@@ -473,3 +473,10 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .sc-dps.na { --c: var(--line2); color: var(--muted); background: var(--bg2); }
 .sc-dps.na b { color: var(--muted); }
 @media (min-width: 761px) and (hover: hover) { .info.right { left: auto; right: 56px; } }
+
+/* last-round damage line in the field tooltip */
+.stat-tip .sc-dmg { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 8px; padding: 6px 10px; background: rgba(255, 178, 30, 0.08); border-left: 3px solid #ffb21e; font-family: var(--font-head); }
+.stat-tip .sc-dmg span { font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; color: #b4b9bd; }
+.stat-tip .sc-dmg b { font-size: 1.35rem; color: #ffcb5c; line-height: 1; }
+.stat-tip .sc-dmg em { margin-left: auto; font-style: normal; font-size: 0.9rem; color: #f1ece0; }
+.stat-tip .sc-dmg.none { display: block; font-size: 0.86rem; color: #b4b9bd; border-left-color: #5e666d; background: rgba(255, 255, 255, 0.04); }
