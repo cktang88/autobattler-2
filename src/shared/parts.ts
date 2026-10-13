@@ -1,4 +1,4 @@
-// Part catalog: 15 chassis (light → titan), 13 mobility systems, 104 mount modules in 5 mount classes (L/M/H/G/T).
+// Part catalog: 26 chassis (light → titan, incl. mechs, spiders and odd frames), 13 mobility systems, 104 modules in 5 mount classes.
 // Balance numbers live here; stats.ts turns a Design into UnitStats.
 
 import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass } from './types.ts';
@@ -14,13 +14,25 @@ export const CHASSIS: ChassisDef[] = [
   { id: 'gunship', name: 'Gunship Airframe', desc: 'Aerodynamic hull. Must fly: rotors or jets only.', size: 2, hp: 380, armor: 3, weight: 8, cost: 120, mounts: ['M', 'M'], agility: 1.1, traits: ['airOnly'], shape: 'airframe' },
   { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.8, traits: [], shape: 'fortress' },
   { id: 'colossus', name: 'Colossus Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 280, mounts: ['H', 'H', 'M', 'L'], agility: 0.85, traits: [], shape: 'titan' },
+  // ---- Odd-shaped frames ----
+  { id: 'mantis', name: 'Mantis Frame', desc: 'Insectoid light walker with twin forelimb mounts.', size: 1, hp: 170, armor: 1, weight: 4, cost: 40, mounts: ['L', 'L'], agility: 1.35, mobility: ['legs', 'jumpjets', 'spider', 'hover'], traits: [], shape: 'mantis' },
+  { id: 'strider', name: 'Strider Mech', desc: 'Humanoid mech: arm guns and a shoulder mount. Needs legs.', size: 2, hp: 480, armor: 5, weight: 12, cost: 110, mounts: ['M', 'L', 'L'], agility: 1.05, mobility: ['legs', 'jumpjets', 'spider', 'anchor'], traits: [], shape: 'mech' },
+  { id: 'arachnid', name: 'Arachnid Core', desc: 'Spider body with twin dorsal mounts. Walks on spider or jump legs.', size: 2, hp: 420, armor: 4, weight: 11, cost: 105, mounts: ['M', 'M'], agility: 1.1, mobility: ['spider', 'jumpjets', 'anchor'], traits: [], shape: 'arachnid' },
+  { id: 'crab', name: 'Crab Hull', desc: 'Wide, low, heavily plated shell with claw mounts.', size: 2, hp: 600, armor: 8, weight: 15, cost: 120, mounts: ['M', 'M', 'L'], agility: 0.85, mobility: ['spider', 'halftrack', 'treads', 'hover', 'anchor'], traits: [], shape: 'crab' },
+  { id: 'saucer', name: 'Saucer Disc', desc: 'Round disc hull with all-round turret ring. Hovers or flies.', size: 2, hp: 400, armor: 4, weight: 10, cost: 115, mounts: ['M', 'M', 'L'], agility: 1.2, mobility: ['hover', 'rotor', 'jet', 'anchor'], traits: [], shape: 'saucer' },
+  { id: 'deltawing', name: 'Delta Wing', desc: 'Triangular strike aircraft. Must fly.', size: 2, hp: 340, armor: 3, weight: 8, cost: 115, mounts: ['M', 'L', 'L'], agility: 1.15, mobility: ['jet', 'rotor'], traits: ['airOnly'], shape: 'delta' },
+  { id: 'warlord', name: 'Warlord Mech', desc: 'Heavy humanoid mech with a shoulder cannon and arm weapons.', size: 3, hp: 1350, armor: 11, weight: 34, cost: 250, mounts: ['H', 'M', 'M', 'L'], agility: 0.9, mobility: ['titanlegs', 'spider', 'anchor'], traits: [], shape: 'warlord' },
+  { id: 'scorpion', name: 'Scorpion Frame', desc: 'Armored scorpion: tail-mounted heavy weapon and twin pincer mounts.', size: 3, hp: 1200, armor: 12, weight: 32, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.95, mobility: ['spider', 'treads', 'anchor'], traits: [], shape: 'scorpion' },
+  { id: 'centipede', name: 'Centipede Hull', desc: 'Long segmented hull with four medium mounts down its back.', size: 3, hp: 1300, armor: 9, weight: 33, cost: 250, mounts: ['M', 'M', 'M', 'M'], agility: 0.8, mobility: ['spider', 'halftrack', 'treads'], traits: [], shape: 'centipede' },
   // ---- Giant class (size 4, 20 m) ----
   { id: 'goliath', name: 'Goliath Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 3200, armor: 16, weight: 70, cost: 420, mounts: ['G', 'H', 'H', 'M'], agility: 0.75, traits: [], shape: 'goliath' },
   { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 470, mounts: ['G', 'G', 'M', 'M'], agility: 0.65, traits: [], shape: 'leviathan' },
   { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2400, armor: 10, weight: 50, cost: 430, mounts: ['G', 'H', 'M', 'M'], agility: 0.8, traits: ['airOnly'], shape: 'carrier' },
+  { id: 'broodmother', name: 'Broodmother', desc: 'Giant spider with a giant-class dorsal weapon and four more mounts.', size: 4, hp: 3000, armor: 14, weight: 66, cost: 430, mounts: ['G', 'H', 'M', 'M', 'L'], agility: 0.85, mobility: ['spider', 'anchor'], traits: [], shape: 'broodmother' },
   // ---- Titan class (size 5, 25 m) ----
   { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 760, mounts: ['T', 'G', 'H', 'H', 'M'], agility: 0.7, traits: [], shape: 'colossal' },
   { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 840, mounts: ['T', 'T', 'G', 'M', 'M', 'L'], agility: 0.55, traits: [], shape: 'citadel' },
+  { id: 'arachne', name: 'Arachne Titan', desc: 'Titan-class spider: a titan mount and twin giant mounts on eight legs.', size: 5, hp: 6000, armor: 20, weight: 115, cost: 760, mounts: ['T', 'G', 'G', 'M'], agility: 0.75, mobility: ['spider', 'anchor'], traits: [], shape: 'arachne' },
 ];
 
 export const MOBILITY: MobilityDef[] = [
@@ -28,7 +40,7 @@ export const MOBILITY: MobilityDef[] = [
   { id: 'halftrack', name: 'Half-Track', desc: 'Wheels up front, treads behind. Balanced all-rounder.', kind: 'ground', sizes: [1, 2, 3], speed: 2.3, turn: 2.6, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [] },
   { id: 'treads', name: 'Tank Treads', desc: 'Heavy-duty treads. Slow, tough, carries anything.', kind: 'ground', sizes: [2, 3, 4], speed: 1.6, turn: 1.8, capacity: [0, 32, 66, 125, 0], weight: 4, hp: 60, armor: 3, cost: 22, traits: ['crush'] },
   { id: 'legs', name: 'Bipedal Legs', desc: 'Nimble walker. Fires while moving.', kind: 'ground', sizes: [1, 2], speed: 2.0, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ['fireOnMove'] },
-  { id: 'spider', name: 'Spider Legs', desc: 'Six-legged stable walker. Better accuracy, carries heavy loads.', kind: 'ground', sizes: [1, 2, 3, 4], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 0], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ['stable'] },
+  { id: 'spider', name: 'Spider Legs', desc: 'Six-legged stable walker. Better accuracy, carries heavy loads.', kind: 'ground', sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ['stable'] },
   { id: 'jumpjets', name: 'Jump Legs', desc: 'Leaps over obstacles straight into the fight.', kind: 'ground', sizes: [1, 2], speed: 2.0, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ['leap'] },
   { id: 'hover', name: 'Hover Skirt', desc: 'Skims the ground. Very fast, hard to hit.', kind: 'ground', sizes: [1, 2], speed: 3.6, turn: 2.2, capacity: [6, 17, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ['evasive'] },
   { id: 'rotor', name: 'Rotor', desc: 'Helicopter rotors. Flies over ground units; only anti-air can hit it.', kind: 'air', sizes: [1, 2], speed: 2.8, turn: 3, capacity: [5, 17, 0, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, traits: ['fireOnMove'] },
@@ -280,6 +292,7 @@ export function pairingError(chassisId: string, mobilityId: string): string | nu
   if (!c) return 'Unknown chassis';
   if (!m) return 'Unknown mobility';
   if (!m.sizes.includes(c.size)) return `${m.name} can't carry a size-${c.size} chassis`;
-  if (c.traits.includes('airOnly') && m.kind !== 'air') return `${c.name} must fly (rotor or jet)`;
+  if (c.traits.includes('airOnly') && m.kind !== 'air') return `${c.name} must fly`;
+  if (c.mobility && !c.mobility.includes(m.id)) return `${c.name} can't use ${m.name}`;
   return null;
 }

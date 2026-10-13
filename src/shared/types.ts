@@ -25,10 +25,13 @@ export interface ChassisDef {
   mounts: MountClass[];
   /** body turn-rate multiplier of the hull (nimble frames > 1, lumbering hulls < 1) */
   agility: number;
+  /** if set, only these mobility ids fit this chassis (e.g. mechs need legs) */
+  mobility?: string[];
   traits: ChassisTrait[];
   /** Render hint: silhouette family for procedural art. */
   shape: 'wedge' | 'box' | 'pod' | 'hex' | 'long' | 'round' | 'cross' | 'fortress' | 'titan' | 'airframe'
-    | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel';
+    | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel'
+    | 'mantis' | 'mech' | 'arachnid' | 'crab' | 'saucer' | 'delta' | 'warlord' | 'scorpion' | 'centipede' | 'broodmother' | 'arachne';
 }
 
 export interface MobilityDef {

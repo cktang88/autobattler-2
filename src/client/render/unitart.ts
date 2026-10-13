@@ -51,6 +51,7 @@ export interface UnitLayout {
 const SHAPE_HW: Record<Shape, number> = {
   wedge: 0.26, pod: 0.24, box: 0.28, hex: 0.3, cross: 0.3, long: 0.2, round: 0.34, airframe: 0.14, fortress: 0.4, titan: 0.3,
   goliath: 0.36, leviathan: 0.3, carrier: 0.42, colossal: 0.27, citadel: 0.42,
+  mantis: 0.2, mech: 0.3, arachnid: 0.28, crab: 0.42, saucer: 0.42, delta: 0.16, warlord: 0.32, scorpion: 0.3, centipede: 0.18, broodmother: 0.32, arachne: 0.32,
 };
 
 /** Mount points per chassis, fractions of S. */
