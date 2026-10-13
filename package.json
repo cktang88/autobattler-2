@@ -1,0 +1,16 @@
+{
+  "name": "autobattler-2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/client/main.ts --bundle --format=esm --outfile=public/game.js --sourcemap",
+    "start": "npm run build && node src/server/main.ts",
+    "test": "node --test 'test/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}
