@@ -8,8 +8,8 @@ import { MODULE_BY_ID } from '../parts.ts';
 import { computeStats, isValidDesign, levelMult, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
-import { CLOAK_REVEAL, TARGET_PRIORITIES } from '../types.ts';
-import type { Design, ModuleDef, Side, TargetPriority } from '../types.ts';
+import { CLOAK_REVEAL, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
+import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
 import { DT, MAX_TICKS, TICK_RATE } from './types.ts';
 import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
 
@@ -51,6 +51,16 @@ const REACTIVE_MULT = 0.25;
 const CLS_EXPLOSIVE = 1;
 const CLS_ENERGY = 2;
 const KNOCK_RATE = 0.35; // fraction of pending knockback applied per tick
+const FOCUS_RADIUS = 6; // cells: allies this close count towards 'focus'
+const RETREAT_BELOW = 0.3; // hp fraction that starts a retreat
+const RETREAT_ABOVE = 0.7; // hp fraction that ends it
+const FLANK_EDGE = 4; // cells from the field edge a flanker swings out to
+const FLANK_TURN_IN = 1.3; // flankers turn in once the goal is within this many weapon ranges
+const ESCORT_NEAR = 3; // cells: escorts try to stay this close to the escorted block
+const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will chase a threat
+const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
+const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
+const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
 const ENGAGE_SHARE = 0.34; // fraction of relevant dps that must be in range before a ground unit halts
 
 // spatial hash
@@ -175,6 +185,25 @@ interface Internal {
   prio: TargetPriority;
   hold: boolean;
   kite: boolean;
+  focus: boolean;
+  stance: Stance;
+  /** movement is gated until this tick */
+  delayTicks: number;
+  retreatOn: boolean;
+  /** currently falling back (hp < 30% until hp > 70%) */
+  retreating: boolean;
+  /** flank: swing is over, fight normally */
+  flankDone: boolean;
+  /** escorted block index or -1 */
+  escortBlock: number;
+  escUnit: number;
+  escThreat: number;
+  /** support module/trait present (heal, dome, uplink, jammer, sensor, repair aura) */
+  isSupport: boolean;
+  /** unitCost x level multiplier (target 'valuable') */
+  valueVal: number;
+  /** size-major, cost-minor key (target 'swarm': smallest first) */
+  swarmKey: number;
   /** index of the placement (block) this unit belongs to */
   block: number;
   /** deployed offset from the block centroid (world cells) */
@@ -251,10 +280,17 @@ export class Battle {
   private blockCount = 0;
   private blockAtk: number[] = [];
   private blockAtkT: number[] = [];
+  private blockSide: Side[] = [];
+  private blockUid: number[] = [];
+  private blockEscortUid: number[] = [];
   private anchorX: Float64Array = new Float64Array(0);
   private anchorY: Float64Array = new Float64Array(0);
   private anchorN: Int32Array = new Int32Array(0);
   private anyHold = false;
+  private blockUnits: number[][] = [];
+  private healers: Internal[] = [];
+  private focusMark: Int32Array = new Int32Array(0);
+  private focusStamp = 0;
   private curSrc = -1;
   private ints: Internal[] = [];
   private projs: Proj[] = [];
@@ -297,8 +333,17 @@ export class Battle {
         for (const c of cs) { mx += c.x; my += c.y; }
         mx /= cs.length; my /= cs.length;
         const block = this.blockCount++;
+        this.blockUnits.push([]);
+        this.blockSide.push(s);
+        this.blockUid.push(p.uid);
+        this.blockEscortUid.push(typeof p.escort === 'number' && p.escort !== p.uid ? p.escort : -1);
         const prio: TargetPriority = p.target && TARGET_PRIORITIES.includes(p.target) ? p.target : 'closest';
-        for (const c of cs) this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: !!p.kite, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
+        const stance: Stance = p.stance && STANCES.includes(p.stance) ? p.stance : 'advance';
+        const delay = p.delay !== undefined && (START_DELAYS as readonly number[]).includes(p.delay) ? p.delay : 0;
+        for (const c of cs) {
+          this.blockUnits[block].push(this.units.length);
+          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: !!p.kite, focus: !!p.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
+        }
       }
     }
     const n = this.units.length;
@@ -307,6 +352,17 @@ export class Battle {
     this.anchorX = new Float64Array(this.blockCount);
     this.anchorY = new Float64Array(this.blockCount);
     this.anchorN = new Int32Array(this.blockCount);
+    // resolve escort targets (same side, by placement uid; not itself)
+    const byUid: Map<number, number>[] = [new Map(), new Map()];
+    for (let b = 0; b < this.blockCount; b++) if (!byUid[this.blockSide[b]].has(this.blockUid[b])) byUid[this.blockSide[b]].set(this.blockUid[b], b);
+    for (const I of this.ints) {
+      const b = I.block;
+      const eu = this.blockEscortUid[b];
+      const tb = eu >= 0 ? byUid[I.u.side].get(eu) : undefined;
+      I.escortBlock = tb !== undefined && tb !== b ? tb : -1;
+      if (I.hasHeal || I.aura) this.healers.push(I);
+    }
+    this.focusMark = new Int32Array(n);
     for (const I of this.ints) {
       if (I.cloak) this.hasCloak = true;
       if (I.detect > 0) this.detectors.push(I);
@@ -320,7 +376,7 @@ export class Battle {
     this.rebuildHash();
   }
 
-  private addUnit(side: Side, uid: number, design: Design, level: number, cx: number, cy: number, cfg: { block: number; prio: TargetPriority; hold: boolean; kite: boolean; offx: number; offy: number; sepMin: number }): void {
+  private addUnit(side: Side, uid: number, design: Design, level: number, cx: number, cy: number, cfg: { block: number; prio: TargetPriority; hold: boolean; kite: boolean; focus: boolean; stance: Stance; delay: number; retreat: boolean; offx: number; offy: number; sepMin: number }): void {
     const stats = computeStats(design);
     const lm = levelMult(level);
     const c = { x: cx, y: cy };
@@ -360,6 +416,7 @@ export class Battle {
     if (!Number.isFinite(minWeaponRange)) minWeaponRange = 3;
     let cloak: 'stealth' | 'phantom' | null = null, detect = 0, domeR = 0, domeAmt = 0, regen = 0, fireRate = 1, reloadBonus = 0;
     let uplinkR = 0, uplinkBonus = 0, pdRange = 0, pdCooldown = 0, pdModule = '', jammer = 0, smokeR = 0, smokeDur = 0;
+    let isSupport = traits.includes('repairAura') || hasHeal;
     let reactive = 0, energyResist = 0, hardened = traits.includes('hardened'), blastDmg = 0, blastR = 0, blastModule = '';
     for (const mid of design.mounts) {
       const d = mid ? MODULE_BY_ID.get(mid) : undefined;
@@ -377,6 +434,7 @@ export class Battle {
       reactive += d.reactive ?? 0;
       energyResist += d.energyResist ?? 0;
       if (d.hardened) hardened = true;
+      if (d.heal || d.shieldAura || d.fireRateAura || d.jammer || d.detect) isSupport = true;
       if (d.deathBlast) { blastDmg += d.deathBlast.damage; blastR = Math.max(blastR, d.deathBlast.radius); blastModule = d.id; }
     }
     const maxHp = stats.hp * lm;
@@ -388,7 +446,7 @@ export class Battle {
     };
     this.units.push(u);
     this.ints.push({
-      u, wpns, radius: stats.size * 0.45, mass: stats.isStatic ? 1e6 : stats.size * stats.size, dmgMult: lm,
+      u, wpns, radius: stats.size * 0.45, mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
       speed: stats.speed, turn: stats.turn,
       fireOnMove: traits.includes('fireOnMove'), strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
@@ -401,7 +459,10 @@ export class Battle {
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
       blastDmg: blastDmg * lm, blastR, blastModule, blocker: !hasWeapon && !hasHeal,
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0,
-      prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
+      prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, focus: cfg.focus, stance: cfg.stance,
+      delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
+      escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
     if (cfg.hold) this.anyHold = true;
@@ -453,10 +514,11 @@ export class Battle {
       const I = ints[i];
       if (!I.u.alive) continue;
       I.goalTimer -= DT;
-      if (I.goalTimer <= 0 || I.goal < 0 || !this.units[I.goal].alive) {
+      if (I.goalTimer <= 0 || I.goal < 0 || !this.units[I.goal].alive || (I.escortBlock >= 0 && I.escUnit >= 0 && !this.units[I.escUnit].alive)) {
         I.goalTimer = GOAL_EVERY;
         I.goal = this.findGoal(I);
-        if (I.prio !== 'closest' && I.mainW && !I.blocker && I.goal >= 0) {
+        if (I.escortBlock >= 0) this.refreshEscort(I);
+        if ((I.prio !== 'closest' || I.focus) && I.mainW && !I.blocker && I.goal >= 0) {
           const pt = this.pickTarget(I, I.mainW, 1.5);
           if (pt >= 0) I.goal = pt;
         }
@@ -703,24 +765,76 @@ export class Battle {
         if (o.alive && o.side !== u.side && this.canHit(w, o) && this.inRange(u, w, o, mult) >= 0 && this.visible(u, o)) return a;
       }
     }
+    // focus: enemies that allies nearby (and we ourselves) are already shooting are preferred
+    let stamp = 0;
+    if (I.focus) {
+      stamp = ++this.focusStamp;
+      const cnt = this.gather(u.x, u.y, FOCUS_RADIUS + MAX_RADIUS);
+      for (let q = 0; q < cnt; q++) {
+        const a = units[this.scratch[q]];
+        if (!a.alive || a.side !== u.side) continue;
+        if (a !== u && Math.hypot(a.x - u.x, a.y - u.y) > FOCUS_RADIUS) continue;
+        for (const m of a.mounts) if (m.target >= 0) this.focusMark[m.target] = stamp;
+      }
+    }
     let best = -1, bestS = Infinity, bestD = Infinity;
+    let fBest = -1, fS = Infinity, fD = Infinity;
     for (let j = 0; j < units.length; j++) {
       const o = units[j];
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const d = this.inRange(u, w, o, mult);
       if (d < 0 || !this.visible(u, o)) continue;
+      const O = this.ints[j];
       let sc: number;
       switch (prio) {
         case 'farthest': sc = -d; break;
         case 'lowestHp': sc = o.hp; break;
         case 'highestHp': sc = -o.hp; break;
-        case 'highestDps': sc = -this.ints[j].dpsVal; break;
-        case 'lowestDps': sc = this.ints[j].dpsVal; break;
+        case 'highestDps': sc = -O.dpsVal; break;
+        case 'lowestDps': sc = O.dpsVal; break;
+        case 'aircraft': sc = o.flying ? 0 : 1; break;
+        case 'armored': sc = -o.stats.armor; break;
+        case 'longestRange': sc = -o.stats.range; break;
+        case 'support': sc = O.isSupport ? 0 : 1; break;
+        case 'valuable': sc = -O.valueVal; break;
+        case 'swarm': sc = O.swarmKey; break;
         default: sc = d;
       }
       if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && d < bestD)) { bestS = sc; bestD = d; best = j; }
+      if (stamp && this.focusMark[j] === stamp && (sc < fS - 1e-9 || (Math.abs(sc - fS) <= 1e-9 && d < fD))) { fS = sc; fD = d; fBest = j; }
     }
-    return best;
+    return fBest >= 0 ? fBest : best;
+  }
+
+  /** Escort bookkeeping: nearest living unit of the escorted block, and the threat to engage near it. */
+  private refreshEscort(I: Internal): void {
+    const u = I.u, units = this.units;
+    let e = -1, bd = Infinity;
+    for (const j of this.blockUnits[I.escortBlock]) {
+      const o = units[j];
+      if (!o.alive) continue;
+      const d = (o.x - u.x) * (o.x - u.x) + (o.y - u.y) * (o.y - u.y);
+      if (d < bd) { bd = d; e = j; }
+    }
+    I.escUnit = e;
+    I.escThreat = -1;
+    if (e < 0 || !I.hasWeapon) return;
+    const E = units[e];
+    // the escorted unit's own target, if we can hit it
+    for (const m of E.mounts) {
+      if (m.target < 0) continue;
+      const t = units[m.target];
+      if (t.alive && t.side !== u.side && (t.flying ? I.canHitA : I.canHitG) && this.visible(u, t)) { I.escThreat = m.target; return; }
+    }
+    // else the nearest enemy to it
+    let bt = -1, btd = ESCORT_THREAT * ESCORT_THREAT;
+    for (let j = 0; j < units.length; j++) {
+      const o = units[j];
+      if (!o.alive || o.side === u.side || (o.flying ? !I.canHitA : !I.canHitG) || !this.visible(u, o)) continue;
+      const d = (o.x - E.x) * (o.x - E.x) + (o.y - E.y) * (o.y - E.y);
+      if (d < btd) { btd = d; bt = j; }
+    }
+    I.escThreat = bt;
   }
 
   /** Formation anchors for holding squads: mean of (position - deployed offset) over living members. */
@@ -782,7 +896,7 @@ export class Battle {
         w.retarget = RETARGET_EVERY;
         const cand = this.findTarget(u, w);
         if (m.target < 0) m.target = cand;
-        else if (cand >= 0 && cand !== m.target && I.prio !== 'closest') m.target = cand;
+        else if (cand >= 0 && cand !== m.target && (I.prio !== 'closest' || I.focus)) m.target = cand;
         else if (cand >= 0 && cand !== m.target) {
           const c = units[cand];
           const dc = Math.hypot(c.x - u.x, c.y - u.y);
@@ -1226,8 +1340,35 @@ export class Battle {
       if (k >= 1) { I.leapT = -1; u.leap = 0; }
       return;
     }
-    const goal = I.goal >= 0 ? this.units[I.goal] : null;
+    // Movement precedence: delay gates everything at the start; then
+    //   holdPos > retreat (while active) > charge > escort > kite > flank > advance.
+    if (this.tick < I.delayTicks) return;
+    if (I.stance === 'holdPos') { this.faceTarget(I); return; }
+    let goal = I.goal >= 0 ? this.units[I.goal] : null;
     if (I.strafe) { this.strafeMove(I, goal); return; }
+
+    if (I.retreatOn) {
+      const r = u.hp / u.maxHp;
+      if (!I.retreating && r < RETREAT_BELOW) I.retreating = true;
+      else if (I.retreating && r > RETREAT_ABOVE) I.retreating = false;
+      if (I.retreating) { this.retreatMove(I); return; }
+    }
+    const charge = I.stance === 'charge';
+    let escorting = false;
+    if (I.escortBlock >= 0 && I.escUnit >= 0 && !charge) {
+      const E = this.units[I.escUnit];
+      if (E.alive) {
+        const dE = Math.hypot(E.x - u.x, E.y - u.y);
+        const thr = I.escThreat >= 0 && this.units[I.escThreat].alive ? this.units[I.escThreat] : null;
+        if (thr && dE <= ESCORT_LEASH) { goal = thr; escorting = true; }
+        else {
+          if (dE <= ESCORT_NEAR) this.faceTarget(I);
+          else this.steer(I, E.x, E.y, ESCORT_NEAR - 0.4, E.id);
+          return;
+        }
+      }
+    }
+    const kiteOn = I.kite && !charge && !escorting;
 
     // Engaged = weapons holding targets make up a meaningful share of the firepower that could hit our goal
     // (so a long-range gun alone doesn't park a brawler out of reach of its main armament).
@@ -1264,13 +1405,28 @@ export class Battle {
         stopDist = 0.6;
         // close enough to the ally already: don't shove it around
         if (d - I.radius - this.ints[goal.id].radius <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
-      } else if (I.kite && !I.meleeOnly && d - this.ints[goal.id].radius < 0.7 * I.maxRange) {
+      } else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius < 0.7 * I.maxRange) {
         // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
         if (!I.fireOnMove && I.wpns.some((w, wi) => w && w.heal <= 0 && u.mounts[wi].cooldown <= 0.15 && u.mounts[wi].target >= 0)) return;
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
         gy = clamp(u.y - (dy / Math.max(d, 1e-6)) * 3, I.radius, FIELD_H - I.radius);
         stopDist = 0;
       } else {
+        // flank: swing out to the owner's left/right edge, run along it, then turn in
+        if ((I.stance === 'flankLeft' || I.stance === 'flankRight') && !I.flankDone) {
+          const past = fwd < 0 ? u.y < FIELD_H / 2 : u.y > FIELD_H / 2;
+          if (engaged || past || d - this.ints[goal.id].radius <= FLANK_TURN_IN * I.maxRange) I.flankDone = true;
+          else {
+            // owner's left is -x for side 0 and +x for side 1
+            const leftX = u.side === 0 ? -1 : 1;
+            const toward = (I.stance === 'flankLeft' ? leftX : -leftX) < 0 ? 0 : 1;
+            const edgeX = toward === 0 ? FLANK_EDGE : FIELD_W - FLANK_EDGE;
+            const lat = edgeX - u.x;
+            if (Math.abs(lat) > 1.5) { this.steer(I, edgeX, u.y + fwd * Math.abs(lat) * 0.25, 0, goal.id); return; }
+            this.steer(I, edgeX, u.y + fwd * 10, 0, goal.id);
+            return;
+          }
+        }
         // leap in
         if (I.canLeap && I.leapCd <= 0 && d >= 3 && d <= 7) {
           const land = Math.max(1.5, I.minWeaponRange * 0.6);
@@ -1298,7 +1454,8 @@ export class Battle {
         gx = u.x + hx * lw;
         gy = u.y + hy;
         stopDist = 0;
-        if (I.kite && !I.meleeOnly && d - this.ints[goal.id].radius <= 0.9 * engageR) wantMove = false;
+        if (charge) wantMove = I.meleeOnly || d - this.ints[goal.id].radius > CHARGE_GUN_FRAC * engageR;
+        else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius <= 0.9 * engageR) wantMove = false;
         else if (engaged && (!I.fireOnMove || I.meleeOnly)) wantMove = false;
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
         else if (I.fireOnMove && engageR > 2.5 && d - this.ints[goal.id].radius <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
@@ -1318,10 +1475,41 @@ export class Battle {
       return;
     }
 
+    this.steer(I, gx, gy, stopDist, goal ? goal.id : -1);
+  }
+
+  /** Turn the body toward whatever the first engaged weapon targets (ground units only). */
+  private faceTarget(I: Internal): void {
+    const u = I.u;
+    if (u.flying || u.stun > 0) return;
+    for (const m of u.mounts) {
+      if (m.target < 0) continue;
+      const t = this.units[m.target];
+      u.angle = turnToward(u.angle, Math.atan2(t.y - u.y, t.x - u.x), I.turn * DT * 0.5);
+      return;
+    }
+  }
+
+  /** Fall back to the nearest friendly repair source (healer / repair aura), else the rear of the own deploy zone. */
+  private retreatMove(I: Internal): void {
+    const u = I.u;
+    let best: Internal | null = null, bd = Infinity;
+    for (const H of this.healers) {
+      if (H === I || !H.u.alive || H.u.side !== u.side || H.retreating) continue;
+      const d = (H.u.x - u.x) * (H.u.x - u.x) + (H.u.y - u.y) * (H.u.y - u.y);
+      if (d < bd) { bd = d; best = H; }
+    }
+    if (best) this.steer(I, best.u.x, best.u.y, 1.5 + I.radius + best.radius, best.u.id);
+    else this.steer(I, u.x, u.side === 0 ? FIELD_H - I.radius - 0.6 : I.radius + 0.6, 0.1, -1);
+  }
+
+  /** Common locomotion: head for (gx, gy), stopping within stopDist. */
+  private steer(I: Internal, gx: number, gy: number, stopDist: number, goalId: number): void {
+    const u = I.u;
     const dx = gx - u.x, dy = gy - u.y;
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d <= Math.max(stopDist, 0.05)) return;
-    const want = Math.atan2(dy, dx) + this.avoid(I, dx / d, dy / d, goal ? goal.id : -1);
+    const want = Math.atan2(dy, dx) + this.avoid(I, dx / d, dy / d, goalId);
     u.angle = turnToward(u.angle, want, I.turn * DT);
     const diff = Math.abs(angDiff(u.angle, want));
     let f = diff >= Math.PI / 2 ? 0 : Math.cos(diff);
