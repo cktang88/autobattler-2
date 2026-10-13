@@ -33,6 +33,8 @@ const AURA_RATE = 0.012; // fraction of maxHp per s
 const AURA_EVERY = 0.5;
 const HEAL_EVENT_EVERY = 0.3;
 const CRUSH_EVERY = 0.3;
+const BOMB_ALT = 1.5; // cells: height bombs start falling from
+const BOMB_FALL = 0.5; // seconds a bomb takes to land
 const CRUSH_DMG = 14; // per size of the crusher, per contact pulse
 const RANGE_KEEP = 1.08; // hysteresis: a held target stays valid out to range * this
 const STALL_CHECK_EVERY = 20; // ticks
@@ -191,6 +193,8 @@ function damageClass(def: ModuleDef): number {
 }
 
 interface Proj extends SimProjectile {
+  /** starting altitude of a bomb dropped from a flyer (falls to 0 over the flight) */
+  z0: number;
   vx: number;
   vy: number;
   speed: number;
@@ -816,15 +820,18 @@ export class Battle {
         tx = ax - s * e1 + c * e2;
         ty = ay + c * e1 + s * e2;
       }
-      const total = Math.max(0.3, Math.hypot(tx - mx, ty - my));
-      const ang = Math.atan2(ty - my, tx - mx);
+      // bombs: dropped from the flyer's own position, falling from its altitude in ~0.5s
+      const bomb = kind === 'arc' && u.flying;
+      const ox = bomb ? u.x : mx, oy = bomb ? u.y : my;
+      const total = Math.max(0.3, Math.hypot(tx - ox, ty - oy));
+      const ang = Math.atan2(ty - oy, tx - ox);
       const pierce = !!def.pierce;
       const p: Proj = {
-        id: this.nextProjId++, side: u.side, moduleId: def.id, kind: kind as Proj['kind'], x: mx, y: my, z: 0, angle: ang, progress: 0,
-        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed, dmg: raw, ap, splash: def.splash ?? 0, airBonus, air,
-        target: kind === 'missile' && t ? t.id : -1, tx, ty, sx: mx, sy: my, total, traveled: 0,
+        id: this.nextProjId++, side: u.side, moduleId: def.id, kind: kind as Proj['kind'], x: ox, y: oy, z: bomb ? BOMB_ALT : 0, z0: bomb ? BOMB_ALT : 0, angle: ang, progress: 0,
+        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed: bomb ? total / BOMB_FALL : speed, dmg: raw, ap, splash: def.splash ?? 0, airBonus, air,
+        target: kind === 'missile' && t ? t.id : -1, tx, ty, sx: ox, sy: oy, total, traveled: 0,
         maxDist: kind === 'flame' ? total : kind === 'missile' ? w.range * 1.8 : pierce ? w.range + 1 : total + 2,
-        ignore: -1, arcH: kind === 'arc' ? 1 + total * 0.22 : 0, dead: false,
+        ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * 0.22 : 0, dead: false,
         pierce, hits: [], fx, fxMult: lm, cls,
       };
       if (air && kind !== 'missile') p.z = 1;
@@ -1027,7 +1034,7 @@ export class Battle {
         const k = p.progress;
         p.x = p.sx + (p.tx - p.sx) * k;
         p.y = p.sy + (p.ty - p.sy) * k;
-        p.z = 4 * p.arcH * k * (1 - k);
+        p.z = 4 * p.arcH * k * (1 - k) + p.z0 * (1 - k);
         if (k >= 1) {
           this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, false, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
           p.dead = true;
@@ -1192,7 +1199,7 @@ export class Battle {
         stopDist = 0;
         if (engaged && (!I.fireOnMove || I.meleeOnly)) wantMove = false;
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
-        else if (I.fireOnMove && d - this.ints[goal.id].radius <= Math.max(1.2, engageR * 0.7)) wantMove = false;
+        else if (I.fireOnMove && engageR > 2.5 && d - this.ints[goal.id].radius <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
         else wantMove = true;
         if (!wantMove) {
           // face the fight while holding

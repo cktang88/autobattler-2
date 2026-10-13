@@ -559,7 +559,7 @@ function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: 
   return dmg[oppSide] - dmg[side] + (sum.winner === side ? 5 : sum.winner === oppSide ? -5 : 0);
 }
 
-const HARD_CANDIDATES = 9;
+const HARD_CANDIDATES = 8;
 
 /** Decide the AI's deployment for the current round. Must pass validateDeploy. */
 export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): DeployAction {

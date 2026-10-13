@@ -456,3 +456,9 @@
   color: var(--g-text); border: 1px dashed var(--g-line2);
 }
 .garage .g-tag.squad { color: var(--accent, #2ed3c0); border-color: currentColor; }
+.garage .g-tgt { width: auto; min-width: 20px; height: 20px; padding: 0 5px; gap: 3px; }
+.garage .g-tgt-l { font-family: var(--g-head, inherit); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.04em; }
+.garage .g-targets { gap: 4px; }
+.garage .g-tag.aironly { color: #7cc8ff; border-color: currentColor; font-size: 0.65rem; margin-left: 4px; }
+.garage .g-opt.locked:disabled { opacity: 0.5; cursor: not-allowed; }
+.garage .g-opt-lock { color: var(--g-warn, #f2a93b); font-size: 0.75rem; font-weight: 600; }

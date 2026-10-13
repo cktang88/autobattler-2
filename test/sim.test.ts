@@ -433,3 +433,29 @@ test('performance: 120 units per side simulates well under 400ms', () => {
   console.log(`  120v120: ${ms.toFixed(0)}ms, ${s.ticks} ticks`);
   assert.ok(ms < 400, `took ${ms}ms`);
 });
+
+test('bombers fly over ground targets and bomb them; bombs cannot hit flyers', () => {
+  const bomber = D('bomber', 'gunship', 'jet', ['bombs', null]);
+  const rotorBomber = D('rotorbomber', 'gunship', 'rotor', ['bombs', null]);
+  assert.deepEqual(validateDesign(bomber), []);
+  assert.deepEqual(validateDesign(rotorBomber), []);
+  const designs = [...DESIGNS, bomber, rotorBomber];
+  const run = (a: Placement[], bb: Placement[]) => {
+    const b = new Battle({ seed: 5, sides: [{ designs, units: a }, { designs, units: mirrorShift(bb) }] });
+    let bombHits = 0, minZ = 99, maxZ = 0;
+    while (!b.done) {
+      b.step();
+      for (const e of b.events) if (e.t === 'hit' && e.moduleId === 'bombs') bombHits++;
+      for (const p of b.projectiles ?? []) if (p.moduleId === 'bombs') { minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z); }
+    }
+    return { b, bombHits, minZ, maxZ };
+  };
+  for (const id of ['bomber', 'rotorbomber']) {
+    const g = run([P(id, 10, 0)], [P('bulwark', 10, 0)]);
+    assert.ok(g.bombHits > 0, `${id} landed bombs`);
+    assert.ok(g.b.damageDealt[0] > 0);
+  }
+  const air = run([P('rotorbomber', 10, 0)], [P('hornet', 10, 0)]);
+  assert.equal(air.bombHits, 0);
+  assert.equal(air.b.damageDealt[0], 0);
+});

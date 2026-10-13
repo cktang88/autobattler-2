@@ -665,10 +665,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function unitAt(px: number, py: number): Sel {
     let w: { x: number; y: number };
     try { w = view.screenToWorld(px, py); } catch { return null; }
+    // anywhere inside the block's footprint (including the gaps between squad units) selects the block
     const hit = (s: Side, p: Placement) => {
-      const size = sizeOf(designOf(s, p.designId));
-      const r = size / 2 + 0.1;
-      return placementUnitCenters(s, p, size).some((c) => Math.abs(w.x - c.x) <= r && Math.abs(w.y - c.y) <= r);
+      const cells = blockCells(sizeOf(designOf(s, p.designId)), p.spacing);
+      const wc = localToWorldCell(s, p.x, p.y, cells);
+      return w.x >= wc.col && w.x <= wc.col + cells && w.y >= wc.row && w.y <= wc.row + cells;
     };
     if (phase === 'deploy') for (const p of place) if (hit(side, p)) return { side, uid: p.uid, pending: true };
     for (const p of me().board) if (hit(side, p)) return { side, uid: p.uid, pending: false };

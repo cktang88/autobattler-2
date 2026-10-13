@@ -97,8 +97,8 @@ export function targetBadges(mod: ModuleDef): HTMLElement {
   const wrap = h('span.g-targets');
   if (mod.kind !== 'weapon') return wrap;
   wrap.append(
-    h('span.g-tgt', { class: mod.targetsGround ? 'on' : 'off', title: mod.targetsGround ? 'Hits ground units' : "Can't hit ground units" }, icon('ground')),
-    h('span.g-tgt', { class: mod.targetsAir ? 'on' : 'off', title: mod.targetsAir ? 'Hits aircraft' : "Can't hit aircraft" }, icon('air')),
+    h('span.g-tgt', { class: mod.targetsGround ? 'on' : 'off', title: mod.targetsGround ? 'Hits ground units' : "Can't hit ground units" }, icon('ground'), h('span.g-tgt-l', null, 'GND')),
+    h('span.g-tgt', { class: mod.targetsAir ? 'on' : 'off', title: mod.targetsAir ? 'Hits aircraft' : "Can't hit aircraft" }, icon('air'), h('span.g-tgt-l', null, 'AIR')),
   );
   return wrap;
 }

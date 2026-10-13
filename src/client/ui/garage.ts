@@ -293,6 +293,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     update();
   }
 
+  /** why a module can't be picked with the current mobility (null = fine) */
+  function reqReason(mod: { requires?: 'air' | 'ground' }): string | null {
+    if (!mod.requires) return null;
+    const flies = MOBILITY_BY_ID.get(draft.mobility)?.kind === 'air';
+    if (mod.requires === 'air' && !flies) return 'Flying designs only';
+    if (mod.requires === 'ground' && flies) return 'Ground designs only';
+    return null;
+  }
+
   function pickModule(slot: number, id: string | null) {
     const mounts = [...draft.mounts];
     mounts[slot] = id;
@@ -556,18 +565,23 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           const load = s ? w / s.capacity : 0;
           const warn = load > MAX_LOAD ? 'over' : load > 1 ? 'heavy' : '';
           const sel = (draft.mounts[i] ?? null) === id;
+          const lock = mod ? reqReason(mod) : null;
           return h('button.g-opt', {
-            type: 'button', class: [sel ? 'sel' : '', warn, mod ? `k-${mod.kind}` : 'k-empty'].join(' '),
+            type: 'button', class: [sel ? 'sel' : '', warn, mod ? `k-${mod.kind}` : 'k-empty', lock ? 'locked' : ''].join(' '),
+            disabled: !!lock && !sel,
             'aria-pressed': String(sel), 'data-fk': `opt-${i}-${id ?? 'none'}`,
-            title: mod ? moduleTooltip(mod) : 'Leave this slot empty',
+            title: lock ? `${lock} — ${moduleTooltip(mod!)}` : mod ? moduleTooltip(mod) : 'Leave this slot empty',
             style: mod ? { '--cat': moduleCategoryColor(mod.id) } : null,
             onclick: () => pickModule(i, id),
           },
           h('span.g-opt-ico', null, mod ? partIcon('module', mod.id, 38, true) : icon('x')),
           h('span.g-opt-name', null, mod ? mod.name : 'Empty slot',
             mod ? h('span.g-fam', null, mod.family) : null,
-            mod ? h('span.g-chip', { class: `c${mod.mount}` }, mod.mount) : null),
+            mod ? h('span.g-chip', { class: `c${mod.mount}` }, mod.mount) : null,
+            mod?.requires === 'air' ? h('span.g-tag.aironly', null, 'AIR ONLY MOUNT') : null,
+            mod?.requires === 'ground' ? h('span.g-tag.aironly', null, 'GROUND ONLY MOUNT') : null),
           mod ? moduleStats(mod, true) : h('span.g-modstats', null, 'Leave this mount empty'),
+          lock ? h('span.g-opt-lock', null, lock) : null,
           h('span.g-opt-side', null,
             h('span', { title: 'Weight' }, icon('weight'), mod ? String(mod.weight) : '0'),
             h('span', { title: 'Base part cost (unit cost also scales with combat power)' }, icon('cost'), mod ? String(mod.cost) : '0'),

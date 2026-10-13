@@ -18,7 +18,7 @@ import { MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps
 import { mixSeed } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import type { BattleInput } from './sim/types.ts';
-import type { DeployAction, Design, MatchMode, MatchState, Placement, PlayerState, RoundRecord, Side } from './types.ts';
+import type { Size, DeployAction, Design, MatchMode, MatchState, Placement, PlayerState, RoundRecord, Side } from './types.ts';
 
 export const DECK_SIZE = 9;
 export const START_HP = 100;
@@ -182,7 +182,7 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     seenUids.add(pl.uid);
     if (pl.level !== 1) return 'New units start at level 1';
     if (pl.round !== m.round) return 'Placement round mismatch';
-    const size = sizeOf(d) as 1 | 2 | 3;
+    const size = sizeOf(d);
     if (pl.spacing !== undefined) {
       if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
       if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
@@ -343,7 +343,7 @@ export function battleInputFor(m: MatchState, rec: RoundRecord): BattleInput {
 
 // ---------------------------------------------------------------------------------------------
 
-function sizeOf(d: Design | undefined): number {
+function sizeOf(d: Design | undefined): Size {
   if (!d) return 1;
   try { return computeStats(d).size; } catch { return 1; }
 }
