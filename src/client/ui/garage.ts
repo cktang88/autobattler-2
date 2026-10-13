@@ -8,10 +8,10 @@ import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck 
 import { drawUnitPreview } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError, MOUNT_RANK } from '../../shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, computeStats, loadSpeedFactor, validateDesign } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MountClass, UnitStats } from '../../shared/types.ts';
-import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, designSizeLabel, footprintLabel, CATEGORY_COLOR } from './garage-parts.ts';
+import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, designSizeLabel, footprintLabel, CATEGORY_COLOR, matchesRoles, matchesSize, roleBar, roleFilter, roleTags } from './garage-parts.ts';
 
 const RANK: Record<MountClass, number> = MOUNT_RANK;
 const NAME_MAX = 24;
@@ -62,6 +62,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   let draft: Design = saved ? clone(saved) : blankDesign(1);
   let openSlot: number | null = null;
   let pickerCat: string | null = null;
+  let modQuery = '';
   let spin = true;
   let angle = -Math.PI / 2;
   let lastT = 0;
@@ -85,6 +86,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const costEl = h('div.g-cost');
   const chassisEl = h('div.g-cards.g-chassis-cards', { role: 'group', 'aria-label': 'Chassis' });
   const mobilityEl = h('div.g-cards.g-mob-cards', { role: 'group', 'aria-label': 'Mobility' });
+  const chassisBar = h('div.g-rbar-host');
+  const mobilityBar = h('div.g-rbar-host');
+  const chassisBox = h('div.g-fbox', null, chassisBar, chassisEl);
+  const mobilityBox = h('div.g-fbox', null, mobilityBar, mobilityEl);
+  const emptyMsg = (what: string) => h('p.g-nomatch', null, `No ${what} match the current filters.`);
   const mountsEl = h('div.g-mounts');
   const aiEl = h('div.g-ai');
   const listCanvases: { c: HTMLCanvasElement; get: () => Design }[] = [];
@@ -130,8 +136,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         costEl,
       ),
       h('section.g-parts', null,
-        step('01', 'Chassis', 'Hull size, armor and mount slots', chassisEl),
-        step('02', 'Mobility', 'Weight capacity sets speed', mobilityEl),
+        step('01', 'Chassis', 'Hull size, armor and mount slots', chassisBox),
+        step('02', 'Mobility', 'Weight capacity sets speed', mobilityBox),
         step('03', 'Loadout', 'A slot takes its class or smaller', mountsEl),
         step('04', 'Battle AI defaults', 'New blocks start with these orders; change them per block on the field', aiEl),
       ),
@@ -513,7 +519,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   function renderChassis() {
-    chassisEl.replaceChildren(...CHASSIS.map((c) => {
+    chassisBar.replaceChildren(roleBar('ch', update, { sizes: true }));
+    const shown = CHASSIS.filter((c) => c.id === draft.chassis || (matchesRoles(c.roles) && matchesSize(c.size)));
+    const cards = shown.map((c) => {
       const sel = c.id === draft.chassis;
       return h('button.g-card.g-ccard', {
         type: 'button', class: sel ? 'sel' : null, 'aria-pressed': String(sel), 'data-fk': `ch-${c.id}`,
@@ -532,14 +540,18 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}` }, m))),
         h('span.g-card-cost', null, icon('cost'), String(c.cost)),
       ),
+      roleTags(c.roles),
       h('span.g-card-desc', null, c.desc),
       );
-    }));
+    });
+    chassisEl.replaceChildren(...cards, ...(shown.length <= 1 && (roleFilter.size || shown.length === 0) ? [emptyMsg('other chassis')] : []));
   }
 
   function renderMobility() {
     const c = CHASSIS_BY_ID.get(draft.chassis)!;
-    mobilityEl.replaceChildren(...MOBILITY.map((m) => {
+    mobilityBar.replaceChildren(roleBar('mob', update));
+    const shownM = MOBILITY.filter((m) => m.id === draft.mobility || matchesRoles(m.roles));
+    const mcards = shownM.map((m) => {
       const err = pairingError(draft.chassis, m.id);
       const sel = m.id === draft.mobility;
       const res = err ? null : statsOf({ ...draft, mobility: m.id });
@@ -563,9 +575,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           h('span.g-loadpct', { class: loadCls }, h('b', null, `${Math.round(res!.load * 100)}%`), ' load'),
           h('span.g-card-cost', null, icon('cost'), String(m.cost * c.size)),
         ),
+      roleTags(m.roles),
       h('span.g-card-desc', null, [m.desc, ...m.traits.map((t) => TRAIT_LABEL[t] ?? t)].join(' · ')),
       );
-    }));
+    });
+    mobilityEl.replaceChildren(...mcards, ...(shownM.length <= 1 && roleFilter.size ? [emptyMsg('other mobility types')] : []));
   }
 
   function renderMounts() {
@@ -611,7 +625,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
             mod ? h('span.g-fam', null, mod.family) : null,
             mod ? h('span.g-chip', { class: `c${mod.mount}` }, mod.mount) : null,
             mod?.requires === 'air' ? h('span.g-tag.aironly', null, 'AIR ONLY MOUNT') : null,
-            mod?.requires === 'ground' ? h('span.g-tag.aironly', null, 'GROUND ONLY MOUNT') : null),
+            mod?.requires === 'ground' ? h('span.g-tag.aironly', null, 'GROUND ONLY MOUNT') : null,
+            mod ? roleTags(moduleRoles(mod)) : null),
           mod ? moduleStats(mod, true) : h('span.g-modstats', null, 'Leave this mount empty'),
           lock ? h('span.g-opt-lock', null, lock) : null,
           h('span.g-opt-side', null,
@@ -621,26 +636,41 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           ),
           );
         };
+        const ALL = '*';
         const fits = MODULES.filter((m) => fitsMount(cls, m.mount));
         const cats = CATEGORIES.filter((k) => fits.some((m) => m.category === k.id));
-        if (!pickerCat || !cats.some((k) => k.id === pickerCat)) pickerCat = cur?.category ?? cats[0]?.id ?? null;
+        if (!pickerCat || (pickerCat !== ALL && !cats.some((k) => k.id === pickerCat))) pickerCat = cur?.category ?? cats[0]?.id ?? null;
         const catDef = cats.find((k) => k.id === pickerCat);
-        const tabs = h('div.g-tabs', { role: 'tablist', 'aria-label': 'Module category' }, ...cats.map((k) => {
-          const on = k.id === pickerCat;
-          const n = fits.filter((m) => m.category === k.id).length;
-          const hasCur = cur?.category === k.id;
-          return h('button.g-tab', {
-            type: 'button', role: 'tab', 'aria-selected': String(on), class: [on ? 'on' : '', hasCur ? 'has' : ''].join(' '),
-            'data-fk': `tab-${i}-${k.id}`, title: k.desc,
-            onclick: () => { pickerCat = k.id; sfx('click'); update(); },
-          }, h('i.g-catdot', { style: { background: CATEGORY_COLOR[k.id] ?? '#b0b8c0' } }), k.name, h('small', null, String(n)));
-        }));
-        const list = fits.filter((m) => m.category === pickerCat)
-          .sort((x, y) => RANK[x.mount] - RANK[y.mount] || x.cost - y.cost);
+        const q = modQuery.trim().toLowerCase();
+        const passes = (m: (typeof MODULES)[number]) => m.id === cur?.id || (matchesRoles(moduleRoles(m)) && (!q || `${m.name} ${m.family}`.toLowerCase().includes(q)));
+        const tab = (id: string, name: string, desc: string, n: number, on: boolean, hasCur: boolean, dot: string) =>
+          h('button.g-tab', {
+            type: 'button', role: 'tab', 'aria-selected': String(on), class: [on ? 'on' : '', hasCur ? 'has' : '', n === 0 ? 'none' : ''].join(' '),
+            'data-fk': `tab-${i}-${id}`, title: desc,
+            onclick: () => { pickerCat = id; sfx('click'); update(); },
+          }, h('i.g-catdot', { style: { background: dot } }), name, h('small', null, String(n)));
+        const tabs = h('div.g-tabs', { role: 'tablist', 'aria-label': 'Module category' },
+          tab(ALL, 'All categories', 'Every category, filtered by role and search', fits.filter(passes).length, pickerCat === ALL, false, 'conic-gradient(#ff8a5c, #5cc8ff, #5cd66b, #c58cff, #ff8a5c)'),
+          ...cats.map((k) => tab(k.id, k.name, k.desc, fits.filter((m) => m.category === k.id && passes(m)).length, k.id === pickerCat, cur?.category === k.id, CATEGORY_COLOR[k.id] ?? '#b0b8c0')));
+        const list = fits.filter((m) => (pickerCat === ALL || m.category === pickerCat) && passes(m))
+          .sort((x, y) => (pickerCat === ALL ? x.category.localeCompare(y.category) : 0) || RANK[x.mount] - RANK[y.mount] || x.cost - y.cost);
+        const search = h('input.g-msearch', { type: 'search', placeholder: 'Search modules…', 'aria-label': 'Search module names', 'data-fk': `msearch-${i}`, autocomplete: 'off' });
+        search.value = modQuery;
+        search.addEventListener('input', () => {
+          modQuery = search.value;
+          const pos = search.selectionStart;
+          update();
+          const again = el.querySelector<HTMLInputElement>(`[data-fk="msearch-${i}"]`);
+          again?.focus();
+          if (pos != null) again?.setSelectionRange(pos, pos);
+        });
         row.append(h('div.g-opts', null,
+          roleBar(`mod${i}`, update),
+          h('div.g-msearch-row', null, search, modQuery ? h('button.g-rclear', { type: 'button', onclick: () => { modQuery = ''; update(); } }, icon('x'), 'Clear search') : null),
           tabs,
-          catDef ? h('p.g-catdesc', null, catDef.desc) : null,
-          h('div.g-optlist', { role: 'group', 'aria-label': `${catDef?.name ?? ''} modules for slot ${i + 1}` }, ...list.map((m) => opt(m.id))),
+          pickerCat === ALL ? h('p.g-catdesc', null, 'All categories: role filter and search apply across every module that fits this slot.') : catDef ? h('p.g-catdesc', null, catDef.desc) : null,
+          h('div.g-optlist', { role: 'group', 'aria-label': `${catDef?.name ?? 'All'} modules for slot ${i + 1}` },
+            ...(list.length ? list.map((m) => opt(m.id)) : [emptyMsg('modules')])),
           opt(null),
         ));
       }

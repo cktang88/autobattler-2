@@ -3,7 +3,8 @@
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { accuracyRating, firingStyle, turretTurnRate, weaponDps } from '../../shared/stats.ts';
-import type { ModuleDef, MoveKind } from '../../shared/types.ts';
+import { ROLES } from '../../shared/parts.ts';
+import type { ModuleDef, MoveKind, Role } from '../../shared/types.ts';
 import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
 import { CATEGORY_COLOR } from '../render/turrets.ts';
 
@@ -255,4 +256,95 @@ export function modal(host: HTMLElement, title: string, body: string, buttons: M
     document.addEventListener('keydown', onKey, true);
     (box.querySelector('button.primary') as HTMLElement ?? box.querySelector('button'))?.focus();
   });
+}
+
+// ---------------- role / size filters ----------------
+
+const ROLE_COLOR: Record<Role, string> = {
+  raider: '#ff8a5c', skirmisher: '#5cc8ff', riot: '#ff5c7a', assault: '#f2a93b', tank: '#9fb0c2', artillery: '#c58cff', antiair: '#7cf0ff',
+  support: '#5cd66b', scout: '#d6e86a', flyer: '#8fa8ff', bomber: '#ff9bd0', siege: '#d8884a', stealth: '#a58cc9', melee: '#ff6b4a',
+};
+const ROLE_ICONS: Record<Role, string> = {
+  raider: '<path d="M4 18l8-13 8 13-8-4z"/>',
+  skirmisher: '<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/>',
+  riot: '<circle cx="12" cy="12" r="3"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3M6.3 6.3l2 2M15.7 15.7l2 2M17.7 6.3l-2 2M8.3 15.7l-2 2"/>',
+  assault: '<path d="M5 19l7-14 7 14M8.5 13h7"/>',
+  tank: '<path d="M12 3l8 3v6c0 4.8-3.4 8-8 9-4.6-1-8-4.2-8-9V6z"/>',
+  artillery: '<path d="M4 19h16M7 19l6-11M13 8l3-3 3 3-3 3z"/>',
+  antiair: '<path d="M12 21V8M7 12l5-6 5 6M5 21h14"/>',
+  support: '<path d="M12 5v14M5 12h14"/><circle cx="12" cy="12" r="9"/>',
+  scout: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/>',
+  flyer: '<path d="M12 3v17M3 13l9-4 9 4"/>',
+  bomber: '<path d="M12 3v7M9 10h6l1 5-4 6-4-6z"/>',
+  siege: '<path d="M4 20V10l3-2 3 2v10M14 20V8l3-3 3 3v12M3 20h18"/>',
+  stealth: '<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><path d="M4 4l16 16"/>',
+  melee: '<path d="M5 19L18 6M14 4h6v6M7 17l-3 3"/>',
+};
+const ROLE_BY_ID = new Map(ROLES.map((r) => [r.id, r] as const));
+
+export function roleIcon(id: Role): HTMLSpanElement {
+  const s = h('span.g-ico', { 'aria-hidden': 'true' });
+  s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ROLE_ICONS[id]}</svg>`;
+  return s;
+}
+
+/** Up to `max` small coloured role chips; roles currently selected in the filter come first. */
+export function roleTags(roles: readonly Role[], max = 3): HTMLElement {
+  const sorted = [...roles].sort((a, b) => Number(roleFilter.has(b)) - Number(roleFilter.has(a)));
+  return h('span.g-rtags', null, ...sorted.slice(0, max).map((r) =>
+    h('span.g-rtag', { class: roleFilter.has(r) ? 'hit' : null, style: { '--rc': ROLE_COLOR[r] }, title: ROLE_BY_ID.get(r)?.desc ?? r }, roleIcon(r), ROLE_BY_ID.get(r)?.name ?? r)));
+}
+
+const LS_ROLES = 'garage.roleFilter';
+const LS_SIZES = 'garage.sizeFilter';
+function loadSet<T>(key: string, ok: (v: unknown) => v is T): Set<T> {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? '[]');
+    if (Array.isArray(v)) return new Set(v.filter(ok));
+  } catch { /* storage unavailable */ }
+  return new Set();
+}
+function saveSet(key: string, s: Set<unknown>) {
+  try { localStorage.setItem(key, JSON.stringify([...s])); } catch { /* ignore */ }
+}
+/** Shared role selection (OR). Empty = All. */
+export const roleFilter: Set<Role> = loadSet<Role>(LS_ROLES, (v): v is Role => typeof v === 'string' && ROLE_BY_ID.has(v as Role));
+export const sizeFilter: Set<number> = loadSet<number>(LS_SIZES, (v): v is number => typeof v === 'number' && v >= 1 && v <= 5);
+export const SIZE_CLASSES = ['Light', 'Medium', 'Heavy', 'Giant', 'Titan'];
+
+/** Does an item with these roles pass the shared role filter? */
+export const matchesRoles = (roles: readonly Role[]) => roleFilter.size === 0 || roles.some((r) => roleFilter.has(r));
+export const matchesSize = (size: number) => sizeFilter.size === 0 || sizeFilter.has(size);
+
+/** Role chip bar (shared selection). `fk` namespaces focus keys; `onChange` re-renders. */
+export function roleBar(fk: string, onChange: () => void, extra?: { sizes?: boolean }): HTMLElement {
+  const toggle = (r: Role) => { if (roleFilter.has(r)) roleFilter.delete(r); else roleFilter.add(r); saveSet(LS_ROLES, roleFilter); onChange(); };
+  const chip = (label: string, on: boolean, click: () => void, tip: string, key: string, color?: string, ico?: HTMLElement) =>
+    h('button.g-rchip', { type: 'button', class: on ? 'on' : null, 'aria-pressed': String(on), title: tip, 'data-fk': `${fk}-${key}`, style: color ? { '--rc': color } : null, onclick: click }, ico ?? null, label);
+  const bar = h('div.g-rbar', { role: 'group', 'aria-label': 'Filter by role' },
+    h('div.g-rchips', null,
+      h('span.g-rlabel', null, 'Role'),
+      chip('All', roleFilter.size === 0, () => { roleFilter.clear(); saveSet(LS_ROLES, roleFilter); onChange(); }, 'Show every role', 'all'),
+      ...ROLES.map((r) => chip(r.name, roleFilter.has(r.id), () => toggle(r.id), r.desc, r.id, ROLE_COLOR[r.id], roleIcon(r.id))),
+    ),
+  );
+  if (extra?.sizes) {
+    bar.append(h('div.g-rchips.sizes', { role: 'group', 'aria-label': 'Filter by size class' },
+      h('span.g-rlabel', null, 'Size'),
+      chip('Any', sizeFilter.size === 0, () => { sizeFilter.clear(); saveSet(LS_SIZES, sizeFilter); onChange(); }, 'Any size class', 'sz-all'),
+      ...SIZE_CLASSES.map((n, i) => chip(n, sizeFilter.has(i + 1), () => {
+        if (sizeFilter.has(i + 1)) sizeFilter.delete(i + 1); else sizeFilter.add(i + 1);
+        saveSet(LS_SIZES, sizeFilter); onChange();
+      }, `${n} chassis (size ${i + 1}, ${sizeLabel(i + 1)})`, `sz-${i + 1}`)),
+    ));
+  }
+  if (roleFilter.size || (extra?.sizes && sizeFilter.size)) {
+    const names = [...roleFilter].map((r) => ROLE_BY_ID.get(r)?.name ?? r);
+    bar.append(h('div.g-ractive', { role: 'status' },
+      h('span', null, 'Filtering: ', h('b', null, [...names, ...(extra?.sizes ? [...sizeFilter].sort().map((s) => SIZE_CLASSES[s - 1]) : [])].join(', ')),
+        h('em', null, ' (shared by chassis, mobility and modules; selected part stays visible)')),
+      h('button.g-rclear', { type: 'button', 'data-fk': `${fk}-clear`, onclick: () => { roleFilter.clear(); saveSet(LS_ROLES, roleFilter); if (extra?.sizes) { sizeFilter.clear(); saveSet(LS_SIZES, sizeFilter); } onChange(); } }, icon('x'), 'Clear filters'),
+    ));
+  }
+  return bar;
 }
