@@ -12,7 +12,7 @@
 
 import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import { applyDeploy, newMatch, newPlayer, resolveRound, validateDeploy } from '../src/shared/match.ts';
-import { CATEGORIES, MODULES } from '../src/shared/parts.ts';
+import { CATEGORIES, CHASSIS, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
 import { computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
@@ -107,6 +107,14 @@ function moduleDesigns(): TestDesign[] {
           add(`base-${i}-${ch}-${mob}-${mounts.map((x) => x === 'U' ? '_' : x).join('+')}`.slice(0, 40), null, true, key, ch, mob, mounts.map((x) => (x === 'U' ? null : x)));
         }
       });
+    }
+  }
+  // plain frames: every legal chassis/mobility pairing with a neutral loadout (calibrates hulls and drives)
+  const FILL: Record<string, string> = { L: 'laser', M: 'autocannon', H: 'cannon' };
+  for (const c of CHASSIS) {
+    for (const mob of MOBILITY) {
+      if (pairingError(c.id, mob.id)) continue;
+      add(`f-${c.id}-${mob.id}`, null, false, '', c.id, mob.id, c.mounts.map((mc) => (c.traits.includes('airOnly') && mc === 'M' ? 'autocannon' : FILL[mc])));
     }
   }
   return out;

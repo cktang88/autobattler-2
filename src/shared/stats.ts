@@ -99,11 +99,12 @@ const CAL: Record<string, number> = {};
 // DEVCAL-BEGIN
 try { Object.assign(CAL, JSON.parse((globalThis as any).process?.env?.BAL_CAL ?? '{}')); } catch { /* ignore */ }
 // DEVCAL-END
+const cal = (id: string) => CAL[id] ?? 1;
 
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
   const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / 5, RANGE_EXP))); // reach decides most fights
-  if (w.heal) return w.heal * 1.6 * rangeF;
+  if (w.heal) return w.heal * 1.6 * rangeF * cal(w.id);
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
   let v = weaponDps(w) * armorEfficiency(w.damage, w.ap ?? 0);
@@ -123,7 +124,7 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;
   const coverage = w.targetsGround && w.targetsAir ? 1.15 : w.targetsGround ? 0.85 : 1.5 * (w.airBonus ?? 1);
-  return v * coverage * rangeF * (CAL[w.id] ?? 1);
+  return v * coverage * rangeF * cal(w.id);
 }
 
 export function computeStats(d: Design): UnitStats {
@@ -179,29 +180,32 @@ export function computeStats(d: Design): UnitStats {
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
   offense *= fireRate;
   let reactiveHp = 0;
+  const shieldCal = mods.reduce((a, m) => a + (m.shield ?? 0) * cal(m.id), 0) / Math.max(1, shield);
   let ehpMult = 1;
   for (const mod of mods) {
-    if (mod.reloadBonus) offense *= 1 + 0.25 * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
-    if (mod.shieldAura) offense += mod.shieldAura.amount * 0.3;
-    if (mod.fireRateAura) offense += mod.fireRateAura.bonus * 300;
-    if (mod.detect) offense += 12;
-    if (mod.jammer) { offense += 15; ehpMult *= 1.1; }
-    if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06;
-    if (mod.regen) ehpMult *= 1 + mod.regen * 12;
-    if (mod.pointDefense) ehpMult *= 1.2;
-    if (mod.smoke) ehpMult *= 1.12;
-    if (mod.reactive) reactiveHp += mod.reactive * 60;
-    if (mod.energyResist) ehpMult *= 1 + mod.energyResist * 0.4;
-    if (mod.hardened) ehpMult *= 1.08;
-    if (mod.cloak === 'stealth') ehpMult *= 1.35;
-    if (mod.cloak === 'phantom') ehpMult *= 1.5;
+    const u = cal(mod.id); // empirical strength of the utility's effect (1 = analytic value)
+    const eh = (mult: number) => 1 + (mult - 1) * u;
+    if (mod.reloadBonus) offense *= 1 + 0.25 * u * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
+    if (mod.shieldAura) offense += mod.shieldAura.amount * 0.3 * u;
+    if (mod.fireRateAura) offense += mod.fireRateAura.bonus * 300 * u;
+    if (mod.detect) offense += 12 * u;
+    if (mod.jammer) { offense += 15 * u; ehpMult *= eh(1.1); }
+    if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06 * u;
+    if (mod.regen) ehpMult *= eh(1 + mod.regen * 12);
+    if (mod.pointDefense) ehpMult *= eh(1.2);
+    if (mod.smoke) ehpMult *= eh(1.12);
+    if (mod.reactive) reactiveHp += mod.reactive * 60 * u;
+    if (mod.energyResist) ehpMult *= eh(1 + mod.energyResist * 0.4);
+    if (mod.hardened) ehpMult *= eh(1.08);
+    if (mod.cloak === 'stealth') ehpMult *= eh(1.35);
+    if (mod.cloak === 'phantom') ehpMult *= eh(1.5);
   }
   offense = Math.max(offense, 5);
-  let ehp = (hp + 1.2 * shield + reactiveHp) * (1 + armor / 15) * ehpMult;
+  let ehp = (hp + 1.2 * shield * shieldCal + reactiveHp) * (1 + armor / 15) * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
-  const power = Math.sqrt(offense * ehp) * mobilityF;
+  const power = Math.sqrt(offense * ehp) * mobilityF * cal(`c:${d.chassis}`) * cal(`m:${d.mobility}`);
   const cost = Math.max(10, Math.ceil((PARTS_WEIGHT * partsCost + POWER_K * power) / 5) * 5);
 
   return {
