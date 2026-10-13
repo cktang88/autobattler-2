@@ -54,45 +54,60 @@ export const fmtMeters = (cells: number) => `${Math.round(cells * METERS_PER_CEL
 export const fmtSpeed = (cellsPerSec: number) => `${Math.round(cellsPerSec * METERS_PER_CELL)} m/s`;
 
 // ---------------------------------------------------------------------------------------------
-// Blocks & squads (Mechabellum-style). Every purchase is one BLOCK placed on a coarse grid:
-//   size-1 designs -> a squad of 4 light units filling a 2x2-cell (10 m) block
-//   size-2 designs -> 1 unit in a 2x2-cell block
-//   size-3 designs -> 1 unit in a 4x4-cell (20 m) block
-// Placement.x/.y is the block's top-left local cell and must be a multiple of BLOCK.
-// One Placement = one block; all its units share the Placement's uid and level.
+// Blocks & squads (Mechabellum-style). Every purchase is one BLOCK placed on the cell grid:
+//   size-1 designs -> a squad of 4 light units in a 2x2 formation
+//   size-2 / size-3 designs -> a single unit (footprint 2x2 / 3x3 cells)
+// Squads have a player-chosen SPACING of 0..MAX_SPACING empty cells between neighbouring units,
+// so a squad occupies (2 + spacing) x (2 + spacing) cells: packed (10 m) up to spread out (30 m).
+// Placement.x/.y is the block's top-left local cell. One Placement = one block; all its units share
+// the Placement's uid and level.
 // ---------------------------------------------------------------------------------------------
 
-/** block grid step, in cells */
-export const BLOCK = 2;
-
-/** footprint edge length (cells) of a block holding a design of this chassis size */
-export const blockCells = (size: Size): number => (size === 3 ? 4 : 2);
+export const MAX_SPACING = 4;
 
 /** number of units bought per block */
 export const squadSize = (size: Size): number => (size === 1 ? 4 : 1);
 
+/** can this design's block have spacing? (only multi-unit squads) */
+export const hasSpacing = (size: Size): boolean => squadSize(size) > 1;
+
+/** clamp/normalize a spacing value (non-squads always 0) */
+export const normSpacing = (size: Size, spacing: number | undefined): number =>
+  hasSpacing(size) ? Math.max(0, Math.min(MAX_SPACING, Math.round(spacing ?? 0))) : 0;
+
+/** footprint edge length (cells) of a block */
+export function blockCells(size: Size, spacing = 0): number {
+  if (size === 1) return 2 + normSpacing(size, spacing);
+  return size;
+}
+
 /** unit centers within a block, as offsets (cells) from the block's top-left corner */
-export function squadOffsets(size: Size): { x: number; y: number }[] {
-  if (size === 1) return [{ x: 0.5, y: 0.5 }, { x: 1.5, y: 0.5 }, { x: 0.5, y: 1.5 }, { x: 1.5, y: 1.5 }];
-  const c = blockCells(size) / 2;
+export function squadOffsets(size: Size, spacing = 0): { x: number; y: number }[] {
+  if (size === 1) {
+    const far = 1.5 + normSpacing(size, spacing);
+    return [{ x: 0.5, y: 0.5 }, { x: far, y: 0.5 }, { x: 0.5, y: far }, { x: far, y: far }];
+  }
+  const c = size / 2;
   return [{ x: c, y: c }];
 }
 
+type BlockPos = Pick<Placement, 'x' | 'y'> & { spacing?: number };
+
 /** World-space centers of every unit in a placed block. */
-export function placementUnitCenters(side: Side, p: Pick<Placement, 'x' | 'y'>, size: Size): { x: number; y: number }[] {
-  const cells = blockCells(size);
+export function placementUnitCenters(side: Side, p: BlockPos, size: Size): { x: number; y: number }[] {
+  const cells = blockCells(size, p.spacing);
   const { col, row } = localToWorldCell(side, p.x, p.y, cells);
-  return squadOffsets(size).map((o) => ({ x: col + o.x, y: row + o.y }));
+  return squadOffsets(size, p.spacing).map((o) => ({ x: col + o.x, y: row + o.y }));
 }
 
 /** World-space center of a placed block. */
-export function blockCenter(side: Side, p: Pick<Placement, 'x' | 'y'>, size: Size): { x: number; y: number } {
-  const cells = blockCells(size);
+export function blockCenter(side: Side, p: BlockPos, size: Size): { x: number; y: number } {
+  const cells = blockCells(size, p.spacing);
   const { col, row } = localToWorldCell(side, p.x, p.y, cells);
   return { x: col + cells / 2, y: row + cells / 2 };
 }
 
-/** Is a block of this design size legal at local (x, y)? (on the block grid and inside the zone) */
-export function blockInZone(x: number, y: number, size: Size): boolean {
-  return x % BLOCK === 0 && y % BLOCK === 0 && inDeployZone(x, y, blockCells(size));
+/** Is a block of this design size (and spacing) inside the deploy zone at local (x, y)? */
+export function blockInZone(x: number, y: number, size: Size, spacing = 0): boolean {
+  return inDeployZone(x, y, blockCells(size, spacing));
 }
