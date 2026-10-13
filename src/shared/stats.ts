@@ -261,6 +261,9 @@ export function validateDesign(d: Design): string[] {
     const mod = MODULE_BY_ID.get(id);
     if (!mod) { errs.push(`Unknown module ${id}`); return; }
     if (!fitsMount(c.mounts[i], mod.mount)) errs.push(`${mod.name} (${mod.mount}) doesn't fit a ${c.mounts[i]} mount`);
+    const flies = MOBILITY_BY_ID.get(d.mobility)?.kind === 'air';
+    if (mod.requires === 'air' && !flies) errs.push(`${mod.name} can only be mounted on flying designs`);
+    if (mod.requires === 'ground' && flies) errs.push(`${mod.name} can't be mounted on flying designs`);
     if (mod.kind === 'weapon' || mod.kind === 'utility') weapons++;
   });
   if (weapons === 0) errs.push('Needs at least one weapon or utility module');

@@ -1,4 +1,4 @@
-// Part catalog: 10 chassis, 10 mobility systems, 82 mount modules (54 weapons in 12 categories + 25 utilities + armor).
+// Part catalog: 10 chassis, 10 mobility systems, 85 mount modules (57 weapons in 12 categories + 25 utilities + armor).
 // Balance numbers live here; stats.ts turns a Design into UnitStats.
 
 import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass } from './types.ts';
@@ -108,6 +108,8 @@ export const MODULES: ModuleDef[] = [
   // ---------------- Missiles ----------------
   wpn({ id: 'atgm', name: 'ATGM Launcher', family: 'Anti-tank', desc: 'Wire-guided anti-tank missile on a light mount.', category: 'missile', visual: 'missileRack', barrels: 1, caliber: 0.3, mount: 'L', weight: 1.6, cost: 18,
     damage: 110, cooldown: 4, range: 8, ...G, projectile: 'missile', projectileSpeed: 9, splash: 0.2, ap: 0.8 }),
+  wpn({ id: 'guidedrocket', name: 'Guided Rocket Launcher', family: 'Dual-role', desc: 'Shoulder-sized guided rocket. Hits ground and air.', category: 'missile', visual: 'missileRack', barrels: 1, caliber: 0.25, mount: 'L', weight: 1.3, cost: 16,
+    damage: 55, cooldown: 3, range: 7, ...GA, projectile: 'missile', projectileSpeed: 10, splash: 0.3, ap: 0.5 }),
   wpn({ id: 'aamissile', name: 'AA Missile Pod', family: 'Anti-air', desc: 'Twin heat-seekers. Air only.', category: 'missile', visual: 'missileRack', barrels: 2, caliber: 0.3, mount: 'L', weight: 1.4, cost: 16,
     damage: 60, burst: 2, cooldown: 3.5, range: 9, ...A, projectile: 'missile', projectileSpeed: 11, splash: 0.3, ap: 0.4, airBonus: 1.5 }),
   wpn({ id: 'sam', name: 'Missile Rack', family: 'Multi-role', desc: 'Homing missiles. Long range, bonus vs aircraft.', category: 'missile', visual: 'missileRack', barrels: 4, caliber: 0.5, mount: 'M', weight: 3, cost: 34,
@@ -156,6 +158,11 @@ export const MODULES: ModuleDef[] = [
     damage: 40, cooldown: 1.4, range: 3.5, ...G, projectile: 'orb', projectileSpeed: 14, splash: 1, ap: 0.3, impulse: 1.6 }),
   wpn({ id: 'gravity', name: 'Gravity Gun', family: 'Graviton', desc: 'Yanks enemies toward you, dragging them out of formation.', category: 'disruption', visual: 'gravity', caliber: 0.8, mount: 'H', weight: 8, cost: 60,
     damage: 30, cooldown: 0.8, range: 7, ...GA, projectile: 'beam', ap: 1, impulse: -0.9 }),
+  // ---------------- Bombs (flyers only) ----------------
+  wpn({ id: 'bombs', name: 'Bomb Bay', family: 'Iron bombs', desc: 'Drops bombs on ground units directly below. Flying designs only.', category: 'artillery', visual: 'charge', caliber: 0.5, mount: 'M', weight: 3.5, cost: 28, requires: 'air',
+    damage: 110, burst: 2, cooldown: 3, range: 1, ...G, projectile: 'arc', projectileSpeed: 6, splash: 1.2, ap: 0.3, spread: 0.3 }),
+  wpn({ id: 'clusterbombs', name: 'Cluster Dispenser', family: 'Cluster', desc: 'Scatters 8 bomblets over a wide area below. Flying designs only.', category: 'artillery', visual: 'charge', barrels: 2, caliber: 0.8, mount: 'M', weight: 5, cost: 45, requires: 'air',
+    damage: 55, pellets: 8, cooldown: 4, range: 1.5, ...G, projectile: 'arc', projectileSpeed: 6, splash: 0.9, ap: 0.2, spread: 1.6 }),
   // ---------------- Flak ----------------
   wpn({ id: 'flak', name: 'Flak Cannon', family: 'Light flak', desc: 'Anti-air only. Bursting shells wreck aircraft groups.', category: 'antiair', visual: 'flak', caliber: 0.5, mount: 'M', weight: 3, cost: 24,
     damage: 45, cooldown: 0.45, range: 7.5, ...A, magazine: 5, reload: 2.5, projectile: 'shell', projectileSpeed: 16, splash: 1.3, ap: 0.2, airBonus: 1.5 }),

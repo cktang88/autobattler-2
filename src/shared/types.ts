@@ -95,6 +95,8 @@ export interface ModuleDef {
   cooldown?: number;
   /** projectiles per volley, fired ~0.1s apart */
   burst?: number;
+  /** mounting restriction: 'air' = only on flying designs (bombs), 'ground' = only on non-flying designs */
+  requires?: 'air' | 'ground';
   /** clip size: after this many shots (volleys) the weapon pauses `reload` seconds. Omit = continuous fire */
   magazine?: number;
   /** seconds to reload a full magazine */
