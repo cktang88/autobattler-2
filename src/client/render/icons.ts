@@ -12,7 +12,7 @@ import { TEAM_PAL, ctx2d, makeCanvas, shade, type Ctx, type TeamPal } from './pa
 import { CATEGORY_COLOR, drawTurret, drawTurretDynamic } from './turrets.ts';
 import { GIANT_SHAPES, drawGiantFx } from './giantart.ts';
 import {
-  drawAnchorPlate, drawMobility, drawPlates, hullDetails, hullPath, hullUnderlay, layoutOf, paintHull, rotorBlur, type UnitLayout,
+  drawAnchorPlate, drawMobility, drawPartsStatic, drawPlates, hullDetails, hullPath, hullUnderlay, layoutOf, paintHull, rotorBlur, type UnitLayout,
 } from './unitart.ts';
 
 export type PartKind = 'chassis' | 'mobility' | 'module';
@@ -123,8 +123,10 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
   const oo = o / sc;
   if (kind === 'chassis') {
     hullUnderlay(g, L, pal, oo);
+    drawPartsStatic(g, L, pal, oo, 'under');
     paintHull(g, hullPath(L.shape, S), pal, S, oo, L.hw);
     hullDetails(g, L, pal, oo);
+    drawPartsStatic(g, L, pal, oo, 'over');
     if (GIANT_SHAPES.has(L.shape)) drawGiantFx(g, L, { time: 0.4 }, 0, 0, 0, 1, PX * sc, pal, 1);
   } else {
     if (L.mob.id === 'anchor') drawAnchorPlate(g, L, pal, oo);

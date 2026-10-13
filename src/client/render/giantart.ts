@@ -8,7 +8,7 @@ import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
 
-export const GIANT_SHAPES = new Set(['goliath', 'leviathan', 'carrier', 'colossal', 'citadel']);
+export const GIANT_SHAPES = new Set(['goliath', 'leviathan', 'carrier', 'colossal', 'citadel', 'broodmother', 'arachne']);
 
 /** Emissive accent colour: cyan for the friendly team, blood red for the enemy. */
 export function emis(pal: TeamPal): string {
@@ -630,6 +630,15 @@ export function giantLights(shape: string, S: number): GLight[] {
       o.push({ x: -0.255 * S, y: 0, r: 0.1 * S, k: 'vent' });
       for (const s of [-1, 1]) { o.push({ x: -0.4 * S, y: s * 0.095 * S, r: 0.042 * S, k: 'stack' }); nav(-0.02, s * 0.5, s); }
       break;
+    case 'broodmother':
+      o.push({ x: -0.32 * S, y: 0, r: 0.05 * S, k: 'core' });
+      o.push({ x: 0.4 * S, y: 0, r: 0.08 * S, k: 'visor' });
+      for (const s of [-1, 1]) nav(-0.1, s * 0.33, s);
+      break;
+    case 'arachne':
+      o.push({ x: 0.43 * S, y: 0, r: 0.09 * S, k: 'visor' });
+      for (const s of [-1, 1]) { nav(-0.24, s * 0.33, s); o.push({ x: -0.3 * S, y: s * 0.13 * S, r: 0.06 * S, k: 'vent', ph: s }); }
+      break;
     case 'citadel':
       o.push({ x: 0.08 * S, y: 0, r: 0.06 * S, k: 'core' });
       o.push({ x: 0.385 * S, y: 0.385 * S, r: 0.17 * S, k: 'radar' });
@@ -649,6 +658,8 @@ function giantStrips(shape: string): number[] {
     case 'leviathan': return [-0.4, -0.235, 0.28, -0.235, -0.4, 0.235, 0.28, 0.235];
     case 'carrier': return [0.09, -0.41, -0.03, -0.445, -0.03, -0.445, -0.28, -0.445, 0.09, 0.41, -0.03, 0.445, -0.03, 0.445, -0.28, 0.445];
     case 'colossal': return [0.12, -0.05, 0.19, -0.15, 0.12, 0.05, 0.19, 0.15, -0.06, -0.1, -0.12, -0.21, -0.06, 0.1, -0.12, 0.21, 0.04, -0.43, 0.24, -0.43, 0.04, 0.43, 0.24, 0.43];
+    case 'broodmother': return [-0.06, -0.2, -0.2, -0.27, -0.06, 0.2, -0.2, 0.27];
+    case 'arachne': return [-0.08, -0.17, -0.38, -0.2, -0.08, 0.17, -0.38, 0.2];
     case 'citadel': return [-0.33, -0.345, 0.33, -0.345, -0.33, 0.345, 0.33, 0.345, -0.345, -0.25, -0.345, 0.25, 0.415, -0.085, 0.415, 0.085];
   }
   return [];
@@ -731,11 +742,12 @@ export interface Foot { x: number; y: number; lift: number; a: number; }
 export function titanFeet(L: UnitLayout, phase: number, rest: boolean): Foot[] {
   const S = L.S;
   const quad = L.shape !== 'colossal' && S >= 4;
-  const colossal = L.shape === 'colossal';
+  const colossal = L.shape === 'colossal' || L.shape === 'warlord';
   const out: Foot[] = [];
-  const stride = (quad ? 0.1 : colossal ? 0.32 : 0.2) * S;
+  const war = L.shape === 'warlord';
+  const stride = (quad ? 0.1 : war ? 0.36 : colossal ? 0.32 : 0.2) * S;
   const rows = quad ? [0.28, -0.28] : [colossal ? -0.02 : 0];
-  const fy = (quad ? Math.min(L.hw, 0.42) + 0.1 : colossal ? 0.215 : 0.31) * S;
+  const fy = (quad ? Math.min(L.hw, 0.42) + 0.1 : war ? 0.17 : colossal ? 0.215 : 0.31) * S;
   let k = 0;
   for (const row of rows) for (const s of [-1, 1]) {
     const diag = quad && (k++ % 2 === 1) ? Math.PI : 0;
@@ -753,7 +765,7 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
   const S = L.S;
   const E = emis(pal);
   const quad = L.shape !== 'colossal' && S >= 4;
-  const colossal = L.shape === 'colossal';
+  const colossal = L.shape === 'colossal' || L.shape === 'warlord';
   const feet = titanFeet(L, phase, rest);
   const hipY = (quad ? Math.min(L.hw, 0.42) * 0.6 : colossal ? 0.15 : 0.2) * S;
   const lw = (quad ? 0.1 : colossal ? 0.13 : 0.14) * S;
@@ -814,7 +826,15 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
   });
 }
 
-export function gravPods(S: number, hw: number): { x: number; y: number; r: number }[] {
+export function gravPods(S: number, hw: number, shape = ''): { x: number; y: number; r: number }[] {
+  if (shape === 'bomber') {
+    // wingtip nacelles + twin tail lifters
+    return [
+      { x: -0.13 * S, y: 0.5 * S, r: 0.09 * S }, { x: -0.13 * S, y: -0.5 * S, r: 0.09 * S },
+      { x: -0.44 * S, y: 0.2 * S, r: 0.075 * S }, { x: -0.44 * S, y: -0.2 * S, r: 0.075 * S },
+      { x: 0.3 * S, y: 0.16 * S, r: 0.065 * S }, { x: 0.3 * S, y: -0.16 * S, r: 0.065 * S },
+    ];
+  }
   if (S >= 4) {
     // giant lifters: four big nacelles out on outriggers + two small ones mid-ship
     const y = (Math.min(0.46, hw) + 0.1) * S, R = 0.085 * S;
@@ -833,7 +853,7 @@ export function gravPods(S: number, hw: number): { x: number; y: number; r: numb
 export function drawGravlift(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
   const E = emis(pal);
-  const pods = gravPods(S, L.hw);
+  const pods = gravPods(S, L.hw, L.shape);
   g.lineCap = 'round';
   g.strokeStyle = OUTLINE; g.lineWidth = 0.07 * S;
   g.beginPath();
@@ -993,7 +1013,7 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
   // running gear
   const id = L.mob.id;
   if (id === 'gravlift') {
-    for (const [i, pod] of gravPods(S, L.hw).entries()) {
+    for (const [i, pod] of gravPods(S, L.hw, L.shape).entries()) {
       const [wx, wy] = W(pod.x, pod.y);
       const r = pod.r * sc;
       const pulse = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.3 + seed);

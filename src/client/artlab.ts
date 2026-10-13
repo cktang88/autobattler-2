@@ -6,7 +6,7 @@
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
 import { aiDeck } from '../shared/ai.ts';
-import { DEPLOY_D, DEPLOY_W, blockCells, blockInZone, hasSpacing, overlaps, placementUnitCenters } from '../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, blockDims, blockInZone, blocksOverlap, hasSpacing, placementUnitCenters } from '../shared/grid.ts';
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from '../shared/parts.ts';
 import { Battle } from '../shared/sim/battle.ts';
 import { TICK_RATE } from '../shared/sim/types.ts';
@@ -171,10 +171,10 @@ function placeUnits(deck: Design[], seed: number, count: number): Placement[] {
     const d = pick(deck);
     const unit = computeStats(d).size;
     const spacing = hasSpacing(unit) ? Math.floor(rnd() * 4) : 0;
-    const s = blockCells(unit, spacing);
-    const x = Math.floor(rnd() * (DEPLOY_W - s + 1)), y = Math.floor(rnd() * (DEPLOY_D - s + 1));
+    const { w, h } = blockDims(unit, spacing);
+    const x = Math.floor(rnd() * (DEPLOY_W - w + 1)), y = Math.floor(rnd() * (DEPLOY_D - h + 1));
     if (!blockInZone(x, y, unit, spacing)) continue;
-    if (out.some((p) => overlaps(p.x, p.y, blockCells(computeStats(deck.find((q) => q.id === p.designId)!).size, p.spacing), x, y, s))) continue;
+    if (out.some((p) => blocksOverlap(p, computeStats(deck.find((q) => q.id === p.designId)!).size, { x, y, spacing }, unit))) continue;
     out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rnd() * 3), round: 1, ...(spacing ? { spacing } : {}) });
   }
   return out;

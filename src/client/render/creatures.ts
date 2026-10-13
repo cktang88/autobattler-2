@@ -10,7 +10,8 @@ import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
 
-export const CREATURE_SHAPES = new Set(['mantis', 'mech', 'arachnid', 'crab', 'saucer', 'delta', 'warlord', 'scorpion', 'centipede', 'broodmother', 'arachne']);
+export const CREATURE_SHAPES = new Set(['mantis', 'mech', 'arachnid', 'crab', 'saucer', 'delta', 'warlord', 'scorpion', 'centipede', 'broodmother', 'arachne',
+  'carriage', 'hunter', 'riot', 'interceptor', 'siegeplat', 'juggernaut', 'bomber']);
 const SPIDERS = new Set(['arachnid', 'broodmother', 'arachne']);
 
 /* ------------------------------------------------------------------------------------------------ geometry */
@@ -35,6 +36,12 @@ export function profilePath(prof: number[], S: number): Path2D {
   for (let i = prof.length - 4; i >= 2; i -= 2) pts.push(prof[i], prof[i + 1]);
   const p = new Path2D();
   smoothClosed(p, pts, S);
+  return p;
+}
+
+function sharp(half: number[], S: number): Path2D {
+  const p = new Path2D();
+  poly(p, mirrorPoly(half), S);
   return p;
 }
 
@@ -148,7 +155,7 @@ function spike(g: Ctx, x: number, y: number, a: number, len: number, w: number, 
 export function creatureHullPath(shape: string, S: number): Path2D | null {
   switch (shape) {
     case 'mantis': return profilePath([0.47, 0, 0.45, 0.06, 0.4, 0.125, 0.34, 0.11, 0.29, 0.045, 0.22, 0.05, 0.12, 0.075, 0.03, 0.065, -0.04, 0.1, -0.16, 0.145, -0.3, 0.135, -0.42, 0.075, -0.47, 0], S);
-    case 'mech': return profilePath([0.21, 0, 0.2, 0.1, 0.14, 0.19, 0.04, 0.235, -0.08, 0.235, -0.17, 0.18, -0.22, 0.09, -0.23, 0], S);
+    case 'mech': return profilePath([0.24, 0, 0.23, 0.11, 0.16, 0.22, 0.05, 0.28, -0.09, 0.28, -0.2, 0.21, -0.26, 0.1, -0.27, 0], S);
     case 'arachnid': return profilePath([0.44, 0, 0.42, 0.07, 0.35, 0.14, 0.25, 0.165, 0.15, 0.14, 0.08, 0.07, 0.03, 0.1, -0.06, 0.2, -0.2, 0.255, -0.34, 0.235, -0.44, 0.14, -0.48, 0], S);
     case 'crab': return profilePath([0.27, 0, 0.26, 0.12, 0.21, 0.27, 0.12, 0.365, 0.0, 0.41, -0.12, 0.39, -0.22, 0.31, -0.28, 0.17, -0.3, 0], S);
     case 'saucer': { const p = new Path2D(); p.arc(0, 0, 0.44 * S, 0, P2); return p; }
@@ -157,6 +164,13 @@ export function creatureHullPath(shape: string, S: number): Path2D | null {
     case 'scorpion': return profilePath([0.39, 0, 0.38, 0.08, 0.33, 0.15, 0.23, 0.2, 0.08, 0.23, -0.07, 0.22, -0.19, 0.18, -0.28, 0.12, -0.34, 0.06, -0.36, 0], S);
     case 'centipede': return profilePath([0.5, 0, 0.49, 0.055, 0.45, 0.115, 0.38, 0.135, 0.32, 0.115, 0.29, 0], S);
     case 'broodmother': return profilePath([0.47, 0, 0.455, 0.075, 0.39, 0.145, 0.29, 0.175, 0.19, 0.15, 0.125, 0.09, 0.075, 0.13, -0.02, 0.27, -0.16, 0.355, -0.32, 0.36, -0.44, 0.27, -0.49, 0.13, -0.5, 0], S);
+    case 'carriage': return profilePath([0.25, 0, 0.245, 0.1, 0.21, 0.22, 0.15, 0.265, 0.09, 0.22, 0.07, 0.12, -0.08, 0.1, -0.15, 0.05, -0.16, 0], S);
+    case 'hunter': return sharp([0.5, 0, 0.3, -0.065, 0.12, -0.11, 0.04, -0.27, -0.06, -0.31, -0.11, -0.15, -0.3, -0.14, -0.38, -0.25, -0.47, -0.25, -0.44, -0.08, -0.47, 0], S);
+    case 'riot': return sharp([0.42, 0, 0.3, -0.2, 0.18, -0.42, 0.06, -0.43, 0.02, -0.3, -0.36, -0.3, -0.44, -0.21, -0.45, 0], S);
+    case 'interceptor': return sharp([0.5, 0, 0.32, -0.05, 0.06, -0.08, -0.2, -0.43, -0.31, -0.43, -0.2, -0.1, -0.34, -0.1, -0.42, -0.22, -0.48, -0.22, -0.45, 0], S);
+    case 'siegeplat': return sharp([0.38, -0.1, 0.32, -0.27, 0.2, -0.33, -0.28, -0.33, -0.38, -0.25, -0.4, -0.1], S);
+    case 'juggernaut': return sharp([0.47, -0.17, 0.44, -0.3, 0.38, -0.43, -0.38, -0.45, -0.46, -0.38, -0.48, -0.16], S);
+    case 'bomber': return sharp([0.46, 0, 0.3, -0.115, -0.05, -0.47, -0.2, -0.47, -0.27, -0.37, -0.35, -0.41, -0.45, -0.29, -0.4, -0.18, -0.46, -0.07, -0.42, 0], S);
     case 'arachne': { const p = new Path2D(); poly(p, mirrorPoly([0.49, 0, 0.46, -0.07, 0.4, -0.14, 0.3, -0.19, 0.2, -0.18, 0.13, -0.11, 0.08, -0.12, 0.02, -0.2, -0.08, -0.28, -0.22, -0.33, -0.36, -0.31, -0.45, -0.23, -0.5, -0.11, -0.5, 0]), S); return p; }
   }
   return null;
@@ -200,6 +214,41 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
       spike(g, -0.5 * S, 0, Math.PI, 0.08 * S, 0.035 * S, shade(pal.deep, 0.1), o);
       break;
     }
+    case 'carriage':
+      // split trail arms with spades, axle beam
+      for (const s of [-1, 1]) {
+        limbSeg(g, -0.06 * S, s * 0.07 * S, 0.035 * S, -0.43 * S, s * 0.2 * S, 0.03 * S, shade(pal.dark, 0.1), pal.deep, o);
+        const sp = new Path2D();
+        poly(sp, [-0.4, s * 0.13, -0.47, s * 0.15, -0.5, s * 0.27, -0.44, s * 0.27], S);
+        fillOut(g, sp, METAL.dark, o * 0.8);
+      }
+      g.lineCap = 'round';
+      g.strokeStyle = OUTLINE; g.lineWidth = 0.07 * S;
+      g.beginPath(); g.moveTo(0.02 * S, -0.3 * S); g.lineTo(0.02 * S, 0.3 * S); g.stroke();
+      g.strokeStyle = METAL.base; g.lineWidth = 0.04 * S; g.stroke();
+      break;
+    case 'siegeplat':
+      // deployed stabiliser outriggers with jack pads
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        const ax = sx * 0.26 * S, ay = sy * 0.24 * S, fx = sx * 0.43 * S, fy = sy * 0.45 * S;
+        limbSeg(g, ax, ay, 0.045 * S, fx, fy, 0.035 * S, shade(pal.dark, 0.05), pal.deep, o);
+        g.strokeStyle = METAL.light; g.lineWidth = 0.014 * S; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(ax + sx * 0.03 * S, ay); g.lineTo((ax + fx) / 2 + sx * 0.02 * S, (ay + fy) / 2); g.stroke();
+        const pad = new Path2D();
+        pad.arc(fx, fy, 0.065 * S, 0, P2);
+        g.fillStyle = METAL.dark; g.fill(pad); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(pad);
+        g.strokeStyle = 'rgba(240,190,40,0.8)'; g.lineWidth = o * 0.8; g.beginPath(); g.arc(fx, fy, 0.045 * S, 0, P2); g.stroke();
+        dot(g, fx, fy, 0.018 * S, METAL.light);
+      }
+      break;
+    case 'bomber':
+      // tail fins
+      for (const s of [-1, 1]) {
+        const f = new Path2D();
+        poly(f, [-0.3, s * 0.09, -0.47, s * 0.2, -0.5, s * 0.2, -0.44, s * 0.06], S);
+        fillOut(g, f, shade(pal.dark, -0.05), o);
+      }
+      break;
     case 'broodmother':
       for (const s of [-1, 1]) for (const [x, y, a] of [[-0.3, 0.355, 1.7], [-0.44, 0.27, 2.3]]) spike(g, x * S, s * y * S, s * a, 0.05 * S, 0.025 * S, shade(pal.deep, 0.1), o);
       break;
@@ -232,6 +281,7 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     }
     case 'mech': {
+      g.save(); g.scale(1.15, 1.15);
       // backpack
       raised(g, roundedRect(-0.26, -0.12, 0.12, 0.24, 0.035, S), grad(g, S, shade(pal.dark, 0.15), pal.deep), o, S, 1, 0.012);
       for (const s of [-1, 1]) dot(g, -0.24 * S, s * 0.07 * S, 0.025 * S, '#0a0c0e');
@@ -247,6 +297,7 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       g.fillStyle = '#05080b';
       g.beginPath(); g.ellipse(0.16 * S, 0, 0.022 * S, 0.048 * S, 0, 0, P2); g.fill();
       glowLine(g, [0.165, -0.035, 0.165, 0.035], S, E, o * 0.9);
+      g.restore();
       break;
     }
     case 'arachnid':
@@ -347,6 +398,127 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       seam(g, [0.17, 0, -0.33, 0], S, o * 0.6, 'rgba(255,255,255,0.12)');
       break;
     }
+    case 'carriage': {
+      // gun shield (curved plate) + cradle + trail hinge
+      g.save(); g.clip(hull);
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-0.2 * S, -0.3 * S, 0.27 * S, 0.6 * S);
+      g.restore();
+      const sh = new Path2D();
+      sh.moveTo(0.25 * S, 0); sh.quadraticCurveTo(0.25 * S, 0.26 * S, 0.12 * S, 0.25 * S); sh.lineTo(0.1 * S, 0.2 * S); sh.quadraticCurveTo(0.17 * S, 0.1 * S, 0.17 * S, 0);
+      sh.quadraticCurveTo(0.17 * S, -0.1 * S, 0.1 * S, -0.2 * S); sh.lineTo(0.12 * S, -0.25 * S); sh.quadraticCurveTo(0.25 * S, -0.26 * S, 0.25 * S, 0); sh.closePath();
+      raised(g, sh, grad(g, S, shade(pal.light, 0.1), pal.dark, 0.1, -0.2, 0.25, 0.2), o, S, 1, 0.01, 0.5);
+      stripe(g, [0.21, -0.17, 0.21, -0.09, 0.21, 0.17, 0.21, 0.09], S, pal.accent, o);
+      dot(g, -0.11 * S, 0, 0.03 * S, METAL.dark);
+      dot(g, -0.11 * S, 0, 0.014 * S, METAL.light);
+      break;
+    }
+    case 'hunter': {
+      // raised spine, fins, cockpit slit, twin intakes
+      const sp = sharp([0.44, 0, 0.28, -0.045, -0.36, -0.07, -0.42, 0], S);
+      raised(g, sp, grad(g, S, shade(pal.light, 0.1), pal.body), o, S, 1, 0.012, 0.45);
+      for (const s of [-1, 1]) {
+        seam(g, [0.08, s * 0.12, -0.08, s * 0.29, -0.12, s * 0.15, -0.36, s * 0.22], S, t);
+        stripe(g, [0.0, s * 0.24, -0.06, s * 0.29, -0.4, s * 0.23, -0.46, s * 0.23], S, pal.accent, o * 1.1);
+        g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); poly(g, [0.18, s * 0.075, 0.08, s * 0.1, 0.06, s * 0.065], S); g.fill();
+      }
+      g.fillStyle = '#132230'; g.beginPath(); g.ellipse(0.27 * S, 0, 0.08 * S, 0.028 * S, 0, 0, P2); g.fill();
+      glowLine(g, [0.22, 0, 0.32, 0], S, emis(pal), o * 0.8);
+      for (const s of [-1, 1]) { dot(g, -0.45 * S, s * 0.05 * S, 0.025 * S, '#07080a'); }
+      break;
+    }
+    case 'riot': {
+      // sloped glacis riot plate across the front
+      const gl = sharp([0.42, 0, 0.3, -0.2, 0.18, -0.42, 0.06, -0.43, 0.03, -0.33, 0.12, -0.18, 0.2, 0], S);
+      const gg = g.createLinearGradient(0.42 * S, 0, 0.05 * S, 0);
+      gg.addColorStop(0, shade(pal.light, 0.15)); gg.addColorStop(1, pal.dark);
+      raised(g, gl, gg, o, S, 1.5, 0.02, 0.7);
+      for (const s of [-1, 1]) {
+        seam(g, [0.33, s * 0.1, 0.17, s * 0.1, 0.25, s * 0.25, 0.12, s * 0.27], S, t);
+        rivetRow(g, 0.36 * S, s * 0.06 * S, 0.12 * S, s * 0.39 * S, 6, 0.01 * S);
+        g.fillStyle = '#04070a'; g.fillRect(0.27 * S, (s > 0 ? 0.03 : -0.05) * S, 0.03 * S, 0.02 * S);
+      }
+      hazard(g, 0.06 * S, -0.41 * S, 0.035 * S, 0.1 * S, o, true);
+      hazard(g, 0.06 * S, 0.31 * S, 0.035 * S, 0.1 * S, o, true);
+      seam(g, [-0.36, -0.29, -0.36, 0.29, -0.0, -0.29, -0.0, 0.29], S, t);
+      for (const s of [-1, 1]) { stripe(g, [-0.02, s * 0.27, -0.32, s * 0.27], S, pal.accent, o); }
+      vent(g, -0.41, 0, 0.05, 0.2, S, o);
+      break;
+    }
+    case 'interceptor': {
+      for (const s of [-1, 1]) {
+        seam(g, [0.04, s * 0.08, -0.22, s * 0.4], S, t);
+        stripe(g, [-0.22, s * 0.41, -0.3, s * 0.41], S, pal.accent, o * 1.2);
+      }
+      g.fillStyle = '#132230'; g.beginPath(); g.ellipse(0.22 * S, 0, 0.1 * S, 0.035 * S, 0, 0, P2); g.fill();
+      g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke();
+      g.fillStyle = rgba(pal.glow, 0.6); g.beginPath(); g.ellipse(0.25 * S, -0.01 * S, 0.05 * S, 0.014 * S, 0, 0, P2); g.fill();
+      dot(g, -0.44 * S, 0, 0.035 * S, '#07080a');
+      break;
+    }
+    case 'siegeplat': {
+      // open deck grating, ammo racks, hazard edging
+      const deck = sharp([0.31, -0.1, 0.27, -0.24, 0.17, -0.28, -0.25, -0.28, -0.33, -0.22, -0.34, -0.1], S);
+      recess(g, deck, o, '#262b30');
+      g.save(); g.clip(deck);
+      g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = o * 0.6;
+      g.beginPath();
+      for (let v = -0.4; v <= 0.4; v += 0.045) { g.moveTo(v * S, -0.3 * S); g.lineTo(v * S, 0.3 * S); }
+      g.stroke();
+      g.restore();
+      for (const s of [-1, 1]) {
+        hazard(g, -0.3 * S, (s > 0 ? 0.29 : -0.325) * S, 0.56 * S, 0.035 * S, o);
+        for (let i = 0; i < 3; i++) {
+          const r = roundedRect(-0.28 + i * 0.06, s * 0.21 - 0.035, 0.05, 0.07, 0.008, S);
+          raised(g, r, i % 2 ? '#6a6a46' : '#7a7a52', o, S, 0.8, 0.008, 0.5);
+        }
+      }
+      fillOut(g, roundedRect(-0.38, -0.08, 0.08, 0.16, 0.02, S), METAL.dark, o);
+      lamp(g, 0.34 * S, 0, 0.016 * S, '#fff3c4');
+      break;
+    }
+    case 'juggernaut': {
+      // layered ablative slabs: three stepped tiers + overlapping side scales
+      const tiers = [
+        sharp([0.42, -0.15, 0.39, -0.38, -0.36, -0.4, -0.42, -0.33, -0.43, -0.14], S),
+        sharp([0.34, -0.12, 0.31, -0.3, -0.3, -0.31, -0.35, -0.25, -0.36, -0.1], S),
+        sharp([0.24, -0.09, 0.21, -0.2, -0.22, -0.21, -0.26, -0.16, -0.27, -0.07], S),
+      ];
+      tiers.forEach((p, i) => raised(g, p, grad(g, S, shade(pal.light, -0.1 + i * 0.1), shade(pal.dark, -0.05 + i * 0.05)), o, S, 1.4, 0.02, 0.65));
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < 6; i++) {
+          const x = 0.32 - i * 0.12;
+          const sc = sharp([x + 0.05, -0.0, x + 0.04, -0.03, x - 0.07, -0.035, x - 0.08, 0], S);
+          g.save(); g.translate(0, s * 0.405 * S);
+          bevel(g, sc, i % 2 ? shade(pal.dark, 0.05) : shade(pal.body, -0.05), o, 0.8);
+          g.restore();
+        }
+        rivetRow(g, 0.36 * S, s * 0.34 * S, -0.3 * S, s * 0.355 * S, 9, 0.011 * S);
+        stripe(g, [0.38, s * 0.2, 0.38, s * 0.33], S, pal.accent, o * 1.3);
+      }
+      hazard(g, 0.43 * S, -0.12 * S, 0.03 * S, 0.24 * S, o, true);
+      for (const s of [-1, 1]) lamp(g, 0.45 * S, s * 0.22 * S, 0.016 * S, '#fff3c4');
+      vent(g, -0.44, -0.2, 0.04, 0.12, S, o);
+      vent(g, -0.44, 0.2, 0.04, 0.12, S, o);
+      break;
+    }
+    case 'bomber': {
+      // bomb bay doors, wing panels, cockpit, engines
+      const bay = roundedRect(-0.24, -0.09, 0.38, 0.18, 0.02, S);
+      recess(g, bay, o, shade(pal.deep, 0.15));
+      seam(g, [-0.24, 0, 0.14, 0, -0.11, -0.09, -0.11, 0.09, 0.02, -0.09, 0.02, 0.09], S, o * 0.6);
+      hazard(g, -0.235 * S, -0.09 * S, 0.37 * S, 0.02 * S, o);
+      hazard(g, -0.235 * S, 0.07 * S, 0.37 * S, 0.02 * S, o);
+      for (const s of [-1, 1]) {
+        seam(g, [0.18, s * 0.13, -0.08, s * 0.42, 0.02, s * 0.1, -0.25, s * 0.38], S, t);
+        stripe(g, [-0.07, s * 0.455, -0.19, s * 0.455], S, pal.accent, o * 1.3);
+        fillOut(g, roundedRect(-0.43, s * 0.11 - 0.04, 0.12, 0.08, 0.02, S), METAL.dark, o * 0.8);
+        dot(g, -0.42 * S, s * 0.11 * S, 0.025 * S, '#07080a');
+      }
+      g.fillStyle = '#132230'; g.beginPath(); g.ellipse(0.33 * S, 0, 0.07 * S, 0.05 * S, 0, 0, P2); g.fill();
+      g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke();
+      g.fillStyle = rgba(pal.glow, 0.55); g.beginPath(); g.ellipse(0.35 * S, -0.015 * S, 0.035 * S, 0.018 * S, 0, 0, P2); g.fill();
+      break;
+    }
     case 'centipede': {
       // head plate + mandible roots + eyes
       const hp = profilePath([0.47, 0, 0.46, 0.05, 0.42, 0.09, 0.36, 0.1, 0.33, 0], S);
@@ -362,6 +534,18 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number, S: n
   const p = new Path2D();
   roundRect(p, x * S, y * S, w * S, h * S, r * S);
   return p;
+}
+function vent(g: Ctx, x: number, y: number, w: number, h: number, S: number, o: number): void {
+  const p = roundedRect(x - w / 2, y - h / 2, w, h, Math.min(w, h) * 0.2, S);
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fill(p);
+  g.strokeStyle = 'rgba(255,255,255,0.2)'; g.lineWidth = o * 0.35;
+  g.beginPath();
+  const horiz = w > h, n = 4;
+  for (let i = 1; i < n; i++) {
+    if (horiz) { const xx = (x - w / 2 + (w * i) / n) * S; g.moveTo(xx, (y - h * 0.35) * S); g.lineTo(xx, (y + h * 0.35) * S); }
+    else { const yy = (y - h / 2 + (h * i) / n) * S; g.moveTo((x - w * 0.35) * S, yy); g.lineTo((x + w * 0.35) * S, yy); }
+  }
+  g.stroke();
 }
 function circPath(x: number, y: number, r: number, S: number): Path2D { return circ(x, y, r, S); }
 
@@ -540,6 +724,38 @@ export function partMounts(parts: PartDef[]): Set<number> {
   return s;
 }
 
+function snipAnim(s: number, rate: number): (a: AnimIn) => { r: number } {
+  return (a) => {
+    const c = (a.t * rate + a.seed * 0.13 + (s > 0 ? 0.5 : 0)) % 1;
+    return { r: s * (0.22 + 0.3 * (c < 0.18 ? Math.sin((c / 0.18) * Math.PI * 2) : 0)) };
+  };
+}
+
+/** Claw palm (propodus) along +x from the wrist at (0,0), with the fixed finger on the inner side. */
+function drawPalm(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
+  const fx = new Path2D();
+  fx.moveTo(0.2 * z * k, -s * 0.0 * k);
+  fx.quadraticCurveTo(0.33 * z * k, -s * 0.03 * z * k, 0.4 * z * k, s * 0.02 * z * k);
+  fx.quadraticCurveTo(0.31 * z * k, -s * 0.075 * z * k, 0.19 * z * k, -s * 0.07 * z * k);
+  fx.closePath();
+  fillOut(g, fx, grad(g, k, shade(pal.light, -0.05), pal.deep, 0.2 * z, -0.07, 0.4 * z, 0.02), o * 0.9);
+  const h = profilePath([0.27, 0, 0.255, 0.06, 0.19, 0.1, 0.08, 0.1, 0.01, 0.065, -0.01, 0], k * z);
+  raised(g, h, grad(g, k, shade(pal.light, 0.12), pal.dark, 0.05 * z, -0.1 * z, 0.25 * z, 0.1 * z), o, k, 1.2, 0.012, 0.5);
+  stripe(g, [0.12 * z, s * 0.07 * z, 0.23 * z, s * 0.05 * z], k, pal.accent, o);
+  for (const x of [0.2, 0.235]) dot(g, x * z * k, -s * 0.03 * z * k, 0.008 * k, 'rgba(0,0,0,0.5)');
+}
+
+/** Movable finger (dactyl), pivot at its root. */
+function drawFinger(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
+  const f = new Path2D();
+  f.moveTo(-0.01 * k * z, -s * 0.03 * k * z);
+  f.quadraticCurveTo(0.1 * k * z, -s * 0.03 * k * z, 0.17 * k * z, -s * 0.075 * k * z);
+  f.quadraticCurveTo(0.11 * k * z, s * 0.035 * k * z, -0.01 * k * z, s * 0.035 * k * z);
+  f.closePath();
+  fillOut(g, f, grad(g, k, shade(pal.light, 0.05), pal.deep, 0, -0.03, 0.15 * z, 0.03), o * 0.9);
+  for (const x of [0.05, 0.1]) spike(g, x * k * z, -s * 0.02 * k * z, -s * 1.5, 0.025 * k * z, 0.008 * k, '#d8d0c0', o * 0.5);
+}
+
 const wob = (a: AnimIn, f: number, ph: number) => Math.sin(a.t * f + a.seed * 1.7 + ph);
 
 function buildParts(L: UnitLayout): PartDef[] {
@@ -549,15 +765,16 @@ function buildParts(L: UnitLayout): PartDef[] {
     case 'mantis':
       for (const s of [-1, 1]) {
         parts.push({
-          px: 0.17 * S, py: s * 0.05 * S, ext: 0.3 * S, layer: 'under', mounts: [s < 0 ? 0 : 1],
+          px: 0.15 * S, py: s * 0.05 * S, ext: 0.36 * S, layer: 'over', mounts: [s < 0 ? 0 : 1],
           draw: (g, pal, o) => {
             const k = S;
-            // femur forward-out, tibia folded back with spines, hooked tip
-            limbSeg(g, 0, 0, 0.032 * k, 0.15 * k, s * 0.12 * k, 0.036 * k, pal.light, pal.dark, o);
-            limbSeg(g, 0.15 * k, s * 0.12 * k, 0.026 * k, 0.05 * k, s * 0.165 * k, 0.016 * k, METAL.light, METAL.dark, o);
-            for (const f of [0.3, 0.55, 0.8]) spike(g, (0.15 - 0.1 * f) * k, s * (0.12 + 0.045 * f) * k, s * -1.7, 0.03 * k, 0.008 * k, METAL.light, o * 0.6);
-            spike(g, 0.05 * k, s * 0.165 * k, Math.PI + s * 0.6, 0.05 * k, 0.012 * k, METAL.dark, o * 0.7);
-            dot(g, 0.15 * k, s * 0.12 * k, 0.026 * k, METAL.dark);
+            // coxa + femur reaching forward-out, spined tibia folded back, hooked tip
+            limbSeg(g, 0, 0, 0.035 * k, 0.19 * k, s * 0.13 * k, 0.04 * k, shade(pal.light, 0.1), pal.dark, o);
+            limbSeg(g, 0.19 * k, s * 0.13 * k, 0.03 * k, 0.08 * k, s * 0.2 * k, 0.02 * k, shade(pal.light, -0.05), pal.deep, o);
+            for (const f of [0.25, 0.5, 0.75]) spike(g, (0.19 - 0.11 * f) * k, s * (0.13 + 0.07 * f) * k, s * -2.0, 0.035 * k, 0.009 * k, '#d8d0c0', o * 0.6);
+            spike(g, 0.08 * k, s * 0.2 * k, Math.PI + s * 0.9, 0.06 * k, 0.014 * k, '#d8d0c0', o * 0.7);
+            dot(g, 0.19 * k, s * 0.13 * k, 0.028 * k, METAL.dark);
+            stripe(g, [0.05, s * 0.03, 0.15, s * 0.1], k, pal.accent, o * 0.8);
           },
           anim: (a) => {
             const f = (a.t * 0.23 + a.seed * 0.1 + (s > 0 ? 0.47 : 0)) % 1;
@@ -570,14 +787,14 @@ function buildParts(L: UnitLayout): PartDef[] {
     case 'mech':
     case 'warlord': {
       const W = L.shape === 'warlord';
-      const sy = W ? 0.31 : 0.255;
+      const sy = W ? 0.31 : 0.3;
       for (const s of [-1, 1]) {
         const mounts = W ? [s > 0 ? 1 : 2] : s > 0 ? [0] : [1, 2];
         parts.push({
           px: (W ? -0.02 : 0) * S, py: s * sy * S, ext: 0.4 * S, layer: W ? 'under' : 'over', mounts,
           draw: (g, pal, o) => {
             const k = S;
-            const r = W ? 0.07 : 0.055, len = W ? 0.33 : 0.29;
+            const r = W ? 0.07 : 0.062, len = W ? 0.33 : 0.32;
             // upper arm, armoured forearm with team plate, fist/gun cradle
             limbSeg(g, 0, 0, r * 0.8 * k, 0.06 * k, s * 0.03 * k, r * 0.8 * k, METAL.light, METAL.dark, o);
             const fa = roundedRect(0.03, -r, len, r * 2, r * 0.6, k);
@@ -589,9 +806,10 @@ function buildParts(L: UnitLayout): PartDef[] {
             g.restore();
             if (!W) {
               // shoulder pauldron on top
-              const pd = profilePath([0.07, 0, 0.065, 0.05, 0.03, 0.075, -0.04, 0.08, -0.09, 0.06, -0.1, 0], k);
+              const pd = profilePath([0.09, 0, 0.085, 0.06, 0.04, 0.095, -0.05, 0.1, -0.11, 0.075, -0.125, 0], k);
               raised(g, pd, grad(g, k, shade(pal.light, 0.1), pal.dark, -0.08, -0.08, 0.08, 0.08), o, k, 1.2, 0.012, 0.5);
-              stripe(g, [-0.07, s * 0.055, 0.04, s * 0.055], k, pal.accent, o);
+              stripe(g, [-0.09, s * 0.07, 0.05, s * 0.07], k, pal.accent, o * 1.2);
+              seam(g, [0.0, -0.09, 0.0, 0.09, -0.06, -0.09, -0.06, 0.09], k, o * 0.5);
             }
           },
           anim: (a) => ({ dx: (a.moving ? 0.035 * Math.sin(a.walk + (s > 0 ? 0 : Math.PI)) : 0.006 * wob(a, 1.3, s)) * S, r: 0.02 * wob(a, 0.9, s * 2) }),
@@ -627,39 +845,18 @@ function buildParts(L: UnitLayout): PartDef[] {
       for (const s of [-1, 1]) {
         const ci = parts.length;
         parts.push({
-          px: 0.17 * S, py: s * 0.28 * S, ext: 0.36 * S, layer: 'under', mounts: [s < 0 ? 0 : 1],
+          px: 0.17 * S, py: s * 0.28 * S, ext: 0.56 * S, layer: 'under', mounts: [s < 0 ? 0 : 1],
           draw: (g, pal, o) => {
             const k = S;
-            limbSeg(g, 0, 0, 0.045 * k, 0.11 * k, s * 0.1 * k, 0.04 * k, METAL.light, METAL.dark, o);
-            dot(g, 0.11 * k, s * 0.1 * k, 0.04 * k, METAL.dark);
-            // claw hand (propodus) + fixed finger
-            const h = profilePath([0.33, 0, 0.3, 0.035, 0.2, 0.08, 0.12, 0.075, 0.08, 0.04, 0.07, 0], k);
-            g.save(); g.translate(0, s * 0.11 * k); g.rotate(s * -0.1);
-            raised(g, h, grad(g, k, shade(pal.light, 0.1), pal.dark, 0.1, -0.08, 0.3, 0.08), o, k, 1.2, 0.012, 0.5);
-            stripe(g, [0.12, s * 0.05, 0.26, s * 0.03], k, pal.accent, o);
-            for (const x of [0.15, 0.22]) dot(g, x * k, 0, 0.008 * k, 'rgba(0,0,0,0.5)');
+            limbSeg(g, 0, 0, 0.045 * k, 0.1 * k, s * 0.11 * k, 0.042 * k, METAL.light, METAL.dark, o);
+            g.save(); g.translate(0.09 * k, s * 0.11 * k);
+            drawPalm(g, s, k, 1, pal, o);
             g.restore();
+            dot(g, 0.1 * k, s * 0.11 * k, 0.03 * k, METAL.dark);
           },
           anim: (a) => ({ r: s * (0.07 * wob(a, 1.1, s) + 0.03 * wob(a, 2.7, 0)) }),
         });
-        // movable finger (dactyl): snips open and closed
-        parts.push({
-          px: 0.27 * S, py: s * 0.135 * S, parent: ci, ext: 0.14 * S, layer: 'under',
-          draw: (g, pal, o) => {
-            const k = S;
-            const f = new Path2D();
-            f.moveTo(-0.01 * k, -0.025 * k * s);
-            f.quadraticCurveTo(0.08 * k, s * -0.02 * k, 0.11 * k, s * -0.055 * k);
-            f.quadraticCurveTo(0.07 * k, s * 0.03 * k, -0.01 * k, s * 0.03 * k);
-            f.closePath();
-            fillOut(g, f, grad(g, k, shade(pal.light, -0.05), pal.deep, 0, -0.03, 0.1, 0.03), o * 0.9);
-          },
-          anim: (a) => {
-            const c = (a.t * 0.5 + a.seed * 0.13 + (s > 0 ? 0.5 : 0)) % 1;
-            const snip = c < 0.18 ? Math.sin((c / 0.18) * Math.PI * 2) : 0;
-            return { r: s * (0.25 + 0.3 * snip) };
-          },
-        });
+        parts.push({ px: (0.09 + 0.22) * S, py: s * (0.11 + 0.05) * S, parent: ci, ext: 0.2 * S, layer: 'under', draw: (g, pal, o) => drawFinger(g, s, S, 1, pal, o), anim: snipAnim(s, 0.5) });
       }
       break;
     case 'saucer':
@@ -693,39 +890,24 @@ function buildParts(L: UnitLayout): PartDef[] {
     case 'scorpion': {
       for (const s of [-1, 1]) {
         const ci = parts.length;
+        const z = 0.85;
         parts.push({
-          px: 0.29 * S, py: s * 0.13 * S, ext: 0.38 * S, layer: 'under', mounts: [s < 0 ? 1 : 2],
+          px: 0.29 * S, py: s * 0.13 * S, ext: 0.56 * S, layer: 'under', mounts: [s < 0 ? 1 : 2],
           draw: (g, pal, o) => {
             const k = S;
-            limbSeg(g, 0, 0, 0.04 * k, 0.09 * k, s * 0.12 * k, 0.04 * k, shade(pal.light, -0.05), pal.dark, o);
-            limbSeg(g, 0.09 * k, s * 0.12 * k, 0.038 * k, 0.17 * k, s * 0.15 * k, 0.04 * k, shade(pal.light, -0.05), pal.dark, o);
-            const h = profilePath([0.36, 0, 0.33, 0.03, 0.24, 0.075, 0.16, 0.075, 0.12, 0.04, 0.11, 0], k);
-            g.save(); g.translate(0.02 * k, s * 0.155 * k); g.rotate(s * -0.12);
-            raised(g, h, grad(g, k, shade(pal.light, 0.1), pal.dark, 0.1, -0.08, 0.3, 0.08), o, k, 1.2, 0.012, 0.5);
-            stripe(g, [0.15, s * 0.045, 0.28, s * 0.03], k, pal.accent, o);
+            limbSeg(g, 0, 0, 0.04 * k, 0.08 * k, s * 0.11 * k, 0.04 * k, shade(pal.light, -0.05), pal.dark, o);
+            limbSeg(g, 0.08 * k, s * 0.11 * k, 0.038 * k, 0.14 * k, s * 0.16 * k, 0.04 * k, shade(pal.light, -0.05), pal.dark, o);
+            dot(g, 0.08 * k, s * 0.11 * k, 0.03 * k, METAL.dark);
+            g.save(); g.translate(0.13 * k, s * 0.16 * k);
+            drawPalm(g, s, k, z, pal, o);
             g.restore();
           },
           anim: (a) => ({ r: s * (0.06 * wob(a, 0.9, s) + 0.02 * wob(a, 2.3, 1)) }),
         });
-        parts.push({
-          px: 0.3 * S, py: s * 0.19 * S, parent: ci, ext: 0.14 * S, layer: 'under',
-          draw: (g, pal, o) => {
-            const k = S;
-            const f = new Path2D();
-            f.moveTo(-0.01 * k, -0.02 * k * s);
-            f.quadraticCurveTo(0.08 * k, s * -0.015 * k, 0.12 * k, s * -0.05 * k);
-            f.quadraticCurveTo(0.07 * k, s * 0.03 * k, -0.01 * k, s * 0.025 * k);
-            f.closePath();
-            fillOut(g, f, grad(g, k, shade(pal.light, -0.05), pal.deep, 0, -0.03, 0.1, 0.03), o * 0.9);
-          },
-          anim: (a) => {
-            const c = (a.t * 0.42 + a.seed * 0.11 + (s > 0 ? 0.5 : 0)) % 1;
-            return { r: s * (0.22 + 0.28 * (c < 0.16 ? Math.sin((c / 0.16) * Math.PI * 2) : 0)) };
-          },
-        });
+        parts.push({ px: (0.13 + 0.22 * z) * S, py: s * (0.16 + 0.05 * z) * S, parent: ci, ext: 0.2 * S, layer: 'under', draw: (g, pal, o) => drawFinger(g, s, S, z, pal, o), anim: snipAnim(s, 0.42) });
       }
       // tail: a chain of segments arching back over the body, stinger + heavy gun at the tip
-      const P: [number, number, number][] = [[-0.31, 0.02, 0.075], [-0.42, 0.06, 0.072], [-0.53, 0.06, 0.074], [-0.605, -0.01, 0.08], [-0.585, -0.115, 0.088], [-0.49, -0.17, 0.1]];
+      const P: [number, number, number][] = [[-0.32, 0.0, 0.08], [-0.44, 0.035, 0.078], [-0.555, 0.02, 0.08], [-0.63, -0.07, 0.085], [-0.625, -0.19, 0.09], [-0.53, -0.27, 0.095], [-0.42, -0.28, 0.1]];
       let parent = -1;
       for (let i = 0; i < P.length; i++) {
         const [x, y, r] = P[i];
@@ -862,17 +1044,17 @@ function legRig(L: UnitLayout): LegRig {
   let w = 0.065, stride = 0.13;
   let armour = false;
   switch (L.shape) {
-    case 'arachnid': radial(0.24, 0.09, 0.1, 0.64, [0.5, 1.12, 1.82, 2.5]); w = 0.06; stride = 0.11; armour = true; break;
-    case 'broodmother': radial(0.27, 0.1, 0.11, 0.7, [0.5, 1.1, 1.8, 2.48]); w = 0.05; stride = 0.1; armour = true; break;
-    case 'arachne': radial(0.27, 0.11, 0.12, 0.74, [0.48, 1.08, 1.78, 2.46]); w = 0.052; stride = 0.1; armour = true; break;
+    case 'arachnid': radial(0.24, 0.09, 0.1, 0.64, [0.5, 1.12, 1.82, 2.5]); w = 0.062; stride = 0.11; armour = true; break;
+    case 'broodmother': radial(0.27, 0.1, 0.11, 0.72, [0.5, 1.1, 1.8, 2.48]); w = 0.058; stride = 0.1; armour = true; break;
+    case 'arachne': radial(0.27, 0.11, 0.12, 0.76, [0.48, 1.08, 1.78, 2.46]); w = 0.062; stride = 0.1; armour = true; break;
     case 'scorpion': row([0.14, 0.03, -0.08, -0.19], 0.17, 0.47, [0.12, 0.02, -0.08, -0.17]); w = 0.055; stride = 0.08; armour = true; break;
     case 'crab': row([0.12, 0.02, -0.08, -0.17], 0.3, 0.58, [0.07, -0.02, -0.1, -0.2]); w = 0.06; stride = 0.08; armour = true; break;
     case 'mantis': row([0.06, -0.04], 0.05, 0.4, [0.22, -0.3]); w = 0.05; stride = 0.13; break;
     case 'centipede': row([0.36, 0.22, 0.085, -0.055, -0.195, -0.335], 0.1, 0.3, [0.04, 0.02, 0, -0.02, -0.04, -0.07]); w = 0.04; stride = 0.06; break;
     default: {
       const hr = Math.min(0.22, L.hw * 0.6);
-      radial(0, hr, hr, Math.max(0.52, L.hw + 0.24), S >= 3 ? [0.6, 1.57, 2.5] : [0.55, 1.57, 2.55]);
-      w = S >= 3 ? 0.055 : 0.065;
+      if (S >= 4) { radial(0, hr, hr, Math.max(0.64, L.hw + 0.28), [0.5, 1.15, 1.95, 2.6]); w = 0.05; stride = 0.09; }
+      else { radial(0, hr, hr, Math.max(0.52, L.hw + 0.24), S >= 3 ? [0.6, 1.57, 2.5] : [0.55, 1.57, 2.55]); w = S >= 3 ? 0.055 : 0.065; }
       armour = S >= 3;
     }
   }
@@ -908,30 +1090,35 @@ export function drawSpiderLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: numbe
   if (rig.big) {
     g.save();
     g.filter = `blur(${Math.max(1, 0.02 * S * devK(g))}px)`;
-    for (const k of geo) if (k.lift < 0.3) dot(g, k.fx + 0.02 * S, k.fy + 0.02 * S, W * 1.3, 'rgba(0,0,0,0.45)');
+    for (const k of geo) if (k.lift < 0.3) dot(g, k.fx + 0.015 * S, k.fy + 0.015 * S, W * 0.5, 'rgba(0,0,0,0.35)');
     g.restore();
   }
   for (const i of idx) {
     const { hx, hy, fx, fy, kx, ky, lift } = geo[i];
     const up = 1 + lift * 0.25;
-    const fem0 = rig.armour ? shade(pal.light, -0.05 + lift * 0.1) : shade(METAL.light, lift * 0.1);
-    const fem1 = rig.armour ? shade(pal.dark, -0.05) : METAL.dark;
-    // tibia (down to the foot), then femur (up to the knee) on top
-    limbSeg(g, kx, ky, W * 0.62 * up, fx, fy, W * 0.22, rig.big ? METAL.light : METAL.base, METAL.deep, o);
-    limbSeg(g, hx, hy, W * 0.8, kx, ky, W * 0.78 * up, fem0, fem1, o);
+    const fem0 = rig.armour ? shade(pal.body, -0.1 + lift * 0.15) : shade(METAL.light, lift * 0.1);
+    const fem1 = rig.armour ? shade(pal.deep, 0.05) : METAL.dark;
+    if (rig.big) {
+      // three segments: femur up to the knee, tibia down to the ankle, slim metatarsus to the claw
+      const ax = kx + (fx - kx) * 0.6, ay = ky + (fy - ky) * 0.6;
+      limbSeg(g, ax, ay, W * 0.36, fx, fy, W * 0.16, METAL.base, METAL.deep, o);
+      limbSeg(g, kx, ky, W * 0.66 * up, ax, ay, W * 0.42, shade(pal.dark, 0.1), pal.deep, o);
+      dot(g, ax, ay, W * 0.34, METAL.dark);
+      g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke();
+    } else limbSeg(g, kx, ky, W * 0.62 * up, fx, fy, W * 0.22, METAL.base, METAL.deep, o);
+    limbSeg(g, hx, hy, W * 0.85, kx, ky, W * 0.8 * up, fem0, fem1, o);
     if (rig.big) {
       // femur armour lames + spikes
-      for (const f of [0.35, 0.65]) {
+      for (const f of [0.3, 0.55, 0.8]) {
         const x = hx + (kx - hx) * f, y = hy + (ky - hy) * f;
         const a = Math.atan2(ky - hy, kx - hx);
-        g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = o * 0.6;
-        g.beginPath(); g.moveTo(x - Math.sin(a) * W * 0.75, y + Math.cos(a) * W * 0.75); g.lineTo(x + Math.sin(a) * W * 0.75, y - Math.cos(a) * W * 0.75); g.stroke();
+        g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = o * 0.7;
+        g.beginPath(); g.moveTo(x - Math.sin(a) * W * 0.8, y + Math.cos(a) * W * 0.8); g.lineTo(x + Math.sin(a) * W * 0.8, y - Math.cos(a) * W * 0.8); g.stroke();
       }
       const a = Math.atan2(ky - hy, kx - hx), side = hy < 0 ? -1 : 1;
-      spike(g, kx - Math.cos(a) * W * 0.4, ky - Math.sin(a) * W * 0.4, a + side * 0.9, W * 0.9, W * 0.25, shade(pal.deep, 0.15), o * 0.8);
-      const b = Math.atan2(fy - ky, fx - kx);
-      g.strokeStyle = rgba(E, 0.8); g.lineWidth = o * 0.9; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(kx + Math.cos(b) * W * 0.8, ky + Math.sin(b) * W * 0.8); g.lineTo(kx + (fx - kx) * 0.6, ky + (fy - ky) * 0.6); g.stroke();
+      for (const f of [0.45, 0.85]) spike(g, hx + (kx - hx) * f, hy + (ky - hy) * f, a + side * 1.1, W * 0.8, W * 0.22, shade(pal.deep, 0.1), o * 0.8);
+      g.strokeStyle = rgba(E, 0.85); g.lineWidth = o * 1.1; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(hx + (kx - hx) * 0.2, hy + (ky - hy) * 0.2); g.lineTo(hx + (kx - hx) * 0.8, hy + (ky - hy) * 0.8); g.stroke();
     }
     // knee: higher = bigger + brighter
     dot(g, kx, ky, W * 0.62 * up, rig.armour ? shade(pal.dark, 0.1 + lift * 0.2) : shade(METAL.base, lift * 0.2));
@@ -962,7 +1149,7 @@ function lightsOf(L: UnitLayout): CLight[] {
     case 'mantis': eye(0.385, 0.095, 0.06); break;
     case 'arachnid': eye(0.36, 0.05, 0.07); break;
     case 'crab': eye(0.335, 0.1, 0.045); break;
-    case 'mech': o.push({ x: 0.165 * S, y: 0, r: 0.06 * S, k: 'eye', ph: 0 }); break;
+    case 'mech': o.push({ x: 0.19 * S, y: 0, r: 0.06 * S, k: 'eye', ph: 0 }); break;
     case 'warlord': o.push({ x: 0.26 * S, y: 0, r: 0.06 * S, k: 'eye', ph: 0 }); break;
     case 'scorpion': eye(0.33, 0.04, 0.035); break;
     case 'centipede': eye(0.44, 0.075, 0.035); break;

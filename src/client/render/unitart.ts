@@ -9,6 +9,7 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
 import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
+import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -51,15 +52,15 @@ export interface UnitLayout {
 const SHAPE_HW: Record<Shape, number> = {
   wedge: 0.26, pod: 0.24, box: 0.28, hex: 0.3, cross: 0.3, long: 0.2, round: 0.34, airframe: 0.14, fortress: 0.4, titan: 0.3,
   goliath: 0.36, leviathan: 0.3, carrier: 0.42, colossal: 0.27, citadel: 0.42,
-  mantis: 0.2, mech: 0.3, arachnid: 0.28, crab: 0.42, saucer: 0.42, delta: 0.16, warlord: 0.32, scorpion: 0.3, centipede: 0.18, broodmother: 0.32, arachne: 0.32,
-  carriage: 0.2, siegeplat: 0.36, riot: 0.34, hunter: 0.24, juggernaut: 0.44, interceptor: 0.14, bomber: 0.2,
+  mantis: 0.14, mech: 0.28, arachnid: 0.22, crab: 0.4, saucer: 0.44, delta: 0.2, warlord: 0.28, scorpion: 0.22, centipede: 0.16, broodmother: 0.34, arachne: 0.33,
+  carriage: 0.2, siegeplat: 0.33, riot: 0.36, hunter: 0.2, juggernaut: 0.44, interceptor: 0.12, bomber: 0.3,
 };
 
 /** Mount points per chassis, fractions of S. */
 const MOUNT_PTS: Record<string, [number, number][]> = {
   scout: [[0.02, 0]],
   drone: [[0.04, 0]],
-  raider: [[0.06, -0.14], [0.06, 0.14]],
+  raider: [[0.13, -0.2], [0.13, 0.2]],
   warden: [[0.05, 0], [-0.25, 0.15]],
   striker: [[-0.02, -0.25], [-0.02, 0.25], [0.22, 0]],
   longarm: [[0.04, 0]],
@@ -74,6 +75,32 @@ const MOUNT_PTS: Record<string, [number, number][]> = {
   // titan walker: T on the right forearm, G on the left forearm, heavies on the shoulder blades, M on the backpack
   titan: [[0.15, 0.37], [0.15, -0.37], [-0.115, -0.165], [-0.115, 0.165], [-0.34, 0]],
   citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  // odd shapes: turrets sit where the anatomy carries them (forelimbs, arms, claws, tail tip, spine segments)
+  mantis: [[0.31, -0.165], [0.31, 0.165]],
+  strider: [[0.32, 0.335], [0.32, -0.335], [-0.04, -0.3]],
+  arachnid: [[-0.16, -0.115], [-0.16, 0.115]],
+  crab: [[0.33, -0.39], [0.33, 0.39], [-0.04, 0]],
+  saucer: [[0.11, -0.19], [0.11, 0.19], [-0.215, 0]],
+  deltawing: [[0.02, 0], [-0.22, -0.25], [-0.22, 0.25]],
+  warlord: [[-0.04, -0.3], [0.32, 0.36], [0.32, -0.36], [-0.28, 0]],
+  scorpion: [[-0.42, -0.28], [0.5, -0.29], [0.5, 0.29]],
+  centipede: [[0.22, 0], [0.085, 0], [-0.055, 0], [-0.195, 0]],
+  broodmother: [[-0.19, 0], [0.26, 0], [-0.05, -0.25], [-0.05, 0.25], [-0.41, 0]],
+  arachne: [[-0.22, 0], [0.24, -0.15], [0.24, 0.15], [-0.43, 0]],
+  carriage: [[0.0, 0]],
+  hunter: [[0.08, 0], [-0.25, 0]],
+  riot: [[-0.13, -0.15], [-0.13, 0.15]],
+  interceptor: [[-0.05, -0.2], [-0.05, 0.2]],
+  siegeplat: [[0.02, -0.15], [0.02, 0.15]],
+  juggernaut: [[-0.04, 0], [-0.3, 0.2]],
+  bomberhull: [[0.24, 0], [-0.1, -0.3], [-0.1, 0.3]],
+};
+
+/** Per-chassis turret scale so guns don't bury slender bodies. */
+const MOUNT_SCALE_I: Record<string, number[]> = { scorpion: [0.72, 0.8, 0.8] };
+const MOUNT_SCALE: Record<string, number> = {
+  mantis: 0.72, strider: 0.85, arachnid: 0.85, crab: 0.75, saucer: 0.9, deltawing: 0.85, warlord: 0.9, scorpion: 0.85, centipede: 0.72,
+  broodmother: 0.92, arachne: 0.95, juggernaut: 0.75, interceptor: 0.8, hunter: 0.9, carriage: 1.0, siegeplat: 1.0, bomberhull: 0.85,
 };
 
 const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64, G: 0.95, T: 1.1 };
@@ -99,20 +126,25 @@ export function layoutOf(d: Design): UnitLayout {
     const cal = mod?.caliber ?? 0.5;
     const p = pts[i] ?? [0, 0];
     const dd = S >= 4 ? GIANT_D[cls] * (0.88 + 0.12 * cal) * (S >= 5 ? 1.06 : 1) : CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
-    return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
+    return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd * (MOUNT_SCALE_I[chassis.id]?.[i] ?? MOUNT_SCALE[chassis.id] ?? 1), turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const air = mob.kind === 'air';
-  const quad = mob.id === 'rotor' && (chassis.id === 'drone' || shape === 'pod' || shape === 'round');
+  const quad = mob.id === 'rotor' && (chassis.id === 'drone' || shape === 'pod' || shape === 'round' || shape === 'saucer' || shape === 'crab' || shape === 'arachnid' || shape === 'mantis');
   const rotors: UnitLayout['rotors'] = [];
   const nozzles: UnitLayout['nozzles'] = [];
   if (mob.id === 'rotor') {
     if (quad) for (const sx of [-1, 1]) for (const sy of [-1, 1]) rotors.push({ x: sx * 0.32 * S, y: sy * 0.32 * S, r: 0.2 * S, blades: 2 });
+    else if (shape === 'delta' || shape === 'interceptor') for (const sy of [-1, 1]) rotors.push({ x: -0.16 * S, y: sy * 0.2 * S, r: (shape === 'delta' ? 0.17 : 0.15) * S, blades: 3 });
     else if (S >= 2 && shape === 'airframe') {
       rotors.push({ x: 0.22 * S, y: 0, r: 0.42 * S, blades: 3 });
       rotors.push({ x: -0.3 * S, y: 0, r: 0.38 * S, blades: 3 });
     } else rotors.push({ x: 0, y: 0, r: 0.52 * S, blades: 3 });
   }
-  if (mob.id === 'jet') for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.13 * S, w: 0.09 * S });
+  if (mob.id === 'jet') {
+    if (shape === 'delta') for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.14 * S, w: 0.08 * S });
+    else if (shape === 'interceptor') nozzles.push({ x: -0.5 * S, y: 0, w: 0.1 * S });
+    else for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.13 * S, w: 0.09 * S });
+  }
   if (mob.id === 'jumpjets') for (const sy of [-1, 1]) nozzles.push({ x: -0.4 * S, y: sy * 0.15 * S, w: 0.07 * S });
   const legged = mob.id === 'legs' || mob.id === 'spider' || mob.id === 'jumpjets' || mob.id === 'titanlegs';
   const rolled = mob.id === 'treads' || mob.id === 'wheels' || mob.id === 'halftrack' || mob.id === 'megatracks';
@@ -133,15 +165,30 @@ export function hullPath(shape: Shape, S: number): Path2D {
   switch (shape) {
     case 'wedge': poly(p, mirrorPoly([0.44, 0, 0.12, -0.16, -0.18, -0.26, -0.36, -0.26, -0.42, -0.17, -0.4, 0]), S); break;
     case 'pod': p.ellipse(0, 0, 0.3 * S, 0.24 * S, 0, 0, Math.PI * 2); break;
-    case 'box': poly(p, mirrorPoly([0.39, -0.17, 0.3, -0.28, -0.36, -0.28, -0.41, -0.22]), S); break;
-    case 'hex': poly(p, mirrorPoly([0.43, -0.1, 0.27, -0.3, -0.33, -0.3, -0.43, -0.16]), S); break;
+    // twin gun-pod skirmisher: narrow nose, pods out on the flanks
+    case 'box': poly(p, mirrorPoly([0.45, -0.05, 0.34, -0.09, 0.28, -0.11, 0.33, -0.19, 0.29, -0.29, 0.05, -0.29, -0.06, -0.19, -0.22, -0.17, -0.33, -0.26, -0.43, -0.24, -0.41, -0.1, -0.43, 0]), S); break;
+    // sponson tank: sloped glacis, stepped side sponsons
+    case 'hex': poly(p, mirrorPoly([0.46, -0.06, 0.4, -0.16, 0.27, -0.21, 0.23, -0.32, -0.2, -0.34, -0.28, -0.25, -0.41, -0.23, -0.46, -0.12]), S); break;
     case 'cross': poly(p, mirrorPoly([0.45, -0.08, 0.34, -0.15, 0.13, -0.15, 0.1, -0.36, -0.15, -0.36, -0.18, -0.15, -0.38, -0.15, -0.44, -0.08]), S); break;
-    case 'long': poly(p, mirrorPoly([0.47, -0.07, 0.38, -0.18, -0.38, -0.2, -0.46, -0.12]), S); break;
-    case 'round': p.arc(0, 0, 0.34 * S, 0, Math.PI * 2); break;
+    case 'long': {
+      // lance with a gun turntable bulge
+      const h = [0.5, 0, 0.42, -0.06, 0.26, -0.085];
+      for (let i = 0; i <= 10; i++) { const a = -0.36 - (i / 10) * (Math.PI - 0.82); h.push(Math.cos(a) * 0.255, Math.sin(a) * 0.255); }
+      h.push(-0.32, -0.11, -0.44, -0.16, -0.48, -0.11, -0.48, 0);
+      poly(p, mirrorPoly(h), S);
+      break;
+    }
+    case 'round': {
+      // shield-emitter petals around the disc
+      for (let i = 0; i < 64; i++) { const a = (i / 64) * Math.PI * 2, r = 0.335 + 0.032 * Math.cos(a * 8); i ? p.lineTo(Math.cos(a) * r * S, Math.sin(a) * r * S) : p.moveTo(Math.cos(a) * r * S, Math.sin(a) * r * S); }
+      p.closePath();
+      break;
+    }
     case 'airframe': poly(p, mirrorPoly([0.49, 0, 0.38, -0.08, 0.12, -0.13, 0.04, -0.4, -0.12, -0.42, -0.15, -0.13, -0.34, -0.08, -0.42, -0.21, -0.49, -0.21, -0.47, -0.05, -0.48, 0]), S); break;
-    case 'fortress': poly(p, mirrorPoly([0.45, -0.2, 0.35, -0.41, -0.36, -0.41, -0.45, -0.3]), S); break;
+    // star fort: corner bastions jut out diagonally
+    case 'fortress': poly(p, mirrorPoly([0.46, -0.14, 0.41, -0.29, 0.48, -0.37, 0.37, -0.48, 0.29, -0.41, -0.29, -0.41, -0.37, -0.48, -0.48, -0.37, -0.41, -0.29, -0.46, -0.14]), S); break;
     case 'titan': poly(p, mirrorPoly([0.33, -0.12, 0.22, -0.2, 0.2, -0.45, -0.18, -0.45, -0.21, -0.22, -0.36, -0.17, -0.42, -0.08]), S); break;
-    default: return giantHullPath(shape, S) ?? p;
+    default: return creatureHullPath(shape, S) ?? giantHullPath(shape, S) ?? p;
   }
   return p;
 }
@@ -232,6 +279,7 @@ function headlights(g: Ctx, x: number, y: number, r: number): void {
 /** Panel lines, hatches, vents and team trim per silhouette. */
 export function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
+  if (CREATURE_SHAPES.has(L.shape)) { creatureDetails(g, L, pal, o, hullPath(L.shape, S)); return; }
   if (GIANT_SHAPES.has(L.shape)) { giantHullDetails(g, L, pal, o); return; }
   const pl = 'rgba(0,0,0,0.38)';
   const hl = 'rgba(255,255,255,0.14)';
@@ -251,14 +299,18 @@ export function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): voi
       line(g, [-0.27, -0.07, -0.27, 0.07], S, pal.accent, o * 0.9);
       break;
     case 'box':
-      line(g, [0.28, -0.26, 0.28, 0.26, -0.26, -0.26, -0.26, 0.26, 0.28, 0, -0.26, 0], S, pl, t);
-      vents(g, -0.33 * S, 0, 0.07 * S, 0.3 * S, 5, o);
-      headlights(g, 0.36 * S, 0.19 * S, 0.025 * S);
-      line(g, [0.33, -0.27, 0.33, -0.12, 0.33, 0.27, 0.33, 0.12], S, pal.accent, o * 1.0);
+      line(g, [0.28, -0.11, -0.2, -0.11, 0.28, 0.11, -0.2, 0.11, 0.42, 0, -0.38, 0], S, pl, t);
+      for (const s of [-1, 1]) {
+        line(g, [0.3, s * 0.2, 0.0, s * 0.2, 0.0, s * 0.12, 0.0, s * 0.28], S, pl, t);
+        line(g, [0.26, s * 0.28, 0.06, s * 0.28], S, pal.accent, o * 1.1);
+      }
+      vents(g, -0.33 * S, 0, 0.06 * S, 0.16 * S, 4, o);
+      headlights(g, 0.31 * S, 0.2 * S, 0.022 * S);
+      g.fillStyle = '#132230'; g.beginPath(); g.ellipse(0.3 * S, 0, 0.06 * S, 0.03 * S, 0, 0, Math.PI * 2); g.fill();
       break;
     case 'hex':
-      line(g, [0.27, -0.28, -0.33, -0.28, 0.27, 0.28, -0.33, 0.28, 0.3, -0.2, 0.3, 0.2], S, hl, t);
-      line(g, [0.3, -0.2, 0.3, 0.2, -0.38, -0.12, -0.38, 0.12, 0.3, -0.2, 0.38, -0.08, 0.3, 0.2, 0.38, 0.08], S, pl, t);
+      line(g, [0.22, -0.3, -0.2, -0.3, 0.22, 0.3, -0.2, 0.3, 0.3, -0.18, 0.3, 0.18], S, hl, t);
+      line(g, [0.3, -0.18, 0.3, 0.18, -0.38, -0.12, -0.38, 0.12, 0.3, -0.18, 0.4, -0.06, 0.3, 0.18, 0.4, 0.06, 0.24, -0.21, -0.27, -0.21, 0.24, 0.21, -0.27, 0.21], S, pl, t);
       vents(g, -0.36 * S, -0.0, 0.06 * S, 0.22 * S, 4, o);
       headlights(g, 0.4 * S, 0.07 * S, 0.018 * S);
       line(g, [-0.2, -0.29, 0.1, -0.29, -0.2, 0.29, 0.1, 0.29], S, pal.accent, o * 0.9);
@@ -270,12 +322,17 @@ export function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): voi
       line(g, [0.08, -0.36, 0.08, -0.14, 0.08, 0.36, 0.08, 0.14], S, pal.accent, o * 0.9);
       break;
     case 'long':
-      line(g, [0.3, -0.17, 0.3, 0.17, -0.1, -0.19, -0.1, 0.19, -0.3, -0.19, -0.3, 0.19, 0.3, 0, 0.45, 0], S, pl, t);
+      g.strokeStyle = pl; g.lineWidth = t;
+      g.beginPath(); g.arc(0, 0, 0.2 * S, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = pal.accent; g.lineWidth = o;
+      g.beginPath(); g.arc(0, 0, 0.225 * S, -2.3, -0.8); g.arc(0, 0, 0.225 * S, 0.8, 2.3); g.stroke();
+      line(g, [0.3, -0.06, 0.3, 0.06, -0.3, -0.1, -0.3, 0.1, 0.25, 0, 0.47, 0], S, pl, t);
       vents(g, -0.4 * S, 0, 0.05 * S, 0.2 * S, 4, o);
       for (let i = 0; i < 3; i++) dotAt(g, (-0.2 + i * 0.08) * S, 0.14 * S, 0.012 * S, 'rgba(0,0,0,0.5)');
-      line(g, [0.36, -0.15, 0.42, -0.06, 0.36, 0.15, 0.42, 0.06], S, pal.accent, o * 0.9);
+      line(g, [0.36, -0.06, 0.44, -0.03, 0.36, 0.06, 0.44, 0.03], S, pal.accent, o * 0.9);
       break;
     case 'round':
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; dotAt(g, Math.cos(a) * 0.335 * S, Math.sin(a) * 0.335 * S, 0.026 * S, 'rgba(0,0,0,0.45)'); dotAt(g, Math.cos(a) * 0.335 * S, Math.sin(a) * 0.335 * S, 0.014 * S, pal.glow); }
       g.strokeStyle = pl; g.lineWidth = t;
       g.beginPath(); g.arc(0, 0, 0.27 * S, 0, Math.PI * 2); g.stroke();
       g.strokeStyle = hl;
@@ -296,11 +353,16 @@ export function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): voi
       line(g, [-0.44, -0.19, -0.44, 0.19], S, pal.accent, o * 0.8);
       break;
     case 'fortress':
-      line(g, [0.32, -0.36, 0.32, 0.36, -0.32, -0.36, -0.32, 0.36, 0.32, -0.36, -0.32, -0.36, 0.32, 0.36, -0.32, 0.36], S, pl, t);
-      line(g, [0.31, -0.35, -0.31, -0.35], S, hl, t);
-      vents(g, -0.39 * S, -0.17 * S, 0.05 * S, 0.16 * S, 4, o);
-      vents(g, -0.39 * S, 0.17 * S, 0.05 * S, 0.16 * S, 4, o);
-      for (const x of [0.38, -0.39]) for (const y of [-0.37, 0.37]) dotAt(g, x * S, y * S, 0.014 * S, 'rgba(0,0,0,0.55)');
+      line(g, [0.32, -0.34, 0.32, 0.34, -0.32, -0.34, -0.32, 0.34, 0.32, -0.34, -0.32, -0.34, 0.32, 0.34, -0.32, 0.34], S, pl, t);
+      line(g, [0.31, -0.33, -0.31, -0.33], S, hl, t);
+      vents(g, -0.39 * S, -0.15 * S, 0.05 * S, 0.14 * S, 4, o);
+      vents(g, -0.39 * S, 0.15 * S, 0.05 * S, 0.14 * S, 4, o);
+      for (const x of [0.385, -0.385]) for (const y of [-0.385, 0.385]) {
+        g.fillStyle = shade(pal.light, -0.1); g.beginPath(); g.arc(x * S, y * S, 0.06 * S, 0, Math.PI * 2); g.fill();
+        g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke();
+        dotAt(g, x * S, y * S, 0.025 * S, 'rgba(0,0,0,0.6)');
+        dotAt(g, x * S, y * S, 0.012 * S, pal.glow);
+      }
       headlights(g, 0.43 * S, 0.12 * S, 0.016 * S);
       line(g, [0.4, -0.3, 0.4, -0.18, 0.4, 0.3, 0.4, 0.18], S, pal.accent, o * 1.2);
       break;
@@ -466,6 +528,7 @@ export function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void
 /** Long outrigger feet on the longarm platform and wing pylons are part of the hull layer. */
 export function hullUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
+  if (CREATURE_SHAPES.has(L.shape)) { creatureUnderlay(g, L, pal, o); return; }
   if (L.shape === 'long') {
     g.strokeStyle = METAL.dark;
     g.lineWidth = 0.06 * S;
@@ -485,6 +548,19 @@ export function hullUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): vo
     }
   }
   void pal;
+}
+
+/** Animated parts drawn directly in their rest pose (icons). */
+export function drawPartsStatic(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, layer: 'under' | 'over'): void {
+  const pd = partsOf(L), rx = partXfs(pd, null);
+  for (let j = 0; j < pd.length; j++) {
+    if (pd[j].layer !== layer) continue;
+    g.save();
+    g.translate(rx[j].x, rx[j].y);
+    g.rotate(rx[j].r);
+    pd[j].draw(g, pal, o);
+    g.restore();
+  }
 }
 
 /* ------------------------------------------------------------------------------------------- mobility */
@@ -595,16 +671,19 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     for (const s of [-1, 1]) wheel(g, 0.29 * S, s * 0.3 * S, 0.2 * S, 0.12 * S, phase, o);
   } else if (id === 'legs' || id === 'jumpjets') {
     const jump = id === 'jumpjets';
-    const hy = 0.2 * S, fy = (jump ? 0.31 : 0.3) * S, stride = (jump ? 0.14 : 0.19) * S;
+    // humanoid / insect bodies: legs tucked under a narrow torso, long stride so the feet step out fore and aft
+    const biped = L.shape === 'mech' || L.shape === 'warlord' || L.shape === 'mantis';
+    const hy = (biped ? 0.11 : 0.2) * S, fy = (biped ? 0.15 : jump ? 0.31 : 0.3) * S, stride = (biped ? (jump ? 0.24 : 0.32) : jump ? 0.14 : 0.19) * S;
     for (const s of [-1, 1]) {
       const ph = phase * P + (s > 0 ? Math.PI : 0);
       const fx = rest ? (s > 0 ? 0.04 : -0.04) * S : Math.sin(ph) * stride;
       const lift = rest ? 0 : Math.max(0, Math.cos(ph));
-      const kx = fx * 0.4 + (jump ? -0.12 : 0.06) * S, ky = s * (fy + 0.07 * S);
+      const kx = fx * 0.4 + (jump ? -0.12 : 0.06) * S, ky = s * (fy + (biped ? 0.05 : 0.07) * S);
       limb(g, [0, s * hy, kx, ky, fx, s * fy], (jump ? 0.1 : 0.075) * S, jump ? METAL.dark : METAL.base, o);
       if (jump) limb(g, [kx * 0.5, s * hy, kx - 0.04 * S, ky - s * 0.02 * S], 0.035 * S, METAL.light, o * 0.6);
       joint(g, kx, ky, 0.055 * S * (1 + lift * 0.15), jump ? pal.dark : METAL.light, o);
-      foot(g, fx + 0.03 * S, s * fy, (jump ? 0.2 : 0.18) * S, 0.1 * S, lift, o, jump ? METAL.dark : METAL.base);
+      foot(g, fx + 0.03 * S, s * fy, (biped ? 0.22 : jump ? 0.2 : 0.18) * S, (biped ? 0.11 : 0.1) * S, lift, o, jump ? METAL.dark : biped ? pal.dark : METAL.base);
+      if (biped) { g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = o * 0.6; g.beginPath(); g.moveTo(fx + 0.08 * S, s * fy - 0.04 * S); g.lineTo(fx + 0.08 * S, s * fy + 0.04 * S); g.stroke(); }
     }
     if (jump) for (const n of L.nozzles) {
       g.beginPath(); roundRect(g, n.x, n.y - n.w, 0.16 * S, n.w * 2, n.w * 0.5);
@@ -612,22 +691,7 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
       dotAt(g, n.x + 0.02 * S, n.y, n.w * 0.6, '#0a0a0a');
     }
   } else if (id === 'spider') {
-    const angs = [0.55, 1.57, 2.55];
-    for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
-      const grp = (i + (s > 0 ? 1 : 0)) % 2;
-      const ph = phase * P + grp * Math.PI;
-      const sw = rest ? 0 : Math.sin(ph) * 0.2;
-      const lift = rest ? 0 : Math.max(0, Math.cos(ph));
-      const a = s * angs[i] - s * sw;
-      const ca = Math.cos(a), sa = Math.sin(a);
-      const hx = ca * 0.16 * S, hy = sa * 0.16 * S;
-      const kx = ca * (0.38 + lift * 0.03) * S, ky = sa * (0.38 + lift * 0.03) * S;
-      const fx = ca * 0.52 * S, fy = sa * 0.52 * S;
-      limb(g, [hx, hy, kx, ky], 0.065 * S, METAL.base, o);
-      limb(g, [kx, ky, fx, fy], 0.045 * S, METAL.dark, o);
-      joint(g, kx, ky, 0.045 * S * (1 + lift * 0.25), lift > 0.3 ? METAL.light : pal.dark, o);
-      dotAt(g, fx, fy, 0.025 * S, OUTLINE);
-    }
+    drawSpiderLegs(g, L, pal, phase, rest, o);
   } else if (id === 'megatracks') {
     drawMegatracks(g, L, pal, phase, o);
   } else if (id === 'titanlegs') {
@@ -636,7 +700,8 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     drawGravlift(g, L, pal, o);
   } else if (id === 'hover') {
     const sk = new Path2D();
-    roundRect(sk, -0.46 * S, -0.37 * S, 0.9 * S, 0.74 * S, 0.22 * S);
+    if (L.shape === 'saucer' || L.shape === 'round' || L.shape === 'crab') sk.ellipse(-0.01 * S, 0, (L.shape === 'crab' ? 0.36 : 0.49) * S, 0.47 * S, 0, 0, Math.PI * 2);
+    else { const hy = Math.min(0.37, L.hw + 0.13); roundRect(sk, -0.46 * S, -hy * S, 0.9 * S, 2 * hy * S, Math.min(0.22, hy * 0.7) * S); }
     g.fillStyle = '#202326';
     g.fill(sk);
     g.save();
@@ -650,7 +715,7 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(sk);
     g.save(); g.scale(0.93, 0.92); g.strokeStyle = rgba(pal.accent, 0.5); g.lineWidth = o * 0.6; g.stroke(sk); g.restore();
     for (const s of [-1, 1]) {
-      const cx = -0.4 * S, cy = s * 0.2 * S, r = 0.11 * S;
+      const cx = -0.4 * S, cy = s * Math.min(0.2, L.hw + 0.02) * S, r = (L.hw < 0.2 ? 0.08 : 0.11) * S;
       joint(g, cx, cy, r, METAL.dark, o);
       g.strokeStyle = METAL.light; g.lineWidth = 0.018 * S;
       g.beginPath();
@@ -684,6 +749,12 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     } else {
       // tandem rotor pylons
       for (const r of L.rotors) joint(g, r.x, r.y, 0.06 * S, METAL.dark, o);
+    }
+  } else if (id === 'jet' && (L.shape === 'delta' || L.shape === 'interceptor')) {
+    // the airframe is the wing: just the engine cans at the trailing edge
+    for (const n of L.nozzles) {
+      g.beginPath(); roundRect(g, n.x, n.y - n.w * 0.75, 0.2 * S, n.w * 1.5, n.w * 0.6);
+      g.fillStyle = METAL.dark; g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
     }
   } else if (id === 'jet') {
     const wing = new Path2D();
@@ -753,6 +824,8 @@ export interface UnitSprites {
   anchor?: HTMLCanvasElement;
   /** parts drawn above the turrets (titan pauldrons) */
   top?: HTMLCanvasElement;
+  /** animated parts (limbs, claws, tail/body segments): sprite + its own halo, centred on the part pivot */
+  parts: { c: HTMLCanvasElement; ext: number; halo: HTMLCanvasElement; haloExt: number; sil: Map<string, HTMLCanvasElement> }[];
 }
 
 const spriteCache = new Map<string, UnitSprites>();
@@ -782,6 +855,9 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const o = outlineW(px, L.S);
   const ext = L.ext;
   const hull = beginSprite(px, ext);
+  const pdefs = partsOf(L);
+  const riding = partMounts(pdefs);
+  const restX = partXfs(pdefs, null);
   hullUnderlay(hull.g, L, pal, o);
   const hp = hullPath(L.shape, L.S);
   paintHull(hull.g, hp, pal, L.S, o, L.hw);
@@ -790,7 +866,7 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   // empty mount sockets
   if (L.S >= 4) {
     for (const m of L.mounts) if (m.turret || !m.mod) drawBarbette(hull.g, m.x, m.y, m.d * (m.turret ? 0.6 : 0.42), pal, o, !m.mod);
-  } else for (const m of L.mounts) if (!m.mod) {
+  } else for (const [mi, m] of L.mounts.entries()) if (!m.mod && !riding.has(mi)) {
     dotAt(hull.g, m.x, m.y, m.d * 0.32, 'rgba(0,0,0,0.45)');
     dotAt(hull.g, m.x, m.y, m.d * 0.18, 'rgba(255,255,255,0.08)');
   }
@@ -811,16 +887,36 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const sh = beginSprite(px, ext);
   sh.g.setTransform(1, 0, 0, 1, 0, 0);
   sh.g.filter = `blur(${Math.max(1, px * 0.04 * L.S)}px)`;
+  // parts (sprite + sockets for empty mounts riding them)
+  const parts: UnitSprites['parts'] = pdefs.map((d, j) => {
+    const sp = beginSprite(px, d.ext);
+    const R = restX[j];
+    sp.g.save();
+    sp.g.rotate(-R.r);
+    d.draw(sp.g, pal, o);
+    sp.g.restore();
+    for (const mi of d.mounts ?? []) {
+      const m = L.mounts[mi];
+      if (m.mod) continue;
+      const c = Math.cos(-R.r), sn = Math.sin(-R.r), dx = m.x - R.x, dy = m.y - R.y;
+      const qx = c * dx - sn * dy, qy = sn * dx + c * dy;
+      dotAt(sp.g, qx, qy, m.d * 0.32, 'rgba(0,0,0,0.5)');
+      dotAt(sp.g, qx, qy, m.d * 0.18, 'rgba(255,255,255,0.1)');
+    }
+    const hl = buildHalo(sp.c, d.ext, px, pal);
+    return { c: sp.c, ext: d.ext, halo: hl.c, haloExt: hl.ext, sil: new Map() };
+  });
   if (anchor) sh.g.drawImage(anchor, 0, 0);
   sh.g.drawImage(rest.c, 0, 0);
   sh.g.drawImage(hull.c, 0, 0);
   if (top) sh.g.drawImage(top, 0, 0);
+  for (let j = 0; j < parts.length; j++) stampPart(sh.g, parts[j].c, parts[j].ext, restX[j], px, sh.c.width);
   sh.g.filter = 'none';
   sh.g.globalCompositeOperation = 'source-in';
   sh.g.fillStyle = '#000';
   sh.g.fillRect(0, 0, sh.c.width, sh.c.height);
-  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: new Map(), anchor, top };
-  const hl = buildHalo(s, pal);
+  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: new Map(), anchor, top, parts };
+  const hl = buildHalo(silhouette(s, '#000'), ext, px, pal);
   s.halo = hl.c;
   s.haloExt = hl.ext;
   spriteCache.set(key, s);
@@ -829,19 +925,31 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
 
 /** Dark outline + bright team rim + soft underglow around the whole unit silhouette. Widths are in device px
  *  (sprite px is ~screen px) so they stay legible when the whole field is visible. */
-function buildHalo(s: UnitSprites, pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
-  const px = s.px;
+function buildHalo(src: HTMLCanvasElement, sext: number, px: number, pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
+  const tint = new Map<string, HTMLCanvasElement>();
+  const solid = (col: string) => {
+    let t = tint.get(col);
+    if (t) return t;
+    t = makeCanvas(src.width, src.height);
+    const tg = ctx2d(t);
+    tg.drawImage(src, 0, 0);
+    tg.globalCompositeOperation = 'source-in';
+    tg.fillStyle = col;
+    tg.fillRect(0, 0, t.width, t.height);
+    tint.set(col, t);
+    return t;
+  };
   const ow = clamp(px * 0.035, 1, 2.4); // dark outline
   const rw = clamp(px * 0.07, 1.5, 3.4); // team rim
   const gw = clamp(px * 0.18, 3, 9); // glow reach
   const pad = ow + rw + gw + 2;
-  const ext = s.ext + pad / px;
+  const ext = sext + pad / px;
   const size = Math.ceil(2 * ext * px);
   const c = makeCanvas(size, size);
   const g = ctx2d(c);
-  const off = (size - s.hull.width) / 2;
+  const off = (size - src.width) / 2;
   const stamp = (col: string, r: number, n: number) => {
-    const sil = silhouette(s, col);
+    const sil = solid(col);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
       g.drawImage(sil, off + Math.cos(a) * r, off + Math.sin(a) * r);
@@ -858,8 +966,31 @@ function buildHalo(s: UnitSprites, pal: TeamPal): { c: HTMLCanvasElement; ext: n
   stamp(pal.rim, ow + rw * 0.5, 16);
   // dark outline directly around the unit
   stamp(OUTLINE, ow, 16);
-    g.drawImage(silhouette(s, OUTLINE), off, off);
+  g.drawImage(solid(OUTLINE), off, off);
   return { c, ext };
+}
+
+/** Draw a part sprite into a pixel-space canvas of the unit sprite (size x size, centred) at transform xf. */
+function stampPart(g: Ctx, c: HTMLCanvasElement, pext: number, xf: Xf, px: number, size: number): void {
+  const t = g.getTransform();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.translate(size / 2 + xf.x * px, size / 2 + xf.y * px);
+  g.rotate(xf.r);
+  g.drawImage(c, -pext * px, -pext * px, pext * 2 * px, pext * 2 * px);
+  g.setTransform(t);
+}
+
+function partSil(p: UnitSprites['parts'][number], color: string): HTMLCanvasElement {
+  let c = p.sil.get(color);
+  if (c) return c;
+  c = makeCanvas(p.c.width, p.c.height);
+  const g = ctx2d(c);
+  g.drawImage(p.c, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = color;
+  g.fillRect(0, 0, c.width, c.height);
+  p.sil.set(color, c);
+  return c;
 }
 
 export function mobFrame(design: Design, team: Team, s: UnitSprites, idx: number): HTMLCanvasElement {
@@ -919,6 +1050,8 @@ export function wreckSprite(design: Design, team: Team, px: number): HTMLCanvasE
   g.drawImage(s.rest, 0, 0);
   g.drawImage(s.hull, 0, 0);
   if (s.top) g.drawImage(s.top, 0, 0);
+  const pd = partsOf(layoutOf(design)), rx = partXfs(pd, null);
+  for (let j = 0; j < s.parts.length; j++) stampPart(g, s.parts[j].c, s.parts[j].ext, rx[j], s.px, c.width);
   g.globalCompositeOperation = 'source-atop';
   // desaturate + near-black so a wreck never reads as a live unit
   g.fillStyle = 'rgba(20,21,22,0.93)';
@@ -1104,8 +1237,29 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
   }
+  // animated parts: per-frame transforms
+  const pdefs = partsOf(L);
+  let pxf: Xf[] = [], prest: Xf[] = [];
+  if (pdefs.length) {
+    const odo = p.odometer ?? 0;
+    const ai: AnimIn = { t: p.time, odo, moving: !!p.moving && L.mob.kind !== 'static', seed: p.seed ?? 0, walk: (odo / L.cycle) * Math.PI * 2 };
+    pxf = partXfs(pdefs, ai);
+    prest = partXfs(pdefs, null);
+  }
+  const partBlit = (j: number, c: HTMLCanvasElement, e: number) => {
+    const f = pxf[j];
+    blit(g, c, x + (cs * f.x - sn * f.y) * sc, y + (sn * f.x + cs * f.y) * sc, ang + f.r, e, sc);
+  };
+  const drawParts = (layer: 'under' | 'over') => { for (let j = 0; j < pdefs.length; j++) if (pdefs[j].layer === layer) partBlit(j, s.parts[j].c, s.parts[j].ext); };
+  const silAll = (color: string, dx = 0, k = 1) => {
+    blit(g, silhouette(s, color), x + dx, y, ang, s.ext, sc * k);
+    for (let j = 0; j < pdefs.length; j++) { const f = pxf[j]; blit(g, partSil(s.parts[j], color), x + dx + (cs * f.x - sn * f.y) * sc, y + (sn * f.x + cs * f.y) * sc, ang + f.r, s.parts[j].ext, sc * k); }
+  };
   // outline + team rim/underglow (stays upright-agnostic: it is the silhouette, rotated with the unit)
-  if (p.cloak !== 'enemy') blit(g, s.halo, x, y, ang, s.haloExt, sc);
+  if (p.cloak !== 'enemy') {
+    blit(g, s.halo, x, y, ang, s.haloExt, sc);
+    for (let j = 0; j < pdefs.length; j++) partBlit(j, s.parts[j].halo, s.parts[j].haloExt);
+  }
   if (s.anchor) blit(g, s.anchor, x, y, 0, s.ext, sc);
   // mobility
   let frame = s.rest;
@@ -1129,7 +1283,10 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     }
   }
   // hull
+  drawParts('under');
   blit(g, s.hull, x, y, ang, s.ext, sc);
+  drawParts('over');
+  if (CREATURE_SHAPES.has(L.shape) && p.cloak !== 'enemy') drawCreatureFx(g, L, p.time, p.seed ?? 0, x, y, ang, sc, px, pal, alpha);
   if (GIANT_SHAPES.has(L.shape) || L.mob.id === 'gravlift' || L.mob.id === 'megatracks' || L.mob.id === 'titanlegs') {
     drawGiantFx(g, L, { time: p.time, seed: p.seed, moving: p.moving, odometer: p.odometer }, x, y, ang, sc, px, pal, alpha);
   }
@@ -1150,8 +1307,10 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
       if (v === 'hammer' || v === 'claw' || v === 'chainsaw' || v === 'blade') rot = Math.sin(sw * Math.PI * 2) * 0.7;
       rec = -k * m.d * (v === 'ram' || v === 'drill' || v === 'prod' ? 0.6 : 0.3);
     }
-    const mx = x + (cs * m.x - sn * m.y) * sc - Math.cos(ta) * rec;
-    const my = y + (sn * m.x + cs * m.y) * sc - Math.sin(ta) * rec;
+    const rp = pdefs.length ? mountOnPart(pdefs, prest, pxf, i, m.x, m.y) : null;
+    const lx = rp ? rp.x : m.x, ly = rp ? rp.y : m.y;
+    const mx = x + (cs * lx - sn * ly) * sc - Math.cos(ta) * rec;
+    const my = y + (sn * lx + cs * ly) * sc - Math.sin(ta) * rec;
     const ts = turretSprite(m.mod, p.team, m.d, px);
     const dis = (p.disarm ?? 0) > 0;
     if (dis) g.globalAlpha = alpha * (0.55 + 0.45 * (Math.sin(p.time * 37 + i * 2) > 0 ? 1 : 0.3));
@@ -1212,12 +1371,12 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   const hf = p.hitFlash ?? 0;
   if (hf > 0.02) {
     g.globalAlpha = alpha * Math.min(0.5, hf * 0.55);
-    blit(g, silhouette(s, '#ffffff'), x, y, ang, s.ext, sc);
+    silAll('#ffffff');
     g.globalAlpha = alpha;
   }
   if ((p.stun ?? 0) > 0) {
     g.globalAlpha = alpha * (0.12 + 0.1 * Math.sin(p.time * 40));
-    blit(g, silhouette(s, '#7fc8ff'), x, y, ang, s.ext, sc);
+    silAll('#7fc8ff');
     g.globalAlpha = alpha;
     drawSparks(g, x, y, 0.45 * L.S, p.time, px);
   }
@@ -1252,7 +1411,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalAlpha = (p.cloak === 'own' ? 0.25 : 0.12) * (0.6 + 0.4 * Math.sin(p.time * 7 + (p.seed ?? 0)));
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
-    blit(g, silhouette(s, '#9fdcff'), x + Math.sin(p.time * 9) * 0.03, y, ang, s.ext, sc * 1.02);
+    silAll('#9fdcff', Math.sin(p.time * 9) * 0.03, 1.02);
     g.globalCompositeOperation = prev;
   }
   // team marker at small scale: circle = friendly, diamond = enemy (shape + colour + luminance cue)

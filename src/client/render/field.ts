@@ -25,6 +25,7 @@
 //   view.consumeDrag() / view.controls.wasDrag: true when the pointer gesture that just ended was a pan/pinch;
 //   call it from a pointerup/click handler to ignore that gesture (controls' listeners run before yours).
 
+import { CREATURE_SHAPES } from './creatures.ts';
 import { battleSfx, setPanFlip } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../../shared/grid.ts';
 import { Camera, CameraControls } from './camera.ts';
@@ -68,7 +69,8 @@ export interface BoardOverlay {
   /** tint the viewer's deploy zone */
   showZone?: boolean;
   /** cells to highlight, world cell coords */
-  hover?: { col: number; row: number; size: number; valid: boolean } | null;
+  /** footprint highlight; w x h (cells) when given, else size x size */
+  hover?: { col: number; row: number; size: number; w?: number; h?: number; valid: boolean } | null;
 }
 
 interface USnap {
@@ -444,10 +446,11 @@ export class FieldView {
     if (hv) {
       const col = hv.valid ? '#46e88a' : '#ff4a4a';
       g.fillStyle = rgba(col, 0.22 + 0.06 * Math.sin(time * 6));
-      g.fillRect(hv.col, hv.row, hv.size, hv.size);
+      const hw = hv.w ?? hv.size, hh = hv.h ?? hv.size;
+      g.fillRect(hv.col, hv.row, hw, hh);
       g.strokeStyle = rgba(col, 0.9);
       g.lineWidth = 2 / this.k;
-      g.strokeRect(hv.col + 0.04, hv.row + 0.04, hv.size - 0.08, hv.size - 0.08);
+      g.strokeRect(hv.col + 0.04, hv.row + 0.04, hw - 0.08, hh - 0.08);
     }
     const poses: { u: BoardUnit; p: UnitPose; air: boolean }[] = [];
     for (let i = 0; i < units.length; i++) {
@@ -1420,7 +1423,7 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   let L;
   try { L = layoutOf(design); } catch { return; }
   const time = opts?.time ?? 0;
-  const ext = L.S * (L.S >= 4 ? (L.air ? 1.5 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' ? 1.18 : 1.1);
+  const ext = L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1);
   const px = Math.min(W, H) / ext;
   g.setTransform(px, 0, 0, px, W / 2, H / 2);
   const team: Team = (opts?.side ?? 0) === 1 ? 1 : 0;
