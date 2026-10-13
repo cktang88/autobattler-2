@@ -14,7 +14,7 @@ import { DEPLOY_D, DEPLOY_W, FIELD_W, MAX_SPACING, blockCells, blockInZone, fmtM
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
-import type { DeployAction, Design, MatchState, Placement, RoundRecord, Side, Size, UnitStats } from '../../shared/types.ts';
+import { TARGET_PRIORITIES, type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type TargetPriority, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import { confirmModal, paintPreview, sizeLabel } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
@@ -28,6 +28,48 @@ export function worldToLocalCell(side: Side, col: number, row: number, size: num
 
 /** last spacing chosen per design id (kept across matches) */
 const lastSpacing = new Map<string, number>();
+
+const TARGET_INFO: Record<TargetPriority, { icon: string; label: string; tip: string }> = {
+  closest: { icon: '◉', label: 'Closest', tip: 'Closest: shoot the nearest enemy (default)' },
+  farthest: { icon: '◌', label: 'Farthest', tip: 'Farthest: shoot the most distant enemy in range' },
+  threat: { icon: '↩', label: 'Threat', tip: 'Threat (retaliate): shoot whoever last damaged this unit or its squad, else the closest' },
+  lowestHp: { icon: '▾', label: 'Low HP', tip: 'Lowest HP: finish off the weakest enemy in range' },
+  highestHp: { icon: '▴', label: 'High HP', tip: 'Highest HP: focus the toughest enemy in range' },
+  highestDps: { icon: '✶', label: 'High DPS', tip: 'Highest DPS: prioritise the enemy with the most damage output' },
+  lowestDps: { icon: '✧', label: 'Low DPS', tip: 'Lowest DPS: prioritise the enemy with the least damage output' },
+};
+type Orders = { target: TargetPriority; hold: boolean };
+const DEFAULT_ORDERS: Orders = { target: 'closest', hold: false };
+const ORDERS_KEY = 'ironclad.orders';
+function loadOrders(): Record<string, Partial<Orders>> {
+  try { const o = JSON.parse(localStorage.getItem(ORDERS_KEY) ?? '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
+}
+function ordersFor(designId: string): Orders {
+  const o = loadOrders()[designId] ?? {};
+  return { target: TARGET_PRIORITIES.includes(o.target as TargetPriority) ? (o.target as TargetPriority) : 'closest', hold: !!o.hold };
+}
+function saveOrders(designId: string, o: Orders) {
+  try { const all = loadOrders(); all[designId] = o; localStorage.setItem(ORDERS_KEY, JSON.stringify(all)); } catch { /* storage unavailable */ }
+}
+const isCustom = (o: Orders) => o.target !== DEFAULT_ORDERS.target || o.hold !== DEFAULT_ORDERS.hold;
+const orderFields = (o: Orders): { target?: TargetPriority; hold?: boolean } => ({ ...(o.target !== 'closest' ? { target: o.target } : {}), ...(o.hold ? { hold: true } : {}) });
+
+/** Battle settings: targeting priority + (squads) formation behaviour. */
+function ordersControl(o: Orders, squad: boolean, onTarget: (t: TargetPriority) => void, onHold: (hold: boolean) => void): HTMLElement {
+  return h('div.orders', null,
+    h('div.sp-head', null, h('span', null, 'Targeting'), isCustom(o) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
+    h('div.tgt-grid', { role: 'group', 'aria-label': 'Targeting priority' }, ...TARGET_PRIORITIES.map((t) => h('button.tgt', {
+      type: 'button', class: t === o.target ? 'on' : null, 'aria-pressed': String(t === o.target), title: TARGET_INFO[t].tip, 'data-target': t,
+      onclick: () => onTarget(t),
+    }, h('i', null, TARGET_INFO[t].icon), TARGET_INFO[t].label))),
+    squad ? h('div.hold-row', null,
+      h('span', null, 'Formation'),
+      h('div.sp-segs.two', { role: 'group', 'aria-label': 'Formation' },
+        h('button.seg', { type: 'button', class: o.hold ? 'on' : null, title: 'Keep spread: units hold their deployed spacing while moving', onclick: () => onHold(true) }, 'Keep spread'),
+        h('button.seg', { type: 'button', class: !o.hold ? 'on' : null, title: 'Close in: units move freely toward the enemy', onclick: () => onHold(false) }, 'Close in'),
+      )) : null,
+  );
+}
 
 /** Tiny diagram of a 4-unit squad at the given spacing, plus the footprint in metres. */
 function spacingDiagram(spacing: number): SVGElement {
@@ -117,6 +159,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let selCard = -1;
   let sel: Sel = null;
   let hover: { x: number; y: number; size: Size; spacing: number; cells: number; valid: boolean; reason: string | null } | null = null;
+  const cfg = new Map<number, UnitConfig>(); // changed settings of units from earlier rounds
   let hoverUnit: Sel = null; // block under the mouse (nothing selected in the shop)
   let lastPtr: { px: number; py: number } | null = null;
   let submitting = false;
@@ -132,7 +175,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const me = () => m.players[side];
   const foe = () => m.players[opp];
   const deck = () => me().deck;
-  const action = (): DeployAction => ({ round: m.round, place: place.map((p) => ({ ...p })), upgrade: [...upgrades] });
+  const action = (): DeployAction => ({ round: m.round, place: place.map((p) => ({ ...p })), upgrade: [...upgrades], ...(cfg.size ? { configure: [...cfg.values()].map((c) => ({ ...c })) } : {}) });
   const check = (a: DeployAction): string | null => {
     try { return validateDeploy(m, side, a); } catch (e) { return (e as Error).message; }
   };
@@ -159,6 +202,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     place = [];
     upgrades = [];
     ops = [];
+    cfg.clear();
     nextUid = me().nextUid;
     selCard = -1;
     sel = null;
@@ -326,7 +370,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     supplyVal.classList.toggle('low', rem < 0);
     const deploying = phase === 'deploy';
     undoBtn.disabled = !deploying || ops.length === 0;
-    clearBtn.disabled = !deploying || ops.length === 0;
+    clearBtn.disabled = !deploying || (ops.length === 0 && cfg.size === 0);
     deployBtn.disabled = !deploying || submitting;
     deployBtn.textContent = submitting ? 'Deploying…' : 'Deploy & Fight';
     renderCards();
@@ -335,9 +379,54 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function renderShopSpacing() {
     const d = phase === 'deploy' ? deck()[selCard] : undefined;
-    if (!d || !hasSpacing(sizeOf(d))) { shopSpacingEl.classList.add('hidden'); shopSpacingEl.replaceChildren(); return; }
+    if (!d) { shopSpacingEl.classList.add('hidden'); shopSpacingEl.replaceChildren(); return; }
     shopSpacingEl.classList.remove('hidden');
-    shopSpacingEl.replaceChildren(spacingControl(spacingOfCard(d), (v) => setCardSpacing(v)));
+    const squad = hasSpacing(sizeOf(d));
+    const o = ordersFor(d.id);
+    shopSpacingEl.replaceChildren(
+      squad ? spacingControl(spacingOfCard(d), (v) => setCardSpacing(v)) : '',
+      ordersControl(o, squad,
+        (t) => { saveOrders(d.id, { ...ordersFor(d.id), target: t }); sfx('click'); renderShopSpacing(); },
+        (hd) => { saveOrders(d.id, { ...ordersFor(d.id), hold: hd }); sfx('click'); renderShopSpacing(); }),
+    );
+  }
+
+  const blockOrders = (sl: NonNullable<Sel>): Orders | null => {
+    const p = sl.pending ? place.find((x) => x.uid === sl.uid) : m.players[sl.side].board.find((x) => x.uid === sl.uid);
+    if (!p) return null;
+    const c = sl.pending ? undefined : cfg.get(p.uid);
+    return { target: c?.target ?? p.target ?? 'closest', hold: c?.hold ?? p.hold ?? false };
+  };
+
+  /** change targeting / formation of one of my blocks (pending: stored on the placement, locked: via `configure`) */
+  function setBlockOrders(sl: NonNullable<Sel>, patch: Partial<Orders>) {
+    if (phase !== 'deploy' || sl.side !== side) return;
+    const cur = blockOrders(sl);
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    if (sl.pending) {
+      const i = place.findIndex((x) => x.uid === sl.uid);
+      if (i < 0) return;
+      const { target: _t, hold: _h, ...rest } = place[i];
+      const np: Placement = { ...rest, ...orderFields(next) };
+      const cand = action();
+      cand.place[i] = np;
+      const err = check(cand);
+      if (err) { sfx('invalid'); app.toast(err, 'error'); return; }
+      place[i] = np;
+      saveOrders(np.designId, next);
+    } else {
+      const base = m.players[side].board.find((x) => x.uid === sl.uid);
+      if (!base) return;
+      const prev = cfg.get(sl.uid);
+      const entry: UnitConfig = { uid: sl.uid, target: next.target, hold: next.hold };
+      const same = next.target === (base.target ?? 'closest') && next.hold === (base.hold ?? false);
+      if (same) cfg.delete(sl.uid); else cfg.set(sl.uid, entry);
+      const err = check(action());
+      if (err) { if (prev) cfg.set(sl.uid, prev); else cfg.delete(sl.uid); sfx('invalid'); app.toast(err, 'error'); return; }
+    }
+    sfx('click');
+    renderAll();
   }
 
   function setCardSpacing(v: number) {
@@ -466,6 +555,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         st.shield ? stat('Shield', String(st.shield)) : null,
         st.heal ? stat('Repair', `${st.heal}/s`) : null,
       ),
+      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, phase === 'deploy' ? (t) => setBlockOrders(s, { target: t }) : () => {}, phase === 'deploy' ? (hd) => setBlockOrders(s, { hold: hd }) : () => {})) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null)) : '',
       h('div.parts', null, parts),
       loadout.length ? h('div.loadout', null, h('div.lo-title', null, 'Loadout'), h('ul', null, ...loadout)) : '',
@@ -538,6 +628,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   // ---------- deploy actions ----------
+  const newOrders = (designId: string, size: Size) => { const o = ordersFor(designId); return orderFields({ target: o.target, hold: hasSpacing(size) && o.hold }); };
+
   function computeHover(px: number, py: number): typeof hover {
     const d = deck()[selCard];
     if (!d) return null;
@@ -556,7 +648,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     else if (costOf(d) > remaining()) reason = 'Not enough supply';
     else {
       const cand = action();
-      cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round, ...(hasSpacing(size) ? { spacing } : {}) });
+      cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round, ...(hasSpacing(size) ? { spacing } : {}), ...newOrders(d.id, size) });
       reason = check(cand);
     }
     return { x, y, size, spacing, cells, valid: !reason, reason };
@@ -572,7 +664,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return;
     }
     const uid = nextUid++;
-    place.push({ uid, designId: d.id, x: hover.x, y: hover.y, level: 1, round: m.round, ...(hasSpacing(hover.size) ? { spacing: hover.spacing } : {}) });
+    place.push({ uid, designId: d.id, x: hover.x, y: hover.y, level: 1, round: m.round, ...(hasSpacing(hover.size) ? { spacing: hover.spacing } : {}), ...newOrders(d.id, hover.size) });
     ops.push({ kind: 'place', uid });
     sfx('place');
     if (costOf(d) > remaining()) { selCard = -1; hover = null; }
@@ -617,6 +709,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   function clearAll() {
+    cfg.clear();
     place = [];
     upgrades = [];
     ops = [];
@@ -792,7 +885,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (rec) { startReplay(rec); return; }
     if (m.status === 'done') { showOver(); return; }
     if (pendingRound !== m.round) resetPending();
-    else if (me().ready && ops.length) { place = []; upgrades = []; ops = []; selCard = -1; hover = null; sel = null; } // submitted: now on the board
+    else if (me().ready && (ops.length || cfg.size)) { cfg.clear(); place = []; upgrades = []; ops = []; selCard = -1; hover = null; sel = null; } // submitted: now on the board
     const blocked = me().ready || (m.status === 'waiting' && !!check({ round: m.round, place: [], upgrade: [] }));
     if (blocked) { if (phase !== 'waiting') setPhase('waiting'); else { renderAll(); renderOverlay(); } }
     else if (phase !== 'deploy') setPhase('deploy');
