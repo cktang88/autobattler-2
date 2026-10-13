@@ -6,6 +6,7 @@ import { loadSettings, saveDeckIds, saveDesigns, saveSettings, type Settings } f
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { confirmModal } from './match-ui.ts';
+import * as kit from './kit.ts';
 
 export function settingsScreen(app: App): Screen {
   playMusic('menu');
@@ -15,28 +16,20 @@ export function settingsScreen(app: App): Screen {
     saveSettings(s);
   };
 
-  const slider = (key: 'master' | 'music' | 'sfx', label: string) => {
-    const out = h('output', null, `${Math.round(s[key] * 100)}`);
-    const input = h('input', { type: 'range', min: 0, max: 100, step: 1, value: Math.round(s[key] * 100), 'aria-label': label });
-    input.addEventListener('input', () => {
-      s[key] = Number(input.value) / 100;
-      out.textContent = input.value;
-      apply();
-    });
-    input.addEventListener('change', () => sfx('click'));
-    return h('div.setting', null, h('label', null, label), input, out);
-  };
+  const slider = (key: 'master' | 'music' | 'sfx', label: string) =>
+    h('div.setting', null, h('label', null, label), kit.slider({
+      value: Math.round(s[key] * 100), min: 0, max: 100, label,
+      onInput: (v) => { s[key] = v / 100; apply(); },
+      onCommit: () => sfx('click'),
+    }));
 
-  const speeds = [1, 2, 4];
-  const speedBtns = speeds.map((v) => h('button', {
-    onclick: () => {
-      sfx('click');
-      s.battleSpeed = v;
-      saveSettings(s);
-      speedBtns.forEach((b, i) => b.classList.toggle('active', speeds[i] === v));
-    },
-  }, `${v}×`));
-  speedBtns.forEach((b, i) => b.classList.toggle('active', speeds[i] === s.battleSpeed));
+  const speeds = [1, 2, 4] as const;
+  const speedHost = h('div');
+  const renderSpeed = () => speedHost.replaceChildren(kit.segmented({
+    value: s.battleSpeed, label: 'Default battle speed', options: speeds.map((v) => ({ value: v, label: `${v}×` })),
+    onChange: (v) => { sfx('click'); s.battleSpeed = v; saveSettings(s); renderSpeed(); },
+  }));
+  renderSpeed();
 
   const reset = async () => {
     sfx('click');
@@ -64,7 +57,7 @@ export function settingsScreen(app: App): Screen {
           h('div.panel-title', null, 'Gameplay'),
           h('div.row', { style: { justifyContent: 'space-between', flexWrap: 'wrap' } },
             h('span', null, 'Default battle speed'),
-            h('div.seg', null, ...speedBtns),
+            speedHost,
           ),
         ),
         h('div.panel', null,
@@ -76,8 +69,7 @@ export function settingsScreen(app: App): Screen {
         ),
         h('div.panel.credits', null,
           h('div.panel-title', null, 'Credits'),
-          h('p.muted', null, 'Music: Eric Skiff — We\u2019re all under the stars / Searching / Underclocked (underunderclocked mix) / We\u2019re the Resistors — Resistor Anthems — EricSkiff.com/music (CC BY 4.0).'),
-          h('p.muted', null, '\u201cIn a Heartbeat\u201d Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 3.0.'),
+          h('p.muted', null, 'Music (CC0, OpenGameArt): vitalezzz \u2014 Inevitable, Claimed by the Void, Brute Force, Hunter-class Lifeform; yd \u2014 Factory ambiance; Ruskerdax \u2014 Menacing Otherworld; Cethiel \u2014 Laments of the War; SRG774 \u2014 Dark Sci-Fi Audio Pack.'),
           h('p.muted', null, 'Fonts: Barlow by Jeremy Tribby (SIL OFL). Effect textures: Zero-K (public domain). Weapon ideas inspired by Zero-K.'),
         ),
       ),

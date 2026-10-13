@@ -13,12 +13,13 @@ import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
+import * as kit from './kit.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
-  designSizeLabel, footprintLabel, CATEGORY_COLOR, matchesRoles, matchesSize, roleBar, roleFilter, roleTags, sizeFilter, traverseDeg, SLOW_TURRET_DEG,
+  designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
 } from './garage-parts.ts';
 
 const RANK: Record<MountClass, number> = MOUNT_RANK;
@@ -45,8 +46,25 @@ const TAB_ICON: Record<Tab, string> = {
   orders: '<path d="M5 4v16M5 5h11l-2 4 2 4H5"/>',
   intel: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
 };
-const WEAPON_CATS = new Set(CATEGORIES.filter((c) => MODULES.some((m) => m.category === c.id && m.kind === 'weapon')).map((c) => c.id));
-const isWeaponTab = (m: ModuleDef) => m.kind === 'weapon' || (WEAPON_CATS.has(m.category) && m.kind !== 'armor' && m.category !== 'support');
+/** Sub-tabs: weapons and systems are split into a handful of single-choice groups, each listing its categories as sections. */
+type Group = { id: string; label: string; tip: string; cats: string[] };
+const WEAPON_GROUPS: Group[] = [
+  { id: 'ballistic', label: 'Guns', tip: 'Machine guns, autocannons and tank cannons', cats: ['machinegun', 'autocannon', 'cannon'] },
+  { id: 'rockets', label: 'Rockets', tip: 'Rocket salvos and homing missiles', cats: ['rocket', 'missile'] },
+  { id: 'longrange', label: 'Long range', tip: 'Snipers, railguns and artillery', cats: ['precision', 'artillery'] },
+  { id: 'energy', label: 'Energy', tip: 'Beams, plasma, lightning and stun weapons', cats: ['energy', 'disruption'] },
+  { id: 'close', label: 'Close', tip: 'Flamers and melee', cats: ['flame', 'melee'] },
+  { id: 'aa', label: 'Anti-air', tip: 'Dedicated flak', cats: ['antiair'] },
+];
+const SYSTEM_GROUPS: Group[] = [
+  { id: 'defense', label: 'Defense', tip: 'Shields, point defense, smoke and coatings', cats: ['defense'] },
+  { id: 'armor', label: 'Armor', tip: 'Plating: more hp and armor for weight', cats: ['armor'] },
+  { id: 'support', label: 'Support', tip: 'Repair beams, shield domes and uplinks', cats: ['support'] },
+  { id: 'electronics', label: 'Electronics', tip: 'Cloaks, jammers, sensors and system upgrades', cats: ['stealth', 'systems'] },
+];
+const WEAPON_CAT_SET = new Set(WEAPON_GROUPS.flatMap((g) => g.cats));
+const isWeaponTab = (m: ModuleDef) => WEAPON_CAT_SET.has(m.category);
+const LS_DETAILS = 'garage.details';
 
 const LS_TAB = 'garage.tab';
 const loadTab = (): Tab => {
@@ -115,9 +133,16 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   /** pinned inspector subject per tab; hover temporarily overrides it */
   const pinned: Partial<Record<Tab, Inspect>> = {};
   let hoverInspect: Inspect | null = null;
-  const catSel: Record<'weapons' | 'systems', string> = { weapons: '*', systems: '*' };
+  const groupSel: Record<'weapons' | 'systems', string> = { weapons: WEAPON_GROUPS[0].id, systems: SYSTEM_GROUPS[0].id };
+  let roleSel = '*';
+  let sizeSel = 0;
+  let driveSel = '*';
+  const openMore = new Set<string>();
+  let showDetails = (() => { try { return localStorage.getItem(LS_DETAILS) === '1'; } catch { return false; } })();
   let modQuery = '';
-  let showFilters = roleFilter.size > 0;
+  /** range overlay: zooms the bench out to fit every weapon's reach */
+  let rangesOn = false;
+  let viewExt = MIN_VIEW_CELLS;
   let destroyed = false;
   let geom: PreviewGeom | null = null;
 
@@ -152,9 +177,13 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     update();
   });
 
+  const rangeBtn = h('button.g-stagebtn', {
+    type: 'button', title: 'Show weapon ranges (V)', 'aria-pressed': 'false',
+    onclick: () => toggleRanges(),
+  }, svgIcon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>'), 'Ranges');
   const stage = h('div.g-stage', null,
     gridCv, preview, socketsEl,
-    h('div.g-stage-hud', null, stageTags),
+    h('div.g-stage-hud', null, stageTags, h('span.spacer'), rangeBtn),
     stageCost,
     stageHint,
   );
@@ -436,6 +465,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (focus) (el.querySelector(`[data-fk="tab-${t}"]`) as HTMLElement | null)?.focus();
   }
 
+  function toggleRanges() {
+    rangesOn = !rangesOn;
+    sfx('click');
+    update();
+  }
+
   /** Click on a socket: select it and open the matching bay tab. */
   function focusSlot(i: number) {
     if (activeSlot === i) { activeSlot = null; sfx('click'); update(); return; }
@@ -648,10 +683,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     return h('span.g-delta', { class: good ? 'up' : 'down' }, `${v > 0 ? '+' : ''}${fmt(v, opts.digits ?? 0)}`);
   }
 
-  function gauge(label: string, value: string, d: HTMLElement | null, opts: { unit?: string; cls?: string; tip?: string } = {}) {
+  function gauge(label: string, value: string, d: HTMLElement | null, opts: { unit?: string; cls?: string; tip?: string; sub?: string } = {}) {
     return h('div.g-gauge', { class: opts.cls ?? null, title: opts.tip ?? null },
       h('span.g-gauge-l', null, label),
       h('span.g-gauge-v', null, value, opts.unit ? h('small', null, opts.unit) : null),
+      opts.sub ? h('span.g-gauge-s', null, opts.sub) : null,
       d);
   }
 
@@ -676,26 +712,28 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     ].filter((x): x is HTMLSpanElement => !!x));
     stageCost.replaceChildren(h('span.g-prev-cost-l', null, s && s.squad > 1 ? `Supply / block · ${s.unitCost} each` : 'Supply'), h('span.g-prev-cost-v', null, icon('cost'), h('b', null, s ? String(s.cost) : '–'), delta(ss && s ? s.cost - ss.cost : null, { invert: true })));
     const empty = draft.mounts.filter((m, i) => !m && i < c.mounts.length).length + Math.max(0, c.mounts.length - draft.mounts.length);
-    stageHint.replaceChildren(
-      h('span.g-kbd', null, 'Drag'), ' parts onto the sockets',
-      h('i', null, '·'), h('span.g-kbd', null, 'Click'), ' a socket to fit it',
-      empty ? h('em', null, ` · ${empty} empty`) : '',
-    );
+    stageHint.replaceChildren(empty ? `Drag parts onto the ${empty} empty socket${empty > 1 ? 's' : ''}` : 'Drag a part onto a socket to swap it');
+    rangeBtn.classList.toggle('on', rangesOn);
+    rangeBtn.setAttribute('aria-pressed', String(rangesOn));
+    stage.classList.toggle('ranges', rangesOn);
 
     renderLoadout();
 
     if (!s) { readoutEl.replaceChildren(); loadEl.replaceChildren(); return; }
-    const mdl = (k: keyof UnitStats) => (ss ? ((s[k] as number) - (ss[k] as number)) * METERS_PER_CELL : null);
-    const dl = (k: keyof UnitStats) => (ss ? (s[k] as number) - (ss[k] as number) : null);
+    const sub = (...xs: (string | null | false)[]) => xs.filter(Boolean).join(' · ');
     readoutEl.replaceChildren(
-      gauge('HP', String(s.hp), delta(dl('hp'))),
-      gauge('Armor', String(s.armor), delta(dl('armor'))),
-      gauge('Shield', String(s.shield), delta(dl('shield')), { cls: s.shield ? '' : 'nil' }),
-      gauge('Speed', s.isStatic ? '—' : String(Math.round(s.speed * METERS_PER_CELL)), delta(mdl('speed')), { unit: s.isStatic ? '' : 'm/s' }),
-      gauge('Turn', s.isStatic ? '—' : String(deg(s.turn)), s.isStatic || !ss ? null : delta(deg(s.turn) - deg(ss.turn)), { unit: s.isStatic ? '' : '°/s' }),
-      gauge('Range', s.range ? fmtMeters(s.range) : '—', delta(mdl('range'))),
-      gauge('DPS', String(s.dps), delta(dl('dps')), { cls: 'hl' }),
-      ...(s.heal ? [gauge('Repair', String(s.heal), delta(dl('heal')), { unit: 'hp/s' })] : []),
+      gauge('Health', String(s.hp), delta(ss ? s.hp - ss.hp : null), {
+        sub: sub(s.armor ? `${s.armor} armor` : 'no armor', s.shield ? `${s.shield} shield` : null),
+        tip: 'Hull hit points. Armor subtracts from every hit; shields soak damage and recharge.',
+      }),
+      gauge('Firepower', String(s.dps), delta(ss ? s.dps - ss.dps : null), {
+        unit: 'dps', cls: 'hl', sub: s.range ? `reach ${fmtMeters(s.range)}` : 'unarmed',
+        tip: 'Damage per second of all weapons combined; reach is the longest weapon range.',
+      }),
+      gauge('Speed', s.isStatic ? '—' : String(Math.round(s.speed * METERS_PER_CELL)), delta(ss ? (s.speed - ss.speed) * METERS_PER_CELL : null), {
+        unit: s.isStatic ? '' : 'm/s', sub: s.isStatic ? 'static emplacement' : `turns ${deg(s.turn)}°/s`,
+      }),
+      ...(s.heal ? [gauge('Repair', String(s.heal), delta(ss ? s.heal - ss.heal : null), { unit: 'hp/s', sub: 'to nearby allies' })] : []),
     );
 
     const pct = s.load * 100;
@@ -817,14 +855,6 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     renderInspector();
   }
 
-  function filterToggle(extraActive: boolean): HTMLElement {
-    const n = roleFilter.size + (extraActive ? sizeFilter.size : 0);
-    return h('button.g-btn.small.g-ftog', {
-      type: 'button', class: showFilters ? 'on' : null, 'aria-expanded': String(showFilters), 'data-fk': 'ftog',
-      onclick: () => { showFilters = !showFilters; sfx('click'); update(); },
-    }, svgIcon('<path d="M4 5h16l-6 8v6l-4-2v-4z"/>'), 'Roles', n ? h('b', null, String(n)) : null);
-  }
-
   function hoverable(node: HTMLElement, it: Inspect) {
     node.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && !drag?.started) { hoverInspect = it; renderInspector(); } });
     node.addEventListener('pointerleave', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); } });
@@ -832,154 +862,168 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     node.addEventListener('blur', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); } });
   }
 
-  function renderHullTab(): HTMLElement[] {
-    const shown = CHASSIS.filter((c) => c.id === draft.chassis || (matchesRoles(c.roles) && matchesSize(c.size)));
-    const tiles = shown.map((c) => {
-      const sel = c.id === draft.chassis;
-      const t = h('button.g-tile.g-htile', {
-        type: 'button', class: [sel ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), 'aria-pressed': String(sel), 'data-fk': `ch-${c.id}`,
-        onclick: () => pickChassis(c.id),
-      },
-      h('span.g-tile-well', null, partIcon('chassis', c.id, 46)),
-      h('span.g-tile-body', null,
-        h('span.g-tile-name', null, c.name),
-        h('span.g-tile-sub', null, h('b', null, sizeLabel(c.size)), ` ${footprintLabel(c.size)} · ${c.hp} hp · ${c.armor} arm`),
-        h('span.g-tile-row', null, h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}` }, m))), roleTags(c.roles, 2)),
-        h('span.g-tile-desc', null, c.desc),
-      ),
-      h('span.g-tile-cost', null, icon('cost'), String(c.cost)),
-      );
-      hoverable(t, { kind: 'chassis', id: c.id });
-      return t;
+  /** Single-choice role dropdown (shared by every tab). */
+  function roleSelect(): HTMLElement {
+    return kit.select({
+      value: roleSel, label: 'Filter by role', prefix: 'Role', fk: 'role', className: 'g-rolesel',
+      options: [{ value: '*', label: 'Any' }, ...ROLES.map((r) => ({ value: r.id as string, label: r.name, hint: r.desc }))],
+      onChange: (v) => { roleSel = v; sfx('click'); update(); },
     });
+  }
+  const roleOk = (roles: readonly string[]) => roleSel === '*' || roles.includes(roleSel);
+
+  /** Collapsed tail of a list ("4 need bigger sockets ▸"). */
+  function overflow(key: string, label: string, tiles: HTMLElement[]): HTMLElement[] {
+    if (!tiles.length) return [];
+    const open = openMore.has(key);
     return [
-      h('div.g-baytools', null, h('span.g-baytitle', null, 'Chassis', h('em', null, `${shown.length}/${CHASSIS.length}`)), h('span.spacer'), filterToggle(true)),
-      showFilters ? roleBar('ch', update, { sizes: true }) : null,
-      h('div.g-tiles.g-wide', { role: 'group', 'aria-label': 'Chassis' }, ...tiles, ...(shown.length <= 1 && (roleFilter.size || sizeFilter.size) ? [h('p.g-nomatch', null, 'No other chassis match the filters.')] : [])),
+      h('button.g-more', {
+        type: 'button', 'aria-expanded': String(open), 'data-fk': `more-${key}`,
+        onclick: () => { if (open) openMore.delete(key); else openMore.add(key); sfx('click'); update(); },
+      }, h('span.g-more-c', null, open ? '▾' : '▸'), `${tiles.length} ${label}`),
+      ...(open ? [h('div.g-ptiles.g-dimmed', null, ...tiles)] : []),
+    ];
+  }
+
+  function partTile(o: {
+    kind: 'chassis' | 'mobility' | 'module'; id: string; name: string; sub: string; chip?: MountClass; cat?: string;
+    cls: string; fk: string; title?: string; count?: number; onclick: () => void; ondblclick?: () => void; onkeydown?: (e: KeyboardEvent) => void;
+  }): HTMLButtonElement {
+    const t = h('button.g-ptile', {
+      type: 'button', class: o.cls, 'data-fk': o.fk, title: o.title ?? null, style: o.cat ? { '--cat': o.cat } : null,
+      onclick: () => { if (!suppressClick) o.onclick(); }, ondblclick: o.ondblclick ?? null, onkeydown: o.onkeydown ?? null,
+    },
+    h('span.g-ptile-well', null, partIcon(o.kind, o.id, 50, o.kind === 'module'), o.chip ? h('span.g-chip.mini', { class: `c${o.chip}` }, o.chip) : null),
+    h('span.g-ptile-name', null, o.name),
+    h('span.g-ptile-sub', null, o.sub),
+    o.count ? h('span.g-tile-n', { title: `Mounted ${o.count}×` }, `×${o.count}`) : null,
+    );
+    hoverable(t, { kind: o.kind, id: o.id });
+    return t;
+  }
+
+  function renderHullTab(): HTMLElement[] {
+    const sizes = [...new Set(CHASSIS.map((c) => c.size))].sort((a, b) => a - b);
+    if (sizeSel !== 0 && !sizes.includes(sizeSel as ChassisDef['size'])) sizeSel = 0;
+    const shown = CHASSIS.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
+      .sort((a, b) => a.size - b.size || a.weight - b.weight);
+    const tiles = shown.map((c) => partTile({
+      kind: 'chassis', id: c.id, name: c.name, sub: `${footprintLabel(c.size)} · ${c.mounts.length} socket${c.mounts.length > 1 ? 's' : ''}`,
+      cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `ch-${c.id}`,
+      onclick: () => pickChassis(c.id),
+    }));
+    return [
+      h('div.g-baytools', null,
+        kit.segmented({
+          value: sizeSel, label: 'Hull size', fk: 'hsize', className: 'g-subtabs',
+          options: [{ value: 0, label: 'All' }, ...sizes.map((z) => ({ value: z as number, label: footprintLabel(z), title: `${SIZE_CLASSES[z - 1]} hulls, ${footprintLabel(z)} across` }))],
+          onChange: (v) => { sizeSel = v; sfx('click'); update(); },
+        }),
+        roleSelect()),
+      h('div.g-ptiles', { role: 'group', 'aria-label': 'Chassis' }, ...tiles),
+      shown.length <= 1 ? h('p.g-nomatch', null, 'No other hulls match.') : null,
     ].filter(Boolean) as HTMLElement[];
   }
 
   function renderDriveTab(): HTMLElement[] {
     const c = chassis();
-    const shown = MOBILITY.filter((m) => m.id === draft.mobility || matchesRoles(m.roles))
-      .sort((a, b) => Number(!!pairingError(draft.chassis, a.id)) - Number(!!pairingError(draft.chassis, b.id)));
-    const tiles = shown.map((m) => {
+    const kinds = (['ground', 'air', 'static'] as const).filter((k) => MOBILITY.some((m) => m.kind === k));
+    const pool = MOBILITY.filter((m) => m.id === draft.mobility || ((driveSel === '*' || m.kind === driveSel) && roleOk(m.roles)))
+      .sort((a, b) => a.weight - b.weight);
+    const tile = (m: MobilityDef) => {
       const err = pairingError(draft.chassis, m.id);
-      const sel = m.id === draft.mobility;
       const res = err ? null : statsOf({ ...draft, mobility: m.id });
-      const loadCls = res ? (res.load > MAX_LOAD ? 'red' : res.load > 1 ? 'amber' : 'green') : '';
-      const t = h('button.g-tile.g-dtile', {
-        type: 'button', class: [sel ? 'sel' : '', err ? 'dis' : '', pinned.drive?.id === m.id ? 'pin' : ''].join(' '), 'aria-pressed': String(sel),
-        'aria-disabled': err ? 'true' : null, 'data-fk': `mob-${m.id}`,
-        onclick: () => pickMobility(m.id),
-      },
-      h('span.g-tile-well', null, partIcon('mobility', m.id, 46)),
-      h('span.g-tile-body', null,
-        h('span.g-tile-name', null, icon(m.kind === 'air' ? 'air' : m.kind === 'static' ? 'static' : 'ground', `k-${m.kind}`), m.name),
-        err
-          ? h('span.g-tile-sub.err', null, err)
-          : h('span.g-tile-sub', null,
-            h('b', null, m.kind === 'static' ? '0' : String(Math.round(res!.speed * METERS_PER_CELL))), ' m/s · ',
-            h('span.g-loadpct', { class: loadCls }, h('b', null, `${Math.round(res!.load * 100)}%`), ' load'),
-            m.kind === 'static' ? null : h('span', null, ' · ', h('b', null, String(deg(m.turn))), '°/s turn')),
-        h('span.g-tile-desc', null, m.desc),
-      ),
-      h('span.g-tile-cost', null, icon('cost'), String(m.cost * c.size)),
-      );
-      hoverable(t, { kind: 'mobility', id: m.id });
-      return t;
-    });
+      return partTile({
+        kind: 'mobility', id: m.id, name: m.name,
+        sub: err ? 'Not for this hull' : m.kind === 'static' ? 'Static' : `${Math.round(res!.speed * METERS_PER_CELL)} m/s`,
+        cls: [m.id === draft.mobility ? 'sel' : '', pinned.drive?.id === m.id ? 'pin' : '', err ? 'nofit' : ''].join(' '), fk: `mob-${m.id}`,
+        title: err ?? undefined, onclick: () => pickMobility(m.id),
+      });
+    };
+    const fits = pool.filter((m) => !pairingError(draft.chassis, m.id));
+    const nofit = pool.filter((m) => pairingError(draft.chassis, m.id));
     return [
-      h('div.g-baytools', null, h('span.g-baytitle', null, 'Mobility', h('em', null, `for ${c.name}`)), h('span.spacer'), filterToggle(false)),
-      showFilters ? roleBar('mob', update) : null,
-      h('div.g-tiles.g-wide', { role: 'group', 'aria-label': 'Mobility' }, ...tiles),
-    ].filter(Boolean) as HTMLElement[];
+      h('div.g-baytools', null,
+        kit.segmented({
+          value: driveSel, label: 'Drive type', fk: 'dkind', className: 'g-subtabs',
+          options: [{ value: '*', label: 'All' }, ...kinds.map((k) => ({ value: k as string, label: KIND_LABEL[k] }))],
+          onChange: (v) => { driveSel = v; sfx('click'); update(); },
+        }),
+        roleSelect()),
+      h('p.g-secnote', null, `Lightest first · speeds shown for the ${c.name}`),
+      h('div.g-ptiles', { role: 'group', 'aria-label': 'Mobility' }, ...fits.map(tile)),
+      ...overflow('drive-nofit', `don't fit the ${c.name}`, nofit.map(tile)),
+    ];
   }
 
   function renderModuleTab(which: 'weapons' | 'systems'): HTMLElement[] {
     const c = chassis();
-    const pool = MODULES.filter((m) => (which === 'weapons') === isWeaponTab(m));
-    const cats = CATEGORIES.filter((k) => pool.some((m) => m.category === k.id));
-    let cat = catSel[which];
-    if (cat !== '*' && !cats.some((k) => k.id === cat)) cat = catSel[which] = '*';
+    const groups = (which === 'weapons' ? WEAPON_GROUPS : SYSTEM_GROUPS).filter((g) => MODULES.some((m) => g.cats.includes(m.category)));
+    let gid = groupSel[which];
+    if (!groups.some((g) => g.id === gid)) gid = groupSel[which] = groups[0].id;
     const q = modQuery.trim().toLowerCase();
     const counts = new Map<string, number>();
     for (const id of draft.mounts) if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-    const slotCls = activeSlot !== null ? c.mounts[activeSlot] : null;
-    const passes = (m: ModuleDef) => counts.has(m.id) || (matchesRoles(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${m.category}`.toLowerCase().includes(q)));
-    const list = pool.filter((m) => (cat === '*' || m.category === cat) && passes(m))
-      .sort((x, y) => {
-        // parts that fit the selected socket (or anywhere on this hull) first
-        const fx = c.mounts.some((_, i) => !slotBlock(x, i)) ? (slotCls && !slotBlock(x, activeSlot!) ? 0 : 1) : 2;
-        const fy = c.mounts.some((_, i) => !slotBlock(y, i)) ? (slotCls && !slotBlock(y, activeSlot!) ? 0 : 1) : 2;
-        return fx - fy || (cat === '*' ? x.category.localeCompare(y.category) : 0) || RANK[x.mount] - RANK[y.mount] || x.cost - y.cost;
-      });
+    const fitsHull = (m: ModuleDef) => c.mounts.some((_, i) => !slotBlock(m, i));
+    const mountedIn = (g: Group) => draft.mounts.some((id) => id && g.cats.includes(MODULE_BY_ID.get(id)!.category));
+    // search looks across the whole tab; otherwise the selected group
+    const cats = q ? groups.flatMap((g) => g.cats) : groups.find((g) => g.id === gid)!.cats;
     const pin = pinned[which];
-    const tiles = list.map((m) => {
-      const fitsHull = c.mounts.some((_, i) => !slotBlock(m, i));
+    const tile = (m: ModuleDef) => {
       const fitsActive = activeSlot !== null && !slotBlock(m, activeSlot);
-      const n = counts.get(m.id) ?? 0;
-      const lock = reqReason(m);
-      const t = h('button.g-tile.g-mtile', {
-        type: 'button', 'data-fk': `mod-${m.id}`,
-        class: [pin?.id === m.id ? 'pin' : '', fitsHull ? '' : 'nofit', fitsActive ? 'fitsel' : '', n ? 'mounted' : ''].join(' '),
-        style: { '--cat': moduleCategoryColor(m.id) },
-        title: fitsHull ? 'Drag onto a socket · double-click to auto-mount' : lock ?? `No ${m.mount}-class socket on this hull`,
-        onclick: () => { if (suppressClick) return; pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); renderBay(); },
+      const fh = fitsHull(m);
+      const t = partTile({
+        kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
+        cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
+        fk: `mod-${m.id}`, title: fh ? undefined : reqReason(m) ?? `Needs a ${m.mount} socket`,
+        onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); renderBay(); },
         ondblclick: () => quickEquip(m.id),
-        onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
-      },
-      h('span.g-tile-well', null, partIcon('module', m.id, 42, true), h('span.g-chip.mini', { class: `c${m.mount}` }, m.mount)),
-      h('span.g-tile-body', null,
-        h('span.g-tile-name', null, m.name),
-        h('span.g-tile-sub', null, tileStat(m)),
-      ),
-      n ? h('span.g-tile-n', { title: `Mounted ${n}×` }, `×${n}`) : null,
-      );
-      hoverable(t, { kind: 'module', id: m.id });
-      if (fitsHull) armDrag(t, () => ({ mod: m.id, from: null }));
+        onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
+      });
+      if (fh) armDrag(t, () => ({ mod: m.id, from: null }));
       return t;
+    };
+    const sections: HTMLElement[] = [];
+    for (const catId of cats) {
+      const def = CATEGORIES.find((k) => k.id === catId);
+      const mods = MODULES.filter((m) => m.category === catId && (counts.has(m.id) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
+        .sort((a, b) => a.weight - b.weight || a.cost - b.cost);
+      if (!mods.length) continue;
+      const ok = mods.filter(fitsHull), no = mods.filter((m) => !fitsHull(m));
+      sections.push(
+        h('div.g-sec', { style: { '--cat': CATEGORY_COLOR[catId] ?? '#b0b8c0' } },
+          h('span.g-sec-name', null, def?.name ?? catId),
+          h('span.g-sec-desc', null, def?.desc ?? '')),
+        ...(ok.length ? [h('div.g-ptiles', { role: 'group', 'aria-label': def?.name ?? catId }, ...ok.map(tile))] : []),
+        ...overflow(`${which}-${catId}`, no.length === 1 ? 'needs a bigger socket' : 'need bigger sockets', no.map(tile)),
+      );
+    }
+    const search = kit.textField({
+      value: modQuery, placeholder: `Search ${which}`, label: `Search ${which}`, fk: `msearch-${which}`, className: 'g-search',
+      icon: svgIcon('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'),
+      onInput: (v) => {
+        modQuery = v;
+        const pos = search.input.selectionStart;
+        update();
+        const again = el.querySelector<HTMLInputElement>(`[data-fk="msearch-${which}"]`);
+        again?.focus();
+        if (pos != null) again?.setSelectionRange(pos, pos);
+      },
+      onClear: () => { modQuery = ''; update(); },
     });
-    const search = h('input.g-msearch', { type: 'search', placeholder: `Search ${which}…`, 'aria-label': `Search ${which}`, 'data-fk': `msearch-${which}`, autocomplete: 'off' });
-    search.value = modQuery;
-    search.addEventListener('input', () => {
-      modQuery = search.value;
-      const pos = search.selectionStart;
-      update();
-      const again = el.querySelector<HTMLInputElement>(`[data-fk="msearch-${which}"]`);
-      again?.focus();
-      if (pos != null) again?.setSelectionRange(pos, pos);
-    });
-    const chip = (id: string, name: string, desc: string, dot: string) => h('button.g-cat', {
-      type: 'button', class: cat === id ? 'on' : null, 'aria-pressed': String(cat === id), title: desc, 'data-fk': `cat-${which}-${id}`,
-      style: { '--cat': dot }, onclick: () => { catSel[which] = id; sfx('click'); update(); },
-    }, name);
-    const slotNote = activeSlot !== null
-      ? h('div.g-slotnote', null,
-        h('span', null, 'Fitting socket ', h('b', null, String(activeSlot + 1)), ' ', h('span.g-chip', { class: `c${slotCls}` }, slotCls!), ' — click a part, then ', h('b', null, 'Mount'), ', or double-click it'),
-        h('button.g-rclear', { type: 'button', onclick: () => { activeSlot = null; sfx('click'); update(); } }, icon('x'), 'Any socket'))
-      : null;
+    const slotCls = activeSlot !== null ? c.mounts[activeSlot] : null;
     return [
-      h('div.g-baytools', null, h('div.g-searchwrap', null, svgIcon('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'), search), filterToggle(false)),
-      showFilters ? roleBar(`mod-${which}`, update) : null,
-      h('div.g-cats', { role: 'group', 'aria-label': 'Category' },
-        chip('*', 'All', 'Every category', '#c9c2b0'),
-        ...cats.map((k) => chip(k.id, k.name, k.desc, CATEGORY_COLOR[k.id] ?? '#b0b8c0'))),
-      slotNote,
-      h('div.g-tiles.g-mtiles', { role: 'group', 'aria-label': which }, ...(tiles.length ? tiles : [h('p.g-nomatch', null, `No ${which} match.`)])),
+      h('div.g-baytools', null, search.el, roleSelect()),
+      q ? h('p.g-secnote', null, `Searching all ${which}`) : kit.segmented({
+        value: gid, label: `${which} group`, fk: `grp-${which}`, className: 'g-subtabs full',
+        options: groups.map((g) => ({ value: g.id, label: h('span', null, g.label, mountedIn(g) ? h('i.g-gdot', { title: 'Something from this group is mounted' }) : null), title: g.tip })),
+        onChange: (v) => { groupSel[which] = v; sfx('click'); update(); bayBody.scrollTop = 0; },
+      }),
+      activeSlot !== null ? h('div.g-slotnote', null,
+        h('span', null, 'Fitting socket ', h('b', null, String(activeSlot + 1)), ' ', h('span.g-chip', { class: `c${slotCls}` }, slotCls!), ' · double-click a part to mount it'),
+        h('button.g-rclear', { type: 'button', onclick: () => { activeSlot = null; sfx('click'); update(); } }, icon('x'), 'Done')) : null,
+      ...(sections.length ? sections : [h('p.g-nomatch', null, `No ${which} match.`)]),
     ].filter(Boolean) as HTMLElement[];
-  }
-
-  function tileStat(m: ModuleDef): HTMLElement {
-    const out = h('span.g-tstat');
-    const s = (k: string, v: string) => out.append(h('span', null, h('b', null, v), ` ${k}`));
-    if (m.kind === 'weapon') { s('dps', fmt(weaponDps(m), 0)); s('', fmtMeters(m.range ?? 0)); }
-    else if (m.heal) { s('hp/s', fmt(m.heal, 0)); s('', fmtMeters(m.range ?? 0)); }
-    else if (m.shield) s('shield', String(m.shield));
-    else if (m.armor || m.hp) { if (m.armor) s('arm', `+${m.armor}`); if (m.hp) s('hp', `+${m.hp}`); }
-    else { const fx = moduleEffects(m)[0]; if (fx) out.append(h('span', null, fx)); }
-    s('wt', String(m.weight));
-    return out;
   }
 
   // ---------------- inspector ----------------
@@ -1002,8 +1046,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const it = currentInspect();
     if (!it) {
       inspector.replaceChildren(h('div.g-insp-empty', null,
-        h('b', null, 'Select a part'),
-        h('span', null, 'Click any part to see its full spec sheet. Drag it onto a socket on the robot to mount it.')));
+        h('b', null, 'Pick a part'),
+        h('span', null, 'Hover or click a part for its spec sheet. Drag it onto a socket on the robot to mount it.')));
       return;
     }
     if (it.kind === 'chassis') inspector.replaceChildren(...inspectChassis(CHASSIS_BY_ID.get(it.id)!));
@@ -1012,52 +1056,69 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   const row = (k: string, v: Node | string, extra?: Node | null) => h('div.g-spec', null, h('span.g-spec-k', null, k), h('span.g-spec-v', null, v, extra ?? null));
+  /** Headline number: label on top, big value. */
+  const kstat = (label: string, value: Node | string, unit = '', cls = '') =>
+    h('div.g-kstat', { class: cls || null }, h('span.g-kstat-l', null, label), h('span.g-kstat-v', null, value, unit ? h('small', null, unit) : null));
 
-  function compare(next: Design): HTMLElement | null {
+  /** What changes on this design — only the numbers that actually move. */
+  function compare(next: Design, title: string): HTMLElement | null {
     const a = statsOf(draft), b = statsOf(next);
     if (!a || !b) return null;
-    const cell = (k: string, v: number, d: number, opts: { invert?: boolean; unit?: string; digits?: number } = {}) =>
-      h('div.g-cmp-c', null, h('span', null, k), h('b', null, `${fmt(v, opts.digits ?? 0)}${opts.unit ?? ''}`), delta(d, opts) ?? h('span.g-delta.same', null, '±0'));
-    return h('div.g-cmp', null,
-      cell('Cost', b.cost, b.cost - a.cost, { invert: true }),
-      cell('DPS', b.dps, b.dps - a.dps),
-      cell('HP', b.hp, b.hp - a.hp),
-      cell('Speed', b.speed * METERS_PER_CELL, (b.speed - a.speed) * METERS_PER_CELL, { unit: '' }),
-      cell('Load', Math.round(b.load * 100), Math.round((b.load - a.load) * 100), { invert: true, unit: '%' }),
-    );
+    const cells: HTMLElement[] = [];
+    const cell = (k: string, va: number, vb: number, opts: { invert?: boolean; unit?: string; digits?: number } = {}) => {
+      const d = vb - va;
+      if (Math.abs(d) < 0.5 * 10 ** -(opts.digits ?? 0)) return;
+      cells.push(h('div.g-cmp-c', null, h('span', null, k), h('b', null, `${fmt(vb, opts.digits ?? 0)}${opts.unit ?? ''}`), delta(d, opts)));
+    };
+    cell('Cost', a.cost, b.cost, { invert: true });
+    cell('DPS', a.dps, b.dps);
+    cell('HP', a.hp, b.hp);
+    cell('Range', a.range * METERS_PER_CELL, b.range * METERS_PER_CELL, { unit: 'm' });
+    cell('Speed', a.speed * METERS_PER_CELL, b.speed * METERS_PER_CELL);
+    cell('Load', a.load * 100, b.load * 100, { invert: true, unit: '%' });
+    if (!cells.length) return null;
+    return h('div.g-insp-sec', null, h('span.g-sec-l', null, title), h('div.g-cmp', null, ...cells.slice(0, 5)));
   }
 
   function inspHead(kind: 'chassis' | 'mobility' | 'module', id: string, name: string, sub: (Node | string | null)[], color?: string) {
     return h('div.g-insp-h', { style: color ? { '--cat': color } : null },
-      h('span.g-insp-well', null, partIcon(kind, id, 64, kind === 'module')),
+      h('span.g-insp-well', null, partIcon(kind, id, 60, kind === 'module')),
       h('div.g-insp-t', null, h('h3', null, name), h('div.g-insp-sub', null, ...sub)),
     );
   }
 
+  /** "Full specs" disclosure, open state remembered. */
+  function details(rows: (HTMLElement | null)[], extra: (HTMLElement | null)[] = []): HTMLElement[] {
+    const btn = h('button.g-more.g-details', {
+      type: 'button', 'aria-expanded': String(showDetails), 'data-fk': 'details',
+      onclick: () => { showDetails = !showDetails; try { localStorage.setItem(LS_DETAILS, showDetails ? '1' : '0'); } catch { /* ignore */ } sfx('click'); renderInspector(); },
+    }, h('span.g-more-c', null, showDetails ? '▾' : '▸'), 'Full specs');
+    return showDetails ? [btn, h('div.g-specs', null, ...rows.filter(Boolean) as HTMLElement[]), ...extra.filter(Boolean) as HTMLElement[]] : [btn];
+  }
+
   function inspectChassis(c: ChassisDef): HTMLElement[] {
     const cur = c.id === draft.chassis;
-    const mobs = MOBILITY.filter((m) => !pairingError(c.id, m.id));
     const next = cur ? null : (() => {
       const mobility = pairingError(c.id, draft.mobility) ? firstLegalMobility(c.id) : draft.mobility;
       return { ...draft, chassis: c.id, mobility, mounts: reseat(draft.mounts, c) };
     })();
     return [
-      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, h('b', null, sizeLabel(c.size)), ` ${footprintLabel(c.size)} × ${footprintLabel(c.size)}`), roleTags(c.roles)]),
+      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, `${footprintLabel(c.size)} × ${footprintLabel(c.size)}`), roleTags(c.roles, 2)]),
+      h('div.g-kstats', null,
+        kstat('Hull', String(c.hp), 'hp'),
+        kstat('Armor', String(c.armor)),
+        kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}` }, m))))),
       h('p.g-insp-desc', null, c.desc),
-      h('div.g-specs', null,
-        row('Hull HP', String(c.hp)),
-        row('Armor', String(c.armor)),
-        row('Weight', String(c.weight)),
-        row('Agility', `×${c.agility.toFixed(2)}`),
-        row('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}` }, m)))),
-        row('Base cost', h('span.g-costv', null, icon('cost'), String(c.cost))),
-      ),
-      c.traits.length ? h('div.g-fxs', null, ...c.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null,
-      row('Drives', mobs.map((m) => m.name).join(', ')),
-      next ? h('div.g-insp-sec', null, h('span.g-sec-l', null, 'If you switch'), compare(next)) : null,
+      next ? compare(next, 'If you switch') : null,
       h('div.g-insp-act', null, cur
         ? h('span.g-current', null, icon('check'), 'Current hull')
         : h('button.g-btn.primary', { type: 'button', onclick: () => pickChassis(c.id) }, 'Use this hull')),
+      ...details([
+        row('Weight', String(c.weight)),
+        row('Agility', `×${c.agility.toFixed(2)}`),
+        row('Base cost', h('span.g-costv', null, icon('cost'), String(c.cost))),
+        row('Drives', MOBILITY.filter((m) => !pairingError(c.id, m.id)).map((m) => m.name).join(', ')),
+      ], [c.traits.length ? h('div.g-fxs', null, ...c.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null]),
     ].filter(Boolean) as HTMLElement[];
   }
 
@@ -1066,53 +1127,55 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const err = pairingError(draft.chassis, m.id);
     const cur = m.id === draft.mobility;
     const next = err || cur ? null : { ...draft, mobility: m.id };
+    const res = err ? null : statsOf({ ...draft, mobility: m.id });
     return [
-      inspHead('mobility', m.id, m.name, [h('span.g-plate', null, KIND_LABEL[m.kind]), roleTags(m.roles)]),
+      inspHead('mobility', m.id, m.name, [h('span.g-plate', null, KIND_LABEL[m.kind]), roleTags(m.roles, 2)]),
+      h('div.g-kstats', null,
+        kstat('Speed', m.kind === 'static' ? '—' : String(Math.round((res?.speed ?? m.speed) * METERS_PER_CELL)), m.kind === 'static' ? '' : 'm/s'),
+        kstat('Carries', m.capacity[c.size - 1] ? String(m.capacity[c.size - 1]) : 'n/a', 'wt'),
+        kstat('Turn', m.kind === 'static' ? '—' : String(deg(m.turn)), m.kind === 'static' ? '' : '°/s')),
       h('p.g-insp-desc', null, m.desc),
-      h('div.g-specs', null,
-        row('Top speed', m.kind === 'static' ? '—' : `${Math.round(m.speed * METERS_PER_CELL)} m/s`),
-        row('Turn', m.kind === 'static' ? '—' : `${deg(m.turn)}°/s`),
-        row(`Capacity (${sizeLabel(c.size)})`, m.capacity[c.size - 1] ? String(m.capacity[c.size - 1]) : 'n/a'),
-        row('Weight', String(m.weight * c.size)),
-        row('Hull bonus', `+${m.hp * c.size} hp${m.armor ? ` · +${m.armor} arm` : ''}`),
-        row('Cost', h('span.g-costv', null, icon('cost'), String(m.cost * c.size))),
-      ),
-      m.traits.length ? h('div.g-fxs', null, ...m.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null,
       err ? h('p.g-insp-err', null, err) : null,
-      next ? h('div.g-insp-sec', null, h('span.g-sec-l', null, 'If you switch'), compare(next)) : null,
+      next ? compare(next, 'If you switch') : null,
       h('div.g-insp-act', null, cur
         ? h('span.g-current', null, icon('check'), 'Current drive')
         : h('button.g-btn.primary', { type: 'button', disabled: !!err, onclick: () => pickMobility(m.id) }, 'Use this drive')),
+      ...details([
+        row('Weight', String(m.weight * c.size)),
+        row('Hull bonus', `+${m.hp * c.size} hp${m.armor ? ` · +${m.armor} arm` : ''}`),
+        row('Cost', h('span.g-costv', null, icon('cost'), String(m.cost * c.size))),
+      ], [m.traits.length ? h('div.g-fxs', null, ...m.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null]),
     ].filter(Boolean) as HTMLElement[];
   }
 
   function inspectModule(m: ModuleDef): HTMLElement[] {
     const c = chassis();
     const catName = CATEGORIES.find((k) => k.id === m.category)?.name ?? m.category;
-    const specs: HTMLElement[] = [];
+    const keys: HTMLElement[] = [];
+    const specs: (HTMLElement | null)[] = [];
     if (m.kind === 'weapon') {
-      const per = `${m.damage ?? 0}${m.pellets && m.pellets > 1 ? ` ×${m.pellets}` : ''}${m.burst && m.burst > 1 ? ` ×${m.burst} burst` : ''}`;
-      specs.push(
-        row('DPS', h('b.g-big', null, fmt(weaponDps(m), 0))),
-        row('Range', m.minRange ? `${Math.round(m.minRange * METERS_PER_CELL)}–${fmtMeters(m.range ?? 0)}` : fmtMeters(m.range ?? 0)),
-        row('Damage', per),
-        row('Firing', firingText(m)),
-        row('Accuracy', accMeter(m)),
-        row('Targets', h('span.g-tgts', null,
-          h('span', { class: m.targetsGround ? 'on' : 'off' }, icon('ground'), 'Ground'),
-          h('span', { class: m.targetsAir ? 'on' : 'off' }, icon('air'), 'Air'))),
+      keys.push(
+        kstat('DPS', fmt(weaponDps(m), 0), '', 'hl'),
+        kstat('Range', m.minRange ? `${Math.round(m.minRange * METERS_PER_CELL)}–${Math.round((m.range ?? 0) * METERS_PER_CELL)}` : String(Math.round((m.range ?? 0) * METERS_PER_CELL)), 'm'),
+        kstat('Hits', h('span.g-tgts', null,
+          h('span', { class: m.targetsGround ? 'on' : 'off', title: m.targetsGround ? 'Hits ground units' : "Can't hit ground units" }, icon('ground'), 'Gnd'),
+          h('span', { class: m.targetsAir ? 'on' : 'off', title: m.targetsAir ? 'Hits aircraft' : "Can't hit aircraft" }, icon('air'), 'Air'))),
       );
+      const per = `${m.damage ?? 0}${m.pellets && m.pellets > 1 ? ` ×${m.pellets}` : ''}${m.burst && m.burst > 1 ? ` ×${m.burst} burst` : ''}`;
+      specs.push(row('Damage', per), row('Firing', firingText(m)), row('Accuracy', accMeter(m)));
       if (m.splash) specs.push(row('Splash', fmtMeters(m.splash)));
       if (m.ap) specs.push(row('Armor pierce', `${Math.round(m.ap * 100)}%`));
     } else {
-      if (m.heal) specs.push(row('Repair', `${fmt(m.heal, 0)} hp/s`), row('Range', fmtMeters(m.range ?? 0)));
-      if (m.shield) specs.push(row('Shield', String(m.shield)));
-      if (m.hp) specs.push(row('Hull', `+${m.hp} hp`));
-      if (m.armor) specs.push(row('Armor', `+${m.armor}`));
+      if (m.heal) keys.push(kstat('Repair', fmt(m.heal, 0), 'hp/s', 'hl'), kstat('Range', String(Math.round((m.range ?? 0) * METERS_PER_CELL)), 'm'));
+      if (m.shield) keys.push(kstat('Shield', String(m.shield), '', 'hl'));
+      if (m.armor) keys.push(kstat('Armor', `+${m.armor}`, '', keys.length ? '' : 'hl'));
+      if (m.hp) keys.push(kstat('Hull', `+${m.hp}`, 'hp'));
+      if (!keys.length) { const fx0 = moduleEffects(m)[0]; if (fx0) keys.push(kstat('Effect', fx0, '', 'hl txt')); }
     }
+    keys.push(kstat('Weight', fmt(m.weight)));
     const trav = traverseDeg(m);
-    if (trav !== null) specs.push(row('Traverse', `${trav}°/s`, trav < SLOW_TURRET_DEG ? h('span.g-warnlbl', null, ' slow') : null));
-    specs.push(row('Weight', String(m.weight)), row('Base cost', h('span.g-costv', null, icon('cost'), String(m.cost))));
+    if (trav !== null) specs.push(row('Turret turn', `${trav}°/s`, trav < SLOW_TURRET_DEG ? h('span.g-warnlbl', null, ' slow') : null));
+    specs.push(row('Base cost', h('span.g-costv', null, icon('cost'), String(m.cost))));
     const fx = moduleEffects(m);
     const target = autoSlot(m);
     const lock = reqReason(m);
@@ -1122,21 +1185,21 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const occ = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
       const here = occ?.id === m.id;
       return h('button.g-sockbtn', {
-        type: 'button', disabled: !!why || here, class: [i === target ? 'best' : '', here ? 'here' : '', activeSlot === i ? 'active' : ''].join(' '),
+        type: 'button', disabled: !!why || here, class: [i === target && !here ? 'best' : '', here ? 'here' : '', activeSlot === i ? 'active' : ''].join(' '),
         title: why ?? (here ? 'Already mounted here' : occ ? `Replace ${occ.name}` : 'Mount in this empty socket'),
         'data-fk': `mount-${m.id}-${i}`,
         onclick: () => equip(i, m.id),
-      }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}` }, cls), h('span.g-sockbtn-l', null, here ? 'mounted' : occ ? occ.name : 'empty'));
+      }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}` }, cls), h('span.g-sockbtn-l', null, here ? 'Mounted' : occ ? `Replace ${occ.name}` : 'Empty'));
     });
     return [
-      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-plate', null, m.family), h('span.g-chip', { class: `c${m.mount}` }, m.mount), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
+      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: `${m.mount}-class mount` }, m.mount), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
+      h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
-      h('div.g-specs', null, ...specs),
-      fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null,
-      next ? h('div.g-insp-sec', null, h('span.g-sec-l', null, `If mounted in socket ${target! + 1}`), compare(next)) : null,
+      next ? compare(next, `Mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
-        h('span.g-sec-l', null, lock ? lock : 'Mount in socket'),
+        h('span.g-sec-l', null, lock ?? (c.mounts.some((_, i) => !slotBlock(m, i)) ? 'Mount in' : `Needs a ${m.mount} socket`)),
         h('div.g-sockbtns', null, ...socketBtns)),
+      ...details(specs, [fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null]),
     ].filter(Boolean) as HTMLElement[];
   }
 
@@ -1217,12 +1280,39 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   // ---------------- blueprint grid ----------------
+  /** Reach rings for the range overlay (cells): weapons (with the design's range bonus), repair beams and auras. */
+  function rangeRings(): { r: number; min: number; color: string; label: string }[] {
+    const st = statsOf(draft);
+    const mult = st?.rangeMult ?? 1;
+    const out: { r: number; min: number; color: string; label: string }[] = [];
+    for (const id of draft.mounts) {
+      const m = id ? MODULE_BY_ID.get(id) : undefined;
+      if (!m) continue;
+      const color = moduleCategoryColor(m.id);
+      if (m.kind === 'weapon' && m.range) out.push({ r: m.range * mult, min: (m.minRange ?? 0) * mult, color, label: m.name });
+      else if (m.heal && m.range) out.push({ r: m.range, min: 0, color, label: m.name });
+      const aura = m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.jammer ?? m.detect;
+      if (aura) out.push({ r: aura, min: 0, color, label: m.name });
+    }
+    // one ring per distinct reach; names merged
+    const merged = new Map<string, { r: number; min: number; color: string; label: string }>();
+    for (const o of out) {
+      const k = o.r.toFixed(2);
+      const e = merged.get(k);
+      if (e) { if (!e.label.includes(o.label)) e.label += `, ${o.label}`; e.min = Math.max(e.min, o.min); }
+      else merged.set(k, { ...o });
+    }
+    return [...merged.values()].sort((a, b) => b.r - a.r);
+  }
+  const rangeExtent = () => Math.max(MIN_VIEW_CELLS, ...rangeRings().map((o) => o.r * 2.18 + 1));
+
   let gridKey = '';
   function drawGrid(g: PreviewGeom) {
     const r = gridCv.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const key = `${r.width}x${r.height}@${dpr}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}`;
+    const rings = rangesOn ? rangeRings() : [];
+    const key = `${r.width}x${r.height}@${dpr}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label).join(',')}`;
     if (key === gridKey) return;
     gridKey = key;
     gridCv.width = Math.round(r.width * dpr);
@@ -1276,6 +1366,43 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     dimLine(x, fx0, dy, fx0 + fw, dy, label, false);
     const dx = Math.max(14, fx0 - 16);
     dimLine(x, dx, fy0, dx, fy0 + fw, label, true);
+    // range rings
+    rings.forEach((o, i) => {
+      const R = o.r * P;
+      x.save();
+      x.globalAlpha = 0.12;
+      x.fillStyle = o.color;
+      x.beginPath(); x.arc(g.cx, g.cy, R, 0, Math.PI * 2);
+      if (o.min) x.arc(g.cx, g.cy, o.min * P, 0, Math.PI * 2, true);
+      x.fill('evenodd');
+      x.globalAlpha = 0.95;
+      x.strokeStyle = o.color;
+      x.lineWidth = 2;
+      x.beginPath(); x.arc(g.cx, g.cy, R, 0, Math.PI * 2); x.stroke();
+      if (o.min) { x.setLineDash([5, 5]); x.beginPath(); x.arc(g.cx, g.cy, o.min * P, 0, Math.PI * 2); x.stroke(); x.setLineDash([]); }
+      // label on the ring, staggered so stacked rings don't collide
+      const a = -Math.PI / 2 + (i % 2 ? 0.42 : -0.42) * Math.ceil(i / 2);
+      const lx = g.cx + Math.cos(a) * R, ly = g.cy + Math.sin(a) * R;
+      const txt = `${Math.round(o.r * METERS_PER_CELL)} m  ${o.label}`;
+      x.font = '700 14px "Barlow Condensed", system-ui, sans-serif';
+      const tw = Math.min(260, x.measureText(txt).width) + 12;
+      const bx = Math.max(6, Math.min(W - tw - 6, lx - tw / 2)), by = Math.max(6, Math.min(H - 28, ly - 11));
+      x.fillStyle = 'rgba(5, 7, 9, 0.9)';
+      x.fillRect(bx, by, tw, 22);
+      x.fillStyle = o.color;
+      x.fillRect(bx, by, 4, 22);
+      x.fillStyle = '#f1ece0';
+      x.textBaseline = 'middle';
+      x.fillText(txt, bx + 9, by + 11.5, tw - 12);
+      x.restore();
+    });
+    if (rangesOn && !rings.length) {
+      x.font = '700 16px "Barlow Condensed", system-ui, sans-serif';
+      x.fillStyle = 'rgba(241, 236, 224, 0.8)';
+      x.textAlign = 'center';
+      x.fillText('No ranged parts mounted', W / 2, 60);
+      x.textAlign = 'left';
+    }
     // scale bar (bottom-left): one cell
     const bx = 18, by = H - 20;
     x.fillStyle = 'rgba(8, 14, 20, 0.75)';
@@ -1332,7 +1459,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const t = now / 1000;
     try {
       if (fit(preview)) {
-        geom = drawUnitPreview(preview, draft, { side: 0, time: t, angle: -Math.PI / 2, minExtent: MIN_VIEW_CELLS, still: true });
+        const want = rangesOn ? rangeExtent() : MIN_VIEW_CELLS;
+        viewExt += (want - viewExt) * (Math.abs(want - viewExt) < 0.01 ? 1 : 0.18);
+        geom = drawUnitPreview(preview, draft, { side: 0, time: t, angle: -Math.PI / 2, minExtent: viewExt, still: true });
         if (geom) { drawGrid(geom); placeSockets(); }
       }
       if (frame++ % 2 === 0) {
@@ -1362,6 +1491,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return;
     }
     if (typing() || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.toLowerCase() === 'v') { toggleRanges(); return; }
     const tk = TABS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
     if (tk) { setTab(tk.id); return; }
     const n = Number(e.key);

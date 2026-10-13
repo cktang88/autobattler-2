@@ -1,6 +1,7 @@
 // Small shared UI helpers for my screens: modals, confirm dialogs, deck cards.
 
 import { h } from '../app.ts';
+import * as kit from './kit.ts';
 import { sfx } from '../audio.ts';
 import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
 import { computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
@@ -138,29 +139,26 @@ export interface EscortUi { label: string | null; picking: boolean; onPick(): vo
 /** Compact battle-AI panel. Targeting (priority + focus fire) / Movement (stance, kite, keep spread, delay, retreat, escort). */
 export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void,
   opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[] } = {}): HTMLElement {
-  const chip = (label: string, tip: string, v: boolean, key: keyof Orders) => h('button.chip', {
-    type: 'button', class: v ? 'on' : null, 'aria-pressed': String(v), title: tip, 'data-orders': String(key), onclick: () => on({ [key]: !v }),
-  }, label);
-  const sel = <T extends string>(label: string, value: T, items: { v: T; text: string; tip: string }[], key: keyof Orders, tipOf: string) => {
-    const el = h('select.ord-sel', { 'aria-label': label, 'data-orders': String(key), title: tipOf, onchange: () => on({ [key]: el.value }) },
-      ...items.map((it) => h('option', { value: it.v, title: it.tip, selected: it.v === value }, it.text)));
-    el.value = value;
-    return el as HTMLSelectElement;
-  };
-  const tgt = sel('Targeting priority', o.target,
-    TARGET_PRIORITIES.map((t) => ({ v: t, text: `${TARGET_INFO[t].icon} ${TARGET_INFO[t].label}`, tip: TARGET_INFO[t].tip })), 'target', TARGET_INFO[o.target].tip);
-  const stance = sel('Stance', o.stance,
-    STANCES.map((t) => ({ v: t, text: STANCE_INFO[t].label, tip: STANCE_INFO[t].tip })), 'stance', STANCE_INFO[o.stance].tip);
+  const chip = (label: string, tip: string, v: boolean, key: keyof Orders) =>
+    kit.toggle({ label, on: v, title: tip, className: `ord-${String(key)}`, onChange: (nv) => on({ [key]: nv }) });
+  const tgt = kit.select({
+    value: o.target, label: 'Targeting priority', title: TARGET_INFO[o.target].tip, className: 'ord-sel',
+    options: TARGET_PRIORITIES.map((t) => ({ value: t, label: TARGET_INFO[t].label, icon: TARGET_INFO[t].icon, hint: TARGET_INFO[t].tip })),
+    onChange: (v) => on({ target: v }),
+  });
+  const stance = kit.select({
+    value: o.stance, label: 'Stance', title: STANCE_INFO[o.stance].tip, className: 'ord-sel',
+    options: STANCES.map((t) => ({ value: t, label: STANCE_INFO[t].label, hint: STANCE_INFO[t].tip })),
+    onChange: (v) => on({ stance: v }),
+  });
   const esc = opts.escort;
   const ko = opts.kiteOptions ?? [];
-  const kiteSel = o.kite && ko.length >= 2 ? (() => {
-    const el = h('select.ord-sel', { 'aria-label': 'Kite with', 'data-orders': 'kiteMount', title: 'Which weapon\'s range to keep to while kiting',
-      onchange: () => on({ kiteMount: Number(el.value) }) },
-      h('option', { value: '-1' }, 'Longest range (default)'),
-      ...ko.map((k) => h('option', { value: String(k.mount) }, k.label)));
-    el.value = String(ko.some((k) => k.mount === o.kiteMount) ? o.kiteMount : -1);
-    return h('div.ord-row', null, h('span', null, 'Kite with'), el);
-  })() : null;
+  const kiteSel = o.kite && ko.length >= 2 ? h('div.ord-row', null, h('span', null, 'Kite with'), kit.select({
+    value: String(ko.some((k) => k.mount === o.kiteMount) ? o.kiteMount : -1), label: 'Kite with', className: 'ord-sel',
+    title: 'Which weapon\'s range to keep to while kiting',
+    options: [{ value: '-1', label: 'Longest range (default)' }, ...ko.map((k) => ({ value: String(k.mount), label: k.label }))],
+    onChange: (v) => on({ kiteMount: Number(v) }),
+  })) : null;
   return h('div.orders', null,
     h('div.sp-head', null, h('span', null, 'Battle orders'), opts.custom !== false && isCustomOrders(o) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
     h('div.ord-group', null,
@@ -178,14 +176,11 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
       kiteSel,
       h('div.hold-row', null,
         h('span', { title: 'Wait before moving; weapons still fire at anything in range' }, 'Start delay'),
-        h('div.sp-segs.four', { role: 'group', 'aria-label': 'Start delay' }, ...START_DELAYS.map((d) => h('button.seg', {
-          type: 'button', class: d === o.delay ? 'on' : null, 'data-delay': String(d), onclick: () => on({ delay: d }),
-        }, d ? `${d}s` : 'None'))),
+        kit.segmented({ value: o.delay, label: 'Start delay', className: 'full', options: START_DELAYS.map((d) => ({ value: d, label: d ? `${d}s` : 'None' })), onChange: (d) => on({ delay: d }) }),
       ),
       esc ? h('div.ord-row.escort', null,
-        h('button.chip', { type: 'button', class: esc.picking ? 'on' : null, title: 'Pick a friendly block to stay close to and protect', 'data-orders': 'escort', onclick: () => esc.onPick() },
-          esc.picking ? 'Click a friendly block…' : 'Escort…'),
-        esc.label ? h('span.esc-label', null, `→ ${esc.label}`, h('button.chip.x', { type: 'button', title: 'Stop escorting', onclick: () => esc.onClear() }, '✕')) : null,
+        kit.toggle({ label: esc.picking ? 'Click a friendly block…' : 'Escort…', on: esc.picking, title: 'Pick a friendly block to stay close to and protect', onChange: () => esc.onPick() }),
+        esc.label ? h('span.esc-label', null, `→ ${esc.label}`, h('button.k-x', { type: 'button', title: 'Stop escorting', 'aria-label': 'Stop escorting', onclick: () => esc.onClear() }, '✕')) : null,
       ) : null,
     ),
   );
