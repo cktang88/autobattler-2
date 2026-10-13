@@ -7,7 +7,7 @@ import { activeDeck } from '../collection.ts';
 import type { MatchDriver } from '../driver.ts';
 import { LocalDriver, lastWatched, setLastWatched } from '../localdriver.ts';
 import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUnit } from '../render/field.ts';
-import { loadSettings } from '../storage.ts';
+import { applyViewSettings, loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters } from '../../shared/grid.ts';
@@ -190,6 +190,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const ringCv = h('canvas.rings', { 'aria-hidden': 'true' });
   const fieldwrap = h('div.fieldwrap', null, canvas, ringCv);
   const view: FieldWithEvents = new FieldView(canvas, side);
+  applyViewSettings(view);
 
   const roundEl = h('div.round');
   const hpMe = h('div.hp.me');
