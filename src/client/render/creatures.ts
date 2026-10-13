@@ -1178,7 +1178,7 @@ export function buildParts(L: UnitLayout): PartDef[] {
       for (let j = 0; j < X.length; j++) {
         const i = X.length - 1 - j; // 0 = right behind the head
         const tail = i === X.length - 1;
-        const ry = tail ? 0.1 : 0.15 - i * 0.004, rx = tail ? 0.07 : 0.062;
+        const ry = tail ? 0.1 : 0.15 - i * 0.004, rx = (tail ? 0.07 : 0.062) * Math.max(1, (L.X / S) * 0.95);
         const mount = i >= 1 && i <= 4 ? [i - 1] : undefined;
         parts.push({
           px: X[j] * S, py: 0, ext: 0.28 * S, layer: 'under', mounts: mount,

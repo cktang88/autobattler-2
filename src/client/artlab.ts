@@ -322,24 +322,30 @@ function silSection(): void {
       const cv = el('canvas');
       const W = 112;
       cv.width = cv.height = W;
-      box.append(cv, el('div', '', c.id + (full ? ' +gear' : '')));
+      box.append(cv, el('div', '', c.id + (full ? ' +gear' : ` ${c.footprint ? c.footprint.join('x') : c.size + 'x' + c.size}`)));
       host.append(box);
       const g = cv.getContext('2d')!;
       g.fillStyle = '#fff'; g.fillRect(0, 0, W, W);
-      const ext = c.size * (full ? 1.5 : 1.05);
+      const fw = c.footprint?.[0] ?? c.size, fh = c.footprint?.[1] ?? c.size;
+      const ext = Math.max(fw, fh) * (full ? 1.5 : 1.12);
       const px = W / ext;
+      // footprint box (w across x h along the facing; facing = up)
+      g.setTransform(px, 0, 0, px, W / 2, W / 2);
+      g.strokeStyle = '#c33'; g.lineWidth = 1 / px; g.setLineDash([3 / px, 3 / px]);
+      g.strokeRect(-fw / 2, -fh / 2, fw, fh);
+      g.setLineDash([]);
       if (!full) {
-        g.setTransform(px, 0, 0, px, W / 2, W / 2);
         g.rotate(-Math.PI / 2);
-        g.fillStyle = '#000'; g.fill(hullPath(c.shape, c.size, c.footprint?.[1] ?? c.size, c.footprint?.[0] ?? c.size));
+        g.fillStyle = '#000'; g.fill(hullPath(c.shape, c.size, fh, fw));
       } else {
-        const mob = MOBILITY.find((m) => !pairingError(c.id, m.id) && m.id !== 'anchor')?.id ?? 'anchor';
+        const mob = params.get('mob') && !pairingError(c.id, params.get('mob')!) ? params.get('mob')! : MOBILITY.find((m) => !pairingError(c.id, m.id) && m.id !== 'anchor')?.id ?? 'anchor';
         const d: Design = { id: 'sil_' + c.id, name: c.id, chassis: c.id, mobility: mob, mounts: c.mounts.map(() => null) };
         const s = unitSprites(d, 0, 13);
         const sil = silhouette(s, '#000');
         g.setTransform(1, 0, 0, 1, W / 2, W / 2);
         g.rotate(-Math.PI / 2);
         const e = s.ext * px;
+        void e;
         g.drawImage(sil, -e, -e, e * 2, e * 2);
       }
     }

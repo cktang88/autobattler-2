@@ -1537,7 +1537,7 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   const a = (p.alpha ?? 1) * (L.air || p.flying ? (L.S >= 4 ? 0.62 : L.S >= 3 ? 0.5 : 0.38) : p.leap ? 0.55 - p.leap * 0.15 : L.S >= 4 ? 0.72 : 0.62);
   g.globalAlpha = a;
   const sc = L.air || p.flying ? (L.S >= 4 ? 0.97 : 0.85) : 1 - (p.leap ?? 0) * 0.15;
-  blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, L.mob.id === 'anchor' ? 0 : p.angle, s.ext, sc);
+  blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, L.mob.id === 'anchor' && L.X === L.Y ? 0 : p.angle, s.ext, sc);
   g.globalAlpha = 1;
 }
 
@@ -1610,7 +1610,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = alpha * (0.45 + 0.1 * Math.sin(p.time * 9 + (p.seed ?? 0)));
-    const r = 0.55 * L.S;
+    const r = 0.5 * L.D;
     g.drawImage(softDot(pal.glow), p.x - r, p.y - r, r * 2, r * 2);
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
@@ -1620,7 +1620,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = alpha * (0.16 + 0.06 * Math.sin(p.time * 2.2 + (p.seed ?? 0)));
-    const r = 0.95 * L.S;
+    const r = 0.8 * L.D;
     g.drawImage(softDot(emis(pal)), p.x - r, p.y - r, r * 2, r * 2);
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
@@ -1648,7 +1648,8 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     blit(g, s.halo, x, y, ang, s.haloExt, sc);
     for (let j = 0; j < pdefs.length; j++) partBlit(j, s.parts[j].halo, s.parts[j].haloExt);
   }
-  if (s.anchor) blit(g, s.anchor, x, y, 0, s.ext, sc);
+  // square anchor plates stay world-aligned; footprint plates turn with the hull
+  if (s.anchor) blit(g, s.anchor, x, y, L.X === L.Y ? 0 : ang, s.ext, sc);
   // mobility
   let frame = s.rest;
   if (L.frames > 1 && p.moving !== false && p.odometer !== undefined && (p.moving || L.mob.id === 'treads' || L.mob.id === 'wheels' || L.mob.id === 'halftrack')) {
@@ -1783,7 +1784,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalAlpha = alpha * (0.12 + 0.08 * Math.sin(p.time * 12));
     silAll('#7fc8ff');
     g.globalAlpha = alpha;
-    drawSparks(g, x, y, 0.45 * L.S, p.time, px);
+    drawSparks(g, x, y, 0.4 * L.D, p.time, px);
   }
   if ((p.slow ?? 0) > 0) {
     g.strokeStyle = `rgba(180,124,255,${0.35 + (p.slow ?? 0)})`;
@@ -1791,7 +1792,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.setLineDash([0.12, 0.1]);
     g.lineDashOffset = p.time * 0.4;
     g.beginPath();
-    g.arc(x, y, 0.55 * L.S, 0, Math.PI * 2);
+    g.ellipse(x, y, 0.55 * L.X, 0.55 * L.Y, ang, 0, Math.PI * 2);
     g.stroke();
     g.setLineDash([]);
   }
@@ -1800,8 +1801,8 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3 + L.S; i++) {
       const a = i * 2.4 + (p.seed ?? 0);
-      const rr = 0.25 * L.S * ((i * 0.37) % 1);
-      const fx = x + Math.cos(a) * rr, fy = y + Math.sin(a) * rr;
+      const rr = ((i * 0.37) % 1), la = Math.cos(a) * 0.3 * L.X * rr, lb = Math.sin(a) * 0.3 * L.Y * rr;
+      const fx = x + cs * la - sn * lb, fy = y + sn * la + cs * lb;
       const fl = 0.5 + 0.5 * Math.sin(p.time * 15 + i * 3.1);
       const r = (0.12 + 0.1 * fl) * Math.sqrt(L.S);
       g.globalAlpha = alpha * (0.5 + 0.4 * fl);

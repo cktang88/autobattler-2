@@ -35,7 +35,7 @@ import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
 import { groundCanvas, groundRegion } from './ground.ts';
-import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, shade, softDot, type Ctx, type Team } from './palette.ts';
+import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
 import { titanFeet } from './giantart.ts';
@@ -484,12 +484,17 @@ export class FieldView {
         if (air !== pass) continue;
         drawUnitShadow(g, p, px, this.dirs);
         if (u.selected) {
-          const S = layoutOf(u.design).S;
+          // footprint-shaped selection outline, rotated with the unit
+          const LL = layoutOf(u.design);
           g.strokeStyle = rgba(TEAM_PAL[0].accent, 0.6 + 0.3 * Math.sin(time * 5));
           g.lineWidth = 2 / this.k;
+          const tr = g.getTransform();
+          g.translate(u.x, u.y); g.rotate(p.angle);
+          const hx = LL.X * 0.5 + 0.12, hy = LL.Y * 0.5 + 0.12;
           g.beginPath();
-          g.arc(u.x, u.y, S * 0.58, 0, Math.PI * 2);
+          roundRect(g, -hx, -hy, hx * 2, hy * 2, Math.min(hx, hy) * 0.45);
           g.stroke();
+          g.setTransform(tr);
         }
         drawUnit(g, p, px, this.dirs);
         if (u.invalid) {
@@ -507,15 +512,16 @@ export class FieldView {
     this.fx.draw(g, px, this.dirs.ux, this.dirs.uy);
     // level pips
     this.setScreen();
-    for (const { u } of poses) if (u.level > 1 && !u.ghost) this.drawPips(u.x, u.y, layoutOf(u.design).S, u.level, 1);
+    for (const { u, p } of poses) if (u.level > 1 && !u.ghost) this.drawPips(u.x, u.y, boxHalf(u.design, p.angle).hy, u.level, 1);
     this.drawVignette();
     this.drawScaleBar();
   }
 
-  private drawPips(x: number, y: number, S: number, level: number, alpha: number): void {
+  /** level pips under the unit; hy = half height (cells) of the unit's rotated footprint on screen */
+  private drawPips(x: number, y: number, hy: number, level: number, alpha: number): void {
     const g = this.g;
     const p = this.worldToScreen(x, y);
-    const half = S * this.k * 0.45;
+    const half = hy * this.k * 0.9;
     const sz = Math.max(3, Math.min(6, this.k * 0.18));
     const by = p.y + half + sz * 0.3;
     g.globalAlpha = alpha;
@@ -746,8 +752,7 @@ export class FieldView {
       const frac = u.maxShield > 0 ? u.shield / u.maxShield : 0.5;
       const a = 0.07 + 0.05 * frac + hit * 0.45;
       if (p.cloak === 'enemy') continue;
-      const S = layoutOf(u.design).S;
-      const r = 0.62 * S;
+      const r = 0.58 * layoutOf(u.design).D;
       const lx = p.x + this.dirs.ux * (u.flying ? 0.12 : 0), ly = p.y + this.dirs.uy * (u.flying ? 0.12 : 0);
       g.globalAlpha = a;
       const hexT = tinted('hex', '#7fd8ff');
@@ -781,18 +786,20 @@ export class FieldView {
     v.shLast = u.shield;
     if (p.cloak === 'enemy') return;
     const S = layoutOf(u.design).S;
-    if (u.level > 1) this.drawPips(p.x, p.y, S, u.level, 0.9);
+    // footprint: bar width follows the unit's mean edge, and it sits just above the rotated footprint box
+    const bh = boxHalf(u.design, p.angle);
+    if (u.level > 1) this.drawPips(p.x, p.y, bh.hy, u.level, 0.9);
     const vis = this.barAlpha(v, S);
     if (vis <= 0.01) return;
     const g = this.g;
     g.globalAlpha = vis;
-    if (S >= 4) { this.drawBossBar(u, p, v, S); g.globalAlpha = 1; return; }
+    if (S >= 4) { this.drawBossBar(u, p, v, S, bh); g.globalAlpha = 1; return; }
     const s = this.worldToScreen(p.x, p.y);
     const lift = u.flying ? 0.12 * this.k : 0;
-    const w = Math.max(14, S * this.k * 0.78);
+    const w = Math.max(14, bh.w * this.k * 0.78);
     const h = S >= 2 ? 4 : 3;
     const x = Math.round(s.x - w / 2);
-    const y = Math.round(s.y - S * this.k * 0.52 - h - 3 - lift);
+    const y = Math.round(s.y - bh.hy * this.k * 1.04 - h - 3 - lift);
     g.fillStyle = 'rgba(0,0,0,0.88)';
     g.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
     const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
@@ -817,15 +824,15 @@ export class FieldView {
   }
 
   /** Wide segmented 'boss' bar for giants and titans (shown after damage, like the small bars), team-coloured frame, white trailing chip. */
-  private drawBossBar(u: SimUnit, p: UnitPose, v: UVis, S: number): void {
+  private drawBossBar(u: SimUnit, p: UnitPose, v: UVis, S: number, bh: { hy: number; w: number }): void {
     const g = this.g;
     const s = this.worldToScreen(p.x, p.y);
     const lift = u.flying ? 0.12 * this.k : 0;
     const team = this.teamOf(u.side);
     const col = TEAM_PAL[team].bar;
-    const w = Math.max(40, S * this.k * 1.0), h = S >= 5 ? 9 : 7;
+    const w = Math.max(40, bh.w * this.k * 1.0), h = S >= 5 ? 9 : 7;
     const x = Math.round(s.x - w / 2);
-    const y = Math.round(s.y - S * this.k * 0.56 - h - 5 - lift);
+    const y = Math.round(s.y - bh.hy * this.k * 1.1 - h - 5 - lift);
     g.fillStyle = 'rgba(0,0,0,0.9)';
     g.fillRect(x - 3, y - 3, w + 6, h + 6);
     g.strokeStyle = TEAM_PAL[team].rim;
@@ -1320,8 +1327,7 @@ export class FieldView {
         if (e.shieldHit) {
           const v = this.visOf(ur);
           v.shieldT = this.time;
-          const S = layoutOf(ur.design).S;
-          if (fx.busy < 0.7) fx.hex(ur.x, ur.y, 0.62 * S, e.x, e.y);
+          if (fx.busy < 0.7) fx.hex(ur.x, ur.y, 0.58 * layoutOf(ur.design).D, e.x, e.y);
           fx.sparks(e.x, e.y, 3, '#bfefff', 2.5, undefined, Math.PI, 0.2);
           break;
         }
@@ -1431,6 +1437,13 @@ export class FieldView {
   }
 }
 
+/** Half extents (cells) of a unit's footprint box rotated to `ang` (screen-axis aligned), plus its mean edge. */
+function boxHalf(d: Design, ang: number): { hx: number; hy: number; w: number } {
+  const L = layoutOf(d);
+  const c = Math.abs(Math.cos(ang)), sn = Math.abs(Math.sin(ang));
+  return { hx: (c * L.X + sn * L.Y) / 2, hy: (sn * L.X + c * L.Y) / 2, w: (L.X + L.Y) / 2 };
+}
+
 /** Render a single design centered in a canvas (garage preview, cards). `time` animates rotors/legs. */
 export interface PreviewGeom {
   /** CSS pixels per cell (1 cell = METERS_PER_CELL metres) */
@@ -1464,8 +1477,8 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   let L;
   try { L = layoutOf(design); } catch { return null; }
   const time = opts?.time ?? 0;
-  const ext0 = L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1);
-  const ext = Math.max(opts?.minExtent ?? 0, L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1));
+  const ext0 = L.D * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1);
+  const ext = Math.max(opts?.minExtent ?? 0, L.D * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1));
   const px = Math.min(W, H) / ext;
   g.setTransform(px, 0, 0, px, W / 2, H / 2);
   const team: Team = (opts?.side ?? 0) === 1 ? 1 : 0;

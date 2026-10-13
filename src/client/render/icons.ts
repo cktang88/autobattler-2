@@ -118,13 +118,13 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
   const L = layoutOf(design);
   g.rotate(-Math.PI / 2);
   const S = L.S;
-  const sc = 1.4 / S;
+  const sc = 1.4 / L.D;
   g.scale(sc, sc);
   const oo = o / sc;
   if (kind === 'chassis') {
     hullUnderlay(g, L, pal, oo);
     drawPartsStatic(g, L, pal, oo, 'under');
-    paintHull(g, hullPathL(L), pal, S, oo, L.hw);
+    paintHull(g, hullPathL(L), pal, S, oo, L.hw, L.X, L.Y);
     hullDetails(g, L, pal, oo);
     drawPartsStatic(g, L, pal, oo, 'over');
     if (GIANT_SHAPES.has(L.shape)) drawGiantFx(g, L, { time: 0.4 }, 0, 0, 0, 1, PX * sc, pal, 1);
@@ -171,7 +171,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
       g.strokeStyle = 'rgba(134,243,255,0.6)';
       g.lineWidth = 0.03 * S;
       g.beginPath();
-      g.ellipse(0, 0, 0.5 * S, 0.42 * S, 0, 0, Math.PI * 2);
+      g.ellipse(0, 0, 0.5 * L.X, 0.42 * L.Y, 0, 0, Math.PI * 2);
       g.stroke();
     }
   }
