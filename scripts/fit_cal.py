@@ -25,6 +25,8 @@ iters = int(sys.argv[1])
 seeds = sys.argv[2] if len(sys.argv) > 2 else '3'
 fixed = set(sys.argv[3].split(',')) if len(sys.argv) > 3 and sys.argv[3] else set()
 fit_size = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
+# mixed AA/ground starters whose result mostly reflects the rock-paper-scissors of the field, not module value
+IGNORE = {'starter-skyguard'}
 ETA = {'w': 0.3, 'u': 0.3, 's': 0.12}
 
 
@@ -50,6 +52,8 @@ for it in range(iters):
                 acc[r['module']][1] += 1
             continue
         if r['base']:
+            continue
+        if r['id'] in IGNORE:
             continue
         starter = r['id'].startswith('starter-')
         for w in ws:
