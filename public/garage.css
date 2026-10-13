@@ -462,3 +462,9 @@
 .garage .g-tag.aironly { color: #7cc8ff; border-color: currentColor; font-size: 0.65rem; margin-left: 4px; }
 .garage .g-opt.locked:disabled { opacity: 0.5; cursor: not-allowed; }
 .garage .g-opt-lock { color: var(--g-warn, #f2a93b); font-size: 0.75rem; font-weight: 600; }
+.garage .g-ai { padding: 4px 2px; }
+.garage .g-ai .sp-head { display: none; }
+.garage .g-ai .tgt-grid { grid-template-columns: repeat(7, 1fr); }
+.garage .g-ai .tgt { min-height: 46px; font-size: 0.7rem; }
+.garage .g-ai .hold-row { max-width: 420px; }
+@media (max-width: 700px) { .garage .g-ai .tgt-grid { grid-template-columns: repeat(4, 1fr); } }

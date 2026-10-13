@@ -7,7 +7,7 @@ import { validateDesign } from '../shared/stats.ts';
 import type { Design } from '../shared/types.ts';
 import { loadDeckIds, loadDesigns, saveDeckIds, saveDesigns } from './storage.ts';
 
-const clone = (d: Design): Design => ({ id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] });
+const clone = (d: Design): Design => ({ id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts], ...(d.behavior && typeof d.behavior === 'object' ? { behavior: { ...d.behavior } } : {}) });
 
 /** Shape check + full rule validation. Corrupt or illegal entries are dropped. */
 function sane(d: unknown): d is Design {

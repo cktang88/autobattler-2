@@ -3,6 +3,7 @@
 import { h } from '../app.ts';
 import type { ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
+import { ordersControl, ordersOf, orderFields } from './match-ui.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
@@ -17,9 +18,10 @@ const NAME_MAX = 24;
 /** Weight bar spans 0..BAR_MAX load. */
 const BAR_MAX = 1.8;
 
-const clone = (d: Design): Design => ({ id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] });
+const clone = (d: Design): Design => ({ id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts], ...(d.behavior ? { behavior: { ...d.behavior } } : {}) });
 const same = (a: Design, b: Design) =>
   a.name === b.name && a.chassis === b.chassis && a.mobility === b.mobility &&
+  JSON.stringify(a.behavior ?? {}) === JSON.stringify(b.behavior ?? {}) &&
   a.mounts.length === b.mounts.length && a.mounts.every((m, i) => (m ?? null) === (b.mounts[i] ?? null));
 
 function statsOf(d: Design): UnitStats | null {
@@ -84,6 +86,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const chassisEl = h('div.g-cards.g-chassis-cards', { role: 'group', 'aria-label': 'Chassis' });
   const mobilityEl = h('div.g-cards.g-mob-cards', { role: 'group', 'aria-label': 'Mobility' });
   const mountsEl = h('div.g-mounts');
+  const aiEl = h('div.g-ai');
   const listCanvases: { c: HTMLCanvasElement; get: () => Design }[] = [];
 
   nameInput.addEventListener('input', () => {
@@ -130,6 +133,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         step('01', 'Chassis', 'Hull size, armor and mount slots', chassisEl),
         step('02', 'Mobility', 'Weight capacity sets speed', mobilityEl),
         step('03', 'Loadout', 'A slot takes its class or smaller', mountsEl),
+        step('04', 'Battle AI defaults', 'New blocks start with these orders; change them per block on the field', aiEl),
       ),
       ),
     ),
@@ -196,7 +200,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     let name = `${base} Mk${n}`.slice(0, NAME_MAX);
     while (names.has(name) && n < 99) name = `${base.slice(0, NAME_MAX - 5)} Mk${++n}`;
     load(null);
-    draft = { ...src, id: newDesignId(), name, mounts: [...src.mounts] };
+    draft = { ...src, id: newDesignId(), name, mounts: [...src.mounts], ...(src.behavior ? { behavior: { ...src.behavior } } : {}) };
     nameInput.value = draft.name;
     update();
     app.toast(`Duplicated as "${name}" — save to keep it`);
@@ -320,7 +324,21 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     renderChassis();
     renderMobility();
     renderMounts();
+    renderAI();
     if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus();
+  }
+
+  function renderAI() {
+    const sq = (statsOf(draft)?.squad ?? 1) > 1;
+    const o = ordersOf(draft.behavior);
+    aiEl.replaceChildren(ordersControl({ ...o, hold: sq && o.hold }, sq, (patch) => {
+      const next = { ...o, ...patch };
+      const b = orderFields({ ...next, hold: sq && next.hold });
+      const { behavior: _b, ...rest } = draft;
+      draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
+      sfx('click');
+      update();
+    }, { title: 'Targeting priority', custom: false }));
   }
 
   function renderHeader() {
