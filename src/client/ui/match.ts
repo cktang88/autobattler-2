@@ -6,14 +6,14 @@ import { playMusic, sfx } from '../audio.ts';
 import { activeDeck } from '../collection.ts';
 import type { MatchDriver } from '../driver.ts';
 import { LocalDriver, lastWatched, setLastWatched } from '../localdriver.ts';
-import { FieldView, type BoardOverlay, type BoardUnit } from '../render/field.ts';
+import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUnit } from '../render/field.ts';
 import { loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
 import { DEPLOY_D, DEPLOY_W, inDeployZone, localToWorldCell, placementCenter, FIELD_W } from '../../shared/grid.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
-import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
+import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
 import type { DeployAction, Design, MatchState, Placement, RoundRecord, Side, Size, UnitStats } from '../../shared/types.ts';
 import { confirmModal, paintPreview, sizeLabel } from './match-ui.ts';
 import { playerName } from './vsai.ts';
@@ -29,6 +29,17 @@ export function worldToLocalCell(side: Side, col: number, row: number, size: num
 type Op = { kind: 'place' | 'upgrade'; uid: number };
 type Sel = { side: Side; uid: number; pending: boolean } | null;
 type FieldWithEvents = FieldView & { pushEvents?: (events: BattleEvent[]) => void };
+
+function loadoutIcon(kind: PartKind, id: string, px: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.className = 'lo-icon';
+  c.style.width = c.style.height = `${px}px`;
+  c.setAttribute('aria-hidden', 'true');
+  requestAnimationFrame(() => { try { drawPartIcon(c, kind, id, { backdrop: true }); } catch { /* icon unavailable */ } });
+  return c;
+}
+const shorten = (t: string, n = 44) => { const f = t.split(/(?<=[.;])\s/)[0] ?? t; return f.length > n ? `${f.slice(0, n - 1).trimEnd()}…` : f; };
+const num1 = (n: number) => String(Math.round(n * 10) / 10);
 
 const stars = (lv: number) => '★'.repeat(lv) + '☆'.repeat(Math.max(0, MAX_LEVEL - lv));
 
@@ -144,17 +155,55 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     cardEls = deck().map((d, i) => {
       const st = statsOf(d);
       const c = h('canvas');
-      const b = h('button.card', { title: d.name, onclick: () => selectCard(i) },
+      const b = h('button.card', { onclick: () => selectCard(i) },
         c,
         h('span.key', null, String(i + 1)),
         h('span.count'),
         h('div.name', null, d.name),
         h('div.meta', null, h('span.cost', null, st ? String(st.cost) : '?'), h('span', null, st ? `${sizeLabel(st.size)}${st.flying ? ' · Air' : ''}` : 'invalid')),
       );
+      attachDeckTip(b, d);
       return b;
     });
     cardsEl.replaceChildren(...cardEls);
     paintCards();
+  }
+  let tipEl: HTMLElement | null = null;
+  function hideTip() { tipEl?.remove(); tipEl = null; }
+  function showTip(b: HTMLElement, d: Design) {
+    hideTip();
+    const mods = d.mounts.map((id) => (id ? MODULE_BY_ID.get(id) : undefined)).filter((x): x is NonNullable<typeof x> => !!x);
+    if (!mods.length) return;
+    const tip = h('div.deck-tip', { role: 'tooltip' }, ...mods.map((md) => {
+      const c = loadoutIcon('module', md.id, 28);
+      c.title = md.name;
+      return c;
+    }));
+    el.append(tip);
+    tipEl = tip;
+    const r = b.getBoundingClientRect(), er = el.getBoundingClientRect();
+    const w = tip.offsetWidth, ht = tip.offsetHeight;
+    const left = Math.max(4, Math.min(er.width - w - 4, r.left - er.left + r.width / 2 - w / 2));
+    let top = r.top - er.top - ht - 6;
+    if (top < 4) top = r.bottom - er.top + 6;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  }
+  function attachDeckTip(b: HTMLElement, d: Design) {
+    let timer = 0;
+    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showTip(b, d); });
+    b.addEventListener('pointerleave', () => { clearTimeout(timer); hideTip(); });
+    b.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => { showTip(b, d); b.dataset.lp = '1'; }, 450);
+    });
+    const cancel = () => { clearTimeout(timer); if (tipEl) setTimeout(hideTip, 1200); };
+    b.addEventListener('pointerup', cancel);
+    b.addEventListener('pointercancel', cancel);
+    b.addEventListener('contextmenu', (e) => { if (b.dataset.lp) e.preventDefault(); });
+    // a long-press should inspect, not select
+    b.addEventListener('click', (e) => { if (b.dataset.lp) { e.stopImmediatePropagation(); delete b.dataset.lp; } }, true);
   }
   function paintCards() {
     requestAnimationFrame(() => {
@@ -259,6 +308,20 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const stat = (label: string, v: string, up = false) => h('div', null, h('span', null, label), h('b', { class: up ? 'up' : null }, v));
     const parts = [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name, ...d.mounts.filter(Boolean).map((id) => MODULE_BY_ID.get(id!)?.name)].filter(Boolean).join(' · ');
     const actions: HTMLElement[] = [];
+    const loRow = (kind: PartKind, id: string, label: string, name: string, stat: string) =>
+      h('li', null, loadoutIcon(kind, id, 32), h('div.lo-txt', null, h('div.lo-name', null, h('span.lo-kind', null, label), name), h('div.lo-stat', null, stat)));
+    const loadout: HTMLElement[] = [];
+    const ch = CHASSIS_BY_ID.get(d.chassis), mo = MOBILITY_BY_ID.get(d.mobility);
+    if (ch) loadout.push(loRow('chassis', ch.id, 'Chassis', ch.name, `${ch.hp} HP · armor ${ch.armor}`));
+    if (mo) loadout.push(loRow('mobility', mo.id, 'Mobility', mo.name, `${mo.kind} · speed ${num1(mo.speed)}`));
+    for (const id of d.mounts) {
+      const md = id ? MODULE_BY_ID.get(id) : undefined;
+      if (!md) continue;
+      const stat = md.kind === 'weapon'
+        ? `${num1(weaponDps(md))} dps · range ${num1(md.range ?? 0)} · ${firingStyle(md)}`
+        : shorten(md.desc);
+      loadout.push(loRow('module', md.id, md.kind === 'weapon' ? 'Weapon' : md.kind === 'armor' ? 'Armor' : 'Utility', md.name, stat));
+    }
     if (mine && phase === 'deploy') {
       if (s.pending) {
         actions.push(h('button.small.danger', { onclick: () => removePending(p.uid) }, 'Remove (refund)'));
@@ -292,6 +355,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         st.heal ? stat('Repair', `${st.heal}/s`) : null,
       ),
       h('div.parts', null, parts),
+      loadout.length ? h('div.loadout', null, h('div.lo-title', null, 'Loadout'), h('ul', null, ...loadout)) : '',
       actions.length ? h('div.actions', null, ...actions) : '',
     );
     infoEl.classList.remove('hidden');
