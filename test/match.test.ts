@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { validateDesign, computeStats, MAX_LEVEL } from '../src/shared/stats.ts';
 import {
-  START_HP, DECK_SIZE, MAX_UNITS, newPlayer, newMatch, joinMatch, validateDeck, validateDeploy, applyDeploy,
+  START_HP, DECK_SIZE, MAX_UNITS, MAX_SIM_UNITS, newPlayer, newMatch, joinMatch, validateDeck, validateDeploy, applyDeploy,
   resolveRound, redactFor, battleInputFor, supplyForRound, upgradeCost, submitDeploy, isPlaceholder, roundDamage,
 } from '../src/shared/match.ts';
+import { blockCells } from '../src/shared/grid.ts';
 import type { DeployAction, MatchState, Placement } from '../src/shared/types.ts';
 
 test('starter designs are valid, unique and cover sizes/flyers/static', () => {
@@ -60,8 +61,10 @@ test('validateDeck', () => {
 
 test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
   const m = fresh();
-  const ok: DeployAction = { round: 1, place: [pl(1, 0, 0), pl(2, 1, 0)], upgrade: [] };
+  const ok: DeployAction = { round: 1, place: [pl(1, 0, 0), pl(2, 2, 0)], upgrade: [] };
   assert.equal(validateDeploy(m, 0, ok), null);
+  // a 2x2 squad footprint: adjacent column 1 overlaps
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 1, 0)], upgrade: [] })!, /overlap/);
   // overlap with each other
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 0)], upgrade: [] })!, /overlap/);
   // big unit overlapping a small one
@@ -71,11 +74,11 @@ test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, -1, 0)], upgrade: [] })!, /zone/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0.5, 0)], upgrade: [] })!, /zone/);
   // over budget
-  const many = Array.from({ length: 20 }, (_, i) => pl(i + 1, i, 0));
+  const many = Array.from({ length: 20 }, (_, i) => pl(i + 1, (i % 20) * 2, 0));
   assert.match(validateDeploy(m, 0, { round: 1, place: many, upgrade: [] })!, /supply/);
   // bad uids
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(0, 0, 0)], upgrade: [] })!, /unit id/);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(3, 0, 0), pl(3, 2, 0)], upgrade: [] })!, /Duplicate/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(3, 0, 0), pl(3, 4, 0)], upgrade: [] })!, /Duplicate/);
   // wrong round, unknown design, level
   assert.ok(validateDeploy(m, 0, { round: 2, place: [], upgrade: [] }));
   assert.ok(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0, 'zzz')], upgrade: [] }));
@@ -87,7 +90,7 @@ test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
 
 test('apply, upgrade limits, overlap with existing board, unit cap', () => {
   const m = fresh();
-  const err = submitDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 3, 0)], upgrade: [] });
+  const err = submitDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 4, 0)], upgrade: [] });
   assert.equal(err, null);
   assert.equal(m.players[0].nextUid, 3);
   assert.equal(m.players[0].supply, supplyForRound(1) - 2 * computeStats(cheap).cost);
@@ -113,7 +116,44 @@ test('apply, upgrade limits, overlap with existing board, unit cap', () => {
   m2.players[0].supply = 1e9;
   const lots: Placement[] = [];
   for (let i = 0; i < MAX_UNITS + 1; i++) lots.push(pl(i + 1, i % 24, Math.floor(i / 24)));
-  assert.match(validateDeploy(m2, 0, { round: 1, place: lots, upgrade: [] })!, /Too many/);
+  assert.match(validateDeploy(m2, 0, { round: 1, place: lots, upgrade: [] })!, /Too many blocks/);
+  // sim-unit cap: 31 squads = 124 units > 120 though only 31 blocks
+  const squads: Placement[] = [];
+  for (let i = 0; i < 31; i++) squads.push(pl(i + 1, (i % 24) * 2, Math.floor(i / 24) * 2));
+  assert.match(validateDeploy(m2, 0, { round: 1, place: squads, upgrade: [] })!, new RegExp(`max ${MAX_SIM_UNITS}`));
+  assert.equal(validateDeploy(m2, 0, { round: 1, place: squads.slice(0, 30), upgrade: [] }), null);
+});
+
+test('spacing: footprint grows, validated, stored and redacted', () => {
+  const m = fresh();
+  const sp = (uid: number, x: number, y: number, spacing: number | undefined, id = cheap.id): Placement => ({ ...pl(uid, x, y, id), spacing });
+  assert.equal(blockCells(1, 3), 5);
+  // spacing 3 -> 5x5 footprint: x=0..4 taken
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 3), sp(2, 4, 0, 0)], upgrade: [] })!, /overlap/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 3), sp(2, 5, 0, 0)], upgrade: [] }), null);
+  // zone check uses the spaced footprint
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 44, 0, 3)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 43, 0, 3)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 9, 3)], upgrade: [] })!, /zone/);
+  // bad spacing values
+  for (const bad of [-1, 5, 1.5, NaN, '2' as unknown as number]) assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, bad)], upgrade: [] })!, /spacing/i);
+  // non-squads can't be spaced
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2, big.id)], upgrade: [] })!, /spaced/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 0, big.id)], upgrade: [] }), null);
+  // stored on the board, and kept for later overlap checks
+  submitDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 3)], upgrade: [] });
+  assert.equal(m.players[0].board[0].spacing, 3);
+  submitDeploy(m, 1, { round: 1, place: [], upgrade: [] });
+  assert.match(validateDeploy(m, 0, { round: 2, place: [{ ...sp(2, 4, 4, 0), round: 2 }], upgrade: [] })!, /overlap/);
+  assert.equal(redactFor(m, 1).players[0].board[0].spacing, 3);
+});
+
+test('survivor damage scales with the surviving fraction of a squad', () => {
+  const m = fresh();
+  const boards: [Placement[], Placement[]] = [[pl(1, 0, 0, big.id)], []];
+  const full = roundDamage(m, 3, 0, [[1], []], boards, [{ 1: 1 }, {}])[1];
+  const half = roundDamage(m, 3, 0, [[1], []], boards, [{ 1: 0.25 }, {}])[1];
+  assert.ok(full > half && half >= 5, `${full} ${half}`);
 });
 
 test('redaction hides pending placements, upgrades and supply', () => {

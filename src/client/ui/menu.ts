@@ -6,11 +6,11 @@ import { FieldView, type BoardUnit } from '../render/field.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { TICK_RATE, type BattleInput } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, overlaps, placementCenter } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, blockCells, hasSpacing, overlaps, placementUnitCenters } from '../../shared/grid.ts';
 import { computeStats } from '../../shared/stats.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { makeRng } from '../../shared/rng.ts';
-import type { Design, Placement, Side } from '../../shared/types.ts';
+import type { Design, Placement, Side, Size } from '../../shared/types.ts';
 import { openModal } from './match-ui.ts';
 
 /** Random but legal-looking boards built from starter designs. */
@@ -25,11 +25,12 @@ function demoInput(seed: number): BattleInput | null {
       const d = designs[Math.floor(rng() * designs.length)];
       const st = computeStats(d);
       if (st.cost > budget) continue;
-      const size = st.size;
+      const spacing = hasSpacing(st.size) ? Math.floor(rng() * 4) : 0;
+      const size = blockCells(st.size, spacing);
       const x = Math.floor(rng() * (DEPLOY_W - size + 1));
       const y = Math.floor(rng() * (DEPLOY_D - size + 1));
-      if (out.some((p) => overlaps(x, y, size, p.x, p.y, sizeOf(designs, p.designId)))) continue;
-      out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rng() * 2), round: 1 });
+      if (out.some((p) => overlaps(x, y, size, p.x, p.y, footOf(designs, p)))) continue;
+      out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rng() * 2), round: 1, ...(spacing ? { spacing } : {}) });
       budget -= st.cost;
     }
     return out;
@@ -37,9 +38,12 @@ function demoInput(seed: number): BattleInput | null {
   return { seed, sides: [{ designs, units: mk() }, { designs, units: mk() }] };
 }
 
-function sizeOf(designs: Design[], id: string): number {
+function sizeOf(designs: Design[], id: string): Size {
   const d = designs.find((x) => x.id === id);
   return d ? computeStats(d).size : 1;
+}
+function footOf(designs: Design[], p: Placement): number {
+  return blockCells(sizeOf(designs, p.designId), p.spacing);
 }
 
 function boardUnits(input: BattleInput): BoardUnit[] {
@@ -48,8 +52,7 @@ function boardUnits(input: BattleInput): BoardUnit[] {
     for (const p of s.units) {
       const d = s.designs.find((x) => x.id === p.designId);
       if (!d) continue;
-      const c = placementCenter(side as Side, p, computeStats(d).size);
-      out.push({ side: side as Side, design: d, x: c.x, y: c.y, level: p.level });
+      for (const c of placementUnitCenters(side as Side, p, computeStats(d).size)) out.push({ side: side as Side, design: d, x: c.x, y: c.y, level: p.level });
     }
   });
   return out;

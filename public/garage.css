@@ -455,3 +455,4 @@
   font-family: var(--g-head); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em;
   color: var(--g-text); border: 1px dashed var(--g-line2);
 }
+.garage .g-tag.squad { color: var(--accent, #2ed3c0); border-color: currentColor; }

@@ -74,10 +74,15 @@ export function sanitizeAction(raw: unknown): DeployAction {
     for (const k of ['uid', 'x', 'y', 'level', 'round'] as const) {
       if (!isInt(o[k]) || Math.abs(o[k] as number) > 1e6) bad(`placement.${k} must be an integer`);
     }
-    return {
+    const pl: Placement = {
       uid: o.uid as number, designId: str(o.designId, 40, 'placement.designId'),
       x: o.x as number, y: o.y as number, level: o.level as number, round: o.round as number,
     };
+    if (o.spacing !== undefined) {
+      if (!isInt(o.spacing) || (o.spacing as number) < 0 || (o.spacing as number) > 8) bad('placement.spacing must be a small integer');
+      pl.spacing = o.spacing as number;
+    }
+    return pl;
   });
   const upgrade = (upRaw as unknown[]).map((u) => {
     if (!isInt(u) || Math.abs(u) > 1e6) bad('upgrade entries must be unit uids');

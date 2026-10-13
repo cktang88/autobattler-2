@@ -16,11 +16,11 @@
 
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from './parts.ts';
 import { computeStats, designModules, MAX_LEVEL, validateDesign } from './stats.ts';
-import { DEPLOY_D, DEPLOY_W, inDeployZone, overlaps } from './grid.ts';
+import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps, squadSize } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import { STARTER_DESIGNS } from './starters.ts';
-import { DECK_SIZE, MAX_UNITS, designCost, redactFor, roundDamage, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
+import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, designCost, redactFor, roundDamage, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
 import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, UnitStats } from './types.ts';
 
 export type AiDifficulty = 'easy' | 'normal' | 'hard';
@@ -30,7 +30,13 @@ export type AiDifficulty = 'easy' | 'normal' | 'hard';
 
 export interface Profile {
   stats: UnitStats;
+  /** price of one block */
   cost: number;
+  /** model value of one unit */
+  unitCost: number;
+  /** splash radius of the largest splash weapon (cells) */
+  splashRadius: number;
+  melee: boolean;
   size: number;
   /** dps usable vs air */
   aaDps: number;
@@ -62,7 +68,7 @@ export function profile(d: Design): Profile {
   if (hit) return hit;
   const s = computeStats(d);
   const mods = designModules(d);
-  let aaDps = 0, groundDps = 0, apSum = 0, splashDps = 0, minRange = 0;
+  let aaDps = 0, groundDps = 0, apSum = 0, splashDps = 0, minRange = 0, splashRadius = 0, melee = false;
   for (const m of mods) {
     if (m.kind !== 'weapon') continue;
     const dps = weaponDps(m);
@@ -72,12 +78,14 @@ export function profile(d: Design): Profile {
       apSum += dps * (m.ap ?? 0);
     }
     if ((m.splash ?? 0) >= 0.8 || (m.chain ?? 0) > 0 || m.pierce) splashDps += dps * (1 + (m.splash ?? 0) + (m.chain ?? 0) * 0.5);
+    if ((m.splash ?? 0) >= 0.8 || m.category === 'flame' || m.category === 'artillery') splashRadius = Math.max(splashRadius, m.splash ?? 1);
+    if (m.projectile === 'melee') melee = true;
     if (m.minRange) minRange = Math.max(minRange, m.minRange);
   }
   const ehp = (s.hp + s.shield) * (1 + s.armor / 12) * (s.traits.includes('evasive') ? 1.3 : 1);
   const p: Profile = {
-    stats: s, cost: s.cost, size: s.size, aaDps, groundDps, ap: groundDps > 0 ? apSum / groundDps : 0,
-    splashDps, minRange, range: s.range, toughPerCost: ehp / Math.max(1, s.cost), ehp,
+    stats: s, cost: s.cost, unitCost: s.unitCost, splashRadius, melee, size: s.size, aaDps, groundDps, ap: groundDps > 0 ? apSum / groundDps : 0,
+    splashDps, minRange, range: s.range, toughPerCost: ehp / Math.max(1, s.unitCost), ehp,
     flying: s.flying, isStatic: s.isStatic, heal: s.heal, role: 'skirmisher',
   };
   p.role = classify(p);
@@ -96,7 +104,7 @@ function classify(p: Profile): Role {
   if (p.range >= 9 && (p.minRange > 0 || p.groundDps === 0 || p.aaDps < p.groundDps * 0.5)) return 'artillery';
   if (p.aaDps > 0 && (p.groundDps === 0 || p.aaDps >= p.groundDps * 1.4)) return 'antiAir';
   if (p.ap >= 0.55 && p.groundDps > 0) return 'antiArmor';
-  if (p.cost <= 75) return 'swarm';
+  if (p.unitCost <= 75) return 'swarm';
   if (p.size >= 2 && p.toughPerCost >= 3.5) return 'frontline';
   return 'skirmisher';
 }
@@ -258,11 +266,13 @@ interface Threat {
   artillery: number;
   aa: number; // our flyers fear this
   ground: number;
+  /** value of splash-capable units (artillery, rockets, flame...) */
+  splashy: number;
 }
 
 function analyze(board: Placement[], deck: Design[]): Threat {
   const byId = new Map(deck.map((d) => [d.id, d] as const));
-  const t: Threat = { total: 0, air: 0, heavy: 0, swarm: 0, artillery: 0, aa: 0, ground: 0 };
+  const t: Threat = { total: 0, air: 0, heavy: 0, swarm: 0, artillery: 0, aa: 0, ground: 0, splashy: 0 };
   for (const u of board) {
     const d = byId.get(u.designId);
     if (!d) continue;
@@ -271,7 +281,8 @@ function analyze(board: Placement[], deck: Design[]): Threat {
     t.total += v;
     if (p.flying) t.air += v; else t.ground += v;
     if (!p.flying && p.stats.armor >= 9) t.heavy += v;
-    if (p.cost <= 75) t.swarm += v;
+    if (p.unitCost <= 75) t.swarm += v;
+    if (p.splashRadius > 0 || p.role === 'artillery') t.splashy += v;
     if (p.role === 'artillery') t.artillery += v;
     if (p.aaDps > 0) t.aa += v * Math.min(1, p.aaDps / Math.max(1, p.aaDps + p.groundDps) * 1.5);
   }
@@ -285,7 +296,7 @@ function designScore(d: Design, opp: Threat, mine: Threat, mineRoles: Map<Role, 
   const airShare = opp.air / T, heavyShare = opp.heavy / T, swarmShare = opp.swarm / T, artyShare = opp.artillery / T;
   const aaShare = opp.aa / T;
   // Base efficiency: power per cost.
-  const dpsPerCost = (p.groundDps + p.aaDps * 0.5) / p.cost;
+  const dpsPerCost = (p.groundDps + p.aaDps * 0.5) / p.unitCost;
   let s = 1 + dpsPerCost * 2.5 + p.toughPerCost * 0.12;
   if (opp.total > 0) {
     if (p.aaDps > 0) s += airShare * 4 * Math.min(1.5, p.aaDps / Math.max(20, p.groundDps + p.aaDps) * 2);
@@ -305,7 +316,7 @@ function designScore(d: Design, opp: Threat, mine: Threat, mineRoles: Map<Role, 
   if (p.role === 'artillery' && count('frontline') + count('skirmisher') + count('antiArmor') < 2) s *= 0.5;
   if (p.role === 'support' && total < 4) s *= 0.4;
   s /= 1 + 0.25 * count(p.role);
-  if (round <= 1 && p.cost > 350) s *= 0.6;
+  if (round <= 1 && p.cost > 500) s *= 0.6;
   void mine;
   return Math.max(0.01, s);
 }
@@ -313,8 +324,8 @@ function designScore(d: Design, opp: Threat, mine: Threat, mineRoles: Map<Role, 
 // ---------------------------------------------------------------------------------------------
 // Placement
 
-function preferredRow(p: Profile, rng: Rng): number {
-  const back = DEPLOY_D - p.size;
+function preferredRow(p: Profile, f: number, rng: Rng): number {
+  const back = DEPLOY_D - f;
   if (p.flying) return Math.floor(rng() * (back + 1));
   if (p.role === 'artillery' || p.range >= 9) return back;
   if (p.role === 'support') return Math.min(back, 3);
@@ -323,17 +334,27 @@ function preferredRow(p: Profile, rng: Rng): number {
   return Math.min(back, 2);
 }
 
+/** Squad spacing by role and by how splashy the enemy is: spread vs splash, packed otherwise. */
+export function chooseSpacing(p: Profile, oppSplashShare: number): number {
+  if (!hasSpacing(p.size as 1 | 2 | 3)) return 0;
+  let sp = p.melee || p.role === 'swarm' || p.role === 'skirmisher' ? 1 : 0;
+  if (oppSplashShare > 0.5) sp = 3;
+  else if (oppSplashShare > 0.2) sp = Math.max(sp, 2);
+  else if (oppSplashShare > 0.08) sp = Math.max(sp, 1);
+  if (p.role === 'artillery') sp = Math.max(sp, oppSplashShare > 0.08 ? 2 : 1);
+  return Math.min(MAX_SPACING, sp);
+}
+
 interface Foot { x: number; y: number; s: number }
 
 function fits(x: number, y: number, s: number, occ: Foot[]): boolean {
-  if (!inDeployZone(x, y, s as 1 | 2 | 3)) return false;
   for (const f of occ) if (overlaps(x, y, s, f.x, f.y, f.s)) return false;
   return true;
 }
 
-function findSpot(p: Profile, occ: Foot[], rng: Rng, randomPlace: boolean, flank: number): { x: number; y: number } | null {
-  const s = p.size;
-  const prefY = preferredRow(p, rng);
+function findSpot(p: Profile, f: number, occ: Foot[], rng: Rng, randomPlace: boolean, flank: number): { x: number; y: number } | null {
+  const s = f;
+  const prefY = preferredRow(p, f, rng);
   let best: { x: number; y: number } | null = null;
   let bestScore = -Infinity;
   const center = DEPLOY_W / 2;
@@ -346,9 +367,9 @@ function findSpot(p: Profile, occ: Foot[], rng: Rng, randomPlace: boolean, flank
         const cx = x + s / 2, cy = y + s / 2;
         let nearest = 99;
         let sameRowCount = 0;
-        for (const f of occ) {
-          const dx = Math.abs(f.x + f.s / 2 - cx), dy = Math.abs(f.y + f.s / 2 - cy);
-          nearest = Math.min(nearest, Math.max(dx, dy) - (s + f.s) / 2);
+        for (const o of occ) {
+          const dx = Math.abs(o.x + o.s / 2 - cx), dy = Math.abs(o.y + o.s / 2 - cy);
+          nearest = Math.min(nearest, Math.max(dx, dy) - (s + o.s) / 2);
           if (dy < 1.5) sameRowCount += Math.max(0, 1 - dx / 8);
         }
         score = -1.6 * Math.abs(y - prefY)
@@ -392,7 +413,9 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     const d = byId.get(u.designId);
     if (d) { const r = profile(d).role; roles.set(r, (roles.get(r) ?? 0) + 1); }
   }
-  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, s: byId.get(u.designId) ? profile(byId.get(u.designId)!).size : 1 }));
+  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, s: byId.get(u.designId) ? blockCells(profile(byId.get(u.designId)!).size as 1 | 2 | 3, u.spacing) : 2 }));
+  let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as 1 | 2 | 3) : 1), 0);
+  const splashShare = opp.total > 0 ? opp.splashy / opp.total : 0;
   let nextUid = me.nextUid;
   let units = me.board.length;
   const easy = o.difficulty === 'easy';
@@ -402,7 +425,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     const last = m.history[m.history.length - 1];
     const surv = new Set(last ? last.result.survivors[side] : []);
     const levels = new Map(me.board.map((u) => [u.uid, u.level] as const));
-    const upBudget = Math.floor(budget * Math.min(0.6, 0.25 * o.upgradeBias + (units >= MAX_UNITS - 4 ? 0.5 : 0) + (occ.length > 22 ? 0.2 : 0)));
+    const upBudget = Math.floor(budget * Math.min(0.6, 0.25 * o.upgradeBias + (units >= MAX_BLOCKS - 4 || simUnits >= MAX_SIM_UNITS - 16 ? 0.5 : 0) + (occ.length > 22 ? 0.2 : 0)));
     let spent = 0;
     const cands = me.board
       .map((u) => {
@@ -429,8 +452,8 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
   // --- purchases ---
   const minCost = Math.min(...deck.map((d) => designCost(d)));
   let guard = 0;
-  while (budget >= minCost && units < MAX_UNITS && guard++ < 80) {
-    const afford = deck.filter((d) => designCost(d) <= budget);
+  while (budget >= minCost && units < MAX_BLOCKS && guard++ < 80) {
+    const afford = deck.filter((d) => designCost(d) <= budget && simUnits + squadSize(profile(d).size as 1 | 2 | 3) <= MAX_SIM_UNITS);
     if (!afford.length) break;
     let choice: Design | null;
     if (easy) {
@@ -448,7 +471,10 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     }
     if (!choice) break;
     const p = profile(choice);
-    const spot = findSpot(p, occ, o.rng, easy, o.flank);
+    const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.size as 1 | 2 | 3) ? 1 : 0) : chooseSpacing(p, splashShare);
+    const sp = normSpacing(p.size as 1 | 2 | 3, spacing);
+    const foot = blockCells(p.size as 1 | 2 | 3, sp);
+    const spot = findSpot(p, foot, occ, o.rng, easy, o.flank);
     if (!spot) {
       // no room for this size; try to stop buying this design
       const smaller = deck.filter((d) => profile(d).size < p.size);
@@ -457,8 +483,12 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       if (!deck.length) break;
       continue;
     }
-    occ.push({ x: spot.x, y: spot.y, s: p.size });
-    action.place.push({ uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round });
+    if (!blockInZone(spot.x, spot.y, p.size as 1 | 2 | 3, sp)) break;
+    occ.push({ x: spot.x, y: spot.y, s: foot });
+    const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
+    if (hasSpacing(p.size as 1 | 2 | 3)) pl.spacing = sp;
+    action.place.push(pl);
+    simUnits += squadSize(p.size as 1 | 2 | 3);
     roles.set(p.role, (roles.get(p.role) ?? 0) + 1);
     budget -= p.cost;
     units++;
@@ -524,7 +554,7 @@ function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: 
     : [{ designs: view.players[0].deck, units: oppBoard }, { designs: view.players[1].deck, units: myBoard }];
   const sum = runBattle({ seed, sides });
   const boards: [Placement[], Placement[]] = [sides[0].units, sides[1].units];
-  const dmg = roundDamage(view, view.round, sum.winner, sum.survivors, boards);
+  const dmg = roundDamage(view, view.round, sum.winner, sum.survivors, boards, sum.aliveFraction);
   // Positive is good for us: damage dealt minus damage taken, plus a small bonus for winning outright.
   return dmg[oppSide] - dmg[side] + (sum.winner === side ? 5 : sum.winner === oppSide ? -5 : 0);
 }

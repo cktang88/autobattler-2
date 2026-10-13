@@ -10,7 +10,7 @@ import { DECK_SIZE } from '../../shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError } from '../../shared/parts.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, computeStats, loadSpeedFactor, validateDesign } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MountClass, UnitStats } from '../../shared/types.ts';
-import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, footprintLabel, CATEGORY_COLOR } from './garage-parts.ts';
+import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, designSizeLabel, footprintLabel, CATEGORY_COLOR } from './garage-parts.ts';
 
 const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3 };
 const NAME_MAX = 24;
@@ -340,8 +340,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('span.g-item-txt', null,
         h('span.g-item-name', null, d.name || 'Untitled', opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
         h('span.g-item-meta', null,
-          h('span.g-size', null, s ? sizeLabel(s.size) : '?'),
-          h('span.g-item-cost', null, icon('cost'), s ? String(s.cost) : '–'),
+          h('span.g-size', null, s ? designSizeLabel(s) : '?'),
+          h('span.g-item-cost', { title: s && s.squad > 1 ? `Block of ${s.squad} (${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
           s?.flying ? h('span.g-tag.air', null, 'AIR') : null,
           s?.isStatic ? h('span.g-tag.static', null, 'FIX') : null,
         ),
@@ -383,13 +383,14 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     errorsEl.replaceChildren(...errs.map((e) => h('li', null, e)));
 
     previewTags.replaceChildren(...[
-      h('span.g-size.big', null, s ? sizeLabel(s.size) : '?'),
+      h('span.g-size.big', null, s ? designSizeLabel(s) : '?'),
+      s && s.squad > 1 ? h('span.g-tag.squad', { title: 'One purchase deploys a block of 4 units with adjustable spacing' }, `Squad of ${s.squad}`) : null,
       s ? h('span.g-footprint', { title: 'Physical footprint' }, footprintLabel(s.size)) : null,
       s?.flying ? h('span.g-tag.air', null, icon('air'), 'Flying') : null,
       s?.isStatic ? h('span.g-tag.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-tag.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
     ].filter((x): x is HTMLSpanElement => !!x));
-    previewCost.replaceChildren(icon('cost'), h('b', null, s ? String(s.cost) : '–'), h('span', null, 'supply'));
+    previewCost.replaceChildren(icon('cost'), h('b', null, s ? String(s.cost) : '–'), h('span', null, s && s.squad > 1 ? `supply / block · ${s.unitCost} per unit` : 'supply'));
 
     if (!s) { statsEl.replaceChildren(); loadEl.replaceChildren(); costEl.replaceChildren(); return; }
     renderCost(s, ss);
@@ -453,13 +454,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     costEl.replaceChildren(
       h('div.g-cost-h', { title: tip },
         h('span', null, icon('cost'), 'Cost breakdown', h('span.g-info', { tabindex: '0', 'aria-label': tip }, 'i')),
-        h('span.g-cost-total', null, h('b', null, String(s.cost)), ' supply'),
+        h('span.g-cost-total', null, h('b', null, String(s.cost)), s.squad > 1 ? ` supply / block of ${s.squad}` : ' supply'),
       ),
       h('div.g-cost-bar', { 'aria-hidden': 'true' },
         h('span.parts', { style: { width: `${(parts / tot) * 100}%` } }),
         h('span.power', { style: { width: `${(pow / tot) * 100}%` } }),
       ),
       h('div.g-cost-rows', null,
+        s.squad > 1 ? h('div.g-cost-row.sub', { title: 'Each of the 4 squad units is worth this much; the block price is 4 units, rounded' },
+          h('span.g-cost-k', null, 'Per unit value'), h('span', null, String(s.unitCost)), h('em', null, `×${s.squad}`)) : null,
         h('div.g-cost-row.parts', { title: 'Sum of base part costs: complexity of fielding this design' },
           h('span.g-cost-k', null, h('i'), 'Parts complexity'), h('span', null, String(Math.round(s.partsCost)), d('partsCost')), h('em', null, `≈${Math.round(parts)}`)),
         h('div.g-cost-row.power', { title: 'Predicted combat power: √(offense × effective hp) × mobility' },

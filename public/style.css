@@ -312,3 +312,30 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .zoombtns { position: absolute; right: 10px; top: 10px; z-index: 4; display: flex; flex-direction: column; gap: 6px; }
 .zoombtns button { width: 36px; height: 36px; padding: 0; font-size: 1.2rem; line-height: 1; background: rgba(20, 27, 36, 0.92); }
 @media (max-width: 700px) { .zoombtns { top: 40px; right: 8px; } .zoombtns button { width: 40px; height: 40px; } }
+
+/* squads: badge + spacing control */
+.squad-badge { font-family: var(--font-head); font-weight: 700; font-size: 0.78rem; color: var(--bg); background: var(--accent); border-radius: 3px; padding: 0 4px; line-height: 1.3; align-self: center; }
+.squad-tag { font-family: var(--font-head); font-weight: 600; color: var(--accent); font-size: 0.95rem; }
+.squad-tag span { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+.shop-spacing { padding: 8px 10px; border-top: 1px solid var(--line); }
+.info-spacing { margin: 8px 0; padding: 8px; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; }
+.spacing .sp-head { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-head); font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+.spacing .sp-head .muted { font-weight: 400; font-size: 0.75rem; }
+.spacing .sp-row { display: flex; align-items: center; gap: 10px; }
+.sp-diagram { flex: none; width: 34px; height: 34px; }
+.sp-diagram .fp { fill: rgba(46, 211, 192, 0.08); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }
+.sp-diagram circle { fill: var(--accent); }
+.sp-segs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line2, var(--line)); border-radius: 4px; overflow: hidden; }
+.sp-segs .seg { border: none; border-radius: 0; padding: 6px 0; min-height: 34px; background: var(--panel2, var(--panel)); font-family: var(--font-head); font-weight: 600; }
+.sp-segs .seg + .seg { border-left: 1px solid var(--line); }
+.sp-segs .seg.on { background: var(--accent); color: var(--bg); }
+.sp-segs .seg:disabled:not(.on) { opacity: 0.6; }
+.spacing .sp-foot { margin-top: 4px; font-size: 0.78rem; color: var(--muted); }
+@media (max-width: 760px), (max-height: 520px) and (max-width: 1000px) {
+  .shop-spacing { padding: 4px 8px; }
+  .shop-spacing .sp-head { display: none; }
+  .shop-spacing .sp-row { gap: 8px; }
+  .shop-spacing .sp-foot { margin: 0; white-space: nowrap; }
+  .shop-spacing .spacing { display: flex; align-items: center; gap: 8px; }
+  .shop-spacing .sp-row { flex: 1; }
+}

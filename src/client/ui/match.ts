@@ -10,7 +10,7 @@ import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUn
 import { loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, inDeployZone, localToWorldCell, placementCenter, FIELD_W, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, FIELD_W, MAX_SPACING, blockCells, blockInZone, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters } from '../../shared/grid.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
@@ -24,6 +24,51 @@ type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 export function worldToLocalCell(side: Side, col: number, row: number, size: number): { x: number; y: number } {
   if (side === 0) return { x: col, y: row - (localToWorldCell(0, 0, 0, size as Size).row) };
   return { x: FIELD_W - col - size, y: DEPLOY_D - row - size };
+}
+
+/** last spacing chosen per design id (kept across matches) */
+const lastSpacing = new Map<string, number>();
+
+/** Tiny diagram of a 4-unit squad at the given spacing, plus the footprint in metres. */
+function spacingDiagram(spacing: number): SVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const cells = 2 + spacing, px = 8;
+  const svg = document.createElementNS(NS, 'svg');
+  const W = cells * px;
+  svg.setAttribute('viewBox', `0 0 ${W} ${W}`);
+  svg.setAttribute('width', '34');
+  svg.setAttribute('height', '34');
+  svg.setAttribute('class', 'sp-diagram');
+  svg.setAttribute('aria-hidden', 'true');
+  const r = document.createElementNS(NS, 'rect');
+  r.setAttribute('x', '0.5'); r.setAttribute('y', '0.5'); r.setAttribute('width', String(W - 1)); r.setAttribute('height', String(W - 1));
+  r.setAttribute('class', 'fp');
+  svg.append(r);
+  const far = 1.5 + spacing;
+  for (const [cx, cy] of [[0.5, 0.5], [far, 0.5], [0.5, far], [far, far]]) {
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', String(cx * px)); c.setAttribute('cy', String(cy * px)); c.setAttribute('r', '2.2');
+    svg.append(c);
+  }
+  return svg;
+}
+
+/** Segmented spacing control: "Spacing 0 1 2 3 4" + live diagram + footprint size. */
+function spacingControl(value: number, onPick: ((v: number) => void) | null): HTMLElement {
+  const segs = Array.from({ length: MAX_SPACING + 1 }, (_, v) => h('button.seg', {
+    type: 'button',
+    class: v === value ? 'on' : null,
+    disabled: !onPick,
+    'aria-pressed': String(v === value),
+    title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units`,
+    onclick: () => onPick?.(v),
+  }, String(v)));
+  const fp = fmtMeters(blockCells(1, value));
+  return h('div.spacing', null,
+    h('div.sp-head', null, h('span', null, 'Spacing'), h('span.muted', null, ...(onPick ? [h('kbd', null, '['), ' ', h('kbd', null, ']')] : ['locked']))),
+    h('div.sp-row', null, spacingDiagram(value), h('div.sp-segs', { role: 'group', 'aria-label': 'Squad spacing' }, ...segs)),
+    h('div.sp-foot', null, `Footprint ${fp} × ${fp}`),
+  );
 }
 
 type Op = { kind: 'place' | 'upgrade'; uid: number };
@@ -60,6 +105,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const designOf = (s: Side, id: string): Design | undefined => m.players[s].deck.find((d) => d.id === id);
   const sizeOf = (d: Design | undefined): Size => (d ? statsOf(d)?.size ?? 1 : 1);
   const costOf = (d: Design | undefined): number => (d ? statsOf(d)?.cost ?? 0 : 0);
+  const squadOf = (d: Design | undefined): number => (d ? statsOf(d)?.squad ?? 1 : 1);
+  const spacingOfCard = (d: Design): number => normSpacing(sizeOf(d), lastSpacing.get(d.id) ?? 0);
 
   // ---------- deploy state ----------
   let pendingRound = -1;
@@ -69,7 +116,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let nextUid = 1;
   let selCard = -1;
   let sel: Sel = null;
-  let hover: { x: number; y: number; size: Size; valid: boolean; reason: string | null } | null = null;
+  let hover: { x: number; y: number; size: Size; spacing: number; cells: number; valid: boolean; reason: string | null } | null = null;
+  let hoverUnit: Sel = null; // block under the mouse (nothing selected in the shop)
+  let lastPtr: { px: number; py: number } | null = null;
   let submitting = false;
 
   // ---------- battle state ----------
@@ -133,9 +182,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const undoBtn = h('button.small', { onclick: () => undo(), title: 'Undo (Backspace)' }, 'Undo');
   const clearBtn = h('button.small', { onclick: () => clearAll(), title: 'Clear all pending' }, 'Clear');
   const deployBtn = h('button.big.primary.deploy-btn', { onclick: () => submit() }, 'Deploy & Fight');
+  const shopSpacingEl = h('div.shop-spacing.hidden');
   const sideEl = h('div.side', null,
     h('div.side-top', null, h('div.supply', null, supplyVal, supplyLbl, h('div.spacer'), h('span.kbd-hint.muted', { style: { fontSize: '0.75rem' } }, h('kbd', null, '1-9'), ' select'))),
     cardsEl,
+    shopSpacingEl,
     h('div.side-actions', null, h('div.row', null, undoBtn, clearBtn), deployBtn),
   );
 
@@ -165,7 +216,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('span.key', null, String(i + 1)),
         h('span.count'),
         h('div.name', null, d.name),
-        h('div.meta', null, h('span.cost', null, st ? String(st.cost) : '?'), h('span', null, st ? `${sizeLabel(st.size)}${st.flying ? ' · Air' : ''}` : 'invalid')),
+        h('div.meta', null, h('span.cost', { title: st && st.squad > 1 ? `Block price: ${st.squad} units (${st.unitCost} each)` : 'Supply price' }, st ? String(st.cost) : '?'), st && st.squad > 1 ? h('span.squad-badge', { title: `Squad of ${st.squad}` }, `×${st.squad}`) : null, h('span', null, st ? `${sizeLabel(st.size)}${st.flying ? ' · Air' : ''}` : 'invalid')),
       );
       attachDeckTip(b, d);
       return b;
@@ -279,14 +330,64 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     deployBtn.disabled = !deploying || submitting;
     deployBtn.textContent = submitting ? 'Deploying…' : 'Deploy & Fight';
     renderCards();
+    renderShopSpacing();
+  }
+
+  function renderShopSpacing() {
+    const d = phase === 'deploy' ? deck()[selCard] : undefined;
+    if (!d || !hasSpacing(sizeOf(d))) { shopSpacingEl.classList.add('hidden'); shopSpacingEl.replaceChildren(); return; }
+    shopSpacingEl.classList.remove('hidden');
+    shopSpacingEl.replaceChildren(spacingControl(spacingOfCard(d), (v) => setCardSpacing(v)));
+  }
+
+  function setCardSpacing(v: number) {
+    const d = deck()[selCard];
+    if (!d || !hasSpacing(sizeOf(d))) return;
+    lastSpacing.set(d.id, normSpacing(sizeOf(d), v));
+    if (lastPtr) hover = computeHover(lastPtr.px, lastPtr.py);
+    sfx('click');
+    renderAll();
+  }
+
+  /** change spacing of a block placed this round; reverts (with a toast) if it would collide */
+  function setPendingSpacing(uid: number, v: number) {
+    const i = place.findIndex((p) => p.uid === uid);
+    if (i < 0) return;
+    const p = place[i];
+    const size = sizeOf(designOf(side, p.designId));
+    if (!hasSpacing(size)) return;
+    const sp = normSpacing(size, v);
+    if (sp === normSpacing(size, p.spacing)) return;
+    const cells = blockCells(size, sp);
+    const next: Placement = { ...p, spacing: sp, x: Math.max(0, Math.min(DEPLOY_W - cells, p.x)), y: Math.max(0, Math.min(DEPLOY_D - cells, p.y)) };
+    const cand = action();
+    cand.place[i] = next;
+    const err = check(cand);
+    if (err) { sfx('invalid'); app.toast(err, 'error'); renderAll(); return; }
+    place[i] = next;
+    lastSpacing.set(p.designId, sp);
+    sfx('click');
+    renderAll();
+  }
+
+  /** [ ] / Shift+wheel: step the spacing of the card being placed, else of the selected pending squad */
+  function stepSpacing(dir: number): boolean {
+    if (phase !== 'deploy') return false;
+    const d = deck()[selCard];
+    if (d && hasSpacing(sizeOf(d))) { setCardSpacing(Math.max(0, Math.min(MAX_SPACING, spacingOfCard(d) + dir))); return true; }
+    if (sel?.pending && sel.side === side) {
+      const p = place.find((x) => x.uid === sel!.uid);
+      if (p && hasSpacing(sizeOf(designOf(side, p.designId)))) { setPendingSpacing(p.uid, Math.max(0, Math.min(MAX_SPACING, normSpacing(1, p.spacing) + dir))); return true; }
+    }
+    return false;
   }
 
   function renderHint() {
     let t = '';
     if (phase === 'deploy') {
       const d = deck()[selCard];
-      if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name} in your zone · Esc to cancel`;
-      else t = place.length ? 'Tap a new unit to remove it · tap your units to upgrade' : 'Pick a unit card, then tap your zone to deploy';
+      if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing' : ''} · Esc to cancel`;
+      else t = place.length ? 'Tap a new block to adjust or remove it · tap your units to upgrade' : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -309,6 +410,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const ups = mine && !s.pending ? pendingUps(p.uid) : 0;
     const lv = p.level + ups;
     const mult = levelMult(lv);
+    const squad = st.squad ?? 1;
+    const sp = normSpacing(st.size, p.spacing);
     const prev = h('canvas');
     const stat = (label: string, v: string, up = false) => h('div', null, h('span', null, label), h('b', { class: up ? 'up' : null }, v));
     const parts = [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name, ...d.mounts.filter(Boolean).map((id) => MODULE_BY_ID.get(id!)?.name)].filter(Boolean).join(' · ');
@@ -347,18 +450,23 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       h('div.head', null, prev, h('div', null,
         h('h3', { class: mine ? 'friendly' : 'enemy' }, d.name),
         h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.8rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
+        squad > 1 ? h('div.squad-tag', null, `Squad ×${squad}`, h('span', null, ` · block ${st.cost}`)) : null,
         h('div.muted', { style: { fontSize: '0.8rem' } }, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · ${sizeLabel(st.size)}${st.flying ? ' · Air' : st.isStatic ? ' · Static' : ''}`),
       )),
       h('div.stats', null,
-        stat('HP', String(Math.round(st.hp * mult)), ups > 0),
-        stat('DPS', String(Math.round(st.dps * mult)), ups > 0),
+        stat(squad > 1 ? 'HP / unit' : 'HP', String(Math.round(st.hp * mult)), ups > 0),
+        stat(squad > 1 ? 'DPS / unit' : 'DPS', String(Math.round(st.dps * mult)), ups > 0),
+        squad > 1 ? stat('HP / block', String(Math.round(st.hp * mult * squad)), ups > 0) : null,
+        squad > 1 ? stat('DPS / block', String(Math.round(st.dps * mult * squad)), ups > 0) : null,
         stat('Armor', String(st.armor)),
         stat('Range', st.range ? fmtMeters(st.range) : '—'),
         stat('Speed', st.isStatic ? '—' : fmtSpeed(st.speed)),
-        stat('Cost', String(st.cost)),
+        stat(squad > 1 ? 'Block cost' : 'Cost', String(st.cost)),
+        squad > 1 ? stat('Unit value', String(st.unitCost)) : null,
         st.shield ? stat('Shield', String(st.shield)) : null,
         st.heal ? stat('Repair', `${st.heal}/s`) : null,
       ),
+      squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null)) : '',
       h('div.parts', null, parts),
       loadout.length ? h('div.loadout', null, h('div.lo-title', null, 'Loadout'), h('ul', null, ...loadout)) : '',
       actions.length ? h('div.actions', null, ...actions) : '',
@@ -434,22 +542,24 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const d = deck()[selCard];
     if (!d) return null;
     const size = sizeOf(d);
+    const spacing = spacingOfCard(d);
+    const cells = blockCells(size, spacing);
     let w: { x: number; y: number };
     try { w = view.screenToWorld(px, py); } catch { return null; }
-    const col = Math.round(w.x - size / 2), row = Math.round(w.y - size / 2);
-    let { x, y } = worldToLocalCell(side, col, row, size);
-    if (y > DEPLOY_D + 2 || y < -size - 1 || x < -size - 1 || x > DEPLOY_W + 1) return null; // far outside our zone
-    x = Math.max(0, Math.min(DEPLOY_W - size, x));
-    y = Math.max(0, Math.min(DEPLOY_D - size, y));
+    const col = Math.round(w.x - cells / 2), row = Math.round(w.y - cells / 2);
+    let { x, y } = worldToLocalCell(side, col, row, cells);
+    if (y > DEPLOY_D + 2 || y < -cells - 1 || x < -cells - 1 || x > DEPLOY_W + 1) return null; // far outside our zone
+    x = Math.max(0, Math.min(DEPLOY_W - cells, x));
+    y = Math.max(0, Math.min(DEPLOY_D - cells, y));
     let reason: string | null = null;
-    if (!inDeployZone(x, y, size)) reason = 'Outside your deploy zone';
+    if (!blockInZone(x, y, size, spacing)) reason = 'Outside your deploy zone';
     else if (costOf(d) > remaining()) reason = 'Not enough supply';
     else {
       const cand = action();
-      cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round });
+      cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round, ...(hasSpacing(size) ? { spacing } : {}) });
       reason = check(cand);
     }
-    return { x, y, size, valid: !reason, reason };
+    return { x, y, size, spacing, cells, valid: !reason, reason };
   }
 
   function placeAt(px: number, py: number) {
@@ -462,7 +572,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return;
     }
     const uid = nextUid++;
-    place.push({ uid, designId: d.id, x: hover.x, y: hover.y, level: 1, round: m.round });
+    place.push({ uid, designId: d.id, x: hover.x, y: hover.y, level: 1, round: m.round, ...(hasSpacing(hover.size) ? { spacing: hover.spacing } : {}) });
     ops.push({ kind: 'place', uid });
     sfx('place');
     if (costOf(d) > remaining()) { selCard = -1; hover = null; }
@@ -557,8 +667,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     try { w = view.screenToWorld(px, py); } catch { return null; }
     const hit = (s: Side, p: Placement) => {
       const size = sizeOf(designOf(s, p.designId));
-      const c = placementCenter(s, p, size);
-      return Math.abs(w.x - c.x) <= size / 2 && Math.abs(w.y - c.y) <= size / 2;
+      const r = size / 2 + 0.1;
+      return placementUnitCenters(s, p, size).some((c) => Math.abs(w.x - c.x) <= r && Math.abs(w.y - c.y) <= r);
     };
     if (phase === 'deploy') for (const p of place) if (hit(side, p)) return { side, uid: p.uid, pending: true };
     for (const p of me().board) if (hit(side, p)) return { side, uid: p.uid, pending: false };
@@ -577,6 +687,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
   });
   canvas.addEventListener('pointermove', (e) => {
+    const lp = local(e);
+    lastPtr = { px: lp.px, py: lp.py };
+    if ((phase === 'deploy' || phase === 'waiting') && (selCard < 0 || phase !== 'deploy') && e.pointerType === 'mouse') {
+      const hu = unitAt(lp.px, lp.rawY);
+      hoverUnit = hu && !(sel && hu.side === sel.side && hu.uid === sel.uid && hu.pending === sel.pending) ? hu : null;
+    } else hoverUnit = null;
     if (phase !== 'deploy' || selCard < 0) return;
     if (e.pointerType === 'touch' && !downAt) return;
     const { px, py } = local(e);
@@ -585,7 +701,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (prev?.x !== hover?.x || prev?.y !== hover?.y || prev?.valid !== hover?.valid) renderHint();
   });
   canvas.addEventListener('pointerleave', (e) => {
-    if (e.pointerType === 'mouse') { hover = null; renderHint(); }
+    if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; renderHint(); }
   });
   canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; });
   canvas.addEventListener('pointerup', (e) => {
@@ -622,6 +738,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       selectCard(Number(e.key) - 1);
       e.preventDefault();
+    } else if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (stepSpacing(e.key === ']' ? 1 : -1)) e.preventDefault();
     } else if (e.key === 'Escape') {
       if (selCard >= 0) { selCard = -1; hover = null; }
       else sel = null;
@@ -638,6 +756,23 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
   };
   document.addEventListener('keydown', onKey);
+
+  // Shift+wheel over the field changes squad spacing (captured here so the camera's wheel-zoom never sees it)
+  let wheelAt = 0;
+  const onWheel = (e: WheelEvent) => {
+    if (!e.shiftKey || phase !== 'deploy') return;
+    const d = deck()[selCard];
+    const can = (d && hasSpacing(sizeOf(d))) || (sel?.pending && sel.side === side);
+    if (!can) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const dy = e.deltaY || e.deltaX;
+    const now = performance.now();
+    if (!dy || now - wheelAt < 110) return;
+    wheelAt = now;
+    stepSpacing(dy < 0 ? 1 : -1);
+  };
+  fieldwrap.addEventListener('wheel', onWheel, { capture: true, passive: false });
 
   // ---------- phase machine ----------
   function setPhase(p: Phase) {
@@ -744,9 +879,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const add = (s: Side, p: Placement, extra: Partial<BoardUnit> = {}) => {
       const d = designOf(s, p.designId);
       if (!d) return;
-      const size = sizeOf(d);
-      const c = placementCenter(s, p, size);
-      out.push({ side: s, design: d, x: c.x, y: c.y, level: p.level, ...extra });
+      for (const c of placementUnitCenters(s, p, sizeOf(d))) out.push({ side: s, design: d, x: c.x, y: c.y, level: p.level, ...extra });
     };
     for (const p of foe().board) add(opp, p, { selected: sel?.side === opp && sel.uid === p.uid });
     for (const p of me().board) add(side, p, { level: Math.min(MAX_LEVEL, p.level + pendingUps(p.uid)), selected: sel?.side === side && !sel.pending && sel.uid === p.uid });
@@ -754,11 +887,25 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       for (const p of place) add(side, p, { selected: !!sel?.pending && sel.uid === p.uid });
       const d = deck()[selCard];
       if (hover && d) {
-        const c = placementCenter(side, hover, hover.size);
-        out.push({ side, design: d, x: c.x, y: c.y, level: 1, ghost: true, invalid: !hover.valid });
+        for (const c of placementUnitCenters(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size)) {
+          out.push({ side, design: d, x: c.x, y: c.y, level: 1, ghost: true, invalid: !hover.valid });
+        }
       }
     }
     return out;
+  }
+
+  /** footprint rectangle (world cells) of the selected / hovered block, drawn through the overlay hover */
+  function blockOutline(): BoardOverlay['hover'] {
+    const t = sel ?? hoverUnit;
+    if (!t) return null;
+    const p = t.pending ? place.find((x) => x.uid === t.uid) : m.players[t.side].board.find((x) => x.uid === t.uid);
+    const d = p && designOf(t.side, p.designId);
+    if (!p || !d) return null;
+    const size = sizeOf(d);
+    const cells = blockCells(size, p.spacing);
+    const wc = localToWorldCell(t.side, p.x, p.y, cells);
+    return { col: wc.col, row: wc.row, size: cells, valid: t.side === side };
   }
 
   let raf = 0;
@@ -788,9 +935,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       } else {
         let hov: BoardOverlay['hover'] = null;
         if (hover && phase === 'deploy') {
-          const wc = localToWorldCell(side, hover.x, hover.y, hover.size);
-          hov = { col: wc.col, row: wc.row, size: hover.size, valid: hover.valid };
-        }
+          const wc = localToWorldCell(side, hover.x, hover.y, hover.cells);
+          hov = { col: wc.col, row: wc.row, size: hover.cells, valid: hover.valid };
+        } else if (phase === 'deploy' || phase === 'waiting') hov = blockOutline();
         view.drawBoard(boardUnits(), { showZone: phase === 'deploy', hover: hov }, now / 1000);
       }
     } catch (e) {
@@ -823,6 +970,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       ro.disconnect();
       window.removeEventListener('resize', onResize);
       document.removeEventListener('keydown', onKey);
+      fieldwrap.removeEventListener('wheel', onWheel, true);
       unsub();
       driver.stop();
       try { view.destroy(); } catch { /* */ }

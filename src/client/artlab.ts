@@ -5,7 +5,7 @@
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
 import { aiDeck } from '../shared/ai.ts';
-import { DEPLOY_D, DEPLOY_W, inDeployZone, overlaps, placementCenter } from '../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, blockCells, blockInZone, hasSpacing, overlaps, placementUnitCenters } from '../shared/grid.ts';
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from '../shared/parts.ts';
 import { Battle } from '../shared/sim/battle.ts';
 import { TICK_RATE } from '../shared/sim/types.ts';
@@ -150,11 +150,13 @@ function placeUnits(deck: Design[], seed: number, count: number): Placement[] {
   let guard = 0;
   while (out.length < count && guard++ < 2000) {
     const d = pick(deck);
-    const s = computeStats(d).size;
+    const unit = computeStats(d).size;
+    const spacing = hasSpacing(unit) ? Math.floor(rnd() * 4) : 0;
+    const s = blockCells(unit, spacing);
     const x = Math.floor(rnd() * (DEPLOY_W - s + 1)), y = Math.floor(rnd() * (DEPLOY_D - s + 1));
-    if (!inDeployZone(x, y, s)) continue;
-    if (out.some((p) => overlaps(p.x, p.y, computeStats(deck.find((q) => q.id === p.designId)!).size, x, y, s))) continue;
-    out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rnd() * 3), round: 1 });
+    if (!blockInZone(x, y, unit, spacing)) continue;
+    if (out.some((p) => overlaps(p.x, p.y, blockCells(computeStats(deck.find((q) => q.id === p.designId)!).size, p.spacing), x, y, s))) continue;
+    out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rnd() * 3), round: 1, ...(spacing ? { spacing } : {}) });
   }
   return out;
 }
@@ -177,8 +179,7 @@ function fieldSection(): void {
     for (const s of [0, 1] as Side[]) {
       for (const p of units[s]) {
         const d = decks[s].find((q) => q.id === p.designId)!;
-        const c = placementCenter(s, p, computeStats(d).size);
-        board.push({ side: s, design: d, x: c.x, y: c.y, level: p.level });
+        for (const c of placementUnitCenters(s, p, computeStats(d).size)) board.push({ side: s, design: d, x: c.x, y: c.y, level: p.level });
       }
     }
     const input: BattleInput = { seed, sides: [{ designs: decks[0], units: units[0] }, { designs: decks[1], units: units[1] }] };

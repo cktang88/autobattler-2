@@ -13,8 +13,8 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { computeStats, levelMult, MAX_LEVEL, validateDesign } from './stats.ts';
-import { inDeployZone, overlaps } from './grid.ts';
+import { computeStats, levelMult, MAX_LEVEL, roundCost, validateDesign } from './stats.ts';
+import { MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps, squadSize } from './grid.ts';
 import { mixSeed } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import type { BattleInput } from './sim/types.ts';
@@ -22,14 +22,19 @@ import type { DeployAction, Design, MatchMode, MatchState, Placement, PlayerStat
 
 export const DECK_SIZE = 9;
 export const START_HP = 100;
+/** Supply granted in round 1 and added each further round. Unspent supply carries over. */
+export const START_SUPPLY = 1000;
 /** After this round resolves the match ends regardless; higher hp wins. */
 export const MAX_ROUNDS = 15;
-/** Hard cap on units per side (bounds simulation cost). */
+/** Hard cap on blocks (placements) per side. */
 export const MAX_UNITS = 40;
+export const MAX_BLOCKS = MAX_UNITS;
+/** Hard cap on simulated units per side, counting every unit of every squad (bounds simulation cost). */
+export const MAX_SIM_UNITS = 120;
 export const MAX_PLAYER_NAME = 24;
 
-const ROUND_SUPPLY_BASE = 300;
-const ROUND_SUPPLY_GROWTH = 50;
+const ROUND_SUPPLY_BASE = START_SUPPLY;
+const ROUND_SUPPLY_GROWTH = 200;
 
 /** Supply granted at the start of `round` (1-based). Unspent supply carries over. */
 export function supplyForRound(round: number): number {
@@ -44,16 +49,14 @@ export function totalSupplyThrough(round: number): number {
   return t;
 }
 
-const round5 = (n: number) => Math.ceil(n / 5) * 5;
-
-/** Supply cost of a design (same as computeStats().cost). */
+/** Supply cost of one BLOCK of a design (same as computeStats().cost; already rounded). */
 export function designCost(design: Design): number {
   return computeStats(design).cost;
 }
 
 /** Cost to raise a unit from `level` to `level + 1`: 50% of design cost for L1->2, 60% for L2->3. */
 export function upgradeCost(design: Design, level: number): number {
-  return round5(designCost(design) * (0.4 + 0.1 * level));
+  return roundCost(designCost(design) * (0.4 + 0.1 * level));
 }
 
 /** Total supply invested in a placement (design + upgrades up to its level). */
@@ -68,9 +71,12 @@ export function baseDamage(round: number): number {
   return 2 + round;
 }
 
-/** Damage contributed by one surviving enemy unit. */
-export function survivorDamage(design: Design, level: number): number {
-  return (designCost(design) * levelMult(level)) / 45;
+/** Survivor divisor: block value (supply) per point of damage. */
+const SURVIVOR_DIV = 150;
+
+/** Damage contributed by one surviving enemy block; `fraction` = share of its squad still alive (0..1]. */
+export function survivorDamage(design: Design, level: number, fraction = 1): number {
+  return (designCost(design) * levelMult(level) * fraction) / SURVIVOR_DIV;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -159,12 +165,13 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   if (!a || typeof a !== 'object') return 'Bad action';
   if (a.round !== m.round) return `Wrong round (expected ${m.round})`;
   if (!Array.isArray(a.place) || !Array.isArray(a.upgrade)) return 'Bad action';
-  if (p.board.length + a.place.length > MAX_UNITS) return `Too many units (max ${MAX_UNITS})`;
+  if (p.board.length + a.place.length > MAX_BLOCKS) return `Too many blocks (max ${MAX_BLOCKS})`;
 
   const designs = new Map(p.deck.map((d) => [d.id, d] as const));
   let cost = 0;
   const seenUids = new Set<number>(p.board.map((u) => u.uid));
-  const footprints: { x: number; y: number; s: number }[] = p.board.map((u) => ({ x: u.x, y: u.y, s: sizeOf(designs.get(u.designId)) }));
+  const footprints: { x: number; y: number; s: number }[] = p.board.map((u) => ({ x: u.x, y: u.y, s: blockCells(sizeOf(designs.get(u.designId)), u.spacing) }));
+  let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
 
   for (const pl of a.place) {
     if (!pl || typeof pl !== 'object') return 'Bad placement';
@@ -175,8 +182,15 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     seenUids.add(pl.uid);
     if (pl.level !== 1) return 'New units start at level 1';
     if (pl.round !== m.round) return 'Placement round mismatch';
-    const s = sizeOf(d);
-    if (!isInt(pl.x) || !isInt(pl.y) || !inDeployZone(pl.x, pl.y, s as 1 | 2 | 3)) return `${d.name} is outside the deploy zone`;
+    const size = sizeOf(d) as 1 | 2 | 3;
+    if (pl.spacing !== undefined) {
+      if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
+      if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
+    }
+    const s = blockCells(size, pl.spacing);
+    simUnits += squadSize(size);
+    if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
+    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing)) return `${d.name} is outside the deploy zone`;
     for (const f of footprints) if (overlaps(pl.x, pl.y, s, f.x, f.y, f.s)) return `${d.name} overlaps another unit`;
     footprints.push({ x: pl.x, y: pl.y, s });
     cost += designCost(d);
@@ -224,7 +238,10 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     if (u) u.level = Math.min(MAX_LEVEL, u.level + 1);
   }
   for (const pl of a.place) {
-    p.board.push({ uid: pl.uid, designId: pl.designId, x: pl.x, y: pl.y, level: 1, round: m.round });
+    const size = sizeOf(p.deck.find((d) => d.id === pl.designId));
+    const b: Placement = { uid: pl.uid, designId: pl.designId, x: pl.x, y: pl.y, level: 1, round: m.round };
+    if (hasSpacing(size)) b.spacing = normSpacing(size, pl.spacing);
+    p.board.push(b);
     p.nextUid = Math.max(p.nextUid, pl.uid + 1);
   }
   p.ready = true;
@@ -244,7 +261,7 @@ export function submitDeploy(m: MatchState, side: Side, a: DeployAction, now?: n
 }
 
 /** Damage each player takes given a battle outcome. Exported for UI previews / tests. */
-export function roundDamage(m: MatchState, round: number, winner: Side | -1, survivors: [number[], number[]], boards: [Placement[], Placement[]]): [number, number] {
+export function roundDamage(m: MatchState, round: number, winner: Side | -1, survivors: [number[], number[]], boards: [Placement[], Placement[]], aliveFraction?: [Record<number, number>, Record<number, number>]): [number, number] {
   const sv = (s: Side) => {
     const designs = new Map(m.players[s].deck.map((d) => [d.id, d] as const));
     const alive = new Set(survivors[s]);
@@ -252,7 +269,7 @@ export function roundDamage(m: MatchState, round: number, winner: Side | -1, sur
     for (const u of boards[s]) {
       if (!alive.has(u.uid)) continue;
       const d = designs.get(u.designId);
-      if (d) v += survivorDamage(d, u.level);
+      if (d) v += survivorDamage(d, u.level, aliveFraction?.[s][u.uid] ?? 1);
     }
     return v;
   };
@@ -278,7 +295,7 @@ export function resolveRound(m: MatchState, now?: number): void {
   };
   const sum = runBattle(input);
   const survivors: [number[], number[]] = [[...sum.survivors[0]], [...sum.survivors[1]]];
-  const damage = roundDamage(m, round, sum.winner, survivors, boards);
+  const damage = roundDamage(m, round, sum.winner, survivors, boards, sum.aliveFraction);
   m.players[0].hp = Math.max(0, m.players[0].hp - damage[0]);
   m.players[1].hp = Math.max(0, m.players[1].hp - damage[1]);
   m.history.push({ round, seed, boards, result: { winner: sum.winner, survivors, damage, ticks: sum.ticks } });
@@ -331,7 +348,9 @@ function sizeOf(d: Design | undefined): number {
   try { return computeStats(d).size; } catch { return 1; }
 }
 function clonePlacement(p: Placement): Placement {
-  return { uid: p.uid, designId: p.designId, x: p.x, y: p.y, level: p.level, round: p.round };
+  const c: Placement = { uid: p.uid, designId: p.designId, x: p.x, y: p.y, level: p.level, round: p.round };
+  if (p.spacing !== undefined) c.spacing = p.spacing;
+  return c;
 }
 function cloneDesign(d: Design): Design {
   return { id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] };
