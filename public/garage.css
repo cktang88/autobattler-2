@@ -337,6 +337,16 @@
 .garage .g-tgt.off::after { content: ''; position: absolute; left: 3px; right: 3px; top: 50%; height: 1.5px; background: #5b6875; transform: rotate(-35deg); }
 .garage .g-fx { font-size: 0.72rem; padding: 0 6px; border-radius: 9px; background: rgba(242, 169, 59, 0.1); border: 1px solid rgba(242, 169, 59, 0.38); color: #f7cf8f; line-height: 1.5; white-space: nowrap; }
 
+.garage .g-fire { font-size: 0.74rem; padding: 0 6px; border-radius: 3px; background: rgba(143, 179, 201, 0.12); border: 1px solid rgba(143, 179, 201, 0.4); color: #c4d7e4; line-height: 1.5; white-space: nowrap; }
+.garage .g-acc { display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem; white-space: nowrap; }
+.garage .g-acc-l { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.68rem; }
+.garage .g-acc-track { position: relative; width: 44px; height: 5px; border-radius: 3px; background: var(--g-panel3); overflow: hidden; }
+.garage .g-acc-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.garage .g-acc.hi .g-acc-fill { background: var(--g-accent); }
+.garage .g-acc.mid .g-acc-fill { background: var(--g-warn); }
+.garage .g-acc.lo .g-acc-fill { background: var(--g-bad); }
+.garage .g-acc b { color: var(--g-text); font-family: var(--g-head); font-size: 0.85rem; }
+
 /* picker */
 .garage .g-opts { border-top: 1px solid var(--g-line); background: rgba(0, 0, 0, 0.22); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .garage .g-tabs { display: flex; flex-wrap: wrap; gap: 4px; }

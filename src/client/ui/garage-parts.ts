@@ -1,7 +1,7 @@
 // Garage helpers: icons, labels, module stat summaries and a small modal dialog.
 
 import { h } from '../app.ts';
-import { weaponDps } from '../../shared/stats.ts';
+import { accuracyRating, firingStyle, weaponDps } from '../../shared/stats.ts';
 import type { ModuleDef, MoveKind } from '../../shared/types.ts';
 
 const ICONS: Record<string, string> = {
@@ -71,12 +71,13 @@ export function targetBadges(mod: ModuleDef): HTMLElement {
 /** Special-effect tags for a module (stun, burn, pierce...). */
 export function moduleEffects(mod: ModuleDef): string[] {
   const t: string[] = [];
-  if (mod.burst && mod.burst > 1) t.push(`burst ×${mod.burst}`);
   if (mod.pellets && mod.pellets > 1) t.push(`${mod.pellets} pellets`);
   if (mod.chain) t.push(`chain ${mod.chain}`);
   if (mod.pierce) t.push('pierce');
   if (mod.stun) t.push(`stun ${mod.stun}s`);
   if (mod.slow) t.push(`slow ${Math.round(mod.slow * 100)}%`);
+  if (mod.disarm) t.push(`disarm ${mod.disarm}s`);
+  if (mod.impulse) t.push(mod.impulse > 0 ? `knockback ${mod.impulse}` : `pull ${-mod.impulse}`);
   if (mod.burn) t.push(`burn ${mod.burn.dps}/s ${mod.burn.duration}s`);
   if (mod.airBonus && mod.airBonus !== 1) t.push(`×${mod.airBonus} vs air`);
   if (mod.falloff != null && mod.falloff < 1) t.push('falloff');
@@ -84,6 +85,43 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.rangeBonus) t.push(`+${Math.round(mod.rangeBonus * 100)}% unit range`);
   if (mod.spreadMult && mod.spreadMult < 1) t.push(`-${Math.round((1 - mod.spreadMult) * 100)}% spread`);
   return t;
+}
+
+const n1 = (v: number) => (Math.round(v * 10) / 10).toString();
+
+/** Firing pattern text, e.g. "Clip: 6 rds, 2.0s reload", "Salvo ×4 every 4s", "Sustained". */
+export function firingText(mod: ModuleDef): string {
+  if (mod.kind !== 'weapon') return '';
+  const style = firingStyle(mod);
+  const cd = mod.cooldown ?? 1;
+  const clip = mod.magazine && mod.reload ? `${mod.magazine} rds, ${mod.reload.toFixed(1)}s reload` : '';
+  if (style === 'Salvo') {
+    const n = (mod.burst ?? 1) * (mod.pellets ?? 1);
+    return `Salvo ×${n} every ${n1(cd)}s${clip ? ` · ${clip}` : ''}`;
+  }
+  if (style === 'Clip') return `Clip: ${clip}`;
+  if (style === 'Sustained') return `Sustained · ${n1(1 / cd)}/s`;
+  return `Single shot · every ${n1(cd)}s`;
+}
+
+/** "Hitscan" / "Guided" label for perfect-accuracy weapons, else null. */
+export function accuracyLabel(mod: ModuleDef): string | null {
+  const p = mod.projectile;
+  if (p === 'beam' || p === 'lightning' || p === 'rail') return 'Hitscan';
+  if (p === 'missile' && accuracyRating(mod) >= 100) return 'Guided';
+  return null;
+}
+
+/** Small accuracy meter. */
+export function accuracyBar(mod: ModuleDef): HTMLElement {
+  const a = accuracyRating(mod);
+  const lbl = accuracyLabel(mod);
+  const zone = a >= 80 ? 'hi' : a >= 55 ? 'mid' : 'lo';
+  return h('span.g-acc', { class: zone, title: `Accuracy ${a}/100${lbl ? ` (${lbl.toLowerCase()})` : ''}`, role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(a), 'aria-label': 'Accuracy' },
+    h('span.g-acc-l', null, 'acc'),
+    h('span.g-acc-track', null, h('span.g-acc-fill', { style: { width: `${a}%` } })),
+    h('b', null, lbl ?? String(a)),
+  );
 }
 
 /** Compact key stats line for a module. */
@@ -105,6 +143,9 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
     if (mod.hp) stat('hp', `+${mod.hp}`);
     if (mod.armor) stat('armor', `+${mod.armor}`);
   }
+  if (withEffects && mod.kind === 'weapon') {
+    out.append(h('span.g-fire', { title: 'Firing style' }, firingText(mod)), accuracyBar(mod));
+  }
   if (withEffects) {
     const fx = moduleEffects(mod).filter((t) => !t.startsWith('min rng'));
     for (const t of fx) out.append(h('span.g-fx', null, t));
@@ -122,6 +163,7 @@ export function moduleTooltip(mod: ModuleDef): string {
     if (mod.splash) extra.push(`splash ${mod.splash}`);
     if (mod.ap) extra.push(`${Math.round(mod.ap * 100)}% armor pierce`);
     lines.push(extra.join(' · '));
+    lines.push(`${firingText(mod)} · Accuracy ${accuracyLabel(mod) ?? accuracyRating(mod) + '/100'}`);
   }
   const fx = moduleEffects(mod);
   if (fx.length) lines.push(fx.join(' · '));

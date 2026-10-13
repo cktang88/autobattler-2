@@ -24,7 +24,7 @@ const DESIGNS: Design[] = [
   D('spire', 'warden', 'anchor', ['sam', 'mg']),
   D('hopper', 'raider', 'jumpjets', ['flamer', 'flamer']),
   D('zapper', 'raider', 'halftrack', ['stungun', 'mg']),
-  D('fortress', 'bastion', 'treads', ['plateH', 'plateM', 'plateM']),
+  D('fortress', 'bastion', 'treads', ['plateH', 'plateM', 'repairM']),
   D('fortgun', 'bastion', 'treads', ['plateH', 'plateM', 'autocannon']),
   D('rotorflak', 'drone', 'rotor', ['aamissile']),
 ];
