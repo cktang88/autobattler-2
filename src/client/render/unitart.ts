@@ -110,10 +110,20 @@ const GIANT_D: Record<MountClass, number> = { L: 0.4, M: 0.52, H: 0.68, G: 0.86,
 const layoutCache = new Map<string, UnitLayout>();
 export const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
 
+const layoutByObj = new WeakMap<Design, { mounts: (string | null)[]; L: UnitLayout }>();
+const sameMounts = (a: (string | null)[], b: (string | null | undefined)[]) => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== (b[i] ?? null)) return false;
+  return true;
+};
+
 export function layoutOf(d: Design): UnitLayout {
+  const hit = layoutByObj.get(d);
+  // designs are plain data; re-check the key cheaply in case a caller mutated the object
+  if (hit && hit.L.chassis.id === d.chassis && hit.L.mob.id === d.mobility && sameMounts(hit.mounts, d.mounts)) return hit.L;
   const key = designKey(d);
   let L = layoutCache.get(key);
-  if (L) return L;
+  if (L) { layoutByObj.set(d, { mounts: d.mounts.map((m) => m ?? null), L }); return L; }
   const chassis = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get('scout')!;
   const mob = MOBILITY_BY_ID.get(d.mobility) ?? MOBILITY_BY_ID.get('wheels')!;
   const S = chassis.size;
@@ -155,6 +165,7 @@ export function layoutOf(d: Design): UnitLayout {
     cycle: mob.id === 'titanlegs' ? 0.7 * S : mob.id === 'megatracks' ? 0.06 * S : mob.id === 'legs' ? 0.75 * S : mob.id === 'spider' ? 0.55 * S : mob.id === 'jumpjets' ? 0.8 * S : mob.id === 'treads' || mob.id === 'halftrack' ? 0.09 * S : 0.06 * S,
   };
   layoutCache.set(key, L);
+  layoutByObj.set(d, { mounts: d.mounts.map((m) => m ?? null), L });
   return L;
 }
 
@@ -830,7 +841,7 @@ export interface UnitSprites {
 
 const spriteCache = new Map<string, UnitSprites>();
 /** below this many device px per cell, animated parts are baked into the static hull sprite */
-const PART_LOD_PX = 12;
+const PART_LOD_PX = 14;
 const turretCache = new Map<string, HTMLCanvasElement>();
 const MAX_SPRITES = 400;
 
@@ -1133,11 +1144,12 @@ export interface ViewDirs {
 export const DEFAULT_DIRS: ViewDirs = { sx: 0.6, sy: 0.8, ux: 0, uy: -1 };
 
 function blit(g: Ctx, c: HTMLCanvasElement, x: number, y: number, ang: number, ext: number, scale = 1): void {
-  const cs = Math.cos(ang) * scale, sn = Math.sin(ang) * scale;
-  const t = g.getTransform();
-  g.transform(cs, sn, -sn, cs, x, y);
+  // apply the rotation, draw, then apply the exact inverse (cheaper than get/setTransform, no DOMMatrix garbage)
+  const cs = Math.cos(ang), sn = Math.sin(ang);
+  g.transform(cs * scale, sn * scale, -sn * scale, cs * scale, x, y);
   g.drawImage(c, -ext, -ext, ext * 2, ext * 2);
-  g.setTransform(t);
+  const k = 1 / scale;
+  g.transform(cs * k, -sn * k, sn * k, cs * k, -(cs * x + sn * y) * k, -(-sn * x + cs * y) * k);
 }
 
 /** Visual altitude (cells) for a pose: flyers hover, leapers arc. */
