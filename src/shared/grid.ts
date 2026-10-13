@@ -58,12 +58,12 @@ export const fmtSpeed = (cellsPerSec: number) => `${Math.round(cellsPerSec * MET
 //   size-1 designs -> a squad of 16 light units in an 8-wide x 2-deep rectangle (SQUAD_LAYOUT)
 //   size-2+ designs -> a single unit (footprint size x size cells)
 // Squads have a player-chosen SPACING of 0..MAX_SPACING empty cells between neighbouring units, so a
-// squad's footprint is (8 + 7s) x (2 + s) cells: packed 40 m x 10 m up to spread 180 m x 30 m.
+// squad's footprint is (8 + 7s) x (2 + s) cells: packed 40 m x 10 m up to spread 110 m x 20 m.
 // Footprints are RECTANGLES: w = across the field (local x), h = depth (local y). Placement.x/.y is the
 // block's top-left local cell. One Placement = one block; all its units share its uid and level.
 // ---------------------------------------------------------------------------------------------
 
-export const MAX_SPACING = 4;
+export const MAX_SPACING = 2;
 
 /** squad formation (cols across, rows deep) per chassis size */
 export const SQUAD_LAYOUT: Record<Size, [number, number]> = { 1: [8, 2], 2: [1, 1], 3: [1, 1], 4: [1, 1], 5: [1, 1] };

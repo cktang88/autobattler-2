@@ -267,7 +267,7 @@ export interface Placement {
   level: number;
   /** round it was placed in */
   round: number;
-  /** squads only: empty cells between neighbouring units in the block (0..MAX_SPACING, default 0). See grid.ts */
+  /** squads only: empty cells between neighbouring units in the block (0..MAX_SPACING = 2, default 0). See grid.ts */
   spacing?: number;
   /** targeting priority for every unit in the block (default 'closest'). Hidden from the opponent until the round resolves. */
   target?: TargetPriority;
