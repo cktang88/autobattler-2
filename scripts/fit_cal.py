@@ -21,9 +21,11 @@ MODS = {}
 src = open(f'{REPO}/src/shared/parts.ts').read()
 for m in re.finditer(r"(wpn|util)\(\{ id: '(\w+)'", src):
     MODS[m.group(2)] = m.group(1)
+chf = f'{FIT}/chassis.json'
 calf, szf, mbf = f'{FIT}/cal.json', f'{FIT}/sizek.json', f'{FIT}/mobcal.json'
 cal = json.load(open(calf)) if os.path.exists(calf) else {}
 sizek = json.load(open(szf)) if os.path.exists(szf) else [1, 1, 1, 1, 1]
+chk = json.load(open(chf)) if os.path.exists(chf) else {}
 mobcal = json.load(open(mbf)) if os.path.exists(mbf) else {}
 iters = int(sys.argv[1])
 seeds = sys.argv[2] if len(sys.argv) > 2 else '3'
@@ -41,7 +43,7 @@ def lg(r):
 
 
 for it in range(iters):
-    env = dict(os.environ, BAL_CAL=json.dumps(cal), BAL_SIZEK=json.dumps(sizek), BAL_MOBCAL=json.dumps(mobcal), BAL_OUT=f'{FIT}/r.json')
+    env = dict(os.environ, BAL_CAL=json.dumps(cal), BAL_SIZEK=json.dumps(sizek), BAL_MOBCAL=json.dumps(mobcal), BAL_CHASSIS=json.dumps(chk), BAL_OUT=f'{FIT}/r.json')
     subprocess.run(['node', 'scripts/balance.ts', 'army', seeds], cwd=REPO, env=env, stdout=open(f'{FIT}/b.txt', 'w'), check=True)
     rows = json.load(open(f'{FIT}/r.json'))
     baserate = {r['carrier']: r['rate'] for r in rows if r['base']}
@@ -105,6 +107,21 @@ for it in range(iters):
             continue
         step = max(-0.1, min(0.1, ETA['m'] * s / (w + 1.0)))
         mobcal[k] = max(0.4, min(2.5, mobcal.get(k, 1.0) * math.exp(step)))
+    # hull hp scale (FIT_CHASSIS=1): plain-frame mean logit of each chassis relative to the mean of its size class.
+    # Price follows sqrt(hp) while strength follows hp, so net strength-per-supply moves as sqrt(q).
+    if os.environ.get('FIT_CHASSIS') == '1':
+        bysize = collections.defaultdict(list)
+        for c, ls in chl.items():
+            sz = next(r['size'] for r in fr if r['chassis'] == c)
+            bysize[sz].append(sum(ls) / len(ls))
+        for c, ls in chl.items():
+            sz = next(r['size'] for r in fr if r['chassis'] == c)
+            res = sum(ls) / len(ls) - sum(bysize[sz]) / len(bysize[sz])
+            res *= len(ls) / (len(ls) + 1.0)
+            if abs(res) < 0.12:
+                continue
+            step = max(-0.15, min(0.15, -0.45 * res))
+            chk[c] = max(0.5, min(2.0, chk.get(c, 1.0) * math.exp(step)))
     mm = collections.defaultdict(list)
     for r in rows:
         if r['module'] and not r['base']:
@@ -115,3 +132,4 @@ for it in range(iters):
     json.dump(cal, open(calf, 'w'))
     json.dump(sizek, open(szf, 'w'))
     json.dump(mobcal, open(mbf, 'w'))
+    json.dump(chk, open(chf, 'w'))

@@ -1,7 +1,10 @@
-// Odd-shaped frames: insectoid, humanoid mech, spider, crab, saucer, delta wing, scorpion, centipede and the giant
-// spiders. Each shape has a smooth organic hull outline, hull details, and "parts": separately baked sprites with
-// a pivot (limbs, claws, tail segments, body segments, a rotating ring) that are animated per frame and may carry
-// turrets. Also: the spider / insect / centipede leg rig used by the 'spider' mobility at every size.
+// Odd-shaped frames: mantis / arachnid / crab / scorpion / centipede walkers, humanoid mechs, saucer, delta wing and
+// the giant spider walkers. Art direction: these are MECHANICAL war machines that only borrow a creature's layout
+// (think Zero-K spiders, Mechabellum crawlers, Battletech / Horizon machines) - faceted armour plates, panel seams,
+// rivets, vents, exhausts, cable bundles, hydraulic rams on the joints, sensor clusters / visors instead of eyes,
+// steel grippers and cutters instead of fangs, fuel cells instead of egg sacs. Each shape has a hull outline, hull
+// details, and "parts": separately baked sprites with a pivot (arms, clamps, tail modules, body modules, a rotating
+// ring) that are animated per frame and may carry turrets. Also: the walker leg rig used by the 'spider' mobility.
 // Local frame: nose +x, +y right, units = cells, S = chassis size.
 
 import { METAL, OUTLINE, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type TeamPal } from './palette.ts';
@@ -91,39 +94,6 @@ function fillOut(g: Ctx, p: Path2D, fill: string | CanvasGradient, o: number): v
   g.lineWidth = o;
   g.strokeStyle = OUTLINE;
   g.stroke(p);
-}
-
-/** Glassy eye: dark socket, emissive iris, specular. */
-function eye(g: Ctx, x: number, y: number, r: number, E: string): void {
-  dot(g, x, y, r * 1.25, OUTLINE);
-  const gr = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-  gr.addColorStop(0, '#ffffff');
-  gr.addColorStop(0.35, E);
-  gr.addColorStop(1, shade(E, -0.6));
-  dot(g, x, y, r, gr);
-  dot(g, x - r * 0.35, y - r * 0.35, r * 0.28, 'rgba(255,255,255,0.85)');
-}
-
-/** Curved chitin band seams across a body (clipped to path). xs fractions of S, bow > 0 bows toward the tail. */
-function bands(g: Ctx, path: Path2D, xs: number[], S: number, o: number, bow = 0.04, w = 0.5): void {
-  g.save();
-  g.clip(path);
-  g.lineCap = 'round';
-  for (const x of xs) {
-    g.beginPath();
-    g.moveTo(x * S, -0.6 * S);
-    g.quadraticCurveTo((x - bow) * S, 0, x * S, 0.6 * S);
-    g.strokeStyle = 'rgba(0,0,0,0.42)';
-    g.lineWidth = o * w * 1.4;
-    g.stroke();
-    g.save();
-    g.translate(-o * 0.7, 0);
-    g.strokeStyle = 'rgba(255,255,255,0.14)';
-    g.lineWidth = o * w;
-    g.stroke();
-    g.restore();
-  }
-  g.restore();
 }
 
 function stripe(g: Ctx, pts: number[], S: number, col: string, w: number): void {
@@ -320,14 +290,14 @@ function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
 
 export function creatureHullPath(shape: string, S: number): Path2D | null {
   switch (shape) {
-    case 'mantis': return sharp([0.47, 0, 0.46, -0.055, 0.42, -0.11, 0.34, -0.115, 0.3, -0.06, 0.26, -0.05, 0.21, -0.075, 0.06, -0.075, 0.02, -0.055, -0.04, -0.06, -0.1, -0.14, -0.38, -0.14, -0.46, -0.09, -0.47, 0], S);
+    case 'mantis': return profilePath([0.48, 0, 0.46, 0.05, 0.4, 0.09, 0.33, 0.08, 0.28, 0.04, 0.2, 0.05, 0.08, 0.06, -0.02, 0.06, -0.1, 0.11, -0.26, 0.13, -0.4, 0.1, -0.47, 0], S);
     case 'mech': return sharp([0.24, 0, 0.235, -0.09, 0.19, -0.19, 0.1, -0.27, -0.1, -0.28, -0.2, -0.22, -0.26, -0.12, -0.27, 0], S);
-    case 'arachnid': return sharp([0.44, 0, 0.43, -0.06, 0.37, -0.13, 0.27, -0.16, 0.16, -0.15, 0.1, -0.08, 0.06, -0.09, 0.0, -0.19, -0.1, -0.25, -0.34, -0.25, -0.44, -0.17, -0.48, -0.06, -0.48, 0], S);
-    case 'crab': return sharp([0.27, 0, 0.27, -0.1, 0.22, -0.26, 0.12, -0.37, 0.0, -0.41, -0.14, -0.39, -0.24, -0.3, -0.3, -0.16, -0.3, 0], S);
+    case 'arachnid': return profilePath([0.45, 0, 0.43, 0.06, 0.36, 0.12, 0.25, 0.14, 0.15, 0.11, 0.08, 0.06, 0.02, 0.1, -0.08, 0.2, -0.22, 0.245, -0.36, 0.22, -0.45, 0.13, -0.48, 0], S);
+    case 'crab': return sharp([0.27, 0, 0.27, -0.16, 0.24, -0.3, 0.16, -0.38, -0.16, -0.4, -0.25, -0.34, -0.3, -0.22, -0.3, 0], S);
     case 'saucer': { const p = new Path2D(); p.arc(0, 0, 0.44 * S, 0, P2); return p; }
     case 'delta': { const p = new Path2D(); poly(p, mirrorPoly([0.5, 0, 0.3, -0.075, -0.27, -0.46, -0.39, -0.46, -0.34, -0.31, -0.45, -0.22, -0.47, -0.1, -0.41, 0]), S); return p; }
     case 'warlord': return sharp([0.25, 0, 0.245, -0.1, 0.2, -0.2, 0.1, -0.27, -0.11, -0.27, -0.22, -0.21, -0.28, -0.12, -0.29, 0], S);
-    case 'scorpion': return sharp([0.39, 0, 0.38, -0.07, 0.33, -0.15, 0.24, -0.2, 0.08, -0.23, -0.08, -0.22, -0.2, -0.18, -0.3, -0.12, -0.36, -0.06, -0.36, 0], S);
+    case 'scorpion': return sharp([0.39, 0, 0.38, -0.08, 0.32, -0.16, 0.24, -0.2, 0.22, -0.23, -0.24, -0.23, -0.3, -0.17, -0.36, -0.1, -0.36, 0], S);
     case 'centipede': return sharp([0.5, 0, 0.49, -0.05, 0.45, -0.11, 0.38, -0.13, 0.32, -0.11, 0.29, 0], S);
     case 'broodmother': return sharp([0.47, 0, 0.46, -0.07, 0.4, -0.14, 0.29, -0.17, 0.19, -0.15, 0.13, -0.09, 0.08, -0.12, 0.0, -0.25, -0.12, -0.34, -0.33, -0.36, -0.44, -0.28, -0.5, -0.14, -0.5, 0], S);
     case 'carriage': return profilePath([0.25, 0, 0.245, 0.1, 0.21, 0.22, 0.15, 0.265, 0.09, 0.22, 0.07, 0.12, -0.08, 0.1, -0.15, 0.05, -0.16, 0], S);
@@ -337,7 +307,7 @@ export function creatureHullPath(shape: string, S: number): Path2D | null {
     case 'siegeplat': return sharp([0.38, -0.1, 0.32, -0.27, 0.2, -0.33, -0.28, -0.33, -0.38, -0.25, -0.4, -0.1], S);
     case 'juggernaut': return sharp([0.47, -0.17, 0.44, -0.3, 0.38, -0.43, -0.38, -0.45, -0.46, -0.38, -0.48, -0.16], S);
     case 'bomber': return sharp([0.46, 0, 0.3, -0.115, -0.05, -0.47, -0.2, -0.47, -0.27, -0.37, -0.35, -0.41, -0.45, -0.29, -0.4, -0.18, -0.46, -0.07, -0.42, 0], S);
-    case 'arachne': { const p = new Path2D(); poly(p, mirrorPoly([0.49, 0, 0.46, -0.07, 0.4, -0.14, 0.3, -0.19, 0.2, -0.18, 0.13, -0.11, 0.08, -0.12, 0.02, -0.2, -0.08, -0.28, -0.22, -0.33, -0.36, -0.31, -0.45, -0.23, -0.5, -0.11, -0.5, 0]), S); return p; }
+    case 'arachne': return profilePath([0.49, 0, 0.47, 0.07, 0.41, 0.14, 0.31, 0.18, 0.2, 0.17, 0.13, 0.11, 0.07, 0.13, -0.02, 0.22, -0.14, 0.3, -0.3, 0.32, -0.43, 0.25, -0.5, 0.12, -0.51, 0], S);
   }
   return null;
 }
@@ -350,7 +320,7 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
       // whip radio mast off the power pack
       g.lineCap = 'round';
       g.strokeStyle = OUTLINE; g.lineWidth = 0.03 * S;
-      g.beginPath(); g.moveTo(-0.3 * S, -0.1 * S); g.lineTo(-0.56 * S, -0.17 * S); g.stroke();
+      g.beginPath(); g.moveTo(-0.3 * S, -0.1 * S); g.lineTo(-0.47 * S, -0.16 * S); g.stroke();
       g.strokeStyle = METAL.light; g.lineWidth = 0.012 * S; g.stroke();
       dot(g, -0.3 * S, -0.1 * S, 0.028 * S, METAL.dark);
       break;
@@ -358,17 +328,8 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
       // periscope sensor booms + armoured skirt plates around the rim
       for (const s of [-1, 1]) {
         beam(g, 0.2 * S, s * 0.08 * S, 0.026 * S, 0.33 * S, s * 0.11 * S, 0.022 * S, METAL.light, METAL.dark, o);
-        for (const [x, y, a] of [[0.24, 0.2, -0.5], [0.17, 0.31, -0.8], [0.06, 0.39, -1.2], [-0.08, 0.4, -1.7], [-0.19, 0.33, -2.2]]) fin(g, x * S, s * y * S, s * a, 0.06 * S, 0.04 * S, shade(pal.dark, -0.05), o);
       }
       break;
-    case 'scorpion':
-      for (const s of [-1, 1]) for (const [x, y] of [[0.16, 0.2], [0.02, 0.225], [-0.12, 0.2]]) fin(g, x * S, s * y * S, s * 1.5, 0.045 * S, 0.035 * S, shade(pal.dark, -0.1), o);
-      break;
-    case 'arachne': {
-      // ablative armour fins along the rear module rim
-      for (const s of [-1, 1]) for (const [x, y, a] of [[-0.1, 0.28, 1.2], [-0.24, 0.33, 1.6], [-0.38, 0.3, 2.1], [-0.47, 0.2, 2.6], [0.02, 0.2, 0.9]]) fin(g, x * S, s * y * S, s * a, 0.07 * S, 0.04 * S, shade(pal.deep, 0.1), o);
-      break;
-    }
     case 'carriage':
       // split trail arms with spades, axle beam
       for (const s of [-1, 1]) {
@@ -418,26 +379,18 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
   const lite = shade(pal.body, 0.18);
   switch (L.shape) {
     case 'mantis': {
-      // rear power pack: armoured engine module with exhausts
-      const pack = sharp([-0.06, 0, -0.11, -0.115, -0.36, -0.115, -0.43, -0.07, -0.44, 0], S);
-      raised(g, pack, grad(g, S, shade(pal.light, 0.05), pal.dark, -0.1, -0.12, -0.4, 0.12), o, S, 1, 0.01, 0.45);
-      seam(g, [-0.2, -0.11, -0.2, 0.11, -0.31, -0.11, -0.31, 0.11], S, t);
-      vent(g, -0.255, 0, 0.08, 0.06, S, o);
-      for (const s of [-1, 1]) {
-        stripe(g, [-0.12, s * 0.1, -0.35, s * 0.1], S, pal.accent, o * 0.8);
-        stack(g, -0.43 * S, s * 0.075 * S, 0.02 * S, o * 0.6);
-      }
-      hazard(g, -0.445 * S, -0.03 * S, 0.02 * S, 0.06 * S, o, true);
-      // spine: torso plate + cable bundle to the pack
-      cables(g, [0.06, 0, -0.1, 0], S, 0.016 * S, 2);
-      raised(g, roundedRect(0.03, -0.055, 0.2, 0.11, 0.015, S), grad(g, S, shade(pal.light, 0.1), pal.body, 0.05, -0.05, 0.2, 0.05), o, S, 0.8, 0.008, 0.4);
-      rivetRow(g, 0.06 * S, -0.03 * S, 0.2 * S, -0.03 * S, 3, 0.008 * S);
-      rivetRow(g, 0.06 * S, 0.03 * S, 0.2 * S, 0.03 * S, 3, 0.008 * S);
-      // sensor head: armoured block, visor strip, twin camera lenses
-      const hd = sharp([0.465, 0, 0.455, -0.05, 0.415, -0.1, 0.345, -0.1, 0.31, -0.05, 0.305, 0], S);
-      raised(g, hd, grad(g, S, shade(pal.light, 0.12), pal.dark, 0.3, -0.1, 0.46, 0.1), o, S, 1, 0.01, 0.4);
-      visor(g, 0.44 * S, -0.045 * S, 0.44 * S, 0.045 * S, 0.011 * S, E, o);
-      for (const s of [-1, 1]) lens(g, 0.375 * S, s * 0.055 * S, 0.022 * S, E);
+      // lanky alien strider: smooth power core, slender spine, sleek sensor head
+      const pack = profilePath([-0.05, 0, -0.1, 0.1, -0.24, 0.12, -0.38, 0.09, -0.45, 0], S);
+      floatGap(g, pack, E, o, S);
+      sleekShell(g, pack, pal, o, S, -0.1, -0.12, -0.4, 0.12);
+      seamGlow(g, [-0.09, -0.07, -0.25, -0.12, -0.42, -0.04, -0.09, 0.07, -0.25, 0.12, -0.42, 0.04], S, E, o * 0.8);
+      cables(g, [0.06, 0, -0.08, 0], S, 0.014 * S, 2);
+      const sp = profilePath([0.25, 0, 0.22, 0.04, 0.12, 0.05, 0.03, 0.04, 0.01, 0], S);
+      sleekShell(g, sp, pal, o, S, 0.02, -0.05, 0.24, 0.05);
+      const hd = profilePath([0.47, 0, 0.455, 0.045, 0.41, 0.085, 0.35, 0.08, 0.31, 0.04, 0.3, 0], S);
+      sleekShell(g, hd, pal, o, S, 0.3, -0.09, 0.47, 0.09);
+      seamGlow(g, [0.42, -0.06, 0.465, 0, 0.42, 0.06], S, E, o * 1.4);
+      void t;
       break;
     }
     case 'mech': {
@@ -466,14 +419,20 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     case 'crab': {
       // armoured carapace plate with straight panel lines, rivets, rear exhausts, front sensor visor
-      const inner = sharp([0.2, 0, 0.2, -0.08, 0.16, -0.2, 0.08, -0.29, -0.02, -0.32, -0.12, -0.3, -0.19, -0.23, -0.23, -0.12, -0.23, 0], S);
+      const inner = sharp([0.2, 0, 0.2, -0.12, 0.17, -0.22, 0.11, -0.28, -0.12, -0.3, -0.19, -0.25, -0.23, -0.16, -0.23, 0], S);
       raised(g, inner, grad(g, S, shade(pal.light, 0.05), pal.dark), o, S, 1.2, 0.012, 0.5);
       seam(g, [0.2, 0, -0.23, 0], S, t);
       g.save(); g.clip(inner);
       seam(g, [0.08, -0.29, 0.02, -0.06, 0.08, 0.29, 0.02, 0.06, -0.19, -0.23, -0.1, -0.05, -0.19, 0.23, -0.1, 0.05], S, t);
       g.restore();
       for (const s of [-1, 1]) {
-        stripe(g, [0.14, s * 0.3, -0.02, s * 0.375], S, pal.accent, o * 1.1);
+        // bolted side skirt slabs: bunker armour
+        for (const [x0, x1] of [[0.18, 0.04], [0.02, -0.12], [-0.14, -0.26]]) {
+          const sk = sharp([x0, s * 0.31, x0 - 0.01, s * 0.395, x1 + 0.01, s * 0.395, x1, s * 0.31], S);
+          bevel(g, sk, grad(g, S, shade(pal.light, -0.15), pal.dark, x1, s * 0.3, x0, s * 0.4), o, 0.8);
+          rivetRow(g, (x0 - 0.02) * S, s * 0.355 * S, (x1 + 0.02) * S, s * 0.355 * S, 3, 0.009 * S);
+        }
+        stripe(g, [0.14, s * 0.29, -0.02, s * 0.3], S, pal.accent, o * 1.1);
         rivetRow(g, 0.17 * S, s * 0.13 * S, 0.06 * S, s * 0.28 * S, 4, 0.01 * S);
         rivetRow(g, -0.06 * S, s * 0.3 * S, -0.18 * S, s * 0.22 * S, 3, 0.01 * S);
         vent(g, -0.15, s * 0.14, 0.06, 0.08, S, o);
@@ -550,7 +509,16 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     }
     case 'scorpion': {
-      plateSeams(g, hull, [0.18, 0.06, -0.06, -0.16, -0.25], S, o, 0.7);
+      plateSeams(g, hull, [0.04, -0.2], S, o, 0.7);
+      // side armour sponsons
+      for (const s of [-1, 1]) {
+        const sp = sharp([0.16, 0, 0.14, -0.04, 0.12, -0.045, -0.22, -0.045, -0.26, -0.02, -0.26, 0], S);
+        g.save(); g.translate(0, s * 0.155 * S);
+        raised(g, sp, grad(g, S, shade(pal.light, -0.02), pal.dark, 0, -0.05, 0, 0.05), o, S, 0.9, 0.008, 0.4);
+        seam(g, [-0.05, -0.04, -0.05, 0.04], S, t);
+        rivetRow(g, 0.1 * S, 0, -0.2 * S, 0, 5, 0.008 * S);
+        g.restore();
+      }
       // armoured spine plate down the back
       raised(g, roundedRect(-0.3, -0.06, 0.46, 0.12, 0.02, S), grad(g, S, shade(pal.light, 0.02), pal.dark, -0.3, -0.06, 0.1, 0.06), o, S, 0.9, 0.01, 0.4);
       rivetRow(g, -0.27 * S, -0.04 * S, 0.12 * S, -0.04 * S, 6, 0.009 * S);
@@ -562,7 +530,7 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       visor(g, 0.335 * S, -0.06 * S, 0.335 * S, 0.06 * S, 0.012 * S, E, o);
       for (const s of [-1, 1]) {
         lens(g, 0.27 * S, s * 0.11 * S, 0.018 * S, E);
-        stripe(g, [0.1, s * 0.19, -0.18, s * 0.16], S, pal.accent, o * 1.0);
+        stripe(g, [0.1, s * 0.205, -0.18, s * 0.19], S, pal.accent, o * 1.0);
         stack(g, -0.33 * S, s * 0.06 * S, 0.022 * S, o * 0.7);
       }
       hazard(g, 0.2 * S, -0.025 * S, 0.03 * S, 0.05 * S, o, true);
@@ -698,19 +666,292 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       seam(g, [0.36, 0, 0.42, 0], S, t);
       break;
     }
+  }
+}
+
+function roundedRect(x: number, y: number, w: number, h: number, r: number, S: number): Path2D {
+  const p = new Path2D();
+  roundRect(p, x * S, y * S, w * S, h * S, r * S);
+  return p;
+}
+function vent(g: Ctx, x: number, y: number, w: number, h: number, S: number, o: number): void {
+  const p = roundedRect(x - w / 2, y - h / 2, w, h, Math.min(w, h) * 0.2, S);
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fill(p);
+  g.strokeStyle = 'rgba(255,255,255,0.2)'; g.lineWidth = o * 0.35;
+  g.beginPath();
+  const horiz = w > h, n = 4;
+  for (let i = 1; i < n; i++) {
+    if (horiz) { const xx = (x - w / 2 + (w * i) / n) * S; g.moveTo(xx, (y - h * 0.35) * S); g.lineTo(xx, (y + h * 0.35) * S); }
+    else { const yy = (y - h / 2 + (h * i) / n) * S; g.moveTo((x - w * 0.35) * S, yy); g.lineTo((x + w * 0.35) * S, yy); }
+  }
+  g.stroke();
+}
+function circPath(x: number, y: number, r: number, S: number): Path2D { return circ(x, y, r, S); }
+
+/** Sensor cluster: dark recessed housing with a visor bar and a lens array (cells, fractions of S). */
+function sensorCluster(g: Ctx, x: number, hw: number, S: number, E: string, o: number, big: boolean): void {
+  const hous = sharp([x + 0.025, -hw * 0.55, x + 0.01, -hw, x - 0.05, -hw, x - 0.065, -hw * 0.5, x - 0.065, 0], S);
+  recess(g, hous, o, '#0a0d10');
+  visor(g, (x + 0.004) * S, -hw * 0.62 * S, (x + 0.004) * S, hw * 0.62 * S, 0.009 * S, E, o);
+  lens(g, (x - 0.035) * S, 0, (big ? 0.02 : 0.022) * S, E);
+  for (const s of [-1, 1]) {
+    lens(g, (x - 0.03) * S, s * hw * 0.62 * S, 0.013 * S, E);
+    if (big) lens(g, (x - 0.05) * S, s * hw * 0.3 * S, 0.009 * S, E);
+  }
+}
+
+/** Sleek alien shell: polished team-tinted metal, broad specular sweep, crisp outline. */
+function sleekShell(g: Ctx, p: Path2D, pal: TeamPal, o: number, S: number, x0: number, y0: number, x1: number, y1: number): void {
+  const gr = g.createLinearGradient(x0 * S, y0 * S, x1 * S, y1 * S);
+  gr.addColorStop(0, shade(pal.light, 0.05)); gr.addColorStop(0.35, pal.body); gr.addColorStop(1, shade(pal.deep, 0.1));
+  ao(g, p, S, 0.02, 0.6);
+  g.fillStyle = gr; g.fill(p);
+  g.save(); g.clip(p);
+  const sp = g.createLinearGradient(x0 * S, y0 * S, x1 * S, y1 * S);
+  sp.addColorStop(0, 'rgba(255,255,255,0)'); sp.addColorStop(0.3, 'rgba(255,255,255,0.32)'); sp.addColorStop(0.42, 'rgba(255,255,255,0)');
+  g.fillStyle = sp; g.fill(p);
+  g.lineWidth = o * 3; g.strokeStyle = 'rgba(0,0,0,0.35)'; g.stroke(p);
+  g.restore();
+  g.lineWidth = o; g.lineJoin = 'round'; g.strokeStyle = OUTLINE; g.stroke(p);
+}
+
+/** Curved glowing seams: [x0, y0, cx, cy, x1, y1, ...] fractions of S. */
+function seamGlow(g: Ctx, q: number[], S: number, E: string, w: number): void {
+  g.lineCap = 'round';
+  for (const [col, lw] of [['rgba(0,0,0,0.6)', w * 2.2], [rgba(E, 0.95), w], ['rgba(255,255,255,0.7)', w * 0.35]] as [string, number][]) {
+    g.strokeStyle = col; g.lineWidth = lw;
+    g.beginPath();
+    for (let i = 0; i < q.length; i += 6) { g.moveTo(q[i] * S, q[i + 1] * S); g.quadraticCurveTo(q[i + 2] * S, q[i + 3] * S, q[i + 4] * S, q[i + 5] * S); }
+    g.stroke();
+  }
+}
+
+/** Levitating core module: dark gap ring with an emissive underglow, then the shell floating above it. */
+function floatGap(g: Ctx, p: Path2D, E: string, o: number, S: number): void {
+  g.save();
+  g.lineJoin = 'round';
+  g.strokeStyle = rgba(E, 0.35); g.lineWidth = 0.05 * S; g.stroke(p);
+  g.strokeStyle = '#05080b'; g.lineWidth = 0.025 * S; g.stroke(p);
+  g.strokeStyle = rgba(E, 0.8); g.lineWidth = o * 0.7; g.stroke(p);
+  g.restore();
+}
+
+/** Arachnid / Broodmother / Arachne: armoured walker cab up front, engine / ammo module behind. */
+function spiderDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, hull: Path2D): void {
+  const S = L.S;
+  const E = emis(pal);
+  const t = o * 0.5;
+  if (L.shape === 'arachnid') {
+    // sleek alien quad walker: levitating rear core pod, smooth cab with one wide sensor visor
+    const ab = profilePath([0.0, 0, -0.03, 0.1, -0.1, 0.18, -0.22, 0.21, -0.34, 0.19, -0.42, 0.11, -0.44, 0], S);
+    floatGap(g, ab, E, o, S);
+    sleekShell(g, ab, pal, o, S, -0.1, -0.2, -0.35, 0.2);
+    seamGlow(g, [-0.04, -0.12, -0.2, -0.24, -0.38, -0.1, -0.04, 0.12, -0.2, 0.24, -0.38, 0.1, -0.12, 0, -0.25, -0.03, -0.4, 0], S, E, o * 0.9);
+    const ce = profilePath([0.41, 0, 0.39, 0.06, 0.32, 0.115, 0.22, 0.125, 0.14, 0.09, 0.11, 0], S);
+    sleekShell(g, ce, pal, o, S, 0.15, -0.12, 0.4, 0.12);
+    seamGlow(g, [0.37, -0.085, 0.405, 0, 0.37, 0.085], S, E, o * 1.6);
+    seamGlow(g, [0.15, -0.06, 0.25, -0.11, 0.33, -0.07, 0.15, 0.06, 0.25, 0.11, 0.33, 0.07], S, E, o * 0.7);
+    dot(g, 0.07 * S, 0, 0.03 * S, OUTLINE); dot(g, 0.07 * S, 0, 0.02 * S, rgba(E, 0.9));
+    void t;
+    return;
+  }
+  if (L.shape === 'broodmother') {
+    // rear module: heavy reactor / ammo bunker ringed with fuel cells
+    const ab = sharp([0.05, 0, 0.02, -0.13, -0.06, -0.25, -0.17, -0.315, -0.32, -0.315, -0.42, -0.24, -0.465, -0.12, -0.475, 0], S);
+    raised(g, ab, grad(g, S, shade(pal.body, 0.05), pal.deep, -0.1, -0.3, -0.3, 0.3), o, S, 1.4, 0.03, 0.7);
+    // inner armour deck
+    const deck = sharp([-0.02, 0, -0.05, -0.1, -0.11, -0.19, -0.3, -0.22, -0.39, -0.16, -0.42, 0], S);
+    bevel(g, deck, grad(g, S, shade(pal.light, -0.02), pal.dark, -0.1, -0.2, -0.4, 0.2), o, 1.2);
+    plateSeams(g, deck, [-0.12, -0.25], S, o, 0.6);
+    seam(g, [-0.02, 0, -0.42, 0], S, t);
+    for (const s of [-1, 1]) {
+      rivetRow(g, -0.06 * S, s * 0.12 * S, -0.36 * S, s * 0.19 * S, 6, 0.007 * S);
+      glowLine(g, [-0.06, s * 0.2, -0.2, s * 0.27], S, E, o * 1.1);
+    }
+    reactor(g, -0.32 * S, 0, 0.045 * S, o, E);
+    hazard(g, -0.47 * S, -0.06 * S, 0.02 * S, 0.12 * S, o, true);
+    // fuel cells / ammo drums racked along the flanks (tangent to the rim)
+    for (const [x, y, r] of CELLS) {
+      canister(g, x * S, y * S, r * 2.6 * S, r * 0.8 * S, Math.atan2(y, x + 0.2) + Math.PI / 2, E, o * 0.8);
+    }
+    // waist coupling
+    cables(g, [0.16, 0, 0.02, 0], S, 0.016 * S, 3);
+    joint(g, 0.09 * S, 0, 0.04 * S, o, METAL.base);
+    // command cab
+    const ce = sharp([0.45, 0, 0.44, -0.065, 0.38, -0.13, 0.28, -0.155, 0.18, -0.13, 0.13, 0], S);
+    raised(g, ce, grad(g, S, shade(pal.light, 0.05), pal.dark), o, S, 1.4, 0.025, 0.6);
+    seam(g, [0.18, 0, 0.36, 0, 0.3, -0.14, 0.26, -0.04, 0.3, 0.14, 0.26, 0.04], S, t);
+    rivetRow(g, 0.2 * S, -0.12 * S, 0.36 * S, -0.1 * S, 5, 0.006 * S);
+    rivetRow(g, 0.2 * S, 0.12 * S, 0.36 * S, 0.1 * S, 5, 0.006 * S);
+    sensorCluster(g, 0.44, 0.075, S, E, o, true);
+    return;
+  }
+  // arachne: colossal alien walking fortress - layered smooth shells, glowing seams, levitating core rings
+  const ab = profilePath([0.04, 0, 0.01, 0.15, -0.08, 0.25, -0.22, 0.29, -0.36, 0.27, -0.45, 0.19, -0.47, 0.09, -0.475, 0], S);
+  floatGap(g, ab, E, o, S);
+  sleekShell(g, ab, pal, o, S, -0.1, -0.3, -0.35, 0.3);
+  for (let i = 0; i < 3; i++) {
+    const x0 = -0.08 - i * 0.12, w = [0.22, 0.25, 0.2][i];
+    const lm = profilePath([x0, 0, x0 - 0.005, w * 0.6, x0 - 0.03, w, x0 - 0.08, w * 0.95, x0 - 0.095, w * 0.5, x0 - 0.1, 0], S);
+    sleekShell(g, lm, pal, o * 0.8, S, x0, -w, x0 - 0.1, w);
+  }
+  seamGlow(g, [-0.06, -0.2, -0.24, -0.31, -0.42, -0.16, -0.06, 0.2, -0.24, 0.31, -0.42, 0.16], S, E, o * 1.2);
+  for (const s of [-1, 1]) { dot(g, -0.3 * S, s * 0.13 * S, 0.03 * S, OUTLINE); dot(g, -0.3 * S, s * 0.13 * S, 0.02 * S, rgba(E, 0.85)); }
+  cables(g, [0.15, 0, 0.0, 0], S, 0.016 * S, 3);
+  dot(g, 0.075 * S, 0, 0.045 * S, OUTLINE); dot(g, 0.075 * S, 0, 0.035 * S, '#0b1016');
+  g.strokeStyle = rgba(E, 0.9); g.lineWidth = o; g.beginPath(); g.arc(0.075 * S, 0, 0.025 * S, 0, P2); g.stroke();
+  // command cab: smooth crest with a sweeping visor arc
+  const ce = profilePath([0.48, 0, 0.46, 0.07, 0.39, 0.13, 0.29, 0.165, 0.2, 0.155, 0.14, 0.09, 0.13, 0], S);
+  sleekShell(g, ce, pal, o * 1.1, S, 0.15, -0.16, 0.47, 0.16);
+  const cr = profilePath([0.4, 0, 0.38, 0.05, 0.31, 0.085, 0.22, 0.08, 0.19, 0], S);
+  sleekShell(g, cr, pal, o, S, 0.2, -0.09, 0.4, 0.09);
+  seamGlow(g, [0.43, -0.1, 0.475, 0, 0.43, 0.1], S, E, o * 2);
+  seamGlow(g, [0.16, -0.1, 0.26, -0.165, 0.36, -0.13, 0.16, 0.1, 0.26, 0.165, 0.36, 0.13], S, E, o * 0.8);
+  void hull; void t;
+}
+
+/** Broodmother fuel cells around the rear module rim [x, y, r]. */
+const CELLS: [number, number, number][] = [
+  [-0.37, -0.255, 0.034], [-0.255, -0.29, 0.032], [-0.44, -0.165, 0.03],
+  [-0.37, 0.255, 0.034], [-0.255, 0.29, 0.032], [-0.44, 0.165, 0.03],
+  [-0.14, -0.27, 0.026], [-0.14, 0.27, 0.026],
+];
+
+/* ------------------------------------------------------------------------------------------------- parts */
+
+export interface AnimIn {
+  t: number;
+  odo: number;
+  moving: boolean;
+  seed: number;
+  /** leg gait phase, radians */
+  walk: number;
+}
+
+export interface PartDef {
+  /** pivot (cells), in hull coords or relative to the parent's pivot */
+  px: number;
+  py: number;
+  /** sprite half extent (cells) around the pivot */
+  ext: number;
+  parent?: number;
+  /** under = between mobility and hull, over = above hull, below turrets */
+  layer: 'under' | 'over';
+  draw: (g: Ctx, pal: TeamPal, o: number) => void;
+  anim?: (a: AnimIn) => { r?: number; dx?: number; dy?: number };
+  /** mount indices riding on this part */
+  mounts?: number[];
+}
+
+export interface Xf { x: number; y: number; r: number; }
+
+const partCache = new Map<string, PartDef[]>();
+
+export function partsOf(L: UnitLayout): PartDef[] {
+  const key = `${L.chassis.id}|${L.mob.id}`;
+  let p = partCache.get(key);
+  if (!p) { p = buildParts(L); partCache.set(key, p); }
+  return p;
+}
+
+/** Part transforms (hull coords) for an animation state; null = rest pose. */
+export function partXfs(parts: PartDef[], a: AnimIn | null): Xf[] {
+  const out: Xf[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const d = parts[i];
+    const an = a && d.anim ? d.anim(a) : null;
+    const lx = d.px + (an?.dx ?? 0), ly = d.py + (an?.dy ?? 0), lr = an?.r ?? 0;
+    if (d.parent !== undefined) {
+      const P = out[d.parent];
+      const c = Math.cos(P.r), s = Math.sin(P.r);
+      out.push({ x: P.x + c * lx - s * ly, y: P.y + s * lx + c * ly, r: P.r + lr });
+    } else out.push({ x: lx, y: ly, r: lr });
+  }
+  return out;
+}
+
+/** Mount position (hull coords) when riding a part. */
+export function mountOnPart(parts: PartDef[], rest: Xf[], xfs: Xf[], i: number, mx: number, my: number): { x: number; y: number } | null {
+  for (let j = 0; j < parts.length; j++) {
+    if (!parts[j].mounts?.includes(i)) continue;
+    const R = rest[j], X = xfs[j];
+    const dx = mx - R.x, dy = my - R.y;
+    const c0 = Math.cos(-R.r), s0 = Math.sin(-R.r);
+    const qx = c0 * dx - s0 * dy, qy = s0 * dx + c0 * dy;
+    const c = Math.cos(X.r), s = Math.sin(X.r);
+    return { x: X.x + c * qx - s * qy, y: X.y + s * qx + c * qy };
+  }
+  return null;
+}
+
+/** Mount indices that ride on parts. */
+export function partMounts(parts: PartDef[]): Set<number> {
+  const s = new Set<number>();
+  for (const p of parts) for (const m of p.mounts ?? []) s.add(m);
+  return s;
+}
+
+function snipAnim(s: number, rate: number): (a: AnimIn) => { r: number } {
+  return (a) => {
+    const c = (a.t * rate + a.seed * 0.13 + (s > 0 ? 0.5 : 0)) % 1;
+    return { r: s * (0.22 + 0.3 * (c < 0.18 ? Math.sin((c / 0.18) * Math.PI * 2) : 0)) };
+  };
+}
+
+/** Hydraulic clamp body along +x from the wrist at (0,0): boxy armoured housing, ram on top, fixed steel jaw. */
+function drawPalm(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
+  const Z = k * z;
+  // fixed jaw (steel, angular, serrated inner edge)
+  const fx = new Path2D();
+  poly(fx, [0.2, 0.0, 0.33, -s * 0.005, 0.41, s * 0.025, 0.385, -s * 0.045, 0.3, -s * 0.075, 0.19, -s * 0.07], Z);
+  fillOut(g, fx, grad(g, k, '#c3cbd2', METAL.dark, 0.2 * z, -0.07, 0.4 * z, 0.02), o * 0.9);
+  g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = o * 0.5;
+  g.beginPath(); g.moveTo(0.21 * Z, -s * 0.06 * Z); g.lineTo(0.37 * Z, -s * 0.04 * Z); g.stroke();
+  // housing
+  const h = new Path2D();
+  poly(h, mirrorPoly([0.27, 0, 0.265, -0.06, 0.22, -0.1, 0.05, -0.1, 0.0, -0.065, -0.01, 0]), Z);
+  raised(g, h, grad(g, k, shade(pal.light, 0.12), pal.dark, 0.05 * z, -0.1 * z, 0.25 * z, 0.1 * z), o, k, 1.2, 0.012, 0.5);
+  seam(g, [0.1, -0.1, 0.1, 0.1, 0.2, -0.1, 0.2, 0.1], Z, o * 0.5);
+  hazard(g, 0.215 * Z, -0.04 * Z, 0.035 * Z, 0.08 * Z, o, true);
+  piston(g, 0.03 * Z, s * 0.055 * Z, 0.19 * Z, s * 0.055 * Z, 0.016 * Z, o * 0.7);
+  stripe(g, [0.04, -s * 0.07, 0.18, -s * 0.07], Z, pal.accent, o);
+  rivetRow(g, 0.05 * Z, -s * 0.03 * Z, 0.17 * Z, -s * 0.03 * Z, 3, 0.008 * k);
+}
+
+/** Movable jaw, pivot at its root: angular steel blade with a serrated edge. */
+function drawFinger(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
+  const Z = k * z;
+  const f = new Path2D();
+  poly(f, [-0.01, -s * 0.03, 0.1, -s * 0.035, 0.175, -s * 0.075, 0.155, -s * 0.015, 0.1, s * 0.035, -0.01, s * 0.035], Z);
+  fillOut(g, f, grad(g, k, '#c3cbd2', METAL.dark, 0, -0.03, 0.15 * z, 0.03), o * 0.9);
+  for (const x of [0.04, 0.08, 0.12]) spike(g, x * Z, -s * 0.03 * Z, -s * Math.PI / 2, 0.018 * Z, 0.01 * Z, '#d6dde3', o * 0.4);
+  joint(g, 0, 0, 0.026 * Z, o * 0.8, METAL.base);
+  void pal;
+}
+
+const wob = (a: AnimIn, f: number, ph: number) => Math.sin(a.t * f + a.seed * 1.7 + ph);
+
+function buildParts(L: UnitLayout): PartDef[] {
+  const S = L.S;
+  const parts: PartDef[] = [];
+  switch (L.shape) {
     case 'mantis':
       for (const s of [-1, 1]) {
         parts.push({
           px: 0.15 * S, py: s * 0.05 * S, ext: 0.36 * S, layer: 'over', mounts: [s < 0 ? 0 : 1],
           draw: (g, pal, o) => {
             const k = S;
-            // coxa + femur reaching forward-out, spined tibia folded back, hooked tip
-            limbSeg(g, 0, 0, 0.035 * k, 0.19 * k, s * 0.13 * k, 0.04 * k, shade(pal.light, 0.1), pal.dark, o);
-            limbSeg(g, 0.19 * k, s * 0.13 * k, 0.03 * k, 0.08 * k, s * 0.2 * k, 0.02 * k, shade(pal.light, -0.05), pal.deep, o);
-            for (const f of [0.25, 0.5, 0.75]) spike(g, (0.19 - 0.11 * f) * k, s * (0.13 + 0.07 * f) * k, s * -2.0, 0.035 * k, 0.009 * k, '#d8d0c0', o * 0.6);
-            spike(g, 0.08 * k, s * 0.2 * k, Math.PI + s * 0.9, 0.06 * k, 0.014 * k, '#d8d0c0', o * 0.7);
-            dot(g, 0.19 * k, s * 0.13 * k, 0.028 * k, METAL.dark);
-            stripe(g, [0.05, s * 0.03, 0.15, s * 0.1], k, pal.accent, o * 0.8);
+            // weapon arm: armoured boom forward-out, folded cutter blade, hydraulic ram across the elbow
+            const blade = new Path2D();
+            poly(blade, [0.215, s * 0.135, 0.2, s * 0.17, 0.03, s * 0.235, 0.075, s * 0.2, 0.17, s * 0.15], k);
+            fillOut(g, blade, grad(g, k, '#d3dae0', METAL.dark, 0.05, s * 0.24, 0.2, s * 0.14), o * 0.8);
+            g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = o * 0.5;
+            g.beginPath(); g.moveTo(0.2 * k, s * 0.168 * k); g.lineTo(0.035 * k, s * 0.232 * k); g.stroke();
+            beam(g, 0.19 * k, s * 0.13 * k, 0.026 * k, 0.09 * k, s * 0.19 * k, 0.018 * k, shade(pal.light, -0.05), pal.deep, o);
+            beam(g, 0, 0, 0.033 * k, 0.19 * k, s * 0.13 * k, 0.036 * k, shade(pal.light, 0.1), pal.dark, o);
+            piston(g, 0.04 * k, s * 0.0 * k, 0.15 * k, s * 0.075 * k, 0.012 * k, o * 0.6);
+            joint(g, 0.19 * k, s * 0.13 * k, 0.03 * k, o, METAL.dark);
+            joint(g, 0, 0, 0.026 * k, o, METAL.base);
           },
           anim: (a) => {
             const f = (a.t * 0.23 + a.seed * 0.1 + (s > 0 ? 0.47 : 0)) % 1;
@@ -732,7 +973,8 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
             const k = S;
             const r = W ? 0.07 : 0.062, len = W ? 0.33 : 0.32;
             // upper arm, armoured forearm with team plate, fist/gun cradle
-            limbSeg(g, 0, 0, r * 0.8 * k, 0.06 * k, s * 0.03 * k, r * 0.8 * k, METAL.light, METAL.dark, o);
+            beam(g, 0, 0, r * 0.8 * k, 0.06 * k, s * 0.03 * k, r * 0.8 * k, METAL.light, METAL.dark, o);
+            joint(g, 0, 0, r * 0.7 * k, o, METAL.base);
             const fa = roundedRect(0.03, -r, len, r * 2, r * 0.6, k);
             g.save(); g.translate(0, s * 0.035 * k);
             raised(g, fa, grad(g, k, shade(pal.light, 0.05), pal.dark, 0, -r, len, r), o, k, 1.1, 0.012, 0.5);
@@ -763,14 +1005,13 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
           px: fx * S, py: s * 0.04 * S, ext: 0.16 * S, layer: 'under',
           draw: (g, pal, o) => {
             const k = S;
-            // chelicera + curved fang
-            limbSeg(g, 0, 0, 0.032 * k, 0.05 * k, s * 0.01 * k, 0.026 * k, shade(pal.dark, 0.1), pal.deep, o);
+            // manipulator: armoured stub + angular steel gripper jaw
             const f = new Path2D();
-            f.moveTo(0.04 * k, s * -0.012 * k);
-            f.quadraticCurveTo(0.11 * k, s * 0.0 * k, 0.1 * k, s * -0.05 * k);
-            f.quadraticCurveTo(0.085 * k, s * 0.02 * k, 0.04 * k, s * 0.025 * k);
-            f.closePath();
-            fillOut(g, f, big ? '#d8d0c0' : METAL.light, o * 0.8);
+            poly(f, [0.035, -s * 0.02, 0.085, -s * 0.02, 0.112, -s * 0.05, 0.104, s * 0.004, 0.075, s * 0.026, 0.035, s * 0.026], k);
+            fillOut(g, f, grad(g, k, '#c9d1d8', METAL.dark, 0.04, -0.03, 0.1, 0.03), o * 0.8);
+            beam(g, 0, 0, 0.03 * k, 0.05 * k, s * 0.004 * k, 0.026 * k, shade(pal.dark, 0.15), pal.deep, o);
+            joint(g, 0.048 * k, s * 0.004 * k, 0.017 * k, o * 0.7, METAL.base);
+            void big;
           },
           anim: (a) => ({ r: s * 0.18 * Math.max(0, wob(a, 3.1, s * 0.4)) }),
         });
@@ -784,11 +1025,13 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
           px: 0.17 * S, py: s * 0.28 * S, ext: 0.56 * S, layer: 'under', mounts: [s < 0 ? 0 : 1],
           draw: (g, pal, o) => {
             const k = S;
-            limbSeg(g, 0, 0, 0.045 * k, 0.1 * k, s * 0.11 * k, 0.042 * k, METAL.light, METAL.dark, o);
+            beam(g, 0, 0, 0.042 * k, 0.1 * k, s * 0.11 * k, 0.04 * k, METAL.light, METAL.dark, o);
+            piston(g, 0.015 * k, -s * 0.03 * k, 0.09 * k, s * 0.06 * k, 0.012 * k, o * 0.6);
             g.save(); g.translate(0.09 * k, s * 0.11 * k);
             drawPalm(g, s, k, 1, pal, o);
             g.restore();
-            dot(g, 0.1 * k, s * 0.11 * k, 0.03 * k, METAL.dark);
+            joint(g, 0.1 * k, s * 0.11 * k, 0.03 * k, o, METAL.dark);
+            joint(g, 0, 0, 0.032 * k, o, METAL.base);
           },
           anim: (a) => ({ r: s * (0.07 * wob(a, 1.1, s) + 0.03 * wob(a, 2.7, 0)) }),
         });
@@ -831,9 +1074,11 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
           px: 0.29 * S, py: s * 0.13 * S, ext: 0.56 * S, layer: 'under', mounts: [s < 0 ? 1 : 2],
           draw: (g, pal, o) => {
             const k = S;
-            limbSeg(g, 0, 0, 0.04 * k, 0.08 * k, s * 0.11 * k, 0.04 * k, shade(pal.light, -0.05), pal.dark, o);
-            limbSeg(g, 0.08 * k, s * 0.11 * k, 0.038 * k, 0.14 * k, s * 0.16 * k, 0.04 * k, shade(pal.light, -0.05), pal.dark, o);
-            dot(g, 0.08 * k, s * 0.11 * k, 0.03 * k, METAL.dark);
+            beam(g, 0, 0, 0.036 * k, 0.08 * k, s * 0.11 * k, 0.036 * k, shade(pal.light, -0.05), pal.dark, o);
+            beam(g, 0.08 * k, s * 0.11 * k, 0.034 * k, 0.14 * k, s * 0.16 * k, 0.036 * k, shade(pal.light, -0.05), pal.dark, o);
+            piston(g, 0.01 * k, -s * 0.02 * k, 0.075 * k, s * 0.07 * k, 0.011 * k, o * 0.6);
+            joint(g, 0.08 * k, s * 0.11 * k, 0.03 * k, o, METAL.dark);
+            joint(g, 0, 0, 0.03 * k, o, METAL.base);
             g.save(); g.translate(0.13 * k, s * 0.16 * k);
             drawPalm(g, s, k, z, pal, o);
             g.restore();
@@ -856,27 +1101,37 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
           draw: (g, pal, o) => {
             const k = S;
             const E = emis(pal);
+            const len = Math.hypot(nx, ny);
             if (last) {
-              // venom bulb + stinger pointing forward over the back
-              spike(g, 0.07 * k, 0.0, 0.15, 0.11 * k, 0.03 * k, '#d8d0c0', o);
-              const b = ellipse(0.0, 0.0, r * 1.05 * k, r * 0.85 * k, 0.1);
-              const bg = g.createRadialGradient(-0.02 * k, -0.02 * k, 0, 0, 0, r * k);
-              bg.addColorStop(0, shade(pal.light, 0.15)); bg.addColorStop(1, pal.dark);
-              raised(g, b, bg, o, k, 1.2, 0.012, 0.6);
-              glowLine(g, [-0.05, 0.05, 0.05, 0.05], k, E, o * 0.8);
+              // weapon pod: armoured housing with a stepped injector lance pointing forward over the back
+              const ln = new Path2D();
+              poly(ln, [0.04, -0.022, 0.13, -0.01, 0.17, 0, 0.13, 0.01, 0.04, 0.022], k);
+              g.save(); g.rotate(0.15);
+              fillOut(g, ln, grad(g, k, '#d3dae0', METAL.dark, 0.05, -0.02, 0.12, 0.02), o * 0.8);
+              seam(g, [0.08, -0.016, 0.08, 0.016, 0.11, -0.012, 0.11, 0.012], k, o * 0.5);
+              g.restore();
+              joint(g, 0, 0, r * 0.62 * k, o, METAL.base);
+              const b = new Path2D();
+              for (let q = 0; q < 6; q++) { const aa = (q / 6) * P2 + P2 / 12; b.lineTo(Math.cos(aa) * r * 1.05 * k, Math.sin(aa) * r * 0.9 * k); }
+              b.closePath();
+              raised(g, b, grad(g, k, shade(pal.light, 0.12), pal.dark, -r, -r, r, r), o, k, 1.2, 0.012, 0.6);
+              glowLine(g, [-0.045, 0.055, 0.045, 0.055], k, E, o * 0.8);
               return;
             }
-            const a = Math.atan2(ny, nx);
-            const seg = ellipse(nx * 0.45 * k, ny * 0.45 * k, Math.hypot(nx, ny) * 0.62 * k, r * k, a);
-            const sg = g.createLinearGradient(-r * k, -r * k, r * k, r * k);
-            sg.addColorStop(0, shade(pal.light, 0.02 + i * 0.03)); sg.addColorStop(1, shade(pal.dark, -0.05));
+            // armoured tail module on a ball joint
+            g.save();
+            g.rotate(Math.atan2(ny, nx));
+            const seg = new Path2D();
+            poly(seg, mirrorPoly([len * 0.92, 0, len * 0.88, -r * 0.62, len * 0.74, -r * 0.92, len * 0.22, -r * 0.92, len * 0.1, -r * 0.6, len * 0.1, 0]), k);
             ao(g, seg, k);
-            fillOut(g, seg, sg, o);
-            g.save(); g.clip(seg);
-            g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = o * 0.8;
-            g.beginPath(); g.moveTo(nx * 0.1 * k - Math.sin(a) * r * 0.5 * k, ny * 0.1 * k + Math.cos(a) * -r * 0.5 * k); g.lineTo(nx * 0.8 * k - Math.sin(a) * r * 0.5 * k, ny * 0.8 * k - Math.cos(a) * r * 0.5 * k); g.stroke();
+            joint(g, len * 0.02 * k, 0, r * 0.58 * k, o, METAL.base);
+            const sg = g.createLinearGradient(0, -r * k, 0, r * k);
+            sg.addColorStop(0, shade(pal.light, 0.02 + i * 0.03)); sg.addColorStop(1, shade(pal.dark, -0.05));
+            bevel(g, seg, sg, o, 0.8);
+            seam(g, [len * 0.5, -r * 0.9, len * 0.5, r * 0.9], k, o * 0.5);
+            stripe(g, [len * 0.25, -r * 0.55, len * 0.8, -r * 0.55], k, rgba(pal.accent, 0.9), o * 0.9);
+            rivetRow(g, len * 0.3 * k, r * 0.5 * k, len * 0.7 * k, r * 0.5 * k, 2, 0.008 * k);
             g.restore();
-            stripe(g, [nx * 0.2, ny * 0.2, nx * 0.7, ny * 0.7], k, rgba(pal.accent, 0.9), o * 0.9);
           },
           anim: (a) => ({ r: (a.moving ? 0.07 : 0.05) * Math.sin(a.t * 1.3 + a.seed - i * 0.55) + (last ? 0.04 * wob(a, 2.1, 0) : 0) }),
         });
@@ -889,22 +1144,33 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       for (let j = 0; j < X.length; j++) {
         const i = X.length - 1 - j; // 0 = right behind the head
         const tail = i === X.length - 1;
-        const ry = tail ? 0.1 : 0.155 - i * 0.004, rx = tail ? 0.075 : 0.085;
+        const ry = tail ? 0.1 : 0.15 - i * 0.004, rx = tail ? 0.07 : 0.062;
         const mount = i >= 1 && i <= 4 ? [i - 1] : undefined;
         parts.push({
           px: X[j] * S, py: 0, ext: 0.28 * S, layer: 'under', mounts: mount,
           draw: (g, pal, o) => {
             const k = S, E = emis(pal);
-            if (tail) for (const s of [-1, 1]) spike(g, -0.05 * k, s * 0.04 * k, Math.PI + s * 0.35, 0.1 * k, 0.02 * k, shade(pal.dark, -0.1), o);
-            for (const s of [-1, 1]) spike(g, 0, s * ry * 0.9 * k, s * 1.6, 0.05 * k, 0.022 * k, shade(pal.dark, -0.1), o * 0.8);
-            const sh = profilePath([rx, 0, rx * 0.9, ry * 0.55, rx * 0.4, ry, -rx * 0.5, ry * 0.95, -rx, ry * 0.45, -rx * 1.05, 0], k);
+            // ball-joint coupling to the module behind + hydraulic links
+            if (j > 0) {
+              cables(g, [-0.075, -ry * 0.55, -rx * 0.8, -ry * 0.55, -0.075, ry * 0.55, -rx * 0.8, ry * 0.55], k, 0.012 * k, 1);
+              joint(g, -0.072 * k, 0, 0.034 * k, o, METAL.base);
+            }
+            if (tail) for (const s of [-1, 1]) stack(g, -rx * 0.95 * k, s * 0.045 * k, 0.022 * k, o * 0.6);
+            // armoured side skirts
+            for (const s of [-1, 1]) {
+              const sk = new Path2D();
+              poly(sk, [rx * 0.7, s * ry * 0.75, rx * 0.55, s * (ry + 0.03), -rx * 0.55, s * (ry + 0.03), -rx * 0.75, s * ry * 0.75], k);
+              fillOut(g, sk, shade(pal.dark, -0.12), o * 0.8);
+            }
+            const sh = sharp([rx, 0, rx, -ry * 0.6, rx * 0.6, -ry, -rx * 0.65, -ry, -rx, -ry * 0.6, -rx, 0], k);
             const sg = g.createLinearGradient(0, -ry * k, 0, ry * k);
             sg.addColorStop(0, shade(pal.light, 0.08)); sg.addColorStop(0.55, pal.body); sg.addColorStop(1, pal.dark);
             ao(g, sh, k, 0.02, 0.6);
             bevel(g, sh, sg, o, 0.8);
-            seam(g, [-rx * 0.3, -ry * 0.8, -rx * 0.3, ry * 0.8], k, o * 0.5);
-            stripe(g, [rx * 0.3, -ry * 0.75, rx * 0.3, -ry * 0.45, rx * 0.3, ry * 0.75, rx * 0.3, ry * 0.45], k, pal.accent, o * 0.9);
-            if (!mount) dot(g, 0, 0, 0.02 * k, rgba(E, 0.9));
+            stripe(g, [rx * 0.3, -ry * 0.82, rx * 0.3, -ry * 0.5, rx * 0.3, ry * 0.82, rx * 0.3, ry * 0.5], k, pal.accent, o * 0.9);
+            for (const s of [-1, 1]) rivetRow(g, -rx * 0.6 * k, s * ry * 0.78 * k, rx * 0.0, s * ry * 0.78 * k, 2, 0.008 * k);
+            if (tail) hazard(g, -rx * 0.75 * k, -0.02 * k, 0.025 * k, 0.04 * k, o, true);
+            else if (!mount) { vent(g, -0.01, 0, 0.05, 0.08, k, o); dot(g, 0.03 * k, 0, 0.012 * k, rgba(E, 0.9)); }
           },
           anim: (a) => {
             const amp = (L.mob.id === 'spider' ? 0.04 : 0.022) * S * Math.min(1, (i + 1) / 3);
@@ -914,18 +1180,16 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
           },
         });
       }
-      // mandibles on the head
+      // hydraulic shears on the head
       for (const s of [-1, 1]) {
         parts.push({
           px: 0.46 * S, py: s * 0.05 * S, ext: 0.14 * S, layer: 'under',
           draw: (g, _pal, o) => {
             const k = S;
             const f = new Path2D();
-            f.moveTo(-0.01 * k, s * -0.015 * k);
-            f.quadraticCurveTo(0.08 * k, s * 0.02 * k, 0.07 * k, s * -0.06 * k);
-            f.quadraticCurveTo(0.06 * k, s * 0.04 * k, -0.01 * k, s * 0.03 * k);
-            f.closePath();
-            fillOut(g, f, '#cfc6b4', o * 0.9);
+            poly(f, [-0.01, -s * 0.018, 0.05, -s * 0.012, 0.078, -s * 0.055, 0.072, s * 0.01, 0.045, s * 0.03, -0.01, s * 0.03], k);
+            fillOut(g, f, grad(g, k, '#c9d1d8', METAL.dark, 0, -0.03, 0.07, 0.03), o * 0.9);
+            joint(g, 0, 0, 0.018 * k, o * 0.7, METAL.base);
           },
           anim: (a) => ({ r: s * 0.25 * Math.max(0, wob(a, 2.6, s * 0.3)) }),
         });
@@ -955,6 +1219,8 @@ interface LegRig {
   stride: number;
   big: boolean;
   armour: boolean;
+  /** limb design language: industrial beams + rams, sleek alien digitigrade limbs, stubby piston stilts */
+  style: 'ind' | 'sleek' | 'stub';
 }
 
 const rigCache = new Map<string, LegRig>();
@@ -979,14 +1245,22 @@ function legRig(L: UnitLayout): LegRig {
   };
   let w = 0.065, stride = 0.13;
   let armour = false;
+  let style: LegRig['style'] = 'ind';
   switch (L.shape) {
-    case 'arachnid': radial(0.24, 0.09, 0.1, 0.64, [0.5, 1.12, 1.82, 2.5]); w = 0.062; stride = 0.11; armour = true; break;
-    case 'broodmother': radial(0.27, 0.1, 0.11, 0.72, [0.5, 1.1, 1.8, 2.48]); w = 0.058; stride = 0.1; armour = true; break;
-    case 'arachne': radial(0.27, 0.11, 0.12, 0.76, [0.48, 1.08, 1.78, 2.46]); w = 0.062; stride = 0.1; armour = true; break;
-    case 'scorpion': row([0.14, 0.03, -0.08, -0.19], 0.17, 0.47, [0.12, 0.02, -0.08, -0.17]); w = 0.055; stride = 0.08; armour = true; break;
-    case 'crab': row([0.12, 0.02, -0.08, -0.17], 0.3, 0.58, [0.07, -0.02, -0.1, -0.2]); w = 0.06; stride = 0.08; armour = true; break;
-    case 'mantis': row([0.06, -0.04], 0.05, 0.4, [0.22, -0.3]); w = 0.05; stride = 0.13; break;
-    case 'centipede': row([0.36, 0.22, 0.085, -0.055, -0.195, -0.335], 0.1, 0.3, [0.04, 0.02, 0, -0.02, -0.04, -0.07]); w = 0.04; stride = 0.06; break;
+    // sleek alien quad walker: two long digitigrade pairs splayed fore and aft
+    case 'arachnid': row([0.22, 0.0], 0.1, 0.56, [0.3, -0.42]); w = 0.07; stride = 0.13; armour = true; style = 'sleek'; break;
+    // brutalist walking fortress: six heavy industrial legs
+    case 'broodmother': radial(0.2, 0.12, 0.13, 0.74, [0.65, 1.55, 2.4]); w = 0.07; stride = 0.1; armour = true; break;
+    // colossal alien walker: six sweeping alien limbs
+    case 'arachne': radial(0.2, 0.12, 0.13, 0.82, [0.6, 1.5, 2.35]); w = 0.07; stride = 0.1; armour = true; style = 'sleek'; break;
+    // weapon-boom platform: three industrial legs a side
+    case 'scorpion': row([0.12, -0.03, -0.18], 0.17, 0.46, [0.12, 0.0, -0.16]); w = 0.062; stride = 0.08; armour = true; break;
+    // mobile bunker on stubby piston stilts
+    case 'crab': row([0.13, -0.04, -0.2], 0.3, 0.5, [0.06, -0.03, -0.12]); w = 0.075; stride = 0.06; armour = true; style = 'stub'; break;
+    // lanky alien strider
+    case 'mantis': row([0.06, -0.06], 0.05, 0.44, [0.24, -0.32]); w = 0.055; stride = 0.14; style = 'sleek'; break;
+    // land-train: short paired piston walking beams under each car
+    case 'centipede': row([0.36, 0.22, 0.085, -0.055, -0.195, -0.335], 0.1, 0.27, [0.03, 0.015, 0, -0.015, -0.03, -0.05]); w = 0.05; stride = 0.05; style = 'stub'; break;
     default: {
       const hr = Math.min(0.22, L.hw * 0.6);
       if (S >= 4) { radial(0, hr, hr, Math.max(0.64, L.hw + 0.28), [0.5, 1.15, 1.95, 2.6]); w = 0.05; stride = 0.09; }
@@ -994,7 +1268,7 @@ function legRig(L: UnitLayout): LegRig {
       armour = S >= 3;
     }
   }
-  r = { legs, w, stride, big: S >= 4, armour };
+  r = { legs, w, stride, big: S >= 4, armour, style };
   rigCache.set(key, r);
   return r;
 }
@@ -1029,44 +1303,131 @@ export function drawSpiderLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: numbe
     for (const k of geo) if (k.lift < 0.3) dot(g, k.fx + 0.015 * S, k.fy + 0.015 * S, W * 0.5, 'rgba(0,0,0,0.35)');
     g.restore();
   }
+  if (rig.style !== 'ind') {
+    for (const i of idx) {
+      const q = geo[i];
+      if (rig.style === 'sleek') sleekLeg(g, q, W, pal, E, o, rig.big);
+      else stubLeg(g, q, W, pal, E, o, cent);
+    }
+    return;
+  }
   for (const i of idx) {
     const { hx, hy, fx, fy, kx, ky, lift } = geo[i];
     const up = 1 + lift * 0.25;
     const fem0 = rig.armour ? shade(pal.body, -0.1 + lift * 0.15) : shade(METAL.light, lift * 0.1);
     const fem1 = rig.armour ? shade(pal.deep, 0.05) : METAL.dark;
-    if (rig.big) {
-      // three segments: femur up to the knee, tibia down to the ankle, slim metatarsus to the claw
-      const ax = kx + (fx - kx) * 0.6, ay = ky + (fy - ky) * 0.6;
-      limbSeg(g, ax, ay, W * 0.36, fx, fy, W * 0.16, METAL.base, METAL.deep, o);
-      limbSeg(g, kx, ky, W * 0.66 * up, ax, ay, W * 0.42, shade(pal.dark, 0.1), pal.deep, o);
-      dot(g, ax, ay, W * 0.34, METAL.dark);
-      g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke();
-    } else limbSeg(g, kx, ky, W * 0.62 * up, fx, fy, W * 0.22, METAL.base, METAL.deep, o);
-    limbSeg(g, hx, hy, W * 0.85, kx, ky, W * 0.8 * up, fem0, fem1, o);
-    if (rig.big) {
-      // femur armour lames + spikes
-      for (const f of [0.3, 0.55, 0.8]) {
-        const x = hx + (kx - hx) * f, y = hy + (ky - hy) * f;
-        const a = Math.atan2(ky - hy, kx - hx);
-        g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = o * 0.7;
-        g.beginPath(); g.moveTo(x - Math.sin(a) * W * 0.8, y + Math.cos(a) * W * 0.8); g.lineTo(x + Math.sin(a) * W * 0.8, y - Math.cos(a) * W * 0.8); g.stroke();
-      }
-      const a = Math.atan2(ky - hy, kx - hx), side = hy < 0 ? -1 : 1;
-      for (const f of [0.45, 0.85]) spike(g, hx + (kx - hx) * f, hy + (ky - hy) * f, a + side * 1.1, W * 0.8, W * 0.22, shade(pal.deep, 0.1), o * 0.8);
-      g.strokeStyle = rgba(E, 0.85); g.lineWidth = o * 1.1; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(hx + (kx - hx) * 0.2, hy + (ky - hy) * 0.2); g.lineTo(hx + (kx - hx) * 0.8, hy + (ky - hy) * 0.8); g.stroke();
-    }
-    // knee: higher = bigger + brighter
-    dot(g, kx, ky, W * 0.62 * up, rig.armour ? shade(pal.dark, 0.1 + lift * 0.2) : shade(METAL.base, lift * 0.2));
-    g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke();
-    if (rig.big || rig.armour) dot(g, kx, ky, W * 0.26 * up, rgba(E, 0.95));
-    else dot(g, kx - W * 0.15, ky - W * 0.15, W * 0.22, 'rgba(255,255,255,0.35)');
-    // claw tip
     const b = Math.atan2(fy - ky, fx - kx);
-    spike(g, fx - Math.cos(b) * W * 0.1, fy - Math.sin(b) * W * 0.1, b, W * 0.55, W * 0.18, OUTLINE, o * 0.5);
+    const side = hy < 0 ? -1 : 1;
+    let ax = kx, ay = ky;
+    if (rig.big) {
+      // three segments: femur up to the knee, armoured shin down to the ankle actuator, steel strut to the foot
+      ax = kx + (fx - kx) * 0.6; ay = ky + (fy - ky) * 0.6;
+      beam(g, ax, ay, W * 0.3, fx, fy, W * 0.2, METAL.light, METAL.deep, o);
+      beam(g, kx, ky, W * 0.6 * up, ax, ay, W * 0.4, shade(pal.dark, 0.1), pal.deep, o);
+      piston(g, kx + Math.cos(b + side * 1.2) * W * 0.3, ky + Math.sin(b + side * 1.2) * W * 0.3, ax + (fx - ax) * 0.35, ay + (fy - ay) * 0.35, W * 0.12, o * 0.6);
+      joint(g, ax, ay, W * 0.34, o * 0.8, METAL.dark);
+    } else {
+      beam(g, kx, ky, W * 0.5 * up, fx, fy, W * 0.26, METAL.light, METAL.dark, o);
+    }
+    // armoured foot pad
+    const pr = W * (rig.big ? 0.42 : 0.36);
+    const pad = new Path2D();
+    for (let q = 0; q < 6; q++) { const aa = b + (q / 6) * P2 + P2 / 12; pad.lineTo(fx + Math.cos(b) * pr * 0.25 + Math.cos(aa) * pr, fy + Math.sin(b) * pr * 0.25 + Math.sin(aa) * pr * 0.85); }
+    pad.closePath();
+    g.fillStyle = METAL.dark; g.fill(pad);
+    g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(pad);
+    dot(g, fx - pr * 0.15, fy - pr * 0.15, pr * 0.35, 'rgba(255,255,255,0.18)');
+    // femur beam + hydraulic ram along its top
+    beam(g, hx, hy, W * 0.72, kx, ky, W * 0.62 * up, fem0, fem1, o);
+    const fa = Math.atan2(ky - hy, kx - hx), fl = Math.hypot(kx - hx, ky - hy);
+    const pnx = -Math.sin(fa) * -side, pny = Math.cos(fa) * -side;
+    if (W > 0.05) piston(g, hx + Math.cos(fa) * fl * 0.12 + pnx * W * 0.5, hy + Math.sin(fa) * fl * 0.12 + pny * W * 0.5, hx + Math.cos(fa) * fl * 0.8 + pnx * W * 0.45, hy + Math.sin(fa) * fl * 0.8 + pny * W * 0.45, W * (rig.big ? 0.16 : 0.18), o * 0.6);
+    if (rig.big) {
+      // femur armour plates + emissive conduit
+      for (const f of [0.3, 0.55]) {
+        const x = hx + (kx - hx) * f, y = hy + (ky - hy) * f;
+        g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = o * 0.7; g.lineCap = 'butt';
+        g.beginPath(); g.moveTo(x - Math.sin(fa) * W * 0.7, y + Math.cos(fa) * W * 0.7); g.lineTo(x + Math.sin(fa) * W * 0.7, y - Math.cos(fa) * W * 0.7); g.stroke();
+      }
+      g.strokeStyle = rgba(E, 0.85); g.lineWidth = o * 1.1; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(hx + (kx - hx) * 0.2 - pnx * W * 0.3, hy + (ky - hy) * 0.2 - pny * W * 0.3); g.lineTo(hx + (kx - hx) * 0.8 - pnx * W * 0.3, hy + (ky - hy) * 0.8 - pny * W * 0.3); g.stroke();
+    }
+    // knee actuator: higher = bigger + brighter
+    joint(g, kx, ky, W * 0.6 * up, o, rig.armour ? shade(pal.dark, 0.1 + lift * 0.2) : shade(METAL.base, lift * 0.2), rig.big || rig.armour ? rgba(E, 0.95) : undefined);
     if (cent) continue;
-    dot(g, hx, hy, W * 0.55, METAL.dark);
+    joint(g, hx, hy, W * 0.55, o, METAL.dark);
   }
+}
+
+interface LegGeo { hx: number; hy: number; fx: number; fy: number; kx: number; ky: number; lift: number; }
+
+/** Smooth tapered alien limb segment (lens-shaped, bowed outward) with a glowing seam. */
+function sleekSeg(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number, w1: number, bow: number, c0: string, c1: string, E: string, o: number): void {
+  const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+  const nx = -dy / l, ny = dx / l;
+  const mx = (x0 + x1) / 2 + nx * bow, my = (y0 + y1) / 2 + ny * bow;
+  const wm = (w0 + w1) * 0.62;
+  const p = new Path2D();
+  p.moveTo(x0 + nx * w0, y0 + ny * w0);
+  p.quadraticCurveTo(mx + nx * wm * 1.4, my + ny * wm * 1.4, x1 + nx * w1, y1 + ny * w1);
+  p.lineTo(x1 - nx * w1, y1 - ny * w1);
+  p.quadraticCurveTo(mx - nx * wm * 0.6, my - ny * wm * 0.6, x0 - nx * w0, y0 - ny * w0);
+  p.closePath();
+  const gr = g.createLinearGradient(mx + nx * wm, my + ny * wm, mx - nx * wm, my - ny * wm);
+  gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+  g.fillStyle = gr; g.fill(p);
+  g.lineJoin = 'round'; g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(p);
+  // glowing seam following the bow
+  g.lineCap = 'round';
+  g.strokeStyle = rgba(E, 0.85); g.lineWidth = Math.max(o * 0.6, Math.min(w0, w1) * 0.28);
+  g.beginPath();
+  g.moveTo(x0 + dx * 0.12 + nx * w0 * 0.2, y0 + dy * 0.12 + ny * w0 * 0.2);
+  g.quadraticCurveTo(mx + nx * wm * 0.45, my + ny * wm * 0.45, x1 - dx * 0.12 + nx * w1 * 0.2, y1 - dy * 0.12 + ny * w1 * 0.2);
+  g.stroke();
+}
+
+/** Alien digitigrade leg: arched thigh, floating knee node, needle shin, hovering foot node. */
+function sleekLeg(g: Ctx, q: LegGeo, W: number, pal: TeamPal, E: string, o: number, big: boolean): void {
+  const { hx, hy, fx, fy, kx, ky, lift } = q;
+  const side = hy < 0 ? -1 : 1;
+  const up = 1 + lift * 0.25;
+  const shell0 = shade(METAL.light, 0.05 + lift * 0.1), shell1 = METAL.deep;
+  // shin: knee -> foot, tapering to a point, bowed backward (reverse joint)
+  sleekSeg(g, kx, ky, W * 0.42 * up, fx, fy, W * 0.1, -side * W * 0.5, shell0, shell1, E, o);
+  // thigh: hip -> knee, thick, bowed outward
+  sleekSeg(g, hx, hy, W * 0.7, kx, ky, W * 0.5 * up, side * W * 0.9, shade(pal.dark, 0.05 + lift * 0.1), METAL.deep, E, o);
+  // floating knee node: dark orb in an emissive ring
+  dot(g, kx, ky, W * 0.5 * up, OUTLINE);
+  dot(g, kx, ky, W * 0.42 * up, '#0b1016');
+  g.strokeStyle = rgba(E, 0.9); g.lineWidth = Math.max(o * 0.7, W * 0.12);
+  g.beginPath(); g.arc(kx, ky, W * 0.3 * up, 0, P2); g.stroke();
+  dot(g, kx - W * 0.1, ky - W * 0.1, W * 0.1, 'rgba(255,255,255,0.7)');
+  // foot node
+  dot(g, fx, fy, W * (big ? 0.24 : 0.2), OUTLINE);
+  dot(g, fx, fy, W * (big ? 0.15 : 0.12), rgba(E, 0.95));
+  // hip socket
+  dot(g, hx, hy, W * 0.55, OUTLINE);
+  dot(g, hx, hy, W * 0.46, METAL.dark);
+  dot(g, hx, hy, W * 0.2, rgba(E, 0.8));
+}
+
+/** Stubby piston stilt: short A-frame strut, telescoping ram straight down to a big bolted foot pad. */
+function stubLeg(g: Ctx, q: LegGeo, W: number, pal: TeamPal, E: string, o: number, small: boolean): void {
+  const { hx, hy, fx, fy, kx, ky, lift } = q;
+  const pr = W * (small ? 0.5 : 0.62) * (1 - lift * 0.15);
+  // foot pad
+  const pad = new Path2D();
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * P2 + P2 / 16; pad.lineTo(fx + Math.cos(a) * pr, fy + Math.sin(a) * pr); }
+  pad.closePath();
+  g.fillStyle = METAL.dark; g.fill(pad); g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(pad);
+  g.strokeStyle = 'rgba(232,184,28,0.75)'; g.lineWidth = Math.max(o * 0.5, pr * 0.14);
+  g.beginPath(); g.arc(fx, fy, pr * 0.66, 0, P2); g.stroke();
+  // upper strut (team armour) and the ram
+  beam(g, hx, hy, W * 0.5, kx, ky, W * 0.42, shade(pal.dark, 0.08 + lift * 0.1), pal.deep, o);
+  piston(g, kx, ky, fx, fy, W * 0.26, o * 0.8);
+  joint(g, kx, ky, W * 0.38, o * 0.8, METAL.base, small ? undefined : rgba(E, 0.9));
+  dot(g, fx, fy, pr * 0.3, METAL.light);
+  if (!small) joint(g, hx, hy, W * 0.45, o * 0.8, METAL.dark);
 }
 
 /* ------------------------------------------------------------------------------------------------ dynamic fx */
@@ -1092,7 +1453,7 @@ function lightsOf(L: UnitLayout): CLight[] {
     case 'saucer': o.push({ x: 0, y: 0, r: 0.12 * S, k: 'core', ph: 0 }); break;
     case 'broodmother':
       eye(0.405, 0.05, 0.05);
-      for (const [x, y, r] of EGGS) o.push({ x: x * S, y: y * S, r: r * S, k: 'egg', ph: x * 13 + y * 7 });
+      for (const [x, y, r] of CELLS) o.push({ x: x * S, y: y * S, r: r * S, k: 'egg', ph: x * 13 + y * 7 });
       break;
     case 'arachne': eye(0.425, 0.05, 0.045); break;
   }

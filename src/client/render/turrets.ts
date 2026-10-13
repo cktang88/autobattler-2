@@ -2,7 +2,7 @@
 // Drawn in turret-local cell units: pivot at origin, barrels pointing +x. `d` = turret base diameter (cells).
 
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
-import { METAL, OUTLINE, clamp, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
+import { METAL, OUTLINE, clamp, mix, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
 
 /** Glow colour used by a weapon family (beams, lenses, projectiles). null = use team glow. */
 export function visualGlow(v: ModuleVisual | undefined, pal: TeamPal): string {
@@ -45,6 +45,42 @@ const MUZZLE_BY_ID: Record<string, number> = {
   massdriver: 1.72, doomsday: 1.6, annihilator: 1.5, tactnuke: 1.0, titanfist: 1.75, stormcore: 0.3,
 };
 export function muzzleLen(m: ModuleDef | undefined): number {
+  return baseMuzzle(m) * barrelStretch(m);
+}
+
+/** 0..1 by weapon range (5 cells or less = 0, 16+ = 1). */
+const rangeF = (m: ModuleDef) => clamp(((m.range ?? 6) - 5) / 11, 0, 1);
+
+/**
+ * Barrel length multiplier (applied about the pivot to the barrel group): parts look like their job - artillery and
+ * precision guns get long barrels, and longer range = longer barrel within each family.
+ */
+export function barrelStretch(m: ModuleDef | undefined): number {
+  if (!m) return 1;
+  if (m.id === 'doomsday') return 1.2;
+  if (MUZZLE_BY_ID[m.id] !== undefined) return 1;
+  const rf = rangeF(m);
+  switch (m.visual) {
+    case 'artillery': return (m.barrels ?? 1) > 1 ? 1.15 + 0.1 * rf : 1.2 + 0.12 * rf;
+    case 'sniper': return 1.2 + 0.1 * rf;
+    case 'rail': case 'gauss': return 1.12 + 0.1 * rf;
+    case 'cannon': return 1.05 + 0.12 * rf;
+    case 'gun': case 'gatling': return 0.95 + 0.15 * rf;
+    default: return 1;
+  }
+}
+
+/** Run a barrel-drawing block stretched along +x by the module's barrel multiplier. */
+function stretched(g: Ctx, m: ModuleDef, fn: () => void): void {
+  const f = barrelStretch(m);
+  if (f === 1) { fn(); return; }
+  g.save();
+  g.scale(f, 1);
+  fn();
+  g.restore();
+}
+
+function baseMuzzle(m: ModuleDef | undefined): number {
   if (!m) return 0.8;
   if (MUZZLE_BY_ID[m.id] !== undefined) return MUZZLE_BY_ID[m.id];
   const c = m.caliber ?? 0.5;
@@ -84,7 +120,7 @@ export function muzzleLen(m: ModuleDef | undefined): number {
 }
 
 /** Half-extent of the turret sprite, as a multiple of d. */
-export const TURRET_EXT = 1.75;
+export const TURRET_EXT = 2.15;
 
 type Fill = string | CanvasGradient;
 const lw = (g: Ctx, w: number) => { g.lineWidth = w; };
@@ -102,21 +138,32 @@ function shape(g: Ctx, fill: Fill, outline: number, path: () => void): void {
 }
 
 /** A barrel from x0 to x1 at lateral offset y, width w. Metallic with a highlight line. */
-function barrel(g: Ctx, x0: number, x1: number, y: number, w: number, o: number, color = METAL.base): void {
-  shape(g, color, o, () => roundRect(g, x0, y - w / 2, x1 - x0, w, w * 0.3));
-  g.fillStyle = 'rgba(255,255,255,0.28)';
-  g.fillRect(x0 + w * 0.3, y - w * 0.32, (x1 - x0) - w * 0.6, w * 0.22);
+function barrel(g: Ctx, x0: number, x1: number, y: number, w: number, o: number, color = GUN): void {
+  // cylindrical gun-steel: dark flanks, bright sheen band, crisp specular line
+  const gr = g.createLinearGradient(0, y - w / 2, 0, y + w / 2);
+  gr.addColorStop(0, shade(color, -0.25));
+  gr.addColorStop(0.28, shade(color, 0.55));
+  gr.addColorStop(0.55, color);
+  gr.addColorStop(1, shade(color, -0.55));
+  shape(g, gr, o, () => roundRect(g, x0, y - w / 2, x1 - x0, w, w * 0.3));
+  g.fillStyle = 'rgba(255,255,255,0.75)';
+  g.fillRect(x0 + w * 0.3, y - w * 0.27, (x1 - x0) - w * 0.6, Math.max(w * 0.09, o * 0.45));
 }
+
+/** Gun steel (barrels) and ceramic armour (housings): neutral, lighter than any hull so weapons pop. */
+const GUN = '#69747d';
+const CERAMIC = ['#f2f5f7', '#c3cbd1', '#7b8790'];
 
 function muzzle(g: Ctx, x: number, y: number, w: number, len: number, o: number): void {
   shape(g, METAL.dark, o, () => roundRect(g, x - len, y - w / 2, len, w, w * 0.2));
 }
 
+/** Turret housing material: light ceramic gun-armour with only a faint team tint (team colour lives on the hull). */
 function teamGrad(g: Ctx, pal: TeamPal, r: number): CanvasGradient {
   const gr = g.createLinearGradient(-r, -r, r, r);
-  gr.addColorStop(0, shade(pal.light, 0.3));
-  gr.addColorStop(0.5, shade(pal.light, -0.05));
-  gr.addColorStop(1, shade(pal.body, -0.1));
+  gr.addColorStop(0, mix(CERAMIC[0], pal.light, 0.1));
+  gr.addColorStop(0.45, mix(CERAMIC[1], pal.body, 0.1));
+  gr.addColorStop(1, mix(CERAMIC[2], pal.dark, 0.14));
   return gr;
 }
 
@@ -531,7 +578,10 @@ export const CATEGORY_COLOR: Record<string, string> = {
 function categoryTick(g: Ctx, m: ModuleDef, r: number, o: number): void {
   const col = CATEGORY_COLOR[m.category];
   if (!col) return;
-  shape(g, col, o * 0.5, () => roundRect(g, -r * 1.02, -r * 0.16, r * 0.16, r * 0.32, r * 0.05));
+  // role-coloured stripe plate on the turret's rear: reads at a glance which job the weapon does
+  shape(g, col, o * 0.6, () => roundRect(g, -r * 1.06, -r * 0.34, r * 0.2, r * 0.68, r * 0.06));
+  g.fillStyle = 'rgba(255,255,255,0.45)';
+  g.fillRect(-r * 1.02, -r * 0.3, r * 0.05, r * 0.6);
 }
 
 function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n: number, o: number, glow: string): void {
@@ -540,10 +590,12 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       const bw = r * (0.2 + 0.28 * c) * (n >= 4 ? 0.75 : 1);
       const len = r * (1.7 + c * 0.9);
       const offs = n >= 4 ? [-0.42, -0.14, 0.14, 0.42].map((v) => v * r * 1.6) : spreadOffsets(n, r * 0.75);
-      for (const y of offs) {
-        barrel(g, 0, len, y, bw, o);
-        if (c >= 0.45) muzzle(g, len, y, bw * 1.45, bw * 1.4, o * 0.7);
-      }
+      stretched(g, m, () => {
+        for (const y of offs) {
+          barrel(g, 0, len, y, bw, o);
+          if (c >= 0.45) muzzle(g, len, y, bw * 1.45, bw * 1.4, o * 0.7);
+        }
+      });
       // mantlet + housing
       shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.95, -r * (n >= 2 ? 0.95 : 0.8), r * 1.75, r * (n >= 2 ? 1.9 : 1.6), r * 0.35));
       shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.55, -r * (n >= 2 ? 0.7 : 0.45), r * 0.4, r * (n >= 2 ? 1.4 : 0.9), r * 0.12));
@@ -580,13 +632,17 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       break;
     }
     case 'cannon': {
-      const bw = r * (0.24 + 0.12 * c);
+      const bw = r * (0.27 + 0.16 * c);
       const len = r * 2.45;
-      for (const y of spreadOffsets(n, r * 0.7)) {
-        barrel(g, 0, len, y, bw, o);
-        shape(g, METAL.base, o * 0.7, () => roundRect(g, len * 0.48, y - bw * 0.72, len * 0.16, bw * 1.44, bw * 0.4));
-        muzzle(g, len + bw * 0.25, y, bw * 1.5, bw * 1.1, o * 0.7);
-      }
+      stretched(g, m, () => {
+        for (const y of spreadOffsets(n, r * 0.7)) {
+          barrel(g, 0, len, y, bw, o);
+          // bore evacuator + muzzle brake
+          barrel(g, len * 0.5, len * 0.66, y, bw * 1.45, o * 0.7, METAL.base);
+          muzzle(g, len + bw * 0.25, y, bw * 1.5, bw * 1.1, o * 0.7);
+          g.fillStyle = '#05070a'; g.fillRect(len - bw * 0.65, y - bw * 0.75, bw * 0.18, bw * 1.5);
+        }
+      });
       shape(g, teamGrad(g, pal, r), o, () => {
         g.moveTo(r * 0.85, -r * 0.55); g.lineTo(r * 0.6, -r * 0.92); g.lineTo(-r * 0.75, -r * 0.92); g.lineTo(-r * 1.0, -r * 0.5);
         g.lineTo(-r * 1.0, r * 0.5); g.lineTo(-r * 0.75, r * 0.92); g.lineTo(r * 0.6, r * 0.92); g.lineTo(r * 0.85, r * 0.55); g.closePath();
@@ -601,14 +657,16 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
     }
     case 'gauss': {
       const len = r * 2.55;
-      shape(g, METAL.dark, o, () => roundRect(g, 0, -r * 0.3, len, r * 0.6, r * 0.12));
-      g.strokeStyle = glow; lw(g, r * 0.08);
-      g.beginPath(); g.moveTo(r * 0.2, 0); g.lineTo(len - r * 0.05, 0); g.stroke();
-      for (let i = 0; i < 6; i++) {
-        const x = r * (0.45 + i * 0.33);
-        shape(g, '#c27a3a', o * 0.5, () => roundRect(g, x, -r * 0.38, r * 0.16, r * 0.76, r * 0.05));
-      }
-      glowDot(g, len, 0, r * 0.12, glow);
+      stretched(g, m, () => {
+        shape(g, METAL.dark, o, () => roundRect(g, 0, -r * 0.3, len, r * 0.6, r * 0.12));
+        g.strokeStyle = glow; lw(g, r * 0.08);
+        g.beginPath(); g.moveTo(r * 0.2, 0); g.lineTo(len - r * 0.05, 0); g.stroke();
+        for (let i = 0; i < 6; i++) {
+          const x = r * (0.45 + i * 0.33);
+          shape(g, '#c27a3a', o * 0.5, () => roundRect(g, x, -r * 0.38, r * 0.16, r * 0.76, r * 0.05));
+        }
+      });
+      glowDot(g, len * barrelStretch(m), 0, r * 0.12, glow);
       shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 0.7, -r * 0.6); g.lineTo(-r * 0.4, -r * 0.95); g.lineTo(-r * 1.0, -r * 0.6); g.lineTo(-r * 1.0, r * 0.6); g.lineTo(-r * 0.4, r * 0.95); g.lineTo(r * 0.7, r * 0.6); g.closePath(); });
       shape(g, METAL.dark, o * 0.6, () => roundRect(g, -r * 0.75, -r * 0.35, r * 0.7, r * 0.7, r * 0.1));
       glowDot(g, -r * 0.4, 0, r * 0.12, glow);
@@ -616,8 +674,12 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
     }
     case 'sniper': {
       const len = r * 2.9;
-      barrel(g, 0, len, 0, r * 0.16, o);
-      muzzle(g, len, 0, r * 0.28, r * 0.3, o * 0.7);
+      stretched(g, m, () => {
+        barrel(g, 0, len, 0, r * 0.16, o);
+        muzzle(g, len, 0, r * 0.28, r * 0.3, o * 0.7);
+        // bipod-style barrel support collar halfway down
+        shape(g, METAL.dark, o * 0.5, () => roundRect(g, len * 0.55, -r * 0.13, r * 0.14, r * 0.26, r * 0.04));
+      });
       shape(g, METAL.deep, o * 0.6, () => roundRect(g, r * 0.1, -r * 0.42, r * 0.9, r * 0.2, r * 0.08));
       shape(g, '#7fd0ff', 0, () => g.arc(r * 1.0, -r * 0.32, r * 0.07, 0, Math.PI * 2));
       shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.85, -r * 0.55, r * 1.25, r * 1.1, r * 0.3));
@@ -626,11 +688,13 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
     }
     case 'rail': {
       const len = r * (2.3 + c * 0.5);
-      shape(g, METAL.deep, 0, () => g.rect(r * 0.3, -r * 0.14, len - r * 0.3, r * 0.28));
-      g.strokeStyle = glow; lw(g, r * 0.1);
-      g.beginPath(); g.moveTo(r * 0.3, 0); g.lineTo(len, 0); g.stroke();
-      for (const y of [-0.24, 0.24]) barrel(g, 0, len, y * r, r * 0.2, o, METAL.light);
-      for (let i = 0; i < 3; i++) shape(g, METAL.dark, o * 0.5, () => roundRect(g, r * (0.6 + i * 0.55), -r * 0.4, r * 0.12, r * 0.8, r * 0.04));
+      stretched(g, m, () => {
+        shape(g, METAL.deep, 0, () => g.rect(r * 0.3, -r * 0.14, len - r * 0.3, r * 0.28));
+        g.strokeStyle = glow; lw(g, r * 0.1);
+        g.beginPath(); g.moveTo(r * 0.3, 0); g.lineTo(len, 0); g.stroke();
+        for (const y of [-0.24, 0.24]) barrel(g, 0, len, y * r, r * 0.2, o, METAL.light);
+        for (let i = 0; i < 4; i++) shape(g, '#c27a3a', o * 0.5, () => roundRect(g, r * (0.6 + i * 0.5), -r * 0.4, r * 0.12, r * 0.8, r * 0.04));
+      });
       shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.0, -r * 0.8, r * 1.5, r * 1.6, r * 0.18));
       for (const y of [-0.5, 0.5]) shape(g, METAL.dark, o * 0.5, () => roundRect(g, -r * 0.85, y * r - r * 0.18, r * 1.0, r * 0.36, r * 0.06));
       glowDot(g, -r * 0.35, -r * 0.5, r * 0.08, glow);
@@ -705,11 +769,18 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       const multi = n > 1;
       const len = r * (multi ? 2.25 : 2.9);
       const bw = r * (multi ? 0.2 : 0.3);
-      for (const y of spreadOffsets(n, r * 0.9)) {
-        barrel(g, 0, len, y, bw, o);
-        muzzle(g, len + bw * 0.3, y, bw * 1.6, bw * 1.3, o * 0.7);
-        if (!multi) for (const s of [-1, 1]) shape(g, METAL.light, o * 0.5, () => roundRect(g, r * 0.4, y + s * bw * 0.85 - bw * 0.2, r * 0.8, bw * 0.4, bw * 0.2));
-      }
+      stretched(g, m, () => {
+        for (const y of spreadOffsets(n, r * 0.9)) {
+          barrel(g, 0, len, y, bw, o);
+          // fume extractor + slotted muzzle brake
+          barrel(g, len * 0.55, len * 0.7, y, bw * 1.35, o * 0.7, METAL.base);
+          muzzle(g, len + bw * 0.3, y, bw * 1.75, bw * 1.5, o * 0.7);
+          g.fillStyle = '#05070a';
+          for (const k of [0.45, 0.95]) g.fillRect(len + bw * 0.3 - bw * 1.5 + bw * k * 0.9, y - bw * 0.85, bw * 0.16, bw * 1.7);
+          // recoil sled rails
+          if (!multi) for (const s of [-1, 1]) shape(g, METAL.light, o * 0.5, () => roundRect(g, r * 0.4, y + s * bw * 0.85 - bw * 0.2, r * 0.95, bw * 0.4, bw * 0.2));
+        }
+      });
       shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.1, -r * 0.9, r * 1.8, r * 1.8, r * 0.25));
       shape(g, METAL.dark, o * 0.7, () => roundRect(g, r * 0.25, -r * 0.65, r * 0.6, r * 1.3, r * 0.15));
       g.strokeStyle = rgba(pal.deep, 0.5); lw(g, o * 0.5);
@@ -1366,12 +1437,14 @@ function drawGiantTurret(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: numbe
         hazard(g, -r * 2.1, s * r * 1.15 - r * 0.25, r * 0.16, r * 0.5);
       }
       baseRing(g, r, o, -r * 0.1, 1.25);
-      for (const y of [-0.55, 0.55]) {
-        barrel(g, 0, r * 3.1, y * r, r * 0.5, o);
-        shape(g, METAL.base, o * 0.7, () => roundRect(g, r * 1.1, y * r - r * 0.34, r * 0.5, r * 0.68, r * 0.12));
-        shape(g, METAL.dark, o, () => roundRect(g, r * 2.85, y * r - r * 0.36, r * 0.55, r * 0.72, r * 0.1));
-        for (let i = 0; i < 2; i++) shape(g, '#05070a', 0, () => g.rect(r * (2.95 + i * 0.2), y * r - r * 0.32, r * 0.08, r * 0.64));
-      }
+      stretched(g, m, () => {
+        for (const y of [-0.55, 0.55]) {
+          barrel(g, 0, r * 3.1, y * r, r * 0.5, o);
+          barrel(g, r * 1.1, r * 1.6, y * r, r * 0.68, o * 0.7, METAL.base);
+          shape(g, METAL.dark, o, () => roundRect(g, r * 2.85, y * r - r * 0.36, r * 0.55, r * 0.72, r * 0.1));
+          for (let i = 0; i < 2; i++) shape(g, '#05070a', 0, () => g.rect(r * (2.95 + i * 0.2), y * r - r * 0.32, r * 0.08, r * 0.64));
+        }
+      });
       shape(g, METAL.dark, o * 0.7, () => roundRect(g, r * 0.5, -r * 1.0, r * 0.4, r * 2.0, r * 0.1));
       shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 0.5, -r * 1.2); g.lineTo(-r * 0.9, -r * 1.2); g.lineTo(-r * 1.2, -r * 0.7); g.lineTo(-r * 1.2, r * 0.7); g.lineTo(-r * 0.9, r * 1.2); g.lineTo(r * 0.5, r * 1.2); g.closePath(); });
       g.strokeStyle = rgba(pal.deep, 0.5); lw(g, o * 0.6); g.beginPath(); g.moveTo(-r * 0.3, -r * 1.15); g.lineTo(-r * 0.3, r * 1.15); g.stroke();
@@ -1653,12 +1726,12 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
       if (c > 0 && m.id === 'doomsday') {
         // breech glow + loader lights as the next salvo is rammed home
         for (const y of [-0.55, 0.55]) glowAt(r * 0.3, y * r, r * (0.3 + 0.3 * c), '#ffb060', c * 0.7);
-        const on = (t * 3) % 1 < 0.5;
-        glowAt(-r * 2.0, -r * 1.15, r * 0.35, '#ffcc40', on ? c : 0.1);
-        glowAt(-r * 2.0, r * 1.15, r * 0.35, '#ffcc40', on ? 0.1 : c);
+        const on = 0.5 + 0.5 * Math.sin(t * Math.PI * 3);
+        glowAt(-r * 2.0, -r * 1.15, r * 0.35, '#ffcc40', 0.1 + (c - 0.1) * on);
+        glowAt(-r * 2.0, r * 1.15, r * 0.35, '#ffcc40', 0.1 + (c - 0.1) * (1 - on));
       }
       if (flash > 0.15) {
-        const bx = m.id === 'siege240' ? r * 3.4 : r * 3.45;
+        const bx = m.id === 'siege240' ? r * 3.4 : r * 3.45 * barrelStretch(m);
         const ys = m.id === 'siege240' ? [0] : [-0.55, 0.55];
         for (const y of ys) { glowAt(bx, y * r, r * (1.2 + flash * 1.6), '#ffd890', flash); glowAt(bx, y * r, r * 0.5, '#ffffff', flash); }
       }

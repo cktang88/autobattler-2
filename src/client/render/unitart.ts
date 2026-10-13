@@ -207,9 +207,10 @@ export function hullPath(shape: Shape, S: number): Path2D {
 export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: number, hw: number): void {
   // base + shading
   const gr = g.createLinearGradient(-0.3 * S, -hw * S * 1.2, 0.3 * S, hw * S * 1.2);
-  gr.addColorStop(0, pal.light);
-  gr.addColorStop(0.45, pal.body);
-  gr.addColorStop(1, pal.dark);
+  // mid-tone team armour (turrets are the light layer, running gear the dark one)
+  gr.addColorStop(0, shade(pal.light, -0.2));
+  gr.addColorStop(0.45, shade(pal.body, -0.06));
+  gr.addColorStop(1, shade(pal.dark, -0.12));
   g.fillStyle = gr;
   g.fill(path);
   g.save();
@@ -232,6 +233,15 @@ export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: numb
   g.strokeStyle = 'rgba(0,0,0,0.35)';
   g.lineWidth = 0.06 * S;
   g.stroke(path);
+  // edge wear: bare-metal scuffs chipped along the lit rim
+  g.save();
+  g.translate(-o * 0.6, -o * 0.6);
+  g.setLineDash([0.012 * S, 0.05 * S, 0.03 * S, 0.08 * S]);
+  g.strokeStyle = 'rgba(220,228,235,0.35)';
+  g.lineWidth = o * 0.9;
+  g.stroke(path);
+  g.setLineDash([]);
+  g.restore();
   g.restore();
   // inner highlight
   g.save();
@@ -1053,9 +1063,29 @@ export function turretSprite(m: ModuleDef, team: Team, d: number, px: number): H
   sp.g.beginPath();
   sp.g.arc(dq * 0.06, dq * 0.08, dq * 0.5, 0, Math.PI * 2);
   sp.g.fill();
-  drawTurret(sp.g, m, TEAM_PAL[team], dq, Math.max(1.1 / px, dq * 0.07), true);
+  drawTurret(sp.g, m, TEAM_PAL[team], dq, Math.max(1.25 / px, dq * 0.08), true);
   turretCache.set(key, sp.c);
   return sp.c;
+}
+
+const shadowCache = new Map<string, HTMLCanvasElement>();
+/** Blurred black silhouette of a turret sprite (cast shadow). */
+export function turretShadow(m: ModuleDef, team: Team, d: number, px: number): HTMLCanvasElement {
+  const src = turretSprite(m, team, d, px);
+  const key = `${m.id}|${team}|${Math.round(d * 100)}|${Math.max(4, Math.round(px))}`;
+  let c = shadowCache.get(key);
+  if (c) return c;
+  if (shadowCache.size > 1200) shadowCache.clear();
+  c = makeCanvas(src.width, src.height);
+  const g = ctx2d(c);
+  g.filter = `blur(${Math.max(1, Math.round(px * d * 0.05))}px)`;
+  g.drawImage(src, 0, 0);
+  g.filter = 'none';
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, c.width, c.height);
+  shadowCache.set(key, c);
+  return c;
 }
 
 /** Wreck sprite: hull silhouette charred, used for persistent battlefield decals. */
@@ -1331,6 +1361,12 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const mx = x + (cs * lx - sn * ly) * sc - Math.cos(ta) * rec;
     const my = y + (sn * lx + cs * ly) * sc - Math.sin(ta) * rec;
     const ts = turretSprite(m.mod, p.team, m.d, px);
+    // soft cast shadow onto the hull so the turret reads as sitting on top
+    const tsh = turretShadow(m.mod, p.team, m.d, px);
+    const so = m.d * 0.09 * sc;
+    g.globalAlpha = alpha * 0.55;
+    blit(g, tsh, mx + so * 0.6, my + so, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
+    g.globalAlpha = alpha;
     const dis = (p.disarm ?? 0) > 0;
     if (dis) g.globalAlpha = alpha * (0.6 + 0.3 * Math.sin(p.time * 11 + i * 2));
     blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);

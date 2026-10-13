@@ -13,10 +13,10 @@ import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.t
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters } from '../../shared/grid.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
-import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
+import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
-import { confirmModal, kiteOptions, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, sizeLabel, type EscortUi, type Orders } from './match-ui.ts';
+import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
@@ -73,17 +73,6 @@ function spacingControl(value: number, onPick: ((v: number) => void) | null): HT
 type Op = { kind: 'place' | 'upgrade'; uid: number };
 type Sel = { side: Side; uid: number; pending: boolean } | null;
 type FieldWithEvents = FieldView & { pushEvents?: (events: BattleEvent[]) => void };
-
-function loadoutIcon(kind: PartKind, id: string, px: number): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.className = 'lo-icon';
-  c.style.width = c.style.height = `${px}px`;
-  c.setAttribute('aria-hidden', 'true');
-  requestAnimationFrame(() => { try { drawPartIcon(c, kind, id, { backdrop: true }); } catch { /* icon unavailable */ } });
-  return c;
-}
-const shorten = (t: string, n = 44) => { const f = t.split(/(?<=[.;])\s/)[0] ?? t; return f.length > n ? `${f.slice(0, n - 1).trimEnd()}…` : f; };
-const num1 = (n: number) => String(Math.round(n * 10) / 10);
 
 const stars = (lv: number) => '★'.repeat(lv) + '☆'.repeat(Math.max(0, MAX_LEVEL - lv));
 
@@ -168,7 +157,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   // ---------- DOM ----------
   const canvas = h('canvas');
-  const fieldwrap = h('div.fieldwrap', null, canvas);
+  const ringCv = h('canvas.rings', { 'aria-hidden': 'true' });
+  const fieldwrap = h('div.fieldwrap', null, canvas, ringCv);
   const view: FieldWithEvents = new FieldView(canvas, side);
 
   const roundEl = h('div.round');
@@ -192,6 +182,25 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   );
 
   const hintEl = h('div.hint');
+  const miniEl = h('div.mini-wrap.hidden');
+  // range overlay controls
+  let showMine = false, showFoe = false, shiftDown = false, ringHi: string | null = null;
+  const mineBtn = h('button.small.rbtn', { type: 'button', title: 'Show weapon ranges of all your units (hold Shift)', 'aria-pressed': 'false', onclick: () => { showMine = !showMine; paintRangeBtns(); } }, svgIcon('range', 16), 'Ranges');
+  const foeBtn = h('button.small.rbtn.foe', { type: 'button', title: 'Show weapon ranges of all enemy units', 'aria-pressed': 'false', onclick: () => { showFoe = !showFoe; paintRangeBtns(); } }, svgIcon('range', 16), 'Enemy ranges');
+  const legendEl = h('div.rlegend.hidden', null,
+    h('span', { style: `--c:${RING_COLOR.ground}` }, 'Ground'),
+    h('span', { style: `--c:${RING_COLOR.air}` }, 'Air'),
+    h('span', { style: `--c:${RING_COLOR.both}` }, 'Both'),
+    h('span.sup', { style: `--c:${RING_COLOR.support}` }, 'Support'),
+    h('span.dash', { style: `--c:${'#ffffff'}` }, 'Min range'),
+  );
+  const rangeBar = h('div.rangebar.hidden', null, h('div.rbtns', null, mineBtn, foeBtn), legendEl);
+  function paintRangeBtns() {
+    mineBtn.classList.toggle('active', showMine);
+    mineBtn.setAttribute('aria-pressed', String(showMine));
+    foeBtn.classList.toggle('active', showFoe);
+    foeBtn.setAttribute('aria-pressed', String(showFoe));
+  }
   const infoEl = h('div.panel.info.hidden');
   const speedBtns = [1, 2, 4].map((v) => h('button.small', { onclick: () => { speed = v; renderSpeed(); } }, `${v}×`));
   const skipBtn = h('button.small', { onclick: () => skipBattle() }, 'Skip ▸▸');
@@ -202,7 +211,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => view.zoomBy(1 / 1.5) }, '−'),
     h('button.small', { title: 'Fit whole field (F)', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
   );
-  fieldwrap.append(hintEl, infoEl, speedbar, zoomBar, overlayEl);
+  fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
 
   const el = h('div.screen.match', null, topbar, h('div.mbody', null, fieldwrap, sideEl));
 
@@ -225,37 +234,85 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     cardsEl.replaceChildren(...cardEls);
     paintCards();
   }
+  // ---------- stat tooltip (floating near the cursor / shop card; bottom sheet on touch) ----------
   let tipEl: HTMLElement | null = null;
-  function hideTip() { tipEl?.remove(); tipEl = null; }
-  function showTip(b: HTMLElement, d: Design) {
+  let tipSize = { w: 0, h: 0 };
+  let tipKey = '';
+  let sheetOff: (() => void) | null = null;
+  function hideTip() { tipEl?.remove(); tipEl = null; tipKey = ''; sheetOff?.(); sheetOff = null; ringHi = null; }
+  function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean): HTMLElement {
+    const lv = Math.max(1, Math.min(MAX_LEVEL, level));
+    return h('div.stat-tip', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
+      h('div.sc-head', null,
+        h('b.sc-name', null, d.name),
+        h('span.stars', null, stars(lv)),
+        h('span.sc-tag2', null, tag),
+        h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost))),
+      statCard({ design: d, st, level: lv, spacing, onRing: interactive ? (k) => { ringHi = k; } : undefined }));
+  }
+  function mountTip(tip: HTMLElement, sheet: boolean) {
     hideTip();
-    const mods = d.mounts.map((id) => (id ? MODULE_BY_ID.get(id) : undefined)).filter((x): x is NonNullable<typeof x> => !!x);
-    if (!mods.length) return;
-    const tip = h('div.deck-tip', { role: 'tooltip' }, ...mods.map((md) => {
-      const c = loadoutIcon('module', md.id, 28);
-      c.title = md.name;
-      return c;
-    }));
-    el.append(tip);
     tipEl = tip;
+    if (sheet) {
+      tip.classList.add('sheet');
+      tip.prepend(h('button.icon.small.ghost.close', { type: 'button', 'aria-label': 'Close', onclick: () => hideTip() }, '✕'));
+      const off = (e: Event) => { if (!tip.contains(e.target as Node)) hideTip(); };
+      const t = window.setTimeout(() => document.addEventListener('pointerdown', off, true), 350);
+      sheetOff = () => { clearTimeout(t); document.removeEventListener('pointerdown', off, true); };
+    }
+    el.append(tip);
+    tipSize = { w: tip.offsetWidth, h: tip.offsetHeight };
+  }
+  function showDeckTip(b: HTMLElement, d: Design, sheet: boolean) {
+    const st = statsOf(d);
+    if (!st) return;
+    mountTip(tipFor(d, st, 1, 'In shop', true, spacingOfCard(d), sheet), sheet);
+    if (sheet) return;
     const r = b.getBoundingClientRect(), er = el.getBoundingClientRect();
-    const w = tip.offsetWidth, ht = tip.offsetHeight;
-    const left = Math.max(4, Math.min(er.width - w - 4, r.left - er.left + r.width / 2 - w / 2));
-    let top = r.top - er.top - ht - 6;
-    if (top < 4) top = r.bottom - er.top + 6;
-    tip.style.left = `${left}px`;
-    tip.style.top = `${top}px`;
+    const { w, h: ht } = tipSize;
+    let left = r.left - er.left - w - 10;
+    let top = Math.max(4, Math.min(er.height - ht - 4, r.top - er.top + r.height / 2 - ht / 2));
+    if (left < 4) { // no room beside the card (narrow layouts): centre above it
+      left = Math.max(4, Math.min(er.width - w - 4, r.left - er.left + r.width / 2 - w / 2));
+      top = r.top - er.top - ht - 6;
+      if (top < 4) top = r.bottom - er.top + 6;
+    }
+    tipEl!.style.left = `${left}px`;
+    tipEl!.style.top = `${top}px`;
+  }
+  /** (re)build the tooltip of a block on the field; `at` = client coords of the pointer */
+  function showUnitTip(t: NonNullable<Sel>, at: { x: number; y: number } | null) {
+    const p = blockSrc(t);
+    const d = p && designOf(t.side, p.designId);
+    const st = d && statsOf(d);
+    if (!p || !d || !st) { hideTip(); return; }
+    const mine = t.side === side;
+    const lv = p.level + (mine && !t.pending ? pendingUps(p.uid) : 0);
+    const key = `${t.side}:${t.uid}:${t.pending}:${lv}`;
+    const sheet = !at; // no pointer position = touch long-press: bottom sheet
+    if (key !== tipKey || !tipEl) {
+      mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet), sheet);
+      tipKey = key;
+    }
+    if (sheet || !at) return;
+    const er = el.getBoundingClientRect();
+    const { w, h: ht } = tipSize;
+    let left = at.x - er.left + 18, top = at.y - er.top + 18;
+    if (left + w > er.width - 4) left = at.x - er.left - w - 18;
+    if (top + ht > er.height - 4) top = at.y - er.top - ht - 18;
+    tipEl!.style.left = `${Math.max(4, left)}px`;
+    tipEl!.style.top = `${Math.max(4, top)}px`;
   }
   function attachDeckTip(b: HTMLElement, d: Design) {
     let timer = 0;
-    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showTip(b, d); });
-    b.addEventListener('pointerleave', () => { clearTimeout(timer); hideTip(); });
+    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showDeckTip(b, d, false); });
+    b.addEventListener('pointerleave', (e) => { clearTimeout(timer); if (e.pointerType === 'mouse') hideTip(); });
     b.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse') return;
       clearTimeout(timer);
-      timer = window.setTimeout(() => { showTip(b, d); b.dataset.lp = '1'; }, 450);
+      timer = window.setTimeout(() => { showDeckTip(b, d, true); b.dataset.lp = '1'; }, 450);
     });
-    const cancel = () => { clearTimeout(timer); if (tipEl) setTimeout(hideTip, 1200); };
+    const cancel = () => { clearTimeout(timer); if (b.dataset.lp) setTimeout(() => delete b.dataset.lp, 400); };
     b.addEventListener('pointerup', cancel);
     b.addEventListener('pointercancel', cancel);
     b.addEventListener('contextmenu', (e) => { if (b.dataset.lp) e.preventDefault(); });
@@ -461,45 +518,59 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
+    const cd = phase === 'deploy' && !escortPick ? deck()[selCard] : undefined;
+    const cst = cd && statsOf(cd);
+    if (cd && cst) miniEl.replaceChildren(miniStats(cd, cst)); else miniEl.replaceChildren();
+    miniEl.classList.toggle('hidden', !cst);
   }
 
   function renderSpeed() {
     speedBtns.forEach((b, i) => b.classList.toggle('active', [1, 2, 4][i] === speed));
     speedbar.classList.toggle('hidden', phase !== 'battle');
+    rangeBar.classList.toggle('hidden', phase !== 'deploy' && phase !== 'waiting');
   }
 
   // ---------- info panel ----------
+  const narrow = () => window.matchMedia('(max-width: 760px), (hover: none)').matches;
+  const onRingHi = (k: string | null) => { ringHi = k; };
+  /** while placing (card selected, nothing selected) the panel previews the card's stats; hidden on phones */
+  function renderCardPreview(): boolean {
+    const d = phase === 'deploy' && !sel && !narrow() ? deck()[selCard] : undefined;
+    const st = d && statsOf(d);
+    if (!d || !st) return false;
+    const prev = h('canvas');
+    infoEl.replaceChildren(
+      h('button.icon.small.ghost.close', { onclick: () => { selCard = -1; hover = null; renderAll(); } }, '✕'),
+      h('div.head', null, prev, h('div', null,
+        h('h3.friendly', null, d.name),
+        h('div.sc-sub', null, 'Placing · ', h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost)))),
+      ),
+      statCard({ design: d, st, level: 1, spacing: spacingOfCard(d), onRing: onRingHi }),
+    );
+    infoEl.classList.remove('hidden');
+    infoEl.classList.remove('picking');
+    requestAnimationFrame(() => paintPreview(prev, d, 0));
+    return true;
+  }
   function renderInfo() {
-    if (!sel || (phase !== 'deploy' && phase !== 'waiting')) { infoEl.classList.add('hidden'); return; }
+    if (!sel || (phase !== 'deploy' && phase !== 'waiting')) {
+      if (!renderCardPreview()) { infoEl.classList.add('hidden'); ringHi = null; }
+      return;
+    }
     const s = sel;
     const p = s.pending ? place.find((x) => x.uid === s.uid) : m.players[s.side].board.find((x) => x.uid === s.uid);
     const d = p && designOf(s.side, p.designId);
     const st = d && statsOf(d);
     if (!p || !d || !st) { sel = null; infoEl.classList.add('hidden'); return; }
+    hideTip();
     const mine = s.side === side;
     const ups = mine && !s.pending ? pendingUps(p.uid) : 0;
     const lv = p.level + ups;
-    const mult = levelMult(lv);
     const squad = st.squad ?? 1;
     const sp = normSpacing(st.size, p.spacing);
     const prev = h('canvas');
-    const stat = (label: string, v: string, up = false) => h('div', null, h('span', null, label), h('b', { class: up ? 'up' : null }, v));
-    const parts = [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name, ...d.mounts.filter(Boolean).map((id) => MODULE_BY_ID.get(id!)?.name)].filter(Boolean).join(' · ');
+    const parts = [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name].filter(Boolean).join(' · ');
     const actions: HTMLElement[] = [];
-    const loRow = (kind: PartKind, id: string, label: string, name: string, stat: string) =>
-      h('li', null, loadoutIcon(kind, id, 32), h('div.lo-txt', null, h('div.lo-name', null, h('span.lo-kind', null, label), name), h('div.lo-stat', null, stat)));
-    const loadout: HTMLElement[] = [];
-    const ch = CHASSIS_BY_ID.get(d.chassis), mo = MOBILITY_BY_ID.get(d.mobility);
-    if (ch) loadout.push(loRow('chassis', ch.id, 'Chassis', ch.name, `${ch.hp} HP · armor ${ch.armor}`));
-    if (mo) loadout.push(loRow('mobility', mo.id, 'Mobility', mo.name, `${mo.kind} · speed ${fmtSpeed(mo.speed)}`));
-    for (const id of d.mounts) {
-      const md = id ? MODULE_BY_ID.get(id) : undefined;
-      if (!md) continue;
-      const stat = md.kind === 'weapon'
-        ? `${num1(weaponDps(md))} dps · range ${fmtMeters(md.range ?? 0)} · ${firingStyle(md)}`
-        : shorten(md.desc);
-      loadout.push(loRow('module', md.id, md.kind === 'weapon' ? 'Weapon' : md.kind === 'armor' ? 'Armor' : 'Utility', md.name, stat));
-    }
     if (mine && phase === 'deploy') {
       if (s.pending) {
         actions.push(h('button.small.danger', { onclick: () => removePending(p.uid) }, 'Remove (refund)'));
@@ -519,27 +590,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       h('button.icon.small.ghost.close', { onclick: () => { sel = null; renderAll(); } }, '✕'),
       h('div.head', null, prev, h('div', null,
         h('h3', { class: mine ? 'friendly' : 'enemy' }, d.name),
-        h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.8rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
-        squad > 1 ? h('div.squad-tag', null, `Squad ×${squad}`, h('span', null, ` · block ${st.cost}`)) : null,
-        h('div.muted', { style: { fontSize: '0.8rem' } }, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · ${sizeLabel(st.size)}${st.flying ? ' · Air' : st.isStatic ? ' · Static' : ''}`),
+        h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.85rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
+        h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost)), squad > 1 ? h('span.sc-blk', null, ` block of ${squad}`) : null),
       )),
-      h('div.stats', null,
-        stat(squad > 1 ? 'HP / unit' : 'HP', String(Math.round(st.hp * mult)), ups > 0),
-        stat(squad > 1 ? 'DPS / unit' : 'DPS', String(Math.round(st.dps * mult)), ups > 0),
-        squad > 1 ? stat('HP / block', String(Math.round(st.hp * mult * squad)), ups > 0) : null,
-        squad > 1 ? stat('DPS / block', String(Math.round(st.dps * mult * squad)), ups > 0) : null,
-        stat('Armor', String(st.armor)),
-        stat('Range', st.range ? fmtMeters(st.range) : '—'),
-        stat('Speed', st.isStatic ? '—' : fmtSpeed(st.speed)),
-        stat(squad > 1 ? 'Block cost' : 'Cost', String(st.cost)),
-        squad > 1 ? stat('Unit value', String(st.unitCost)) : null,
-        st.shield ? stat('Shield', String(st.shield)) : null,
-        st.heal ? stat('Repair', `${st.heal}/s`) : null,
-      ),
+      statCard({ design: d, st, level: lv, spacing: sp, upgraded: ups > 0, onRing: onRingHi }),
       mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)) } : {})) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null)) : '',
       h('div.parts', null, parts),
-      loadout.length ? h('div.loadout', null, h('div.lo-title', null, 'Loadout'), h('ul', null, ...loadout)) : '',
       actions.length ? h('div.actions', null, ...actions) : '',
     );
     infoEl.classList.remove('hidden');
@@ -753,8 +810,19 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   let downAt: { x: number; y: number } | null = null;
+  let lpTimer = 0;
+  let lpDone = false;
   canvas.addEventListener('pointerdown', (e) => {
     downAt = { x: e.clientX, y: e.clientY };
+    lpDone = false;
+    clearTimeout(lpTimer);
+    if (e.pointerType === 'touch' && (phase === 'deploy' || phase === 'waiting') && selCard < 0) {
+      const { px, rawY } = local(e);
+      lpTimer = window.setTimeout(() => { // long-press a unit: peek at its stats without selecting it
+        const hit = downAt && unitAt(px, rawY);
+        if (hit) { lpDone = true; showUnitTip(hit, null); }
+      }, 450);
+    }
     try { canvas.setPointerCapture(e.pointerId); } catch { /* */ }
     if (phase === 'deploy' && selCard >= 0) {
       const { px, py } = local(e);
@@ -765,10 +833,15 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   canvas.addEventListener('pointermove', (e) => {
     const lp = local(e);
     lastPtr = { px: lp.px, py: lp.py };
+    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) clearTimeout(lpTimer);
     if ((phase === 'deploy' || phase === 'waiting') && (selCard < 0 || phase !== 'deploy') && e.pointerType === 'mouse') {
       const hu = unitAt(lp.px, lp.rawY);
       hoverUnit = hu && !(sel && hu.side === sel.side && hu.uid === sel.uid && hu.pending === sel.pending) ? hu : null;
     } else hoverUnit = null;
+    if (e.pointerType === 'mouse') {
+      if (hoverUnit) showUnitTip(hoverUnit, { x: e.clientX, y: e.clientY });
+      else if (tipKey) hideTip();
+    }
     if (phase !== 'deploy' || selCard < 0) return;
     if (e.pointerType === 'touch' && !downAt) return;
     const { px, py } = local(e);
@@ -777,12 +850,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (prev?.x !== hover?.x || prev?.y !== hover?.y || prev?.valid !== hover?.valid) renderHint();
   });
   canvas.addEventListener('pointerleave', (e) => {
-    if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; renderHint(); }
+    if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; if (tipKey) hideTip(); renderHint(); }
   });
-  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; });
+  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; clearTimeout(lpTimer); });
   canvas.addEventListener('pointerup', (e) => {
     const start = downAt;
     downAt = null;
+    clearTimeout(lpTimer);
+    if (lpDone) { lpDone = false; return; }
     if (!start || e.button > 0) return;
     if (view.wasDrag) { // end of a pan / pinch: not a click or tap
       if (e.pointerType === 'touch') { hover = null; renderHint(); }
@@ -824,6 +899,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     } else if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (stepSpacing(e.key === ']' ? 1 : -1)) e.preventDefault();
     } else if (e.key === 'Escape') {
+      if (tipEl?.classList.contains('sheet')) { hideTip(); return; }
       if (escortPick) escortPick = null;
       else if (selCard >= 0) { selCard = -1; hover = null; }
       else sel = null;
@@ -840,6 +916,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
   };
   document.addEventListener('keydown', onKey);
+  const onShift = (e: KeyboardEvent) => { if (e.key === 'Shift') shiftDown = e.type === 'keydown'; };
+  const onBlur = () => { shiftDown = false; };
+  document.addEventListener('keydown', onShift);
+  document.addEventListener('keyup', onShift);
+  window.addEventListener('blur', onBlur);
 
   // Shift+wheel over the field changes squad spacing (captured here so the camera's wheel-zoom never sees it)
   let wheelAt = 0;
@@ -991,6 +1072,180 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     return { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: t.side === side };
   }
 
+  // ---------- range rings overlay ----------
+  interface RingTarget { side: Side; design: Design; st: UnitStats; pos: Pick<Placement, 'x' | 'y'> & { spacing?: number }; size: Size; strong: boolean; invalid?: boolean }
+  const ringCtx = ringCv.getContext('2d');
+  let ringW = 0, ringH = 0, ringDpr = 1, ringsShown = false;
+  function clearRings() {
+    if (!ringCtx || !ringsShown) return;
+    ringCtx.setTransform(1, 0, 0, 1, 0, 0);
+    ringCtx.clearRect(0, 0, ringCv.width, ringCv.height);
+    ringsShown = false;
+    legendEl.classList.add('hidden');
+  }
+  function rangeTargets(): RingTarget[] {
+    const out: RingTarget[] = [];
+    const seen = new Set<string>();
+    const push = (s: Side, p: Placement | { x: number; y: number; spacing?: number; designId?: string }, d: Design | undefined, strong: boolean, key: string, invalid = false) => {
+      if (!d || seen.has(key)) return;
+      const st = statsOf(d);
+      if (!st) return;
+      seen.add(key);
+      out.push({ side: s, design: d, st, pos: p, size: st.size, strong, invalid });
+    };
+    const keyOf = (s: Side, uid: number) => `${s}:${uid}`;
+    if (phase === 'deploy' && hover && selCard >= 0) push(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, deck()[selCard], true, 'ghost', !hover.valid);
+    for (const t of [sel, hoverUnit]) {
+      if (!t) continue;
+      const p = blockSrc(t);
+      if (p) push(t.side, p, designOf(t.side, p.designId), true, keyOf(t.side, t.uid));
+    }
+    if (showMine || shiftDown) {
+      for (const p of me().board) push(side, p, designOf(side, p.designId), false, keyOf(side, p.uid));
+      if (phase === 'deploy') for (const p of place) push(side, p, designOf(side, p.designId), false, keyOf(side, p.uid));
+    }
+    if (showFoe) for (const p of foe().board) push(opp, p, designOf(opp, p.designId), false, keyOf(opp, p.uid));
+    return out;
+  }
+  /** point on the outline of the rect [x0,x1]x[y0,y1] grown by r, along the ray from its centre at `ang` */
+  function envelopePoint(x0: number, y0: number, x1: number, y1: number, r: number, ang: number): { x: number; y: number } {
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = (x1 - x0) / 2, hh = (y1 - y0) / 2;
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    let lo = 0, hi = r + Math.hypot(hw, hh) + 2;
+    for (let i = 0; i < 22; i++) {
+      const t = (lo + hi) / 2;
+      const ex = Math.max(0, Math.abs(dx * t) - hw), ey = Math.max(0, Math.abs(dy * t) - hh);
+      if (Math.hypot(ex, ey) < r) lo = t; else hi = t;
+    }
+    return { x: cx + dx * lo, y: cy + dy * lo };
+  }
+  function drawRanges() {
+    if (!ringCtx) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    if (cw !== ringW || ch !== ringH || dpr !== ringDpr) {
+      ringW = cw; ringH = ch; ringDpr = dpr;
+      ringCv.width = Math.max(1, Math.round(cw * dpr));
+      ringCv.height = Math.max(1, Math.round(ch * dpr));
+    }
+    const g = ringCtx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, ringCv.width, ringCv.height);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const targets = rangeTargets();
+    ringsShown = targets.length > 0;
+    legendEl.classList.toggle('hidden', !targets.length);
+    if (!targets.length) return;
+    const o = view.worldToScreen(0, 0), o1 = view.worldToScreen(1, 0);
+    const k = Math.hypot(o1.x - o.x, o1.y - o.y);
+    const taken: { x: number; y: number; w: number; h: number }[] = [];
+    // weak (all-units) rings first so the focused block's rings sit on top
+    for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
+      const centers = placementUnitCenters(t.side, t.pos, t.size).map((c) => view.worldToScreen(c.x, c.y));
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const c of centers) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x); y1 = Math.max(y1, c.y); }
+      const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
+      const path = (r: number) => { g.beginPath(); g.roundRect(x0 - r, y0 - r, x1 - x0 + 2 * r, y1 - y0 + 2 * r, r); };
+      const angles = [-90, -62, -118, -34, -146, -10, -170].map((a) => (a * Math.PI) / 180);
+      rings.forEach((rg, i) => {
+        const R = rg.range * k;
+        const hi = ringHi != null && rg.key === ringHi;
+        const dim = ringHi != null && !hi ? 0.3 : 1;
+        const sup = rg.kind === 'support';
+        g.save();
+        g.lineJoin = 'round';
+        g.lineCap = 'round';
+        if (t.strong) {
+          path(R);
+          g.globalAlpha = (hi ? 0.2 : sup ? 0.04 : 0.07) * dim;
+          g.fillStyle = rg.color;
+          g.fill();
+          if (rg.minRange > 0) { // dead zone: darken
+            path(rg.minRange * k);
+            g.globalAlpha = 0.22 * dim;
+            g.fillStyle = '#000';
+            g.fill();
+          }
+          // dark under-stroke for contrast against any terrain
+          path(R);
+          g.globalAlpha = 0.55 * dim;
+          g.strokeStyle = '#06090c';
+          g.lineWidth = (hi ? 6 : 4.5);
+          g.setLineDash(sup ? [1, 7] : []);
+          g.stroke();
+          g.globalAlpha = (t.invalid ? 0.6 : 1) * dim;
+          g.strokeStyle = rg.color;
+          g.lineWidth = hi ? 3.5 : 2.4;
+          g.stroke();
+          if (rg.minRange > 0) {
+            path(rg.minRange * k);
+            g.setLineDash([7, 6]);
+            g.lineWidth = 2;
+            g.globalAlpha = 0.95 * dim;
+            g.strokeStyle = rg.color;
+            g.stroke();
+          }
+        } else {
+          g.globalAlpha = (t.side === side ? 0.62 : 0.55);
+          g.strokeStyle = rg.color;
+          g.lineWidth = 1.2;
+          g.setLineDash(sup ? [1, 5] : t.side === side ? [] : [6, 4]);
+          path(R);
+          g.stroke();
+          if (rg.minRange > 0) { path(rg.minRange * k); g.setLineDash([3, 4]); g.stroke(); }
+        }
+        g.restore();
+        if (!t.strong && !hi) return;
+        // label on the ring, nudged along the arc until it fits the viewport and misses other labels
+        g.font = '700 14px "Barlow Condensed", "Barlow", system-ui, sans-serif';
+        const tw = g.measureText(rg.label).width + 14, th = 20;
+        for (let a = 0; a < angles.length * 2; a++) {
+          const ang = angles[(i + a) % angles.length] + (a >= angles.length ? 0.12 : 0);
+          const pt = envelopePoint(x0, y0, x1, y1, R, ang);
+          const lx = pt.x - tw / 2, ly = pt.y - th / 2;
+          if (lx < 6 || ly < 6 || lx + tw > cw - 6 || ly + th > ch - 6) continue;
+          if (taken.some((q) => lx < q.x + q.w + 3 && q.x < lx + tw + 3 && ly < q.y + q.h + 3 && q.y < ly + th + 3)) continue;
+          taken.push({ x: lx, y: ly, w: tw, h: th });
+          g.save();
+          g.globalAlpha = dim < 1 ? 0.5 : 1;
+          g.fillStyle = 'rgba(8,11,15,0.88)';
+          g.strokeStyle = rg.color;
+          g.lineWidth = 1.5;
+          g.beginPath();
+          g.roundRect(lx, ly, tw, th, 10);
+          g.fill();
+          g.stroke();
+          g.fillStyle = '#f4f8fb';
+          g.textBaseline = 'middle';
+          g.textAlign = 'center';
+          g.fillText(rg.label, pt.x, pt.y + 0.5);
+          g.restore();
+          break;
+        }
+      });
+    }
+  }
+
+  /** keep the pinned stat panel from covering the block it describes (desktop: dock left or right) */
+  function dockInfo() {
+    const t = sel ?? (phase === 'deploy' && hover && selCard >= 0 ? { side, uid: -1, pending: true } : null);
+    if (!t || infoEl.classList.contains('hidden') || window.matchMedia('(max-width: 760px), (hover: none)').matches) return;
+    let cx: number | null = null;
+    if (sel) {
+      const p = blockSrc(sel);
+      const d = p && designOf(sel.side, p.designId);
+      if (p && d) cx = view.worldToScreen(...(Object.values(blockWorldRectCenter(sel.side, p, sizeOf(d))) as [number, number])).x;
+    } else if (hover) {
+      const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size);
+      cx = view.worldToScreen(r.col + r.w / 2, r.row + r.h / 2).x;
+    }
+    if (cx == null) return;
+    const W = canvas.clientWidth;
+    if (cx < 390) infoEl.classList.add('right');
+    else if (cx > W - 450) infoEl.classList.remove('right');
+  }
+  const blockWorldRectCenter = (s: Side, p: Placement, size: Size) => { const r = blockWorldRect(s, p, size); return { x: r.col + r.w / 2, y: r.row + r.h / 2 }; };
+
   let raf = 0;
   let last = performance.now();
   let drawErr = false;
@@ -1015,6 +1270,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           }
         }
         view.drawBattle(battle, dt);
+        clearRings();
       } else {
         let hov: BoardOverlay['hover'] = null;
         if (hover && phase === 'deploy') {
@@ -1022,6 +1278,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           hov = { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: hover.valid };
         } else if (phase === 'deploy' || phase === 'waiting') hov = blockOutline();
         view.drawBoard(boardUnits(), { showZone: phase === 'deploy', hover: hov }, now / 1000);
+        drawRanges();
+        dockInfo();
       }
     } catch (e) {
       if (!drawErr) { drawErr = true; console.error('field draw', e); }
@@ -1053,6 +1311,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       ro.disconnect();
       window.removeEventListener('resize', onResize);
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onShift);
+      document.removeEventListener('keyup', onShift);
+      window.removeEventListener('blur', onBlur);
+      hideTip();
       fieldwrap.removeEventListener('wheel', onWheel, true);
       unsub();
       driver.stop();
