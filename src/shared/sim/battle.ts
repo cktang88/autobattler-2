@@ -222,7 +222,9 @@ export class Battle {
         canHitA ||= w.hitA;
         maxRange = Math.max(maxRange, range);
         minWeaponRange = Math.min(minWeaponRange, range);
-        mounts[mounts.length - 1].cooldown = this.rng() * (def.cooldown ?? 1) * 0.5;
+        const ms = mounts[mounts.length - 1];
+        ms.cooldown = this.rng() * (def.cooldown ?? 1) * 0.5;
+        if (def.magazine && def.magazine > 0) { ms.ammo = def.magazine; ms.reloading = false; }
       } else hasHeal = true;
       wpns.push(w);
     }
@@ -404,6 +406,7 @@ export class Battle {
       if (!w) continue;
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
       if (m.cooldown > 0) m.cooldown -= DT * (1 - u.slow);
+      if (m.reloading && m.cooldown <= 0) { m.reloading = false; m.ammo = w.def.magazine; }
 
       if (w.heal > 0) {
         this.updateHeal(I, w, m);
@@ -453,6 +456,10 @@ export class Battle {
       if (t && m.cooldown <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
         w.aimX = ax; w.aimY = ay;
         m.cooldown = w.def.cooldown ?? 1;
+        if (m.ammo !== undefined) {
+          m.ammo--;
+          if (m.ammo <= 0) { m.ammo = 0; m.reloading = true; m.cooldown = Math.max(m.cooldown, w.def.reload ?? 0); }
+        }
         const burst = w.def.burst ?? 1;
         if (burst > 1) { w.burstLeft = burst - 1; w.burstTimer = BURST_GAP; }
         this.fire(I, mi, w, t, ax, ay);
@@ -461,19 +468,11 @@ export class Battle {
   }
 
   private aimScratch = { x: 0, y: 0 };
-  /** Lead point for projectile weapons; target centre for hitscan. */
+  /** Where a weapon aims: the target's current position. Unguided shots are not led, so movers dodge slow rounds. */
   private aimPoint(I: Internal, w: Wpn, t: SimUnit): { x: number; y: number } {
     const p = this.aimScratch;
     p.x = t.x; p.y = t.y;
-    const kind = w.def.projectile;
-    const spd = w.def.projectileSpeed ?? 0;
-    if (kind === 'beam' || kind === 'lightning' || kind === 'rail' || kind === 'missile' || spd <= 0) return p;
-    const T = this.ints[t.id];
-    for (let k = 0; k < 2; k++) {
-      const ft = Math.min(2, Math.hypot(p.x - I.u.x, p.y - I.u.y) / spd);
-      p.x = t.x + T.vx * ft;
-      p.y = t.y + T.vy * ft;
-    }
+    void I; void w;
     return p;
   }
 

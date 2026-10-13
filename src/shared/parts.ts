@@ -1,4 +1,4 @@
-// Part catalog: 10 chassis, 10 mobility systems, 49 mount modules (43 weapons in 11 categories + support + armor).
+// Part catalog: 10 chassis, 10 mobility systems, 52 mount modules (46 weapons in 11 categories + support + armor).
 // Balance numbers live here; stats.ts turns a Design into UnitStats.
 
 import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass } from './types.ts';
@@ -144,6 +144,12 @@ export const MODULES: ModuleDef[] = [
     damage: 12, cooldown: 0.2, range: 6, ...GA, projectile: 'beam', ap: 1, slow: 0.15 }),
   wpn({ id: 'arclance', name: 'Arc Lance', family: 'Storm', desc: 'Heavy lightning that chains through 6 enemies and jolts them.', category: 'disruption', visual: 'tesla', caliber: 0.9, mount: 'H', weight: 9, cost: 75,
     damage: 105, cooldown: 1.6, range: 5.5, ...GA, projectile: 'lightning', chain: 5, ap: 0.5, stun: 0.3 }),
+  wpn({ id: 'disarm', name: 'Disarm Ray', family: 'Disarmer', desc: 'Scrambles weapon systems: target can move but not fire for 2s.', category: 'disruption', visual: 'emp', caliber: 0.5, mount: 'M', weight: 3, cost: 34,
+    damage: 15, cooldown: 2.5, range: 6.5, ...GA, projectile: 'beam', ap: 1, disarm: 2 }),
+  wpn({ id: 'sonic', name: 'Sonic Pulser', family: 'Riot', desc: 'Concussive blast that hurls light units backwards.', category: 'disruption', visual: 'sonic', caliber: 0.5, mount: 'M', weight: 3.5, cost: 30,
+    damage: 40, cooldown: 1.4, range: 3.5, ...G, projectile: 'orb', projectileSpeed: 14, splash: 1, ap: 0.3, impulse: 1.6 }),
+  wpn({ id: 'gravity', name: 'Gravity Gun', family: 'Graviton', desc: 'Yanks enemies toward you, dragging them out of formation.', category: 'disruption', visual: 'gravity', caliber: 0.8, mount: 'H', weight: 8, cost: 60,
+    damage: 30, cooldown: 0.8, range: 7, ...GA, projectile: 'beam', ap: 1, impulse: -0.9 }),
   // ---------------- Flak ----------------
   wpn({ id: 'flak', name: 'Flak Cannon', family: 'Light flak', desc: 'Anti-air only. Bursting shells wreck aircraft groups.', category: 'antiair', visual: 'flak', caliber: 0.5, mount: 'M', weight: 3, cost: 24,
     damage: 45, cooldown: 0.45, range: 7.5, ...A, magazine: 5, reload: 2.5, projectile: 'shell', projectileSpeed: 16, splash: 1.3, ap: 0.2, airBonus: 1.5 }),

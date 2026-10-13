@@ -57,7 +57,7 @@ export type ModuleCategory =
 export type ModuleVisual =
   | 'gun' | 'gatling' | 'shotgun' | 'cannon' | 'gauss' | 'sniper' | 'rail' | 'rocketPod' | 'missileRack' | 'cruise'
   | 'mortar' | 'artillery' | 'laser' | 'heatray' | 'plasma' | 'flamer' | 'tesla' | 'emp' | 'slowbeam' | 'flak'
-  | 'repair' | 'shield' | 'sensor' | 'plate';
+  | 'repair' | 'shield' | 'sensor' | 'plate' | 'sonic' | 'gravity';
 export type ModuleKind = 'weapon' | 'armor' | 'utility';
 
 export interface ModuleDef {
@@ -120,6 +120,10 @@ export interface ModuleDef {
   slow?: number;
   /** burning damage over time applied per hit (refreshes, doesn't stack) */
   burn?: { dps: number; duration: number };
+  /** knockback in cells per hit, away from the shooter (negative = pull toward). Halved vs size 2, x0.25 vs size 3, none vs static */
+  impulse?: number;
+  /** seconds per hit the target can't fire (but can still move); stacks to max 4s */
+  disarm?: number;
   /** damage multiplier at max range (beams that fade with distance, e.g. 0.3); 1 = none */
   falloff?: number;
   // ---- utility ----

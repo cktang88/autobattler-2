@@ -99,6 +99,8 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.burn) v += w.burn.dps * Math.min(1, w.burn.duration / cyc) * (1 + 0.6 * (w.splash ?? 0));
   if (w.stun) v += ((w.stun * shots) / cyc) * 70 * (1 + 0.8 * (w.splash ?? 0));
   if (w.slow) v += (w.slow / cyc) * 18;
+  if (w.disarm) v += (w.disarm / cyc) * 55;
+  if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 14 * (1 + 0.6 * (w.splash ?? 0));
   v *= 0.75 + 0.25 * (accuracyRating(w) / 100);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;

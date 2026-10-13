@@ -31,6 +31,10 @@ export interface MountState {
   flash: number;
   /** uid (SimUnit.id) currently targeted, or -1 */
   target: number;
+  /** shots left in the magazine (weapons with a magazine only) */
+  ammo?: number;
+  /** true while the magazine reloads */
+  reloading?: boolean;
 }
 
 export interface SimUnit {
