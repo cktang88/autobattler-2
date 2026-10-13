@@ -7,6 +7,7 @@ import { kiteOptions, ordersControl, ordersOf, orderFields } from './match-ui.ts
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
+import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, computeStats, loadSpeedFactor, validateDesign } from '../../shared/stats.ts';
@@ -44,11 +45,11 @@ function reseat(mods: (string | null)[], c: ChassisDef): (string | null)[] {
   return out;
 }
 
-function blankDesign(n: number): Design {
+function blankDesign(taken: string[]): Design {
   const c = CHASSIS_BY_ID.get('raider') ?? CHASSIS[0];
   const weapon = MODULES.find((m) => m.kind === 'weapon' && fitsMount(c.mounts[0], m.mount))!;
   return {
-    id: newDesignId(), name: `Prototype ${n}`, chassis: c.id, mobility: firstLegalMobility(c.id),
+    id: newDesignId(), name: randomDesignName(c.id, Math.random, taken), chassis: c.id, mobility: firstLegalMobility(c.id),
     mounts: c.mounts.map((_, i) => (i === 0 ? weapon.id : null)),
   };
 }
@@ -59,7 +60,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   let deck = activeDeck().map((d) => d.id);
   let selectedId: string | null = designs[0]?.id ?? null;
   let saved: Design | null = designs[0] ? clone(designs[0]) : null;
-  let draft: Design = saved ? clone(saved) : blankDesign(1);
+  let draft: Design = saved ? clone(saved) : blankDesign(designs.map((d) => d.name));
+  /** true while the name is an auto-generated one the player has not typed over */
+  let autoName = !saved;
   let openSlot: number | null = null;
   let pickerCat: string | null = null;
   let modQuery = '';
@@ -78,6 +81,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const previewCost = h('div.g-prev-cost');
   const spinBtn = h('button.g-iconbtn.g-spin', { type: 'button', title: 'Toggle rotation', 'aria-label': 'Toggle rotation', onclick: () => { spin = !spin; sfx('click'); syncSpin(); } }, icon('spin'));
   const nameInput = h('input.g-name', { type: 'text', maxlength: NAME_MAX, 'aria-label': 'Design name', spellcheck: 'false', autocomplete: 'off' });
+  const rerollBtn = h('button.g-iconbtn', { type: 'button', title: 'Random name', 'aria-label': 'Pick a random name', onclick: () => reroll() }, '\u{1F3B2}');
   const saveBtn = h('button.g-btn.primary', { type: 'button', onclick: () => doSave() }, icon('save'), 'Save');
   const revertBtn = h('button.g-btn.ghost', { type: 'button', title: 'Revert to saved', onclick: () => revert() }, icon('undo'), 'Revert');
   const errorsEl = h('ul.g-errors', { 'aria-live': 'polite' });
@@ -97,6 +101,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   nameInput.addEventListener('input', () => {
     draft.name = nameInput.value.slice(0, NAME_MAX);
+    autoName = false;
     update();
   });
 
@@ -129,7 +134,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           previewCost,
           h('div.g-stage-hint', null, 'drag to rotate'),
         ),
-        h('div.g-namebar', null, nameInput, revertBtn, saveBtn),
+        h('div.g-namebar', null, nameInput, rerollBtn, revertBtn, saveBtn),
         errorsEl,
         statsEl,
         loadEl,
@@ -174,7 +179,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function load(d: Design | null) {
     selectedId = d?.id ?? null;
     saved = d ? clone(d) : null;
-    draft = d ? clone(d) : blankDesign(designs.length + 1);
+    draft = d ? clone(d) : blankDesign(designs.map((x) => x.name));
+    autoName = !d;
     openSlot = null;
     nameInput.value = draft.name;
     update();
@@ -284,11 +290,20 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     app.go({ name: 'menu' });
   }
 
+  function reroll() {
+    draft.name = randomDesignName(draft.chassis, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX);
+    autoName = true;
+    nameInput.value = draft.name;
+    sfx('click');
+    update();
+  }
+
   function pickChassis(id: string) {
     if (id === draft.chassis) return;
     const c = CHASSIS_BY_ID.get(id)!;
     const mobility = pairingError(id, draft.mobility) ? firstLegalMobility(id) : draft.mobility;
     draft = { ...draft, chassis: id, mobility, mounts: reseat(draft.mounts, c) };
+    if (autoName) { draft.name = randomDesignName(id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
     openSlot = null;
     sfx('click');
     update();
@@ -426,7 +441,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
     previewTags.replaceChildren(...[
       h('span.g-size.big', null, s ? designSizeLabel(s) : '?'),
-      s && s.squad > 1 ? h('span.g-tag.squad', { title: 'One purchase deploys a block of 4 units with adjustable spacing' }, `Squad of ${s.squad}`) : null,
+      s && s.squad > 1 ? h('span.g-tag.squad', { title: `One purchase deploys a block of ${s.squad} units with adjustable spacing` }, `Squad of ${s.squad}`) : null,
       s ? h('span.g-footprint', { title: 'Physical footprint' }, footprintLabel(s.size)) : null,
       s?.flying ? h('span.g-tag.air', null, icon('air'), 'Flying') : null,
       s?.isStatic ? h('span.g-tag.static', null, icon('static'), 'Static') : null,
@@ -504,7 +519,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         h('span.power', { style: { width: `${(pow / tot) * 100}%` } }),
       ),
       h('div.g-cost-rows', null,
-        s.squad > 1 ? h('div.g-cost-row.sub', { title: 'Each of the 4 squad units is worth this much; the block price is 4 units, rounded' },
+        s.squad > 1 ? h('div.g-cost-row.sub', { title: `Each of the ${s.squad} squad units is worth this much; the block price is ${s.squad} units, rounded` },
           h('span.g-cost-k', null, 'Per unit value'), h('span', null, String(s.unitCost)), h('em', null, `×${s.squad}`)) : null,
         h('div.g-cost-row.parts', { title: 'Sum of base part costs: complexity of fielding this design' },
           h('span.g-cost-k', null, h('i'), 'Parts complexity'), h('span', null, String(Math.round(s.partsCost)), d('partsCost')), h('em', null, `≈${Math.round(parts)}`)),
