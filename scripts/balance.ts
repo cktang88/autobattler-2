@@ -13,7 +13,7 @@
 import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import { applyDeploy, newMatch, newPlayer, resolveRound, validateDeploy } from '../src/shared/match.ts';
 import { CATEGORIES, CHASSIS, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
-import { MODULE_CAL, SIZE_K, computeStats, validateDesign } from '../src/shared/stats.ts';
+import { MOBILITY_CAL, MODULE_CAL, SIZE_K, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
 import { writeFileSync } from 'node:fs';
@@ -22,6 +22,7 @@ import type { Design, Placement } from '../src/shared/types.ts';
 
 // fit_cal.py injects trial calibrations here (children inherit the env)
 if (process.env.BAL_CAL) Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CAL));
+if (process.env.BAL_MOBCAL) Object.assign(MOBILITY_CAL, JSON.parse(process.env.BAL_MOBCAL));
 if (process.env.BAL_SIZEK) SIZE_K.splice(0, 5, ...(JSON.parse(process.env.BAL_SIZEK) as number[]));
 
 const mode = process.argv[2] ?? 'all';
@@ -65,6 +66,7 @@ const BIG_SUPPLY = Number(process.env.BAL_BIG_SUPPLY ?? 8000);
 /** Keep armies under the sim-unit cap (match.ts MAX_SIM_UNITS = 240) so supply is never silently dropped. */
 const UNIT_CAP = 220;
 const SHARDS = 4;
+const FIELD_DIV = Math.max(1, Number(process.env.BAL_FIELD_DIV ?? 1));
 
 /** Fillers that top up a giant/titan army (bought in equal supply shares): a balanced, cheap-ish mix. */
 const FILLER_IDS = ['starter-bulwark', 'starter-buzzsaw', 'starter-tankbuster', 'starter-skyguard'];
@@ -211,8 +213,9 @@ function runShard(pool: Design[], seeds: number, shard: number): Result[] {
     if (i % SHARDS !== shard) return;
     let score = 0, games = 0;
     const field = antiAirOnly(d) ? AIR_FIELD : STARTER_DESIGNS;
-    for (const e of field) {
-      if (e.id === d.id) continue;
+    // BAL_FIELD_DIV=k: each design faces only every k-th opponent (staggered by design index) -> k times faster, noisier
+    for (const [j, e] of field.entries()) {
+      if (e.id === d.id || (j + i) % FIELD_DIV !== 0) continue;
       // giants/titans on either side -> the big budget for the whole pairing
       const S = st(d).size >= 4 || st(e).size >= 4 ? BIG_SUPPLY : ARMY_SUPPLY;
       const pd = plan(d, S);

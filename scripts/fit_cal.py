@@ -6,8 +6,11 @@ Each iteration runs `node scripts/balance.ts army SEEDS` with trial calibrations
   - every utility's calibration toward its win-rate delta against the same carrier without it,
   - the size-class factors (sizes 1,3,4,5; size 2 is the reference) toward the logit of neutral designs of that class
     (plain frames and starters; for giants/titans frames only, so G/T module fits are not mixed up with the class effect).
-State lives in $FIT_DIR (default: this repo's .fit/ is NOT used; pass FIT_DIR=/some/dir): cal.json, sizek.json.
-Copy the final tables into MODULE_CAL / SIZE_K in src/shared/stats.ts.
+  - the mobility price factors (MOBILITY_CAL) toward the logit of plain frames of that drive relative to the other
+    drives of the SAME chassis (within-chassis contrast, so hull outliers - fixed by hand in parts.ts - do not leak in).
+State lives in $FIT_DIR (default /tmp/fit; pass FIT_DIR=/some/dir): cal.json, sizek.json, mobcal.json.
+Env: BAL_FIELD_DIV=k makes each balance run k times faster (each design meets every k-th opponent).
+Copy the final tables into MODULE_CAL / SIZE_K / MOBILITY_CAL in src/shared/stats.ts.
 """
 import json, subprocess, math, sys, os, re, collections
 
@@ -18,16 +21,18 @@ MODS = {}
 src = open(f'{REPO}/src/shared/parts.ts').read()
 for m in re.finditer(r"(wpn|util)\(\{ id: '(\w+)'", src):
     MODS[m.group(2)] = m.group(1)
-calf, szf = f'{FIT}/cal.json', f'{FIT}/sizek.json'
+calf, szf, mbf = f'{FIT}/cal.json', f'{FIT}/sizek.json', f'{FIT}/mobcal.json'
 cal = json.load(open(calf)) if os.path.exists(calf) else {}
 sizek = json.load(open(szf)) if os.path.exists(szf) else [1, 1, 1, 1, 1]
+mobcal = json.load(open(mbf)) if os.path.exists(mbf) else {}
 iters = int(sys.argv[1])
 seeds = sys.argv[2] if len(sys.argv) > 2 else '3'
 fixed = set(sys.argv[3].split(',')) if len(sys.argv) > 3 and sys.argv[3] else set()
 fit_size = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
 # mixed AA/ground starters whose result mostly reflects the rock-paper-scissors of the field, not module value
 IGNORE = {'starter-skyguard'}
-ETA = {'w': 0.3, 'u': 0.3, 's': 0.12}
+ETA = {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}
+STEP_S = float(os.environ.get('FIT_STEP_S', '0.12'))
 
 
 def lg(r):
@@ -36,7 +41,7 @@ def lg(r):
 
 
 for it in range(iters):
-    env = dict(os.environ, BAL_CAL=json.dumps(cal), BAL_SIZEK=json.dumps(sizek), BAL_OUT=f'{FIT}/r.json')
+    env = dict(os.environ, BAL_CAL=json.dumps(cal), BAL_SIZEK=json.dumps(sizek), BAL_MOBCAL=json.dumps(mobcal), BAL_OUT=f'{FIT}/r.json')
     subprocess.run(['node', 'scripts/balance.ts', 'army', seeds], cwd=REPO, env=env, stdout=open(f'{FIT}/b.txt', 'w'), check=True)
     rows = json.load(open(f'{FIT}/r.json'))
     baserate = {r['carrier']: r['rate'] for r in rows if r['base']}
@@ -79,8 +84,27 @@ for it in range(iters):
             s, w = sacc[z]
             if w == 0:
                 continue
-            step = max(-0.08, min(0.08, ETA['s'] * s / (w + 1.0)))
+            step = max(-STEP_S, min(STEP_S, ETA['s'] * s / (w + 1.0)))
             sizek[z - 1] = max(0.4, min(2.5, sizek[z - 1] * math.exp(step)))
+    # mobility: within-chassis contrast of plain frames
+    fr = [r for r in rows if r['id'].startswith('f-')]
+    chl = collections.defaultdict(list)
+    for r in fr:
+        chl[r['chassis']].append(lg(r['rate']))
+    macc = collections.defaultdict(lambda: [0.0, 0.0])
+    for r in fr:
+        n = len(chl[r['chassis']])
+        if n < 2:
+            continue
+        res = lg(r['rate']) - sum(chl[r['chassis']]) / n
+        w = n / (n - 1.0) # un-shrink the leave-in mean
+        macc[r['mobility']][0] += res * w
+        macc[r['mobility']][1] += 1
+    for k, (s, w) in macc.items():
+        if w == 0:
+            continue
+        step = max(-0.1, min(0.1, ETA['m'] * s / (w + 1.0)))
+        mobcal[k] = max(0.4, min(2.5, mobcal.get(k, 1.0) * math.exp(step)))
     mm = collections.defaultdict(list)
     for r in rows:
         if r['module'] and not r['base']:
@@ -90,3 +114,4 @@ for it in range(iters):
     print(it, 'modrms', round(mr * 100, 1), 'inband', f'{inb}/{len(mm)}', 'sizek', [round(x, 3) for x in sizek], flush=True)
     json.dump(cal, open(calf, 'w'))
     json.dump(sizek, open(szf, 'w'))
+    json.dump(mobcal, open(mbf, 'w'))
