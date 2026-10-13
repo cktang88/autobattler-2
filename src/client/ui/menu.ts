@@ -71,7 +71,7 @@ export function menuScreen(app: App): Screen {
   playMusic('menu');
   const canvas = h('canvas.menu-bg');
   let view: FieldView | null = null;
-  try { view = new FieldView(canvas, 0); } catch (e) { console.warn(e); }
+  try { view = new FieldView(canvas, 0, { interactive: false }); } catch (e) { console.warn(e); }
 
   // keep the background skirmish silent
   if (view) view.muted = true;

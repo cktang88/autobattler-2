@@ -307,3 +307,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
   .start-row .muted { font-size: 0.8rem; }
 }
 @media (hover: none) { .kbd-hint { display: none; } }
+
+/* camera zoom buttons (match screen, top-right of the field) */
+.zoombtns { position: absolute; right: 10px; top: 10px; z-index: 4; display: flex; flex-direction: column; gap: 6px; }
+.zoombtns button { width: 36px; height: 36px; padding: 0; font-size: 1.2rem; line-height: 1; background: rgba(20, 27, 36, 0.92); }
+@media (max-width: 700px) { .zoombtns { top: 40px; right: 8px; } .zoombtns button { width: 40px; height: 40px; } }

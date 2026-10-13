@@ -10,7 +10,7 @@ import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUn
 import { loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, inDeployZone, localToWorldCell, placementCenter, FIELD_W } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, inDeployZone, localToWorldCell, placementCenter, FIELD_W, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
@@ -145,7 +145,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const skipBtn = h('button.small', { onclick: () => skipBattle() }, 'Skip ▸▸');
   const speedbar = h('div.speedbar.hidden', null, ...speedBtns, skipBtn);
   const overlayEl = h('div');
-  fieldwrap.append(hintEl, infoEl, speedbar, overlayEl);
+  const zoomBar = h('div.zoombtns', null,
+    h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => view.zoomBy(1.5) }, '+'),
+    h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => view.zoomBy(1 / 1.5) }, '−'),
+    h('button.small', { title: 'Fit whole field (F)', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
+  );
+  fieldwrap.append(hintEl, infoEl, speedbar, zoomBar, overlayEl);
 
   const el = h('div.screen.match', null, topbar, h('div.mbody', null, fieldwrap, sideEl));
 
@@ -313,12 +318,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const loadout: HTMLElement[] = [];
     const ch = CHASSIS_BY_ID.get(d.chassis), mo = MOBILITY_BY_ID.get(d.mobility);
     if (ch) loadout.push(loRow('chassis', ch.id, 'Chassis', ch.name, `${ch.hp} HP · armor ${ch.armor}`));
-    if (mo) loadout.push(loRow('mobility', mo.id, 'Mobility', mo.name, `${mo.kind} · speed ${num1(mo.speed)}`));
+    if (mo) loadout.push(loRow('mobility', mo.id, 'Mobility', mo.name, `${mo.kind} · speed ${fmtSpeed(mo.speed)}`));
     for (const id of d.mounts) {
       const md = id ? MODULE_BY_ID.get(id) : undefined;
       if (!md) continue;
       const stat = md.kind === 'weapon'
-        ? `${num1(weaponDps(md))} dps · range ${num1(md.range ?? 0)} · ${firingStyle(md)}`
+        ? `${num1(weaponDps(md))} dps · range ${fmtMeters(md.range ?? 0)} · ${firingStyle(md)}`
         : shorten(md.desc);
       loadout.push(loRow('module', md.id, md.kind === 'weapon' ? 'Weapon' : md.kind === 'armor' ? 'Armor' : 'Utility', md.name, stat));
     }
@@ -348,8 +353,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         stat('HP', String(Math.round(st.hp * mult)), ups > 0),
         stat('DPS', String(Math.round(st.dps * mult)), ups > 0),
         stat('Armor', String(st.armor)),
-        stat('Range', String(st.range)),
-        stat('Speed', st.isStatic ? '—' : String(st.speed)),
+        stat('Range', st.range ? fmtMeters(st.range) : '—'),
+        stat('Speed', st.isStatic ? '—' : fmtSpeed(st.speed)),
         stat('Cost', String(st.cost)),
         st.shield ? stat('Shield', String(st.shield)) : null,
         st.heal ? stat('Repair', `${st.heal}/s`) : null,
@@ -587,6 +592,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const start = downAt;
     downAt = null;
     if (!start || e.button > 0) return;
+    if (view.wasDrag) { // end of a pan / pinch: not a click or tap
+      if (e.pointerType === 'touch') { hover = null; renderHint(); }
+      return;
+    }
     if (phase !== 'deploy' && phase !== 'waiting') return;
     const { px, py, rawY } = local(e);
     if (phase === 'deploy' && selCard >= 0) {
@@ -634,7 +643,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function setPhase(p: Phase) {
     const prev = phase;
     phase = p;
-    if (p === 'deploy' && prev !== 'deploy') playMusic('deploy');
+    if (p === 'deploy' && prev !== 'deploy') { playMusic('deploy'); try { view.frameDeploy(); } catch { /* */ } }
+    if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } }
     renderAll();
     renderOverlay();
   }
@@ -756,6 +766,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let drawErr = false;
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
+    view.controls.doubleClickZoom = phase !== 'deploy' || (selCard < 0 && !sel);
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     try {
@@ -800,7 +811,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   phase = 'waiting'; // forces setPhase('deploy') to start deploy music on first evaluate
   evaluate();
   requestAnimationFrame(() => {
-    try { view.resize(); } catch { /* */ }
+    try { view.resize(); if (phase === 'deploy') view.frameDeploy(true); else if (phase === 'battle') view.fit(true); } catch { /* */ }
     raf = requestAnimationFrame(frame);
   });
 

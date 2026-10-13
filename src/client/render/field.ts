@@ -16,16 +16,24 @@
 //   - A new Battle object (or battle.tick going backwards) resets effects, wrecks and interpolation state.
 //
 // Coordinates: world units are cells (FIELD_W x FIELD_H). The viewer's side is always at the bottom; for
-// viewerSide 1 the field is rotated 180°. worldToScreen/screenToWorld use canvas CSS pixels.
+// viewerSide 1 the field is rotated 180°. worldToScreen/screenToWorld use canvas CSS pixels and include the camera.
+//
+// CAMERA: `view.cam` eases (frame-rate independent) toward a target center + zoom. Built-in input (wheel / pinch zoom
+// toward cursor, drag/touch pan with inertia, WASD/arrows, +/-, Home/F, double-click/tap) is attached to the canvas
+// unless `new FieldView(canvas, side, { interactive: false })` or `view.controls.enabled = false`.
+//   view.fit() | view.frameDeploy() | view.focusOn(x, y, zoom?) | view.zoomBy(f, sx?, sy?)  (zoom: 1 = whole field fits)
+//   view.consumeDrag() / view.controls.wasDrag: true when the pointer gesture that just ended was a pan/pinch;
+//   call it from a pointerup/click handler to ignore that gesture (controls' listeners run before yours).
 
 import { battleSfx, setPanFlip } from '../audio.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W } from '../../shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../../shared/grid.ts';
+import { Camera, CameraControls } from './camera.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types.ts';
 import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
-import { groundCanvas } from './ground.ts';
+import { groundCanvas, groundRegion } from './ground.ts';
 import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
@@ -94,6 +102,10 @@ interface PTrack {
   born: number;
 }
 
+/** fixed resolution (device px per cell) of the cached base ground and the decal layer */
+const GROUND_PX = 24;
+const DECAL_PX = 20;
+
 const forwardAngle = (side: Side) => (side === 0 ? -Math.PI / 2 : Math.PI / 2);
 
 /**
@@ -109,10 +121,11 @@ export class FieldView {
   private dpr = 1;
   private cssW = 0;
   private cssH = 0;
-  /** CSS px per cell */
-  private k = 1;
-  private ox = 0;
-  private oy = 0;
+  readonly cam = new Camera(FIELD_W, FIELD_H);
+  readonly controls: CameraControls;
+  /** when true a small scale bar is drawn in the bottom-left corner */
+  scaleBar = true;
+  private detail: { c: HTMLCanvasElement; x0: number; y0: number; x1: number; y1: number; px: number } | null = null;
   readonly fx = new Fx();
   private dirs: ViewDirs;
   private vignette: CanvasGradient | null = null;
@@ -133,8 +146,11 @@ export class FieldView {
   private time = 0;
   private alpha = 1;
 
-  constructor(canvas: HTMLCanvasElement, viewerSide: Side) {
+  constructor(canvas: HTMLCanvasElement, viewerSide: Side, opts?: { interactive?: boolean }) {
     this.canvas = canvas;
+    const interactive = opts?.interactive !== false;
+    this.scaleBar = interactive;
+    this.controls = new CameraControls(this.cam, canvas, interactive);
     this.viewerSide = viewerSide;
     this.g = ctx2d(canvas);
     this.dirs = viewerSide === 0 ? { sx: 0.55, sy: 0.85, ux: 0, uy: -1 } : { sx: -0.55, sy: -0.85, ux: 0, uy: 1 };
@@ -154,11 +170,76 @@ export class FieldView {
     const w = Math.max(1, Math.round(cw * dpr)), h = Math.max(1, Math.round(ch * dpr));
     if (this.canvas.width !== w) this.canvas.width = w;
     if (this.canvas.height !== h) this.canvas.height = h;
-    this.k = Math.max(0.5, Math.min(cw / FIELD_W, ch / FIELD_H));
-    this.ox = (cw - FIELD_W * this.k) / 2;
-    this.oy = (ch - FIELD_H * this.k) / 2;
+    this.cam.setViewport(cw, ch);
     this.vignette = null;
-    this.fx.setDecalSpace(FIELD_W, FIELD_H, this.k * dpr);
+    this.detail = null;
+    this.fx.setDecalSpace(FIELD_W, FIELD_H, DECAL_PX);
+  }
+
+  /** CSS px per cell (camera zoom) */
+  private get k(): number {
+    return this.cam.k;
+  }
+
+  /** screen position (CSS px) of the visual (rotated) field's top-left corner */
+  private get ox(): number {
+    return this.cssW / 2 - this.cam.cx * this.cam.k;
+  }
+
+  private get oy(): number {
+    return this.cssH / 2 - this.cam.cy * this.cam.k;
+  }
+
+  /** quantized device px per cell for sprite caches (avoids thrashing while zooming) */
+  private get spritePx(): number {
+    const raw = Math.max(4, this.k * this.dpr);
+    return Math.min(96, Math.round(2 ** (Math.round(Math.log2(raw) * 3) / 3)));
+  }
+
+  /* ---------------------------------------------------------------------------------------- camera API */
+
+  private toVisual(x: number, y: number): { x: number; y: number } {
+    return this.viewerSide === 1 ? { x: FIELD_W - x, y: FIELD_H - y } : { x, y };
+  }
+
+  /** whole field fits (minimum zoom) */
+  fit(instant = false): void {
+    this.cam.fit(instant);
+  }
+
+  /** frame the viewer's own deploy zone plus some of no-man's land */
+  frameDeploy(instant = false): void {
+    this.checkSize();
+    const c = this.cam;
+    const rows = DEPLOY_D + 6;
+    let k = Math.min(c.vw / FIELD_W, c.vh / rows);
+    if (c.vw < 640) k = Math.max(k, 11); // phones: bigger units, pan sideways
+    k = Math.max(c.minK, k);
+    c.setTarget(FIELD_W / 2, FIELD_H - c.vh / (2 * k) + 0.4, k, instant);
+  }
+
+  /** center on world point (x, y); zoom is relative to fit (1 = whole field, omitted = keep current) */
+  focusOn(x: number, y: number, zoom?: number, instant = false): void {
+    const v = this.toVisual(x, y);
+    this.cam.setTarget(v.x, v.y, zoom === undefined ? this.cam.tk : this.cam.minK * zoom, instant);
+  }
+
+  /** multiply zoom by f about a screen point (CSS px; default viewport center) */
+  zoomBy(f: number, screenX?: number, screenY?: number): void {
+    this.cam.zoomBy(f, screenX, screenY);
+  }
+
+  /** true if the pointer gesture that just ended was a pan/pinch; clears the flag */
+  consumeDrag(): boolean {
+    return this.controls.consumeDrag();
+  }
+
+  get wasDrag(): boolean {
+    return this.controls.wasDrag;
+  }
+
+  private stepCamera(dt: number): void {
+    this.cam.update(dt);
   }
 
   private checkSize(): void {
@@ -216,7 +297,8 @@ export class FieldView {
     // drop shadow frame around the field
     g.fillStyle = 'rgba(0,0,0,0.5)';
     g.fillRect(-0.25, -0.25, FIELD_W + 0.5, FIELD_H + 0.5);
-    g.drawImage(groundCanvas(this.px), 0, 0, FIELD_W, FIELD_H);
+    g.drawImage(groundCanvas(GROUND_PX), 0, 0, FIELD_W, FIELD_H);
+    this.drawDetail();
     if (this.fx.decalCanvas) g.drawImage(this.fx.decalCanvas, 0, 0, FIELD_W, FIELD_H);
     // deploy zones
     const myTop = this.viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
@@ -251,6 +333,58 @@ export class FieldView {
     g.strokeRect(0, 0, FIELD_W, FIELD_H);
   }
 
+  /** hi-res ground patch for the visible area when zoomed in; rebuilt once the camera settles */
+  private drawDetail(): void {
+    const px = this.px;
+    if (px < GROUND_PX * 1.2) { this.detail = null; return; }
+    const g = this.g;
+    // visible world rect
+    const a = this.screenToWorld(0, 0), b = this.screenToWorld(this.cssW, this.cssH);
+    const vx0 = Math.max(0, Math.min(a.x, b.x)), vx1 = Math.min(FIELD_W, Math.max(a.x, b.x));
+    const vy0 = Math.max(0, Math.min(a.y, b.y)), vy1 = Math.min(FIELD_H, Math.max(a.y, b.y));
+    let d = this.detail;
+    const covers = !!d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6;
+    const sharp = !!d && d.px >= px * 0.8 && d.px <= px * 1.6;
+    if ((!d || !covers || !sharp) && this.cam.still > 0.12) {
+      const mx = (vx1 - vx0) * 0.3, my = (vy1 - vy0) * 0.3;
+      const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
+      const y0 = Math.max(0, vy0 - my), y1 = Math.min(FIELD_H, vy1 + my);
+      const dpx = Math.min(px, 3800 / (x1 - x0), 3800 / (y1 - y0));
+      d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1), x0, y0, x1, y1, px: dpx };
+    }
+    if (d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6) {
+      g.drawImage(d.c, d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
+    }
+  }
+
+  /** scale bar (bottom-left): a round number of metres */
+  private drawScaleBar(): void {
+    if (!this.scaleBar) return;
+    const g = this.g;
+    this.setScreen();
+    const pxPerM = this.k / METERS_PER_CELL;
+    let m = 5;
+    for (const c of [5, 10, 25, 50, 100, 200, 250]) { m = c; if (c * pxPerM >= 56) break; }
+    const len = m * pxPerM;
+    const x = 12, y = this.cssH - 12;
+    g.save();
+    g.lineCap = 'butt';
+    g.font = '600 11px system-ui, sans-serif';
+    g.textBaseline = 'bottom';
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    g.strokeStyle = 'rgba(0,0,0,0.6)';
+    g.lineWidth = 4;
+    g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x, y); g.lineTo(x + len, y); g.lineTo(x + len, y - 5); g.stroke();
+    g.lineWidth = 2;
+    g.strokeStyle = 'rgba(255,255,255,0.85)';
+    g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x, y); g.lineTo(x + len, y); g.lineTo(x + len, y - 5); g.stroke();
+    g.lineWidth = 3;
+    g.strokeStyle = 'rgba(0,0,0,0.6)';
+    g.strokeText(`${m} m`, x + 2, y - 4);
+    g.fillText(`${m} m`, x + 2, y - 4);
+    g.restore();
+  }
+
   private drawVignette(): void {
     const g = this.g;
     this.setScreen();
@@ -275,8 +409,9 @@ export class FieldView {
     const dt = this.time ? clamp(time - this.time, 0, 0.1) : 0;
     this.time = time;
     this.fx.update(dt);
+    this.stepCamera(dt);
     this.drawGround(!!overlay.showZone, 0, 0);
-    const px = this.px;
+    const px = this.spritePx;
     // hover footprint
     const hv = overlay.hover;
     if (hv) {
@@ -327,6 +462,7 @@ export class FieldView {
     this.setScreen();
     for (const { u } of poses) if (u.level > 1 && !u.ghost) this.drawPips(u.x, u.y, layoutOf(u.design).S, u.level, 1);
     this.drawVignette();
+    this.drawScaleBar();
   }
 
   private drawPips(x: number, y: number, S: number, level: number, alpha: number): void {
@@ -418,13 +554,14 @@ export class FieldView {
       if (!newTicks) this.pending = [];
     }
     this.fx.update(dt);
+    this.stepCamera(dt);
     for (const v of this.vis.values()) for (let i = 0; i < v.swing.length; i++) v.swing[i] = Math.max(0, v.swing[i] - dt * 3.5);
 
     const g = this.g;
     const tr = this.fx.trauma * this.fx.trauma;
     const sx = tr ? (Math.random() * 2 - 1) * tr * 7 : 0, sy = tr ? (Math.random() * 2 - 1) * tr * 7 : 0;
     this.drawGround(false, sx, sy);
-    const px = this.px;
+    const px = this.spritePx;
 
     // poses
     const ground: UnitPose[] = [], air: UnitPose[] = [];
@@ -450,6 +587,7 @@ export class FieldView {
     this.setScreen();
     for (const { u, p } of bars) this.drawBar(u, p, dt);
     this.drawVignette();
+    this.drawScaleBar();
   }
 
   private visOf(u: SimUnit): UVis {
@@ -995,14 +1133,14 @@ export class FieldView {
           fx.debris(x, y, 6 * S, pal.dark, 2.5, 0.07 * S);
           fx.schedule(0.35, () => {
             fx.boom(x, y, 0.6 * S, 'fire');
-            if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, this.px), unitSprites(u.design, team, this.px).ext * 0.8, u.angle + 0.6);
+            if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext * 0.8, u.angle + 0.6);
           });
         } else {
           fx.boom(x, y, 0.55 + 0.45 * S, S >= 3 ? 'big' : 'fire');
           fx.debris(x, y, 5 + 5 * S, pal.dark, 3 + S, 0.06 * S);
           fx.debris(x, y, 3 + 2 * S, '#2a2622', 3, 0.05 * S);
           fx.embers(x, y, 6 * S, S * 0.6);
-          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, this.px), unitSprites(u.design, team, this.px).ext, u.angle);
+          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext, u.angle);
           for (let i = 0; i < S; i++) fx.schedule(0.15 + i * 0.2, () => fx.boom(x + (Math.random() - 0.5) * S * 0.6, y + (Math.random() - 0.5) * S * 0.6, 0.3 + 0.2 * S, 'fire'));
           // lingering smoke column
           for (let i = 0; i < 4; i++) fx.schedule(0.4 + i * 0.5, () => fx.smoke(x, y, 0.3 * S, 2.5, '#1e1c1a', 0.2, -0.3, 0.45));
@@ -1035,6 +1173,8 @@ export class FieldView {
   }
 
   destroy(): void {
+    this.controls.destroy();
+    this.detail = null;
     this.fx.clear();
     this.battle = null;
     this.prevU.clear();

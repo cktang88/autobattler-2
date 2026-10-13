@@ -1,4 +1,5 @@
 // src/shared/grid.ts
+var METERS_PER_CELL = 5;
 var FIELD_W = 48;
 var FIELD_H = 46;
 var DEPLOY_W = FIELD_W;
@@ -1727,6 +1728,437 @@ function playMusic(track2) {
   }
 }
 
+// src/client/render/camera.ts
+var MAX_K = 80;
+var clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+var Camera = class {
+  cx;
+  cy;
+  k = 1;
+  tcx;
+  tcy;
+  tk = 1;
+  vw = 300;
+  vh = 400;
+  minK = 1;
+  maxK = MAX_K;
+  /** exponential smoothing rate (1/s) */
+  smooth = 13;
+  /** seconds since the camera last moved (used to decide when to re-render hi-res ground) */
+  still = 0;
+  /** continuous key pan direction, -1..1 (screen axes) */
+  keyX = 0;
+  keyY = 0;
+  anchor = null;
+  velX = 0;
+  // inertia, visual cells / s
+  velY = 0;
+  fw;
+  fh;
+  constructor(fw, fh) {
+    this.fw = fw;
+    this.fh = fh;
+    this.cx = this.tcx = fw / 2;
+    this.cy = this.tcy = fh / 2;
+  }
+  /** Set the viewport size (CSS px). Keeps the fit view fitted. */
+  setViewport(w, h) {
+    const wasFit = this.vw > 0 && this.tk <= this.minK * 1.001;
+    this.vw = Math.max(1, w);
+    this.vh = Math.max(1, h);
+    this.minK = Math.max(0.5, Math.min(this.vw / this.fw, this.vh / this.fh));
+    this.maxK = Math.max(MAX_K, this.minK * 1.5);
+    if (wasFit) this.k = this.tk = this.minK;
+    this.k = clampN(this.k, this.minK, this.maxK);
+    this.tk = clampN(this.tk, this.minK, this.maxK);
+    this.clampTarget();
+    this.clampCurrent();
+  }
+  get isFit() {
+    return this.tk <= this.minK * 1.02;
+  }
+  clampAxis(c, k, view, field) {
+    const half = view / (2 * k);
+    if (half * 2 >= field) return field / 2;
+    const pad = half * 0.35;
+    const lo = half - pad, hi = field - half + pad;
+    if (lo >= hi) return field / 2;
+    return clampN(c, lo, hi);
+  }
+  clampTarget() {
+    this.tcx = this.clampAxis(this.tcx, this.tk, this.vw, this.fw);
+    this.tcy = this.clampAxis(this.tcy, this.tk, this.vh, this.fh);
+  }
+  clampCurrent() {
+    const x = this.clampAxis(this.cx, this.k, this.vw, this.fw);
+    const y = this.clampAxis(this.cy, this.k, this.vh, this.fh);
+    const hit = x !== this.cx || y !== this.cy;
+    this.cx = x;
+    this.cy = y;
+    return hit;
+  }
+  /** visual cells -> screen CSS px */
+  toScreen(vx, vy) {
+    return { x: this.vw / 2 + (vx - this.cx) * this.k, y: this.vh / 2 + (vy - this.cy) * this.k };
+  }
+  fromScreen(sx, sy) {
+    return { x: this.cx + (sx - this.vw / 2) / this.k, y: this.cy + (sy - this.vh / 2) / this.k };
+  }
+  stopInertia() {
+    this.velX = this.velY = 0;
+  }
+  /** Direct manipulation: pan by a screen delta, immediately (no easing). */
+  panByScreen(dx, dy) {
+    this.anchor = null;
+    this.cx -= dx / this.k;
+    this.cy -= dy / this.k;
+    this.clampCurrent();
+    this.tcx = this.cx;
+    this.tcy = this.cy;
+    this.tk = this.k;
+    this.still = 0;
+  }
+  /** Direct manipulation: zoom about a screen point, immediately. */
+  zoomAtInstant(f, sx, sy) {
+    this.anchor = null;
+    const w = this.fromScreen(sx, sy);
+    const nk = clampN(this.k * f, this.minK, this.maxK);
+    this.k = nk;
+    this.cx = w.x - (sx - this.vw / 2) / nk;
+    this.cy = w.y - (sy - this.vh / 2) / nk;
+    this.clampCurrent();
+    this.tcx = this.cx;
+    this.tcy = this.cy;
+    this.tk = this.k;
+    this.still = 0;
+  }
+  /** Eased zoom about a screen point (wheel, buttons). Default point: viewport center. */
+  zoomBy(f, sx = this.vw / 2, sy = this.vh / 2) {
+    const nk = clampN(this.tk * f, this.minK, this.maxK);
+    if (nk === this.tk) return;
+    const w = this.fromScreen(sx, sy);
+    this.anchor = { sx, sy, vx: w.x, vy: w.y };
+    this.tk = nk;
+    this.tcx = w.x - (sx - this.vw / 2) / nk;
+    this.tcy = w.y - (sy - this.vh / 2) / nk;
+    this.clampTarget();
+    this.stopInertia();
+    this.still = 0;
+  }
+  /** Eased move to a view (visual coords). k in CSS px per cell. */
+  setTarget(vx, vy, k, instant = false) {
+    this.anchor = null;
+    this.stopInertia();
+    this.tk = clampN(k, this.minK, this.maxK);
+    this.tcx = vx;
+    this.tcy = vy;
+    this.clampTarget();
+    if (instant) {
+      this.k = this.tk;
+      this.cx = this.tcx;
+      this.cy = this.tcy;
+    }
+    this.still = 0;
+  }
+  fit(instant = false) {
+    this.setTarget(this.fw / 2, this.fh / 2, this.minK, instant);
+  }
+  /** Fling after a drag; velocity in screen px / s. */
+  fling(vxPx, vyPx) {
+    this.velX = -vxPx / this.k;
+    this.velY = -vyPx / this.k;
+  }
+  /** Advance the animation. Returns true while the camera is moving. */
+  update(dt) {
+    dt = clampN(dt, 0, 0.1);
+    const f = 1 - Math.exp(-dt * this.smooth);
+    let moving = false;
+    if (this.velX || this.velY) {
+      this.cx += this.velX * dt;
+      this.cy += this.velY * dt;
+      if (this.clampCurrent()) this.velX = this.velY = 0;
+      this.tcx = this.cx;
+      this.tcy = this.cy;
+      const d = Math.exp(-dt * 3.2);
+      this.velX *= d;
+      this.velY *= d;
+      if (Math.hypot(this.velX, this.velY) * this.k < 6) this.velX = this.velY = 0;
+      moving = true;
+    }
+    if (this.keyX || this.keyY) {
+      const sp = 560 / this.k;
+      this.anchor = null;
+      this.tcx += this.keyX * sp * dt;
+      this.tcy += this.keyY * sp * dt;
+      this.clampTarget();
+      moving = true;
+    }
+    const lk = Math.log(this.k), ltk = Math.log(this.tk);
+    if (Math.abs(ltk - lk) > 5e-4) {
+      this.k = Math.exp(lk + (ltk - lk) * f);
+      moving = true;
+    } else this.k = this.tk;
+    if (this.anchor) {
+      const a = this.anchor;
+      this.cx = a.vx - (a.sx - this.vw / 2) / this.k;
+      this.cy = a.vy - (a.sy - this.vh / 2) / this.k;
+      if (this.k === this.tk) this.anchor = null;
+    } else {
+      const ex = this.tcx - this.cx, ey = this.tcy - this.cy;
+      if (Math.abs(ex) * this.k > 0.05 || Math.abs(ey) * this.k > 0.05) {
+        this.cx += ex * f;
+        this.cy += ey * f;
+        moving = true;
+      } else {
+        this.cx = this.tcx;
+        this.cy = this.tcy;
+      }
+    }
+    this.clampCurrent();
+    this.still = moving ? 0 : this.still + dt;
+    return moving;
+  }
+};
+var MOUSE_DRAG_PX = 6;
+var TOUCH_DRAG_PX = 8;
+var CameraControls = class _CameraControls {
+  _enabled = true;
+  /** double click / double tap zooms in on the point (or back to fit). Screens may switch this off temporarily. */
+  doubleClickZoom = true;
+  ptrs = /* @__PURE__ */ new Map();
+  panning = false;
+  pinching = false;
+  dragged = false;
+  pinchDist = 0;
+  pinchMidX = 0;
+  pinchMidY = 0;
+  samples = [];
+  lastTap = null;
+  keys = /* @__PURE__ */ new Set();
+  offs = [];
+  cam;
+  canvas;
+  constructor(cam, canvas, enabled = true) {
+    this.cam = cam;
+    this.canvas = canvas;
+    this.enabled = enabled;
+    const on = (t, type, fn, opts) => {
+      t.addEventListener(type, fn, opts);
+      this.offs.push(() => t.removeEventListener(type, fn, opts));
+    };
+    on(canvas, "pointerdown", (e) => this.down(e));
+    on(canvas, "pointermove", (e) => this.move(e));
+    on(canvas, "pointerup", (e) => this.up(e, false));
+    on(canvas, "pointercancel", (e) => this.up(e, true));
+    on(canvas, "wheel", (e) => this.wheel(e), { passive: false });
+    on(canvas, "contextmenu", (e) => {
+      if (this.enabled && this.rightDragged) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+      this.rightDragged = false;
+    });
+    on(canvas, "auxclick", (e) => {
+      if (this.enabled && e.button === 1) e.preventDefault();
+    });
+    on(window, "keydown", (e) => this.keyDown(e));
+    on(window, "keyup", (e) => this.keyUp(e));
+    on(window, "blur", () => {
+      this.keys.clear();
+      this.syncKeys();
+    });
+  }
+  rightDragged = false;
+  get enabled() {
+    return this._enabled;
+  }
+  set enabled(v) {
+    this._enabled = v;
+    if (!v) {
+      this.ptrs.clear();
+      this.keys.clear();
+      this.syncKeys();
+      this.panning = this.pinching = false;
+    }
+    try {
+      this.canvas.style.touchAction = v ? "none" : "";
+    } catch {
+    }
+  }
+  /** true if the pointer gesture that just ended was a pan / pinch (not a click or tap) */
+  get wasDrag() {
+    return this.dragged;
+  }
+  /** returns wasDrag and clears it; call from your pointerup/click handler to ignore the end of a pan */
+  consumeDrag() {
+    const d = this.dragged;
+    this.dragged = false;
+    return d;
+  }
+  destroy() {
+    for (const f of this.offs) f();
+    this.offs = [];
+  }
+  pos(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  down(e) {
+    if (!this._enabled) return;
+    if (this.ptrs.size === 0) {
+      this.dragged = false;
+      this.panning = false;
+      this.pinching = false;
+      this.rightDragged = false;
+      this.samples = [];
+    }
+    const p = this.pos(e);
+    this.ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, type: e.pointerType, button: e.button, t0: performance.now() });
+    this.cam.stopInertia();
+    if (e.button === 1) e.preventDefault();
+    if (this.ptrs.size === 2) this.startPinch();
+    else if (this.ptrs.size === 1 && (e.button === 1 || e.button === 2)) {
+      this.panning = true;
+      this.dragged = true;
+    }
+  }
+  startPinch() {
+    const [a, b] = [...this.ptrs.values()];
+    this.pinching = true;
+    this.panning = false;
+    this.dragged = true;
+    this.pinchDist = Math.max(8, Math.hypot(a.x - b.x, a.y - b.y));
+    this.pinchMidX = (a.x + b.x) / 2;
+    this.pinchMidY = (a.y + b.y) / 2;
+  }
+  move(e) {
+    const q = this.ptrs.get(e.pointerId);
+    if (!q || !this._enabled) return;
+    const p = this.pos(e);
+    const dx = p.x - q.x, dy = p.y - q.y;
+    q.x = p.x;
+    q.y = p.y;
+    if (this.pinching && this.ptrs.size >= 2) {
+      const [a, b] = [...this.ptrs.values()];
+      const d = Math.max(8, Math.hypot(a.x - b.x, a.y - b.y));
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      this.cam.panByScreen(mx - this.pinchMidX, my - this.pinchMidY);
+      this.cam.zoomAtInstant(d / this.pinchDist, mx, my);
+      this.pinchDist = d;
+      this.pinchMidX = mx;
+      this.pinchMidY = my;
+      e.preventDefault();
+      return;
+    }
+    if (this.ptrs.size !== 1) return;
+    if (!this.panning) {
+      if (q.button !== 0) return;
+      const thr = q.type === "mouse" ? MOUSE_DRAG_PX : TOUCH_DRAG_PX;
+      if (Math.hypot(p.x - q.sx, p.y - q.sy) <= thr) return;
+      this.panning = true;
+      this.dragged = true;
+      this.cam.panByScreen(p.x - q.sx, p.y - q.sy);
+    } else this.cam.panByScreen(dx, dy);
+    if (q.button === 2) this.rightDragged = true;
+    const t = performance.now();
+    this.samples.push({ t, x: p.x, y: p.y });
+    while (this.samples.length > 2 && t - this.samples[0].t > 100) this.samples.shift();
+  }
+  up(e, cancel) {
+    const q = this.ptrs.get(e.pointerId);
+    if (!q) return;
+    this.ptrs.delete(e.pointerId);
+    if (!this._enabled) return;
+    const now = performance.now();
+    if (this.pinching) {
+      if (this.ptrs.size === 1) {
+        this.pinching = false;
+        this.panning = true;
+        this.samples = [];
+      } else if (this.ptrs.size === 0) this.pinching = false;
+      return;
+    }
+    if (this.ptrs.size > 0) return;
+    if (this.panning) {
+      this.panning = false;
+      if (!cancel) {
+        const s = this.samples;
+        if (s.length >= 2 && now - s[s.length - 1].t < 70) {
+          const a = s[0], b = s[s.length - 1];
+          const dt = (b.t - a.t) / 1e3;
+          if (dt > 0.012) {
+            const vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt;
+            if (Math.hypot(vx, vy) > 120) this.cam.fling(clampN(vx, -3e3, 3e3), clampN(vy, -3e3, 3e3));
+          }
+        }
+      }
+      this.samples = [];
+      this.lastTap = null;
+      return;
+    }
+    if (cancel || q.button !== 0 || this.dragged) {
+      this.lastTap = null;
+      return;
+    }
+    const lt = this.lastTap;
+    if (lt && now - lt.t < 350 && Math.hypot(q.x - lt.x, q.y - lt.y) < 30) {
+      this.lastTap = null;
+      if (this.doubleClickZoom) this.doubleTap(q.x, q.y);
+    } else this.lastTap = { t: now, x: q.x, y: q.y };
+  }
+  doubleTap(sx, sy) {
+    const c = this.cam;
+    if (c.tk > c.minK * 1.6) c.fit();
+    else {
+      const w = c.fromScreen(sx, sy);
+      c.setTarget(w.x, w.y, Math.min(c.maxK, Math.max(c.minK * 2.8, 22)));
+    }
+  }
+  wheel(e) {
+    if (!this._enabled) return;
+    e.preventDefault();
+    const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+    const f = clampN(Math.exp(-dy * (e.ctrlKey ? 0.011 : 16e-4)), 0.6, 1.7);
+    const p = this.pos(e);
+    this.cam.zoomBy(f, p.x, p.y);
+  }
+  /* keyboard */
+  static PAN = /* @__PURE__ */ new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
+  keyOk(e) {
+    if (!this._enabled || e.ctrlKey || e.metaKey || e.altKey) return false;
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return false;
+    if (document.querySelector(".modal-back")) return false;
+    return true;
+  }
+  keyDown(e) {
+    if (!this.keyOk(e)) return;
+    const k = e.key.toLowerCase();
+    if (_CameraControls.PAN.has(k)) {
+      this.keys.add(k);
+      this.syncKeys();
+      e.preventDefault();
+    } else if (k === "+" || k === "=" || k === "add") {
+      this.cam.zoomBy(1.3);
+      e.preventDefault();
+    } else if (k === "-" || k === "_" || k === "subtract") {
+      this.cam.zoomBy(1 / 1.3);
+      e.preventDefault();
+    } else if (k === "home" || k === "f") {
+      this.cam.fit();
+      e.preventDefault();
+    }
+  }
+  keyUp(e) {
+    if (this.keys.delete(e.key.toLowerCase())) this.syncKeys();
+  }
+  syncKeys() {
+    const h = (a, b) => (this.keys.has(a) ? 1 : 0) - (this.keys.has(b) ? 1 : 0);
+    this.cam.keyX = clampN(h("d", "a") + h("arrowright", "arrowleft"), -1, 1);
+    this.cam.keyY = clampN(h("s", "w") + h("arrowdown", "arrowup"), -1, 1);
+  }
+};
+
 // src/shared/sim/types.ts
 var TICK_RATE = 20;
 var DT = 1 / TICK_RATE;
@@ -2507,22 +2939,28 @@ function groundCanvas(px) {
   if (cache.size > 4) cache.clear();
   c = makeCanvas(FIELD_W * px, FIELD_H * px);
   const g = ctx2d(c);
-  paint(g, px);
+  paint(g, px, 0, 0, c.width, c.height);
   cache.set(px, c);
   return c;
 }
-function paint(g, px) {
+function groundRegion(px, x0, y0, x1, y1) {
+  const c = makeCanvas(Math.max(1, Math.ceil((x1 - x0) * px)), Math.max(1, Math.ceil((y1 - y0) * px)));
+  paint(ctx2d(c), px, x0, y0, c.width, c.height);
+  return c;
+}
+function paint(g, px, x0, y0, cw, ch) {
+  const T = () => g.setTransform(px, 0, 0, px, -x0 * px, -y0 * px);
   let seed = 9001;
   const rnd3 = () => (seed = seed * 16807 % 2147483647) / 2147483647;
   const W = FIELD_W, H = FIELD_H;
-  g.setTransform(px, 0, 0, px, 0, 0);
+  T();
   const base2 = g.createLinearGradient(0, 0, W, H);
   base2.addColorStop(0, "#363a37");
   base2.addColorStop(0.5, "#313432");
   base2.addColorStop(1, "#383934");
   g.fillStyle = base2;
   g.fillRect(0, 0, W, H);
-  const P = 4;
+  const P = 5;
   for (let y = 0; y < H; y += P) for (let x = 0; x < W; x += P) {
     const v = rnd3();
     g.fillStyle = v < 0.33 ? "rgba(255,255,255,0.025)" : v < 0.66 ? "rgba(0,0,0,0.05)" : "rgba(90,80,60,0.05)";
@@ -2542,10 +2980,10 @@ function paint(g, px) {
   if (pat) {
     g.fillStyle = pat;
     g.globalAlpha = 0.55;
-    g.fillRect(0, 0, W * px, H * px);
+    g.fillRect(0, 0, cw, ch);
     g.globalAlpha = 1;
   }
-  g.setTransform(px, 0, 0, px, 0, 0);
+  T();
   const lw2 = 1 / px;
   g.lineWidth = lw2 * 1.5;
   g.strokeStyle = "rgba(0,0,0,0.35)";
@@ -2582,14 +3020,26 @@ function paint(g, px) {
       g.fill();
     }
   }
-  g.strokeStyle = "rgba(255,255,255,0.035)";
+  g.strokeStyle = "rgba(255,255,255,0.04)";
   g.lineWidth = lw2;
   g.beginPath();
-  for (let x = 1; x < W; x++) {
+  for (let x = 1; x < W; x++) if (x % 5) {
     g.moveTo(x, 0);
     g.lineTo(x, H);
   }
-  for (let y = 1; y < H; y++) {
+  for (let y = 1; y < H; y++) if (y % 5) {
+    g.moveTo(0, y);
+    g.lineTo(W, y);
+  }
+  g.stroke();
+  g.strokeStyle = "rgba(255,255,255,0.085)";
+  g.lineWidth = lw2 * 1.4;
+  g.beginPath();
+  for (let x = 5; x < W; x += 5) {
+    g.moveTo(x, 0);
+    g.lineTo(x, H);
+  }
+  for (let y = 5; y < H; y += 5) {
     g.moveTo(0, y);
     g.lineTo(W, y);
   }
@@ -5527,6 +5977,8 @@ function drawPartIcon(canvas, kind, id, opts = {}) {
 }
 
 // src/client/render/field.ts
+var GROUND_PX = 24;
+var DECAL_PX = 20;
 var forwardAngle = (side2) => side2 === 0 ? -Math.PI / 2 : Math.PI / 2;
 var FieldView = class {
   canvas;
@@ -5537,10 +5989,11 @@ var FieldView = class {
   dpr = 1;
   cssW = 0;
   cssH = 0;
-  /** CSS px per cell */
-  k = 1;
-  ox = 0;
-  oy = 0;
+  cam = new Camera(FIELD_W, FIELD_H);
+  controls;
+  /** when true a small scale bar is drawn in the bottom-left corner */
+  scaleBar = true;
+  detail = null;
   fx = new Fx();
   dirs;
   vignette = null;
@@ -5560,8 +6013,11 @@ var FieldView = class {
   usePush = false;
   time = 0;
   alpha = 1;
-  constructor(canvas, viewerSide) {
+  constructor(canvas, viewerSide, opts) {
     this.canvas = canvas;
+    const interactive = opts?.interactive !== false;
+    this.scaleBar = interactive;
+    this.controls = new CameraControls(this.cam, canvas, interactive);
     this.viewerSide = viewerSide;
     this.g = ctx2d(canvas);
     this.dirs = viewerSide === 0 ? { sx: 0.55, sy: 0.85, ux: 0, uy: -1 } : { sx: -0.55, sy: -0.85, ux: 0, uy: 1 };
@@ -5583,11 +6039,63 @@ var FieldView = class {
     const w = Math.max(1, Math.round(cw * dpr)), h = Math.max(1, Math.round(ch * dpr));
     if (this.canvas.width !== w) this.canvas.width = w;
     if (this.canvas.height !== h) this.canvas.height = h;
-    this.k = Math.max(0.5, Math.min(cw / FIELD_W, ch / FIELD_H));
-    this.ox = (cw - FIELD_W * this.k) / 2;
-    this.oy = (ch - FIELD_H * this.k) / 2;
+    this.cam.setViewport(cw, ch);
     this.vignette = null;
-    this.fx.setDecalSpace(FIELD_W, FIELD_H, this.k * dpr);
+    this.detail = null;
+    this.fx.setDecalSpace(FIELD_W, FIELD_H, DECAL_PX);
+  }
+  /** CSS px per cell (camera zoom) */
+  get k() {
+    return this.cam.k;
+  }
+  /** screen position (CSS px) of the visual (rotated) field's top-left corner */
+  get ox() {
+    return this.cssW / 2 - this.cam.cx * this.cam.k;
+  }
+  get oy() {
+    return this.cssH / 2 - this.cam.cy * this.cam.k;
+  }
+  /** quantized device px per cell for sprite caches (avoids thrashing while zooming) */
+  get spritePx() {
+    const raw = Math.max(4, this.k * this.dpr);
+    return Math.min(96, Math.round(2 ** (Math.round(Math.log2(raw) * 3) / 3)));
+  }
+  /* ---------------------------------------------------------------------------------------- camera API */
+  toVisual(x, y) {
+    return this.viewerSide === 1 ? { x: FIELD_W - x, y: FIELD_H - y } : { x, y };
+  }
+  /** whole field fits (minimum zoom) */
+  fit(instant = false) {
+    this.cam.fit(instant);
+  }
+  /** frame the viewer's own deploy zone plus some of no-man's land */
+  frameDeploy(instant = false) {
+    this.checkSize();
+    const c = this.cam;
+    const rows = DEPLOY_D + 6;
+    let k = Math.min(c.vw / FIELD_W, c.vh / rows);
+    if (c.vw < 640) k = Math.max(k, 11);
+    k = Math.max(c.minK, k);
+    c.setTarget(FIELD_W / 2, FIELD_H - c.vh / (2 * k) + 0.4, k, instant);
+  }
+  /** center on world point (x, y); zoom is relative to fit (1 = whole field, omitted = keep current) */
+  focusOn(x, y, zoom, instant = false) {
+    const v = this.toVisual(x, y);
+    this.cam.setTarget(v.x, v.y, zoom === void 0 ? this.cam.tk : this.cam.minK * zoom, instant);
+  }
+  /** multiply zoom by f about a screen point (CSS px; default viewport center) */
+  zoomBy(f, screenX, screenY) {
+    this.cam.zoomBy(f, screenX, screenY);
+  }
+  /** true if the pointer gesture that just ended was a pan/pinch; clears the flag */
+  consumeDrag() {
+    return this.controls.consumeDrag();
+  }
+  get wasDrag() {
+    return this.controls.wasDrag;
+  }
+  stepCamera(dt) {
+    this.cam.update(dt);
   }
   checkSize() {
     const cw = this.canvas.clientWidth, ch = this.canvas.clientHeight;
@@ -5634,7 +6142,8 @@ var FieldView = class {
     this.setWorld(sx, sy);
     g.fillStyle = "rgba(0,0,0,0.5)";
     g.fillRect(-0.25, -0.25, FIELD_W + 0.5, FIELD_H + 0.5);
-    g.drawImage(groundCanvas(this.px), 0, 0, FIELD_W, FIELD_H);
+    g.drawImage(groundCanvas(GROUND_PX), 0, 0, FIELD_W, FIELD_H);
+    this.drawDetail();
     if (this.fx.decalCanvas) g.drawImage(this.fx.decalCanvas, 0, 0, FIELD_W, FIELD_H);
     const myTop = this.viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = this.viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
@@ -5677,6 +6186,71 @@ var FieldView = class {
     g.lineWidth = lw2 * 1.5;
     g.strokeRect(0, 0, FIELD_W, FIELD_H);
   }
+  /** hi-res ground patch for the visible area when zoomed in; rebuilt once the camera settles */
+  drawDetail() {
+    const px = this.px;
+    if (px < GROUND_PX * 1.2) {
+      this.detail = null;
+      return;
+    }
+    const g = this.g;
+    const a = this.screenToWorld(0, 0), b = this.screenToWorld(this.cssW, this.cssH);
+    const vx0 = Math.max(0, Math.min(a.x, b.x)), vx1 = Math.min(FIELD_W, Math.max(a.x, b.x));
+    const vy0 = Math.max(0, Math.min(a.y, b.y)), vy1 = Math.min(FIELD_H, Math.max(a.y, b.y));
+    let d = this.detail;
+    const covers = !!d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6;
+    const sharp = !!d && d.px >= px * 0.8 && d.px <= px * 1.6;
+    if ((!d || !covers || !sharp) && this.cam.still > 0.12) {
+      const mx = (vx1 - vx0) * 0.3, my = (vy1 - vy0) * 0.3;
+      const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
+      const y0 = Math.max(0, vy0 - my), y1 = Math.min(FIELD_H, vy1 + my);
+      const dpx = Math.min(px, 3800 / (x1 - x0), 3800 / (y1 - y0));
+      d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1), x0, y0, x1, y1, px: dpx };
+    }
+    if (d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6) {
+      g.drawImage(d.c, d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
+    }
+  }
+  /** scale bar (bottom-left): a round number of metres */
+  drawScaleBar() {
+    if (!this.scaleBar) return;
+    const g = this.g;
+    this.setScreen();
+    const pxPerM = this.k / METERS_PER_CELL;
+    let m = 5;
+    for (const c of [5, 10, 25, 50, 100, 200, 250]) {
+      m = c;
+      if (c * pxPerM >= 56) break;
+    }
+    const len = m * pxPerM;
+    const x = 12, y = this.cssH - 12;
+    g.save();
+    g.lineCap = "butt";
+    g.font = "600 11px system-ui, sans-serif";
+    g.textBaseline = "bottom";
+    g.fillStyle = "rgba(255,255,255,0.85)";
+    g.strokeStyle = "rgba(0,0,0,0.6)";
+    g.lineWidth = 4;
+    g.beginPath();
+    g.moveTo(x, y - 5);
+    g.lineTo(x, y);
+    g.lineTo(x + len, y);
+    g.lineTo(x + len, y - 5);
+    g.stroke();
+    g.lineWidth = 2;
+    g.strokeStyle = "rgba(255,255,255,0.85)";
+    g.beginPath();
+    g.moveTo(x, y - 5);
+    g.lineTo(x, y);
+    g.lineTo(x + len, y);
+    g.lineTo(x + len, y - 5);
+    g.stroke();
+    g.lineWidth = 3;
+    g.strokeStyle = "rgba(0,0,0,0.6)";
+    g.strokeText(`${m} m`, x + 2, y - 4);
+    g.fillText(`${m} m`, x + 2, y - 4);
+    g.restore();
+  }
   drawVignette() {
     const g = this.g;
     this.setScreen();
@@ -5699,8 +6273,9 @@ var FieldView = class {
     const dt = this.time ? clamp(time - this.time, 0, 0.1) : 0;
     this.time = time;
     this.fx.update(dt);
+    this.stepCamera(dt);
     this.drawGround(!!overlay.showZone, 0, 0);
-    const px = this.px;
+    const px = this.spritePx;
     const hv = overlay.hover;
     if (hv) {
       const col = hv.valid ? "#46e88a" : "#ff4a4a";
@@ -5757,6 +6332,7 @@ var FieldView = class {
     this.setScreen();
     for (const { u } of poses) if (u.level > 1 && !u.ghost) this.drawPips(u.x, u.y, layoutOf(u.design).S, u.level, 1);
     this.drawVignette();
+    this.drawScaleBar();
   }
   drawPips(x, y, S, level, alpha) {
     const g = this.g;
@@ -5844,12 +6420,13 @@ var FieldView = class {
       if (!newTicks) this.pending = [];
     }
     this.fx.update(dt);
+    this.stepCamera(dt);
     for (const v of this.vis.values()) for (let i = 0; i < v.swing.length; i++) v.swing[i] = Math.max(0, v.swing[i] - dt * 3.5);
     const g = this.g;
     const tr = this.fx.trauma * this.fx.trauma;
     const sx = tr ? (Math.random() * 2 - 1) * tr * 7 : 0, sy = tr ? (Math.random() * 2 - 1) * tr * 7 : 0;
     this.drawGround(false, sx, sy);
-    const px = this.px;
+    const px = this.spritePx;
     const ground = [], air = [];
     const bars = [];
     for (const u of battle.units) {
@@ -5871,6 +6448,7 @@ var FieldView = class {
     this.setScreen();
     for (const { u, p } of bars) this.drawBar(u, p, dt);
     this.drawVignette();
+    this.drawScaleBar();
   }
   visOf(u) {
     let v = this.vis.get(u.id);
@@ -6509,14 +7087,14 @@ var FieldView = class {
           fx.debris(x, y, 6 * S, pal.dark, 2.5, 0.07 * S);
           fx.schedule(0.35, () => {
             fx.boom(x, y, 0.6 * S, "fire");
-            if (u) fx.decal("wreck", x, y, 0, wreckSprite(u.design, team, this.px), unitSprites(u.design, team, this.px).ext * 0.8, u.angle + 0.6);
+            if (u) fx.decal("wreck", x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext * 0.8, u.angle + 0.6);
           });
         } else {
           fx.boom(x, y, 0.55 + 0.45 * S, S >= 3 ? "big" : "fire");
           fx.debris(x, y, 5 + 5 * S, pal.dark, 3 + S, 0.06 * S);
           fx.debris(x, y, 3 + 2 * S, "#2a2622", 3, 0.05 * S);
           fx.embers(x, y, 6 * S, S * 0.6);
-          if (u) fx.decal("wreck", x, y, 0, wreckSprite(u.design, team, this.px), unitSprites(u.design, team, this.px).ext, u.angle);
+          if (u) fx.decal("wreck", x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext, u.angle);
           for (let i = 0; i < S; i++) fx.schedule(0.15 + i * 0.2, () => fx.boom(x + (Math.random() - 0.5) * S * 0.6, y + (Math.random() - 0.5) * S * 0.6, 0.3 + 0.2 * S, "fire"));
           for (let i = 0; i < 4; i++) fx.schedule(0.4 + i * 0.5, () => fx.smoke(x, y, 0.3 * S, 2.5, "#1e1c1a", 0.2, -0.3, 0.45));
         }
@@ -6547,6 +7125,8 @@ var FieldView = class {
     }
   }
   destroy() {
+    this.controls.destroy();
+    this.detail = null;
     this.fx.clear();
     this.battle = null;
     this.prevU.clear();

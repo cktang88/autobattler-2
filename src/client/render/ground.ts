@@ -34,16 +34,25 @@ export function groundCanvas(px: number): HTMLCanvasElement {
   if (cache.size > 4) cache.clear();
   c = makeCanvas(FIELD_W * px, FIELD_H * px);
   const g = ctx2d(c);
-  paint(g, px);
+  paint(g, px, 0, 0, c.width, c.height);
   cache.set(px, c);
   return c;
 }
 
-function paint(g: Ctx, px: number): void {
+/** Hi-res ground for just the world rect [x0,x1]x[y0,y1] (cells), painted at `px` device px per cell.
+ *  Same procedural content as groundCanvas, so it can be drawn over it seamlessly when zoomed in. */
+export function groundRegion(px: number, x0: number, y0: number, x1: number, y1: number): HTMLCanvasElement {
+  const c = makeCanvas(Math.max(1, Math.ceil((x1 - x0) * px)), Math.max(1, Math.ceil((y1 - y0) * px)));
+  paint(ctx2d(c), px, x0, y0, c.width, c.height);
+  return c;
+}
+
+function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: number): void {
+  const T = () => g.setTransform(px, 0, 0, px, -x0 * px, -y0 * px);
   let seed = 9001;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const W = FIELD_W, H = FIELD_H;
-  g.setTransform(px, 0, 0, px, 0, 0);
+  T();
   // base
   const base = g.createLinearGradient(0, 0, W, H);
   base.addColorStop(0, '#363a37');
@@ -53,7 +62,7 @@ function paint(g: Ctx, px: number): void {
   g.fillRect(0, 0, W, H);
 
   // large deck plates (4x4 cells) with slight tint variation
-  const P = 4;
+  const P = 5; // 5 tiles = 25 m
   for (let y = 0; y < H; y += P) for (let x = 0; x < W; x += P) {
     const v = rnd();
     g.fillStyle = v < 0.33 ? 'rgba(255,255,255,0.025)' : v < 0.66 ? 'rgba(0,0,0,0.05)' : 'rgba(90,80,60,0.05)';
@@ -75,10 +84,10 @@ function paint(g: Ctx, px: number): void {
   if (pat) {
     g.fillStyle = pat;
     g.globalAlpha = 0.55;
-    g.fillRect(0, 0, W * px, H * px);
+    g.fillRect(0, 0, cw, ch);
     g.globalAlpha = 1;
   }
-  g.setTransform(px, 0, 0, px, 0, 0);
+  T();
   // plate seams
   const lw = 1 / px;
   g.lineWidth = lw * 1.5;
@@ -101,12 +110,18 @@ function paint(g: Ctx, px: number): void {
       g.beginPath(); g.arc(x + dx - 0.012, y + dy - 0.012, 0.022, 0, Math.PI * 2); g.fill();
     }
   }
-  // faint cell grid
-  g.strokeStyle = 'rgba(255,255,255,0.035)';
+  // faint tile grid (1 tile = 5 m), stronger every 5 tiles (25 m)
+  g.strokeStyle = 'rgba(255,255,255,0.04)';
   g.lineWidth = lw;
   g.beginPath();
-  for (let x = 1; x < W; x++) { g.moveTo(x, 0); g.lineTo(x, H); }
-  for (let y = 1; y < H; y++) { g.moveTo(0, y); g.lineTo(W, y); }
+  for (let x = 1; x < W; x++) if (x % 5) { g.moveTo(x, 0); g.lineTo(x, H); }
+  for (let y = 1; y < H; y++) if (y % 5) { g.moveTo(0, y); g.lineTo(W, y); }
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.085)';
+  g.lineWidth = lw * 1.4;
+  g.beginPath();
+  for (let x = 5; x < W; x += 5) { g.moveTo(x, 0); g.lineTo(x, H); }
+  for (let y = 5; y < H; y += 5) { g.moveTo(0, y); g.lineTo(W, y); }
   g.stroke();
   // cracks
   g.strokeStyle = 'rgba(0,0,0,0.3)';
