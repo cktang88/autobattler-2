@@ -125,12 +125,27 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
   } else {
     if (L.mob.id === 'anchor') drawAnchorPlate(g, L, pal, oo);
     else drawMobility(g, L, pal, 0.15, false, oo);
-    // ghosted hull so the running gear reads as a vehicle
-    g.globalAlpha = 0.35;
-    g.fillStyle = shade(pal.dark, -0.2);
-    g.fill(hullPath(L.shape, S));
+    // ghosted hull outline so the running gear reads as a vehicle
+    const hp = hullPath(L.shape, S);
+    g.globalAlpha = 0.18;
+    g.fillStyle = pal.light;
+    g.fill(hp);
+    g.globalAlpha = 0.6;
+    g.setLineDash([0.04 * S, 0.03 * S]);
+    g.strokeStyle = pal.light;
+    g.lineWidth = oo;
+    g.stroke(hp);
+    g.setLineDash([]);
     g.globalAlpha = 1;
-    for (const r of L.rotors) rotorBlur(g, r.x, r.y, r.r, r.blades, 0.37, PX * sc);
+    for (const r of L.rotors) {
+      rotorBlur(g, r.x, r.y, r.r, r.blades, 0.37, PX * sc);
+      g.strokeStyle = '#c8d0d8';
+      g.lineWidth = r.r * 0.1;
+      g.lineCap = 'round';
+      g.beginPath();
+      for (let i = 0; i < r.blades; i++) { const a = 0.4 + (i / r.blades) * Math.PI * 2; g.moveTo(r.x, r.y); g.lineTo(r.x + Math.cos(a) * r.r, r.y + Math.sin(a) * r.r); }
+      g.stroke();
+    }
     if (L.mob.id === 'jet' || L.mob.id === 'jumpjets') {
       for (const n of L.nozzles) {
         const gr = g.createRadialGradient(n.x - 0.05 * S, n.y, 0, n.x - 0.05 * S, n.y, n.w * 2.5);

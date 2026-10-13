@@ -284,8 +284,8 @@ export class Fx {
       g.arc(d.x, d.y, r * 0.4, 0, Math.PI * 2);
       g.fill();
       // radial streaks
-      g.strokeStyle = 'rgba(10,8,6,0.3)';
-      g.lineWidth = r * 0.06;
+      g.strokeStyle = 'rgba(10,8,6,0.14)';
+      g.lineWidth = r * 0.1;
       g.beginPath();
       for (let i = 0; i < 7; i++) {
         const a = d.a + i * 0.9 + Math.sin(i * 3.1) * 0.3;

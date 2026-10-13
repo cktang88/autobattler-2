@@ -109,9 +109,9 @@ function muzzle(g: Ctx, x: number, y: number, w: number, len: number, o: number)
 
 function teamGrad(g: Ctx, pal: TeamPal, r: number): CanvasGradient {
   const gr = g.createLinearGradient(-r, -r, r, r);
-  gr.addColorStop(0, pal.light);
-  gr.addColorStop(0.55, pal.body);
-  gr.addColorStop(1, pal.dark);
+  gr.addColorStop(0, shade(pal.light, 0.3));
+  gr.addColorStop(0.5, shade(pal.light, -0.05));
+  gr.addColorStop(1, shade(pal.body, -0.1));
   return gr;
 }
 

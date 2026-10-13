@@ -73,6 +73,8 @@ export const PARTS_WEIGHT = 0.3;
 export const POWER_K = 0.36;
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
+const RANGE_EXP = 1.0;
+const RANGE_CAP = 2.8;
 
 /** Fraction of raw damage that gets through the reference armor mix (sim damage formula). */
 export function armorEfficiency(damage: number, ap: number): number {
@@ -82,9 +84,25 @@ export function armorEfficiency(damage: number, ap: number): number {
 }
 
 /** Predicted damage-output rating of one weapon (or healing value of a repair module). */
+/** Expected fraction of shots that connect with a (mostly engaged, slowly moving) target. Hitscan, homing and
+ *  melee never miss; unguided projectiles lose to spread and to target drift during flight (no lead in the sim). */
+export function hitFactor(w: ModuleDef): number {
+  const p = w.projectile;
+  if (p === 'beam' || p === 'lightning' || p === 'rail' || p === 'melee' || (p === 'missile' && !w.spread)) return 1;
+  const spread = (w.spread ?? 0) * 0.7;
+  const flight = w.projectileSpeed ? (w.range ?? 5) / w.projectileSpeed : 0;
+  const target = 0.45 + 0.6 * (w.splash ?? 0);
+  return target / (target + spread + 0.25 * flight) / 0.7;
+}
+
+const CAL: Record<string, number> = {};
+// DEVCAL-BEGIN
+try { Object.assign(CAL, JSON.parse((globalThis as any).process?.env?.BAL_CAL ?? '{}')); } catch { /* ignore */ }
+// DEVCAL-END
+
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
-  const rangeF = Math.min(2.2, Math.max(0.5, Math.pow(range / 5, 0.8))); // reach decides most fights
+  const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / 5, RANGE_EXP))); // reach decides most fights
   if (w.heal) return w.heal * 1.6 * rangeF;
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
@@ -97,15 +115,15 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const cyc = cycleTime(w);
   // burn refreshes rather than stacks: worth ~its dps on each target it keeps alight
   if (w.burn) v += w.burn.dps * Math.min(1, w.burn.duration / cyc) * (1 + 0.6 * (w.splash ?? 0));
-  if (w.stun) v += ((w.stun * shots) / cyc) * 30 * (1 + 0.8 * (w.splash ?? 0));
-  if (w.slow) v += (w.slow / cyc) * 18;
-  if (w.disarm) v += (w.disarm / cyc) * 55;
-  if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 14 * (1 + 0.6 * (w.splash ?? 0));
-  v *= 0.75 + 0.25 * (accuracyRating(w) / 100);
+  if (w.stun) v += ((w.stun * shots) / cyc) * 22 * (1 + 0.8 * (w.splash ?? 0));
+  if (w.slow) v += (w.slow / cyc) * 14;
+  if (w.disarm) v += (w.disarm / cyc) * 28;
+  if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 6 * (1 + 0.6 * (w.splash ?? 0));
+  v *= hitFactor(w);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;
-  const coverage = w.targetsGround && w.targetsAir ? 1.15 : w.targetsGround ? 0.85 : 0.7 * (w.airBonus ?? 1);
-  return v * coverage * rangeF;
+  const coverage = w.targetsGround && w.targetsAir ? 1.15 : w.targetsGround ? 0.85 : 1.5 * (w.airBonus ?? 1);
+  return v * coverage * rangeF * (CAL[w.id] ?? 1);
 }
 
 export function computeStats(d: Design): UnitStats {

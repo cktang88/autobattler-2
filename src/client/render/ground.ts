@@ -46,9 +46,9 @@ function paint(g: Ctx, px: number): void {
   g.setTransform(px, 0, 0, px, 0, 0);
   // base
   const base = g.createLinearGradient(0, 0, W, H);
-  base.addColorStop(0, '#2c302e');
-  base.addColorStop(0.5, '#282b2a');
-  base.addColorStop(1, '#2d2f2b');
+  base.addColorStop(0, '#363a37');
+  base.addColorStop(0.5, '#313432');
+  base.addColorStop(1, '#383934');
   g.fillStyle = base;
   g.fillRect(0, 0, W, H);
 
@@ -133,7 +133,7 @@ function paint(g: Ctx, px: number): void {
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.beginPath(); g.arc(x, y, r * 1.4, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = 'rgba(160,140,110,0.12)';
+    g.strokeStyle = 'rgba(160,140,110,0.05)';
     g.lineWidth = r * 0.12;
     g.beginPath(); g.arc(x, y, r * 0.75, 3.6, 5.8); g.stroke();
   }

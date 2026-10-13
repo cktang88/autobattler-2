@@ -63,7 +63,7 @@ const MOUNT_PTS: Record<string, [number, number][]> = {
   colossus: [[0.0, -0.31], [0.0, 0.31], [0.18, 0], [-0.24, 0]],
 };
 
-const CLASS_D: Record<MountClass, number> = { L: 0.3, M: 0.42, H: 0.56 };
+const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64 };
 
 const layoutCache = new Map<string, UnitLayout>();
 export const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
@@ -443,12 +443,12 @@ export function hullUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): vo
 /* ------------------------------------------------------------------------------------------- mobility */
 
 function rubberBand(g: Ctx, x0: number, x1: number, y: number, w: number, phase: number, sp: number, o: number): void {
-  g.beginPath();
-  roundRect(g, x0, y - w / 2, x1 - x0, w, w * 0.45);
+  const band = new Path2D();
+  roundRect(band, x0, y - w / 2, x1 - x0, w, w * 0.45);
   g.fillStyle = METAL.rubber;
-  g.fill();
+  g.fill(band);
   g.save();
-  g.clip();
+  g.clip(band);
   g.strokeStyle = METAL.rubberHi;
   g.lineWidth = sp * 0.45;
   g.beginPath();
@@ -459,7 +459,7 @@ function rubberBand(g: Ctx, x0: number, x1: number, y: number, w: number, phase:
   g.restore();
   g.lineWidth = o;
   g.strokeStyle = OUTLINE;
-  g.stroke();
+  g.stroke(band);
 }
 
 function wheel(g: Ctx, x: number, y: number, len: number, w: number, phase: number, o: number): void {
@@ -898,35 +898,35 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
 }
 
 export function rotorBlur(g: Ctx, x: number, y: number, r: number, blades: number, t: number, px: number): void {
-  g.fillStyle = 'rgba(20,24,28,0.22)';
+  g.fillStyle = 'rgba(210,220,230,0.07)';
   g.beginPath();
   g.arc(x, y, r, 0, Math.PI * 2);
   g.fill();
-  g.strokeStyle = 'rgba(200,210,220,0.18)';
-  g.lineWidth = Math.max(1 / px, r * 0.04);
+  g.strokeStyle = 'rgba(220,230,240,0.22)';
+  g.lineWidth = Math.max(1 / px, r * 0.035);
   g.beginPath();
-  g.arc(x, y, r * 0.92, 0, Math.PI * 2);
+  g.arc(x, y, r * 0.95, 0, Math.PI * 2);
   g.stroke();
   const spin = t * 31;
   g.lineCap = 'round';
-  for (let k = 0; k < 2; k++) {
-    g.strokeStyle = k === 0 ? 'rgba(15,17,20,0.55)' : 'rgba(15,17,20,0.25)';
-    g.lineWidth = Math.max(1.4 / px, r * 0.11);
+  for (let k = 0; k < 3; k++) {
+    g.strokeStyle = k === 0 ? 'rgba(25,28,32,0.75)' : `rgba(190,200,210,${0.22 - k * 0.06})`;
+    g.lineWidth = Math.max(1.4 / px, r * (k === 0 ? 0.09 : 0.14));
     g.beginPath();
     for (let i = 0; i < blades; i++) {
-      const a = spin - k * 0.35 + (i / blades) * Math.PI * 2;
-      g.moveTo(x, y);
+      const a = spin - k * 0.3 + (i / blades) * Math.PI * 2;
+      g.moveTo(x + Math.cos(a) * r * 0.12, y + Math.sin(a) * r * 0.12);
       g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
     }
     g.stroke();
   }
   g.fillStyle = '#2b3035';
   g.beginPath();
-  g.arc(x, y, r * 0.12, 0, Math.PI * 2);
+  g.arc(x, y, r * 0.13, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = '#9aa2aa';
+  g.fillStyle = '#b0b8c0';
   g.beginPath();
-  g.arc(x - r * 0.03, y - r * 0.03, r * 0.05, 0, Math.PI * 2);
+  g.arc(x - r * 0.03, y - r * 0.03, r * 0.06, 0, Math.PI * 2);
   g.fill();
 }
 
@@ -1071,12 +1071,12 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   // hit flash / status tints
   const hf = p.hitFlash ?? 0;
   if (hf > 0.02) {
-    g.globalAlpha = alpha * Math.min(0.85, hf * 0.9);
+    g.globalAlpha = alpha * Math.min(0.5, hf * 0.55);
     blit(g, silhouette(s, '#ffffff'), x, y, ang, s.ext, sc);
     g.globalAlpha = alpha;
   }
   if ((p.stun ?? 0) > 0) {
-    g.globalAlpha = alpha * (0.25 + 0.2 * Math.sin(p.time * 40));
+    g.globalAlpha = alpha * (0.12 + 0.1 * Math.sin(p.time * 40));
     blit(g, silhouette(s, '#7fc8ff'), x, y, ang, s.ext, sc);
     g.globalAlpha = alpha;
     drawSparks(g, x, y, 0.45 * L.S, p.time, px);

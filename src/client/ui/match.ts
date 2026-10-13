@@ -158,7 +158,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
   function paintCards() {
     requestAnimationFrame(() => {
-      cardEls.forEach((b, i) => { const d = deck()[i]; if (d) paintPreview(b.querySelector('canvas')!, d, side); });
+      cardEls.forEach((b, i) => { const d = deck()[i]; if (d) paintPreview(b.querySelector('canvas')!, d, 0); }); // previews use absolute team colors: 0 = friendly
     });
   }
   function renderCards() {
@@ -295,7 +295,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       actions.length ? h('div.actions', null, ...actions) : '',
     );
     infoEl.classList.remove('hidden');
-    requestAnimationFrame(() => paintPreview(prev, d, s.side));
+    requestAnimationFrame(() => paintPreview(prev, d, mine ? 0 : 1));
   }
 
   // ---------- overlays (waiting / result / game over) ----------
@@ -582,6 +582,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (rec) { startReplay(rec); return; }
     if (m.status === 'done') { showOver(); return; }
     if (pendingRound !== m.round) resetPending();
+    else if (me().ready && ops.length) { place = []; upgrades = []; ops = []; selCard = -1; hover = null; sel = null; } // submitted: now on the board
     const blocked = me().ready || (m.status === 'waiting' && !!check({ round: m.round, place: [], upgrade: [] }));
     if (blocked) { if (phase !== 'waiting') setPhase('waiting'); else { renderAll(); renderOverlay(); } }
     else if (phase !== 'deploy') setPhase('deploy');
@@ -602,9 +603,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     replay = rec;
     acc = 0;
     endTimer = 0;
-    selCard = -1;
-    hover = null;
-    sel = null;
+    submitting = false;
+    resetPending(); // the round already advanced; anything pending belonged to the resolved round
     battle = null;
     try {
       battle = new Battle(battleInputFor(m, rec));

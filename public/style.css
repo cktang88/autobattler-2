@@ -114,7 +114,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 
 /* ---------- toasts ---------- */
 .toast {
-  position: fixed; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%); z-index: 1000;
+  position: fixed; left: 50%; top: calc(96px + var(--safe-t)); transform: translateX(-50%); z-index: 1000;
   background: var(--panel2); border: 1px solid var(--line2); border-left: 4px solid var(--accent); color: var(--text);
   padding: 10px 18px; border-radius: var(--radius); box-shadow: var(--shadow); font-weight: 600; max-width: min(92vw, 520px);
   animation: toast-in 0.18s ease-out; pointer-events: none;
@@ -194,7 +194,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 
 .mbody { flex: 1; min-height: 0; display: flex; position: relative; }
 .fieldwrap { flex: 1; min-width: 0; position: relative; }
-.fieldwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.fieldwrap > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
 .side { width: 300px; display: flex; flex-direction: column; background: linear-gradient(180deg, #111820, #0c1117); border-left: 1px solid var(--line); min-height: 0; }
 .supply { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .supply .val { font-family: var(--font-head); font-weight: 700; font-size: 1.6rem; color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; }
