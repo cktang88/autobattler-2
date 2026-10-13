@@ -10,7 +10,7 @@ import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUn
 import { loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, FIELD_W, MAX_SPACING, blockCells, blockInZone, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters } from '../../shared/grid.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
@@ -20,40 +20,41 @@ import { playerName } from './vsai.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 
-/** Inverse of localToWorldCell: top-left world cell -> local deploy-grid coords for `side`. */
-export function worldToLocalCell(side: Side, col: number, row: number, size: number): { x: number; y: number } {
-  if (side === 0) return { x: col, y: row - (localToWorldCell(0, 0, 0, size as Size).row) };
-  return { x: FIELD_W - col - size, y: DEPLOY_D - row - size };
+/** Inverse of localRectToWorld: top-left world cell of a w x h rectangle -> local deploy-grid coords for `side`. */
+export function worldToLocalRect(side: Side, col: number, row: number, w: number, h: number): { x: number; y: number } {
+  if (side === 0) return { x: col, y: row - (FIELD_H - DEPLOY_D) };
+  return { x: FIELD_W - col - w, y: DEPLOY_D - row - h };
 }
 
 /** last spacing chosen per design id (kept across matches) */
 const lastSpacing = new Map<string, number>();
 
-/** Tiny diagram of a 4-unit squad at the given spacing, plus the footprint in metres. */
+/** Tiny diagram of a squad (8 x 2 units) at the given spacing, plus the footprint in metres. */
 function spacingDiagram(spacing: number): SVGElement {
   const NS = 'http://www.w3.org/2000/svg';
-  const cells = 2 + spacing, px = 8;
+  const { w: cw, h: ch } = blockDims(1, spacing);
+  const px = 4;
   const svg = document.createElementNS(NS, 'svg');
-  const W = cells * px;
-  svg.setAttribute('viewBox', `0 0 ${W} ${W}`);
-  svg.setAttribute('width', '34');
-  svg.setAttribute('height', '34');
+  const W = cw * px, H = ch * px;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', String(Math.round(W * 0.9)));
+  svg.setAttribute('height', String(Math.round(H * 0.9 + 4)));
   svg.setAttribute('class', 'sp-diagram');
   svg.setAttribute('aria-hidden', 'true');
   const r = document.createElementNS(NS, 'rect');
-  r.setAttribute('x', '0.5'); r.setAttribute('y', '0.5'); r.setAttribute('width', String(W - 1)); r.setAttribute('height', String(W - 1));
+  r.setAttribute('x', '0.5'); r.setAttribute('y', '0.5'); r.setAttribute('width', String(W - 1)); r.setAttribute('height', String(H - 1));
   r.setAttribute('class', 'fp');
   svg.append(r);
-  const far = 1.5 + spacing;
-  for (const [cx, cy] of [[0.5, 0.5], [far, 0.5], [0.5, far], [far, far]]) {
+  const [cols, rows] = SQUAD_LAYOUT[1];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
     const c = document.createElementNS(NS, 'circle');
-    c.setAttribute('cx', String(cx * px)); c.setAttribute('cy', String(cy * px)); c.setAttribute('r', '2.2');
+    c.setAttribute('cx', String((0.5 + i * (1 + spacing)) * px)); c.setAttribute('cy', String((0.5 + j * (1 + spacing)) * px)); c.setAttribute('r', '1.4');
     svg.append(c);
   }
   return svg;
 }
 
-/** Segmented spacing control: "Spacing 0 1 2 3 4" + live diagram + footprint size. */
+/** Segmented spacing control: "Spacing 0 1 2" + live diagram + footprint size. */
 function spacingControl(value: number, onPick: ((v: number) => void) | null): HTMLElement {
   const segs = Array.from({ length: MAX_SPACING + 1 }, (_, v) => h('button.seg', {
     type: 'button',
@@ -63,11 +64,11 @@ function spacingControl(value: number, onPick: ((v: number) => void) | null): HT
     title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units`,
     onclick: () => onPick?.(v),
   }, String(v)));
-  const fp = fmtMeters(blockCells(1, value));
+  const d = blockDims(1, value);
   return h('div.spacing', null,
     h('div.sp-head', null, h('span', null, 'Spacing'), h('span.muted', null, ...(onPick ? [h('kbd', null, '['), ' ', h('kbd', null, ']')] : ['locked']))),
     h('div.sp-row', null, spacingDiagram(value), h('div.sp-segs', { role: 'group', 'aria-label': 'Squad spacing' }, ...segs)),
-    h('div.sp-foot', null, `Footprint ${fp} × ${fp}`),
+    h('div.sp-foot', null, `Footprint ${fmtMeters(d.w)} × ${fmtMeters(d.h)}`),
   );
 }
 
@@ -116,7 +117,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let nextUid = 1;
   let selCard = -1;
   let sel: Sel = null;
-  let hover: { x: number; y: number; size: Size; spacing: number; cells: number; valid: boolean; reason: string | null } | null = null;
+  let hover: { x: number; y: number; size: Size; spacing: number; w: number; h: number; valid: boolean; reason: string | null } | null = null;
   const cfg = new Map<number, UnitConfig>(); // changed settings of units from earlier rounds
   let hoverUnit: Sel = null; // block under the mouse (nothing selected in the shop)
   let lastPtr: { px: number; py: number } | null = null;
@@ -426,8 +427,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!hasSpacing(size)) return;
     const sp = normSpacing(size, v);
     if (sp === normSpacing(size, p.spacing)) return;
-    const cells = blockCells(size, sp);
-    const next: Placement = { ...p, spacing: sp, x: Math.max(0, Math.min(DEPLOY_W - cells, p.x)), y: Math.max(0, Math.min(DEPLOY_D - cells, p.y)) };
+    const bd = blockDims(size, sp);
+    const next: Placement = { ...p, spacing: sp, x: Math.max(0, Math.min(DEPLOY_W - bd.w, p.x)), y: Math.max(0, Math.min(DEPLOY_D - bd.h, p.y)) };
     const cand = action();
     cand.place[i] = next;
     const err = check(cand);
@@ -616,14 +617,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!d) return null;
     const size = sizeOf(d);
     const spacing = spacingOfCard(d);
-    const cells = blockCells(size, spacing);
-    let w: { x: number; y: number };
-    try { w = view.screenToWorld(px, py); } catch { return null; }
-    const col = Math.round(w.x - cells / 2), row = Math.round(w.y - cells / 2);
-    let { x, y } = worldToLocalCell(side, col, row, cells);
-    if (y > DEPLOY_D + 2 || y < -cells - 1 || x < -cells - 1 || x > DEPLOY_W + 1) return null; // far outside our zone
-    x = Math.max(0, Math.min(DEPLOY_W - cells, x));
-    y = Math.max(0, Math.min(DEPLOY_D - cells, y));
+    const { w: bw, h: bh } = blockDims(size, spacing);
+    let wp: { x: number; y: number };
+    try { wp = view.screenToWorld(px, py); } catch { return null; }
+    const col = Math.round(wp.x - bw / 2), row = Math.round(wp.y - bh / 2);
+    let { x, y } = worldToLocalRect(side, col, row, bw, bh);
+    if (y > DEPLOY_D + 2 || y < -bh - 1 || x < -bw - 1 || x > DEPLOY_W + 1) return null; // far outside our zone
+    x = Math.max(0, Math.min(DEPLOY_W - bw, x));
+    y = Math.max(0, Math.min(DEPLOY_D - bh, y));
     let reason: string | null = null;
     if (!blockInZone(x, y, size, spacing)) reason = 'Outside your deploy zone';
     else if (costOf(d) > remaining()) reason = 'Not enough supply';
@@ -632,7 +633,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round, ...(hasSpacing(size) ? { spacing } : {}), ...newOrders(d.id, size) });
       reason = check(cand);
     }
-    return { x, y, size, spacing, cells, valid: !reason, reason };
+    return { x, y, size, spacing, w: bw, h: bh, valid: !reason, reason };
   }
 
   function placeAt(px: number, py: number) {
@@ -742,9 +743,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     try { w = view.screenToWorld(px, py); } catch { return null; }
     // anywhere inside the block's footprint (including the gaps between squad units) selects the block
     const hit = (s: Side, p: Placement) => {
-      const cells = blockCells(sizeOf(designOf(s, p.designId)), p.spacing);
-      const wc = localToWorldCell(s, p.x, p.y, cells);
-      return w.x >= wc.col && w.x <= wc.col + cells && w.y >= wc.row && w.y <= wc.row + cells;
+      const r = blockWorldRect(s, p, sizeOf(designOf(s, p.designId)));
+      return w.x >= r.col && w.x <= r.col + r.w && w.y >= r.row && w.y <= r.row + r.h;
     };
     if (phase === 'deploy') for (const p of place) if (hit(side, p)) return { side, uid: p.uid, pending: true };
     for (const p of me().board) if (hit(side, p)) return { side, uid: p.uid, pending: false };
@@ -987,9 +987,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const d = p && designOf(t.side, p.designId);
     if (!p || !d) return null;
     const size = sizeOf(d);
-    const cells = blockCells(size, p.spacing);
-    const wc = localToWorldCell(t.side, p.x, p.y, cells);
-    return { col: wc.col, row: wc.row, size: cells, valid: t.side === side };
+    const r = blockWorldRect(t.side, p, size);
+    return { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: t.side === side };
   }
 
   let raf = 0;
@@ -1019,8 +1018,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       } else {
         let hov: BoardOverlay['hover'] = null;
         if (hover && phase === 'deploy') {
-          const wc = localToWorldCell(side, hover.x, hover.y, hover.cells);
-          hov = { col: wc.col, row: wc.row, size: hover.cells, valid: hover.valid };
+          const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size);
+          hov = { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: hover.valid };
         } else if (phase === 'deploy' || phase === 'waiting') hov = blockOutline();
         view.drawBoard(boardUnits(), { showZone: phase === 'deploy', hover: hov }, now / 1000);
       }

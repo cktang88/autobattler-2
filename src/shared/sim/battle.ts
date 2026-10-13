@@ -309,6 +309,8 @@ export class Battle {
   private head: Int32Array = new Int32Array(HCOLS * HROWS);
   private next: Int32Array = new Int32Array(0);
   private scratch: Int32Array = new Int32Array(0);
+  /** ascending unit indexes alive at the last hash rebuild, per side (cheap enemy scans) */
+  private liveIdx: number[][] = [[], []];
   private smokes: Smoke[] = [];
   private pendingBlasts: number[] = [];
   private hasCloak = false;
@@ -739,9 +741,11 @@ export class Battle {
       }
       return best;
     }
-    for (let j = 0; j < units.length; j++) {
+    const foes = this.liveIdx[u.side === 0 ? 1 : 0];
+    for (let k = 0; k < foes.length; k++) {
+      const j = foes[k];
       const o = units[j];
-      if (!o.alive || o.side === u.side) continue;
+      if (!o.alive) continue;
       if (o.flying ? !I.canHitA : !I.canHitG) continue;
       if (!this.visible(u, o)) continue;
       const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
@@ -752,6 +756,8 @@ export class Battle {
 
   private inRange(u: SimUnit, w: Wpn, t: SimUnit, mult: number): number {
     const dx = t.x - u.x, dy = t.y - u.y;
+    const lim = w.range * mult + this.ints[t.id].radius + (w.melee ? this.ints[u.id].radius : 0);
+    if (dx * dx + dy * dy > lim * lim) return -1;
     const d = Math.sqrt(dx * dx + dy * dy);
     let edge = d - this.ints[t.id].radius;
     if (w.melee) edge -= this.ints[u.id].radius;
@@ -789,7 +795,14 @@ export class Battle {
     }
     let best = -1, bestS = Infinity, bestD = Infinity;
     let fBest = -1, fS = Infinity, fD = Infinity;
-    for (let j = 0; j < units.length; j++) {
+    // short-range weapons only look at the spatial hash neighbourhood (hash is at most one step stale);
+    // ties are broken by lowest index so the result does not depend on iteration order
+    let src: ArrayLike<number> = this.liveIdx[u.side === 0 ? 1 : 0];
+    let cnt = src.length;
+    const reach = w.range * mult + MAX_RADIUS + (w.melee ? I.radius : 0) + 1.5;
+    if (reach <= 12) { cnt = this.gather(u.x, u.y, reach); src = this.scratch; }
+    for (let k = 0; k < cnt; k++) {
+      const j = src[k];
       const o = units[j];
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const d = this.inRange(u, w, o, mult);
@@ -810,8 +823,8 @@ export class Battle {
         case 'swarm': sc = O.swarmKey; break;
         default: sc = d;
       }
-      if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && d < bestD)) { bestS = sc; bestD = d; best = j; }
-      if (stamp && this.focusMark[j] === stamp && (sc < fS - 1e-9 || (Math.abs(sc - fS) <= 1e-9 && d < fD))) { fS = sc; fD = d; fBest = j; }
+      if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && (d < bestD || (d === bestD && j < best)))) { bestS = sc; bestD = d; best = j; }
+      if (stamp && this.focusMark[j] === stamp && (sc < fS - 1e-9 || (Math.abs(sc - fS) <= 1e-9 && (d < fD || (d === fD && j < fBest))))) { fS = sc; fD = d; fBest = j; }
     }
     return fBest >= 0 ? fBest : best;
   }
@@ -1626,6 +1639,9 @@ export class Battle {
     const head = this.head;
     head.fill(-1);
     const units = this.units;
+    const l0 = this.liveIdx[0], l1 = this.liveIdx[1];
+    l0.length = 0; l1.length = 0;
+    for (let i = 0; i < units.length; i++) if (units[i].alive) (units[i].side === 0 ? l0 : l1).push(i);
     for (let i = units.length - 1; i >= 0; i--) {
       const u = units[i];
       if (!u.alive) continue;

@@ -6,7 +6,7 @@ import { FieldView, type BoardUnit } from '../render/field.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { TICK_RATE, type BattleInput } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, blockCells, hasSpacing, overlaps, placementUnitCenters } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blocksOverlap, hasSpacing, placementUnitCenters } from '../../shared/grid.ts';
 import { computeStats } from '../../shared/stats.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { makeRng } from '../../shared/rng.ts';
@@ -20,16 +20,16 @@ function demoInput(seed: number): BattleInput | null {
   const rng = makeRng(seed);
   const mk = (): Placement[] => {
     const out: Placement[] = [];
-    let budget = 900;
+    let budget = 3500;
     for (let tries = 0; tries < 80 && budget > 0; tries++) {
       const d = designs[Math.floor(rng() * designs.length)];
       const st = computeStats(d);
       if (st.cost > budget) continue;
-      const spacing = hasSpacing(st.size) ? Math.floor(rng() * 4) : 0;
-      const size = blockCells(st.size, spacing);
-      const x = Math.floor(rng() * (DEPLOY_W - size + 1));
-      const y = Math.floor(rng() * (DEPLOY_D - size + 1));
-      if (out.some((p) => overlaps(x, y, size, p.x, p.y, footOf(designs, p)))) continue;
+      const spacing = hasSpacing(st.size) ? Math.floor(rng() * (MAX_SPACING + 1)) : 0;
+      const dim = blockDims(st.size, spacing);
+      const x = Math.floor(rng() * (DEPLOY_W - dim.w + 1));
+      const y = Math.floor(rng() * (DEPLOY_D - dim.h + 1));
+      if (out.some((p) => blocksOverlap({ x, y, spacing }, st.size, p, sizeOf(designs, p.designId)))) continue;
       out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rng() * 2), round: 1, ...(spacing ? { spacing } : {}) });
       budget -= st.cost;
     }
@@ -42,10 +42,6 @@ function sizeOf(designs: Design[], id: string): Size {
   const d = designs.find((x) => x.id === id);
   return d ? computeStats(d).size : 1;
 }
-function footOf(designs: Design[], p: Placement): number {
-  return blockCells(sizeOf(designs, p.designId), p.spacing);
-}
-
 function boardUnits(input: BattleInput): BoardUnit[] {
   const out: BoardUnit[] = [];
   input.sides.forEach((s, side) => {

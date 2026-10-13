@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aiDeck, aiDeploy, profile, type AiDifficulty } from '../src/shared/ai.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateDeploy, applyDeploy, resolveRound, redactFor, DECK_SIZE } from '../src/shared/match.ts';
-import { blockCells, squadSize, overlaps, blockInZone } from '../src/shared/grid.ts';
+import { blockDims, squadSize, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
 import { computeStats } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
 
@@ -63,14 +63,14 @@ function checkBoard(m: MatchState, side: 0 | 1, board: Placement[]) {
   const byId = new Map(m.players[side].deck.map((d) => [d.id, d] as const));
   assert.ok(board.length <= MAX_BLOCKS);
   let units = 0;
-  const feet: { x: number; y: number; s: number }[] = [];
+  const feet: { x: number; y: number; w: number; h: number }[] = [];
   for (const p of board) {
     const size = computeStats(byId.get(p.designId)!).size;
     units += squadSize(size);
     assert.ok(blockInZone(p.x, p.y, size, p.spacing ?? 0), 'in zone');
-    const s = blockCells(size, p.spacing ?? 0);
-    for (const f of feet) assert.ok(!overlaps(p.x, p.y, s, f.x, f.y, f.s), 'no overlap');
-    feet.push({ x: p.x, y: p.y, s });
+    const { w, h } = blockDims(size, p.spacing ?? 0);
+    for (const f of feet) assert.ok(!rectsOverlap(p.x, p.y, w, h, f.x, f.y, f.w, f.h), 'no overlap');
+    feet.push({ x: p.x, y: p.y, w, h });
     if (size > 1) assert.ok(!p.spacing, 'non-squads have no spacing');
   }
   assert.ok(units <= MAX_SIM_UNITS);

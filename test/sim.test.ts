@@ -49,6 +49,7 @@ const DESIGNS: Design[] = [
   D('domer', 'bastion', 'treads', ['dome', 'autocannon', 'plateM']),
   D('era', 'warden', 'halftrack', ['reactive', 'mg']),
   D('mirror', 'warden', 'halftrack', ['autocannon', 'mirror']),
+  D('mgtank', 'warden', 'halftrack', ['mg', null]),
 ];
 
 test('test designs are legal', () => {
@@ -106,10 +107,10 @@ test('mutually untouchable armies end early instead of running to the cap', () =
 
 test('heavy armor shrugs off machine guns but not cannons', () => {
   // vs MG buggies: the armored hull with an autocannon wins
-  const mg = runBattle(input(1, [P('fortgun', 10, 0), P('fortgun', 13, 0)], [P('buggy', 4, 0), P('buggy', 8, 0)]));
+  const mg = runBattle(input(1, [P('fortgun', 10, 0), P('fortgun', 13, 0)], [P('mgtank', 4, 0), P('mgtank', 8, 0)]));
   assert.equal(mg.winner, 0);
   // per-hit damage check
-  const b = new Battle(input(2, [P('fortress', 10, 0)], [P('buggy', 8, 0), P('buster', 12, 0)]));
+  const b = new Battle(input(2, [P('fortress', 10, 0)], [P('mgtank', 8, 0), P('buster', 12, 0)]));
   let mgHit = 0, mgN = 0, cHit = 0, cN = 0;
   while (!b.done) {
     b.step();
@@ -154,7 +155,7 @@ test('invalid / unknown placements are skipped; empty side loses', () => {
   const bad: Design = D('bad', 'scout', 'treads', ['mg']);
   const inp: BattleInput = { seed: 1, sides: [{ designs: [...DESIGNS, bad], units: [P('bad', 0, 0), P('nope', 4, 0)] }, { designs: DESIGNS, units: [P('buggy', 4, 0)] }] };
   const b = new Battle(inp);
-  assert.equal(b.units.length, 4); // the squad of 4
+  assert.equal(b.units.length, 16); // the squad of 16
   b.step();
   assert.ok(b.done);
   assert.equal(b.winner, 1);
@@ -162,11 +163,12 @@ test('invalid / unknown placements are skipped; empty side loses', () => {
 });
 
 test('jets strafe ground targets and win; stun applies', () => {
-  const s = runBattle(input(4, [P('strafer', 10, 0), P('strafer', 14, 0)], [P('buggy', 6, 2)]));
+  const s = runBattle(input(4, [P('strafer', 10, 0), P('strafer', 14, 0)], [P('mgtank', 6, 2)]));
   assert.equal(s.winner, 0);
   const b = new Battle(input(4, [P('zapper', 10, 0)], [P('bulwark', 10, 0)]));
   let stunned = false;
-  while (!b.done) { b.step(); if (b.units[4].stun > 0) stunned = true; } // squad of 4 zappers = ids 0..3
+  const foe = b.units.find((u) => u.side === 1)!;
+  while (!b.done) { b.step(); if (foe.stun > 0) stunned = true; }
   assert.ok(stunned);
 });
 
@@ -180,20 +182,20 @@ test('units start facing the enemy and stay inside the field', () => {
   }
 });
 
-test('performance: 60 units per side simulates quickly', () => {
+test('performance: 240 units per side (15 light squads) simulates in well under 500ms', () => {
   const small = ['buggy', 'torch', 'lancer', 'hornet', 'hopper', 'zapper'];
   const army = () => {
     const out: Placement[] = [];
-    for (let i = 0; i < 60; i++) out.push(P(small[i % small.length], (i * 2) % 24, Math.floor(i / 12) + (i % 2)));
+    for (let i = 0; i < 15; i++) out.push({ ...P(small[i % small.length], (i % 5) * 9, Math.floor(i / 5) * 3), spacing: i % 2 });
     return out;
   };
-  const inp = input(42, army(), army());
-  runBattle(structuredClone(inp)); // warm up JIT
+  const inp = (): BattleInput => ({ seed: 42, sides: [{ designs: DESIGNS, units: army() }, { designs: DESIGNS, units: army() }] });
+  runBattle(inp()); // warm up JIT
   const t0 = performance.now();
-  const s = runBattle(inp);
+  const s = runBattle(inp());
   const ms = performance.now() - t0;
-  console.log(`  60v60: ${ms.toFixed(0)}ms, ${s.ticks} ticks, winner ${s.winner}`);
-  assert.ok(ms < 1000, `took ${ms}ms`);
+  console.log(`  240v240: ${ms.toFixed(0)}ms, ${s.ticks} ticks, winner ${s.winner}`);
+  assert.ok(ms < 500, `took ${ms}ms`);
 });
 
 function fireLog(b: Battle) {
@@ -221,12 +223,12 @@ test('magazines pause for reload', () => {
 });
 
 test('accuracy: sniper is pinpoint, minigun sprays', () => {
-  const sn = fireLog(new Battle(input(3, [P('sniperw', 10, 0)], [{ ...P('dummy', 10, 0), spacing: 4 }])));
-  const mg = fireLog(new Battle(input(3, [P('gunner', 10, 0)], [{ ...P('dummy', 10, 0), spacing: 4 }])));
+  const sn = fireLog(new Battle(input(3, [P('sniperw', 10, 0)], [{ ...P('dummy', 10, 0), spacing: 2 }])));
+  const mg = fireLog(new Battle(input(3, [P('gunner', 10, 0)], [{ ...P('dummy', 10, 0), spacing: 2 }])));
   const ratio = (r: ReturnType<typeof fireLog>, id: string) => (r.hits[id] ?? 0) / r.fires.filter((f) => f.moduleId === id).length;
   const rs = ratio(sn, 'sniper'), rm = ratio(mg, 'minigun');
   assert.ok(rs > 0.9, `sniper ${rs}`);
-  assert.ok(rm < rs - 0.1, `minigun ${rm} vs sniper ${rs}`);
+  assert.ok(rm < rs - 0.05, `minigun ${rm} vs sniper ${rs}`);
 });
 
 test('impulse knocks units back; disarm stops firing', () => {
@@ -371,11 +373,12 @@ test('unarmed blockers advance; self-destruct blasts on death', () => {
 test('defensive systems: hardened, shield dome, reactive armor, mirror coating', () => {
   // hardened: stun guns never stun it
   const h = new Battle(input(1, [P('zapper', 10, 0)], [P('hardtank', 10, 0)]));
-  while (!h.done) { h.step(); assert.equal(h.units[4].stun, 0); }
+  const tank = h.units.find((u) => u.side === 1)!;
+  while (!h.done) { h.step(); assert.equal(tank.stun, 0); }
   // dome: neighbours start with projected shield, the dome itself doesn't
   const d = new Battle(input(1, [P('domer', 10, 0), P('buggy', 9, 0), P('buggy', 14, 1)], [P('buggy', 10, 0)]));
   d.step();
-  assert.ok(d.units[1].auraShield > 0 && d.units[5].auraShield > 0);
+  assert.ok(d.units[1].auraShield > 0 && d.units[17].auraShield > 0); // first unit of each buggy squad
   assert.equal(d.units[0].maxAuraShield, 0);
   // reactive: charges are consumed by explosive hits and blunt them
   const r = new Battle(input(1, [P('buster', 10, 0)], [P('era', 10, 0)]));
@@ -385,53 +388,54 @@ test('defensive systems: hardened, shield dome, reactive armor, mirror coating',
   assert.ok(r.units[1].reactive < 6);
   // mirror: laser hits reduced
   const m = new Battle(input(1, [P('lancer', 10, 0)], [P('mirror', 10, 0)]));
+  const mirrorId = m.units.find((u) => u.side === 1)!.id;
   let lh = 0, ln = 0;
-  while (!m.done) { m.step(); for (const e of m.events) if (e.t === 'hit' && e.unit === 4 && e.moduleId === 'laser' && !e.shieldHit) { lh += e.damage; ln++; } }
+  while (!m.done) { m.step(); for (const e of m.events) if (e.t === 'hit' && e.unit === mirrorId && e.moduleId === 'laser' && !e.shieldHit) { lh += e.damage; ln++; } }
   assert.ok(ln > 0 && lh / ln < 24 * 0.6, `laser per hit ${lh / ln}`);
 });
 
-test('blocks: size-1 designs spawn a squad of 4 at spacing-dependent positions', () => {
+test('blocks: size-1 designs spawn a squad of 16 (8x2) at spacing-dependent positions', () => {
   const tight = new Battle(input(1, [P('buggy', 10, 0)], []));
-  assert.equal(tight.units.length, 4);
+  assert.equal(tight.units.length, 16);
   assert.ok(tight.units.every((u) => u.uid === tight.units[0].uid));
-  const wide = new Battle(input(1, [{ ...P('buggy', 10, 0), spacing: 3 }], []));
-  assert.equal(wide.units.length, 4);
-  const ext = (b: Battle) => Math.max(...b.units.map((u) => u.x)) - Math.min(...b.units.map((u) => u.x));
-  assert.equal(ext(tight), 1);
-  assert.equal(ext(wide), 4);
-  const expect = placementUnitCenters(0, { x: 10, y: 0, spacing: 3 }, 1);
+  const wide = new Battle(input(1, [{ ...P('buggy', 10, 0), spacing: 2 }], []));
+  assert.equal(wide.units.length, 16);
+  const ext = (b: Battle, k: 'x' | 'y') => Math.max(...b.units.map((u) => u[k])) - Math.min(...b.units.map((u) => u[k]));
+  assert.equal(ext(tight, 'x'), 7);
+  assert.equal(ext(tight, 'y'), 1);
+  assert.equal(ext(wide, 'x'), 21);
+  assert.equal(ext(wide, 'y'), 3);
+  const expect = placementUnitCenters(0, { x: 10, y: 0, spacing: 2 }, 1);
   assert.deepEqual(wide.units.map((u) => [u.x, u.y]), expect.map((c) => [c.x, c.y]));
   // size-2 / size-3 are single units; spacing is ignored for them
-  assert.equal(new Battle(input(1, [{ ...P('bulwark', 10, 0), spacing: 3 }, P('ironclad', 20, 0)], [])).units.length, 2);
+  assert.equal(new Battle(input(1, [{ ...P('bulwark', 10, 0), spacing: 2 }, P('ironclad', 20, 0)], [])).units.length, 2);
+});
+
+test('side 1 is mirrored: squads and formations are rotated 180 degrees about the field centre', () => {
+  for (const spacing of [0, 1, 2]) {
+    const p0 = { ...P('buggy', 5, 1), spacing };
+    const a = new Battle({ seed: 1, sides: [{ designs: DESIGNS, units: [p0] }, { designs: DESIGNS, units: [{ ...p0 }] }] });
+    const s0 = a.units.filter((u) => u.side === 0), s1 = a.units.filter((u) => u.side === 1);
+    assert.equal(s0.length, 16);
+    assert.equal(s1.length, 16);
+    for (let i = 0; i < 16; i++) {
+      assert.ok(Math.abs(s1[i].x - (FIELD_W - s0[i].x)) < 1e-9 && Math.abs(s1[i].y - (FIELD_H - s0[i].y)) < 1e-9, `unit ${i} spacing ${spacing}`);
+    }
+    assert.ok(s0.every((u) => u.y > FIELD_H - 12) && s1.every((u) => u.y < 12), 'each squad starts in its own zone');
+  }
 });
 
 test('summary: a placement survives while any unit lives; aliveFraction reports the share', () => {
   const b = new Battle(input(1, [P('buggy', 10, 0), P('bulwark', 20, 0)], [P('buggy', 10, 0)]));
   b.step();
   const uid0 = b.units[0].uid;
-  b.units[0].alive = false; b.units[1].alive = false;
+  for (let i = 0; i < 8; i++) b.units[i].alive = false;
   const s = b.summary();
   assert.equal(s.survivors[0].filter((u) => u === uid0).length, 1);
   assert.equal(s.aliveFraction[0][uid0], 0.5);
-  assert.equal(s.aliveFraction[0][b.units[4].uid], 1);
-  b.units[2].alive = false; b.units[3].alive = false;
+  assert.equal(s.aliveFraction[0][b.units[16].uid], 1);
+  for (let i = 8; i < 16; i++) b.units[i].alive = false;
   assert.ok(!b.summary().survivors[0].includes(uid0));
-});
-
-test('performance: 120 units per side simulates well under 400ms', () => {
-  const small = ['buggy', 'torch', 'lancer', 'hornet', 'hopper', 'zapper'];
-  const army = () => {
-    const out: Placement[] = [];
-    for (let i = 0; i < 30; i++) out.push({ ...P(small[i % small.length], (i * 4) % 48, Math.floor(i / 12) * 3), spacing: i % 2 });
-    return out;
-  };
-  const inp = (): BattleInput => ({ seed: 7, sides: [{ designs: DESIGNS, units: army() }, { designs: DESIGNS, units: army() }] });
-  runBattle(inp());
-  const t0 = performance.now();
-  const s = runBattle(inp());
-  const ms = performance.now() - t0;
-  console.log(`  120v120: ${ms.toFixed(0)}ms, ${s.ticks} ticks`);
-  assert.ok(ms < 400, `took ${ms}ms`);
 });
 
 test('bombers fly over ground targets and bomb them; bombs cannot hit flyers', () => {
@@ -515,18 +519,18 @@ test('target priority: threat retaliates against a long-range attacker, else clo
 
 test('hold keeps squad spacing while advancing; no hold lets squads bunch up', () => {
   const run = (hold: boolean) => {
-    const b = new Battle(input(3, [{ ...P('buggy', 10, 0), spacing: 3, hold }], [P('ironclad', 10, 0)]));
+    const b = new Battle(input(3, [{ ...P('buggy', 10, 0), spacing: 2, hold }], [P('ironclad', 10, 0)]));
     let minD = 99;
     for (let i = 0; i < 160 && !b.done; i++) {
       b.step();
       const sq = b.units.filter((u) => u.side === 0 && u.alive);
-      if (sq.length < 4) break;
+      if (sq.length < 16) break;
       for (let a = 0; a < sq.length; a++) for (let c = a + 1; c < sq.length; c++) minD = Math.min(minD, Math.hypot(sq[a].x - sq[c].x, sq[a].y - sq[c].y));
     }
     return minD;
   };
   const held = run(true), loose = run(false);
-  assert.ok(held >= 3.5, `held min distance ${held}`);
+  assert.ok(held >= 2.5, `held min distance ${held}`);
   assert.ok(loose < held, `loose ${loose} vs held ${held}`);
 });
 
