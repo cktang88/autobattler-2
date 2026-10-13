@@ -185,7 +185,7 @@ export function computeStats(d: Design): UnitStats {
   const load = weight / capacity;
   let range = 0;
   for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.projectile === 'melee' ? mod.range : mod.range * rangeMult);
-  const sizeSpeed = size === 3 ? 0.85 : size === 2 ? 0.95 : 1;
+  const sizeSpeed = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
   const speed = m.kind === 'static' ? 0 : m.speed * loadSpeedFactor(load) * sizeSpeed * (1 + speedBonus);
   const turn = m.turn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
   const flying = m.kind === 'air';

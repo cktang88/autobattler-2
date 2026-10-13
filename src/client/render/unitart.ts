@@ -47,6 +47,7 @@ export interface UnitLayout {
 
 const SHAPE_HW: Record<Shape, number> = {
   wedge: 0.26, pod: 0.24, box: 0.28, hex: 0.3, cross: 0.3, long: 0.2, round: 0.34, airframe: 0.14, fortress: 0.4, titan: 0.3,
+  goliath: 0.36, leviathan: 0.4, carrier: 0.2, colossal: 0.32, citadel: 0.44,
 };
 
 /** Mount points per chassis, fractions of S. */
@@ -61,9 +62,14 @@ const MOUNT_PTS: Record<string, [number, number][]> = {
   gunship: [[-0.03, -0.28], [-0.03, 0.28]],
   bastion: [[0.06, 0], [-0.24, -0.25], [-0.24, 0.25]],
   colossus: [[0.0, -0.31], [0.0, 0.31], [0.18, 0], [-0.24, 0]],
+  goliath: [[0.12, 0], [-0.12, -0.28], [-0.12, 0.28], [-0.32, 0]],
+  leviathan: [[0.12, -0.2], [0.12, 0.2], [-0.25, -0.22], [-0.25, 0.22]],
+  carrier: [[0.1, 0], [-0.1, -0.3], [-0.28, -0.12], [-0.28, 0.12]],
+  titan: [[0.1, 0], [-0.08, -0.32], [-0.08, 0.32], [-0.3, -0.15], [-0.3, 0.15]],
+  citadel: [[0.14, -0.2], [0.14, 0.2], [-0.12, 0], [-0.3, -0.28], [-0.3, 0.28], [-0.36, 0]],
 };
 
-const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64 };
+const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64, G: 0.56, T: 0.62 };
 
 const layoutCache = new Map<string, UnitLayout>();
 export const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;

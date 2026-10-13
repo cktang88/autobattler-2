@@ -1,8 +1,10 @@
 // Core shared types. Every module (sim, match, ai, client, server) speaks these.
 
-export type Size = 1 | 2 | 3;
-/** Weapon mount class. A slot of class X accepts modules of class X or smaller (L < M < H). */
-export type MountClass = 'L' | 'M' | 'H';
+/** chassis size class: 1 light (5 m) · 2 medium (10 m) · 3 heavy (15 m) · 4 GIANT (20 m) · 5 TITAN (25 m) */
+export type Size = 1 | 2 | 3 | 4 | 5;
+/** Weapon mount class. A slot of class X accepts modules of class X or smaller (L < M < H < G < T).
+ *  G = giant-class (size-4 chassis), T = titan-class (size-5 chassis). */
+export type MountClass = 'L' | 'M' | 'H' | 'G' | 'T';
 export type MoveKind = 'ground' | 'air' | 'static';
 export type Side = 0 | 1;
 
@@ -23,7 +25,8 @@ export interface ChassisDef {
   mounts: MountClass[];
   traits: ChassisTrait[];
   /** Render hint: silhouette family for procedural art. */
-  shape: 'wedge' | 'box' | 'pod' | 'hex' | 'long' | 'round' | 'cross' | 'fortress' | 'titan' | 'airframe';
+  shape: 'wedge' | 'box' | 'pod' | 'hex' | 'long' | 'round' | 'cross' | 'fortress' | 'titan' | 'airframe'
+    | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel';
 }
 
 export interface MobilityDef {
@@ -36,8 +39,8 @@ export interface MobilityDef {
   speed: number;
   /** radians / second body turn rate */
   turn: number;
-  /** Max weight carried at full speed, per chassis size (index 0 = size 1). 0 means unsupported. */
-  capacity: [number, number, number];
+  /** Max weight carried at full speed, per chassis size (index 0 = size 1 ... index 4 = size 5). 0 means unsupported. */
+  capacity: [number, number, number, number, number];
   /** weight per size unit (total = weight * size) */
   weight: number;
   /** hp per size unit */

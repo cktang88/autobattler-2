@@ -92,7 +92,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
   if (kind === 'module') {
     const m = MODULE_BY_ID.get(id);
     if (!m) return null;
-    const d = { L: 0.62, M: 0.78, H: 0.95 }[m.mount] * (0.85 + 0.3 * (m.caliber ?? 0.5));
+    const d = ({ L: 0.62, M: 0.78, H: 0.95, G: 1, T: 1 } as Record<string, number>)[m.mount] * (0.85 + 0.3 * (m.caliber ?? 0.5));
     if (m.kind === 'armor' || m.visual === 'plate') {
       // plating sample on a hull block
       const L = { S: 1, hw: 0.3, shape: 'box', mounts: [{ x: 0, y: 0, d: d * 0.9, mod: m, slot: m.mount, turret: false }] } as unknown as UnitLayout;

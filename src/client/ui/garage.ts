@@ -8,12 +8,12 @@ import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck 
 import { drawUnitPreview } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError } from '../../shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError, MOUNT_RANK } from '../../shared/parts.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, computeStats, loadSpeedFactor, validateDesign } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MountClass, UnitStats } from '../../shared/types.ts';
 import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, designSizeLabel, footprintLabel, CATEGORY_COLOR } from './garage-parts.ts';
 
-const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3 };
+const RANK: Record<MountClass, number> = MOUNT_RANK;
 const NAME_MAX = 24;
 /** Weight bar spans 0..BAR_MAX load. */
 const BAR_MAX = 1.8;
