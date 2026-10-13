@@ -428,7 +428,7 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       for (const s of [-1, 1]) {
         // bolted side skirt slabs: bunker armour
         for (const [x0, x1] of [[0.18, 0.04], [0.02, -0.12], [-0.14, -0.26]]) {
-          const sk = sharp([x0, s * 0.31, x0 - 0.01, s * 0.395, x1 + 0.01, s * 0.395, x1, s * 0.31], S);
+          const sk = new Path2D(); poly(sk, [x0, s * 0.31, x0 - 0.01, s * 0.395, x1 + 0.01, s * 0.395, x1, s * 0.31], S);
           bevel(g, sk, grad(g, S, shade(pal.light, -0.15), pal.dark, x1, s * 0.3, x0, s * 0.4), o, 0.8);
           rivetRow(g, (x0 - 0.02) * S, s * 0.355 * S, (x1 + 0.02) * S, s * 0.355 * S, 3, 0.009 * S);
         }

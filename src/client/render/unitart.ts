@@ -6,10 +6,12 @@
 // dynamic strokes (rotor blades, thruster flames, status effects).
 
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
+import { computeStats } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
 import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
 import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
+import { buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -47,6 +49,8 @@ export interface UnitLayout {
   frames: number;
   /** cells of travel per animation cycle */
   cycle: number;
+  /** wheel axle count (wheels mobility), derived from size + load */
+  axles: number;
 }
 
 const SHAPE_HW: Record<Shape, number> = {
@@ -139,11 +143,15 @@ export function layoutOf(d: Design): UnitLayout {
     return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd * (MOUNT_SCALE_I[chassis.id]?.[i] ?? MOUNT_SCALE[chassis.id] ?? 1), turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const air = mob.kind === 'air';
-  const quad = mob.id === 'rotor' && (chassis.id === 'drone' || shape === 'pod' || shape === 'round' || shape === 'saucer' || shape === 'crab' || shape === 'arachnid' || shape === 'mantis');
+  // running gear is sized to what it carries: heavier / overloaded builds get more rotors, engines, axles
+  let load = 0.7;
+  try { load = computeStats(d).load; } catch { /* invalid design */ }
+  const heavyLift = load > 0.88;
+  const quad = mob.id === 'rotor' && (heavyLift && S >= 2 && shape !== 'delta' && shape !== 'interceptor' && shape !== 'airframe' || chassis.id === 'drone' || shape === 'pod' || shape === 'round' || shape === 'saucer' || shape === 'crab' || shape === 'arachnid' || shape === 'mantis');
   const rotors: UnitLayout['rotors'] = [];
   const nozzles: UnitLayout['nozzles'] = [];
   if (mob.id === 'rotor') {
-    if (quad) for (const sx of [-1, 1]) for (const sy of [-1, 1]) rotors.push({ x: sx * 0.32 * S, y: sy * 0.32 * S, r: 0.2 * S, blades: 2 });
+    if (quad) for (const sx of [-1, 1]) for (const sy of [-1, 1]) rotors.push({ x: sx * (heavyLift ? 0.36 : 0.32) * S, y: sy * (heavyLift ? 0.38 : 0.32) * S, r: (heavyLift ? 0.23 : 0.2) * S, blades: load > 1 ? 4 : heavyLift ? 3 : 2 });
     else if (shape === 'delta' || shape === 'interceptor') for (const sy of [-1, 1]) rotors.push({ x: -0.16 * S, y: sy * 0.2 * S, r: (shape === 'delta' ? 0.17 : 0.15) * S, blades: 3 });
     else if (S >= 2 && shape === 'airframe') {
       rotors.push({ x: 0.22 * S, y: 0, r: 0.42 * S, blades: 3 });
@@ -153,6 +161,8 @@ export function layoutOf(d: Design): UnitLayout {
   if (mob.id === 'jet') {
     if (shape === 'delta') for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.14 * S, w: 0.08 * S });
     else if (shape === 'interceptor') nozzles.push({ x: -0.5 * S, y: 0, w: 0.1 * S });
+    else if (S === 1 && !heavyLift) nozzles.push({ x: -0.5 * S, y: 0, w: 0.11 * S });
+    else if (S >= 3 || load > 1) for (const sy of [-1, 1]) for (const k of [0.1, 0.24]) nozzles.push({ x: -0.5 * S, y: sy * k * S, w: 0.075 * S });
     else for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.13 * S, w: 0.09 * S });
   }
   if (mob.id === 'jumpjets') for (const sy of [-1, 1]) nozzles.push({ x: -0.4 * S, y: sy * 0.15 * S, w: 0.07 * S });
@@ -160,6 +170,7 @@ export function layoutOf(d: Design): UnitLayout {
   const rolled = mob.id === 'treads' || mob.id === 'wheels' || mob.id === 'halftrack' || mob.id === 'megatracks';
   L = {
     key, S, chassis, mob, shape, hw: SHAPE_HW[shape] ?? 0.28, mounts, air, quad, rotors, nozzles,
+    axles: S === 1 ? (heavyLift ? 3 : 2) : S === 2 ? (heavyLift ? 4 : 3) : 4,
     ext: 0.8 * S,
     frames: legged ? 8 : mob.id === 'megatracks' ? 6 : rolled ? 4 : 1,
     cycle: mob.id === 'titanlegs' ? 0.7 * S : mob.id === 'megatracks' ? 0.06 * S : mob.id === 'legs' ? 0.75 * S : mob.id === 'spider' ? 0.55 * S : mob.id === 'jumpjets' ? 0.8 * S : mob.id === 'treads' || mob.id === 'halftrack' ? 0.09 * S : 0.06 * S,
@@ -676,14 +687,17 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
       g.fillRect(-0.42 * S, s * tc - tw * 0.08, 0.84 * S, tw * 0.16);
     }
   } else if (id === 'wheels') {
-    const xs = S === 1 ? [-0.27, 0.27] : [-0.32, 0, 0.32];
+    const n = L.axles;
+    const span = S === 1 ? 0.54 : 0.68;
+    const xs = Array.from({ length: n }, (_, i) => -span / 2 + (span * i) / (n - 1));
     const y = (S === 1 ? 0.3 : 0.34) * S;
     g.strokeStyle = METAL.dark;
     g.lineWidth = 0.05 * S;
     g.beginPath();
     for (const x of xs) { g.moveTo(x * S, -y); g.lineTo(x * S, y); }
     g.stroke();
-    for (const x of xs) for (const s of [-1, 1]) wheel(g, x * S, s * y, 0.22 * S, 0.13 * S, phase, o);
+    const wl = Math.min(0.22, (span / (n - 1)) * 0.88);
+    for (const x of xs) for (const s of [-1, 1]) wheel(g, x * S, s * y, wl * S, 0.13 * S, phase, o);
   } else if (id === 'halftrack') {
     const y = Math.min(0.36, L.hw + 0.05) * S;
     for (const s of [-1, 1]) rubberBand(g, -0.47 * S, 0.06 * S, s * y, 0.16 * S, phase, 0.08 * S, o);
@@ -831,6 +845,25 @@ export function drawAnchorPlate(g: Ctx, L: UnitLayout, pal: TeamPal, o: number):
 
 /* ------------------------------------------------------------------------------------------- sprites */
 
+/** Build profile of a design (cached per layout key). */
+export function profileOf(d: Design, L: UnitLayout): BuildProfile {
+  return buildProfile(d, L.key, L.S, L.chassis.roles, L.mounts.map((m) => m.mod));
+}
+
+const rearCache = new Map<string, number>();
+let scratch: Ctx | null = null;
+/** x (fraction of S) of the hull's rear edge on the centreline. */
+function rearX(L: UnitLayout, hp: Path2D): number {
+  const k = L.shape + L.S;
+  const hit = rearCache.get(k);
+  if (hit !== undefined) return hit;
+  scratch ??= ctx2d(makeCanvas(2, 2));
+  let r = -0.42;
+  for (let x = -0.55; x < 0; x += 0.01) if (scratch.isPointInPath(hp, x * L.S, 0)) { r = x; break; }
+  rearCache.set(k, r);
+  return r;
+}
+
 export interface UnitSprites {
   px: number;
   ext: number;
@@ -845,6 +878,8 @@ export interface UnitSprites {
   anchor?: HTMLCanvasElement;
   /** parts drawn above the turrets (titan pauldrons) */
   top?: HTMLCanvasElement;
+  /** shield shimmer envelope (designs with a shield module) */
+  shell?: HTMLCanvasElement;
   /** animated parts (limbs, claws, tail/body segments): sprite + its own halo, centred on the part pivot */
   parts: { c: HTMLCanvasElement; ext: number; halo: HTMLCanvasElement; haloExt: number; sil: Map<string, HTMLCanvasElement> }[];
 }
@@ -884,6 +919,10 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const pdefs = bake ? [] : allParts;
   const riding = partMounts(pdefs);
   const restX = partXfs(pdefs, null);
+  const prof = profileOf(design, L);
+  const creature = CREATURE_SHAPES.has(L.shape);
+  const legged = L.mob.id === 'legs' || L.mob.id === 'spider' || L.mob.id === 'jumpjets' || L.mob.id === 'titanlegs';
+  if (prof.role === 'artillery' && (L.mob.id === 'treads' || L.mob.id === 'wheels' || L.mob.id === 'halftrack') && !creature && L.shape !== 'long' && L.shape !== 'siegeplat' && L.shape !== 'carriage') drawOutriggers(hull.g, L.S, Math.min(L.hw, 0.36), o);
   hullUnderlay(hull.g, L, pal, o);
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'under');
   const hp = hullPath(L.shape, L.S);
@@ -891,13 +930,17 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   hullDetails(hull.g, L, pal, o);
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
+  drawProfile(hull.g, prof, hp, L.S, Math.min(L.hw, 0.42), pal, o, emis(pal), { creature, air: L.air, legged, rearX: rearX(L, hp) });
+  // turret rings let into the hull under every turret (they read as seated, not stuck on)
+  if (L.S < 4) for (const [mi, m] of L.mounts.entries()) if (m.turret && !riding.has(mi)) {
+    dotAt(hull.g, m.x, m.y, m.d * 0.5, 'rgba(0,0,0,0.5)');
+    hull.g.strokeStyle = METAL.light; hull.g.lineWidth = o * 0.7;
+    hull.g.beginPath(); hull.g.arc(m.x, m.y, m.d * 0.47, Math.PI * 0.8, Math.PI * 1.75); hull.g.stroke();
+  }
   // empty mount sockets
   if (L.S >= 4) {
     for (const m of L.mounts) if (m.turret || !m.mod) drawBarbette(hull.g, m.x, m.y, m.d * (m.turret ? 0.6 : 0.42), pal, o, !m.mod);
-  } else for (const [mi, m] of L.mounts.entries()) if (!m.mod && !riding.has(mi)) {
-    dotAt(hull.g, m.x, m.y, m.d * 0.32, 'rgba(0,0,0,0.45)');
-    dotAt(hull.g, m.x, m.y, m.d * 0.18, 'rgba(255,255,255,0.08)');
-  }
+  } else for (const [mi, m] of L.mounts.entries()) if (!m.mod && !riding.has(mi)) armoredCap(hull.g, m.x, m.y, m.d * 0.34, pal, o);
   let top: HTMLCanvasElement | undefined;
   if (GIANT_SHAPES.has(L.shape)) {
     const tp = beginSprite(px, ext);
@@ -944,11 +987,28 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   sh.g.fillStyle = '#000';
   sh.g.fillRect(0, 0, sh.c.width, sh.c.height);
   s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: new Map(), anchor, top, parts };
+  if (prof.shield > 0) s.shell = shieldShell(hp, L.S, ext, px, prof.shield, pal.glow);
   const hl = buildHalo(silhouette(s, '#000'), ext, px, pal);
   s.halo = hl.c;
   s.haloExt = hl.ext;
   spriteCache.set(key, s);
   return s;
+}
+
+/** Armoured blanking cap over an empty mount: octagonal plate, bolts, team-trim ring. */
+function armoredCap(g: Ctx, x: number, y: number, r: number, pal: TeamPal, o: number): void {
+  const p = new Path2D();
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; p.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  p.closePath();
+  g.fillStyle = 'rgba(0,0,0,0.45)'; g.save(); g.translate(o * 0.6, o); g.fill(p); g.restore();
+  const gr = g.createLinearGradient(x - r, y - r, x + r, y + r);
+  gr.addColorStop(0, METAL.light); gr.addColorStop(1, METAL.dark);
+  g.fillStyle = gr; g.fill(p);
+  g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(p);
+  g.strokeStyle = rgba(pal.accent, 0.7); g.lineWidth = o * 0.6;
+  g.beginPath(); g.arc(x, y, r * 0.62, 0, Math.PI * 2); g.stroke();
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; dotAt(g, x + Math.cos(a) * r * 0.78, y + Math.sin(a) * r * 0.78, r * 0.09, 'rgba(0,0,0,0.6)'); }
+  dotAt(g, x, y, r * 0.22, METAL.dark);
 }
 
 /** Dark outline + bright team rim + soft underglow around the whole unit silhouette. Widths are in device px
@@ -1194,7 +1254,10 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   const L = layoutOf(p.design);
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
-  const off = 0.09 * L.S + alt * 0.75;
+  // load: overloaded designs squat low on strained suspension (tight shadow), light ones ride high
+  const lp = profileOf(p.design, L).load;
+  const liftK = lp > 1 ? Math.max(0.55, 1 - (lp - 1) * 1.2) : lp < 0.6 ? 1.3 : 1;
+  const off = 0.09 * L.S * liftK + alt * 0.75;
   const a = (p.alpha ?? 1) * (L.air || p.flying ? (L.S >= 4 ? 0.62 : L.S >= 3 ? 0.5 : 0.38) : p.leap ? 0.55 - p.leap * 0.15 : L.S >= 4 ? 0.72 : 0.62);
   g.globalAlpha = a;
   const sc = L.air || p.flying ? (L.S >= 4 ? 0.97 : 0.85) : 1 - (p.leap ?? 0) * 0.15;
@@ -1335,6 +1398,15 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   drawParts('under');
   blit(g, s.hull, x, y, ang, s.ext, sc);
   drawParts('over');
+  if (s.shell && p.cloak !== 'enemy') {
+    // shield envelope: slow breathing shimmer, always on
+    const prevOp = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = alpha * (0.45 + 0.2 * Math.sin(p.time * 1.6 + (p.seed ?? 0)));
+    blit(g, s.shell, x, y, ang, s.ext, sc * 1.0);
+    g.globalCompositeOperation = prevOp;
+    g.globalAlpha = alpha;
+  }
   if (CREATURE_SHAPES.has(L.shape) && p.cloak !== 'enemy' && px >= 8) drawCreatureFx(g, L, p.time, p.seed ?? 0, x, y, ang, sc, px, pal, alpha);
   if (GIANT_SHAPES.has(L.shape) || L.mob.id === 'gravlift' || L.mob.id === 'megatracks' || L.mob.id === 'titanlegs') {
     drawGiantFx(g, L, { time: p.time, seed: p.seed, moving: p.moving, odometer: p.odometer }, x, y, ang, sc, px, pal, alpha);

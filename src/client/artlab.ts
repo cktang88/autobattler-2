@@ -1,7 +1,8 @@
 // Art lab (dev page): every chassis x mobility pairing, every module turret, every part icon, a tiny-scale
 // readability row, a deploy-board view and a demo battle on a FieldView.
 // URL params: ?enemy=1 (red team), ?battle=1 (auto-start battle), ?speed=N, ?only=grid|modules|icons|small|field,
-// ?chassis=id,id (grid rows filter), ?big=1, ?zoom=N (grid cell scale), ?empty=1 (no turrets)
+// ?chassis=id,id (grid rows filter), ?big=1, ?zoom=N (grid cell scale), ?empty=1 (no turrets),
+// ?only=small&n=40&cell=48&rseed=N (sheet of random valid designs, labelled)
 
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
@@ -118,11 +119,46 @@ function iconsSection(): void {
 
 function smallSection(): void {
   const host = $('#small');
-  const designs = randomDesigns(24, 99);
+  // ?n=40&cell=48&rseed=5: a bigger sheet of random valid designs (every one should look like an intentional unit)
+  const n = Number(params.get('n') ?? '24') || 24;
+  const cell = Number(params.get('cell') ?? '20') || 20;
+  const vc = params.get('variants');
+  const designs = vc ? variantDesigns(vc) : randomDesigns(n, Number(params.get('rseed') ?? '99') || 99);
   for (const d of designs) {
     const size = computeStats(d).size;
-    host.append(preview(d, 20 * size + 8));
+    host.append(preview(d, cell * size + 8, params.get('cell') ? `${d.chassis}${vc ? ' · ' + d.name : ''}` : undefined, params.get('cell') ? `${d.mobility} · ${d.mounts.filter(Boolean).join(',')}` : undefined));
   }
+}
+
+/** Same chassis with different whole-body builds: bare, max armour, shield, stealth, coatings, systems. */
+function variantDesigns(spec: string): Design[] {
+  const out: Design[] = [];
+  for (const cm of spec.split(';')) {
+    const [cid, mid] = cm.split(':');
+    const c = CHASSIS.find((x) => x.id === cid);
+    if (!c) continue;
+    const mob = mid ?? MOBILITY.find((m) => !pairingError(c.id, m.id))!.id;
+    const weapons = fillMounts(c.id, 3);
+    const fill = (extra: string[]) => {
+      // first slot keeps its weapon, the rest take the extras that fit (or stay armed)
+      const used = new Set<number>();
+      return c.mounts.map((slot, i) => {
+        if (i === 0) return weapons[0];
+        const k = extra.findIndex((id, j) => !used.has(j) && fitsMount(slot, MODULES.find((m) => m.id === id)!.mount));
+        if (k >= 0) { used.add(k); return extra[k]; }
+        return weapons[i];
+      });
+    };
+    const plates = c.mounts.map((slot, i) => (i === 0 ? weapons[0] : MODULES.find((m) => m.kind === 'armor' && m.mount === slot)?.id ?? weapons[i]));
+    const v: [string, (string | null)[]][] = [
+      ['bare', c.mounts.map(() => null)], ['armed', weapons], ['max armour', plates],
+      ['shield', fill(['shieldH', 'shield', 'shieldL', 'bulwarkshield'])], ['stealth', fill(['phantom', 'stealth'])],
+      ['mirror+hardened', fill(['mirror', 'hardened', 'reactive'])], ['turbo+gyro+sensor', fill(['turbo', 'gyro', 'sensor', 'targeting'])],
+      ['nanite+overclock+selfdestruct', fill(['nanite', 'overclock', 'selfdestruct'])],
+    ];
+    for (const [name, mounts] of v) out.push({ id: `v_${cid}_${name}`, name, chassis: c.id, mobility: mob, mounts });
+  }
+  return out;
 }
 
 function randomDesigns(n: number, seed: number): Design[] {
