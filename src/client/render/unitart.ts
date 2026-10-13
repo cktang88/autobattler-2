@@ -104,8 +104,84 @@ const MOUNT_PTS: Record<string, [number, number][]> = {
 const MOUNT_SCALE_I: Record<string, number[]> = { scorpion: [0.72, 0.8, 0.8] };
 const MOUNT_SCALE: Record<string, number> = {
   mantis: 0.72, strider: 0.85, arachnid: 0.85, crab: 0.75, saucer: 0.9, deltawing: 0.85, warlord: 0.9, scorpion: 0.85, centipede: 0.72,
-  broodmother: 0.92, arachne: 0.95, juggernaut: 0.75, interceptor: 0.8, hunter: 0.9, carriage: 1.0, siegeplat: 1.0, bomberhull: 0.85,
+  broodmother: 0.92, arachne: 0.95, juggernaut: 0.9, interceptor: 0.8, hunter: 0.9, carriage: 1.0, siegeplat: 1.0, bomberhull: 0.85,
 };
+
+const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+/** frames whose mounts ride animated anatomy (limbs, claws, tails): hardpoints are fixed to the part */
+const PART_SHAPES = new Set(['mantis', 'mech', 'warlord', 'arachnid', 'broodmother', 'arachne', 'crab', 'saucer', 'scorpion', 'centipede']);
+
+/**
+ * Hardpoint assignment by role and class: the heaviest weapon takes the most prominent hardpoint (big, centreline,
+ * forward), identical weapons pair up on mirrored flank points, utilities (dishes, emitters, packs) go to the rear
+ * deck. Returns perm[i] = hardpoint index of module i. Weapons must fit the hardpoint class.
+ */
+function solveMounts(caps: MountClass[], pts: [number, number][], mods: (ModuleDef | null)[]): number[] {
+  const n = caps.length;
+  const id0 = caps.map((_, i) => i);
+  if (n <= 1) return id0;
+  // mirrored hardpoint pairs
+  const mate = caps.map((_, i) => pts.findIndex((q, j) => j !== i && Math.abs(q[0] - pts[i][0]) < 0.03 && Math.abs(q[1] + pts[i][1]) < 0.03 && Math.abs(q[1]) > 0.04));
+  const prom = (j: number) => RANK[caps[j]] * 1.0 + (1 - Math.min(1, Math.abs(pts[j][1]) / 0.3)) * 0.8 + pts[j][0] * 1.2;
+  const isW = (m: ModuleDef | null) => !!m && m.kind === 'weapon';
+  const isU = (m: ModuleDef | null) => !!m && m.kind === 'utility' && m.visual !== 'plate';
+  let best = id0, bestS = -Infinity;
+  const perm = new Array<number>(n), used = new Array<boolean>(n).fill(false);
+  const score = () => {
+    let sc = 0;
+    for (let i = 0; i < n; i++) {
+      const m = mods[i], j = perm[i];
+      if (j === i) sc += 0.05;
+      if (isW(m)) sc += (RANK[m!.mount] + 0.5 * (m!.caliber ?? 0.5) + 1) * prom(j);
+      else if (isU(m)) sc += -pts[j][0] * 2.2 + RANK[caps[j]] * 0.1;
+    }
+    // pairs: identical modules mirror each other
+    const at = new Array<ModuleDef | null>(n).fill(null);
+    for (let i = 0; i < n; i++) at[perm[i]] = mods[i];
+    for (let j = 0; j < n; j++) {
+      const k = mate[j];
+      if (k < 0 || k < j) continue;
+      const a = at[j], b = at[k];
+      if (a && b && a.id === b.id) sc += 3;
+      else if (a && b && a.visual === b.visual) sc += 1;
+      else if ((isW(a) && isU(b)) || (isU(a) && isW(b))) sc -= 0.6;
+      else if (!!a !== !!b) sc -= 0.3;
+    }
+    return sc;
+  };
+  const rec = (i: number) => {
+    if (i === n) { const s = score(); if (s > bestS + 1e-9) { bestS = s; best = perm.slice(); } return; }
+    const m = mods[i];
+    for (let j = 0; j < n; j++) {
+      if (used[j]) continue;
+      if (isW(m) && RANK[m!.mount] > RANK[caps[j]]) continue;
+      used[j] = true; perm[i] = j; rec(i + 1); used[j] = false;
+    }
+  };
+  rec(0);
+  return best;
+}
+
+/** Weapon presence: the centreline main gun of a big hull is its centrepiece; then clear any turret overlaps. */
+function scaleMounts(mounts: MountSlot[], S: number): void {
+  if (S >= 2 && S < 4) {
+    let main = -1;
+    for (let i = 0; i < mounts.length; i++) {
+      const m = mounts[i];
+      if (!m.turret || m.mod?.kind !== 'weapon' || Math.abs(m.y) > 0.08 * S) continue;
+      if (main < 0 || m.d > mounts[main].d) main = i;
+    }
+    if (main >= 0) mounts[main].d *= S >= 3 ? 1.25 : 1.1;
+  }
+  for (let i = 0; i < mounts.length; i++) for (let j = i + 1; j < mounts.length; j++) {
+    const a = mounts[i], b = mounts[j];
+    if (!a.turret || !b.turret) continue;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y), need = (a.d + b.d) * 0.5 * 0.92;
+    if (dist >= need) continue;
+    const k = Math.max(0.72, dist / need);
+    if (a.d < b.d) a.d *= k; else b.d *= k;
+  }
+}
 
 const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64, G: 0.95, T: 1.1 };
 /** Turret base diameters (cells) on giant/titan hulls: big guns, but sized like real turrets on a huge hull. */
@@ -133,15 +209,22 @@ export function layoutOf(d: Design): UnitLayout {
   const S = chassis.size;
   const shape = chassis.shape;
   const pts = MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : (i % 2 ? 0.2 : -0.2)] as [number, number]);
+  const mods = chassis.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
+  // layout solver: which hardpoint each module occupies (anatomical frames keep their fixed points)
+  const perm = PART_SHAPES.has(shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods);
   const mounts: MountSlot[] = chassis.mounts.map((slot, i) => {
-    const id = d.mounts[i] ?? null;
-    const mod = id ? MODULE_BY_ID.get(id) ?? null : null;
-    const cls = mod?.mount ?? slot;
+    const mod = mods[i];
+    const j = perm[i];
+    const cap = chassis.mounts[j] ?? slot;
+    // utilities are sized to the hardpoint they were moved to; weapons always fit theirs
+    let cls = mod?.mount ?? slot;
+    if (mod && mod.kind !== 'weapon' && RANK[cls] > RANK[cap]) cls = cap;
     const cal = mod?.caliber ?? 0.5;
-    const p = pts[i] ?? [0, 0];
+    const p = pts[j] ?? [0, 0];
     const dd = S >= 4 ? GIANT_D[cls] * (0.88 + 0.12 * cal) * (S >= 5 ? 1.06 : 1) : CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
-    return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd * (MOUNT_SCALE_I[chassis.id]?.[i] ?? MOUNT_SCALE[chassis.id] ?? 1), turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
+    return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd * (MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1), turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
+  if (!PART_SHAPES.has(shape)) scaleMounts(mounts, S);
   const air = mob.kind === 'air';
   // running gear is sized to what it carries: heavier / overloaded builds get more rotors, engines, axles
   let load = 0.7;
