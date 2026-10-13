@@ -3,7 +3,8 @@
 
 import { DECK_SIZE, validateDeck } from '../shared/match.ts';
 import { validateDesign } from '../shared/stats.ts';
-import type { DeployAction, Design, Placement } from '../shared/types.ts';
+import { TARGET_PRIORITIES } from '../shared/types.ts';
+import type { DeployAction, Design, Placement, UnitBehavior, UnitConfig } from '../shared/types.ts';
 
 export class HttpError extends Error {
   readonly status: number;
@@ -16,6 +17,21 @@ export class HttpError extends Error {
 const bad = (msg: string): never => { throw new HttpError(400, msg); };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
+/** Pick target/hold/kite from a raw object (strictly typed), or bad() on invalid values. */
+function readBehavior(o: Record<string, unknown>, what: string): UnitBehavior {
+  const out: UnitBehavior = {};
+  if (o.target !== undefined) {
+    if (!TARGET_PRIORITIES.includes(o.target as never)) bad(`Invalid ${what}.target`);
+    out.target = o.target as UnitBehavior['target'];
+  }
+  for (const k of ['hold', 'kite'] as const) {
+    if (o[k] !== undefined) {
+      if (typeof o[k] !== 'boolean') bad(`Invalid ${what}.${k}`);
+      out[k] = o[k] as boolean;
+    }
+  }
+  return out;
+}
 const str = (v: unknown, max: number, what: string): string => {
   if (typeof v !== 'string' || v.length === 0 || v.length > max) bad(`Invalid ${what}`);
   return v as string;
@@ -49,7 +65,12 @@ export function sanitizeDeck(raw: unknown): Design[] {
       if (m === null) return null;
       return str(m, 40, `mount (#${i + 1})`);
     });
-    return { id, name: o.name as string, chassis: str(o.chassis, 40, 'chassis'), mobility: str(o.mobility, 40, 'mobility'), mounts };
+    const design: Design = { id, name: o.name as string, chassis: str(o.chassis, 40, 'chassis'), mobility: str(o.mobility, 40, 'mobility'), mounts };
+    if (o.behavior !== undefined) {
+      if (!isObj(o.behavior)) bad(`Invalid behavior (#${i + 1})`);
+      design.behavior = readBehavior(o.behavior as Record<string, unknown>, 'behavior');
+    }
+    return design;
   });
   for (const d of deck) {
     const errs = validateDesign(d);
@@ -82,11 +103,22 @@ export function sanitizeAction(raw: unknown): DeployAction {
       if (!isInt(o.spacing) || (o.spacing as number) < 0 || (o.spacing as number) > 8) bad('placement.spacing must be a small integer');
       pl.spacing = o.spacing as number;
     }
+    Object.assign(pl, readBehavior(o, 'placement'));
     return pl;
   });
   const upgrade = (upRaw as unknown[]).map((u) => {
     if (!isInt(u) || Math.abs(u) > 1e6) bad('upgrade entries must be unit uids');
     return u as number;
   });
-  return { round: a.round as number, place, upgrade };
+  const out: DeployAction = { round: a.round as number, place, upgrade };
+  if (a.configure !== undefined) {
+    if (!Array.isArray(a.configure) || a.configure.length > 200) bad('action.configure must be an array (max 200)');
+    out.configure = (a.configure as unknown[]).map((c): UnitConfig => {
+      if (!isObj(c)) bad('configure entry must be an object');
+      const o = c as Record<string, unknown>;
+      if (!isInt(o.uid) || Math.abs(o.uid as number) > 1e6) bad('configure.uid must be an integer');
+      return { uid: o.uid as number, ...readBehavior(o, 'configure') };
+    });
+  }
+  return out;
 }

@@ -18,6 +18,7 @@ import { MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps
 import { mixSeed } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import type { BattleInput } from './sim/types.ts';
+import { TARGET_PRIORITIES } from './types.ts';
 import type { Size, DeployAction, Design, MatchMode, MatchState, Placement, PlayerState, RoundRecord, Side } from './types.ts';
 
 export const DECK_SIZE = 9;
@@ -146,12 +147,26 @@ export function validateDeck(deck: Design[]): string[] {
     const de = validateDesign(d);
     const label = d && typeof d === 'object' && typeof d.name === 'string' ? d.name : '?';
     for (const e of de) errs.push(`${label}: ${e}`);
+    if (d && typeof d === 'object' && d.behavior !== undefined) {
+      const be = behaviorError(d.behavior);
+      if (be) errs.push(`${label}: ${be}`);
+    }
     if (d && typeof d === 'object') {
       if (ids.has(d.id)) errs.push(`Duplicate design id ${d.id}`);
       ids.add(d.id);
     }
   }
   return errs;
+}
+
+/** Error string for a bad {target, hold, kite} settings object, else null. */
+function behaviorError(b: unknown): string | null {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return 'Bad behavior';
+  const o = b as Record<string, unknown>;
+  if (o.target !== undefined && !TARGET_PRIORITIES.includes(o.target as never)) return 'Bad target priority';
+  if (o.hold !== undefined && typeof o.hold !== 'boolean') return 'Bad hold flag';
+  if (o.kite !== undefined && typeof o.kite !== 'boolean') return 'Bad kite flag';
+  return null;
 }
 
 const isInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n);
@@ -187,6 +202,8 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
       if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
       if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
     }
+    const be = behaviorError({ target: pl.target, hold: pl.hold, kite: pl.kite });
+    if (be) return `${d.name}: ${be}`;
     const s = blockCells(size, pl.spacing);
     simUnits += squadSize(size);
     if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
@@ -194,6 +211,16 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     for (const f of footprints) if (overlaps(pl.x, pl.y, s, f.x, f.y, f.s)) return `${d.name} overlaps another unit`;
     footprints.push({ x: pl.x, y: pl.y, s });
     cost += designCost(d);
+  }
+
+  if (a.configure !== undefined) {
+    if (!Array.isArray(a.configure) || a.configure.length > 200) return 'Bad configure list';
+    for (const c of a.configure) {
+      if (!c || typeof c !== 'object' || !isInt(c.uid)) return 'Bad configure entry';
+      if (!p.board.some((u) => u.uid === c.uid)) return `Can't configure unknown unit ${String(c.uid)}`;
+      const be = behaviorError({ target: c.target, hold: c.hold, kite: c.kite });
+      if (be) return be;
+    }
   }
 
   const pending = new Map<number, number>();
@@ -237,10 +264,20 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     const u = p.board.find((b) => b.uid === uid);
     if (u) u.level = Math.min(MAX_LEVEL, u.level + 1);
   }
+  for (const c of a.configure ?? []) {
+    const u = p.board.find((b) => b.uid === c.uid);
+    if (!u) continue;
+    if (c.target !== undefined) u.target = c.target;
+    if (c.hold !== undefined) u.hold = c.hold;
+    if (c.kite !== undefined) u.kite = c.kite;
+  }
   for (const pl of a.place) {
     const size = sizeOf(p.deck.find((d) => d.id === pl.designId));
     const b: Placement = { uid: pl.uid, designId: pl.designId, x: pl.x, y: pl.y, level: 1, round: m.round };
     if (hasSpacing(size)) b.spacing = normSpacing(size, pl.spacing);
+    if (pl.target !== undefined) b.target = pl.target;
+    if (pl.hold !== undefined) b.hold = pl.hold;
+    if (pl.kite !== undefined) b.kite = pl.kite;
     p.board.push(b);
     p.nextUid = Math.max(p.nextUid, pl.uid + 1);
   }
@@ -324,7 +361,12 @@ export function redactFor(m: MatchState, viewer: Side): MatchState {
   if (last) for (const u of last.boards[oppSide]) prevLevel.set(u.uid, u.level);
   opp.board = opp.board
     .filter((u) => u.round < c.round)
-    .map((u) => ({ ...u, level: prevLevel.get(u.uid) ?? u.level }));
+    .map((u) => {
+      const v = { ...u, level: prevLevel.get(u.uid) ?? u.level };
+      delete v.target; delete v.hold; delete v.kite;
+      return v;
+    });
+  for (const d of opp.deck) delete d.behavior;
   opp.supply = -1;
   opp.nextUid = opp.board.reduce((mx, u) => Math.max(mx, u.uid + 1), 1);
   return c;
@@ -350,8 +392,13 @@ function sizeOf(d: Design | undefined): Size {
 function clonePlacement(p: Placement): Placement {
   const c: Placement = { uid: p.uid, designId: p.designId, x: p.x, y: p.y, level: p.level, round: p.round };
   if (p.spacing !== undefined) c.spacing = p.spacing;
+  if (p.target !== undefined) c.target = p.target;
+  if (p.hold !== undefined) c.hold = p.hold;
+  if (p.kite !== undefined) c.kite = p.kite;
   return c;
 }
 function cloneDesign(d: Design): Design {
-  return { id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] };
+  const c: Design = { id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] };
+  if (d.behavior) c.behavior = { ...d.behavior };
+  return c;
 }

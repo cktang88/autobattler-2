@@ -453,9 +453,90 @@ test('bombers fly over ground targets and bomb them; bombs cannot hit flyers', (
   for (const id of ['bomber', 'rotorbomber']) {
     const g = run([P(id, 10, 0)], [P('bulwark', 10, 0)]);
     assert.ok(g.bombHits > 0, `${id} landed bombs`);
-    assert.ok(g.b.damageDealt[0] > 0);
+    assert.ok(g.b.summary().damageDealt[0] > 0);
   }
   const air = run([P('rotorbomber', 10, 0)], [P('hornet', 10, 0)]);
   assert.equal(air.bombHits, 0);
-  assert.equal(air.b.damageDealt[0], 0);
+  assert.equal(air.b.summary().damageDealt[0], 0);
+});
+
+// ---------------------------------------------------------------- target priorities, hold, kite
+import { computeStats } from '../src/shared/stats.ts';
+import type { TargetPriority } from '../src/shared/types.ts';
+
+function pickedTarget(prio: TargetPriority, enemyA: string, enemyB: string, tweak?: (near: Battle['units'][number], far: Battle['units'][number]) => void): { near: number; far: number; got: number } {
+  const b = new Battle(input(1, [{ ...P('sniperw', 10, 0), target: prio }], [P(enemyA, 8, 0), P(enemyB, 12, 1)]));
+  const near = b.units[1], far = b.units[2];
+  tweak?.(near, far);
+  for (let i = 0; i < 600 && b.units[0].mounts[0].target < 0; i++) b.step();
+  for (let i = 0; i < 40; i++) b.step();
+  return { near: near.id, far: far.id, got: b.units[0].mounts[0].target };
+}
+
+test('target priority: closest / farthest / lowestHp / highestHp', () => {
+  let r = pickedTarget('closest', 'bulwark', 'bulwark');
+  assert.equal(r.got, r.near);
+  r = pickedTarget('farthest', 'bulwark', 'bulwark');
+  assert.equal(r.got, r.far);
+  // lowestHp picks a damaged unit over a closer healthy one
+  r = pickedTarget('lowestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 100; });
+  assert.equal(r.got, r.far);
+  r = pickedTarget('highestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 100; });
+  assert.equal(r.got, r.near);
+});
+
+test('target priority: highestDps / lowestDps', () => {
+  const dA = computeStats(DESIGNS.find((d) => d.id === 'gunner')!).dps, dB = computeStats(DESIGNS.find((d) => d.id === 'plaintank')!).dps;
+  assert.notEqual(dA, dB);
+  const hi = pickedTarget('highestDps', 'gunner', 'plaintank');
+  assert.equal(hi.got, dA > dB ? hi.near : hi.far);
+  const lo = pickedTarget('lowestDps', 'gunner', 'plaintank');
+  assert.equal(lo.got, dA > dB ? lo.far : lo.near);
+});
+
+test('target priority: threat retaliates against a long-range attacker, else closest', () => {
+  const mk = (prio: TargetPriority) => new Battle(input(1, [{ ...P('sniperw', 10, 0), target: prio }], [P('bulwark', 8, 0), P('bulwark', 12, 1)]));
+  const b = mk('threat');
+  const none = (() => { for (let i = 0; i < 600 && b.units[0].mounts[0].target < 0; i++) b.step(); return b.units[0].mounts[0].target; })();
+  for (let i = 0; i < 40; i++) b.step();
+  assert.equal(b.units[0].mounts[0].target, 1, 'no attacker yet -> closest');
+  void none;
+  // an enemy damages the block: the unit swings to it
+  const hook = b as unknown as { blockAtk: number[]; blockAtkT: number[] };
+  hook.blockAtk[0] = 2; hook.blockAtkT[0] = b.tick;
+  for (let i = 0; i < 8; i++) b.step();
+  assert.equal(b.units[0].mounts[0].target, 2);
+  // organic: a sniper outranging a bulwark makes the bulwark's block remember it
+  const o = new Battle(input(2, [{ ...P('bulwark', 10, 0), target: 'threat' }], [P('bulwark', 6, 0), P('sniperw', 14, 8)]));
+  let tracked = false;
+  for (let i = 0; i < 400 && !o.done; i++) { o.step(); if ((o as unknown as { blockAtk: number[] }).blockAtk[0] >= 0) tracked = true; }
+  assert.ok(tracked, 'attacks are recorded per block');
+});
+
+test('hold keeps squad spacing while advancing; no hold lets squads bunch up', () => {
+  const run = (hold: boolean) => {
+    const b = new Battle(input(3, [{ ...P('buggy', 10, 0), spacing: 3, hold }], [P('ironclad', 10, 0)]));
+    let minD = 99;
+    for (let i = 0; i < 160 && !b.done; i++) {
+      b.step();
+      const sq = b.units.filter((u) => u.side === 0 && u.alive);
+      if (sq.length < 4) break;
+      for (let a = 0; a < sq.length; a++) for (let c = a + 1; c < sq.length; c++) minD = Math.min(minD, Math.hypot(sq[a].x - sq[c].x, sq[a].y - sq[c].y));
+    }
+    return minD;
+  };
+  const held = run(true), loose = run(false);
+  assert.ok(held >= 3.5, `held min distance ${held}`);
+  assert.ok(loose < held, `loose ${loose} vs held ${held}`);
+});
+
+test('kite: ranged units back away from enemies that close in', () => {
+  const run = (kite: boolean) => {
+    const b = new Battle(input(4, [{ ...P('sniperw', 10, 0), kite }], [P('bulwark', 10, 0)]));
+    for (let i = 0; i < 270 && !b.done; i++) b.step();
+    return { hp: b.units[0].hp, y: b.units[0].y };
+  };
+  const k = run(true), n = run(false);
+  assert.ok(k.hp > n.hp + 100, `kiter hp ${k.hp} vs ${n.hp}`);
+  assert.ok(k.y > n.y + 3, `kiter retreated: y ${k.y} vs ${n.y}`);
 });

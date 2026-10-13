@@ -217,3 +217,40 @@ test('resolveRound is a no-op until both ready', () => {
   resolveRound(m);
   assert.equal(m.history.length, 0);
 });
+
+test('target / hold / kite validation, configure and redaction', () => {
+  const m = fresh();
+  const w = (extra: object): DeployAction => ({ round: 1, place: [{ ...pl(1, 0, 0), ...extra }], upgrade: [] });
+  assert.equal(validateDeploy(m, 0, w({ target: 'lowestHp', hold: true, kite: false })), null);
+  for (const bad of [{ target: 'x' }, { hold: 'y' }, { kite: 0 }]) assert.ok(validateDeploy(m, 0, w(bad)), JSON.stringify(bad));
+  submitDeploy(m, 0, w({ target: 'lowestHp', hold: true, kite: true, spacing: 2 }));
+  submitDeploy(m, 1, { round: 1, place: [pl(1, 0, 0, deck[0].id)], upgrade: [] });
+  assert.equal(m.round, 2);
+  const b = m.players[0].board[0];
+  assert.deepEqual([b.target, b.hold, b.kite, b.spacing], ['lowestHp', true, true, 2]);
+  // configure: free, any uid on own board, validated; spacing can't change
+  assert.ok(validateDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 9, kite: true }] }));
+  assert.ok(validateDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 1, target: 'bad' as never }] }));
+  const before = m.players[0].supply;
+  submitDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 1, target: 'farthest', kite: false }] });
+  assert.equal(m.players[0].supply, before);
+  assert.deepEqual([b.target, b.hold, b.kite, b.spacing], ['farthest', true, false, 2]);
+  // the opponent never sees current settings; history keeps them
+  const v = redactFor(m, 1);
+  assert.equal(v.players[0].board[0].target, undefined);
+  assert.equal(v.players[0].board[0].hold, undefined);
+  assert.equal(v.players[0].board[0].kite, undefined);
+  assert.equal(v.players[0].board[0].spacing, 2);
+  assert.equal(v.history[0].boards[0][0].target, 'lowestHp');
+  assert.equal(redactFor(m, 0).players[0].board[0].target, 'farthest');
+});
+
+test('design behavior defaults: validated, hidden from the opponent', () => {
+  assert.deepEqual(validateDeck([{ ...deck[0], behavior: { target: 'closest', hold: true, kite: false } }]), []);
+  assert.ok(validateDeck([{ ...deck[0], behavior: { target: 'nope' as never } }]).length);
+  assert.ok(validateDeck([{ ...deck[0], behavior: { hold: 'x' as never } }]).length);
+  const m = fresh();
+  m.players[1].deck[0].behavior = { kite: true };
+  assert.equal(redactFor(m, 0).players[1].deck[0].behavior, undefined);
+  assert.deepEqual(redactFor(m, 1).players[1].deck[0].behavior, { kite: true });
+});

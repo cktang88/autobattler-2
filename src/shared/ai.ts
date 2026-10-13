@@ -21,7 +21,7 @@ import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import { STARTER_DESIGNS } from './starters.ts';
 import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, designCost, redactFor, roundDamage, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
-import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, UnitStats } from './types.ts';
+import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, TargetPriority, UnitConfig, UnitStats } from './types.ts';
 
 export type AiDifficulty = 'easy' | 'normal' | 'hard';
 
@@ -345,6 +345,33 @@ export function chooseSpacing(p: Profile, oppSplashShare: number): number {
   return Math.min(MAX_SPACING, sp);
 }
 
+export interface Behavior { target: TargetPriority; hold: boolean; kite: boolean }
+
+/** Battle settings by role: artillery/snipers pick off valuable or weak targets, anti-tank goes for the biggest hulls,
+ *  swarms/melee take what is closest, skirmishers retaliate; spread squads vs splash hold formation; long-range units kite. */
+export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: number, rng: Rng): Behavior {
+  let target: TargetPriority = 'closest';
+  switch (p.role) {
+    case 'artillery': target = rng() < 0.5 ? 'highestDps' : 'lowestHp'; break;
+    case 'antiArmor': target = 'highestHp'; break;
+    case 'antiAir': target = 'closest'; break;
+    case 'flyer': target = rng() < 0.5 ? 'lowestHp' : 'highestDps'; break;
+    case 'skirmisher': target = p.range >= 7 && p.ap >= 0.3 ? 'lowestHp' : rng() < 0.4 ? 'threat' : 'closest'; break;
+    case 'support': target = 'threat'; break;
+    case 'frontline': target = 'closest'; break;
+    default: target = 'closest';
+  }
+  const hold = hasSpacing(p.size as 1 | 2 | 3) && spacing >= 2 && oppSplashShare > 0.2;
+  const kite = !p.isStatic && !p.melee && !p.flying && p.range >= 7 && (p.role === 'artillery' || p.role === 'antiArmor' || p.role === 'skirmisher') && rng() < 0.7;
+  return { target, hold, kite };
+}
+
+function applyBehavior(pl: Placement | UnitConfig, b: Behavior): void {
+  if (b.target !== 'closest') pl.target = b.target;
+  if (b.hold) pl.hold = true;
+  if (b.kite) pl.kite = true;
+}
+
 interface Foot { x: number; y: number; s: number }
 
 function fits(x: number, y: number, s: number, occ: Foot[]): boolean {
@@ -449,6 +476,20 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     budget -= spent;
   }
 
+  // --- reconfigure some existing units against what the enemy fields now ---
+  if (!easy && m.round >= 2) {
+    for (const u of me.board) {
+      const d = byId.get(u.designId);
+      if (!d || o.rng() >= 0.3) continue;
+      const b = chooseBehavior(profile(d), u.spacing ?? 0, splashShare, o.rng);
+      const cfg: UnitConfig = { uid: u.uid };
+      if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
+      if (b.hold !== !!u.hold && hasSpacing(profile(d).size as 1 | 2 | 3)) cfg.hold = b.hold;
+      if (b.kite !== !!u.kite) cfg.kite = b.kite;
+      if (cfg.target !== undefined || cfg.hold !== undefined || cfg.kite !== undefined) (action.configure ??= []).push(cfg);
+    }
+  }
+
   // --- purchases ---
   const minCost = Math.min(...deck.map((d) => designCost(d)));
   let guard = 0;
@@ -487,6 +528,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     occ.push({ x: spot.x, y: spot.y, s: foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
     if (hasSpacing(p.size as 1 | 2 | 3)) pl.spacing = sp;
+    if (!easy) applyBehavior(pl, chooseBehavior(p, sp, splashShare, o.rng));
     action.place.push(pl);
     simUnits += squadSize(p.size as 1 | 2 | 3);
     roles.set(p.role, (roles.get(p.role) ?? 0) + 1);
@@ -515,6 +557,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
 function sanitize(m: MatchState, side: Side, a: DeployAction): DeployAction {
   if (validateDeploy(m, side, a) === null) return a;
   const b: DeployAction = { round: m.round, place: [...a.place], upgrade: [] };
+  if (a.configure) { b.configure = a.configure; if (validateDeploy(m, side, b) !== null) delete b.configure; }
   while (b.place.length && validateDeploy(m, side, b) !== null) b.place.pop();
   if (validateDeploy(m, side, b) === null) return b;
   return { round: m.round, place: [], upgrade: [] };
@@ -542,6 +585,13 @@ function applyToBoard(board: Placement[], a: DeployAction): Placement[] {
   for (const uid of a.upgrade) {
     const u = out.find((x) => x.uid === uid);
     if (u) u.level = Math.min(MAX_LEVEL, u.level + 1);
+  }
+  for (const c of a.configure ?? []) {
+    const u = out.find((x) => x.uid === c.uid);
+    if (!u) continue;
+    if (c.target !== undefined) u.target = c.target;
+    if (c.hold !== undefined) u.hold = c.hold;
+    if (c.kite !== undefined) u.kite = c.kite;
   }
   for (const p of a.place) out.push({ ...p });
   return out;
