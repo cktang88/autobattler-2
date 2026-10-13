@@ -1,8 +1,8 @@
 // src/shared/grid.ts
-var FIELD_W = 24;
-var FIELD_H = 32;
+var FIELD_W = 48;
+var FIELD_H = 46;
 var DEPLOY_W = FIELD_W;
-var DEPLOY_D = 9;
+var DEPLOY_D = 12;
 function localToWorldCell(side2, x, y, size) {
   if (side2 === 0) return { col: x, row: FIELD_H - DEPLOY_D + y };
   return { col: FIELD_W - x - size, row: DEPLOY_D - y - size };
@@ -1500,12 +1500,12 @@ var R = {
 function weaponSound(id) {
   const m = MODULE_BY_ID.get(id);
   if (!m) return { key: "mg", k: 1, gap: 0.05, max: 4, dur: 0.05 };
-  const cal = m.caliber ?? 0.5;
-  const k = 1.25 - cal * 0.5;
+  const cal2 = m.caliber ?? 0.5;
+  const k = 1.25 - cal2 * 0.5;
   switch (m.visual) {
     case "gun":
       if (m.category === "autocannon") return { key: "autocannon", k, gap: 0.06, max: 5, dur: 0.12 };
-      return cal >= 0.4 ? { key: "hmg", k, gap: 0.05, max: 5, dur: 0.07 } : { key: "mg", k, gap: 0.04, max: 5, dur: 0.04 };
+      return cal2 >= 0.4 ? { key: "hmg", k, gap: 0.05, max: 5, dur: 0.07 } : { key: "mg", k, gap: 0.04, max: 5, dur: 0.04 };
     case "gatling":
       return { key: "gatling", k, gap: 0.035, max: 4, dur: 0.035 };
     case "shotgun":
@@ -1517,7 +1517,7 @@ function weaponSound(id) {
     case "sniper":
       return { key: "sniper", k, gap: 0.1, max: 3, dur: 0.4 };
     case "rail":
-      return { key: "rail", k: 1.3 - cal * 0.4, gap: 0.12, max: 3, dur: 0.55 };
+      return { key: "rail", k: 1.3 - cal2 * 0.4, gap: 0.12, max: 3, dur: 0.55 };
     case "rocketPod":
       return { key: "rocketPod", k, gap: 0.06, max: 5, dur: 0.32 };
     case "missileRack":
@@ -1730,7 +1730,7 @@ function playMusic(track2) {
 // src/shared/sim/types.ts
 var TICK_RATE = 20;
 var DT = 1 / TICK_RATE;
-var MAX_TICKS = TICK_RATE * 90;
+var MAX_TICKS = TICK_RATE * 120;
 
 // src/client/render/palette.ts
 var TEAM_PAL = [
@@ -4214,9 +4214,9 @@ function layoutOf(d) {
     const id = d.mounts[i] ?? null;
     const mod = id ? MODULE_BY_ID.get(id) ?? null : null;
     const cls = mod?.mount ?? slot;
-    const cal = mod?.caliber ?? 0.5;
+    const cal2 = mod?.caliber ?? 0.5;
     const p = pts[i] ?? [0, 0];
-    const dd = CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
+    const dd = CLASS_D[cls] * (0.8 + 0.4 * cal2) * (1 + 0.12 * (S - 1));
     return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd, turret: !!mod && mod.kind !== "armor" && mod.visual !== "plate" };
   });
   const air = mob.kind === "air";
@@ -6071,7 +6071,7 @@ var FieldView = class {
       const t = this.ptrack.get(p.id);
       const mod = modOf(p.moduleId);
       const vis = mod?.visual;
-      const cal = mod?.caliber ?? 0.5;
+      const cal2 = mod?.caliber ?? 0.5;
       const cs = Math.cos(pos.angle), sn = Math.sin(pos.angle);
       const lift = kind === "missile" ? Math.min(0.6, pos.z * 0.4) : kind === "arc" ? pos.z * 0.45 : 0;
       const x = pos.x + this.dirs.ux * lift, y = pos.y + this.dirs.uy * lift;
@@ -6080,7 +6080,7 @@ var FieldView = class {
       switch (kind) {
         case "bullet": {
           const sniper = vis === "sniper";
-          const big = mod ? (mod.mount === "M" ? 1.4 : mod.mount === "H" ? 1.8 : 1) * (0.6 + cal) : 1;
+          const big = mod ? (mod.mount === "M" ? 1.4 : mod.mount === "H" ? 1.8 : 1) * (0.6 + cal2) : 1;
           const len = sniper ? 0.9 : 0.22 + 0.2 * big;
           const w = sniper ? 0.05 : 0.025 + 0.022 * big;
           const col = sniper ? "#ff5050" : mod?.category === "autocannon" ? "#ffb050" : "#ffe27a";
@@ -6123,7 +6123,7 @@ var FieldView = class {
             g.globalAlpha = blink;
             g.drawImage(softDot("#ffd080", 0.3), x - 0.12, y - 0.12, 0.24, 0.24);
           } else {
-            const r = 0.07 + 0.08 * cal * (mod?.mount === "H" ? 1.3 : 1);
+            const r = 0.07 + 0.08 * cal2 * (mod?.mount === "H" ? 1.3 : 1);
             g.drawImage(softDot("rgba(255,170,80,0.8)"), x - r * 3, y - r * 3, r * 6, r * 6);
             g.strokeStyle = "#ffe8c0";
             g.lineWidth = Math.max(minW, r * 1.1);
@@ -6196,7 +6196,7 @@ var FieldView = class {
         }
         case "arc": {
           const sc = 1 + pos.z * 0.12;
-          const r = (0.09 + 0.07 * cal) * sc;
+          const r = (0.09 + 0.07 * cal2) * sc;
           g.globalCompositeOperation = prevOp;
           g.fillStyle = "#2a2a28";
           g.beginPath();
@@ -6237,7 +6237,7 @@ var FieldView = class {
             } else g.drawImage(softDot("#7ab8ff", 0.3), x - r, y - r, r * 2, r * 2);
             if (Math.random() < dt * 20) this.fx.sparks(x, y, 1, "#cfe9ff", 2, void 0, Math.PI, 0.12);
           } else {
-            const r = 0.18 + 0.12 * cal;
+            const r = 0.18 + 0.12 * cal2;
             g.drawImage(softDot(rgba(glowC.length === 7 ? glowC : "#e070ff", 0.6)), x - r * 2.5, y - r * 2.5, r * 5, r * 5);
             g.drawImage(softDot("#ffffff", 0.4), x - r * 0.6, y - r * 0.6, r * 1.2, r * 1.2);
             this.trail(p.id, x, y, r * 0.8, "#e070ff", 0.05, true);
@@ -6305,7 +6305,7 @@ var FieldView = class {
           if (mod?.category === "melee") v.swing[e.mount] = 1;
         }
         const cs = Math.cos(e.angle), sn = Math.sin(e.angle);
-        const cal = mod?.caliber ?? 0.5;
+        const cal2 = mod?.caliber ?? 0.5;
         const glowC = moduleGlow(mod, TEAM_PAL[ur ? this.teamOf(ur.u.side) : 0]);
         switch (vis) {
           case "gun":
@@ -6317,7 +6317,7 @@ var FieldView = class {
           case "artillery":
           case "gauss": {
             const heavy = vis === "cannon" || vis === "artillery" || vis === "gauss";
-            const r = d * (0.6 + cal * 0.8) * (heavy ? 1.5 : 1) * (vis === "shotgun" ? 1.4 : 1);
+            const r = d * (0.6 + cal2 * 0.8) * (heavy ? 1.5 : 1) * (vis === "shotgun" ? 1.4 : 1);
             fx.star(mx + cs * r * 0.3, my + sn * r * 0.3, r, vis === "gauss" ? "#9fe8ff" : "#ffd890", e.angle, heavy ? 0.1 : 0.06);
             fx.glow(mx, my, r * 1.3, vis === "gauss" ? "#9fe8ff" : "#ffb060", heavy ? 0.14 : 0.07, 0.8);
             if (heavy || vis === "shotgun") {
@@ -6627,8 +6627,9 @@ function cycleTime(w) {
   if (!w.magazine || !w.reload) return cd;
   return (cd * (w.magazine - 1) + w.reload) / w.magazine;
 }
-var PARTS_WEIGHT = 0.3;
-var POWER_K = 0.36;
+var devNum = (k, d) => Number(globalThis.process?.env?.[k] ?? d);
+var PARTS_WEIGHT = devNum("BAL_PW", 0.3);
+var POWER_K = devNum("BAL_PK", 0.36);
 var REF_ARMOR = [0, 5, 12];
 var RANGE_EXP = 1;
 var RANGE_CAP = 2.8;
@@ -6650,10 +6651,11 @@ try {
   Object.assign(CAL, JSON.parse(globalThis.process?.env?.BAL_CAL ?? "{}"));
 } catch {
 }
+var cal = (id) => CAL[id] ?? 1;
 function weaponValue(w, rangeMult = 1) {
   const range = (w.range ?? 0) * rangeMult;
   const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / 5, RANGE_EXP)));
-  if (w.heal) return w.heal * 1.6 * rangeF;
+  if (w.heal) return w.heal * 1.6 * rangeF * cal(w.id);
   if (w.kind !== "weapon" || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
   let v = weaponDps(w) * armorEfficiency(w.damage, w.ap ?? 0);
@@ -6672,7 +6674,7 @@ function weaponValue(w, rangeMult = 1) {
   if (w.projectile === "missile") v *= 1.1;
   if (w.minRange) v *= 0.9;
   const coverage = w.targetsGround && w.targetsAir ? 1.15 : w.targetsGround ? 0.85 : 1.5 * (w.airBonus ?? 1);
-  return v * coverage * rangeF * (CAL[w.id] ?? 1);
+  return v * coverage * rangeF * cal(w.id);
 }
 function computeStats(d) {
   const c = CHASSIS_BY_ID.get(d.chassis);
@@ -6724,32 +6726,35 @@ function computeStats(d) {
   if (traits.includes("repairAura")) offense += 25;
   offense *= fireRate;
   let reactiveHp = 0;
+  const shieldCal = mods.reduce((a, m2) => a + (m2.shield ?? 0) * cal(m2.id), 0) / Math.max(1, shield);
   let ehpMult = 1;
   for (const mod of mods) {
-    if (mod.reloadBonus) offense *= 1 + 0.25 * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === "weapon").length);
-    if (mod.shieldAura) offense += mod.shieldAura.amount * 0.3;
-    if (mod.fireRateAura) offense += mod.fireRateAura.bonus * 300;
-    if (mod.detect) offense += 12;
+    const u = cal(mod.id);
+    const eh = (mult) => 1 + (mult - 1) * u;
+    if (mod.reloadBonus) offense *= 1 + 0.25 * u * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === "weapon").length);
+    if (mod.shieldAura) offense += mod.shieldAura.amount * 0.3 * u;
+    if (mod.fireRateAura) offense += mod.fireRateAura.bonus * 300 * u;
+    if (mod.detect) offense += 12 * u;
     if (mod.jammer) {
-      offense += 15;
-      ehpMult *= 1.1;
+      offense += 15 * u;
+      ehpMult *= eh(1.1);
     }
-    if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06;
-    if (mod.regen) ehpMult *= 1 + mod.regen * 12;
-    if (mod.pointDefense) ehpMult *= 1.2;
-    if (mod.smoke) ehpMult *= 1.12;
-    if (mod.reactive) reactiveHp += mod.reactive * 60;
-    if (mod.energyResist) ehpMult *= 1 + mod.energyResist * 0.4;
-    if (mod.hardened) ehpMult *= 1.08;
-    if (mod.cloak === "stealth") ehpMult *= 1.35;
-    if (mod.cloak === "phantom") ehpMult *= 1.5;
+    if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06 * u;
+    if (mod.regen) ehpMult *= eh(1 + mod.regen * 12);
+    if (mod.pointDefense) ehpMult *= eh(1.2);
+    if (mod.smoke) ehpMult *= eh(1.12);
+    if (mod.reactive) reactiveHp += mod.reactive * 60 * u;
+    if (mod.energyResist) ehpMult *= eh(1 + mod.energyResist * 0.4);
+    if (mod.hardened) ehpMult *= eh(1.08);
+    if (mod.cloak === "stealth") ehpMult *= eh(1.35);
+    if (mod.cloak === "phantom") ehpMult *= eh(1.5);
   }
   offense = Math.max(offense, 5);
-  let ehp = (hp + 1.2 * shield + reactiveHp) * (1 + armor / 15) * ehpMult;
+  let ehp = (hp + 1.2 * shield * shieldCal + reactiveHp) * (1 + armor / 15) * ehpMult;
   if (traits.includes("evasive")) ehp *= 1.15;
   if (flying) ehp *= 1.2;
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes("fireOnMove") ? 0.05 : 0) + (traits.includes("leap") ? 0.05 : 0);
-  const power = Math.sqrt(offense * ehp) * mobilityF;
+  const power = Math.sqrt(offense * ehp) * mobilityF * cal(`c:${d.chassis}`) * cal(`m:${d.mobility}`);
   const cost = Math.max(10, Math.ceil((PARTS_WEIGHT * partsCost + POWER_K * power) / 5) * 5);
   return {
     size,
@@ -8332,7 +8337,15 @@ var STARTER_DESIGNS = [
   { id: "starter-behemoth", name: "Behemoth", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "twin30", "hmg"] },
   { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["cannon", "plateM", "autocannon"] },
   // ---- emplacement ----
-  { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "anchor", mounts: ["sam", "mg"] }
+  { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "anchor", mounts: ["sam", "mg"] },
+  // ---- melee: fast hover brawler that dives into the line ----
+  { id: "starter-ripper", name: "Ripper", chassis: "raider", mobility: "hover", mounts: ["buzzsaw", "shockprod"] },
+  // ---- stealth: cloaked sniper platform ----
+  { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
+  // ---- shield wall: barrier-heavy anchor of the line ----
+  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "autocannon", "shield"] },
+  // ---- support aura: command vehicle that speeds up and repairs its escorts ----
+  { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "autocannon", "repair"] }
 ];
 
 // src/shared/match.ts
