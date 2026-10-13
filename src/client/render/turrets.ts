@@ -1554,7 +1554,7 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
       // charge: capacitors fill, coils light up one by one down the rails, arcs crackle, the muzzle goes white-hot
       const c = Math.max(0, ch ?? 0.2);
       const cc = c * c;
-      const flick = 0.85 + 0.15 * Math.sin(t * 60);
+      const flick = 0.88 + 0.12 * Math.sin(t * 15);
       for (let i = 0; i < 3; i++) glowAt(-r * 0.45, (i - 1) * r * 0.62, r * (0.5 + 0.6 * c), '#9fe8ff', 0.2 + 0.8 * c * flick);
       for (let i = 0; i < 6; i++) {
         const on = clamp(c * 7 - i, 0, 1);
@@ -1608,9 +1608,10 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
           nukeMissile(g, r, o, k);
           if (k > 0.05) {
             // warning strobe + hot exhaust venting while it rises
-            const on = (t * 4) % 1 < 0.5;
-            glowAt(-r * 1.25, -r * 0.8, r * 0.45, '#ff3020', on ? 0.95 : 0.15);
-            glowAt(-r * 1.25, r * 0.8, r * 0.45, '#ff3020', on ? 0.15 : 0.95);
+            // slow smooth pulse (1.5 Hz), never a hard strobe
+            const on = 0.5 + 0.5 * Math.sin(t * Math.PI * 3);
+            glowAt(-r * 1.25, -r * 0.8, r * 0.45, '#ff3020', 0.2 + 0.7 * on);
+            glowAt(-r * 1.25, r * 0.8, r * 0.45, '#ff3020', 0.9 - 0.7 * on);
             glowAt(-r * 0.25, 0, r * (0.4 + 0.5 * k), '#ffb060', k * (0.45 + 0.25 * Math.sin(t * 40)));
           }
           glowAt(r * 1.3 * Math.cos(k * 1.2), 0, r * 0.6, '#9aff50', 0.25 + 0.25 * pulse + k * 0.3);
