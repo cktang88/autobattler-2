@@ -75,11 +75,11 @@ export const POWER_K = 0.36;
 /** Size-class price factor on the whole unit cost, by chassis size 1..5 (size 1 = per unit of a 4-unit squad).
  *  Sim effects that scale with size (overkill, focus fire, chip damage vs a few big targets, squad splash exposure,
  *  retargeting) are not visible to the analytic power term; this one multiplier per class soaks them up. */
-export const SIZE_K: number[] = [1.10, 1.16, 1.08, 0.98, 0.88];
+export const SIZE_K: number[] = [1.11, 1.17, 1.09, 0.98, 0.85];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
-export const MOBILITY_CAL: Record<string, number> = { anchor: 1.01, gravlift: 1.00, halftrack: 1.07, hover: 1.05, jet: 0.85, jumpjets: 0.82, legs: 1.10, megatracks: 1.10, rotor: 1.26, spider: 1.03, titanlegs: 1.16, treads: 1.10, wheels: 1.09 };
+export const MOBILITY_CAL: Record<string, number> = { anchor: 1.04, gravlift: 1.06, halftrack: 1.04, hover: 1.05, jet: 0.85, jumpjets: 0.82, legs: 1.12, megatracks: 1.11, rotor: 1.18, spider: 1.08, titanlegs: 1.13, treads: 1.03, wheels: 1.08 };
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -111,20 +111,20 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 1.25, ac20: 1.93, ac40: 2.54, aegisT: 1.24, annihilator: 1.97, arclance: 1.68, atgm: 3.43,
-  autocannon: 2.13, autoloader: 3.29, avenger: 3.04, barrage: 2.48, bombs: 1.56, bulwarkshield: 1.11,
-  buzzsaw: 0.45, cannon: 2.74, cannon75: 2.72, chainsaw: 2.11, claw: 1.87, clusterbombs: 1.91, cruise: 3.21,
-  disarm: 0.01, dome: 0.25, domeG: 0.29, doomsday: 4.17, drill: 1.67, empcannon: 0.44, flak: 1.28,
-  flamer: 0.67, gauss: 2.47, gravity: 0.96, grinder: 4.65, guidedrocket: 1.30, gyro: 0.32, hammer: 2.45,
-  hardened: 0.36, heatray: 0.05, heavyflak: 2.23, hmg: 1.40, howitzer: 1.75, incendiary: 0.91, inferno: 2.25,
-  jammer: 0.25, laser: 2.01, lightrail: 2.93, massdriver: 1.77, mg: 1.27, minigun: 1.24, mirror: 0.81,
-  missilebattery: 1.61, mlrs: 3.48, mortar: 0.91, nanite: 0.27, napalm: 0.94, overclock: 1.38, phantom: 0.29,
-  plasma: 2.14, plasmablade: 2.13, plasmaorb: 1.91, pointdef: 4.00, quad20: 2.99, railgun: 2.75, ram: 0.21,
-  reactive: 1.52, repair: 4.00, repairM: 3.08, rocketL: 1.77, rockets: 2.16, sam: 1.44, selfdestruct: 0.42,
-  sensor: 0.31, shield: 1.48, shieldH: 1.32, shieldL: 1.36, shockprod: 1.05, shotgun: 1.83, siege240: 1.41,
-  siegeplasma: 3.69, skyfortress: 5.44, slowbeam: 2.96, smoke: 4.00, sniper: 6.27, sonic: 0.00, stealth: 0.44,
-  stormcore: 1.18, stormtower: 2.39, stungun: 0.95, swarm: 1.39, tactnuke: 2.27, targeting: 4.00, tesla: 1.06,
-  titanfist: 4.47, turbo: 0.26, twin120: 3.17, twin30: 2.08, twinlaser: 2.08, twinmg: 1.34, uplink: 0.39,
+  aamissile: 1.64, ac20: 2.38, ac40: 2.64, aegisT: 1.33, annihilator: 2.10, arclance: 1.73, atgm: 3.83,
+  autocannon: 2.46, autoloader: 2.09, avenger: 3.10, barrage: 2.83, bombs: 2.04, bulwarkshield: 1.55,
+  buzzsaw: 0.63, cannon: 3.06, cannon75: 2.87, chainsaw: 2.65, claw: 2.21, clusterbombs: 3.03, cruise: 3.41,
+  disarm: 0.02, dome: 0.10, domeG: 0.71, doomsday: 5.04, drill: 2.00, empcannon: 1.36, flak: 1.50,
+  flamer: 0.82, gauss: 2.44, gravity: 1.02, grinder: 4.98, guidedrocket: 1.53, gyro: 0.13, hammer: 2.68,
+  hardened: 0.17, heatray: 0.19, heavyflak: 2.47, hmg: 1.64, howitzer: 1.91, incendiary: 1.32, inferno: 2.44,
+  jammer: 0.10, laser: 2.35, lightrail: 3.55, massdriver: 1.90, mg: 1.54, minigun: 1.45, mirror: 0.32,
+  missilebattery: 1.76, mlrs: 3.87, mortar: 1.16, nanite: 0.12, napalm: 1.02, overclock: 0.52, phantom: 0.20,
+  plasma: 2.24, plasmablade: 2.54, plasmaorb: 2.48, pointdef: 2.53, quad20: 3.54, railgun: 3.15, ram: 0.49,
+  reactive: 1.03, repair: 3.46, repairM: 2.84, rocketL: 2.34, rockets: 2.81, sam: 1.75, selfdestruct: 0.25,
+  sensor: 0.15, shield: 1.09, shieldH: 1.16, shieldL: 0.72, shockprod: 1.31, shotgun: 2.32, siege240: 1.75,
+  siegeplasma: 3.90, skyfortress: 8.42, slowbeam: 3.17, smoke: 4.00, sniper: 7.78, sonic: 0.00, stealth: 0.27,
+  stormcore: 1.57, stormtower: 2.82, stungun: 1.26, swarm: 1.59, tactnuke: 2.56, targeting: 3.65, tesla: 1.35,
+  titanfist: 5.26, turbo: 0.10, twin120: 3.36, twin30: 2.37, twinlaser: 2.31, twinmg: 1.81, uplink: 0.25,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
