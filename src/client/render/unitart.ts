@@ -1332,7 +1332,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const my = y + (sn * lx + cs * ly) * sc - Math.sin(ta) * rec;
     const ts = turretSprite(m.mod, p.team, m.d, px);
     const dis = (p.disarm ?? 0) > 0;
-    if (dis) g.globalAlpha = alpha * (0.55 + 0.45 * (Math.sin(p.time * 37 + i * 2) > 0 ? 1 : 0.3));
+    if (dis) g.globalAlpha = alpha * (0.6 + 0.3 * Math.sin(p.time * 11 + i * 2));
     blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
     g.globalAlpha = alpha;
     if (m.mod.id === 'grinder' || m.mod.mount === 'T' || m.mod.mount === 'G') drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha, chargeOf(m.mod, mp));
@@ -1394,7 +1394,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalAlpha = alpha;
   }
   if ((p.stun ?? 0) > 0) {
-    g.globalAlpha = alpha * (0.12 + 0.1 * Math.sin(p.time * 40));
+    g.globalAlpha = alpha * (0.12 + 0.08 * Math.sin(p.time * 12));
     silAll('#7fc8ff');
     g.globalAlpha = alpha;
     drawSparks(g, x, y, 0.45 * L.S, p.time, px);

@@ -5,7 +5,7 @@
 // Local frame: nose +x, +y right, units = cells, S = chassis size.
 
 import { METAL, OUTLINE, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type TeamPal } from './palette.ts';
-import { bevel, circ, devK, dot, emis, glowLine, grad, hazard, lamp, raised, reactor, recess, rivetRow, seam } from './giantart.ts';
+import { bevel, circ, devK, dot, emis, glowLine, grad, hazard, lamp, raised, reactor, recess, rivetRow, seam, stack, grille } from './giantart.ts';
 import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
@@ -150,20 +150,186 @@ function spike(g: Ctx, x: number, y: number, a: number, len: number, w: number, 
   g.stroke(p);
 }
 
+/* ------------------------------------------------------------------------------------- hard-surface kit */
+
+/** Armoured beam (limb segment): straight sides, chamfered ends, lit edge, centre seam, outline. Half widths. */
+function beam(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number, w1: number, c0: string, c1: string, o: number): void {
+  const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+  const ux = dx / l, uy = dy / l, nx = -uy, ny = ux;
+  const c = Math.min(w0, w1) * 0.6;
+  const p = new Path2D();
+  const P = (x: number, y: number, u: number, n: number) => p.lineTo(x + ux * u + nx * n, y + uy * u + ny * n);
+  P(x0, y0, -c, w0 * 0.55); P(x0, y0, 0, w0); P(x1, y1, 0, w1); P(x1, y1, c, w1 * 0.55);
+  P(x1, y1, c, -w1 * 0.55); P(x1, y1, 0, -w1); P(x0, y0, 0, -w0); P(x0, y0, -c, -w0 * 0.55);
+  p.closePath();
+  const w = Math.max(w0, w1);
+  const gr = g.createLinearGradient(x0 - nx * w, y0 - ny * w, x0 + nx * w, y0 + ny * w);
+  gr.addColorStop(0, c0);
+  gr.addColorStop(1, c1);
+  g.fillStyle = gr;
+  g.fill(p);
+  g.lineCap = 'butt';
+  // lit bevel on one edge, panel seam down the middle
+  g.strokeStyle = 'rgba(255,255,255,0.26)';
+  g.lineWidth = Math.min(w0, w1) * 0.32;
+  g.beginPath();
+  g.moveTo(x0 - nx * w0 * 0.62, y0 - ny * w0 * 0.62);
+  g.lineTo(x1 - nx * w1 * 0.62, y1 - ny * w1 * 0.62);
+  g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,0.32)';
+  g.lineWidth = Math.max(o * 0.35, Math.min(w0, w1) * 0.12);
+  g.beginPath();
+  g.moveTo(x0 + ux * c + nx * w0 * 0.2, y0 + uy * c + ny * w0 * 0.2);
+  g.lineTo(x1 - ux * c + nx * w1 * 0.2, y1 - uy * c + ny * w1 * 0.2);
+  g.stroke();
+  g.lineJoin = 'round';
+  g.lineWidth = o;
+  g.strokeStyle = OUTLINE;
+  g.stroke(p);
+}
+
+/** Hydraulic ram: dark cylinder from (x0,y0), polished rod to (x1,y1). r = cylinder half width. */
+function piston(g: Ctx, x0: number, y0: number, x1: number, y1: number, r: number, o: number): void {
+  const mx = x0 + (x1 - x0) * 0.55, my = y0 + (y1 - y0) * 0.55;
+  g.lineCap = 'round';
+  g.strokeStyle = OUTLINE; g.lineWidth = r * 0.9 + o;
+  g.beginPath(); g.moveTo(mx, my); g.lineTo(x1, y1); g.stroke();
+  g.strokeStyle = '#c9d1d8'; g.lineWidth = r * 0.9;
+  g.stroke();
+  g.lineCap = 'butt';
+  g.strokeStyle = OUTLINE; g.lineWidth = r * 2 + o;
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(mx, my); g.stroke();
+  g.strokeStyle = METAL.dark; g.lineWidth = r * 2;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = r * 0.5;
+  g.stroke();
+  dot(g, x1, y1, r * 0.75, METAL.base);
+}
+
+/** Actuator hub: octagonal housing, bright ring, centre bolt (optional emissive core). */
+function joint(g: Ctx, x: number, y: number, r: number, o: number, fill: string, core?: string): void {
+  const p = new Path2D();
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * P2 + P2 / 16; p.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  p.closePath();
+  g.fillStyle = fill; g.fill(p);
+  g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(p);
+  g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = Math.max(o * 0.3, r * 0.14);
+  g.beginPath(); g.arc(x, y, r * 0.62, Math.PI * 0.9, Math.PI * 1.7); g.stroke();
+  if (core) { dot(g, x, y, r * 0.42, '#05080b'); dot(g, x, y, r * 0.3, core); }
+  else { dot(g, x, y, r * 0.3, METAL.light); dot(g, x + r * 0.06, y + r * 0.06, r * 0.14, METAL.deep); }
+}
+
+/** Camera lens: steel bezel, dark glass, emissive pupil, glint. */
+function lens(g: Ctx, x: number, y: number, r: number, E: string): void {
+  dot(g, x, y, r * 1.45, OUTLINE);
+  dot(g, x, y, r * 1.25, METAL.base);
+  dot(g, x - r * 0.2, y - r * 0.2, r * 0.9, METAL.light);
+  dot(g, x, y, r * 0.95, '#04070a');
+  const gr = g.createRadialGradient(x, y, 0, x, y, r * 0.65);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.4, E); gr.addColorStop(1, rgba(E, 0));
+  dot(g, x, y, r * 0.65, gr);
+  dot(g, x - r * 0.35, y - r * 0.35, r * 0.2, 'rgba(255,255,255,0.8)');
+}
+
+/** Recessed visor slot with an emissive strip, between two points (cells already scaled). */
+function visor(g: Ctx, x0: number, y0: number, x1: number, y1: number, w: number, E: string, o: number): void {
+  g.lineCap = 'butt';
+  g.strokeStyle = OUTLINE; g.lineWidth = w * 2 + o * 1.4;
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  g.strokeStyle = '#04070a'; g.lineWidth = w * 2;
+  g.stroke();
+  g.strokeStyle = rgba(E, 0.95); g.lineWidth = w * 0.95;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = w * 0.3;
+  g.stroke();
+}
+
+/** Fuel cell / ammo drum seen from above: steel end caps, glowing core band. Cells already scaled. */
+function canister(g: Ctx, x: number, y: number, len: number, r: number, a: number, E: string, o: number): void {
+  g.save();
+  g.translate(x, y); g.rotate(a);
+  g.fillStyle = 'rgba(0,0,0,0.45)';
+  g.beginPath(); roundRect(g, -len / 2 + o, -r + o * 1.4, len, r * 2, r * 0.45); g.fill();
+  const p = new Path2D();
+  roundRect(p, -len / 2, -r, len, r * 2, r * 0.45);
+  const gr = g.createLinearGradient(0, -r, 0, r);
+  gr.addColorStop(0, METAL.light); gr.addColorStop(0.5, METAL.base); gr.addColorStop(1, METAL.deep);
+  g.fillStyle = gr; g.fill(p);
+  // glowing window in the middle
+  const wl = len * 0.46;
+  g.fillStyle = '#05080b'; g.fillRect(-wl / 2, -r * 0.62, wl, r * 1.24);
+  const eg = g.createLinearGradient(0, -r * 0.6, 0, r * 0.6);
+  eg.addColorStop(0, rgba(E, 0.35)); eg.addColorStop(0.45, shade(E, 0.4)); eg.addColorStop(1, rgba(E, 0.25));
+  g.fillStyle = eg; g.fillRect(-wl / 2 + o * 0.4, -r * 0.48, wl - o * 0.8, r * 0.96);
+  g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = o * 0.5;
+  g.beginPath();
+  for (const f of [-0.17, 0, 0.17]) { g.moveTo(f * len, -r * 0.62); g.lineTo(f * len, r * 0.62); }
+  g.stroke();
+  g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(p);
+  g.restore();
+}
+
+/** Blunt armour fin (replaces organic spikes): trapezoid plate jutting along angle a. */
+function fin(g: Ctx, x: number, y: number, a: number, len: number, w: number, fill: string, o: number): void {
+  const p = new Path2D();
+  const cs = Math.cos(a), sn = Math.sin(a);
+  const P = (u: number, n: number) => p.lineTo(x + cs * u - sn * n, y + sn * u + cs * n);
+  P(-len * 0.1, -w); P(len * 0.75, -w * 0.55); P(len, -w * 0.15); P(len, w * 0.3); P(len * 0.75, w * 0.55); P(-len * 0.1, w);
+  p.closePath();
+  g.fillStyle = fill; g.fill(p);
+  g.save(); g.clip(p);
+  g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = w * 0.5;
+  g.beginPath(); g.moveTo(x - sn * -w * 0.6, y + cs * -w * 0.6); g.lineTo(x + cs * len - sn * -w * 0.4, y + sn * len + cs * -w * 0.4); g.stroke();
+  g.restore();
+  g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(p);
+}
+
+/** Straight plate seams across a body (clipped): dark groove + lit lip. xs fractions of S. */
+function plateSeams(g: Ctx, path: Path2D, xs: number[], S: number, o: number, w = 0.6): void {
+  g.save();
+  g.clip(path);
+  g.lineCap = 'butt';
+  for (const x of xs) {
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = o * w * 1.3;
+    g.beginPath(); g.moveTo(x * S, -0.6 * S); g.lineTo(x * S, 0.6 * S); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = o * w * 0.8;
+    g.beginPath(); g.moveTo(x * S - o * w * 1.1, -0.6 * S); g.lineTo(x * S - o * w * 1.1, 0.6 * S); g.stroke();
+  }
+  g.restore();
+}
+
+/** Cable bundle: a few parallel dark hoses with highlights (cells, already scaled pts). */
+function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
+  g.lineCap = 'round';
+  for (let i = 0; i < pts.length; i += 4) {
+    const x0 = pts[i] * S, y0 = pts[i + 1] * S, x1 = pts[i + 2] * S, y1 = pts[i + 3] * S;
+    const l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / l, ny = (x1 - x0) / l;
+    for (let k = 0; k < n; k++) {
+      const off = (k - (n - 1) / 2) * w * 1.3;
+      g.strokeStyle = OUTLINE; g.lineWidth = w * 1.4;
+      g.beginPath(); g.moveTo(x0 + nx * off, y0 + ny * off); g.lineTo(x1 + nx * off, y1 + ny * off); g.stroke();
+      g.strokeStyle = k % 2 ? '#3a2f22' : '#262b30'; g.lineWidth = w;
+      g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = w * 0.35;
+      g.beginPath(); g.moveTo(x0 + nx * (off - w * 0.2), y0 + ny * (off - w * 0.2)); g.lineTo(x1 + nx * (off - w * 0.2), y1 + ny * (off - w * 0.2)); g.stroke();
+    }
+  }
+}
+
 /* ------------------------------------------------------------------------------------------------- hulls */
 
 export function creatureHullPath(shape: string, S: number): Path2D | null {
   switch (shape) {
-    case 'mantis': return profilePath([0.47, 0, 0.45, 0.06, 0.4, 0.125, 0.34, 0.11, 0.29, 0.045, 0.22, 0.05, 0.12, 0.075, 0.03, 0.065, -0.04, 0.1, -0.16, 0.145, -0.3, 0.135, -0.42, 0.075, -0.47, 0], S);
-    case 'mech': return profilePath([0.24, 0, 0.23, 0.11, 0.16, 0.22, 0.05, 0.28, -0.09, 0.28, -0.2, 0.21, -0.26, 0.1, -0.27, 0], S);
-    case 'arachnid': return profilePath([0.44, 0, 0.42, 0.07, 0.35, 0.14, 0.25, 0.165, 0.15, 0.14, 0.08, 0.07, 0.03, 0.1, -0.06, 0.2, -0.2, 0.255, -0.34, 0.235, -0.44, 0.14, -0.48, 0], S);
-    case 'crab': return profilePath([0.27, 0, 0.26, 0.12, 0.21, 0.27, 0.12, 0.365, 0.0, 0.41, -0.12, 0.39, -0.22, 0.31, -0.28, 0.17, -0.3, 0], S);
+    case 'mantis': return sharp([0.47, 0, 0.46, -0.055, 0.42, -0.11, 0.34, -0.115, 0.3, -0.06, 0.26, -0.05, 0.21, -0.075, 0.06, -0.075, 0.02, -0.055, -0.04, -0.06, -0.1, -0.14, -0.38, -0.14, -0.46, -0.09, -0.47, 0], S);
+    case 'mech': return sharp([0.24, 0, 0.235, -0.09, 0.19, -0.19, 0.1, -0.27, -0.1, -0.28, -0.2, -0.22, -0.26, -0.12, -0.27, 0], S);
+    case 'arachnid': return sharp([0.44, 0, 0.43, -0.06, 0.37, -0.13, 0.27, -0.16, 0.16, -0.15, 0.1, -0.08, 0.06, -0.09, 0.0, -0.19, -0.1, -0.25, -0.34, -0.25, -0.44, -0.17, -0.48, -0.06, -0.48, 0], S);
+    case 'crab': return sharp([0.27, 0, 0.27, -0.1, 0.22, -0.26, 0.12, -0.37, 0.0, -0.41, -0.14, -0.39, -0.24, -0.3, -0.3, -0.16, -0.3, 0], S);
     case 'saucer': { const p = new Path2D(); p.arc(0, 0, 0.44 * S, 0, P2); return p; }
     case 'delta': { const p = new Path2D(); poly(p, mirrorPoly([0.5, 0, 0.3, -0.075, -0.27, -0.46, -0.39, -0.46, -0.34, -0.31, -0.45, -0.22, -0.47, -0.1, -0.41, 0]), S); return p; }
-    case 'warlord': return profilePath([0.25, 0, 0.24, 0.12, 0.17, 0.22, 0.06, 0.27, -0.1, 0.27, -0.21, 0.21, -0.27, 0.11, -0.29, 0], S);
-    case 'scorpion': return profilePath([0.39, 0, 0.38, 0.08, 0.33, 0.15, 0.23, 0.2, 0.08, 0.23, -0.07, 0.22, -0.19, 0.18, -0.28, 0.12, -0.34, 0.06, -0.36, 0], S);
-    case 'centipede': return profilePath([0.5, 0, 0.49, 0.055, 0.45, 0.115, 0.38, 0.135, 0.32, 0.115, 0.29, 0], S);
-    case 'broodmother': return profilePath([0.47, 0, 0.455, 0.075, 0.39, 0.145, 0.29, 0.175, 0.19, 0.15, 0.125, 0.09, 0.075, 0.13, -0.02, 0.27, -0.16, 0.355, -0.32, 0.36, -0.44, 0.27, -0.49, 0.13, -0.5, 0], S);
+    case 'warlord': return sharp([0.25, 0, 0.245, -0.1, 0.2, -0.2, 0.1, -0.27, -0.11, -0.27, -0.22, -0.21, -0.28, -0.12, -0.29, 0], S);
+    case 'scorpion': return sharp([0.39, 0, 0.38, -0.07, 0.33, -0.15, 0.24, -0.2, 0.08, -0.23, -0.08, -0.22, -0.2, -0.18, -0.3, -0.12, -0.36, -0.06, -0.36, 0], S);
+    case 'centipede': return sharp([0.5, 0, 0.49, -0.05, 0.45, -0.11, 0.38, -0.13, 0.32, -0.11, 0.29, 0], S);
+    case 'broodmother': return sharp([0.47, 0, 0.46, -0.07, 0.4, -0.14, 0.29, -0.17, 0.19, -0.15, 0.13, -0.09, 0.08, -0.12, 0.0, -0.25, -0.12, -0.34, -0.33, -0.36, -0.44, -0.28, -0.5, -0.14, -0.5, 0], S);
     case 'carriage': return profilePath([0.25, 0, 0.245, 0.1, 0.21, 0.22, 0.15, 0.265, 0.09, 0.22, 0.07, 0.12, -0.08, 0.1, -0.15, 0.05, -0.16, 0], S);
     case 'hunter': return sharp([0.5, 0, 0.3, -0.065, 0.12, -0.11, 0.04, -0.27, -0.06, -0.31, -0.11, -0.15, -0.3, -0.14, -0.38, -0.25, -0.47, -0.25, -0.44, -0.08, -0.47, 0], S);
     case 'riot': return sharp([0.42, 0, 0.3, -0.2, 0.18, -0.42, 0.06, -0.43, 0.02, -0.3, -0.36, -0.3, -0.44, -0.21, -0.45, 0], S);
@@ -181,37 +347,26 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
   const S = L.S;
   switch (L.shape) {
     case 'mantis':
-      // antennae
+      // whip radio mast off the power pack
       g.lineCap = 'round';
-      for (const s of [-1, 1]) {
-        g.strokeStyle = OUTLINE; g.lineWidth = 0.035 * S;
-        g.beginPath(); g.moveTo(0.42 * S, s * 0.04 * S); g.quadraticCurveTo(0.56 * S, s * 0.06 * S, 0.62 * S, s * 0.17 * S); g.stroke();
-        g.strokeStyle = METAL.light; g.lineWidth = 0.014 * S; g.stroke();
-      }
+      g.strokeStyle = OUTLINE; g.lineWidth = 0.03 * S;
+      g.beginPath(); g.moveTo(-0.3 * S, -0.1 * S); g.lineTo(-0.56 * S, -0.17 * S); g.stroke();
+      g.strokeStyle = METAL.light; g.lineWidth = 0.012 * S; g.stroke();
+      dot(g, -0.3 * S, -0.1 * S, 0.028 * S, METAL.dark);
       break;
     case 'crab':
-      // eye stalks + front rim spines
+      // periscope sensor booms + armoured skirt plates around the rim
       for (const s of [-1, 1]) {
-        limbSeg(g, 0.2 * S, s * 0.06 * S, 0.022 * S, 0.33 * S, s * 0.1 * S, 0.018 * S, METAL.light, METAL.dark, o);
-        for (const [x, y, a] of [[0.24, 0.2, -0.5], [0.17, 0.31, -0.8], [0.06, 0.39, -1.2], [-0.08, 0.4, -1.7], [-0.19, 0.33, -2.2]]) spike(g, x * S, s * y * S, s * a, 0.07 * S, 0.03 * S, shade(pal.dark, -0.1), o);
+        beam(g, 0.2 * S, s * 0.08 * S, 0.026 * S, 0.33 * S, s * 0.11 * S, 0.022 * S, METAL.light, METAL.dark, o);
+        for (const [x, y, a] of [[0.24, 0.2, -0.5], [0.17, 0.31, -0.8], [0.06, 0.39, -1.2], [-0.08, 0.4, -1.7], [-0.19, 0.33, -2.2]]) fin(g, x * S, s * y * S, s * a, 0.06 * S, 0.04 * S, shade(pal.dark, -0.05), o);
       }
       break;
     case 'scorpion':
-      for (const s of [-1, 1]) for (const [x, y] of [[0.16, 0.2], [0.02, 0.225], [-0.12, 0.2]]) spike(g, x * S, s * y * S, s * 1.5, 0.05 * S, 0.025 * S, shade(pal.dark, -0.15), o);
-      break;
-    case 'centipede':
-      // antennae
-      g.lineCap = 'round';
-      for (const s of [-1, 1]) {
-        g.strokeStyle = OUTLINE; g.lineWidth = 0.03 * S;
-        g.beginPath(); g.moveTo(0.46 * S, s * 0.07 * S); g.quadraticCurveTo(0.6 * S, s * 0.1 * S, 0.66 * S, s * 0.22 * S); g.stroke();
-        g.strokeStyle = METAL.light; g.lineWidth = 0.012 * S; g.stroke();
-      }
+      for (const s of [-1, 1]) for (const [x, y] of [[0.16, 0.2], [0.02, 0.225], [-0.12, 0.2]]) fin(g, x * S, s * y * S, s * 1.5, 0.045 * S, 0.035 * S, shade(pal.dark, -0.1), o);
       break;
     case 'arachne': {
-      // armour spikes jutting off the abdomen rim
-      for (const s of [-1, 1]) for (const [x, y, a] of [[-0.1, 0.28, 1.2], [-0.24, 0.33, 1.6], [-0.38, 0.3, 2.1], [-0.47, 0.2, 2.6], [0.02, 0.2, 0.9]]) spike(g, x * S, s * y * S, s * a, 0.085 * S, 0.03 * S, shade(pal.deep, 0.1), o);
-      spike(g, -0.5 * S, 0, Math.PI, 0.08 * S, 0.035 * S, shade(pal.deep, 0.1), o);
+      // ablative armour fins along the rear module rim
+      for (const s of [-1, 1]) for (const [x, y, a] of [[-0.1, 0.28, 1.2], [-0.24, 0.33, 1.6], [-0.38, 0.3, 2.1], [-0.47, 0.2, 2.6], [0.02, 0.2, 0.9]]) fin(g, x * S, s * y * S, s * a, 0.07 * S, 0.04 * S, shade(pal.deep, 0.1), o);
       break;
     }
     case 'carriage':
@@ -250,7 +405,7 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
       }
       break;
     case 'broodmother':
-      for (const s of [-1, 1]) for (const [x, y, a] of [[-0.3, 0.355, 1.7], [-0.44, 0.27, 2.3]]) spike(g, x * S, s * y * S, s * a, 0.05 * S, 0.025 * S, shade(pal.deep, 0.1), o);
+      for (const s of [-1, 1]) for (const [x, y, a] of [[-0.3, 0.355, 1.7], [-0.44, 0.27, 2.3]]) fin(g, x * S, s * y * S, s * a, 0.05 * S, 0.04 * S, shade(pal.deep, 0.1), o);
       break;
   }
 }
@@ -263,21 +418,26 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
   const lite = shade(pal.body, 0.18);
   switch (L.shape) {
     case 'mantis': {
-      // folded wings over the abdomen
+      // rear power pack: armoured engine module with exhausts
+      const pack = sharp([-0.06, 0, -0.11, -0.115, -0.36, -0.115, -0.43, -0.07, -0.44, 0], S);
+      raised(g, pack, grad(g, S, shade(pal.light, 0.05), pal.dark, -0.1, -0.12, -0.4, 0.12), o, S, 1, 0.01, 0.45);
+      seam(g, [-0.2, -0.11, -0.2, 0.11, -0.31, -0.11, -0.31, 0.11], S, t);
+      vent(g, -0.255, 0, 0.08, 0.06, S, o);
       for (const s of [-1, 1]) {
-        const w = new Path2D();
-        w.moveTo(0.06 * S, s * 0.02 * S);
-        w.quadraticCurveTo(-0.1 * S, s * 0.16 * S, -0.44 * S, s * 0.03 * S);
-        w.quadraticCurveTo(-0.2 * S, s * 0.01 * S, 0.06 * S, s * 0.02 * S);
-        g.fillStyle = rgba(shade(pal.light, 0.2), 0.35); g.fill(w);
-        g.lineWidth = t; g.strokeStyle = 'rgba(0,0,0,0.45)'; g.stroke(w);
-        stripe(g, [0.0, s * 0.04, -0.36, s * 0.04], S, rgba(pal.accent, 0.8), o * 0.7);
+        stripe(g, [-0.12, s * 0.1, -0.35, s * 0.1], S, pal.accent, o * 0.8);
+        stack(g, -0.43 * S, s * 0.075 * S, 0.02 * S, o * 0.6);
       }
-      bands(g, hull, [-0.08, -0.2, -0.32], S, o, 0.03);
-      // thorax plate + head
-      fillOut(g, ellipse(0.13 * S, 0, 0.09 * S, 0.04 * S), grad(g, S, pal.light, pal.dark, 0.05, -0.04, 0.2, 0.04), o * 0.6);
-      for (const s of [-1, 1]) eye(g, 0.385 * S, s * 0.095 * S, 0.042 * S, E);
-      dot(g, 0.44 * S, 0, 0.012 * S, 'rgba(0,0,0,0.6)');
+      hazard(g, -0.445 * S, -0.03 * S, 0.02 * S, 0.06 * S, o, true);
+      // spine: torso plate + cable bundle to the pack
+      cables(g, [0.06, 0, -0.1, 0], S, 0.016 * S, 2);
+      raised(g, roundedRect(0.03, -0.055, 0.2, 0.11, 0.015, S), grad(g, S, shade(pal.light, 0.1), pal.body, 0.05, -0.05, 0.2, 0.05), o, S, 0.8, 0.008, 0.4);
+      rivetRow(g, 0.06 * S, -0.03 * S, 0.2 * S, -0.03 * S, 3, 0.008 * S);
+      rivetRow(g, 0.06 * S, 0.03 * S, 0.2 * S, 0.03 * S, 3, 0.008 * S);
+      // sensor head: armoured block, visor strip, twin camera lenses
+      const hd = sharp([0.465, 0, 0.455, -0.05, 0.415, -0.1, 0.345, -0.1, 0.31, -0.05, 0.305, 0], S);
+      raised(g, hd, grad(g, S, shade(pal.light, 0.12), pal.dark, 0.3, -0.1, 0.46, 0.1), o, S, 1, 0.01, 0.4);
+      visor(g, 0.44 * S, -0.045 * S, 0.44 * S, 0.045 * S, 0.011 * S, E, o);
+      for (const s of [-1, 1]) lens(g, 0.375 * S, s * 0.055 * S, 0.022 * S, E);
       break;
     }
     case 'mech': {
@@ -293,10 +453,9 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       }
       stripe(g, [0.12, -0.15, 0.0, -0.19, 0.12, 0.15, 0.0, 0.19], S, pal.accent, o * 0.9);
       // head / cockpit
-      fillOut(g, ellipse(0.11 * S, 0, 0.075 * S, 0.065 * S), grad(g, S, shade(pal.light, 0.1), pal.dark, 0.05, -0.06, 0.18, 0.06), o);
-      g.fillStyle = '#05080b';
-      g.beginPath(); g.ellipse(0.16 * S, 0, 0.022 * S, 0.048 * S, 0, 0, P2); g.fill();
-      glowLine(g, [0.165, -0.035, 0.165, 0.035], S, E, o * 0.9);
+      raised(g, sharp([0.185, 0, 0.18, -0.04, 0.15, -0.065, 0.06, -0.065, 0.035, -0.035, 0.035, 0], S), grad(g, S, shade(pal.light, 0.1), pal.dark, 0.05, -0.06, 0.18, 0.06), o, S, 1, 0.01, 0.4);
+      visor(g, 0.162 * S, -0.04 * S, 0.162 * S, 0.04 * S, 0.012 * S, E, o);
+      seam(g, [0.06, -0.06, 0.06, 0.06], S, t);
       g.restore();
       break;
     }
@@ -306,19 +465,23 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       spiderDetails(g, L, pal, o, hull);
       break;
     case 'crab': {
-      // shell ridges + carapace plates
-      const inner = profilePath([0.2, 0, 0.19, 0.09, 0.15, 0.21, 0.08, 0.29, -0.01, 0.32, -0.1, 0.3, -0.18, 0.24, -0.22, 0.13, -0.23, 0], S);
+      // armoured carapace plate with straight panel lines, rivets, rear exhausts, front sensor visor
+      const inner = sharp([0.2, 0, 0.2, -0.08, 0.16, -0.2, 0.08, -0.29, -0.02, -0.32, -0.12, -0.3, -0.19, -0.23, -0.23, -0.12, -0.23, 0], S);
       raised(g, inner, grad(g, S, shade(pal.light, 0.05), pal.dark), o, S, 1.2, 0.012, 0.5);
-      seam(g, [0.19, 0, -0.22, 0], S, t);
+      seam(g, [0.2, 0, -0.23, 0], S, t);
       g.save(); g.clip(inner);
-      g.strokeStyle = pl; g.lineWidth = t;
-      for (const s of [-1, 1]) { g.beginPath(); g.moveTo(0.1 * S, s * 0.03 * S); g.quadraticCurveTo(0.0, s * 0.2 * S, -0.16 * S, s * 0.24 * S); g.stroke(); }
+      seam(g, [0.08, -0.29, 0.02, -0.06, 0.08, 0.29, 0.02, 0.06, -0.19, -0.23, -0.1, -0.05, -0.19, 0.23, -0.1, 0.05], S, t);
       g.restore();
       for (const s of [-1, 1]) {
         stripe(g, [0.14, s * 0.3, -0.02, s * 0.375], S, pal.accent, o * 1.1);
-        for (const [x, y] of [[0.02, 0.12], [-0.08, 0.18], [0.08, 0.2]]) rivetRow(g, x * S, s * y * S, x * S, s * y * S, 1, 0.012 * S);
+        rivetRow(g, 0.17 * S, s * 0.13 * S, 0.06 * S, s * 0.28 * S, 4, 0.01 * S);
+        rivetRow(g, -0.06 * S, s * 0.3 * S, -0.18 * S, s * 0.22 * S, 3, 0.01 * S);
+        vent(g, -0.15, s * 0.14, 0.06, 0.08, S, o);
+        stack(g, -0.27 * S, s * 0.09 * S, 0.024 * S, o * 0.7);
+        lens(g, 0.245 * S, s * 0.155 * S, 0.02 * S, E);
       }
-      for (const s of [-1, 1]) eye(g, 0.335 * S, s * 0.1 * S, 0.028 * S, E);
+      hazard(g, 0.215 * S, -0.03 * S, 0.035 * S, 0.06 * S, o, true);
+      visor(g, 0.255 * S, -0.1 * S, 0.255 * S, 0.1 * S, 0.012 * S, E, o);
       break;
     }
     case 'saucer': {
@@ -387,15 +550,22 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     }
     case 'scorpion': {
-      bands(g, hull, [0.18, 0.06, -0.06, -0.16, -0.25], S, o, 0.04, 0.7);
-      const cara = profilePath([0.36, 0, 0.35, 0.07, 0.3, 0.13, 0.22, 0.16, 0.18, 0], S);
-      raised(g, cara, grad(g, S, shade(pal.light, 0.05), pal.body), o, S, 1.1, 0.01, 0.4);
+      plateSeams(g, hull, [0.18, 0.06, -0.06, -0.16, -0.25], S, o, 0.7);
+      // armoured spine plate down the back
+      raised(g, roundedRect(-0.3, -0.06, 0.46, 0.12, 0.02, S), grad(g, S, shade(pal.light, 0.02), pal.dark, -0.3, -0.06, 0.1, 0.06), o, S, 0.9, 0.01, 0.4);
+      rivetRow(g, -0.27 * S, -0.04 * S, 0.12 * S, -0.04 * S, 6, 0.009 * S);
+      rivetRow(g, -0.27 * S, 0.04 * S, 0.12 * S, 0.04 * S, 6, 0.009 * S);
+      vent(g, -0.2, 0, 0.1, 0.05, S, o);
+      // sensor head
+      const cara = sharp([0.36, 0, 0.355, -0.06, 0.31, -0.125, 0.23, -0.155, 0.185, -0.1, 0.18, 0], S);
+      raised(g, cara, grad(g, S, shade(pal.light, 0.08), pal.body), o, S, 1.1, 0.01, 0.4);
+      visor(g, 0.335 * S, -0.06 * S, 0.335 * S, 0.06 * S, 0.012 * S, E, o);
       for (const s of [-1, 1]) {
-        eye(g, 0.33 * S, s * 0.04 * S, 0.02 * S, E);
-        eye(g, 0.27 * S, s * 0.12 * S, 0.014 * S, E);
+        lens(g, 0.27 * S, s * 0.11 * S, 0.018 * S, E);
         stripe(g, [0.1, s * 0.19, -0.18, s * 0.16], S, pal.accent, o * 1.0);
+        stack(g, -0.33 * S, s * 0.06 * S, 0.022 * S, o * 0.7);
       }
-      seam(g, [0.17, 0, -0.33, 0], S, o * 0.6, 'rgba(255,255,255,0.12)');
+      hazard(g, 0.2 * S, -0.025 * S, 0.03 * S, 0.05 * S, o, true);
       break;
     }
     case 'carriage': {
@@ -520,248 +690,14 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     }
     case 'centipede': {
-      // head plate + mandible roots + eyes
-      const hp = profilePath([0.47, 0, 0.46, 0.05, 0.42, 0.09, 0.36, 0.1, 0.33, 0], S);
+      // armoured sensor head: visor bar + lenses
+      const hp = sharp([0.475, 0, 0.465, -0.045, 0.43, -0.09, 0.37, -0.1, 0.335, -0.06, 0.33, 0], S);
       raised(g, hp, grad(g, S, shade(pal.light, 0.08), pal.body), o, S, 1, 0.01, 0.4);
-      for (const s of [-1, 1]) eye(g, 0.44 * S, s * 0.075 * S, 0.02 * S, E);
-      seam(g, [0.36, 0, 0.46, 0], S, t);
+      visor(g, 0.45 * S, -0.05 * S, 0.45 * S, 0.05 * S, 0.01 * S, E, o);
+      for (const s of [-1, 1]) lens(g, 0.4 * S, s * 0.06 * S, 0.016 * S, E);
+      seam(g, [0.36, 0, 0.42, 0], S, t);
       break;
     }
-  }
-}
-
-function roundedRect(x: number, y: number, w: number, h: number, r: number, S: number): Path2D {
-  const p = new Path2D();
-  roundRect(p, x * S, y * S, w * S, h * S, r * S);
-  return p;
-}
-function vent(g: Ctx, x: number, y: number, w: number, h: number, S: number, o: number): void {
-  const p = roundedRect(x - w / 2, y - h / 2, w, h, Math.min(w, h) * 0.2, S);
-  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fill(p);
-  g.strokeStyle = 'rgba(255,255,255,0.2)'; g.lineWidth = o * 0.35;
-  g.beginPath();
-  const horiz = w > h, n = 4;
-  for (let i = 1; i < n; i++) {
-    if (horiz) { const xx = (x - w / 2 + (w * i) / n) * S; g.moveTo(xx, (y - h * 0.35) * S); g.lineTo(xx, (y + h * 0.35) * S); }
-    else { const yy = (y - h / 2 + (h * i) / n) * S; g.moveTo((x - w * 0.35) * S, yy); g.lineTo((x + w * 0.35) * S, yy); }
-  }
-  g.stroke();
-}
-function circPath(x: number, y: number, r: number, S: number): Path2D { return circ(x, y, r, S); }
-
-/** Arachnid / Broodmother / Arachne bodies. */
-function spiderDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, hull: Path2D): void {
-  const S = L.S;
-  const E = emis(pal);
-  const big = S >= 4;
-  const t = o * 0.5;
-  if (L.shape === 'arachnid') {
-    // abdomen: dorsal plates + chevron markings
-    const ab = profilePath([0.02, 0, 0.0, 0.09, -0.08, 0.18, -0.2, 0.225, -0.33, 0.205, -0.42, 0.12, -0.45, 0], S);
-    raised(g, ab, grad(g, S, shade(pal.light, 0.02), pal.dark, -0.1, -0.2, -0.3, 0.2), o, S, 1, 0.01, 0.45);
-    bands(g, ab, [-0.1, -0.22, -0.34], S, o, -0.04);
-    for (let i = 0; i < 3; i++) {
-      const x = -0.27 - i * 0.055;
-      stripe(g, [x + 0.04, -0.07 + i * 0.015, x, 0, x, 0, x + 0.04, 0.07 - i * 0.015], S, rgba(E, 0.85), o * 0.9);
-    }
-    // cephalothorax shield + eye cluster
-    const ce = profilePath([0.4, 0, 0.385, 0.06, 0.32, 0.12, 0.23, 0.135, 0.14, 0.1, 0.11, 0], S);
-    raised(g, ce, grad(g, S, shade(pal.light, 0.1), pal.body), o, S, 1.2, 0.01, 0.4);
-    seam(g, [0.14, 0, 0.3, 0], S, t);
-    for (const s of [-1, 1]) {
-      eye(g, 0.37 * S, s * 0.025 * S, 0.022 * S, E);
-      eye(g, 0.35 * S, s * 0.07 * S, 0.016 * S, E);
-      eye(g, 0.31 * S, s * 0.095 * S, 0.012 * S, E);
-      eye(g, 0.325 * S, s * 0.045 * S, 0.011 * S, E);
-    }
-    return;
-  }
-  if (L.shape === 'broodmother') {
-    // bulbous abdomen with armour ribs, egg sacs and glowing markings
-    const ab = profilePath([0.06, 0, 0.03, 0.12, -0.05, 0.24, -0.17, 0.32, -0.31, 0.32, -0.42, 0.24, -0.465, 0.12, -0.475, 0], S);
-    raised(g, ab, grad(g, S, shade(pal.body, 0.05), pal.deep, -0.1, -0.3, -0.3, 0.3), o, S, 1.4, 0.03, 0.7);
-    bands(g, ab, [-0.04, -0.15, -0.27, -0.38], S, o, -0.06, 1.0);
-    // hourglass / skull marking
-    const mk = new Path2D();
-    poly(mk, mirrorPoly([-0.27, 0, -0.29, -0.06, -0.34, -0.09, -0.37, -0.05, -0.36, 0]), S);
-    g.fillStyle = rgba(E, 0.85); g.fill(mk); g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke(mk);
-    glowLine(g, [-0.06, -0.2, -0.2, -0.27, -0.06, 0.2, -0.2, 0.27, -0.42, -0.1, -0.44, 0.1], S, E, o * 1.1);
-    // egg sacs (clusters of glowing pods on the flanks/rear)
-    for (const [x, y, r] of EGGS) {
-      dot(g, (x + 0.008) * S, (y + 0.012) * S, r * 1.15 * S, 'rgba(0,0,0,0.55)');
-      const eg = g.createRadialGradient((x - r * 0.3) * S, (y - r * 0.3) * S, 0, x * S, y * S, r * S);
-      eg.addColorStop(0, '#fff8e8'); eg.addColorStop(0.3, shade(E, 0.35)); eg.addColorStop(0.75, shade(E, -0.3)); eg.addColorStop(1, shade(E, -0.75));
-      dot(g, x * S, y * S, r * S, eg);
-      g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.beginPath(); g.arc(x * S, y * S, r * S, 0, P2); g.stroke();
-      g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = o * 0.4;
-      g.beginPath(); g.moveTo((x - r * 0.6) * S, y * S); g.quadraticCurveTo(x * S, (y + r * 0.3) * S, (x + r * 0.6) * S, y * S); g.stroke();
-    }
-    // cephalothorax armour + eyes
-    const ce = profilePath([0.45, 0, 0.44, 0.065, 0.38, 0.13, 0.28, 0.155, 0.18, 0.13, 0.13, 0], S);
-    raised(g, ce, grad(g, S, shade(pal.light, 0.05), pal.dark), o, S, 1.4, 0.025, 0.6);
-    seam(g, [0.18, 0, 0.36, 0, 0.3, -0.14, 0.24, -0.04, 0.3, 0.14, 0.24, 0.04], S, t);
-    rivetRow(g, 0.2 * S, -0.12 * S, 0.36 * S, -0.1 * S, 5, 0.006 * S);
-    rivetRow(g, 0.2 * S, 0.12 * S, 0.36 * S, 0.1 * S, 5, 0.006 * S);
-    for (const s of [-1, 1]) {
-      eye(g, 0.42 * S, s * 0.025 * S, 0.02 * S, E);
-      eye(g, 0.405 * S, s * 0.06 * S, 0.014 * S, E);
-      eye(g, 0.375 * S, s * 0.09 * S, 0.011 * S, E);
-      eye(g, 0.39 * S, s * 0.04 * S, 0.009 * S, E);
-    }
-    return;
-  }
-  // arachne: titan spider, faceted armour
-  const ab = new Path2D();
-  poly(ab, mirrorPoly([0.04, 0, 0.0, -0.15, -0.09, -0.24, -0.22, -0.28, -0.35, -0.265, -0.43, -0.2, -0.46, -0.1, -0.46, 0]), S);
-  raised(g, ab, grad(g, S, shade(pal.body, 0.02), pal.deep, -0.1, -0.3, -0.3, 0.3), o, S, 1.5, 0.03, 0.7);
-  // armour lames across the abdomen
-  for (let i = 0; i < 4; i++) {
-    const x0 = -0.06 - i * 0.1;
-    const w = [0.2, 0.25, 0.25, 0.18][i];
-    const lm = new Path2D();
-    poly(lm, mirrorPoly([x0, 0, x0 - 0.01, -w * 0.6, x0 - 0.04, -w, x0 - 0.085, -w * 0.95, x0 - 0.09, 0]), S);
-    bevel(g, lm, grad(g, S, shade(pal.light, -0.05 - i * 0.04), shade(pal.dark, -0.05), x0, -w, x0 - 0.09, w), o, 1.2);
-    rivetRow(g, (x0 - 0.02) * S, -w * 0.75 * S, (x0 - 0.02) * S, w * 0.75 * S, 5, 0.006 * S);
-  }
-  glowLine(g, [-0.08, -0.17, -0.38, -0.2, -0.08, 0.17, -0.38, 0.2], S, E, o * 1.2);
-  hazard(g, -0.455 * S, -0.06 * S, 0.025 * S, 0.12 * S, o, true);
-  // armoured cephalothorax + crown spikes + eyes
-  const ce = new Path2D();
-  poly(ce, mirrorPoly([0.47, 0, 0.44, -0.065, 0.38, -0.12, 0.29, -0.165, 0.2, -0.155, 0.14, -0.08, 0.13, 0]), S);
-  raised(g, ce, grad(g, S, shade(pal.light, 0.08), pal.dark), o, S, 1.6, 0.03, 0.7);
-  const cr = new Path2D();
-  poly(cr, mirrorPoly([0.4, 0, 0.37, -0.06, 0.3, -0.1, 0.22, -0.1, 0.19, 0]), S);
-  bevel(g, cr, grad(g, S, shade(pal.light, 0.15), pal.body), o, 1.3);
-  seam(g, [0.19, 0, 0.4, 0], S, t);
-  for (const s of [-1, 1]) {
-    spike(g, 0.27 * S, s * 0.155 * S, s * 1.2, 0.06 * S, 0.022 * S, shade(pal.light, -0.15), o);
-    spike(g, 0.2 * S, s * 0.15 * S, s * 1.7, 0.06 * S, 0.022 * S, shade(pal.light, -0.15), o);
-    eye(g, 0.44 * S, s * 0.025 * S, 0.018 * S, E);
-    eye(g, 0.425 * S, s * 0.058 * S, 0.014 * S, E);
-    eye(g, 0.4 * S, s * 0.085 * S, 0.011 * S, E);
-    eye(g, 0.405 * S, s * 0.035 * S, 0.008 * S, E);
-  }
-  void big; void hull;
-}
-
-const EGGS: [number, number, number][] = [
-  [-0.36, -0.235, 0.032], [-0.3, -0.27, 0.027], [-0.41, -0.18, 0.026],
-  [-0.36, 0.235, 0.032], [-0.3, 0.27, 0.027], [-0.41, 0.18, 0.026],
-  [-0.44, -0.04, 0.024], [-0.44, 0.04, 0.024], [-0.22, -0.29, 0.022], [-0.22, 0.29, 0.022],
-];
-
-/* ------------------------------------------------------------------------------------------------- parts */
-
-export interface AnimIn {
-  t: number;
-  odo: number;
-  moving: boolean;
-  seed: number;
-  /** leg gait phase, radians */
-  walk: number;
-}
-
-export interface PartDef {
-  /** pivot (cells), in hull coords or relative to the parent's pivot */
-  px: number;
-  py: number;
-  /** sprite half extent (cells) around the pivot */
-  ext: number;
-  parent?: number;
-  /** under = between mobility and hull, over = above hull, below turrets */
-  layer: 'under' | 'over';
-  draw: (g: Ctx, pal: TeamPal, o: number) => void;
-  anim?: (a: AnimIn) => { r?: number; dx?: number; dy?: number };
-  /** mount indices riding on this part */
-  mounts?: number[];
-}
-
-export interface Xf { x: number; y: number; r: number; }
-
-const partCache = new Map<string, PartDef[]>();
-
-export function partsOf(L: UnitLayout): PartDef[] {
-  const key = `${L.chassis.id}|${L.mob.id}`;
-  let p = partCache.get(key);
-  if (!p) { p = buildParts(L); partCache.set(key, p); }
-  return p;
-}
-
-/** Part transforms (hull coords) for an animation state; null = rest pose. */
-export function partXfs(parts: PartDef[], a: AnimIn | null): Xf[] {
-  const out: Xf[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    const d = parts[i];
-    const an = a && d.anim ? d.anim(a) : null;
-    const lx = d.px + (an?.dx ?? 0), ly = d.py + (an?.dy ?? 0), lr = an?.r ?? 0;
-    if (d.parent !== undefined) {
-      const P = out[d.parent];
-      const c = Math.cos(P.r), s = Math.sin(P.r);
-      out.push({ x: P.x + c * lx - s * ly, y: P.y + s * lx + c * ly, r: P.r + lr });
-    } else out.push({ x: lx, y: ly, r: lr });
-  }
-  return out;
-}
-
-/** Mount position (hull coords) when riding a part. */
-export function mountOnPart(parts: PartDef[], rest: Xf[], xfs: Xf[], i: number, mx: number, my: number): { x: number; y: number } | null {
-  for (let j = 0; j < parts.length; j++) {
-    if (!parts[j].mounts?.includes(i)) continue;
-    const R = rest[j], X = xfs[j];
-    const dx = mx - R.x, dy = my - R.y;
-    const c0 = Math.cos(-R.r), s0 = Math.sin(-R.r);
-    const qx = c0 * dx - s0 * dy, qy = s0 * dx + c0 * dy;
-    const c = Math.cos(X.r), s = Math.sin(X.r);
-    return { x: X.x + c * qx - s * qy, y: X.y + s * qx + c * qy };
-  }
-  return null;
-}
-
-/** Mount indices that ride on parts. */
-export function partMounts(parts: PartDef[]): Set<number> {
-  const s = new Set<number>();
-  for (const p of parts) for (const m of p.mounts ?? []) s.add(m);
-  return s;
-}
-
-function snipAnim(s: number, rate: number): (a: AnimIn) => { r: number } {
-  return (a) => {
-    const c = (a.t * rate + a.seed * 0.13 + (s > 0 ? 0.5 : 0)) % 1;
-    return { r: s * (0.22 + 0.3 * (c < 0.18 ? Math.sin((c / 0.18) * Math.PI * 2) : 0)) };
-  };
-}
-
-/** Claw palm (propodus) along +x from the wrist at (0,0), with the fixed finger on the inner side. */
-function drawPalm(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
-  const fx = new Path2D();
-  fx.moveTo(0.2 * z * k, -s * 0.0 * k);
-  fx.quadraticCurveTo(0.33 * z * k, -s * 0.03 * z * k, 0.4 * z * k, s * 0.02 * z * k);
-  fx.quadraticCurveTo(0.31 * z * k, -s * 0.075 * z * k, 0.19 * z * k, -s * 0.07 * z * k);
-  fx.closePath();
-  fillOut(g, fx, grad(g, k, shade(pal.light, -0.05), pal.deep, 0.2 * z, -0.07, 0.4 * z, 0.02), o * 0.9);
-  const h = profilePath([0.27, 0, 0.255, 0.06, 0.19, 0.1, 0.08, 0.1, 0.01, 0.065, -0.01, 0], k * z);
-  raised(g, h, grad(g, k, shade(pal.light, 0.12), pal.dark, 0.05 * z, -0.1 * z, 0.25 * z, 0.1 * z), o, k, 1.2, 0.012, 0.5);
-  stripe(g, [0.12 * z, s * 0.07 * z, 0.23 * z, s * 0.05 * z], k, pal.accent, o);
-  for (const x of [0.2, 0.235]) dot(g, x * z * k, -s * 0.03 * z * k, 0.008 * k, 'rgba(0,0,0,0.5)');
-}
-
-/** Movable finger (dactyl), pivot at its root. */
-function drawFinger(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
-  const f = new Path2D();
-  f.moveTo(-0.01 * k * z, -s * 0.03 * k * z);
-  f.quadraticCurveTo(0.1 * k * z, -s * 0.03 * k * z, 0.17 * k * z, -s * 0.075 * k * z);
-  f.quadraticCurveTo(0.11 * k * z, s * 0.035 * k * z, -0.01 * k * z, s * 0.035 * k * z);
-  f.closePath();
-  fillOut(g, f, grad(g, k, shade(pal.light, 0.05), pal.deep, 0, -0.03, 0.15 * z, 0.03), o * 0.9);
-  for (const x of [0.05, 0.1]) spike(g, x * k * z, -s * 0.02 * k * z, -s * 1.5, 0.025 * k * z, 0.008 * k, '#d8d0c0', o * 0.5);
-}
-
-const wob = (a: AnimIn, f: number, ph: number) => Math.sin(a.t * f + a.seed * 1.7 + ph);
-
-function buildParts(L: UnitLayout): PartDef[] {
-  const S = L.S;
-  const parts: PartDef[] = [];
-  switch (L.shape) {
     case 'mantis':
       for (const s of [-1, 1]) {
         parts.push({

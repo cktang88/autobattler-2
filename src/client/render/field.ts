@@ -126,6 +126,11 @@ const forwardAngle = (side: Side) => (side === 0 ? -Math.PI / 2 : Math.PI / 2);
  * Draws the battlefield on a canvas. The viewer's side is always at the bottom (side 1 sees the
  * field rotated 180°). Handles devicePixelRatio and fits the whole field into the canvas.
  */
+/** max camera shake offset, CSS px (only reached when zoomed in close) */
+const SHAKE_CAP = 2.5;
+/** max full-screen flash opacity */
+const FLASH_CAP = 0.25;
+
 export class FieldView {
   canvas: HTMLCanvasElement;
   viewerSide: Side;
@@ -139,6 +144,9 @@ export class FieldView {
   readonly controls: CameraControls;
   /** when true a small scale bar is drawn in the bottom-left corner */
   scaleBar = true;
+  /** accessibility multipliers (0..1) for camera shake and full-screen flashes (settings: "Screen shake", "Flashes") */
+  shakeScale = 1;
+  flashScale = 1;
   /** show every HP/shield bar permanently (otherwise bars appear for a few seconds after damage, or while Alt is held) */
   alwaysShowHealth = false;
   /** Alt held (Zero-K style "show all bars"), tracked only when controls are interactive */
@@ -600,8 +608,7 @@ export class FieldView {
     }
 
     const g = this.g;
-    const tr = this.fx.trauma * this.fx.trauma;
-    const sx = tr ? (Math.random() * 2 - 1) * tr * 7 : 0, sy = tr ? (Math.random() * 2 - 1) * tr * 7 : 0;
+    const { sx, sy } = this.shakeOffset();
     this.drawGround(false, sx, sy);
     const px = this.spritePx;
 
@@ -657,14 +664,32 @@ export class FieldView {
     this.drawScaleBar();
   }
 
-  /** Full-screen white-out for titan weapon moments (nuke, mass driver, doomsday, titan deaths). */
+  /**
+   * Camera shake (CSS px). Photosensitivity-safe: none at the fit / zoomed-out view, ramping in only when zoomed in
+   * close, hard-capped at SHAKE_CAP px no matter how many sources stack (trauma saturates at 1), and driven by smooth
+   * low-frequency sines (2-5 Hz) instead of per-frame random jitter.
+   */
+  private shakeOffset(): { sx: number; sy: number } {
+    const tr = this.fx.trauma * this.fx.trauma;
+    if (tr <= 0.001 || this.shakeScale <= 0) return { sx: 0, sy: 0 };
+    const z = this.cam.k / this.cam.minK;
+    const zf = Math.max(0, Math.min(1, (z - 1.6) / 2.4));
+    const amp = SHAKE_CAP * Math.min(1, tr) * zf * Math.max(0, Math.min(1, this.shakeScale));
+    if (amp <= 0.01) return { sx: 0, sy: 0 };
+    const t = this.time;
+    const nx = Math.sin(t * 2 * Math.PI * 3.1) * 0.6 + Math.sin(t * 2 * Math.PI * 4.7 + 1.3) * 0.4;
+    const ny = Math.sin(t * 2 * Math.PI * 2.6 + 0.7) * 0.6 + Math.sin(t * 2 * Math.PI * 4.3 + 2.1) * 0.4;
+    return { sx: nx * amp, sy: ny * amp };
+  }
+
+  /** Full-screen flash for titan weapon moments (nuke, mass driver, doomsday, titan deaths): soft, short, rate-limited. */
   private drawFlash(): void {
-    const a = this.fx.flashA;
+    const a = this.fx.flashA * Math.max(0, Math.min(1, this.flashScale));
     if (a <= 0.01) return;
     const g = this.g;
     g.save();
     g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = Math.min(0.85, a * 0.8);
+    g.globalAlpha = Math.min(FLASH_CAP, a * FLASH_CAP);
     g.fillStyle = this.fx.flashC;
     g.fillRect(0, 0, this.cssW, this.cssH);
     g.restore();
@@ -962,7 +987,7 @@ export class FieldView {
             g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.9, y - sn * 0.9); g.stroke();
             if (t && Math.random() < dt * 30) this.fx.ring(x, y, 0.05, 0.4, '#40ffc0', 0.3, 0.5);
           } else if (vis === 'flak') {
-            const blink = Math.sin(this.time * 40 + p.id) > 0 ? 1 : 0.5;
+            const blink = 0.75 + 0.25 * Math.sin(this.time * 12 + p.id);
             g.globalAlpha = blink;
             g.drawImage(softDot('#ffd080', 0.3), x - 0.12, y - 0.12, 0.24, 0.24);
           } else {

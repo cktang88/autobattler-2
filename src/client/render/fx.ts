@@ -68,6 +68,7 @@ export class Fx {
     this.decals.length = 0;
     this.trauma = 0;
     this.flashA = 0;
+    this.lastFlashT = -9;
     if (this.decalCanvas) ctx2d(this.decalCanvas).clearRect(0, 0, this.decalCanvas.width, this.decalCanvas.height);
   }
 
@@ -95,9 +96,13 @@ export class Fx {
 
   /** Blinding full-screen flash. */
   flash(a: number, color = '#ffffff'): void {
-    if (a >= this.flashA) this.flashC = color;
+    // photosensitivity: at most one full-screen flash per second globally (no strobing / double flashes)
+    if (this.time - this.lastFlashT < 1) return;
+    this.lastFlashT = this.time;
+    this.flashC = color;
     this.flashA = Math.min(1, Math.max(this.flashA, a));
   }
+  private lastFlashT = -9;
 
   /* ---------------------------------------------------------------------------------------- spawners */
 
@@ -391,8 +396,8 @@ export class Fx {
         for (const l of due) l.fn();
       }
     }
-    this.trauma = Math.max(0, this.trauma - dt * 1.6);
-    this.flashA = Math.max(0, this.flashA - dt * (this.flashA > 0.5 ? 2.2 : 3.2));
+    this.trauma = Math.max(0, this.trauma - dt * 2.4);
+    this.flashA = Math.max(0, this.flashA - dt * 4);
     const P = this.parts;
     for (let i = P.length - 1; i >= 0; i--) {
       const p = P[i];
