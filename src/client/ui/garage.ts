@@ -338,7 +338,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
       sfx('click');
       update();
-    }, { title: 'Targeting priority', custom: false }));
+    }, { custom: false }));
   }
 
   function renderHeader() {

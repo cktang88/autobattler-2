@@ -4,7 +4,7 @@ import { h } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { drawUnitPreview } from '../render/field.ts';
 import { computeStats } from '../../shared/stats.ts';
-import { TARGET_PRIORITIES, type Design, type Side, type TargetPriority, type UnitBehavior } from '../../shared/types.ts';
+import { START_DELAYS, STANCES, TARGET_PRIORITIES, type Design, type Side, type Stance, type TargetPriority, type UnitBehavior } from '../../shared/types.ts';
 
 export interface ModalHandle { close(): void; el: HTMLElement }
 
@@ -63,40 +63,99 @@ export function safeStats(d: Design) {
   try { return computeStats(d); } catch { return null; }
 }
 
-// ---- battle AI settings (targeting / formation / kite): shared by the match screen and the garage ----
+// ---- battle AI settings: shared by the match screen (per block) and the garage (design defaults) ----
 export const TARGET_INFO: Record<TargetPriority, { icon: string; label: string; tip: string }> = {
-  closest: { icon: '◉', label: 'Closest', tip: 'Closest: shoot the nearest enemy (default)' },
-  farthest: { icon: '◌', label: 'Farthest', tip: 'Farthest: shoot the most distant enemy in range' },
-  threat: { icon: '↩', label: 'Threat', tip: 'Threat (retaliate): shoot whoever last damaged this unit or its squad, else the closest' },
-  lowestHp: { icon: '▾', label: 'Low HP', tip: 'Lowest HP: finish off the weakest enemy in range' },
-  highestHp: { icon: '▴', label: 'High HP', tip: 'Highest HP: focus the toughest enemy in range' },
-  highestDps: { icon: '✶', label: 'High DPS', tip: 'Highest DPS: prioritise the enemy with the most damage output' },
-  lowestDps: { icon: '✧', label: 'Low DPS', tip: 'Lowest DPS: prioritise the enemy with the least damage output' },
+  closest: { icon: '◉', label: 'Closest', tip: 'Shoot the nearest enemy (default)' },
+  farthest: { icon: '◌', label: 'Farthest', tip: 'Shoot the most distant enemy in range' },
+  threat: { icon: '↩', label: 'Threat (retaliate)', tip: 'Shoot whoever last damaged this unit or its squad, else the closest' },
+  lowestHp: { icon: '▾', label: 'Lowest HP', tip: 'Finish off the weakest enemy in range' },
+  highestHp: { icon: '▴', label: 'Highest HP', tip: 'Focus the toughest enemy in range' },
+  highestDps: { icon: '✶', label: 'Highest DPS', tip: 'Prioritise the enemy with the most damage output' },
+  lowestDps: { icon: '✧', label: 'Lowest DPS', tip: 'Prioritise the enemy with the least damage output' },
+  aircraft: { icon: '✈', label: 'Aircraft', tip: 'Aircraft first (falls back to ground targets)' },
+  armored: { icon: '▣', label: 'Armored', tip: 'Highest armor first' },
+  longestRange: { icon: '➶', label: 'Longest range', tip: 'Hunt artillery and snipers: longest weapon range first' },
+  support: { icon: '✚', label: 'Support', tip: 'Repair, shields, uplinks, jammers and sensors first' },
+  valuable: { icon: '◆', label: 'Most valuable', tip: 'Highest unit cost first' },
+  swarm: { icon: '∴', label: 'Swarm', tip: 'Smallest / cheapest first: clear out swarms' },
 };
-export type Orders = { target: TargetPriority; hold: boolean; kite: boolean };
-export const DEFAULT_ORDERS: Orders = { target: 'closest', hold: false, kite: false };
+export const STANCE_INFO: Record<Stance, { label: string; tip: string }> = {
+  advance: { label: 'Advance', tip: 'Approach and engage (default)' },
+  holdPos: { label: 'Hold position', tip: 'Never move: fire from where placed' },
+  charge: { label: 'Charge', tip: 'Never stop to shoot: close to contact' },
+  flankLeft: { label: 'Flank left', tip: 'Swing wide along your left side before turning in' },
+  flankRight: { label: 'Flank right', tip: 'Swing wide along your right side before turning in' },
+};
+export type Orders = {
+  target: TargetPriority; focus: boolean; stance: Stance; kite: boolean; hold: boolean; delay: number; retreat: boolean;
+};
+export const DEFAULT_ORDERS: Orders = { target: 'closest', focus: false, stance: 'advance', kite: false, hold: false, delay: 0, retreat: false };
 export const ordersOf = (b: UnitBehavior | undefined): Orders => ({
-  target: b?.target && TARGET_PRIORITIES.includes(b.target) ? b.target : 'closest', hold: !!b?.hold, kite: !!b?.kite,
+  target: b?.target && TARGET_PRIORITIES.includes(b.target) ? b.target : 'closest',
+  focus: !!b?.focus,
+  stance: b?.stance && STANCES.includes(b.stance) ? b.stance : 'advance',
+  kite: !!b?.kite,
+  hold: !!b?.hold,
+  delay: (START_DELAYS as readonly number[]).includes(b?.delay ?? 0) ? (b?.delay ?? 0) : 0,
+  retreat: !!b?.retreat,
 });
-export const isCustomOrders = (o: Orders) => o.target !== DEFAULT_ORDERS.target || o.hold || o.kite;
+export const ordersEqual = (a: Orders, b: Orders) => (Object.keys(DEFAULT_ORDERS) as (keyof Orders)[]).every((k) => a[k] === b[k]);
+export const isCustomOrders = (o: Orders) => !ordersEqual(o, DEFAULT_ORDERS);
 /** compact form: only non-default fields (what Placement / Design.behavior store) */
-export const orderFields = (o: Orders): UnitBehavior => ({ ...(o.target !== 'closest' ? { target: o.target } : {}), ...(o.hold ? { hold: true } : {}), ...(o.kite ? { kite: true } : {}) });
+export const orderFields = (o: Orders): UnitBehavior => ({
+  ...(o.target !== 'closest' ? { target: o.target } : {}),
+  ...(o.focus ? { focus: true } : {}),
+  ...(o.stance !== 'advance' ? { stance: o.stance } : {}),
+  ...(o.kite ? { kite: true } : {}),
+  ...(o.hold ? { hold: true } : {}),
+  ...(o.delay ? { delay: o.delay } : {}),
+  ...(o.retreat ? { retreat: true } : {}),
+});
 
-/** Targeting priority + (squads) formation + kite. `title` heads the control; `custom` marks non-default values. */
-export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void, opts: { title?: string; custom?: boolean } = {}): HTMLElement {
-  const toggle = (label: string, tip: string, v: boolean, key: 'hold' | 'kite', yes: string, no: string) => h('div.hold-row', null,
-    h('span', { title: tip }, label),
-    h('div.sp-segs.two', { role: 'group', 'aria-label': label },
-      h('button.seg', { type: 'button', class: v ? 'on' : null, title: tip, 'data-orders': `${key}-on`, onclick: () => on({ [key]: true }) }, yes),
-      h('button.seg', { type: 'button', class: !v ? 'on' : null, 'data-orders': `${key}-off`, onclick: () => on({ [key]: false }) }, no),
-    ));
+export interface EscortUi { label: string | null; picking: boolean; onPick(): void; onClear(): void }
+
+/** Compact battle-AI panel. Targeting (priority + focus fire) / Movement (stance, kite, keep spread, delay, retreat, escort). */
+export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void,
+  opts: { custom?: boolean; escort?: EscortUi } = {}): HTMLElement {
+  const chip = (label: string, tip: string, v: boolean, key: keyof Orders) => h('button.chip', {
+    type: 'button', class: v ? 'on' : null, 'aria-pressed': String(v), title: tip, 'data-orders': String(key), onclick: () => on({ [key]: !v }),
+  }, label);
+  const sel = <T extends string>(label: string, value: T, items: { v: T; text: string; tip: string }[], key: keyof Orders, tipOf: string) => {
+    const el = h('select.ord-sel', { 'aria-label': label, 'data-orders': String(key), title: tipOf, onchange: () => on({ [key]: el.value }) },
+      ...items.map((it) => h('option', { value: it.v, title: it.tip, selected: it.v === value }, it.text)));
+    el.value = value;
+    return el as HTMLSelectElement;
+  };
+  const tgt = sel('Targeting priority', o.target,
+    TARGET_PRIORITIES.map((t) => ({ v: t, text: `${TARGET_INFO[t].icon} ${TARGET_INFO[t].label}`, tip: TARGET_INFO[t].tip })), 'target', TARGET_INFO[o.target].tip);
+  const stance = sel('Stance', o.stance,
+    STANCES.map((t) => ({ v: t, text: STANCE_INFO[t].label, tip: STANCE_INFO[t].tip })), 'stance', STANCE_INFO[o.stance].tip);
+  const esc = opts.escort;
   return h('div.orders', null,
-    h('div.sp-head', null, h('span', null, opts.title ?? 'Targeting'), opts.custom !== false && isCustomOrders(o) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
-    h('div.tgt-grid', { role: 'group', 'aria-label': 'Targeting priority' }, ...TARGET_PRIORITIES.map((t) => h('button.tgt', {
-      type: 'button', class: t === o.target ? 'on' : null, 'aria-pressed': String(t === o.target), title: TARGET_INFO[t].tip, 'data-target': t,
-      onclick: () => on({ target: t }),
-    }, h('i', null, TARGET_INFO[t].icon), TARGET_INFO[t].label))),
-    squad ? toggle('Formation', 'Keep spread: units hold their deployed spacing while moving. Close in: units move freely toward the enemy.', o.hold, 'hold', 'Keep spread', 'Close in') : null,
-    toggle('Range', 'Kite: stay at maximum weapon range and back away from enemies that close in', o.kite, 'kite', 'Kite', 'Stand'),
+    h('div.sp-head', null, h('span', null, 'Battle orders'), opts.custom !== false && isCustomOrders(o) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
+    h('div.ord-group', null,
+      h('div.ord-title', null, 'Targeting'),
+      h('div.ord-row', null, tgt, chip('Focus fire', 'Prefer the target nearby allies are already shooting', o.focus, 'focus')),
+    ),
+    h('div.ord-group', null,
+      h('div.ord-title', null, 'Movement'),
+      h('div.ord-row', null, stance),
+      h('div.ord-row.chips', null,
+        chip('Kite', 'Stay at maximum weapon range and back away from enemies that close in', o.kite, 'kite'),
+        squad ? chip('Keep spread', 'Squad units hold their deployed spacing while moving', o.hold, 'hold') : null,
+        chip('Retreat', 'Below 30% HP fall back toward your lines or repair; return above 70%', o.retreat, 'retreat'),
+      ),
+      h('div.hold-row', null,
+        h('span', { title: 'Wait before moving; weapons still fire at anything in range' }, 'Start delay'),
+        h('div.sp-segs.four', { role: 'group', 'aria-label': 'Start delay' }, ...START_DELAYS.map((d) => h('button.seg', {
+          type: 'button', class: d === o.delay ? 'on' : null, 'data-delay': String(d), onclick: () => on({ delay: d }),
+        }, d ? `${d}s` : 'None'))),
+      ),
+      esc ? h('div.ord-row.escort', null,
+        h('button.chip', { type: 'button', class: esc.picking ? 'on' : null, title: 'Pick a friendly block to stay close to and protect', 'data-orders': 'escort', onclick: () => esc.onPick() },
+          esc.picking ? 'Click a friendly block…' : 'Escort…'),
+        esc.label ? h('span.esc-label', null, `→ ${esc.label}`, h('button.chip.x', { type: 'button', title: 'Stop escorting', onclick: () => esc.onClear() }, '✕')) : null,
+      ) : null,
+    ),
   );
 }

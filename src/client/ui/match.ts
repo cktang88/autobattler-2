@@ -15,7 +15,7 @@ import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../sha
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
-import { confirmModal, ordersControl, ordersOf, orderFields, paintPreview, sizeLabel, type Orders } from './match-ui.ts';
+import { confirmModal, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, sizeLabel, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
@@ -344,24 +344,45 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     shopSpacingEl.classList.toggle('hidden', !squad);
   }
 
+  function escortUi(sl: NonNullable<Sel>): EscortUi {
+    const e = blockEscort(sl);
+    const tp = e != null ? place.find((x) => x.uid === e) ?? me().board.find((x) => x.uid === e) : undefined;
+    return {
+      label: e != null ? designOf(side, tp?.designId ?? '')?.name ?? `#${e}` : null,
+      picking: escortPick?.uid === sl.uid && escortPick.pending === sl.pending,
+      onPick: () => { escortPick = escortPick?.uid === sl.uid ? null : sl; renderAll(); },
+      onClear: () => setBlockOrders(sl, { escort: -1 }),
+    };
+  }
+  type OrdersPatch = Partial<Orders> & { escort?: number }; // escort -1 = clear
+  const blockSrc = (sl: NonNullable<Sel>) => (sl.pending ? place.find((x) => x.uid === sl.uid) : m.players[sl.side].board.find((x) => x.uid === sl.uid));
   const blockOrders = (sl: NonNullable<Sel>): Orders | null => {
-    const p = sl.pending ? place.find((x) => x.uid === sl.uid) : m.players[sl.side].board.find((x) => x.uid === sl.uid);
+    const p = blockSrc(sl);
     if (!p) return null;
     const c = sl.pending ? undefined : cfg.get(p.uid);
-    return ordersOf({ target: c?.target ?? p.target, hold: c?.hold ?? p.hold, kite: c?.kite ?? p.kite });
+    return ordersOf({ ...p, ...(c ?? {}) });
   };
+  const blockEscort = (sl: NonNullable<Sel>): number | undefined => {
+    const p = blockSrc(sl);
+    if (!p) return undefined;
+    const e = sl.pending ? p.escort : cfg.get(p.uid)?.escort ?? p.escort;
+    return e != null && e >= 0 ? e : undefined;
+  };
+  let escortPick: NonNullable<Sel> | null = null;
 
-  /** change targeting / formation of one of my blocks (pending: stored on the placement, locked: via `configure`) */
-  function setBlockOrders(sl: NonNullable<Sel>, patch: Partial<Orders>) {
+  /** change battle orders of one of my blocks (pending: stored on the placement, locked: via `configure`) */
+  function setBlockOrders(sl: NonNullable<Sel>, patch: OrdersPatch) {
     if (phase !== 'deploy' || sl.side !== side) return;
     const cur = blockOrders(sl);
     if (!cur) return;
-    const next = { ...cur, ...patch };
+    const { escort: escPatch, ...op } = patch;
+    const next: Orders = { ...cur, ...op };
+    const esc = escPatch === undefined ? blockEscort(sl) : escPatch >= 0 ? escPatch : undefined;
     if (sl.pending) {
       const i = place.findIndex((x) => x.uid === sl.uid);
       if (i < 0) return;
-      const { target: _t, hold: _h, kite: _k, ...rest } = place[i];
-      const np: Placement = { ...rest, ...orderFields({ ...next, hold: next.hold && hasSpacing(sizeOf(designOf(side, rest.designId))) }) };
+      const { target: _t, hold: _h, kite: _k, focus: _f, stance: _s, delay: _d, retreat: _r, escort: _e, ...rest } = place[i];
+      const np: Placement = { ...rest, ...orderFields({ ...next, hold: next.hold && hasSpacing(sizeOf(designOf(side, rest.designId))) }), ...(esc != null ? { escort: esc } : {}) };
       const cand = action();
       cand.place[i] = np;
       const err = check(cand);
@@ -371,15 +392,20 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const base = m.players[side].board.find((x) => x.uid === sl.uid);
       if (!base) return;
       const prev = cfg.get(sl.uid);
-      const entry: UnitConfig = { uid: sl.uid, target: next.target, hold: next.hold, kite: next.kite };
-      const bo = ordersOf(base);
-      const same = next.target === bo.target && next.hold === bo.hold && next.kite === bo.kite;
+      const entry: UnitConfig = { uid: sl.uid, ...next, escort: esc ?? -1 };
+      const same = ordersEqual(next, ordersOf(base)) && (esc ?? -1) === (base.escort ?? -1);
       if (same) cfg.delete(sl.uid); else cfg.set(sl.uid, entry);
       const err = check(action());
       if (err) { if (prev) cfg.set(sl.uid, prev); else cfg.delete(sl.uid); sfx('invalid'); app.toast(err, 'error'); return; }
     }
     sfx('click');
     renderAll();
+  }
+
+  function dropEscortsTo(uid: number) {
+    place = place.map((p) => { if (p.escort !== uid) return p; const { escort: _e, ...r } = p; return r; });
+    for (const [k, c] of cfg) if (c.escort === uid) { const b = m.players[side].board.find((x) => x.uid === k); if (b?.escort != null && b.escort >= 0) c.escort = -1; else cfg.delete(k); }
+    for (const b of m.players[side].board) if (b.escort === uid && !cfg.has(b.uid)) cfg.set(b.uid, { uid: b.uid, ...ordersOf(b), escort: -1 });
   }
 
   function setCardSpacing(v: number) {
@@ -426,7 +452,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function renderHint() {
     let t = '';
-    if (phase === 'deploy') {
+    if (phase === 'deploy' && escortPick) t = 'Click a friendly block to escort · Esc to cancel';
+    else if (phase === 'deploy') {
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing' : ''} · Esc to cancel`;
       else t = place.length ? 'Tap a new block to adjust or remove it · tap your units to upgrade' : 'Pick a unit card, then tap your zone to deploy';
@@ -508,13 +535,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         st.shield ? stat('Shield', String(st.shield)) : null,
         st.heal ? stat('Repair', `${st.heal}/s`) : null,
       ),
-      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); })) : '',
+      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s) } : {})) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null)) : '',
       h('div.parts', null, parts),
       loadout.length ? h('div.loadout', null, h('div.lo-title', null, 'Loadout'), h('ul', null, ...loadout)) : '',
       actions.length ? h('div.actions', null, ...actions) : '',
     );
     infoEl.classList.remove('hidden');
+    infoEl.classList.toggle('picking', !!escortPick);
     requestAnimationFrame(() => paintPreview(prev, d, mine ? 0 : 1));
   }
 
@@ -627,6 +655,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function removePending(uid: number) {
     place = place.filter((p) => p.uid !== uid);
+    dropEscortsTo(uid);
     ops = ops.filter((o) => !(o.kind === 'place' && o.uid === uid));
     if (sel?.pending && sel.uid === uid) sel = null;
     sfx('click');
@@ -655,7 +684,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function undo() {
     const o = ops.pop();
     if (!o) return;
-    if (o.kind === 'place') { place = place.filter((p) => p.uid !== o.uid); if (sel?.pending && sel.uid === o.uid) sel = null; }
+    if (o.kind === 'place') { place = place.filter((p) => p.uid !== o.uid); dropEscortsTo(o.uid); if (sel?.pending && sel.uid === o.uid) sel = null; }
     else { const i = upgrades.lastIndexOf(o.uid); if (i >= 0) upgrades.splice(i, 1); }
     sfx('click');
     renderAll();
@@ -767,6 +796,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return;
     }
     const hit = unitAt(px, rawY);
+    if (escortPick) {
+      const pk = escortPick;
+      escortPick = null;
+      if (hit && phase === 'deploy' && hit.side === side && !(hit.uid === pk.uid)) setBlockOrders(pk, { escort: hit.uid });
+      else { sfx('invalid'); renderAll(); }
+      return;
+    }
     if (hit && phase === 'deploy' && hit.pending && sel?.pending && sel.uid === hit.uid) { removePending(hit.uid); return; }
     sel = hit;
     if (hit) sfx('click');
@@ -788,7 +824,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     } else if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (stepSpacing(e.key === ']' ? 1 : -1)) e.preventDefault();
     } else if (e.key === 'Escape') {
-      if (selCard >= 0) { selCard = -1; hover = null; }
+      if (escortPick) escortPick = null;
+      else if (selCard >= 0) { selCard = -1; hover = null; }
       else sel = null;
       renderAll();
     } else if (e.key === ' ' || e.key === 'Enter') {
