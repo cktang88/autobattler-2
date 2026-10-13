@@ -201,7 +201,12 @@ export interface UnitStats {
   load: number;
   speed: number;
   turn: number;
+  /** supply price of one BLOCK (squadSize units), rounded via roundCost — what the player pays */
   cost: number;
+  /** model value of a single unit (unrounded) — use for per-unit value comparisons in the sim */
+  unitCost: number;
+  /** units per purchased block (grid.ts squadSize) */
+  squad: number;
   flying: boolean;
   isStatic: boolean;
   /** longest weapon range (after range bonuses) */

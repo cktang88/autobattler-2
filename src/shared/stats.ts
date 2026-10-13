@@ -1,6 +1,7 @@
 // Design -> UnitStats, plus design validation.
 
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, pairingError } from './parts.ts';
+import { squadSize } from './grid.ts';
 import type { Design, ModuleDef, UnitStats } from './types.ts';
 
 /** Above this load (weight / capacity) a design is illegal. */
@@ -223,15 +224,23 @@ export function computeStats(d: Design): UnitStats {
   if (flying) ehp *= 1.2; // only anti-air can answer it
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const cost = Math.max(10, Math.ceil((PARTS_WEIGHT * partsCost + POWER_K * power) / 5) * 5);
+  const unitCost = Math.max(10, PARTS_WEIGHT * partsCost + POWER_K * power);
+  const squad = squadSize(size);
+  const cost = roundCost(unitCost * squad);
 
   return {
     size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
-    speed: Math.round(speed * 100) / 100, turn, cost,
+    speed: Math.round(speed * 100) / 100, turn, cost, unitCost: Math.round(unitCost), squad,
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
   };
+}
+
+/** Round a supply cost to a friendly number: nearest 50 (min 50) up to 500, nearest 100 above. */
+export function roundCost(raw: number): number {
+  if (raw <= 500) return Math.max(50, Math.round(raw / 50) * 50);
+  return Math.round(raw / 100) * 100;
 }
 
 /** Level multiplier for hp and damage. */
