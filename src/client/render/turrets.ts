@@ -1555,10 +1555,10 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
       const c = Math.max(0, ch ?? 0.2);
       const cc = c * c;
       const flick = 0.85 + 0.15 * Math.sin(t * 60);
-      for (let i = 0; i < 3; i++) glowAt(-r * 0.45, (i - 1) * r * 0.62, r * (0.35 + 0.35 * cc), '#9fe8ff', 0.15 + 0.85 * c * flick);
+      for (let i = 0; i < 3; i++) glowAt(-r * 0.45, (i - 1) * r * 0.62, r * (0.5 + 0.6 * c), '#9fe8ff', 0.2 + 0.8 * c * flick);
       for (let i = 0; i < 6; i++) {
         const on = clamp(c * 7 - i, 0, 1);
-        if (on > 0) { glowAt(r * (0.73 + i * 0.5), -r * 0.6, r * 0.28, '#9fe8ff', on * flick); glowAt(r * (0.73 + i * 0.5), r * 0.6, r * 0.28, '#9fe8ff', on * flick); }
+        if (on > 0) { glowAt(r * (0.73 + i * 0.5), -r * 0.6, r * 0.42, '#bff0ff', on * flick); glowAt(r * (0.73 + i * 0.5), r * 0.6, r * 0.42, '#bff0ff', on * flick); }
       }
       g.globalCompositeOperation = 'lighter';
       g.globalAlpha = alpha * (0.3 + 0.7 * c);
@@ -1570,6 +1570,17 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
         for (const y of [-0.36, 0.36]) jag(g, r * (0.6 + ((k * 0.37) % 1) * 1.5), y * r, r * (1.6 + ((k * 0.61) % 1) * 1.6), -y * r * 0.2, k + (y > 0 ? 7 : 3), r * 0.25, '#e8faff', Math.max(1 / px, r * 0.035));
       }
       glowAt(r * 3.45, 0, r * (0.6 + 2.4 * cc + flash * 2.2), '#9fe8ff', 0.25 + 0.75 * c + flash);
+      if (c > 0.25) {
+        // wide charge bloom + an energy ring collapsing onto the muzzle
+        glowAt(r * 3.0, 0, r * (1.5 + 4 * c), '#6ad8ff', 0.2 + 0.6 * c);
+        glowAt(r * 1.8, 0, r * (1.2 + 2 * c), '#9fe8ff', 0.15 + 0.5 * c);
+        g.globalCompositeOperation = 'lighter';
+        const f = (t * 2.5) % 1;
+        g.globalAlpha = alpha * c * f;
+        g.strokeStyle = '#cff4ff';
+        g.lineWidth = Math.max(1.5 / px, r * 0.12 * c);
+        g.beginPath(); g.arc(r * 3.45, 0, r * (0.4 + 2.4 * (1 - f)), 0, P2); g.stroke();
+      }
       if (c > 0.7 || flash > 0.1) glowAt(r * 3.45, 0, r * (0.4 + 1.2 * cc + flash), '#ffffff', (c - 0.7) * 3 + flash);
       glowAt(r * 0.1, 0, r * (1.0 + cc), '#6ac8ff', 0.1 + 0.4 * cc);
       break;

@@ -9,7 +9,7 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
 import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
-import { GIANT_SHAPES, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
+import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
 
@@ -76,7 +76,7 @@ const MOUNT_PTS: Record<string, [number, number][]> = {
 
 const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64, G: 0.95, T: 1.1 };
 /** Turret base diameters (cells) on giant/titan hulls: big guns, but sized like real turrets on a huge hull. */
-const GIANT_D: Record<MountClass, number> = { L: 0.4, M: 0.52, H: 0.68, G: 0.86, T: 1.22 };
+const GIANT_D: Record<MountClass, number> = { L: 0.4, M: 0.52, H: 0.68, G: 0.86, T: 1.14 };
 
 const layoutCache = new Map<string, UnitLayout>();
 export const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
@@ -1089,6 +1089,16 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalAlpha = alpha * (0.45 + 0.1 * Math.sin(p.time * 9 + (p.seed ?? 0)));
     const r = 0.55 * L.S;
     g.drawImage(softDot(pal.glow), p.x - r, p.y - r, r * 2, r * 2);
+    g.globalCompositeOperation = prev;
+    g.globalAlpha = alpha;
+  }
+  // giants: a pulsing pool of team light on the ground beneath them, so the eye goes to them first
+  if (L.S >= 4 && p.cloak !== 'enemy') {
+    const prev = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = alpha * (0.16 + 0.06 * Math.sin(p.time * 2.2 + (p.seed ?? 0)));
+    const r = 0.95 * L.S;
+    g.drawImage(softDot(emis(pal)), p.x - r, p.y - r, r * 2, r * 2);
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
   }

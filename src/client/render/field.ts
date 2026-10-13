@@ -37,6 +37,9 @@ import { groundCanvas, groundRegion } from './ground.ts';
 import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
+import { titanFeet } from './giantart.ts';
+
+const P2 = Math.PI * 2;
 import {
   drawUnit, drawUnitShadow, layoutOf, muzzlePos, unitSprites, silhouette, wreckSprite,
   type MountPose, type UnitPose, type ViewDirs,
@@ -592,7 +595,18 @@ export class FieldView {
         if (lp !== undefined && ph !== lp) {
           for (const c of [0.25, 0.75]) {
             const a = lp <= ph ? lp < c && ph >= c : lp < c || ph >= c;
-            if (a && Math.abs(ph - lp) < 0.5) { this.fx.shake(0.05 + 0.02 * LL.S); this.fx.dust(p.x, p.y, 0.5 * LL.S * 0.4, 4, 0.7); }
+            if (a && Math.abs(ph - lp) < 0.5) {
+              // titan footfall: a real jolt of the camera and a dust ring where the foot came down
+              this.fx.shake(0.12 + 0.08 * LL.S);
+              const cs = Math.cos(p.angle), sn = Math.sin(p.angle);
+              for (const f of titanFeet(LL, c, false)) {
+                if (f.a > 0.25 && f.a < P2 - 0.25) continue;
+                const fx = p.x + cs * f.x - sn * f.y, fy = p.y + sn * f.x + cs * f.y;
+                this.fx.dust(fx, fy, 0.35 * LL.S * 0.4, 7, 1.0);
+                this.fx.ring(fx, fy, 0.2, 0.55 * LL.S * 0.5, '#d8c8a0', 0.45, 0.45);
+                this.fx.decal('scorch', fx, fy, 0.18 * LL.S * 0.5);
+              }
+            }
           }
         }
         vv.lastPh = ph;
@@ -1090,7 +1104,8 @@ export class FieldView {
                 const sx = -sn, sy = cs;
                 for (const k of [-0.55, 0.55]) {
                   const bx = mx + sx * k * d * 0.5, by = my + sy * k * d * 0.5;
-                  fx.star(bx + cs * 0.6, by + sn * 0.6, 2.6, '#fff0c0', e.angle, 0.16);
+                  for (let j = 0; j < 4; j++) fx.star(bx + cs * (0.4 + j * 1.1), by + sn * (0.4 + j * 1.1), 2.8 - j * 0.55, j ? '#ffc070' : '#fff0c0', e.angle, 0.14 + j * 0.03);
+                  for (const sd of [-1, 1]) for (let j = 0; j < 3; j++) fx.smoke(bx, by, 0.45, 1.6, '#8a8278', sx * sd * (2.5 + j) + cs * 0.6, sy * sd * (2.5 + j) + sn * 0.6, 0.6);
                   fx.glow(bx + cs * 0.8, by + sn * 0.8, 2.4, '#ffb060', 0.3, 0.9);
                   for (let i = 0; i < 9; i++) { const a = e.angle + (Math.random() - 0.5) * 0.7, v = 3 + Math.random() * 6; fx.fire(bx + cs * 0.3, by + sn * 0.3, 0.35 + Math.random() * 0.35, 0.35 + Math.random() * 0.25, Math.cos(a) * v, Math.sin(a) * v); }
                 }

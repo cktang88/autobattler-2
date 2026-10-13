@@ -528,20 +528,27 @@ export function giantTopLayer(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): b
   const S = L.S;
   const E = emis(pal);
   for (const s of [-1, 1]) {
-    // pauldron: big curved shoulder shell layered from three plates
-    const outer = pp([0.07, s * 0.27, 0.05, s * 0.46, -0.02, s * 0.51, -0.18, s * 0.51, -0.25, s * 0.45, -0.26, s * 0.3, -0.2, s * 0.24, 0.0, s * 0.23], S);
-    raised(g, outer, grad(g, S, shade(pal.light, 0.05), pal.dark, -0.2, s * 0.25, 0.05, s * 0.5), o, S, 1.6, 0.04, 0.8);
-    const mid = pp([0.03, s * 0.3, 0.01, s * 0.45, -0.05, s * 0.48, -0.17, s * 0.48, -0.22, s * 0.43, -0.22, s * 0.31, -0.17, s * 0.27], S);
-    bevel(g, mid, grad(g, S, shade(pal.light, 0.2), pal.body, -0.2, s * 0.28, 0.0, s * 0.48), o, 1.3);
-    const top = pp([-0.02, s * 0.33, -0.04, s * 0.43, -0.15, s * 0.44, -0.18, s * 0.33], S);
-    bevel(g, top, grad(g, S, '#ffffff55', shade(pal.body, 0.1), -0.15, s * 0.33, -0.02, s * 0.44), o, 1.2);
-    hazard(g, -0.235 * S, (s < 0 ? -0.43 : 0.33) * S, 0.035 * S, 0.1 * S, o, true);
-    rivetRow(g, 0.035 * S, s * 0.3 * S, 0.02 * S, s * 0.44 * S, 4, 0.009 * S);
-    glowLine(g, [0.045, s * 0.29, 0.02, s * 0.46, -0.02, s * 0.495, -0.17, s * 0.495], S, E, o * 1.1);
-    // shoulder lamp + team stripe
-    g.fillStyle = rgba(pal.accent, 0.9);
-    g.fillRect(-0.12 * S, (s < 0 ? -0.43 : 0.35) * S, 0.06 * S, 0.08 * S);
-    g.lineWidth = o * 0.5; g.strokeStyle = OUTLINE; g.strokeRect(-0.12 * S, (s < 0 ? -0.43 : 0.35) * S, 0.06 * S, 0.08 * S);
+    // pauldron: layered armour lames hanging outward from a heavy shoulder cap
+    const outer = new Path2D();
+    roundRect(outer, -0.27 * S, (s > 0 ? 0.24 : -0.52) * S, 0.35 * S, 0.28 * S, 0.1 * S);
+    ao(g, outer, S, 0.045, 0.85);
+    for (let k = 2; k >= 0; k--) {
+      const x0 = -0.265 + 0.025 * k, x1 = 0.075 - 0.03 * k;
+      const yc = s * (0.44 - 0.07 * k), h = 0.12 + 0.02 * k;
+      const lp = new Path2D();
+      roundRect(lp, x0 * S, (yc - h / 2) * S, (x1 - x0) * S, h * S, h * 0.45 * S);
+      const c1 = shade(pal.dark, -0.1 + 0.08 * (2 - k));
+      bevel(g, lp, grad(g, S, k === 0 ? shade(pal.light, 0.1) : shade(pal.light, -0.1 - 0.08 * k), k === 0 ? pal.body : c1, x0, yc - h / 2, x1, yc + h / 2), o, 1.3);
+      if (k > 0) rivetRow(g, (x0 + 0.04) * S, (yc + s * h * 0.3) * S, (x1 - 0.04) * S, (yc + s * h * 0.3) * S, 5, 0.008 * S);
+    }
+    // cap crest + emissive edge on the outermost lame
+    seam(g, [-0.2, s * 0.32, 0.03, s * 0.32], S, o * 1.2, 'rgba(0,0,0,0.55)');
+    seam(g, [-0.2, s * 0.315, 0.03, s * 0.315], S, o * 0.6, 'rgba(255,255,255,0.35)');
+    glowLine(g, [-0.24, s * 0.5, 0.05, s * 0.5], S, E, o * 1.2);
+    hazard(g, -0.24 * S, (s > 0 ? 0.35 : -0.39) * S, 0.03 * S, 0.04 * S, o, true);
+    g.fillStyle = rgba(pal.accent, 0.95);
+    g.beginPath(); roundRect(g, -0.08 * S, (s > 0 ? 0.345 : -0.385) * S, 0.07 * S, 0.04 * S, 0.01 * S); g.fill();
+    g.lineWidth = o * 0.5; g.strokeStyle = OUTLINE; g.stroke();
   }
   return true;
 }
@@ -560,7 +567,7 @@ export function drawBarbette(g: Ctx, x: number, y: number, r: number, pal: TeamP
   gr.addColorStop(0, METAL.light); gr.addColorStop(0.5, METAL.base); gr.addColorStop(1, METAL.deep);
   g.strokeStyle = gr; g.lineWidth = r * 0.16;
   g.beginPath(); g.arc(x, y, r * 0.88, 0, P2); g.stroke();
-  const n = Math.max(8, Math.round(r * 40 / Math.max(0.5, r * 2)));
+  const n = 12;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * P2;
     dot(g, x + Math.cos(a) * r * 0.88, y + Math.sin(a) * r * 0.88, r * 0.035, 'rgba(0,0,0,0.6)');
@@ -641,7 +648,7 @@ function giantStrips(shape: string): number[] {
     case 'goliath': return [0.21, -0.17, 0.3, -0.27, 0.21, 0.17, 0.3, 0.27, 0.1, -0.4, -0.21, -0.4, 0.1, 0.4, -0.21, 0.4];
     case 'leviathan': return [-0.4, -0.235, 0.28, -0.235, -0.4, 0.235, 0.28, 0.235];
     case 'carrier': return [0.09, -0.41, -0.03, -0.445, -0.03, -0.445, -0.28, -0.445, 0.09, 0.41, -0.03, 0.445, -0.03, 0.445, -0.28, 0.445];
-    case 'colossal': return [0.12, -0.05, 0.19, -0.15, 0.12, 0.05, 0.19, 0.15, -0.06, -0.1, -0.12, -0.21, -0.06, 0.1, -0.12, 0.21];
+    case 'colossal': return [0.12, -0.05, 0.19, -0.15, 0.12, 0.05, 0.19, 0.15, -0.06, -0.1, -0.12, -0.21, -0.06, 0.1, -0.12, 0.21, 0.04, -0.43, 0.24, -0.43, 0.04, 0.43, 0.24, 0.43];
     case 'citadel': return [-0.33, -0.345, 0.33, -0.345, -0.33, 0.345, 0.33, 0.345, -0.345, -0.25, -0.345, 0.25, 0.415, -0.085, 0.415, 0.085];
   }
   return [];
@@ -726,14 +733,14 @@ export function titanFeet(L: UnitLayout, phase: number, rest: boolean): Foot[] {
   const quad = L.shape !== 'colossal' && S >= 4;
   const colossal = L.shape === 'colossal';
   const out: Foot[] = [];
-  const stride = (quad ? 0.1 : colossal ? 0.3 : 0.2) * S;
+  const stride = (quad ? 0.1 : colossal ? 0.32 : 0.2) * S;
   const rows = quad ? [0.28, -0.28] : [colossal ? -0.02 : 0];
-  const fy = (quad ? Math.min(L.hw, 0.42) + 0.1 : colossal ? 0.2 : 0.31) * S;
+  const fy = (quad ? Math.min(L.hw, 0.42) + 0.1 : colossal ? 0.215 : 0.31) * S;
   let k = 0;
   for (const row of rows) for (const s of [-1, 1]) {
-    const diag = (k++ % 2 === 0) ? 0 : Math.PI;
+    const diag = quad && (k++ % 2 === 1) ? Math.PI : 0;
     const ph = phase * P2 + (s > 0 ? Math.PI : 0) + diag;
-    const restX = colossal ? (s > 0 ? 0.11 : -0.07) : (s > 0 ? 0.03 : -0.03);
+    const restX = colossal ? (s > 0 ? 0.27 : -0.22) : (s > 0 ? 0.03 : -0.03);
     const fx = rest ? row * S + restX * S : row * S + Math.sin(ph) * stride;
     const lift = rest ? 0 : Math.max(0, Math.cos(ph));
     const a = (((ph - Math.PI / 2) % P2) + P2) % P2;
@@ -748,7 +755,7 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
   const quad = L.shape !== 'colossal' && S >= 4;
   const colossal = L.shape === 'colossal';
   const feet = titanFeet(L, phase, rest);
-  const hipY = (quad ? Math.min(L.hw, 0.42) * 0.6 : colossal ? 0.14 : 0.2) * S;
+  const hipY = (quad ? Math.min(L.hw, 0.42) * 0.6 : colossal ? 0.15 : 0.2) * S;
   const lw = (quad ? 0.1 : colossal ? 0.13 : 0.14) * S;
   feet.forEach((f, i) => {
     const s = f.y < 0 ? -1 : 1;
@@ -808,13 +815,19 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
 }
 
 export function gravPods(S: number, hw: number): { x: number; y: number; r: number }[] {
+  if (S >= 4) {
+    // giant lifters: four big nacelles out on outriggers + two small ones mid-ship
+    const y = (Math.min(0.46, hw) + 0.1) * S, R = 0.085 * S;
+    return [
+      { x: 0.26 * S, y, r: R }, { x: 0.26 * S, y: -y, r: R }, { x: -0.3 * S, y, r: R }, { x: -0.3 * S, y: -y, r: R },
+      { x: -0.02 * S, y: y + 0.02 * S, r: R * 0.7 }, { x: -0.02 * S, y: -y - 0.02 * S, r: R * 0.7 },
+    ];
+  }
   const y = (Math.min(0.46, hw) + 0.07) * S;
-  const o = [
+  return [
     { x: 0.3 * S, y, r: 0.115 * S }, { x: 0.3 * S, y: -y, r: 0.115 * S },
     { x: -0.3 * S, y, r: 0.115 * S }, { x: -0.3 * S, y: -y, r: 0.115 * S },
   ];
-  if (S >= 4) { o.push({ x: 0, y: y + 0.02 * S, r: 0.09 * S }, { x: 0, y: -y - 0.02 * S, r: 0.09 * S }); }
-  return o;
 }
 
 export function drawGravlift(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
@@ -984,8 +997,9 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       const [wx, wy] = W(pod.x, pod.y);
       const r = pod.r * sc;
       const pulse = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.3 + seed);
-      g.globalAlpha = alpha * (0.5 + 0.25 * pulse);
-      g.drawImage(glow, wx - r * 2.1, wy - r * 2.1, r * 4.2, r * 4.2);
+      const gk = S >= 4 ? 1.6 : 2.1;
+      g.globalAlpha = alpha * (S >= 4 ? 0.3 + 0.2 * pulse : 0.5 + 0.25 * pulse);
+      g.drawImage(glow, wx - r * gk, wy - r * gk, r * gk * 2, r * gk * 2);
       g.globalAlpha = alpha * 0.7;
       g.drawImage(white, wx - r * 0.5, wy - r * 0.5, r, r);
       g.strokeStyle = E;
@@ -1025,7 +1039,7 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       g.drawImage(softDot('rgba(160,140,108,1)'), bx - r, by - r, r * 2, r * 2);
       g.strokeStyle = 'rgba(220,200,160,0.55)';
       g.lineWidth = Math.max(1.5 / px, 0.035 * S * (1 - age));
-      g.globalAlpha = alpha * (1 - age) * 0.8;
+      g.globalAlpha = alpha * (1 - age) * 0.45;
       g.beginPath(); g.arc(bx, by, r * 1.2, 0, P2); g.stroke();
     }
   }
