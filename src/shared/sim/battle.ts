@@ -67,7 +67,7 @@ const THREAT_MEMORY = 6 * TICK_RATE; // ticks a recorded attacker stays 'the thr
 const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
-const MAX_RADIUS = 2.3; // size-5 titans have radius 2.25
+const MAX_RADIUS = 3.0; // bounding radius of the largest hull (long axis * 0.45 for non-square footprints)
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
@@ -109,7 +109,19 @@ interface Wpn {
 interface Internal {
   u: SimUnit;
   wpns: (Wpn | null)[];
+  /** circle radius used for steering / separation broad-phase (0.45 * sqrt(fw*fh); 0.45 * size for squares) */
   radius: number;
+  /** non-square footprint: contact / edge-range use the oriented box */
+  elong: boolean;
+  /** half extents of the oriented box: hl along facing, hw across */
+  hl: number;
+  hw: number;
+  /** capsule used for separation: radius capR around a segment of half-length capS (along facing, or across when capAcross) */
+  capR: number;
+  capS: number;
+  capAcross: boolean;
+  /** bounding radius (centre to farthest point) */
+  bound: number;
   mass: number;
   dmgMult: number;
   speed: number;
@@ -345,7 +357,7 @@ export class Battle {
         if (!ok) continue;
         const size = computeStats(d).size;
         const sp = normSpacing(size, p.spacing);
-        const cs = placementUnitCenters(s, { x: p.x, y: p.y, spacing: sp }, size);
+        const cs = placementUnitCenters(s, { x: p.x, y: p.y, spacing: sp }, size, computeStats(d));
         let mx = 0, my = 0;
         for (const c of cs) { mx += c.x; my += c.y; }
         mx /= cs.length; my /= cs.length;
@@ -464,7 +476,9 @@ export class Battle {
     };
     this.units.push(u);
     this.ints.push({
-      u, wpns, radius: stats.size * 0.45, mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
+      u, wpns, radius: 0.45 * Math.sqrt(stats.fw * stats.fh), elong: stats.fw !== stats.fh,
+      hl: 0.45 * stats.fh, hw: 0.45 * stats.fw, capR: 0.45 * Math.min(stats.fw, stats.fh), capS: 0.45 * Math.abs(stats.fh - stats.fw),
+      capAcross: stats.fw > stats.fh, bound: 0.45 * Math.max(stats.fw, stats.fh), mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
       speed: stats.speed, turn: stats.turn,
       fireOnMove: traits.includes('fireOnMove'), strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
@@ -619,12 +633,12 @@ export class Battle {
         }
       }
       if (!visible && I.cloak === 'stealth') {
-        const cnt = this.gather(u.x, u.y, CLOAK_REVEAL + I.radius + MAX_RADIUS);
+        const cnt = this.gather(u.x, u.y, CLOAK_REVEAL + I.bound + MAX_RADIUS);
         for (let q = 0; q < cnt; q++) {
           const j = this.scratch[q];
           const o = units[j];
           if (!o.alive || o.side === u.side) continue;
-          if (Math.hypot(o.x - u.x, o.y - u.y) - I.radius - ints[j].radius <= CLOAK_REVEAL) { visible = true; break; }
+          if (this.gap(I, ints[j]) <= CLOAK_REVEAL) { visible = true; break; }
         }
       }
       u.cloaked = !visible;
@@ -765,13 +779,41 @@ export class Battle {
     return best;
   }
 
+  /** distance from a world point to the nearest point of O's oriented footprint box (0 inside) */
+  private boxDist(O: Internal, px: number, py: number): number {
+    const o = O.u;
+    const dx = px - o.x, dy = py - o.y, c = Math.cos(o.angle), sn = Math.sin(o.angle);
+    const ex = Math.max(Math.abs(dx * c + dy * sn) - O.hl, 0), ey = Math.max(Math.abs(-dx * sn + dy * c) - O.hw, 0);
+    return Math.sqrt(ex * ex + ey * ey);
+  }
+
+  /** how far an elongated unit's footprint reaches from its centre toward the direction (dx, dy) */
+  private extToward(I: Internal, dx: number, dy: number): number {
+    const phi = Math.atan2(dy, dx) - I.u.angle;
+    return Math.abs(Math.cos(phi)) * I.hl + Math.abs(Math.sin(phi)) * I.hw;
+  }
+
+  /** distance from a world point to O's edge (negative inside a round footprint) */
+  private edgeC(O: Internal, px: number, py: number): number {
+    return O.elong ? this.boxDist(O, px, py) : Math.hypot(px - O.u.x, py - O.u.y) - O.radius;
+  }
+
+  /** edge-to-edge gap between two units (center distance minus both radii for square hulls) */
+  private gap(I: Internal, O: Internal): number {
+    if (!I.elong && !O.elong) return Math.hypot(O.u.x - I.u.x, O.u.y - I.u.y) - I.radius - O.radius;
+    const ext = I.elong ? this.extToward(I, O.u.x - I.u.x, O.u.y - I.u.y) : I.radius;
+    return this.edgeC(O, I.u.x, I.u.y) - ext;
+  }
+
   private inRange(u: SimUnit, w: Wpn, t: SimUnit, mult: number): number {
     const dx = t.x - u.x, dy = t.y - u.y;
-    const lim = w.range * mult + this.ints[t.id].radius + (w.melee ? this.ints[u.id].radius : 0);
+    const T = this.ints[t.id], U = this.ints[u.id];
+    const lim = w.range * mult + T.bound + (w.melee ? U.bound : 0);
     if (dx * dx + dy * dy > lim * lim) return -1;
     const d = Math.sqrt(dx * dx + dy * dy);
-    let edge = d - this.ints[t.id].radius;
-    if (w.melee) edge -= this.ints[u.id].radius;
+    // edge-to-edge: nearest point of the target's (oriented) footprint, minus our own reach toward it for melee
+    let edge = T.elong ? this.boxDist(T, u.x, u.y) : d - T.radius;
+    if (w.melee) edge -= U.elong ? this.extToward(U, dx, dy) : U.radius;
     if (edge > w.range * mult || d < w.minRange) return -1;
     return d;
   }
@@ -810,7 +852,7 @@ export class Battle {
     // ties are broken by lowest index so the result does not depend on iteration order
     let src: ArrayLike<number> = this.liveIdx[u.side === 0 ? 1 : 0];
     let cnt = src.length;
-    const reach = w.range * mult + MAX_RADIUS + (w.melee ? I.radius : 0) + 1.5;
+    const reach = w.range * mult + MAX_RADIUS + (w.melee ? I.bound : 0) + 1.5;
     if (reach <= 12) { cnt = this.gather(u.x, u.y, reach); src = this.scratch; }
     for (let k = 0; k < cnt; k++) {
       const j = src[k];
@@ -1114,7 +1156,7 @@ export class Battle {
       const along = dx * c + dy * s;
       if (along < -0.3 || along > len + 0.3) continue;
       const perp = Math.abs(-dx * s + dy * c);
-      if (perp <= this.ints[j].radius + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
+      if (perp <= this.ints[j].bound + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
     }
     this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side });
   }
@@ -1255,7 +1297,7 @@ export class Battle {
       const id = this.scratch[q];
       const o = this.units[id];
       if (!o.alive || o.side === side || o.flying !== air) continue;
-      const d = Math.hypot(o.x - x, o.y - y) - this.ints[id].radius;
+      const d = this.edgeC(this.ints[id], x, y);
       if (d > R && id !== direct) continue;
       const f = id === direct ? 1 : 1 - (1 - SPLASH_EDGE) * Math.max(0, d) / R;
       this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult, ox, oy, cls);
@@ -1435,15 +1477,15 @@ export class Battle {
         gx = u.x + dx * lw;
         gy = u.y + dy;
         stopDist = 0;
-        if (d - I.radius - this.ints[goal.id].radius <= 0.15) return;
+        if (this.gap(I, this.ints[goal.id]) <= 0.15) return;
       } else if (!I.hasWeapon) {
         // support: stay just behind the nearest armed ally
         gx = goal.x;
         gy = clamp(goal.y - fwd * (1.6 + this.ints[goal.id].radius), I.radius, FIELD_H - I.radius);
         stopDist = 0.6;
         // close enough to the ally already: don't shove it around
-        if (d - I.radius - this.ints[goal.id].radius <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
-      } else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius < 0.7 * I.kiteRange) {
+        if (this.gap(I, this.ints[goal.id]) <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
+      } else if (kiteOn && !I.meleeOnly && this.edgeC(this.ints[goal.id], u.x, u.y) < 0.7 * I.kiteRange) {
         // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
         if (!I.fireOnMove && I.wpns.some((w, wi) => w && w.heal <= 0 && u.mounts[wi].cooldown <= 0.15 && u.mounts[wi].target >= 0)) return;
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
@@ -1453,7 +1495,7 @@ export class Battle {
         // flank: swing out to the owner's left/right edge, run along it, then turn in
         if ((I.stance === 'flankLeft' || I.stance === 'flankRight') && !I.flankDone) {
           const past = fwd < 0 ? u.y < FIELD_H / 2 : u.y > FIELD_H / 2;
-          if (engaged || past || d - this.ints[goal.id].radius <= FLANK_TURN_IN * I.maxRange) I.flankDone = true;
+          if (engaged || past || this.edgeC(this.ints[goal.id], u.x, u.y) <= FLANK_TURN_IN * I.maxRange) I.flankDone = true;
           else {
             // owner's left is -x for side 0 and +x for side 1
             const leftX = u.side === 0 ? -1 : 1;
@@ -1492,11 +1534,11 @@ export class Battle {
         gx = u.x + hx * lw;
         gy = u.y + hy;
         stopDist = 0;
-        if (charge) wantMove = I.meleeOnly || d - this.ints[goal.id].radius > CHARGE_GUN_FRAC * engageR;
-        else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius <= 0.9 * I.kiteRange) wantMove = false;
+        if (charge) wantMove = I.meleeOnly || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
+        else if (kiteOn && !I.meleeOnly && this.edgeC(this.ints[goal.id], u.x, u.y) <= 0.9 * I.kiteRange) wantMove = false;
         else if (engaged && (!I.fireOnMove || I.meleeOnly)) wantMove = false;
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
-        else if (I.fireOnMove && engageR > 2.5 && d - this.ints[goal.id].radius <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
+        else if (I.fireOnMove && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
         else wantMove = true;
         if (!wantMove) {
           // face the fight while holding
@@ -1567,7 +1609,7 @@ export class Battle {
   /** Steering offset (radians) to slip around allies (or emplacements) that block the way ahead. */
   private avoid(I: Internal, dirX: number, dirY: number, goalId: number): number {
     const u = I.u;
-    const look = I.radius + MAX_RADIUS + 0.8;
+    const look = I.bound + MAX_RADIUS + 0.8;
     const cnt = this.gather(u.x, u.y, look);
     let best = Infinity, bestPerp = 0, bestClear = 1;
     const mySpeed = I.speed * 0.5;
@@ -1684,6 +1726,34 @@ export class Battle {
     return n;
   }
 
+  private capSeg = { d: 0, nx: 0, ny: 0 };
+  /** closest distance between the core segments of two capsules, with the unit vector from A's point to B's point */
+  private capsuleSep(A: Internal, B: Internal, a: SimUnit, b: SimUnit): { d: number; nx: number; ny: number } {
+    const ar = A.capAcross ? a.angle + Math.PI / 2 : a.angle, br = B.capAcross ? b.angle + Math.PI / 2 : b.angle;
+    const ux = Math.cos(ar) * A.capS, uy = Math.sin(ar) * A.capS, vx = Math.cos(br) * B.capS, vy = Math.sin(br) * B.capS;
+    // segments P(s) = a + s*u, Q(t) = b + t*v with s,t in [-1,1]
+    const wx = a.x - b.x, wy = a.y - b.y;
+    const uu = ux * ux + uy * uy, vv = vx * vx + vy * vy, uv = ux * vx + uy * vy;
+    const uw = ux * wx + uy * wy, vw = vx * wx + vy * wy;
+    const den = uu * vv - uv * uv;
+    let sp = 0, tp = 0;
+    if (uu < 1e-9 && vv < 1e-9) { sp = 0; tp = 0; }
+    else if (uu < 1e-9) { tp = clamp(vw / vv, -1, 1); }
+    else if (vv < 1e-9) { sp = clamp(-uw / uu, -1, 1); }
+    else {
+      sp = den > 1e-9 ? clamp((uv * vw - vv * uw) / den, -1, 1) : 0;
+      tp = clamp((uv * sp + vw) / vv, -1, 1);
+      sp = clamp((uv * tp - uw) / uu, -1, 1);
+    }
+    const px = a.x + ux * sp, py = a.y + uy * sp, qx = b.x + vx * tp, qy = b.y + vy * tp;
+    let ddx = qx - px, ddy = qy - py;
+    const dd = Math.sqrt(ddx * ddx + ddy * ddy);
+    const r = this.capSeg;
+    if (dd < 1e-6) { ddx = b.x - a.x; ddy = b.y - a.y; const l = Math.sqrt(ddx * ddx + ddy * ddy); if (l < 1e-6) { r.nx = 1; r.ny = 0; } else { r.nx = ddx / l; r.ny = ddy / l; } r.d = 0; }
+    else { r.nx = ddx / dd; r.ny = ddy / dd; r.d = dd; }
+    return r;
+  }
+
   private separate(): void {
     const units = this.units;
     const ints = this.ints;
@@ -1694,7 +1764,7 @@ export class Battle {
       const A = ints[i];
       if (A.leapT >= 0) continue;
       const ccx = clamp(Math.floor(a.x / CELL), 0, HCOLS - 1), ccy = clamp(Math.floor(a.y / CELL), 0, HROWS - 1);
-      const reach = Math.max(1, Math.ceil((A.radius + MAX_RADIUS) / CELL));
+      const reach = Math.max(1, Math.ceil((A.bound + MAX_RADIUS) / CELL));
       for (let cy = Math.max(0, ccy - reach); cy <= Math.min(HROWS - 1, ccy + reach); cy++) {
         for (let cx = Math.max(0, ccx - reach); cx <= Math.min(HCOLS - 1, ccx + reach); cx++) {
           for (let j = head[cy * HCOLS + cx]; j >= 0; j = next[j]) {
@@ -1706,9 +1776,19 @@ export class Battle {
             if (A.strafe || B.strafe) continue; // jets pass through each other
             let dx = b.x - a.x, dy = b.y - a.y;
             let rr = A.radius + B.radius;
-            if (A.hold && B.hold && A.block === B.block) rr = Math.max(rr, Math.min(2.9, A.sepMin) * 0.95);
-            const d2 = dx * dx + dy * dy;
-            if (d2 >= rr * rr) continue;
+            let d2 = dx * dx + dy * dy;
+            if (A.elong || B.elong) {
+              // capsule vs capsule: separate along the closest points of the two core segments
+              const bb = A.bound + B.bound;
+              if (d2 >= bb * bb) continue;
+              const cd = this.capsuleSep(A, B, a, b);
+              if (cd.d >= A.capR + B.capR) continue;
+              rr = A.capR + B.capR;
+              dx = cd.nx * cd.d; dy = cd.ny * cd.d; d2 = cd.d * cd.d;
+            } else {
+              if (A.hold && B.hold && A.block === B.block) rr = Math.max(rr, Math.min(2.9, A.sepMin) * 0.95);
+              if (d2 >= rr * rr) continue;
+            }
             let d = Math.sqrt(d2);
             if (d < 1e-6) {
               // deterministic nudge

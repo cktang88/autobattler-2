@@ -26,10 +26,10 @@ function demoInput(seed: number): BattleInput | null {
       const st = computeStats(d);
       if (st.cost > budget) continue;
       const spacing = hasSpacing(st.size) ? Math.floor(rng() * (MAX_SPACING + 1)) : 0;
-      const dim = blockDims(st.size, spacing);
+      const dim = blockDims(st.size, spacing, st);
       const x = Math.floor(rng() * (DEPLOY_W - dim.w + 1));
       const y = Math.floor(rng() * (DEPLOY_D - dim.h + 1));
-      if (out.some((p) => blocksOverlap({ x, y, spacing }, st.size, p, sizeOf(designs, p.designId)))) continue;
+      if (out.some((p) => blocksOverlap({ x, y, spacing }, st.size, p, sizeOf(designs, p.designId), st, footOf(designs, p.designId)))) continue;
       out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rng() * 2), round: 1, ...(spacing ? { spacing } : {}) });
       budget -= st.cost;
     }
@@ -38,6 +38,10 @@ function demoInput(seed: number): BattleInput | null {
   return { seed, sides: [{ designs, units: mk() }, { designs, units: mk() }] };
 }
 
+function footOf(designs: Design[], id: string): { fw: number; fh: number } | undefined {
+  const d = designs.find((x) => x.id === id);
+  return d ? computeStats(d) : undefined;
+}
 function sizeOf(designs: Design[], id: string): Size {
   const d = designs.find((x) => x.id === id);
   return d ? computeStats(d).size : 1;
@@ -48,7 +52,7 @@ function boardUnits(input: BattleInput): BoardUnit[] {
     for (const p of s.units) {
       const d = s.designs.find((x) => x.id === p.designId);
       if (!d) continue;
-      for (const c of placementUnitCenters(side as Side, p, computeStats(d).size)) out.push({ side: side as Side, design: d, x: c.x, y: c.y, level: p.level });
+      for (const c of placementUnitCenters(side as Side, p, computeStats(d).size, computeStats(d))) out.push({ side: side as Side, design: d, x: c.x, y: c.y, level: p.level });
     }
   });
   return out;

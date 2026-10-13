@@ -10,7 +10,8 @@ import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUn
 import { applyViewSettings, loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters } from '../../shared/grid.ts';
+import type { UnitFoot } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
@@ -31,10 +32,10 @@ export function worldToLocalRect(side: Side, col: number, row: number, w: number
 const lastSpacing = new Map<string, number>();
 
 /** Tiny diagram of a squad (8 x 2 units) at the given spacing, plus the footprint in metres. */
-function spacingDiagram(spacing: number): SVGElement {
+function spacingDiagram(spacing: number, foot?: UnitFoot): SVGElement {
   const NS = 'http://www.w3.org/2000/svg';
-  const { w: cw, h: ch } = blockDims(1, spacing);
-  const px = 4;
+  const { w: cw, h: ch } = blockDims(1, spacing, foot);
+  const px = Math.max(1.5, Math.min(4, 120 / cw));
   const svg = document.createElementNS(NS, 'svg');
   const W = cw * px, H = ch * px;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -46,26 +47,25 @@ function spacingDiagram(spacing: number): SVGElement {
   r.setAttribute('x', '0.5'); r.setAttribute('y', '0.5'); r.setAttribute('width', String(W - 1)); r.setAttribute('height', String(H - 1));
   r.setAttribute('class', 'fp');
   svg.append(r);
-  const [cols, rows] = SQUAD_LAYOUT[1];
-  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+  for (const o of squadOffsets(1, spacing, foot)) {
     const c = document.createElementNS(NS, 'circle');
-    c.setAttribute('cx', String((0.5 + i * (1 + spacing)) * px)); c.setAttribute('cy', String((0.5 + j * (1 + spacing)) * px)); c.setAttribute('r', '1.4');
+    c.setAttribute('cx', String(o.x * px)); c.setAttribute('cy', String(o.y * px)); c.setAttribute('r', '1.4');
     svg.append(c);
   }
   return svg;
 }
 
 /** Segmented spacing control: "Spacing 0 1 2" + live diagram + footprint size. */
-function spacingControl(value: number, onPick: ((v: number) => void) | null): HTMLElement {
+function spacingControl(value: number, onPick: ((v: number) => void) | null, foot?: UnitFoot): HTMLElement {
   const segs = kit.segmented({
     value, label: 'Squad spacing', disabled: !onPick,
     options: Array.from({ length: MAX_SPACING + 1 }, (_, v) => ({ value: v, label: String(v), title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units` })),
     onChange: (v) => onPick?.(v),
   });
-  const d = blockDims(1, value);
+  const d = blockDims(1, value, foot);
   return h('div.spacing', null,
     h('div.sp-head', null, h('span', null, 'Spacing'), h('span.muted', null, ...(onPick ? [h('kbd', null, '['), ' ', h('kbd', null, ']')] : ['locked']))),
-    h('div.sp-row', null, spacingDiagram(value), segs),
+    h('div.sp-row', null, spacingDiagram(value, foot), segs),
     h('div.sp-foot', null, `Footprint ${fmtMeters(d.w)} × ${fmtMeters(d.h)}`),
   );
 }
@@ -92,6 +92,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   };
   const designOf = (s: Side, id: string): Design | undefined => m.players[s].deck.find((d) => d.id === id);
   const sizeOf = (d: Design | undefined): Size => (d ? statsOf(d)?.size ?? 1 : 1);
+  const footOf = (d: Design | undefined): UnitFoot => { const st = d ? statsOf(d) : null; return st ? { fw: st.fw, fh: st.fh } : undefined; };
   const costOf = (d: Design | undefined): number => (d ? statsOf(d)?.cost ?? 0 : 0);
   const squadOf = (d: Design | undefined): number => (d ? statsOf(d)?.squad ?? 1 : 1);
   const spacingOfCard = (d: Design): number => normSpacing(sizeOf(d), lastSpacing.get(d.id) ?? 0);
@@ -436,7 +437,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!d) { shopSpacingEl.classList.add('hidden'); shopSpacingEl.replaceChildren(); return; }
     shopSpacingEl.classList.remove('hidden');
     const squad = hasSpacing(sizeOf(d));
-    shopSpacingEl.replaceChildren(squad ? spacingControl(spacingOfCard(d), (v) => setCardSpacing(v)) : '');
+    shopSpacingEl.replaceChildren(squad ? spacingControl(spacingOfCard(d), (v) => setCardSpacing(v), footOf(d)) : '');
     shopSpacingEl.classList.toggle('hidden', !squad);
   }
 
@@ -522,7 +523,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!hasSpacing(size)) return;
     const sp = normSpacing(size, v);
     if (sp === normSpacing(size, p.spacing)) return;
-    const bd = blockDims(size, sp);
+    const bd = blockDims(size, sp, footOf(designOf(side, p.designId)));
     const next: Placement = { ...p, spacing: sp, x: Math.max(0, Math.min(DEPLOY_W - bd.w, p.x)), y: Math.max(0, Math.min(DEPLOY_D - bd.h, p.y)) };
     const cand = action();
     cand.place[i] = next;
@@ -633,7 +634,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       )),
       statCard({ design: d, st, level: lv, spacing: sp, upgraded: ups > 0, onRing: onRingHi }),
       mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)) } : {})) : '',
-      squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null)) : '',
+      squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, footOf(d))) : '',
       h('div.parts', null, parts),
       actions.length ? h('div.actions', null, ...actions) : '',
     );
@@ -715,7 +716,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!d) return null;
     const size = sizeOf(d);
     const spacing = spacingOfCard(d);
-    const { w: bw, h: bh } = blockDims(size, spacing);
+    const { w: bw, h: bh } = blockDims(size, spacing, footOf(d));
     let wp: { x: number; y: number };
     try { wp = view.screenToWorld(px, py); } catch { return null; }
     const col = Math.round(wp.x - bw / 2), row = Math.round(wp.y - bh / 2);
@@ -724,7 +725,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     x = Math.max(0, Math.min(DEPLOY_W - bw, x));
     y = Math.max(0, Math.min(DEPLOY_D - bh, y));
     let reason: string | null = null;
-    if (!blockInZone(x, y, size, spacing)) reason = 'Outside your deploy zone';
+    if (!blockInZone(x, y, size, spacing, footOf(d))) reason = 'Outside your deploy zone';
     else if (costOf(d) > remaining()) reason = 'Not enough supply';
     else {
       const cand = action();
@@ -841,7 +842,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     try { w = view.screenToWorld(px, py); } catch { return null; }
     // anywhere inside the block's footprint (including the gaps between squad units) selects the block
     const hit = (s: Side, p: Placement) => {
-      const r = blockWorldRect(s, p, sizeOf(designOf(s, p.designId)));
+      const r = blockWorldRect(s, p, sizeOf(designOf(s, p.designId)), footOf(designOf(s, p.designId)));
       return w.x >= r.col && w.x <= r.col + r.w && w.y >= r.row && w.y <= r.row + r.h;
     };
     if (phase === 'deploy') for (const p of place) if (hit(side, p)) return { side, uid: p.uid, pending: true };
@@ -1094,7 +1095,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const add = (s: Side, p: Placement, extra: Partial<BoardUnit> = {}) => {
       const d = designOf(s, p.designId);
       if (!d) return;
-      for (const c of placementUnitCenters(s, p, sizeOf(d))) out.push({ side: s, design: d, x: c.x, y: c.y, level: p.level, ...extra });
+      for (const c of placementUnitCenters(s, p, sizeOf(d), footOf(d))) out.push({ side: s, design: d, x: c.x, y: c.y, level: p.level, ...extra });
     };
     for (const p of foe().board) add(opp, p, { selected: sel?.side === opp && sel.uid === p.uid });
     for (const p of me().board) add(side, p, { level: Math.min(MAX_LEVEL, p.level + pendingUps(p.uid)), selected: sel?.side === side && !sel.pending && sel.uid === p.uid });
@@ -1102,7 +1103,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       for (const p of place) add(side, p, { selected: !!sel?.pending && sel.uid === p.uid });
       const d = deck()[selCard];
       if (hover && d) {
-        for (const c of placementUnitCenters(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size)) {
+        for (const c of placementUnitCenters(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size, footOf(d))) {
           out.push({ side, design: d, x: c.x, y: c.y, level: 1, ghost: true, invalid: !hover.valid });
         }
       }
@@ -1118,7 +1119,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const d = p && designOf(t.side, p.designId);
     if (!p || !d) return null;
     const size = sizeOf(d);
-    const r = blockWorldRect(t.side, p, size);
+    const r = blockWorldRect(t.side, p, size, footOf(d));
     return { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: t.side === side };
   }
 
@@ -1191,7 +1192,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const taken: { x: number; y: number; w: number; h: number }[] = [];
     // weak (all-units) rings first so the focused block's rings sit on top
     for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
-      const centers = placementUnitCenters(t.side, t.pos, t.size).map((c) => view.worldToScreen(c.x, c.y));
+      const centers = placementUnitCenters(t.side, t.pos, t.size, t.st).map((c) => view.worldToScreen(c.x, c.y));
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const c of centers) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x); y1 = Math.max(y1, c.y); }
       const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
@@ -1284,9 +1285,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (sel) {
       const p = blockSrc(sel);
       const d = p && designOf(sel.side, p.designId);
-      if (p && d) cx = view.worldToScreen(...(Object.values(blockWorldRectCenter(sel.side, p, sizeOf(d))) as [number, number])).x;
+      if (p && d) cx = view.worldToScreen(...(Object.values(blockWorldRectCenter(sel.side, p, sizeOf(d), footOf(d))) as [number, number])).x;
     } else if (hover) {
-      const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size);
+      const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size, footOf(deck()[selCard]));
       cx = view.worldToScreen(r.col + r.w / 2, r.row + r.h / 2).x;
     }
     if (cx == null) return;
@@ -1294,7 +1295,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (cx < 390) infoEl.classList.add('right');
     else if (cx > W - 450) infoEl.classList.remove('right');
   }
-  const blockWorldRectCenter = (s: Side, p: Placement, size: Size) => { const r = blockWorldRect(s, p, size); return { x: r.col + r.w / 2, y: r.row + r.h / 2 }; };
+  const blockWorldRectCenter = (s: Side, p: Placement, size: Size, foot?: UnitFoot) => { const r = blockWorldRect(s, p, size, foot); return { x: r.col + r.w / 2, y: r.row + r.h / 2 }; };
 
   let raf = 0;
   let last = performance.now();
@@ -1324,7 +1325,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       } else {
         let hov: BoardOverlay['hover'] = null;
         if (hover && phase === 'deploy') {
-          const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size);
+          const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size, footOf(deck()[selCard]));
           hov = { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: hover.valid };
         } else if (phase === 'deploy' || phase === 'waiting') hov = blockOutline();
         view.drawBoard(boardUnits(), { showZone: phase === 'deploy', hover: hov }, now / 1000);
