@@ -84,7 +84,7 @@ export function armorEfficiency(damage: number, ap: number): number {
 /** Predicted damage-output rating of one weapon (or healing value of a repair module). */
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
-  const rangeF = Math.min(1.8, Math.max(0.6, Math.sqrt(range / 5)));
+  const rangeF = Math.min(2.2, Math.max(0.5, Math.pow(range / 5, 0.8))); // reach decides most fights
   if (w.heal) return w.heal * 1.6 * rangeF;
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
@@ -93,18 +93,18 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   v *= 1 + 0.45 * (w.chain ?? 0);
   if (w.pierce) v *= 1.5;
   if ((w.pellets ?? 1) > 1) v *= 0.7; // pellets rarely all land
-  if (w.falloff != null) v *= 0.5 + 0.5 * w.falloff;
+  if (w.falloff != null) v *= 0.3 + 0.7 * w.falloff;
   const cyc = cycleTime(w);
   // burn refreshes rather than stacks: worth ~its dps on each target it keeps alight
   if (w.burn) v += w.burn.dps * Math.min(1, w.burn.duration / cyc) * (1 + 0.6 * (w.splash ?? 0));
-  if (w.stun) v += ((w.stun * shots) / cyc) * 70 * (1 + 0.8 * (w.splash ?? 0));
+  if (w.stun) v += ((w.stun * shots) / cyc) * 30 * (1 + 0.8 * (w.splash ?? 0));
   if (w.slow) v += (w.slow / cyc) * 18;
   if (w.disarm) v += (w.disarm / cyc) * 55;
   if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 14 * (1 + 0.6 * (w.splash ?? 0));
   v *= 0.75 + 0.25 * (accuracyRating(w) / 100);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;
-  const coverage = w.targetsGround && w.targetsAir ? 1 : w.targetsGround ? 0.85 : 0.55 * (w.airBonus ?? 1);
+  const coverage = w.targetsGround && w.targetsAir ? 1.15 : w.targetsGround ? 0.85 : 0.7 * (w.airBonus ?? 1);
   return v * coverage * rangeF;
 }
 

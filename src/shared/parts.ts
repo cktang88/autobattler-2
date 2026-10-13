@@ -130,9 +130,9 @@ export const MODULES: ModuleDef[] = [
     damage: 48, cooldown: 0.25, range: 5, ...GA, projectile: 'beam', ap: 0.6 }),
   // ---------------- Flame ----------------
   wpn({ id: 'flamer', name: 'Flamethrower', family: 'Light flame', desc: 'Short-range cone that ignores most armor.', category: 'flame', visual: 'flamer', caliber: 0.3, mount: 'L', weight: 1.5, cost: 14,
-    damage: 7, cooldown: 0.1, range: 2.5, ...G, projectile: 'flame', projectileSpeed: 9, splash: 0.8, ap: 0.8, burn: { dps: 6, duration: 2 } }),
+    damage: 10, cooldown: 0.1, range: 3, ...G, projectile: 'flame', projectileSpeed: 9, splash: 0.8, ap: 0.8, burn: { dps: 6, duration: 2 } }),
   wpn({ id: 'napalm', name: 'Napalm Projector', family: 'Napalm', desc: 'Sticky burning gel. Wide cone, long burn.', category: 'flame', visual: 'flamer', caliber: 0.6, mount: 'M', weight: 3.2, cost: 30,
-    damage: 10, cooldown: 0.15, range: 3.5, ...G, projectile: 'flame', projectileSpeed: 8, splash: 1.2, ap: 0.8, burn: { dps: 15, duration: 3 } }),
+    damage: 14, cooldown: 0.15, range: 4, ...G, projectile: 'flame', projectileSpeed: 8, splash: 1.2, ap: 0.8, burn: { dps: 15, duration: 3 } }),
   // ---------------- Stun & disruption ----------------
   wpn({ id: 'tesla', name: 'Tesla Coil', family: 'Chain lightning', desc: 'Lightning arcs that jump between up to 4 enemies.', category: 'disruption', visual: 'tesla', caliber: 0.5, mount: 'M', weight: 3.5, cost: 32,
     damage: 48, cooldown: 1.2, range: 4, ...GA, projectile: 'lightning', chain: 3, ap: 0.4 }),

@@ -68,16 +68,17 @@ export function targetBadges(mod: ModuleDef): HTMLElement {
   return wrap;
 }
 
+const n1 = (v: number) => (Math.round(v * 10) / 10).toString();
+
 /** Special-effect tags for a module (stun, burn, pierce...). */
 export function moduleEffects(mod: ModuleDef): string[] {
   const t: string[] = [];
-  if (mod.pellets && mod.pellets > 1) t.push(`${mod.pellets} pellets`);
   if (mod.chain) t.push(`chain ${mod.chain}`);
   if (mod.pierce) t.push('pierce');
   if (mod.stun) t.push(`stun ${mod.stun}s`);
   if (mod.slow) t.push(`slow ${Math.round(mod.slow * 100)}%`);
-  if (mod.disarm) t.push(`disarm ${mod.disarm}s`);
-  if (mod.impulse) t.push(mod.impulse > 0 ? `knockback ${mod.impulse}` : `pull ${-mod.impulse}`);
+  if (mod.disarm) t.push(`Disarm ${n1(mod.disarm)}s`);
+  if (mod.impulse) t.push(mod.impulse > 0 ? 'Knockback' : 'Pull');
   if (mod.burn) t.push(`burn ${mod.burn.dps}/s ${mod.burn.duration}s`);
   if (mod.airBonus && mod.airBonus !== 1) t.push(`×${mod.airBonus} vs air`);
   if (mod.falloff != null && mod.falloff < 1) t.push('falloff');
@@ -87,21 +88,19 @@ export function moduleEffects(mod: ModuleDef): string[] {
   return t;
 }
 
-const n1 = (v: number) => (Math.round(v * 10) / 10).toString();
-
 /** Firing pattern text, e.g. "Clip: 6 rds, 2.0s reload", "Salvo ×4 every 4s", "Sustained". */
 export function firingText(mod: ModuleDef): string {
   if (mod.kind !== 'weapon') return '';
   const style = firingStyle(mod);
   const cd = mod.cooldown ?? 1;
-  const clip = mod.magazine && mod.reload ? `${mod.magazine} rds, ${mod.reload.toFixed(1)}s reload` : '';
+  const rds = mod.magazine && mod.reload ? `${mod.magazine} rds · ${mod.reload.toFixed(1)}s reload` : '';
   if (style === 'Salvo') {
     const n = (mod.burst ?? 1) * (mod.pellets ?? 1);
-    return `Salvo ×${n} every ${n1(cd)}s${clip ? ` · ${clip}` : ''}`;
+    return `Salvo ×${n} every ${cd.toFixed(1)}s${rds ? ` · ${rds}` : ''}`;
   }
-  if (style === 'Clip') return `Clip: ${clip}`;
-  if (style === 'Sustained') return `Sustained · ${n1(1 / cd)}/s`;
-  return `Single shot · every ${n1(cd)}s`;
+  if (style === 'Clip') return `Clip · ${rds}`;
+  if (style === 'Sustained') return 'Sustained';
+  return `Single shot · ${cd.toFixed(1)}s`;
 }
 
 /** "Hitscan" / "Guided" label for perfect-accuracy weapons, else null. */

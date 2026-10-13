@@ -39,6 +39,7 @@ const MAX_STUN = 4;
 const MAX_SLOW = 0.6;
 const SLOW_DECAY = 0.3; // per s (0.6 fully decays over 2s)
 const BURN_EVERY = 0.5; // s between burn damage pulses
+const KNOCK_RATE = 0.35; // fraction of pending knockback applied per tick
 const ENGAGE_SHARE = 0.34; // fraction of relevant dps that must be in range before a ground unit halts
 
 // spatial hash
@@ -120,6 +121,9 @@ interface Internal {
   burnSide: Side;
   burnModule: string;
   burnTick: number;
+  /** pending knockback displacement (cells), applied over a few ticks */
+  kbx: number;
+  kby: number;
 }
 
 interface Proj extends SimProjectile {
@@ -233,7 +237,7 @@ export class Battle {
     const u: SimUnit = {
       id, side, uid, design, stats, level, x: c.x, y: c.y, angle: heading, hp: maxHp, maxHp,
       shield: stats.shield, maxShield: stats.shield, alive: true, flying: stats.flying, moving: false,
-      odometer: 0, leap: 0, mounts, hitFlash: 0, stun: 0, slow: 0, burning: 0,
+      odometer: 0, leap: 0, mounts, hitFlash: 0, stun: 0, slow: 0, burning: 0, disarm: 0,
     };
     this.units.push(u);
     this.ints.push({
@@ -244,7 +248,7 @@ export class Battle {
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
-      burnDps: 0, burnSide: side, burnModule: '', burnTick: 0,
+      burnDps: 0, burnSide: side, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
     });
   }
 
@@ -267,6 +271,7 @@ export class Battle {
       if (I.leapCd > 0) I.leapCd -= DT;
       if (I.crushCd > 0) I.crushCd -= DT;
       if (u.stun > 0) u.stun = Math.max(0, u.stun - DT);
+      if (u.disarm > 0) u.disarm = Math.max(0, u.disarm - DT);
       if (u.slow > 0) u.slow = Math.max(0, u.slow - SLOW_DECAY * DT);
       if (u.burning > 0) {
         I.burnTick += DT;
@@ -444,6 +449,7 @@ export class Battle {
 
       // burst continuation
       if (w.burstLeft > 0) {
+        if (u.disarm > 0) { w.burstLeft = 0; continue; }
         w.burstTimer -= DT * (1 - u.slow);
         if (w.burstTimer <= 0) {
           w.burstLeft--;
@@ -453,7 +459,7 @@ export class Battle {
         }
         continue;
       }
-      if (t && m.cooldown <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
+      if (t && m.cooldown <= 0 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
         w.aimX = ax; w.aimY = ay;
         m.cooldown = w.def.cooldown ?? 1;
         if (m.ammo !== undefined) {
@@ -493,13 +499,13 @@ export class Battle {
     const kind = def.projectile ?? 'bullet';
     const ap = def.ap ?? 0;
     const airBonus = def.airBonus ?? 1;
-    const fx = def.stun || def.slow || def.burn ? def : null;
+    const fx = def.stun || def.slow || def.burn || def.impulse || def.disarm ? def : null;
     const lm = I.dmgMult;
 
     if (kind === 'beam') {
       if (!t || !t.alive) return;
       this.events.push({ t: 'beam', moduleId: def.id, x1: mx, y1: my, x2: t.x, y2: t.y, side: u.side });
-      this.damage(t, raw, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm);
+      this.damage(t, raw, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm, mx, my);
       return;
     }
     if (kind === 'lightning') {
@@ -557,9 +563,10 @@ export class Battle {
     let dmg = raw;
     const jumps = w.def.chain ?? 0;
     for (let k = 0; k <= jumps && cur; k++) {
+      const from = pts[pts.length - 1];
       pts.push({ x: cur.x, y: cur.y });
       hit.push(cur.id);
-      this.damage(cur, dmg, ap, airBonus, u.side, w.def.id, cur.x, cur.y, fx, lm);
+      this.damage(cur, dmg, ap, airBonus, u.side, w.def.id, cur.x, cur.y, fx, lm, from.x, from.y);
       dmg *= CHAIN_FALLOFF;
       if (k === jumps) break;
       // next jump: nearest unhit enemy near the current one
@@ -588,7 +595,7 @@ export class Battle {
       const along = dx * c + dy * s;
       if (along < -0.3 || along > len + 0.3) continue;
       const perp = Math.abs(-dx * s + dy * c);
-      if (perp <= this.ints[j].radius + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm);
+      if (perp <= this.ints[j].radius + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my);
     }
     this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side });
   }
@@ -645,9 +652,23 @@ export class Battle {
 
   // ---------------------------------------------------------------- damage
 
-  private damage(t: SimUnit, raw: number, ap: number, airBonus: number, side: Side, moduleId: string, x: number, y: number, fx: ModuleDef | null = null, fxMult = 1): void {
+  private damage(t: SimUnit, raw: number, ap: number, airBonus: number, side: Side, moduleId: string, x: number, y: number, fx: ModuleDef | null = null, fxMult = 1, ox = NaN, oy = NaN): void {
     if (!t.alive) return;
     if (fx) {
+      if (fx.disarm) t.disarm = Math.min(MAX_STUN, t.disarm + fx.disarm);
+      if (fx.impulse && !t.flying && !t.stats.isStatic && !Number.isNaN(ox)) {
+        const mag = fx.impulse * (t.stats.size === 1 ? 1 : t.stats.size === 2 ? 0.5 : 0.25);
+        let dx = t.x - ox, dy = t.y - oy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 1e-6) {
+          dx /= d; dy /= d;
+          // pulls never drag a unit past the puller
+          const m2 = mag < 0 ? -Math.min(-mag, Math.max(0, d - 1)) : mag;
+          const T = this.ints[t.id];
+          T.kbx += dx * m2;
+          T.kby += dy * m2;
+        }
+      }
       if (fx.stun) t.stun = Math.min(MAX_STUN, t.stun + fx.stun);
       if (fx.slow) t.slow = Math.min(MAX_SLOW, t.slow + fx.slow);
       if (fx.burn) {
@@ -697,7 +718,7 @@ export class Battle {
       const d = Math.hypot(o.x - x, o.y - y) - this.ints[id].radius;
       if (d > R && id !== direct) continue;
       const f = id === direct ? 1 : 1 - (1 - SPLASH_EDGE) * Math.max(0, d) / R;
-      this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult);
+      this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult, x, y);
     }
   }
 
@@ -747,7 +768,7 @@ export class Battle {
           p.ignore = hitId;
         } else {
           if (p.splash > 0) this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, hitId, p.kind !== 'flame', p.fx, p.fxMult);
-          else this.damage(t, p.dmg, p.ap, p.airBonus, p.side, p.moduleId, p.x, p.y, p.fx, p.fxMult);
+          else this.damage(t, p.dmg, p.ap, p.airBonus, p.side, p.moduleId, p.x, p.y, p.fx, p.fxMult, p.x - p.vx * DT, p.y - p.vy * DT);
           if (p.pierce) { p.hits.push(hitId); p.ignore = hitId; }
           else { p.dead = true; continue; }
         }
@@ -798,6 +819,12 @@ export class Battle {
   private move(I: Internal): void {
     const u = I.u;
     if (I.isStatic) return;
+    if (I.kbx !== 0 || I.kby !== 0) {
+      const kx = I.kbx * KNOCK_RATE, ky = I.kby * KNOCK_RATE;
+      u.x += kx; u.y += ky;
+      I.kbx -= kx; I.kby -= ky;
+      if (Math.abs(I.kbx) < 0.01 && Math.abs(I.kby) < 0.01) { I.kbx = 0; I.kby = 0; }
+    }
     if (u.stun > 0 && I.leapT < 0 && !I.strafe) return;
     if (I.leapT >= 0) {
       I.leapT = Math.min(1, I.leapT + DT / LEAP_TIME);

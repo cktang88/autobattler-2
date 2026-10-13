@@ -72,6 +72,8 @@ export interface SimUnit {
   slow: number;
   /** seconds of burning remaining */
   burning: number;
+  /** seconds remaining during which it can't fire (but can move) */
+  disarm: number;
 }
 
 export interface SimProjectile {
