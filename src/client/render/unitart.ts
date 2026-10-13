@@ -113,7 +113,7 @@ export function layoutOf(d: Design): UnitLayout {
 
 /* ------------------------------------------------------------------------------------------------ hull */
 
-function hullPath(shape: Shape, S: number): Path2D {
+export function hullPath(shape: Shape, S: number): Path2D {
   const p = new Path2D();
   switch (shape) {
     case 'wedge': poly(p, mirrorPoly([0.44, 0, 0.12, -0.16, -0.18, -0.26, -0.36, -0.26, -0.42, -0.17, -0.4, 0]), S); break;
@@ -130,7 +130,7 @@ function hullPath(shape: Shape, S: number): Path2D {
   return p;
 }
 
-function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: number, hw: number): void {
+export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: number, hw: number): void {
   // base + shading
   const gr = g.createLinearGradient(-0.3 * S, -hw * S * 1.2, 0.3 * S, hw * S * 1.2);
   gr.addColorStop(0, pal.light);
@@ -214,7 +214,7 @@ function headlights(g: Ctx, x: number, y: number, r: number): void {
 }
 
 /** Panel lines, hatches, vents and team trim per silhouette. */
-function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
+export function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
   const pl = 'rgba(0,0,0,0.38)';
   const hl = 'rgba(255,255,255,0.14)';
@@ -299,26 +299,27 @@ function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   }
 }
 
-/** Armor plate modules: riveted slabs at the mount, plus side skirts for medium/heavy plating. */
-function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
+/** Armor plate modules: hull plating patterns per module id, plus side skirts for medium/heavy plating. */
+export function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
   let skirts = 0;
+  let reactive = false;
   for (const m of L.mounts) {
     if (!m.mod || m.turret) continue;
-    const cls = m.mod.mount;
-    if (cls === 'M') skirts = Math.max(skirts, 1);
-    if (cls === 'H') skirts = 2;
+    if (m.mod.id === 'plateM') skirts = Math.max(skirts, 1);
+    if (m.mod.id === 'plateH') skirts = 2;
+    if (m.mod.id === 'reactive') reactive = true;
   }
   const plateCol = shade(pal.body, -0.15);
+  const hw = Math.min(L.hw, 0.36);
+  const len = L.shape === 'airframe' ? 0.3 : 0.62;
   if (skirts) {
-    const hw = Math.min(L.hw, 0.36);
-    const len = L.shape === 'airframe' ? 0.3 : 0.62;
-    const th = skirts === 2 ? 0.075 : 0.055;
+    const th = skirts === 2 ? 0.08 : 0.055;
     for (const s of [-1, 1]) {
       const y = s * (hw + th * 0.3) * S;
       g.beginPath();
       roundRect(g, -len / 2 * S, y - (th / 2) * S, len * S, th * S, th * 0.25 * S);
-      g.fillStyle = plateCol;
+      g.fillStyle = skirts === 2 ? shade(plateCol, -0.1) : plateCol;
       g.fill();
       g.lineWidth = o * 0.8;
       g.strokeStyle = OUTLINE;
@@ -326,50 +327,97 @@ function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
       g.strokeStyle = 'rgba(0,0,0,0.4)';
       g.lineWidth = o * 0.35;
       g.beginPath();
-      for (let i = 1; i < 4; i++) { const x = (-len / 2 + (len * i) / 4) * S; g.moveTo(x, y - (th / 2) * S); g.lineTo(x, y + (th / 2) * S); }
+      const segs = skirts === 2 ? 3 : 5;
+      for (let i = 1; i < segs; i++) { const x = (-len / 2 + (len * i) / segs) * S; g.moveTo(x, y - (th / 2) * S); g.lineTo(x, y + (th / 2) * S); }
       g.stroke();
+      if (skirts === 2) for (let i = 0; i < segs; i++) dotAt(g, (-len / 2 + (len * (i + 0.5)) / segs) * S, y, th * 0.18 * S, 'rgba(0,0,0,0.55)');
     }
     if (skirts === 2) {
-      // glacis plate across the nose
       const nx = L.shape === 'titan' ? 0.27 : L.shape === 'round' ? 0.29 : 0.36;
       g.beginPath();
-      roundRect(g, (nx - 0.05) * S, -0.17 * S, 0.075 * S, 0.34 * S, 0.02 * S);
-      g.fillStyle = plateCol;
+      roundRect(g, (nx - 0.05) * S, -0.18 * S, 0.085 * S, 0.36 * S, 0.02 * S);
+      g.fillStyle = shade(plateCol, -0.1);
       g.fill();
       g.lineWidth = o * 0.8;
       g.strokeStyle = OUTLINE;
       g.stroke();
     }
   }
+  if (reactive) {
+    // explosive reactive tiles along both flanks
+    const n = Math.max(3, Math.round(len * 8));
+    const tw = (len / n) * S;
+    for (const s of [-1, 1]) for (let i = 0; i < n; i++) {
+      const x = -len / 2 * S + i * tw, y = s * (hw - 0.02) * S;
+      g.beginPath(); roundRect(g, x + tw * 0.08, y - tw * 0.42, tw * 0.84, tw * 0.84, tw * 0.12);
+      g.fillStyle = '#7a7a52'; g.fill(); g.lineWidth = o * 0.5; g.strokeStyle = OUTLINE; g.stroke();
+      dotAt(g, x + tw * 0.5, y, tw * 0.12, '#c0392b');
+    }
+  }
   for (const m of L.mounts) {
     if (!m.mod || m.turret) continue;
-    const w = m.d * 1.25, h = m.d * 1.05;
+    const id = m.mod.id;
+    const w = m.d * 1.3, h = m.d * 1.1;
     g.save();
     g.translate(m.x, m.y);
-    g.beginPath();
-    g.moveTo(-w / 2 + h * 0.2, -h / 2); g.lineTo(w / 2, -h / 2); g.lineTo(w / 2, h / 2); g.lineTo(-w / 2 + h * 0.2, h / 2); g.lineTo(-w / 2, 0); g.closePath();
-    const gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
-    gr.addColorStop(0, shade(pal.light, -0.1));
-    gr.addColorStop(1, shade(pal.dark, -0.1));
-    g.fillStyle = gr;
-    g.fill();
-    g.lineWidth = o * 0.8;
-    g.strokeStyle = OUTLINE;
-    g.stroke();
-    g.strokeStyle = 'rgba(255,255,255,0.22)';
-    g.lineWidth = o * 0.4;
-    g.strokeRect(-w * 0.28, -h * 0.3, w * 0.62, h * 0.6);
-    const rv = Math.max(0.012, m.d * 0.05);
-    for (const [x, y] of [[-0.3, -0.38], [0.4, -0.38], [-0.3, 0.38], [0.4, 0.38]]) {
-      dotAt(g, x * w, y * h, rv, 'rgba(0,0,0,0.55)');
-      dotAt(g, x * w - rv * 0.3, y * h - rv * 0.3, rv * 0.5, 'rgba(255,255,255,0.35)');
+    if (id === 'reactive') {
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) {
+        const tx = -w / 2 + (j * w) / 3, ty = -h / 2 + (i * h) / 2;
+        g.beginPath(); roundRect(g, tx + w * 0.02, ty + h * 0.03, w / 3 - w * 0.04, h / 2 - h * 0.06, w * 0.04);
+        g.fillStyle = (i + j) % 2 ? '#7a7a52' : '#6a6a46'; g.fill(); g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke();
+        dotAt(g, tx + w / 6, ty + h / 4, m.d * 0.05, '#c0392b');
+      }
+    } else if (id === 'mirror') {
+      g.beginPath(); roundRect(g, -w / 2, -h / 2, w, h, h * 0.25);
+      const gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      gr.addColorStop(0, '#f4f8fc'); gr.addColorStop(0.35, '#9aa8b8'); gr.addColorStop(0.5, '#ffffff'); gr.addColorStop(0.65, '#8a98a8'); gr.addColorStop(1, '#c8d4e0');
+      g.fillStyle = gr; g.fill(); g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = o * 0.6;
+      g.beginPath(); g.moveTo(-w * 0.3, h * 0.35); g.lineTo(w * 0.1, -h * 0.35); g.moveTo(-w * 0.05, h * 0.35); g.lineTo(w * 0.3, -h * 0.25); g.stroke();
+    } else if (id === 'plateM') {
+      // layered composite: three stacked strips
+      for (let i = 0; i < 3; i++) {
+        const yy = -h / 2 + (i * h) / 3;
+        g.beginPath(); roundRect(g, -w / 2 + (i === 1 ? w * 0.06 : 0), yy, w - (i === 1 ? w * 0.06 : 0), h / 3, h * 0.06);
+        g.fillStyle = i === 1 ? shade(pal.dark, 0.05) : shade(pal.light, -0.15); g.fill(); g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke();
+      }
+    } else if (id === 'plateH') {
+      g.beginPath(); roundRect(g, -w * 0.6, -h * 0.6, w * 1.2, h * 1.2, h * 0.12);
+      const gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      gr.addColorStop(0, shade(pal.light, -0.25)); gr.addColorStop(1, shade(pal.deep, 0.1));
+      g.fillStyle = gr; g.fill(); g.lineWidth = o * 1.1; g.strokeStyle = OUTLINE; g.stroke();
+      g.beginPath(); roundRect(g, -w * 0.42, -h * 0.42, w * 0.84, h * 0.84, h * 0.08);
+      g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = o * 0.6; g.stroke();
+      const rv = Math.max(0.014, m.d * 0.055);
+      for (let i = 0; i < 4; i++) for (const sy of [-1, 1]) {
+        const x = -w * 0.5 + (i + 0.5) * (w / 4);
+        dotAt(g, x, sy * h * 0.51, rv, 'rgba(0,0,0,0.6)');
+        dotAt(g, x - rv * 0.3, sy * h * 0.51 - rv * 0.3, rv * 0.5, 'rgba(255,255,255,0.35)');
+      }
+    } else {
+      // plateL (and fallback): single riveted wedge slab
+      g.beginPath();
+      g.moveTo(-w / 2 + h * 0.2, -h / 2); g.lineTo(w / 2, -h / 2); g.lineTo(w / 2, h / 2); g.lineTo(-w / 2 + h * 0.2, h / 2); g.lineTo(-w / 2, 0); g.closePath();
+      const gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      gr.addColorStop(0, shade(pal.light, -0.1));
+      gr.addColorStop(1, shade(pal.dark, -0.1));
+      g.fillStyle = gr;
+      g.fill();
+      g.lineWidth = o * 0.8;
+      g.strokeStyle = OUTLINE;
+      g.stroke();
+      const rv = Math.max(0.012, m.d * 0.05);
+      for (const [x, y] of [[-0.3, -0.38], [0.4, -0.38], [-0.3, 0.38], [0.4, 0.38]]) {
+        dotAt(g, x * w, y * h, rv, 'rgba(0,0,0,0.55)');
+        dotAt(g, x * w - rv * 0.3, y * h - rv * 0.3, rv * 0.5, 'rgba(255,255,255,0.35)');
+      }
     }
     g.restore();
   }
 }
 
 /** Long outrigger feet on the longarm platform and wing pylons are part of the hull layer. */
-function hullUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
+export function hullUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
   if (L.shape === 'long') {
     g.strokeStyle = METAL.dark;
@@ -461,7 +509,7 @@ function foot(g: Ctx, x: number, y: number, len: number, w: number, lift: number
 }
 
 /** Draw the mobility layer (under the hull). phase in [0,1); rest = idle stance. */
-function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: boolean, o: number): void {
+export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: boolean, o: number): void {
   const S = L.S;
   const id = L.mob.id;
   const P = Math.PI * 2;
@@ -595,7 +643,7 @@ function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: 
 }
 
 /** Anchor base plate (drawn axis-aligned, does not rotate with the hull). */
-function drawAnchorPlate(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
+export function drawAnchorPlate(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
   const p = new Path2D();
   poly(p, [0.47, -0.3, 0.47, 0.3, 0.3, 0.47, -0.3, 0.47, -0.47, 0.3, -0.47, -0.3, -0.3, -0.47, 0.3, -0.47], S);
@@ -777,6 +825,10 @@ export function wreckSprite(design: Design, team: Team, px: number): HTMLCanvasE
 export interface MountPose {
   angle: number;
   flash: number;
+  /** 0..1 melee strike animation (1 = just struck) */
+  swing?: number;
+  /** magazine reloading */
+  reloading?: boolean;
 }
 
 export interface UnitPose {
@@ -798,6 +850,9 @@ export interface UnitPose {
   stun?: number;
   slow?: number;
   burning?: number;
+  disarm?: number;
+  /** cloaked: 'own' = viewer's cloaked unit (ghosted), 'enemy' = barely visible shimmer */
+  cloak?: 'own' | 'enemy';
   /** stable per-unit seed for idle variation */
   seed?: number;
 }
@@ -842,7 +897,7 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   g.globalAlpha = 1;
 }
 
-function rotorBlur(g: Ctx, x: number, y: number, r: number, blades: number, t: number, px: number): void {
+export function rotorBlur(g: Ctx, x: number, y: number, r: number, blades: number, t: number, px: number): void {
   g.fillStyle = 'rgba(20,24,28,0.22)';
   g.beginPath();
   g.arc(x, y, r, 0, Math.PI * 2);
@@ -875,7 +930,7 @@ function rotorBlur(g: Ctx, x: number, y: number, r: number, blades: number, t: n
   g.fill();
 }
 
-function flame(g: Ctx, x: number, y: number, ang: number, len: number, w: number, hot: string): void {
+export function flame(g: Ctx, x: number, y: number, ang: number, len: number, w: number, hot: string): void {
   const prev = g.globalCompositeOperation;
   g.globalCompositeOperation = 'lighter';
   const cs = Math.cos(ang), sn = Math.sin(ang);
@@ -901,7 +956,9 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   const pal = TEAM_PAL[p.team];
   const ang = p.angle;
   const cs = Math.cos(ang), sn = Math.sin(ang);
-  const alpha = p.alpha ?? 1;
+  let alpha = p.alpha ?? 1;
+  if (p.cloak === 'own') alpha *= 0.4 + 0.08 * Math.sin(p.time * 5 + (p.seed ?? 0));
+  else if (p.cloak === 'enemy') alpha *= 0.06 + 0.05 * Math.max(0, Math.sin(p.time * 3.3 + (p.seed ?? 0)));
   g.globalAlpha = alpha;
 
   // hover glow beneath
@@ -946,11 +1003,55 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const sway = Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
     const ta = mp ? mp.angle : ang + sway;
     const fl = mp ? Math.max(0, Math.min(1, mp.flash)) : 0;
-    const rec = fl * fl * m.d * 0.18;
+    let rec = fl * fl * m.d * 0.18;
+    let rot = 0;
+    const sw = mp?.swing ?? 0;
+    if (sw > 0 && m.mod.category === 'melee') {
+      const k = Math.sin(sw * Math.PI);
+      const v = m.mod.visual;
+      if (v === 'hammer' || v === 'claw' || v === 'chainsaw' || v === 'blade') rot = Math.sin(sw * Math.PI * 2) * 0.7;
+      rec = -k * m.d * (v === 'ram' || v === 'drill' || v === 'prod' ? 0.6 : 0.3);
+    }
     const mx = x + (cs * m.x - sn * m.y) * sc - Math.cos(ta) * rec;
     const my = y + (sn * m.x + cs * m.y) * sc - Math.sin(ta) * rec;
     const ts = turretSprite(m.mod, p.team, m.d, px);
-    blit(g, ts, mx, my, ta, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
+    const dis = (p.disarm ?? 0) > 0;
+    if (dis) g.globalAlpha = alpha * (0.55 + 0.45 * (Math.sin(p.time * 37 + i * 2) > 0 ? 1 : 0.3));
+    blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
+    g.globalAlpha = alpha;
+    if (m.mod.visual === 'saw' || m.mod.visual === 'drill') {
+      // spinning blade / bore highlight
+      const ml = muzzleLen(m.mod) * m.d * (m.mod.visual === 'saw' ? 0.95 : 0.7);
+      const bx = mx + Math.cos(ta) * ml * sc, by = my + Math.sin(ta) * ml * sc;
+      g.strokeStyle = 'rgba(255,255,255,0.55)';
+      g.lineWidth = Math.max(1 / px, m.d * 0.05);
+      g.beginPath();
+      const sp = p.time * (sw > 0 ? 40 : 12);
+      const rr = m.d * (m.mod.visual === 'saw' ? 0.36 : 0.2);
+      g.arc(bx, by, rr, sp, sp + 1.2);
+      g.stroke();
+    }
+    if (dis) {
+      g.strokeStyle = '#ffe84a';
+      g.lineWidth = Math.max(1 / px, 0.02);
+      g.beginPath();
+      const ph = Math.floor(p.time * 15 + i * 3);
+      for (let k = 0; k < 2; k++) {
+        const a = ph * 2.4 + k * 3.1;
+        const r0 = m.d * 0.25, r1 = m.d * 0.6;
+        g.moveTo(mx + Math.cos(a) * r0, my + Math.sin(a) * r0);
+        g.lineTo(mx + Math.cos(a + 0.4) * (r0 + r1) / 2, my + Math.sin(a + 0.4) * (r0 + r1) / 2);
+        g.lineTo(mx + Math.cos(a - 0.1) * r1, my + Math.sin(a - 0.1) * r1);
+      }
+      g.stroke();
+    }
+    if (mp?.reloading) {
+      g.strokeStyle = `rgba(255,190,80,${0.35 + 0.25 * Math.sin(p.time * 8 + i)})`;
+      g.lineWidth = Math.max(1 / px, m.d * 0.06);
+      g.beginPath();
+      g.arc(mx, my, m.d * 0.5, p.time * 4, p.time * 4 + 2.2);
+      g.stroke();
+    }
     if (m.mod.visual === 'tesla' || m.mod.visual === 'shield') {
       const prev = g.globalCompositeOperation;
       g.globalCompositeOperation = 'lighter';
@@ -1005,6 +1106,14 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     }
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
+  }
+  if (p.cloak) {
+    // refractive shimmer outline
+    g.globalAlpha = (p.cloak === 'own' ? 0.25 : 0.12) * (0.6 + 0.4 * Math.sin(p.time * 7 + (p.seed ?? 0)));
+    const prev = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'lighter';
+    blit(g, silhouette(s, '#9fdcff'), x + Math.sin(p.time * 9) * 0.03, y, ang, s.ext, sc * 1.02);
+    g.globalCompositeOperation = prev;
   }
   g.globalAlpha = 1;
 }

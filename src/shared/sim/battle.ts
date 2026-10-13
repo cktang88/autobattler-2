@@ -8,6 +8,7 @@ import { MODULE_BY_ID } from '../parts.ts';
 import { computeStats, isValidDesign, levelMult, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, placementCenter } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
+import { CLOAK_REVEAL } from '../types.ts';
 import type { Design, ModuleDef, Side } from '../types.ts';
 import { DT, MAX_TICKS } from './types.ts';
 import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
@@ -39,6 +40,14 @@ const MAX_STUN = 4;
 const MAX_SLOW = 0.6;
 const SLOW_DECAY = 0.3; // per s (0.6 fully decays over 2s)
 const BURN_EVERY = 0.5; // s between burn damage pulses
+const STEALTH_FIRE_REVEAL = 1.5; // s a stealth unit stays visible after firing
+const PHANTOM_FIRE_REVEAL = 3;
+const SMOKE_SIGHT = 2.5; // units inside smoke can only be targeted from within this distance
+const SMOKE_AT = 0.6; // hp fraction that pops smoke
+const REGEN_DELAY = 2;
+const REACTIVE_MULT = 0.25;
+const CLS_EXPLOSIVE = 1;
+const CLS_ENERGY = 2;
 const KNOCK_RATE = 0.35; // fraction of pending knockback applied per tick
 const ENGAGE_SHARE = 0.34; // fraction of relevant dps that must be in range before a ground unit halts
 
@@ -79,6 +88,8 @@ interface Wpn {
   healTimer: number;
   spread: number;
   dps: number;
+  melee: boolean;
+  cls: number;
 }
 
 interface Internal {
@@ -124,6 +135,59 @@ interface Internal {
   /** pending knockback displacement (cells), applied over a few ticks */
   kbx: number;
   kby: number;
+  // ---- utilities ----
+  cloak: 'stealth' | 'phantom' | null;
+  detect: number;
+  sinceFire: number;
+  domeR: number;
+  domeAmt: number;
+  regen: number;
+  fireRate: number;
+  reloadMult: number;
+  uplinkR: number;
+  uplinkBonus: number;
+  /** current fire-rate bonus received from allied uplinks */
+  rateAura: number;
+  pdRange: number;
+  pdCooldown: number;
+  pdCd: number;
+  pdModule: string;
+  jammer: number;
+  /** inside an allied jammer's radius */
+  jammed: boolean;
+  smokeR: number;
+  smokeDur: number;
+  smokeUsed: boolean;
+  /** inside an active smoke cloud */
+  smoked: boolean;
+  energyResist: number;
+  hardened: boolean;
+  blastDmg: number;
+  blastR: number;
+  blastModule: string;
+  /** no weapons and no healing: advances as a blocker */
+  blocker: boolean;
+  /** every weapon is melee: charge into contact */
+  meleeOnly: boolean;
+  avoidSide: number;
+  avoidT: number;
+  stuckT: number;
+}
+
+interface Smoke {
+  x: number;
+  y: number;
+  r: number;
+  t: number;
+}
+
+/** Damage class of a weapon for reactive armor / energy resist. */
+function damageClass(def: ModuleDef): number {
+  const k = def.projectile;
+  if (k === 'shell' || k === 'rocket' || k === 'missile' || k === 'arc') return CLS_EXPLOSIVE;
+  if (k === 'orb') return def.category === 'energy' ? CLS_ENERGY | CLS_EXPLOSIVE : CLS_EXPLOSIVE;
+  if (k === 'beam' || k === 'lightning' || k === 'rail' || k === 'flame') return CLS_ENERGY;
+  return 0;
 }
 
 interface Proj extends SimProjectile {
@@ -150,6 +214,7 @@ interface Proj extends SimProjectile {
   hits: number[];
   fx: ModuleDef | null;
   fxMult: number;
+  cls: number;
 }
 
 export class Battle {
@@ -171,6 +236,14 @@ export class Battle {
   private head: Int32Array = new Int32Array(HCOLS * HROWS);
   private next: Int32Array = new Int32Array(0);
   private scratch: Int32Array = new Int32Array(0);
+  private smokes: Smoke[] = [];
+  private pendingBlasts: number[] = [];
+  private hasCloak = false;
+  private detectors: Internal[] = [];
+  private domes: Internal[] = [];
+  private uplinks: Internal[] = [];
+  private jammers: Internal[] = [];
+  private pds: Internal[] = [];
 
   constructor(input: BattleInput) {
     this.input = input;
@@ -193,8 +266,17 @@ export class Battle {
       }
     }
     const n = this.units.length;
+    for (const I of this.ints) {
+      if (I.cloak) this.hasCloak = true;
+      if (I.detect > 0) this.detectors.push(I);
+      if (I.domeAmt > 0) this.domes.push(I);
+      if (I.uplinkBonus > 0) this.uplinks.push(I);
+      if (I.jammer > 0) this.jammers.push(I);
+      if (I.pdRange > 0) this.pds.push(I);
+    }
     this.next = new Int32Array(n);
     this.scratch = new Int32Array(Math.max(16, n));
+    this.rebuildHash();
   }
 
   private addUnit(side: Side, uid: number, design: Design, level: number, lx: number, ly: number): void {
@@ -212,13 +294,15 @@ export class Battle {
       mounts.push({ moduleId: mid ?? null, angle: heading, cooldown: 0, flash: 0, target: -1 });
       if (!def || (def.kind === 'armor') || (def.kind === 'utility' && !def.heal)) { wpns.push(null); continue; }
       const isWeapon = def.kind === 'weapon';
-      const range = (def.range ?? 0) * stats.rangeMult;
+      const melee = def.projectile === 'melee';
+      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult);
       const w: Wpn = {
         def, heal: def.heal ?? 0, range, minRange: def.minRange ?? 0,
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
+        melee, cls: damageClass(def),
       };
       if (isWeapon) {
         hasWeapon = true;
@@ -233,11 +317,33 @@ export class Battle {
       wpns.push(w);
     }
     if (!Number.isFinite(minWeaponRange)) minWeaponRange = 3;
+    let cloak: 'stealth' | 'phantom' | null = null, detect = 0, domeR = 0, domeAmt = 0, regen = 0, fireRate = 1, reloadBonus = 0;
+    let uplinkR = 0, uplinkBonus = 0, pdRange = 0, pdCooldown = 0, pdModule = '', jammer = 0, smokeR = 0, smokeDur = 0;
+    let reactive = 0, energyResist = 0, hardened = traits.includes('hardened'), blastDmg = 0, blastR = 0, blastModule = '';
+    for (const mid of design.mounts) {
+      const d = mid ? MODULE_BY_ID.get(mid) : undefined;
+      if (!d) continue;
+      if (d.cloak && cloak !== 'phantom') cloak = d.cloak;
+      if (d.detect) detect = Math.max(detect, d.detect);
+      if (d.shieldAura) { domeR = Math.max(domeR, d.shieldAura.radius); domeAmt = Math.max(domeAmt, d.shieldAura.amount); }
+      regen += d.regen ?? 0;
+      fireRate += d.fireRateBonus ?? 0;
+      reloadBonus += d.reloadBonus ?? 0;
+      if (d.fireRateAura && d.fireRateAura.bonus > uplinkBonus) { uplinkBonus = d.fireRateAura.bonus; uplinkR = d.fireRateAura.radius; }
+      if (d.pointDefense && d.pointDefense.range > pdRange) { pdRange = d.pointDefense.range; pdCooldown = d.pointDefense.cooldown; pdModule = d.id; }
+      if (d.jammer) jammer = Math.max(jammer, d.jammer);
+      if (d.smoke) { smokeR = Math.max(smokeR, d.smoke.radius); smokeDur = Math.max(smokeDur, d.smoke.duration); }
+      reactive += d.reactive ?? 0;
+      energyResist += d.energyResist ?? 0;
+      if (d.hardened) hardened = true;
+      if (d.deathBlast) { blastDmg += d.deathBlast.damage; blastR = Math.max(blastR, d.deathBlast.radius); blastModule = d.id; }
+    }
     const maxHp = stats.hp * lm;
     const u: SimUnit = {
       id, side, uid, design, stats, level, x: c.x, y: c.y, angle: heading, hp: maxHp, maxHp,
       shield: stats.shield, maxShield: stats.shield, alive: true, flying: stats.flying, moving: false,
       odometer: 0, leap: 0, mounts, hitFlash: 0, stun: 0, slow: 0, burning: 0, disarm: 0,
+      cloaked: cloak !== null, reactive, auraShield: 0, maxAuraShield: 0,
     };
     this.units.push(u);
     this.ints.push({
@@ -249,6 +355,11 @@ export class Battle {
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
       burnDps: 0, burnSide: side, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
+      cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
+      uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
+      smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
+      blastDmg: blastDmg * lm, blastR, blastModule, blocker: !hasWeapon && !hasHeal,
+      meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0,
     });
   }
 
@@ -266,8 +377,12 @@ export class Battle {
       if (!u.alive) continue;
       u.hitFlash = Math.max(0, u.hitFlash - DT * 4);
       I.sinceDamage += DT;
-      if (u.maxShield > 0 && I.sinceDamage > SHIELD_DELAY && u.shield < u.maxShield)
-        u.shield = Math.min(u.maxShield, u.shield + u.maxShield * SHIELD_REGEN * DT);
+      I.sinceFire += DT;
+      if (I.sinceDamage > SHIELD_DELAY) {
+        if (u.shield < u.maxShield) u.shield = Math.min(u.maxShield, u.shield + u.maxShield * SHIELD_REGEN * DT);
+        if (u.auraShield < u.maxAuraShield) u.auraShield = Math.min(u.maxAuraShield, u.auraShield + u.maxAuraShield * SHIELD_REGEN * DT);
+      }
+      if (I.regen > 0 && I.sinceDamage > REGEN_DELAY && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * I.regen * DT);
       if (I.leapCd > 0) I.leapCd -= DT;
       if (I.crushCd > 0) I.crushCd -= DT;
       if (u.stun > 0) u.stun = Math.max(0, u.stun - DT);
@@ -286,6 +401,8 @@ export class Battle {
       I.px = u.x;
       I.py = u.y;
     }
+
+    this.updateVisibility();
 
     // goals + weapons
     for (let i = 0; i < n; i++) {
@@ -308,14 +425,17 @@ export class Battle {
     this.rebuildHash();
     this.separate();
 
-    // repair auras
+    // repair / support auras
     this.auraTimer -= DT;
     if (this.auraTimer <= 0) {
       this.auraTimer = AURA_EVERY;
       for (let i = 0; i < n; i++) if (ints[i].aura && ints[i].u.alive) this.applyAura(ints[i]);
+      this.supportAuras();
     }
 
+    if (this.pds.length) this.pointDefense();
     this.updateProjectiles();
+    this.flushBlasts();
 
     // bookkeeping
     for (let i = 0; i < n; i++) {
@@ -334,6 +454,138 @@ export class Battle {
     this.checkEnd();
   }
 
+  // ---------------------------------------------------------------- visibility + support systems
+
+  /** Smoke clouds tick down; cloaked units are revealed by proximity, recent fire or detectors. */
+  private updateVisibility(): void {
+    const units = this.units, ints = this.ints;
+    if (this.smokes.length) {
+      let wi = 0;
+      for (const c of this.smokes) { c.t -= DT; if (c.t > 0) this.smokes[wi++] = c; }
+      this.smokes.length = wi;
+      for (let i = 0; i < ints.length; i++) {
+        const u = units[i];
+        let inside = false;
+        if (u.alive) for (const c of this.smokes) { const dx = u.x - c.x, dy = u.y - c.y; if (dx * dx + dy * dy <= c.r * c.r) { inside = true; break; } }
+        ints[i].smoked = inside;
+      }
+    } else {
+      for (let i = 0; i < ints.length; i++) ints[i].smoked = false;
+    }
+    if (!this.hasCloak) return;
+    for (let i = 0; i < ints.length; i++) {
+      const I = ints[i];
+      const u = I.u;
+      if (!I.cloak || !u.alive) continue;
+      let visible = I.sinceFire < (I.cloak === 'phantom' ? PHANTOM_FIRE_REVEAL : STEALTH_FIRE_REVEAL);
+      if (!visible) {
+        for (const D of this.detectors) {
+          const o = D.u;
+          if (!o.alive || o.side === u.side) continue;
+          const dx = o.x - u.x, dy = o.y - u.y, r = D.detect + I.radius;
+          if (dx * dx + dy * dy <= r * r) { visible = true; break; }
+        }
+      }
+      if (!visible && I.cloak === 'stealth') {
+        const cnt = this.gather(u.x, u.y, CLOAK_REVEAL + I.radius + MAX_RADIUS);
+        for (let q = 0; q < cnt; q++) {
+          const j = this.scratch[q];
+          const o = units[j];
+          if (!o.alive || o.side === u.side) continue;
+          if (Math.hypot(o.x - u.x, o.y - u.y) - I.radius - ints[j].radius <= CLOAK_REVEAL) { visible = true; break; }
+        }
+      }
+      u.cloaked = !visible;
+    }
+  }
+
+  /** Can `shooter` see (target) `t`? Cloak and smoke. */
+  private visible(shooter: SimUnit, t: SimUnit): boolean {
+    if (t.cloaked) return false;
+    if (this.ints[t.id].smoked) {
+      const dx = t.x - shooter.x, dy = t.y - shooter.y;
+      if (dx * dx + dy * dy > SMOKE_SIGHT * SMOKE_SIGHT) return false;
+    }
+    return true;
+  }
+
+  /** Shield domes, command uplinks and jammers (refreshed every AURA_EVERY). */
+  private supportAuras(): void {
+    const units = this.units, ints = this.ints;
+    const first = this.tick === 0;
+    for (const I of ints) { I.rateAura = 0; I.jammed = false; if (this.domes.length) I.u.maxAuraShield = 0; }
+    for (const D of this.domes) {
+      const d = D.u;
+      if (!d.alive) continue;
+      const cnt = this.gather(d.x, d.y, D.domeR + MAX_RADIUS);
+      for (let q = 0; q < cnt; q++) {
+        const o = units[this.scratch[q]];
+        if (!o.alive || o.side !== d.side || o === d) continue;
+        if (Math.hypot(o.x - d.x, o.y - d.y) <= D.domeR) o.maxAuraShield = Math.max(o.maxAuraShield, D.domeAmt);
+      }
+    }
+    if (this.domes.length) for (const I of ints) {
+      const u = I.u;
+      if (first) u.auraShield = u.maxAuraShield;
+      if (u.auraShield > u.maxAuraShield) u.auraShield = u.maxAuraShield;
+    }
+    for (const L of this.uplinks) {
+      const l = L.u;
+      if (!l.alive) continue;
+      const cnt = this.gather(l.x, l.y, L.uplinkR + MAX_RADIUS);
+      for (let q = 0; q < cnt; q++) {
+        const j = this.scratch[q];
+        const o = units[j];
+        if (!o.alive || o.side !== l.side || o === l) continue;
+        if (Math.hypot(o.x - l.x, o.y - l.y) <= L.uplinkR) ints[j].rateAura = Math.max(ints[j].rateAura, L.uplinkBonus);
+      }
+    }
+    for (const J of this.jammers) {
+      const jm = J.u;
+      if (!jm.alive) continue;
+      const cnt = this.gather(jm.x, jm.y, J.jammer + MAX_RADIUS);
+      for (let q = 0; q < cnt; q++) {
+        const j = this.scratch[q];
+        const o = units[j];
+        if (!o.alive || o.side !== jm.side) continue;
+        if (Math.hypot(o.x - jm.x, o.y - jm.y) <= J.jammer) ints[j].jammed = true;
+      }
+    }
+  }
+
+  /** Point-defense lasers shoot down one incoming explosive projectile per cooldown. */
+  private pointDefense(): void {
+    for (const I of this.pds) {
+      const u = I.u;
+      if (!u.alive) continue;
+      if (I.pdCd > 0) I.pdCd -= DT;
+      if (I.pdCd > 0 || u.stun > 0 || u.disarm > 0) continue;
+      let best: Proj | null = null, bestD = I.pdRange * I.pdRange;
+      for (const p of this.projs) {
+        if (p.dead || p.side === u.side) continue;
+        const k = p.kind;
+        if (k !== 'rocket' && k !== 'missile' && k !== 'shell' && k !== 'arc' && k !== 'orb') continue;
+        const dx = p.x - u.x, dy = p.y - u.y, d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      if (!best) continue;
+      best.dead = true;
+      I.pdCd = I.pdCooldown;
+      this.events.push({ t: 'beam', moduleId: I.pdModule, x1: u.x, y1: u.y, x2: best.x, y2: best.y, side: u.side });
+      this.events.push({ t: 'explode', x: best.x, y: best.y, radius: 0.3, moduleId: I.pdModule });
+    }
+  }
+
+  private flushBlasts(): void {
+    const pb = this.pendingBlasts;
+    for (let k = 0; k < pb.length; k++) {
+      const I = this.ints[pb[k]];
+      const u = I.u;
+      this.splash(u.x, u.y, I.blastR, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true);
+    }
+    pb.length = 0;
+  }
+
   // ---------------------------------------------------------------- targeting
 
   private canHit(w: Wpn, t: SimUnit): boolean {
@@ -345,6 +597,18 @@ export class Battle {
     const u = I.u;
     const units = this.units;
     let best = -1, bestD = Infinity;
+    if (I.blocker) {
+      // pure walls: head for the nearest visible ground enemy (else any) to body-block it
+      let bestA = -1, bestAD = Infinity;
+      for (let j = 0; j < units.length; j++) {
+        const o = units[j];
+        if (!o.alive || o.side === u.side || !this.visible(u, o)) continue;
+        const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
+        if (o.flying) { if (d < bestAD) { bestAD = d; bestA = j; } }
+        else if (d < bestD) { bestD = d; best = j; }
+      }
+      return best >= 0 ? best : bestA;
+    }
     if (!I.hasWeapon) {
       for (let j = 0; j < units.length; j++) {
         const o = units[j];
@@ -358,6 +622,7 @@ export class Battle {
       const o = units[j];
       if (!o.alive || o.side === u.side) continue;
       if (o.flying ? !I.canHitA : !I.canHitG) continue;
+      if (!this.visible(u, o)) continue;
       const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
       if (d < bestD) { bestD = d; best = j; }
     }
@@ -367,7 +632,8 @@ export class Battle {
   private inRange(u: SimUnit, w: Wpn, t: SimUnit, mult: number): number {
     const dx = t.x - u.x, dy = t.y - u.y;
     const d = Math.sqrt(dx * dx + dy * dy);
-    const edge = d - this.ints[t.id].radius;
+    let edge = d - this.ints[t.id].radius;
+    if (w.melee) edge -= this.ints[u.id].radius;
     if (edge > w.range * mult || d < w.minRange) return -1;
     return d;
   }
@@ -379,6 +645,7 @@ export class Battle {
       const o = units[j];
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const d = this.inRange(u, w, o, 1);
+      if (d >= 0 && !this.visible(u, o)) continue;
       if (d >= 0 && d < bestD) { bestD = d; best = j; }
     }
     return best;
@@ -410,7 +677,7 @@ export class Battle {
       const w = I.wpns[mi];
       if (!w) continue;
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
-      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow);
+      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
       if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
 
       if (w.heal > 0) {
@@ -422,7 +689,7 @@ export class Battle {
       let curD = -1;
       if (m.target >= 0) {
         const t = units[m.target];
-        curD = t.alive ? this.inRange(u, w, t, RANGE_KEEP) : -1;
+        curD = t.alive && this.visible(u, t) ? this.inRange(u, w, t, RANGE_KEEP) : -1;
         if (curD < 0) { m.target = -1; w.retarget = 0; }
       }
       w.retarget -= DT;
@@ -450,7 +717,7 @@ export class Battle {
       // burst continuation
       if (w.burstLeft > 0) {
         if (u.disarm > 0) { w.burstLeft = 0; continue; }
-        w.burstTimer -= DT * (1 - u.slow);
+        w.burstTimer -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
         if (w.burstTimer <= 0) {
           w.burstLeft--;
           w.burstTimer = BURST_GAP;
@@ -464,7 +731,7 @@ export class Battle {
         m.cooldown = Math.max(m.cooldown, -DT) + (w.def.cooldown ?? 1); // carry sub-tick remainder
         if (m.ammo !== undefined) {
           m.ammo--;
-          if (m.ammo <= 0) { m.ammo = 0; m.reloading = true; m.cooldown = Math.max(m.cooldown, w.def.reload ?? 0); }
+          if (m.ammo <= 0) { m.ammo = 0; m.reloading = true; m.cooldown = Math.max(m.cooldown, (w.def.reload ?? 0) * I.reloadMult); }
         }
         const burst = w.def.burst ?? 1;
         if (burst > 1) { w.burstLeft = burst - 1; w.burstTimer = BURST_GAP; }
@@ -489,6 +756,7 @@ export class Battle {
     const def = w.def;
     const m = u.mounts[mi];
     m.flash = 1;
+    I.sinceFire = 0;
     const aim = Math.atan2(ay - u.y, ax - u.x);
     const mx = u.x + Math.cos(aim) * I.radius * 0.8;
     const my = u.y + Math.sin(aim) * I.radius * 0.8;
@@ -502,10 +770,18 @@ export class Battle {
     const fx = def.stun || def.slow || def.burn || def.impulse || def.disarm ? def : null;
     const lm = I.dmgMult;
 
+    const cls = w.cls;
+    if (kind === 'melee') {
+      if (!t || !t.alive) return;
+      const hx = t.x - Math.cos(aim) * this.ints[t.id].radius * 0.7, hy = t.y - Math.sin(aim) * this.ints[t.id].radius * 0.7;
+      if (def.splash && def.splash > 0) this.splash(t.x, t.y, def.splash, raw, ap, airBonus, u.side, false, def.id, t.id, false, fx, lm, cls, u.x, u.y);
+      else this.damage(t, raw, ap, airBonus, u.side, def.id, hx, hy, fx, lm, u.x, u.y, cls);
+      return;
+    }
     if (kind === 'beam') {
       if (!t || !t.alive) return;
       this.events.push({ t: 'beam', moduleId: def.id, x1: mx, y1: my, x2: t.x, y2: t.y, side: u.side });
-      this.damage(t, raw, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm, mx, my);
+      this.damage(t, raw, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm, mx, my, cls);
       return;
     }
     if (kind === 'lightning') {
@@ -521,7 +797,7 @@ export class Battle {
 
     const pellets = Math.max(1, def.pellets ?? 1);
     const c = Math.cos(aim), s = Math.sin(aim);
-    const err = w.spread * Math.min(1.2, dist0 / Math.max(1, w.range));
+    const err = w.spread * Math.min(1.2, dist0 / Math.max(1, w.range)) * (t && this.ints[t.id].jammed ? 2 : 1);
     const speed = def.projectileSpeed ?? 15;
     const air = kind === 'arc' || kind === 'flame' ? false : t ? t.flying : !w.hitG;
     for (let k = 0; k < pellets; k++) {
@@ -548,7 +824,7 @@ export class Battle {
         target: kind === 'missile' && t ? t.id : -1, tx, ty, sx: mx, sy: my, total, traveled: 0,
         maxDist: kind === 'flame' ? total : kind === 'missile' ? w.range * 1.8 : pierce ? w.range + 1 : total + 2,
         ignore: -1, arcH: kind === 'arc' ? 1 + total * 0.22 : 0, dead: false,
-        pierce, hits: [], fx, fxMult: lm,
+        pierce, hits: [], fx, fxMult: lm, cls,
       };
       if (air && kind !== 'missile') p.z = 1;
       else if (kind === 'orb') p.z = 0.4;
@@ -566,7 +842,7 @@ export class Battle {
       const from = pts[pts.length - 1];
       pts.push({ x: cur.x, y: cur.y });
       hit.push(cur.id);
-      this.damage(cur, dmg, ap, airBonus, u.side, w.def.id, cur.x, cur.y, fx, lm, from.x, from.y);
+      this.damage(cur, dmg, ap, airBonus, u.side, w.def.id, cur.x, cur.y, fx, lm, from.x, from.y, w.cls);
       dmg *= CHAIN_FALLOFF;
       if (k === jumps) break;
       // next jump: nearest unhit enemy near the current one
@@ -595,7 +871,7 @@ export class Battle {
       const along = dx * c + dy * s;
       if (along < -0.3 || along > len + 0.3) continue;
       const perp = Math.abs(-dx * s + dy * c);
-      if (perp <= this.ints[j].radius + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my);
+      if (perp <= this.ints[j].radius + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
     }
     this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side });
   }
@@ -652,9 +928,10 @@ export class Battle {
 
   // ---------------------------------------------------------------- damage
 
-  private damage(t: SimUnit, raw: number, ap: number, airBonus: number, side: Side, moduleId: string, x: number, y: number, fx: ModuleDef | null = null, fxMult = 1, ox = NaN, oy = NaN): void {
+  private damage(t: SimUnit, raw: number, ap: number, airBonus: number, side: Side, moduleId: string, x: number, y: number, fx: ModuleDef | null = null, fxMult = 1, ox = NaN, oy = NaN, cls = 0): void {
     if (!t.alive) return;
-    if (fx) {
+    const T = this.ints[t.id];
+    if (fx && !T.hardened) {
       if (fx.disarm) t.disarm = Math.min(MAX_STUN, t.disarm + fx.disarm);
       if (fx.impulse && !t.flying && !t.stats.isStatic && !Number.isNaN(ox)) {
         const mag = fx.impulse * (t.stats.size === 1 ? 1 : t.stats.size === 2 ? 0.5 : 0.25);
@@ -664,7 +941,6 @@ export class Battle {
           dx /= d; dy /= d;
           // pulls never drag a unit past the puller
           const m2 = mag < 0 ? -Math.min(-mag, Math.max(0, d - 1)) : mag;
-          const T = this.ints[t.id];
           T.kbx += dx * m2;
           T.kby += dy * m2;
         }
@@ -672,13 +948,16 @@ export class Battle {
       if (fx.stun) t.stun = Math.min(MAX_STUN, t.stun + fx.stun);
       if (fx.slow) t.slow = Math.min(MAX_SLOW, t.slow + fx.slow);
       if (fx.burn) {
-        const T = this.ints[t.id];
         const dps = fx.burn.dps * fxMult;
         if (t.burning <= 0 || dps >= T.burnDps) { T.burnDps = dps; T.burnSide = side; T.burnModule = moduleId; }
         t.burning = Math.max(t.burning, fx.burn.duration);
       }
     }
     if (t.flying) raw *= airBonus;
+    if (cls) {
+      if ((cls & CLS_ENERGY) && T.energyResist > 0) raw *= 1 - T.energyResist;
+      if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { raw *= REACTIVE_MULT; t.reactive--; }
+    }
     const effArmor = t.stats.armor * (1 - ap);
     let dmg = Math.max(raw * MIN_DMG_FRAC, raw - effArmor);
     let dealt = 0;
@@ -690,6 +969,13 @@ export class Battle {
       dealt += a;
       shieldHit = true;
     }
+    if (dmg > 0 && t.auraShield > 0) {
+      const a = Math.min(t.auraShield, dmg);
+      t.auraShield -= a;
+      dmg -= a;
+      dealt += a;
+      shieldHit = true;
+    }
     if (dmg > 0) {
       const a = Math.min(t.hp, dmg);
       t.hp -= dmg;
@@ -697,18 +983,24 @@ export class Battle {
     }
     this.damageDealt[side] += dealt;
     t.hitFlash = 1;
-    this.ints[t.id].sinceDamage = 0;
+    T.sinceDamage = 0;
     this.events.push({ t: 'hit', unit: t.id, damage: dealt, shieldHit, x, y, moduleId });
     if (t.hp <= 0) {
       t.hp = 0;
       t.alive = false;
       t.moving = false;
       t.leap = 0;
+      t.cloaked = false;
       this.events.push({ t: 'death', unit: t.id, x: t.x, y: t.y, size: t.stats.size, flying: t.flying });
+      if (T.blastDmg > 0) this.pendingBlasts.push(t.id);
+    } else if (T.smokeR > 0 && !T.smokeUsed && t.hp < t.maxHp * SMOKE_AT) {
+      T.smokeUsed = true;
+      this.smokes.push({ x: t.x, y: t.y, r: T.smokeR, t: T.smokeDur });
+      this.events.push({ t: 'smoke', x: t.x, y: t.y, radius: T.smokeR, duration: T.smokeDur });
     }
   }
 
-  private splash(x: number, y: number, R: number, raw: number, ap: number, airBonus: number, side: Side, air: boolean, moduleId: string, direct: number, emit: boolean, fx: ModuleDef | null = null, fxMult = 1): void {
+  private splash(x: number, y: number, R: number, raw: number, ap: number, airBonus: number, side: Side, air: boolean, moduleId: string, direct: number, emit: boolean, fx: ModuleDef | null = null, fxMult = 1, cls = 0, ox = x, oy = y): void {
     if (emit) this.events.push({ t: 'explode', x, y, radius: R, moduleId });
     const cnt = this.gather(x, y, R + MAX_RADIUS);
     for (let q = 0; q < cnt; q++) {
@@ -718,7 +1010,7 @@ export class Battle {
       const d = Math.hypot(o.x - x, o.y - y) - this.ints[id].radius;
       if (d > R && id !== direct) continue;
       const f = id === direct ? 1 : 1 - (1 - SPLASH_EDGE) * Math.max(0, d) / R;
-      this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult, x, y);
+      this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult, ox, oy, cls);
     }
   }
 
@@ -728,6 +1020,7 @@ export class Battle {
     const ps = this.projs;
     for (let i = 0; i < ps.length; i++) {
       const p = ps[i];
+      if (p.dead) continue;
       if (p.kind === 'arc') {
         p.progress = Math.min(1, p.progress + (p.speed * DT) / p.total);
         const k = p.progress;
@@ -735,7 +1028,7 @@ export class Battle {
         p.y = p.sy + (p.ty - p.sy) * k;
         p.z = 4 * p.arcH * k * (1 - k);
         if (k >= 1) {
-          this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, false, p.moduleId, -1, true, p.fx, p.fxMult);
+          this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, false, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
           p.dead = true;
         }
         continue;
@@ -743,7 +1036,8 @@ export class Battle {
       if (p.kind === 'missile') {
         if (p.target >= 0) {
           const t = this.units[p.target];
-          if (t.alive) { p.tx = t.x; p.ty = t.y; } else p.target = -1;
+          // jammed targets break the lock: the missile flies on to its last known point
+          if (t.alive && !this.ints[t.id].jammed) { p.tx = t.x; p.ty = t.y; } else p.target = -1;
         }
         const want = Math.atan2(p.ty - p.y, p.tx - p.x);
         p.angle = turnToward(p.angle, want, 5 * DT);
@@ -767,8 +1061,8 @@ export class Battle {
         if (T.evasive && this.rng() < EVADE_CHANCE) {
           p.ignore = hitId;
         } else {
-          if (p.splash > 0) this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, hitId, p.kind !== 'flame', p.fx, p.fxMult);
-          else this.damage(t, p.dmg, p.ap, p.airBonus, p.side, p.moduleId, p.x, p.y, p.fx, p.fxMult, p.x - p.vx * DT, p.y - p.vy * DT);
+          if (p.splash > 0) this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, hitId, p.kind !== 'flame', p.fx, p.fxMult, p.cls);
+          else this.damage(t, p.dmg, p.ap, p.airBonus, p.side, p.moduleId, p.x, p.y, p.fx, p.fxMult, p.x - p.vx * DT, p.y - p.vy * DT, p.cls);
           if (p.pierce) { p.hits.push(hitId); p.ignore = hitId; }
           else { p.dead = true; continue; }
         }
@@ -776,12 +1070,12 @@ export class Battle {
       if (p.kind === 'missile') {
         const dx = p.tx - p.x, dy = p.ty - p.y;
         if (p.target < 0 && dx * dx + dy * dy < step * step) {
-          this.splash(p.tx, p.ty, Math.max(0.4, p.splash), p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult);
+          this.splash(p.tx, p.ty, Math.max(0.4, p.splash), p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
           p.dead = true;
           continue;
         }
       } else if (p.splash > 0 && p.kind !== 'flame' && !p.pierce && p.traveled >= p.total) {
-        this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult);
+        this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
         p.dead = true;
         continue;
       }
@@ -859,11 +1153,20 @@ export class Battle {
     if (goal) {
       const dx = goal.x - u.x, dy = goal.y - u.y;
       const d = Math.sqrt(dx * dx + dy * dy);
-      if (!I.hasWeapon) {
+      if (I.blocker) {
+        // wall: march into the nearest enemy and body-block it (straight-ish advance while far)
+        const lw = clamp(1 - (d - 4) / 8, 0.3, 1);
+        gx = u.x + dx * lw;
+        gy = u.y + dy;
+        stopDist = 0;
+        if (d - I.radius - this.ints[goal.id].radius <= 0.15) return;
+      } else if (!I.hasWeapon) {
         // support: stay just behind the nearest armed ally
         gx = goal.x;
-        gy = goal.y - fwd * 1.6;
+        gy = clamp(goal.y - fwd * (1.6 + this.ints[goal.id].radius), I.radius, FIELD_H - I.radius);
         stopDist = 0.6;
+        // close enough to the ally already: don't shove it around
+        if (d - I.radius - this.ints[goal.id].radius <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
       } else {
         // leap in
         if (I.canLeap && I.leapCd <= 0 && d >= 3 && d <= 7) {
@@ -886,7 +1189,8 @@ export class Battle {
         gx = u.x + dx * lw;
         gy = u.y + dy;
         stopDist = 0;
-        if (engaged && !I.fireOnMove) wantMove = false;
+        if (engaged && (!I.fireOnMove || I.meleeOnly)) wantMove = false;
+        else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
         else if (I.fireOnMove && d - this.ints[goal.id].radius <= Math.max(1.2, engageR * 0.7)) wantMove = false;
         else wantMove = true;
         if (!wantMove) {
@@ -907,7 +1211,7 @@ export class Battle {
     const dx = gx - u.x, dy = gy - u.y;
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d <= Math.max(stopDist, 0.05)) return;
-    const want = Math.atan2(dy, dx);
+    const want = Math.atan2(dy, dx) + this.avoid(I, dx / d, dy / d, goal ? goal.id : -1);
     u.angle = turnToward(u.angle, want, I.turn * DT);
     const diff = Math.abs(angDiff(u.angle, want));
     let f = diff >= Math.PI / 2 ? 0 : Math.cos(diff);
@@ -922,6 +1226,55 @@ export class Battle {
       u.x += Math.cos(u.angle) * sp;
       u.y += Math.sin(u.angle) * sp;
     }
+  }
+
+  /** Steering offset (radians) to slip around allies (or emplacements) that block the way ahead. */
+  private avoid(I: Internal, dirX: number, dirY: number, goalId: number): number {
+    const u = I.u;
+    const look = I.radius + MAX_RADIUS + 0.8;
+    const cnt = this.gather(u.x, u.y, look);
+    let best = Infinity, bestPerp = 0, bestClear = 1;
+    const mySpeed = I.speed * 0.5;
+    for (let q = 0; q < cnt; q++) {
+      const j = this.scratch[q];
+      if (j === u.id || j === goalId) continue;
+      const o = this.units[j];
+      if (!o.alive || o.flying !== u.flying) continue;
+      const O = this.ints[j];
+      if (O.leapT >= 0) continue;
+      // enemies are only obstacles when they can't be pushed (emplacements)
+      if (o.side !== u.side && !O.isStatic) continue;
+      const rx = o.x - u.x, ry = o.y - u.y;
+      const along = rx * dirX + ry * dirY;
+      if (along <= 0) continue;
+      const clear = I.radius + O.radius + 0.1;
+      if (along > clear + 0.8) continue;
+      const perp = rx * -dirY + ry * dirX; // >0: obstacle on our left (in +perp direction)
+      if (Math.abs(perp) >= clear) continue;
+      // allies moving our way at a decent clip aren't in the way
+      if (O.vx * dirX + O.vy * dirY > mySpeed) continue;
+      if (along < best) { best = along; bestPerp = perp; bestClear = clear; }
+    }
+    if (best === Infinity) {
+      if (I.avoidT > 0) I.avoidT -= DT;
+      else I.avoidSide = 0;
+      return 0;
+    }
+    if (I.avoidSide === 0) {
+      I.avoidSide = bestPerp > 0.05 ? -1 : bestPerp < -0.05 ? 1 : (u.id & 1 ? 1 : -1);
+      // don't dodge into a wall
+      const sx = u.x + I.avoidSide * -dirY * (I.radius + 1.5), sy = u.y + I.avoidSide * dirX * (I.radius + 1.5);
+      if (sx < I.radius || sx > FIELD_W - I.radius || sy < I.radius || sy > FIELD_H - I.radius) I.avoidSide = -I.avoidSide;
+      I.stuckT = 0;
+    }
+    // making no headway around this obstacle: try the other way
+    if (I.vx * dirX + I.vy * dirY < I.speed * 0.15) {
+      I.stuckT += DT;
+      if (I.stuckT > 1.5) { I.avoidSide = -I.avoidSide; I.stuckT = 0; }
+    } else I.stuckT = 0;
+    I.avoidT = 0.6;
+    const strength = 1 - Math.abs(bestPerp) / bestClear; // 1 = dead ahead
+    return I.avoidSide * (0.5 + 0.9 * strength);
   }
 
   private strafeMove(I: Internal, goal: SimUnit | null): void {

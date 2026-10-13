@@ -74,6 +74,13 @@ export interface SimUnit {
   burning: number;
   /** seconds remaining during which it can't fire (but can move) */
   disarm: number;
+  /** true while enemies can't target it (cloak not revealed) */
+  cloaked: boolean;
+  /** reactive armor charges left */
+  reactive: number;
+  /** projected shield from allied shield domes (absorbed after the unit's own shield) */
+  auraShield: number;
+  maxAuraShield: number;
 }
 
 export interface SimProjectile {
@@ -100,6 +107,7 @@ export type BattleEvent =
   | { t: 'heal'; unit: number; amount: number; from: number }
   | { t: 'death'; unit: number; x: number; y: number; size: number; flying: boolean }
   | { t: 'leap'; unit: number }
+  | { t: 'smoke'; x: number; y: number; radius: number; duration: number }
   | { t: 'end'; winner: Side | -1 };
 
 export interface BattleSummary {

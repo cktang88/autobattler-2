@@ -33,6 +33,20 @@ const DESIGNS: Design[] = [
   D('sonic', 'warden', 'halftrack', ['sonic', null]),
   D('disarmer', 'warden', 'halftrack', ['disarm', null]),
   D('pulse', 'warden', 'halftrack', ['twinlaser', null]),
+  D('brawler', 'raider', 'halftrack', ['buzzsaw', 'buzzsaw']),
+  D('runner', 'scout', 'wheels', ['buzzsaw']),
+  D('mortartruck', 'warden', 'halftrack', ['mortar', null]),
+  D('ghost', 'striker', 'halftrack', ['stealth', 'autocannon', 'mg']),
+  D('spotter', 'raider', 'halftrack', ['sensor', 'mg']),
+  D('pdtank', 'warden', 'halftrack', ['autocannon', 'pointdef']),
+  D('plaintank', 'warden', 'halftrack', ['autocannon', 'plateL']),
+  D('rocketeer', 'warden', 'halftrack', ['rockets', null]),
+  D('smoker', 'warden', 'halftrack', ['autocannon', 'smoke']),
+  D('bomb', 'scout', 'wheels', ['selfdestruct']),
+  D('hardtank', 'warden', 'halftrack', ['autocannon', 'hardened']),
+  D('domer', 'bastion', 'treads', ['dome', 'autocannon', 'plateM']),
+  D('era', 'warden', 'halftrack', ['reactive', 'mg']),
+  D('mirror', 'warden', 'halftrack', ['autocannon', 'mirror']),
 ];
 
 test('test designs are legal', () => {
@@ -227,4 +241,145 @@ test('impulse knocks units back; disarm stops firing', () => {
   }
   assert.ok(disarmedTicks > 0);
   assert.equal(firedWhileDisarmed, 0);
+});
+
+test('melee: charges into contact and strikes edge-to-edge', () => {
+  const b = new Battle(input(1, [P('brawler', 10, 0)], [P('dummy', 10, 0)]));
+  let firstHitGap = -1, swings = 0;
+  while (!b.done) {
+    b.step();
+    for (const e of b.events) {
+      if (e.t === 'fire' && e.moduleId === 'buzzsaw') {
+        swings++;
+        if (firstHitGap < 0) {
+          const [a, t] = b.units;
+          firstHitGap = Math.hypot(a.x - t.x, a.y - t.y) - 0.45 - 0.45;
+        }
+      }
+    }
+  }
+  assert.equal(b.winner, 0);
+  assert.ok(swings > 3);
+  assert.ok(firstHitGap <= 0.6 * 1.08 + 0.05, `gap ${firstHitGap}`);
+});
+
+test('arc shells land where the target was: fast movers dodge, parked targets do not', () => {
+  // one mortar truck vs one target, several seeds and lateral offsets
+  const perShot = (enemy: string) => {
+    let dmg = 0, shots = 0;
+    for (const seed of [1, 2, 3]) for (const ox of [2, 10, 18]) {
+      const b = new Battle(input(seed, [P('mortartruck', 10, 0)], [P(enemy, ox, 0)]));
+      while (!b.done && b.tick < 20 * 40) {
+        b.step();
+        for (const e of b.events) {
+          if (e.t === 'fire' && e.moduleId === 'mortar') shots++;
+          if (e.t === 'hit' && e.moduleId === 'mortar') dmg += e.damage;
+        }
+      }
+    }
+    return { per: dmg / Math.max(1, shots), shots };
+  };
+  const parked = perShot('dummy');
+  const fast = perShot('runner');
+  assert.ok(fast.shots > 0 && parked.shots > 0);
+  assert.ok(parked.per > 20, `parked ${parked.per}`);
+  assert.ok(fast.per < parked.per * 0.4, `fast ${fast.per} vs parked ${parked.per}`);
+});
+
+test('stealth: untargetable until it fires; detectors reveal it', () => {
+  const b = new Battle(input(1, [P('ghost', 10, 0)], [P('spire', 10, 0)]));
+  assert.equal(b.units[0].cloaked, true);
+  let ghostFired = false, enemyFiredFirst = false;
+  while (!b.done) {
+    b.step();
+    for (const e of b.events) if (e.t === 'fire') {
+      if (e.unit === 0) ghostFired = true;
+      else if (!ghostFired) enemyFiredFirst = true;
+    }
+  }
+  assert.ok(ghostFired);
+  assert.equal(enemyFiredFirst, false);
+
+  const d = new Battle(input(1, [P('ghost', 10, 0)], [P('spire', 10, 0), P('spotter', 14, 6)]));
+  let revealedEarly = false, gf = false;
+  while (!d.done) {
+    d.step();
+    for (const e of d.events) if (e.t === 'fire') { if (e.unit === 0) gf = true; else if (!gf) revealedEarly = true; }
+  }
+  assert.ok(revealedEarly);
+});
+
+test('point defense shoots down rockets', () => {
+  const rocketHits = (target: string) => {
+    const b = new Battle(input(2, [P('rocketeer', 10, 0)], [P(target, 10, 0)]));
+    let hits = 0, zaps = 0;
+    while (!b.done && b.tick < 20 * 30) {
+      b.step();
+      for (const e of b.events) {
+        if (e.t === 'hit' && e.moduleId === 'rockets') hits++;
+        if (e.t === 'explode' && e.moduleId === 'pointdef') zaps++;
+      }
+    }
+    return { hits, zaps };
+  };
+  const pd = rocketHits('pdtank'), plain = rocketHits('plaintank');
+  assert.ok(pd.zaps > 0);
+  assert.ok(pd.hits < plain.hits, `pd ${pd.hits} vs plain ${plain.hits}`);
+});
+
+test('smoke pops below 60% hp and blocks long-range targeting', () => {
+  const b = new Battle(input(3, [P('smoker', 10, 0)], [P('buster', 4, 0), P('buster', 16, 0)]));
+  let smoke: { x: number; y: number; radius: number; from: number; until: number } | null = null;
+  let violations = 0;
+  while (!b.done) {
+    b.step();
+    for (const e of b.events) if (e.t === 'smoke') {
+      smoke = { x: e.x, y: e.y, radius: e.radius, from: b.tick + 1, until: b.tick + e.duration * 20 };
+      assert.ok(b.units[0].hp < b.units[0].maxHp * 0.6);
+    }
+    if (smoke && b.tick > smoke.from && b.tick < smoke.until - 1 && b.units[0].alive) {
+      const s0 = b.units[0];
+      if (Math.hypot(s0.x - smoke.x, s0.y - smoke.y) > smoke.radius) continue;
+      for (const u of b.units.slice(1)) {
+        if (!u.alive) continue;
+        if (u.mounts[0].target === 0 && Math.hypot(u.x - s0.x, u.y - s0.y) > 2.6) violations++;
+      }
+    }
+  }
+  assert.ok(smoke, 'smoke event');
+  assert.equal(violations, 0);
+});
+
+test('unarmed blockers advance; self-destruct blasts on death', () => {
+  const b = new Battle(input(4, [P('bomb', 10, 0)], [P('buggy', 10, 0)]));
+  let blast = false;
+  while (!b.done) {
+    b.step();
+    for (const e of b.events) if (e.t === 'explode' && e.moduleId === 'selfdestruct') blast = true;
+  }
+  assert.ok(b.units[0].odometer > 3, `advanced ${b.units[0].odometer}`);
+  assert.ok(blast);
+  assert.ok(b.summary().damageDealt[0] > 0);
+});
+
+test('defensive systems: hardened, shield dome, reactive armor, mirror coating', () => {
+  // hardened: stun guns never stun it
+  const h = new Battle(input(1, [P('zapper', 10, 0)], [P('hardtank', 10, 0)]));
+  while (!h.done) { h.step(); assert.equal(h.units[1].stun, 0); }
+  // dome: neighbours start with projected shield, the dome itself doesn't
+  const d = new Battle(input(1, [P('domer', 10, 0), P('buggy', 9, 0), P('buggy', 14, 1)], [P('buggy', 10, 0)]));
+  d.step();
+  assert.ok(d.units[1].auraShield > 0 && d.units[2].auraShield > 0);
+  assert.equal(d.units[0].maxAuraShield, 0);
+  // reactive: charges are consumed by explosive hits and blunt them
+  const r = new Battle(input(1, [P('buster', 10, 0)], [P('era', 10, 0)]));
+  const cannonHits: number[] = [];
+  while (!r.done) { r.step(); for (const e of r.events) if (e.t === 'hit' && e.unit === 1 && e.moduleId === 'cannon') cannonHits.push(e.damage); }
+  assert.ok(cannonHits.length > 0 && cannonHits[0] < 190 * 0.3, `first cannon hit ${cannonHits[0]}`);
+  assert.ok(r.units[1].reactive < 6);
+  // mirror: laser hits reduced
+  const m = new Battle(input(1, [P('lancer', 10, 0)], [P('mirror', 10, 0)]));
+  let lh = 0, ln = 0;
+  while (!m.done) { m.step(); for (const e of m.events) if (e.t === 'hit' && e.unit === 1 && e.moduleId === 'laser' && !e.shieldHit) { lh += e.damage; ln++; } }
+  assert.ok(ln > 0 && lh / ln < 24 * 0.6, `laser per hit ${lh / ln}`);
 });
