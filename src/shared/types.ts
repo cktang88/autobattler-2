@@ -253,6 +253,8 @@ export interface Placement {
   target?: TargetPriority;
   /** squads: keep the deployed spacing while moving/fighting (true) or close in freely (false/absent). Hidden like `target`. */
   hold?: boolean;
+  /** stay at max weapon range, backing away from enemies that close in. Hidden like `target`. */
+  kite?: boolean;
 }
 
 /** Battle AI settings. A Design carries defaults (set in the garage); each Placement copies them when placed and
