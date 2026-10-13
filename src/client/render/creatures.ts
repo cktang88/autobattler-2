@@ -150,20 +150,186 @@ function spike(g: Ctx, x: number, y: number, a: number, len: number, w: number, 
   g.stroke(p);
 }
 
+/* ------------------------------------------------------------------------------------- hard-surface kit */
+
+/** Armoured beam (limb segment): straight sides, chamfered ends, lit edge, centre seam, outline. Half widths. */
+function beam(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number, w1: number, c0: string, c1: string, o: number): void {
+  const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+  const ux = dx / l, uy = dy / l, nx = -uy, ny = ux;
+  const c = Math.min(w0, w1) * 0.6;
+  const p = new Path2D();
+  const P = (x: number, y: number, u: number, n: number) => p.lineTo(x + ux * u + nx * n, y + uy * u + ny * n);
+  P(x0, y0, -c, w0 * 0.55); P(x0, y0, 0, w0); P(x1, y1, 0, w1); P(x1, y1, c, w1 * 0.55);
+  P(x1, y1, c, -w1 * 0.55); P(x1, y1, 0, -w1); P(x0, y0, 0, -w0); P(x0, y0, -c, -w0 * 0.55);
+  p.closePath();
+  const w = Math.max(w0, w1);
+  const gr = g.createLinearGradient(x0 - nx * w, y0 - ny * w, x0 + nx * w, y0 + ny * w);
+  gr.addColorStop(0, c0);
+  gr.addColorStop(1, c1);
+  g.fillStyle = gr;
+  g.fill(p);
+  g.lineCap = 'butt';
+  // lit bevel on one edge, panel seam down the middle
+  g.strokeStyle = 'rgba(255,255,255,0.26)';
+  g.lineWidth = Math.min(w0, w1) * 0.32;
+  g.beginPath();
+  g.moveTo(x0 - nx * w0 * 0.62, y0 - ny * w0 * 0.62);
+  g.lineTo(x1 - nx * w1 * 0.62, y1 - ny * w1 * 0.62);
+  g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,0.32)';
+  g.lineWidth = Math.max(o * 0.35, Math.min(w0, w1) * 0.12);
+  g.beginPath();
+  g.moveTo(x0 + ux * c + nx * w0 * 0.2, y0 + uy * c + ny * w0 * 0.2);
+  g.lineTo(x1 - ux * c + nx * w1 * 0.2, y1 - uy * c + ny * w1 * 0.2);
+  g.stroke();
+  g.lineJoin = 'round';
+  g.lineWidth = o;
+  g.strokeStyle = OUTLINE;
+  g.stroke(p);
+}
+
+/** Hydraulic ram: dark cylinder from (x0,y0), polished rod to (x1,y1). r = cylinder half width. */
+function piston(g: Ctx, x0: number, y0: number, x1: number, y1: number, r: number, o: number): void {
+  const mx = x0 + (x1 - x0) * 0.55, my = y0 + (y1 - y0) * 0.55;
+  g.lineCap = 'round';
+  g.strokeStyle = OUTLINE; g.lineWidth = r * 0.9 + o;
+  g.beginPath(); g.moveTo(mx, my); g.lineTo(x1, y1); g.stroke();
+  g.strokeStyle = '#c9d1d8'; g.lineWidth = r * 0.9;
+  g.stroke();
+  g.lineCap = 'butt';
+  g.strokeStyle = OUTLINE; g.lineWidth = r * 2 + o;
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(mx, my); g.stroke();
+  g.strokeStyle = METAL.dark; g.lineWidth = r * 2;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = r * 0.5;
+  g.stroke();
+  dot(g, x1, y1, r * 0.75, METAL.base);
+}
+
+/** Actuator hub: octagonal housing, bright ring, centre bolt (optional emissive core). */
+function joint(g: Ctx, x: number, y: number, r: number, o: number, fill: string, core?: string): void {
+  const p = new Path2D();
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * P2 + P2 / 16; p.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  p.closePath();
+  g.fillStyle = fill; g.fill(p);
+  g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(p);
+  g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = Math.max(o * 0.3, r * 0.14);
+  g.beginPath(); g.arc(x, y, r * 0.62, Math.PI * 0.9, Math.PI * 1.7); g.stroke();
+  if (core) { dot(g, x, y, r * 0.42, '#05080b'); dot(g, x, y, r * 0.3, core); }
+  else { dot(g, x, y, r * 0.3, METAL.light); dot(g, x + r * 0.06, y + r * 0.06, r * 0.14, METAL.deep); }
+}
+
+/** Camera lens: steel bezel, dark glass, emissive pupil, glint. */
+function lens(g: Ctx, x: number, y: number, r: number, E: string): void {
+  dot(g, x, y, r * 1.45, OUTLINE);
+  dot(g, x, y, r * 1.25, METAL.base);
+  dot(g, x - r * 0.2, y - r * 0.2, r * 0.9, METAL.light);
+  dot(g, x, y, r * 0.95, '#04070a');
+  const gr = g.createRadialGradient(x, y, 0, x, y, r * 0.65);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.4, E); gr.addColorStop(1, rgba(E, 0));
+  dot(g, x, y, r * 0.65, gr);
+  dot(g, x - r * 0.35, y - r * 0.35, r * 0.2, 'rgba(255,255,255,0.8)');
+}
+
+/** Recessed visor slot with an emissive strip, between two points (cells already scaled). */
+function visor(g: Ctx, x0: number, y0: number, x1: number, y1: number, w: number, E: string, o: number): void {
+  g.lineCap = 'butt';
+  g.strokeStyle = OUTLINE; g.lineWidth = w * 2 + o * 1.4;
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  g.strokeStyle = '#04070a'; g.lineWidth = w * 2;
+  g.stroke();
+  g.strokeStyle = rgba(E, 0.95); g.lineWidth = w * 0.95;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = w * 0.3;
+  g.stroke();
+}
+
+/** Fuel cell / ammo drum seen from above: steel end caps, glowing core band. Cells already scaled. */
+function canister(g: Ctx, x: number, y: number, len: number, r: number, a: number, E: string, o: number): void {
+  g.save();
+  g.translate(x, y); g.rotate(a);
+  g.fillStyle = 'rgba(0,0,0,0.45)';
+  g.beginPath(); roundRect(g, -len / 2 + o, -r + o * 1.4, len, r * 2, r * 0.45); g.fill();
+  const p = new Path2D();
+  roundRect(p, -len / 2, -r, len, r * 2, r * 0.45);
+  const gr = g.createLinearGradient(0, -r, 0, r);
+  gr.addColorStop(0, METAL.light); gr.addColorStop(0.5, METAL.base); gr.addColorStop(1, METAL.deep);
+  g.fillStyle = gr; g.fill(p);
+  // glowing window in the middle
+  const wl = len * 0.46;
+  g.fillStyle = '#05080b'; g.fillRect(-wl / 2, -r * 0.62, wl, r * 1.24);
+  const eg = g.createLinearGradient(0, -r * 0.6, 0, r * 0.6);
+  eg.addColorStop(0, rgba(E, 0.35)); eg.addColorStop(0.45, shade(E, 0.4)); eg.addColorStop(1, rgba(E, 0.25));
+  g.fillStyle = eg; g.fillRect(-wl / 2 + o * 0.4, -r * 0.48, wl - o * 0.8, r * 0.96);
+  g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = o * 0.5;
+  g.beginPath();
+  for (const f of [-0.17, 0, 0.17]) { g.moveTo(f * len, -r * 0.62); g.lineTo(f * len, r * 0.62); }
+  g.stroke();
+  g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(p);
+  g.restore();
+}
+
+/** Blunt armour fin (replaces organic spikes): trapezoid plate jutting along angle a. */
+function fin(g: Ctx, x: number, y: number, a: number, len: number, w: number, fill: string, o: number): void {
+  const p = new Path2D();
+  const cs = Math.cos(a), sn = Math.sin(a);
+  const P = (u: number, n: number) => p.lineTo(x + cs * u - sn * n, y + sn * u + cs * n);
+  P(-len * 0.1, -w); P(len * 0.75, -w * 0.55); P(len, -w * 0.15); P(len, w * 0.3); P(len * 0.75, w * 0.55); P(-len * 0.1, w);
+  p.closePath();
+  g.fillStyle = fill; g.fill(p);
+  g.save(); g.clip(p);
+  g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = w * 0.5;
+  g.beginPath(); g.moveTo(x - sn * -w * 0.6, y + cs * -w * 0.6); g.lineTo(x + cs * len - sn * -w * 0.4, y + sn * len + cs * -w * 0.4); g.stroke();
+  g.restore();
+  g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(p);
+}
+
+/** Straight plate seams across a body (clipped): dark groove + lit lip. xs fractions of S. */
+function plateSeams(g: Ctx, path: Path2D, xs: number[], S: number, o: number, w = 0.6): void {
+  g.save();
+  g.clip(path);
+  g.lineCap = 'butt';
+  for (const x of xs) {
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = o * w * 1.3;
+    g.beginPath(); g.moveTo(x * S, -0.6 * S); g.lineTo(x * S, 0.6 * S); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = o * w * 0.8;
+    g.beginPath(); g.moveTo(x * S - o * w * 1.1, -0.6 * S); g.lineTo(x * S - o * w * 1.1, 0.6 * S); g.stroke();
+  }
+  g.restore();
+}
+
+/** Cable bundle: a few parallel dark hoses with highlights (cells, already scaled pts). */
+function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
+  g.lineCap = 'round';
+  for (let i = 0; i < pts.length; i += 4) {
+    const x0 = pts[i] * S, y0 = pts[i + 1] * S, x1 = pts[i + 2] * S, y1 = pts[i + 3] * S;
+    const l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / l, ny = (x1 - x0) / l;
+    for (let k = 0; k < n; k++) {
+      const off = (k - (n - 1) / 2) * w * 1.3;
+      g.strokeStyle = OUTLINE; g.lineWidth = w * 1.4;
+      g.beginPath(); g.moveTo(x0 + nx * off, y0 + ny * off); g.lineTo(x1 + nx * off, y1 + ny * off); g.stroke();
+      g.strokeStyle = k % 2 ? '#3a2f22' : '#262b30'; g.lineWidth = w;
+      g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = w * 0.35;
+      g.beginPath(); g.moveTo(x0 + nx * (off - w * 0.2), y0 + ny * (off - w * 0.2)); g.lineTo(x1 + nx * (off - w * 0.2), y1 + ny * (off - w * 0.2)); g.stroke();
+    }
+  }
+}
+
 /* ------------------------------------------------------------------------------------------------- hulls */
 
 export function creatureHullPath(shape: string, S: number): Path2D | null {
   switch (shape) {
-    case 'mantis': return profilePath([0.47, 0, 0.45, 0.06, 0.4, 0.125, 0.34, 0.11, 0.29, 0.045, 0.22, 0.05, 0.12, 0.075, 0.03, 0.065, -0.04, 0.1, -0.16, 0.145, -0.3, 0.135, -0.42, 0.075, -0.47, 0], S);
-    case 'mech': return profilePath([0.24, 0, 0.23, 0.11, 0.16, 0.22, 0.05, 0.28, -0.09, 0.28, -0.2, 0.21, -0.26, 0.1, -0.27, 0], S);
-    case 'arachnid': return profilePath([0.44, 0, 0.42, 0.07, 0.35, 0.14, 0.25, 0.165, 0.15, 0.14, 0.08, 0.07, 0.03, 0.1, -0.06, 0.2, -0.2, 0.255, -0.34, 0.235, -0.44, 0.14, -0.48, 0], S);
-    case 'crab': return profilePath([0.27, 0, 0.26, 0.12, 0.21, 0.27, 0.12, 0.365, 0.0, 0.41, -0.12, 0.39, -0.22, 0.31, -0.28, 0.17, -0.3, 0], S);
+    case 'mantis': return sharp([0.47, 0, 0.46, -0.055, 0.42, -0.11, 0.34, -0.115, 0.3, -0.06, 0.26, -0.05, 0.21, -0.075, 0.06, -0.075, 0.02, -0.055, -0.04, -0.06, -0.1, -0.14, -0.38, -0.14, -0.46, -0.09, -0.47, 0], S);
+    case 'mech': return sharp([0.24, 0, 0.235, -0.09, 0.19, -0.19, 0.1, -0.27, -0.1, -0.28, -0.2, -0.22, -0.26, -0.12, -0.27, 0], S);
+    case 'arachnid': return sharp([0.44, 0, 0.43, -0.06, 0.37, -0.13, 0.27, -0.16, 0.16, -0.15, 0.1, -0.08, 0.06, -0.09, 0.0, -0.19, -0.1, -0.25, -0.34, -0.25, -0.44, -0.17, -0.48, -0.06, -0.48, 0], S);
+    case 'crab': return sharp([0.27, 0, 0.27, -0.1, 0.22, -0.26, 0.12, -0.37, 0.0, -0.41, -0.14, -0.39, -0.24, -0.3, -0.3, -0.16, -0.3, 0], S);
     case 'saucer': { const p = new Path2D(); p.arc(0, 0, 0.44 * S, 0, P2); return p; }
     case 'delta': { const p = new Path2D(); poly(p, mirrorPoly([0.5, 0, 0.3, -0.075, -0.27, -0.46, -0.39, -0.46, -0.34, -0.31, -0.45, -0.22, -0.47, -0.1, -0.41, 0]), S); return p; }
-    case 'warlord': return profilePath([0.25, 0, 0.24, 0.12, 0.17, 0.22, 0.06, 0.27, -0.1, 0.27, -0.21, 0.21, -0.27, 0.11, -0.29, 0], S);
-    case 'scorpion': return profilePath([0.39, 0, 0.38, 0.08, 0.33, 0.15, 0.23, 0.2, 0.08, 0.23, -0.07, 0.22, -0.19, 0.18, -0.28, 0.12, -0.34, 0.06, -0.36, 0], S);
-    case 'centipede': return profilePath([0.5, 0, 0.49, 0.055, 0.45, 0.115, 0.38, 0.135, 0.32, 0.115, 0.29, 0], S);
-    case 'broodmother': return profilePath([0.47, 0, 0.455, 0.075, 0.39, 0.145, 0.29, 0.175, 0.19, 0.15, 0.125, 0.09, 0.075, 0.13, -0.02, 0.27, -0.16, 0.355, -0.32, 0.36, -0.44, 0.27, -0.49, 0.13, -0.5, 0], S);
+    case 'warlord': return sharp([0.25, 0, 0.245, -0.1, 0.2, -0.2, 0.1, -0.27, -0.11, -0.27, -0.22, -0.21, -0.28, -0.12, -0.29, 0], S);
+    case 'scorpion': return sharp([0.39, 0, 0.38, -0.07, 0.33, -0.15, 0.24, -0.2, 0.08, -0.23, -0.08, -0.22, -0.2, -0.18, -0.3, -0.12, -0.36, -0.06, -0.36, 0], S);
+    case 'centipede': return sharp([0.5, 0, 0.49, -0.05, 0.45, -0.11, 0.38, -0.13, 0.32, -0.11, 0.29, 0], S);
+    case 'broodmother': return sharp([0.47, 0, 0.46, -0.07, 0.4, -0.14, 0.29, -0.17, 0.19, -0.15, 0.13, -0.09, 0.08, -0.12, 0.0, -0.25, -0.12, -0.34, -0.33, -0.36, -0.44, -0.28, -0.5, -0.14, -0.5, 0], S);
     case 'carriage': return profilePath([0.25, 0, 0.245, 0.1, 0.21, 0.22, 0.15, 0.265, 0.09, 0.22, 0.07, 0.12, -0.08, 0.1, -0.15, 0.05, -0.16, 0], S);
     case 'hunter': return sharp([0.5, 0, 0.3, -0.065, 0.12, -0.11, 0.04, -0.27, -0.06, -0.31, -0.11, -0.15, -0.3, -0.14, -0.38, -0.25, -0.47, -0.25, -0.44, -0.08, -0.47, 0], S);
     case 'riot': return sharp([0.42, 0, 0.3, -0.2, 0.18, -0.42, 0.06, -0.43, 0.02, -0.3, -0.36, -0.3, -0.44, -0.21, -0.45, 0], S);
