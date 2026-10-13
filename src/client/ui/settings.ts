@@ -16,7 +16,7 @@ export function settingsScreen(app: App): Screen {
     saveSettings(s);
   };
 
-  const slider = (key: 'master' | 'music' | 'sfx', label: string) =>
+  const slider = (key: 'master' | 'music' | 'sfx' | 'shake' | 'flashes', label: string) =>
     h('div.setting', null, h('label', null, label), kit.slider({
       value: Math.round(s[key] * 100), min: 0, max: 100, label,
       onInput: (v) => { s[key] = v / 100; apply(); },
@@ -52,6 +52,14 @@ export function settingsScreen(app: App): Screen {
           slider('master', 'Master'),
           slider('music', 'Music'),
           slider('sfx', 'Effects'),
+        ),
+        h('div.panel', null,
+          h('div.panel-title', null, 'Visual comfort'),
+          slider('shake', 'Screen shake'),
+          slider('flashes', 'Screen flashes'),
+          h('label.setting.check', null,
+            h('input', { type: 'checkbox', checked: s.alwaysHealth || null, onchange: (e: Event) => { s.alwaysHealth = (e.target as HTMLInputElement).checked; saveSettings(s); sfx('click'); } }),
+            ' Always show health bars (otherwise shown briefly after damage; hold Alt in battle)'),
         ),
         h('div.panel', null,
           h('div.panel-title', null, 'Gameplay'),
