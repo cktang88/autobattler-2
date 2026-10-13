@@ -5,11 +5,12 @@ import type { ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview } from '../render/field.ts';
+import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError } from '../../shared/parts.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, computeStats, loadSpeedFactor, validateDesign } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MountClass, UnitStats } from '../../shared/types.ts';
-import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, CATEGORY_COLOR } from './garage-parts.ts';
+import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, footprintLabel, CATEGORY_COLOR } from './garage-parts.ts';
 
 const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3 };
 const NAME_MAX = 24;
@@ -383,6 +384,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
     previewTags.replaceChildren(...[
       h('span.g-size.big', null, s ? sizeLabel(s.size) : '?'),
+      s ? h('span.g-footprint', { title: 'Physical footprint' }, footprintLabel(s.size)) : null,
       s?.flying ? h('span.g-tag.air', null, icon('air'), 'Flying') : null,
       s?.isStatic ? h('span.g-tag.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-tag.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
@@ -391,16 +393,17 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
     if (!s) { statsEl.replaceChildren(); loadEl.replaceChildren(); costEl.replaceChildren(); return; }
     renderCost(s, ss);
+    const mdl = (k: keyof UnitStats) => (ss ? ((s[k] as number) - (ss[k] as number)) * METERS_PER_CELL : null);
     const dl = (k: keyof UnitStats) => (ss ? (s[k] as number) - (ss[k] as number) : null);
     const traits = [...new Set(s.traits)];
     statsEl.replaceChildren(
       statTile('HP', String(s.hp), dl('hp')),
       statTile('Armor', String(s.armor), dl('armor')),
       statTile('Shield', String(s.shield), dl('shield'), { cls: s.shield ? '' : 'nil' }),
-      statTile('Speed', s.isStatic ? '—' : fmt(s.speed, 2), dl('speed'), { unit: s.isStatic ? '' : 'c/s', digits: 2 }),
-      statTile('Range', s.range ? fmt(s.range) : '—', dl('range'), { digits: 1 }),
+      statTile('Speed', s.isStatic ? '—' : String(Math.round(s.speed * METERS_PER_CELL)), mdl('speed'), { unit: s.isStatic ? '' : 'm/s' }),
+      statTile('Range', s.range ? fmtMeters(s.range) : '—', mdl('range'), { }),
       statTile('DPS', String(s.dps), dl('dps'), { cls: 'hl' }),
-      s.heal ? statTile('Repair', String(s.heal), dl('heal'), { unit: 'hp/s' }) : statTile('Size', sizeLabel(s.size), null),
+      s.heal ? statTile('Repair', String(s.heal), dl('heal'), { unit: 'hp/s' }) : statTile('Size', sizeLabel(s.size), null, { unit: footprintLabel(s.size) }),
       statTile('Cost', String(s.cost), dl('cost'), { invert: true }),
       h('div.g-traits', null, ...traits.map((t) => h('span.g-trait', null, TRAIT_LABEL[t] ?? t))),
     );
@@ -511,7 +514,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       err
         ? h('span.g-card-err', null, err)
         : h('span.g-card-stats', null,
-          h('span', null, h('b', null, m.kind === 'static' ? '0' : fmt(res!.speed, 1)), ' c/s'),
+          h('span', null, h('b', null, m.kind === 'static' ? '0' : String(Math.round(res!.speed * METERS_PER_CELL))), ' m/s'),
           h('span', null, h('b', null, String(m.capacity[c.size - 1])), ' cap'),
           h('span.g-loadpct', { class: loadCls }, h('b', null, `${Math.round(res!.load * 100)}%`), ' load'),
           h('span.g-card-cost', null, icon('cost'), String(m.cost * c.size)),

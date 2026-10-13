@@ -1,6 +1,7 @@
 // Garage helpers: icons, labels, module stat summaries and a small modal dialog.
 
 import { h } from '../app.ts';
+import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { accuracyRating, firingStyle, weaponDps } from '../../shared/stats.ts';
 import type { ModuleDef, MoveKind } from '../../shared/types.ts';
 import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
@@ -81,6 +82,8 @@ export const TRAIT_LABEL: Record<string, string> = {
 export const KIND_LABEL: Record<MoveKind, string> = { ground: 'Ground', air: 'Air', static: 'Static' };
 
 export const sizeLabel = (s: number) => `${s}×${s}`;
+/** Physical footprint of a size-N unit, e.g. 2 -> "10 m". */
+export const footprintLabel = (s: number) => fmtMeters(s);
 
 export function fmt(n: number, digits = 1): string {
   const r = Math.round(n * 10 ** digits) / 10 ** digits;
@@ -108,11 +111,15 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.stun) t.push(`stun ${mod.stun}s`);
   if (mod.slow) t.push(`slow ${Math.round(mod.slow * 100)}%`);
   if (mod.disarm) t.push(`Disarm ${n1(mod.disarm)}s`);
-  if (mod.impulse) t.push(mod.impulse > 0 ? 'Knockback' : 'Pull');
+  if (mod.impulse) t.push(`${mod.impulse > 0 ? 'Knockback' : 'Pull'} ${fmtMeters(Math.abs(mod.impulse))}`);
+  if (mod.detect) t.push(`Detect ${fmtMeters(mod.detect)}`);
+  if (mod.shieldAura) t.push(`Shield aura ${fmtMeters(mod.shieldAura.radius)}`);
+  if (mod.fireRateAura) t.push(`Fire-rate aura ${fmtMeters(mod.fireRateAura.radius)}`);
+  if (mod.jammer) t.push(`Jam ${fmtMeters(mod.jammer)}`);
   if (mod.burn) t.push(`burn ${mod.burn.dps}/s ${mod.burn.duration}s`);
   if (mod.airBonus && mod.airBonus !== 1) t.push(`×${mod.airBonus} vs air`);
   if (mod.falloff != null && mod.falloff < 1) t.push('falloff');
-  if (mod.minRange) t.push(`min rng ${mod.minRange}`);
+  if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
   if (mod.rangeBonus) t.push(`+${Math.round(mod.rangeBonus * 100)}% unit range`);
   if (mod.spreadMult && mod.spreadMult < 1) t.push(`-${Math.round((1 - mod.spreadMult) * 100)}% spread`);
   return t;
@@ -159,15 +166,15 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
   const stat = (k: string, v: string) => out.append(h('span.g-ms', null, h('b', null, v), ' ', k));
   if (mod.kind === 'weapon') {
     stat('dps', fmt(weaponDps(mod), 0));
-    stat('rng', mod.minRange ? `${mod.minRange}–${mod.range}` : fmt(mod.range ?? 0));
-    if (mod.splash) stat('splash', fmt(mod.splash));
+    stat('rng', mod.minRange ? `${Math.round(mod.minRange * METERS_PER_CELL)}–${fmtMeters(mod.range ?? 0)}` : fmtMeters(mod.range ?? 0));
+    if (mod.splash) stat('splash', fmtMeters(mod.splash));
     if (mod.ap) stat('ap', `${Math.round(mod.ap * 100)}%`);
     out.append(targetBadges(mod));
   } else if (mod.kind === 'armor') {
     if (mod.armor) stat('armor', `+${mod.armor}`);
     if (mod.hp) stat('hp', `+${mod.hp}`);
   } else {
-    if (mod.heal) { stat('hp/s', fmt(mod.heal, 0)); stat('rng', fmt(mod.range ?? 0)); }
+    if (mod.heal) { stat('hp/s', fmt(mod.heal, 0)); stat('rng', fmtMeters(mod.range ?? 0)); }
     if (mod.shield) stat('shield', String(mod.shield));
     if (mod.hp) stat('hp', `+${mod.hp}`);
     if (mod.armor) stat('armor', `+${mod.armor}`);
@@ -187,9 +194,9 @@ export function moduleTooltip(mod: ModuleDef): string {
   const lines = [`${mod.name} (${mod.family}, ${mod.mount}) — ${mod.desc}`];
   if (mod.kind === 'weapon') {
     const tg = [mod.targetsGround ? 'ground' : '', mod.targetsAir ? 'air' : ''].filter(Boolean).join(' + ');
-    lines.push(`DPS ${fmt(weaponDps(mod), 0)} · Range ${mod.minRange ? mod.minRange + '–' : ''}${mod.range} · Targets ${tg}`);
+    lines.push(`DPS ${fmt(weaponDps(mod), 0)} · Range ${mod.minRange ? Math.round(mod.minRange * METERS_PER_CELL) + '–' : ''}${fmtMeters(mod.range ?? 0)} · Targets ${tg}`);
     const extra: string[] = [`${mod.damage}${mod.pellets && mod.pellets > 1 ? '×' + mod.pellets : ''}${mod.burst && mod.burst > 1 ? ' ×' + mod.burst : ''} dmg / ${mod.cooldown}s`];
-    if (mod.splash) extra.push(`splash ${mod.splash}`);
+    if (mod.splash) extra.push(`splash ${fmtMeters(mod.splash)}`);
     if (mod.ap) extra.push(`${Math.round(mod.ap * 100)}% armor pierce`);
     lines.push(extra.join(' · '));
     lines.push(`${firingText(mod)} · Accuracy ${accuracyLabel(mod) ?? accuracyRating(mod) + '/100'}`);

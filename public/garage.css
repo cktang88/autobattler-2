@@ -450,3 +450,8 @@
   .garage .g-card-top { flex-wrap: wrap; }
 }
 .garage .g-opt.sel { border-left-color: var(--g-accent) !important; }
+.garage .g-footprint {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 6px; border-radius: 3px;
+  font-family: var(--g-head); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em;
+  color: var(--g-text); border: 1px dashed var(--g-line2);
+}
