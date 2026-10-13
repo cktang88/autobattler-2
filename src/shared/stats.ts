@@ -240,7 +240,7 @@ export function computeStats(d: Design): UnitStats {
   const cost = roundCost(unitCost * squad);
 
   return {
-    size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
+    size, fw: c.footprint?.[0] ?? size, fh: c.footprint?.[1] ?? size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
     speed: Math.round(speed * 100) / 100, turn, cost, unitCost: Math.round(unitCost), squad,
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,

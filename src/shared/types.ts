@@ -30,6 +30,9 @@ export interface ChassisDef {
   mounts: MountClass[];
   /** body turn-rate multiplier of the hull (nimble frames > 1, lumbering hulls < 1) */
   agility: number;
+  /** unit footprint in cells [w across, h long/deep] when not square (default [size, size]).
+   *  h is the unit's LENGTH along its facing; w its width. Size class (mount classes, stats) stays `size`. */
+  footprint?: [number, number];
   /** if set, only these mobility ids fit this chassis (e.g. mechs need legs) */
   mobility?: string[];
   /** roles this hull is built for */
@@ -217,6 +220,9 @@ export interface Design {
 /** Derived stats of a design (see stats.ts). */
 export interface UnitStats {
   size: Size;
+  /** unit footprint in cells: width across, length along facing (from ChassisDef.footprint or size x size) */
+  fw: number;
+  fh: number;
   hp: number;
   armor: number;
   weight: number;

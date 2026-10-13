@@ -78,21 +78,27 @@ export const hasSpacing = (size: Size): boolean => squadSize(size) > 1;
 export const normSpacing = (size: Size, spacing: number | undefined): number =>
   hasSpacing(size) ? Math.max(0, Math.min(MAX_SPACING, Math.round(spacing ?? 0))) : 0;
 
-/** footprint of a block in cells: w across the field (local x), h deep (local y) */
-export function blockDims(size: Size, spacing = 0): { w: number; h: number } {
+/** Unit footprint (cells) for blocks: pass UnitStats-like {fw, fh}; omitted = size x size. */
+export type UnitFoot = { fw: number; fh: number } | undefined;
+
+/** footprint of a block in cells: w across the field (local x), h deep (local y).
+ *  `foot` = the unit's own footprint (non-square chassis); units face the enemy, so fh runs along local y. */
+export function blockDims(size: Size, spacing = 0, foot?: UnitFoot): { w: number; h: number } {
+  const uw = foot?.fw ?? size, uh = foot?.fh ?? size;
   const [cols, rows] = SQUAD_LAYOUT[size];
-  if (cols * rows === 1) return { w: size, h: size };
+  if (cols * rows === 1) return { w: uw, h: uh };
   const sp = normSpacing(size, spacing);
-  return { w: cols + (cols - 1) * sp, h: rows + (rows - 1) * sp };
+  return { w: cols * uw + (cols - 1) * sp, h: rows * uh + (rows - 1) * sp };
 }
 
 /** unit centers within a block, as offsets (cells) from the block's top-left corner (local orientation) */
-export function squadOffsets(size: Size, spacing = 0): { x: number; y: number }[] {
+export function squadOffsets(size: Size, spacing = 0, foot?: UnitFoot): { x: number; y: number }[] {
+  const uw = foot?.fw ?? size, uh = foot?.fh ?? size;
   const [cols, rows] = SQUAD_LAYOUT[size];
-  if (cols * rows === 1) return [{ x: size / 2, y: size / 2 }];
-  const step = 1 + normSpacing(size, spacing);
+  if (cols * rows === 1) return [{ x: uw / 2, y: uh / 2 }];
+  const sp = normSpacing(size, spacing);
   const out: { x: number; y: number }[] = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) out.push({ x: 0.5 + c * step, y: 0.5 + r * step });
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) out.push({ x: uw / 2 + c * (uw + sp), y: uh / 2 + r * (uh + sp) });
   return out;
 }
 
@@ -115,33 +121,33 @@ export function rectInZone(x: number, y: number, w: number, h: number): boolean 
 type BlockPos = Pick<Placement, 'x' | 'y'> & { spacing?: number };
 
 /** World-space centers of every unit in a placed block. Side 1's offsets are mirrored (180° rotation). */
-export function placementUnitCenters(side: Side, p: BlockPos, size: Size): { x: number; y: number }[] {
-  const { w, h } = blockDims(size, p.spacing);
+export function placementUnitCenters(side: Side, p: BlockPos, size: Size, foot?: UnitFoot): { x: number; y: number }[] {
+  const { w, h } = blockDims(size, p.spacing, foot);
   const { col, row } = localRectToWorld(side, p.x, p.y, w, h);
-  return squadOffsets(size, p.spacing).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
+  return squadOffsets(size, p.spacing, foot).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
 }
 
 /** World-space center of a placed block. */
-export function blockCenter(side: Side, p: BlockPos, size: Size): { x: number; y: number } {
-  const { w, h } = blockDims(size, p.spacing);
+export function blockCenter(side: Side, p: BlockPos, size: Size, foot?: UnitFoot): { x: number; y: number } {
+  const { w, h } = blockDims(size, p.spacing, foot);
   const { col, row } = localRectToWorld(side, p.x, p.y, w, h);
   return { x: col + w / 2, y: row + h / 2 };
 }
 
 /** World-space rectangle {col,row,w,h} covered by a placed block (for highlights). */
-export function blockWorldRect(side: Side, p: BlockPos, size: Size): { col: number; row: number; w: number; h: number } {
-  const { w, h } = blockDims(size, p.spacing);
+export function blockWorldRect(side: Side, p: BlockPos, size: Size, foot?: UnitFoot): { col: number; row: number; w: number; h: number } {
+  const { w, h } = blockDims(size, p.spacing, foot);
   return { ...localRectToWorld(side, p.x, p.y, w, h), w, h };
 }
 
 /** Is a block of this design size (and spacing) inside the deploy zone at local (x, y)? */
-export function blockInZone(x: number, y: number, size: Size, spacing = 0): boolean {
-  const { w, h } = blockDims(size, spacing);
+export function blockInZone(x: number, y: number, size: Size, spacing = 0, foot?: UnitFoot): boolean {
+  const { w, h } = blockDims(size, spacing, foot);
   return rectInZone(x, y, w, h);
 }
 
 /** Do two placed blocks overlap? */
-export function blocksOverlap(a: BlockPos, aSize: Size, b: BlockPos, bSize: Size): boolean {
-  const da = blockDims(aSize, a.spacing), db = blockDims(bSize, b.spacing);
+export function blocksOverlap(a: BlockPos, aSize: Size, b: BlockPos, bSize: Size, aFoot?: UnitFoot, bFoot?: UnitFoot): boolean {
+  const da = blockDims(aSize, a.spacing, aFoot), db = blockDims(bSize, b.spacing, bFoot);
   return rectsOverlap(a.x, a.y, da.w, da.h, b.x, b.y, db.w, db.h);
 }
