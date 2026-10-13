@@ -18,7 +18,7 @@ const DESIGNS: Design[] = [
   D('skyguard', 'warden', 'halftrack', ['flak', 'mg']),
   D('arty', 'longarm', 'spider', ['howitzer']),
   D('hornet', 'drone', 'rotor', ['mg']),
-  D('strafer', 'gunship', 'jet', ['rockets', null]),
+  D('strafer', 'strikejet', 'jet', ['rockets', null, null]),
   D('medic', 'aegis', 'halftrack', ['autocannon', 'repair']),
   D('storm', 'striker', 'halftrack', ['tesla', 'autocannon', 'mg']),
   D('ironclad', 'bastion', 'treads', ['cannon', 'plateM', 'autocannon']),
@@ -439,7 +439,7 @@ test('summary: a placement survives while any unit lives; aliveFraction reports 
 });
 
 test('bombers fly over ground targets and bomb them; bombs cannot hit flyers', () => {
-  const bomber = D('bomber', 'gunship', 'jet', ['bombs', null]);
+  const bomber = D('bomber', 'strikejet', 'jet', ['bombs', null, null]);
   const rotorBomber = D('rotorbomber', 'gunship', 'rotor', ['bombs', null]);
   assert.deepEqual(validateDesign(bomber), []);
   assert.deepEqual(validateDesign(rotorBomber), []);

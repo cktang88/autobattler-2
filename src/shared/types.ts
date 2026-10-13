@@ -6,6 +6,9 @@ export type Size = 1 | 2 | 3 | 4 | 5;
  *  G = giant-class (size-4 chassis), T = titan-class (size-5 chassis). */
 export type MountClass = 'L' | 'M' | 'H' | 'G' | 'T';
 export type MoveKind = 'ground' | 'air' | 'static';
+/** Unit class, chosen first in the designer: chassis and mobility must share a domain.
+ *  ground = tanks/walkers/hover/emplacements · jet = fixed-wing aircraft · heli = rotorcraft & grav-lift VTOLs */
+export type Domain = 'ground' | 'jet' | 'heli';
 export type Side = 0 | 1;
 
 /** Combat role tags (Zero-K / Mechabellum style) used to filter and describe parts. */
@@ -30,6 +33,8 @@ export interface ChassisDef {
   mounts: MountClass[];
   /** body turn-rate multiplier of the hull (nimble frames > 1, lumbering hulls < 1) */
   agility: number;
+  /** unit class; defaults to 'ground' */
+  domain?: Domain;
   /** unit footprint in cells [w across, h long/deep] when not square (default [size, size]).
    *  h is the unit's LENGTH along its facing; w its width. Size class (mount classes, stats) stays `size`. */
   footprint?: [number, number];
@@ -42,7 +47,8 @@ export interface ChassisDef {
   shape: 'wedge' | 'box' | 'pod' | 'hex' | 'long' | 'round' | 'cross' | 'fortress' | 'titan' | 'airframe'
     | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel'
     | 'mantis' | 'mech' | 'arachnid' | 'crab' | 'saucer' | 'delta' | 'warlord' | 'scorpion' | 'centipede' | 'broodmother' | 'arachne'
-    | 'carriage' | 'siegeplat' | 'riot' | 'hunter' | 'juggernaut' | 'interceptor' | 'bomber';
+    | 'carriage' | 'siegeplat' | 'riot' | 'hunter' | 'juggernaut' | 'interceptor' | 'bomber'
+    | 'strikejet' | 'stratobomber' | 'heavyheli';
 }
 
 export interface MobilityDef {
@@ -67,6 +73,8 @@ export interface MobilityDef {
   traits: MobilityTrait[];
   /** roles this mobility suits */
   roles: Role[];
+  /** unit class this mobility belongs to; defaults to 'ground' */
+  domain?: Domain;
 }
 
 /** 'melee' = instant contact strike; its range is measured EDGE to edge (shooter radius + target radius excluded),

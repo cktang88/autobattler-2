@@ -21,7 +21,7 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-firestorm', name: 'Firestorm', chassis: 'striker', mobility: 'spider', mounts: ['mortar', 'mortar', 'targeting'] },
   // ---- flyers ----
   { id: 'starter-hornet', name: 'Hornet', chassis: 'drone', mobility: 'rotor', mounts: ['mg'] },
-  { id: 'starter-strafer', name: 'Strafer', chassis: 'gunship', mobility: 'jet', mounts: ['rockets', null] },
+  { id: 'starter-strafer', name: 'Strafer', chassis: 'strikejet', mobility: 'jet', mounts: ['rockets', 'mg', 'mg'] },
   // ---- support ----
   { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['autocannon', 'repair'] },
   // ---- brawler ----
