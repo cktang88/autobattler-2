@@ -177,6 +177,12 @@ export class Fx {
       this.ring(x, y, r * 0.2, r * 1.4, '#e070ff', 0.3);
       this.sparks(x, y, 14 * q, '#f0a0ff', 5 * r);
       for (let i = 0; i < 3; i++) this.smoke(x, y, r * 0.5, 1, '#2a1830');
+      if (r > 1.2) {
+        this.glow(x, y, r * 3, '#ff90ff', 0.4, 0.8);
+        this.shockwave(x, y, r * 1.8, '#e070ff', 0.7);
+        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; this.bolt(x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.6, r * 0.7, '#f0a0ff', 0.3); }
+        this.shake(0.35);
+      }
       if (ground) this.decal('scorch', x, y, r * 0.7);
       return;
     }
@@ -217,6 +223,69 @@ export class Fx {
       if (style === 'napalm') this.decal('burn', x, y, r * 0.9);
     }
     if (big) this.debris(x, y, Math.round(r * 3), '#2a2622', 3 * r, 0.06);
+    if (r >= 2.4) { this.shockwave(x, y, r * 1.7, '#ffd8a0', 0.8); this.glow(x, y, r * 3, '#ffe0b0', 0.3, 0.8); this.shake(0.5); }
+  }
+
+  /** Ground shockwave: expanding dusty ring plus a bright leading edge. */
+  shockwave(x: number, y: number, r: number, color = '#ffe0b0', life = 0.7): void {
+    this.ring(x, y, r * 0.1, r, color, life, 0.9);
+    this.ring(x, y, r * 0.05, r * 0.8, '#ffffff', life * 0.7, 0.6);
+    this.dust(x, y, r * 0.5, 8, life * 1.4);
+  }
+
+  /** Tactical nuke: blinding flash, double shockwave, fireball, rising mushroom of smoke, embers and a huge crater. */
+  nuke(x: number, y: number, r: number): void {
+    this.shake(1);
+    this.glow(x, y, r * 3.2, '#ffffff', 0.35);
+    this.glow(x, y, r * 2.2, '#ffe0a0', 0.6, 0.9);
+    this.glow(x, y, r * 1.6, '#ff9a40', 1.1, 0.7);
+    this.shockwave(x, y, r * 1.5, '#fff0d0', 0.9);
+    this.schedule(0.12, () => this.shockwave(x, y, r * 1.1, '#ffb060', 1.0));
+    this.schedule(0.3, () => this.ring(x, y, r * 0.2, r * 2.1, '#ffd8a0', 1.1, 0.5));
+    for (let i = 0; i < 26; i++) {
+      const a = rnd() * Math.PI * 2, d = rnd() * r * 0.7, v = rr(0.4, 1.4) * r;
+      this.fire(x + Math.cos(a) * d, y + Math.sin(a) * d, r * rr(0.45, 0.9), rr(0.7, 1.3), Math.cos(a) * v * 0.6, Math.sin(a) * v * 0.6);
+    }
+    this.sparks(x, y, 40, '#ffcf70', 11 * Math.sqrt(r), undefined, Math.PI, 0.6);
+    this.embers(x, y, 30, r);
+    this.debris(x, y, 26, '#2a2622', 7 * r, 0.1);
+    // mushroom: stem rises then a cap billows out
+    for (let i = 0; i < 9; i++) this.schedule(0.2 + i * 0.12, () => this.smoke(x + rr(-0.15, 0.15) * r, y - i * 0.09 * r, r * (0.35 + 0.02 * i), 3.2, '#3a322c', 0, -0.25 * r, 0.7));
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      this.schedule(1.0 + i * 0.02, () => this.smoke(x + Math.cos(a) * r * 0.5, y - r * 0.9 + Math.sin(a) * r * 0.25, r * 0.6, 3.6, i % 2 ? '#4a4038' : '#2a2420', Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.2 - 0.1, 0.65));
+    }
+    this.schedule(0.5, () => this.glow(x, y - r * 0.5, r * 1.3, '#ff7a30', 1.3, 0.6));
+    this.decal('crater', x, y, r * 1.1);
+    this.decal('burn', x, y, r * 1.5);
+    this.decal('scorch', x, y, r * 1.8);
+  }
+
+  /** Multi-stage death of a giant / titan: chain of blasts, reactor flash, debris rain, long smoke. */
+  megaDeath(x: number, y: number, S: number, color: string): void {
+    const R = 0.35 * S;
+    this.shake(0.9);
+    this.glow(x, y, R * 5, '#ffffff', 0.18);
+    this.glow(x, y, R * 3.2, '#ffb060', 0.5, 0.8);
+    this.shockwave(x, y, R * 4, '#ffe0b0', 0.8);
+    this.boom(x, y, R * 2.4, 'big');
+    this.debris(x, y, 14 * S, color, 6 + S, 0.09 * S);
+    this.debris(x, y, 10 * S, '#2a2622', 5, 0.07 * S);
+    this.embers(x, y, 14 * S, S * 0.7);
+    for (let i = 0; i < 6 + S; i++) {
+      const a = rnd() * Math.PI * 2, d = rnd() * R * 2.2;
+      this.schedule(0.15 + i * 0.16, () => { this.boom(x + Math.cos(a) * d, y + Math.sin(a) * d, R * rr(0.7, 1.3), 'fire', i % 2 === 0); if (i % 3 === 0) this.shake(0.3); });
+    }
+    this.schedule(0.2 + (4 + S) * 0.16, () => {
+      this.glow(x, y, R * 6, '#ffffff', 0.25);
+      this.shockwave(x, y, R * 6.5, '#fff0d0', 1.0);
+      this.boom(x, y, R * 3.2, 'big');
+      this.shake(1);
+      this.debris(x, y, 16 * S, color, 9, 0.1 * S);
+    });
+    for (let i = 0; i < 8; i++) this.schedule(0.5 + i * 0.5, () => this.smoke(x + rr(-0.4, 0.4) * R, y + rr(-0.4, 0.4) * R, R * 0.9, 3, '#1e1c1a', 0.2, -0.3, 0.55));
+    this.decal('crater', x, y, R * 3);
+    this.decal('burn', x, y, R * 3.6);
   }
 
   /* ------------------------------------------------------------------------------------------ decals */

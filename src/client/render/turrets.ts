@@ -2,7 +2,7 @@
 // Drawn in turret-local cell units: pivot at origin, barrels pointing +x. `d` = turret base diameter (cells).
 
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
-import { METAL, OUTLINE, shade, rgba, roundRect, type Ctx, type TeamPal } from './palette.ts';
+import { METAL, OUTLINE, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
 
 /** Glow colour used by a weapon family (beams, lenses, projectiles). null = use team glow. */
 export function visualGlow(v: ModuleVisual | undefined, pal: TeamPal): string {
@@ -40,8 +40,13 @@ export function moduleGlow(m: ModuleDef | undefined, pal: TeamPal): string {
 }
 
 /** Distance from pivot to the muzzle, as a multiple of d (for muzzle flashes / beam origins). */
+const MUZZLE_BY_ID: Record<string, number> = {
+  siege240: 1.65, avenger: 1.55, missilebattery: 0.7, siegeplasma: 1.3, skyfortress: 1.28, stormtower: 0.3, inferno: 1.15, grinder: 1.1,
+  massdriver: 1.72, doomsday: 1.6, annihilator: 1.5, tactnuke: 1.0, titanfist: 1.75, stormcore: 0.3,
+};
 export function muzzleLen(m: ModuleDef | undefined): number {
   if (!m) return 0.8;
+  if (MUZZLE_BY_ID[m.id] !== undefined) return MUZZLE_BY_ID[m.id];
   const c = m.caliber ?? 0.5;
   switch (m.visual) {
     case 'gun': return 0.95 + c * 0.45;
@@ -210,6 +215,7 @@ function hazard(g: Ctx, x: number, y: number, w: number, h: number): void {
 }
 
 function drawSpecial(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, glow: string): boolean {
+  if (drawGiantTurret(g, m, pal, r, o, glow)) return true;
   switch (m.id) {
     case 'mg': {
       barrel(g, 0, r * 1.75, 0, r * 0.13, o);
@@ -1032,4 +1038,566 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       shape(g, teamGrad(g, pal, r), o, () => g.arc(0, 0, r * 0.8, 0, Math.PI * 2));
     }
   }
+}
+
+/* ===================================================================================================
+ * Giant (G) and Titan (T) class turrets. r = d / 2. Everything points +x; sprite half-extent is 3.5 r.
+ * ================================================================================================ */
+
+const P2 = Math.PI * 2;
+const GOLD = '#e8c25a';
+
+function baseRing(g: Ctx, r: number, o: number, cx = 0, rad = 1.1, col = METAL.dark): void {
+  shape(g, col, o, () => g.arc(cx, 0, r * rad, 0, P2));
+  g.strokeStyle = 'rgba(255,255,255,0.18)'; lw(g, o * 0.6);
+  g.beginPath(); g.arc(cx, 0, r * rad * 0.9, 0, P2); g.stroke();
+}
+
+function bolts(g: Ctx, r: number, n: number, rad: number, cx = 0, cy = 0, br = 0.045): void {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * P2 + 0.3;
+    rivets(g, [cx + Math.cos(a) * r * rad, cy + Math.sin(a) * r * rad], r * br);
+  }
+}
+
+function hexPath(g: Ctx, x: number, y: number, R: number, rot = 0): void {
+  for (let i = 0; i < 6; i++) { const a = rot + (i / 6) * P2; if (i === 0) g.moveTo(x + Math.cos(a) * R, y + Math.sin(a) * R); else g.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R); }
+  g.closePath();
+}
+
+function hexGrid(g: Ctx, R: number, cell: number, col: string, w: number): void {
+  g.strokeStyle = col; lw(g, w);
+  g.beginPath();
+  const h = cell * Math.sqrt(3) / 2;
+  for (let row = -6; row <= 6; row++) for (let c = -6; c <= 6; c++) {
+    const x = c * cell * 1.5, y = row * h * 2 + (c & 1 ? h : 0);
+    if (Math.hypot(x, y) > R + cell) continue;
+    hexPath(g, x, y, cell * 0.95, 0);
+  }
+  g.stroke();
+}
+
+function domeGlass(g: Ctx, R: number, c0: string, c1: string, o: number, hx = 0): void {
+  const gr = g.createRadialGradient(-R * 0.3 + hx, -R * 0.3, R * 0.05, hx, 0, R);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.25, c0); gr.addColorStop(1, c1);
+  shape(g, gr, o, () => g.arc(hx, 0, R, 0, P2));
+  g.save(); g.beginPath(); g.arc(hx, 0, R, 0, P2); g.clip();
+  g.translate(hx, 0);
+  hexGrid(g, R, R * 0.3, 'rgba(255,255,255,0.35)', R * 0.025);
+  g.restore();
+  g.fillStyle = 'rgba(255,255,255,0.35)';
+  g.beginPath(); g.ellipse(hx - R * 0.32, -R * 0.4, R * 0.28, R * 0.13, -0.6, 0, P2); g.fill();
+}
+
+function spire(g: Ctx, a: number, r0: number, r1: number, w: number, o: number, tip: string): void {
+  g.save();
+  g.rotate(a);
+  g.beginPath(); g.moveTo(r0, -w); g.lineTo(r1, -w * 0.25); g.lineTo(r1, w * 0.25); g.lineTo(r0, w); g.closePath();
+  g.fillStyle = metalGrad(g, r1, METAL.light); g.fill(); lw(g, o * 0.8); g.strokeStyle = OUTLINE; g.stroke();
+  for (let i = 1; i <= 3; i++) {
+    const x = r0 + (r1 - r0) * (i / 4.2);
+    shape(g, '#c88a3c', o * 0.4, () => roundRect(g, x, -w * (1 - 0.6 * (i / 4)) - w * 0.2, (r1 - r0) * 0.07, (w * (1 - 0.6 * (i / 4)) + w * 0.2) * 2, w * 0.1));
+  }
+  glowDot(g, r1, 0, w * 0.5, tip);
+  g.restore();
+}
+
+function jag(g: Ctx, x0: number, y0: number, x1: number, y1: number, seed: number, amp: number, col: string, w: number): void {
+  const n = 5;
+  g.beginPath(); g.moveTo(x0, y0);
+  for (let i = 1; i < n; i++) {
+    const f = i / n;
+    const nx = -(y1 - y0), ny = x1 - x0, l = Math.hypot(nx, ny) || 1;
+    const j = Math.sin(seed * 12.9898 + i * 78.233) * amp;
+    g.lineTo(x0 + (x1 - x0) * f + (nx / l) * j, y0 + (y1 - y0) * f + (ny / l) * j);
+  }
+  g.lineTo(x1, y1);
+  g.strokeStyle = rgba(col.length === 7 ? col : '#a8d8ff', 0.35); lw(g, w * 3); g.stroke();
+  g.strokeStyle = '#ffffff'; lw(g, w); g.stroke();
+}
+
+/** Spinning grinder wheel (also redrawn rotated each frame by drawTurretDynamic). */
+export function grinderWheel(g: Ctx, R: number, o: number, rot: number, hot = '#ff8a30'): void {
+  g.save();
+  g.rotate(rot);
+  const N = 16;
+  g.beginPath();
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * P2, b = ((i + 0.5) / N) * P2, c = ((i + 1) / N) * P2;
+    if (i === 0) g.moveTo(Math.cos(a) * R * 0.86, Math.sin(a) * R * 0.86);
+    g.lineTo(Math.cos(a + 0.01) * R * 0.86, Math.sin(a + 0.01) * R * 0.86);
+    g.lineTo(Math.cos(b) * R * 1.02, Math.sin(b) * R * 1.02);
+    g.lineTo(Math.cos(c - 0.01) * R * 0.86, Math.sin(c - 0.01) * R * 0.86);
+  }
+  g.closePath();
+  const gr = g.createLinearGradient(-R, -R, R, R);
+  gr.addColorStop(0, '#d8dee4'); gr.addColorStop(0.5, '#7d8790'); gr.addColorStop(1, '#3a4148');
+  g.fillStyle = gr; g.fill(); lw(g, o); g.strokeStyle = OUTLINE; g.stroke();
+  // cut-outs
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * P2;
+    g.beginPath(); g.arc(0, 0, R * 0.68, a + 0.12, a + P2 / 6 - 0.12); g.arc(0, 0, R * 0.36, a + P2 / 6 - 0.12, a + 0.12, true); g.closePath();
+    g.fillStyle = '#0d1013'; g.fill();
+  }
+  g.strokeStyle = hot; lw(g, R * 0.04); g.globalAlpha = 0.7;
+  g.beginPath(); g.arc(0, 0, R * 0.8, 0, P2); g.stroke(); g.globalAlpha = 1;
+  shape(g, METAL.dark, o, () => g.arc(0, 0, R * 0.26, 0, P2));
+  shape(g, METAL.light, o * 0.6, () => g.arc(0, 0, R * 0.13, 0, P2));
+  g.restore();
+}
+
+function drawGiantTurret(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, glow: string): boolean {
+  switch (m.id) {
+    case 'siege240': {
+      baseRing(g, r, o, -r * 0.1, 1.2);
+      for (const y of [-0.52, 0.52]) { barrel(g, r * 0.4, r * 1.9, y * r, r * 0.17, o, METAL.light); barrel(g, r * 0.2, r * 1.0, y * r, r * 0.3, o, METAL.dark); }
+      barrel(g, 0, r * 3.15, 0, r * 0.4, o);
+      shape(g, METAL.dark, o * 0.7, () => roundRect(g, r * 0.7, -r * 0.34, r * 0.5, r * 0.68, r * 0.08));
+      for (let i = 0; i < 3; i++) shape(g, METAL.deep, o * 0.4, () => roundRect(g, r * (1.3 + i * 0.22), -r * 0.27, r * 0.1, r * 0.54, r * 0.03));
+      // bore evacuator
+      shape(g, metalGrad(g, r * 0.4, METAL.light), o, () => roundRect(g, r * 1.85, -r * 0.34, r * 0.6, r * 0.68, r * 0.14));
+      g.strokeStyle = METAL.deep; lw(g, r * 0.04);
+      g.beginPath(); for (let i = 1; i < 5; i++) { g.moveTo(r * (1.85 + i * 0.12), -r * 0.3); g.lineTo(r * (1.85 + i * 0.12), r * 0.3); } g.stroke();
+      // muzzle brake
+      shape(g, METAL.dark, o, () => roundRect(g, r * 2.9, -r * 0.38, r * 0.55, r * 0.76, r * 0.1));
+      for (let i = 0; i < 3; i++) shape(g, '#05070a', 0, () => g.rect(r * (2.99 + i * 0.15), -r * 0.34, r * 0.07, r * 0.68));
+      shape(g, METAL.light, o * 0.5, () => roundRect(g, r * 2.88, -r * 0.4, r * 0.08, r * 0.8, r * 0.02));
+      // bustle
+      shape(g, teamGrad(g, pal, r), o, () => {
+        g.moveTo(r * 0.95, -r * 0.7); g.lineTo(r * 0.6, -r * 1.05); g.lineTo(-r * 0.9, -r * 1.05); g.lineTo(-r * 1.2, -r * 0.6);
+        g.lineTo(-r * 1.2, r * 0.6); g.lineTo(-r * 0.9, r * 1.05); g.lineTo(r * 0.6, r * 1.05); g.lineTo(r * 0.95, r * 0.7); g.closePath();
+      });
+      g.strokeStyle = rgba(pal.deep, 0.55); lw(g, o * 0.6);
+      g.beginPath(); g.moveTo(-r * 0.3, -r * 1.0); g.lineTo(-r * 0.3, r * 1.0); g.moveTo(r * 0.3, -r * 0.98); g.lineTo(r * 0.3, r * 0.98); g.stroke();
+      hazard(g, -r * 1.16, -r * 0.4, r * 0.22, r * 0.8);
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.6, -r * 0.5, r * 0.4, r * 1.0, r * 0.1));
+      hatch(g, -r * 0.55, -r * 0.55, r * 0.26, o); hatch(g, -r * 0.55, r * 0.55, r * 0.2, o);
+      shape(g, METAL.light, o * 0.5, () => roundRect(g, -r * 0.1, -r * 0.2, r * 0.45, r * 0.4, r * 0.08));
+      glowDot(g, r * 0.2, 0, r * 0.05, '#ff5030');
+      rivets(g, [-r * 0.8, -r * 0.85, -r * 0.8, r * 0.85, r * 0.5, -r * 0.88, r * 0.5, r * 0.88], r * 0.06);
+      return true;
+    }
+    case 'avenger': {
+      // ammo drum behind
+      shape(g, metalGrad(g, r, METAL.dark), o, () => g.arc(-r * 0.75, 0, r * 1.0, 0, P2));
+      g.strokeStyle = 'rgba(255,255,255,0.25)'; lw(g, r * 0.06);
+      for (const k of [0.8, 0.55, 0.3]) { g.beginPath(); g.arc(-r * 0.75, 0, r * k, 0, P2); g.stroke(); }
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * P2; g.beginPath(); g.moveTo(-r * 0.75 + Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3); g.lineTo(-r * 0.75 + Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8); g.stroke(); }
+      shape(g, '#c9a040', o * 0.5, () => g.arc(-r * 0.75, 0, r * 0.2, 0, P2));
+      // barrel shroud + 5 visible barrels
+      shape(g, metalGrad(g, r * 0.7, METAL.dark), o, () => roundRect(g, r * 0.3, -r * 0.75, r * 2.85, r * 1.5, r * 0.18));
+      for (const [y, w] of [[-0.55, 0.14], [-0.28, 0.17], [0, 0.18], [0.28, 0.17], [0.55, 0.14]] as [number, number][]) {
+        barrel(g, r * 0.55, r * 3.2, y * r, r * w, o * 0.6, METAL.light);
+        shape(g, METAL.deep, 0, () => g.arc(r * 3.2, y * r, r * w * 0.5, 0, P2));
+      }
+      for (const x of [1.0, 1.8, 2.55]) shape(g, METAL.base, o * 0.7, () => roundRect(g, x * r, -r * 0.8, r * 0.2, r * 1.6, r * 0.06));
+      shape(g, METAL.dark, o, () => roundRect(g, r * 3.0, -r * 0.8, r * 0.22, r * 1.6, r * 0.08));
+      // belt
+      for (let i = 0; i < 7; i++) shape(g, '#c9a040', o * 0.3, () => roundRect(g, -r * 0.3 + i * r * 0.1, r * 0.45 + Math.sin(i * 0.9) * r * 0.05, r * 0.08, r * 0.22, r * 0.02));
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.2, -r * 1.0, r * 1.3, r * 2.0, r * 0.35));
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.55, -r * 0.55, r * 0.35, r * 1.1, r * 0.1));
+      hatch(g, r * 0.1, -r * 0.45, r * 0.24, o);
+      shape(g, pal.accent, 0, () => roundRect(g, -r * 0.15, -r * 0.1, r * 0.15, r * 0.2, r * 0.03));
+      return true;
+    }
+    case 'missilebattery': {
+      baseRing(g, r, o, 0, 1.25);
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.1, -r * 1.1, r * 2.3, r * 2.2, r * 0.18));
+      shape(g, METAL.dark, o * 0.7, () => roundRect(g, r * 1.05, -r * 1.12, r * 0.22, r * 2.24, r * 0.05));
+      const cell = r * 0.48, x0 = -r * 0.85, y0 = -r * 0.96;
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+        const cx = x0 + j * cell, cy = y0 + i * cell;
+        shape(g, '#0a0c0e', o * 0.5, () => roundRect(g, cx + cell * 0.04, cy + cell * 0.04, cell * 0.92, cell * 0.92, cell * 0.14));
+        shape(g, j >= 3 ? '#e4e0d4' : '#c8c4b8', 0, () => roundRect(g, cx + cell * 0.14, cy + cell * 0.14, cell * 0.72, cell * 0.72, cell * 0.12));
+        g.strokeStyle = '#c0392b'; lw(g, cell * 0.07);
+        g.beginPath(); g.arc(cx + cell * 0.5, cy + cell * 0.5, cell * 0.25, 0, P2); g.stroke();
+        shape(g, '#ff7ab0', 0, () => g.arc(cx + cell * 0.5, cy + cell * 0.5, cell * 0.1, 0, P2));
+      }
+      const gr = g.createLinearGradient(-r * 0.85, 0, r * 1.1, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0.25)');
+      g.fillStyle = gr; g.fillRect(-r * 0.9, -r * 1.0, r * 2.0, r * 2.0);
+      hazard(g, -r * 1.08, -r * 0.9, r * 0.16, r * 1.8);
+      // sensor mast
+      shape(g, METAL.light, o * 0.6, () => g.ellipse(-r * 0.95, -r * 0.95, r * 0.18, r * 0.12, 0, 0, P2));
+      glowDot(g, -r * 0.95, -r * 0.95, r * 0.05, '#ff4040');
+      return true;
+    }
+    case 'siegeplasma': {
+      baseRing(g, r, o, 0, 1.2);
+      shape(g, metalGrad(g, r, METAL.dark), o, () => { g.moveTo(r * 0.6, -r * 0.4); g.lineTo(r * 2.35, -r * 0.7); g.lineTo(r * 2.35, r * 0.7); g.lineTo(r * 0.6, r * 0.4); g.closePath(); });
+      for (let i = 0; i < 4; i++) { const x = r * (0.95 + i * 0.37), h = r * (0.45 + i * 0.1); shape(g, '#7a3aa8', o * 0.5, () => roundRect(g, x, -h, r * 0.14, h * 2, r * 0.04)); glowDot(g, x + r * 0.07, -h, r * 0.04, '#e070ff'); glowDot(g, x + r * 0.07, h, r * 0.04, '#e070ff'); }
+      glowDot(g, r * 2.4, 0, r * 0.24, '#e070ff');
+      for (const s of [-1, 1]) shape(g, metalGrad(g, r * 0.4, METAL.base), o, () => roundRect(g, -r * 1.0, s * r * 0.9 - r * 0.2, r * 1.5, r * 0.4, r * 0.2));
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.15, -r * 0.85, r * 1.9, r * 1.7, r * 0.4));
+      // containment sphere
+      shape(g, '#14081c', o, () => g.arc(-r * 0.1, 0, r * 0.7, 0, P2));
+      const gr = g.createRadialGradient(-r * 0.1, 0, 0, -r * 0.1, 0, r * 0.62);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.3, '#ff80f0'); gr.addColorStop(0.7, '#7a2aa8'); gr.addColorStop(1, '#14081c');
+      shape(g, gr, 0, () => g.arc(-r * 0.1, 0, r * 0.62, 0, P2));
+      for (const a of [0, 1.05, 2.1]) { g.save(); g.translate(-r * 0.1, 0); g.rotate(a); g.strokeStyle = METAL.light; lw(g, r * 0.07); g.beginPath(); g.ellipse(0, 0, r * 0.78, r * 0.3, 0, 0, P2); g.stroke(); lw(g, r * 0.025); g.strokeStyle = '#e070ff'; g.stroke(); g.restore(); }
+      return true;
+    }
+    case 'skyfortress': {
+      baseRing(g, r, o, 0, 1.25);
+      for (const y of [-0.68, -0.23, 0.23, 0.68]) {
+        barrel(g, 0, r * 2.35, y * r, r * 0.2, o);
+        shape(g, METAL.dark, o * 0.6, () => { g.moveTo(r * 2.2, y * r - r * 0.12); g.lineTo(r * 2.62, y * r - r * 0.24); g.lineTo(r * 2.62, y * r + r * 0.24); g.lineTo(r * 2.2, y * r + r * 0.12); g.closePath(); });
+        shape(g, METAL.base, o * 0.5, () => roundRect(g, r * 1.0, y * r - r * 0.15, r * 0.22, r * 0.3, r * 0.05));
+      }
+      for (const s of [-1, 1]) { shape(g, metalGrad(g, r * 0.4, '#6a5a2a'), o, () => roundRect(g, -r * 0.9, s * r * 0.98 - r * 0.2, r * 1.2, r * 0.4, r * 0.18)); }
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.05, -r * 0.95, r * 1.95, r * 1.9, r * 0.4));
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.5, -r * 0.88, r * 0.3, r * 1.76, r * 0.1));
+      // radar dish
+      shape(g, METAL.dark, o * 0.6, () => g.arc(-r * 0.4, 0, r * 0.2, 0, P2));
+      shape(g, metalGrad(g, r * 0.5, METAL.light), o * 0.7, () => g.ellipse(-r * 0.4, 0, r * 0.28, r * 0.72, 0, 0, P2));
+      g.strokeStyle = METAL.dark; lw(g, r * 0.05);
+      g.beginPath(); g.moveTo(-r * 0.4, -r * 0.65); g.lineTo(-r * 0.4, r * 0.65); g.moveTo(-r * 0.4, 0); g.lineTo(0, 0); g.stroke();
+      glowDot(g, 0, 0, r * 0.06, '#ff5050');
+      hatch(g, r * 0.25, -r * 0.5, r * 0.18, o); hatch(g, r * 0.25, r * 0.5, r * 0.18, o);
+      return true;
+    }
+    case 'stormtower': {
+      dot2(g, r * 0.12, r * 0.14, r * 1.05, 'rgba(0,0,0,0.35)');
+      baseRing(g, r, o, 0, 1.15);
+      const layers = 5;
+      for (let k = 0; k < layers; k++) {
+        const R = r * (1.0 - k * 0.16), cx = -k * r * 0.04, cy = -k * r * 0.05;
+        const coil = k % 2 === 0;
+        const gr = g.createRadialGradient(cx - R * 0.3, cy - R * 0.3, 0, cx, cy, R);
+        gr.addColorStop(0, coil ? '#f0b868' : '#e6eef4'); gr.addColorStop(1, coil ? '#8a5a20' : '#6c7a88');
+        shape(g, gr, o * 0.8, () => g.arc(cx, cy, R, 0, P2));
+        if (coil) { g.strokeStyle = 'rgba(60,30,0,0.5)'; lw(g, R * 0.04); for (let q = 1; q < 4; q++) { g.beginPath(); g.arc(cx, cy, R * (1 - q * 0.08), 0, P2); g.stroke(); } }
+        else { g.strokeStyle = 'rgba(255,255,255,0.5)'; lw(g, R * 0.03); g.beginPath(); g.arc(cx, cy, R * 0.9, 3.3, 4.7); g.stroke(); }
+      }
+      const tx = -layers * r * 0.04, ty = -layers * r * 0.05;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * P2 + 0.785;
+        const x1 = Math.cos(a) * r * 1.25, y1 = Math.sin(a) * r * 1.25;
+        g.strokeStyle = OUTLINE; lw(g, r * 0.15); g.beginPath(); g.moveTo(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55); g.lineTo(x1, y1); g.stroke();
+        g.strokeStyle = METAL.light; lw(g, r * 0.08); g.stroke();
+        glowDot(g, x1, y1, r * 0.08, '#a8d8ff');
+        jag(g, x1, y1, tx, ty, i + 1, r * 0.2, '#a8d8ff', r * 0.03);
+      }
+      shape(g, '#e8f6ff', o * 0.6, () => g.arc(tx, ty, r * 0.2, 0, P2));
+      glowDot(g, tx, ty, r * 0.18, '#a8d8ff');
+      return true;
+    }
+    case 'inferno': {
+      baseRing(g, r, o, 0, 1.25);
+      for (const s of [-1, 1]) {
+        shape(g, '#c8432a', o, () => roundRect(g, -r * 1.3, s * r * 1.0 - r * 0.38, r * 1.7, r * 0.76, r * 0.38));
+        const gr = g.createLinearGradient(0, s * r * 1.0 - r * 0.38, 0, s * r * 1.0 + r * 0.38);
+        gr.addColorStop(0, 'rgba(255,255,255,0.35)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.35)');
+        g.fillStyle = gr; g.beginPath(); roundRect(g, -r * 1.3, s * r * 1.0 - r * 0.38, r * 1.7, r * 0.76, r * 0.38); g.fill();
+        hazard(g, -r * 0.8, s * r * 1.0 - r * 0.38, r * 0.3, r * 0.76);
+        shape(g, '#ffa040', 0, () => { g.moveTo(-r * 0.2, s * r); g.lineTo(-r * 0.05, s * r * 1.0 - r * 0.2); g.lineTo(r * 0.1, s * r); g.lineTo(-r * 0.05, s * r + r * 0.2); g.closePath(); });
+        g.strokeStyle = METAL.dark; lw(g, r * 0.12); g.beginPath(); g.moveTo(r * 0.3, s * r * 0.95); g.lineTo(r * 0.6, s * r * 0.5); g.stroke();
+        // nozzle
+        shape(g, metalGrad(g, r * 0.4, METAL.dark), o, () => { g.moveTo(r * 0.5, s * r * 0.5 - r * 0.2); g.lineTo(r * 2.2, s * r * 0.5 - r * 0.34); g.lineTo(r * 2.2, s * r * 0.5 + r * 0.34); g.lineTo(r * 0.5, s * r * 0.5 + r * 0.2); g.closePath(); });
+        shape(g, METAL.light, o * 0.6, () => roundRect(g, r * 2.05, s * r * 0.5 - r * 0.4, r * 0.2, r * 0.8, r * 0.05));
+        for (const x of [1.0, 1.5]) shape(g, METAL.base, o * 0.5, () => roundRect(g, r * x, s * r * 0.5 - r * 0.3, r * 0.1, r * 0.6, r * 0.03));
+        glowDot(g, r * 2.28, s * r * 0.5, r * 0.15, '#ffa040');
+      }
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.7, -r * 0.8, r * 1.6, r * 1.6, r * 0.3));
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.3, -r * 0.5, r * 0.4, r, r * 0.1));
+      hatch(g, -r * 0.3, 0, r * 0.28, o);
+      shape(g, '#2a2a2a', o * 0.5, () => g.arc(-r * 0.3, -r * 0.5, r * 0.15, 0, P2));
+      return true;
+    }
+    case 'grinder': {
+      baseRing(g, r, o, 0, 1.15);
+      for (const s of [-1, 1]) {
+        g.strokeStyle = OUTLINE; lw(g, r * 0.36); g.beginPath(); g.moveTo(r * 0.3, s * r * 0.55); g.lineTo(r * 2.05, s * r * 0.2); g.stroke();
+        g.strokeStyle = METAL.base; lw(g, r * 0.26); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,0.25)'; lw(g, r * 0.07); g.stroke();
+      }
+      g.save(); g.translate(r * 2.1, 0); grinderWheel(g, r * 1.05, o, 0); g.restore();
+      shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 0.8, -r * 0.7); g.lineTo(-r * 0.7, -r * 0.95); g.lineTo(-r * 1.1, -r * 0.5); g.lineTo(-r * 1.1, r * 0.5); g.lineTo(-r * 0.7, r * 0.95); g.lineTo(r * 0.8, r * 0.7); g.closePath(); });
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, -r * 0.7, -r * 0.4, r * 1.0, r * 0.8, r * 0.14));
+      hazard(g, -r * 1.05, -r * 0.25, r * 0.2, r * 0.5);
+      glowDot(g, r * 0.0, 0, r * 0.1, '#ff8a30');
+      return true;
+    }
+    case 'bulwarkshield': {
+      shape(g, METAL.dark, o, () => hexPath(g, 0, 0, r * 1.2, 0.52));
+      shape(g, teamGrad(g, pal, r), o * 0.8, () => hexPath(g, 0, 0, r * 1.05, 0.52));
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * P2; shape(g, METAL.light, o * 0.5, () => roundRect(g, Math.cos(a) * r * 1.05 - r * 0.12, Math.sin(a) * r * 1.05 - r * 0.12, r * 0.24, r * 0.24, r * 0.05)); glowDot(g, Math.cos(a) * r * 1.05, Math.sin(a) * r * 1.05, r * 0.07, '#7fd8ff'); }
+      domeGlass(g, r * 0.78, '#9fe8ff', '#1a5a8a', o);
+      g.strokeStyle = rgba('#7fd8ff', 0.8); lw(g, r * 0.05); g.beginPath(); g.arc(0, 0, r * 0.92, 0, P2); g.stroke();
+      return true;
+    }
+    case 'domeG': {
+      baseRing(g, r, o, 0, 1.3, METAL.dark);
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * P2 + 0.2; g.save(); g.rotate(a); shape(g, metalGrad(g, r * 0.4, METAL.light), o * 0.6, () => roundRect(g, r * 0.95, -r * 0.1, r * 0.4, r * 0.2, r * 0.05)); glowDot(g, r * 1.42, 0, r * 0.07, '#5aff9a'); g.restore(); }
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(0, 0, r * 1.0, 0, P2));
+      domeGlass(g, r * 0.82, '#a0ffc8', '#1a7a50', o);
+      g.strokeStyle = rgba('#5aff9a', 0.9); lw(g, r * 0.05);
+      for (const k of [0.65, 0.92]) { g.beginPath(); g.arc(0, 0, r * k, 0, P2); g.stroke(); }
+      shape(g, METAL.dark, o * 0.7, () => g.arc(0, 0, r * 0.2, 0, P2));
+      glowDot(g, 0, 0, r * 0.14, '#5aff9a');
+      return true;
+    }
+    case 'massdriver': {
+      baseRing(g, r, o, -r * 0.3, 1.15);
+      // rails
+      shape(g, '#0a1830', o, () => roundRect(g, r * 0.2, -r * 0.5, r * 3.2, r * 1.0, r * 0.12));
+      for (const y of [-0.36, 0.36]) barrel(g, r * 0.1, r * 3.45, y * r, r * 0.28, o, METAL.light);
+      g.strokeStyle = glow; lw(g, r * 0.14); g.beginPath(); g.moveTo(r * 0.4, 0); g.lineTo(r * 3.4, 0); g.stroke();
+      g.strokeStyle = '#ffffff'; lw(g, r * 0.04); g.stroke();
+      for (let i = 0; i < 6; i++) { const x = r * (0.65 + i * 0.5); shape(g, '#c27a3a', o * 0.6, () => roundRect(g, x, -r * 0.62, r * 0.17, r * 1.24, r * 0.05)); g.fillStyle = glow; g.fillRect(x + r * 0.03, -r * 0.62, r * 0.11, r * 0.06); g.fillRect(x + r * 0.03, r * 0.56, r * 0.11, r * 0.06); }
+      glowDot(g, r * 3.45, 0, r * 0.2, glow);
+      // capacitor bank
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.35, -r * 1.05, r * 1.9, r * 2.1, r * 0.3));
+      for (let i = 0; i < 3; i++) { const y = (i - 1) * r * 0.62; shape(g, '#0a1830', o * 0.7, () => roundRect(g, -r * 1.15, y - r * 0.24, r * 1.3, r * 0.48, r * 0.24)); g.fillStyle = rgba('#9fe8ff', 0.8); g.fillRect(-r * 1.0, y - r * 0.08, r * 1.0, r * 0.16); glowDot(g, r * 0.1, y, r * 0.06, glow); }
+      hazard(g, -r * 1.3, -r * 0.95, r * 0.18, r * 1.9);
+      g.strokeStyle = METAL.dark; lw(g, r * 0.1); g.beginPath(); g.moveTo(r * 0.55, -r * 0.62); g.lineTo(r * 0.55, -r * 0.4); g.moveTo(r * 0.55, r * 0.62); g.lineTo(r * 0.55, r * 0.4); g.stroke();
+      return true;
+    }
+    case 'doomsday': {
+      for (const s of [-1, 1]) {
+        g.strokeStyle = OUTLINE; lw(g, r * 0.3); g.beginPath(); g.moveTo(-r * 0.5, s * r * 0.5); g.lineTo(-r * 1.9, s * r * 1.15); g.stroke();
+        g.strokeStyle = METAL.dark; lw(g, r * 0.18); g.stroke();
+        shape(g, METAL.base, o * 0.7, () => roundRect(g, -r * 2.15, s * r * 1.15 - r * 0.3, r * 0.35, r * 0.6, r * 0.06));
+        hazard(g, -r * 2.1, s * r * 1.15 - r * 0.25, r * 0.16, r * 0.5);
+      }
+      baseRing(g, r, o, -r * 0.1, 1.25);
+      for (const y of [-0.55, 0.55]) {
+        barrel(g, 0, r * 3.1, y * r, r * 0.5, o);
+        shape(g, METAL.base, o * 0.7, () => roundRect(g, r * 1.1, y * r - r * 0.34, r * 0.5, r * 0.68, r * 0.12));
+        shape(g, METAL.dark, o, () => roundRect(g, r * 2.85, y * r - r * 0.36, r * 0.55, r * 0.72, r * 0.1));
+        for (let i = 0; i < 2; i++) shape(g, '#05070a', 0, () => g.rect(r * (2.95 + i * 0.2), y * r - r * 0.32, r * 0.08, r * 0.64));
+      }
+      shape(g, METAL.dark, o * 0.7, () => roundRect(g, r * 0.5, -r * 1.0, r * 0.4, r * 2.0, r * 0.1));
+      shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 0.5, -r * 1.2); g.lineTo(-r * 0.9, -r * 1.2); g.lineTo(-r * 1.2, -r * 0.7); g.lineTo(-r * 1.2, r * 0.7); g.lineTo(-r * 0.9, r * 1.2); g.lineTo(r * 0.5, r * 1.2); g.closePath(); });
+      g.strokeStyle = rgba(pal.deep, 0.5); lw(g, o * 0.6); g.beginPath(); g.moveTo(-r * 0.3, -r * 1.15); g.lineTo(-r * 0.3, r * 1.15); g.stroke();
+      hatch(g, -r * 0.5, -r * 0.7, r * 0.28, o); hatch(g, -r * 0.5, r * 0.7, r * 0.28, o);
+      shape(g, '#4a5a3a', o * 0.6, () => roundRect(g, -r * 0.9, -r * 0.3, r * 0.9, r * 0.6, r * 0.08));
+      g.fillStyle = '#c9a040'; for (let i = 0; i < 5; i++) g.fillRect(-r * 0.8 + i * r * 0.17, -r * 0.2, r * 0.1, r * 0.4);
+      return true;
+    }
+    case 'annihilator': {
+      baseRing(g, r, o, -r * 0.2, 1.2);
+      const tip = r * 2.35;
+      for (const s of [-1, 1]) {
+        shape(g, metalGrad(g, r * 0.4, METAL.dark), o, () => { g.moveTo(r * 0.3, s * r * 0.5 - r * 0.2); g.lineTo(tip, s * r * 0.45 - r * 0.32); g.lineTo(tip, s * r * 0.45 + r * 0.32); g.lineTo(r * 0.3, s * r * 0.5 + r * 0.2); g.closePath(); });
+        for (let i = 0; i < 4; i++) { const x = r * (0.7 + i * 0.4), h = r * (0.26 + i * 0.03); shape(g, '#7a3aa8', o * 0.5, () => roundRect(g, x, s * r * 0.48 - h, r * 0.13, h * 2, r * 0.04)); }
+        glowDot(g, tip + r * 0.05, s * r * 0.45, r * 0.16, '#e070ff');
+        g.strokeStyle = rgba('#e070ff', 0.6); lw(g, r * 0.04); g.beginPath(); g.moveTo(tip + r * 0.05, s * r * 0.45); g.lineTo(r * 2.95, 0); g.stroke();
+        g.strokeStyle = METAL.base; lw(g, r * 0.09); g.beginPath(); g.moveTo(tip - r * 0.1, s * r * 0.45); g.lineTo(r * 2.75, s * r * 0.2); g.stroke();
+      }
+      // focusing lens
+      shape(g, METAL.dark, o, () => g.arc(r * 2.95, 0, r * 0.5, 0, P2));
+      shape(g, METAL.light, o * 0.6, () => g.arc(r * 2.95, 0, r * 0.4, 0, P2));
+      const gr = g.createRadialGradient(r * 2.95, 0, 0, r * 2.95, 0, r * 0.34);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.4, '#ff80f0'); gr.addColorStop(1, '#5a1a80');
+      shape(g, gr, o * 0.5, () => g.arc(r * 2.95, 0, r * 0.34, 0, P2));
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.2, -r * 1.0, r * 1.9, r * 2.0, r * 0.4));
+      for (const s of [-1, 1]) { shape(g, '#14081c', o, () => g.arc(-r * 0.2, s * r * 0.5, r * 0.36, 0, P2)); glowDot(g, -r * 0.2, s * r * 0.5, r * 0.2, '#e070ff'); }
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.35, -r * 0.8, r * 0.3, r * 1.6, r * 0.08));
+      return true;
+    }
+    case 'tactnuke': {
+      baseRing(g, r, o, -r * 0.8, 1.1);
+      // erector rails
+      for (const s of [-1, 1]) {
+        shape(g, METAL.dark, o, () => roundRect(g, -r * 0.9, s * r * 0.68 - r * 0.1, r * 3.0, r * 0.2, r * 0.05));
+        g.fillStyle = '#e8b81c'; for (let i = 0; i < 6; i++) g.fillRect(-r * 0.7 + i * r * 0.5, s * r * 0.68 - r * 0.06, r * 0.18, r * 0.12);
+      }
+      // hydraulic ram
+      g.strokeStyle = OUTLINE; lw(g, r * 0.2); g.beginPath(); g.moveTo(-r * 0.9, r * 0.2); g.lineTo(r * 0.5, r * 0.62); g.stroke();
+      g.strokeStyle = METAL.light; lw(g, r * 0.1); g.stroke();
+      // missile
+      shape(g, '#d8d6c8', o, () => roundRect(g, -r * 0.2, -r * 0.38, r * 3.0, r * 0.76, r * 0.38));
+      const mg = g.createLinearGradient(0, -r * 0.38, 0, r * 0.38);
+      mg.addColorStop(0, 'rgba(255,255,255,0.45)'); mg.addColorStop(0.5, 'rgba(255,255,255,0)'); mg.addColorStop(1, 'rgba(0,0,0,0.35)');
+      g.fillStyle = mg; g.beginPath(); roundRect(g, -r * 0.2, -r * 0.38, r * 3.0, r * 0.76, r * 0.38); g.fill();
+      shape(g, '#c0392b', o, () => { g.moveTo(r * 2.78, -r * 0.37); g.lineTo(r * 3.5, 0); g.lineTo(r * 2.78, r * 0.37); g.closePath(); });
+      g.fillStyle = '#e8b81c'; g.fillRect(r * 2.35, -r * 0.37, r * 0.18, r * 0.74); g.fillRect(r * 2.0, -r * 0.37, r * 0.08, r * 0.74);
+      shape(g, '#7a7a74', o * 0.7, () => { g.moveTo(-r * 0.2, -r * 0.4); g.lineTo(r * 0.5, -r * 0.95); g.lineTo(r * 0.7, -r * 0.4); g.closePath(); });
+      shape(g, '#7a7a74', o * 0.7, () => { g.moveTo(-r * 0.2, r * 0.4); g.lineTo(r * 0.5, r * 0.95); g.lineTo(r * 0.7, r * 0.4); g.closePath(); });
+      // trefoil
+      shape(g, '#e8b81c', o * 0.6, () => g.arc(r * 1.3, 0, r * 0.31, 0, P2));
+      g.fillStyle = '#151515';
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * P2 + Math.PI / 2 + 0.2; g.beginPath(); g.moveTo(r * 1.3, 0); g.arc(r * 1.3, 0, r * 0.27, a, a + 1.0); g.closePath(); g.fill(); }
+      shape(g, '#e8b81c', 0, () => g.arc(r * 1.3, 0, r * 0.07, 0, P2));
+      // clamps
+      for (const x of [0.2, 1.8]) shape(g, METAL.dark, o * 0.8, () => roundRect(g, r * x, -r * 0.62, r * 0.28, r * 1.24, r * 0.06));
+      // pivot housing
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.4, -r * 0.95, r * 1.1, r * 1.9, r * 0.3));
+      hatch(g, -r * 0.95, -r * 0.5, r * 0.2, o);
+      hazard(g, -r * 1.35, r * 0.3, r * 0.9, r * 0.2);
+      return true;
+    }
+    case 'titanfist': {
+      baseRing(g, r, o, -r * 0.3, 1.25);
+      // piston arms
+      for (const y of [-0.38, 0.38]) { barrel(g, r * 0.4, r * 1.9, y * r, r * 0.32, o, METAL.light); barrel(g, r * 0.4, r * 1.1, y * r, r * 0.46, o, METAL.dark); }
+      // shoulder ball
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(-r * 0.35, 0, r * 1.0, 0, P2));
+      g.strokeStyle = GOLD; lw(g, r * 0.07); g.beginPath(); g.arc(-r * 0.35, 0, r * 0.82, 0, P2); g.stroke();
+      hatch(g, -r * 0.35, 0, r * 0.3, o);
+      // elbow + forearm
+      shape(g, METAL.dark, o, () => roundRect(g, r * 1.7, -r * 0.66, r * 0.45, r * 1.32, r * 0.14));
+      shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 1.95, -r * 0.7); g.lineTo(r * 2.95, -r * 0.62); g.lineTo(r * 2.95, r * 0.62); g.lineTo(r * 1.95, r * 0.7); g.closePath(); });
+      g.strokeStyle = GOLD; lw(g, r * 0.05); g.beginPath(); g.moveTo(r * 2.05, -r * 0.55); g.lineTo(r * 2.85, -r * 0.5); g.moveTo(r * 2.05, r * 0.55); g.lineTo(r * 2.85, r * 0.5); g.stroke();
+      // fist
+      shape(g, metalGrad(g, r, METAL.light), o, () => roundRect(g, r * 2.75, -r * 0.82, r * 0.85, r * 1.64, r * 0.28));
+      g.strokeStyle = 'rgba(0,0,0,0.6)'; lw(g, r * 0.05);
+      g.beginPath(); for (const y of [-0.41, 0, 0.41]) { g.moveTo(r * 2.95, y * r); g.lineTo(r * 3.58, y * r); } g.stroke();
+      for (const y of [-0.62, -0.2, 0.2, 0.62]) { shape(g, '#2a2f34', o * 0.6, () => g.arc(r * 3.55, y * r, r * 0.13, 0, P2)); shape(g, METAL.light, 0, () => g.arc(r * 3.52, y * r - r * 0.03, r * 0.06, 0, P2)); }
+      shape(g, metalGrad(g, r * 0.5, METAL.base), o, () => roundRect(g, r * 2.85, r * 0.78, r * 0.7, r * 0.34, r * 0.16));
+      rivets(g, [r * 2.95, -r * 0.7, r * 2.95, r * 0.7], r * 0.06);
+      return true;
+    }
+    case 'stormcore': {
+      baseRing(g, r, o, 0, 1.2);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * P2;
+        spire(g, a, r * 0.6, r * 1.55, r * 0.17, o, '#a8d8ff');
+      }
+      shape(g, teamGrad(g, pal, r), o, () => hexPath(g, 0, 0, r * 0.95, 0.52));
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * P2 + P2 / 6; g.strokeStyle = rgba(pal.deep, 0.6); lw(g, o * 0.8); g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.9); g.stroke(); }
+      shape(g, '#06101c', o, () => g.arc(0, 0, r * 0.58, 0, P2));
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 0.5);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, '#a8d8ff'); gr.addColorStop(1, '#1a4a9a');
+      shape(g, gr, 0, () => g.arc(0, 0, r * 0.5, 0, P2));
+      g.strokeStyle = '#c8e8ff'; lw(g, r * 0.04);
+      g.beginPath(); g.arc(0, 0, r * 0.5, 0.3, 2.0); g.arc(0, 0, r * 0.5, 3.4, 5.1); g.stroke();
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * P2; jag(g, Math.cos(a) * r * 1.55, Math.sin(a) * r * 1.55, Math.cos(a + P2 / 3) * r * 1.55, Math.sin(a + P2 / 3) * r * 1.55, i + 3, r * 0.25, '#a8d8ff', r * 0.025); }
+      return true;
+    }
+    case 'aegisT': {
+      shape(g, GOLD, o, () => g.arc(0, 0, r * 1.3, 0, P2));
+      const gg = g.createLinearGradient(-r, -r, r, r);
+      gg.addColorStop(0, '#fff2b0'); gg.addColorStop(0.5, '#c8982a'); gg.addColorStop(1, '#6a4a10');
+      shape(g, gg, o * 0.7, () => g.arc(0, 0, r * 1.25, 0, P2));
+      shape(g, METAL.dark, o * 0.7, () => g.arc(0, 0, r * 1.05, 0, P2));
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * P2; shape(g, i % 3 === 0 ? '#5affc0' : '#7fd8ff', o * 0.4, () => g.arc(Math.cos(a) * r * 1.15, Math.sin(a) * r * 1.15, r * 0.07, 0, P2)); }
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * P2 + 0.785;
+        g.save(); g.rotate(a);
+        shape(g, gg, o * 0.8, () => { g.moveTo(r * 0.5, -r * 0.12); g.lineTo(r * 1.45, 0); g.lineTo(r * 0.5, r * 0.12); g.closePath(); });
+        glowDot(g, r * 1.45, 0, r * 0.08, '#bfefff');
+        g.restore();
+      }
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(0, 0, r * 0.95, 0, P2));
+      domeGlass(g, r * 0.8, '#cffaff', '#1a6a9a', o);
+      g.strokeStyle = GOLD; lw(g, r * 0.06); g.beginPath(); g.arc(0, 0, r * 0.6, 0, P2); g.stroke();
+      // crystal
+      shape(g, '#e8fcff', o * 0.6, () => { g.moveTo(r * 0.25, 0); g.lineTo(0, -r * 0.2); g.lineTo(-r * 0.25, 0); g.lineTo(0, r * 0.2); g.closePath(); });
+      glowDot(g, 0, 0, r * 0.15, '#bfefff');
+      return true;
+    }
+  }
+  return false;
+}
+
+function dot2(g: Ctx, x: number, y: number, rad: number, c: string): void {
+  g.fillStyle = c; g.beginPath(); g.arc(x, y, rad, 0, P2); g.fill();
+}
+
+/** Per-frame animated bits of giant/titan turrets, drawn over the baked sprite. Local frame: pivot at (mx, my), barrels along ang. */
+export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, mx: number, my: number, ang: number, sc: number, t: number, flash: number, swing: number, px: number, alpha: number): void {
+  const r = d / 2;
+  const cs = Math.cos(ang) * sc, sn = Math.sin(ang) * sc;
+  const tr = g.getTransform();
+  g.transform(cs, sn, -sn, cs, mx, my);
+  const prev = g.globalCompositeOperation;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+  const glowAt = (x: number, y: number, rad: number, col: string, a: number) => {
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = alpha * Math.min(1, a);
+    g.drawImage(softDot(col), x - rad, y - rad, rad * 2, rad * 2);
+  };
+  switch (m.id) {
+    case 'grinder': {
+      g.save(); g.translate(r * 2.1, 0); grinderWheel(g, r * 1.05, Math.max(1.1 / px, d * 0.04), t * (swing > 0 ? 38 : 11)); g.restore();
+      glowAt(r * 2.1, 0, r * 1.3, 'rgba(255,140,50,0.8)', 0.12 + swing * 0.5);
+      break;
+    }
+    case 'massdriver': {
+      const ch = 0.35 + 0.3 * pulse + flash * 0.8;
+      glowAt(r * 3.45, 0, r * (0.8 + flash * 1.4), '#9fe8ff', ch);
+      g.globalAlpha = alpha * 0.9;
+      for (let i = 0; i < 3; i++) {
+        const f = (t * 1.2 + i / 3) % 1;
+        glowAt(r * (0.5 + f * 2.9), 0, r * 0.26, '#cff4ff', 0.9 * (1 - Math.abs(f - 0.5) * 1.2));
+      }
+      glowAt(r * 0.1, 0, r * 1.0, '#6ac8ff', 0.1 + 0.12 * pulse);
+      break;
+    }
+    case 'annihilator': {
+      const w = 0.35 + 0.35 * pulse + flash;
+      glowAt(r * 2.95, 0, r * (0.9 + flash), '#ff80f0', w);
+      glowAt(r * 2.95, 0, r * 0.3, '#ffffff', 0.5 + flash);
+      break;
+    }
+    case 'tactnuke':
+      glowAt(r * 1.3, 0, r * 0.7, '#9aff50', 0.3 + 0.25 * pulse);
+      glowAt(r * 3.4, 0, r * 0.3, '#ff4030', 0.2 + 0.2 * pulse);
+      break;
+    case 'siegeplasma':
+      glowAt(-r * 0.1, 0, r * 0.9, '#e070ff', 0.35 + 0.3 * pulse + flash);
+      glowAt(r * 2.4, 0, r * 0.5, '#e070ff', 0.4 + 0.4 * flash + 0.2 * pulse);
+      break;
+    case 'stormcore': case 'stormtower': {
+      glowAt(0, 0, r * 0.8, '#a8d8ff', 0.3 + 0.3 * pulse + flash);
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = alpha;
+      const k = Math.floor(t * 18);
+      const n = m.id === 'stormcore' ? 3 : 4;
+      for (let i = 0; i < n; i++) {
+        if ((k + i) % 3 === 0) continue;
+        const a = m.id === 'stormcore' ? (i / 3) * P2 : (i / 4) * P2 + 0.785;
+        const rad = m.id === 'stormcore' ? r * 1.55 : r * 1.25;
+        jag(g, Math.cos(a) * rad, Math.sin(a) * rad, 0, 0, k + i * 3, r * 0.3, '#a8d8ff', Math.max(1 / px, r * 0.02));
+      }
+      break;
+    }
+    case 'inferno':
+      for (const s of [-1, 1]) {
+        const f = 0.7 + 0.3 * Math.sin(t * 23 + s) + (Math.sin(t * 41) > 0.5 ? 0.15 : 0);
+        glowAt(r * 2.4, s * r * 0.5, r * 0.45 * f, '#ff9030', 0.55 + flash);
+        glowAt(r * 2.35, s * r * 0.5, r * 0.18, '#fff0b0', 0.7);
+      }
+      break;
+    case 'doomsday':
+    case 'siege240':
+      if (flash > 0.15) {
+        const bx = m.id === 'siege240' ? r * 3.4 : r * 3.45;
+        const ys = m.id === 'siege240' ? [0] : [-0.55, 0.55];
+        for (const y of ys) { glowAt(bx, y * r, r * (1.2 + flash * 1.6), '#ffd890', flash); glowAt(bx, y * r, r * 0.5, '#ffffff', flash); }
+      }
+      break;
+    case 'skyfortress': {
+      const on = (t * 1.4) % 1 < 0.2;
+      if (on) glowAt(0, 0, r * 0.3, '#ff4040', 0.9);
+      break;
+    }
+    case 'bulwarkshield': case 'domeG': case 'aegisT': {
+      const rad = (m.id === 'aegisT' ? 1.5 : m.id === 'domeG' ? 1.35 : 1.1) * r;
+      const col = m.id === 'domeG' ? '#5aff9a' : '#7fd8ff';
+      glowAt(0, 0, rad * (1.05 + 0.1 * pulse), col, 0.25 + 0.15 * pulse);
+      g.globalCompositeOperation = 'lighter';
+      g.strokeStyle = col; g.lineWidth = Math.max(1.2 / px, r * 0.05); g.lineCap = 'round';
+      for (let k = 0; k < (m.id === 'aegisT' ? 3 : 2); k++) {
+        const f = (t * 0.7 + k * 0.33) % 1;
+        g.globalAlpha = alpha * (1 - f) * 0.8;
+        g.beginPath(); g.arc(0, 0, rad * (0.5 + f * 0.9), 0, P2); g.stroke();
+      }
+      break;
+    }
+    case 'missilebattery':
+      for (let i = 0; i < 4; i++) glowAt(-r * 0.95, -r * 0.45 + i * r * 0.3, r * 0.1, (Math.floor(t * 2) + i) % 4 === 0 ? '#ff4040' : '#40ff70', 0.9);
+      break;
+    case 'titanfist':
+      glowAt(r * 3.1, 0, r * 1.2, '#ffd890', swing * 0.8);
+      break;
+    case 'avenger':
+      glowAt(r * 3.25, 0, r * (0.5 + flash), '#ffd27a', flash * 1.2);
+      break;
+  }
+  g.setTransform(tr);
+  g.globalCompositeOperation = prev;
+  g.globalAlpha = alpha;
 }

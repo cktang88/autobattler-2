@@ -34,7 +34,7 @@ import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
 import { groundCanvas, groundRegion } from './ground.ts';
-import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, softDot, type Ctx, type Team } from './palette.ts';
+import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
 import {
@@ -81,6 +81,7 @@ interface UVis {
   hpShown: number;
   swing: number[];
   seen: number;
+  lastPh?: number;
 }
 
 interface PSnap {
@@ -425,6 +426,15 @@ export class FieldView {
     const poses: { u: BoardUnit; p: UnitPose; air: boolean }[] = [];
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
+      const LS = layoutOf(u.design).S;
+      if (LS >= 4 && !u.ghost && !u.dim) {
+        const key = `${u.side}|${u.x}|${u.y}|${u.design.chassis}`;
+        if (!this.landed.has(key)) {
+          this.landed.add(key);
+          this.fx.shockwave(u.x, u.y, 0.9 * LS, '#d8c8a0', 0.8);
+          this.fx.shake(0.12 + 0.03 * LS);
+        }
+      }
       const seed = hash01(i * 7919 + Math.round(u.x * 13 + u.y * 101)) * 10;
       const p: UnitPose = {
         design: u.design, team: this.teamOf(u.side), x: u.x, y: u.y, angle: forwardAngle(u.side), time, seed,
@@ -569,6 +579,19 @@ export class FieldView {
     for (const u of battle.units) {
       if (!u.alive) continue;
       const p = this.poseOf(u);
+      const LL = layoutOf(u.design);
+      if (LL.mob.id === 'titanlegs' && LL.S >= 4 && p.moving) {
+        const vv = this.visOf(u);
+        const ph = ((p.odometer ?? 0) / LL.cycle) % 1;
+        const lp = vv.lastPh;
+        if (lp !== undefined && ph !== lp) {
+          for (const c of [0.25, 0.75]) {
+            const a = lp <= ph ? lp < c && ph >= c : lp < c || ph >= c;
+            if (a && Math.abs(ph - lp) < 0.5) { this.fx.shake(0.05 + 0.02 * LL.S); this.fx.dust(p.x, p.y, 0.5 * LL.S * 0.4, 4, 0.7); }
+          }
+        }
+        vv.lastPh = ph;
+      }
       (u.flying ? air : ground).push(p);
       bars.push({ u, p });
     }
@@ -589,6 +612,8 @@ export class FieldView {
     this.drawVignette();
     this.drawScaleBar();
   }
+
+  private landed = new Set<string>();
 
   private visOf(u: SimUnit): UVis {
     let v = this.vis.get(u.id);
@@ -669,6 +694,7 @@ export class FieldView {
     const damaged = u.hp < u.maxHp - 0.5;
     const S = layoutOf(u.design).S;
     if (u.level > 1) this.drawPips(p.x, p.y, S, u.level, 0.9);
+    if (S >= 4) { this.drawBossBar(u, p, v, S); return; }
     if (!damaged && u.shield <= 0) return;
     const g = this.g;
     const s = this.worldToScreen(p.x, p.y);
@@ -689,6 +715,41 @@ export class FieldView {
       g.fillStyle = '#8fe0ff';
       g.fillRect(x, y - 2, w * clamp(u.shield / u.maxShield, 0, 1), 1.5);
     }
+  }
+
+  /** Wide segmented 'boss' bar for giants and titans: always visible, team-coloured frame, white trailing chip. */
+  private drawBossBar(u: SimUnit, p: UnitPose, v: UVis, S: number): void {
+    const g = this.g;
+    const s = this.worldToScreen(p.x, p.y);
+    const lift = u.flying ? 0.12 * this.k : 0;
+    const team = this.teamOf(u.side);
+    const col = TEAM_PAL[team].bar;
+    const w = Math.max(40, S * this.k * 1.0), h = S >= 5 ? 9 : 7;
+    const x = Math.round(s.x - w / 2);
+    const y = Math.round(s.y - S * this.k * 0.56 - h - 5 - lift);
+    g.fillStyle = 'rgba(0,0,0,0.9)';
+    g.fillRect(x - 3, y - 3, w + 6, h + 6);
+    g.strokeStyle = TEAM_PAL[team].rim;
+    g.lineWidth = 1.5;
+    g.strokeRect(x - 2.5, y - 2.5, w + 5, h + 5);
+    const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    g.fillRect(x, y, w * fs, h);
+    const gr = g.createLinearGradient(0, y, 0, y + h);
+    const base = f < 0.3 ? (team === 0 ? '#ffd24a' : '#ff3a2a') : col;
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.25, base); gr.addColorStop(1, shade(base, -0.4));
+    g.fillStyle = gr;
+    g.fillRect(x, y, w * f, h);
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    for (let i = 1; i < 10; i++) g.fillRect(Math.round(x + (w * i) / 10), y, 1, h);
+    if (u.maxShield > 0 && u.shield > 0) {
+      g.fillStyle = '#8fe0ff';
+      g.fillRect(x, y - 4, w * clamp(u.shield / u.maxShield, 0, 1), 2);
+    }
+    // corner ticks
+    g.fillStyle = TEAM_PAL[team].rim;
+    g.fillRect(x - 5, y - 1, 3, h + 2);
+    g.fillRect(x + w + 2, y - 1, 3, h + 2);
   }
 
   /* ------------------------------------------------------------------------------------ projectiles */
@@ -855,7 +916,8 @@ export class FieldView {
         }
         case 'missile': {
           const cruise = vis === 'cruise';
-          const sz = cruise ? 0.5 : mod?.id === 'swarm' ? 0.16 : 0.26;
+          const nuke = mod?.id === 'tactnuke';
+          const sz = nuke ? 1.3 : cruise ? 0.5 : mod?.id === 'swarm' ? 0.16 : mod?.id === 'missilebattery' ? 0.3 : 0.26;
           // ground shadow
           g.globalCompositeOperation = prevOp;
           g.globalAlpha = 0.3;
@@ -872,7 +934,8 @@ export class FieldView {
           const fr = sz * (0.4 + Math.random() * 0.2);
           const col = mod?.targetsAir && !mod.targetsGround ? 'rgba(120,170,255,0.9)' : 'rgba(255,220,120,0.9)';
           g.drawImage(softDot(col), x - cs * sz * 1.1 - fr, y - sn * sz * 1.1 - fr, fr * 2, fr * 2);
-          this.trail(p.id, x - cs * sz, y - sn * sz, cruise ? 0.3 : 0.14, '#8a8680', cruise ? 0.04 : 0.05);
+          if (nuke) { g.drawImage(softDot('rgba(255,120,40,0.9)'), x - cs * sz * 1.3 - fr * 1.6, y - sn * sz * 1.3 - fr * 1.6, fr * 3.2, fr * 3.2); g.drawImage(softDot('rgba(150,255,90,0.6)'), x - cs * sz * 0.5 - sz * 0.5, y - sn * sz * 0.5 - sz * 0.5, sz, sz); }
+          this.trail(p.id, x - cs * sz, y - sn * sz, nuke ? 0.6 : cruise ? 0.3 : 0.14, nuke ? '#aaa49a' : '#8a8680', nuke ? 0.07 : cruise ? 0.04 : 0.05);
           break;
         }
         case 'flame': {
@@ -924,7 +987,7 @@ export class FieldView {
             } else g.drawImage(softDot('#7ab8ff', 0.3), x - r, y - r, r * 2, r * 2);
             if (Math.random() < dt * 20) this.fx.sparks(x, y, 1, '#cfe9ff', 2, undefined, Math.PI, 0.12);
           } else {
-            const r = 0.18 + 0.12 * cal;
+            const r = (0.18 + 0.12 * cal) * (mod?.mount === 'G' ? 2.1 : 1);
             g.drawImage(softDot(rgba(glowC.length === 7 ? glowC : '#e070ff', 0.6)), x - r * 2.5, y - r * 2.5, r * 5, r * 5);
             g.drawImage(softDot('#ffffff', 0.4), x - r * 0.6, y - r * 0.6, r * 1.2, r * 1.2);
             this.trail(p.id, x, y, r * 0.8, '#e070ff', 0.05, true);
@@ -986,6 +1049,17 @@ export class FieldView {
         const cs = Math.cos(e.angle), sn = Math.sin(e.angle);
         const cal = mod?.caliber ?? 0.5;
         const glowC = moduleGlow(mod, TEAM_PAL[ur ? this.teamOf(ur.u.side) : 0]);
+        if (mod && (mod.mount === 'G' || mod.mount === 'T') && mod.kind === 'weapon' && mod.category !== 'melee') {
+          const T = mod.mount === 'T';
+          const cc = mod.id === 'massdriver' ? '#9fe8ff' : mod.id === 'annihilator' || mod.id === 'siegeplasma' ? '#e070ff' : mod.id === 'stormcore' || mod.id === 'stormtower' ? '#a8d8ff' : '#ffd890';
+          fx.glow(mx, my, (T ? 1.8 : 1.0) * (mod.cooldown && mod.cooldown < 0.2 ? 0.4 : 1), cc, 0.16);
+          if (mod.cooldown === undefined || mod.cooldown >= 0.2) {
+            fx.ring(mx, my, 0.1, T ? 2.4 : 1.4, cc, 0.3, 0.7);
+            if (mod.id === 'doomsday' || mod.id === 'siege240') { fx.shockwave(mx, my, T ? 3.2 : 1.8, '#e0c8a0', 0.6); fx.shake(T ? 0.4 : 0.2); for (let i = 0; i < 6; i++) fx.smoke(mx + cs * 0.3, my + sn * 0.3, 0.4, 1.6, '#6a6660', cs * 1.5 + (Math.random() - 0.5), sn * 1.5 + (Math.random() - 0.5), 0.5); }
+            else if (mod.id === 'tactnuke') { for (let i = 0; i < 10; i++) fx.smoke(mx - cs * 0.6, my - sn * 0.6, 0.5, 2.4, '#8a8680', -cs * 2 + (Math.random() - 0.5) * 2, -sn * 2 + (Math.random() - 0.5) * 2, 0.6); fx.shake(0.35); }
+            else if (T) fx.shake(0.25);
+          }
+        }
         switch (vis) {
           case 'gun': case 'gatling': case 'shotgun': case 'sniper': case 'flak': case 'cannon': case 'artillery': case 'gauss': {
             const heavy = vis === 'cannon' || vis === 'artillery' || vis === 'gauss';
@@ -1057,10 +1131,12 @@ export class FieldView {
           }
           case 'rail': {
             const heavy = (mod?.caliber ?? 0.5) > 0.7;
-            fx.beam('rail', pts, '#9fe8ff', heavy ? 0.1 : 0.06, heavy ? 0.5 : 0.35);
-            fx.glow(e.x1, e.y1, heavy ? 0.7 : 0.45, '#9fe8ff', 0.2);
-            fx.sparks(e.x2, e.y2, 10, '#cff4ff', 5, undefined, Math.PI, 0.3);
-            if (heavy) fx.shake(0.18);
+            const huge = mod?.mount === 'T';
+            fx.beam('rail', pts, '#9fe8ff', huge ? 0.24 : heavy ? 0.1 : 0.06, huge ? 0.8 : heavy ? 0.5 : 0.35);
+            fx.glow(e.x1, e.y1, huge ? 1.6 : heavy ? 0.7 : 0.45, '#9fe8ff', huge ? 0.35 : 0.2);
+            fx.sparks(e.x2, e.y2, huge ? 24 : 10, '#cff4ff', huge ? 8 : 5, undefined, Math.PI, 0.3);
+            if (huge) { fx.shockwave(e.x2, e.y2, 1.6, '#9fe8ff', 0.5); fx.ring(e.x1, e.y1, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
+            if (huge) fx.shake(0.4); else if (heavy) fx.shake(0.18);
             break;
           }
           case 'pointdef': fx.beam('laser', pts, '#ff6060', 0.025, 0.08); impact = false; break;
@@ -1115,7 +1191,9 @@ export class FieldView {
         const vis = mod?.visual;
         const r = e.radius;
         const air = mod ? !mod.targetsGround && !!mod.targetsAir : false;
-        if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.4, r * 0.7), 'flak', false);
+        if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
+        else if (mod?.id === 'doomsday') { fx.boom(e.x, e.y, r * 0.8, 'big'); fx.shake(0.45); }
+        else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.4, r * 0.7), 'flak', false);
         else if (vis === 'emp') fx.boom(e.x, e.y, Math.max(0.4, r), 'emp');
         else if (vis === 'plasma') fx.boom(e.x, e.y, Math.max(0.4, r * 0.8), 'plasma');
         else if (vis === 'sonic') fx.boom(e.x, e.y, Math.max(0.5, r), 'sonic');
@@ -1142,13 +1220,19 @@ export class FieldView {
         const team = u ? this.teamOf(u.side) : 1;
         const x = e.x, y = e.y;
         const pal = TEAM_PAL[team];
-        if (e.flying) {
+        if (e.flying && S >= 4) {
+          fx.megaDeath(x, y, S, pal.dark);
+          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext * 0.9, u.angle + 0.6);
+        } else if (e.flying) {
           fx.boom(x + this.dirs.ux * 0.3, y + this.dirs.uy * 0.3, 0.5 * S, 'fire', false);
           fx.debris(x, y, 6 * S, pal.dark, 2.5, 0.07 * S);
           fx.schedule(0.35, () => {
             fx.boom(x, y, 0.6 * S, 'fire');
             if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext * 0.8, u.angle + 0.6);
           });
+        } else if (S >= 4) {
+          fx.megaDeath(x, y, S, pal.dark);
+          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext, u.angle);
         } else {
           fx.boom(x, y, 0.55 + 0.45 * S, S >= 3 ? 'big' : 'fire');
           fx.debris(x, y, 5 + 5 * S, pal.dark, 3 + S, 0.06 * S);
@@ -1216,7 +1300,7 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   let L;
   try { L = layoutOf(design); } catch { return; }
   const time = opts?.time ?? 0;
-  const ext = L.S * (L.air ? 1.25 : L.mob.id === 'spider' ? 1.18 : 1.1);
+  const ext = L.S * (L.S >= 4 ? (L.air ? 1.5 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' ? 1.18 : 1.1);
   const px = Math.min(W, H) / ext;
   g.setTransform(px, 0, 0, px, W / 2, H / 2);
   const team: Team = (opts?.side ?? 0) === 1 ? 1 : 0;

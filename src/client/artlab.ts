@@ -67,8 +67,8 @@ function gridSection(): void {
     MOBILITY.forEach((m, mi) => {
       const td = el('td');
       if (!pairingError(c.id, m.id)) {
-        const d: Design = { id: `g${ci}_${mi}`, name: 'x', chassis: c.id, mobility: m.id, mounts: fillMounts(c.id, ci + mi) };
-        td.append(preview(d, 96));
+        const d: Design = { id: `g${ci}_${mi}`, name: 'x', chassis: c.id, mobility: m.id, mounts: params.get('empty') ? c.mounts.map(() => null) : fillMounts(c.id, ci + mi) };
+        td.append(preview(d, c.size >= 4 ? (params.get('big') ? 420 : 190) : 96));
       } else td.className = 'na';
       tr.append(td);
     });
@@ -78,6 +78,8 @@ function gridSection(): void {
 }
 
 function refChassis(m: ModuleDef): { chassis: string; mobility: string; slot: number } {
+  if (m.mount === 'T') return { chassis: 'titan', mobility: 'titanlegs', slot: 0 };
+  if (m.mount === 'G') return { chassis: 'leviathan', mobility: 'megatracks', slot: 0 };
   if (m.mount === 'L') return { chassis: 'scout', mobility: 'wheels', slot: 0 };
   if (m.mount === 'M') return { chassis: 'warden', mobility: 'halftrack', slot: 0 };
   return { chassis: 'longarm', mobility: 'treads', slot: 0 };
@@ -91,7 +93,7 @@ function modulesSection(): void {
     const mounts: (string | null)[] = c.mounts.map(() => null);
     mounts[r.slot] = m.id;
     const d: Design = { id: 'm_' + m.id, name: m.name, chassis: r.chassis, mobility: r.mobility, mounts };
-    host.append(preview(d, 110, m.name, `${m.id} · ${m.mount} · ${m.visual}`));
+    host.append(preview(d, m.mount === 'G' || m.mount === 'T' ? 230 : 110, m.name, `${m.id} · ${m.mount} · ${m.visual}`));
   }
 }
 
@@ -136,7 +138,20 @@ function randomDesigns(n: number, seed: number): Design[] {
   return out;
 }
 
+function giantDeck(): Design[] {
+  const mk = (id: string, chassis: string, mobility: string, mounts: string[]): Design => ({ id, name: id, chassis, mobility, mounts });
+  return [
+    mk('t1', 'titan', 'titanlegs', ['massdriver', 'siegeplasma', 'twin120', 'gauss', 'quad20']),
+    mk('c1', 'citadel', 'megatracks', ['doomsday', 'tactnuke', 'siege240', 'twin30', 'quad20', 'mg']),
+    mk('l1', 'leviathan', 'megatracks', ['siege240', 'inferno', 'cannon75', 'twin30']),
+    mk('k1', 'carrier', 'gravlift', ['skyfortress', 'heavyflak', 'quad20', 'quad20']),
+    mk('g1', 'goliath', 'titanlegs', ['stormtower', 'cannon', 'cannon', 'twin30']),
+    mk('t2', 'titan', 'megatracks', ['stormcore', 'avenger', 'howitzer', 'cruise', 'autocannon']),
+  ];
+}
+
 function makeDeck(seed: number): Design[] {
+  if (params.get('giants')) return giantDeck();
   try {
     const d = aiDeck(seed, 'hard');
     if (d.length >= 4) return d;

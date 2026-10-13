@@ -9,7 +9,8 @@
 import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import type { Design } from '../../shared/types.ts';
 import { TEAM_PAL, ctx2d, makeCanvas, shade, type Ctx, type TeamPal } from './palette.ts';
-import { CATEGORY_COLOR, drawTurret } from './turrets.ts';
+import { CATEGORY_COLOR, drawTurret, drawTurretDynamic } from './turrets.ts';
+import { GIANT_SHAPES, drawGiantFx } from './giantart.ts';
 import {
   drawAnchorPlate, drawMobility, drawPlates, hullDetails, hullPath, hullUnderlay, layoutOf, paintHull, rotorBlur, type UnitLayout,
 } from './unitart.ts';
@@ -75,7 +76,8 @@ function sampleDesign(kind: PartKind, id: string): Design | null {
     const m = MOBILITY_BY_ID.get(id);
     if (!m) return null;
     const size = m.sizes.includes(1) ? 1 : m.sizes[0];
-    const chassis = CHASSIS.find((c) => c.size === size && !c.traits.includes('airOnly') && c.shape === (size === 1 ? 'box' : 'hex'))
+    const pref = id === 'gravlift' ? 'carrier' : id === 'megatracks' ? 'leviathan' : id === 'titanlegs' ? 'titan' : '';
+    const chassis = (pref ? CHASSIS_BY_ID.get(pref) : undefined) ?? CHASSIS.find((c) => c.size === size && !c.traits.includes('airOnly') && c.shape === (size === 1 ? 'box' : 'hex'))
       ?? CHASSIS.find((c) => c.size === size)!;
     return { id: 'icon', name: 'icon', chassis: chassis.id, mobility: id, mounts: chassis.mounts.map(() => null) };
   }
@@ -107,6 +109,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
     } else {
       g.rotate(-Math.PI / 4);
       drawTurret(g, m, pal, d, Math.max(o, d * 0.06));
+      if (m.mount === 'G' || m.mount === 'T') drawTurretDynamic(g, m, pal, d, 0, 0, 0, 1, 0.35, 0, 0, PX, 1);
     }
     return cropAlpha(c);
   }
@@ -122,6 +125,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
     hullUnderlay(g, L, pal, oo);
     paintHull(g, hullPath(L.shape, S), pal, S, oo, L.hw);
     hullDetails(g, L, pal, oo);
+    if (GIANT_SHAPES.has(L.shape)) drawGiantFx(g, L, { time: 0.4 }, 0, 0, 0, 1, PX * sc, pal, 1);
   } else {
     if (L.mob.id === 'anchor') drawAnchorPlate(g, L, pal, oo);
     else drawMobility(g, L, pal, 0.15, false, oo);
@@ -157,6 +161,9 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
         g.arc(n.x - 0.05 * S, n.y, n.w * 2.5, 0, Math.PI * 2);
         g.fill();
       }
+    }
+    if (L.mob.id === 'gravlift' || L.mob.id === 'megatracks' || L.mob.id === 'titanlegs') {
+      drawGiantFx(g, { ...L, shape: 'wedge' } as UnitLayout, { time: 0.4, moving: true, odometer: 0.15 * L.cycle }, 0, 0, 0, 1, PX * sc, pal, 1);
     }
     if (L.mob.id === 'hover') {
       g.strokeStyle = 'rgba(134,243,255,0.6)';
