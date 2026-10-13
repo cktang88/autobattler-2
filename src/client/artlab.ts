@@ -1,6 +1,7 @@
 // Art lab (dev page): every chassis x mobility pairing, every module turret, every part icon, a tiny-scale
 // readability row, a deploy-board view and a demo battle on a FieldView.
-// URL params: ?enemy=1 (red team), ?battle=1 (auto-start battle), ?speed=N, ?only=grid|modules|icons|small|field
+// URL params: ?enemy=1 (red team), ?battle=1 (auto-start battle), ?speed=N, ?only=grid|modules|icons|small|field,
+// ?chassis=id,id (grid rows filter), ?big=1, ?zoom=N (grid cell scale), ?empty=1 (no turrets)
 
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
@@ -61,14 +62,17 @@ function gridSection(): void {
   head.append(el('th', '', ''));
   for (const m of MOBILITY) head.append(el('th', '', m.name));
   table.append(head);
+  const chF = params.get('chassis')?.split(',');
   CHASSIS.forEach((c, ci) => {
+    if (chF && !chF.includes(c.id)) return;
     const tr = el('tr');
     tr.append(el('th', 'rowh', `${c.name} (${c.size})`));
     MOBILITY.forEach((m, mi) => {
       const td = el('td');
       if (!pairingError(c.id, m.id)) {
         const d: Design = { id: `g${ci}_${mi}`, name: 'x', chassis: c.id, mobility: m.id, mounts: params.get('empty') ? c.mounts.map(() => null) : fillMounts(c.id, ci + mi) };
-        td.append(preview(d, c.size >= 4 ? (params.get('big') ? 420 : 190) : 96));
+        const zoom = Number(params.get('zoom') ?? '1') || 1;
+        td.append(preview(d, (c.size >= 4 ? (params.get('big') ? 420 : 190) : params.get('big') ? 150 : 96) * zoom));
       } else td.className = 'na';
       tr.append(td);
     });

@@ -17,38 +17,38 @@ export function emis(pal: TeamPal): string {
 
 /* ---------------------------------------------------------------------------------------------- helpers */
 
-const pm = (half: number[], S: number): Path2D => {
+export const pm = (half: number[], S: number): Path2D => {
   const p = new Path2D();
   poly(p, mirrorPoly(half), S);
   return p;
 };
-const pp = (pts: number[], S: number): Path2D => {
+export const pp = (pts: number[], S: number): Path2D => {
   const p = new Path2D();
   poly(p, pts, S);
   return p;
 };
-const rr = (x: number, y: number, w: number, h: number, r: number, S: number): Path2D => {
+export const rr = (x: number, y: number, w: number, h: number, r: number, S: number): Path2D => {
   const p = new Path2D();
   roundRect(p, x * S, y * S, w * S, h * S, r * S);
   return p;
 };
-const oct = (x: number, y: number, r: number, S: number): Path2D => {
+export const oct = (x: number, y: number, r: number, S: number): Path2D => {
   const p = new Path2D();
   for (let i = 0; i < 8; i++) { const a = (i / 8) * P2 + P2 / 16; p.lineTo((x + Math.cos(a) * r) * S, (y + Math.sin(a) * r) * S); }
   p.closePath();
   return p;
 };
-const circ = (x: number, y: number, r: number, S: number): Path2D => {
+export const circ = (x: number, y: number, r: number, S: number): Path2D => {
   const p = new Path2D();
   p.arc(x * S, y * S, r * S, 0, P2);
   return p;
 };
 
 /** Device pixels per cell of the current transform (for blur radii). */
-const devK = (g: Ctx) => Math.hypot(g.getTransform().a, g.getTransform().b) || 1;
+export const devK = (g: Ctx) => Math.hypot(g.getTransform().a, g.getTransform().b) || 1;
 
 /** Soft ambient-occlusion shadow around/under a raised part. */
-function ao(g: Ctx, path: Path2D, S: number, r = 0.022, a = 0.6): void {
+export function ao(g: Ctx, path: Path2D, S: number, r = 0.022, a = 0.6): void {
   const k = devK(g);
   g.save();
   g.filter = `blur(${Math.max(1, r * S * k)}px)`;
@@ -63,7 +63,7 @@ function ao(g: Ctx, path: Path2D, S: number, r = 0.022, a = 0.6): void {
 }
 
 /** Filled panel with a lit top-left edge, a shadowed bottom-right edge and an outline. */
-function bevel(g: Ctx, path: Path2D, fill: string | CanvasGradient, o: number, depth = 1): void {
+export function bevel(g: Ctx, path: Path2D, fill: string | CanvasGradient, o: number, depth = 1): void {
   g.fillStyle = fill;
   g.fill(path);
   g.save();
@@ -87,19 +87,19 @@ function bevel(g: Ctx, path: Path2D, fill: string | CanvasGradient, o: number, d
 }
 
 /** Raised armour: AO shadow then a bevelled panel. */
-function raised(g: Ctx, path: Path2D, fill: string | CanvasGradient, o: number, S: number, depth = 1, aoR = 0.022, aoA = 0.6): void {
+export function raised(g: Ctx, path: Path2D, fill: string | CanvasGradient, o: number, S: number, depth = 1, aoR = 0.022, aoA = 0.6): void {
   ao(g, path, S, aoR, aoA);
   bevel(g, path, fill, o, depth);
 }
 
-function grad(g: Ctx, S: number, c0: string, c1: string, x0 = -0.3, y0 = -0.3, x1 = 0.3, y1 = 0.3): CanvasGradient {
+export function grad(g: Ctx, S: number, c0: string, c1: string, x0 = -0.3, y0 = -0.3, x1 = 0.3, y1 = 0.3): CanvasGradient {
   const gr = g.createLinearGradient(x0 * S, y0 * S, x1 * S, y1 * S);
   gr.addColorStop(0, c0);
   gr.addColorStop(1, c1);
   return gr;
 }
 
-function recess(g: Ctx, path: Path2D, o: number, fill = 'rgba(4,6,9,0.62)'): void {
+export function recess(g: Ctx, path: Path2D, o: number, fill = 'rgba(4,6,9,0.62)'): void {
   g.fillStyle = fill;
   g.fill(path);
   g.save();
@@ -113,7 +113,7 @@ function recess(g: Ctx, path: Path2D, o: number, fill = 'rgba(4,6,9,0.62)'): voi
   g.stroke(path);
 }
 
-function glowLine(g: Ctx, pts: number[], S: number, col: string, w: number, a = 1): void {
+export function glowLine(g: Ctx, pts: number[], S: number, col: string, w: number, a = 1): void {
   g.lineCap = 'round';
   g.beginPath();
   for (let i = 0; i < pts.length; i += 4) { g.moveTo(pts[i] * S, pts[i + 1] * S); g.lineTo(pts[i + 2] * S, pts[i + 3] * S); }
@@ -128,7 +128,7 @@ function glowLine(g: Ctx, pts: number[], S: number, col: string, w: number, a = 
   g.stroke();
 }
 
-function seam(g: Ctx, pts: number[], S: number, w: number, col = 'rgba(0,0,0,0.45)'): void {
+export function seam(g: Ctx, pts: number[], S: number, w: number, col = 'rgba(0,0,0,0.45)'): void {
   g.lineCap = 'butt';
   g.strokeStyle = col;
   g.lineWidth = w;
@@ -137,14 +137,14 @@ function seam(g: Ctx, pts: number[], S: number, w: number, col = 'rgba(0,0,0,0.4
   g.stroke();
 }
 
-function dot(g: Ctx, x: number, y: number, r: number, c: string | CanvasGradient): void {
+export function dot(g: Ctx, x: number, y: number, r: number, c: string | CanvasGradient): void {
   g.fillStyle = c;
   g.beginPath();
   g.arc(x, y, r, 0, P2);
   g.fill();
 }
 
-function rivetRow(g: Ctx, x0: number, y0: number, x1: number, y1: number, n: number, r: number): void {
+export function rivetRow(g: Ctx, x0: number, y0: number, x1: number, y1: number, n: number, r: number): void {
   for (let i = 0; i < n; i++) {
     const f = n === 1 ? 0.5 : i / (n - 1);
     const x = x0 + (x1 - x0) * f, y = y0 + (y1 - y0) * f;
@@ -153,7 +153,7 @@ function rivetRow(g: Ctx, x0: number, y0: number, x1: number, y1: number, n: num
   }
 }
 
-function hazard(g: Ctx, x: number, y: number, w: number, h: number, o: number, vertical = false): void {
+export function hazard(g: Ctx, x: number, y: number, w: number, h: number, o: number, vertical = false): void {
   g.save();
   g.beginPath();
   g.rect(x, y, w, h);
@@ -174,7 +174,7 @@ function hazard(g: Ctx, x: number, y: number, w: number, h: number, o: number, v
   g.strokeRect(x, y, w, h);
 }
 
-function grille(g: Ctx, x: number, y: number, w: number, h: number, n: number, o: number, E: string, hot = 0.5): void {
+export function grille(g: Ctx, x: number, y: number, w: number, h: number, n: number, o: number, E: string, hot = 0.5): void {
   g.beginPath();
   roundRect(g, x - w / 2, y - h / 2, w, h, Math.min(w, h) * 0.15);
   g.fillStyle = '#05070a';
@@ -223,7 +223,7 @@ function belt(g: Ctx, x0: number, x1: number, y: number, h: number, S: number, p
 }
 
 /** Exhaust stack seen from above: heavy collar, sooty bore. */
-function stack(g: Ctx, x: number, y: number, r: number, o: number): void {
+export function stack(g: Ctx, x: number, y: number, r: number, o: number): void {
   dot(g, x + r * 0.25, y + r * 0.35, r * 1.35, 'rgba(0,0,0,0.45)');
   dot(g, x, y, r * 1.15, METAL.dark);
   g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
@@ -234,7 +234,7 @@ function stack(g: Ctx, x: number, y: number, r: number, o: number): void {
   dot(g, x, y, r * 0.3, 'rgba(255,120,40,0.55)');
 }
 
-function lamp(g: Ctx, x: number, y: number, r: number, c: string): void {
+export function lamp(g: Ctx, x: number, y: number, r: number, c: string): void {
   dot(g, x, y, r * 1.7, 'rgba(0,0,0,0.5)');
   dot(g, x, y, r, c);
   dot(g, x - r * 0.25, y - r * 0.25, r * 0.4, 'rgba(255,255,255,0.8)');
@@ -260,7 +260,7 @@ function merlons(g: Ctx, x0: number, y0: number, x1: number, y1: number, n: numb
 }
 
 /** Reactor core socket (the pulsing light is added by the overlay). */
-function reactor(g: Ctx, x: number, y: number, r: number, o: number, E: string): void {
+export function reactor(g: Ctx, x: number, y: number, r: number, o: number, E: string): void {
   dot(g, x, y, r * 1.25, METAL.dark);
   g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
   for (let i = 0; i < 8; i++) {
@@ -656,7 +656,7 @@ function giantStrips(shape: string): number[] {
 
 /* ---------------------------------------------------------------------------------------------- mobility */
 
-function limbG(g: Ctx, pts: number[], w: number, color: string, o: number): void {
+export function limbG(g: Ctx, pts: number[], w: number, color: string, o: number): void {
   g.lineCap = 'round';
   g.lineJoin = 'round';
   g.beginPath();

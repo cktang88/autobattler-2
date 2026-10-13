@@ -81,6 +81,12 @@ interface USnap {
 
 interface UVis {
   shieldT: number;
+  /** last time the unit took damage (hit event or hp/shield drop) */
+  dmgT: number;
+  /** last time the unit was healed */
+  healT: number;
+  hpLast: number;
+  shLast: number;
   hpShown: number;
   swing: number[];
   seen: number;
@@ -131,6 +137,11 @@ export class FieldView {
   readonly controls: CameraControls;
   /** when true a small scale bar is drawn in the bottom-left corner */
   scaleBar = true;
+  /** show every HP/shield bar permanently (otherwise bars appear for a few seconds after damage, or while Alt is held) */
+  alwaysShowHealth = false;
+  /** Alt held (Zero-K style "show all bars"), tracked only when controls are interactive */
+  private altHeld = false;
+  private keyOff: (() => void) | null = null;
   private detail: { c: HTMLCanvasElement; x0: number; y0: number; x1: number; y1: number; px: number } | null = null;
   readonly fx = new Fx();
   private dirs: ViewDirs;
@@ -157,6 +168,16 @@ export class FieldView {
     const interactive = opts?.interactive !== false;
     this.scaleBar = interactive;
     this.controls = new CameraControls(this.cam, canvas, interactive);
+    if (interactive && typeof window !== 'undefined') {
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Alt') { this.altHeld = e.type === 'keydown' && this.controls.enabled; if (e.type === 'keydown') e.preventDefault(); }
+      };
+      const onBlur = () => { this.altHeld = false; };
+      window.addEventListener('keydown', onKey);
+      window.addEventListener('keyup', onKey);
+      window.addEventListener('blur', onBlur);
+      this.keyOff = () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); window.removeEventListener('blur', onBlur); };
+    }
     this.viewerSide = viewerSide;
     this.g = ctx2d(canvas);
     this.dirs = viewerSide === 0 ? { sx: 0.55, sy: 0.85, ux: 0, uy: -1 } : { sx: -0.55, sy: -0.85, ux: 0, uy: 1 };
@@ -653,7 +674,7 @@ export class FieldView {
   private visOf(u: SimUnit): UVis {
     let v = this.vis.get(u.id);
     if (!v) {
-      v = { shieldT: -9, hpShown: u.hp, swing: u.mounts.map(() => 0), seen: this.time };
+      v = { shieldT: -9, dmgT: -99, healT: -99, hpLast: u.hp, shLast: u.shield, hpShown: u.hp, swing: u.mounts.map(() => 0), seen: this.time };
       this.vis.set(u.id, v);
     }
     return v;
@@ -725,13 +746,19 @@ export class FieldView {
   private drawBar(u: SimUnit, p: UnitPose, dt: number): void {
     const v = this.visOf(u);
     v.hpShown = v.hpShown > u.hp ? Math.max(u.hp, v.hpShown - (u.maxHp * 0.6 + (v.hpShown - u.hp) * 3) * dt) : u.hp;
+    // damage / heal detection from state (burn, splash, auras) on top of 'hit' events
+    if (u.hp < v.hpLast - 0.01 || u.shield < v.shLast - 0.01) v.dmgT = this.time;
+    else if (u.hp > v.hpLast + 0.5) v.healT = this.time;
+    v.hpLast = u.hp;
+    v.shLast = u.shield;
     if (p.cloak === 'enemy') return;
-    const damaged = u.hp < u.maxHp - 0.5;
     const S = layoutOf(u.design).S;
     if (u.level > 1) this.drawPips(p.x, p.y, S, u.level, 0.9);
-    if (S >= 4) { this.drawBossBar(u, p, v, S); return; }
-    if (!damaged && u.shield <= 0) return;
+    const vis = this.barAlpha(v, S);
+    if (vis <= 0.01) return;
     const g = this.g;
+    g.globalAlpha = vis;
+    if (S >= 4) { this.drawBossBar(u, p, v, S); g.globalAlpha = 1; return; }
     const s = this.worldToScreen(p.x, p.y);
     const lift = u.flying ? 0.12 * this.k : 0;
     const w = Math.max(14, S * this.k * 0.78);
@@ -750,9 +777,18 @@ export class FieldView {
       g.fillStyle = '#8fe0ff';
       g.fillRect(x, y - 2, w * clamp(u.shield / u.maxShield, 0, 1), 1.5);
     }
+    g.globalAlpha = 1;
   }
 
-  /** Wide segmented 'boss' bar for giants and titans: always visible, team-coloured frame, white trailing chip. */
+  /** Bar opacity: visible ~3 s after the last damage (giants ~5 s), ~1.2 s after a heal, then a 0.7 s fade. */
+  private barAlpha(v: UVis, S: number): number {
+    if (this.alwaysShowHealth || this.altHeld) return 1;
+    const hold = S >= 4 ? 5 : 3, fade = 0.7;
+    const f = (since: number, h: number) => (since < h ? 1 : since < h + fade ? 1 - (since - h) / fade : 0);
+    return Math.max(f(this.time - v.dmgT, hold), f(this.time - v.healT, 1.2));
+  }
+
+  /** Wide segmented 'boss' bar for giants and titans (shown after damage, like the small bars), team-coloured frame, white trailing chip. */
   private drawBossBar(u: SimUnit, p: UnitPose, v: UVis, S: number): void {
     const g = this.g;
     const s = this.worldToScreen(p.x, p.y);
@@ -1252,6 +1288,7 @@ export class FieldView {
           fx.sparks(e.x, e.y, 3, '#ffd890', 2.5, undefined, Math.PI, 0.18);
           break;
         }
+        if (e.damage > 0) this.visOf(ur).dmgT = this.time;
         if (e.shieldHit) {
           const v = this.visOf(ur);
           v.shieldT = this.time;
@@ -1352,6 +1389,8 @@ export class FieldView {
   }
 
   destroy(): void {
+    this.keyOff?.();
+    this.keyOff = null;
     this.controls.destroy();
     this.detail = null;
     this.fx.clear();
