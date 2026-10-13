@@ -214,7 +214,7 @@ export interface RingSpec {
 const mName = (m: ModuleDef) => m.name.replace(/^[\d.]+mm\s+/, '');
 export const ringKey = (range: number, min: number, kind: RingKind) => `${kind}|${Math.round(range * 100)}|${Math.round(min * 100)}`;
 
-/** One ring per distinct weapon range (melee excluded) plus support radii. Ranges include the unit's range multiplier. */
+/** One ring per distinct weapon range (melee shows as a tiny ring) plus support radii. Ranges include the unit's range multiplier. */
 export function ringsOf(d: Design, st: UnitStats): RingSpec[] {
   const groups = new Map<string, RingSpec & { names: string[] }>();
   const add = (kind: RingKind, range: number, min: number, name: string) => {
@@ -227,9 +227,9 @@ export function ringsOf(d: Design, st: UnitStats): RingSpec[] {
   for (const id of d.mounts) {
     const m = id ? MODULE_BY_ID.get(id) : undefined;
     if (!m) continue;
-    if (m.kind === 'weapon' && m.projectile !== 'melee' && m.range && !m.heal) {
+    if (m.kind === 'weapon' && m.range && !m.heal) { // melee reach is not scaled by range bonuses
       const g = !!m.targetsGround, a = !!m.targetsAir;
-      add(g && a ? 'both' : a ? 'air' : 'ground', m.range * st.rangeMult, m.minRange ?? 0, mName(m));
+      add(g && a ? 'both' : a ? 'air' : 'ground', m.range * (m.projectile === 'melee' ? 1 : st.rangeMult), m.minRange ?? 0, mName(m));
     }
     if (m.heal && m.range) add('support', m.range * st.rangeMult, 0, mName(m));
     if (m.shieldAura) add('support', m.shieldAura.radius, 0, mName(m));
@@ -243,9 +243,9 @@ export function ringsOf(d: Design, st: UnitStats): RingSpec[] {
 
 /** Ring key of a module on a design (matches ringsOf) for hover-highlighting. */
 export function moduleRingKey(m: ModuleDef, st: UnitStats): string | null {
-  if (m.kind === 'weapon' && m.projectile !== 'melee' && m.range && !m.heal) {
+  if (m.kind === 'weapon' && m.range && !m.heal) {
     const g = !!m.targetsGround, a = !!m.targetsAir;
-    return ringKey(m.range * st.rangeMult, m.minRange ?? 0, g && a ? 'both' : a ? 'air' : 'ground');
+    return ringKey(m.range * (m.projectile === 'melee' ? 1 : st.rangeMult), m.minRange ?? 0, g && a ? 'both' : a ? 'air' : 'ground');
   }
   if (m.heal && m.range) return ringKey(m.range * st.rangeMult, 0, 'support');
   const r = m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.detect ?? m.jammer ?? m.pointDefense?.range;
