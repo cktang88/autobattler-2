@@ -17,6 +17,7 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.
 import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
+import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
@@ -82,7 +83,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const opp = (1 - side) as Side;
   let m: MatchState = driver.state();
   const settings = loadSettings();
-  let speed = [1, 2, 4].includes(settings.battleSpeed) ? settings.battleSpeed : 1;
+  let speed = BATTLE_SPEEDS.includes(settings.battleSpeed) ? settings.battleSpeed : 1;
 
   // ---------- design lookup ----------
   const statCache = new Map<Design, UnitStats | null>();
@@ -241,7 +242,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     foeBtn.setAttribute('aria-pressed', String(showFoe));
   }
   const infoEl = h('div.panel.info.hidden');
-  const speedBtns = [1, 2, 4].map((v) => h('button.small', { onclick: () => { speed = v; renderSpeed(); } }, `${v}×`));
+  const speedBtns = BATTLE_SPEEDS.map((v) => h('button.small', { title: `${speedLabel(v)} speed`, onclick: () => { speed = v; renderSpeed(); } }, speedLabel(v)));
   const skipBtn = h('button.small', { onclick: () => skipBattle() }, 'Skip ▸▸');
   const speedbar = h('div.speedbar.hidden', null, ...speedBtns, skipBtn);
   const overlayEl = h('div');
@@ -604,7 +605,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   function renderSpeed() {
-    speedBtns.forEach((b, i) => b.classList.toggle('active', [1, 2, 4][i] === speed));
+    speedBtns.forEach((b, i) => b.classList.toggle('active', BATTLE_SPEEDS[i] === speed));
     speedbar.classList.toggle('hidden', phase !== 'battle');
     rangeBar.classList.toggle('hidden', phase !== 'deploy' && phase !== 'waiting');
   }

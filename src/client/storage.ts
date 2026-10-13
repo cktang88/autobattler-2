@@ -33,6 +33,9 @@ export interface Settings {
   /** show unit health bars at all times instead of only after damage */
   alwaysHealth: boolean;
 }
+/** replay speeds offered in battle and settings (slow-mo included) */
+export const BATTLE_SPEEDS = [0.25, 0.5, 1, 2, 4];
+export const speedLabel = (v: number) => (v === 0.25 ? '¼×' : v === 0.5 ? '½×' : `${v}×`);
 export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false };
 
 /** Apply the visual accessibility settings to a FieldView-like object. */
