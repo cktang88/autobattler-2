@@ -237,10 +237,9 @@ export function computeStats(d: Design): UnitStats {
   };
 }
 
-/** Round a supply cost to a friendly number: nearest 50 (min 50) up to 500, nearest 100 above. */
+/** Round a supply cost to a friendly number: nearest 50 (min 50). */
 export function roundCost(raw: number): number {
-  if (raw <= 500) return Math.max(50, Math.round(raw / 50) * 50);
-  return Math.round(raw / 100) * 100;
+  return Math.max(50, Math.round(raw / 50) * 50);
 }
 
 /** Level multiplier for hp and damage. */
