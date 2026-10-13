@@ -12,6 +12,7 @@ import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, r
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
 import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
+import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
@@ -34,8 +35,13 @@ export interface UnitLayout {
   chassis: ChassisDef;
   mob: MobilityDef;
   shape: Shape;
-  /** hull half width (fraction of S) */
+  /** hull half width (fraction of S; hw * S = half width in cells) */
   hw: number;
+  /** footprint: X = length along the facing (cells), Y = width across (cells); square chassis X = Y = S */
+  X: number;
+  Y: number;
+  /** largest footprint edge (overall visual size) */
+  D: number;
   mounts: MountSlot[];
   /** sprite half-extent in cells */
   ext: number;
@@ -216,7 +222,10 @@ export function layoutOf(d: Design): UnitLayout {
   const mob = MOBILITY_BY_ID.get(d.mobility) ?? MOBILITY_BY_ID.get('wheels')!;
   const S = chassis.size;
   const shape = chassis.shape;
-  const pts = MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : (i % 2 ? 0.2 : -0.2)] as [number, number]);
+  // footprint: Y = width across, X = length along the facing (square chassis: S x S)
+  const Y = chassis.footprint?.[0] ?? S, X = chassis.footprint?.[1] ?? S;
+  const F = FOOT[shape];
+  const pts: [number, number][] = F?.mounts ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : (i % 2 ? 0.2 : -0.2)] as [number, number]);
   const mods = chassis.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
   // layout solver: which hardpoint each module occupies (anatomical frames keep their fixed points)
   const perm = PART_SHAPES.has(shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods);
@@ -230,7 +239,8 @@ export function layoutOf(d: Design): UnitLayout {
     const cal = mod?.caliber ?? 0.5;
     const p = pts[j] ?? [0, 0];
     const dd = S >= 4 ? GIANT_D[cls] * (0.88 + 0.12 * cal) * (S >= 5 ? 1.06 : 1) : CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
-    return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd * (MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1), turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
+    const ms = F?.scale ? (F.scale[j] ?? F.scale[0]) : MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1;
+    return { x: p[0] * X, y: p[1] * Y, slot, mod, d: dd * ms, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const main = PART_SHAPES.has(shape) ? -1 : scaleMounts(mounts, S);
   const air = mob.kind === 'air';
@@ -238,34 +248,40 @@ export function layoutOf(d: Design): UnitLayout {
   let load = 0.7;
   try { load = computeStats(d).load; } catch { /* invalid design */ }
   const heavyLift = load > 0.88;
-  const quad = mob.id === 'rotor' && (heavyLift && S >= 2 && shape !== 'delta' && shape !== 'interceptor' && shape !== 'airframe' || chassis.id === 'drone' || shape === 'pod' || shape === 'round' || shape === 'saucer' || shape === 'crab' || shape === 'arachnid' || shape === 'mantis');
-  const rotors: UnitLayout['rotors'] = [];
-  const nozzles: UnitLayout['nozzles'] = [];
-  if (mob.id === 'rotor') {
-    if (quad) for (const sx of [-1, 1]) for (const sy of [-1, 1]) rotors.push({ x: sx * (heavyLift ? 0.36 : 0.32) * S, y: sy * (heavyLift ? 0.38 : 0.32) * S, r: (heavyLift ? 0.23 : 0.2) * S, blades: load > 1 ? 4 : heavyLift ? 3 : 2 });
-    else if (shape === 'delta' || shape === 'interceptor') for (const sy of [-1, 1]) rotors.push({ x: -0.16 * S, y: sy * 0.2 * S, r: (shape === 'delta' ? 0.17 : 0.15) * S, blades: 3 });
-    else if (S >= 2 && shape === 'airframe') {
-      rotors.push({ x: 0.22 * S, y: 0, r: 0.42 * S, blades: 3 });
-      rotors.push({ x: -0.3 * S, y: 0, r: 0.38 * S, blades: 3 });
-    } else rotors.push({ x: 0, y: 0, r: 0.52 * S, blades: 3 });
+  const quad = mob.id === 'rotor' && !F?.rotors && (heavyLift && S >= 2 && shape !== 'delta' && shape !== 'interceptor' && shape !== 'airframe' || chassis.id === 'drone' || shape === 'pod' || shape === 'round' || shape === 'saucer' || shape === 'crab' || shape === 'arachnid' || shape === 'mantis');
+  let rotors: UnitLayout['rotors'] = [];
+  let nozzles: UnitLayout['nozzles'] = [];
+  if (mob.id === 'rotor' && F?.rotors) rotors = F.rotors(X, Y, S, heavyLift);
+  else if (mob.id === 'rotor') {
+    const R = Math.max(X, Y);
+    if (quad) for (const sx of [-1, 1]) for (const sy of [-1, 1]) rotors.push({ x: sx * (heavyLift ? 0.36 : 0.32) * X, y: sy * (heavyLift ? 0.38 : 0.32) * Y, r: (heavyLift ? 0.23 : 0.2) * Math.min(X, Y), blades: load > 1 ? 4 : heavyLift ? 3 : 2 });
+    else rotors.push({ x: 0, y: 0, r: 0.52 * R, blades: 3 });
   }
-  if (mob.id === 'jet') {
-    if (shape === 'delta') for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.14 * S, w: 0.08 * S });
-    else if (shape === 'interceptor') nozzles.push({ x: -0.5 * S, y: 0, w: 0.1 * S });
-    else if (S === 1 && !heavyLift) nozzles.push({ x: -0.5 * S, y: 0, w: 0.11 * S });
-    else if (S >= 3 || load > 1) for (const sy of [-1, 1]) for (const k of [0.1, 0.24]) nozzles.push({ x: -0.5 * S, y: sy * k * S, w: 0.075 * S });
-    else for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * S, y: sy * 0.13 * S, w: 0.09 * S });
+  if (mob.id === 'jet' && F?.nozzles) nozzles = F.nozzles(X, Y, S);
+  else if (mob.id === 'jet') {
+    if (S === 1 && !heavyLift) nozzles.push({ x: -0.5 * X, y: 0, w: 0.11 * S });
+    else if (S >= 3 || load > 1) for (const sy of [-1, 1]) for (const k of [0.1, 0.24]) nozzles.push({ x: -0.5 * X, y: sy * k * Y, w: 0.075 * S });
+    else for (const sy of [-1, 1]) nozzles.push({ x: -0.5 * X, y: sy * 0.13 * Y, w: 0.09 * S });
   }
-  if (mob.id === 'jumpjets') for (const sy of [-1, 1]) nozzles.push({ x: -0.4 * S, y: sy * 0.15 * S, w: 0.07 * S });
+  if (mob.id === 'jumpjets') for (const sy of [-1, 1]) nozzles.push({ x: -0.4 * X, y: sy * 0.15 * Y, w: 0.07 * S });
   const legged = mob.id === 'legs' || mob.id === 'spider' || mob.id === 'jumpjets' || mob.id === 'titanlegs';
   const rolled = mob.id === 'treads' || mob.id === 'wheels' || mob.id === 'halftrack' || mob.id === 'megatracks';
   L = {
-    key, S, chassis, mob, shape, hw: SHAPE_HW[shape] ?? 0.28, mounts, air, quad, rotors, nozzles, main,
-    axles: S === 1 ? (heavyLift ? 3 : 2) : S === 2 ? (heavyLift ? 4 : 3) : 4,
-    ext: 0.8 * S,
+    key, S, chassis, mob, shape, hw: F ? (F.hw * Y) / S : SHAPE_HW[shape] ?? 0.28, X, Y, D: Math.max(X, Y), mounts, air, quad, rotors, nozzles, main,
+    axles: Math.min(6, Math.max(2, Math.round(X * 1.1) + 1 + (heavyLift ? 1 : 0) - (X >= 3 ? 1 : 0))),
+    ext: 0.8 * Math.max(X, Y) + (F?.extPad ?? 0) * S,
     frames: legged ? 8 : mob.id === 'megatracks' ? 6 : rolled ? 4 : 1,
     cycle: mob.id === 'titanlegs' ? 0.7 * S : mob.id === 'megatracks' ? 0.06 * S : mob.id === 'legs' ? 0.75 * S : mob.id === 'spider' ? 0.55 * S : mob.id === 'jumpjets' ? 0.8 * S : mob.id === 'treads' || mob.id === 'halftrack' ? 0.09 * S : 0.06 * S,
   };
+  // anatomical frames with a footprint: hardpoints riding a part sit where that part's weapon point rests
+  if (F && PART_SHAPES.has(shape)) {
+    const pd = partsOf(L), rx = partXfs(pd, null);
+    pd.forEach((p, j) => {
+      if (!p.mounts || !p.mountAt) return;
+      const c = Math.cos(rx[j].r), sn = Math.sin(rx[j].r);
+      for (const mi of p.mounts) if (L!.mounts[mi]) { L!.mounts[mi].x = rx[j].x + c * p.mountAt[0] - sn * p.mountAt[1]; L!.mounts[mi].y = rx[j].y + sn * p.mountAt[0] + c * p.mountAt[1]; }
+    });
+  }
   layoutCache.set(key, L);
   layoutByObj.set(d, { mounts: d.mounts.map((m) => m ?? null), L });
   return L;
@@ -273,7 +289,21 @@ export function layoutOf(d: Design): UnitLayout {
 
 /* ------------------------------------------------------------------------------------------------ hull */
 
-export function hullPath(shape: Shape, S: number): Path2D {
+const hullCache = new Map<string, Path2D>();
+/** Hull outline in cells: footprint-designed outline (unit box) stretched to X (length) x Y (width). */
+export function hullPath(shape: Shape, S: number, X = S, Y = S): Path2D {
+  const key = `${shape}|${S}|${X}|${Y}`;
+  let p = hullCache.get(key);
+  if (p) return p;
+  const unit = footHullPath(shape) ?? rawHullPath(shape, 1);
+  p = new Path2D();
+  p.addPath(unit, new DOMMatrix([X, 0, 0, Y, 0, 0]));
+  hullCache.set(key, p);
+  return p;
+}
+export const hullPathL = (L: UnitLayout): Path2D => hullPath(L.shape, L.S, L.X, L.Y);
+
+function rawHullPath(shape: Shape, S: number): Path2D {
   const p = new Path2D();
   switch (shape) {
     case 'wedge': poly(p, mirrorPoly([0.44, 0, 0.12, -0.16, -0.18, -0.26, -0.36, -0.26, -0.42, -0.17, -0.4, 0]), S); break;
@@ -318,7 +348,7 @@ export function hullPath(shape: Shape, S: number): Path2D {
   return p;
 }
 
-export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: number, hw: number): void {
+export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: number, hw: number, X = S, Y = S): void {
   // base + shading
   const gr = g.createLinearGradient(-0.3 * S, -hw * S * 1.2, 0.3 * S, hw * S * 1.2);
   // mid-tone team armour (turrets are the light layer, running gear the dark one)
@@ -334,13 +364,13 @@ export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: numb
   rg.addColorStop(0, 'rgba(255,255,255,0.18)');
   rg.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = rg;
-  g.fillRect(-S, -S, 2 * S, 2 * S);
+  g.fillRect(-X, -Y, 2 * X, 2 * Y);
   // weathering speckle (deterministic)
   let seed = 17 + S * 31;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 40 * S; i++) {
+  for (let i = 0; i < 40 * Math.sqrt(X * Y); i++) {
     g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.07)';
-    const x = (rnd() - 0.5) * S, y = (rnd() - 0.5) * S, r = (0.004 + rnd() * 0.014) * S;
+    const x = (rnd() - 0.5) * X, y = (rnd() - 0.5) * Y, r = (0.004 + rnd() * 0.014) * S;
     g.fillRect(x, y, r, r);
   }
   // inner bevel: thick dark stroke clipped = rim shadow
@@ -413,8 +443,17 @@ function headlights(g: Ctx, x: number, y: number, r: number): void {
 
 /** Panel lines, hatches, vents and team trim per silhouette. */
 export function hullDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
+  if (footDetails(g, L, pal, o)) return;
+  if (L.X !== L.S || L.Y !== L.S) {
+    // footprint chassis without footprint art: square-designed details, uniformly scaled to fit
+    const k = Math.min(L.X, L.Y) / L.S;
+    g.save(); g.scale(k, k);
+    hullDetails(g, { ...L, X: L.S, Y: L.S }, pal, o / k);
+    g.restore();
+    return;
+  }
   const S = L.S;
-  if (CREATURE_SHAPES.has(L.shape)) { creatureDetails(g, L, pal, o, hullPath(L.shape, S)); return; }
+  if (CREATURE_SHAPES.has(L.shape)) { creatureDetails(g, L, pal, o, hullPathL(L)); return; }
   if (GIANT_SHAPES.has(L.shape)) { giantHullDetails(g, L, pal, o); return; }
   const pl = 'rgba(0,0,0,0.38)';
   const hl = 'rgba(255,255,255,0.14)';
@@ -561,10 +600,10 @@ export function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void
   void skirts;
   if (reactive) {
     // explosive reactive armour: neat two-row brick grid along both flanks
-    const n = Math.max(3, Math.round(len * 8));
-    const tw = (len / n) * S;
+    const n = Math.max(3, Math.round(len * 8 * L.X / S));
+    const tw = Math.min((len / n) * L.X, 0.1 * S);
     for (const s of [-1, 1]) for (let row = 0; row < 2; row++) for (let i = 0; i < n - row; i++) {
-      const x = -len / 2 * S + (i + row * 0.5) * tw, y = s * (hw - 0.02 - row * 0.055) * S;
+      const x = -len / 2 * L.X + (i + row * 0.5) * (len * L.X / n), y = s * (hw - 0.02 - row * 0.055) * S;
       g.save(); g.translate(o * 0.5, o * 0.8);
       g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(x + tw * 0.06, y - tw * 0.36, tw * 0.88, tw * 0.72);
       g.restore();
@@ -575,7 +614,7 @@ export function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void
       dotAt(g, x + tw * 0.5, y, tw * 0.09, '#c0392b');
     }
   }
-  const hpClip = hullPath(L.shape, S);
+  const hpClip = hullPathL(L);
   for (const m of L.mounts) {
     if (!m.mod || m.turret) continue;
     const id = m.mod.id;
@@ -707,9 +746,9 @@ export function drawSkirts(g: Ctx, L: UnitLayout, tier: number, pal: TeamPal, o:
   };
   const cover = tier >= 3 ? 1.06 : tier >= 2 ? 0.82 : 0.52;
   if (id === 'treads' || id === 'halftrack') {
-    const tc = id === 'treads' ? Math.min(0.38, Math.max(0.3, L.hw + 0.06)) * S : Math.min(0.36, L.hw + 0.05) * S;
-    const tw = (id === 'treads' ? 0.19 : 0.16) * S;
-    const xa = id === 'treads' ? -0.44 * S : -0.46 * S, xb = id === 'treads' ? 0.44 * S : 0.05 * S;
+    const tg = trackGeo(L);
+    const tc = tg.tc, tw = tg.tw;
+    const xa = tg.xa, xb = id === 'treads' ? tg.xb : 0.05 * L.X;
     const ww = tw * cover, segs = Math.max(2, Math.round((xb - xa) / (0.26 * S)) + (tier >= 2 ? 1 : 0));
     for (const s of [-1, 1]) {
       const yc = s * (tc + tw / 2 - ww / 2 + (tier >= 3 ? 0.012 * S : 0));
@@ -720,17 +759,32 @@ export function drawSkirts(g: Ctx, L: UnitLayout, tier: number, pal: TeamPal, o:
     }
   } else if (id === 'wheels') {
     // armoured wheel arches over each axle
-    const n = L.axles, span = S === 1 ? 0.54 : 0.68, y = (S === 1 ? 0.3 : 0.34) * S;
-    const wl = Math.min(0.22, (span / (n - 1)) * 0.88) * S;
-    for (let i = 0; i < n; i++) {
-      const x = (-span / 2 + (span * i) / (n - 1)) * S;
-      for (const s of [-1, 1]) panel(x - wl * 0.62, x + wl * 0.62, s * (y + 0.065 * S - 0.13 * S * cover * 0.5), 0.13 * S * cover, s, i === n - 1);
-    }
+    const wg = wheelGeo(L);
+    for (const x of wg.xs) for (const s of [-1, 1]) panel(x - wg.wl * 0.62, x + wg.wl * 0.62, s * (wg.y + 0.065 * S - 0.13 * S * cover * 0.5), 0.13 * S * cover, s, x === wg.xs[wg.xs.length - 1]);
   }
+}
+
+/** Track band geometry (cells): centre line offset, band width, rear / front ends. */
+export function trackGeo(L: UnitLayout): { tc: number; tw: number; xa: number; xb: number } {
+  const S = L.S, big = S >= 4;
+  const tw = Math.min((big ? 0.15 : 0.19) * S, 0.3 * L.Y + 0.08);
+  const hwc = L.hw * S;
+  const tc = Math.min((big ? 0.48 : 0.38) * L.Y, Math.max(0.3 * L.Y, hwc + 0.06 * S), 0.5 * L.Y - tw * 0.3);
+  return { tc: Math.max(tc, hwc * 0.6 + tw * 0.35), tw, xa: -0.47 * L.X, xb: 0.47 * L.X };
+}
+
+/** Wheel geometry (cells): axle x positions, lateral offset, tyre length. */
+export function wheelGeo(L: UnitLayout): { xs: number[]; y: number; wl: number; ww: number } {
+  const n = L.axles, span = (L.X <= 1 ? 0.54 : 0.68) * L.X - (L.X > L.S ? 0.1 : 0);
+  const xs = Array.from({ length: n }, (_, i) => -span / 2 + (span * i) / (n - 1));
+  const ww = 0.13 * Math.min(L.S, L.Y * 1.3);
+  const y = Math.max(0.34 * L.Y, Math.min(L.hw * L.S + ww * 0.3, 0.5 * L.Y - ww * 0.3));
+  return { xs, y, wl: Math.min(0.22 * L.S, (span / (n - 1)) * 0.88), ww };
 }
 
 /** Long outrigger feet on the longarm platform and wing pylons are part of the hull layer. */
 export function hullUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
+  if (footUnderlay(g, L, pal, o)) return;
   const S = L.S;
   if (CREATURE_SHAPES.has(L.shape)) { creatureUnderlay(g, L, pal, o); return; }
   if (L.shape === 'long') {
@@ -837,53 +891,54 @@ function foot(g: Ctx, x: number, y: number, len: number, w: number, lift: number
 
 /** Draw the mobility layer (under the hull). phase in [0,1); rest = idle stance. */
 export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: boolean, o: number): void {
-  const S = L.S;
+  const S = L.S, X = L.X, Y = L.Y;
   const id = L.mob.id;
   const P = Math.PI * 2;
+  if (footMobility(g, L, pal, phase, rest, o)) return;
   if (id === 'treads') {
     const big = S >= 4;
-    const tc = Math.min(big ? 0.48 : 0.38, Math.max(0.3, L.hw + 0.06)) * S, tw = (big ? 0.15 : 0.19) * S;
+    const { tc, tw, xa, xb } = trackGeo(L);
     for (const s of [-1, 1]) {
       if (big) {
         const sp = 0.065 * S;
-        rubberBand(g, -0.47 * S, 0.47 * S, s * tc, tw, phase, sp, o);
+        rubberBand(g, xa, xb, s * tc, tw, phase, sp, o);
         g.fillStyle = 'rgba(0,0,0,0.4)';
-        g.fillRect(-0.44 * S, s * tc - tw * 0.3, 0.88 * S, tw * 0.6);
-        for (let i = 0; i < 6; i++) { const x = (-0.38 + i * 0.152) * S; g.fillStyle = METAL.base; g.beginPath(); g.arc(x, s * tc, tw * 0.3, 0, P); g.fill(); g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(); g.fillStyle = METAL.light; g.beginPath(); g.arc(x, s * tc, tw * 0.12, 0, P); g.fill(); }
-        for (const x of [-0.44, 0.44]) { g.fillStyle = METAL.dark; g.beginPath(); g.arc(x * S, s * tc, tw * 0.42, 0, P); g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(); }
+        g.fillRect(xa + 0.03 * X, s * tc - tw * 0.3, (xb - xa) - 0.06 * X, tw * 0.6);
+        const nw = Math.max(4, Math.round(X * 1.4));
+        for (let i = 0; i < nw; i++) { const x = xa + 0.09 * X + (i * ((xb - xa) - 0.18 * X)) / (nw - 1); g.fillStyle = METAL.base; g.beginPath(); g.arc(x, s * tc, tw * 0.3, 0, P); g.fill(); g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(); g.fillStyle = METAL.light; g.beginPath(); g.arc(x, s * tc, tw * 0.12, 0, P); g.fill(); }
+        for (const x of [xa + 0.03 * X, xb - 0.03 * X]) { g.fillStyle = METAL.dark; g.beginPath(); g.arc(x, s * tc, tw * 0.42, 0, P); g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(); }
         continue;
       }
-      rubberBand(g, -0.47 * S, 0.47 * S, s * tc, tw, phase, 0.09 * S, o);
-      for (const x of [-0.4, 0.4]) { g.fillStyle = METAL.base; g.beginPath(); g.arc(x * S, s * tc, tw * 0.28, 0, P); g.fill(); }
+      rubberBand(g, xa, xb, s * tc, tw, phase, 0.09 * S, o);
+      const nw = Math.max(2, Math.round(X / S * 2));
+      for (let i = 0; i < nw; i++) { const x = (xa + 0.07 * X) + (i * ((xb - xa) - 0.14 * X)) / Math.max(1, nw - 1); g.fillStyle = METAL.base; g.beginPath(); g.arc(x, s * tc, tw * 0.28, 0, P); g.fill(); }
       g.fillStyle = 'rgba(0,0,0,0.35)';
-      g.fillRect(-0.42 * S, s * tc - tw * 0.08, 0.84 * S, tw * 0.16);
+      g.fillRect(xa + 0.05 * X, s * tc - tw * 0.08, (xb - xa) - 0.1 * X, tw * 0.16);
     }
   } else if (id === 'wheels') {
-    const n = L.axles;
-    const span = S === 1 ? 0.54 : 0.68;
-    const xs = Array.from({ length: n }, (_, i) => -span / 2 + (span * i) / (n - 1));
-    const y = (S === 1 ? 0.3 : 0.34) * S;
+    const wg = wheelGeo(L);
     g.strokeStyle = METAL.dark;
     g.lineWidth = 0.05 * S;
     g.beginPath();
-    for (const x of xs) { g.moveTo(x * S, -y); g.lineTo(x * S, y); }
+    for (const x of wg.xs) { g.moveTo(x, -wg.y); g.lineTo(x, wg.y); }
     g.stroke();
-    const wl = Math.min(0.22, (span / (n - 1)) * 0.88);
-    for (const x of xs) for (const s of [-1, 1]) wheel(g, x * S, s * y, wl * S, 0.13 * S, phase, o);
+    for (const x of wg.xs) for (const s of [-1, 1]) wheel(g, x, s * wg.y, wg.wl, wg.ww, phase, o);
   } else if (id === 'halftrack') {
-    const y = Math.min(0.36, L.hw + 0.05) * S;
-    for (const s of [-1, 1]) rubberBand(g, -0.47 * S, 0.06 * S, s * y, 0.16 * S, phase, 0.08 * S, o);
+    const y = Math.min(0.36 * Y, L.hw * S + 0.05 * S, 0.5 * Y - 0.06 * S);
+    const tw = Math.min(0.16 * S, 0.3 * Y);
+    for (const s of [-1, 1]) rubberBand(g, -0.47 * X, 0.06 * X, s * y, tw, phase, 0.08 * S, o);
+    const wy = Math.min(0.3 * Y + 0.0, 0.5 * Y - 0.05 * S);
     g.strokeStyle = METAL.dark; g.lineWidth = 0.05 * S;
-    g.beginPath(); g.moveTo(0.29 * S, -0.3 * S); g.lineTo(0.29 * S, 0.3 * S); g.stroke();
-    for (const s of [-1, 1]) wheel(g, 0.29 * S, s * 0.3 * S, 0.2 * S, 0.12 * S, phase, o);
+    g.beginPath(); g.moveTo(0.29 * X, -wy); g.lineTo(0.29 * X, wy); g.stroke();
+    for (const s of [-1, 1]) wheel(g, 0.29 * X, s * wy, 0.2 * S, Math.min(0.12 * S, 0.25 * Y), phase, o);
   } else if (id === 'legs' || id === 'jumpjets') {
     const jump = id === 'jumpjets';
     // humanoid / insect bodies: legs tucked under a narrow torso, long stride so the feet step out fore and aft
     const biped = L.shape === 'mech' || L.shape === 'warlord' || L.shape === 'mantis';
-    const hy = (biped ? 0.11 : 0.2) * S, fy = (biped ? 0.15 : jump ? 0.31 : 0.3) * S, stride = (biped ? (jump ? 0.24 : 0.32) : jump ? 0.14 : 0.19) * S;
+    const hy = (biped ? 0.11 : 0.2) * Y, fy = (biped ? 0.15 : jump ? 0.31 : 0.3) * Y, stride = (biped ? (jump ? 0.24 : 0.32) : jump ? 0.14 : 0.19) * X;
     for (const s of [-1, 1]) {
       const ph = phase * P + (s > 0 ? Math.PI : 0);
-      const fx = rest ? (s > 0 ? 0.04 : -0.04) * S : Math.sin(ph) * stride;
+      const fx = rest ? (s > 0 ? 0.04 : -0.04) * X : Math.sin(ph) * stride;
       const lift = rest ? 0 : Math.max(0, Math.cos(ph));
       const kx = fx * 0.4 + (jump ? -0.12 : 0.06) * S, ky = s * (fy + (biped ? 0.05 : 0.07) * S);
       limb(g, [0, s * hy, kx, ky, fx, s * fy], (jump ? 0.1 : 0.075) * S, jump ? METAL.dark : METAL.base, o);
@@ -907,8 +962,8 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     drawGravlift(g, L, pal, o);
   } else if (id === 'hover') {
     const sk = new Path2D();
-    if (L.shape === 'saucer' || L.shape === 'round' || L.shape === 'crab') sk.ellipse(-0.01 * S, 0, (L.shape === 'crab' ? 0.36 : 0.49) * S, 0.47 * S, 0, 0, Math.PI * 2);
-    else { const hy = Math.min(0.37, L.hw + 0.13); roundRect(sk, -0.46 * S, -hy * S, 0.9 * S, 2 * hy * S, Math.min(0.22, hy * 0.7) * S); }
+    if (L.shape === 'saucer' || L.shape === 'round' || L.shape === 'crab') sk.ellipse(-0.01 * X, 0, (L.shape === 'crab' ? 0.36 : 0.49) * X, 0.47 * Y, 0, 0, Math.PI * 2);
+    else { const hy = Math.min(0.37 * Y, L.hw * S + 0.13 * S); roundRect(sk, -0.46 * X, -hy, 0.9 * X, 2 * hy, Math.min(0.22 * S, hy * 0.7)); }
     g.fillStyle = '#202326';
     g.fill(sk);
     g.save();
@@ -916,13 +971,13 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     g.strokeStyle = '#34383c';
     g.lineWidth = 0.02 * S;
     g.beginPath();
-    for (let i = 0; i < 16; i++) { const a = (i / 16) * P; g.moveTo(0, 0); g.lineTo(Math.cos(a) * S, Math.sin(a) * S); }
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * P; g.moveTo(0, 0); g.lineTo(Math.cos(a) * L.D, Math.sin(a) * L.D); }
     g.stroke();
     g.restore();
     g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(sk);
     g.save(); g.scale(0.93, 0.92); g.strokeStyle = rgba(pal.accent, 0.5); g.lineWidth = o * 0.6; g.stroke(sk); g.restore();
     for (const s of [-1, 1]) {
-      const cx = -0.4 * S, cy = s * Math.min(0.2, L.hw + 0.02) * S, r = (L.hw < 0.2 ? 0.08 : 0.11) * S;
+      const cx = -0.4 * X, cy = s * Math.min(0.2 * Y, L.hw * S + 0.02 * S), r = (L.hw < 0.2 ? 0.08 : 0.11) * S;
       joint(g, cx, cy, r, METAL.dark, o);
       g.strokeStyle = METAL.light; g.lineWidth = 0.018 * S;
       g.beginPath();
@@ -939,66 +994,34 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
       g.strokeStyle = METAL.base; g.lineWidth = 0.05 * S;
       g.stroke();
       for (const r of L.rotors) joint(g, r.x, r.y, 0.07 * S, pal.dark, o);
-    } else if (L.rotors.length === 1) {
-      // tail boom + skids
-      g.strokeStyle = METAL.dark; g.lineWidth = 0.035 * S;
-      g.beginPath();
-      for (const s of [-1, 1]) { g.moveTo(-0.24 * S, s * 0.22 * S); g.lineTo(0.26 * S, s * 0.22 * S); }
-      g.stroke();
-      g.beginPath();
-      roundRect(g, -0.66 * S, -0.04 * S, 0.5 * S, 0.08 * S, 0.03 * S);
-      g.fillStyle = pal.dark; g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
-      g.beginPath();
-      roundRect(g, -0.66 * S, -0.13 * S, 0.08 * S, 0.26 * S, 0.02 * S);
-      g.fillStyle = pal.body; g.fill(); g.stroke();
-      g.beginPath(); g.ellipse(-0.6 * S, 0.1 * S, 0.06 * S, 0.012 * S, 0, 0, P);
-      g.fillStyle = 'rgba(30,30,30,0.7)'; g.fill();
     } else {
-      // rotor pylons: an armoured strut from the fuselage to a streamlined nacelle under each hub
+      // rotor masts: an armoured pylon to each hub that is off the fuselage centreline
       for (const r of L.rotors) {
         if (Math.abs(r.y) > 0.02 * S) {
           g.lineCap = 'round';
           g.strokeStyle = OUTLINE; g.lineWidth = 0.07 * S;
           g.beginPath(); g.moveTo(r.x + 0.03 * S, Math.sign(r.y) * 0.04 * S); g.lineTo(r.x, r.y); g.stroke();
           g.strokeStyle = pal.dark; g.lineWidth = 0.045 * S; g.stroke();
+          g.beginPath(); roundRect(g, r.x - 0.13 * S, r.y - 0.045 * S, 0.24 * S, 0.09 * S, 0.045 * S);
+          g.fillStyle = METAL.dark; g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
         }
-        g.beginPath(); roundRect(g, r.x - 0.13 * S, r.y - 0.045 * S, 0.24 * S, 0.09 * S, 0.045 * S);
-        g.fillStyle = METAL.dark; g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
-        g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(r.x - 0.09 * S, r.y - 0.03 * S, 0.16 * S, 0.015 * S);
-        joint(g, r.x, r.y, 0.055 * S, METAL.base, o);
+        joint(g, r.x, r.y, Math.max(0.04 * S, r.r * 0.09), METAL.base, o);
       }
     }
-  } else if (id === 'jet' && (L.shape === 'delta' || L.shape === 'interceptor')) {
-    // the airframe is the wing: just the engine cans at the trailing edge
+  } else if (id === 'jet') {
+    // the airframe is the wing: engine cans at the nozzles
     for (const n of L.nozzles) {
       g.beginPath(); roundRect(g, n.x, n.y - n.w * 0.75, 0.2 * S, n.w * 1.5, n.w * 0.6);
       g.fillStyle = METAL.dark; g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
-    }
-  } else if (id === 'jet') {
-    const wing = new Path2D();
-    poly(wing, mirrorPoly([0.12, -0.05, -0.18, -0.46, -0.3, -0.48, -0.3, -0.3, -0.36, -0.05]), S);
-    const gr = g.createLinearGradient(0, -0.5 * S, 0, 0.5 * S);
-    gr.addColorStop(0, shade(pal.dark, 0.1));
-    gr.addColorStop(0.5, pal.dark);
-    gr.addColorStop(1, shade(pal.dark, -0.3));
-    g.fillStyle = gr;
-    g.fill(wing);
-    g.lineWidth = o; g.strokeStyle = OUTLINE; g.lineJoin = 'round'; g.stroke(wing);
-    line(g, [-0.18, -0.44, -0.27, -0.46, -0.18, 0.44, -0.27, 0.46], S, pal.accent, o * 1.2);
-    line(g, [0.0, -0.12, -0.26, -0.36, 0.0, 0.12, -0.26, 0.36], S, 'rgba(0,0,0,0.35)', o * 0.5);
-    for (const n of L.nozzles) {
-      g.beginPath(); roundRect(g, n.x, n.y - n.w * 0.75, 0.36 * S, n.w * 1.5, n.w * 0.6);
-      g.fillStyle = METAL.dark; g.fill(); g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
-      g.fillStyle = 'rgba(255,255,255,0.15)'; g.fillRect(n.x + 0.05 * S, n.y - n.w * 0.5, 0.25 * S, n.w * 0.25);
     }
   }
 }
 
 /** Anchor base plate (drawn axis-aligned, does not rotate with the hull). */
 export function drawAnchorPlate(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
-  const S = L.S;
+  const S = Math.min(L.X, L.Y), ax = L.X / S, ay = L.Y / S;
   const p = new Path2D();
-  poly(p, [0.47, -0.3, 0.47, 0.3, 0.3, 0.47, -0.3, 0.47, -0.47, 0.3, -0.47, -0.3, -0.3, -0.47, 0.3, -0.47], S);
+  poly(p, [0.47 * ax, -0.3 * ay, 0.47 * ax, 0.3 * ay, 0.47 * ax - 0.17, 0.47 * ay, -0.47 * ax + 0.17, 0.47 * ay, -0.47 * ax, 0.3 * ay, -0.47 * ax, -0.3 * ay, -0.47 * ax + 0.17, -0.47 * ay, 0.47 * ax - 0.17, -0.47 * ay], S);
   g.fillStyle = '#3a3f44';
   g.fill(p);
   g.save();
@@ -1006,10 +1029,10 @@ export function drawAnchorPlate(g: Ctx, L: UnitLayout, pal: TeamPal, o: number):
   g.strokeStyle = 'rgba(240,190,40,0.55)';
   g.lineWidth = 0.05 * S;
   g.beginPath();
-  for (let i = -12; i < 12; i++) { const x = i * 0.1 * S; g.moveTo(x, -0.6 * S); g.lineTo(x + 1.2 * S, 0.6 * S); }
+  for (let i = -36; i < 36; i++) { const x = i * 0.1 * S; g.moveTo(x, -0.6 * L.Y); g.lineTo(x + 1.2 * L.Y, 0.6 * L.Y); }
   g.stroke();
   g.beginPath();
-  poly(g, [0.39, -0.25, 0.39, 0.25, 0.25, 0.39, -0.25, 0.39, -0.39, 0.25, -0.39, -0.25, -0.25, -0.39, 0.25, -0.39], S);
+  poly(g, [0.39 * ax, -0.25 * ay, 0.39 * ax, 0.25 * ay, 0.39 * ax - 0.14, 0.39 * ay, -0.39 * ax + 0.14, 0.39 * ay, -0.39 * ax, 0.25 * ay, -0.39 * ax, -0.25 * ay, -0.39 * ax + 0.14, -0.39 * ay, 0.39 * ax - 0.14, -0.39 * ay], S);
   g.fillStyle = '#41474d';
   g.fill();
   g.restore();
@@ -1037,12 +1060,12 @@ const rearCache = new Map<string, number>();
 let scratch: Ctx | null = null;
 /** x (fraction of S) of the hull's rear edge on the centreline. */
 function rearX(L: UnitLayout, hp: Path2D): number {
-  const k = L.shape + L.S;
+  const k = `${L.shape}|${L.S}|${L.X}|${L.Y}`;
   const hit = rearCache.get(k);
   if (hit !== undefined) return hit;
   scratch ??= ctx2d(makeCanvas(2, 2));
-  let r = -0.42;
-  for (let x = -0.55; x < 0; x += 0.01) if (scratch.isPointInPath(hp, x * L.S, 0)) { r = x; break; }
+  let r = -0.42 * L.X / L.S;
+  for (let x = -0.55; x < 0; x += 0.01) if (scratch.isPointInPath(hp, x * L.X, 0)) { r = x * L.X / L.S; break; }
   rearCache.set(k, r);
   return r;
 }
@@ -1105,23 +1128,23 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const prof = profileOf(design, L);
   const creature = CREATURE_SHAPES.has(L.shape);
   const legged = L.mob.id === 'legs' || L.mob.id === 'spider' || L.mob.id === 'jumpjets' || L.mob.id === 'titanlegs';
-  if (prof.role === 'artillery' && (L.mob.id === 'treads' || L.mob.id === 'wheels' || L.mob.id === 'halftrack') && !creature && L.shape !== 'long' && L.shape !== 'siegeplat' && L.shape !== 'carriage') drawOutriggers(hull.g, L.S, Math.min(L.hw, 0.36), o);
+  if (prof.role === 'artillery' && (L.mob.id === 'treads' || L.mob.id === 'wheels' || L.mob.id === 'halftrack') && !creature && L.shape !== 'long' && L.shape !== 'siegeplat' && L.shape !== 'carriage') drawOutriggers(hull.g, L.S, Math.min(L.hw, 0.36), o, L.X);
   hullUnderlay(hull.g, L, pal, o);
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'under');
   // armour class shapes the hull itself: light builds are slimmer, heavy ones wider with skirts over the running gear
   const tier = armourTier(prof);
   const kY = !creature && !GIANT_SHAPES.has(L.shape) && !L.air ? [0.93, 1, 1.04, 1.08][tier] : 1;
-  const hp0 = hullPath(L.shape, L.S);
+  const hp0 = hullPathL(L);
   let hp = hp0;
   if (kY !== 1) { hp = new Path2D(); hp.addPath(hp0, new DOMMatrix().scale(1, kY)); }
   if (!L.air && L.mob.id !== 'anchor') drawSkirts(hull.g, L, tier, pal, o);
-  paintHull(hull.g, hp, pal, L.S, o, L.hw * kY);
+  paintHull(hull.g, hp, pal, L.S, o, L.hw * kY, L.X, L.Y);
   hullDetails(hull.g, L, pal, o);
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
-  drawProfile(hull.g, prof, hp, L.S, Math.min(L.hw, 0.42), pal, o, emis(pal), { creature, air: L.air, legged, rearX: rearX(L, hp0) });
+  drawProfile(hull.g, prof, hp, L.S, Math.min(L.hw, 0.42), pal, o, emis(pal), { creature, air: L.air, legged, rearX: rearX(L, hp0), X: L.X, Y: L.Y });
   const sin: SuperIn = {
-    S: L.S, shape: `${L.shape}|${kY}`, mob: L.mob.id, air: L.air, mounts: L.mounts, riding, hull: hp, P: prof, pal, o, E: emis(pal), px,
+    S: L.S, X: L.X, Y: L.Y, shape: `${L.shape}|${kY}|${L.X}|${L.Y}`, mob: L.mob.id, air: L.air, mounts: L.mounts, riding, hull: hp, P: prof, pal, o, E: emis(pal), px,
     muzzle: L.mounts.map((m) => (m.mod ? muzzleLen(m.mod) : 0)),
   };
   if (!PART_SHAPES.has(L.shape)) {

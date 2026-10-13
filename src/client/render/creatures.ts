@@ -42,20 +42,20 @@ export function profilePath(prof: number[], S: number): Path2D {
   return p;
 }
 
-function sharp(half: number[], S: number): Path2D {
+export function sharp(half: number[], S: number): Path2D {
   const p = new Path2D();
   poly(p, mirrorPoly(half), S);
   return p;
 }
 
-function ellipse(x: number, y: number, rx: number, ry: number, rot = 0): Path2D {
+export function ellipse(x: number, y: number, rx: number, ry: number, rot = 0): Path2D {
   const p = new Path2D();
   p.ellipse(x, y, rx, ry, rot, 0, P2);
   return p;
 }
 
 /** Tapered capsule from (x0,y0) radius r0 to (x1,y1) radius r1 (cells). */
-function capsule(x0: number, y0: number, r0: number, x1: number, y1: number, r1: number): Path2D {
+export function capsule(x0: number, y0: number, r0: number, x1: number, y1: number, r1: number): Path2D {
   const a = Math.atan2(y1 - y0, x1 - x0);
   const p = new Path2D();
   p.arc(x0, y0, r0, a + Math.PI / 2, a + Math.PI * 1.5);
@@ -65,7 +65,7 @@ function capsule(x0: number, y0: number, r0: number, x1: number, y1: number, r1:
 }
 
 /** Shaded limb segment: gradient fill, top highlight, outline. */
-function limbSeg(g: Ctx, x0: number, y0: number, r0: number, x1: number, y1: number, r1: number, c0: string, c1: string, o: number): void {
+export function limbSeg(g: Ctx, x0: number, y0: number, r0: number, x1: number, y1: number, r1: number, c0: string, c1: string, o: number): void {
   const p = capsule(x0, y0, r0, x1, y1, r1);
   const nx = -(y1 - y0), ny = x1 - x0, nl = Math.hypot(nx, ny) || 1;
   const r = Math.max(r0, r1);
@@ -87,7 +87,7 @@ function limbSeg(g: Ctx, x0: number, y0: number, r0: number, x1: number, y1: num
   g.stroke(p);
 }
 
-function fillOut(g: Ctx, p: Path2D, fill: string | CanvasGradient, o: number): void {
+export function fillOut(g: Ctx, p: Path2D, fill: string | CanvasGradient, o: number): void {
   g.fillStyle = fill;
   g.fill(p);
   g.lineJoin = 'round';
@@ -96,7 +96,7 @@ function fillOut(g: Ctx, p: Path2D, fill: string | CanvasGradient, o: number): v
   g.stroke(p);
 }
 
-function stripe(g: Ctx, pts: number[], S: number, col: string, w: number): void {
+export function stripe(g: Ctx, pts: number[], S: number, col: string, w: number): void {
   g.lineCap = 'round';
   g.strokeStyle = col;
   g.lineWidth = w;
@@ -106,7 +106,7 @@ function stripe(g: Ctx, pts: number[], S: number, col: string, w: number): void 
 }
 
 /** Small triangular spike pointing along angle a from (x,y). */
-function spike(g: Ctx, x: number, y: number, a: number, len: number, w: number, fill: string, o: number): void {
+export function spike(g: Ctx, x: number, y: number, a: number, len: number, w: number, fill: string, o: number): void {
   const p = new Path2D();
   const cs = Math.cos(a), sn = Math.sin(a);
   p.moveTo(x - sn * w, y + cs * w);
@@ -123,7 +123,7 @@ function spike(g: Ctx, x: number, y: number, a: number, len: number, w: number, 
 /* ------------------------------------------------------------------------------------- hard-surface kit */
 
 /** Armoured beam (limb segment): straight sides, chamfered ends, lit edge, centre seam, outline. Half widths. */
-function beam(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number, w1: number, c0: string, c1: string, o: number): void {
+export function beam(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number, w1: number, c0: string, c1: string, o: number): void {
   const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
   const ux = dx / l, uy = dy / l, nx = -uy, ny = ux;
   const c = Math.min(w0, w1) * 0.6;
@@ -159,7 +159,7 @@ function beam(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number
 }
 
 /** Hydraulic ram: dark cylinder from (x0,y0), polished rod to (x1,y1). r = cylinder half width. */
-function piston(g: Ctx, x0: number, y0: number, x1: number, y1: number, r: number, o: number): void {
+export function piston(g: Ctx, x0: number, y0: number, x1: number, y1: number, r: number, o: number): void {
   const mx = x0 + (x1 - x0) * 0.55, my = y0 + (y1 - y0) * 0.55;
   g.lineCap = 'round';
   g.strokeStyle = OUTLINE; g.lineWidth = r * 0.9 + o;
@@ -177,7 +177,7 @@ function piston(g: Ctx, x0: number, y0: number, x1: number, y1: number, r: numbe
 }
 
 /** Actuator hub: octagonal housing, bright ring, centre bolt (optional emissive core). */
-function joint(g: Ctx, x: number, y: number, r: number, o: number, fill: string, core?: string): void {
+export function joint(g: Ctx, x: number, y: number, r: number, o: number, fill: string, core?: string): void {
   const p = new Path2D();
   for (let i = 0; i < 8; i++) { const a = (i / 8) * P2 + P2 / 16; p.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
   p.closePath();
@@ -190,7 +190,7 @@ function joint(g: Ctx, x: number, y: number, r: number, o: number, fill: string,
 }
 
 /** Camera lens: steel bezel, dark glass, emissive pupil, glint. */
-function lens(g: Ctx, x: number, y: number, r: number, E: string): void {
+export function lens(g: Ctx, x: number, y: number, r: number, E: string): void {
   dot(g, x, y, r * 1.45, OUTLINE);
   dot(g, x, y, r * 1.25, METAL.base);
   dot(g, x - r * 0.2, y - r * 0.2, r * 0.9, METAL.light);
@@ -202,7 +202,7 @@ function lens(g: Ctx, x: number, y: number, r: number, E: string): void {
 }
 
 /** Recessed visor slot with an emissive strip, between two points (cells already scaled). */
-function visor(g: Ctx, x0: number, y0: number, x1: number, y1: number, w: number, E: string, o: number): void {
+export function visor(g: Ctx, x0: number, y0: number, x1: number, y1: number, w: number, E: string, o: number): void {
   g.lineCap = 'butt';
   g.strokeStyle = OUTLINE; g.lineWidth = w * 2 + o * 1.4;
   g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
@@ -215,7 +215,7 @@ function visor(g: Ctx, x0: number, y0: number, x1: number, y1: number, w: number
 }
 
 /** Fuel cell / ammo drum seen from above: steel end caps, glowing core band. Cells already scaled. */
-function canister(g: Ctx, x: number, y: number, len: number, r: number, a: number, E: string, o: number): void {
+export function canister(g: Ctx, x: number, y: number, len: number, r: number, a: number, E: string, o: number): void {
   g.save();
   g.translate(x, y); g.rotate(a);
   g.fillStyle = 'rgba(0,0,0,0.45)';
@@ -240,7 +240,7 @@ function canister(g: Ctx, x: number, y: number, len: number, r: number, a: numbe
 }
 
 /** Blunt armour fin (replaces organic spikes): trapezoid plate jutting along angle a. */
-function fin(g: Ctx, x: number, y: number, a: number, len: number, w: number, fill: string, o: number): void {
+export function fin(g: Ctx, x: number, y: number, a: number, len: number, w: number, fill: string, o: number): void {
   const p = new Path2D();
   const cs = Math.cos(a), sn = Math.sin(a);
   const P = (u: number, n: number) => p.lineTo(x + cs * u - sn * n, y + sn * u + cs * n);
@@ -255,7 +255,7 @@ function fin(g: Ctx, x: number, y: number, a: number, len: number, w: number, fi
 }
 
 /** Straight plate seams across a body (clipped): dark groove + lit lip. xs fractions of S. */
-function plateSeams(g: Ctx, path: Path2D, xs: number[], S: number, o: number, w = 0.6): void {
+export function plateSeams(g: Ctx, path: Path2D, xs: number[], S: number, o: number, w = 0.6): void {
   g.save();
   g.clip(path);
   g.lineCap = 'butt';
@@ -269,7 +269,7 @@ function plateSeams(g: Ctx, path: Path2D, xs: number[], S: number, o: number, w 
 }
 
 /** Cable bundle: a few parallel dark hoses with highlights (cells, already scaled pts). */
-function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
+export function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
   g.lineCap = 'round';
   for (let i = 0; i < pts.length; i += 4) {
     const x0 = pts[i] * S, y0 = pts[i + 1] * S, x1 = pts[i + 2] * S, y1 = pts[i + 3] * S;
@@ -694,12 +694,12 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
   }
 }
 
-function roundedRect(x: number, y: number, w: number, h: number, r: number, S: number): Path2D {
+export function roundedRect(x: number, y: number, w: number, h: number, r: number, S: number): Path2D {
   const p = new Path2D();
   roundRect(p, x * S, y * S, w * S, h * S, r * S);
   return p;
 }
-function vent(g: Ctx, x: number, y: number, w: number, h: number, S: number, o: number): void {
+export function vent(g: Ctx, x: number, y: number, w: number, h: number, S: number, o: number): void {
   const p = roundedRect(x - w / 2, y - h / 2, w, h, Math.min(w, h) * 0.2, S);
   g.fillStyle = 'rgba(0,0,0,0.55)'; g.fill(p);
   g.strokeStyle = 'rgba(255,255,255,0.2)'; g.lineWidth = o * 0.35;
@@ -714,7 +714,7 @@ function vent(g: Ctx, x: number, y: number, w: number, h: number, S: number, o: 
 function circPath(x: number, y: number, r: number, S: number): Path2D { return circ(x, y, r, S); }
 
 /** Sensor cluster: dark recessed housing with a visor bar and a lens array (cells, fractions of S). */
-function sensorCluster(g: Ctx, x: number, hw: number, S: number, E: string, o: number, big: boolean): void {
+export function sensorCluster(g: Ctx, x: number, hw: number, S: number, E: string, o: number, big: boolean): void {
   const hous = sharp([x + 0.025, -hw * 0.55, x + 0.01, -hw, x - 0.05, -hw, x - 0.065, -hw * 0.5, x - 0.065, 0], S);
   recess(g, hous, o, '#0a0d10');
   visor(g, (x + 0.004) * S, -hw * 0.62 * S, (x + 0.004) * S, hw * 0.62 * S, 0.009 * S, E, o);
@@ -726,7 +726,7 @@ function sensorCluster(g: Ctx, x: number, hw: number, S: number, E: string, o: n
 }
 
 /** Sleek alien shell: polished team-tinted metal, broad specular sweep, crisp outline. */
-function sleekShell(g: Ctx, p: Path2D, pal: TeamPal, o: number, S: number, x0: number, y0: number, x1: number, y1: number): void {
+export function sleekShell(g: Ctx, p: Path2D, pal: TeamPal, o: number, S: number, x0: number, y0: number, x1: number, y1: number): void {
   const gr = g.createLinearGradient(x0 * S, y0 * S, x1 * S, y1 * S);
   gr.addColorStop(0, shade(pal.light, 0.05)); gr.addColorStop(0.35, pal.body); gr.addColorStop(1, shade(pal.deep, 0.1));
   ao(g, p, S, 0.02, 0.6);
@@ -741,7 +741,7 @@ function sleekShell(g: Ctx, p: Path2D, pal: TeamPal, o: number, S: number, x0: n
 }
 
 /** Curved glowing seams: [x0, y0, cx, cy, x1, y1, ...] fractions of S. */
-function seamGlow(g: Ctx, q: number[], S: number, E: string, w: number): void {
+export function seamGlow(g: Ctx, q: number[], S: number, E: string, w: number): void {
   g.lineCap = 'round';
   for (const [col, lw] of [['rgba(0,0,0,0.6)', w * 2.2], [rgba(E, 0.95), w], ['rgba(255,255,255,0.7)', w * 0.35]] as [string, number][]) {
     g.strokeStyle = col; g.lineWidth = lw;
@@ -752,7 +752,7 @@ function seamGlow(g: Ctx, q: number[], S: number, E: string, w: number): void {
 }
 
 /** Levitating core module: dark gap ring with an emissive underglow, then the shell floating above it. */
-function floatGap(g: Ctx, p: Path2D, E: string, o: number, S: number): void {
+export function floatGap(g: Ctx, p: Path2D, E: string, o: number, S: number): void {
   g.save();
   g.lineJoin = 'round';
   g.strokeStyle = rgba(E, 0.35); g.lineWidth = 0.05 * S; g.stroke(p);
@@ -866,16 +866,25 @@ export interface PartDef {
   anim?: (a: AnimIn) => { r?: number; dx?: number; dy?: number };
   /** mount indices riding on this part */
   mounts?: number[];
+  /** footprint frames: where the riding weapon sits, in the part's rest frame (cells from the pivot) */
+  mountAt?: [number, number];
 }
 
 export interface Xf { x: number; y: number; r: number; }
 
 const partCache = new Map<string, PartDef[]>();
 
+/** Footprint art hooks (set by footart.ts): parts, leg rig and lights for redesigned frames; null = shape tables. */
+export const creatureHooks: {
+  parts: ((L: UnitLayout) => PartDef[] | null) | null;
+  rig: ((L: UnitLayout) => LegRig | null) | null;
+  lights: ((L: UnitLayout) => CLight[] | null) | null;
+} = { parts: null, rig: null, lights: null };
+
 export function partsOf(L: UnitLayout): PartDef[] {
-  const key = `${L.chassis.id}|${L.mob.id}`;
+  const key = `${L.chassis.id}|${L.mob.id}|${L.X}|${L.Y}`;
   let p = partCache.get(key);
-  if (!p) { p = buildParts(L); partCache.set(key, p); }
+  if (!p) { p = creatureHooks.parts?.(L) ?? buildParts(L); partCache.set(key, p); }
   return p;
 }
 
@@ -916,7 +925,7 @@ export function partMounts(parts: PartDef[]): Set<number> {
   return s;
 }
 
-function snipAnim(s: number, rate: number): (a: AnimIn) => { r: number } {
+export function snipAnim(s: number, rate: number): (a: AnimIn) => { r: number } {
   return (a) => {
     const c = (a.t * rate + a.seed * 0.13 + (s > 0 ? 0.5 : 0)) % 1;
     return { r: s * (0.22 + 0.3 * (c < 0.18 ? Math.sin((c / 0.18) * Math.PI * 2) : 0)) };
@@ -924,7 +933,7 @@ function snipAnim(s: number, rate: number): (a: AnimIn) => { r: number } {
 }
 
 /** Hydraulic clamp body along +x from the wrist at (0,0): boxy armoured housing, ram on top, fixed steel jaw. */
-function drawPalm(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
+export function drawPalm(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
   const Z = k * z;
   // fixed jaw (steel, angular, serrated inner edge)
   const fx = new Path2D();
@@ -944,7 +953,7 @@ function drawPalm(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: numb
 }
 
 /** Movable jaw, pivot at its root: angular steel blade with a serrated edge. */
-function drawFinger(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
+export function drawFinger(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: number): void {
   const Z = k * z;
   const f = new Path2D();
   poly(f, [-0.01, -s * 0.03, 0.1, -s * 0.035, 0.175, -s * 0.075, 0.155, -s * 0.015, 0.1, s * 0.035, -0.01, s * 0.035], Z);
@@ -956,7 +965,7 @@ function drawFinger(g: Ctx, s: number, k: number, z: number, pal: TeamPal, o: nu
 
 const wob = (a: AnimIn, f: number, ph: number) => Math.sin(a.t * f + a.seed * 1.7 + ph);
 
-function buildParts(L: UnitLayout): PartDef[] {
+export function buildParts(L: UnitLayout): PartDef[] {
   const S = L.S;
   const parts: PartDef[] = [];
   switch (L.shape) {
@@ -1225,7 +1234,7 @@ function buildParts(L: UnitLayout): PartDef[] {
   return parts;
 }
 
-function ao(g: Ctx, path: Path2D, S: number, r = 0.015, a = 0.5): void {
+export function ao(g: Ctx, path: Path2D, S: number, r = 0.015, a = 0.5): void {
   const k = devK(g);
   g.save();
   g.filter = `blur(${Math.max(1, r * S * k)}px)`;
@@ -1237,8 +1246,8 @@ function ao(g: Ctx, path: Path2D, S: number, r = 0.015, a = 0.5): void {
 
 /* -------------------------------------------------------------------------------------------- spider legs */
 
-interface LegRig {
-  /** hips and rest feet, fractions of S */
+export interface LegRig {
+  /** hips and rest feet, fractions of S (footprint rigs: hx/fx fractions of X, hy/fy of Y; stride of X) */
   legs: { hx: number; hy: number; fx: number; fy: number; grp: number }[];
   w: number;
   stride: number;
@@ -1246,14 +1255,18 @@ interface LegRig {
   armour: boolean;
   /** limb design language: industrial beams + rams, sleek alien digitigrade limbs, stubby piston stilts */
   style: 'ind' | 'sleek' | 'stub';
+  /** footprint rig: coordinates are fractions of X (along) / Y (across) */
+  foot?: boolean;
 }
 
 const rigCache = new Map<string, LegRig>();
 
 function legRig(L: UnitLayout): LegRig {
-  const key = `${L.shape}|${L.S}`;
+  const key = `${L.shape}|${L.S}|${L.X}|${L.Y}`;
   let r = rigCache.get(key);
   if (r) return r;
+  const hr = creatureHooks.rig?.(L);
+  if (hr) { rigCache.set(key, hr); return hr; }
   const S = L.S;
   const legs: LegRig['legs'] = [];
   const radial = (cx: number, hipR: number, hipRy: number, reach: number, angs: number[], ry = 1) => {
@@ -1305,12 +1318,13 @@ export function drawSpiderLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: numbe
   const E = emis(pal);
   const W = Math.max(rig.w * S, 0.075);
   const cent = L.shape === 'centipede';
+  const KX = rig.foot ? L.X : S, KY = rig.foot ? L.Y : S;
   const order = rig.legs.map((l, i) => ({ l, i, lift: 0 }));
   const geo = order.map(({ l, i }) => {
     const ph = phase * P2 + (cent ? i * 0.7 : l.grp * Math.PI);
     const lift = rest ? 0 : Math.max(0, Math.cos(ph));
-    const fx = (l.fx + (rest ? 0 : Math.sin(ph) * rig.stride)) * S, fy = l.fy * S * (1 - lift * 0.06);
-    const hx = l.hx * S, hy = l.hy * S;
+    const fx = (l.fx + (rest ? 0 : Math.sin(ph) * rig.stride)) * KX, fy = l.fy * KY * (1 - lift * 0.06);
+    const hx = l.hx * KX, hy = l.hy * KY;
     const dx = fx - hx, dy = fy - hy, d = Math.hypot(dx, dy);
     const a = Math.atan2(dy, dx), lat = l.hy < 0 ? -Math.PI / 2 : Math.PI / 2;
     let da = lat - a;
@@ -1457,13 +1471,15 @@ function stubLeg(g: Ctx, q: LegGeo, W: number, pal: TeamPal, E: string, o: numbe
 
 /* ------------------------------------------------------------------------------------------------ dynamic fx */
 
-interface CLight { x: number; y: number; r: number; k: 'eye' | 'egg' | 'core'; ph: number; }
+export interface CLight { x: number; y: number; r: number; k: 'eye' | 'egg' | 'core'; ph: number; }
 const lightCache = new Map<string, CLight[]>();
 
 function lightsOf(L: UnitLayout): CLight[] {
-  const key = L.shape + L.S;
+  const key = `${L.shape}|${L.S}|${L.X}|${L.Y}`;
   let o = lightCache.get(key);
   if (o) return o;
+  const hl = creatureHooks.lights?.(L);
+  if (hl) { lightCache.set(key, hl); return hl; }
   const S = L.S;
   o = [];
   const eye = (x: number, y: number, r: number) => { for (const s of [-1, 1]) o!.push({ x: x * S, y: s * y * S, r: r * S, k: 'eye', ph: s }); };

@@ -12,7 +12,7 @@ import { TEAM_PAL, ctx2d, makeCanvas, shade, type Ctx, type TeamPal } from './pa
 import { CATEGORY_COLOR, drawTurret, drawTurretDynamic } from './turrets.ts';
 import { GIANT_SHAPES, drawGiantFx } from './giantart.ts';
 import {
-  drawAnchorPlate, drawMobility, drawPartsStatic, drawPlates, hullDetails, hullPath, hullUnderlay, layoutOf, paintHull, rotorBlur, type UnitLayout,
+  drawAnchorPlate, drawMobility, drawPartsStatic, drawPlates, hullDetails, hullPathL, hullUnderlay, layoutOf, paintHull, rotorBlur, type UnitLayout,
 } from './unitart.ts';
 
 export type PartKind = 'chassis' | 'mobility' | 'module';
@@ -124,7 +124,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
   if (kind === 'chassis') {
     hullUnderlay(g, L, pal, oo);
     drawPartsStatic(g, L, pal, oo, 'under');
-    paintHull(g, hullPath(L.shape, S), pal, S, oo, L.hw);
+    paintHull(g, hullPathL(L), pal, S, oo, L.hw);
     hullDetails(g, L, pal, oo);
     drawPartsStatic(g, L, pal, oo, 'over');
     if (GIANT_SHAPES.has(L.shape)) drawGiantFx(g, L, { time: 0.4 }, 0, 0, 0, 1, PX * sc, pal, 1);
@@ -132,7 +132,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
     if (L.mob.id === 'anchor') drawAnchorPlate(g, L, pal, oo);
     else drawMobility(g, L, pal, 0.15, false, oo);
     // ghosted hull outline so the running gear reads as a vehicle
-    const hp = hullPath(L.shape, S);
+    const hp = hullPathL(L);
     g.globalAlpha = 0.18;
     g.fillStyle = pal.light;
     g.fill(hp);

@@ -200,7 +200,7 @@ export function grille(g: Ctx, x: number, y: number, w: number, h: number, n: nu
   g.stroke();
 }
 
-function belt(g: Ctx, x0: number, x1: number, y: number, h: number, S: number, pal: TeamPal, o: number, E: string, segs: number): void {
+export function belt(g: Ctx, x0: number, x1: number, y: number, h: number, S: number, pal: TeamPal, o: number, E: string, segs: number): void {
   const p = rr(x0, y - h / 2, x1 - x0, h, h * 0.25, S);
   const gr = g.createLinearGradient(0, (y - h / 2) * S, 0, (y + h / 2) * S);
   gr.addColorStop(0, shade(pal.body, -0.05));
@@ -241,7 +241,7 @@ export function lamp(g: Ctx, x: number, y: number, r: number, c: string): void {
 }
 
 /** Row of crenellation blocks (merlons) along a segment. */
-function merlons(g: Ctx, x0: number, y0: number, x1: number, y1: number, n: number, w: number, h: number, fill: string, o: number): void {
+export function merlons(g: Ctx, x0: number, y0: number, x1: number, y1: number, n: number, w: number, h: number, fill: string, o: number): void {
   const a = Math.atan2(y1 - y0, x1 - x0);
   for (let i = 0; i < n; i++) {
     const f = n === 1 ? 0.5 : i / (n - 1);
@@ -596,6 +596,9 @@ export interface GLight {
 
 const lightCache = new Map<string, GLight[]>();
 
+/** Footprint art hooks: per-layout animated lights / emissive strips in absolute cells (null = use the shape table). */
+export const fxHooks: { lights: ((L: UnitLayout) => GLight[] | null) | null; strips: ((L: UnitLayout) => number[] | null) | null } = { lights: null, strips: null };
+
 /** Positions (cells, local) of animated hull details per shape. */
 export function giantLights(shape: string, S: number): GLight[] {
   const key = shape + S;
@@ -680,7 +683,7 @@ export function limbG(g: Ctx, pts: number[], w: number, color: string, o: number
   g.save(); g.translate(w * 0.25, w * 0.25); g.stroke(); g.restore();
 }
 
-function trackUnit(g: Ctx, cx: number, cy: number, len: number, th: number, phase: number, pal: TeamPal, o: number, E: string): void {
+export function trackUnit(g: Ctx, cx: number, cy: number, len: number, th: number, phase: number, pal: TeamPal, o: number, E: string): void {
   const x0 = cx - len / 2, y0 = cy - th / 2;
   const band = new Path2D();
   roundRect(band, x0, y0, len, th, th * 0.45);
@@ -722,11 +725,20 @@ function trackUnit(g: Ctx, cx: number, cy: number, len: number, th: number, phas
   hazard(g, x0 + len * 0.86, cy - th * 0.28, len * 0.04, th * 0.56, o * 0.6, true);
 }
 
+export function megaGeo(L: UnitLayout): { yc: number; th: number; len: number; xs: number[] } {
+  const S = L.S, th = 0.18 * S;
+  const yc = Math.min((Math.min(0.47, L.hw) + 0.09) * S, 0.5 * L.Y - th * 0.15);
+  // long hulls get three track units a side
+  const n = L.X / L.Y >= 1.6 ? 3 : 2;
+  const len = (0.88 / n) * L.X;
+  const xs = n === 3 ? [0.32 * L.X, 0, -0.32 * L.X] : [0.265 * L.X, -0.265 * L.X];
+  return { yc, th, len, xs };
+}
+
 export function drawMegatracks(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, o: number): void {
   const S = L.S;
   const E = emis(pal);
-  const yc = (Math.min(0.47, L.hw) + 0.09) * S, th = 0.18 * S, len = 0.44 * S;
-  const xs = [0.265 * S, -0.265 * S];
+  const { yc, th, len, xs } = megaGeo(L);
   // axle beams + pylons
   g.strokeStyle = OUTLINE; g.lineWidth = 0.08 * S; g.lineCap = 'round';
   g.beginPath();
@@ -740,19 +752,19 @@ export interface Foot { x: number; y: number; lift: number; a: number; }
 
 /** Foot placements of titan legs for a gait phase (0..1). a = radians since touchdown. */
 export function titanFeet(L: UnitLayout, phase: number, rest: boolean): Foot[] {
-  const S = L.S;
+  const S = L.S, kx = L.X / S, ky = L.Y / S;
   const quad = L.shape !== 'colossal' && S >= 4;
   const colossal = L.shape === 'colossal' || L.shape === 'warlord';
   const out: Foot[] = [];
   const war = L.shape === 'warlord';
-  const stride = (quad ? 0.1 : war ? 0.36 : colossal ? 0.32 : 0.2) * S;
-  const rows = quad ? [0.28, -0.28] : [colossal ? -0.02 : 0];
-  const fy = (quad ? Math.min(L.hw, 0.42) + 0.1 : war ? 0.17 : colossal ? 0.215 : 0.31) * S;
+  const stride = (quad ? 0.1 : war ? 0.36 : colossal ? 0.32 : 0.2) * S * Math.min(1.25, kx);
+  const rows = (quad ? [0.28, -0.28] : [colossal ? -0.02 : 0]).map((r) => r * kx);
+  const fy = Math.min((quad ? Math.min(L.hw, 0.42) + 0.1 : war ? 0.17 * ky : colossal ? 0.215 * ky : 0.31 * ky) * S, 0.5 * L.Y);
   let k = 0;
   for (const row of rows) for (const s of [-1, 1]) {
     const diag = quad && (k++ % 2 === 1) ? Math.PI : 0;
     const ph = phase * P2 + (s > 0 ? Math.PI : 0) + diag;
-    const restX = colossal ? (s > 0 ? 0.27 : -0.22) : (s > 0 ? 0.03 : -0.03);
+    const restX = (colossal ? (s > 0 ? 0.27 : -0.22) : (s > 0 ? 0.03 : -0.03)) * kx;
     const fx = rest ? row * S + restX * S : row * S + Math.sin(ph) * stride;
     const lift = rest ? 0 : Math.max(0, Math.cos(ph));
     const a = (((ph - Math.PI / 2) % P2) + P2) % P2;
@@ -767,11 +779,12 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
   const quad = L.shape !== 'colossal' && S >= 4;
   const colossal = L.shape === 'colossal' || L.shape === 'warlord';
   const feet = titanFeet(L, phase, rest);
-  const hipY = (quad ? Math.min(L.hw, 0.42) * 0.6 : colossal ? 0.15 : 0.2) * S;
+  const kxx = L.X / S;
+  const hipY = (quad ? Math.min(L.hw, 0.42) * 0.6 : colossal ? 0.15 * L.Y / S : 0.2) * S;
   const lw = (quad ? 0.1 : colossal ? 0.13 : 0.14) * S;
   feet.forEach((f, i) => {
     const s = f.y < 0 ? -1 : 1;
-    const row = quad ? (i < 2 ? 0.28 : -0.28) * S : colossal ? -0.02 * S : 0;
+    const row = (quad ? (i < 2 ? 0.28 : -0.28) * S : colossal ? -0.02 * S : 0) * kxx;
     const kx = (row + f.x) * 0.5 + (quad ? 0 : 0.06 * S);
     const ky = s * (Math.abs(f.y) + (quad ? 0.09 : colossal ? 0.07 : 0.07) * S);
     // contact shadow of a planted foot
@@ -826,34 +839,45 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
   });
 }
 
-export function gravPods(S: number, hw: number, shape = ''): { x: number; y: number; r: number }[] {
-  if (shape === 'bomber') {
-    // wingtip nacelles + twin tail lifters
+export function gravPods(L: UnitLayout): { x: number; y: number; r: number }[] {
+  const S = L.S, X = L.X, Y = L.Y, hw = L.hw;
+  if (L.shape === 'bomber') {
+    // wingtip lifter nacelles + twin tail lifters + chin pair
     return [
-      { x: -0.13 * S, y: 0.5 * S, r: 0.09 * S }, { x: -0.13 * S, y: -0.5 * S, r: 0.09 * S },
-      { x: -0.44 * S, y: 0.2 * S, r: 0.075 * S }, { x: -0.44 * S, y: -0.2 * S, r: 0.075 * S },
-      { x: 0.3 * S, y: 0.16 * S, r: 0.065 * S }, { x: 0.3 * S, y: -0.16 * S, r: 0.065 * S },
+      { x: 0.02 * X, y: 0.47 * Y, r: 0.1 * S }, { x: 0.02 * X, y: -0.47 * Y, r: 0.1 * S },
+      { x: -0.42 * X, y: 0.2 * Y, r: 0.075 * S }, { x: -0.42 * X, y: -0.2 * Y, r: 0.075 * S },
+      { x: 0.34 * X, y: 0.12 * Y, r: 0.065 * S }, { x: 0.34 * X, y: -0.12 * Y, r: 0.065 * S },
+    ];
+  }
+  if (L.shape === 'carrier') {
+    // a row of lifters along the flying wing's trailing edge + two under the bow
+    const R = 0.08 * S;
+    return [
+      { x: 0.3 * X, y: 0.1 * Y, r: R * 0.8 }, { x: 0.3 * X, y: -0.1 * Y, r: R * 0.8 },
+      { x: -0.06 * X, y: 0.43 * Y, r: R }, { x: -0.06 * X, y: -0.43 * Y, r: R },
+      { x: -0.2 * X, y: 0.27 * Y, r: R }, { x: -0.2 * X, y: -0.27 * Y, r: R },
+      { x: -0.36 * X, y: 0.1 * Y, r: R * 0.9 }, { x: -0.36 * X, y: -0.1 * Y, r: R * 0.9 },
     ];
   }
   if (S >= 4) {
     // giant lifters: four big nacelles out on outriggers + two small ones mid-ship
-    const y = (Math.min(0.46, hw) + 0.1) * S, R = 0.085 * S;
+    const y = Math.min((Math.min(0.46, hw) + 0.1) * S, 0.5 * Y), R = 0.085 * S;
     return [
-      { x: 0.26 * S, y, r: R }, { x: 0.26 * S, y: -y, r: R }, { x: -0.3 * S, y, r: R }, { x: -0.3 * S, y: -y, r: R },
-      { x: -0.02 * S, y: y + 0.02 * S, r: R * 0.7 }, { x: -0.02 * S, y: -y - 0.02 * S, r: R * 0.7 },
+      { x: 0.26 * X, y, r: R }, { x: 0.26 * X, y: -y, r: R }, { x: -0.3 * X, y, r: R }, { x: -0.3 * X, y: -y, r: R },
+      { x: -0.02 * X, y: y + 0.02 * S, r: R * 0.7 }, { x: -0.02 * X, y: -y - 0.02 * S, r: R * 0.7 },
     ];
   }
-  const y = (Math.min(0.46, hw) + 0.07) * S;
+  const y = Math.min((Math.min(0.46, hw) + 0.07) * S, 0.5 * Y);
   return [
-    { x: 0.3 * S, y, r: 0.115 * S }, { x: 0.3 * S, y: -y, r: 0.115 * S },
-    { x: -0.3 * S, y, r: 0.115 * S }, { x: -0.3 * S, y: -y, r: 0.115 * S },
+    { x: 0.3 * X, y, r: 0.115 * S }, { x: 0.3 * X, y: -y, r: 0.115 * S },
+    { x: -0.3 * X, y, r: 0.115 * S }, { x: -0.3 * X, y: -y, r: 0.115 * S },
   ];
 }
 
 export function drawGravlift(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void {
   const S = L.S;
   const E = emis(pal);
-  const pods = gravPods(S, L.hw, L.shape);
+  const pods = gravPods(L);
   g.lineCap = 'round';
   g.strokeStyle = OUTLINE; g.lineWidth = 0.07 * S;
   g.beginPath();
@@ -897,7 +921,9 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
   const breathe = 0.5 + 0.5 * Math.sin(t * 2.2 + seed);
   if (GIANT_SHAPES.has(L.shape)) {
     // emissive trim with a travelling pulse
-    const st = giantStrips(L.shape);
+    const hs = fxHooks.strips?.(L) ?? null;
+    const st = hs ?? giantStrips(L.shape);
+    const sk = hs ? 1 : S;
     if (st.length) {
       const tr = g.getTransform();
       g.transform(cs * sc, sn * sc, -sn * sc, cs * sc, x, y);
@@ -906,14 +932,14 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       g.globalAlpha = alpha * (0.25 + 0.3 * breathe);
       g.lineWidth = Math.max(3 / px, 0.035 * S);
       g.beginPath();
-      for (let i = 0; i < st.length; i += 4) { g.moveTo(st[i] * S, st[i + 1] * S); g.lineTo(st[i + 2] * S, st[i + 3] * S); }
+      for (let i = 0; i < st.length; i += 4) { g.moveTo(st[i] * sk, st[i + 1] * sk); g.lineTo(st[i + 2] * sk, st[i + 3] * sk); }
       g.stroke();
       g.globalAlpha = alpha * (0.55 + 0.35 * breathe);
       g.lineWidth = Math.max(1.3 / px, 0.01 * S);
       g.stroke();
       const f = (t * 0.6 + seed * 0.1) % 1;
       for (let i = 0; i < st.length; i += 4) {
-        const qx = (st[i] + (st[i + 2] - st[i]) * f) * S, qy = (st[i + 1] + (st[i + 3] - st[i + 1]) * f) * S;
+        const qx = (st[i] + (st[i + 2] - st[i]) * f) * sk, qy = (st[i + 1] + (st[i + 3] - st[i + 1]) * f) * sk;
         const r = Math.max(4 / px, 0.05 * S);
         g.globalAlpha = alpha * 0.9;
         g.drawImage(glow, qx - r, qy - r, r * 2, r * 2);
@@ -921,7 +947,7 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       }
       g.setTransform(tr);
     }
-    for (const l of giantLights(L.shape, S)) {
+    for (const l of (fxHooks.lights?.(L) ?? giantLights(L.shape, S))) {
       const [wx, wy] = W(l.x, l.y);
       if (l.k === 'core') {
         // reactor heart: slow heavy throb visible from fit zoom
@@ -976,7 +1002,7 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
     }
     // smoke (normal blend) from stacks
     g.globalCompositeOperation = prev;
-    for (const l of giantLights(L.shape, S)) {
+    for (const l of (fxHooks.lights?.(L) ?? giantLights(L.shape, S))) {
       if (l.k !== 'stack') continue;
       const n = p.moving ? 4 : 3;
       for (let i = 0; i < n; i++) {
@@ -988,7 +1014,7 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       }
     }
     // radar dishes
-    for (const l of giantLights(L.shape, S)) {
+    for (const l of (fxHooks.lights?.(L) ?? giantLights(L.shape, S))) {
       if (l.k !== 'radar' || l.r <= 0) continue;
       const [wx, wy] = W(l.x, l.y);
       const a = ang + t * 1.6 + seed;
@@ -1013,7 +1039,7 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
   // running gear
   const id = L.mob.id;
   if (id === 'gravlift') {
-    for (const [i, pod] of gravPods(S, L.hw, L.shape).entries()) {
+    for (const [i, pod] of gravPods(L).entries()) {
       const [wx, wy] = W(pod.x, pod.y);
       const r = pod.r * sc;
       const pulse = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.3 + seed);
@@ -1039,8 +1065,9 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
     }
   } else if (id === 'megatracks' && p.moving) {
     g.globalCompositeOperation = prev;
-    const yc = (Math.min(0.47, L.hw) + 0.09) * S;
-    for (const s of [-1, 1]) for (const sx of [0.265, -0.265]) for (let i = 0; i < 4; i++) {
+    const mg = megaGeo(L), yc = mg.yc;
+    for (const s of [-1, 1]) for (const sxa of mg.xs) for (let i = 0; i < 4; i++) {
+      const sx = sxa / S;
       const age = (t * 1.6 + i / 4 + seed + sx * 3 + s) % 1;
       const [bx, by] = W((sx - 0.22) * S - age * 0.45 * S, s * (yc / S + (age - 0.3) * 0.12 * s) * S);
       const r = (0.05 + age * 0.14) * S * sc;

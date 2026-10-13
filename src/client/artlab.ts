@@ -331,7 +331,7 @@ function silSection(): void {
       if (!full) {
         g.setTransform(px, 0, 0, px, W / 2, W / 2);
         g.rotate(-Math.PI / 2);
-        g.fillStyle = '#000'; g.fill(hullPath(c.shape, c.size));
+        g.fillStyle = '#000'; g.fill(hullPath(c.shape, c.size, c.footprint?.[1] ?? c.size, c.footprint?.[0] ?? c.size));
       } else {
         const mob = MOBILITY.find((m) => !pairingError(c.id, m.id) && m.id !== 'anchor')?.id ?? 'anchor';
         const d: Design = { id: 'sil_' + c.id, name: c.id, chassis: c.id, mobility: mob, mounts: c.mounts.map(() => null) };

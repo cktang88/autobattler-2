@@ -11,6 +11,9 @@ import { METAL, OUTLINE, ctx2d, makeCanvas, rgba, roundRect, shade, type Ctx, ty
 
 export interface SuperIn {
   S: number;
+  /** footprint length / width (cells) */
+  X?: number;
+  Y?: number;
   shape: string;
   mob: string;
   air: boolean;
@@ -43,13 +46,13 @@ interface Geo {
 const geoCache = new Map<string, Geo>();
 let scratch: Ctx | null = null;
 
-function geometry(shape: string, S: number, hull: Path2D): Geo {
-  const key = shape + '|' + S;
+function geometry(shape: string, S: number, hull: Path2D, D = S): Geo {
+  const key = shape + '|' + S + '|' + D;
   const hit = geoCache.get(key);
   if (hit) return hit;
   scratch ??= ctx2d(makeCanvas(2, 2));
   const g = scratch;
-  const N = 72, E = 0.56 * S, st = (2 * E) / N;
+  const N = Math.round(72 * Math.max(1, D / S)), E = 0.56 * D, st = (2 * E) / N;
   const halfs: number[] = [], fr: number[] = [], rr: number[] = [];
   for (let i = 0; i <= N; i++) {
     const x = -E + i * st;
@@ -277,7 +280,7 @@ export function drawTurretSeats(g: Ctx, I: SuperIn): void {
     if (!m.turret || I.riding.has(i) || Math.abs(m.y) > 0.08 * S) continue;
     if (main < 0 || m.d > mounts[main].d) main = i;
   }
-  const geo = geometry(I.shape, S, I.hull);
+  const geo = geometry(I.shape, S, I.hull, Math.max(S, I.X ?? S, I.Y ?? S));
   for (let i = 0; i < mounts.length; i++) {
     const m = mounts[i];
     if (!m.turret || I.riding.has(i)) continue;
@@ -337,7 +340,7 @@ export function drawTurretSeats(g: Ctx, I: SuperIn): void {
 export function drawSuperstructure(g: Ctx, I: SuperIn): void {
   const { S, P, pal, o, E, mounts } = I;
   if (S < 2) return;
-  const geo = geometry(I.shape, S, I.hull);
+  const geo = geometry(I.shape, S, I.hull, Math.max(S, I.X ?? S, I.Y ?? S));
   const sp = new Space(I.hull);
   const air = I.air || AIR.has(I.shape);
   const walker = WALKER.has(I.shape) || I.mob === 'titanlegs';
@@ -387,8 +390,8 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
       // seam between the fighting compartment and the engine bay
       g.save(); g.clip(I.hull);
       g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = o * 0.6;
-      g.beginPath(); g.moveTo(x0 + dd * 0.08, -S); g.lineTo(x0 + dd * 0.08, S); g.stroke();
-      g.strokeStyle = 'rgba(255,255,255,0.12)'; g.beginPath(); g.moveTo(x0 + dd * 0.08 + o * 0.7, -S); g.lineTo(x0 + dd * 0.08 + o * 0.7, S); g.stroke();
+      g.beginPath(); g.moveTo(x0 + dd * 0.08, -2 * S); g.lineTo(x0 + dd * 0.08, 2 * S); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.12)'; g.beginPath(); g.moveTo(x0 + dd * 0.08 + o * 0.7, -2 * S); g.lineTo(x0 + dd * 0.08 + o * 0.7, 2 * S); g.stroke();
       g.restore();
     }
   }
@@ -398,9 +401,9 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
     const gx = front0 - Math.min(len * 0.14, 0.2 * S);
     g.save(); g.clip(I.hull);
     g.fillStyle = lgrad(g, front0, 0, gx, 0, 'rgba(255,255,255,0.16)', 'rgba(255,255,255,0.02)');
-    g.fillRect(gx, -S, S, 2 * S);
+    g.fillRect(gx, -2 * S, 2 * S, 4 * S);
     g.strokeStyle = 'rgba(0,0,0,0.42)'; g.lineWidth = o * 0.6;
-    g.beginPath(); g.moveTo(gx, -S); g.lineTo(gx, S); g.stroke();
+    g.beginPath(); g.moveTo(gx, -2 * S); g.lineTo(gx, 2 * S); g.stroke();
     g.restore();
   }
 
@@ -514,7 +517,7 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
   }
 
   // ---- track guards / mudguards where the running gear shows past the hull
-  if (ground && (tracked || wheeled) && S < 4 && armourTier(P) === 0) {
+  if (ground && (tracked || wheeled) && S < 4 && armourTier(P) === 0 && (I.X ?? S) === S && (I.Y ?? S) === S) {
     const tc = Math.max(0.3, Math.min(0.38, geo.maxHalf / S + 0.06)) * S;
     const tw = I.mob === 'wheels' ? 0.13 * S : 0.19 * S;
     for (const s of [-1, 1]) for (const [xa, xb] of [[0.31, 0.47], [-0.47, -0.36]] as [number, number][]) {

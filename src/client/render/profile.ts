@@ -94,7 +94,7 @@ function frontX(hull: Path2D, S: number): number {
   if (hit !== undefined) return hit;
   scratchG ??= ctx2d(makeCanvas(2, 2));
   let f = 0.45 * S;
-  for (let x = 0.56 * S; x > 0; x -= 0.005 * S) if (scratchG.isPointInPath(hull, x, 0)) { f = x; break; }
+  for (let x = 0.56 * S; x > 0; x -= 0.0025 * S) if (scratchG.isPointInPath(hull, x, 0)) { f = x; break; }
   frontCache.set(hull, f);
   return f;
 }
@@ -169,8 +169,10 @@ function insignia(g: Ctx, role: RoleStyle, x: number, y: number, u: number, seri
  * Whole-body build art over the painted hull (clipped to the hull path where it is a surface treatment).
  * creature = odd-shaped frame (fewer generic add-ons: its own anatomy carries the look).
  */
-export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw: number, pal: TeamPal, o: number, E: string, opts: { creature: boolean; air: boolean; legged: boolean; rearX: number }): void {
+export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw: number, pal: TeamPal, o: number, E: string, opts: { creature: boolean; air: boolean; legged: boolean; rearX: number; X?: number; Y?: number }): void {
   const H = hw * S;
+  // footprint: positions along the hull scale with its length X, fills cover the whole footprint
+  const X = opts.X ?? S, D = Math.max(X, opts.Y ?? S, S);
   const rx = opts.rearX * S;
   // ---- skeletal: open frame, lightening holes + truss bracing on the flanks
   if (P.skeletal) {
@@ -178,14 +180,14 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
     for (const s of [-1, 1]) {
       const y = s * H * 0.55, n = 4;
       for (let i = 0; i < n; i++) {
-        const x0 = (-0.3 + i * 0.15) * S, x1 = x0 + 0.13 * S, up = i % 2 === 0;
+        const x0 = (-0.3 + i * 0.15) * X, x1 = x0 + 0.13 * X, up = i % 2 === 0;
         const tri = new Path2D();
         tri.moveTo(x0, y + (up ? 1 : -1) * H * 0.18); tri.lineTo(x1, y + (up ? 1 : -1) * H * 0.18); tri.lineTo((x0 + x1) / 2, y - (up ? 1 : -1) * H * 0.18); tri.closePath();
         g.fillStyle = 'rgba(4,6,8,0.85)'; g.fill(tri);
         g.strokeStyle = 'rgba(255,255,255,0.14)'; g.lineWidth = o * 0.5; g.stroke(tri);
       }
       g.strokeStyle = METAL.light; g.lineWidth = o * 0.7;
-      g.beginPath(); g.moveTo(-0.32 * S, y - s * H * 0.2); g.lineTo(0.3 * S, y - s * H * 0.2); g.moveTo(-0.32 * S, y + s * H * 0.2); g.lineTo(0.3 * S, y + s * H * 0.2); g.stroke();
+      g.beginPath(); g.moveTo(-0.32 * X, y - s * H * 0.2); g.lineTo(0.3 * X, y - s * H * 0.2); g.moveTo(-0.32 * X, y + s * H * 0.2); g.lineTo(0.3 * X, y + s * H * 0.2); g.stroke();
     }
     g.restore();
   }
@@ -203,15 +205,15 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
     g.strokeStyle = bg; g.lineWidth = th * 2; g.stroke(hull);
     if (!opts.creature && !opts.air) {
       // glacis: the sloped front plate catches the light; heavier armour = deeper glacis + bolted spaced plate
-      const fx = frontX(hull, S);
+      const fx = frontX(hull, D);
       const gd = (0.08 + 0.035 * tier) * S;
       const gl = g.createLinearGradient(fx, 0, fx - gd, 0);
       gl.addColorStop(0, shade(pal.light, 0.05)); gl.addColorStop(1, shade(pal.body, -0.02));
-      g.fillStyle = gl; g.fillRect(fx - gd, -S, S, 2 * S);
+      g.fillStyle = gl; g.fillRect(fx - gd, -D, D, 2 * D);
       g.strokeStyle = OUTLINE; g.lineWidth = o * 0.9;
-      g.beginPath(); g.moveTo(fx - gd, -S); g.lineTo(fx - gd, S); g.stroke();
+      g.beginPath(); g.moveTo(fx - gd, -D); g.lineTo(fx - gd, D); g.stroke();
       g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = o * 0.6;
-      g.beginPath(); g.moveTo(fx - gd + o, -S); g.lineTo(fx - gd + o, S); g.stroke();
+      g.beginPath(); g.moveTo(fx - gd + o, -D); g.lineTo(fx - gd + o, D); g.stroke();
       if (tier >= 2) {
         // spaced add-on plate across the glacis, standing off on bolted brackets
         const px0 = fx - gd * 0.82, pw = gd * 0.5;
@@ -226,7 +228,7 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
         // cast-steel hull: mottled surface + weld seams
         let seed = P.serial * 13 + 5;
         const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-        for (let i = 0; i < 70 * S; i++) dot(g, (rnd() - 0.5) * S, (rnd() - 0.5) * 2 * H, (0.004 + rnd() * 0.01) * S, rnd() < 0.5 ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.06)');
+        for (let i = 0; i < 70 * S * X / S; i++) dot(g, (rnd() - 0.5) * X, (rnd() - 0.5) * 2 * H, (0.004 + rnd() * 0.01) * S, rnd() < 0.5 ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.06)');
       }
     }
     g.restore();
@@ -235,20 +237,20 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
   // ---- coatings
   if (P.stealth) {
     g.save(); g.clip(hull);
-    g.fillStyle = 'rgba(10,12,16,0.62)'; g.fillRect(-S, -S, 2 * S, 2 * S);
+    g.fillStyle = 'rgba(10,12,16,0.62)'; g.fillRect(-D, -D, 2 * D, 2 * D);
     g.strokeStyle = 'rgba(150,165,185,0.22)'; g.lineWidth = o * 0.6;
     g.beginPath();
-    g.moveTo(0.5 * S, 0); g.lineTo(0.05 * S, -H); g.moveTo(0.5 * S, 0); g.lineTo(0.05 * S, H);
-    g.moveTo(0.05 * S, -H); g.lineTo(-0.2 * S, 0); g.lineTo(0.05 * S, H);
-    g.moveTo(-0.2 * S, 0); g.lineTo(-0.5 * S, -H); g.moveTo(-0.2 * S, 0); g.lineTo(-0.5 * S, H);
+    g.moveTo(0.5 * X, 0); g.lineTo(0.05 * X, -H); g.moveTo(0.5 * X, 0); g.lineTo(0.05 * X, H);
+    g.moveTo(0.05 * X, -H); g.lineTo(-0.2 * X, 0); g.lineTo(0.05 * X, H);
+    g.moveTo(-0.2 * X, 0); g.lineTo(-0.5 * X, -H); g.moveTo(-0.2 * X, 0); g.lineTo(-0.5 * X, H);
     g.stroke();
     g.restore();
   }
   if (P.mirror) {
     g.save(); g.clip(hull);
-    const mg = g.createLinearGradient(-0.5 * S, -0.5 * S, 0.5 * S, 0.5 * S);
+    const mg = g.createLinearGradient(-0.5 * D, -0.5 * D, 0.5 * D, 0.5 * D);
     for (const [f, a] of [[0, 0], [0.22, 0.5], [0.3, 0.05], [0.48, 0], [0.56, 0.35], [0.62, 0], [1, 0.1]] as [number, number][]) mg.addColorStop(f, `rgba(240,248,255,${a})`);
-    g.fillStyle = mg; g.fillRect(-S, -S, 2 * S, 2 * S);
+    g.fillStyle = mg; g.fillRect(-D, -D, 2 * D, 2 * D);
     g.restore();
   }
   if (P.hardened) {
@@ -269,7 +271,7 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
     g.save(); g.clip(hull);
     let seed = P.serial * 7 + 3;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 26 * S; i++) dot(g, (rnd() - 0.5) * S, (rnd() - 0.5) * 2 * H, (0.004 + rnd() * 0.006) * S, rnd() < 0.5 ? 'rgba(140,255,190,0.85)' : 'rgba(230,255,240,0.7)');
+    for (let i = 0; i < 26 * X; i++) dot(g, (rnd() - 0.5) * X, (rnd() - 0.5) * 2 * H, (0.004 + rnd() * 0.006) * S, rnd() < 0.5 ? 'rgba(140,255,190,0.85)' : 'rgba(230,255,240,0.7)');
     g.restore();
   }
   // ---- role furniture
@@ -277,13 +279,13 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
     if (P.role === 'raider') {
       g.strokeStyle = rgba(pal.accent, 0.8); g.lineWidth = o * 0.9; g.lineCap = 'butt';
       g.save(); g.clip(hull);
-      g.beginPath(); for (const s of [-1, 1]) { g.moveTo(0.4 * S, s * H * 0.42); g.lineTo(-0.45 * S, s * H * 0.42); } g.stroke();
+      g.beginPath(); for (const s of [-1, 1]) { g.moveTo(0.4 * X, s * H * 0.42); g.lineTo(-0.45 * X, s * H * 0.42); } g.stroke();
       g.restore();
     }
     if (P.role === 'riot') {
       g.save(); g.clip(hull);
-      g.fillStyle = METAL.dark; g.fillRect(0.38 * S, -S, S, 2 * S);
-      hazardBox(g, 0.4 * S, -H, 0.035 * S, 2 * H, o);
+      g.fillStyle = METAL.dark; g.fillRect(frontX(hull, D) - 0.12 * S, -D, D, 2 * D);
+      hazardBox(g, frontX(hull, D) - 0.1 * S, -H, 0.035 * S, 2 * H, o);
       g.restore();
     }
     if (P.role === 'artillery') {
@@ -331,7 +333,7 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
   }
   if (P.overclock) {
     for (const s of [-1, 1]) {
-      const x = -0.2 * S, y = s * H * 0.62, w = 0.14 * S, h = 0.035 * S;
+      const x = -0.2 * X, y = s * H * 0.62, w = 0.14 * S, h = 0.035 * S;
       g.fillStyle = '#07080a'; g.fillRect(x, y - h / 2, w, h);
       for (let i = 0; i < 4; i++) { g.fillStyle = `rgba(255,${120 + i * 20},40,0.85)`; g.fillRect(x + w * (0.08 + i * 0.23), y - h * 0.32, w * 0.12, h * 0.64); }
       g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.strokeRect(x, y - h / 2, w, h);
@@ -340,7 +342,7 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
   if (P.emitter) {
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-      const x = Math.cos(a) * 0.36 * S * 0.9, y = Math.sin(a) * H * 0.9;
+      const x = Math.cos(a) * 0.36 * X * 0.9, y = Math.sin(a) * H * 0.9;
       dot(g, x, y, 0.024 * S, OUTLINE); dot(g, x, y, 0.018 * S, METAL.base); dot(g, x, y, 0.01 * S, '#7fd8ff');
     }
   }
@@ -349,9 +351,9 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
 }
 
 /** Artillery outrigger stabilisers (drawn under the hull). */
-export function drawOutriggers(g: Ctx, S: number, hw: number, o: number): void {
+export function drawOutriggers(g: Ctx, S: number, hw: number, o: number, X = S): void {
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
-    const ax = sx * 0.22 * S, ay = sy * hw * 0.8 * S, fx = sx * 0.34 * S, fy = sy * (hw + 0.17) * S;
+    const ax = sx * 0.22 * X, ay = sy * hw * 0.8 * S, fx = sx * 0.34 * X, fy = sy * (hw + 0.17) * S;
     g.lineCap = 'round';
     g.strokeStyle = OUTLINE; g.lineWidth = 0.07 * S; g.beginPath(); g.moveTo(ax, ay); g.lineTo(fx, fy); g.stroke();
     g.strokeStyle = METAL.base; g.lineWidth = 0.045 * S; g.stroke();
