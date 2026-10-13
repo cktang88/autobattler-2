@@ -6,6 +6,7 @@
 
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
+import { hullPath, silhouette, unitSprites } from './render/unitart.ts';
 import { aiDeck } from '../shared/ai.ts';
 import { DEPLOY_D, DEPLOY_W, blockDims, blockInZone, blocksOverlap, hasSpacing, placementUnitCenters } from '../shared/grid.ts';
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from '../shared/parts.ts';
@@ -305,6 +306,46 @@ function fieldSection(): void {
   requestAnimationFrame(frame);
 }
 
+/** ?only=sil: every chassis as a solid black silhouette on white (hull outline, then hull + running gear), so each
+ *  frame's shape can be judged on its own. */
+function silSection(): void {
+  const sec = el('section');
+  sec.append(el('h2', '', 'Chassis silhouettes'));
+  const host = el('div');
+  host.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;background:#fff;padding:10px;color:#222';
+  sec.append(host);
+  document.body.append(sec);
+  for (const c of CHASSIS) {
+    for (const full of [false, true]) {
+      const box = el('div');
+      box.style.cssText = 'display:flex;flex-direction:column;align-items:center;font:11px sans-serif;width:118px';
+      const cv = el('canvas');
+      const W = 112;
+      cv.width = cv.height = W;
+      box.append(cv, el('div', '', c.id + (full ? ' +gear' : '')));
+      host.append(box);
+      const g = cv.getContext('2d')!;
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, W);
+      const ext = c.size * (full ? 1.5 : 1.05);
+      const px = W / ext;
+      if (!full) {
+        g.setTransform(px, 0, 0, px, W / 2, W / 2);
+        g.rotate(-Math.PI / 2);
+        g.fillStyle = '#000'; g.fill(hullPath(c.shape, c.size));
+      } else {
+        const mob = MOBILITY.find((m) => !pairingError(c.id, m.id) && m.id !== 'anchor')?.id ?? 'anchor';
+        const d: Design = { id: 'sil_' + c.id, name: c.id, chassis: c.id, mobility: mob, mounts: c.mounts.map(() => null) };
+        const s = unitSprites(d, 0, 13);
+        const sil = silhouette(s, '#000');
+        g.setTransform(1, 0, 0, 1, W / 2, W / 2);
+        g.rotate(-Math.PI / 2);
+        const e = s.ext * px;
+        g.drawImage(sil, -e, -e, e * 2, e * 2);
+      }
+    }
+  }
+}
+
 function animate(): void {
   let t0 = performance.now();
   const loop = (now: number) => {
@@ -329,6 +370,7 @@ function main(): void {
   if (show('modules')) modulesSection();
   if (show('icons')) iconsSection();
   if (show('small')) smallSection();
+  if (only === 'sil') silSection();
   animate();
   addEventListener('pointerdown', () => unlockAudio(), { once: true });
 }

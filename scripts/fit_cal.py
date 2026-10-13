@@ -33,6 +33,9 @@ fixed = set(sys.argv[3].split(',')) if len(sys.argv) > 3 and sys.argv[3] else se
 fit_size = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
 # mixed AA/ground starters whose result mostly reflects the rock-paper-scissors of the field, not module value
 IGNORE = {'starter-skyguard'}
+BASE = json.load(open(os.environ.get('FIT_BASE', f'{FIT}/base_chassis.json')))  # untouched hull numbers
+CHASSIS_MIN = 0.35
+ONLY_CHASSIS = os.environ.get('FIT_ONLY_CHASSIS') == '1'  # frames-only run (filter f-): fit hulls + drives only
 ETA = {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}
 STEP_S = float(os.environ.get('FIT_STEP_S', '0.12'))
 
@@ -43,9 +46,11 @@ def lg(r):
 
 
 for it in range(iters):
-    env = dict(os.environ, BAL_CAL=json.dumps(cal), BAL_SIZEK=json.dumps(sizek), BAL_MOBCAL=json.dumps(mobcal), BAL_CHASSIS=json.dumps(chk), BAL_OUT=f'{FIT}/r.json')
-    subprocess.run(['node', 'scripts/balance.ts', 'army', seeds], cwd=REPO, env=env, stdout=open(f'{FIT}/b.txt', 'w'), check=True)
+    env = dict(os.environ, BAL_CAL=json.dumps(cal), BAL_SIZEK=json.dumps(sizek), BAL_MOBCAL=json.dumps(mobcal), BAL_CHASSIS=json.dumps({c: {'hp': v['hp'], 'cost': v['cost']} for c, v in chk.items()}), BAL_OUT=f'{FIT}/r.json')
+    subprocess.run(['node', 'scripts/balance.ts', 'army', seeds] + (['f-'] if ONLY_CHASSIS else []), cwd=REPO, env=env, stdout=open(f'{FIT}/b.txt', 'w'), check=True)
     rows = json.load(open(f'{FIT}/r.json'))
+    if ONLY_CHASSIS:
+        rows = [r for r in rows if r['id'].startswith('f-')]
     baserate = {r['carrier']: r['rate'] for r in rows if r['base']}
     cen = sum(lg(r['rate']) for r in rows) / len(rows)
     acc = collections.defaultdict(lambda: [0.0, 0.0])
@@ -72,7 +77,7 @@ for it in range(iters):
             sacc[r['size']][0] += l * (3.0 if starter else 1.0)
             sacc[r['size']][1] += (3.0 if starter else 1.0)
     for k, (s, w) in acc.items():
-        if k in fixed or w == 0:
+        if k in fixed or w == 0 or ONLY_CHASSIS:
             continue
         t = 'u' if MODS.get(k) == 'util' else 'w'
         step = max(-0.15, min(0.15, ETA[t] * s / (w + 0.5)))
@@ -81,7 +86,7 @@ for it in range(iters):
         if t == 'u':
             v = min(4.0, max(0.25, v))
         cal[k] = v
-    if fit_size:
+    if fit_size and not ONLY_CHASSIS:
         for z in (1, 3, 4, 5):
             s, w = sacc[z]
             if w == 0:
@@ -107,10 +112,15 @@ for it in range(iters):
             continue
         step = max(-0.1, min(0.1, ETA['m'] * s / (w + 1.0)))
         mobcal[k] = max(0.4, min(2.5, mobcal.get(k, 1.0) * math.exp(step)))
-    # hull hp scale (FIT_CHASSIS=1): plain-frame mean logit of each chassis relative to the mean of its size class.
-    # Price follows sqrt(hp) while strength follows hp, so net strength-per-supply moves as sqrt(q).
+    # hull price pressure (FIT_CHASSIS=1): plain-frame mean logit of each chassis relative to the mean of its size
+    # class -> ln-price pressure p (too strong -> dearer). Realised through the hull's `cost` (a flat parts term worth
+    # 0.3x in the unit price); when a discount would push cost under CHASSIS_MIN the rest comes from extra hull hp
+    # (a weak lever: strength per supply only moves ~q^0.3).  chk[c] = {'p': pressure, 'hp': hp, 'cost': cost}
     if os.environ.get('FIT_CHASSIS') == '1':
         bysize = collections.defaultdict(list)
+        price = collections.defaultdict(list)
+        for r in fr:
+            price[r['chassis']].append(r['unitCost'])
         for c, ls in chl.items():
             sz = next(r['size'] for r in fr if r['chassis'] == c)
             bysize[sz].append(sum(ls) / len(ls))
@@ -118,15 +128,32 @@ for it in range(iters):
             sz = next(r['size'] for r in fr if r['chassis'] == c)
             res = sum(ls) / len(ls) - sum(bysize[sz]) / len(bysize[sz])
             res *= len(ls) / (len(ls) + 1.0)
-            if abs(res) < 0.12:
+            st = chk.setdefault(c, {'p': 0.0, 'hp': BASE[c]['hp'], 'cost': BASE[c]['cost']})
+            if abs(res) < 0.1:
                 continue
-            step = max(-0.15, min(0.15, -0.45 * res))
-            chk[c] = max(0.5, min(2.0, chk.get(c, 1.0) * math.exp(step)))
+            st['p'] = max(-0.9, min(0.9, st['p'] + max(-0.08, min(0.08, 0.22 * res))))
+            P = sum(price[c]) / len(price[c]) / math.exp(0.0)  # current mean unit price (already includes the current p)
+            P0 = P  # price at the current realisation; Delta is relative to the base realisation below
+            # price at base (p=0) is P / (1 + dprice/P0): recover it from the current cost delta
+            dcost = st['cost'] - BASE[c]['cost']
+            hpq = st['hp'] / BASE[c]['hp']
+            Pbase = P0 - dcost * 0.3 * sizek[BASE[c]['size'] - 1]  # approx: ignores the (weak) hp contribution
+            Pbase = max(Pbase, 0.4 * P0)
+            want = Pbase * math.exp(st['p']) - Pbase  # desired absolute price delta
+            dc = want / (0.3 * sizek[BASE[c]['size'] - 1])
+            cost = BASE[c]['cost'] + dc
+            hp = BASE[c]['hp']
+            if cost < CHASSIS_MIN * BASE[c]['cost']:
+                short = (CHASSIS_MIN * BASE[c]['cost'] - cost) * 0.3 * sizek[BASE[c]['size'] - 1]
+                cost = CHASSIS_MIN * BASE[c]['cost']
+                hp = BASE[c]['hp'] * min(1.8, math.exp(-math.log(max(0.3, 1 - short / Pbase)) / 0.15 * 0.5))
+            st['cost'] = round(cost)
+            st['hp'] = round(hp)
     mm = collections.defaultdict(list)
     for r in rows:
         if r['module'] and not r['base']:
             mm[r['module']].append(r['rate'])
-    mr = math.sqrt(sum((sum(v) / len(v) - 0.5) ** 2 for v in mm.values()) / len(mm))
+    mr = math.sqrt(sum((sum(v) / len(v) - 0.5) ** 2 for v in mm.values()) / max(1, len(mm)))
     inb = sum(1 for v in mm.values() if 0.35 <= sum(v) / len(v) <= 0.65)
     print(it, 'modrms', round(mr * 100, 1), 'inband', f'{inb}/{len(mm)}', 'sizek', [round(x, 3) for x in sizek], flush=True)
     json.dump(cal, open(calf, 'w'))

@@ -5,7 +5,7 @@
 // artillery shell racks, support crosses and masts, tank appliqué slabs). Everything is baked into the cached hull
 // sprite. Local frame: nose +x, +y right, units = cells.
 
-import type { BuildProfile } from './profile.ts';
+import { armourTier, type BuildProfile } from './profile.ts';
 import type { MountSlot } from './unitart.ts';
 import { METAL, OUTLINE, ctx2d, makeCanvas, rgba, roundRect, shade, type Ctx, type TeamPal } from './palette.ts';
 
@@ -446,7 +446,13 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
     const x0 = front0 - len * 0.2, x1 = rear0 + len * 0.28;
     const maxN = S >= 4 ? 4 : S >= 3 ? 3 : 2;
     let n = 0;
-    for (let x = x0; x > x1 && n < maxN; x -= bw * 0.25) {
+    // candidate stations spread over the flank, filled from the middle outward
+    const cands: number[] = [];
+    for (let x = x1 + bw / 2; x < x0 - bw / 2; x += bw * 0.3) cands.push(x);
+    const xm0 = (x0 + x1) / 2;
+    cands.sort((a, b) => Math.abs(a - xm0) - Math.abs(b - xm0));
+    for (const x of cands) {
+      if (n >= maxN) break;
       const h = Math.min(geo.half(x - bw / 2), geo.half(x + bw / 2));
       const y = h - bh * 0.5 - u * 0.22;
       if (y < 0.12 * S) continue;
@@ -468,7 +474,6 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
         sp.take(x, yy, bw, bh, u * 0.12);
       }
       n++;
-      x -= bw;
     }
   }
 
@@ -509,7 +514,7 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
   }
 
   // ---- track guards / mudguards where the running gear shows past the hull
-  if (ground && (tracked || wheeled) && S < 4) {
+  if (ground && (tracked || wheeled) && S < 4 && armourTier(P) === 0) {
     const tc = Math.max(0.3, Math.min(0.38, geo.maxHalf / S + 0.06)) * S;
     const tw = I.mob === 'wheels' ? 0.13 * S : 0.19 * S;
     for (const s of [-1, 1]) for (const [xa, xb] of [[0.31, 0.47], [-0.47, -0.36]] as [number, number][]) {
@@ -527,13 +532,13 @@ export function drawSuperstructure(g: Ctx, I: SuperIn): void {
   // ---- antennas: whip antennas off the rear corners (support: tall masts with a relay dish)
   if (fine) {
     const n = P.role === 'support' ? 2 : P.role === 'artillery' || P.role === 'tank' || P.role === 'giant' ? 2 : 1;
-    const L0 = (P.role === 'support' ? 0.55 : 0.36) * Math.sqrt(S);
+    const L0 = (P.role === 'support' ? 0.42 : 0.26) * Math.sqrt(S);
     let k = 0;
     for (const s of n === 1 ? [-1] : [-1, 1]) {
       for (let x = rear0 + len * 0.3; x < front0 - len * 0.3; x += u * 0.3) {
         const y = s * (geo.half(x) - u * 0.4);
         if (!sp.fits(x, y, u * 0.35, u * 0.35, 0)) continue;
-        antenna(g, x, y, L0, Math.PI + s * 0.35, o, P.role === 'support' ? '#5aff9a' : '#ff5050');
+        antenna(g, x, y, L0, Math.PI + s * 0.18, o, P.role === 'support' ? '#5aff9a' : '#ff5050');
         sp.take(x, y, u * 0.35, u * 0.35);
         k++;
         break;

@@ -291,21 +291,35 @@ function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
 export function creatureHullPath(shape: string, S: number): Path2D | null {
   switch (shape) {
     case 'mantis': return profilePath([0.48, 0, 0.46, 0.05, 0.4, 0.09, 0.33, 0.08, 0.28, 0.04, 0.2, 0.05, 0.08, 0.06, -0.02, 0.06, -0.1, 0.11, -0.26, 0.13, -0.4, 0.1, -0.47, 0], S);
-    case 'mech': return sharp([0.24, 0, 0.235, -0.09, 0.19, -0.19, 0.1, -0.27, -0.1, -0.28, -0.2, -0.22, -0.26, -0.12, -0.27, 0], S);
+    case 'mech': return sharp([0.28, 0, 0.27, -0.05, 0.23, -0.08, 0.2, -0.18, 0.13, -0.24, 0.12, -0.32, 0.02, -0.34, -0.08, -0.33, -0.1, -0.28, -0.2, -0.22, -0.24, -0.14, -0.33, -0.12, -0.36, -0.05, -0.32, 0], S);
     case 'arachnid': return profilePath([0.45, 0, 0.43, 0.06, 0.36, 0.12, 0.25, 0.14, 0.15, 0.11, 0.08, 0.06, 0.02, 0.1, -0.08, 0.2, -0.22, 0.245, -0.36, 0.22, -0.45, 0.13, -0.48, 0], S);
-    case 'crab': return sharp([0.27, 0, 0.27, -0.16, 0.24, -0.3, 0.16, -0.38, -0.16, -0.4, -0.25, -0.34, -0.3, -0.22, -0.3, 0], S);
-    case 'saucer': { const p = new Path2D(); p.arc(0, 0, 0.44 * S, 0, P2); return p; }
+    // spiked carapace: sawtooth shell rim
+    case 'crab': return sharp([0.3, 0, 0.29, -0.08, 0.27, -0.16, 0.3, -0.22, 0.24, -0.3, 0.2, -0.38, 0.14, -0.39, 0.1, -0.44, 0.04, -0.4, -0.04, -0.45, -0.1, -0.4, -0.18, -0.43, -0.22, -0.36, -0.28, -0.34, -0.3, -0.26, -0.36, -0.2, -0.32, -0.12, -0.36, -0.05, -0.33, 0], S);
+    case 'saucer': {
+      // manta disc: bridge prow, twin side nacelles and a split tail jutting out past the turret ring
+      const p = new Path2D();
+      const bump = (a: number, c: number, wdt: number, h: number) => { let d = Math.abs(a - c); d = Math.min(d, P2 - d); return d < wdt ? h * (1 - Math.pow(d / wdt, 4)) : 0; };
+      for (let i = 0; i < 128; i++) {
+        const a = (i / 128) * P2;
+        const r = 0.44 + bump(a, 0, 0.2, 0.12) + bump(a, 1.75, 0.2, 0.08) + bump(a, P2 - 1.75, 0.2, 0.08) + bump(a, 2.85, 0.13, 0.09) + bump(a, P2 - 2.85, 0.13, 0.09);
+        i ? p.lineTo(Math.cos(a) * r * S, Math.sin(a) * r * S) : p.moveTo(Math.cos(a) * r * S, Math.sin(a) * r * S);
+      }
+      p.closePath();
+      return p;
+    }
     case 'delta': { const p = new Path2D(); poly(p, mirrorPoly([0.5, 0, 0.3, -0.075, -0.27, -0.46, -0.39, -0.46, -0.34, -0.31, -0.45, -0.22, -0.47, -0.1, -0.41, 0]), S); return p; }
-    case 'warlord': return sharp([0.25, 0, 0.245, -0.1, 0.2, -0.2, 0.1, -0.27, -0.11, -0.27, -0.22, -0.21, -0.28, -0.12, -0.29, 0], S);
-    case 'scorpion': return sharp([0.39, 0, 0.38, -0.08, 0.32, -0.16, 0.24, -0.2, 0.22, -0.23, -0.24, -0.23, -0.3, -0.17, -0.36, -0.1, -0.36, 0], S);
+    case 'warlord': return sharp([0.3, 0, 0.29, -0.05, 0.25, -0.08, 0.22, -0.18, 0.14, -0.26, 0.1, -0.27, -0.11, -0.27, -0.2, -0.22, -0.24, -0.17, -0.34, -0.19, -0.41, -0.1, -0.39, 0], S);
+    case 'scorpion': return sharp([0.4, 0, 0.38, -0.08, 0.32, -0.16, 0.24, -0.2, 0.22, -0.26, 0.15, -0.23, 0.09, -0.28, 0.02, -0.235, -0.05, -0.285, -0.12, -0.235, -0.19, -0.28, -0.25, -0.21, -0.31, -0.17, -0.37, -0.1, -0.36, 0], S);
     case 'centipede': return sharp([0.5, 0, 0.49, -0.05, 0.45, -0.11, 0.38, -0.13, 0.32, -0.11, 0.29, 0], S);
     case 'broodmother': return sharp([0.47, 0, 0.46, -0.07, 0.4, -0.14, 0.29, -0.17, 0.19, -0.15, 0.13, -0.09, 0.08, -0.12, 0.0, -0.25, -0.12, -0.34, -0.33, -0.36, -0.44, -0.28, -0.5, -0.14, -0.5, 0], S);
     case 'carriage': return profilePath([0.25, 0, 0.245, 0.1, 0.21, 0.22, 0.15, 0.265, 0.09, 0.22, 0.07, 0.12, -0.08, 0.1, -0.15, 0.05, -0.16, 0], S);
     case 'hunter': return sharp([0.5, 0, 0.3, -0.065, 0.12, -0.11, 0.04, -0.27, -0.06, -0.31, -0.11, -0.15, -0.3, -0.14, -0.38, -0.25, -0.47, -0.25, -0.44, -0.08, -0.47, 0], S);
-    case 'riot': return sharp([0.42, 0, 0.3, -0.2, 0.18, -0.42, 0.06, -0.43, 0.02, -0.3, -0.36, -0.3, -0.44, -0.21, -0.45, 0], S);
+    // riot plough: toothed sloped front, cut-in flanks, rear engine block
+    case 'riot': return sharp([0.45, 0, 0.42, -0.088, 0.36, -0.12, 0.36, -0.188, 0.3, -0.22, 0.3, -0.288, 0.24, -0.32, 0.24, -0.388, 0.18, -0.42, 0.06, -0.43, 0.02, -0.3, -0.12, -0.3, -0.15, -0.345, -0.3, -0.345, -0.34, -0.3, -0.44, -0.21, -0.46, -0.08, -0.43, 0], S);
     case 'interceptor': return sharp([0.5, 0, 0.32, -0.05, 0.06, -0.08, -0.2, -0.43, -0.31, -0.43, -0.2, -0.1, -0.34, -0.1, -0.42, -0.22, -0.48, -0.22, -0.45, 0], S);
-    case 'siegeplat': return sharp([0.38, -0.1, 0.32, -0.27, 0.2, -0.33, -0.28, -0.33, -0.38, -0.25, -0.4, -0.1], S);
-    case 'juggernaut': return sharp([0.47, -0.17, 0.44, -0.3, 0.38, -0.43, -0.38, -0.45, -0.46, -0.38, -0.48, -0.16], S);
+    case 'siegeplat': return sharp([0.46, -0.04, 0.44, -0.12, 0.34, -0.17, 0.34, -0.28, 0.22, -0.35, -0.2, -0.35, -0.24, -0.31, -0.3, -0.31, -0.35, -0.38, -0.45, -0.35, -0.43, -0.2, -0.47, -0.1, -0.44, -0.04], S);
+    // wall of armour: a swept dozer-blade front wider than the tracks, notched casemate flanks, rear engine block
+    case 'juggernaut': return sharp([0.58, 0, 0.52, -0.1, 0.47, -0.3, 0.47, -0.52, 0.35, -0.52, 0.31, -0.44, 0.22, -0.44, 0.19, -0.47, -0.06, -0.47, -0.1, -0.415, -0.16, -0.415, -0.2, -0.47, -0.38, -0.47, -0.46, -0.4, -0.5, -0.22, -0.45, -0.17, -0.49, -0.06], S);
     case 'bomber': return sharp([0.46, 0, 0.3, -0.115, -0.05, -0.47, -0.2, -0.47, -0.27, -0.37, -0.35, -0.41, -0.45, -0.29, -0.4, -0.18, -0.46, -0.07, -0.42, 0], S);
     case 'arachne': return profilePath([0.49, 0, 0.47, 0.07, 0.41, 0.14, 0.31, 0.18, 0.2, 0.17, 0.13, 0.11, 0.07, 0.13, -0.02, 0.22, -0.14, 0.3, -0.3, 0.32, -0.43, 0.25, -0.5, 0.12, -0.51, 0], S);
   }
@@ -615,28 +629,39 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     }
     case 'juggernaut': {
-      // layered ablative slabs: three stepped tiers + overlapping side scales
-      const tiers = [
-        sharp([0.42, -0.15, 0.39, -0.38, -0.36, -0.4, -0.42, -0.33, -0.43, -0.14], S),
-        sharp([0.34, -0.12, 0.31, -0.3, -0.3, -0.31, -0.35, -0.25, -0.36, -0.1], S),
-        sharp([0.24, -0.09, 0.21, -0.2, -0.22, -0.21, -0.26, -0.16, -0.27, -0.07], S),
-      ];
-      tiers.forEach((p, i) => raised(g, p, grad(g, S, shade(pal.light, -0.1 + i * 0.1), shade(pal.dark, -0.05 + i * 0.05)), o, S, 1.4, 0.02, 0.65));
+      // one massive cast casemate behind a swept dozer-blade glacis; overlapping ablative scales down the flanks
+      const blade = sharp([0.58, 0, 0.52, -0.1, 0.47, -0.3, 0.47, -0.52, 0.35, -0.52, 0.31, -0.44, 0.34, -0.3, 0.39, -0.1, 0.41, 0], S);
+      const bg = g.createLinearGradient(0.58 * S, 0, 0.32 * S, 0);
+      bg.addColorStop(0, shade(pal.light, 0.12)); bg.addColorStop(1, shade(pal.dark, 0.05));
+      raised(g, blade, bg, o, S, 1.6, 0.02, 0.7);
+      for (const s of [-1, 1]) {
+        seam(g, [0.5, s * 0.05, 0.44, s * 0.28, 0.44, s * 0.28, 0.43, s * 0.48], S, t);
+        hazard(g, 0.37 * S, (s > 0 ? 0.42 : -0.5) * S, 0.08 * S, 0.08 * S, o, true);
+        lamp(g, 0.5 * S, s * 0.13 * S, 0.018 * S, '#fff3c4');
+        rivetRow(g, 0.43 * S, s * 0.1 * S, 0.39 * S, s * 0.42 * S, 6, 0.011 * S);
+      }
+      const cm = sharp([0.32, -0.12, 0.28, -0.35, -0.28, -0.37, -0.36, -0.29, -0.37, -0.1], S);
+      raised(g, cm, grad(g, S, shade(pal.light, -0.04), shade(pal.dark, -0.08)), o, S, 1.4, 0.02, 0.65);
+      seam(g, [0.1, -0.36, 0.1, 0.36, -0.14, -0.37, -0.14, 0.37], S, t);
+      // asymmetric command tower on the left of the casemate: vision slits all round, periscope head
+      const twp = new Path2D(); poly(twp, [0.27, -0.17, 0.25, -0.31, 0.12, -0.31, 0.1, -0.17], S);
+      raised(g, twp, grad(g, S, shade(pal.light, 0.08), pal.dark), o, S, 1.3, 0.015, 0.6);
+      g.fillStyle = '#04070a';
+      g.fillRect(0.245 * S, -0.29 * S, 0.012 * S, 0.1 * S);
+      glowLine(g, [0.251, -0.28, 0.251, -0.2], S, E, o * 0.8);
+      for (const yy of [-0.2, -0.28]) { g.fillStyle = '#04070a'; g.fillRect(0.14 * S, yy * S, 0.08 * S, 0.01 * S); }
+      dot(g, 0.18 * S, -0.24 * S, 0.028 * S, METAL.dark); dot(g, 0.18 * S, -0.24 * S, 0.014 * S, METAL.light);
+      for (const s of [-1, 1]) rivetRow(g, 0.26 * S, s * 0.31 * S, -0.3 * S, s * 0.33 * S, 10, 0.01 * S);
       for (const s of [-1, 1]) {
         for (let i = 0; i < 6; i++) {
-          const x = 0.32 - i * 0.12;
+          const x = 0.27 - i * 0.11;
           const sc = sharp([x + 0.05, -0.0, x + 0.04, -0.03, x - 0.07, -0.035, x - 0.08, 0], S);
-          g.save(); g.translate(0, s * 0.405 * S);
+          g.save(); g.translate(0, s * 0.415 * S);
           bevel(g, sc, i % 2 ? shade(pal.dark, 0.05) : shade(pal.body, -0.05), o, 0.8);
           g.restore();
         }
-        rivetRow(g, 0.36 * S, s * 0.34 * S, -0.3 * S, s * 0.355 * S, 9, 0.011 * S);
-        stripe(g, [0.38, s * 0.2, 0.38, s * 0.33], S, pal.accent, o * 1.3);
+        stripe(g, [0.3, s * 0.4, 0.3, s * 0.44], S, pal.accent, o * 1.3);
       }
-      hazard(g, 0.43 * S, -0.12 * S, 0.03 * S, 0.24 * S, o, true);
-      for (const s of [-1, 1]) lamp(g, 0.45 * S, s * 0.22 * S, 0.016 * S, '#fff3c4');
-      vent(g, -0.44, -0.2, 0.04, 0.12, S, o);
-      vent(g, -0.44, 0.2, 0.04, 0.12, S, o);
       break;
     }
     case 'bomber': {

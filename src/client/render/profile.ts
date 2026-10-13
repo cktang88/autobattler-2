@@ -368,13 +368,13 @@ export function shieldShell(hull: Path2D, S: number, ext: number, px: number, st
   const g = ctx2d(c);
   g.setTransform(px, 0, 0, px, size / 2, size / 2);
   g.lineJoin = 'round';
-  const pad = (0.06 + 0.05 * strength) * S;
+  const pad = (0.07 + 0.06 * strength) * S;
   g.strokeStyle = '#fff'; g.lineWidth = pad * 2; g.stroke(hull); g.fillStyle = '#fff'; g.fill(hull);
   g.globalCompositeOperation = 'source-in';
-  g.fillStyle = rgba(col, 0.26 + 0.14 * strength); g.fillRect(-ext, -ext, ext * 2, ext * 2);
+  g.fillStyle = rgba(col, 0.3 + 0.16 * strength); g.fillRect(-ext, -ext, ext * 2, ext * 2);
   // hex lattice
   g.globalCompositeOperation = 'source-atop';
-  g.strokeStyle = rgba(col, 0.55 + 0.3 * strength); g.lineWidth = Math.max(1 / px, 0.01 * S);
+  g.strokeStyle = rgba(col, 0.6 + 0.3 * strength); g.lineWidth = Math.max(1.2 / px, 0.01 * S);
   const r = 0.06 * S, w = r * Math.sqrt(3);
   g.beginPath();
   for (let yy = -ext, row = 0; yy < ext; yy += r * 1.5, row++) for (let xx = -ext + (row % 2 ? w / 2 : 0); xx < ext; xx += w) {
@@ -386,7 +386,8 @@ export function shieldShell(hull: Path2D, S: number, ext: number, px: number, st
   g.globalCompositeOperation = 'destination-out';
   g.fillStyle = 'rgba(0,0,0,0.7)'; g.fill(hull);
   g.globalCompositeOperation = 'source-over';
-  g.strokeStyle = rgba(col, 0.7); g.lineWidth = Math.max(1 / px, 0.012 * S);
+  // bright envelope rim: thick enough to read as a shield bubble even at fit zoom
+  g.strokeStyle = rgba(col, 0.9); g.lineWidth = Math.max(2 / px, 0.016 * S);
   g.save(); g.scale(1 + pad / (0.45 * S), 1 + pad / (0.45 * S)); g.stroke(hull); g.restore();
   return c;
 }

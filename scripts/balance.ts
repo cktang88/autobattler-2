@@ -23,8 +23,8 @@ import type { Design, Placement } from '../src/shared/types.ts';
 // fit_cal.py injects trial calibrations here (children inherit the env)
 if (process.env.BAL_CAL) Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CAL));
 if (process.env.BAL_MOBCAL) Object.assign(MOBILITY_CAL, JSON.parse(process.env.BAL_MOBCAL));
-// BAL_CHASSIS = {chassisId: hpScale}: trial hull-hp multipliers (fit_cal.py fits them; copy the result into parts.ts)
-if (process.env.BAL_CHASSIS) for (const [id, q] of Object.entries(JSON.parse(process.env.BAL_CHASSIS) as Record<string, number>)) { const c = CHASSIS_BY_ID.get(id); if (c) c.hp = Math.round(c.hp * q); }
+// BAL_CHASSIS = {chassisId: {hp, cost, armor, weight, agility}}: trial hull numbers (fit_cal.py fits hp/cost; copy into parts.ts)
+if (process.env.BAL_CHASSIS) for (const [id, patch] of Object.entries(JSON.parse(process.env.BAL_CHASSIS) as Record<string, Record<string, number>>)) { const c = CHASSIS_BY_ID.get(id); if (c) Object.assign(c, patch); }
 if (process.env.BAL_SIZEK) SIZE_K.splice(0, 5, ...(JSON.parse(process.env.BAL_SIZEK) as number[]));
 
 const mode = process.argv[2] ?? 'all';
