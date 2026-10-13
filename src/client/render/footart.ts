@@ -59,6 +59,10 @@ const orbU = (cx: number, rx: number, ry: number, n: number, step: number, hubs:
   for (const a of hubs) for (const s of [-1, 1]) q.addPath(ellU(cx + Math.cos(a) * rx * 0.97, s * Math.sin(a) * ry * 0.97, hubR, hubR * aspect));
   return q;
 };
+/** Destroyer-droid back-shell and head pod profiles ([u, half-width v] in the unit box; X = 2Y so the shell reads
+ *  round: it spans the same ~1 cell as the rolling ball) */
+const MANTIS_SHELL = [0.075, 0, 0.08, 0.2, 0.06, 0.36, 0.0, 0.445, -0.1, 0.475, -0.22, 0.46, -0.33, 0.39, -0.41, 0.26, -0.45, 0.12, -0.46, 0];
+const MANTIS_HEAD = [0.25, 0, 0.245, 0.08, 0.225, 0.13, 0.17, 0.15, 0.08, 0.15, 0.03, 0.12, 0.02, 0];
 /** Aegis emitter vanes: [u, v, angle] - two swept forward, one astern */
 const AEGIS_PODS: [number, number, number][] = [[0.2, -0.3, -0.98], [0.2, 0.3, 0.98], [-0.38, 0, 0]];
 /** Leg-hub angles of the orb spiders (match their leg rigs) */
@@ -303,13 +307,14 @@ const SPECS: Record<string, Spec> = {
       sharpU([0.26, 0, 0.25, -0.14, 0.2, -0.4, 0.1, -0.42, 0.06, -0.35, -0.04, -0.35, -0.08, -0.42, -0.22, -0.42, -0.26, -0.35, -0.36, -0.35, -0.4, -0.41, -0.47, -0.32, -0.49, -0.14, -0.48, 0]),
     ),
   },
-  // ---- mantis: destroyer-droid grammar - a curled armour shell astern, slim bronze-ribbed body, a flat crescent head
-  //      forward; twin gun arms ride the shoulders. Curls into a rolling ball when it travels (see droidart.ts).
+  // ---- mantis: destroyer droid (droideka grammar) deployed - a smooth curved back-shell astern (the plates that curl
+  //      into the rolling ball), a compact sensor head forward under its lip, twin gun arms off a shoulder yoke, tripod
+  //      struts. Curls into a rolling ball when it travels (see droidart.ts).
   mantis: {
-    hw: 0.42, mounts: [[0.3, -0.3], [0.3, 0.3]], scale: [0.72], extPad: 0.35,
+    hw: 0.46, mounts: [[0.22, -0.31], [0.22, 0.31]], scale: [0.72], extPad: 0.3,
     hull: () => union(
-      smoothU([0.47, 0, 0.46, 0.12, 0.41, 0.22, 0.33, 0.25, 0.26, 0.17, 0.2, 0.08, 0.1, 0.08, 0.02, 0.2]),
-      smoothU([0.06, 0, 0.04, 0.26, -0.04, 0.38, -0.18, 0.45, -0.34, 0.42, -0.45, 0.3, -0.5, 0.12, -0.5, 0]),
+      smoothU(MANTIS_HEAD),
+      smoothU(MANTIS_SHELL),
     ),
   },
   // ---- crab: wide, low scuttling bunker (crab-droid grammar) - a broad shell with a sensor brow, claws out front
@@ -825,25 +830,66 @@ const DETAILS: Record<string, (k: K) => void> = {
     for (const s of [-1, 1]) k.glow([0.16, s * 0.4, -0.36, s * 0.4], k.o);
   },
   mantis(k) {
-    const S = k.S, E = k.E, g = k.g;
-    // curled armour shell astern: three overlapping banded lames (they wrap round into the ball when it rolls)
-    for (let i = 0; i < 3; i++) {
-      const u0 = 0.02 - i * 0.16;
-      const lame = k.B([u0, 0, u0 - 0.02, 0.27 - i * 0.02, u0 - 0.08, 0.4 - i * 0.03, u0 - 0.17, 0.44 - i * 0.05, u0 - 0.26, 0.37 - i * 0.07, Math.max(-0.5, u0 - 0.31), 0.18, Math.max(-0.5, u0 - 0.32), 0]);
-      sleekShell(g, lame, k.pal, k.o, 1, k.x(u0), k.y(-0.44), k.x(u0 - 0.3), k.y(0.44));
-      k.seam([u0 - 0.06, -0.3 + i * 0.03, u0 - 0.06, 0.3 - i * 0.03], k.o * 0.5);
+    const S = k.S, E = k.E, g = k.g, pal = k.pal, o = k.o;
+    // compact sensor head pod: armoured cowl, a visor slit across its front, cheek vents
+    const hd = k.B(MANTIS_HEAD);
+    k.dark(hd, 0.02, -0.15, 0.25, 0.15, 1.3);
+    g.save(); g.clip(hd);
+    g.fillStyle = 'rgba(255,255,255,0.14)'; g.beginPath(); g.ellipse(k.x(0.12), k.y(-0.06), k.x(0.08), k.y(0.05), 0, 0, P2); g.fill();
+    g.restore();
+    k.seam([0.17, -0.14, 0.17, 0.14, 0.06, -0.12, 0.06, 0.12], o * 0.5);
+    k.visor(0.215, -0.095, 0.215, 0.095, 0.03 * S);
+    for (const s of [-1, 1]) k.grille(0.11, s * 0.1, 0.07 * S, 0.06 * S, 3, 0.4);
+    // curved back-shell: one smooth dome in two plates (the ones that curl round into the ball), the steel rolling
+    // band down its spine with glowing seams, trim studs on the plates - the same grammar as the ball frames
+    const sh = k.B(MANTIS_SHELL);
+    const cx = k.x(-0.19), R = k.y(0.47);
+    const gr = g.createRadialGradient(cx - R * 0.35, -R * 0.4, R * 0.05, cx, 0, R * 1.1);
+    gr.addColorStop(0, shade(pal.light, 0.22)); gr.addColorStop(0.5, pal.body); gr.addColorStop(1, shade(pal.deep, -0.08));
+    raised(g, sh, gr, o, S, 1.4, 0.03, 0.7);
+    g.save(); g.clip(sh);
+    // plate split: the forward collar plate (a shade darker, hard meridian edge, bolted) and the rear dome plate
+    const rx = k.x(0.07), su = k.x(-0.06) - rx;
+    g.fillStyle = 'rgba(0,0,0,0.16)'; g.beginPath(); g.ellipse(su, 0, rx, R, 0, -Math.PI / 2, Math.PI / 2); g.lineTo(k.x(0.2), R); g.lineTo(k.x(0.2), -R); g.closePath(); g.fill();
+    for (const [u, a, w] of [[-0.06, 0.65, 1.4], [-0.31, 0.3, 0.8]] as [number, number, number][]) {
+      g.strokeStyle = `rgba(0,0,0,${a})`; g.lineWidth = o * w;
+      g.beginPath(); g.ellipse(k.x(u) - rx, 0, rx, R, 0, -Math.PI / 2, Math.PI / 2); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.2)'; g.lineWidth = o * 0.5;
+      g.beginPath(); g.ellipse(k.x(u) - rx - o, 0, rx, R, 0, -Math.PI / 2, Math.PI / 2); g.stroke();
     }
-    k.stripe([-0.12, -0.36, -0.12, -0.2, -0.12, 0.2, -0.12, 0.36], k.o * 1.2);
-    seamGlow(g, k.A([-0.38, -0.2, -0.44, 0, -0.38, 0.2]), 1, E, k.o * 0.9);
-    // ribbed bronze body / neck
-    cables(g, k.A([0.2, 0, 0.0, 0]), 1, 0.045 * S, 3);
-    for (const u of [0.06, 0.11, 0.16]) k.dot(u, 0, 0.05 * S, METAL.base);
-    // flat crescent head with a sensor slit
-    const hd = k.B([0.47, 0, 0.46, 0.12, 0.41, 0.22, 0.33, 0.25, 0.27, 0.17, 0.24, 0.08, 0.22, 0]);
-    sleekShell(g, hd, k.pal, k.o, 1, k.x(0.24), k.y(-0.25), k.x(0.47), k.y(0.25));
-    k.seam([0.3, -0.18, 0.4, 0, 0.3, 0.18, 0.4, 0]);
-    k.visor(0.44, -0.1, 0.44, 0.1, 0.018 * S);
-    for (const s of [-1, 1]) k.eye(0.36, s * 0.14, 0.022 * S);
+    for (const s of [-1, 1]) {
+      for (let i = 1; i <= 3; i++) { const t = (i / 4) * (Math.PI / 2) * 0.92 + 0.12; k.dot((su + Math.cos(t) * rx) / k.X - 0.012, s * Math.sin(t) * R / k.Y, 0.014 * S, METAL.light); }
+      // rear plate cooling grilles either side of the spine
+      k.grille(-0.3, s * 0.24, 0.12 * S, 0.1 * S, 4, 0.35);
+      // collar status slits
+      k.glow([0.02, s * 0.27, 0.0, s * 0.35], o * 1.1, 0.9);
+    }
+    // spine band (folded rolling band): steel strip with tread lugs
+    const bw = k.y(0.17);
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(k.x(-0.5), -bw / 2 - o, k.x(0.6), bw + o * 2);
+    const bg = g.createLinearGradient(0, -bw / 2, 0, bw / 2);
+    bg.addColorStop(0, METAL.light); bg.addColorStop(0.5, METAL.base); bg.addColorStop(1, METAL.deep);
+    g.fillStyle = bg; g.fillRect(k.x(-0.5), -bw / 2, k.x(0.6), bw);
+    g.fillStyle = 'rgba(10,12,14,0.55)';
+    for (let u = 0.04; u > -0.47; u -= 0.065) g.fillRect(k.x(u) - k.x(0.012), -bw * 0.4, k.x(0.024), bw * 0.8);
+    for (const s of [-1, 1]) {
+      g.strokeStyle = 'rgba(0,0,0,0.7)'; g.lineWidth = o * 1.6; g.beginPath(); g.moveTo(k.x(-0.5), s * bw / 2); g.lineTo(k.x(0.1), s * bw / 2); g.stroke();
+      g.strokeStyle = rgba(E, 0.85); g.lineWidth = o * 0.7; g.stroke();
+    }
+    // team stripe along the collar's lip
+    k.stripe([0.06, -0.38, 0.065, -0.14, 0.06, 0.38, 0.065, 0.14], o * 1.3);
+    // terminator shade + specular glint (rounded, like the ball)
+    const ts = g.createRadialGradient(cx + R * 0.25, R * 0.3, R * 0.4, cx, 0, R * 1.15);
+    ts.addColorStop(0, 'rgba(0,0,0,0)'); ts.addColorStop(1, 'rgba(0,0,0,0.42)');
+    g.fillStyle = ts; g.fill(sh);
+    g.fillStyle = 'rgba(255,255,255,0.2)'; g.beginPath(); g.ellipse(cx - R * 0.4, -R * 0.45, R * 0.22, R * 0.09, -0.5, 0, P2); g.fill();
+    // machined steel rim round the shell edge
+    g.lineWidth = o * 2.6; g.strokeStyle = METAL.base; g.stroke(sh);
+    g.lineWidth = o * 0.8; g.strokeStyle = 'rgba(255,255,255,0.3)'; g.stroke(sh);
+    g.restore();
+    g.lineWidth = o * 1.1; g.strokeStyle = OUTLINE; g.stroke(sh);
+    // shield emitter node on the spine (projects the deployed shield)
+    cjoint(g, k.x(-0.36), 0, 0.055 * S, o, METAL.dark, E);
   },
   crab(k) {
     const S = k.S;
@@ -1102,23 +1148,35 @@ export function chickenLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, 
 /** Destroyer-droid tripod: two thin legs splayed forward-out from the shoulders, one straight back from under the
  *  shell, each ending in a flat hoof pad. */
 function tripodLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: boolean, o: number): void {
+  // destroyer-droid tripod: two struts forward-out from the shell flanks, one straight astern. Seen from above the
+  // knees fold vertically, so each leg reads as a near-straight thin steel strut with a hydraulic knee and a flat foot.
   const X = L.X, Y = L.Y, m = Math.min(X, Y);
-  const W = 0.04 * m;
+  const W = 0.026 * m;
   const legs: [number, number, number, number, number, number, number][] = [
     // hip u, v, knee u, v, foot u, v, gait offset
-    [0.06, -0.1, 0.12, -0.52, 0.3, -0.64, 0], [0.06, 0.1, 0.12, 0.52, 0.3, 0.64, Math.PI], [-0.12, 0, -0.42, 0.08, -0.62, 0, Math.PI / 2],
+    [-0.01, -0.36, 0.1, -0.56, 0.2, -0.72, 0], [-0.01, 0.36, 0.1, 0.56, 0.2, 0.72, Math.PI], [-0.36, 0, -0.48, 0, -0.6, 0, Math.PI / 2],
   ];
   for (const [hu, hv, ku, kv, fu, fv, off] of legs) {
     const ph = phase * P2 + off;
-    const sw = rest ? 0 : Math.sin(ph) * 0.06, lift = rest ? 0 : Math.max(0, Math.cos(ph));
-    const fx = (fu + sw) * X, fy = fv * Y, kx = (ku + sw * 0.5) * X, ky = kv * Y * (1 + lift * 0.06);
-    beam(g, kx, ky, W * 0.8, fx, fy, W * 0.65, METAL.light, METAL.dark, o * 0.8);
-    beam(g, hu * X, hv * Y, W, kx, ky, W * 0.85, shade(pal.light, -0.05), pal.dark, o * 0.8);
-    cjoint(g, kx, ky, W * 1.1, o * 0.8, METAL.base);
+    const sw = rest ? 0 : Math.sin(ph) * 0.04, lift = rest ? 0 : Math.max(0, Math.cos(ph));
+    const hx = hu * X, hy = hv * Y, fx = (fu + sw) * X, fy = fv * Y, kx = (ku + sw * 0.5) * X, ky = kv * Y;
+    const a = Math.atan2(fy - hy, fx - hx);
+    // flat foot pad: a splayed steel plate along the leg with a dark toe split
     const z = 1 + lift * 0.2;
-    const hoof = new Path2D(); hoof.ellipse(fx, fy, W * 1.9 * z, W * 1.4 * z, Math.atan2(fy - ky, fx - kx), 0, P2);
-    fillOut(g, hoof, lift > 0.1 ? METAL.light : METAL.base, o * 0.8);
-    dot(g, fx, fy, W * 0.6, METAL.deep);
+    g.save(); g.translate(fx, fy); g.rotate(a); g.scale(z, z);
+    const pad = new Path2D(); roundRect(pad, -W * 1.8, -W * 2.5, W * 4.6, W * 5, W * 1.2);
+    fillOut(g, pad, lift > 0.1 ? METAL.light : METAL.base, o * 0.8);
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = o * 0.6; g.beginPath(); g.moveTo(W * 1.6, -W * 1.8); g.lineTo(W * 1.6, W * 1.8); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(-W * 1.4, -W * 2.1, W * 3.8, W * 0.7);
+    g.restore();
+    // shin strut, thigh strut with a hydraulic ram alongside
+    beam(g, kx, ky, W * 0.8, fx, fy, W * 0.7, METAL.light, METAL.dark, o * 0.8);
+    beam(g, hx, hy, W, kx, ky, W * 0.85, METAL.light, METAL.dark, o * 0.8);
+    const nx = -Math.sin(a) * W * 1.6, ny = Math.cos(a) * W * 1.6;
+    piston(g, hx + (kx - hx) * 0.15 + nx, hy + (ky - hy) * 0.15 + ny, kx - (kx - hx) * 0.1 + nx, ky - (ky - hy) * 0.1 + ny, W * 0.45, o * 0.5);
+    cjoint(g, kx, ky, W * 1.35, o * 0.8, METAL.base);
+    cjoint(g, fx, fy, W * 0.9, o * 0.6, METAL.dark);
+    void pal;
   }
 }
 
@@ -1245,7 +1303,7 @@ export function footMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     return true;
   }
   // destroyer droid deployed on its tripod (it rolls as a ball when moving - drawUnit swaps the sprite)
-  if (L.shape === 'mantis' && (id === 'legs' || id === 'jumpjets')) {
+  if (L.shape === 'mantis' && (id === 'legs' || id === 'jumpjets' || id === 'spider')) {
     tripodLegs(g, L, pal, phase, rest, o);
     return true;
   }
@@ -1396,28 +1454,37 @@ function walkerPods(L: UnitLayout): PartDef[] {
   return out;
 }
 
-/** Destroyer-droid gun arms: shoulder ball, short upper arm out, forearm forward with a twin-blaster cluster. */
+/** Destroyer-droid gun arms: a shoulder ball under the shell lip, a short steel upper strut out to the elbow, the
+ *  forearm forward into a team-armour gun housing with twin blaster barrels (the L mount rides the housing). */
 function droidekaArms(L: UnitLayout): PartDef[] {
   const m = Math.min(L.X, L.Y);
   const out: PartDef[] = [];
   for (const s of [-1, 1]) {
     out.push({
-      px: 0.16 * L.X, py: s * 0.15 * L.Y, ext: 0.5 * m, layer: 'over', mounts: [s < 0 ? 0 : 1], mountAt: [0.26 * m, s * 0.17 * m],
+      px: 0.07 * L.X, py: s * 0.2 * L.Y, ext: 0.5 * m, layer: 'over', mounts: [s < 0 ? 0 : 1], mountAt: [0.29 * m, s * 0.11 * m],
       draw: (g, pal, o) => {
-        const ex = 0.06 * m, ey = s * 0.16 * m;
-        beam(g, 0, 0, 0.035 * m, ex, ey, 0.03 * m, shade(pal.light, 0.05), pal.dark, o);
-        beam(g, ex, ey, 0.032 * m, 0.3 * m, s * 0.18 * m, 0.03 * m, METAL.light, METAL.dark, o);
-        for (const d of [-0.025, 0.025]) {
-          const b = new Path2D(); roundRect(b, 0.28 * m, s * 0.18 * m + d * m - 0.011 * m, 0.14 * m, 0.022 * m, 0.008 * m);
+        const ex = 0.07 * m, ey = s * 0.1 * m, gx = 0.29 * m, gy = s * 0.11 * m;
+        // upper strut + hydraulic ram alongside, forearm strut
+        beam(g, 0, 0, 0.028 * m, ex, ey, 0.024 * m, METAL.light, METAL.dark, o * 0.8);
+        piston(g, 0.015 * m, s * 0.035 * m, ex - 0.01 * m, ey - s * 0.005 * m, 0.008 * m, o * 0.5);
+        beam(g, ex, ey, 0.024 * m, gx - 0.05 * m, gy, 0.022 * m, METAL.light, METAL.dark, o * 0.8);
+        // twin blaster barrels with muzzle shrouds
+        for (const d of [-0.026, 0.026]) {
+          const by = gy + d * m;
+          const b = new Path2D(); roundRect(b, gx, by - 0.011 * m, 0.17 * m, 0.022 * m, 0.008 * m);
           fillOut(g, b, METAL.base, o * 0.7);
-          dot(g, 0.415 * m, s * 0.18 * m + d * m, 0.008 * m, '#07080a');
+          const mz = new Path2D(); roundRect(mz, gx + 0.13 * m, by - 0.015 * m, 0.045 * m, 0.03 * m, 0.01 * m);
+          fillOut(g, mz, METAL.dark, o * 0.6);
+          dot(g, gx + 0.17 * m, by, 0.008 * m, '#07080a');
         }
-        const hs = new Path2D(); roundRect(hs, 0.18 * m, s * 0.18 * m - 0.045 * m, 0.12 * m, 0.09 * m, 0.03 * m);
-        raised(g, hs, grad(g, 1, shade(pal.light, 0.08), pal.dark, 0.18 * m, s * 0.14 * m, 0.3 * m, s * 0.22 * m), o, m, 1.1, 0.01, 0.5);
-        cjoint(g, ex, ey, 0.032 * m, o, METAL.base);
-        cjoint(g, 0, 0, 0.04 * m, o, METAL.dark);
+        // gun housing: team armour block over the barrel roots, a glowing charge slit
+        const hs = new Path2D(); roundRect(hs, gx - 0.07 * m, gy - 0.05 * m, 0.12 * m, 0.1 * m, 0.03 * m);
+        raised(g, hs, grad(g, 1, shade(pal.light, 0.08), pal.dark, gx - 0.07 * m, gy - 0.05 * m, gx + 0.05 * m, gy + 0.05 * m), o, m, 1.1, 0.01, 0.5);
+        glowLine(g, [gx - 0.05 * m, gy + s * 0.032 * m, gx + 0.03 * m, gy + s * 0.032 * m], 1, emis(pal), o * 0.7, 0.9);
+        cjoint(g, ex, ey, 0.03 * m, o * 0.8, METAL.base);
+        cjoint(g, 0, 0, 0.042 * m, o * 0.8, METAL.dark);
       },
-      anim: (a) => ({ r: s * 0.06 * wobF(a.t, a.seed, 1.4, s) }),
+      anim: (a) => ({ r: s * 0.05 * wobF(a.t, a.seed, 1.4, s) }),
     });
   }
   return out;
@@ -1460,7 +1527,7 @@ function footCreatureLights(L: UnitLayout): CLight[] | null {
   const X = L.X, Y = L.Y, S = L.S;
   const eye = (u: number, v: number, r: number) => [-1, 1].map((s) => ({ x: u * X, y: s * v * Y, r: r * S, k: 'eye' as const, ph: s }));
   switch (L.shape) {
-    case 'mantis': return eye(0.36, 0.14, 0.035);
+    case 'mantis': return [{ x: 0.215 * X, y: 0, r: 0.04 * S, k: 'eye', ph: 0 }];
     case 'crab': return eye(0.3, 0.16, 0.03);
     case 'warlord': return [{ x: 0.235 * X, y: 0, r: 0.045 * S, k: 'eye', ph: 0 }];
     case 'mech': return [{ x: 0.185 * X, y: 0, r: 0.05 * S, k: 'eye', ph: 0 }];

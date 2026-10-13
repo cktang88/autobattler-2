@@ -1628,6 +1628,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   const lift = L.air || p.flying ? 0.12 : alt * 0.35;
   const x = p.x + dirs.ux * lift, y = p.y + dirs.uy * lift;
   let sc = 1 + (p.leap ?? 0) * 0.3 + (L.air ? 0.04 : 0);
+  let shieldK = 0;
   if (rolls(L)) {
     // destroyer droid: rolls as an armoured ball while it travels, unfolds onto its tripod when it stops
     const c = curlOf(p.seed ?? 0, !!p.moving, p.time);
@@ -1647,6 +1648,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
       return;
     }
     sc *= 0.7 + 0.3 * (1 - c * 2);
+    shieldK = 1 - c * 2;
   }
   const pal = TEAM_PAL[p.team];
   const ang = p.angle;
@@ -1732,6 +1734,21 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = alpha * (0.7 + 0.25 * Math.sin(p.time * 1.6 + (p.seed ?? 0)));
     blit(g, s.shell, x, y, ang, s.ext, sc * 1.0);
+    g.globalCompositeOperation = prevOp;
+    g.globalAlpha = alpha;
+  }
+  if (shieldK > 0.05 && p.cloak !== 'enemy') {
+    // destroyer droid planted on its tripod: a faint deployed shield-emitter ring round it (two strokes, no gradients)
+    const r = (0.5 * L.X + 0.12 * L.S) * sc, ox = -0.1 * L.X * sc;
+    const cx = x + cs * ox, cy = y + sn * ox;
+    const prevOp = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'lighter';
+    const pulse = 0.75 + 0.25 * Math.sin(p.time * 2.4 + (p.seed ?? 0));
+    g.strokeStyle = emis(pal);
+    g.globalAlpha = alpha * shieldK * 0.07 * pulse;
+    g.lineWidth = r * 0.14; g.beginPath(); g.arc(cx, cy, r * 0.93, 0, P2U); g.stroke();
+    g.globalAlpha = alpha * shieldK * 0.32 * pulse;
+    g.lineWidth = Math.max(1 / px, 0.018 * L.S); g.beginPath(); g.arc(cx, cy, r, 0, P2U); g.stroke();
     g.globalCompositeOperation = prevOp;
     g.globalAlpha = alpha;
   }

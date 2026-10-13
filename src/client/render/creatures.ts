@@ -332,12 +332,9 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
   const S = L.S;
   switch (L.shape) {
     case 'mantis':
-      // whip radio mast off the power pack
-      g.lineCap = 'round';
-      g.strokeStyle = OUTLINE; g.lineWidth = 0.03 * S;
-      g.beginPath(); g.moveTo(-0.3 * S, -0.1 * S); g.lineTo(-0.47 * S, -0.16 * S); g.stroke();
-      g.strokeStyle = METAL.light; g.lineWidth = 0.012 * S; g.stroke();
-      dot(g, -0.3 * S, -0.1 * S, 0.028 * S, METAL.dark);
+      // shield-emitter node on the power pack (no mast: the destroyer droid reads as a sealed machine)
+      dot(g, -0.3 * S, 0, 0.03 * S, METAL.dark);
+      dot(g, -0.3 * S, 0, 0.014 * S, emis(pal));
       break;
     case 'crab':
       // periscope sensor booms + armoured skirt plates around the rim
@@ -394,7 +391,7 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
   const lite = shade(pal.body, 0.18);
   switch (L.shape) {
     case 'mantis': {
-      // lanky alien strider: smooth power core, slender spine, sleek sensor head
+      // destroyer-droid frame (square fallback): smooth power-pack shell, steel spine, sensor head
       const pack = profilePath([-0.05, 0, -0.1, 0.1, -0.24, 0.12, -0.38, 0.09, -0.45, 0], S);
       floatGap(g, pack, E, o, S);
       sleekShell(g, pack, pal, o, S, -0.1, -0.12, -0.4, 0.12);
