@@ -46,7 +46,18 @@ export interface MobilityDef {
   traits: MobilityTrait[];
 }
 
-export type ProjectileKind = 'bullet' | 'shell' | 'rocket' | 'missile' | 'beam' | 'flame' | 'arc' | 'lightning' | 'rail' | 'none';
+export type ProjectileKind = 'bullet' | 'shell' | 'rocket' | 'missile' | 'beam' | 'flame' | 'arc' | 'lightning' | 'rail' | 'orb' | 'none';
+
+/** Main weapon/module categories (UI grouping + AI roles). */
+export type ModuleCategory =
+  | 'machinegun' | 'autocannon' | 'cannon' | 'precision' | 'rocket' | 'missile' | 'artillery'
+  | 'energy' | 'flame' | 'disruption' | 'antiair' | 'support' | 'armor';
+
+/** Render family: the renderer draws a turret per visual kind, varied by barrels & caliber. */
+export type ModuleVisual =
+  | 'gun' | 'gatling' | 'shotgun' | 'cannon' | 'gauss' | 'sniper' | 'rail' | 'rocketPod' | 'missileRack' | 'cruise'
+  | 'mortar' | 'artillery' | 'laser' | 'heatray' | 'plasma' | 'flamer' | 'tesla' | 'emp' | 'slowbeam' | 'flak'
+  | 'repair' | 'shield' | 'sensor' | 'plate';
 export type ModuleKind = 'weapon' | 'armor' | 'utility';
 
 export interface ModuleDef {
@@ -55,7 +66,16 @@ export interface ModuleDef {
   desc: string;
   mount: MountClass;
   kind: ModuleKind;
+  category: ModuleCategory;
+  /** sub-category label shown in UI, e.g. "30mm" or "Twin 30mm" */
+  family: string;
+  visual: ModuleVisual;
+  /** visual barrel / tube count (1 if omitted) */
+  barrels?: number;
+  /** visual size 0..1 within its mount class */
+  caliber?: number;
   weight: number;
+  /** base complexity cost of the part; final unit cost also depends on predicted combat power (stats.ts) */
   cost: number;
   hp?: number;
   armor?: number;
@@ -66,6 +86,8 @@ export interface ModuleDef {
   cooldown?: number;
   /** projectiles per volley, fired ~0.1s apart */
   burst?: number;
+  /** projectiles per shot fired simultaneously in a spread (shotguns, barrage) */
+  pellets?: number;
   /** cells */
   range?: number;
   minRange?: number;
@@ -84,13 +106,25 @@ export interface ModuleDef {
   chain?: number;
   /** multiplier vs flying targets (default 1) */
   airBonus?: number;
-  /** rail: hits everything along the line */
+  /** rail/gauss: hits every enemy along its path (once each) */
   pierce?: boolean;
+  /** seconds of paralysis applied per hit (target can't move or fire); stacks up to 4s */
+  stun?: number;
+  /** slow applied per hit: fraction of speed & fire rate removed (0..1) for 2s; max 0.6 */
+  slow?: number;
+  /** burning damage over time applied per hit (refreshes, doesn't stack) */
+  burn?: { dps: number; duration: number };
+  /** damage multiplier at max range (beams that fade with distance, e.g. 0.3); 1 = none */
+  falloff?: number;
   // ---- utility ----
   /** hp healed per second to the most damaged ally in range */
   heal?: number;
   /** personal energy shield points (regenerates 5%/s after 3s without damage) */
   shield?: number;
+  /** utility: +fraction weapon range for the whole unit (targeting computer) */
+  rangeBonus?: number;
+  /** utility: multiplies weapon spread (e.g. 0.6) */
+  spreadMult?: number;
 }
 
 /** A player-authored unit blueprint. */
@@ -124,8 +158,19 @@ export interface UnitStats {
   shield: number;
   heal: number;
   traits: string[];
-  /** range multiplier from chassis/mobility traits */
+  /** range multiplier from chassis/mobility traits and modules */
   rangeMult: number;
+  /** spread multiplier from traits/modules (stable, targeting computer) */
+  spreadMult: number;
+  // ---- cost model breakdown (see stats.ts) ----
+  /** sum of the parts' base complexity costs */
+  partsCost: number;
+  /** predicted damage output rating */
+  offense: number;
+  /** effective hp rating (hp, shield, armor, evasion, flight) */
+  ehp: number;
+  /** combat power = sqrt(offense * ehp) * mobility factor */
+  power: number;
 }
 
 /** One placed unit instance on a player's board. Coordinates are in the player's LOCAL deploy grid (see grid.ts). */
