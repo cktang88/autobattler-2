@@ -14,7 +14,8 @@ import { DT, MAX_TICKS, TICK_RATE } from './types.ts';
 import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
 
 // ---- tuning ----
-const AIM_TOLERANCE = 0.2; // rad
+/** a turret only fires once its barrel is on target (~3.4°) — bursts included */
+const AIM_TOLERANCE = 0.06; // rad
 const RETARGET_EVERY = 0.3; // s
 const GOAL_EVERY = 0.4; // s
 const BURST_GAP = 0.1; // s
@@ -994,7 +995,8 @@ export class Battle {
       if (w.burstLeft > 0) {
         if (u.disarm > 0) { w.burstLeft = 0; continue; }
         w.burstTimer -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
-        if (w.burstTimer <= 0) {
+        // follow-up rounds wait for the barrel too (a target that moves out of the arc pauses the burst)
+        if (w.burstTimer <= 0 && (!t || Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE)) {
           w.burstLeft--;
           w.burstTimer = BURST_GAP;
           if (t) { w.aimX = ax; w.aimY = ay; }
@@ -1062,17 +1064,17 @@ export class Battle {
     }
     if (kind === 'beam') {
       if (!t || !t.alive) return;
-      this.events.push({ t: 'beam', moduleId: def.id, x1: mx, y1: my, x2: t.x, y2: t.y, side: u.side });
+      this.events.push({ t: 'beam', moduleId: def.id, x1: mx, y1: my, x2: t.x, y2: t.y, side: u.side, unit: u.id, mount: mi });
       this.damage(t, raw, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm, mx, my, cls);
       return;
     }
     if (kind === 'lightning') {
       if (!t || !t.alive) return;
-      this.lightning(u, w, t, raw, ap, airBonus, mx, my, fx, lm);
+      this.lightning(u, w, t, raw, ap, airBonus, mx, my, fx, lm, mi);
       return;
     }
     if (kind === 'rail') {
-      this.rail(u, w, aim, raw, ap, airBonus, mx, my, fx, lm);
+      this.rail(u, w, aim, raw, ap, airBonus, mx, my, fx, lm, mi);
       return;
     }
     if (kind === 'none') return;
@@ -1109,7 +1111,7 @@ export class Battle {
         target: kind === 'missile' && t ? t.id : -1, tx, ty, sx: ox, sy: oy, total, traveled: 0,
         maxDist: kind === 'flame' ? total : kind === 'missile' ? w.range * 1.8 : pierce ? w.range + 1 : total + 2,
         ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * 0.22 : 0, dead: false,
-        pierce, hits: [], fx, fxMult: lm, cls,
+        pierce, hits: [], fx, fxMult: lm, cls, mount: mi,
       };
       if (air && kind !== 'missile') p.z = 1;
       else if (kind === 'orb') p.z = 0.4;
@@ -1117,7 +1119,7 @@ export class Battle {
     }
   }
 
-  private lightning(u: SimUnit, w: Wpn, first: SimUnit, raw: number, ap: number, airBonus: number, mx: number, my: number, fx: ModuleDef | null, lm: number): void {
+  private lightning(u: SimUnit, w: Wpn, first: SimUnit, raw: number, ap: number, airBonus: number, mx: number, my: number, fx: ModuleDef | null, lm: number, mi = -1): void {
     const pts: { x: number; y: number }[] = [{ x: mx, y: my }];
     const hit: number[] = [];
     let cur: SimUnit | null = first;
@@ -1141,10 +1143,10 @@ export class Battle {
       }
       cur = best;
     }
-    this.events.push({ t: 'chain', moduleId: w.def.id, points: pts, side: u.side });
+    this.events.push({ t: 'chain', moduleId: w.def.id, points: pts, side: u.side, unit: u.id, mount: mi });
   }
 
-  private rail(u: SimUnit, w: Wpn, aim: number, raw: number, ap: number, airBonus: number, mx: number, my: number, fx: ModuleDef | null, lm: number): void {
+  private rail(u: SimUnit, w: Wpn, aim: number, raw: number, ap: number, airBonus: number, mx: number, my: number, fx: ModuleDef | null, lm: number, mi = -1): void {
     const c = Math.cos(aim), s = Math.sin(aim);
     const len = w.range;
     const ex = mx + c * len, ey = my + s * len;
@@ -1158,7 +1160,7 @@ export class Battle {
       const perp = Math.abs(-dx * s + dy * c);
       if (perp <= this.ints[j].bound + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
     }
-    this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side });
+    this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side, unit: u.id, mount: mi });
   }
 
   private updateHeal(I: Internal, w: Wpn, m: MountState): void {
@@ -1192,7 +1194,7 @@ export class Battle {
     const target = t ?? null;
     if (target) {
       this.events.push({ t: 'heal', unit: target.id, amount: w.healAcc, from: u.id });
-      this.events.push({ t: 'beam', moduleId: w.def.id, x1: u.x, y1: u.y, x2: target.x, y2: target.y, side: u.side });
+      this.events.push({ t: 'beam', moduleId: w.def.id, x1: u.x, y1: u.y, x2: target.x, y2: target.y, side: u.side, unit: u.id, mount: u.mounts.indexOf(m) });
     }
     w.healAcc = 0;
     void m;

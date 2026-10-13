@@ -96,12 +96,15 @@ export interface SimProjectile {
   angle: number;
   /** 0..1 progress to impact (useful for arcs) */
   progress: number;
+  /** shooter (SimUnit.id) and its mount index, so the view can launch the round from that barrel's tip */
+  src?: number;
+  mount?: number;
 }
 
 export type BattleEvent =
   | { t: 'fire'; unit: number; mount: number; moduleId: string; x: number; y: number; angle: number }
-  | { t: 'beam'; moduleId: string; x1: number; y1: number; x2: number; y2: number; side: Side }
-  | { t: 'chain'; moduleId: string; points: { x: number; y: number }[]; side: Side }
+  | { t: 'beam'; moduleId: string; x1: number; y1: number; x2: number; y2: number; side: Side; unit?: number; mount?: number }
+  | { t: 'chain'; moduleId: string; points: { x: number; y: number }[]; side: Side; unit?: number; mount?: number }
   | { t: 'hit'; unit: number; damage: number; shieldHit: boolean; x: number; y: number; moduleId: string }
   | { t: 'explode'; x: number; y: number; radius: number; moduleId: string }
   | { t: 'heal'; unit: number; amount: number; from: number }

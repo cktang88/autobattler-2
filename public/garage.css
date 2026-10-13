@@ -712,7 +712,9 @@
 .garage .g-baytools { flex-wrap: wrap; }
 .garage .g-search { flex: 1 1 160px; min-height: 36px; }
 .garage button.k-select.g-rolesel { min-height: 36px; max-width: 190px; }
-.garage .k-seg.g-subtabs { flex: 1 1 auto; }
+.garage .k-seg.g-subtabs { flex: none; align-self: stretch; }
+/* only grow sideways when it shares the toolbar row (hull / drive); in the column it keeps its own height */
+.garage .g-baytools .k-seg.g-subtabs { flex: 1 1 auto; align-self: center; }
 .garage .k-seg.g-subtabs .k-seg-b { padding: 0 8px; font-size: 0.88rem; letter-spacing: 0.06em; min-height: 36px; }
 .garage .g-gdot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; vertical-align: 2px; background: var(--teal); transform: rotate(45deg); }
 .garage .k-seg-b.on .g-gdot { background: var(--amber-ink); }
@@ -836,3 +838,4 @@
   .garage .g-class-txt small { display: none; }
   .garage .g-class-well { width: 40px; height: 40px; }
 }
+.garage .g-baybody > * { flex-shrink: 0; }
