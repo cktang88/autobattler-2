@@ -25,14 +25,14 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- support ----
   { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['autocannon', 'repair'] },
   // ---- brawler ----
-  { id: 'starter-stormcaller', name: 'Stormcaller', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'shotgun'] },
+  { id: 'starter-stormcaller', name: 'Voltrider', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'shotgun'] },
   // ---- size-3 heavies ----
-  { id: 'starter-behemoth', name: 'Behemoth', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'twin30', 'hmg'] },
+  { id: 'starter-behemoth', name: 'Ironbreaker', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'twin30', 'hmg'] },
   { id: 'starter-ironclad', name: 'Ironclad', chassis: 'bastion', mobility: 'treads', mounts: ['cannon', 'plateM', 'autocannon'] },
   // ---- emplacement ----
   { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'anchor', mounts: ['guidedrocket', 'hmg'] },
   // ---- melee: fast hover brawler that dives into the line ----
-  { id: 'starter-ripper', name: 'Ripper', chassis: 'raider', mobility: 'legs', mounts: ['buzzsaw', 'shockprod'] },
+  { id: 'starter-ripper', name: 'Gnasher', chassis: 'raider', mobility: 'legs', mounts: ['buzzsaw', 'shockprod'] },
   // ---- stealth: cloaked sniper platform ----
   { id: 'starter-shade', name: 'Shade', chassis: 'striker', mobility: 'halftrack', mounts: ['lightrail', 'stealth', 'sniper'] },
   // ---- shield wall: barrier-heavy anchor of the line ----
