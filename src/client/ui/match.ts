@@ -114,6 +114,36 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let phase: Phase = 'deploy';
   let battle: Battle | null = null;
   let replay: RoundRecord | null = null;
+  /** damage each block dealt in the most recent resolved round, keyed "side:uid" */
+  let lastDmg: { round: number; by: Map<string, number> } | null = null;
+  /** read the per-block tally off a finished battle */
+  function captureDamage(rec: RoundRecord, b: Battle) {
+    const by = new Map<string, number>();
+    for (const sd of [0, 1] as const) for (const p of rec.boards[sd]) by.set(`${sd}:${p.uid}`, Math.round(b.blockDamage(sd, p.uid)));
+    lastDmg = { round: rec.round, by };
+  }
+  /** no replay watched this session (match resumed): quietly re-run the last round, the sim is deterministic */
+  function ensureLastDamage() {
+    const rec = m.history[m.history.length - 1];
+    if (!rec || lastDmg?.round === rec.round) return;
+    try {
+      const b = new Battle(battleInputFor(m, rec));
+      let n = 0;
+      while (!b.done && n++ < MAX_TICKS + 100) b.step();
+      captureDamage(rec, b);
+    } catch (e) { console.warn('damage tally failed', e); }
+  }
+  const damageLine = (sd: Side, uid: number): HTMLElement | null => {
+    if (!lastDmg) return null;
+    const v = lastDmg.by.get(`${sd}:${uid}`);
+    if (v === undefined) return h('div.sc-dmg.none', null, 'New: no battle record yet');
+    const ranked = [...lastDmg.by].filter(([k]) => k.startsWith(`${sd}:`)).map(([, x]) => x).sort((a, b) => b - a);
+    const rank = ranked.indexOf(v) + 1;
+    return h('div.sc-dmg', null,
+      h('span', null, `Round ${lastDmg.round} damage`),
+      h('b', null, v.toLocaleString()),
+      v > 0 && ranked.length > 1 ? h('em', null, rank === 1 ? 'top of army' : `#${rank} of ${ranked.length}`) : null);
+  };
   let acc = 0;
   let endTimer = 0;
   let destroyed = false;
@@ -241,7 +271,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let tipKey = '';
   let sheetOff: (() => void) | null = null;
   function hideTip() { tipEl?.remove(); tipEl = null; tipKey = ''; sheetOff?.(); sheetOff = null; ringHi = null; }
-  function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean): HTMLElement {
+  function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean, dmg: HTMLElement | null = null): HTMLElement {
     const lv = Math.max(1, Math.min(MAX_LEVEL, level));
     return h('div.stat-tip', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
       h('div.sc-head', null,
@@ -249,6 +279,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('span.stars', null, stars(lv)),
         h('span.sc-tag2', null, tag),
         h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost))),
+      dmg,
       statCard({ design: d, st, level: lv, spacing, onRing: interactive ? (k) => { ringHi = k; } : undefined }));
   }
   function mountTip(tip: HTMLElement, sheet: boolean) {
@@ -292,7 +323,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const key = `${t.side}:${t.uid}:${t.pending}:${lv}`;
     const sheet = !at; // no pointer position = touch long-press: bottom sheet
     if (key !== tipKey || !tipEl) {
-      mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet), sheet);
+      if (!t.pending) ensureLastDamage();
+      mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet, t.pending ? null : damageLine(t.side, t.uid)), sheet);
       tipKey = key;
     }
     if (sheet || !at) return;
@@ -944,7 +976,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function setPhase(p: Phase) {
     const prev = phase;
     phase = p;
-    if (p === 'deploy' && prev !== 'deploy') { playMusic('deploy'); try { view.frameDeploy(); } catch { /* */ } }
+    if (p === 'deploy' && prev !== 'deploy') {
+      playMusic('deploy');
+      try { view.frameDeploy(); } catch { /* */ }
+      // resumed mid-match: rebuild last round's damage tally off the critical path
+      if (m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
+    }
     if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } }
     renderAll();
     renderOverlay();
@@ -1002,6 +1039,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function showResult() {
     if (phase !== 'battle' || !replay) return;
+    if (battle?.done) captureDamage(replay, battle);
     const r = replay.result;
     sfx(r.winner === side ? 'roundWin' : r.winner === opp ? 'roundLose' : 'click');
     setPhase('result');

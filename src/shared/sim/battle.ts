@@ -144,6 +144,8 @@ interface Internal {
   crushCd: number;
   burnDps: number;
   burnSide: Side;
+  /** SimUnit.id that set the unit alight (damage tally) */
+  burnSrc: number;
   burnModule: string;
   burnTick: number;
   /** pending knockback displacement (cells), applied over a few ticks */
@@ -301,6 +303,10 @@ export class Battle {
   private focusMark: Int32Array = new Int32Array(0);
   private focusStamp = 0;
   private curSrc = -1;
+  /** SimUnit.id credited with damage for the per-block tally (accounting only; never affects the fight) */
+  private dmgSrc = -1;
+  /** damage dealt to enemies per block, keyed side * 1e6 + placement uid */
+  private blockDmg = new Map<number, number>();
   private ints: Internal[] = [];
   private projs: Proj[] = [];
   private nextProjId = 1;
@@ -465,7 +471,7 @@ export class Battle {
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
-      burnDps: 0, burnSide: side, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
+      burnDps: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
@@ -510,7 +516,9 @@ export class Battle {
         if (I.burnTick >= BURN_EVERY || u.burning <= DT) {
           const dmg = I.burnDps * I.burnTick;
           I.burnTick = 0;
+          this.dmgSrc = I.burnSrc;
           this.damage(u, dmg, 1, 1, I.burnSide, I.burnModule, u.x, u.y);
+          this.dmgSrc = -1;
         }
         u.burning = Math.max(0, u.burning - DT);
         if (!u.alive) continue;
@@ -558,6 +566,7 @@ export class Battle {
 
     if (this.pds.length) this.pointDefense();
     this.updateProjectiles();
+    this.dmgSrc = -1;
     this.flushBlasts();
 
     // bookkeeping
@@ -704,7 +713,9 @@ export class Battle {
     for (let k = 0; k < pb.length; k++) {
       const I = this.ints[pb[k]];
       const u = I.u;
+      this.dmgSrc = u.id;
       this.splash(u.x, u.y, I.blastR, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true);
+      this.dmgSrc = -1;
     }
     pb.length = 0;
   }
@@ -975,9 +986,9 @@ export class Battle {
   // ---------------------------------------------------------------- firing
 
   private fire(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number): void {
-    this.curSrc = I.u.id;
+    this.curSrc = this.dmgSrc = I.u.id;
     this.fireImpl(I, mi, w, t, ax, ay);
-    this.curSrc = -1;
+    this.curSrc = this.dmgSrc = -1;
   }
 
   private fireImpl(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number): void {
@@ -1182,7 +1193,7 @@ export class Battle {
       if (fx.slow) t.slow = Math.min(MAX_SLOW, t.slow + fx.slow);
       if (fx.burn) {
         const dps = fx.burn.dps * fxMult;
-        if (t.burning <= 0 || dps >= T.burnDps) { T.burnDps = dps; T.burnSide = side; T.burnModule = moduleId; }
+        if (t.burning <= 0 || dps >= T.burnDps) { T.burnDps = dps; T.burnSide = side; T.burnSrc = this.dmgSrc; T.burnModule = moduleId; }
         t.burning = Math.max(t.burning, fx.burn.duration);
       }
     }
@@ -1215,6 +1226,10 @@ export class Battle {
       dealt += a;
     }
     this.damageDealt[side] += dealt;
+    if (this.dmgSrc >= 0) {
+      const a = this.units[this.dmgSrc];
+      if (a && a.side !== t.side) { const k = a.side * 1e6 + a.uid; this.blockDmg.set(k, (this.blockDmg.get(k) ?? 0) + dealt); }
+    }
     t.hitFlash = 1;
     T.sinceDamage = 0;
     this.events.push({ t: 'hit', unit: t.id, damage: dealt, shieldHit, x, y, moduleId });
@@ -1254,7 +1269,7 @@ export class Battle {
     for (let i = 0; i < ps.length; i++) {
       const p = ps[i];
       if (p.dead) continue;
-      this.curSrc = p.src;
+      this.curSrc = this.dmgSrc = p.src;
       if (p.kind === 'arc') {
         p.progress = Math.min(1, p.progress + (p.speed * DT) / p.total);
         const k = p.progress;
@@ -1708,10 +1723,14 @@ export class Battle {
             if (a.side !== b.side && !a.flying) {
               if (A.crush && A.crushCd <= 0 && b.stats.size < a.stats.size) {
                 A.crushCd = CRUSH_EVERY;
+                this.dmgSrc = a.id;
                 this.damage(b, CRUSH_DMG * a.stats.size, 0.5, 1, a.side, 'crush', b.x, b.y);
+                this.dmgSrc = -1;
               } else if (B.crush && B.crushCd <= 0 && a.stats.size < b.stats.size) {
                 B.crushCd = CRUSH_EVERY;
+                this.dmgSrc = b.id;
                 this.damage(a, CRUSH_DMG * b.stats.size, 0.5, 1, b.side, 'crush', a.x, a.y);
+                this.dmgSrc = -1;
               }
             }
           }
@@ -1748,6 +1767,11 @@ export class Battle {
       for (const w of I.wpns) if (w && w.heal <= 0 && this.findTarget(u, w) >= 0) return true;
     }
     return false;
+  }
+
+  /** Damage this block (all its squad units) has dealt to enemies so far, shields included. */
+  blockDamage(side: Side, uid: number): number {
+    return this.blockDmg.get(side * 1e6 + uid) ?? 0;
   }
 
   private finish(winner: Side | -1): void {
