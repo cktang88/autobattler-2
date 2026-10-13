@@ -77,6 +77,18 @@ function angDiff(a: number, b: number): number {
   else if (d < -Math.PI) d += TAU;
   return d;
 }
+/** Turret slew: always the short way round, but once swinging hard it keeps its direction while the target is near
+ *  dead astern (~180°), where the "short way" flips sign tick to tick and would make the barrel reverse mid-swing. */
+function slewTurret(w: { turnDir: number }, a: number, b: number, max: number): number {
+  let d = angDiff(a, b);
+  if (w.turnDir !== 0 && Math.abs(d) > Math.PI - 0.35 && Math.sign(d) !== w.turnDir) d += w.turnDir * TAU;
+  if (d > max) { w.turnDir = 1; return a + max; }
+  if (d < -max) { w.turnDir = -1; return a - max; }
+  w.turnDir = 0;
+  return b;
+}
+/** pre-aim reach: turrets with nothing in range track the nearest enemy out to this multiple of their range */
+const PREAIM_MULT = 1.5;
 function turnToward(a: number, b: number, max: number): number {
   const d = angDiff(a, b);
   if (d > max) return a + max;
@@ -105,6 +117,10 @@ interface Wpn {
   dps: number;
   melee: boolean;
   cls: number;
+  /** nothing in range: enemy (SimUnit.id) within PREAIM_MULT x range the turret swings toward without firing, or -1 */
+  preaim: number;
+  /** direction (+1/-1) of the last full-speed swing; keeps a turret committed when the target sits ~180° away */
+  turnDir: number;
 }
 
 interface Internal {
@@ -358,7 +374,7 @@ export class Battle {
         if (!ok) continue;
         const size = computeStats(d).size;
         const sp = normSpacing(size, p.spacing);
-        const cs = placementUnitCenters(s, { x: p.x, y: p.y, spacing: sp }, size, computeStats(d));
+        const cs = placementUnitCenters(s, { x: p.x, y: p.y, spacing: sp, rot: p.rot }, size, computeStats(d));
         let mx = 0, my = 0;
         for (const c of cs) { mx += c.x; my += c.y; }
         mx /= cs.length; my /= cs.length;
@@ -426,7 +442,7 @@ export class Battle {
       const w: Wpn = {
         def, heal: def.heal ?? 0, range, minRange: def.minRange ?? 0,
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
-        burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0,
+        burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -969,8 +985,10 @@ export class Battle {
         if (curD < 0) { m.target = -1; w.retarget = 0; }
       }
       w.retarget -= DT;
+      let refreshed = false;
       if (w.retarget <= 0) {
         w.retarget = RETARGET_EVERY;
+        refreshed = true;
         const cand = this.findTarget(u, w);
         if (m.target < 0) m.target = cand;
         else if (cand >= 0 && cand !== m.target && (I.prio !== 'closest' || I.focus)) m.target = cand;
@@ -985,11 +1003,18 @@ export class Battle {
       let want = u.angle;
       let ax = 0, ay = 0;
       if (t) {
+        w.preaim = -1;
         const p = this.aimPoint(I, w, t);
         ax = p.x; ay = p.y;
         want = Math.atan2(ay - u.y, ax - u.x);
+      } else {
+        // nothing in range: swing toward whatever is closing in (aim only, never fires)
+        if (refreshed) w.preaim = this.pickTarget(I, w, PREAIM_MULT);
+        const pa = w.preaim >= 0 ? units[w.preaim] : null;
+        if (pa && pa.alive && this.visible(u, pa)) want = Math.atan2(pa.y - u.y, pa.x - u.x);
+        else w.preaim = -1;
       }
-      m.angle = turnToward(m.angle, want, w.traverse * DT);
+      m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
 
       // burst continuation
       if (w.burstLeft > 0) {

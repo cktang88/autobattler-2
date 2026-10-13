@@ -116,6 +116,10 @@ export function sanitizeAction(raw: unknown): DeployAction {
       if (!isInt(o.spacing) || (o.spacing as number) < 0 || (o.spacing as number) > 8) bad('placement.spacing must be a small integer');
       pl.spacing = o.spacing as number;
     }
+    if (o.rot !== undefined) {
+      if (typeof o.rot !== 'boolean') bad('placement.rot must be a boolean');
+      if (o.rot) pl.rot = true;
+    }
     Object.assign(pl, readBehavior(o, 'placement'));
     if (o.kiteMount !== undefined) {
       if (!isInt(o.kiteMount) || (o.kiteMount as number) < 0 || (o.kiteMount as number) > 16) bad('placement.kiteMount must be a mount index');
