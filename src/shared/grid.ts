@@ -14,6 +14,10 @@
 
 import type { Placement, Side, Size } from './types.ts';
 
+/** Real-world scale: one grid cell is 5 m x 5 m (Mechabellum-style). The field is 240 m x 230 m.
+ *  A size-1 unit is a 5 m light vehicle, size 2 a 10 m tank, size 3 a 15 m walker. All ranges/speeds in
+ *  data are in cells; multiply by METERS_PER_CELL for display. */
+export const METERS_PER_CELL = 5;
 export const FIELD_W = 48;
 export const FIELD_H = 46;
 export const DEPLOY_W = FIELD_W;
@@ -42,3 +46,8 @@ export function inDeployZone(x: number, y: number, size: Size): boolean {
 export function overlaps(ax: number, ay: number, as: number, bx: number, by: number, bs: number): boolean {
   return ax < bx + bs && bx < ax + as && ay < by + bs && by < ay + as;
 }
+
+/** Format a distance given in cells as metres, e.g. 4.5 -> "23 m". */
+export const fmtMeters = (cells: number) => `${Math.round(cells * METERS_PER_CELL)} m`;
+/** Format a speed given in cells/s as metres per second, e.g. 3.2 -> "16 m/s". */
+export const fmtSpeed = (cellsPerSec: number) => `${Math.round(cellsPerSec * METERS_PER_CELL)} m/s`;
