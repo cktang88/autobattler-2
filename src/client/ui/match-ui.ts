@@ -328,7 +328,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
 
   const dpsBox = (kind: 'ground' | 'air', v: number) => {
     const none = v <= 0;
-    return h('div.sc-dps', { class: `${kind}${none ? ' none' : ''}` },
+    return h('div.sc-dps', { class: `${kind}${none ? (dp.weapons ? ' none' : ' na') : ''}` },
       svgIcon(kind, 20),
       h('div.sc-dv', null,
         h('span.sc-dl', null, `DPS vs ${kind === 'ground' ? 'GROUND' : 'AIR'}`),

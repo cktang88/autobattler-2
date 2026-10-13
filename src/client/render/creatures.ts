@@ -290,14 +290,14 @@ function cables(g: Ctx, pts: number[], S: number, w: number, n = 2): void {
 
 export function creatureHullPath(shape: string, S: number): Path2D | null {
   switch (shape) {
-    case 'mantis': return sharp([0.47, 0, 0.46, -0.055, 0.42, -0.11, 0.34, -0.115, 0.3, -0.06, 0.26, -0.05, 0.21, -0.075, 0.06, -0.075, 0.02, -0.055, -0.04, -0.06, -0.1, -0.14, -0.38, -0.14, -0.46, -0.09, -0.47, 0], S);
+    case 'mantis': return profilePath([0.48, 0, 0.46, 0.05, 0.4, 0.09, 0.33, 0.08, 0.28, 0.04, 0.2, 0.05, 0.08, 0.06, -0.02, 0.06, -0.1, 0.11, -0.26, 0.13, -0.4, 0.1, -0.47, 0], S);
     case 'mech': return sharp([0.24, 0, 0.235, -0.09, 0.19, -0.19, 0.1, -0.27, -0.1, -0.28, -0.2, -0.22, -0.26, -0.12, -0.27, 0], S);
-    case 'arachnid': return sharp([0.44, 0, 0.43, -0.06, 0.37, -0.13, 0.27, -0.16, 0.16, -0.15, 0.1, -0.08, 0.06, -0.09, 0.0, -0.19, -0.1, -0.25, -0.34, -0.25, -0.44, -0.17, -0.48, -0.06, -0.48, 0], S);
-    case 'crab': return sharp([0.27, 0, 0.27, -0.1, 0.22, -0.26, 0.12, -0.37, 0.0, -0.41, -0.14, -0.39, -0.24, -0.3, -0.3, -0.16, -0.3, 0], S);
+    case 'arachnid': return profilePath([0.45, 0, 0.43, 0.06, 0.36, 0.12, 0.25, 0.14, 0.15, 0.11, 0.08, 0.06, 0.02, 0.1, -0.08, 0.2, -0.22, 0.245, -0.36, 0.22, -0.45, 0.13, -0.48, 0], S);
+    case 'crab': return sharp([0.27, 0, 0.27, -0.16, 0.24, -0.3, 0.16, -0.38, -0.16, -0.4, -0.25, -0.34, -0.3, -0.22, -0.3, 0], S);
     case 'saucer': { const p = new Path2D(); p.arc(0, 0, 0.44 * S, 0, P2); return p; }
     case 'delta': { const p = new Path2D(); poly(p, mirrorPoly([0.5, 0, 0.3, -0.075, -0.27, -0.46, -0.39, -0.46, -0.34, -0.31, -0.45, -0.22, -0.47, -0.1, -0.41, 0]), S); return p; }
     case 'warlord': return sharp([0.25, 0, 0.245, -0.1, 0.2, -0.2, 0.1, -0.27, -0.11, -0.27, -0.22, -0.21, -0.28, -0.12, -0.29, 0], S);
-    case 'scorpion': return sharp([0.39, 0, 0.38, -0.07, 0.33, -0.15, 0.24, -0.2, 0.08, -0.23, -0.08, -0.22, -0.2, -0.18, -0.3, -0.12, -0.36, -0.06, -0.36, 0], S);
+    case 'scorpion': return sharp([0.39, 0, 0.38, -0.08, 0.32, -0.16, 0.24, -0.2, 0.22, -0.23, -0.24, -0.23, -0.3, -0.17, -0.36, -0.1, -0.36, 0], S);
     case 'centipede': return sharp([0.5, 0, 0.49, -0.05, 0.45, -0.11, 0.38, -0.13, 0.32, -0.11, 0.29, 0], S);
     case 'broodmother': return sharp([0.47, 0, 0.46, -0.07, 0.4, -0.14, 0.29, -0.17, 0.19, -0.15, 0.13, -0.09, 0.08, -0.12, 0.0, -0.25, -0.12, -0.34, -0.33, -0.36, -0.44, -0.28, -0.5, -0.14, -0.5, 0], S);
     case 'carriage': return profilePath([0.25, 0, 0.245, 0.1, 0.21, 0.22, 0.15, 0.265, 0.09, 0.22, 0.07, 0.12, -0.08, 0.1, -0.15, 0.05, -0.16, 0], S);
@@ -307,7 +307,7 @@ export function creatureHullPath(shape: string, S: number): Path2D | null {
     case 'siegeplat': return sharp([0.38, -0.1, 0.32, -0.27, 0.2, -0.33, -0.28, -0.33, -0.38, -0.25, -0.4, -0.1], S);
     case 'juggernaut': return sharp([0.47, -0.17, 0.44, -0.3, 0.38, -0.43, -0.38, -0.45, -0.46, -0.38, -0.48, -0.16], S);
     case 'bomber': return sharp([0.46, 0, 0.3, -0.115, -0.05, -0.47, -0.2, -0.47, -0.27, -0.37, -0.35, -0.41, -0.45, -0.29, -0.4, -0.18, -0.46, -0.07, -0.42, 0], S);
-    case 'arachne': { const p = new Path2D(); poly(p, mirrorPoly([0.49, 0, 0.46, -0.07, 0.4, -0.14, 0.3, -0.19, 0.2, -0.18, 0.13, -0.11, 0.08, -0.12, 0.02, -0.2, -0.08, -0.28, -0.22, -0.33, -0.36, -0.31, -0.45, -0.23, -0.5, -0.11, -0.5, 0]), S); return p; }
+    case 'arachne': return profilePath([0.49, 0, 0.47, 0.07, 0.41, 0.14, 0.31, 0.18, 0.2, 0.17, 0.13, 0.11, 0.07, 0.13, -0.02, 0.22, -0.14, 0.3, -0.3, 0.32, -0.43, 0.25, -0.5, 0.12, -0.51, 0], S);
   }
   return null;
 }
@@ -711,32 +711,59 @@ function sensorCluster(g: Ctx, x: number, hw: number, S: number, E: string, o: n
   }
 }
 
+/** Sleek alien shell: polished team-tinted metal, broad specular sweep, crisp outline. */
+function sleekShell(g: Ctx, p: Path2D, pal: TeamPal, o: number, S: number, x0: number, y0: number, x1: number, y1: number): void {
+  const gr = g.createLinearGradient(x0 * S, y0 * S, x1 * S, y1 * S);
+  gr.addColorStop(0, shade(pal.light, 0.05)); gr.addColorStop(0.35, pal.body); gr.addColorStop(1, shade(pal.deep, 0.1));
+  ao(g, p, S, 0.02, 0.6);
+  g.fillStyle = gr; g.fill(p);
+  g.save(); g.clip(p);
+  const sp = g.createLinearGradient(x0 * S, y0 * S, x1 * S, y1 * S);
+  sp.addColorStop(0, 'rgba(255,255,255,0)'); sp.addColorStop(0.3, 'rgba(255,255,255,0.32)'); sp.addColorStop(0.42, 'rgba(255,255,255,0)');
+  g.fillStyle = sp; g.fill(p);
+  g.lineWidth = o * 3; g.strokeStyle = 'rgba(0,0,0,0.35)'; g.stroke(p);
+  g.restore();
+  g.lineWidth = o; g.lineJoin = 'round'; g.strokeStyle = OUTLINE; g.stroke(p);
+}
+
+/** Curved glowing seams: [x0, y0, cx, cy, x1, y1, ...] fractions of S. */
+function seamGlow(g: Ctx, q: number[], S: number, E: string, w: number): void {
+  g.lineCap = 'round';
+  for (const [col, lw] of [['rgba(0,0,0,0.6)', w * 2.2], [rgba(E, 0.95), w], ['rgba(255,255,255,0.7)', w * 0.35]] as [string, number][]) {
+    g.strokeStyle = col; g.lineWidth = lw;
+    g.beginPath();
+    for (let i = 0; i < q.length; i += 6) { g.moveTo(q[i] * S, q[i + 1] * S); g.quadraticCurveTo(q[i + 2] * S, q[i + 3] * S, q[i + 4] * S, q[i + 5] * S); }
+    g.stroke();
+  }
+}
+
+/** Levitating core module: dark gap ring with an emissive underglow, then the shell floating above it. */
+function floatGap(g: Ctx, p: Path2D, E: string, o: number, S: number): void {
+  g.save();
+  g.lineJoin = 'round';
+  g.strokeStyle = rgba(E, 0.35); g.lineWidth = 0.05 * S; g.stroke(p);
+  g.strokeStyle = '#05080b'; g.lineWidth = 0.025 * S; g.stroke(p);
+  g.strokeStyle = rgba(E, 0.8); g.lineWidth = o * 0.7; g.stroke(p);
+  g.restore();
+}
+
 /** Arachnid / Broodmother / Arachne: armoured walker cab up front, engine / ammo module behind. */
 function spiderDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, hull: Path2D): void {
   const S = L.S;
   const E = emis(pal);
   const t = o * 0.5;
   if (L.shape === 'arachnid') {
-    // rear module: armoured engine / ammo block, vents, exhausts, team trim
-    const ab = sharp([0.02, 0, -0.02, -0.13, -0.1, -0.205, -0.33, -0.205, -0.42, -0.13, -0.45, 0], S);
-    raised(g, ab, grad(g, S, shade(pal.light, 0.02), pal.dark, -0.1, -0.2, -0.3, 0.2), o, S, 1, 0.01, 0.45);
-    plateSeams(g, ab, [-0.08, -0.25, -0.36], S, o, 0.6);
-    seam(g, [-0.08, 0, -0.36, 0], S, t);
-    for (const s of [-1, 1]) {
-      glowLine(g, [-0.11, s * 0.19, -0.3, s * 0.19], S, E, o * 0.8);
-      rivetRow(g, -0.04 * S, s * 0.1 * S, -0.04 * S, s * 0.02 * S, 2, 0.008 * S);
-      stack(g, -0.43 * S, s * 0.075 * S, 0.022 * S, o * 0.6);
-    }
-    grille(g, -0.395 * S, 0, 0.04 * S, 0.1 * S, 3, o, E, 0.3);
-    // waist coupling: cable bundle + ball joint
-    cables(g, [0.13, 0, -0.03, 0], S, 0.016 * S, 3);
-    joint(g, 0.06 * S, 0, 0.035 * S, o, METAL.base);
-    // cab: armoured walker head with a sensor cluster
-    const ce = sharp([0.41, 0, 0.4, -0.055, 0.345, -0.12, 0.24, -0.135, 0.15, -0.11, 0.12, 0], S);
-    raised(g, ce, grad(g, S, shade(pal.light, 0.1), pal.body), o, S, 1.2, 0.01, 0.4);
-    seam(g, [0.15, 0, 0.32, 0, 0.24, -0.13, 0.22, -0.04, 0.24, 0.13, 0.22, 0.04], S, t);
-    for (const s of [-1, 1]) stripe(g, [0.31, s * 0.1, 0.2, s * 0.12], S, pal.accent, o * 0.8);
-    sensorCluster(g, 0.4, 0.07, S, E, o, false);
+    // sleek alien quad walker: levitating rear core pod, smooth cab with one wide sensor visor
+    const ab = profilePath([0.0, 0, -0.03, 0.1, -0.1, 0.18, -0.22, 0.21, -0.34, 0.19, -0.42, 0.11, -0.44, 0], S);
+    floatGap(g, ab, E, o, S);
+    sleekShell(g, ab, pal, o, S, -0.1, -0.2, -0.35, 0.2);
+    seamGlow(g, [-0.04, -0.12, -0.2, -0.24, -0.38, -0.1, -0.04, 0.12, -0.2, 0.24, -0.38, 0.1, -0.12, 0, -0.25, -0.03, -0.4, 0], S, E, o * 0.9);
+    const ce = profilePath([0.41, 0, 0.39, 0.06, 0.32, 0.115, 0.22, 0.125, 0.14, 0.09, 0.11, 0], S);
+    sleekShell(g, ce, pal, o, S, 0.15, -0.12, 0.4, 0.12);
+    seamGlow(g, [0.37, -0.085, 0.405, 0, 0.37, 0.085], S, E, o * 1.6);
+    seamGlow(g, [0.15, -0.06, 0.25, -0.11, 0.33, -0.07, 0.15, 0.06, 0.25, 0.11, 0.33, 0.07], S, E, o * 0.7);
+    dot(g, 0.07 * S, 0, 0.03 * S, OUTLINE); dot(g, 0.07 * S, 0, 0.02 * S, rgba(E, 0.9));
+    void t;
     return;
   }
   if (L.shape === 'broodmother') {
@@ -770,39 +797,28 @@ function spiderDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, hull: Pat
     sensorCluster(g, 0.44, 0.075, S, E, o, true);
     return;
   }
-  // arachne: titan walker, faceted armour
-  const ab = new Path2D();
-  poly(ab, mirrorPoly([0.04, 0, 0.0, -0.15, -0.09, -0.24, -0.22, -0.28, -0.35, -0.265, -0.43, -0.2, -0.46, -0.1, -0.46, 0]), S);
-  raised(g, ab, grad(g, S, shade(pal.body, 0.02), pal.deep, -0.1, -0.3, -0.3, 0.3), o, S, 1.5, 0.03, 0.7);
-  // armour lames across the rear module
-  for (let i = 0; i < 4; i++) {
-    const x0 = -0.06 - i * 0.1;
-    const w = [0.2, 0.25, 0.25, 0.18][i];
-    const lm = new Path2D();
-    poly(lm, mirrorPoly([x0, 0, x0 - 0.01, -w * 0.6, x0 - 0.04, -w, x0 - 0.085, -w * 0.95, x0 - 0.09, 0]), S);
-    bevel(g, lm, grad(g, S, shade(pal.light, -0.05 - i * 0.04), shade(pal.dark, -0.05), x0, -w, x0 - 0.09, w), o, 1.2);
-    rivetRow(g, (x0 - 0.02) * S, -w * 0.75 * S, (x0 - 0.02) * S, w * 0.75 * S, 5, 0.006 * S);
+  // arachne: colossal alien walking fortress - layered smooth shells, glowing seams, levitating core rings
+  const ab = profilePath([0.04, 0, 0.01, 0.15, -0.08, 0.25, -0.22, 0.29, -0.36, 0.27, -0.45, 0.19, -0.47, 0.09, -0.475, 0], S);
+  floatGap(g, ab, E, o, S);
+  sleekShell(g, ab, pal, o, S, -0.1, -0.3, -0.35, 0.3);
+  for (let i = 0; i < 3; i++) {
+    const x0 = -0.08 - i * 0.12, w = [0.22, 0.25, 0.2][i];
+    const lm = profilePath([x0, 0, x0 - 0.005, w * 0.6, x0 - 0.03, w, x0 - 0.08, w * 0.95, x0 - 0.095, w * 0.5, x0 - 0.1, 0], S);
+    sleekShell(g, lm, pal, o * 0.8, S, x0, -w, x0 - 0.1, w);
   }
-  glowLine(g, [-0.08, -0.17, -0.38, -0.2, -0.08, 0.17, -0.38, 0.2], S, E, o * 1.2);
-  for (const s of [-1, 1]) { vent(g, -0.3, s * 0.13, 0.07, 0.05, S, o); stack(g, -0.45 * S, s * 0.12 * S, 0.02 * S, o * 0.6); }
-  hazard(g, -0.455 * S, -0.06 * S, 0.025 * S, 0.12 * S, o, true);
-  cables(g, [0.16, 0, 0.0, 0], S, 0.016 * S, 3);
-  joint(g, 0.08 * S, 0, 0.04 * S, o, METAL.base);
-  // armoured command cab + crown + radio masts + sensor cluster
-  const ce = new Path2D();
-  poly(ce, mirrorPoly([0.47, 0, 0.44, -0.065, 0.38, -0.12, 0.29, -0.165, 0.2, -0.155, 0.14, -0.08, 0.13, 0]), S);
-  raised(g, ce, grad(g, S, shade(pal.light, 0.08), pal.dark), o, S, 1.6, 0.03, 0.7);
-  const cr = new Path2D();
-  poly(cr, mirrorPoly([0.39, 0, 0.37, -0.06, 0.3, -0.1, 0.22, -0.1, 0.19, 0]), S);
-  bevel(g, cr, grad(g, S, shade(pal.light, 0.15), pal.body), o, 1.3);
-  seam(g, [0.19, 0, 0.37, 0], S, t);
-  for (const s of [-1, 1]) {
-    vent(g, 0.245, s * 0.055, 0.06, 0.03, S, o);
-    fin(g, 0.27 * S, s * 0.155 * S, s * 1.2, 0.045 * S, 0.03 * S, shade(pal.light, -0.15), o);
-    fin(g, 0.2 * S, s * 0.15 * S, s * 1.7, 0.045 * S, 0.03 * S, shade(pal.light, -0.15), o);
-  }
-  sensorCluster(g, 0.46, 0.075, S, E, o, true);
-  void hull;
+  seamGlow(g, [-0.06, -0.2, -0.24, -0.31, -0.42, -0.16, -0.06, 0.2, -0.24, 0.31, -0.42, 0.16], S, E, o * 1.2);
+  for (const s of [-1, 1]) { dot(g, -0.3 * S, s * 0.13 * S, 0.03 * S, OUTLINE); dot(g, -0.3 * S, s * 0.13 * S, 0.02 * S, rgba(E, 0.85)); }
+  cables(g, [0.15, 0, 0.0, 0], S, 0.016 * S, 3);
+  dot(g, 0.075 * S, 0, 0.045 * S, OUTLINE); dot(g, 0.075 * S, 0, 0.035 * S, '#0b1016');
+  g.strokeStyle = rgba(E, 0.9); g.lineWidth = o; g.beginPath(); g.arc(0.075 * S, 0, 0.025 * S, 0, P2); g.stroke();
+  // command cab: smooth crest with a sweeping visor arc
+  const ce = profilePath([0.48, 0, 0.46, 0.07, 0.39, 0.13, 0.29, 0.165, 0.2, 0.155, 0.14, 0.09, 0.13, 0], S);
+  sleekShell(g, ce, pal, o * 1.1, S, 0.15, -0.16, 0.47, 0.16);
+  const cr = profilePath([0.4, 0, 0.38, 0.05, 0.31, 0.085, 0.22, 0.08, 0.19, 0], S);
+  sleekShell(g, cr, pal, o, S, 0.2, -0.09, 0.4, 0.09);
+  seamGlow(g, [0.43, -0.1, 0.475, 0, 0.43, 0.1], S, E, o * 2);
+  seamGlow(g, [0.16, -0.1, 0.26, -0.165, 0.36, -0.13, 0.16, 0.1, 0.26, 0.165, 0.36, 0.13], S, E, o * 0.8);
+  void hull; void t;
 }
 
 /** Broodmother fuel cells around the rear module rim [x, y, r]. */
@@ -1214,6 +1230,8 @@ interface LegRig {
   stride: number;
   big: boolean;
   armour: boolean;
+  /** limb design language: industrial beams + rams, sleek alien digitigrade limbs, stubby piston stilts */
+  style: 'ind' | 'sleek' | 'stub';
 }
 
 const rigCache = new Map<string, LegRig>();
@@ -1238,14 +1256,22 @@ function legRig(L: UnitLayout): LegRig {
   };
   let w = 0.065, stride = 0.13;
   let armour = false;
+  let style: LegRig['style'] = 'ind';
   switch (L.shape) {
-    case 'arachnid': radial(0.24, 0.09, 0.1, 0.64, [0.5, 1.12, 1.82, 2.5]); w = 0.062; stride = 0.11; armour = true; break;
-    case 'broodmother': radial(0.27, 0.1, 0.11, 0.72, [0.5, 1.1, 1.8, 2.48]); w = 0.058; stride = 0.1; armour = true; break;
-    case 'arachne': radial(0.27, 0.11, 0.12, 0.76, [0.48, 1.08, 1.78, 2.46]); w = 0.062; stride = 0.1; armour = true; break;
-    case 'scorpion': row([0.14, 0.03, -0.08, -0.19], 0.17, 0.47, [0.12, 0.02, -0.08, -0.17]); w = 0.055; stride = 0.08; armour = true; break;
-    case 'crab': row([0.12, 0.02, -0.08, -0.17], 0.3, 0.58, [0.07, -0.02, -0.1, -0.2]); w = 0.06; stride = 0.08; armour = true; break;
-    case 'mantis': row([0.06, -0.04], 0.05, 0.4, [0.22, -0.3]); w = 0.05; stride = 0.13; break;
-    case 'centipede': row([0.36, 0.22, 0.085, -0.055, -0.195, -0.335], 0.1, 0.3, [0.04, 0.02, 0, -0.02, -0.04, -0.07]); w = 0.04; stride = 0.06; break;
+    // sleek alien quad walker: two long digitigrade pairs splayed fore and aft
+    case 'arachnid': row([0.22, 0.0], 0.1, 0.56, [0.3, -0.42]); w = 0.07; stride = 0.13; armour = true; style = 'sleek'; break;
+    // brutalist walking fortress: six heavy industrial legs
+    case 'broodmother': radial(0.2, 0.12, 0.13, 0.74, [0.65, 1.55, 2.4]); w = 0.07; stride = 0.1; armour = true; break;
+    // colossal alien walker: six sweeping alien limbs
+    case 'arachne': radial(0.2, 0.12, 0.13, 0.82, [0.6, 1.5, 2.35]); w = 0.07; stride = 0.1; armour = true; style = 'sleek'; break;
+    // weapon-boom platform: three industrial legs a side
+    case 'scorpion': row([0.12, -0.03, -0.18], 0.17, 0.46, [0.12, 0.0, -0.16]); w = 0.062; stride = 0.08; armour = true; break;
+    // mobile bunker on stubby piston stilts
+    case 'crab': row([0.13, -0.04, -0.2], 0.3, 0.5, [0.06, -0.03, -0.12]); w = 0.075; stride = 0.06; armour = true; style = 'stub'; break;
+    // lanky alien strider
+    case 'mantis': row([0.06, -0.06], 0.05, 0.44, [0.24, -0.32]); w = 0.055; stride = 0.14; style = 'sleek'; break;
+    // land-train: short paired piston walking beams under each car
+    case 'centipede': row([0.36, 0.22, 0.085, -0.055, -0.195, -0.335], 0.1, 0.27, [0.03, 0.015, 0, -0.015, -0.03, -0.05]); w = 0.05; stride = 0.05; style = 'stub'; break;
     default: {
       const hr = Math.min(0.22, L.hw * 0.6);
       if (S >= 4) { radial(0, hr, hr, Math.max(0.64, L.hw + 0.28), [0.5, 1.15, 1.95, 2.6]); w = 0.05; stride = 0.09; }
@@ -1253,7 +1279,7 @@ function legRig(L: UnitLayout): LegRig {
       armour = S >= 3;
     }
   }
-  r = { legs, w, stride, big: S >= 4, armour };
+  r = { legs, w, stride, big: S >= 4, armour, style };
   rigCache.set(key, r);
   return r;
 }
@@ -1287,6 +1313,14 @@ export function drawSpiderLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: numbe
     g.filter = `blur(${Math.max(1, 0.02 * S * devK(g))}px)`;
     for (const k of geo) if (k.lift < 0.3) dot(g, k.fx + 0.015 * S, k.fy + 0.015 * S, W * 0.5, 'rgba(0,0,0,0.35)');
     g.restore();
+  }
+  if (rig.style !== 'ind') {
+    for (const i of idx) {
+      const q = geo[i];
+      if (rig.style === 'sleek') sleekLeg(g, q, W, pal, E, o, rig.big);
+      else stubLeg(g, q, W, pal, E, o, cent);
+    }
+    return;
   }
   for (const i of idx) {
     const { hx, hy, fx, fy, kx, ky, lift } = geo[i];
@@ -1334,6 +1368,77 @@ export function drawSpiderLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: numbe
     if (cent) continue;
     joint(g, hx, hy, W * 0.55, o, METAL.dark);
   }
+}
+
+interface LegGeo { hx: number; hy: number; fx: number; fy: number; kx: number; ky: number; lift: number; }
+
+/** Smooth tapered alien limb segment (lens-shaped, bowed outward) with a glowing seam. */
+function sleekSeg(g: Ctx, x0: number, y0: number, w0: number, x1: number, y1: number, w1: number, bow: number, c0: string, c1: string, E: string, o: number): void {
+  const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+  const nx = -dy / l, ny = dx / l;
+  const mx = (x0 + x1) / 2 + nx * bow, my = (y0 + y1) / 2 + ny * bow;
+  const wm = (w0 + w1) * 0.62;
+  const p = new Path2D();
+  p.moveTo(x0 + nx * w0, y0 + ny * w0);
+  p.quadraticCurveTo(mx + nx * wm * 1.4, my + ny * wm * 1.4, x1 + nx * w1, y1 + ny * w1);
+  p.lineTo(x1 - nx * w1, y1 - ny * w1);
+  p.quadraticCurveTo(mx - nx * wm * 0.6, my - ny * wm * 0.6, x0 - nx * w0, y0 - ny * w0);
+  p.closePath();
+  const gr = g.createLinearGradient(mx + nx * wm, my + ny * wm, mx - nx * wm, my - ny * wm);
+  gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+  g.fillStyle = gr; g.fill(p);
+  g.lineJoin = 'round'; g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(p);
+  // glowing seam following the bow
+  g.lineCap = 'round';
+  g.strokeStyle = rgba(E, 0.85); g.lineWidth = Math.max(o * 0.6, Math.min(w0, w1) * 0.28);
+  g.beginPath();
+  g.moveTo(x0 + dx * 0.12 + nx * w0 * 0.2, y0 + dy * 0.12 + ny * w0 * 0.2);
+  g.quadraticCurveTo(mx + nx * wm * 0.45, my + ny * wm * 0.45, x1 - dx * 0.12 + nx * w1 * 0.2, y1 - dy * 0.12 + ny * w1 * 0.2);
+  g.stroke();
+}
+
+/** Alien digitigrade leg: arched thigh, floating knee node, needle shin, hovering foot node. */
+function sleekLeg(g: Ctx, q: LegGeo, W: number, pal: TeamPal, E: string, o: number, big: boolean): void {
+  const { hx, hy, fx, fy, kx, ky, lift } = q;
+  const side = hy < 0 ? -1 : 1;
+  const up = 1 + lift * 0.25;
+  const shell0 = shade(METAL.light, 0.05 + lift * 0.1), shell1 = METAL.deep;
+  // shin: knee -> foot, tapering to a point, bowed backward (reverse joint)
+  sleekSeg(g, kx, ky, W * 0.42 * up, fx, fy, W * 0.1, -side * W * 0.5, shell0, shell1, E, o);
+  // thigh: hip -> knee, thick, bowed outward
+  sleekSeg(g, hx, hy, W * 0.7, kx, ky, W * 0.5 * up, side * W * 0.9, shade(pal.dark, 0.05 + lift * 0.1), METAL.deep, E, o);
+  // floating knee node: dark orb in an emissive ring
+  dot(g, kx, ky, W * 0.5 * up, OUTLINE);
+  dot(g, kx, ky, W * 0.42 * up, '#0b1016');
+  g.strokeStyle = rgba(E, 0.9); g.lineWidth = Math.max(o * 0.7, W * 0.12);
+  g.beginPath(); g.arc(kx, ky, W * 0.3 * up, 0, P2); g.stroke();
+  dot(g, kx - W * 0.1, ky - W * 0.1, W * 0.1, 'rgba(255,255,255,0.7)');
+  // foot node
+  dot(g, fx, fy, W * (big ? 0.24 : 0.2), OUTLINE);
+  dot(g, fx, fy, W * (big ? 0.15 : 0.12), rgba(E, 0.95));
+  // hip socket
+  dot(g, hx, hy, W * 0.55, OUTLINE);
+  dot(g, hx, hy, W * 0.46, METAL.dark);
+  dot(g, hx, hy, W * 0.2, rgba(E, 0.8));
+}
+
+/** Stubby piston stilt: short A-frame strut, telescoping ram straight down to a big bolted foot pad. */
+function stubLeg(g: Ctx, q: LegGeo, W: number, pal: TeamPal, E: string, o: number, small: boolean): void {
+  const { hx, hy, fx, fy, kx, ky, lift } = q;
+  const pr = W * (small ? 0.5 : 0.62) * (1 - lift * 0.15);
+  // foot pad
+  const pad = new Path2D();
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * P2 + P2 / 16; pad.lineTo(fx + Math.cos(a) * pr, fy + Math.sin(a) * pr); }
+  pad.closePath();
+  g.fillStyle = METAL.dark; g.fill(pad); g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(pad);
+  g.strokeStyle = 'rgba(232,184,28,0.75)'; g.lineWidth = Math.max(o * 0.5, pr * 0.14);
+  g.beginPath(); g.arc(fx, fy, pr * 0.66, 0, P2); g.stroke();
+  // upper strut (team armour) and the ram
+  beam(g, hx, hy, W * 0.5, kx, ky, W * 0.42, shade(pal.dark, 0.08 + lift * 0.1), pal.deep, o);
+  piston(g, kx, ky, fx, fy, W * 0.26, o * 0.8);
+  joint(g, kx, ky, W * 0.38, o * 0.8, METAL.base, small ? undefined : rgba(E, 0.9));
+  dot(g, fx, fy, pr * 0.3, METAL.light);
+  if (!small) joint(g, hx, hy, W * 0.45, o * 0.8, METAL.dark);
 }
 
 /* ------------------------------------------------------------------------------------------------ dynamic fx */

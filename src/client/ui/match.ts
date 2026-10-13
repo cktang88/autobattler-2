@@ -1228,6 +1228,26 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
   }
 
+  /** keep the pinned stat panel from covering the block it describes (desktop: dock left or right) */
+  function dockInfo() {
+    const t = sel ?? (phase === 'deploy' && hover && selCard >= 0 ? { side, uid: -1, pending: true } : null);
+    if (!t || infoEl.classList.contains('hidden') || window.matchMedia('(max-width: 760px), (hover: none)').matches) return;
+    let cx: number | null = null;
+    if (sel) {
+      const p = blockSrc(sel);
+      const d = p && designOf(sel.side, p.designId);
+      if (p && d) cx = view.worldToScreen(...(Object.values(blockWorldRectCenter(sel.side, p, sizeOf(d))) as [number, number])).x;
+    } else if (hover) {
+      const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size);
+      cx = view.worldToScreen(r.col + r.w / 2, r.row + r.h / 2).x;
+    }
+    if (cx == null) return;
+    const W = canvas.clientWidth;
+    if (cx < 390) infoEl.classList.add('right');
+    else if (cx > W - 450) infoEl.classList.remove('right');
+  }
+  const blockWorldRectCenter = (s: Side, p: Placement, size: Size) => { const r = blockWorldRect(s, p, size); return { x: r.col + r.w / 2, y: r.row + r.h / 2 }; };
+
   let raf = 0;
   let last = performance.now();
   let drawErr = false;
@@ -1261,6 +1281,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         } else if (phase === 'deploy' || phase === 'waiting') hov = blockOutline();
         view.drawBoard(boardUnits(), { showZone: phase === 'deploy', hover: hov }, now / 1000);
         drawRanges();
+        dockInfo();
       }
     } catch (e) {
       if (!drawErr) { drawErr = true; console.error('field draw', e); }

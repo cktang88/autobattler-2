@@ -462,3 +462,7 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
   .sc-tile b { font-size: 1.35rem; }
 }
 .info .sc { margin-bottom: 8px; }
+
+.sc-dps.na { --c: var(--line2); color: var(--muted); background: var(--bg2); }
+.sc-dps.na b { color: var(--muted); }
+@media (min-width: 761px) and (hover: hover) { .info.right { left: auto; right: 56px; } }
