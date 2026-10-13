@@ -180,7 +180,7 @@ test('deploy, redaction, polling and round resolution', async () => {
 
   // bad block settings are rejected
   const withSettings = (extra: object): DeployAction => { const a = placeOne(m0, 0); a.place[0] = { ...a.place[0], ...extra }; return a; };
-  for (const bad of [{ spacing: 9 }, { spacing: 1.5 }, { target: 'nope' }, { hold: 'yes' }, { kite: 1 }, { focus: 1 }, { retreat: 'x' }, { stance: 'sideways' }, { delay: 4 }, { delay: '3' }, { escort: 1.5 }, { escort: 'a' }, { escort: 424242 }]) {
+  for (const bad of [{ spacing: 9 }, { spacing: 1.5 }, { target: 'nope' }, { hold: 'yes' }, { kite: 1 }, { focus: 1 }, { retreat: 'x' }, { stance: 'sideways' }, { delay: 4 }, { delay: '3' }, { escort: 1.5 }, { escort: 'a' }, { escort: 424242 }, { kiteMount: -1 }, { kiteMount: 1.5 }, { kiteMount: 99 }]) {
     assert.equal((await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: withSettings(bad) })).status, 400, JSON.stringify(bad));
   }
   assert.equal((await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: { ...placeOne(m0, 0), configure: [{ uid: 77, kite: true }] } })).status, 400, 'configure of unknown unit');

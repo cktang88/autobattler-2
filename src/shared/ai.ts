@@ -370,6 +370,8 @@ export interface Behavior {
   /** seconds before the block starts moving (0, 3, 6) */
   delay: number;
   retreat: boolean;
+  /** mount index whose weapon range a kiting unit keeps to (absent = longest-range weapon) */
+  kiteMount?: number;
 }
 
 export interface BehaviorCtx {
@@ -429,7 +431,24 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
   return { target, hold, kite: kite && stance !== 'holdPos', focus, stance, delay, retreat };
 }
 
+/** For a kiting unit with mixed weapons: the (non-melee) weapon mount carrying the most dps, unless that is
+ *  already the longest-range weapon (the sim default). */
+function withKiteMount(b: Behavior, d: Design): Behavior {
+  if (!b.kite) return b;
+  let best = -1, bestDps = 0, longest = -1, longestR = 0;
+  d.mounts.forEach((id, i) => {
+    const m = id ? MODULES.find((x) => x.id === id) : undefined;
+    if (!m || m.kind !== 'weapon' || m.projectile === 'melee' || !(m.range ?? 0)) return;
+    const dps = weaponDps(m);
+    if (dps > bestDps) { bestDps = dps; best = i; }
+    if ((m.range ?? 0) > longestR) { longestR = m.range ?? 0; longest = i; }
+  });
+  if (best >= 0 && best !== longest) b.kiteMount = best;
+  return b;
+}
+
 function applyBehavior(pl: Placement | UnitConfig, b: Behavior): void {
+  if (b.kite && b.kiteMount !== undefined) pl.kiteMount = b.kiteMount;
   if (b.target !== 'closest') pl.target = b.target;
   if (b.hold) pl.hold = true;
   if (b.kite) pl.kite = true;
@@ -608,7 +627,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     occ.push({ x: spot.x, y: spot.y, s: foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
     if (hasSpacing(p.size as Size)) pl.spacing = sp;
-    if (!easy) applyBehavior(pl, chooseBehavior(p, sp, splashShare, o.rng, ctx));
+    if (!easy) applyBehavior(pl, withKiteMount(chooseBehavior(p, sp, splashShare, o.rng, ctx), choice));
     action.place.push(pl);
     simUnits += squadSize(p.size as Size);
     roles.set(p.role, (roles.get(p.role) ?? 0) + 1);
@@ -633,7 +652,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
         const d = byId.get(u.designId);
         if (!d || o.rng() >= 0.3) continue;
         const pr = profile(d);
-        const b = chooseBehavior(pr, u.spacing ?? 0, splashShare, o.rng, ctx);
+        const b = withKiteMount(chooseBehavior(pr, u.spacing ?? 0, splashShare, o.rng, ctx), d);
         const cfg: UnitConfig = { uid: u.uid };
         if (isHealer(pr)) {
           if (u.escort === undefined) { const e = pickEscort(blocks, u.uid); if (e !== undefined) cfg.escort = e; }
@@ -641,6 +660,8 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
           if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
           if (b.hold !== !!u.hold && hasSpacing(pr.size as Size)) cfg.hold = b.hold;
           if (b.kite !== !!u.kite) cfg.kite = b.kite;
+          if (b.kite && b.kiteMount !== undefined && b.kiteMount !== u.kiteMount) cfg.kiteMount = b.kiteMount;
+          else if (!b.kite && u.kiteMount !== undefined) cfg.kiteMount = -1;
           if (b.focus !== !!u.focus) cfg.focus = b.focus;
           if (b.stance !== (u.stance ?? 'advance')) cfg.stance = b.stance;
           if (b.delay !== (u.delay ?? 0)) cfg.delay = b.delay;
@@ -707,6 +728,7 @@ function applyToBoard(board: Placement[], a: DeployAction): Placement[] {
     if (c.target !== undefined) u.target = c.target;
     if (c.hold !== undefined) u.hold = c.hold;
     if (c.kite !== undefined) u.kite = c.kite;
+    if (c.kiteMount !== undefined) { if (c.kiteMount === -1) delete u.kiteMount; else u.kiteMount = c.kiteMount; }
     if (c.focus !== undefined) u.focus = c.focus;
     if (c.stance !== undefined) u.stance = c.stance;
     if (c.delay !== undefined) u.delay = c.delay;

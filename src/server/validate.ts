@@ -77,6 +77,11 @@ export function sanitizeDeck(raw: unknown): Design[] {
     if (o.behavior !== undefined) {
       if (!isObj(o.behavior)) bad(`Invalid behavior (#${i + 1})`);
       design.behavior = readBehavior(o.behavior as Record<string, unknown>, 'behavior');
+      const km = (o.behavior as Record<string, unknown>).kiteMount;
+      if (km !== undefined) {
+        if (!isInt(km) || (km as number) < 0 || (km as number) > 16) bad('Invalid behavior.kiteMount');
+        design.behavior.kiteMount = km as number;
+      }
     }
     return design;
   });

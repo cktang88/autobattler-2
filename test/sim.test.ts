@@ -798,3 +798,22 @@ test('titan battle: giants/titans fight, crush smaller units, stay deterministic
     for (const u of b.units) if (u.alive) assert.ok(Number.isFinite(u.x) && u.x >= 0 && u.x <= FIELD_W && u.y >= 0 && u.y <= FIELD_H);
   }
 });
+
+test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar', () => {
+  const mm = D('mortmg', 'warden', 'halftrack', ['mortar', 'mg']);
+  assert.deepEqual(validateDesign(mm), []);
+  const designs = [...DESIGNS, mm];
+  const run = (kiteMount?: number) => {
+    const u: Placement = { ...P('mortmg', 10, 0), kite: true, kiteMount };
+    const b = new Battle({ seed: 4, sides: [{ designs, units: [u] }, { designs, units: mirrorShift([{ ...P('buggy', 10, 0), stance: 'holdPos' }]) }] });
+    // park the enemy squad 6 cells ahead; the kiter must decide how far to back off
+    const en = b.units.filter((x) => x.side === 1);
+    en.forEach((x, i) => { x.x = 24 + (i % 2); x.y = 17 + (i >> 1); });
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    for (let i = 0; i < 200; i++) b.step();
+    return Math.hypot(b.units[0].x - 24, b.units[0].y - 17.5);
+  };
+  const onMortar = run(0), onMg = run(1), dflt = run();
+  assert.ok(onMg < onMortar - 1, `mg ${onMg} vs mortar ${onMortar}`);
+  assert.ok(Math.abs(dflt - onMortar) < 0.5, 'default = longest-range weapon');
+});

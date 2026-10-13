@@ -169,6 +169,7 @@ function behaviorError(b: unknown): string | null {
   if (o.kite !== undefined && typeof o.kite !== 'boolean') return 'Bad kite flag';
   if (o.focus !== undefined && typeof o.focus !== 'boolean') return 'Bad focus flag';
   if (o.retreat !== undefined && typeof o.retreat !== 'boolean') return 'Bad retreat flag';
+  if (o.kiteMount !== undefined && (!isInt(o.kiteMount) || o.kiteMount < -1)) return 'Bad kite weapon';
   if (o.stance !== undefined && !STANCES.includes(o.stance as never)) return 'Bad stance';
   if (o.delay !== undefined && !(START_DELAYS as readonly unknown[]).includes(o.delay)) return 'Bad start delay';
   return null;

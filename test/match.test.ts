@@ -311,3 +311,22 @@ test('design behavior defaults: new fields validated and hidden', () => {
   assert.equal(redactFor(m, 0).players[1].deck[0].behavior, undefined);
   assert.deepEqual(redactFor(m, 1).players[1].deck[0].behavior, { stance: 'charge', delay: 3 });
 });
+
+test('kiteMount: validated against weapon mounts, configure/clear, redacted', () => {
+  const m = fresh();
+  const w = (extra: object): DeployAction => ({ round: 1, place: [{ ...pl(1, 0, 0), ...extra }], upgrade: [] });
+  const d = m.players[0].deck.find((x) => x.id === pl(1, 0, 0).designId)!;
+  const weapon = d.mounts.findIndex((id) => id);
+  assert.ok(weapon >= 0);
+  assert.equal(validateDeploy(m, 0, w({ kite: true, kiteMount: weapon })), null);
+  for (const bad of [-1, 99, 1.5, 'x']) assert.ok(validateDeploy(m, 0, w({ kiteMount: bad })), String(bad));
+  submitDeploy(m, 0, w({ kite: true, kiteMount: weapon }));
+  submitDeploy(m, 1, { round: 1, place: [pl(1, 0, 0, deck[0].id)], upgrade: [] });
+  assert.equal(m.players[0].board[0].kiteMount, weapon);
+  assert.ok(validateDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 1, kiteMount: 99 }] }));
+  assert.equal(validateDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 1, kiteMount: -1 }] }), null);
+  assert.equal(redactFor(m, 1).players[0].board[0].kiteMount, undefined);
+  assert.equal(redactFor(m, 1).history[0].boards[0][0].kiteMount, weapon);
+  submitDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 1, kiteMount: -1 }] });
+  assert.equal(m.players[0].board[0].kiteMount, undefined);
+});
