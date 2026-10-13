@@ -198,7 +198,8 @@ async function armyTest() {
     const dump = results.map((r) => {
       const d = [...STARTER_DESIGNS, ...tests.map((t) => t.d)].find((x) => x.id === r.id)!;
       const st = computeStats(d);
-      return { id: r.id, rate: r.score / r.games, mounts: d.mounts, chassis: d.chassis, mobility: d.mobility, cost: st.cost, hp: st.hp, armor: st.armor, speed: st.speed, range: st.range, offense: st.offense, ehp: st.ehp, flying: st.flying };
+      const t = tests.find((x) => x.d.id === r.id);
+      return { id: r.id, module: t?.module ?? null, base: t?.base ?? false, carrier: t?.carrier ?? '', rate: r.score / r.games, mounts: d.mounts, chassis: d.chassis, mobility: d.mobility, cost: st.cost, hp: st.hp, armor: st.armor, speed: st.speed, range: st.range, offense: st.offense, ehp: st.ehp, flying: st.flying };
     });
     writeFileSync(process.env.BAL_OUT, JSON.stringify(dump));
   }
