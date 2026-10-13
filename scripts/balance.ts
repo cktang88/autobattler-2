@@ -57,13 +57,17 @@ function matches() {
   }
 }
 
-const ARMY_SUPPLY = 1500;
-/** Budget when a giant/titan is involved on either side (a titan block costs ~3000). */
-const BIG_SUPPLY = 3500;
+// Economy: 3000 starting supply, +600/round -> a mid-game army is ~6000 supply (a 16-squad block costs 450+, a
+// single medium 100-300, a giant ~1500, a titan ~2500).
+const ARMY_SUPPLY = Number(process.env.BAL_SUPPLY ?? 6000);
+/** Budget when a giant/titan is involved on either side. */
+const BIG_SUPPLY = Number(process.env.BAL_BIG_SUPPLY ?? 8000);
+/** Keep armies under the sim-unit cap (match.ts MAX_SIM_UNITS = 240) so supply is never silently dropped. */
+const UNIT_CAP = 220;
 const SHARDS = 4;
 
 /** Fillers that top up a giant/titan army (bought in equal supply shares): a balanced, cheap-ish mix. */
-const FILLER_IDS = ['starter-bulwark', 'starter-lancer', 'starter-tankbuster', 'starter-skyguard'];
+const FILLER_IDS = ['starter-bulwark', 'starter-buzzsaw', 'starter-tankbuster', 'starter-skyguard'];
 const FILLER: Design[] = STARTER_DESIGNS.filter((d) => FILLER_IDS.includes(d.id));
 
 const stats = new Map<string, ReturnType<typeof computeStats>>();
@@ -84,7 +88,8 @@ interface Spec { d: Design; n: number }
 function plan(d: Design, S: number): { specs: Spec[]; spend: number } {
   const raw = rawCost(d);
   if (st(d).size < 4) {
-    const n = Math.max(1, Math.round(S / raw));
+    // (blocks: one block = one 16-unit squad for size-1 designs, one unit otherwise)
+    const n = Math.max(1, Math.min(Math.round(S / raw), Math.floor(UNIT_CAP / st(d).squad)));
     return { specs: [{ d, n }], spend: n * raw };
   }
   const nBig = Math.max(1, Math.round((0.55 * S) / raw));
@@ -328,6 +333,34 @@ async function armyTest() {
   const big = nb.filter((d) => sizeOf(d) >= 4).map((d) => ({ id: d.id, r: rate.get(d.id)! }));
   const bigBad = big.filter((x) => x.r < 0.35 || x.r > 0.65);
   if (bigBad.length) console.log(`giant/titan designs outside 35-65%: ${bigBad.map((x) => `${x.id} ${pct(x.r)}`).join(', ')}`);
+
+  // ---- plain frames: per chassis / role / mobility ----
+  const frames = nb.filter((d) => d.id.startsWith('f-'));
+  if (frames.length) {
+    const chRows = CHASSIS.map((c) => {
+      const xs = frames.filter((d) => d.chassis === c.id).map((d) => rate.get(d.id)!);
+      return { id: c.id, size: c.size, roles: c.roles, rate: mean(xs), n: xs.length, lo: Math.min(...xs), hi: Math.max(...xs) };
+    }).filter((c) => c.n > 0).sort((a, b) => b.rate - a.rate);
+    console.log('\n--- plain frames per chassis (mean over legal mobilities; range) ---');
+    for (const c of chRows) console.log(`${pct(c.rate).padStart(4)}  ${c.id.padEnd(12)} size${c.size} n=${String(c.n).padEnd(2)} ${pct(c.lo)}-${pct(c.hi)}  [${c.roles.join(',')}]${flag(c.rate)}`);
+    console.log('\n--- plain frames per role (chassis tagged with the role; viable = chassis mean within 40-60%) ---');
+    const roles = [...new Set(CHASSIS.flatMap((c) => c.roles))];
+    for (const r of roles) {
+      const cs = chRows.filter((c) => c.roles.includes(r));
+      const viable = cs.filter((c) => c.rate >= 0.4 && c.rate <= 0.6);
+      console.log(`${r.padEnd(11)} mean ${pct(mean(cs.map((c) => c.rate)))}  viable ${viable.length}/${cs.length}  ${cs.map((c) => `${c.id} ${pct(c.rate)}`).join(', ')}`);
+    }
+    console.log('\n--- plain frames per mobility (mean) ---');
+    for (const m of MOBILITY) {
+      const xs = frames.filter((d) => d.mobility === m.id).map((d) => rate.get(d.id)!);
+      if (xs.length) console.log(`${pct(mean(xs)).padStart(4)}  ${m.id.padEnd(11)} n=${xs.length}`);
+    }
+  }
+  console.log('\n--- starter price rounding (raw = unit cost x squad; block price rounds to 50) ---');
+  for (const d of STARTER_DESIGNS) {
+    const x = st(d), raw = rawCost(d);
+    console.log(`${d.id.padEnd(22)} raw ${String(raw).padStart(5)}  price ${String(x.cost).padStart(5)}  ${((x.cost / raw - 1) * 100).toFixed(1).padStart(6)}%`);
+  }
 
   const inBand = modRows.filter((m) => m.rate >= 0.35 && m.rate <= 0.65).length;
   const sd = Math.sqrt(mean(modRows.map((m) => (m.rate - 0.5) ** 2)));
