@@ -7,7 +7,7 @@
 
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
-import { METAL, OUTLINE, TEAM_PAL, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
+import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, muzzleLen } from './turrets.ts';
 
 type Shape = ChassisDef['shape'];
@@ -683,6 +683,9 @@ export interface UnitSprites {
   mob: (HTMLCanvasElement | undefined)[];
   rest: HTMLCanvasElement;
   shadow: HTMLCanvasElement;
+  /** dark outline + team rim + soft glow, drawn under the unit */
+  halo: HTMLCanvasElement;
+  haloExt: number;
   sil: Map<string, HTMLCanvasElement>;
   anchor?: HTMLCanvasElement;
 }
@@ -743,9 +746,48 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   sh.g.globalCompositeOperation = 'source-in';
   sh.g.fillStyle = '#000';
   sh.g.fillRect(0, 0, sh.c.width, sh.c.height);
-  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, sil: new Map(), anchor };
+  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: new Map(), anchor };
+  const hl = buildHalo(s, pal);
+  s.halo = hl.c;
+  s.haloExt = hl.ext;
   spriteCache.set(key, s);
   return s;
+}
+
+/** Dark outline + bright team rim + soft underglow around the whole unit silhouette. Widths are in device px
+ *  (sprite px is ~screen px) so they stay legible when the whole field is visible. */
+function buildHalo(s: UnitSprites, pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
+  const px = s.px;
+  const ow = clamp(px * 0.05, 1.3, 3.2); // dark outline
+  const rw = clamp(px * 0.09, 1.8, 4.5); // team rim
+  const gw = clamp(px * 0.22, 3, 11); // glow reach
+  const pad = ow + rw + gw + 2;
+  const ext = s.ext + pad / px;
+  const size = Math.ceil(2 * ext * px);
+  const c = makeCanvas(size, size);
+  const g = ctx2d(c);
+  const off = (size - s.hull.width) / 2;
+  const stamp = (col: string, r: number, n: number) => {
+    const sil = silhouette(s, col);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      g.drawImage(sil, off + Math.cos(a) * r, off + Math.sin(a) * r);
+    }
+  };
+  // soft glow
+  g.filter = `blur(${gw * 0.45}px)`;
+  g.globalAlpha = 0.55;
+  stamp(pal.rim, ow + rw, 12);
+  g.filter = 'none';
+  g.globalAlpha = 1;
+  // rim ring
+  stamp(pal.rim, ow + rw, 20);
+  stamp(pal.rim, ow + rw * 0.5, 16);
+  // dark outline directly around the unit
+  stamp(OUTLINE, ow, 16);
+  stamp(OUTLINE, ow * 0.5, 12);
+  g.drawImage(silhouette(s, OUTLINE), off, off);
+  return { c, ext };
 }
 
 export function mobFrame(design: Design, team: Team, s: UnitSprites, idx: number): HTMLCanvasElement {
@@ -889,8 +931,8 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   const L = layoutOf(p.design);
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
-  const off = 0.07 * L.S + alt * 0.7;
-  const a = (p.alpha ?? 1) * (L.air || p.flying ? 0.3 : p.leap ? 0.45 - p.leap * 0.15 : 0.5);
+  const off = 0.09 * L.S + alt * 0.75;
+  const a = (p.alpha ?? 1) * (L.air || p.flying ? 0.38 : p.leap ? 0.55 - p.leap * 0.15 : 0.62);
   g.globalAlpha = a;
   const sc = L.air || p.flying ? 0.85 : 1 - (p.leap ?? 0) * 0.15;
   blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, L.mob.id === 'anchor' ? 0 : p.angle, s.ext, sc);
@@ -971,6 +1013,8 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
   }
+  // outline + team rim/underglow (stays upright-agnostic: it is the silhouette, rotated with the unit)
+  if (p.cloak !== 'enemy') blit(g, s.halo, x, y, ang, s.haloExt, sc);
   if (s.anchor) blit(g, s.anchor, x, y, 0, s.ext, sc);
   // mobility
   let frame = s.rest;
@@ -1115,7 +1159,26 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     blit(g, silhouette(s, '#9fdcff'), x + Math.sin(p.time * 9) * 0.03, y, ang, s.ext, sc * 1.02);
     g.globalCompositeOperation = prev;
   }
+  // team marker at small scale: circle = friendly, diamond = enemy (shape + colour + luminance cue)
+  if (px < 26 && p.cloak !== 'enemy') {
+    const k = clamp((26 - px) / 10, 0, 1);
+    const r = Math.max(2.4 / px, 0.1 * Math.sqrt(L.S)) * (0.8 + 0.2 * k);
+    const my = y;
+    g.globalAlpha = alpha * Math.max(0.55, k);
+    g.fillStyle = OUTLINE;
+    markerPath(g, p.team, x, my, r * 1.45);
+    g.fill();
+    g.fillStyle = pal.rim;
+    markerPath(g, p.team, x, my, r);
+    g.fill();
+  }
   g.globalAlpha = 1;
+}
+
+function markerPath(g: Ctx, team: Team, x: number, y: number, r: number): void {
+  g.beginPath();
+  if (team === 0) g.arc(x, y, r, 0, Math.PI * 2);
+  else { g.moveTo(x, y - r * 1.2); g.lineTo(x + r * 1.2, y); g.lineTo(x, y + r * 1.2); g.lineTo(x - r * 1.2, y); g.closePath(); }
 }
 
 function drawSparks(g: Ctx, x: number, y: number, r: number, t: number, px: number): void {

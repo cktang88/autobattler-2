@@ -30,7 +30,7 @@ export interface PartIconOpts {
 export function palFromColor(color: string): TeamPal {
   return {
     body: color, light: shade(color, 0.4), dark: shade(color, -0.4), deep: shade(color, -0.7),
-    accent: shade(color, 0.65), glow: shade(color, 0.75), glowRgb: '200,230,255', bar: color,
+    accent: shade(color, 0.65), glow: shade(color, 0.75), glowRgb: '200,230,255', bar: color, rim: shade(color, 0.3),
   };
 }
 

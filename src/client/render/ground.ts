@@ -55,9 +55,9 @@ function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: numbe
   T();
   // base
   const base = g.createLinearGradient(0, 0, W, H);
-  base.addColorStop(0, '#363a37');
-  base.addColorStop(0.5, '#313432');
-  base.addColorStop(1, '#383934');
+  base.addColorStop(0, '#2f343a');
+  base.addColorStop(0.5, '#2c3136');
+  base.addColorStop(1, '#30353a');
   g.fillStyle = base;
   g.fillRect(0, 0, W, H);
 
@@ -65,15 +65,15 @@ function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: numbe
   const P = 5; // 5 tiles = 25 m
   for (let y = 0; y < H; y += P) for (let x = 0; x < W; x += P) {
     const v = rnd();
-    g.fillStyle = v < 0.33 ? 'rgba(255,255,255,0.025)' : v < 0.66 ? 'rgba(0,0,0,0.05)' : 'rgba(90,80,60,0.05)';
+    g.fillStyle = v < 0.33 ? 'rgba(255,255,255,0.012)' : v < 0.66 ? 'rgba(0,0,0,0.025)' : 'rgba(60,70,80,0.03)';
     g.fillRect(x + 0.03, y + 0.03, P - 0.06, P - 0.06);
   }
   // dusty blotches
-  for (let i = 0; i < 90; i++) {
-    const x = rnd() * W, y = rnd() * H, r = 0.8 + rnd() * 3.5;
+  for (let i = 0; i < 40; i++) {
+    const x = rnd() * W, y = rnd() * H, r = 2 + rnd() * 4;
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
     const dusty = rnd() < 0.6;
-    gr.addColorStop(0, dusty ? `rgba(120,104,78,${0.05 + rnd() * 0.07})` : `rgba(0,0,0,${0.06 + rnd() * 0.08})`);
+    gr.addColorStop(0, dusty ? `rgba(110,120,130,${0.02 + rnd() * 0.025})` : `rgba(0,0,0,${0.03 + rnd() * 0.04})`);
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.fillRect(x - r, y - r, r * 2, r * 2);
@@ -83,7 +83,7 @@ function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: numbe
   const pat = g.createPattern(getNoise(), 'repeat');
   if (pat) {
     g.fillStyle = pat;
-    g.globalAlpha = 0.55;
+    g.globalAlpha = 0.12;
     g.fillRect(0, 0, cw, ch);
     g.globalAlpha = 1;
   }
@@ -91,12 +91,12 @@ function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: numbe
   // plate seams
   const lw = 1 / px;
   g.lineWidth = lw * 1.5;
-  g.strokeStyle = 'rgba(0,0,0,0.35)';
+  g.strokeStyle = 'rgba(0,0,0,0.3)';
   g.beginPath();
   for (let x = P; x < W; x += P) { g.moveTo(x, 0); g.lineTo(x, H); }
   for (let y = P; y < H; y += P) { g.moveTo(0, y); g.lineTo(W, y); }
   g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,0.05)';
+  g.strokeStyle = 'rgba(255,255,255,0.035)';
   g.beginPath();
   for (let x = P; x < W; x += P) { g.moveTo(x + lw * 1.5, 0); g.lineTo(x + lw * 1.5, H); }
   for (let y = P; y < H; y += P) { g.moveTo(0, y + lw * 1.5); g.lineTo(W, y + lw * 1.5); }
@@ -104,29 +104,29 @@ function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: numbe
   // rivets at plate corners
   for (let y = P; y < H; y += P) for (let x = P; x < W; x += P) {
     for (const [dx, dy] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) {
-      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.fillStyle = 'rgba(0,0,0,0.25)';
       g.beginPath(); g.arc(x + dx, y + dy, 0.045, 0, Math.PI * 2); g.fill();
-      g.fillStyle = 'rgba(255,255,255,0.09)';
+      g.fillStyle = 'rgba(255,255,255,0.04)';
       g.beginPath(); g.arc(x + dx - 0.012, y + dy - 0.012, 0.022, 0, Math.PI * 2); g.fill();
     }
   }
   // faint tile grid (1 tile = 5 m), stronger every 5 tiles (25 m)
-  g.strokeStyle = 'rgba(255,255,255,0.04)';
+  g.strokeStyle = 'rgba(190,210,230,0.055)';
   g.lineWidth = lw;
   g.beginPath();
   for (let x = 1; x < W; x++) if (x % 5) { g.moveTo(x, 0); g.lineTo(x, H); }
   for (let y = 1; y < H; y++) if (y % 5) { g.moveTo(0, y); g.lineTo(W, y); }
   g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,0.085)';
-  g.lineWidth = lw * 1.4;
+  g.strokeStyle = 'rgba(190,210,230,0.15)';
+  g.lineWidth = lw * 1.5;
   g.beginPath();
   for (let x = 5; x < W; x += 5) { g.moveTo(x, 0); g.lineTo(x, H); }
   for (let y = 5; y < H; y += 5) { g.moveTo(0, y); g.lineTo(W, y); }
   g.stroke();
   // cracks
-  g.strokeStyle = 'rgba(0,0,0,0.3)';
+  g.strokeStyle = 'rgba(0,0,0,0.18)';
   g.lineWidth = lw * 1.2;
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 8; i++) {
     let x = rnd() * W, y = DEPLOY_D + rnd() * (H - 2 * DEPLOY_D);
     let a = rnd() * Math.PI * 2;
     g.beginPath();
@@ -143,18 +143,18 @@ function paint(g: Ctx, px: number, x0: number, y0: number, cw: number, ch: numbe
   for (let i = 0; i < 9; i++) {
     const x = 1 + rnd() * (W - 2), y = DEPLOY_D + 1 + rnd() * (H - 2 * DEPLOY_D - 2), r = 0.3 + rnd() * 0.7;
     const gr = g.createRadialGradient(x, y, 0, x, y, r * 1.4);
-    gr.addColorStop(0, 'rgba(0,0,0,0.3)');
-    gr.addColorStop(0.6, 'rgba(0,0,0,0.12)');
+    gr.addColorStop(0, 'rgba(0,0,0,0.2)');
+    gr.addColorStop(0.6, 'rgba(0,0,0,0.08)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.beginPath(); g.arc(x, y, r * 1.4, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = 'rgba(160,140,110,0.05)';
+    g.strokeStyle = 'rgba(160,170,180,0.03)';
     g.lineWidth = r * 0.12;
     g.beginPath(); g.arc(x, y, r * 0.75, 3.6, 5.8); g.stroke();
   }
   // hazard stripes along the midline
   const mid = H / 2;
-  g.strokeStyle = 'rgba(255,255,255,0.06)';
+  g.strokeStyle = 'rgba(190,210,230,0.09)';
   g.lineWidth = lw * 2;
   g.setLineDash([0.4, 0.4]);
   g.beginPath(); g.moveTo(0, mid); g.lineTo(W, mid); g.stroke();

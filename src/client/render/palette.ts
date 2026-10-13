@@ -13,11 +13,15 @@ export interface TeamPal {
   /** rgb triple of glow for rgba() strings */
   glowRgb: string;
   bar: string;
+  /** bright outer rim / underglow colour (unit silhouette halo, markers) */
+  rim: string;
 }
 
+// Friendly = bright cyan-blue (high luminance), enemy = saturated red-orange (lower luminance, warm hue): they differ
+// in hue AND lightness, and the unit overlay adds a shape cue (circle vs diamond marker) for colour-blind viewers.
 export const TEAM_PAL: [TeamPal, TeamPal] = [
-  { body: '#3d6f8e', light: '#7bb3cf', dark: '#24435a', deep: '#132634', accent: '#46e8d2', glow: '#86f3ff', glowRgb: '134,243,255', bar: '#4fe3b8' },
-  { body: '#9b4a32', light: '#dc8a5e', dark: '#5c2a1c', deep: '#2e140d', accent: '#ffb23e', glow: '#ffb27a', glowRgb: '255,170,110', bar: '#ff6a4a' },
+  { body: '#3f8fc4', light: '#9fdcf8', dark: '#255a82', deep: '#122c42', accent: '#55f2ff', glow: '#9af6ff', glowRgb: '154,246,255', bar: '#4fe3d0', rim: '#46dcff' },
+  { body: '#c2452b', light: '#f58a5a', dark: '#6a2216', deep: '#34100a', accent: '#ffb23e', glow: '#ffb27a', glowRgb: '255,170,110', bar: '#ff5a3a', rim: '#ff4a22' },
 ];
 
 export const METAL = { base: '#545b62', light: '#8c959e', dark: '#2b3035', deep: '#16191c', rubber: '#1d1f21', rubberHi: '#3a3e42' };

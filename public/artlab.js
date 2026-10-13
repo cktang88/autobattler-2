@@ -2166,8 +2166,8 @@ var MAX_TICKS = TICK_RATE * 120;
 
 // src/client/render/palette.ts
 var TEAM_PAL = [
-  { body: "#3d6f8e", light: "#7bb3cf", dark: "#24435a", deep: "#132634", accent: "#46e8d2", glow: "#86f3ff", glowRgb: "134,243,255", bar: "#4fe3b8" },
-  { body: "#9b4a32", light: "#dc8a5e", dark: "#5c2a1c", deep: "#2e140d", accent: "#ffb23e", glow: "#ffb27a", glowRgb: "255,170,110", bar: "#ff6a4a" }
+  { body: "#3f8fc4", light: "#9fdcf8", dark: "#255a82", deep: "#122c42", accent: "#55f2ff", glow: "#9af6ff", glowRgb: "154,246,255", bar: "#4fe3d0", rim: "#46dcff" },
+  { body: "#c2452b", light: "#f58a5a", dark: "#6a2216", deep: "#34100a", accent: "#ffb23e", glow: "#ffb27a", glowRgb: "255,170,110", bar: "#ff5a3a", rim: "#ff4a22" }
 ];
 var METAL = { base: "#545b62", light: "#8c959e", dark: "#2b3035", deep: "#16191c", rubber: "#1d1f21", rubberHi: "#3a3e42" };
 var OUTLINE = "#0b0d0f";
@@ -2955,22 +2955,22 @@ function paint(g, px, x0, y0, cw, ch) {
   const W = FIELD_W, H = FIELD_H;
   T();
   const base2 = g.createLinearGradient(0, 0, W, H);
-  base2.addColorStop(0, "#363a37");
-  base2.addColorStop(0.5, "#313432");
-  base2.addColorStop(1, "#383934");
+  base2.addColorStop(0, "#2f343a");
+  base2.addColorStop(0.5, "#2c3136");
+  base2.addColorStop(1, "#30353a");
   g.fillStyle = base2;
   g.fillRect(0, 0, W, H);
   const P = 5;
   for (let y = 0; y < H; y += P) for (let x = 0; x < W; x += P) {
     const v = rnd3();
-    g.fillStyle = v < 0.33 ? "rgba(255,255,255,0.025)" : v < 0.66 ? "rgba(0,0,0,0.05)" : "rgba(90,80,60,0.05)";
+    g.fillStyle = v < 0.33 ? "rgba(255,255,255,0.012)" : v < 0.66 ? "rgba(0,0,0,0.025)" : "rgba(60,70,80,0.03)";
     g.fillRect(x + 0.03, y + 0.03, P - 0.06, P - 0.06);
   }
-  for (let i = 0; i < 90; i++) {
-    const x = rnd3() * W, y = rnd3() * H, r = 0.8 + rnd3() * 3.5;
+  for (let i = 0; i < 40; i++) {
+    const x = rnd3() * W, y = rnd3() * H, r = 2 + rnd3() * 4;
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
     const dusty = rnd3() < 0.6;
-    gr.addColorStop(0, dusty ? `rgba(120,104,78,${0.05 + rnd3() * 0.07})` : `rgba(0,0,0,${0.06 + rnd3() * 0.08})`);
+    gr.addColorStop(0, dusty ? `rgba(110,120,130,${0.02 + rnd3() * 0.025})` : `rgba(0,0,0,${0.03 + rnd3() * 0.04})`);
     gr.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = gr;
     g.fillRect(x - r, y - r, r * 2, r * 2);
@@ -2979,14 +2979,14 @@ function paint(g, px, x0, y0, cw, ch) {
   const pat = g.createPattern(getNoise(), "repeat");
   if (pat) {
     g.fillStyle = pat;
-    g.globalAlpha = 0.55;
+    g.globalAlpha = 0.12;
     g.fillRect(0, 0, cw, ch);
     g.globalAlpha = 1;
   }
   T();
   const lw2 = 1 / px;
   g.lineWidth = lw2 * 1.5;
-  g.strokeStyle = "rgba(0,0,0,0.35)";
+  g.strokeStyle = "rgba(0,0,0,0.3)";
   g.beginPath();
   for (let x = P; x < W; x += P) {
     g.moveTo(x, 0);
@@ -2997,7 +2997,7 @@ function paint(g, px, x0, y0, cw, ch) {
     g.lineTo(W, y);
   }
   g.stroke();
-  g.strokeStyle = "rgba(255,255,255,0.05)";
+  g.strokeStyle = "rgba(255,255,255,0.035)";
   g.beginPath();
   for (let x = P; x < W; x += P) {
     g.moveTo(x + lw2 * 1.5, 0);
@@ -3010,17 +3010,17 @@ function paint(g, px, x0, y0, cw, ch) {
   g.stroke();
   for (let y = P; y < H; y += P) for (let x = P; x < W; x += P) {
     for (const [dx, dy] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) {
-      g.fillStyle = "rgba(0,0,0,0.4)";
+      g.fillStyle = "rgba(0,0,0,0.25)";
       g.beginPath();
       g.arc(x + dx, y + dy, 0.045, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = "rgba(255,255,255,0.09)";
+      g.fillStyle = "rgba(255,255,255,0.04)";
       g.beginPath();
       g.arc(x + dx - 0.012, y + dy - 0.012, 0.022, 0, Math.PI * 2);
       g.fill();
     }
   }
-  g.strokeStyle = "rgba(255,255,255,0.04)";
+  g.strokeStyle = "rgba(190,210,230,0.055)";
   g.lineWidth = lw2;
   g.beginPath();
   for (let x = 1; x < W; x++) if (x % 5) {
@@ -3032,8 +3032,8 @@ function paint(g, px, x0, y0, cw, ch) {
     g.lineTo(W, y);
   }
   g.stroke();
-  g.strokeStyle = "rgba(255,255,255,0.085)";
-  g.lineWidth = lw2 * 1.4;
+  g.strokeStyle = "rgba(190,210,230,0.15)";
+  g.lineWidth = lw2 * 1.5;
   g.beginPath();
   for (let x = 5; x < W; x += 5) {
     g.moveTo(x, 0);
@@ -3044,9 +3044,9 @@ function paint(g, px, x0, y0, cw, ch) {
     g.lineTo(W, y);
   }
   g.stroke();
-  g.strokeStyle = "rgba(0,0,0,0.3)";
+  g.strokeStyle = "rgba(0,0,0,0.18)";
   g.lineWidth = lw2 * 1.2;
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 8; i++) {
     let x = rnd3() * W, y = DEPLOY_D + rnd3() * (H - 2 * DEPLOY_D);
     let a = rnd3() * Math.PI * 2;
     g.beginPath();
@@ -3062,21 +3062,21 @@ function paint(g, px, x0, y0, cw, ch) {
   for (let i = 0; i < 9; i++) {
     const x = 1 + rnd3() * (W - 2), y = DEPLOY_D + 1 + rnd3() * (H - 2 * DEPLOY_D - 2), r = 0.3 + rnd3() * 0.7;
     const gr = g.createRadialGradient(x, y, 0, x, y, r * 1.4);
-    gr.addColorStop(0, "rgba(0,0,0,0.3)");
-    gr.addColorStop(0.6, "rgba(0,0,0,0.12)");
+    gr.addColorStop(0, "rgba(0,0,0,0.2)");
+    gr.addColorStop(0.6, "rgba(0,0,0,0.08)");
     gr.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = gr;
     g.beginPath();
     g.arc(x, y, r * 1.4, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = "rgba(160,140,110,0.05)";
+    g.strokeStyle = "rgba(160,170,180,0.03)";
     g.lineWidth = r * 0.12;
     g.beginPath();
     g.arc(x, y, r * 0.75, 3.6, 5.8);
     g.stroke();
   }
   const mid = H / 2;
-  g.strokeStyle = "rgba(255,255,255,0.06)";
+  g.strokeStyle = "rgba(190,210,230,0.09)";
   g.lineWidth = lw2 * 2;
   g.setLineDash([0.4, 0.4]);
   g.beginPath();
@@ -5457,9 +5457,42 @@ function unitSprites(design, team, px) {
   sh.g.globalCompositeOperation = "source-in";
   sh.g.fillStyle = "#000";
   sh.g.fillRect(0, 0, sh.c.width, sh.c.height);
-  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, sil: /* @__PURE__ */ new Map(), anchor };
+  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: /* @__PURE__ */ new Map(), anchor };
+  const hl = buildHalo(s, pal);
+  s.halo = hl.c;
+  s.haloExt = hl.ext;
   spriteCache.set(key, s);
   return s;
+}
+function buildHalo(s, pal) {
+  const px = s.px;
+  const ow = clamp(px * 0.05, 1.3, 3.2);
+  const rw = clamp(px * 0.09, 1.8, 4.5);
+  const gw = clamp(px * 0.22, 3, 11);
+  const pad = ow + rw + gw + 2;
+  const ext = s.ext + pad / px;
+  const size = Math.ceil(2 * ext * px);
+  const c = makeCanvas(size, size);
+  const g = ctx2d(c);
+  const off = (size - s.hull.width) / 2;
+  const stamp = (col, r, n) => {
+    const sil = silhouette(s, col);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2;
+      g.drawImage(sil, off + Math.cos(a) * r, off + Math.sin(a) * r);
+    }
+  };
+  g.filter = `blur(${gw * 0.45}px)`;
+  g.globalAlpha = 0.55;
+  stamp(pal.rim, ow + rw, 12);
+  g.filter = "none";
+  g.globalAlpha = 1;
+  stamp(pal.rim, ow + rw, 20);
+  stamp(pal.rim, ow + rw * 0.5, 16);
+  stamp(OUTLINE, ow, 16);
+  stamp(OUTLINE, ow * 0.5, 12);
+  g.drawImage(silhouette(s, OUTLINE), off, off);
+  return { c, ext };
 }
 function mobFrame(design, team, s, idx) {
   const L = layoutOf(design);
@@ -5543,8 +5576,8 @@ function drawUnitShadow(g, p, px, dirs = DEFAULT_DIRS) {
   const L = layoutOf(p.design);
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
-  const off = 0.07 * L.S + alt * 0.7;
-  const a = (p.alpha ?? 1) * (L.air || p.flying ? 0.3 : p.leap ? 0.45 - p.leap * 0.15 : 0.5);
+  const off = 0.09 * L.S + alt * 0.75;
+  const a = (p.alpha ?? 1) * (L.air || p.flying ? 0.38 : p.leap ? 0.55 - p.leap * 0.15 : 0.62);
   g.globalAlpha = a;
   const sc = L.air || p.flying ? 0.85 : 1 - (p.leap ?? 0) * 0.15;
   blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, L.mob.id === "anchor" ? 0 : p.angle, s.ext, sc);
@@ -5619,6 +5652,7 @@ function drawUnit(g, p, px, dirs = DEFAULT_DIRS) {
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
   }
+  if (p.cloak !== "enemy") blit(g, s.halo, x, y, ang, s.haloExt, sc);
   if (s.anchor) blit(g, s.anchor, x, y, 0, s.ext, sc);
   let frame = s.rest;
   if (L.frames > 1 && p.moving !== false && p.odometer !== void 0 && (p.moving || L.mob.id === "treads" || L.mob.id === "wheels" || L.mob.id === "halftrack")) {
@@ -5755,7 +5789,30 @@ function drawUnit(g, p, px, dirs = DEFAULT_DIRS) {
     blit(g, silhouette(s, "#9fdcff"), x + Math.sin(p.time * 9) * 0.03, y, ang, s.ext, sc * 1.02);
     g.globalCompositeOperation = prev;
   }
+  if (px < 26 && p.cloak !== "enemy") {
+    const k = clamp((26 - px) / 10, 0, 1);
+    const r = Math.max(2.4 / px, 0.1 * Math.sqrt(L.S)) * (0.8 + 0.2 * k);
+    const my = y;
+    g.globalAlpha = alpha * Math.max(0.55, k);
+    g.fillStyle = OUTLINE;
+    markerPath(g, p.team, x, my, r * 1.45);
+    g.fill();
+    g.fillStyle = pal.rim;
+    markerPath(g, p.team, x, my, r);
+    g.fill();
+  }
   g.globalAlpha = 1;
+}
+function markerPath(g, team, x, y, r) {
+  g.beginPath();
+  if (team === 0) g.arc(x, y, r, 0, Math.PI * 2);
+  else {
+    g.moveTo(x, y - r * 1.2);
+    g.lineTo(x + r * 1.2, y);
+    g.lineTo(x, y + r * 1.2);
+    g.lineTo(x - r * 1.2, y);
+    g.closePath();
+  }
 }
 function drawSparks(g, x, y, r, t, px) {
   g.strokeStyle = "#d8f0ff";
@@ -5795,7 +5852,8 @@ function palFromColor(color) {
     accent: shade(color, 0.65),
     glow: shade(color, 0.75),
     glowRgb: "200,230,255",
-    bar: color
+    bar: color,
+    rim: shade(color, 0.3)
   };
 }
 function moduleCategoryColor(id) {
@@ -6148,9 +6206,9 @@ var FieldView = class {
     const myTop = this.viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = this.viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
     const mine = TEAM_PAL[0], theirs = TEAM_PAL[1];
-    g.fillStyle = rgba(theirs.body, 0.07);
+    g.fillStyle = rgba(theirs.rim, 0.075);
     g.fillRect(0, enTop, FIELD_W, DEPLOY_D);
-    g.fillStyle = rgba(mine.body, showZone ? 0.16 : 0.07);
+    g.fillStyle = rgba(mine.rim, showZone ? 0.16 : 0.075);
     g.fillRect(0, myTop, FIELD_W, DEPLOY_D);
     const lw2 = 1 / this.k;
     if (showZone) {
@@ -6171,12 +6229,12 @@ var FieldView = class {
     const enFront = this.viewerSide === 0 ? DEPLOY_D : FIELD_H - DEPLOY_D;
     g.lineWidth = lw2 * (showZone ? 2 : 1.5);
     g.setLineDash([0.5, 0.3]);
-    g.strokeStyle = rgba(mine.accent, showZone ? 0.75 : 0.35);
+    g.strokeStyle = rgba(mine.rim, showZone ? 0.8 : 0.5);
     g.beginPath();
     g.moveTo(0, myFront);
     g.lineTo(FIELD_W, myFront);
     g.stroke();
-    g.strokeStyle = rgba(theirs.accent, 0.3);
+    g.strokeStyle = rgba(theirs.rim, 0.5);
     g.beginPath();
     g.moveTo(0, enFront);
     g.lineTo(FIELD_W, enFront);

@@ -304,9 +304,9 @@ export class FieldView {
     const myTop = this.viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = this.viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
     const mine = TEAM_PAL[0], theirs = TEAM_PAL[1];
-    g.fillStyle = rgba(theirs.body, 0.07);
+    g.fillStyle = rgba(theirs.rim, 0.075);
     g.fillRect(0, enTop, FIELD_W, DEPLOY_D);
-    g.fillStyle = rgba(mine.body, showZone ? 0.16 : 0.07);
+    g.fillStyle = rgba(mine.rim, showZone ? 0.16 : 0.075);
     g.fillRect(0, myTop, FIELD_W, DEPLOY_D);
     const lw = 1 / this.k;
     if (showZone) {
@@ -322,9 +322,9 @@ export class FieldView {
     const enFront = this.viewerSide === 0 ? DEPLOY_D : FIELD_H - DEPLOY_D;
     g.lineWidth = lw * (showZone ? 2 : 1.5);
     g.setLineDash([0.5, 0.3]);
-    g.strokeStyle = rgba(mine.accent, showZone ? 0.75 : 0.35);
+    g.strokeStyle = rgba(mine.rim, showZone ? 0.8 : 0.5);
     g.beginPath(); g.moveTo(0, myFront); g.lineTo(FIELD_W, myFront); g.stroke();
-    g.strokeStyle = rgba(theirs.accent, 0.3);
+    g.strokeStyle = rgba(theirs.rim, 0.5);
     g.beginPath(); g.moveTo(0, enFront); g.lineTo(FIELD_W, enFront); g.stroke();
     g.setLineDash([]);
     // field border
