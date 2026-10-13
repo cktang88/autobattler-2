@@ -328,17 +328,8 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
       // periscope sensor booms + armoured skirt plates around the rim
       for (const s of [-1, 1]) {
         beam(g, 0.2 * S, s * 0.08 * S, 0.026 * S, 0.33 * S, s * 0.11 * S, 0.022 * S, METAL.light, METAL.dark, o);
-        for (const [x, y, a] of [[0.24, 0.2, -0.5], [0.17, 0.31, -0.8], [0.06, 0.39, -1.2], [-0.08, 0.4, -1.7], [-0.19, 0.33, -2.2]]) fin(g, x * S, s * y * S, s * a, 0.06 * S, 0.04 * S, shade(pal.dark, -0.05), o);
       }
       break;
-    case 'scorpion':
-      for (const s of [-1, 1]) for (const [x, y] of [[0.16, 0.2], [0.02, 0.225], [-0.12, 0.2]]) fin(g, x * S, s * y * S, s * 1.5, 0.045 * S, 0.035 * S, shade(pal.dark, -0.1), o);
-      break;
-    case 'arachne': {
-      // ablative armour fins along the rear module rim
-      for (const s of [-1, 1]) for (const [x, y, a] of [[-0.17, 0.3, 1.45], [-0.36, 0.29, 2.0], [-0.47, 0.15, 2.7]]) fin(g, x * S, s * y * S, s * a, 0.045 * S, 0.06 * S, shade(pal.deep, 0.1), o);
-      break;
-    }
     case 'carriage':
       // split trail arms with spades, axle beam
       for (const s of [-1, 1]) {
@@ -388,26 +379,18 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
   const lite = shade(pal.body, 0.18);
   switch (L.shape) {
     case 'mantis': {
-      // rear power pack: armoured engine module with exhausts
-      const pack = sharp([-0.06, 0, -0.11, -0.115, -0.36, -0.115, -0.43, -0.07, -0.44, 0], S);
-      raised(g, pack, grad(g, S, shade(pal.light, 0.05), pal.dark, -0.1, -0.12, -0.4, 0.12), o, S, 1, 0.01, 0.45);
-      seam(g, [-0.2, -0.11, -0.2, 0.11, -0.31, -0.11, -0.31, 0.11], S, t);
-      vent(g, -0.255, 0, 0.08, 0.06, S, o);
-      for (const s of [-1, 1]) {
-        stripe(g, [-0.12, s * 0.1, -0.35, s * 0.1], S, pal.accent, o * 0.8);
-        stack(g, -0.43 * S, s * 0.075 * S, 0.02 * S, o * 0.6);
-      }
-      hazard(g, -0.445 * S, -0.03 * S, 0.02 * S, 0.06 * S, o, true);
-      // spine: torso plate + cable bundle to the pack
-      cables(g, [0.06, 0, -0.1, 0], S, 0.016 * S, 2);
-      raised(g, roundedRect(0.03, -0.055, 0.2, 0.11, 0.015, S), grad(g, S, shade(pal.light, 0.1), pal.body, 0.05, -0.05, 0.2, 0.05), o, S, 0.8, 0.008, 0.4);
-      rivetRow(g, 0.06 * S, -0.03 * S, 0.2 * S, -0.03 * S, 3, 0.008 * S);
-      rivetRow(g, 0.06 * S, 0.03 * S, 0.2 * S, 0.03 * S, 3, 0.008 * S);
-      // sensor head: armoured block, visor strip, twin camera lenses
-      const hd = sharp([0.465, 0, 0.455, -0.05, 0.415, -0.1, 0.345, -0.1, 0.31, -0.05, 0.305, 0], S);
-      raised(g, hd, grad(g, S, shade(pal.light, 0.12), pal.dark, 0.3, -0.1, 0.46, 0.1), o, S, 1, 0.01, 0.4);
-      visor(g, 0.44 * S, -0.045 * S, 0.44 * S, 0.045 * S, 0.011 * S, E, o);
-      for (const s of [-1, 1]) lens(g, 0.375 * S, s * 0.055 * S, 0.022 * S, E);
+      // lanky alien strider: smooth power core, slender spine, sleek sensor head
+      const pack = profilePath([-0.05, 0, -0.1, 0.1, -0.24, 0.12, -0.38, 0.09, -0.45, 0], S);
+      floatGap(g, pack, E, o, S);
+      sleekShell(g, pack, pal, o, S, -0.1, -0.12, -0.4, 0.12);
+      seamGlow(g, [-0.09, -0.07, -0.25, -0.12, -0.42, -0.04, -0.09, 0.07, -0.25, 0.12, -0.42, 0.04], S, E, o * 0.8);
+      cables(g, [0.06, 0, -0.08, 0], S, 0.014 * S, 2);
+      const sp = profilePath([0.25, 0, 0.22, 0.04, 0.12, 0.05, 0.03, 0.04, 0.01, 0], S);
+      sleekShell(g, sp, pal, o, S, 0.02, -0.05, 0.24, 0.05);
+      const hd = profilePath([0.47, 0, 0.455, 0.045, 0.41, 0.085, 0.35, 0.08, 0.31, 0.04, 0.3, 0], S);
+      sleekShell(g, hd, pal, o, S, 0.3, -0.09, 0.47, 0.09);
+      seamGlow(g, [0.42, -0.06, 0.465, 0, 0.42, 0.06], S, E, o * 1.4);
+      void t;
       break;
     }
     case 'mech': {
@@ -436,14 +419,20 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       break;
     case 'crab': {
       // armoured carapace plate with straight panel lines, rivets, rear exhausts, front sensor visor
-      const inner = sharp([0.2, 0, 0.2, -0.08, 0.16, -0.2, 0.08, -0.29, -0.02, -0.32, -0.12, -0.3, -0.19, -0.23, -0.23, -0.12, -0.23, 0], S);
+      const inner = sharp([0.2, 0, 0.2, -0.12, 0.17, -0.22, 0.11, -0.28, -0.12, -0.3, -0.19, -0.25, -0.23, -0.16, -0.23, 0], S);
       raised(g, inner, grad(g, S, shade(pal.light, 0.05), pal.dark), o, S, 1.2, 0.012, 0.5);
       seam(g, [0.2, 0, -0.23, 0], S, t);
       g.save(); g.clip(inner);
       seam(g, [0.08, -0.29, 0.02, -0.06, 0.08, 0.29, 0.02, 0.06, -0.19, -0.23, -0.1, -0.05, -0.19, 0.23, -0.1, 0.05], S, t);
       g.restore();
       for (const s of [-1, 1]) {
-        stripe(g, [0.14, s * 0.3, -0.02, s * 0.375], S, pal.accent, o * 1.1);
+        // bolted side skirt slabs: bunker armour
+        for (const [x0, x1] of [[0.18, 0.04], [0.02, -0.12], [-0.14, -0.26]]) {
+          const sk = sharp([x0, s * 0.31, x0 - 0.01, s * 0.395, x1 + 0.01, s * 0.395, x1, s * 0.31], S);
+          bevel(g, sk, grad(g, S, shade(pal.light, -0.15), pal.dark, x1, s * 0.3, x0, s * 0.4), o, 0.8);
+          rivetRow(g, (x0 - 0.02) * S, s * 0.355 * S, (x1 + 0.02) * S, s * 0.355 * S, 3, 0.009 * S);
+        }
+        stripe(g, [0.14, s * 0.29, -0.02, s * 0.3], S, pal.accent, o * 1.1);
         rivetRow(g, 0.17 * S, s * 0.13 * S, 0.06 * S, s * 0.28 * S, 4, 0.01 * S);
         rivetRow(g, -0.06 * S, s * 0.3 * S, -0.18 * S, s * 0.22 * S, 3, 0.01 * S);
         vent(g, -0.15, s * 0.14, 0.06, 0.08, S, o);
