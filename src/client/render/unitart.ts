@@ -1494,6 +1494,17 @@ function drawSparks(g: Ctx, x: number, y: number, r: number, t: number, px: numb
 }
 
 /** World position of mount i's muzzle for a unit at (x, y, angle) aiming `aim`. */
+/** Rest-pose mount centres in hull-local cells (+x = forward), riding animated parts where they do; r = turret radius. */
+export function mountPoints(design: Design): { x: number; y: number; r: number }[] {
+  const L = layoutOf(design);
+  const pdefs = partsOf(L);
+  const rest = pdefs.length ? partXfs(pdefs, null) : [];
+  return L.mounts.map((m, i) => {
+    const rp = pdefs.length ? mountOnPart(pdefs, rest, rest, i, m.x, m.y) : null;
+    return { x: rp ? rp.x : m.x, y: rp ? rp.y : m.y, r: m.d * 0.5 };
+  });
+}
+
 export function muzzlePos(design: Design, i: number, x: number, y: number, angle: number, aim: number): { x: number; y: number; d: number } {
   const L = layoutOf(design);
   const m = L.mounts[i];

@@ -42,7 +42,7 @@ import { titanFeet } from './giantart.ts';
 
 const P2 = Math.PI * 2;
 import {
-  drawUnit, drawUnitShadow, layoutOf, muzzlePos, unitSprites, silhouette, wreckSprite,
+  drawUnit, drawUnitShadow, layoutOf, mountPoints, muzzlePos, unitSprites, silhouette, wreckSprite,
   type MountPose, type UnitPose, type ViewDirs,
 } from './unitart.ts';
 
@@ -1432,9 +1432,23 @@ export class FieldView {
 }
 
 /** Render a single design centered in a canvas (garage preview, cards). `time` animates rotors/legs. */
-export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?: { side?: Side; time?: number; angle?: number }): void {
+export interface PreviewGeom {
+  /** CSS pixels per cell (1 cell = METERS_PER_CELL metres) */
+  px: number;
+  /** unit centre in CSS pixels */
+  cx: number;
+  cy: number;
+  /** mount centres (CSS px) and turret radius (CSS px) */
+  mounts: { x: number; y: number; r: number }[];
+  /** chassis size in cells */
+  S: number;
+}
+
+/** Draw a design centred in the canvas. `minExtent` (cells) keeps small units small so a backdrop grid reads at true scale;
+ *  `still` stops the walk cycle so mount markers stay put. Returns the on-screen geometry. */
+export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?: { side?: Side; time?: number; angle?: number; minExtent?: number; still?: boolean }): PreviewGeom | null {
   let g: Ctx;
-  try { g = ctx2d(canvas); } catch { return; }
+  try { g = ctx2d(canvas); } catch { return null; }
   const dpr = Math.min(3, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
   const cw = canvas.clientWidth, ch = canvas.clientHeight;
   if (cw > 0 && ch > 0) {
@@ -1446,18 +1460,31 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, W, H);
   let L;
-  try { L = layoutOf(design); } catch { return; }
+  try { L = layoutOf(design); } catch { return null; }
   const time = opts?.time ?? 0;
-  const ext = L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1);
+  const ext = Math.max(opts?.minExtent ?? 0, L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1));
   const px = Math.min(W, H) / ext;
   g.setTransform(px, 0, 0, px, W / 2, H / 2);
   const team: Team = (opts?.side ?? 0) === 1 ? 1 : 0;
+  const angle = opts?.angle ?? -Math.PI / 2;
   const pose: UnitPose = {
-    design, team, x: 0, y: L.air ? 0.1 * L.S : 0, angle: opts?.angle ?? -Math.PI / 2, time,
-    moving: L.mob.kind !== 'static', odometer: time * Math.max(0.6, L.cycle * 1.5), seed: 1,
+    design, team, x: 0, y: L.air ? 0.1 * L.S : 0, angle, time,
+    moving: !opts?.still && L.mob.kind !== 'static', odometer: opts?.still ? 0 : time * Math.max(0.6, L.cycle * 1.5), seed: 1,
   };
   const dirs: ViewDirs = { sx: 0.45, sy: 0.75, ux: 0, uy: -1 };
   drawUnitShadow(g, pose, px, dirs);
   drawUnit(g, pose, px, dirs);
   g.setTransform(1, 0, 0, 1, 0, 0);
+  // same placement maths as drawUnit's turret pass (lift + airborne scale)
+  const k = cw > 0 ? cw / W : 1 / dpr;
+  const lift = L.air ? 0.12 : 0;
+  const sc = L.air ? 1.04 : 1;
+  const ux = pose.x + dirs.ux * lift, uy = pose.y + dirs.uy * lift;
+  const cs = Math.cos(angle), sn = Math.sin(angle);
+  const mounts = mountPoints(design).map((m) => ({
+    x: (W / 2 + (ux + (cs * m.x - sn * m.y) * sc) * px) * k,
+    y: (H / 2 + (uy + (sn * m.x + cs * m.y) * sc) * px) * k,
+    r: m.r * sc * px * k,
+  }));
+  return { px: px * k, cx: (W / 2 + ux * px) * k, cy: (H / 2 + uy * px) * k, mounts, S: L.S };
 }

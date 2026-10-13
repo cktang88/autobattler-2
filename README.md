@@ -17,7 +17,9 @@ and a demo battle.
 
 ## How it plays
 
-1. **Garage** — build designs from parts:
+1. **Garage** — build designs from parts on a blueprint bench drawn on the true 5 m grid: drag weapons and modules
+   straight onto the sockets on the robot (drag between sockets to swap, off the robot to remove), and browse parts in
+   Hull / Drive / Weapons / Systems / Orders / Intel tabs with a spec-sheet inspector:
    - **10 chassis** (sizes 1×1, 2×2, 3×3; 1–4 mount slots of class L/M/H): Scout, Drone Core, Raider,
      Warden, Striker, Longarm, Aegis, Gunship, Bastion, Colossus.
    - **10 mobility systems**: wheels, half-track, tank treads, biped legs, spider legs, jump legs,
