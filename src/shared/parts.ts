@@ -1,54 +1,62 @@
-// Part catalog: 26 chassis (light → titan, incl. mechs, spiders and odd frames), 13 mobility systems, 104 modules in 5 mount classes.
+// Part catalog: 33 chassis covering every role (light → titan, incl. mechs, spiders and odd frames), 13 mobility systems, 104 modules in 5 mount classes. All parts carry role tags.
 // Balance numbers live here; stats.ts turns a Design into UnitStats.
 
-import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass } from './types.ts';
+import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass, Role } from './types.ts';
 
 export const CHASSIS: ChassisDef[] = [
-  { id: 'scout', name: 'Scout Frame', desc: 'Tiny, cheap and quick. One light mount.', size: 1, hp: 140, armor: 0, weight: 3, cost: 25, mounts: ['L'], agility: 1.3, traits: [], shape: 'wedge' },
-  { id: 'drone', name: 'Drone Core', desc: 'Featherweight core. Pairs well with rotors and jets.', size: 1, hp: 90, armor: 0, weight: 1.5, cost: 20, mounts: ['L'], agility: 1.4, traits: ['compact'], shape: 'pod' },
-  { id: 'raider', name: 'Raider Frame', desc: 'Light skirmisher with twin light mounts.', size: 1, hp: 210, armor: 2, weight: 5, cost: 45, mounts: ['L', 'L'], agility: 1.15, traits: [], shape: 'box' },
-  { id: 'warden', name: 'Warden Hull', desc: 'Sturdy medium hull built to hold a line.', size: 2, hp: 560, armor: 6, weight: 14, cost: 100, mounts: ['M', 'L'], agility: 0.95, traits: [], shape: 'hex' },
-  { id: 'striker', name: 'Striker Frame', desc: 'Aggressive medium frame with three mounts.', size: 2, hp: 430, armor: 4, weight: 12, cost: 115, mounts: ['M', 'M', 'L'], agility: 1.0, traits: [], shape: 'cross' },
-  { id: 'longarm', name: 'Longarm Platform', desc: 'Stabilized platform: one heavy mount, +20% weapon range.', size: 2, hp: 360, armor: 3, weight: 12, cost: 105, mounts: ['H'], agility: 0.85, traits: ['rangeBoost'], shape: 'long' },
-  { id: 'aegis', name: 'Aegis Frame', desc: 'Support frame. Field-repairs nearby allies.', size: 2, hp: 470, armor: 4, weight: 13, cost: 135, mounts: ['M', 'L'], agility: 0.95, traits: ['repairAura'], shape: 'round' },
-  { id: 'gunship', name: 'Gunship Airframe', desc: 'Aerodynamic hull. Must fly: rotors or jets only.', size: 2, hp: 380, armor: 3, weight: 8, cost: 120, mounts: ['M', 'M'], agility: 1.1, traits: ['airOnly'], shape: 'airframe' },
-  { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.8, traits: [], shape: 'fortress' },
-  { id: 'colossus', name: 'Colossus Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 280, mounts: ['H', 'H', 'M', 'L'], agility: 0.85, traits: [], shape: 'titan' },
+  { id: 'scout', name: 'Scout Frame', desc: 'Tiny, cheap and quick. One light mount.', size: 1, hp: 140, armor: 0, weight: 3, cost: 25, mounts: ['L'], agility: 1.3, roles: ['scout', 'raider'], traits: [], shape: 'wedge' },
+  { id: 'drone', name: 'Drone Core', desc: 'Featherweight core. Pairs well with rotors and jets.', size: 1, hp: 90, armor: 0, weight: 1.5, cost: 20, mounts: ['L'], agility: 1.4, roles: ['scout', 'flyer'], traits: ['compact'], shape: 'pod' },
+  { id: 'raider', name: 'Raider Frame', desc: 'Light skirmisher with twin light mounts.', size: 1, hp: 210, armor: 2, weight: 5, cost: 45, mounts: ['L', 'L'], agility: 1.15, roles: ['raider'], traits: [], shape: 'box' },
+  { id: 'warden', name: 'Warden Hull', desc: 'Sturdy medium hull built to hold a line.', size: 2, hp: 560, armor: 6, weight: 14, cost: 100, mounts: ['M', 'L'], agility: 0.95, roles: ['assault', 'tank'], traits: [], shape: 'hex' },
+  { id: 'striker', name: 'Striker Frame', desc: 'Aggressive medium frame with three mounts.', size: 2, hp: 430, armor: 4, weight: 12, cost: 115, mounts: ['M', 'M', 'L'], agility: 1.0, roles: ['skirmisher', 'assault'], traits: [], shape: 'cross' },
+  { id: 'longarm', name: 'Longarm Platform', desc: 'Stabilized platform: one heavy mount, +20% weapon range.', size: 2, hp: 360, armor: 3, weight: 12, cost: 105, mounts: ['H'], agility: 0.85, roles: ['artillery', 'siege'], traits: ['rangeBoost'], shape: 'long' },
+  { id: 'aegis', name: 'Aegis Frame', desc: 'Support frame. Field-repairs nearby allies.', size: 2, hp: 470, armor: 4, weight: 13, cost: 135, mounts: ['M', 'L'], agility: 0.95, roles: ['support'], traits: ['repairAura'], shape: 'round' },
+  { id: 'gunship', name: 'Gunship Airframe', desc: 'Aerodynamic hull. Must fly: rotors or jets only.', size: 2, hp: 380, armor: 3, weight: 8, cost: 120, mounts: ['M', 'M'], agility: 1.1, roles: ['flyer'], traits: ['airOnly'], shape: 'airframe' },
+  { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.8, roles: ['tank', 'assault'], traits: [], shape: 'fortress' },
+  { id: 'colossus', name: 'Colossus Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 280, mounts: ['H', 'H', 'M', 'L'], agility: 0.85, roles: ['assault', 'siege'], traits: [], shape: 'titan' },
   // ---- Odd-shaped frames ----
-  { id: 'mantis', name: 'Mantis Frame', desc: 'Insectoid light walker with twin forelimb mounts.', size: 1, hp: 170, armor: 1, weight: 4, cost: 40, mounts: ['L', 'L'], agility: 1.35, mobility: ['legs', 'jumpjets', 'spider', 'hover'], traits: [], shape: 'mantis' },
-  { id: 'strider', name: 'Strider Mech', desc: 'Humanoid mech: arm guns and a shoulder mount. Needs legs.', size: 2, hp: 480, armor: 5, weight: 12, cost: 110, mounts: ['M', 'L', 'L'], agility: 1.05, mobility: ['legs', 'jumpjets', 'spider', 'anchor'], traits: [], shape: 'mech' },
-  { id: 'arachnid', name: 'Arachnid Core', desc: 'Spider body with twin dorsal mounts. Walks on spider or jump legs.', size: 2, hp: 420, armor: 4, weight: 11, cost: 105, mounts: ['M', 'M'], agility: 1.1, mobility: ['spider', 'jumpjets', 'anchor'], traits: [], shape: 'arachnid' },
-  { id: 'crab', name: 'Crab Hull', desc: 'Wide, low, heavily plated shell with claw mounts.', size: 2, hp: 600, armor: 8, weight: 15, cost: 120, mounts: ['M', 'M', 'L'], agility: 0.85, mobility: ['spider', 'halftrack', 'treads', 'hover', 'anchor'], traits: [], shape: 'crab' },
-  { id: 'saucer', name: 'Saucer Disc', desc: 'Round disc hull with all-round turret ring. Hovers or flies.', size: 2, hp: 400, armor: 4, weight: 10, cost: 115, mounts: ['M', 'M', 'L'], agility: 1.2, mobility: ['hover', 'rotor', 'jet', 'anchor'], traits: [], shape: 'saucer' },
-  { id: 'deltawing', name: 'Delta Wing', desc: 'Triangular strike aircraft. Must fly.', size: 2, hp: 340, armor: 3, weight: 8, cost: 115, mounts: ['M', 'L', 'L'], agility: 1.15, mobility: ['jet', 'rotor'], traits: ['airOnly'], shape: 'delta' },
-  { id: 'warlord', name: 'Warlord Mech', desc: 'Heavy humanoid mech with a shoulder cannon and arm weapons.', size: 3, hp: 1350, armor: 11, weight: 34, cost: 250, mounts: ['H', 'M', 'M', 'L'], agility: 0.9, mobility: ['titanlegs', 'spider', 'anchor'], traits: [], shape: 'warlord' },
-  { id: 'scorpion', name: 'Scorpion Frame', desc: 'Armored scorpion: tail-mounted heavy weapon and twin pincer mounts.', size: 3, hp: 1200, armor: 12, weight: 32, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.95, mobility: ['spider', 'treads', 'anchor'], traits: [], shape: 'scorpion' },
-  { id: 'centipede', name: 'Centipede Hull', desc: 'Long segmented hull with four medium mounts down its back.', size: 3, hp: 1300, armor: 9, weight: 33, cost: 250, mounts: ['M', 'M', 'M', 'M'], agility: 0.8, mobility: ['spider', 'halftrack', 'treads'], traits: [], shape: 'centipede' },
+  { id: 'mantis', name: 'Mantis Frame', desc: 'Insectoid light walker with twin forelimb mounts.', size: 1, hp: 170, armor: 1, weight: 4, cost: 40, mounts: ['L', 'L'], agility: 1.35, mobility: ['legs', 'jumpjets', 'spider', 'hover'], roles: ['raider', 'melee'], traits: [], shape: 'mantis' },
+  { id: 'strider', name: 'Strider Mech', desc: 'Humanoid mech: arm guns and a shoulder mount. Needs legs.', size: 2, hp: 480, armor: 5, weight: 12, cost: 110, mounts: ['M', 'L', 'L'], agility: 1.05, mobility: ['legs', 'jumpjets', 'spider', 'anchor'], roles: ['skirmisher'], traits: [], shape: 'mech' },
+  { id: 'arachnid', name: 'Arachnid Core', desc: 'Spider body with twin dorsal mounts. Walks on spider or jump legs.', size: 2, hp: 420, armor: 4, weight: 11, cost: 105, mounts: ['M', 'M'], agility: 1.1, mobility: ['spider', 'jumpjets', 'anchor'], roles: ['skirmisher', 'raider'], traits: [], shape: 'arachnid' },
+  { id: 'crab', name: 'Crab Hull', desc: 'Wide, low, heavily plated shell with claw mounts.', size: 2, hp: 600, armor: 8, weight: 15, cost: 120, mounts: ['M', 'M', 'L'], agility: 0.85, mobility: ['spider', 'halftrack', 'treads', 'hover', 'anchor'], roles: ['riot', 'tank'], traits: [], shape: 'crab' },
+  { id: 'saucer', name: 'Saucer Disc', desc: 'Round disc hull with all-round turret ring. Hovers or flies.', size: 2, hp: 400, armor: 4, weight: 10, cost: 115, mounts: ['M', 'M', 'L'], agility: 1.2, mobility: ['hover', 'rotor', 'jet', 'anchor'], roles: ['skirmisher', 'antiair'], traits: [], shape: 'saucer' },
+  { id: 'deltawing', name: 'Delta Wing', desc: 'Triangular strike aircraft. Must fly.', size: 2, hp: 340, armor: 3, weight: 8, cost: 115, mounts: ['M', 'L', 'L'], agility: 1.15, mobility: ['jet', 'rotor'], roles: ['flyer', 'bomber'], traits: ['airOnly'], shape: 'delta' },
+  { id: 'warlord', name: 'Warlord Mech', desc: 'Heavy humanoid mech with a shoulder cannon and arm weapons.', size: 3, hp: 1350, armor: 11, weight: 34, cost: 250, mounts: ['H', 'M', 'M', 'L'], agility: 0.9, mobility: ['titanlegs', 'spider', 'anchor'], roles: ['assault'], traits: [], shape: 'warlord' },
+  { id: 'scorpion', name: 'Scorpion Frame', desc: 'Armored scorpion: tail-mounted heavy weapon and twin pincer mounts.', size: 3, hp: 1200, armor: 12, weight: 32, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.95, mobility: ['spider', 'treads', 'anchor'], roles: ['assault', 'siege'], traits: [], shape: 'scorpion' },
+  { id: 'centipede', name: 'Centipede Hull', desc: 'Long segmented hull with four medium mounts down its back.', size: 3, hp: 1300, armor: 9, weight: 33, cost: 250, mounts: ['M', 'M', 'M', 'M'], agility: 0.8, mobility: ['spider', 'halftrack', 'treads'], roles: ['riot', 'assault'], traits: [], shape: 'centipede' },
+  // ---- Role-specialist frames ----
+  { id: 'carriage', name: 'Gun Carriage', desc: 'Light, thin-skinned carriage that holds a medium weapon. Cheap artillery or tank-hunter.', size: 1, hp: 110, armor: 0, weight: 3, cost: 35, mounts: ['M'], agility: 0.9, roles: ['artillery', 'skirmisher'], traits: [], shape: 'carriage' },
+  { id: 'hunter', name: 'Hunter Frame', desc: 'Fast, lightly armored skirmisher frame. Strikes from range and keeps moving.', size: 2, hp: 360, armor: 2, weight: 9, cost: 90, mounts: ['M', 'L'], agility: 1.25, roles: ['skirmisher', 'raider'], traits: [], shape: 'hunter' },
+  { id: 'riot', name: 'Riot Frame', desc: 'Sloped front armor and twin medium mounts. Built to wade into swarms.', size: 2, hp: 650, armor: 9, weight: 15, cost: 120, mounts: ['M', 'M'], agility: 0.9, roles: ['riot', 'tank'], traits: [], shape: 'riot' },
+  { id: 'interceptor', name: 'Interceptor', desc: 'Light fighter airframe. Must fly.', size: 1, hp: 120, armor: 1, weight: 1.2, cost: 35, mounts: ['L', 'L'], agility: 1.3, mobility: ['jet', 'rotor'], roles: ['antiair', 'flyer', 'raider'], traits: ['airOnly'], shape: 'interceptor' },
+  { id: 'siegeplat', name: 'Siege Platform', desc: 'Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.', size: 3, hp: 800, armor: 3, weight: 22, cost: 170, mounts: ['H', 'H'], agility: 0.7, roles: ['artillery', 'siege'], traits: [], shape: 'siegeplat' },
+  { id: 'juggernaut', name: 'Juggernaut Hull', desc: 'A wall of armor with token weapons. Soaks fire for the army behind it.', size: 3, hp: 2100, armor: 18, weight: 40, cost: 230, mounts: ['M', 'L'], agility: 0.75, roles: ['tank'], traits: [], shape: 'juggernaut' },
+  { id: 'bomberhull', name: 'Heavy Bomber', desc: 'Big flying bomb truck with three medium bays. Grav lifters or nothing.', size: 3, hp: 900, armor: 5, weight: 24, cost: 200, mounts: ['M', 'M', 'M'], agility: 0.7, mobility: ['gravlift'], roles: ['bomber', 'flyer'], traits: ['airOnly'], shape: 'bomber' },
   // ---- Giant class (size 4, 20 m) ----
-  { id: 'goliath', name: 'Goliath Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 3200, armor: 16, weight: 70, cost: 420, mounts: ['G', 'H', 'H', 'M'], agility: 0.75, traits: [], shape: 'goliath' },
-  { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 470, mounts: ['G', 'G', 'M', 'M'], agility: 0.65, traits: [], shape: 'leviathan' },
-  { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2400, armor: 10, weight: 50, cost: 430, mounts: ['G', 'H', 'M', 'M'], agility: 0.8, traits: ['airOnly'], shape: 'carrier' },
-  { id: 'broodmother', name: 'Broodmother', desc: 'Giant spider with a giant-class dorsal weapon and four more mounts.', size: 4, hp: 3000, armor: 14, weight: 66, cost: 430, mounts: ['G', 'H', 'M', 'M', 'L'], agility: 0.85, mobility: ['spider', 'anchor'], traits: [], shape: 'broodmother' },
+  { id: 'goliath', name: 'Goliath Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 3200, armor: 16, weight: 70, cost: 420, mounts: ['G', 'H', 'H', 'M'], agility: 0.75, roles: ['assault'], traits: [], shape: 'goliath' },
+  { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 470, mounts: ['G', 'G', 'M', 'M'], agility: 0.65, roles: ['siege', 'assault'], traits: [], shape: 'leviathan' },
+  { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2400, armor: 10, weight: 50, cost: 430, mounts: ['G', 'H', 'M', 'M'], agility: 0.8, roles: ['flyer', 'bomber'], traits: ['airOnly'], shape: 'carrier' },
+  { id: 'broodmother', name: 'Broodmother', desc: 'Giant spider with a giant-class dorsal weapon and four more mounts.', size: 4, hp: 3000, armor: 14, weight: 66, cost: 430, mounts: ['G', 'H', 'M', 'M', 'L'], agility: 0.85, mobility: ['spider', 'anchor'], roles: ['riot', 'assault'], traits: [], shape: 'broodmother' },
   // ---- Titan class (size 5, 25 m) ----
-  { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 760, mounts: ['T', 'G', 'H', 'H', 'M'], agility: 0.7, traits: [], shape: 'colossal' },
-  { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 840, mounts: ['T', 'T', 'G', 'M', 'M', 'L'], agility: 0.55, traits: [], shape: 'citadel' },
-  { id: 'arachne', name: 'Arachne Titan', desc: 'Titan-class spider: a titan mount and twin giant mounts on eight legs.', size: 5, hp: 6000, armor: 20, weight: 115, cost: 760, mounts: ['T', 'G', 'G', 'M'], agility: 0.75, mobility: ['spider', 'anchor'], traits: [], shape: 'arachne' },
+  { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 760, mounts: ['T', 'G', 'H', 'H', 'M'], agility: 0.7, roles: ['assault', 'siege'], traits: [], shape: 'colossal' },
+  { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 840, mounts: ['T', 'T', 'G', 'M', 'M', 'L'], agility: 0.55, roles: ['siege', 'tank'], traits: [], shape: 'citadel' },
+  { id: 'arachne', name: 'Arachne Titan', desc: 'Titan-class spider: a titan mount and twin giant mounts on eight legs.', size: 5, hp: 6000, armor: 20, weight: 115, cost: 760, mounts: ['T', 'G', 'G', 'M'], agility: 0.75, mobility: ['spider', 'anchor'], roles: ['assault'], traits: [], shape: 'arachne' },
 ];
 
 export const MOBILITY: MobilityDef[] = [
-  { id: 'wheels', name: 'Wheels', desc: 'Fast and cheap, but fragile and light-duty.', kind: 'ground', sizes: [1, 2], speed: 3.2, turn: 4, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [] },
-  { id: 'halftrack', name: 'Half-Track', desc: 'Wheels up front, treads behind. Balanced all-rounder.', kind: 'ground', sizes: [1, 2, 3], speed: 2.3, turn: 2.6, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [] },
-  { id: 'treads', name: 'Tank Treads', desc: 'Heavy-duty treads. Slow, tough, carries anything.', kind: 'ground', sizes: [2, 3, 4], speed: 1.6, turn: 1.8, capacity: [0, 32, 66, 125, 0], weight: 4, hp: 60, armor: 3, cost: 22, traits: ['crush'] },
-  { id: 'legs', name: 'Bipedal Legs', desc: 'Nimble walker. Fires while moving.', kind: 'ground', sizes: [1, 2], speed: 2.0, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ['fireOnMove'] },
-  { id: 'spider', name: 'Spider Legs', desc: 'Six-legged stable walker. Better accuracy, carries heavy loads.', kind: 'ground', sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ['stable'] },
-  { id: 'jumpjets', name: 'Jump Legs', desc: 'Leaps over obstacles straight into the fight.', kind: 'ground', sizes: [1, 2], speed: 2.0, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ['leap'] },
-  { id: 'hover', name: 'Hover Skirt', desc: 'Skims the ground. Very fast, hard to hit.', kind: 'ground', sizes: [1, 2], speed: 3.6, turn: 2.2, capacity: [6, 17, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ['evasive'] },
-  { id: 'rotor', name: 'Rotor', desc: 'Helicopter rotors. Flies over ground units; only anti-air can hit it.', kind: 'air', sizes: [1, 2], speed: 2.8, turn: 3, capacity: [5, 17, 0, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, traits: ['fireOnMove'] },
-  { id: 'jet', name: 'Jet Thrusters', desc: 'Very fast strafing flyer. Fires on the pass.', kind: 'air', sizes: [1, 2], speed: 4.6, turn: 1.6, capacity: [4, 14, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, traits: ['fireOnMove', 'strafe', 'evasive'] },
-  { id: 'megatracks', name: 'Colossal Tracks', desc: 'Quad track assemblies for giant and titan hulls. Crushes anything underfoot.', kind: 'ground', sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ['crush'] },
-  { id: 'titanlegs', name: 'Titan Legs', desc: 'Towering walker legs. Fires on the move and stomps smaller units.', kind: 'ground', sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ['fireOnMove', 'crush'] },
-  { id: 'gravlift', name: 'Grav Lifters', desc: 'Anti-gravity lifters that make heavy and giant hulls fly.', kind: 'air', sizes: [3, 4], speed: 1.6, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, traits: ['fireOnMove'] },
-  { id: 'anchor', name: 'Anchor Mount', desc: 'Immobile emplacement. Extra hp, armor and +15% range.', kind: 'static', sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ['fortified'] },
+  { id: 'wheels', name: 'Wheels', desc: 'Fast and cheap, but fragile and light-duty.', kind: 'ground', sizes: [1, 2], speed: 3.2, turn: 4, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [], roles: ['raider', 'scout'] },
+  { id: 'halftrack', name: 'Half-Track', desc: 'Wheels up front, treads behind. Balanced all-rounder.', kind: 'ground', sizes: [1, 2, 3], speed: 2.3, turn: 2.6, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [], roles: ['skirmisher', 'assault'] },
+  { id: 'treads', name: 'Tank Treads', desc: 'Heavy-duty treads. Slow, tough, carries anything.', kind: 'ground', sizes: [2, 3, 4], speed: 1.6, turn: 1.8, capacity: [0, 32, 66, 125, 0], weight: 4, hp: 60, armor: 3, cost: 22, traits: ['crush'], roles: ['tank', 'assault'] },
+  { id: 'legs', name: 'Bipedal Legs', desc: 'Nimble walker. Fires while moving.', kind: 'ground', sizes: [1, 2], speed: 2.0, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ['fireOnMove'], roles: ['skirmisher', 'raider'] },
+  { id: 'spider', name: 'Spider Legs', desc: 'Six-legged stable walker. Better accuracy, carries heavy loads.', kind: 'ground', sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ['stable'], roles: ['artillery', 'riot', 'skirmisher'] },
+  { id: 'jumpjets', name: 'Jump Legs', desc: 'Leaps over obstacles straight into the fight.', kind: 'ground', sizes: [1, 2], speed: 2.0, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ['leap'], roles: ['raider', 'melee'] },
+  { id: 'hover', name: 'Hover Skirt', desc: 'Skims the ground. Very fast, hard to hit.', kind: 'ground', sizes: [1, 2], speed: 3.6, turn: 2.2, capacity: [6, 17, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ['evasive'], roles: ['raider', 'scout'] },
+  { id: 'rotor', name: 'Rotor', desc: 'Helicopter rotors. Flies over ground units; only anti-air can hit it.', kind: 'air', sizes: [1, 2], speed: 2.8, turn: 3, capacity: [5, 17, 0, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, traits: ['fireOnMove'], roles: ['flyer', 'support'] },
+  { id: 'jet', name: 'Jet Thrusters', desc: 'Very fast strafing flyer. Fires on the pass.', kind: 'air', sizes: [1, 2], speed: 4.6, turn: 1.6, capacity: [4, 14, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, traits: ['fireOnMove', 'strafe', 'evasive'], roles: ['flyer', 'raider', 'bomber'] },
+  { id: 'megatracks', name: 'Colossal Tracks', desc: 'Quad track assemblies for giant and titan hulls. Crushes anything underfoot.', kind: 'ground', sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ['crush'], roles: ['tank', 'assault'] },
+  { id: 'titanlegs', name: 'Titan Legs', desc: 'Towering walker legs. Fires on the move and stomps smaller units.', kind: 'ground', sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ['fireOnMove', 'crush'], roles: ['assault'] },
+  { id: 'gravlift', name: 'Grav Lifters', desc: 'Anti-gravity lifters that make heavy and giant hulls fly.', kind: 'air', sizes: [3, 4], speed: 1.6, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, traits: ['fireOnMove'], roles: ['flyer', 'bomber'] },
+  { id: 'anchor', name: 'Anchor Mount', desc: 'Immobile emplacement. Extra hp, armor and +15% range.', kind: 'static', sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ['fortified'], roles: ['siege', 'artillery', 'antiair'] },
 ];
 
 export const CATEGORIES: { id: ModuleCategory; name: string; desc: string }[] = [
@@ -282,6 +290,42 @@ export const MODULE_BY_ID = byId(MODULES);
 
 export const MOUNT_RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
 const RANK = MOUNT_RANK;
+
+export const ROLES: { id: Role; name: string; desc: string }[] = [
+  { id: 'raider', name: 'Raider', desc: 'Fast and light. Picks off weak or isolated targets and harasses the back line.' },
+  { id: 'skirmisher', name: 'Skirmisher', desc: 'Medium range and mobility. Out-ranges riots, out-runs assaults.' },
+  { id: 'riot', name: 'Riot', desc: 'Short-range splash and sustained fire. Shreds swarms and raiders.' },
+  { id: 'assault', name: 'Assault', desc: 'Tough, well-armed frontliners that push through defenses.' },
+  { id: 'tank', name: 'Tank', desc: 'Huge hp and armor. Soaks damage so the army behind can work.' },
+  { id: 'artillery', name: 'Artillery', desc: 'Long range, fragile. Must be protected; punishes clumped or static enemies.' },
+  { id: 'antiair', name: 'Anti-air', desc: 'Dedicated to swatting aircraft.' },
+  { id: 'support', name: 'Support', desc: 'Repairs, shields and buffs allies.' },
+  { id: 'scout', name: 'Scout', desc: 'Cheap and quick. Spots cloaked units and screens.' },
+  { id: 'flyer', name: 'Flyer', desc: 'Aircraft: only anti-air can hit them.' },
+  { id: 'bomber', name: 'Bomber', desc: 'Aircraft that drop heavy ordnance on ground targets.' },
+  { id: 'siege', name: 'Siege', desc: 'Breaks entrenched positions and emplacements from extreme range.' },
+  { id: 'stealth', name: 'Stealth', desc: 'Cloaked, ambushes and ECM.' },
+  { id: 'melee', name: 'Melee', desc: 'Close-combat brawlers that need to reach their target.' },
+];
+
+const CATEGORY_ROLES: Record<string, Role[]> = {
+  machinegun: ['riot', 'antiair', 'raider'], autocannon: ['assault', 'skirmisher', 'antiair'], cannon: ['assault', 'tank'],
+  precision: ['skirmisher', 'siege'], rocket: ['riot', 'artillery'], missile: ['skirmisher', 'antiair', 'siege'],
+  artillery: ['artillery', 'siege'], energy: ['skirmisher', 'assault'], flame: ['riot', 'melee'],
+  disruption: ['riot', 'support', 'skirmisher'], antiair: ['antiair'], melee: ['melee', 'raider'],
+  support: ['support'], defense: ['tank', 'support'], stealth: ['stealth', 'scout'], systems: ['skirmisher', 'raider'], armor: ['tank', 'assault'],
+};
+/** Role tags of a module, derived from its category and characteristics. */
+export function moduleRoles(m: ModuleDef): Role[] {
+  const r = new Set<Role>(CATEGORY_ROLES[m.category] ?? []);
+  if (m.targetsAir && !m.targetsGround) r.add('antiair');
+  if (m.requires === 'air') { r.add('bomber'); r.add('flyer'); }
+  if ((m.range ?? 0) >= 10) { r.add('artillery'); r.add('siege'); }
+  if ((m.splash ?? 0) >= 1 && (m.range ?? 0) <= 6) r.add('riot');
+  if (m.detect) r.add('scout');
+  if (m.cloak) r.add('stealth');
+  return [...r];
+}
 /** Can a module of class `module` go in a slot of class `slot`? */
 export const fitsMount = (slot: MountClass, module: MountClass) => RANK[module] <= RANK[slot];
 

@@ -8,6 +8,11 @@ export type MountClass = 'L' | 'M' | 'H' | 'G' | 'T';
 export type MoveKind = 'ground' | 'air' | 'static';
 export type Side = 0 | 1;
 
+/** Combat role tags (Zero-K / Mechabellum style) used to filter and describe parts. */
+export type Role =
+  | 'raider' | 'skirmisher' | 'riot' | 'assault' | 'tank' | 'artillery' | 'antiair'
+  | 'support' | 'scout' | 'flyer' | 'bomber' | 'siege' | 'stealth' | 'melee';
+
 export type ChassisTrait = 'rangeBoost' | 'repairAura' | 'airOnly' | 'compact';
 /** distance (cells, edge to edge) at which a 'stealth' cloak is revealed */
 export const CLOAK_REVEAL = 2.5;
@@ -27,11 +32,14 @@ export interface ChassisDef {
   agility: number;
   /** if set, only these mobility ids fit this chassis (e.g. mechs need legs) */
   mobility?: string[];
+  /** roles this hull is built for */
+  roles: Role[];
   traits: ChassisTrait[];
   /** Render hint: silhouette family for procedural art. */
   shape: 'wedge' | 'box' | 'pod' | 'hex' | 'long' | 'round' | 'cross' | 'fortress' | 'titan' | 'airframe'
     | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel'
-    | 'mantis' | 'mech' | 'arachnid' | 'crab' | 'saucer' | 'delta' | 'warlord' | 'scorpion' | 'centipede' | 'broodmother' | 'arachne';
+    | 'mantis' | 'mech' | 'arachnid' | 'crab' | 'saucer' | 'delta' | 'warlord' | 'scorpion' | 'centipede' | 'broodmother' | 'arachne'
+    | 'carriage' | 'siegeplat' | 'riot' | 'hunter' | 'juggernaut' | 'interceptor' | 'bomber';
 }
 
 export interface MobilityDef {
@@ -54,6 +62,8 @@ export interface MobilityDef {
   /** cost per size unit */
   cost: number;
   traits: MobilityTrait[];
+  /** roles this mobility suits */
+  roles: Role[];
 }
 
 /** 'melee' = instant contact strike; its range is measured EDGE to edge (shooter radius + target radius excluded),
