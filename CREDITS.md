@@ -1,8 +1,12 @@
 # Credits
 
-- **Music** — Eric Skiff, *Resistor Anthems* (http://EricSkiff.com/music, CC BY 4.0): "We're all under the
-  stars", "Searching", "Underclocked (underunderclocked mix)", "We're the Resistors". "In a Heartbeat" by
-  Kevin MacLeod (incompetech.com), CC BY 3.0. Taken from the author's dead-air-game repo.
+- **Music** — all CC0 (public domain dedication), from OpenGameArt.org:
+  - "Inevitable", "Claimed by the Void", "Brute Force", "Hunter-class Lifeform" by vitalezzz
+    (https://opengameart.org/content/inevitable, /claimed-by-the-void, /brute-force, /hunter-class-lifeform)
+  - "Factory ambiance" by yd (https://opengameart.org/content/factory-ambiance)
+  - "Menacing Otherworld" by Ruskerdax (https://opengameart.org/content/menacing-otherworld)
+  - "Laments of the War" by Cethiel (https://opengameart.org/content/laments-of-the-war)
+  - victory sting from "Dark Sci-Fi Audio Pack" by SRG774 (https://opengameart.org/content/dark-sci-fi-audio-pack)
 - **Fonts** — Barlow / Barlow Condensed by Jeremy Tribby, SIL Open Font License (`public/assets/fonts/OFL.txt`),
   via the author's tinwar repo.
 - **Effect textures** — `public/assets/zk/pd/`: public-domain bitmaps from Zero-K (https://zero-k.info).

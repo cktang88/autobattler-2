@@ -362,14 +362,17 @@ export function sfx(name: SfxName): void {
 
 /* -------------------------------------------------------------------------------------------- music */
 
-const TRACKS: Record<Exclude<MusicTrack, null>, { file: string; loop: boolean; rate: number }> = {
-  menu: { file: 'title.mp3', loop: true, rate: 1 },
-  deploy: { file: 'tension.mp3', loop: true, rate: 1 },
-  battle: { file: 'combat.mp3', loop: true, rate: 1 },
-  victory: { file: 'win.mp3', loop: false, rate: 1 },
-  // somber: the explore theme slowed and pitched down
-  defeat: { file: 'explore.mp3', loop: true, rate: 0.8 },
+// All CC0 (OpenGameArt) — see CREDITS.md. Tracks with several files rotate each time the phase comes round.
+const TRACKS: Record<Exclude<MusicTrack, null>, { files: string[]; loop: boolean; rate: number }> = {
+  // dark industrial ambience for menus and the hangar
+  menu: { files: ['menu-factory.mp3', 'menu-menacing-otherworld.mp3'], loop: true, rate: 1 },
+  // starts sparse and pulsing, then swells: suspense while both sides plan
+  deploy: { files: ['deploy-tension.mp3', 'deploy-tension-alt.mp3'], loop: true, rate: 1 },
+  battle: { files: ['battle-brute-force.mp3', 'battle-hunter-class.mp3'], loop: true, rate: 1 },
+  victory: { files: ['victory-sting.mp3'], loop: false, rate: 1 },
+  defeat: { files: ['defeat-lament.mp3'], loop: true, rate: 1 },
 };
+const rotation: Partial<Record<Exclude<MusicTrack, null>, number>> = {};
 
 let musicBase = 'assets/music/';
 /** Override the music folder (relative to the page). */
@@ -394,7 +397,9 @@ const music = {
     if (track && !this.chans.some((c) => c.track === track && c.target === 1 && !c.el.ended)) {
       const def = TRACKS[track];
       if (typeof Audio === 'undefined') return;
-      const el = new Audio(musicBase + def.file);
+      const n = rotation[track] ?? 0;
+      rotation[track] = n + 1;
+      const el = new Audio(musicBase + def.files[n % def.files.length]);
       el.loop = def.loop;
       el.preload = 'auto';
       try {

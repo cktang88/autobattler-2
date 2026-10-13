@@ -11,6 +11,7 @@ import { DECK_SIZE, validateDeck } from '../../shared/match.ts';
 import { computeStats } from '../../shared/stats.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { confirmModal } from './match-ui.ts';
+import * as kit from './kit.ts';
 
 const REFRESH_MS = 10_000;
 
@@ -184,10 +185,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   }
 
   function loginPanel(): HTMLElement {
-    const input = h('input.lobby-input', {
-      type: 'text', maxlength: 16, minlength: 2, placeholder: 'Callsign', autocomplete: 'nickname', spellcheck: 'false',
-      'aria-label': 'Callsign',
-    });
+    const { el: field, input } = kit.textField({ maxlength: 16, placeholder: 'Callsign', label: 'Callsign', className: 'lobby-input', attrs: { minlength: '2', autocomplete: 'nickname' } });
     const submit = (e?: Event) => { e?.preventDefault(); void doLogin(input.value); };
     const form = h('form.panel.lobby-login', { onsubmit: submit },
       h('div.panel-title', null, 'Enlist'),
@@ -195,7 +193,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
       h('p.muted', null,
         'Async matches are played over hours or days: submit your deployment whenever you like, and the battle resolves once your opponent has submitted theirs.'),
       h('div.lobby-row', null,
-        input,
+        field,
         h('button.primary', { type: 'submit' }, 'Enlist'),
       ),
       h('p.muted.lobby-small', null, '2–16 characters. Your callsign is remembered on this device.'),
@@ -224,10 +222,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   }
 
   function actionsPanel(): HTMLElement {
-    const code = h('input.lobby-input.lobby-code-input', {
-      type: 'text', maxlength: 16, placeholder: 'Join code', autocomplete: 'off', spellcheck: 'false',
-      autocapitalize: 'characters', 'aria-label': 'Join code',
-    });
+    const { el: codeField, input: code } = kit.textField({ maxlength: 16, placeholder: 'Join code', label: 'Join code', className: 'lobby-input lobby-code-input', attrs: { autocapitalize: 'characters' } });
     const fresh = freshCode
       ? h('div.lobby-fresh', null,
         h('span.muted', null, 'Share this code:'),
@@ -245,7 +240,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
         h('button', { onclick: () => doCreate(true) }, 'Create Private'),
       ),
       h('form.lobby-row', { onsubmit: (e: Event) => { e.preventDefault(); void doJoin(code.value); } },
-        code,
+        codeField,
         h('button', { type: 'submit' }, 'Join by Code'),
       ),
     );

@@ -15,6 +15,7 @@ import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../sha
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
+import * as kit from './kit.ts';
 import { confirmModal, kiteOptions, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, sizeLabel, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
@@ -56,18 +57,15 @@ function spacingDiagram(spacing: number): SVGElement {
 
 /** Segmented spacing control: "Spacing 0 1 2" + live diagram + footprint size. */
 function spacingControl(value: number, onPick: ((v: number) => void) | null): HTMLElement {
-  const segs = Array.from({ length: MAX_SPACING + 1 }, (_, v) => h('button.seg', {
-    type: 'button',
-    class: v === value ? 'on' : null,
-    disabled: !onPick,
-    'aria-pressed': String(v === value),
-    title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units`,
-    onclick: () => onPick?.(v),
-  }, String(v)));
+  const segs = kit.segmented({
+    value, label: 'Squad spacing', disabled: !onPick,
+    options: Array.from({ length: MAX_SPACING + 1 }, (_, v) => ({ value: v, label: String(v), title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units` })),
+    onChange: (v) => onPick?.(v),
+  });
   const d = blockDims(1, value);
   return h('div.spacing', null,
     h('div.sp-head', null, h('span', null, 'Spacing'), h('span.muted', null, ...(onPick ? [h('kbd', null, '['), ' ', h('kbd', null, ']')] : ['locked']))),
-    h('div.sp-row', null, spacingDiagram(value), h('div.sp-segs', { role: 'group', 'aria-label': 'Squad spacing' }, ...segs)),
+    h('div.sp-row', null, spacingDiagram(value), segs),
     h('div.sp-foot', null, `Footprint ${fmtMeters(d.w)} × ${fmtMeters(d.h)}`),
   );
 }

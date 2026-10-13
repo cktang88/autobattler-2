@@ -5,27 +5,20 @@ this project (no sprite sheets). All sound effects in `src/client/audio.ts` are 
 
 ## Music (`public/assets/music/`)
 
-Copied unchanged from the author's `dead-air-game` repo (`assets/music/`), which took them from
-[qompassai/light-show](https://github.com/qompassai/light-show) as bar-aligned loops (re-encoded 112 kbps MP3).
+All tracks are CC0 (public domain dedication; no attribution required, credited anyway), downloaded from
+OpenGameArt.org and re-encoded to MP3 (160 kbps, 192 kbps for the OGG source) with metadata stripped. Phases with two
+files alternate each time the phase comes round (`TRACKS` in `src/client/audio.ts`).
 
-| File | Used for | Title | Composer | License |
+| File | Used for | Title | Author | Source |
 | --- | --- | --- | --- | --- |
-| `title.mp3` | menu | "We're all under the stars" (Resistor Anthems) | Eric Skiff | CC BY 4.0 |
-| `tension.mp3` | deploy | "In a Heartbeat" | Kevin MacLeod | CC BY 3.0 |
-| `combat.mp3` | battle | "Underclocked (underunderclocked mix)" (Resistor Anthems) | Eric Skiff | CC BY 4.0 |
-| `win.mp3` | victory | "We're the Resistors" (Resistor Anthems) | Eric Skiff | CC BY 4.0 |
-| `explore.mp3` | defeat (played at 0.8x, pitched down) | "Searching" (Resistor Anthems) | Eric Skiff | CC BY 4.0 |
-
-Required attribution (show in an in-game credits screen):
-
-> Music: Eric Skiff - We're all under the stars / Searching / Underclocked (underunderclocked mix) / We're the Resistors -
-> Resistor Anthems - Available at http://EricSkiff.com/music (CC BY 4.0)
->
-> "In a Heartbeat" Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By Attribution 3.0
-> http://creativecommons.org/licenses/by/3.0/
-
-The defeat track is `explore.mp3` slowed via `playbackRate = 0.8` with `preservesPitch = false` (a playback-time
-transformation; the file itself is unmodified).
+| `menu-factory.mp3` | menu / hangar | "Factory ambiance" | yd | https://opengameart.org/content/factory-ambiance |
+| `menu-menacing-otherworld.mp3` | menu / hangar | "Menacing Otherworld" | Ruskerdax | https://opengameart.org/content/menacing-otherworld |
+| `deploy-tension.mp3` | deploy | "Inevitable" | vitalezzz | https://opengameart.org/content/inevitable |
+| `deploy-tension-alt.mp3` | deploy | "Claimed by the Void" (loop version) | vitalezzz | https://opengameart.org/content/claimed-by-the-void |
+| `battle-brute-force.mp3` | battle | "Brute Force" (loop version) | vitalezzz | https://opengameart.org/content/brute-force |
+| `battle-hunter-class.mp3` | battle | "Hunter-class Lifeform" | vitalezzz | https://opengameart.org/content/hunter-class-lifeform |
+| `victory-sting.mp3` | victory | "victory_4" (Dark Sci-Fi Audio Pack) | SRG774 | https://opengameart.org/content/dark-sci-fi-audio-pack |
+| `defeat-lament.mp3` | defeat | "Laments of the War" | Cethiel | https://opengameart.org/content/laments-of-the-war |
 
 ## Effect textures (`public/assets/zk/pd/`)
 

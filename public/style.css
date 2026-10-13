@@ -359,3 +359,11 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 }
 .info { z-index: 6; }
 .info.picking { display: none; }
+
+/* kit controls inside battle orders / spacing */
+.orders .ord-row button.k-select { flex: 1 1 140px; min-height: 32px; font-size: 0.92rem; }
+.orders .ord-row button.k-toggle { min-height: 30px; font-size: 0.82rem; padding: 0 9px 0 8px; }
+.orders .hold-row .k-seg { flex: 1; }
+.orders .k-x { min-height: 22px; padding: 0 6px; margin-left: 6px; font-size: 0.8rem; clip-path: none; }
+.sp-row .k-seg { flex: 1; }
+.setting .k-slider { grid-column: 2 / 4; }

@@ -1,0 +1,106 @@
+/* Themed UI kit (.k-*) — game-styled form controls shared by every screen. Matches the hangar language:
+ * ink-outlined gunmetal plates, hazard-amber for the active choice. */
+
+:root {
+  --k-ink: #050709;
+  --k-plate: #161b20;
+  --k-plate2: #1e252b;
+  --k-plate3: #29313a;
+  --k-plate4: #343e48;
+  --k-edge: rgba(255, 255, 255, 0.08);
+  --k-txt: #f1ece0;
+  --k-dim: #b4b9bd;
+  --k-dim2: #868e95;
+  --k-amber: #ffb21e;
+  --k-amber2: #ffcb5c;
+  --k-amber-ink: #241500;
+  --k-head: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+}
+
+/* ---------- dropdown ---------- */
+button.k-select {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px 0 12px; max-width: 100%;
+  font-family: var(--k-head); font-weight: 700; font-size: 0.98rem; letter-spacing: 0.04em; text-transform: none; text-align: left;
+  color: var(--k-txt); background: var(--k-plate2); border: 0; border-radius: 0; clip-path: none; transform: none;
+  box-shadow: inset 0 0 0 2px var(--k-ink), inset 0 2px 0 var(--k-edge); cursor: pointer; justify-content: flex-start;
+}
+button.k-select:hover:not(:disabled) { background: var(--k-plate3); border-color: transparent; }
+button.k-select.open { box-shadow: inset 0 0 0 2px var(--k-ink), inset 0 0 0 3px var(--k-amber); }
+button.k-select:focus-visible { outline: 2px solid var(--k-amber); outline-offset: 2px; }
+.k-select-pre { color: var(--k-dim); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.k-select-v { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-select-ico { display: inline-flex; color: var(--k-amber); }
+.k-chev { display: inline-flex; width: 16px; height: 16px; color: var(--k-dim); flex: none; transition: transform 0.12s; }
+.k-chev svg { width: 100%; height: 100%; }
+.k-select.open .k-chev { transform: rotate(180deg); color: var(--k-amber); }
+
+.k-pop {
+  position: fixed; z-index: 3000; max-height: 60vh; overflow-y: auto; padding: 4px;
+  background: #12171b; box-shadow: inset 0 0 0 2px var(--k-ink), 0 0 0 1px var(--k-plate4), 0 16px 40px rgba(0, 0, 0, 0.7);
+  font-family: var(--font-body, 'Barlow', system-ui, sans-serif); animation: k-pop 0.1s ease-out;
+}
+@keyframes k-pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.k-opt { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; color: var(--k-txt); position: relative; }
+.k-opt.act { background: var(--k-plate3); }
+.k-opt.sel { box-shadow: inset 3px 0 0 var(--k-amber); }
+.k-opt.sel .k-opt-l { color: var(--k-amber); }
+.k-opt.dis { opacity: 0.4; cursor: not-allowed; }
+.k-opt-ico { display: inline-flex; width: 18px; justify-content: center; color: var(--k-dim); }
+.k-opt-t { display: flex; flex-direction: column; min-width: 0; }
+.k-opt-l { font-family: var(--k-head); font-weight: 700; font-size: 1rem; letter-spacing: 0.03em; }
+.k-opt-h { font-size: 0.84rem; color: var(--k-dim); line-height: 1.25; }
+
+/* ---------- segmented ---------- */
+.k-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--k-ink); max-width: 100%; }
+.k-seg button.k-seg-b {
+  flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; min-width: 0; padding: 0 12px;
+  font-family: var(--k-head); font-weight: 700; font-size: 0.92rem; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+  color: var(--k-dim); background: var(--k-plate2); border: 0; border-radius: 0; clip-path: none; transform: none; box-shadow: inset 0 2px 0 var(--k-edge); cursor: pointer;
+}
+.k-seg button.k-seg-b:hover:not(:disabled):not(.on) { color: var(--k-txt); background: var(--k-plate3); border-color: transparent; }
+.k-seg button.k-seg-b.on { color: var(--k-amber-ink); background: linear-gradient(180deg, var(--k-amber2), var(--k-amber)); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.4); }
+.k-seg button.k-seg-b:disabled:not(.on) { opacity: 0.45; cursor: not-allowed; }
+.k-seg button.k-seg-b:disabled.on { opacity: 0.75; }
+.k-seg button.k-seg-b:focus-visible { outline: 2px solid var(--k-txt); outline-offset: -3px; }
+.k-seg.full { display: flex; width: 100%; }
+
+/* ---------- switch ---------- */
+button.k-toggle {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px 0 10px;
+  font-family: var(--k-head); font-weight: 700; font-size: 0.92rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--k-dim); background: var(--k-plate2); border: 0; border-radius: 0; clip-path: none; transform: none;
+  box-shadow: inset 0 0 0 2px var(--k-ink), inset 0 2px 0 var(--k-edge); cursor: pointer;
+}
+button.k-toggle:hover:not(:disabled) { color: var(--k-txt); background: var(--k-plate3); border-color: transparent; }
+button.k-toggle.on { color: var(--k-txt); }
+.k-lamp { width: 10px; height: 10px; flex: none; background: #2a2f34; box-shadow: inset 0 0 0 1px var(--k-ink); transform: rotate(45deg); }
+.k-toggle.on .k-lamp { background: var(--k-amber); box-shadow: 0 0 8px rgba(255, 178, 30, 0.8), inset 0 0 0 1px var(--k-ink); }
+button.k-toggle:focus-visible { outline: 2px solid var(--k-amber); outline-offset: 2px; }
+
+/* ---------- slider ---------- */
+.k-slider { display: flex; align-items: center; gap: 12px; min-height: 34px; cursor: pointer; touch-action: none; outline: none; }
+.k-slider-track { position: relative; flex: 1; height: 12px; background: #07090b; box-shadow: inset 0 0 0 1px var(--k-ink), 0 0 0 1px var(--k-plate3); }
+.k-slider-fill { position: absolute; left: 2px; top: 2px; bottom: 2px; max-width: calc(100% - 4px); background: repeating-linear-gradient(90deg, var(--k-amber) 0 6px, #c88300 6px 8px); }
+.k-slider-thumb {
+  position: absolute; top: 50%; width: 14px; height: 24px; margin: -12px 0 0 -7px;
+  background: linear-gradient(180deg, #f1ece0, #b8b2a4); box-shadow: 0 0 0 2px var(--k-ink), 0 3px 6px rgba(0, 0, 0, 0.5);
+}
+.k-slider:focus-visible .k-slider-thumb, .k-slider.drag .k-slider-thumb { box-shadow: 0 0 0 2px var(--k-ink), 0 0 0 4px var(--k-amber); }
+.k-slider-out { min-width: 34px; text-align: right; font-family: var(--k-head); font-weight: 700; font-size: 1.05rem; color: var(--k-txt); font-variant-numeric: tabular-nums; }
+
+/* ---------- text field ---------- */
+.k-field {
+  display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 10px; color: var(--k-dim); cursor: text;
+  background: #0a0d10; box-shadow: inset 0 0 0 2px var(--k-ink), inset 0 0 0 3px var(--k-plate3), inset 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.k-field:focus-within { box-shadow: inset 0 0 0 2px var(--k-ink), inset 0 0 0 3px var(--k-amber), inset 0 4px 10px rgba(0, 0, 0, 0.45); }
+.k-field .g-ico, .k-field svg { width: 17px; height: 17px; flex: none; }
+input.k-input {
+  flex: 1; min-width: 0; min-height: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--k-txt);
+  font: inherit; font-size: 1rem;
+}
+input.k-input:focus { outline: none; border: 0; }
+input.k-input::placeholder { color: var(--k-dim2); }
+button.k-field-x { min-height: 0; padding: 2px 4px; background: none; border: 0; clip-path: none; color: var(--k-dim); font-size: 0.9rem; }
+button.k-field-x:hover:not(:disabled) { color: var(--k-txt); background: none; }
+button.k-field-x[hidden] { display: none; }

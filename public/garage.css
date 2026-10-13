@@ -13,9 +13,9 @@
   --plate3: #262e35;
   --plate4: #313a42;
   --edge: rgba(255, 255, 255, 0.07);
-  --txt: #ece6d8;
-  --dim: #8e959b;
-  --dim2: #5e666d;
+  --txt: #f1ece0;
+  --dim: #b4b9bd;
+  --dim2: #868e95;
   --amber: #ffb21e;
   --amber2: #ffcb5c;
   --amber-ink: #241500;
@@ -44,12 +44,12 @@
 .garage *, .garage *::before, .garage *::after { box-sizing: border-box; }
 
 /* ---------- neutralise the global chamfered button for garage widgets ---------- */
-.garage button {
+.garage button:where(:not([class^="k-"]):not([class*=" k-"])) {
   clip-path: none; border-radius: 0; min-height: 0; padding: 0; transform: none; box-shadow: none;
   background: none; border: 0; color: inherit; font-family: inherit; text-transform: none; letter-spacing: normal; font-weight: inherit; font-size: inherit;
   justify-content: flex-start; text-align: left; gap: 0;
 }
-.garage button:hover:not(:disabled) { background: none; border-color: transparent; }
+.garage button:where(:not([class^="k-"]):not([class*=" k-"])):hover:not(:disabled) { background: none; border-color: transparent; }
 .garage button:active:not(:disabled) { transform: none; }
 .garage button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .garage .spacer { flex: 1; }
@@ -676,4 +676,128 @@
   .garage .g-inspector { max-height: 42%; }
   .garage .g-insp-well { width: 60px; height: 60px; }
   .garage .g-insp-t h3 { font-size: 1.25rem; }
+}
+
+/* ================= v2: progressive disclosure, grouped bay, range view ================= */
+.garage { font-size: 15px; }
+.garage .g-gauge-l, .garage .g-spec-k, .garage .g-sec-l, .garage .g-kstat-l { font-size: 0.8rem; letter-spacing: 0.14em; color: var(--dim); }
+.garage .g-gauge { padding: 8px 12px 9px; gap: 1px; }
+.garage .g-gauge-v { font-size: 1.7rem; }
+.garage .g-gauge-v small { font-size: 0.85rem; color: var(--dim); }
+.garage .g-gauge-s { font-size: 0.86rem; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.garage .g-readout { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.garage .g-load { font-size: 0.92rem; }
+.garage .g-lslot-name { font-size: 1rem; }
+.garage .g-item-meta { font-size: 0.86rem; }
+.garage .g-tab { font-size: 0.86rem !important; height: 54px; }
+.garage .g-tab .g-ico { width: 20px; height: 20px; }
+
+/* stage toolbar */
+.garage .g-stage-hud { left: 40px; right: 40px; align-items: center; }
+.garage .g-stagebtn {
+  pointer-events: auto; display: inline-flex !important; align-items: center; gap: 7px !important; height: 34px; padding: 0 12px !important; cursor: pointer;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.95rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important;
+  color: var(--txt) !important; background: rgba(5, 7, 9, 0.8) !important; box-shadow: inset 0 0 0 2px var(--plate4);
+}
+.garage .g-stagebtn .g-ico { width: 18px; height: 18px; color: var(--cyan); }
+.garage .g-stagebtn:hover { box-shadow: inset 0 0 0 2px var(--amber); }
+.garage .g-stagebtn.on { color: var(--amber-ink) !important; background: linear-gradient(180deg, var(--amber2), var(--amber)) !important; box-shadow: inset 0 0 0 2px var(--ink); }
+.garage .g-stagebtn.on .g-ico { color: var(--amber-ink); }
+.garage .g-stage.ranges .g-sockets { opacity: 0; pointer-events: none; }
+.garage .g-sockets { transition: opacity 0.2s; }
+.garage .g-stage .g-stage-hint { font-size: 0.9rem; letter-spacing: 0.08em; color: rgba(241, 236, 224, 0.75); }
+.garage .g-stage.ranges .g-stage-hint { display: none; }
+
+/* bay toolbar */
+.garage .g-baytools { flex-wrap: wrap; }
+.garage .g-search { flex: 1 1 160px; min-height: 36px; }
+.garage button.k-select.g-rolesel { min-height: 36px; max-width: 190px; }
+.garage .k-seg.g-subtabs { flex: 1 1 auto; }
+.garage .k-seg.g-subtabs .k-seg-b { padding: 0 8px; font-size: 0.88rem; letter-spacing: 0.06em; min-height: 36px; }
+.garage .g-gdot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; vertical-align: 2px; background: var(--teal); transform: rotate(45deg); }
+.garage .k-seg-b.on .g-gdot { background: var(--amber-ink); }
+.garage .g-secnote { margin: 0; font-size: 0.88rem; color: var(--dim); }
+
+/* category section header */
+.garage .g-sec { --cat: var(--dim); display: flex; flex-direction: column; gap: 1px; margin-top: 6px; padding-left: 10px; box-shadow: inset 4px 0 0 var(--cat); }
+.garage .g-sec-name { font-family: var(--head); font-weight: 700; font-size: 1.08rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--txt); }
+.garage .g-sec-desc { font-size: 0.88rem; color: var(--dim); line-height: 1.3; }
+
+/* icon-first part tiles */
+.garage .g-ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 5px; }
+.garage .g-ptile {
+  --cat: var(--plate4);
+  position: relative; display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start !important; gap: 3px !important;
+  padding: 8px 6px 7px !important; min-height: 118px; cursor: pointer; text-align: center !important; user-select: none; touch-action: pan-y; -webkit-touch-callout: none;
+  background: var(--plate2) !important; box-shadow: inset 0 0 0 2px var(--ink), inset 0 2px 0 var(--edge), inset 0 -4px 0 var(--cat);
+}
+.garage .g-ptile:hover { background: var(--plate3) !important; }
+.garage .g-ptile:focus-visible { outline-offset: -3px; }
+.garage .g-ptile-well {
+  position: relative; width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; flex: none;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.06), transparent 70%), #0b0f13; box-shadow: inset 0 0 0 1px var(--ink), inset 0 3px 8px rgba(0, 0, 0, 0.7);
+}
+.garage .g-ptile-well .g-chip.mini { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; font-size: 0.76rem; }
+.garage .g-ptile-name { font-family: var(--head); font-weight: 700; font-size: 1rem; letter-spacing: 0.03em; line-height: 1.1; color: var(--txt); text-transform: uppercase;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.garage .g-ptile-sub { font-size: 0.84rem; color: var(--dim); margin-top: auto; }
+.garage .g-ptile.sel { background: #1d2d2b !important; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--teal); }
+.garage .g-ptile.sel::after { content: 'Fitted'; position: absolute; left: 6px; top: 5px; font-family: var(--head); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); }
+.garage .g-ptile.pin { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--amber), inset 0 -4px 0 var(--cat) !important; }
+.garage .g-ptile.mounted { background: #1d2a29 !important; }
+.garage .g-ptile.fitsel .g-ptile-well { box-shadow: inset 0 0 0 1px var(--ink), 0 0 0 2px rgba(255, 178, 30, 0.6); }
+.garage .g-ptile.nofit { opacity: 0.55; }
+.garage .g-ptile:not(.nofit)[data-fk^="mod-"] { cursor: grab; }
+.garage .g-ptile .g-tile-n { top: 5px; right: 5px; font-size: 0.8rem; }
+
+/* collapsible tails / disclosure */
+.garage .g-more {
+  display: inline-flex !important; align-items: center; gap: 8px !important; align-self: flex-start; padding: 4px 6px !important; cursor: pointer;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.9rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: var(--dim) !important;
+}
+.garage .g-more:hover { color: var(--txt) !important; }
+.garage .g-more-c { color: var(--amber); width: 10px; }
+.garage .g-dimmed .g-ptile { opacity: 0.6; }
+
+/* inspector: headline numbers first, the rest on demand */
+.garage .g-inspector { gap: 10px; padding: 0 14px 14px; }
+.garage .g-inspector::before { margin: 0 -14px 2px; }
+.garage .g-insp-t h3 { font-size: 1.5rem; }
+.garage .g-insp-desc { font-size: 0.98rem; color: #d6d1c5; }
+.garage .g-kstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 2px; background: var(--ink); padding: 2px; }
+.garage .g-kstat { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; background: #12171b; min-width: 0; }
+.garage .g-kstat-v { font-family: var(--head); font-weight: 700; font-size: 1.5rem; line-height: 1.05; white-space: nowrap; display: flex; align-items: baseline; gap: 3px; }
+.garage .g-kstat-v small { font-size: 0.85rem; color: var(--dim); }
+.garage .g-kstat.hl .g-kstat-v { color: var(--amber); }
+.garage .g-kstat.txt .g-kstat-v { font-size: 1.05rem; white-space: normal; text-transform: uppercase; }
+.garage .g-kstat .g-tgts { gap: 8px; }
+.garage .g-kstat .g-tgts span { font-size: 0.95rem; }
+.garage .g-kstat .g-chips .g-chip { width: 22px; height: 22px; }
+.garage .g-tgts .off { color: var(--dim2); }
+.garage .g-spec-v { font-size: 1.02rem; }
+.garage .g-cmp { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); }
+.garage .g-cmp-c > span:first-child { font-size: 0.74rem; color: var(--dim); }
+.garage .g-cmp-c b { font-size: 1.15rem; }
+.garage .g-sockbtn { height: 34px; font-size: 0.9rem !important; }
+.garage .g-sockbtn-l { max-width: 170px; }
+.garage .g-insp-empty { font-size: 0.98rem; }
+.garage .g-fx { font-size: 0.84rem; }
+.garage .g-plate { font-size: 0.86rem; }
+.garage .g-rtag { font-size: 0.76rem; }
+.garage .g-slotnote { font-size: 0.92rem; }
+.garage .g-errors li { font-size: 1rem; }
+.garage .g-note { font-size: 0.94rem; }
+
+/* orders tab now uses kit controls */
+.garage .g-orders .ord-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.garage .g-orders button.k-select { flex: 1 1 200px; }
+.garage .g-orders .hold-row { margin-top: 8px; }
+@media (max-width: 1100px) {
+  .garage .g-ptiles { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+}
+.garage .g-kstat-l { font-family: var(--head); font-weight: 600; text-transform: uppercase; }
+.garage .g-sockbtn.here { background: #1d2d2b !important; color: var(--teal) !important; }
+@media (max-width: 760px) {
+  .garage .g-kstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .garage .g-baytools .k-seg.g-subtabs { overflow-x: auto; }
 }
