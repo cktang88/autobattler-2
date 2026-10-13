@@ -1442,6 +1442,8 @@ export interface PreviewGeom {
   mounts: { x: number; y: number; r: number }[];
   /** chassis size in cells */
   S: number;
+  /** rough half-extent of the drawn sprite (CSS px) */
+  half: number;
 }
 
 /** Draw a design centred in the canvas. `minExtent` (cells) keeps small units small so a backdrop grid reads at true scale;
@@ -1462,6 +1464,7 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   let L;
   try { L = layoutOf(design); } catch { return null; }
   const time = opts?.time ?? 0;
+  const ext0 = L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1);
   const ext = Math.max(opts?.minExtent ?? 0, L.S * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1));
   const px = Math.min(W, H) / ext;
   g.setTransform(px, 0, 0, px, W / 2, H / 2);
@@ -1486,5 +1489,5 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
     y: (H / 2 + (uy + (sn * m.x + cs * m.y) * sc) * px) * k,
     r: m.r * sc * px * k,
   }));
-  return { px: px * k, cx: (W / 2 + ux * px) * k, cy: (H / 2 + uy * px) * k, mounts, S: L.S };
+  return { px: px * k, cx: (W / 2 + ux * px) * k, cy: (H / 2 + uy * px) * k, mounts, S: L.S, half: (ext0 / 2) * 0.92 * px * k };
 }

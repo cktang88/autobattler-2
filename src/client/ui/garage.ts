@@ -317,6 +317,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     selectedId = draft.id;
     saved = clone(draft);
     nameInput.value = draft.name;
+    activeSlot = null;
     sfx('upgrade');
     app.toast(msg, 'good');
     update();
@@ -624,7 +625,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     renderBench();
     renderSockets();
     renderBay();
-    if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus();
+    if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
   function renderHeader() {
@@ -651,7 +652,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       },
       canvas,
       h('span.g-item-txt', null,
-        h('span.g-item-name', null, d.name || 'Untitled', opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
+        h('span.g-item-name', null, h('span.g-item-nm', { title: d.name || 'Untitled' }, d.name || 'Untitled'), opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
         h('span.g-item-meta', null,
           h('span.g-size', null, s ? designSizeLabel(s) : '?'),
           h('span.g-item-cost', { title: s && s.squad > 1 ? `Block of ${s.squad} (${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
@@ -988,7 +989,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const sections: HTMLElement[] = [];
     for (const catId of cats) {
       const def = CATEGORIES.find((k) => k.id === catId);
-      const mods = MODULES.filter((m) => m.category === catId && (counts.has(m.id) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
+      const mods = MODULES.filter((m) => m.category === catId && ((!q && counts.has(m.id)) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
         .sort((a, b) => a.weight - b.weight || a.cost - b.cost);
       if (!mods.length) continue;
       const ok = mods.filter(fitsHull), no = mods.filter((m) => !fitsHull(m));
@@ -1197,7 +1198,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: `${m.mount}-class mount` }, m.mount), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
-      next ? compare(next, `Mounted in socket ${target! + 1}`) : null,
+      next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, lock ?? (c.mounts.some((_, i) => !slotBlock(m, i)) ? 'Mount in' : `Needs a ${m.mount} socket`)),
         h('div.g-sockbtns', null, ...socketBtns)),
@@ -1298,7 +1299,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rings = rangesOn ? rangeRings() : [];
-    const key = `${r.width}x${r.height}@${dpr}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label).join(',')}`;
+    const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label).join(',')}`;
     if (key === gridKey) return;
     gridKey = key;
     gridCv.width = Math.round(r.width * dpr);
@@ -1348,9 +1349,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     x.fillStyle = 'rgba(255, 196, 64, 0.95)';
     x.strokeStyle = 'rgba(255, 196, 64, 0.7)';
     x.lineWidth = 1;
-    const dy = Math.max(14, fy0 - 16);
+    // keep the dimension lines clear of the sprite (giants overhang their footprint)
+    const off = Math.max(16, g.half - (S / 2) * P + 12);
+    const dy = Math.max(14, fy0 - off);
     dimLine(x, fx0, dy, fx0 + fw, dy, label, false);
-    const dx = Math.max(14, fx0 - 16);
+    const dx = Math.max(14, fx0 - off);
     dimLine(x, dx, fy0, dx, fy0 + fw, label, true);
     // range rings
     rings.forEach((o, i) => {

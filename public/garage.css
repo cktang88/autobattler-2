@@ -801,3 +801,14 @@
   .garage .g-kstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .garage .g-baytools .k-seg.g-subtabs { overflow-x: auto; }
 }
+
+/* review fixes */
+.garage .g-bay, .garage .g-body { overflow: clip; }
+.garage .g-item-txt { flex: 1; }
+.garage .g-item-name { min-width: 0; }
+.garage .g-item-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.garage .g-item-meta { min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+.garage .g-item-meta .g-size { white-space: nowrap; flex: none; }
+.garage .g-lslot { flex: 1 1 170px; max-width: none; }
+.garage .g-lslot-name { font-size: 0.95rem; }
+@media (max-width: 1360px) { .garage .g-body { grid-template-columns: 218px minmax(0, 1fr) 420px; } }
