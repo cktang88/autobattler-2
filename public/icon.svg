@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5ef0de"/>
+      <stop offset="1" stop-color="#1a9e90"/>
+    </linearGradient>
+  </defs>
+  <!-- gear ring -->
+  <g fill="#1b2531" stroke="#2ed3c0" stroke-width="2" stroke-linejoin="round">
+    <path d="M28 3h8l1.5 6.2a23 23 0 0 1 6.3 2.6l5.4-3.4 5.7 5.7-3.4 5.4a23 23 0 0 1 2.6 6.3L61 28v8l-6.2 1.5a23 23 0 0 1-2.6 6.3l3.4 5.4-5.7 5.7-5.4-3.4a23 23 0 0 1-6.3 2.6L36 61h-8l-1.5-6.2a23 23 0 0 1-6.3-2.6l-5.4 3.4-5.7-5.7 3.4-5.4a23 23 0 0 1-2.6-6.3L3 36v-8l6.2-1.5a23 23 0 0 1 2.6-6.3l-3.4-5.4 5.7-5.7 5.4 3.4a23 23 0 0 1 6.3-2.6z"/>
+  </g>
+  <!-- mech head / visor -->
+  <path d="M20 24l6-6h12l6 6v12l-5 8H25l-5-8z" fill="#0b0f14" stroke="url(#g)" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M24 28h16l-2 5H26z" fill="#f2a93b"/>
+  <path d="M27 38h10M29 41h6" stroke="#2ed3c0" stroke-width="2" stroke-linecap="round"/>
+</svg>
