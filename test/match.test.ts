@@ -254,3 +254,60 @@ test('design behavior defaults: validated, hidden from the opponent', () => {
   assert.equal(redactFor(m, 0).players[1].deck[0].behavior, undefined);
   assert.deepEqual(redactFor(m, 1).players[1].deck[0].behavior, { kite: true });
 });
+
+test('focus / stance / delay / retreat / escort: validation, configure, redaction', () => {
+  const m = fresh();
+  const w = (extra: object): DeployAction => ({ round: 1, place: [{ ...pl(1, 0, 0), ...extra }], upgrade: [] });
+  assert.equal(validateDeploy(m, 0, w({ focus: true, stance: 'charge', delay: 10, retreat: true })), null);
+  for (const stance of ['advance', 'holdPos', 'charge', 'flankLeft', 'flankRight']) assert.equal(validateDeploy(m, 0, w({ stance })), null, stance);
+  for (const d of [0, 3, 6, 10]) assert.equal(validateDeploy(m, 0, w({ delay: d })), null);
+  for (const bad of [{ focus: 'y' }, { retreat: 1 }, { stance: 'nope' }, { stance: 3 }, { delay: 4 }, { delay: '3' }, { delay: -3 }, { escort: 1 }, { escort: 99 }, { escort: 1.5 }, { escort: 'x' }, { target: 'bogus' }]) {
+    assert.ok(validateDeploy(m, 0, w(bad)), JSON.stringify(bad));
+  }
+  // new priorities are legal
+  for (const t of ['aircraft', 'armored', 'longestRange', 'support', 'valuable', 'swarm']) assert.equal(validateDeploy(m, 0, w({ target: t })), null, t);
+  // escort may point at a unit bought in the same action, but not at itself
+  const two: DeployAction = { round: 1, place: [{ ...pl(1, 0, 0), escort: 2 }, pl(2, 6, 0)], upgrade: [] };
+  assert.equal(validateDeploy(m, 0, two), null);
+  assert.ok(validateDeploy(m, 0, { round: 1, place: [{ ...pl(1, 0, 0), escort: 1 }], upgrade: [] }));
+
+  submitDeploy(m, 0, { round: 1, place: [{ ...pl(1, 0, 0), focus: true, stance: 'holdPos', delay: 3, retreat: true }, { ...pl(2, 6, 0), escort: 1 }], upgrade: [] });
+  submitDeploy(m, 1, { round: 1, place: [pl(1, 0, 0, deck[0].id)], upgrade: [] });
+  assert.equal(m.round, 2);
+  const b = m.players[0].board[0];
+  assert.deepEqual([b.focus, b.stance, b.delay, b.retreat, m.players[0].board[1].escort], [true, 'holdPos', 3, true, 1]);
+
+  // configure: escort must be an own uid (or -1 to clear); stance/delay validated; free of charge
+  const cfg = (c: object): DeployAction => ({ round: 2, place: [], upgrade: [], configure: [{ uid: 2, ...c }] });
+  assert.ok(validateDeploy(m, 0, cfg({ escort: 2 })), 'self');
+  assert.ok(validateDeploy(m, 0, cfg({ escort: 77 })), 'unknown');
+  assert.ok(validateDeploy(m, 0, cfg({ stance: 'x' })));
+  assert.ok(validateDeploy(m, 0, cfg({ delay: 5 })));
+  assert.ok(validateDeploy(m, 0, cfg({ focus: 'no' })));
+  assert.equal(validateDeploy(m, 0, cfg({ escort: -1 })), null);
+  const before = m.players[0].supply;
+  submitDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 2, escort: -1, stance: 'flankRight', delay: 10, focus: true, retreat: false }, { uid: 1, escort: 2, stance: 'advance' }] });
+  assert.equal(m.players[0].supply, before);
+  const [u1, u2] = m.players[0].board;
+  assert.equal(u2.escort, undefined, 'escort -1 clears');
+  assert.deepEqual([u2.stance, u2.delay, u2.focus, u2.retreat], ['flankRight', 10, true, false]);
+  assert.deepEqual([u1.escort, u1.stance], [2, 'advance']);
+
+  // the opponent sees none of them; history and the owner keep everything
+  const v = redactFor(m, 1);
+  for (const u of v.players[0].board) for (const k of ['target', 'hold', 'kite', 'focus', 'stance', 'delay', 'retreat', 'escort'] as const) assert.equal(u[k], undefined, k);
+  assert.equal(v.history[0].boards[0][0].stance, 'holdPos');
+  assert.equal(v.history[0].boards[0][1].escort, 1);
+  assert.equal(redactFor(m, 0).players[0].board[1].stance, 'flankRight');
+});
+
+test('design behavior defaults: new fields validated and hidden', () => {
+  assert.deepEqual(validateDeck([{ ...deck[0], behavior: { target: 'aircraft', focus: true, stance: 'holdPos', delay: 6, retreat: true } }]), []);
+  for (const behavior of [{ stance: 'x' }, { delay: 2 }, { focus: 'y' }, { retreat: 0 }]) {
+    assert.ok(validateDeck([{ ...deck[0], behavior: behavior as never }]).length, JSON.stringify(behavior));
+  }
+  const m = fresh();
+  m.players[1].deck[0].behavior = { stance: 'charge', delay: 3 };
+  assert.equal(redactFor(m, 0).players[1].deck[0].behavior, undefined);
+  assert.deepEqual(redactFor(m, 1).players[1].deck[0].behavior, { stance: 'charge', delay: 3 });
+});

@@ -18,7 +18,7 @@ import { MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps
 import { mixSeed } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import type { BattleInput } from './sim/types.ts';
-import { TARGET_PRIORITIES } from './types.ts';
+import { STANCES, START_DELAYS, TARGET_PRIORITIES } from './types.ts';
 import type { Size, DeployAction, Design, MatchMode, MatchState, Placement, PlayerState, RoundRecord, Side } from './types.ts';
 
 export const DECK_SIZE = 9;
@@ -159,14 +159,26 @@ export function validateDeck(deck: Design[]): string[] {
   return errs;
 }
 
-/** Error string for a bad {target, hold, kite} settings object, else null. */
+/** Error string for a bad {target, hold, kite, focus, stance, delay, retreat} settings object, else null. */
 function behaviorError(b: unknown): string | null {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return 'Bad behavior';
   const o = b as Record<string, unknown>;
   if (o.target !== undefined && !TARGET_PRIORITIES.includes(o.target as never)) return 'Bad target priority';
   if (o.hold !== undefined && typeof o.hold !== 'boolean') return 'Bad hold flag';
   if (o.kite !== undefined && typeof o.kite !== 'boolean') return 'Bad kite flag';
+  if (o.focus !== undefined && typeof o.focus !== 'boolean') return 'Bad focus flag';
+  if (o.retreat !== undefined && typeof o.retreat !== 'boolean') return 'Bad retreat flag';
+  if (o.stance !== undefined && !STANCES.includes(o.stance as never)) return 'Bad stance';
+  if (o.delay !== undefined && !(START_DELAYS as readonly unknown[]).includes(o.delay)) return 'Bad start delay';
   return null;
+}
+
+/** The hidden battle-setting fields a Placement / UnitConfig / design behavior can carry (escort excluded). */
+const BEHAVIOR_KEYS = ['target', 'hold', 'kite', 'focus', 'stance', 'delay', 'retreat'] as const;
+function behaviorOf(o: object): Record<string, unknown> {
+  const r: Record<string, unknown> = {};
+  for (const k of BEHAVIOR_KEYS) r[k] = (o as Record<string, unknown>)[k];
+  return r;
 }
 
 const isInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n);
@@ -185,6 +197,9 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   const designs = new Map(p.deck.map((d) => [d.id, d] as const));
   let cost = 0;
   const seenUids = new Set<number>(p.board.map((u) => u.uid));
+  // escort may reference any block already on the board or bought in this very action
+  const knownUids = new Set<number>(seenUids);
+  for (const pl of a.place) if (pl && typeof pl === 'object' && isInt(pl.uid)) knownUids.add(pl.uid);
   const footprints: { x: number; y: number; s: number }[] = p.board.map((u) => ({ x: u.x, y: u.y, s: blockCells(sizeOf(designs.get(u.designId)), u.spacing) }));
   let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
 
@@ -202,8 +217,9 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
       if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
       if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
     }
-    const be = behaviorError({ target: pl.target, hold: pl.hold, kite: pl.kite });
+    const be = behaviorError(behaviorOf(pl));
     if (be) return `${d.name}: ${be}`;
+    if (pl.escort !== undefined && (!isInt(pl.escort) || pl.escort === pl.uid || !knownUids.has(pl.escort))) return `${d.name}: Bad escort target`;
     const s = blockCells(size, pl.spacing);
     simUnits += squadSize(size);
     if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
@@ -218,8 +234,9 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     for (const c of a.configure) {
       if (!c || typeof c !== 'object' || !isInt(c.uid)) return 'Bad configure entry';
       if (!p.board.some((u) => u.uid === c.uid)) return `Can't configure unknown unit ${String(c.uid)}`;
-      const be = behaviorError({ target: c.target, hold: c.hold, kite: c.kite });
+      const be = behaviorError(behaviorOf(c));
       if (be) return be;
+      if (c.escort !== undefined && (!isInt(c.escort) || (c.escort !== -1 && (c.escort === c.uid || !knownUids.has(c.escort))))) return 'Bad escort target';
     }
   }
 
@@ -270,6 +287,11 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     if (c.target !== undefined) u.target = c.target;
     if (c.hold !== undefined) u.hold = c.hold;
     if (c.kite !== undefined) u.kite = c.kite;
+    if (c.focus !== undefined) u.focus = c.focus;
+    if (c.stance !== undefined) u.stance = c.stance;
+    if (c.delay !== undefined) u.delay = c.delay;
+    if (c.retreat !== undefined) u.retreat = c.retreat;
+    if (c.escort !== undefined) { if (c.escort === -1) delete u.escort; else u.escort = c.escort; }
   }
   for (const pl of a.place) {
     const size = sizeOf(p.deck.find((d) => d.id === pl.designId));
@@ -278,6 +300,11 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     if (pl.target !== undefined) b.target = pl.target;
     if (pl.hold !== undefined) b.hold = pl.hold;
     if (pl.kite !== undefined) b.kite = pl.kite;
+    if (pl.focus !== undefined) b.focus = pl.focus;
+    if (pl.stance !== undefined) b.stance = pl.stance;
+    if (pl.delay !== undefined) b.delay = pl.delay;
+    if (pl.retreat !== undefined) b.retreat = pl.retreat;
+    if (pl.escort !== undefined) b.escort = pl.escort;
     p.board.push(b);
     p.nextUid = Math.max(p.nextUid, pl.uid + 1);
   }
@@ -363,7 +390,7 @@ export function redactFor(m: MatchState, viewer: Side): MatchState {
     .filter((u) => u.round < c.round)
     .map((u) => {
       const v = { ...u, level: prevLevel.get(u.uid) ?? u.level };
-      delete v.target; delete v.hold; delete v.kite;
+      delete v.target; delete v.hold; delete v.kite; delete v.focus; delete v.stance; delete v.delay; delete v.retreat; delete v.escort;
       return v;
     });
   for (const d of opp.deck) delete d.behavior;
@@ -395,6 +422,11 @@ function clonePlacement(p: Placement): Placement {
   if (p.target !== undefined) c.target = p.target;
   if (p.hold !== undefined) c.hold = p.hold;
   if (p.kite !== undefined) c.kite = p.kite;
+  if (p.focus !== undefined) c.focus = p.focus;
+  if (p.stance !== undefined) c.stance = p.stance;
+  if (p.delay !== undefined) c.delay = p.delay;
+  if (p.retreat !== undefined) c.retreat = p.retreat;
+  if (p.escort !== undefined) c.escort = p.escort;
   return c;
 }
 function cloneDesign(d: Design): Design {

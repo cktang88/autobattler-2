@@ -180,18 +180,20 @@ test('deploy, redaction, polling and round resolution', async () => {
 
   // bad block settings are rejected
   const withSettings = (extra: object): DeployAction => { const a = placeOne(m0, 0); a.place[0] = { ...a.place[0], ...extra }; return a; };
-  for (const bad of [{ spacing: 9 }, { spacing: 1.5 }, { target: 'nope' }, { hold: 'yes' }, { kite: 1 }]) {
+  for (const bad of [{ spacing: 9 }, { spacing: 1.5 }, { target: 'nope' }, { hold: 'yes' }, { kite: 1 }, { focus: 1 }, { retreat: 'x' }, { stance: 'sideways' }, { delay: 4 }, { delay: '3' }, { escort: 1.5 }, { escort: 'a' }, { escort: 424242 }]) {
     assert.equal((await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: withSettings(bad) })).status, 400, JSON.stringify(bad));
   }
   assert.equal((await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: { ...placeOne(m0, 0), configure: [{ uid: 77, kite: true }] } })).status, 400, 'configure of unknown unit');
 
-  const d1 = await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: withSettings({ spacing: 1, target: 'lowestHp', hold: true, kite: true }) });
+  const d1 = await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: withSettings({ spacing: 1, target: 'lowestHp', hold: true, kite: true, focus: true, stance: 'flankLeft', delay: 6, retreat: true }) });
   assert.equal(d1.status, 200, JSON.stringify(d1.body));
   assert.equal(d1.body.match.players[0].ready, true);
   assert.equal(d1.body.match.players[0].board.length, 1);
   assert.deepEqual(
     { s: d1.body.match.players[0].board[0].spacing, t: d1.body.match.players[0].board[0].target, h: d1.body.match.players[0].board[0].hold, k: d1.body.match.players[0].board[0].kite },
     { s: 1, t: 'lowestHp', h: true, k: true }, 'spacing/target/hold/kite pass through the server');
+  const placed0 = d1.body.match.players[0].board[0];
+  assert.deepEqual([placed0.focus, placed0.stance, placed0.delay, placed0.retreat], [true, 'flankLeft', 6, true], 'new settings pass through');
   // double submit refused
   assert.equal((await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: placeOne(m0, 0, 4) })).status, 409);
 
@@ -230,11 +232,17 @@ test('deploy, redaction, polling and round resolution', async () => {
     assert.equal(after.players[0].board[0].target, undefined);
     assert.equal(after.players[0].board[0].hold, undefined);
     assert.equal(after.players[0].board[0].kite, undefined);
+    for (const k of ['focus', 'stance', 'delay', 'retreat', 'escort'] as const) assert.equal(after.players[0].board[0][k], undefined, k);
+    assert.equal(after.history[0].boards[0][0].stance, 'flankLeft');
     // the history keeps the full settings for replay
     assert.equal(after.history[0].boards[0][0].target, 'lowestHp');
     // alice (owner) still sees her own, and may reconfigure them for free
     const ma: MatchState = (await api('GET', `/api/matches/${matchId}`, alice.token)).body.match;
     assert.equal(ma.players[0].board[0].target, 'lowestHp');
+    const bad = await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: { round: ma.round, place: [], upgrade: [], configure: [{ uid: ma.players[0].board[0].uid, escort: ma.players[0].board[0].uid }] } });
+    assert.equal(bad.status, 400, 'can not escort itself');
+    const badStance = await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: { round: ma.round, place: [], upgrade: [], configure: [{ uid: ma.players[0].board[0].uid, stance: 'x' }] } });
+    assert.equal(badStance.status, 400);
     const cfg = await api('POST', `/api/matches/${matchId}/deploy`, alice.token, { action: { round: ma.round, place: [], upgrade: [], configure: [{ uid: ma.players[0].board[0].uid, target: 'highestHp', kite: false }] } });
     assert.equal(cfg.status, 200, JSON.stringify(cfg.body));
     assert.equal(cfg.body.match.players[0].board[0].target, 'highestHp');

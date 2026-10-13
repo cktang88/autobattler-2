@@ -68,7 +68,7 @@ const THREAT_MEMORY = 6 * TICK_RATE; // ticks a recorded attacker stays 'the thr
 const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
-const MAX_RADIUS = 1.4;
+const MAX_RADIUS = 2.3; // size-5 titans have radius 2.25
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
@@ -1653,8 +1653,9 @@ export class Battle {
       const A = ints[i];
       if (A.leapT >= 0) continue;
       const ccx = clamp(Math.floor(a.x / CELL), 0, HCOLS - 1), ccy = clamp(Math.floor(a.y / CELL), 0, HROWS - 1);
-      for (let cy = Math.max(0, ccy - 1); cy <= Math.min(HROWS - 1, ccy + 1); cy++) {
-        for (let cx = Math.max(0, ccx - 1); cx <= Math.min(HCOLS - 1, ccx + 1); cx++) {
+      const reach = Math.max(1, Math.ceil((A.radius + MAX_RADIUS) / CELL));
+      for (let cy = Math.max(0, ccy - reach); cy <= Math.min(HROWS - 1, ccy + reach); cy++) {
+        for (let cx = Math.max(0, ccx - reach); cx <= Math.min(HCOLS - 1, ccx + reach); cx++) {
           for (let j = head[cy * HCOLS + cx]; j >= 0; j = next[j]) {
             if (j <= i) continue;
             const b = units[j];

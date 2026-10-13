@@ -3,7 +3,7 @@
 
 import { DECK_SIZE, validateDeck } from '../shared/match.ts';
 import { validateDesign } from '../shared/stats.ts';
-import { TARGET_PRIORITIES } from '../shared/types.ts';
+import { STANCES, START_DELAYS, TARGET_PRIORITIES } from '../shared/types.ts';
 import type { DeployAction, Design, Placement, UnitBehavior, UnitConfig } from '../shared/types.ts';
 
 export class HttpError extends Error {
@@ -17,18 +17,26 @@ export class HttpError extends Error {
 const bad = (msg: string): never => { throw new HttpError(400, msg); };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
-/** Pick target/hold/kite from a raw object (strictly typed), or bad() on invalid values. */
+/** Pick target/hold/kite/focus/stance/delay/retreat from a raw object (strictly typed), or bad() on invalid values. */
 function readBehavior(o: Record<string, unknown>, what: string): UnitBehavior {
   const out: UnitBehavior = {};
   if (o.target !== undefined) {
     if (!TARGET_PRIORITIES.includes(o.target as never)) bad(`Invalid ${what}.target`);
     out.target = o.target as UnitBehavior['target'];
   }
-  for (const k of ['hold', 'kite'] as const) {
+  for (const k of ['hold', 'kite', 'focus', 'retreat'] as const) {
     if (o[k] !== undefined) {
       if (typeof o[k] !== 'boolean') bad(`Invalid ${what}.${k}`);
       out[k] = o[k] as boolean;
     }
+  }
+  if (o.stance !== undefined) {
+    if (!STANCES.includes(o.stance as never)) bad(`Invalid ${what}.stance`);
+    out.stance = o.stance as UnitBehavior['stance'];
+  }
+  if (o.delay !== undefined) {
+    if (!(START_DELAYS as readonly unknown[]).includes(o.delay)) bad(`Invalid ${what}.delay`);
+    out.delay = o.delay as number;
   }
   return out;
 }
@@ -104,6 +112,10 @@ export function sanitizeAction(raw: unknown): DeployAction {
       pl.spacing = o.spacing as number;
     }
     Object.assign(pl, readBehavior(o, 'placement'));
+    if (o.escort !== undefined) {
+      if (!isInt(o.escort) || Math.abs(o.escort as number) > 1e6) bad('placement.escort must be a unit uid');
+      pl.escort = o.escort as number;
+    }
     return pl;
   });
   const upgrade = (upRaw as unknown[]).map((u) => {
@@ -117,7 +129,12 @@ export function sanitizeAction(raw: unknown): DeployAction {
       if (!isObj(c)) bad('configure entry must be an object');
       const o = c as Record<string, unknown>;
       if (!isInt(o.uid) || Math.abs(o.uid as number) > 1e6) bad('configure.uid must be an integer');
-      return { uid: o.uid as number, ...readBehavior(o, 'configure') };
+      const cfg: UnitConfig = { uid: o.uid as number, ...readBehavior(o, 'configure') };
+      if (o.escort !== undefined) {
+        if (!isInt(o.escort) || Math.abs(o.escort as number) > 1e6) bad('configure.escort must be a unit uid or -1');
+        cfg.escort = o.escort as number;
+      }
+      return cfg;
     });
   }
   return out;

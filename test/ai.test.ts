@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aiDeck, aiDeploy, profile, type AiDifficulty } from '../src/shared/ai.ts';
-import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateDeploy, applyDeploy, resolveRound, DECK_SIZE } from '../src/shared/match.ts';
+import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateDeploy, applyDeploy, resolveRound, redactFor, DECK_SIZE } from '../src/shared/match.ts';
 import { blockCells, squadSize, overlaps, blockInZone } from '../src/shared/grid.ts';
 import { computeStats } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
@@ -101,4 +101,38 @@ test('hard AI decision stays fast (<1.5s)', () => {
   const t = performance.now();
   aiDeploy(mm, 0, 'hard');
   assert.ok(performance.now() - t < 1500);
+});
+
+test('AI uses the new battle settings sensibly and keeps them valid', () => {
+  const seen = { stance: new Set<string>(), target: new Set<string>(), delay: 0, retreat: 0, focus: 0, escort: 0 };
+  for (let i = 0; i < 6; i++) {
+    const m = playMatch(400 + i, 'hard', 'normal');
+    for (const r of m.history) for (const side of [0, 1] as const) {
+      const uids = new Set(r.boards[side].map((p) => p.uid));
+      const byId = new Map(m.players[side].deck.map((d) => [d.id, d] as const));
+      for (const p of r.boards[side]) {
+        if (p.stance) seen.stance.add(p.stance);
+        if (p.target) seen.target.add(p.target);
+        if (p.delay) seen.delay++;
+        if (p.retreat) seen.retreat++;
+        if (p.focus) seen.focus++;
+        if (p.escort !== undefined) {
+          seen.escort++;
+          assert.ok(uids.has(p.escort) && p.escort !== p.uid, 'escort references another own block');
+          assert.ok(profile(byId.get(p.designId)!).heal > 0 || computeStats(byId.get(p.designId)!).traits.includes('repairAura'), 'only healers escort');
+        }
+        // artillery that holds position never also kites
+        if (p.stance === 'holdPos') assert.ok(!p.kite);
+      }
+    }
+  }
+  assert.ok(seen.stance.size >= 2, `stances used: ${[...seen.stance]}`);
+  assert.ok(seen.target.size >= 3, `targets used: ${[...seen.target]}`);
+  assert.ok(seen.focus > 0 && seen.delay > 0, `focus ${seen.focus} delay ${seen.delay}`);
+});
+
+test('AI never hands the opponent an exploitable view: redacted deck has no behavior', () => {
+  const m = newMatch('r', 'ai', 3, newPlayer('A', aiDeck(1, 'hard'), true), newPlayer('B', aiDeck(2, 'hard'), true));
+  const v = redactFor(m, 0);
+  for (const d of v.players[1].deck) assert.equal(d.behavior, undefined);
 });

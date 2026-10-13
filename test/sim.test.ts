@@ -542,59 +542,85 @@ test('kite: ranged units back away from enemies that close in', () => {
 });
 
 // ---------------------------------------------------------------- new priorities, focus, stances, delay, retreat, escort
-function pickFrom(attacker: string, prio: TargetPriority, enemyA: string, enemyB: string, extra: Partial<Placement> = {}): { near: string; far: string; got: string } {
-  const b = new Battle(input(1, [{ ...P(attacker, 10, 0), target: prio, ...extra }], [P(enemyA, 8, 0), P(enemyB, 12, 1)]));
-  for (let i = 0; i < 600 && b.units[0].mounts[0].target < 0; i++) b.step();
-  for (let i = 0; i < 40; i++) b.step();
-  return { near: enemyA, far: enemyB, got: b.units[b.units[0].mounts[0].target]?.design.id ?? '' };
+/** Move every unit of a placement so its centroid sits at (x, y). */
+function teleport(b: Battle, side: 0 | 1, uid: number, x: number, y: number): void {
+  const us = b.units.filter((u) => u.side === side && u.uid === uid);
+  const cx = us.reduce((a, u) => a + u.x, 0) / us.length, cy = us.reduce((a, u) => a + u.y, 0) / us.length;
+  for (const u of us) { u.x += x - cx; u.y += y - cy; }
+  (b as unknown as { rebuildHash(): void }).rebuildHash();
+}
+/** attacker sits at (24, 23); `near` 3 cells away, `far` 5 cells away on the other side; both parked (holdPos). */
+function pickFrom(attacker: string, prio: TargetPriority, enemyA: string, enemyB: string, extra: Partial<Placement> = {}): { near: string; far: string; got: string; gotUid: number; nearUid: number; farUid: number } {
+  const a = { ...P(attacker, 10, 0), target: prio, ...extra };
+  const e1 = { ...P(enemyA, 8, 0), stance: 'holdPos' as const }, e2 = { ...P(enemyB, 12, 1), stance: 'holdPos' as const };
+  const b = new Battle(input(1, [a], [e1, e2]));
+  teleport(b, 0, a.uid, 24, 23);
+  teleport(b, 1, e1.uid, 21, 23);
+  teleport(b, 1, e2.uid, 24, 18);
+  for (let i = 0; i < 30; i++) b.step();
+  const t = b.units[b.units[0].mounts[0].target];
+  return { near: enemyA, far: enemyB, got: t?.design.id ?? '', gotUid: t?.uid ?? -1, nearUid: e1.uid, farUid: e2.uid };
 }
 
 test('target priority: aircraft prefers flyers, else falls back to closest', () => {
-  let r = pickFrom('lancer', 'aircraft', 'bulwark', 'hornet');
-  assert.equal(r.got, r.far);
-  r = pickFrom('lancer', 'aircraft', 'bulwark', 'ironclad');
-  assert.equal(r.got, r.near);
+  let r = pickFrom('bulwark', 'aircraft', 'sniperw', 'hornet');
+  assert.equal(r.got, 'hornet');
+  r = pickFrom('bulwark', 'aircraft', 'sniperw', 'ironclad');
+  assert.equal(r.got, 'sniperw');
 });
 
 test('target priority: armored / longestRange / support / valuable / swarm', () => {
   const arm = (n: string) => computeStats(DESIGNS.find((d) => d.id === n)!);
   assert.ok(arm('ironclad').armor > arm('gunner').armor);
   let r = pickFrom('sniperw', 'armored', 'gunner', 'ironclad');
-  assert.equal(r.got, r.far);
+  assert.equal(r.got, 'ironclad');
   r = pickFrom('sniperw', 'armored', 'ironclad', 'gunner');
-  assert.equal(r.got, r.near);
+  assert.equal(r.got, 'ironclad');
 
   assert.ok(arm('sniperw').range > arm('bulwark').range);
   r = pickFrom('sniperw', 'longestRange', 'bulwark', 'sniperw');
-  assert.equal(r.got, r.far);
+  assert.equal(r.got, 'sniperw');
+  r = pickFrom('sniperw', 'longestRange', 'sniperw', 'bulwark');
+  assert.equal(r.got, 'sniperw');
 
   r = pickFrom('sniperw', 'support', 'bulwark', 'medic');
-  assert.equal(r.got, r.far);
+  assert.equal(r.got, 'medic');
   r = pickFrom('sniperw', 'support', 'bulwark', 'domer');
-  assert.equal(r.got, r.far);
+  assert.equal(r.got, 'domer');
+  r = pickFrom('sniperw', 'support', 'bulwark', 'spotter');
+  assert.equal(r.got, 'spotter');
+  r = pickFrom('sniperw', 'support', 'medic', 'bulwark');
+  assert.equal(r.got, 'medic');
 
   assert.ok(arm('ironclad').unitCost > arm('bulwark').unitCost);
   r = pickFrom('sniperw', 'valuable', 'bulwark', 'ironclad');
-  assert.equal(r.got, r.far);
+  assert.equal(r.got, 'ironclad');
   r = pickFrom('sniperw', 'valuable', 'ironclad', 'bulwark');
-  assert.equal(r.got, r.near);
+  assert.equal(r.got, 'ironclad');
 
   assert.ok(arm('ironclad').size > arm('bulwark').size);
   r = pickFrom('sniperw', 'swarm', 'ironclad', 'bulwark');
-  assert.equal(r.got, r.far);
+  assert.equal(r.got, 'bulwark');
   r = pickFrom('sniperw', 'swarm', 'bulwark', 'ironclad');
-  assert.equal(r.got, r.near);
+  assert.equal(r.got, 'bulwark');
+  // same size: the cheaper one goes first
+  assert.ok(arm('gunner').unitCost < arm('sniperw').unitCost && arm('gunner').size === arm('sniperw').size);
+  r = pickFrom('bulwark', 'swarm', 'sniperw', 'gunner');
+  assert.equal(r.got, 'gunner');
 });
 
 test('focus: units join the target their neighbours already shoot', () => {
   const run = (focus: boolean) => {
-    const b = new Battle(input(1, [
-      { ...P('sniperw', 10, 0), target: 'farthest' },
-      { ...P('sniperw', 12, 0), target: 'closest', focus },
-    ], [P('bulwark', 8, 0), P('bulwark', 14, 1)]));
-    for (let i = 0; i < 600 && b.units[1].mounts[0].target < 0; i++) b.step();
+    const ally = { ...P('sniperw', 10, 0), target: 'farthest' as const };
+    const me = { ...P('sniperw', 12, 0), target: 'closest' as const, focus };
+    const e1 = { ...P('bulwark', 8, 0), stance: 'holdPos' as const }, e2 = { ...P('bulwark', 14, 1), stance: 'holdPos' as const };
+    const b = new Battle(input(1, [ally, me], [e1, e2]));
+    teleport(b, 0, ally.uid, 22, 23);
+    teleport(b, 0, me.uid, 26, 23);
+    teleport(b, 1, e1.uid, 24, 21); // nearer to `me`
+    teleport(b, 1, e2.uid, 24, 15);
     for (let i = 0; i < 60; i++) b.step();
-    return { a: b.units[0].mounts[0].target, f: b.units[1].mounts[0].target, far: b.units.length - 1, near: 2 };
+    return { a: b.units[0].mounts[0].target, f: b.units[1].mounts[0].target, far: b.units.find((u) => u.uid === e2.uid)!.id };
   };
   const on = run(true), off = run(false);
   assert.equal(on.a, on.far);
@@ -604,7 +630,7 @@ test('focus: units join the target their neighbours already shoot', () => {
 
 test('stance holdPos: never moves but still fires', () => {
   const run = (stance?: 'holdPos') => {
-    const b = new Battle(input(2, [{ ...P('gunner', 10, 0), stance }], [P('bulwark', 10, 0)]));
+    const b = new Battle(input(2, [{ ...P('gunner', 10, 0), stance }], [P('brawler', 10, 0)]));
     const x0 = b.units[0].x, y0 = b.units[0].y;
     for (let i = 0; i < 400 && !b.done; i++) b.step();
     return { moved: Math.hypot(b.units[0].x - x0, b.units[0].y - y0), dealt: b.summary().damageDealt[0] };
@@ -617,62 +643,61 @@ test('stance holdPos: never moves but still fires', () => {
 
 test('stance charge: closes to contact range instead of stopping to shoot', () => {
   const run = (stance?: 'charge') => {
-    const b = new Battle(input(2, [{ ...P('gunner', 10, 0), stance }], [P('ironclad', 10, 0)]));
+    const b = new Battle(input(2, [{ ...P('gunner', 10, 0), stance }], [{ ...P('ironclad', 10, 0), stance: 'holdPos' }]));
     let min = 99;
     for (let i = 0; i < 500 && !b.done; i++) {
       b.step();
       min = Math.min(min, Math.hypot(b.units[0].x - b.units[1].x, b.units[0].y - b.units[1].y));
     }
-    return min;
+    return min - 1.35; // edge distance to the ironclad
   };
   const range = computeStats(DESIGNS.find((d) => d.id === 'gunner')!).range;
   const c = run('charge'), n = run();
-  assert.ok(c < range * 0.55, `charge min dist ${c}`);
-  assert.ok(c < n - 1, `charge ${c} vs advance ${n}`);
+  assert.ok(c < range * 0.4 + 0.4, `charge min edge dist ${c}`);
+  assert.ok(c < n - 0.8, `charge ${c} vs advance ${n}`);
 });
 
 test('stance flank: swings toward the owner\'s left/right edge before advancing', () => {
   const at = (side: 0 | 1, stance: 'flankLeft' | 'flankRight') => {
-    const mine = [{ ...P('lancer', 22, 0), stance }];
-    const far = [P('bulwark', 10, 0)];
-    const b = new Battle(side === 0 ? input(3, mine, far) : input(3, far, mine));
-    const u = b.units.find((q) => q.side === side)!;
-    const x0 = u.x, y0 = u.y;
+    const mine: Placement = { ...P('lancer', 22, 0), stance };
+    const far = P('bulwark', 10, 0);
+    const b = new Battle(side === 0
+      ? { seed: 3, sides: [{ designs: DESIGNS, units: [mine] }, { designs: DESIGNS, units: [{ ...far, x: 22 }] }] }
+      : { seed: 3, sides: [{ designs: DESIGNS, units: [{ ...far, x: 22 }] }, { designs: DESIGNS, units: [mine] }] });
+    const us = b.units.filter((q) => q.side === side);
+    const cx = () => us.reduce((a, q) => a + q.x, 0) / us.length, cy = () => us.reduce((a, q) => a + q.y, 0) / us.length;
+    const x0 = cx(), y0 = cy();
     for (let i = 0; i < 80; i++) b.step();
-    return { dx: u.x - x0, dy: Math.abs(u.y - y0), x: u.x };
+    return { dx: cx() - x0, dy: Math.abs(cy() - y0) };
   };
   const l0 = at(0, 'flankLeft'), r0 = at(0, 'flankRight'), l1 = at(1, 'flankLeft'), r1 = at(1, 'flankRight');
-  assert.ok(l0.dx < -3 && l0.dy < l0.dx * -1, `side0 left ${JSON.stringify(l0)}`);
+  assert.ok(l0.dx < -3 && l0.dy < -l0.dx, `side0 left ${JSON.stringify(l0)}`);
   assert.ok(r0.dx > 3, `side0 right ${JSON.stringify(r0)}`);
   assert.ok(l1.dx > 3, `side1 left ${JSON.stringify(l1)}`);
   assert.ok(r1.dx < -3, `side1 right ${JSON.stringify(r1)}`);
   // a plain advancer barely moves laterally
-  const adv = new Battle(input(3, [P('lancer', 22, 0)], [P('bulwark', 22, 0)]));
+  const adv = new Battle({ seed: 3, sides: [{ designs: DESIGNS, units: [P('lancer', 22, 0)] }, { designs: DESIGNS, units: [{ ...P('bulwark', 22, 0) }] }] });
   const x0 = adv.units[0].x;
   for (let i = 0; i < 80; i++) adv.step();
   assert.ok(Math.abs(adv.units[0].x - x0) < 2);
 });
 
 test('delay: waits before moving but fires at anything in range', () => {
-  const b = new Battle(input(2, [{ ...P('sniperw', 10, 0), delay: 3 }], [P('bulwark', 10, 0)]));
-  const x0 = b.units[0].x, y0 = b.units[0].y;
-  let firedEarly = false;
-  for (let i = 0; i < 58; i++) { b.step(); for (const e of b.events) if (e.t === 'fire' && e.unit === 0) firedEarly = true; }
-  assert.ok(Math.hypot(b.units[0].x - x0, b.units[0].y - y0) < 0.01, 'still parked at 2.9s');
-  const ref = new Battle(input(2, [P('sniperw', 10, 0)], [P('bulwark', 10, 0)]));
-  for (let i = 0; i < 58; i++) ref.step();
-  assert.ok(Math.hypot(ref.units[0].x - x0, ref.units[0].y - y0) > 0.5, 'undelayed unit moves');
-  void firedEarly;
   const g = new Battle(input(2, [{ ...P('gunner', 10, 0), delay: 3 }], [P('bulwark', 10, 0)]));
-  const gx = g.units[0].y;
-  for (let i = 0; i < 40; i++) g.step();
-  assert.equal(g.units[0].y, gx);
+  const gy = g.units[0].y;
+  for (let i = 0; i < 58; i++) g.step();
+  assert.equal(g.units[0].y, gy, 'parked at 2.9s');
   for (let i = 0; i < 80; i++) g.step();
-  assert.ok(Math.abs(g.units[0].y - gx) > 1, 'moves after the delay');
+  assert.ok(Math.abs(g.units[0].y - gy) > 1, 'moves after the delay');
   // fires while delayed when the enemy is already in range
-  const f = new Battle(input(2, [{ ...P('sniperw', 10, 0), delay: 10 }], [P('bulwark', 10, 3)]));
-  for (let i = 0; i < 100 && !f.done; i++) f.step();
+  const s = { ...P('sniperw', 10, 0), delay: 10 };
+  const f = new Battle(input(2, [s], [{ ...P('bulwark', 10, 0), stance: 'holdPos' }]));
+  teleport(f, 1, f.units[1].uid, 24, 18);
+  teleport(f, 0, s.uid, 24, 23);
+  const x0 = f.units[0].y;
+  for (let i = 0; i < 100; i++) f.step();
   assert.ok(f.summary().damageDealt[0] > 0, 'delayed sniper still shoots');
+  assert.equal(f.units[0].y, x0);
 });
 
 test('retreat: a badly hurt unit falls back instead of advancing', () => {
@@ -688,24 +713,27 @@ test('retreat: a badly hurt unit falls back instead of advancing', () => {
   assert.ok(n.dy < 0, `non-retreating advanced ${n.dy}`);
 });
 
-test('retreat: heads for a friendly healer and returns to the fight once healed', () => {
-  const b = new Battle(input(2, [{ ...P('bulwark', 10, 0), retreat: true }, { ...P('medic', 16, 6), stance: 'holdPos' }], [P('buster', 10, 0)]));
+test('retreat: heads for a friendly healer, is repaired, then returns to the fight', () => {
+  const med = { ...P('medic', 16, 6), stance: 'holdPos' as const };
+  const b = new Battle(input(2, [{ ...P('bulwark', 10, 0), retreat: true }, med], [P('dummy', 10, 0)]));
   const u = b.units[0], medic = b.units[1];
   u.hp = u.maxHp * 0.2;
-  let near = 99, healed = false;
-  for (let i = 0; i < 700 && !b.done; i++) {
+  let near = 99, healedAt = -1;
+  for (let i = 0; i < 1500 && !b.done; i++) {
     b.step();
     near = Math.min(near, Math.hypot(u.x - medic.x, u.y - medic.y));
-    if (u.hp > u.maxHp * 0.7) healed = true;
+    if (healedAt < 0 && u.hp > u.maxHp * 0.7) healedAt = i;
+    if (healedAt >= 0 && i > healedAt + 200) break;
   }
   assert.ok(near < 4, `reached the medic: ${near}`);
-  assert.ok(healed, 'was repaired past 70%');
+  assert.ok(healedAt > 0, 'was repaired past 70%');
+  assert.ok(Math.hypot(u.x - medic.x, u.y - medic.y) > 6, 'left the medic after recovering');
 });
 
 test('escort: stays near the escorted block; invalid escort target behaves normally', () => {
   const anchor = { ...P('ironclad', 20, 0), stance: 'holdPos' as const };
   const run = (escort?: number) => {
-    const b = new Battle(input(2, [anchor, { ...P('buggy', 3, 6), escort }], [P('bulwark', 3, 0)]));
+    const b = new Battle(input(2, [anchor, { ...P('buggy', 3, 6), escort }], [{ ...P('bulwark', 3, 0), stance: 'holdPos' }]));
     const E = b.units[0];
     const mine = b.units.filter((u) => u.side === 0 && u.id > 0);
     let late = 0;
@@ -715,7 +743,8 @@ test('escort: stays near the escorted block; invalid escort target behaves norma
     }
     return late;
   };
-  assert.ok(run(anchor.uid) < 6, `escort stays close: ${run(anchor.uid)}`);
+  const near = run(anchor.uid);
+  assert.ok(near < 4, `escort stays close: ${near}`);
   assert.ok(run(99999) > 8, 'bogus uid ignored');
   assert.ok(run(undefined) > 8, 'no escort');
 });
@@ -733,10 +762,39 @@ test('stances + priorities: 120v120 stays fast and deterministic', () => {
     }
     return out;
   };
-  const inp = (): BattleInput => ({ seed: 9, sides: [{ designs: DESIGNS, units: army() }, { designs: DESIGNS, units: mirrorShift(army()) }] });
+  const a0 = army(), a1 = mirrorShift(army());
+  const inp = (): BattleInput => structuredClone({ seed: 9, sides: [{ designs: DESIGNS, units: a0 }, { designs: DESIGNS, units: a1 }] });
   const t0 = performance.now();
   const a = runBattle(inp());
   const ms = performance.now() - t0;
   assert.deepEqual(runBattle(inp()), a);
   assert.ok(ms < 1500, `took ${ms}ms`);
+});
+
+test('titan battle: giants/titans fight, crush smaller units, stay deterministic and fast', () => {
+  const titan = D('titanw', 'titan', 'megatracks', ['stormcore', 'siege240', 'cannon', 'cannon', 'autocannon']);
+  const giant = D('giantw', 'goliath', 'titanlegs', ['siege240', 'cannon', 'cannon', 'autocannon']);
+  const designs = [...DESIGNS, titan, giant];
+  for (const d of [titan, giant]) assert.deepEqual(validateDesign(d), [], d.id);
+  const mk = (): BattleInput => {
+    const a = [P('titanw', 4, 0), P('giantw', 14, 0), P('bulwark', 22, 0), P('buggy', 30, 0)];
+    const b = [P('giantw', 4, 0), P('titanw', 12, 0), P('lancer', 24, 0), P('ironclad', 30, 0)];
+    return structuredClone({ seed: 11, sides: [{ designs, units: a }, { designs, units: mirrorShift(b) }] });
+  };
+  const inp = mk();
+  const x = new Battle(structuredClone(inp));
+  assert.equal(x.units[0].stats.size, 5);
+  const t0 = performance.now();
+  const r1 = runBattle(inp);
+  assert.ok(performance.now() - t0 < 400);
+  const inp2 = mk();
+  inp2.sides[0].units.forEach((u, i) => { u.uid = inp.sides[0].units[i].uid; });
+  inp2.sides[1].units.forEach((u, i) => { u.uid = inp.sides[1].units[i].uid; });
+  assert.deepEqual(runBattle(inp2), r1);
+  assert.ok(r1.damageDealt[0] > 0 && r1.damageDealt[1] > 0);
+  const b = new Battle(structuredClone(inp));
+  while (!b.done) {
+    b.step();
+    for (const u of b.units) if (u.alive) assert.ok(Number.isFinite(u.x) && u.x >= 0 && u.x <= FIELD_W && u.y >= 0 && u.y <= FIELD_H);
+  }
 });

@@ -20,8 +20,8 @@ import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockCells, blockInZone, hasSpacing, n
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import { STARTER_DESIGNS } from './starters.ts';
-import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, designCost, redactFor, roundDamage, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
-import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, TargetPriority, UnitConfig, UnitStats } from './types.ts';
+import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, designCost, redactFor, roundDamage, supplyForRound, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
+import type { Size, DeployAction, Design, MatchState, ModuleDef, Placement, Side, Stance, TargetPriority, UnitConfig, UnitStats } from './types.ts';
 
 export type AiDifficulty = 'easy' | 'normal' | 'hard';
 
@@ -177,9 +177,11 @@ function weightedPick<T>(rng: Rng, items: { item: T; w: number }[]): T | null {
 }
 
 /** Try to generate a valid design aiming at `role`. Returns null if nothing suitable was found. */
-export function generateDesign(rng: Rng, role: Role, id: string): Design | null {
-  for (let attempt = 0; attempt < 60; attempt++) {
+export function generateDesign(rng: Rng, role: Role, id: string, giant = false): Design | null {
+  for (let attempt = 0; attempt < (giant ? 200 : 60); attempt++) {
     const chassisPool = CHASSIS.filter((c) => {
+      if (giant) return c.size >= 4 && !c.traits.includes('airOnly');
+      if (c.size >= 4) return false; // giants/titans are added deliberately by aiDeck
       if (role === 'swarm') return c.size === 1;
       if (role === 'frontline') return c.size >= 2;
       if (role === 'support') return c.traits.includes('repairAura') || c.size >= 2;
@@ -203,10 +205,16 @@ export function generateDesign(rng: Rng, role: Role, id: string): Design | null 
     });
     // Leave trailing slots empty sometimes to save weight.
     const d: Design = { id, name: `${pick(rng, DESIGN_NAMES_A)}${pick(rng, DESIGN_NAMES_B)}`, chassis: c.id, mobility: mob.id, mounts };
-    for (let k = mounts.length - 1; k > 0 && !acceptable(d, role); k--) d.mounts[k] = null;
-    if (acceptable(d, role)) return d;
+    for (let k = mounts.length - 1; k > 0 && !(giant ? acceptableGiant(d) : acceptable(d, role)); k--) d.mounts[k] = null;
+    if (giant ? acceptableGiant(d) : acceptable(d, role)) return d;
   }
   return null;
+}
+
+function acceptableGiant(d: Design): boolean {
+  if (validateDesign(d).length) return false;
+  const p = profile(d);
+  return p.stats.load <= 1.1 && p.groundDps > 0 && !p.isStatic && p.heal <= 0;
 }
 
 function acceptable(d: Design, role: Role): boolean {
@@ -245,6 +253,14 @@ export function aiDeck(seed: number, difficulty: AiDifficulty): Design[] {
     const g = generateDesign(rng, role, `gen${gen++}`);
     if (g) add(g);
     else if (fromStarter) add(fromStarter);
+  }
+  // Normal/hard decks carry one giant or titan to save up for.
+  if (difficulty !== 'easy' && (difficulty === 'hard' || rng() < 0.5)) {
+    const g = generateDesign(rng, 'frontline', `giant`, true);
+    if (g) {
+      if (deck.length >= DECK_SIZE) deck.pop();
+      add(g);
+    }
   }
   // Fill any gaps.
   for (const d of starters) if (deck.length < DECK_SIZE) add(d);
@@ -336,7 +352,7 @@ function preferredRow(p: Profile, f: number, rng: Rng): number {
 
 /** Squad spacing by role and by how splashy the enemy is: spread vs splash, packed otherwise. */
 export function chooseSpacing(p: Profile, oppSplashShare: number): number {
-  if (!hasSpacing(p.size as 1 | 2 | 3)) return 0;
+  if (!hasSpacing(p.size as Size)) return 0;
   let sp = p.melee || p.role === 'swarm' || p.role === 'skirmisher' ? 1 : 0;
   if (oppSplashShare > 0.5) sp = 3;
   else if (oppSplashShare > 0.2) sp = Math.max(sp, 2);
@@ -345,32 +361,97 @@ export function chooseSpacing(p: Profile, oppSplashShare: number): number {
   return Math.min(MAX_SPACING, sp);
 }
 
-export interface Behavior { target: TargetPriority; hold: boolean; kite: boolean }
+export interface Behavior {
+  target: TargetPriority;
+  hold: boolean;
+  kite: boolean;
+  focus: boolean;
+  stance: Stance;
+  /** seconds before the block starts moving (0, 3, 6) */
+  delay: number;
+  retreat: boolean;
+}
 
-/** Battle settings by role: artillery/snipers pick off valuable or weak targets, anti-tank goes for the biggest hulls,
- *  swarms/melee take what is closest, skirmishers retaliate; spread squads vs splash hold formation; long-range units kite. */
-export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: number, rng: Rng): Behavior {
+export interface BehaviorCtx {
+  /** the AI's deck contains a repair unit (so falling back to heal is worthwhile) */
+  hasRepair: boolean;
+  /** flanking blocks alternate sides: increments per flanker */
+  flankCount: number;
+}
+
+/** Battle settings by role:
+ *  - artillery: holds position (or kites) and hunts dangerous / long-range / valuable targets;
+ *  - anti-air: aircraft; anti-tank: armored; snipers: support / valuable / longest-range, kiting, starting late behind the tanks;
+ *  - melee & swarms charge, fast skirmishers flank (alternating sides); flyers raid the back line;
+ *  - spread squads vs splash hold formation; expensive ground units retreat when a repair unit is around.
+ *  (Supports escort a frontline block: assigned by pickEscort in plan, since it needs the other placements.) */
+export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: number, rng: Rng, ctx: BehaviorCtx = { hasRepair: false, flankCount: 0 }): Behavior {
   let target: TargetPriority = 'closest';
+  let stance: Stance = 'advance';
+  let delay = 0;
   switch (p.role) {
-    case 'artillery': target = rng() < 0.5 ? 'highestDps' : 'lowestHp'; break;
-    case 'antiArmor': target = 'highestHp'; break;
-    case 'antiAir': target = 'closest'; break;
-    case 'flyer': target = rng() < 0.5 ? 'lowestHp' : 'highestDps'; break;
-    case 'skirmisher': target = p.range >= 7 && p.ap >= 0.3 ? 'lowestHp' : rng() < 0.4 ? 'threat' : 'closest'; break;
+    case 'artillery': {
+      const r = rng();
+      target = r < 0.35 ? 'highestDps' : r < 0.65 ? 'longestRange' : r < 0.85 ? 'valuable' : 'lowestHp';
+      break;
+    }
+    case 'antiArmor': target = rng() < 0.75 ? 'armored' : 'highestHp'; break;
+    case 'antiAir': target = 'aircraft'; break;
+    case 'flyer': { const r = rng(); target = r < 0.3 ? 'lowestHp' : r < 0.55 ? 'highestDps' : r < 0.8 ? 'longestRange' : 'support'; break; }
+    case 'skirmisher':
+      if (p.range >= 7) target = p.ap >= 0.3 ? (rng() < 0.5 ? 'support' : 'valuable') : rng() < 0.5 ? 'longestRange' : 'lowestHp';
+      else target = rng() < 0.4 ? 'threat' : 'closest';
+      break;
     case 'support': target = 'threat'; break;
-    case 'frontline': target = 'closest'; break;
+    case 'swarm': target = rng() < 0.4 ? 'swarm' : 'closest'; break;
     default: target = 'closest';
   }
-  const hold = hasSpacing(p.size as 1 | 2 | 3) && spacing >= 2 && oppSplashShare > 0.2;
-  const kite = !p.isStatic && !p.melee && !p.flying && p.range >= 7 && (p.role === 'artillery' || p.role === 'antiArmor' || p.role === 'skirmisher') && rng() < 0.7;
-  return { target, hold, kite };
+  const mobile = !p.isStatic && !p.flying;
+  const kitable = mobile && !p.melee && p.range >= 7 && (p.role === 'artillery' || p.role === 'antiArmor' || p.role === 'skirmisher');
+  let kite = kitable && rng() < 0.7;
+  if (p.role === 'artillery' && mobile && !p.melee) {
+    // artillery with a real standoff range either sits still or kites
+    if (rng() < 0.5) { stance = 'holdPos'; kite = false; }
+  } else if (mobile && p.melee) {
+    stance = 'charge';
+  } else if (mobile && p.role === 'swarm' && p.range <= 4.5 && rng() < 0.5) {
+    stance = 'charge';
+  } else if (mobile && (p.role === 'skirmisher' || p.role === 'swarm') && p.stats.speed >= 3 && !kite) {
+    stance = ctx.flankCount % 2 === 0 ? 'flankLeft' : 'flankRight';
+  }
+  if (stance === 'charge') kite = false;
+  // back-line shooters wait a moment so the tanks lead
+  if (mobile && stance === 'advance' && p.range >= 7 && (p.role === 'artillery' || p.role === 'skirmisher' || p.role === 'antiArmor')) delay = rng() < 0.5 ? 3 : 6;
+  const hold = hasSpacing(p.size as Size) && spacing >= 2 && oppSplashShare > 0.2;
+  const focus = !p.isStatic && p.range >= 5 && p.role !== 'support' && rng() < 0.45;
+  const retreat = mobile && ctx.hasRepair && p.unitCost >= 100 && p.role !== 'support' && p.role !== 'artillery' && rng() < 0.7;
+  if (stance === 'flankLeft' || stance === 'flankRight') ctx.flankCount++;
+  return { target, hold, kite: kite && stance !== 'holdPos', focus, stance, delay, retreat };
 }
 
 function applyBehavior(pl: Placement | UnitConfig, b: Behavior): void {
   if (b.target !== 'closest') pl.target = b.target;
   if (b.hold) pl.hold = true;
   if (b.kite) pl.kite = true;
+  if (b.focus) pl.focus = true;
+  if (b.stance !== 'advance') pl.stance = b.stance;
+  if (b.delay > 0) pl.delay = b.delay;
+  if (b.retreat) pl.retreat = true;
 }
+
+/** Support units (healers, repair chassis) escort the most valuable frontline block: highest cost x level among
+ *  armed, mobile, non-support ground blocks (prefers the frontline role). Returns a uid or undefined. */
+function pickEscort(blocks: { uid: number; p: Profile; level: number }[], selfUid: number): number | undefined {
+  let best: number | undefined, bestV = -1;
+  for (const b of blocks) {
+    if (b.uid === selfUid || b.p.flying || b.p.isStatic || b.p.heal > 0 || b.p.groundDps <= 0) continue;
+    const v = b.p.cost * (1 + 0.5 * (b.level - 1)) * (b.p.role === 'frontline' ? 1.5 : 1);
+    if (v > bestV) { bestV = v; best = b.uid; }
+  }
+  return best;
+}
+
+const isHealer = (p: Profile) => p.heal > 0 || p.stats.traits.includes('repairAura');
 
 interface Foot { x: number; y: number; s: number }
 
@@ -440,12 +521,14 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     const d = byId.get(u.designId);
     if (d) { const r = profile(d).role; roles.set(r, (roles.get(r) ?? 0) + 1); }
   }
-  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, s: byId.get(u.designId) ? blockCells(profile(byId.get(u.designId)!).size as 1 | 2 | 3, u.spacing) : 2 }));
-  let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as 1 | 2 | 3) : 1), 0);
+  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, s: byId.get(u.designId) ? blockCells(profile(byId.get(u.designId)!).size as Size, u.spacing) : 2 }));
+  let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as Size) : 1), 0);
   const splashShare = opp.total > 0 ? opp.splashy / opp.total : 0;
   let nextUid = me.nextUid;
   let units = me.board.length;
   const easy = o.difficulty === 'easy';
+  const hasRepair = deck.some((d) => isHealer(profile(d)));
+  const ctx: BehaviorCtx = { hasRepair, flankCount: o.flank > 0 ? 1 : 0 };
 
   // --- upgrades: prefer units that survived last round and are valuable ---
   if (!easy && o.upgradeBias > 0 && m.round >= 2 && me.board.length) {
@@ -476,25 +559,21 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     budget -= spent;
   }
 
-  // --- reconfigure some existing units against what the enemy fields now ---
-  if (!easy && m.round >= 2) {
-    for (const u of me.board) {
-      const d = byId.get(u.designId);
-      if (!d || o.rng() >= 0.3) continue;
-      const b = chooseBehavior(profile(d), u.spacing ?? 0, splashShare, o.rng);
-      const cfg: UnitConfig = { uid: u.uid };
-      if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
-      if (b.hold !== !!u.hold && hasSpacing(profile(d).size as 1 | 2 | 3)) cfg.hold = b.hold;
-      if (b.kite !== !!u.kite) cfg.kite = b.kite;
-      if (cfg.target !== undefined || cfg.hold !== undefined || cfg.kite !== undefined) (action.configure ??= []).push(cfg);
-    }
+  // --- saving for the deck's giant/titan: hold supply when it is within reach next round ---
+  const giantD = !easy && o.difficulty !== 'easy' ? deck.filter((d) => profile(d).size >= 4).sort((a, b) => designCost(a) - designCost(b))[0] : undefined;
+  let saveForGiant = false;
+  if (giantD && m.round >= 2 && m.round <= 11 && me.board.length >= 3) {
+    const owned = me.board.some((u) => u.designId === giantD.id);
+    const gc = designCost(giantD);
+    if (!owned && budget < gc && budget + supplyForRound(m.round + 1) >= gc) saveForGiant = true;
   }
+  const giantReady = !!giantD && !me.board.some((u) => u.designId === giantD.id) && designCost(giantD) <= budget;
 
   // --- purchases ---
   const minCost = Math.min(...deck.map((d) => designCost(d)));
   let guard = 0;
-  while (budget >= minCost && units < MAX_BLOCKS && guard++ < 80) {
-    const afford = deck.filter((d) => designCost(d) <= budget && simUnits + squadSize(profile(d).size as 1 | 2 | 3) <= MAX_SIM_UNITS);
+  while (!saveForGiant && budget >= minCost && units < MAX_BLOCKS && guard++ < 80) {
+    const afford = deck.filter((d) => designCost(d) <= budget && simUnits + squadSize(profile(d).size as Size) <= MAX_SIM_UNITS);
     if (!afford.length) break;
     let choice: Design | null;
     if (easy) {
@@ -503,6 +582,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     } else {
       const scored = afford.map((d) => {
         let w = designScore(d, opp, mine, roles, m.round);
+        if (giantReady && d === giantD) w *= 6;
         if (o.favor && profile(d).role === o.favor) w *= 1.8;
         return { item: d, w: w * w };
       });
@@ -512,9 +592,9 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     }
     if (!choice) break;
     const p = profile(choice);
-    const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.size as 1 | 2 | 3) ? 1 : 0) : chooseSpacing(p, splashShare);
-    const sp = normSpacing(p.size as 1 | 2 | 3, spacing);
-    const foot = blockCells(p.size as 1 | 2 | 3, sp);
+    const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.size as Size) ? 1 : 0) : chooseSpacing(p, splashShare);
+    const sp = normSpacing(p.size as Size, spacing);
+    const foot = blockCells(p.size as Size, sp);
     const spot = findSpot(p, foot, occ, o.rng, easy, o.flank);
     if (!spot) {
       // no room for this size; try to stop buying this design
@@ -524,20 +604,55 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       if (!deck.length) break;
       continue;
     }
-    if (!blockInZone(spot.x, spot.y, p.size as 1 | 2 | 3, sp)) break;
+    if (!blockInZone(spot.x, spot.y, p.size as Size, sp)) break;
     occ.push({ x: spot.x, y: spot.y, s: foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
-    if (hasSpacing(p.size as 1 | 2 | 3)) pl.spacing = sp;
-    if (!easy) applyBehavior(pl, chooseBehavior(p, sp, splashShare, o.rng));
+    if (hasSpacing(p.size as Size)) pl.spacing = sp;
+    if (!easy) applyBehavior(pl, chooseBehavior(p, sp, splashShare, o.rng, ctx));
     action.place.push(pl);
-    simUnits += squadSize(p.size as 1 | 2 | 3);
+    simUnits += squadSize(p.size as Size);
     roles.set(p.role, (roles.get(p.role) ?? 0) + 1);
     budget -= p.cost;
     units++;
   }
 
+  // --- escorts + reconfigure existing units against what the enemy fields now ---
+  if (!easy) {
+    const blocks = [
+      ...me.board.map((u) => ({ uid: u.uid, p: byId.has(u.designId) ? profile(byId.get(u.designId)!) : null, level: u.level })),
+      ...action.place.map((u) => ({ uid: u.uid, p: profile(byId.get(u.designId)!), level: 1 })),
+    ].filter((x): x is { uid: number; p: Profile; level: number } => !!x.p);
+    for (const pl of action.place) {
+      const pr = profile(byId.get(pl.designId)!);
+      if (!isHealer(pr)) continue;
+      const e = pickEscort(blocks, pl.uid);
+      if (e !== undefined) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kite; }
+    }
+    if (m.round >= 2) {
+      for (const u of me.board) {
+        const d = byId.get(u.designId);
+        if (!d || o.rng() >= 0.3) continue;
+        const pr = profile(d);
+        const b = chooseBehavior(pr, u.spacing ?? 0, splashShare, o.rng, ctx);
+        const cfg: UnitConfig = { uid: u.uid };
+        if (isHealer(pr)) {
+          if (u.escort === undefined) { const e = pickEscort(blocks, u.uid); if (e !== undefined) cfg.escort = e; }
+        } else {
+          if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
+          if (b.hold !== !!u.hold && hasSpacing(pr.size as Size)) cfg.hold = b.hold;
+          if (b.kite !== !!u.kite) cfg.kite = b.kite;
+          if (b.focus !== !!u.focus) cfg.focus = b.focus;
+          if (b.stance !== (u.stance ?? 'advance')) cfg.stance = b.stance;
+          if (b.delay !== (u.delay ?? 0)) cfg.delay = b.delay;
+          if (b.retreat !== !!u.retreat) cfg.retreat = b.retreat;
+        }
+        if (Object.keys(cfg).length > 1) (action.configure ??= []).push(cfg);
+      }
+    }
+  }
+
   // --- leftover supply -> upgrades (non-easy) ---
-  if (!easy && budget > 0) {
+  if (!easy && budget > 0 && !saveForGiant) {
     const levels = new Map(me.board.map((u) => [u.uid, u.level] as const));
     for (const uid of action.upgrade) levels.set(uid, levels.get(uid)! + 1);
     const sorted = [...me.board].sort((a, b) => designCost(byId.get(b.designId)!) - designCost(byId.get(a.designId)!) || a.uid - b.uid);
@@ -592,6 +707,11 @@ function applyToBoard(board: Placement[], a: DeployAction): Placement[] {
     if (c.target !== undefined) u.target = c.target;
     if (c.hold !== undefined) u.hold = c.hold;
     if (c.kite !== undefined) u.kite = c.kite;
+    if (c.focus !== undefined) u.focus = c.focus;
+    if (c.stance !== undefined) u.stance = c.stance;
+    if (c.delay !== undefined) u.delay = c.delay;
+    if (c.retreat !== undefined) u.retreat = c.retreat;
+    if (c.escort !== undefined) { if (c.escort === -1) delete u.escort; else u.escort = c.escort; }
   }
   for (const p of a.place) out.push({ ...p });
   return out;
