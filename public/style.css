@@ -482,3 +482,9 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .stat-tip .sc-dmg.none { display: block; font-size: 0.86rem; color: #b4b9bd; border-left-color: #5e666d; background: rgba(255, 255, 255, 0.04); }
 .setting.check { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .setting.check .k-toggle { white-space: nowrap; }
+/* deploy cards: rows keep their content height and the list scrolls (rows were squeezed at short viewports) */
+.cards { grid-auto-rows: max-content; }
+/* selected-unit panel: never taller than the field; scroll inside */
+.info { max-height: calc(100% - 20px); overflow-y: auto; overscroll-behavior: contain; }
+/* keep the range controls above the canvas scale bar (bottom-left) */
+.rangebar { bottom: calc(34px + var(--safe-b)); }

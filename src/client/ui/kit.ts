@@ -168,7 +168,14 @@ export function segmented<T extends string | number>(o: {
           for (let s = 0; s < n; s++) { j = (j + d + n) % n; if (!o.options[j].disabled) break; }
           pick(j);
           // the caller usually re-renders; focus whatever now carries this value
-          requestAnimationFrame(() => { (document.querySelector(`[data-fk="${o.fk}-${String(o.options[j].value)}"]`) as HTMLElement | null)?.focus(); btns[j]?.isConnected && btns[j].focus(); });
+          requestAnimationFrame(() => {
+            if (btns[j]?.isConnected) { btns[j].focus(); return; }
+            // re-rendered: find the replacement group by fk, else by its label
+            const sel = o.fk ? `[data-fk="${o.fk}-${String(o.options[j].value)}"]` : null;
+            const byFk = sel ? document.querySelector<HTMLElement>(sel) : null;
+            const grp = o.label ? document.querySelector(`.k-seg[aria-label="${CSS.escape(o.label)}"]`) : null;
+            (byFk ?? grp?.querySelectorAll<HTMLElement>('[role="radio"]')[j] ?? null)?.focus();
+          });
         },
       }, opt.label);
       btns.push(b);

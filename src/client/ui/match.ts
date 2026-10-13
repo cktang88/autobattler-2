@@ -131,8 +131,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       let n = 0;
       while (!b.done && n++ < MAX_TICKS + 100) b.step();
       captureDamage(rec, b);
-    } catch (e) { console.warn('damage tally failed', e); }
+    } catch (e) {
+      console.warn('damage tally failed', e);
+      lastDmg = { round: rec.round, by: new Map() }; // don't retry on every hover
+    }
   }
+  /** total damage a side's units dealt in the last tallied round */
+  const sideDamage = (sd: Side) => { let t = 0; for (const [k, v] of lastDmg?.by ?? []) if (k.startsWith(`${sd}:`)) t += v; return t; };
   const damageLine = (sd: Side, uid: number): HTMLElement | null => {
     if (!lastDmg) return null;
     const v = lastDmg.by.get(`${sd}:${uid}`);
@@ -658,8 +663,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('h4', null, `Round ${replay.round}`),
         h('h1', null, won ? 'Round won' : lost ? 'Round lost' : 'Draw'),
         h('div.lines', null,
-          h('span', null, 'Damage dealt'), h('b.good', null, String(r.damage[opp])),
-          h('span', null, 'Damage taken'), h('b.bad', null, String(r.damage[side])),
+          ...(lastDmg?.round === replay.round ? [
+            h('span', null, 'Unit damage dealt'), h('b.good', null, sideDamage(side).toLocaleString()),
+            h('span', null, 'Unit damage taken'), h('b.bad', null, sideDamage(opp).toLocaleString()),
+          ] : []),
+          h('span', { title: 'Commander HP the enemy lost / you lost this round' }, 'Commander HP: enemy / you'), h('b', null, h('span.good', null, r.damage[opp] ? `−${r.damage[opp]}` : '0'), ' / ', h('span.bad', null, r.damage[side] ? `−${r.damage[side]}` : '0')),
           h('span', null, 'Your survivors'), h('b', null, `${r.survivors[side].length} / ${replay.boards[side].length}`),
           h('span', null, 'Enemy survivors'), h('b', null, `${r.survivors[opp].length} / ${replay.boards[opp].length}`),
         ),
@@ -681,8 +689,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('div.lines', null,
           h('span', null, 'Rounds played'), h('b', null, String(m.history.length)),
           h('span', null, 'Rounds won'), h('b', null, `${roundsWon}`),
-          h('span', null, 'Damage dealt'), h('b.good', null, String(dealt)),
-          h('span', null, 'Damage taken'), h('b.bad', null, String(taken)),
+          h('span', null, 'Commander damage dealt'), h('b.good', null, String(dealt)),
+          h('span', null, 'Commander damage taken'), h('b.bad', null, String(taken)),
           h('span', null, 'Units fielded'), h('b', null, String(me().board.length)),
           h('span', null, 'Final HP'), h('b', null, `${Math.max(0, me().hp)} – ${Math.max(0, foe().hp)}`),
         ),
@@ -926,6 +934,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (document.querySelector('.modal-back')) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+    // kit dropdown open or focused: arrows / type-ahead / Space belong to it
+    if (document.querySelector('.k-pop') || t?.getAttribute('role') === 'combobox') return;
     if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       selectCard(Number(e.key) - 1);
       e.preventDefault();
@@ -938,7 +948,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       else sel = null;
       renderAll();
     } else if (e.key === ' ' || e.key === 'Enter') {
-      if (t && t.tagName === 'BUTTON' && e.key === 'Enter') return; // let the focused button handle it
+      if (t && t.tagName === 'BUTTON') return; // let the focused button / kit control handle it
       e.preventDefault();
       if (phase === 'deploy') void submit();
       else if (phase === 'battle') skipBattle();
@@ -976,6 +986,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function setPhase(p: Phase) {
     const prev = phase;
     phase = p;
+    if (p === 'waiting' && prev !== 'waiting' && m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     if (p === 'deploy' && prev !== 'deploy') {
       playMusic('deploy');
       try { view.frameDeploy(); } catch { /* */ }

@@ -7,7 +7,7 @@
 import { h } from '../app.ts';
 import type { ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
-import { kiteOptions, ordersControl, ordersOf, orderFields } from './match-ui.ts';
+import { kiteOptions, ordersControl, ordersOf, orderFields, ringsOf } from './match-ui.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
@@ -317,6 +317,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     selectedId = draft.id;
     saved = clone(draft);
     nameInput.value = draft.name;
+    activeSlot = null;
     sfx('upgrade');
     app.toast(msg, 'good');
     update();
@@ -501,7 +502,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const touch = e.pointerType !== 'mouse';
       const d = { src: s, pid: e.pointerId, x0: e.clientX, y0: e.clientY, started: false, ghost: null, hot: null, origin: node, timer: 0 };
       drag = d;
-      if (!touch || immediate) { try { node.setPointerCapture(e.pointerId); } catch { /* ignore */ } }
+      // capture only once a drag begins, so a plain click still reaches inner buttons (row select / unmount ✕)
       if (touch && !immediate) {
         d.timer = window.setTimeout(() => {
           if (drag !== d || d.started) return;
@@ -526,6 +527,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     let best: number | null = null, bd = Infinity;
     for (const s of sockets()) {
       const r = s.el.getBoundingClientRect();
+      if (rangesOn && s.el.classList.contains('g-sock')) continue; // hidden while the range view is up
       const pad = s.el.classList.contains('g-sock') ? 14 : 2;
       if (x < r.left - pad || x > r.right + pad || y < r.top - pad || y > r.bottom + pad) continue;
       const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
@@ -537,6 +539,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function beginDrag(x: number, y: number) {
     if (!drag || drag.started) return;
     drag.started = true;
+    try { if (!drag.origin.hasPointerCapture(drag.pid)) drag.origin.setPointerCapture(drag.pid); } catch { /* ignore */ }
     const mod = MODULE_BY_ID.get(drag.src.mod)!;
     drag.ghost = h('div.g-ghost', { style: { '--cat': moduleCategoryColor(mod.id) } },
       partIcon('module', mod.id, 52, true), h('span', null, mod.name), h('span.g-chip', { class: `c${mod.mount}` }, mod.mount));
@@ -622,7 +625,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     renderBench();
     renderSockets();
     renderBay();
-    if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus();
+    if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
   function renderHeader() {
@@ -649,7 +652,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       },
       canvas,
       h('span.g-item-txt', null,
-        h('span.g-item-name', null, d.name || 'Untitled', opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
+        h('span.g-item-name', null, h('span.g-item-nm', { title: d.name || 'Untitled' }, d.name || 'Untitled'), opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
         h('span.g-item-meta', null,
           h('span.g-size', null, s ? designSizeLabel(s) : '?'),
           h('span.g-item-cost', { title: s && s.squad > 1 ? `Block of ${s.squad} (${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
@@ -976,7 +979,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
         cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
         fk: `mod-${m.id}`, title: fh ? undefined : reqReason(m) ?? `Needs a ${m.mount} socket`,
-        onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); renderBay(); },
+        onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
       });
@@ -986,7 +989,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const sections: HTMLElement[] = [];
     for (const catId of cats) {
       const def = CATEGORIES.find((k) => k.id === catId);
-      const mods = MODULES.filter((m) => m.category === catId && (counts.has(m.id) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
+      const mods = MODULES.filter((m) => m.category === catId && ((!q && counts.has(m.id)) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
         .sort((a, b) => a.weight - b.weight || a.cost - b.cost);
       if (!mods.length) continue;
       const ok = mods.filter(fitsHull), no = mods.filter((m) => !fitsHull(m));
@@ -1009,7 +1012,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         again?.focus();
         if (pos != null) again?.setSelectionRange(pos, pos);
       },
-      onClear: () => { modQuery = ''; update(); },
+      onClear: () => { modQuery = ''; update(); el.querySelector<HTMLInputElement>(`[data-fk="msearch-${which}"]`)?.focus(); },
     });
     const slotCls = activeSlot !== null ? c.mounts[activeSlot] : null;
     return [
@@ -1091,7 +1094,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function details(rows: (HTMLElement | null)[], extra: (HTMLElement | null)[] = []): HTMLElement[] {
     const btn = h('button.g-more.g-details', {
       type: 'button', 'aria-expanded': String(showDetails), 'data-fk': 'details',
-      onclick: () => { showDetails = !showDetails; try { localStorage.setItem(LS_DETAILS, showDetails ? '1' : '0'); } catch { /* ignore */ } sfx('click'); renderInspector(); },
+      onclick: () => { showDetails = !showDetails; try { localStorage.setItem(LS_DETAILS, showDetails ? '1' : '0'); } catch { /* ignore */ } sfx('click'); renderInspector(); (inspector.querySelector('[data-fk="details"]') as HTMLElement | null)?.focus(); },
     }, h('span.g-more-c', null, showDetails ? '▾' : '▸'), 'Full specs');
     return showDetails ? [btn, h('div.g-specs', null, ...rows.filter(Boolean) as HTMLElement[]), ...extra.filter(Boolean) as HTMLElement[]] : [btn];
   }
@@ -1195,7 +1198,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: `${m.mount}-class mount` }, m.mount), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
-      next ? compare(next, `Mounted in socket ${target! + 1}`) : null,
+      next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, lock ?? (c.mounts.some((_, i) => !slotBlock(m, i)) ? 'Mount in' : `Needs a ${m.mount} socket`)),
         h('div.g-sockbtns', null, ...socketBtns)),
@@ -1281,28 +1284,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   // ---------------- blueprint grid ----------------
   /** Reach rings for the range overlay (cells): weapons (with the design's range bonus), repair beams and auras. */
+  /** Reach rings for the range overlay (cells) — the same rings the battlefield draws (ringsOf), so the sim's rules
+   *  apply: range bonus scales guns and repair beams, not melee reach or dead zones. */
   function rangeRings(): { r: number; min: number; color: string; label: string }[] {
     const st = statsOf(draft);
-    const mult = st?.rangeMult ?? 1;
-    const out: { r: number; min: number; color: string; label: string }[] = [];
-    for (const id of draft.mounts) {
-      const m = id ? MODULE_BY_ID.get(id) : undefined;
-      if (!m) continue;
-      const color = moduleCategoryColor(m.id);
-      if (m.kind === 'weapon' && m.range) out.push({ r: m.range * mult, min: (m.minRange ?? 0) * mult, color, label: m.name });
-      else if (m.heal && m.range) out.push({ r: m.range, min: 0, color, label: m.name });
-      const aura = m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.jammer ?? m.detect;
-      if (aura) out.push({ r: aura, min: 0, color, label: m.name });
-    }
-    // one ring per distinct reach; names merged
-    const merged = new Map<string, { r: number; min: number; color: string; label: string }>();
-    for (const o of out) {
-      const k = o.r.toFixed(2);
-      const e = merged.get(k);
-      if (e) { if (!e.label.includes(o.label)) e.label += `, ${o.label}`; e.min = Math.max(e.min, o.min); }
-      else merged.set(k, { ...o });
-    }
-    return [...merged.values()].sort((a, b) => b.r - a.r);
+    if (!st) return [];
+    return ringsOf(draft, st).map((o) => ({ r: o.range, min: o.minRange, color: o.color, label: o.label })).sort((a, b) => b.r - a.r);
   }
   const rangeExtent = () => Math.max(MIN_VIEW_CELLS, ...rangeRings().map((o) => o.r * 2.18 + 1));
 
@@ -1312,7 +1299,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rings = rangesOn ? rangeRings() : [];
-    const key = `${r.width}x${r.height}@${dpr}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label).join(',')}`;
+    const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label).join(',')}`;
     if (key === gridKey) return;
     gridKey = key;
     gridCv.width = Math.round(r.width * dpr);
@@ -1362,9 +1349,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     x.fillStyle = 'rgba(255, 196, 64, 0.95)';
     x.strokeStyle = 'rgba(255, 196, 64, 0.7)';
     x.lineWidth = 1;
-    const dy = Math.max(14, fy0 - 16);
+    // keep the dimension lines clear of the sprite (giants overhang their footprint)
+    const off = Math.max(16, g.half - (S / 2) * P + 12);
+    const dy = Math.max(14, fy0 - off);
     dimLine(x, fx0, dy, fx0 + fw, dy, label, false);
-    const dx = Math.max(14, fx0 - 16);
+    const dx = Math.max(14, fx0 - off);
     dimLine(x, dx, fy0, dx, fy0 + fw, label, true);
     // range rings
     rings.forEach((o, i) => {
@@ -1383,7 +1372,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       // label on the ring, staggered so stacked rings don't collide
       const a = -Math.PI / 2 + (i % 2 ? 0.42 : -0.42) * Math.ceil(i / 2);
       const lx = g.cx + Math.cos(a) * R, ly = g.cy + Math.sin(a) * R;
-      const txt = `${Math.round(o.r * METERS_PER_CELL)} m  ${o.label}`;
+      const txt = o.label;
       x.font = '700 14px "Barlow Condensed", system-ui, sans-serif';
       const tw = Math.min(260, x.measureText(txt).width) + 12;
       const bx = Math.max(6, Math.min(W - tw - 6, lx - tw / 2)), by = Math.max(6, Math.min(H - 28, ly - 11));
@@ -1447,10 +1436,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function fit(c: HTMLCanvasElement): boolean {
     const r = c.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight) return false;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = Math.round(r.width * dpr), hh = Math.round(r.height * dpr);
-    if (c.width !== w || c.height !== hh) { c.width = w; c.height = hh; }
-    return true;
+    return true; // drawUnitPreview sizes the backing store itself (one formula, no per-frame reallocation)
   }
   let frame = 0;
   let raf = 0;
@@ -1476,7 +1462,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   const typing = () => {
     const a = document.activeElement as HTMLElement | null;
-    return !!a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA');
+    if (document.querySelector('.k-pop')) return true; // a kit dropdown is open: its type-ahead owns the keys
+    return !!a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA' || a.getAttribute('role') === 'combobox');
   };
   const onKey = (e: KeyboardEvent) => {
     if (el.querySelector('.g-modal-back')) return;
