@@ -758,9 +758,9 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
  *  (sprite px is ~screen px) so they stay legible when the whole field is visible. */
 function buildHalo(s: UnitSprites, pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
   const px = s.px;
-  const ow = clamp(px * 0.05, 1.3, 3.2); // dark outline
-  const rw = clamp(px * 0.09, 1.8, 4.5); // team rim
-  const gw = clamp(px * 0.22, 3, 11); // glow reach
+  const ow = clamp(px * 0.035, 1, 2.4); // dark outline
+  const rw = clamp(px * 0.07, 1.5, 3.4); // team rim
+  const gw = clamp(px * 0.18, 3, 9); // glow reach
   const pad = ow + rw + gw + 2;
   const ext = s.ext + pad / px;
   const size = Math.ceil(2 * ext * px);
@@ -776,7 +776,7 @@ function buildHalo(s: UnitSprites, pal: TeamPal): { c: HTMLCanvasElement; ext: n
   };
   // soft glow
   g.filter = `blur(${gw * 0.45}px)`;
-  g.globalAlpha = 0.55;
+  g.globalAlpha = 0.4;
   stamp(pal.rim, ow + rw, 12);
   g.filter = 'none';
   g.globalAlpha = 1;
@@ -785,8 +785,7 @@ function buildHalo(s: UnitSprites, pal: TeamPal): { c: HTMLCanvasElement; ext: n
   stamp(pal.rim, ow + rw * 0.5, 16);
   // dark outline directly around the unit
   stamp(OUTLINE, ow, 16);
-  stamp(OUTLINE, ow * 0.5, 12);
-  g.drawImage(silhouette(s, OUTLINE), off, off);
+    g.drawImage(silhouette(s, OUTLINE), off, off);
   return { c, ext };
 }
 
@@ -846,7 +845,8 @@ export function wreckSprite(design: Design, team: Team, px: number): HTMLCanvasE
   g.drawImage(s.rest, 0, 0);
   g.drawImage(s.hull, 0, 0);
   g.globalCompositeOperation = 'source-atop';
-  g.fillStyle = 'rgba(22,19,17,0.82)';
+  // desaturate + near-black so a wreck never reads as a live unit
+  g.fillStyle = 'rgba(20,21,22,0.93)';
   g.fillRect(0, 0, c.width, c.height);
   // burn streaks
   g.globalCompositeOperation = 'source-atop';
@@ -1160,13 +1160,13 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalCompositeOperation = prev;
   }
   // team marker at small scale: circle = friendly, diamond = enemy (shape + colour + luminance cue)
-  if (px < 26 && p.cloak !== 'enemy') {
-    const k = clamp((26 - px) / 10, 0, 1);
-    const r = Math.max(2.4 / px, 0.1 * Math.sqrt(L.S)) * (0.8 + 0.2 * k);
+  if (px < 17 && p.cloak !== 'enemy') {
+    const k = clamp((17 - px) / 6, 0, 1);
+    const r = Math.max(1.7 / px, 0.07 * Math.sqrt(L.S));
     const my = y;
     g.globalAlpha = alpha * Math.max(0.55, k);
     g.fillStyle = OUTLINE;
-    markerPath(g, p.team, x, my, r * 1.45);
+    markerPath(g, p.team, x, my, r * 1.4);
     g.fill();
     g.fillStyle = pal.rim;
     markerPath(g, p.team, x, my, r);

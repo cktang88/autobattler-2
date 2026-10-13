@@ -196,7 +196,8 @@ export class Fx {
     // fire family
     const big = style === 'big' || r > 1.4;
     this.glow(x, y, r * 2.4, '#ffb060', 0.18, 0.9);
-    this.glow(x, y, r * 1.0, '#ffffff', 0.08);
+    this.glow(x, y, r * 1.0, '#fff4d0', 0.16);
+    this.glow(x, y, r * 0.5, '#ffffff', 0.1);
     const nf = Math.round((4 + r * 5) * q);
     for (let i = 0; i < nf; i++) {
       const a = rnd() * Math.PI * 2, d = rnd() * r * 0.5, v = rr(0.5, 1.6) * r;
@@ -251,7 +252,7 @@ export class Fx {
       g.save();
       g.translate(d.x, d.y);
       g.rotate(d.a);
-      g.globalAlpha = 0.95;
+      g.globalAlpha = 0.85;
       g.drawImage(d.img, -d.ext, -d.ext, d.ext * 2, d.ext * 2);
       g.restore();
       g.globalAlpha = 1;
@@ -492,6 +493,16 @@ export class Fx {
   }
 
   private drawBeams(g: Ctx, minW: number): void {
+    // dark soft backing under every beam (normal blend) so additive light still reads against the ground
+    const add = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'source-over';
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const b of this.beams) {
+      const t = b.life / b.max;
+      stroke(g, b.pts, '#05070a', Math.max(minW * 5, b.width * 5.5), 0.42 * Math.pow(t, 1.5));
+    }
+    g.globalCompositeOperation = add;
     for (const b of this.beams) {
       const t = b.life / b.max;
       const fade = Math.pow(t, 1.5);

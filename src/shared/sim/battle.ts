@@ -6,7 +6,7 @@
 
 import { MODULE_BY_ID } from '../parts.ts';
 import { computeStats, isValidDesign, levelMult, weaponDps } from '../stats.ts';
-import { FIELD_H, FIELD_W, forwardY, placementCenter } from '../grid.ts';
+import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL } from '../types.ts';
 import type { Design, ModuleDef, Side } from '../types.ts';
@@ -262,7 +262,8 @@ export class Battle {
           validCache.set(d, ok);
         }
         if (!ok) continue;
-        this.addUnit(s, p.uid, d, p.level, p.x, p.y);
+        const size = computeStats(d).size;
+        for (const c of placementUnitCenters(s, { x: p.x, y: p.y, spacing: normSpacing(size, p.spacing) }, size)) this.addUnit(s, p.uid, d, p.level, c.x, c.y);
       }
     }
     const n = this.units.length;
@@ -279,10 +280,10 @@ export class Battle {
     this.rebuildHash();
   }
 
-  private addUnit(side: Side, uid: number, design: Design, level: number, lx: number, ly: number): void {
+  private addUnit(side: Side, uid: number, design: Design, level: number, cx: number, cy: number): void {
     const stats = computeStats(design);
     const lm = levelMult(level);
-    const c = placementCenter(side, { x: lx, y: ly }, stats.size);
+    const c = { x: cx, y: cy };
     const heading = forwardY(side) < 0 ? -Math.PI / 2 : Math.PI / 2;
     const id = this.units.length;
     const traits = stats.traits;
@@ -1405,7 +1406,7 @@ export class Battle {
 
   private sideValue(side: Side): number {
     let v = 0;
-    for (const u of this.units) if (u.alive && u.side === side) v += u.stats.cost * (u.hp / u.maxHp);
+    for (const u of this.units) if (u.alive && u.side === side) v += u.stats.unitCost * (u.hp / u.maxHp);
     return v;
   }
 
@@ -1446,8 +1447,19 @@ export class Battle {
 
   summary(): BattleSummary {
     const survivors: [number[], number[]] = [[], []];
-    for (const u of this.units) if (u.alive) survivors[u.side].push(u.uid);
+    const total: Map<number, number>[] = [new Map(), new Map()];
+    const alive: Map<number, number>[] = [new Map(), new Map()];
+    for (const u of this.units) {
+      total[u.side].set(u.uid, (total[u.side].get(u.uid) ?? 0) + 1);
+      if (u.alive) {
+        if (!alive[u.side].has(u.uid)) survivors[u.side].push(u.uid);
+        alive[u.side].set(u.uid, (alive[u.side].get(u.uid) ?? 0) + 1);
+      }
+    }
+    const aliveFraction: [Record<number, number>, Record<number, number>] = [{}, {}];
+    for (const sd of [0, 1] as const) for (const uid of survivors[sd]) aliveFraction[sd][uid] = alive[sd].get(uid)! / total[sd].get(uid)!;
     return {
+      aliveFraction,
       winner: this.winner, ticks: this.tick, survivors,
       damageDealt: [Math.round(this.damageDealt[0]), Math.round(this.damageDealt[1])],
     };

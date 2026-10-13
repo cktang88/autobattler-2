@@ -115,6 +115,8 @@ export interface BattleSummary {
   ticks: number;
   /** surviving Placement.uids per side */
   survivors: [number[], number[]];
+  /** per side: fraction (0..1] of each surviving placement uid's units still alive (squads); keys = survivors */
+  aliveFraction: [Record<number, number>, Record<number, number>];
   /** total damage dealt by each side */
   damageDealt: [number, number];
 }

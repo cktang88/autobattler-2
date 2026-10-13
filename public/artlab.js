@@ -19,6 +19,7 @@ function inDeployZone(x, y, size) {
 function overlaps(ax, ay, as, bx, by, bs) {
   return ax < bx + bs && bx < ax + as && ay < by + bs && by < ay + as;
 }
+var squadSize = (size) => size === 1 ? 4 : 1;
 
 // src/shared/parts.ts
 var CHASSIS = [
@@ -2467,7 +2468,8 @@ var Fx = class {
     }
     const big = style === "big" || r > 1.4;
     this.glow(x, y, r * 2.4, "#ffb060", 0.18, 0.9);
-    this.glow(x, y, r * 1, "#ffffff", 0.08);
+    this.glow(x, y, r * 1, "#fff4d0", 0.16);
+    this.glow(x, y, r * 0.5, "#ffffff", 0.1);
     const nf = Math.round((4 + r * 5) * q);
     for (let i = 0; i < nf; i++) {
       const a = rnd() * Math.PI * 2, d = rnd() * r * 0.5, v = rr(0.5, 1.6) * r;
@@ -2519,7 +2521,7 @@ var Fx = class {
       g.save();
       g.translate(d.x, d.y);
       g.rotate(d.a);
-      g.globalAlpha = 0.95;
+      g.globalAlpha = 0.85;
       g.drawImage(d.img, -d.ext, -d.ext, d.ext * 2, d.ext * 2);
       g.restore();
       g.globalAlpha = 1;
@@ -2756,6 +2758,15 @@ var Fx = class {
     g.globalCompositeOperation = prev;
   }
   drawBeams(g, minW) {
+    const add = g.globalCompositeOperation;
+    g.globalCompositeOperation = "source-over";
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    for (const b of this.beams) {
+      const t = b.life / b.max;
+      stroke(g, b.pts, "#05070a", Math.max(minW * 5, b.width * 5.5), 0.42 * Math.pow(t, 1.5));
+    }
+    g.globalCompositeOperation = add;
     for (const b of this.beams) {
       const t = b.life / b.max;
       const fade = Math.pow(t, 1.5);
@@ -5466,9 +5477,9 @@ function unitSprites(design, team, px) {
 }
 function buildHalo(s, pal) {
   const px = s.px;
-  const ow = clamp(px * 0.05, 1.3, 3.2);
-  const rw = clamp(px * 0.09, 1.8, 4.5);
-  const gw = clamp(px * 0.22, 3, 11);
+  const ow = clamp(px * 0.035, 1, 2.4);
+  const rw = clamp(px * 0.07, 1.5, 3.4);
+  const gw = clamp(px * 0.18, 3, 9);
   const pad = ow + rw + gw + 2;
   const ext = s.ext + pad / px;
   const size = Math.ceil(2 * ext * px);
@@ -5483,14 +5494,13 @@ function buildHalo(s, pal) {
     }
   };
   g.filter = `blur(${gw * 0.45}px)`;
-  g.globalAlpha = 0.55;
+  g.globalAlpha = 0.4;
   stamp(pal.rim, ow + rw, 12);
   g.filter = "none";
   g.globalAlpha = 1;
   stamp(pal.rim, ow + rw, 20);
   stamp(pal.rim, ow + rw * 0.5, 16);
   stamp(OUTLINE, ow, 16);
-  stamp(OUTLINE, ow * 0.5, 12);
   g.drawImage(silhouette(s, OUTLINE), off, off);
   return { c, ext };
 }
@@ -5544,7 +5554,7 @@ function wreckSprite(design, team, px) {
   g.drawImage(s.rest, 0, 0);
   g.drawImage(s.hull, 0, 0);
   g.globalCompositeOperation = "source-atop";
-  g.fillStyle = "rgba(22,19,17,0.82)";
+  g.fillStyle = "rgba(20,21,22,0.93)";
   g.fillRect(0, 0, c.width, c.height);
   g.globalCompositeOperation = "source-atop";
   for (let i = 0; i < 6; i++) {
@@ -5789,13 +5799,13 @@ function drawUnit(g, p, px, dirs = DEFAULT_DIRS) {
     blit(g, silhouette(s, "#9fdcff"), x + Math.sin(p.time * 9) * 0.03, y, ang, s.ext, sc * 1.02);
     g.globalCompositeOperation = prev;
   }
-  if (px < 26 && p.cloak !== "enemy") {
-    const k = clamp((26 - px) / 10, 0, 1);
-    const r = Math.max(2.4 / px, 0.1 * Math.sqrt(L.S)) * (0.8 + 0.2 * k);
+  if (px < 17 && p.cloak !== "enemy") {
+    const k = clamp((17 - px) / 6, 0, 1);
+    const r = Math.max(1.7 / px, 0.07 * Math.sqrt(L.S));
     const my = y;
     g.globalAlpha = alpha * Math.max(0.55, k);
     g.fillStyle = OUTLINE;
-    markerPath(g, p.team, x, my, r * 1.45);
+    markerPath(g, p.team, x, my, r * 1.4);
     g.fill();
     g.fillStyle = pal.rim;
     markerPath(g, p.team, x, my, r);
@@ -6206,9 +6216,9 @@ var FieldView = class {
     const myTop = this.viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = this.viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
     const mine = TEAM_PAL[0], theirs = TEAM_PAL[1];
-    g.fillStyle = rgba(theirs.rim, 0.075);
+    g.fillStyle = rgba(theirs.rim, 0.045);
     g.fillRect(0, enTop, FIELD_W, DEPLOY_D);
-    g.fillStyle = rgba(mine.rim, showZone ? 0.16 : 0.075);
+    g.fillStyle = rgba(mine.rim, showZone ? 0.14 : 0.045);
     g.fillRect(0, myTop, FIELD_W, DEPLOY_D);
     const lw2 = 1 / this.k;
     if (showZone) {
@@ -6611,10 +6621,10 @@ var FieldView = class {
     const h = S >= 2 ? 4 : 3;
     const x = Math.round(s.x - w / 2);
     const y = Math.round(s.y - S * this.k * 0.52 - h - 3 - lift);
-    g.fillStyle = "rgba(0,0,0,0.65)";
-    g.fillRect(x - 1, y - 1, w + 2, h + 2);
+    g.fillStyle = "rgba(0,0,0,0.88)";
+    g.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
     const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
-    g.fillStyle = "rgba(255,255,255,0.75)";
+    g.fillStyle = "rgba(255,255,255,0.85)";
     g.fillRect(x, y, w * fs, h);
     const team = this.teamOf(u.side);
     g.fillStyle = f < 0.3 ? team === 0 ? "#ffd24a" : "#ff3a2a" : TEAM_PAL[team].bar;
@@ -6675,16 +6685,21 @@ var FieldView = class {
       const mod = modOf(p.moduleId);
       const rad = Math.max(0.5, mod?.splash ?? 1);
       const enemy = p.side !== this.viewerSide;
-      const col = enemy ? "#ff5a3a" : "#5ae8d0";
+      const col = enemy ? "#ff5a30" : "#4fe8ff";
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 10 + p.id);
-      g.globalAlpha = (enemy ? 0.45 : 0.22) * (0.4 + 0.6 * pr);
-      g.fillStyle = rgba(col, 0.18 + 0.12 * pr);
+      g.globalAlpha = (enemy ? 0.55 : 0.4) * (0.4 + 0.6 * pr);
+      g.fillStyle = rgba(col, 0.2 + 0.14 * pr);
       g.beginPath();
       g.arc(lx, ly, rad * (1.05 - pr * 0.05), 0, Math.PI * 2);
       g.fill();
-      g.globalAlpha = (enemy ? 0.9 : 0.45) * (0.5 + 0.5 * pulse);
+      g.globalAlpha = 0.95 * (0.6 + 0.4 * pulse);
+      g.lineWidth = Math.max(3.2 / this.k, 0.08);
+      g.strokeStyle = "rgba(0,0,0,0.55)";
+      g.beginPath();
+      g.arc(lx, ly, rad * pr, 0, Math.PI * 2);
+      g.stroke();
       g.strokeStyle = col;
-      g.lineWidth = Math.max(1.2 / this.k, 0.04);
+      g.lineWidth = Math.max(1.8 / this.k, 0.05);
       g.beginPath();
       g.arc(lx, ly, rad * pr, 0, Math.PI * 2);
       g.stroke();
@@ -6698,7 +6713,7 @@ var FieldView = class {
   }
   drawProjectiles(g, list, elevated, dt) {
     const prevOp = g.globalCompositeOperation;
-    const minW = 1 / this.px;
+    const minW = 1.5 / this.px;
     for (const p of list) {
       const kind = p.kind;
       const isHigh = kind === "arc" || kind === "missile";
@@ -6712,6 +6727,19 @@ var FieldView = class {
       const lift = kind === "missile" ? Math.min(0.6, pos.z * 0.4) : kind === "arc" ? pos.z * 0.45 : 0;
       const x = pos.x + this.dirs.ux * lift, y = pos.y + this.dirs.uy * lift;
       const glowC = mod ? moduleGlow(mod, TEAM_PAL[this.teamOf(p.side)]) : "#ffd27a";
+      if (kind === "bullet" || kind === "shell" || kind === "rocket" || kind === "missile" || kind === "arc") {
+        const len = kind === "bullet" ? 0.4 : kind === "rocket" ? 0.3 : kind === "missile" ? 0.35 : 0.2;
+        g.globalCompositeOperation = prevOp;
+        g.globalAlpha = 0.5;
+        g.strokeStyle = "#05070a";
+        g.lineCap = "round";
+        g.lineWidth = Math.max(4 / this.px, kind === "arc" ? 0.28 : 0.12);
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x - cs * len, y - sn * len);
+        g.stroke();
+        g.globalAlpha = 1;
+      }
       g.globalCompositeOperation = "lighter";
       switch (kind) {
         case "bullet": {
@@ -7466,7 +7494,9 @@ function computeStats(d) {
   if (flying) ehp *= 1.2;
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes("fireOnMove") ? 0.05 : 0) + (traits.includes("leap") ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const cost = Math.max(10, Math.ceil((PARTS_WEIGHT * partsCost + POWER_K * power) / 5) * 5);
+  const unitCost = Math.max(10, PARTS_WEIGHT * partsCost + POWER_K * power);
+  const squad = squadSize(size);
+  const cost = roundCost(unitCost * squad);
   return {
     size,
     hp: Math.round(hp),
@@ -7477,6 +7507,8 @@ function computeStats(d) {
     speed: Math.round(speed * 100) / 100,
     turn,
     cost,
+    unitCost: Math.round(unitCost),
+    squad,
     flying,
     isStatic,
     range: Math.round(range * 10) / 10,
@@ -7491,6 +7523,10 @@ function computeStats(d) {
     ehp: Math.round(ehp),
     power: Math.round(power)
   };
+}
+function roundCost(raw) {
+  if (raw <= 500) return Math.max(50, Math.round(raw / 50) * 50);
+  return Math.round(raw / 100) * 100;
 }
 var levelMult = (level) => 1 + LEVEL_BONUS * (Math.max(1, Math.min(MAX_LEVEL, level)) - 1);
 function validateDesign(d) {

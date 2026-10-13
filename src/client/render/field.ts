@@ -304,9 +304,9 @@ export class FieldView {
     const myTop = this.viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = this.viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
     const mine = TEAM_PAL[0], theirs = TEAM_PAL[1];
-    g.fillStyle = rgba(theirs.rim, 0.075);
+    g.fillStyle = rgba(theirs.rim, 0.045);
     g.fillRect(0, enTop, FIELD_W, DEPLOY_D);
-    g.fillStyle = rgba(mine.rim, showZone ? 0.16 : 0.075);
+    g.fillStyle = rgba(mine.rim, showZone ? 0.14 : 0.045);
     g.fillRect(0, myTop, FIELD_W, DEPLOY_D);
     const lw = 1 / this.k;
     if (showZone) {
@@ -677,10 +677,10 @@ export class FieldView {
     const h = S >= 2 ? 4 : 3;
     const x = Math.round(s.x - w / 2);
     const y = Math.round(s.y - S * this.k * 0.52 - h - 3 - lift);
-    g.fillStyle = 'rgba(0,0,0,0.65)';
-    g.fillRect(x - 1, y - 1, w + 2, h + 2);
+    g.fillStyle = 'rgba(0,0,0,0.88)';
+    g.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
     const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
-    g.fillStyle = 'rgba(255,255,255,0.75)';
+    g.fillStyle = 'rgba(255,255,255,0.85)';
     g.fillRect(x, y, w * fs, h);
     const team = this.teamOf(u.side);
     g.fillStyle = f < 0.3 ? (team === 0 ? '#ffd24a' : '#ff3a2a') : TEAM_PAL[team].bar;
@@ -744,16 +744,19 @@ export class FieldView {
       const mod = modOf(p.moduleId);
       const rad = Math.max(0.5, mod?.splash ?? 1);
       const enemy = p.side !== this.viewerSide;
-      const col = enemy ? '#ff5a3a' : '#5ae8d0';
+      const col = enemy ? '#ff5a30' : '#4fe8ff';
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 10 + p.id);
-      g.globalAlpha = (enemy ? 0.45 : 0.22) * (0.4 + 0.6 * pr);
-      g.fillStyle = rgba(col, 0.18 + 0.12 * pr);
+      g.globalAlpha = (enemy ? 0.55 : 0.4) * (0.4 + 0.6 * pr);
+      g.fillStyle = rgba(col, 0.2 + 0.14 * pr);
       g.beginPath();
       g.arc(lx, ly, rad * (1.05 - pr * 0.05), 0, Math.PI * 2);
       g.fill();
-      g.globalAlpha = (enemy ? 0.9 : 0.45) * (0.5 + 0.5 * pulse);
+      g.globalAlpha = 0.95 * (0.6 + 0.4 * pulse);
+      g.lineWidth = Math.max(3.2 / this.k, 0.08);
+      g.strokeStyle = 'rgba(0,0,0,0.55)';
+      g.beginPath(); g.arc(lx, ly, rad * pr, 0, Math.PI * 2); g.stroke();
       g.strokeStyle = col;
-      g.lineWidth = Math.max(1.2 / this.k, 0.04);
+      g.lineWidth = Math.max(1.8 / this.k, 0.05);
       g.beginPath();
       g.arc(lx, ly, rad * pr, 0, Math.PI * 2);
       g.stroke();
@@ -768,7 +771,7 @@ export class FieldView {
 
   private drawProjectiles(g: Ctx, list: SimProjectile[], elevated: boolean, dt: number): void {
     const prevOp = g.globalCompositeOperation;
-    const minW = 1 / this.px;
+    const minW = 1.5 / this.px;
     for (const p of list) {
       const kind = p.kind as string;
       const isHigh = kind === 'arc' || kind === 'missile';
@@ -782,6 +785,17 @@ export class FieldView {
       const lift = kind === 'missile' ? Math.min(0.6, pos.z * 0.4) : kind === 'arc' ? pos.z * 0.45 : 0;
       const x = pos.x + this.dirs.ux * lift, y = pos.y + this.dirs.uy * lift;
       const glowC = mod ? moduleGlow(mod, TEAM_PAL[this.teamOf(p.side)]) : '#ffd27a';
+      // dark soft backing (normal blend) so additive tracers/shells stay visible on any ground
+      if (kind === 'bullet' || kind === 'shell' || kind === 'rocket' || kind === 'missile' || kind === 'arc') {
+        const len = kind === 'bullet' ? 0.4 : kind === 'rocket' ? 0.3 : kind === 'missile' ? 0.35 : 0.2;
+        g.globalCompositeOperation = prevOp;
+        g.globalAlpha = 0.5;
+        g.strokeStyle = '#05070a';
+        g.lineCap = 'round';
+        g.lineWidth = Math.max(4 / this.px, kind === 'arc' ? 0.28 : 0.12);
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * len, y - sn * len); g.stroke();
+        g.globalAlpha = 1;
+      }
       g.globalCompositeOperation = 'lighter';
       switch (kind) {
         case 'bullet': {
