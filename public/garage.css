@@ -703,7 +703,7 @@
 .garage .g-stagebtn:hover { box-shadow: inset 0 0 0 2px var(--amber); }
 .garage .g-stagebtn.on { color: var(--amber-ink) !important; background: linear-gradient(180deg, var(--amber2), var(--amber)) !important; box-shadow: inset 0 0 0 2px var(--ink); }
 .garage .g-stagebtn.on .g-ico { color: var(--amber-ink); }
-.garage .g-stage.ranges .g-sockets { opacity: 0; pointer-events: none; }
+.garage .g-stage.ranges .g-sockets, .garage .g-stage.ranges .g-sock { opacity: 0; pointer-events: none; }
 .garage .g-sockets { transition: opacity 0.2s; }
 .garage .g-stage .g-stage-hint { font-size: 0.9rem; letter-spacing: 0.08em; color: rgba(241, 236, 224, 0.75); }
 .garage .g-stage.ranges .g-stage-hint { display: none; }

@@ -7,7 +7,7 @@
 import { h } from '../app.ts';
 import type { ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
-import { kiteOptions, ordersControl, ordersOf, orderFields } from './match-ui.ts';
+import { kiteOptions, ordersControl, ordersOf, orderFields, ringsOf } from './match-ui.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
@@ -501,7 +501,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const touch = e.pointerType !== 'mouse';
       const d = { src: s, pid: e.pointerId, x0: e.clientX, y0: e.clientY, started: false, ghost: null, hot: null, origin: node, timer: 0 };
       drag = d;
-      if (!touch || immediate) { try { node.setPointerCapture(e.pointerId); } catch { /* ignore */ } }
+      // capture only once a drag begins, so a plain click still reaches inner buttons (row select / unmount ✕)
       if (touch && !immediate) {
         d.timer = window.setTimeout(() => {
           if (drag !== d || d.started) return;
@@ -526,6 +526,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     let best: number | null = null, bd = Infinity;
     for (const s of sockets()) {
       const r = s.el.getBoundingClientRect();
+      if (rangesOn && s.el.classList.contains('g-sock')) continue; // hidden while the range view is up
       const pad = s.el.classList.contains('g-sock') ? 14 : 2;
       if (x < r.left - pad || x > r.right + pad || y < r.top - pad || y > r.bottom + pad) continue;
       const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
@@ -537,6 +538,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function beginDrag(x: number, y: number) {
     if (!drag || drag.started) return;
     drag.started = true;
+    try { if (!drag.origin.hasPointerCapture(drag.pid)) drag.origin.setPointerCapture(drag.pid); } catch { /* ignore */ }
     const mod = MODULE_BY_ID.get(drag.src.mod)!;
     drag.ghost = h('div.g-ghost', { style: { '--cat': moduleCategoryColor(mod.id) } },
       partIcon('module', mod.id, 52, true), h('span', null, mod.name), h('span.g-chip', { class: `c${mod.mount}` }, mod.mount));
@@ -976,7 +978,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
         cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
         fk: `mod-${m.id}`, title: fh ? undefined : reqReason(m) ?? `Needs a ${m.mount} socket`,
-        onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); renderBay(); },
+        onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
       });
@@ -1009,7 +1011,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         again?.focus();
         if (pos != null) again?.setSelectionRange(pos, pos);
       },
-      onClear: () => { modQuery = ''; update(); },
+      onClear: () => { modQuery = ''; update(); el.querySelector<HTMLInputElement>(`[data-fk="msearch-${which}"]`)?.focus(); },
     });
     const slotCls = activeSlot !== null ? c.mounts[activeSlot] : null;
     return [
@@ -1091,7 +1093,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function details(rows: (HTMLElement | null)[], extra: (HTMLElement | null)[] = []): HTMLElement[] {
     const btn = h('button.g-more.g-details', {
       type: 'button', 'aria-expanded': String(showDetails), 'data-fk': 'details',
-      onclick: () => { showDetails = !showDetails; try { localStorage.setItem(LS_DETAILS, showDetails ? '1' : '0'); } catch { /* ignore */ } sfx('click'); renderInspector(); },
+      onclick: () => { showDetails = !showDetails; try { localStorage.setItem(LS_DETAILS, showDetails ? '1' : '0'); } catch { /* ignore */ } sfx('click'); renderInspector(); (inspector.querySelector('[data-fk="details"]') as HTMLElement | null)?.focus(); },
     }, h('span.g-more-c', null, showDetails ? '▾' : '▸'), 'Full specs');
     return showDetails ? [btn, h('div.g-specs', null, ...rows.filter(Boolean) as HTMLElement[]), ...extra.filter(Boolean) as HTMLElement[]] : [btn];
   }
@@ -1281,28 +1283,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   // ---------------- blueprint grid ----------------
   /** Reach rings for the range overlay (cells): weapons (with the design's range bonus), repair beams and auras. */
+  /** Reach rings for the range overlay (cells) — the same rings the battlefield draws (ringsOf), so the sim's rules
+   *  apply: range bonus scales guns and repair beams, not melee reach or dead zones. */
   function rangeRings(): { r: number; min: number; color: string; label: string }[] {
     const st = statsOf(draft);
-    const mult = st?.rangeMult ?? 1;
-    const out: { r: number; min: number; color: string; label: string }[] = [];
-    for (const id of draft.mounts) {
-      const m = id ? MODULE_BY_ID.get(id) : undefined;
-      if (!m) continue;
-      const color = moduleCategoryColor(m.id);
-      if (m.kind === 'weapon' && m.range) out.push({ r: m.range * mult, min: (m.minRange ?? 0) * mult, color, label: m.name });
-      else if (m.heal && m.range) out.push({ r: m.range, min: 0, color, label: m.name });
-      const aura = m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.jammer ?? m.detect;
-      if (aura) out.push({ r: aura, min: 0, color, label: m.name });
-    }
-    // one ring per distinct reach; names merged
-    const merged = new Map<string, { r: number; min: number; color: string; label: string }>();
-    for (const o of out) {
-      const k = o.r.toFixed(2);
-      const e = merged.get(k);
-      if (e) { if (!e.label.includes(o.label)) e.label += `, ${o.label}`; e.min = Math.max(e.min, o.min); }
-      else merged.set(k, { ...o });
-    }
-    return [...merged.values()].sort((a, b) => b.r - a.r);
+    if (!st) return [];
+    return ringsOf(draft, st).map((o) => ({ r: o.range, min: o.minRange, color: o.color, label: o.label })).sort((a, b) => b.r - a.r);
   }
   const rangeExtent = () => Math.max(MIN_VIEW_CELLS, ...rangeRings().map((o) => o.r * 2.18 + 1));
 
@@ -1383,7 +1369,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       // label on the ring, staggered so stacked rings don't collide
       const a = -Math.PI / 2 + (i % 2 ? 0.42 : -0.42) * Math.ceil(i / 2);
       const lx = g.cx + Math.cos(a) * R, ly = g.cy + Math.sin(a) * R;
-      const txt = `${Math.round(o.r * METERS_PER_CELL)} m  ${o.label}`;
+      const txt = o.label;
       x.font = '700 14px "Barlow Condensed", system-ui, sans-serif';
       const tw = Math.min(260, x.measureText(txt).width) + 12;
       const bx = Math.max(6, Math.min(W - tw - 6, lx - tw / 2)), by = Math.max(6, Math.min(H - 28, ly - 11));
@@ -1447,10 +1433,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function fit(c: HTMLCanvasElement): boolean {
     const r = c.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight) return false;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = Math.round(r.width * dpr), hh = Math.round(r.height * dpr);
-    if (c.width !== w || c.height !== hh) { c.width = w; c.height = hh; }
-    return true;
+    return true; // drawUnitPreview sizes the backing store itself (one formula, no per-frame reallocation)
   }
   let frame = 0;
   let raf = 0;
@@ -1476,7 +1459,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   const typing = () => {
     const a = document.activeElement as HTMLElement | null;
-    return !!a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA');
+    if (document.querySelector('.k-pop')) return true; // a kit dropdown is open: its type-ahead owns the keys
+    return !!a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA' || a.getAttribute('role') === 'combobox');
   };
   const onKey = (e: KeyboardEvent) => {
     if (el.querySelector('.g-modal-back')) return;

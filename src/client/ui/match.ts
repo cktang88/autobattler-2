@@ -131,7 +131,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       let n = 0;
       while (!b.done && n++ < MAX_TICKS + 100) b.step();
       captureDamage(rec, b);
-    } catch (e) { console.warn('damage tally failed', e); }
+    } catch (e) {
+      console.warn('damage tally failed', e);
+      lastDmg = { round: rec.round, by: new Map() }; // don't retry on every hover
+    }
   }
   const damageLine = (sd: Side, uid: number): HTMLElement | null => {
     if (!lastDmg) return null;
@@ -926,6 +929,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (document.querySelector('.modal-back')) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+    // kit dropdown open or focused: arrows / type-ahead / Space belong to it
+    if (document.querySelector('.k-pop') || t?.getAttribute('role') === 'combobox') return;
     if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       selectCard(Number(e.key) - 1);
       e.preventDefault();
@@ -938,7 +943,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       else sel = null;
       renderAll();
     } else if (e.key === ' ' || e.key === 'Enter') {
-      if (t && t.tagName === 'BUTTON' && e.key === 'Enter') return; // let the focused button handle it
+      if (t && t.tagName === 'BUTTON') return; // let the focused button / kit control handle it
       e.preventDefault();
       if (phase === 'deploy') void submit();
       else if (phase === 'battle') skipBattle();
@@ -976,6 +981,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function setPhase(p: Phase) {
     const prev = phase;
     phase = p;
+    if (p === 'waiting' && prev !== 'waiting' && m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     if (p === 'deploy' && prev !== 'deploy') {
       playMusic('deploy');
       try { view.frameDeploy(); } catch { /* */ }
