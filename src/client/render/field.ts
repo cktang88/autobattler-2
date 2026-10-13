@@ -39,7 +39,6 @@ import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
 import { titanFeet } from './giantart.ts';
-import { rolls } from './droidart.ts';
 
 const P2 = Math.PI * 2;
 import {
@@ -1486,8 +1485,8 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   const angle = opts?.angle ?? -Math.PI / 2;
   const pose: UnitPose = {
     design, team, x: 0, y: L.air ? 0.1 * L.S : 0, angle, time,
-    // destroyer droids alternate rolling and deployed in animated previews so both forms show
-    moving: !opts?.still && L.mob.kind !== 'static' && (!rolls(L) || time % 5 < 2.2), odometer: opts?.still ? 0 : time * Math.max(0.6, L.cycle * 1.5), seed: 1,
+    // the Needle Frame alternates running (arms folded) and standing (arms deployed) in animated previews
+    moving: !opts?.still && L.mob.kind !== 'static' && (L.shape !== 'mantis' || time % 5 < 2.2), odometer: opts?.still ? 0 : time * Math.max(0.6, L.cycle * 1.5), seed: 1,
   };
   const dirs: ViewDirs = { sx: 0.45, sy: 0.75, ux: 0, uy: -1 };
   drawUnitShadow(g, pose, px, dirs);

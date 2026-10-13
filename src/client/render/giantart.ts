@@ -757,14 +757,15 @@ export function titanFeet(L: UnitLayout, phase: number, rest: boolean): Foot[] {
   const colossal = L.shape === 'colossal' || L.shape === 'warlord';
   const out: Foot[] = [];
   const war = L.shape === 'warlord';
-  const stride = (quad ? 0.1 : war ? 0.36 : colossal ? 0.32 : 0.2) * S * Math.min(1.25, kx);
+  const stride = (quad ? 0.1 : war ? 0.15 : colossal ? 0.32 : 0.2) * S * Math.min(1.25, kx);
   const rows = (quad ? [0.28, -0.28] : [colossal ? -0.02 : 0]).map((r) => r * kx);
-  const fy = Math.min((quad ? Math.min(L.hw, 0.42) + 0.1 : war ? 0.17 * ky : colossal ? 0.215 * ky : 0.31 * ky) * S, 0.5 * L.Y);
+  // warlord: outrigger legs plant their feet well out past the hull flanks
+  const fy = Math.min((quad ? Math.min(L.hw, 0.42) + 0.1 : war ? 0.43 * ky : colossal ? 0.215 * ky : 0.31 * ky) * S, 0.5 * L.Y);
   let k = 0;
   for (const row of rows) for (const s of [-1, 1]) {
     const diag = quad && (k++ % 2 === 1) ? Math.PI : 0;
     const ph = phase * P2 + (s > 0 ? Math.PI : 0) + diag;
-    const restX = (colossal ? (s > 0 ? 0.27 : -0.22) : (s > 0 ? 0.03 : -0.03)) * kx;
+    const restX = (war ? (s > 0 ? 0.12 : 0.0) : colossal ? (s > 0 ? 0.27 : -0.22) : (s > 0 ? 0.03 : -0.03)) * kx;
     const fx = rest ? row * S + restX * S : row * S + Math.sin(ph) * stride;
     const lift = rest ? 0 : Math.max(0, Math.cos(ph));
     const a = (((ph - Math.PI / 2) % P2) + P2) % P2;

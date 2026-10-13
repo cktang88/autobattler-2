@@ -332,7 +332,7 @@ export function creatureUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number)
   const S = L.S;
   switch (L.shape) {
     case 'mantis':
-      // shield-emitter node on the power pack (no mast: the destroyer droid reads as a sealed machine)
+      // spine node on the counterweight pack
       dot(g, -0.3 * S, 0, 0.03 * S, METAL.dark);
       dot(g, -0.3 * S, 0, 0.014 * S, emis(pal));
       break;
@@ -391,7 +391,7 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
   const lite = shade(pal.body, 0.18);
   switch (L.shape) {
     case 'mantis': {
-      // destroyer-droid frame (square fallback): smooth power-pack shell, steel spine, sensor head
+      // needle frame (square fallback): power-pack shell, steel spine, sensor head
       const pack = profilePath([-0.05, 0, -0.1, 0.1, -0.24, 0.12, -0.38, 0.09, -0.45, 0], S);
       floatGap(g, pack, E, o, S);
       sleekShell(g, pack, pal, o, S, -0.1, -0.12, -0.4, 0.12);
@@ -867,6 +867,10 @@ export interface AnimIn {
   seed: number;
   /** leg gait phase, radians */
   walk: number;
+  /** some mount has a target */
+  armed?: boolean;
+  /** 0..1 strongest muzzle flash this frame (recoil) */
+  fire?: number;
 }
 
 export interface PartDef {

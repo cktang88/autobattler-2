@@ -14,7 +14,6 @@ import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, d
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
-import { BALL_FRAMES, ballFrames, ballR, ballShadow, curlOf, rolls } from './droidart.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -1530,11 +1529,6 @@ export function altitudeOf(p: UnitPose, L: UnitLayout): number {
 
 export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAULT_DIRS): void {
   const L = layoutOf(p.design);
-  if (rolls(L) && curlOf(p.seed ?? 0, !!p.moving, p.time) > 0.5) {
-    const alt = altitudeOf(p, L), off = 0.06 + alt * 0.75;
-    ballShadow(g, p.x + dirs.sx * off, p.y + dirs.sy * off, ballR(L), (p.alpha ?? 1) * (p.leap ? 0.6 : 1));
-    return;
-  }
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
   // load: overloaded designs squat low on strained suspension (tight shadow), light ones ride high
@@ -1627,29 +1621,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   const alt = altitudeOf(p, L);
   const lift = L.air || p.flying ? 0.12 : alt * 0.35;
   const x = p.x + dirs.ux * lift, y = p.y + dirs.uy * lift;
-  let sc = 1 + (p.leap ?? 0) * 0.3 + (L.air ? 0.04 : 0);
-  let shieldK = 0;
-  if (rolls(L)) {
-    // destroyer droid: rolls as an armoured ball while it travels, unfolds onto its tripod when it stops
-    const c = curlOf(p.seed ?? 0, !!p.moving, p.time);
-    if (c > 0.5) {
-      const R = ballR(L), fr = ballFrames(L, p.team, Math.max(4, Math.round(px)));
-      const per = (P2U * R) / 6;
-      const ph = ((p.odometer ?? 0) / per) % 1;
-      const idx = Math.min(BALL_FRAMES - 1, Math.max(0, Math.floor((ph < 0 ? ph + 1 : ph) * BALL_FRAMES))) || 0;
-      let a = p.alpha ?? 1;
-      if (p.cloak === 'own') a *= 0.45; else if (p.cloak === 'enemy') a *= 0.08;
-      g.globalAlpha = a;
-      blit(g, fr[idx], x, y, p.angle, R * 1.25, sc * (0.7 + 0.6 * (c - 0.5)));
-      const hf = p.hitFlash ?? 0;
-      if (hf > 0.02) { g.globalAlpha = a * Math.min(0.5, hf * 0.55); g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, R * sc, 0, P2U); g.fill(); }
-      if ((p.stun ?? 0) > 0) drawSparks(g, x, y, R * 1.1, p.time, px);
-      g.globalAlpha = 1;
-      return;
-    }
-    sc *= 0.7 + 0.3 * (1 - c * 2);
-    shieldK = 1 - c * 2;
-  }
+  const sc = 1 + (p.leap ?? 0) * 0.3 + (L.air ? 0.04 : 0);
   const pal = TEAM_PAL[p.team];
   const ang = p.angle;
   const cs = Math.cos(ang), sn = Math.sin(ang);
@@ -1683,7 +1655,9 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   let pxf: Xf[] = [], prest: Xf[] = [];
   if (pdefs.length) {
     const odo = p.odometer ?? 0;
-    const ai: AnimIn = { t: p.time, odo, moving: !!p.moving && L.mob.kind !== 'static', seed: p.seed ?? 0, walk: (odo / L.cycle) * Math.PI * 2 };
+    let armed = false, fire = 0;
+    if (p.mounts) for (const mp of p.mounts) { if (mp.armed) armed = true; if (mp.flash > fire) fire = mp.flash; }
+    const ai: AnimIn = { t: p.time, odo, moving: !!p.moving && L.mob.kind !== 'static', seed: p.seed ?? 0, walk: (odo / L.cycle) * Math.PI * 2, armed, fire: Math.min(1, fire) };
     pxf = partXfs(pdefs, ai);
     prest = partXfs(pdefs, null);
   }
@@ -1734,21 +1708,6 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = alpha * (0.7 + 0.25 * Math.sin(p.time * 1.6 + (p.seed ?? 0)));
     blit(g, s.shell, x, y, ang, s.ext, sc * 1.0);
-    g.globalCompositeOperation = prevOp;
-    g.globalAlpha = alpha;
-  }
-  if (shieldK > 0.05 && p.cloak !== 'enemy') {
-    // destroyer droid planted on its tripod: a faint deployed shield-emitter ring round it (two strokes, no gradients)
-    const r = (0.5 * L.X + 0.12 * L.S) * sc, ox = -0.1 * L.X * sc;
-    const cx = x + cs * ox, cy = y + sn * ox;
-    const prevOp = g.globalCompositeOperation;
-    g.globalCompositeOperation = 'lighter';
-    const pulse = 0.75 + 0.25 * Math.sin(p.time * 2.4 + (p.seed ?? 0));
-    g.strokeStyle = emis(pal);
-    g.globalAlpha = alpha * shieldK * 0.07 * pulse;
-    g.lineWidth = r * 0.14; g.beginPath(); g.arc(cx, cy, r * 0.93, 0, P2U); g.stroke();
-    g.globalAlpha = alpha * shieldK * 0.32 * pulse;
-    g.lineWidth = Math.max(1 / px, 0.018 * L.S); g.beginPath(); g.arc(cx, cy, r, 0, P2U); g.stroke();
     g.globalCompositeOperation = prevOp;
     g.globalAlpha = alpha;
   }
