@@ -62,7 +62,8 @@ for it in range(iters):
         ws = [m for m in set(x for x in r['mounts'] if x) if MODS.get(m) == 'wpn']
         if r['module'] and MODS.get(r['module']) == 'util' and not r['base']:
             if r['carrier'] in baserate:
-                acc[r['module']][0] += lg(r['rate']) - lg(baserate[r['carrier']])
+                # half the delta against the bare carrier, half the absolute distance from 50% (the module-band goal)
+                acc[r['module']][0] += 0.5 * (lg(r['rate']) - lg(baserate[r['carrier']])) + 0.5 * (lg(r['rate']) - cen)
                 acc[r['module']][1] += 1
             continue
         if r['base']:
@@ -86,7 +87,7 @@ for it in range(iters):
         v = cal.get(k, 1.0) * math.exp(step)
         v = v ** 0.99
         if t == 'u':
-            v = min(4.0, max(0.25, v))
+            v = min(4.0, max(0.1, v))
         cal[k] = v
     if fit_size and not ONLY_CHASSIS:
         # all five classes are fitted toward 50%; the mean log-step is removed (a common factor on every price is a
