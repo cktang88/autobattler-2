@@ -40,7 +40,7 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- support aura: command vehicle that speeds up and repairs its escorts ----
   { id: 'starter-commander', name: 'Commander', chassis: 'striker', mobility: 'halftrack', mounts: ['uplink', 'autocannon', 'repair'] },
   // ---- giant (size 4): all-round assault walker ----
-  { id: 'starter-juggernaut', name: 'Juggernaut', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'autocannon'] },
+  { id: 'starter-juggernaut', name: 'Gargantua', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'autocannon'] },
   // ---- titan (size 5): beam-armed war machine ----
-  { id: 'starter-warlord', name: 'Warlord', chassis: 'titan', mobility: 'megatracks', mounts: ['annihilator', 'siegeplasma', 'cannon', 'cannon', 'autocannon'] },
+  { id: 'starter-warlord', name: 'Kronos', chassis: 'titan', mobility: 'megatracks', mounts: ['annihilator', 'siegeplasma', 'cannon', 'cannon', 'autocannon'] },
 ];
