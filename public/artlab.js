@@ -1191,11 +1191,11 @@ var MODULES = [
     ap: 1
   }),
   // ---------------- Support (allies) ----------------
-  util({ id: "repair", name: "Repair Beam", family: "Light repair", desc: "Heals the most damaged ally in range.", category: "support", visual: "repair", caliber: 0.3, mount: "L", weight: 1, cost: 20, heal: 22, range: 4 }),
+  util({ id: "repair", name: "Repair Beam", family: "Light repair", desc: "Heals the most damaged ally in range.", category: "support", visual: "repair", caliber: 0.3, mount: "L", weight: 1, cost: 17, heal: 22, range: 4 }),
   util({ id: "repairM", name: "Repair Array", family: "Heavy repair", desc: "Industrial nano-repair array with longer reach.", category: "support", visual: "repair", caliber: 0.6, mount: "M", weight: 2.5, cost: 40, heal: 55, range: 5 }),
   util({ id: "dome", name: "Shield Dome", family: "Area shield", desc: "Projects a 150-point shield onto every ally within 3 cells.", category: "support", visual: "dome", caliber: 0.8, mount: "H", weight: 6, cost: 60, shieldAura: { radius: 3, amount: 150 } }),
-  util({ id: "uplink", name: "Command Uplink", family: "Command", desc: "Allies within 4 cells fire 15% faster.", category: "support", visual: "uplink", caliber: 0.5, mount: "M", weight: 2, cost: 35, fireRateAura: { radius: 4, bonus: 0.15 } }),
-  util({ id: "sensor", name: "Sensor Mast", family: "Detection", desc: "Reveals cloaked enemies within 7 cells for your whole army.", category: "stealth", visual: "sensor", caliber: 0.4, mount: "L", weight: 1, cost: 15, detect: 7 }),
+  util({ id: "uplink", name: "Command Uplink", family: "Command", desc: "Allies within 4 cells fire 15% faster.", category: "support", visual: "uplink", caliber: 0.5, mount: "M", weight: 2, cost: 15, fireRateAura: { radius: 4, bonus: 0.15 } }),
+  util({ id: "sensor", name: "Sensor Mast", family: "Detection", desc: "Reveals cloaked enemies within 7 cells for your whole army.", category: "stealth", visual: "sensor", caliber: 0.4, mount: "L", weight: 1, cost: 7, detect: 7 }),
   // ---------------- Defense ----------------
   util({ id: "shield", name: "Shield Projector", family: "Energy shield", desc: "Personal energy shield that absorbs 260 damage and regenerates.", category: "defense", visual: "shield", caliber: 0.5, mount: "M", weight: 2.5, cost: 32, shield: 260 }),
   util({ id: "shieldL", name: "Shield Emitter", family: "Light shield", desc: "Small personal shield: absorbs 100 damage, regenerates.", category: "defense", visual: "shield", caliber: 0.25, mount: "L", weight: 1, cost: 14, shield: 100 }),
@@ -1204,19 +1204,19 @@ var MODULES = [
   util({ id: "smoke", name: "Smoke Launchers", family: "Obscurant", desc: "Below 60% hp, pops a smoke screen: nothing outside 2.5 cells can target units inside for 5s.", category: "defense", visual: "smoke", caliber: 0.3, mount: "L", weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
   util({ id: "reactive", name: "Reactive Armor", family: "ERA", desc: "Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.", category: "defense", visual: "plate", caliber: 0.5, mount: "M", weight: 3, cost: 22, reactive: 6, armor: 1 }),
   util({ id: "mirror", name: "Mirror Coating", family: "Reflective", desc: "Takes 45% less damage from beams, lightning, rails, plasma and flame.", category: "defense", visual: "plate", caliber: 0.4, mount: "L", weight: 1, cost: 14, energyResist: 0.45 }),
-  util({ id: "hardened", name: "Hardened Systems", family: "EMP shielding", desc: "Immune to stun, slow, disarm, burning and knockback.", category: "defense", visual: "coolant", caliber: 0.4, mount: "L", weight: 1.2, cost: 16, hardened: true }),
-  util({ id: "nanite", name: "Nanite Hull", family: "Self-repair", desc: "Regenerates 2.5% max hp per second when out of combat for 2s.", category: "defense", visual: "nanite", caliber: 0.4, mount: "L", weight: 1, cost: 18, regen: 0.025 }),
+  util({ id: "hardened", name: "Hardened Systems", family: "EMP shielding", desc: "Immune to stun, slow, disarm, burning and knockback.", category: "defense", visual: "coolant", caliber: 0.4, mount: "L", weight: 1.2, cost: 8, hardened: true }),
+  util({ id: "nanite", name: "Nanite Hull", family: "Self-repair", desc: "Regenerates 2.5% max hp per second when out of combat for 2s.", category: "defense", visual: "nanite", caliber: 0.4, mount: "L", weight: 1, cost: 8, regen: 0.025 }),
   // ---------------- Stealth & ECM ----------------
   util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Untargetable unless an enemy comes within 2.5 cells or it has just fired.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 2, cost: 40, cloak: "stealth" }),
-  util({ id: "phantom", name: "Phantom Field", family: "Phase cloak", desc: "Untargetable at any range, except for 3s after each shot it fires.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "H", weight: 4, cost: 70, cloak: "phantom" }),
-  util({ id: "jammer", name: "ECM Jammer", family: "Jammer", desc: "Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.", category: "stealth", visual: "jammer", caliber: 0.5, mount: "M", weight: 2, cost: 30, jammer: 3 }),
+  util({ id: "phantom", name: "Phantom Field", family: "Phase cloak", desc: "Untargetable at any range, except for 3s after each shot it fires.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "H", weight: 4, cost: 55, cloak: "phantom" }),
+  util({ id: "jammer", name: "ECM Jammer", family: "Jammer", desc: "Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.", category: "stealth", visual: "jammer", caliber: 0.5, mount: "M", weight: 2, cost: 14, jammer: 3 }),
   // ---------------- Systems ----------------
-  util({ id: "targeting", name: "Targeting Computer", family: "Fire control", desc: "+15% range for all weapons and tighter spread.", category: "systems", visual: "sensor", caliber: 0.3, mount: "L", weight: 0.8, cost: 15, rangeBonus: 0.15, spreadMult: 0.6 }),
-  util({ id: "turbo", name: "Turbo Engine", family: "Engine", desc: "+20% move speed.", category: "systems", visual: "engine", caliber: 0.4, mount: "L", weight: 1.2, cost: 14, speedBonus: 0.2 }),
-  util({ id: "gyro", name: "Gyro Stabilizer", family: "Stabilizer", desc: "All weapons can fire on the move, with tighter spread.", category: "systems", visual: "gyro", caliber: 0.3, mount: "L", weight: 1, cost: 16, gyro: true, spreadMult: 0.85 }),
+  util({ id: "targeting", name: "Targeting Computer", family: "Fire control", desc: "+15% range for all weapons and tighter spread.", category: "systems", visual: "sensor", caliber: 0.3, mount: "L", weight: 0.8, cost: 8, rangeBonus: 0.15, spreadMult: 0.6 }),
+  util({ id: "turbo", name: "Turbo Engine", family: "Engine", desc: "+20% move speed.", category: "systems", visual: "engine", caliber: 0.4, mount: "L", weight: 1.2, cost: 7, speedBonus: 0.2 }),
+  util({ id: "gyro", name: "Gyro Stabilizer", family: "Stabilizer", desc: "All weapons can fire on the move, with tighter spread.", category: "systems", visual: "gyro", caliber: 0.3, mount: "L", weight: 1, cost: 8, gyro: true, spreadMult: 0.85 }),
   util({ id: "autoloader", name: "Autoloader", family: "Ammo feed", desc: "Clip weapons reload 40% faster.", category: "systems", visual: "coolant", caliber: 0.3, mount: "L", weight: 1, cost: 14, reloadBonus: 0.4 }),
-  util({ id: "overclock", name: "Overclocked Core", family: "Overclock", desc: "All weapons fire 20% faster.", category: "systems", visual: "coolant", caliber: 0.5, mount: "M", weight: 2, cost: 30, fireRateBonus: 0.2 }),
-  util({ id: "selfdestruct", name: "Self-Destruct Charge", family: "Demolition", desc: "Detonates on death for 300 damage in a 2-cell radius.", category: "systems", visual: "charge", caliber: 0.4, mount: "L", weight: 1.5, cost: 12, deathBlast: { damage: 300, radius: 2 } }),
+  util({ id: "overclock", name: "Overclocked Core", family: "Overclock", desc: "All weapons fire 20% faster.", category: "systems", visual: "coolant", caliber: 0.5, mount: "M", weight: 2, cost: 14, fireRateBonus: 0.2 }),
+  util({ id: "selfdestruct", name: "Self-Destruct Charge", family: "Demolition", desc: "Detonates on death for 300 damage in a 2-cell radius.", category: "systems", visual: "charge", caliber: 0.4, mount: "L", weight: 1.5, cost: 6, deathBlast: { damage: 300, radius: 2 } }),
   // ---------------- Armor ----------------
   { id: "plateL", name: "Armor Plate", family: "Light plate", desc: "+3 armor, +60 hp.", category: "armor", visual: "plate", caliber: 0.3, mount: "L", kind: "armor", weight: 2, cost: 8, armor: 3, hp: 60 },
   { id: "plateM", name: "Composite Armor", family: "Composite", desc: "+6 armor, +150 hp.", category: "armor", visual: "plate", caliber: 0.6, mount: "M", kind: "armor", weight: 5, cost: 20, armor: 6, hp: 150 },
@@ -7207,9 +7207,8 @@ function cycleTime(w) {
   if (!w.magazine || !w.reload) return cd;
   return (cd * (w.magazine - 1) + w.reload) / w.magazine;
 }
-var devNum = (k, d) => Number(globalThis.process?.env?.[k] ?? d);
-var PARTS_WEIGHT = devNum("BAL_PW", 0.3);
-var POWER_K = devNum("BAL_PK", 0.36);
+var PARTS_WEIGHT = 0.3;
+var POWER_K = 0.36;
 var REF_ARMOR = [0, 5, 12];
 var RANGE_EXP = 1;
 var RANGE_CAP = 2.8;
@@ -7226,12 +7225,86 @@ function hitFactor(w) {
   const target = 0.45 + 0.6 * (w.splash ?? 0);
   return target / (target + spread + 0.25 * flight) / 0.7;
 }
-var CAL = {};
-try {
-  Object.assign(CAL, JSON.parse(globalThis.process?.env?.BAL_CAL ?? "{}"));
-} catch {
-}
-var cal = (id) => CAL[id] ?? 1;
+var MODULE_CAL = {
+  aamissile: 0.86,
+  ac20: 1.19,
+  ac40: 0.83,
+  arclance: 0.51,
+  atgm: 1.31,
+  autocannon: 0.75,
+  autoloader: 2.29,
+  barrage: 0.97,
+  buzzsaw: 0.35,
+  cannon: 1.1,
+  cannon75: 1.15,
+  chainsaw: 1.04,
+  claw: 1.28,
+  cruise: 0.52,
+  disarm: 0.37,
+  dome: 0.67,
+  drill: 1.44,
+  empcannon: 0.29,
+  flak: 1.1,
+  flamer: 0.5,
+  gauss: 0.68,
+  gravity: 0.57,
+  gyro: 0.25,
+  hammer: 1.34,
+  hardened: 0.31,
+  heatray: 0.31,
+  heavyflak: 0.78,
+  hmg: 0.61,
+  howitzer: 0.21,
+  incendiary: 0.55,
+  jammer: 0.25,
+  laser: 0.84,
+  lightrail: 1,
+  mg: 0.76,
+  minigun: 1.08,
+  mirror: 0.39,
+  mlrs: 0.89,
+  mortar: 0.35,
+  nanite: 0.25,
+  napalm: 0.43,
+  overclock: 0.26,
+  phantom: 0.49,
+  plasma: 1.53,
+  plasmablade: 0.83,
+  plasmaorb: 0.73,
+  pointdef: 0.48,
+  quad20: 1.9,
+  railgun: 0.63,
+  ram: 0.35,
+  reactive: 0.63,
+  repair: 0.38,
+  repairM: 0.91,
+  rocketL: 0.94,
+  rockets: 0.72,
+  sam: 0.62,
+  selfdestruct: 0.26,
+  sensor: 0.26,
+  shield: 1.06,
+  shieldH: 0.99,
+  shieldL: 0.39,
+  shockprod: 2.47,
+  shotgun: 1.9,
+  slowbeam: 1.55,
+  smoke: 2.48,
+  sniper: 1.88,
+  sonic: 0.19,
+  stealth: 0.38,
+  stungun: 1.55,
+  swarm: 0.58,
+  targeting: 0.25,
+  tesla: 0.44,
+  turbo: 0.26,
+  twin120: 1.22,
+  twin30: 1.14,
+  twinlaser: 1.21,
+  twinmg: 1.37,
+  uplink: 0.25
+};
+var cal = (id) => MODULE_CAL[id] ?? 1;
 function weaponValue(w, rangeMult = 1) {
   const range = (w.range ?? 0) * rangeMult;
   const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / 5, RANGE_EXP)));
@@ -7334,7 +7407,7 @@ function computeStats(d) {
   if (traits.includes("evasive")) ehp *= 1.15;
   if (flying) ehp *= 1.2;
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes("fireOnMove") ? 0.05 : 0) + (traits.includes("leap") ? 0.05 : 0);
-  const power = Math.sqrt(offense * ehp) * mobilityF * cal(`c:${d.chassis}`) * cal(`m:${d.mobility}`);
+  const power = Math.sqrt(offense * ehp) * mobilityF;
   const cost = Math.max(10, Math.ceil((PARTS_WEIGHT * partsCost + POWER_K * power) / 5) * 5);
   return {
     size,

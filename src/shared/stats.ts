@@ -69,11 +69,8 @@ export function accuracyRating(w: ModuleDef): number {
 // when the model under-rates them); the power term is what keeps army sizes balanced.
 // ---------------------------------------------------------------------------------------------
 
-// DEVCAL-BEGIN
-const devNum = (k: string, d: number) => Number((globalThis as any).process?.env?.[k] ?? d);
-// DEVCAL-END
-export const PARTS_WEIGHT = devNum('BAL_PW', 0.3);
-export const POWER_K = devNum('BAL_PK', 0.36);
+export const PARTS_WEIGHT = 0.3;
+export const POWER_K = 0.36;
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -98,11 +95,28 @@ export function hitFactor(w: ModuleDef): number {
   return target / (target + spread + 0.25 * flight) / 0.7;
 }
 
-const CAL: Record<string, number> = {};
-// DEVCAL-BEGIN
-try { Object.assign(CAL, JSON.parse((globalThis as any).process?.env?.BAL_CAL ?? '{}')); } catch { /* ignore */ }
-// DEVCAL-END
-const cal = (id: string) => CAL[id] ?? 1;
+/** Empirical calibration, fitted with `node scripts/balance.ts` (equal-supply armies of every module vs a reference
+ *  field). The analytic terms above give each module a first-order value; sim effects they cannot see (target
+ *  drift, overkill, focus fire, how often a stun/aura/cloak really matters in a big fight) are folded into one
+ *  multiplier per module id. Weapons: multiplies weaponValue. Utilities: scales the strength of the effect terms
+ *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
+ *  changing the sim or the part numbers. */
+const MODULE_CAL: Record<string, number> = {
+  aamissile: 0.86, ac20: 1.19, ac40: 0.83, arclance: 0.51, atgm: 1.31, autocannon: 0.75,
+  autoloader: 2.29, barrage: 0.97, buzzsaw: 0.35, cannon: 1.1, cannon75: 1.15, chainsaw: 1.04,
+  claw: 1.28, cruise: 0.52, disarm: 0.37, dome: 0.67, drill: 1.44, empcannon: 0.29,
+  flak: 1.1, flamer: 0.5, gauss: 0.68, gravity: 0.57, gyro: 0.25, hammer: 1.34,
+  hardened: 0.31, heatray: 0.31, heavyflak: 0.78, hmg: 0.61, howitzer: 0.21, incendiary: 0.55,
+  jammer: 0.25, laser: 0.84, lightrail: 1.0, mg: 0.76, minigun: 1.08, mirror: 0.39,
+  mlrs: 0.89, mortar: 0.35, nanite: 0.25, napalm: 0.43, overclock: 0.26, phantom: 0.49,
+  plasma: 1.53, plasmablade: 0.83, plasmaorb: 0.73, pointdef: 0.48, quad20: 1.9, railgun: 0.63,
+  ram: 0.35, reactive: 0.63, repair: 0.38, repairM: 0.91, rocketL: 0.94, rockets: 0.72,
+  sam: 0.62, selfdestruct: 0.26, sensor: 0.26, shield: 1.06, shieldH: 0.99, shieldL: 0.39,
+  shockprod: 2.47, shotgun: 1.9, slowbeam: 1.55, smoke: 2.48, sniper: 1.88, sonic: 0.19,
+  stealth: 0.38, stungun: 1.55, swarm: 0.58, targeting: 0.25, tesla: 0.44, turbo: 0.26,
+  twin120: 1.22, twin30: 1.14, twinlaser: 1.21, twinmg: 1.37, uplink: 0.25,
+};
+const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
@@ -208,7 +222,7 @@ export function computeStats(d: Design): UnitStats {
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
-  const power = Math.sqrt(offense * ehp) * mobilityF * cal(`c:${d.chassis}`) * cal(`m:${d.mobility}`);
+  const power = Math.sqrt(offense * ehp) * mobilityF;
   const cost = Math.max(10, Math.ceil((PARTS_WEIGHT * partsCost + POWER_K * power) / 5) * 5);
 
   return {
