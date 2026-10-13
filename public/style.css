@@ -488,3 +488,4 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .info { max-height: calc(100% - 20px); overflow-y: auto; overscroll-behavior: contain; }
 /* keep the range controls above the canvas scale bar (bottom-left) */
 .rangebar { bottom: calc(34px + var(--safe-b)); }
+.mbar .round small { white-space: nowrap; }

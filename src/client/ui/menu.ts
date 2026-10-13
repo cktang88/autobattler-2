@@ -3,6 +3,7 @@
 import { h, type App, type Screen } from '../app.ts';
 import { playMusic, sfx } from '../audio.ts';
 import { FieldView, type BoardUnit } from '../render/field.ts';
+import { MAPS } from '../render/ground.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { TICK_RATE, type BattleInput } from '../../shared/sim/types.ts';
@@ -78,6 +79,8 @@ export function menuScreen(app: App): Screen {
 
   // keep the background skirmish silent
   if (view) view.muted = true;
+  // a different battlefield each visit
+  view?.setMap(MAPS[Math.floor(Math.random() * MAPS.length)]);
   const go = (fn: () => void) => () => {
     sfx('click');
     fn();

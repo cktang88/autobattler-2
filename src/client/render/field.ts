@@ -34,7 +34,7 @@ import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types
 import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
-import { groundCanvas, groundRegion } from './ground.ts';
+import { MAPS, SURROUND, groundCanvas, groundRegion, surroundCanvas, type MapTheme } from './ground.ts';
 import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
@@ -158,6 +158,15 @@ export class FieldView {
   private altHeld = false;
   private keyOff: (() => void) | null = null;
   private detail: { c: HTMLCanvasElement; x0: number; y0: number; x1: number; y1: number; px: number } | null = null;
+  /** terrain theme of the current map */
+  private map: MapTheme = MAPS[0];
+  /** switch the battlefield terrain (maps rotate per round) */
+  setMap(map: MapTheme): void {
+    if (map.id === this.map.id) return;
+    this.map = map;
+    this.detail = null;
+  }
+  get mapTheme(): MapTheme { return this.map; }
   readonly fx = new Fx();
   private dirs: ViewDirs;
   private vignette: CanvasGradient | null = null;
@@ -333,13 +342,14 @@ export class FieldView {
   private drawGround(showZone: boolean, sx: number, sy: number): void {
     const g = this.g;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#121416';
+    g.fillStyle = this.map.void;
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.setWorld(sx, sy);
-    // drop shadow frame around the field
-    g.fillStyle = 'rgba(0,0,0,0.5)';
-    g.fillRect(-0.25, -0.25, FIELD_W + 0.5, FIELD_H + 0.5);
-    g.drawImage(groundCanvas(GROUND_PX), 0, 0, FIELD_W, FIELD_H);
+    // the land around the board, darkened, then a soft shadow lip and the field itself
+    g.drawImage(surroundCanvas(this.map), -SURROUND, -SURROUND, FIELD_W + SURROUND * 2, FIELD_H + SURROUND * 2);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(-0.3, -0.3, FIELD_W + 0.6, FIELD_H + 0.6);
+    g.drawImage(groundCanvas(GROUND_PX, this.map), 0, 0, FIELD_W, FIELD_H);
     this.drawDetail();
     if (this.fx.decalCanvas) g.drawImage(this.fx.decalCanvas, 0, 0, FIELD_W, FIELD_H);
     // deploy zones
@@ -392,7 +402,7 @@ export class FieldView {
       const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
       const y0 = Math.max(0, vy0 - my), y1 = Math.min(FIELD_H, vy1 + my);
       const dpx = Math.min(px, 3800 / (x1 - x0), 3800 / (y1 - y0));
-      d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1), x0, y0, x1, y1, px: dpx };
+      d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1, this.map), x0, y0, x1, y1, px: dpx };
     }
     if (d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6) {
       g.drawImage(d.c, d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);

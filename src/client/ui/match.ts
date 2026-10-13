@@ -17,6 +17,7 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.
 import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
+import { mapForRound } from '../render/ground.ts';
 import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
@@ -405,7 +406,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const foeHp = Math.max(0, through === Infinity ? foe().hp : hpAt(opp, through));
     const max = Math.max(1, START_HP, myHp, foeHp);
     const tag = phase === 'battle' ? 'Battle' : phase === 'result' ? 'Result' : phase === 'over' ? 'Final' : phase === 'waiting' ? 'Waiting' : 'Deploy';
-    roundEl.replaceChildren(document.createTextNode(`Round ${shownRound}`), h('small', null, tag));
+    // maps rotate every round; the battle replay is fought on the map of the round it belongs to
+    const map = mapForRound(shownRound);
+    view.setMap?.(map);
+    roundEl.replaceChildren(document.createTextNode(`Round ${shownRound}`), h('small', { title: map.blurb }, `${tag} · ${map.name}`));
     const showReady = driver.mode === 'pvp' && (phase === 'deploy' || phase === 'waiting');
     hpMe.replaceChildren(
       h('div.who', null, h('span', null, me().name || 'You'), h('span', null, String(myHp))),
