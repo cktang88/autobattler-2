@@ -2,7 +2,7 @@
 
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
-import { accuracyRating, firingStyle, weaponDps } from '../../shared/stats.ts';
+import { accuracyRating, firingStyle, turretTurnRate, weaponDps } from '../../shared/stats.ts';
 import type { ModuleDef, MoveKind } from '../../shared/types.ts';
 import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
 import { CATEGORY_COLOR } from '../render/turrets.ts';
@@ -162,6 +162,13 @@ export function accuracyBar(mod: ModuleDef): HTMLElement {
   );
 }
 
+export const SLOW_TURRET_DEG = 60;
+/** Turret traverse in deg/s, or null for modules without a turret (armor, non-healing utility). */
+export function traverseDeg(mod: ModuleDef): number | null {
+  if (mod.kind === 'armor' || (mod.kind === 'utility' && !mod.heal)) return null;
+  return Math.round(turretTurnRate(mod) * 180 / Math.PI);
+}
+
 /** Compact key stats line for a module. */
 export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
   const out = h('span.g-modstats');
@@ -180,6 +187,11 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
     if (mod.shield) stat('shield', String(mod.shield));
     if (mod.hp) stat('hp', `+${mod.hp}`);
     if (mod.armor) stat('armor', `+${mod.armor}`);
+  }
+  const trav = traverseDeg(mod);
+  if (trav !== null) {
+    stat('traverse', `${trav}°/s`);
+    if (trav < SLOW_TURRET_DEG) out.append(h('span.g-tag.slowturret', { title: `Turret traverse under ${SLOW_TURRET_DEG}°/s: slow to track moving targets` }, 'slow turret'));
   }
   if (withEffects && mod.kind === 'weapon') {
     out.append(h('span.g-fire', { title: 'Firing style' }, firingText(mod)), accuracyBar(mod));
@@ -203,6 +215,8 @@ export function moduleTooltip(mod: ModuleDef): string {
     lines.push(extra.join(' · '));
     lines.push(`${firingText(mod)} · Accuracy ${accuracyLabel(mod) ?? accuracyRating(mod) + '/100'}`);
   }
+  const trav = traverseDeg(mod);
+  if (trav !== null) lines.push(`Traverse ${trav}°/s${trav < SLOW_TURRET_DEG ? ' (slow turret)' : ''}`);
   const fx = moduleEffects(mod);
   if (fx.length) lines.push(fx.join(' · '));
   lines.push(`Weight ${mod.weight} · Base cost ${mod.cost}`);

@@ -466,3 +466,8 @@
 .garage .g-opt-lock { color: var(--g-warn, #f2a93b); font-size: 0.75rem; font-weight: 600; }
 .garage .g-ai { padding: 4px 2px; max-width: 520px; }
 .garage .g-ai .sp-head { display: none; }
+
+.garage .g-tag.slowturret { color: var(--g-warn, #f2a93b); border-color: currentColor; font-size: 0.65rem; margin-left: 4px; }
+.garage .g-agil { display: inline-flex; align-items: center; gap: 5px; }
+.garage .g-agil .g-acc-track { display: inline-block; width: 36px; height: 5px; border-radius: 3px; background: var(--g-panel3); overflow: hidden; }
+.garage .g-agil .g-acc-fill { display: block; height: 100%; background: var(--g-accent); }

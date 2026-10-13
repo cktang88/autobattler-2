@@ -397,6 +397,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     listEl.replaceChildren(...items);
   }
 
+  const deg = (rad: number) => Math.round(rad * 180 / Math.PI);
   function statTile(label: string, value: string, delta: number | null, opts: { unit?: string; invert?: boolean; digits?: number; cls?: string } = {}) {
     let d: HTMLElement | null = null;
     if (delta !== null && Math.abs(delta) > 1e-6) {
@@ -437,6 +438,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       statTile('Armor', String(s.armor), dl('armor')),
       statTile('Shield', String(s.shield), dl('shield'), { cls: s.shield ? '' : 'nil' }),
       statTile('Speed', s.isStatic ? '—' : String(Math.round(s.speed * METERS_PER_CELL)), mdl('speed'), { unit: s.isStatic ? '' : 'm/s' }),
+      statTile('Turn', s.isStatic ? '—' : String(deg(s.turn)), s.isStatic || !ss ? null : deg(s.turn) - deg(ss.turn), { unit: s.isStatic ? '' : '°/s' }),
       statTile('Range', s.range ? fmtMeters(s.range) : '—', mdl('range'), { }),
       statTile('DPS', String(s.dps), dl('dps'), { cls: 'hl' }),
       s.heal ? statTile('Repair', String(s.heal), dl('heal'), { unit: 'hp/s' }) : statTile('Size', sizeLabel(s.size), null, { unit: footprintLabel(s.size) }),
@@ -522,6 +524,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         h('span', null, h('b', null, String(c.hp)), ' hp'),
         h('span', null, h('b', null, String(c.armor)), ' arm'),
         h('span', null, h('b', null, String(c.weight)), ' wt'),
+        h('span.g-agil', { title: `Agility ×${c.agility.toFixed(2)}: multiplies body turn rate` },
+          'Agility ', h('b', null, `×${c.agility.toFixed(2)}`),
+          h('span.g-acc-track', null, h('span.g-acc-fill', { style: { width: `${Math.min(100, (c.agility / 1.5) * 100).toFixed(0)}%` } }))),
       ),
       h('span.g-card-bot', null,
         h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}` }, m))),
@@ -553,6 +558,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         ? h('span.g-card-err', null, err)
         : h('span.g-card-stats', null,
           h('span', null, h('b', null, m.kind === 'static' ? '0' : String(Math.round(res!.speed * METERS_PER_CELL))), ' m/s'),
+          m.kind === 'static' ? null : h('span', { title: 'Base turn rate before chassis agility, size and load' }, h('b', null, String(deg(m.turn))), '°/s turn'),
           h('span', null, h('b', null, String(m.capacity[c.size - 1])), ' cap'),
           h('span.g-loadpct', { class: loadCls }, h('b', null, `${Math.round(res!.load * 100)}%`), ' load'),
           h('span.g-card-cost', null, icon('cost'), String(m.cost * c.size)),
