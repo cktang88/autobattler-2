@@ -190,6 +190,8 @@ export interface Design {
   mobility: string;
   /** one entry per chassis mount slot; null = empty */
   mounts: (string | null)[];
+  /** default battle AI for blocks of this design (overridable per placement) */
+  behavior?: UnitBehavior;
 }
 
 /** Derived stats of a design (see stats.ts). */
@@ -253,6 +255,17 @@ export interface Placement {
   hold?: boolean;
 }
 
+/** Battle AI settings. A Design carries defaults (set in the garage); each Placement copies them when placed and
+ *  may override them on the field. The sim only reads the Placement's values. Hidden from the opponent
+ *  (redactFor strips them from the opponent's board AND deck) until a round resolves. */
+export interface UnitBehavior {
+  target?: TargetPriority;
+  /** squads: keep deployed spacing while moving */
+  hold?: boolean;
+  /** stay at max weapon range and back away from enemies that close in */
+  kite?: boolean;
+}
+
 /** Who a unit prefers to shoot, among valid targets it could engage.
  *  closest/farthest: by distance · threat: whoever last damaged this unit or its squad (else closest) ·
  *  lowestHp/highestHp: by current hp · highestDps/lowestDps: by the target's damage output. */
@@ -264,6 +277,7 @@ export interface UnitConfig {
   uid: number;
   target?: TargetPriority;
   hold?: boolean;
+  kite?: boolean;
 }
 
 export interface DeployAction {
