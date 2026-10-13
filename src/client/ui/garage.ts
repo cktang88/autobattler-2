@@ -13,10 +13,10 @@ import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
-import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
+import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
   designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
@@ -99,11 +99,22 @@ function reseat(mods: (string | null)[], c: ChassisDef): (string | null)[] {
   return out;
 }
 
-function blankDesign(taken: string[]): Design {
-  const c = CHASSIS_BY_ID.get('raider') ?? CHASSIS[0];
-  const weapon = MODULES.find((m) => m.kind === 'weapon' && fitsMount(c.mounts[0], m.mount))!;
+/** Class badge shown on roster rows. */
+const DOMAIN_BADGE: Record<Domain, string> = { ground: 'GND', jet: 'JET', heli: 'HELI' };
+/** Representative hull drawn on each class card, and the default hull of a new design in that class. */
+const DOMAIN_ICON: Record<Domain, string> = { ground: 'raider', jet: 'strikejet', heli: 'gunship' };
+const DOMAIN_SHORT: Record<Domain, string> = { ground: 'Ground', jet: 'Jet aircraft', heli: 'Helicopter · VTOL' };
+const domainChassis = (dom: Domain) => CHASSIS.filter((c) => chassisDomain(c) === dom);
+const domainMobility = (dom: Domain) => MOBILITY.filter((m) => mobilityDomain(m) === dom);
+const designDomain = (d: Design): Domain => { const c = CHASSIS_BY_ID.get(d.chassis); return c ? chassisDomain(c) : 'ground'; };
+
+function blankDesign(taken: string[], dom: Domain = 'ground'): Design {
+  const c = CHASSIS_BY_ID.get(DOMAIN_ICON[dom]) ?? domainChassis(dom)[0] ?? CHASSIS[0];
+  const mobility = firstLegalMobility(c.id);
+  const flies = MOBILITY_BY_ID.get(mobility)?.kind === 'air';
+  const weapon = MODULES.find((m) => m.kind === 'weapon' && fitsMount(c.mounts[0], m.mount) && !(m.requires === 'ground' && flies) && !(m.requires === 'air' && !flies))!;
   return {
-    id: newDesignId(), name: randomDesignName(c.id, Math.random, taken), chassis: c.id, mobility: firstLegalMobility(c.id),
+    id: newDesignId(), name: randomDesignName(c.id, Math.random, taken), chassis: c.id, mobility,
     mounts: c.mounts.map((_, i) => (i === 0 ? weapon.id : null)),
   };
 }
@@ -181,6 +192,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     type: 'button', title: 'Show weapon ranges (V)', 'aria-pressed': 'false',
     onclick: () => toggleRanges(),
   }, svgIcon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>'), 'Ranges');
+  const classEl = h('div.g-classes', { role: 'radiogroup', 'aria-label': 'Unit class' });
   const stage = h('div.g-stage', null,
     gridCv, preview, socketsEl,
     h('div.g-stage-hud', null, stageTags, h('span.spacer'), rangeBtn),
@@ -209,6 +221,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       ),
       h('section.g-bench', { 'aria-label': 'Blueprint' },
         h('div.g-namebar', null, nameInput, rerollBtn, revertBtn, saveBtn),
+        classEl,
         stage,
         loadoutEl,
         errorsEl,
@@ -237,10 +250,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     return r === 'discard';
   }
 
-  function load(d: Design | null) {
+  function load(d: Design | null, dom: Domain = 'ground') {
     selectedId = d?.id ?? null;
     saved = d ? clone(d) : null;
-    draft = d ? clone(d) : blankDesign(designs.map((x) => x.name));
+    draft = d ? clone(d) : blankDesign(designs.map((x) => x.name), dom);
     autoName = !d;
     activeSlot = null;
     nameInput.value = draft.name;
@@ -258,7 +271,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   async function newDesign() {
     if (!(await guard())) return;
     sfx('click');
-    load(null);
+    load(null, designDomain(draft));
     nameInput.focus();
     nameInput.select();
   }
@@ -272,7 +285,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const names = new Set(designs.map((d) => d.name));
     let name = `${base} Mk${n}`.slice(0, NAME_MAX);
     while (names.has(name) && n < 99) name = `${base.slice(0, NAME_MAX - 5)} Mk${++n}`;
-    load(null);
+    load(null, designDomain(src));
     draft = { ...src, id: newDesignId(), name, mounts: [...src.mounts], ...(src.behavior ? { behavior: { ...src.behavior } } : {}) };
     nameInput.value = draft.name;
     update();
@@ -371,6 +384,26 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const lost = before - draft.mounts.filter(Boolean).length;
     if (autoName) { draft.name = randomDesignName(id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
     activeSlot = null;
+    if (lost > 0) app.toast(`${lost} module${lost > 1 ? 's' : ''} did not fit the ${c.name} and went back to stores`);
+    sfx('click');
+    update();
+  }
+
+  /** Switch unit class: first hull + first legal drive of that class; modules that still fit stay mounted. */
+  function pickDomain(dom: Domain) {
+    if (dom === designDomain(draft)) return;
+    const c = domainChassis(dom).sort((a, b) => a.size - b.size || a.weight - b.weight)[0];
+    if (!c) return;
+    const mobility = firstLegalMobility(c.id);
+    const before = draft.mounts.filter(Boolean).length;
+    const usable = draft.mounts.map((id) => (id && !reqReason(MODULE_BY_ID.get(id) ?? {}, mobility) ? id : null));
+    draft = { ...draft, chassis: c.id, mobility, mounts: reseat(usable, c) };
+    const lost = before - draft.mounts.filter(Boolean).length;
+    if (autoName) { draft.name = randomDesignName(c.id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
+    pinned.hull = { kind: 'chassis', id: c.id };
+    pinned.drive = { kind: 'mobility', id: mobility };
+    activeSlot = null;
+    sizeSel = 0; roleSel = '*'; driveSel = '*';
     if (lost > 0) app.toast(`${lost} module${lost > 1 ? 's' : ''} did not fit the ${c.name} and went back to stores`);
     sfx('click');
     update();
@@ -622,6 +655,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (activeSlot !== null && activeSlot >= chassis().mounts.length) activeSlot = null;
     renderHeader();
     renderList();
+    renderClasses();
     renderBench();
     renderSockets();
     renderBay();
@@ -631,6 +665,16 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function renderHeader() {
     deckChip.replaceChildren(icon('deck'), 'Deck ', h('b', null, String(deck.length)), `/${DECK_SIZE}`);
     deckChip.classList.toggle('full', deck.length >= DECK_SIZE);
+  }
+
+  function renderClasses() {
+    const cur = designDomain(draft);
+    classEl.replaceChildren(h('span.g-classes-k', null, h('b', null, '1'), 'Unit class'), ...DOMAINS.map((dm) => h('button.g-class', {
+      type: 'button', role: 'radio', 'aria-checked': String(dm.id === cur), class: dm.id === cur ? `on d-${dm.id}` : `d-${dm.id}`,
+      'data-fk': `class-${dm.id}`, title: dm.desc, onclick: () => pickDomain(dm.id),
+    },
+    h('span.g-class-well', null, partIcon('chassis', DOMAIN_ICON[dm.id], 44, true)),
+    h('span.g-class-txt', null, h('b', null, DOMAIN_SHORT[dm.id]), h('small', null, dm.desc)))));
   }
 
   function listItem(d: Design, opts: { selected: boolean; unsaved: boolean; isDraft: boolean }) {
@@ -654,6 +698,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('span.g-item-txt', null,
         h('span.g-item-name', null, h('span.g-item-nm', { title: d.name || 'Untitled' }, d.name || 'Untitled'), opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
         h('span.g-item-meta', null,
+          h('span.g-tag.dom', { class: `d-${designDomain(d)}`, title: DOMAINS.find((x) => x.id === designDomain(d))?.name ?? '' }, DOMAIN_BADGE[designDomain(d)]),
           h('span.g-size', null, s ? designSizeLabel(s) : '?'),
           h('span.g-item-cost', { title: s && s.squad > 1 ? `Block of ${s.squad} (${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
           s?.flying ? h('span.g-tag.air', null, 'AIR') : null,
@@ -906,9 +951,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   function renderHullTab(): HTMLElement[] {
-    const sizes = [...new Set(CHASSIS.map((c) => c.size))].sort((a, b) => a - b);
+    const pool = domainChassis(designDomain(draft));
+    const sizes = [...new Set(pool.map((c) => c.size))].sort((a, b) => a - b);
     if (sizeSel !== 0 && !sizes.includes(sizeSel as ChassisDef['size'])) sizeSel = 0;
-    const shown = CHASSIS.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
+    const shown = pool.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
       .sort((a, b) => a.size - b.size || a.weight - b.weight);
     const tiles = shown.map((c) => partTile({
       kind: 'chassis', id: c.id, name: c.name, sub: `${footprintLabel(c.size)} · ${c.mounts.length} socket${c.mounts.length > 1 ? 's' : ''}`,
@@ -930,8 +976,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   function renderDriveTab(): HTMLElement[] {
     const c = chassis();
-    const kinds = (['ground', 'air', 'static'] as const).filter((k) => MOBILITY.some((m) => m.kind === k));
-    const pool = MOBILITY.filter((m) => m.id === draft.mobility || ((driveSel === '*' || m.kind === driveSel) && roleOk(m.roles)))
+    const dpool = domainMobility(designDomain(draft));
+    const kinds = (['ground', 'air', 'static'] as const).filter((k) => dpool.some((m) => m.kind === k));
+    if (driveSel !== '*' && !kinds.includes(driveSel as 'ground')) driveSel = '*';
+    const pool = dpool.filter((m) => m.id === draft.mobility || ((driveSel === '*' || m.kind === driveSel) && roleOk(m.roles)))
       .sort((a, b) => a.weight - b.weight);
     const tile = (m: MobilityDef) => {
       const err = pairingError(draft.chassis, m.id);
