@@ -86,6 +86,10 @@ export interface ModuleDef {
   cooldown?: number;
   /** projectiles per volley, fired ~0.1s apart */
   burst?: number;
+  /** clip size: after this many shots (volleys) the weapon pauses `reload` seconds. Omit = continuous fire */
+  magazine?: number;
+  /** seconds to reload a full magazine */
+  reload?: number;
   /** projectiles per shot fired simultaneously in a spread (shotguns, barrage) */
   pellets?: number;
   /** cells */
@@ -100,7 +104,9 @@ export interface ModuleDef {
   splash?: number;
   /** armor pierce 0..1 (fraction of target armor ignored) */
   ap?: number;
-  /** random aim error in cells at max range */
+  /** random aim error in cells at max range (0 = pinpoint). Hitscan beams/lightning/rail never miss;
+   *  homing missiles track their target; every other projectile flies to where the target WAS when fired
+   *  (no lead), so slow unguided shots miss fast movers. */
   spread?: number;
   /** lightning: additional jumps */
   chain?: number;

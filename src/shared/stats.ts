@@ -28,7 +28,30 @@ export function designModules(d: Design): ModuleDef[] {
 /** Sustained dps of one weapon vs 0 armor (no splash/chain multipliers). */
 export function weaponDps(w: ModuleDef): number {
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
-  return (w.damage * (w.burst ?? 1) * (w.pellets ?? 1)) / w.cooldown;
+  return (w.damage * (w.burst ?? 1) * (w.pellets ?? 1)) / cycleTime(w);
+}
+
+/** Average seconds per shot including magazine reloads. */
+export function cycleTime(w: ModuleDef): number {
+  const cd = w.cooldown ?? 1;
+  if (!w.magazine || !w.reload) return cd;
+  return (cd * (w.magazine - 1) + w.reload) / w.magazine;
+}
+
+/** Firing pattern label for UI. */
+export function firingStyle(w: ModuleDef): 'Sustained' | 'Clip' | 'Salvo' | 'Single shot' {
+  if ((w.burst ?? 1) > 1 || (w.pellets ?? 1) > 1) return 'Salvo';
+  if (w.magazine && w.reload) return 'Clip';
+  return (w.cooldown ?? 1) <= 0.6 ? 'Sustained' : 'Single shot';
+}
+
+/** Accuracy rating 0..100 for UI: hitscan/homing are perfect, otherwise from spread & projectile speed. */
+export function accuracyRating(w: ModuleDef): number {
+  const p = w.projectile;
+  if (p === 'beam' || p === 'lightning' || p === 'rail' || p === 'missile' && !w.spread) return 100;
+  const spreadPenalty = (w.spread ?? 0) / Math.max(1, (w.range ?? 5) / 5);
+  const speedPenalty = p === 'arc' ? 0.25 : w.projectileSpeed ? Math.max(0, 0.3 - w.projectileSpeed / 80) : 0;
+  return Math.round(Math.max(5, 100 * (1 - spreadPenalty * 0.8 - speedPenalty)));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -66,14 +89,17 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
   let v = weaponDps(w) * armorEfficiency(w.damage, w.ap ?? 0);
-  v *= 1 + 0.9 * (w.splash ?? 0);
-  v *= 1 + 0.6 * (w.chain ?? 0);
+  v *= 1 + 0.6 * (w.splash ?? 0);
+  v *= 1 + 0.45 * (w.chain ?? 0);
   if (w.pierce) v *= 1.5;
   if ((w.pellets ?? 1) > 1) v *= 0.7; // pellets rarely all land
   if (w.falloff != null) v *= 0.5 + 0.5 * w.falloff;
-  if (w.burn) v += ((w.burn.dps * w.burn.duration * shots) / w.cooldown) * 0.5 * (1 + (w.splash ?? 0));
-  if (w.stun) v += ((w.stun * shots) / w.cooldown) * 70 * (1 + 0.8 * (w.splash ?? 0));
-  if (w.slow) v += (w.slow / w.cooldown) * 18;
+  const cyc = cycleTime(w);
+  // burn refreshes rather than stacks: worth ~its dps on each target it keeps alight
+  if (w.burn) v += w.burn.dps * Math.min(1, w.burn.duration / cyc) * (1 + 0.6 * (w.splash ?? 0));
+  if (w.stun) v += ((w.stun * shots) / cyc) * 70 * (1 + 0.8 * (w.splash ?? 0));
+  if (w.slow) v += (w.slow / cyc) * 18;
+  v *= 0.75 + 0.25 * (accuracyRating(w) / 100);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;
   const coverage = w.targetsGround && w.targetsAir ? 1 : w.targetsGround ? 0.85 : 0.55 * (w.airBonus ?? 1);
