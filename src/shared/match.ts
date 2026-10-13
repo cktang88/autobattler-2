@@ -25,7 +25,7 @@ import type { Size, DeployAction, Design, MatchMode, MatchState, Placement, Play
 export const DECK_SIZE = 9;
 export const START_HP = 100;
 /** Supply granted in round 1 and added each further round. Unspent supply carries over. */
-export const START_SUPPLY = 1000;
+export const START_SUPPLY = 3000;
 /** After this round resolves the match ends regardless; higher hp wins. */
 export const MAX_ROUNDS = 15;
 /** Hard cap on blocks (placements) per side. */
@@ -36,7 +36,7 @@ export const MAX_SIM_UNITS = 240;
 export const MAX_PLAYER_NAME = 24;
 
 const ROUND_SUPPLY_BASE = START_SUPPLY;
-const ROUND_SUPPLY_GROWTH = 200;
+const ROUND_SUPPLY_GROWTH = 600;
 
 /** Supply granted at the start of `round` (1-based). Unspent supply carries over. */
 export function supplyForRound(round: number): number {
@@ -74,7 +74,7 @@ export function baseDamage(round: number): number {
 }
 
 /** Survivor divisor: block value (supply) per point of damage. */
-const SURVIVOR_DIV = 150;
+const SURVIVOR_DIV = 450;
 
 /** Damage contributed by one surviving enemy block; `fraction` = share of its squad still alive (0..1]. */
 export function survivorDamage(design: Design, level: number, fraction = 1): number {

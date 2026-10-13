@@ -754,7 +754,7 @@ function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: 
   return dmg[oppSide] - dmg[side] + (sum.winner === side ? 5 : sum.winner === oppSide ? -5 : 0);
 }
 
-const HARD_CANDIDATES = 8;
+const HARD_CANDIDATES = 5;
 
 /** Decide the AI's deployment for the current round. Must pass validateDeploy. */
 export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): DeployAction {
@@ -800,7 +800,12 @@ export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): D
   ];
   let best: DeployAction | null = null;
   let bestScore = -Infinity;
-  const n = Math.min(variants.length, HARD_CANDIDATES);
+  // battles cost ~ units^1.3: fewer candidates once both armies are big (keeps the decision under ~1.2 s)
+  const countUnits = (pl: Placement[], deck: Design[]) => pl.reduce((k, u) => { const d = deck.find((x) => x.id === u.designId); return k + (d ? squadSize(profile(d).size as Size) : 1); }, 0);
+  const bigArmies = countUnits(view.players[side].board, view.players[side].deck) + countUnits(opp.board, opp.deck);
+  const secondEval = bigArmies <= 100;
+  const n = Math.min(variants.length, bigArmies > 300 ? 2 : bigArmies > 160 ? 3 : HARD_CANDIDATES);
+  // a second (visible-board-only) evaluation per candidate doubles the cost: only while the armies are small
   // Always include the first three (core) variants; pick the rest by seed.
   const order = [0, 1, 2, ...shuffled(rng, [3, 4, 5, 6, 7, 8])].slice(0, n);
   for (let i = 0; i < order.length; i++) {
@@ -813,7 +818,7 @@ export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): D
     let score = 0;
     try {
       score = evaluate(view, side, myBoard, predicted, mixSeed(baseSeed, 5000 + i));
-      if (predicted !== opp.board && opp.board.length) score = score * 0.7 + 0.3 * evaluate(view, side, myBoard, opp.board, mixSeed(baseSeed, 6000 + i));
+      if (predicted !== opp.board && opp.board.length && secondEval) score = score * 0.7 + 0.3 * evaluate(view, side, myBoard, opp.board, mixSeed(baseSeed, 6000 + i));
     } catch { score = 0; }
     if (score > bestScore) { bestScore = score; best = cand; }
   }

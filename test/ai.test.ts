@@ -136,3 +136,42 @@ test('AI never hands the opponent an exploitable view: redacted deck has no beha
   const v = redactFor(m, 0);
   for (const d of v.players[1].deck) assert.equal(d.behavior, undefined);
 });
+
+test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 16-unit squad deployments', () => {
+  const lens: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    const m = playMatch(600 + i, 'normal', 'normal');
+    lens.push(m.history.length);
+    for (const r of m.history) for (const side of [0, 1] as const) checkBoard(m, side, r.boards[side]);
+  }
+  const avg = lens.reduce((a, b) => a + b, 0) / lens.length;
+  assert.ok(avg >= 5 && avg <= 8.5, `avg rounds ${avg} (${lens})`);
+  assert.ok(lens.every((n) => n >= 4 && n <= 12), `rounds ${lens}`);
+});
+
+test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone width', () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const m = newMatch('b', 'ai', seed, newPlayer('A', aiDeck(seed, 'normal'), true), newPlayer('B', aiDeck(seed + 50, 'normal'), true));
+    const a = aiDeploy(m, 0, 'normal');
+    assert.ok(a.place.length >= 2 && a.place.length <= 14, `blocks ${a.place.length}`);
+    for (const p of a.place) {
+      const size = computeStats(m.players[0].deck.find((d) => d.id === p.designId)!).size;
+      const { w, h } = blockDims(size, p.spacing ?? 0);
+      assert.ok(p.x + w <= 48 && p.y + h <= 12, 'footprint inside zone');
+    }
+  }
+});
+
+test('hard AI mid-match decision with big armies stays under 1.5s', () => {
+  const m = newMatch('h', 'ai', 77, newPlayer('A', aiDeck(77, 'hard'), true), newPlayer('B', aiDeck(78, 'hard'), true));
+  for (let r = 0; r < 4 && m.status === 'deploy'; r++) {
+    for (const side of [0, 1] as const) applyDeploy(m, side, aiDeploy(m, side, 'normal'));
+    resolveRound(m);
+  }
+  if (m.status !== 'deploy') return;
+  const t = performance.now();
+  const act = aiDeploy(m, 0, 'hard');
+  const ms = performance.now() - t;
+  assert.equal(validateDeploy(m, 0, act), null);
+  assert.ok(ms < 1500, `took ${ms}ms`);
+});

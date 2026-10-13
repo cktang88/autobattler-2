@@ -6,7 +6,7 @@ import {
   START_HP, DECK_SIZE, MAX_UNITS, MAX_SIM_UNITS, newPlayer, newMatch, joinMatch, validateDeck, validateDeploy, applyDeploy,
   resolveRound, redactFor, battleInputFor, supplyForRound, upgradeCost, submitDeploy, isPlaceholder, roundDamage,
 } from '../src/shared/match.ts';
-import { blockCells } from '../src/shared/grid.ts';
+import { blockDims, blockInZone, blocksOverlap, rectInZone, rectsOverlap, localRectToWorld, placementUnitCenters, squadSize, FIELD_W, FIELD_H } from '../src/shared/grid.ts';
 import type { DeployAction, MatchState, Placement } from '../src/shared/types.ts';
 
 test('starter designs are valid, unique and cover sizes/flyers/static', () => {
@@ -61,10 +61,15 @@ test('validateDeck', () => {
 
 test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
   const m = fresh();
-  const ok: DeployAction = { round: 1, place: [pl(1, 0, 0), pl(2, 2, 0)], upgrade: [] };
+  const ok: DeployAction = { round: 1, place: [pl(1, 0, 0), pl(2, 8, 0)], upgrade: [] };
   assert.equal(validateDeploy(m, 0, ok), null);
-  // a 2x2 squad footprint: adjacent column 1 overlaps
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 1, 0)], upgrade: [] })!, /overlap/);
+  // an 8x2 squad footprint: one column short of 8 overlaps, 8 apart is fine, and the second row is free
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 7, 0)], upgrade: [] })!, /overlap/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 1)], upgrade: [] })!, /overlap/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 2)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 41, 0)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [pl(1, 40, 10)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 11)], upgrade: [] })!, /zone/);
   // overlap with each other
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 0)], upgrade: [] })!, /overlap/);
   // big unit overlapping a small one
@@ -74,11 +79,11 @@ test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, -1, 0)], upgrade: [] })!, /zone/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0.5, 0)], upgrade: [] })!, /zone/);
   // over budget
-  const many = Array.from({ length: 20 }, (_, i) => pl(i + 1, (i % 20) * 2, 0));
+  const many = Array.from({ length: 12 }, (_, i) => pl(i + 1, (i % 6) * 8, Math.floor(i / 6) * 2));
   assert.match(validateDeploy(m, 0, { round: 1, place: many, upgrade: [] })!, /supply/);
   // bad uids
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(0, 0, 0)], upgrade: [] })!, /unit id/);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(3, 0, 0), pl(3, 4, 0)], upgrade: [] })!, /Duplicate/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(3, 0, 0), pl(3, 8, 0)], upgrade: [] })!, /Duplicate/);
   // wrong round, unknown design, level
   assert.ok(validateDeploy(m, 0, { round: 2, place: [], upgrade: [] }));
   assert.ok(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0, 'zzz')], upgrade: [] }));
@@ -90,7 +95,7 @@ test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
 
 test('apply, upgrade limits, overlap with existing board, unit cap', () => {
   const m = fresh();
-  const err = submitDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 4, 0)], upgrade: [] });
+  const err = submitDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 8, 0)], upgrade: [] });
   assert.equal(err, null);
   assert.equal(m.players[0].nextUid, 3);
   assert.equal(m.players[0].supply, supplyForRound(1) - 2 * computeStats(cheap).cost);
@@ -117,35 +122,60 @@ test('apply, upgrade limits, overlap with existing board, unit cap', () => {
   const lots: Placement[] = [];
   for (let i = 0; i < MAX_UNITS + 1; i++) lots.push(pl(i + 1, i % 24, Math.floor(i / 24)));
   assert.match(validateDeploy(m2, 0, { round: 1, place: lots, upgrade: [] })!, /Too many blocks/);
-  // sim-unit cap: 31 squads = 124 units > 120 though only 31 blocks
+  // sim-unit cap: 16 squads = 256 units > 240 though only 16 blocks
   const squads: Placement[] = [];
-  for (let i = 0; i < 31; i++) squads.push(pl(i + 1, (i % 24) * 2, Math.floor(i / 24) * 2));
+  for (let i = 0; i < 16; i++) squads.push(pl(i + 1, (i % 6) * 8, Math.floor(i / 6) * 2));
   assert.match(validateDeploy(m2, 0, { round: 1, place: squads, upgrade: [] })!, new RegExp(`max ${MAX_SIM_UNITS}`));
-  assert.equal(validateDeploy(m2, 0, { round: 1, place: squads.slice(0, 30), upgrade: [] }), null);
+  assert.equal(validateDeploy(m2, 0, { round: 1, place: squads.slice(0, 15), upgrade: [] }), null);
 });
 
 test('spacing: footprint grows, validated, stored and redacted', () => {
   const m = fresh();
   const sp = (uid: number, x: number, y: number, spacing: number | undefined, id = cheap.id): Placement => ({ ...pl(uid, x, y, id), spacing });
-  assert.equal(blockCells(1, 3), 5);
-  // spacing 3 -> 5x5 footprint: x=0..4 taken
-  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 3), sp(2, 4, 0, 0)], upgrade: [] })!, /overlap/);
-  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 3), sp(2, 5, 0, 0)], upgrade: [] }), null);
+  assert.deepEqual(blockDims(1, 0), { w: 8, h: 2 });
+  assert.deepEqual(blockDims(1, 2), { w: 22, h: 4 });
+  // spacing 2 -> 22x4 footprint: x=0..21 taken
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2), sp(2, 21, 0, 0)], upgrade: [] })!, /overlap/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2), sp(2, 22, 0, 0)], upgrade: [] }), null);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2), sp(2, 0, 4, 0)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2), sp(2, 0, 3, 0)], upgrade: [] })!, /overlap/);
   // zone check uses the spaced footprint
-  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 44, 0, 3)], upgrade: [] })!, /zone/);
-  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 43, 0, 3)], upgrade: [] }), null);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 9, 3)], upgrade: [] })!, /zone/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 27, 0, 2)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 26, 0, 2)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 9, 2)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 8, 2)], upgrade: [] }), null);
   // bad spacing values
-  for (const bad of [-1, 5, 1.5, NaN, '2' as unknown as number]) assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, bad)], upgrade: [] })!, /spacing/i);
+  for (const bad of [-1, 3, 5, 1.5, NaN, '2' as unknown as number]) assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, bad)], upgrade: [] })!, /spacing/i);
   // non-squads can't be spaced
   assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2, big.id)], upgrade: [] })!, /spaced/);
   assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 0, big.id)], upgrade: [] }), null);
   // stored on the board, and kept for later overlap checks
-  submitDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 3)], upgrade: [] });
-  assert.equal(m.players[0].board[0].spacing, 3);
+  submitDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2)], upgrade: [] });
+  assert.equal(m.players[0].board[0].spacing, 2);
   submitDeploy(m, 1, { round: 1, place: [], upgrade: [] });
-  assert.match(validateDeploy(m, 0, { round: 2, place: [{ ...sp(2, 4, 4, 0), round: 2 }], upgrade: [] })!, /overlap/);
-  assert.equal(redactFor(m, 1).players[0].board[0].spacing, 3);
+  assert.match(validateDeploy(m, 0, { round: 2, place: [{ ...sp(2, 4, 3, 0), round: 2 }], upgrade: [] })!, /overlap/);
+  assert.equal(redactFor(m, 1).players[0].board[0].spacing, 2);
+});
+
+test('rectangular footprints: overlap, zone and world mapping', () => {
+  assert.equal(squadSize(1), 16);
+  assert.equal(squadSize(2), 1);
+  assert.ok(rectsOverlap(0, 0, 8, 2, 7, 1, 8, 2));
+  assert.ok(!rectsOverlap(0, 0, 8, 2, 8, 0, 8, 2));
+  assert.ok(!rectsOverlap(0, 0, 8, 2, 0, 2, 8, 2));
+  assert.ok(rectInZone(40, 10, 8, 2) && !rectInZone(41, 10, 8, 2) && !rectInZone(40, 11, 8, 2) && !rectInZone(0.5, 0, 8, 2));
+  assert.ok(blockInZone(26, 8, 1, 2) && !blockInZone(27, 8, 1, 2) && !blockInZone(26, 9, 1, 2));
+  assert.ok(blocksOverlap({ x: 0, y: 0, spacing: 2 }, 1, { x: 10, y: 2 }, 1)); // inside the spread squad's 22x4 box
+  assert.ok(!blocksOverlap({ x: 0, y: 0, spacing: 2 }, 1, { x: 22, y: 0 }, 1));
+  assert.ok(blocksOverlap({ x: 3, y: 1 }, 1, { x: 8, y: 1 }, 2)); // a size-2 unit against a squad
+  // side 1 is the same rectangle rotated 180 degrees
+  const r0 = localRectToWorld(0, 5, 1, 8, 2), r1 = localRectToWorld(1, 5, 1, 8, 2);
+  assert.deepEqual([r0.col + 8, r0.row + 2], [FIELD_W - r1.col, FIELD_H - r1.row]);
+  for (const spacing of [0, 1, 2]) {
+    const c0 = placementUnitCenters(0, { x: 5, y: 1, spacing }, 1), c1 = placementUnitCenters(1, { x: 5, y: 1, spacing }, 1);
+    assert.equal(c0.length, 16);
+    c0.forEach((c, i) => assert.ok(Math.abs(c1[i].x - (FIELD_W - c.x)) < 1e-9 && Math.abs(c1[i].y - (FIELD_H - c.y)) < 1e-9));
+  }
 });
 
 test('survivor damage scales with the surviving fraction of a squad', () => {
@@ -267,11 +297,11 @@ test('focus / stance / delay / retreat / escort: validation, configure, redactio
   // new priorities are legal
   for (const t of ['aircraft', 'armored', 'longestRange', 'support', 'valuable', 'swarm']) assert.equal(validateDeploy(m, 0, w({ target: t })), null, t);
   // escort may point at a unit bought in the same action, but not at itself
-  const two: DeployAction = { round: 1, place: [{ ...pl(1, 0, 0), escort: 2 }, pl(2, 6, 0)], upgrade: [] };
+  const two: DeployAction = { round: 1, place: [{ ...pl(1, 0, 0), escort: 2 }, pl(2, 8, 0)], upgrade: [] };
   assert.equal(validateDeploy(m, 0, two), null);
   assert.ok(validateDeploy(m, 0, { round: 1, place: [{ ...pl(1, 0, 0), escort: 1 }], upgrade: [] }));
 
-  submitDeploy(m, 0, { round: 1, place: [{ ...pl(1, 0, 0), focus: true, stance: 'holdPos', delay: 3, retreat: true }, { ...pl(2, 6, 0), escort: 1 }], upgrade: [] });
+  submitDeploy(m, 0, { round: 1, place: [{ ...pl(1, 0, 0), focus: true, stance: 'holdPos', delay: 3, retreat: true }, { ...pl(2, 8, 0), escort: 1 }], upgrade: [] });
   submitDeploy(m, 1, { round: 1, place: [pl(1, 0, 0, deck[0].id)], upgrade: [] });
   assert.equal(m.round, 2);
   const b = m.players[0].board[0];
