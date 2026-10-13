@@ -506,48 +506,23 @@ export function drawPlates(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): void
     if (m.mod.id === 'plateT') skirts = 4;
     if (m.mod.id === 'reactive') reactive = true;
   }
-  const plateCol = shade(pal.body, -0.15);
   const hw = Math.min(L.hw, 0.36);
   const len = L.shape === 'airframe' ? 0.3 : 0.62;
-  if (skirts) {
-    const th = skirts === 4 ? 0.12 : skirts === 3 ? 0.1 : skirts === 2 ? 0.08 : 0.055;
-    for (const s of [-1, 1]) {
-      const y = s * (hw + th * 0.3) * S;
-      g.beginPath();
-      roundRect(g, -len / 2 * S, y - (th / 2) * S, len * S, th * S, th * 0.25 * S);
-      g.fillStyle = skirts >= 2 ? shade(plateCol, -0.1) : plateCol;
-      g.fill();
-      g.lineWidth = o * 0.8;
-      g.strokeStyle = OUTLINE;
-      g.stroke();
-      g.strokeStyle = 'rgba(0,0,0,0.4)';
-      g.lineWidth = o * 0.35;
-      g.beginPath();
-      const segs = skirts >= 2 ? 3 : 5;
-      for (let i = 1; i < segs; i++) { const x = (-len / 2 + (len * i) / segs) * S; g.moveTo(x, y - (th / 2) * S); g.lineTo(x, y + (th / 2) * S); }
-      g.stroke();
-      if (skirts >= 2) for (let i = 0; i < segs; i++) dotAt(g, (-len / 2 + (len * (i + 0.5)) / segs) * S, y, th * 0.18 * S, 'rgba(0,0,0,0.55)');
-    }
-    if (skirts >= 2) {
-      const nx = L.shape === 'titan' ? 0.27 : L.shape === 'round' ? 0.29 : 0.36;
-      g.beginPath();
-      roundRect(g, (nx - 0.05) * S, -0.18 * S, 0.085 * S, 0.36 * S, 0.02 * S);
-      g.fillStyle = shade(plateCol, -0.1);
-      g.fill();
-      g.lineWidth = o * 0.8;
-      g.strokeStyle = OUTLINE;
-      g.stroke();
-    }
-  }
+  void skirts;
   if (reactive) {
-    // explosive reactive tiles along both flanks
+    // explosive reactive armour: neat two-row brick grid along both flanks
     const n = Math.max(3, Math.round(len * 8));
     const tw = (len / n) * S;
-    for (const s of [-1, 1]) for (let i = 0; i < n; i++) {
-      const x = -len / 2 * S + i * tw, y = s * (hw - 0.02) * S;
-      g.beginPath(); roundRect(g, x + tw * 0.08, y - tw * 0.42, tw * 0.84, tw * 0.84, tw * 0.12);
-      g.fillStyle = '#7a7a52'; g.fill(); g.lineWidth = o * 0.5; g.strokeStyle = OUTLINE; g.stroke();
-      dotAt(g, x + tw * 0.5, y, tw * 0.12, '#c0392b');
+    for (const s of [-1, 1]) for (let row = 0; row < 2; row++) for (let i = 0; i < n - row; i++) {
+      const x = -len / 2 * S + (i + row * 0.5) * tw, y = s * (hw - 0.02 - row * 0.055) * S;
+      g.save(); g.translate(o * 0.5, o * 0.8);
+      g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(x + tw * 0.06, y - tw * 0.36, tw * 0.88, tw * 0.72);
+      g.restore();
+      g.beginPath(); roundRect(g, x + tw * 0.06, y - tw * 0.36, tw * 0.88, tw * 0.72, tw * 0.1);
+      const gr = g.createLinearGradient(x, y - tw * 0.4, x, y + tw * 0.4);
+      gr.addColorStop(0, '#8a8a60'); gr.addColorStop(1, '#5e5e3e');
+      g.fillStyle = gr; g.fill(); g.lineWidth = o * 0.5; g.strokeStyle = OUTLINE; g.stroke();
+      dotAt(g, x + tw * 0.5, y, tw * 0.09, '#c0392b');
     }
   }
   for (const m of L.mounts) {

@@ -87,7 +87,8 @@ interface Box { x0: number; y0: number; x1: number; y1: number }
 class Space {
   circs: Circ[] = [];
   boxes: Box[] = [];
-  constructor(private hull: Path2D) {}
+  hull: Path2D;
+  constructor(hull: Path2D) { this.hull = hull; }
   inside(x: number, y: number): boolean { return scratch!.isPointInPath(this.hull, x, y); }
   /** rect centred at (x, y), w along x, h along y */
   fits(x: number, y: number, w: number, h: number, m: number): boolean {

@@ -81,6 +81,24 @@ export function buildProfile(d: Design, key: string, size: number, chassisRoles:
   return p;
 }
 
+/** Armour class of a build: 0 light (bare frame), 1 medium (skirts, glacis), 2 heavy (deep skirts, spaced plate,
+ *  turret wedges), 3 super-heavy (cast hull, full skirts). */
+export function armourTier(P: BuildProfile): 0 | 1 | 2 | 3 {
+  return P.heavy > 0.66 ? 3 : P.heavy > 0.38 ? 2 : P.heavy > 0.14 ? 1 : 0;
+}
+
+const frontCache = new WeakMap<Path2D, number>();
+let scratchG: Ctx | null = null;
+function frontX(hull: Path2D, S: number): number {
+  const hit = frontCache.get(hull);
+  if (hit !== undefined) return hit;
+  scratchG ??= ctx2d(makeCanvas(2, 2));
+  let f = 0.45 * S;
+  for (let x = 0.56 * S; x > 0; x -= 0.005 * S) if (scratchG.isPointInPath(hull, x, 0)) { f = x; break; }
+  frontCache.set(hull, f);
+  return f;
+}
+
 /* ------------------------------------------------------------------------------------------------ helpers */
 
 function dot(g: Ctx, x: number, y: number, r: number, c: string): void {
@@ -171,28 +189,48 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
     }
     g.restore();
   }
-  // ---- heavy: appliqué slabs on the flanks, thick glacis, heavier outline; more armour = more layers
-  const layers = P.heavy > 0.66 ? 3 : P.heavy > 0.33 ? 2 : P.heavy > 0.12 ? 1 : 0;
-  if (layers) {
+  // ---- armour language: thick plate rim, sloped glacis, bolted spaced front plate, heavier outline (skirts and the
+  //      wider hull are drawn by the hull painter). Light builds stay bare.
+  const tier = armourTier(P);
+  if (tier) {
     g.save(); g.clip(hull);
-    const gl = g.createLinearGradient(0.5 * S, 0, 0.2 * S, 0);
-    gl.addColorStop(0, shade(pal.light, -0.1)); gl.addColorStop(1, shade(pal.dark, -0.1));
-    g.fillStyle = gl; g.fillRect((0.5 - 0.06 - layers * 0.035) * S, -S, S, 2 * S);
-    g.strokeStyle = OUTLINE; g.lineWidth = o; g.beginPath(); g.moveTo((0.5 - 0.06 - layers * 0.035) * S, -S); g.lineTo((0.5 - 0.06 - layers * 0.035) * S, S); g.stroke();
-    rivets(g, (0.47 - 0.06 - layers * 0.035) * S, -H * 0.7, (0.47 - 0.06 - layers * 0.035) * S, H * 0.7, 3 + layers, 0.012 * S);
-    for (let k = 0; k < layers; k++) {
-      const inset = 0.05 + k * 0.045, th = 0.06 - k * 0.008;
-      for (const s of [-1, 1]) {
-        const y = s > 0 ? H - inset * S - th * S * 0.2 : -H + inset * S - th * S * 0.8;
-        const gr = g.createLinearGradient(0, y, 0, y + th * S);
-        gr.addColorStop(0, shade(pal.light, -0.15 - k * 0.04)); gr.addColorStop(1, shade(pal.dark, -0.1));
-        const len = 0.62 - k * 0.12;
-        slab(g, -len / 2 * S - 0.04 * S, y, len * S, th * S, gr, o);
-        rivets(g, (-len / 2 + 0.0) * S, y + th * S / 2, (len / 2 - 0.08) * S, y + th * S / 2, 3 + layers, 0.01 * S);
+    // plate thickness reads as a lit chamfer band all round the hull edge
+    const th = (0.012 + 0.012 * tier) * S;
+    g.lineJoin = 'miter';
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = th * 2 + o * 1.2; g.stroke(hull);
+    const bg = g.createLinearGradient(-0.3 * S, -H, 0.3 * S, H);
+    bg.addColorStop(0, shade(pal.light, -0.05)); bg.addColorStop(1, shade(pal.body, -0.25));
+    g.strokeStyle = bg; g.lineWidth = th * 2; g.stroke(hull);
+    if (!opts.creature && !opts.air) {
+      // glacis: the sloped front plate catches the light; heavier armour = deeper glacis + bolted spaced plate
+      const fx = frontX(hull, S);
+      const gd = (0.08 + 0.035 * tier) * S;
+      const gl = g.createLinearGradient(fx, 0, fx - gd, 0);
+      gl.addColorStop(0, shade(pal.light, 0.05)); gl.addColorStop(1, shade(pal.body, -0.02));
+      g.fillStyle = gl; g.fillRect(fx - gd, -S, S, 2 * S);
+      g.strokeStyle = OUTLINE; g.lineWidth = o * 0.9;
+      g.beginPath(); g.moveTo(fx - gd, -S); g.lineTo(fx - gd, S); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = o * 0.6;
+      g.beginPath(); g.moveTo(fx - gd + o, -S); g.lineTo(fx - gd + o, S); g.stroke();
+      if (tier >= 2) {
+        // spaced add-on plate across the glacis, standing off on bolted brackets
+        const px0 = fx - gd * 0.82, pw = gd * 0.5;
+        g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(px0 + o, -H * 0.62 + o * 1.4, pw, H * 1.24);
+        const pg = g.createLinearGradient(px0, 0, px0 + pw, 0);
+        pg.addColorStop(0, shade(pal.light, -0.12)); pg.addColorStop(1, shade(pal.light, 0.08));
+        g.fillStyle = pg; g.beginPath(); roundRect(g, px0, -H * 0.62, pw, H * 1.24, pw * 0.15); g.fill();
+        g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke();
+        rivets(g, px0 + pw * 0.5, -H * 0.55, px0 + pw * 0.5, H * 0.55, 3 + tier * 2, 0.011 * S);
+      }
+      if (tier >= 3) {
+        // cast-steel hull: mottled surface + weld seams
+        let seed = P.serial * 13 + 5;
+        const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+        for (let i = 0; i < 70 * S; i++) dot(g, (rnd() - 0.5) * S, (rnd() - 0.5) * 2 * H, (0.004 + rnd() * 0.01) * S, rnd() < 0.5 ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.06)');
       }
     }
     g.restore();
-    g.lineJoin = 'round'; g.strokeStyle = OUTLINE; g.lineWidth = o * (1 + layers * 0.45); g.stroke(hull);
+    g.lineJoin = 'round'; g.strokeStyle = OUTLINE; g.lineWidth = o * (1 + tier * 0.4); g.stroke(hull);
   }
   // ---- coatings
   if (P.stealth) {
@@ -214,12 +252,17 @@ export function drawProfile(g: Ctx, P: BuildProfile, hull: Path2D, S: number, hw
     g.restore();
   }
   if (P.hardened) {
-    g.save(); g.clip(hull);
-    g.strokeStyle = 'rgba(190,200,210,0.38)'; g.lineWidth = o * 0.45;
-    g.beginPath();
-    const st = 0.06 * S;
-    for (let v = -S * 1.2; v < S * 1.2; v += st) { g.moveTo(v, -S); g.lineTo(v + S, S); g.moveTo(v, S); g.lineTo(v + S, -S); }
-    g.stroke();
+    // slat / cage armour: a rail standing off the hull with slats all round
+    g.save();
+    g.lineJoin = 'round';
+    const k = 1 + 0.07 * Math.min(1, 0.5 / Math.max(0.2, hw));
+    g.scale(k, 1 + (k - 1) * 1.6);
+    g.setLineDash([o * 0.9, o * 1.7]);
+    g.strokeStyle = OUTLINE; g.lineWidth = 0.05 * S + o; g.stroke(hull);
+    g.strokeStyle = METAL.light; g.lineWidth = 0.05 * S; g.stroke(hull);
+    g.setLineDash([]);
+    g.strokeStyle = OUTLINE; g.lineWidth = o * 1.1; g.stroke(hull);
+    g.strokeStyle = METAL.base; g.lineWidth = o * 0.5; g.stroke(hull);
     g.restore();
   }
   if (P.nanite) {
