@@ -247,6 +247,23 @@ export interface Placement {
   round: number;
   /** squads only: empty cells between neighbouring units in the block (0..MAX_SPACING, default 0). See grid.ts */
   spacing?: number;
+  /** targeting priority for every unit in the block (default 'closest'). Hidden from the opponent until the round resolves. */
+  target?: TargetPriority;
+  /** squads: keep the deployed spacing while moving/fighting (true) or close in freely (false/absent). Hidden like `target`. */
+  hold?: boolean;
+}
+
+/** Who a unit prefers to shoot, among valid targets it could engage.
+ *  closest/farthest: by distance · threat: whoever last damaged this unit or its squad (else closest) ·
+ *  lowestHp/highestHp: by current hp · highestDps/lowestDps: by the target's damage output. */
+export type TargetPriority = 'closest' | 'farthest' | 'threat' | 'lowestHp' | 'highestHp' | 'highestDps' | 'lowestDps';
+export const TARGET_PRIORITIES: TargetPriority[] = ['closest', 'farthest', 'threat', 'lowestHp', 'highestHp', 'highestDps', 'lowestDps'];
+
+/** Change the hidden battle settings of a unit already on the board (any round). */
+export interface UnitConfig {
+  uid: number;
+  target?: TargetPriority;
+  hold?: boolean;
 }
 
 export interface DeployAction {
@@ -255,6 +272,8 @@ export interface DeployAction {
   place: Placement[];
   /** uids of existing units to upgrade by one level (may repeat a uid to upgrade twice) */
   upgrade: number[];
+  /** setting changes for units placed in earlier rounds (spacing can't change once locked in) */
+  configure?: UnitConfig[];
 }
 
 export interface RoundResult {
