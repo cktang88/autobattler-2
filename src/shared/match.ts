@@ -14,7 +14,7 @@
 // No Math.random / Date: callers pass `now` for timestamps.
 
 import { computeStats, levelMult, MAX_LEVEL, roundCost, validateDesign } from './stats.ts';
-import { MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps, squadSize } from './grid.ts';
+import { MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadSize } from './grid.ts';
 import { mixSeed } from './rng.ts';
 import { MODULE_BY_ID } from './parts.ts';
 import { runBattle } from './sim/battle.ts';
@@ -32,7 +32,7 @@ export const MAX_ROUNDS = 15;
 export const MAX_UNITS = 40;
 export const MAX_BLOCKS = MAX_UNITS;
 /** Hard cap on simulated units per side, counting every unit of every squad (bounds simulation cost). */
-export const MAX_SIM_UNITS = 120;
+export const MAX_SIM_UNITS = 240;
 export const MAX_PLAYER_NAME = 24;
 
 const ROUND_SUPPLY_BASE = START_SUPPLY;
@@ -202,7 +202,7 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   // escort may reference any block already on the board or bought in this very action
   const knownUids = new Set<number>(seenUids);
   for (const pl of a.place) if (pl && typeof pl === 'object' && isInt(pl.uid)) knownUids.add(pl.uid);
-  const footprints: { x: number; y: number; s: number }[] = p.board.map((u) => ({ x: u.x, y: u.y, s: blockCells(sizeOf(designs.get(u.designId)), u.spacing) }));
+  const footprints: { x: number; y: number; spacing?: number; size: Size }[] = p.board.map((u) => ({ x: u.x, y: u.y, spacing: u.spacing, size: sizeOf(designs.get(u.designId)) }));
   let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
 
   for (const pl of a.place) {
@@ -223,12 +223,11 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     if (be) return `${d.name}: ${be}`;
     if (pl.kiteMount !== undefined && !validKiteMount(d, pl.kiteMount, false)) return `${d.name}: Bad kite weapon`;
     if (pl.escort !== undefined && (!isInt(pl.escort) || pl.escort === pl.uid || !knownUids.has(pl.escort))) return `${d.name}: Bad escort target`;
-    const s = blockCells(size, pl.spacing);
     simUnits += squadSize(size);
     if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
     if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing)) return `${d.name} is outside the deploy zone`;
-    for (const f of footprints) if (overlaps(pl.x, pl.y, s, f.x, f.y, f.s)) return `${d.name} overlaps another unit`;
-    footprints.push({ x: pl.x, y: pl.y, s });
+    for (const f of footprints) if (blocksOverlap(pl, size, f, f.size)) return `${d.name} overlaps another unit`;
+    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, size });
     cost += designCost(d);
   }
 

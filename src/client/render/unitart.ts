@@ -829,6 +829,8 @@ export interface UnitSprites {
 }
 
 const spriteCache = new Map<string, UnitSprites>();
+/** below this many device px per cell, animated parts are baked into the static hull sprite */
+const PART_LOD_PX = 12;
 const turretCache = new Map<string, HTMLCanvasElement>();
 const MAX_SPRITES = 400;
 
@@ -855,13 +857,18 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const o = outlineW(px, L.S);
   const ext = L.ext;
   const hull = beginSprite(px, ext);
-  const pdefs = partsOf(L);
+  const allParts = partsOf(L);
+  // LOD: when a unit is only a few pixels per cell, parts are baked (rest pose) into the hull -> no per-part blits
+  const bake = px < PART_LOD_PX;
+  const pdefs = bake ? [] : allParts;
   const riding = partMounts(pdefs);
   const restX = partXfs(pdefs, null);
   hullUnderlay(hull.g, L, pal, o);
+  if (bake) drawPartsStatic(hull.g, L, pal, o, 'under');
   const hp = hullPath(L.shape, L.S);
   paintHull(hull.g, hp, pal, L.S, o, L.hw);
   hullDetails(hull.g, L, pal, o);
+  if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
   // empty mount sockets
   if (L.S >= 4) {
@@ -1050,7 +1057,7 @@ export function wreckSprite(design: Design, team: Team, px: number): HTMLCanvasE
   g.drawImage(s.rest, 0, 0);
   g.drawImage(s.hull, 0, 0);
   if (s.top) g.drawImage(s.top, 0, 0);
-  const pd = partsOf(layoutOf(design)), rx = partXfs(pd, null);
+  const pd = s.parts.length ? partsOf(layoutOf(design)) : [], rx = partXfs(pd, null);
   for (let j = 0; j < s.parts.length; j++) stampPart(g, s.parts[j].c, s.parts[j].ext, rx[j], s.px, c.width);
   g.globalCompositeOperation = 'source-atop';
   // desaturate + near-black so a wreck never reads as a live unit
@@ -1238,7 +1245,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.globalAlpha = alpha;
   }
   // animated parts: per-frame transforms
-  const pdefs = partsOf(L);
+  const pdefs = s.parts.length ? partsOf(L) : [];
   let pxf: Xf[] = [], prest: Xf[] = [];
   if (pdefs.length) {
     const odo = p.odometer ?? 0;
@@ -1286,7 +1293,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   drawParts('under');
   blit(g, s.hull, x, y, ang, s.ext, sc);
   drawParts('over');
-  if (CREATURE_SHAPES.has(L.shape) && p.cloak !== 'enemy') drawCreatureFx(g, L, p.time, p.seed ?? 0, x, y, ang, sc, px, pal, alpha);
+  if (CREATURE_SHAPES.has(L.shape) && p.cloak !== 'enemy' && px >= 8) drawCreatureFx(g, L, p.time, p.seed ?? 0, x, y, ang, sc, px, pal, alpha);
   if (GIANT_SHAPES.has(L.shape) || L.mob.id === 'gravlift' || L.mob.id === 'megatracks' || L.mob.id === 'titanlegs') {
     drawGiantFx(g, L, { time: p.time, seed: p.seed, moving: p.moving, odometer: p.odometer }, x, y, ang, sc, px, pal, alpha);
   }

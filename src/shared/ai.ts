@@ -16,7 +16,7 @@
 
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from './parts.ts';
 import { computeStats, designModules, MAX_LEVEL, validateDesign } from './stats.ts';
-import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps, squadSize } from './grid.ts';
+import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap, squadSize } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import { STARTER_DESIGNS } from './starters.ts';
@@ -332,7 +332,7 @@ function designScore(d: Design, opp: Threat, mine: Threat, mineRoles: Map<Role, 
   if (p.role === 'artillery' && count('frontline') + count('skirmisher') + count('antiArmor') < 2) s *= 0.5;
   if (p.role === 'support' && total < 4) s *= 0.4;
   s /= 1 + 0.25 * count(p.role);
-  if (round <= 1 && p.cost > 500) s *= 0.6;
+  if (round <= 1 && p.cost > supplyForRound(1) * 0.4) s *= 0.6;
   void mine;
   return Math.max(0.01, s);
 }
@@ -340,8 +340,8 @@ function designScore(d: Design, opp: Threat, mine: Threat, mineRoles: Map<Role, 
 // ---------------------------------------------------------------------------------------------
 // Placement
 
-function preferredRow(p: Profile, f: number, rng: Rng): number {
-  const back = DEPLOY_D - f;
+function preferredRow(p: Profile, h: number, rng: Rng): number {
+  const back = DEPLOY_D - h;
   if (p.flying) return Math.floor(rng() * (back + 1));
   if (p.role === 'artillery' || p.range >= 9) return back;
   if (p.role === 'support') return Math.min(back, 3);
@@ -472,31 +472,30 @@ function pickEscort(blocks: { uid: number; p: Profile; level: number }[], selfUi
 
 const isHealer = (p: Profile) => p.heal > 0 || p.stats.traits.includes('repairAura');
 
-interface Foot { x: number; y: number; s: number }
+interface Foot { x: number; y: number; w: number; h: number }
 
-function fits(x: number, y: number, s: number, occ: Foot[]): boolean {
-  for (const f of occ) if (overlaps(x, y, s, f.x, f.y, f.s)) return false;
+function fits(x: number, y: number, w: number, h: number, occ: Foot[]): boolean {
+  for (const f of occ) if (rectsOverlap(x, y, w, h, f.x, f.y, f.w, f.h)) return false;
   return true;
 }
 
-function findSpot(p: Profile, f: number, occ: Foot[], rng: Rng, randomPlace: boolean, flank: number): { x: number; y: number } | null {
-  const s = f;
-  const prefY = preferredRow(p, f, rng);
+function findSpot(p: Profile, w: number, h: number, occ: Foot[], rng: Rng, randomPlace: boolean, flank: number): { x: number; y: number } | null {
+  const prefY = preferredRow(p, h, rng);
   let best: { x: number; y: number } | null = null;
   let bestScore = -Infinity;
   const center = DEPLOY_W / 2;
-  for (let y = 0; y + s <= DEPLOY_D; y++) {
-    for (let x = 0; x + s <= DEPLOY_W; x++) {
-      if (!fits(x, y, s, occ)) continue;
+  for (let y = 0; y + h <= DEPLOY_D; y++) {
+    for (let x = 0; x + w <= DEPLOY_W; x++) {
+      if (!fits(x, y, w, h, occ)) continue;
       let score: number;
       if (randomPlace) score = rng();
       else {
-        const cx = x + s / 2, cy = y + s / 2;
+        const cx = x + w / 2, cy = y + h / 2;
         let nearest = 99;
         let sameRowCount = 0;
         for (const o of occ) {
-          const dx = Math.abs(o.x + o.s / 2 - cx), dy = Math.abs(o.y + o.s / 2 - cy);
-          nearest = Math.min(nearest, Math.max(dx, dy) - (s + o.s) / 2);
+          const dx = Math.abs(o.x + o.w / 2 - cx), dy = Math.abs(o.y + o.h / 2 - cy);
+          nearest = Math.min(nearest, Math.max(dx - (w + o.w) / 2, dy - (h + o.h) / 2));
           if (dy < 1.5) sameRowCount += Math.max(0, 1 - dx / 8);
         }
         score = -1.6 * Math.abs(y - prefY)
@@ -540,7 +539,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     const d = byId.get(u.designId);
     if (d) { const r = profile(d).role; roles.set(r, (roles.get(r) ?? 0) + 1); }
   }
-  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, s: byId.get(u.designId) ? blockCells(profile(byId.get(u.designId)!).size as Size, u.spacing) : 2 }));
+  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, ...blockDims(byId.get(u.designId) ? (profile(byId.get(u.designId)!).size as Size) : 2, u.spacing) }));
   let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as Size) : 1), 0);
   const splashShare = opp.total > 0 ? opp.splashy / opp.total : 0;
   let nextUid = me.nextUid;
@@ -560,7 +559,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       .map((u) => {
         const d = byId.get(u.designId);
         if (!d) return null;
-        const sc = designScore(d, opp, mine, roles, m.round) * (surv.has(u.uid) ? 1.4 : 1) * (profile(d).cost >= 150 ? 1.2 : 0.8);
+        const sc = designScore(d, opp, mine, roles, m.round) * (surv.has(u.uid) ? 1.4 : 1) * (profile(d).cost >= 400 ? 1.2 : 0.8);
         return { u, d, sc };
       })
       .filter((x): x is { u: Placement; d: Design; sc: number } => !!x)
@@ -612,19 +611,23 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     if (!choice) break;
     const p = profile(choice);
     const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.size as Size) ? 1 : 0) : chooseSpacing(p, splashShare);
-    const sp = normSpacing(p.size as Size, spacing);
-    const foot = blockCells(p.size as Size, sp);
-    const spot = findSpot(p, foot, occ, o.rng, easy, o.flank);
+    let sp = normSpacing(p.size as Size, spacing);
+    // a spread squad is (8+7s) wide: when no spot is left at this spacing, tighten up before giving up
+    let foot = blockDims(p.size as Size, sp);
+    let spot = findSpot(p, foot.w, foot.h, occ, o.rng, easy, o.flank);
+    while (!spot && sp > 0) {
+      sp--;
+      foot = blockDims(p.size as Size, sp);
+      spot = findSpot(p, foot.w, foot.h, occ, o.rng, easy, o.flank);
+    }
     if (!spot) {
       // no room for this size; try to stop buying this design
-      const smaller = deck.filter((d) => profile(d).size < p.size);
-      if (!smaller.length) break;
       deck.splice(deck.indexOf(choice), 1);
       if (!deck.length) break;
       continue;
     }
     if (!blockInZone(spot.x, spot.y, p.size as Size, sp)) break;
-    occ.push({ x: spot.x, y: spot.y, s: foot });
+    occ.push({ x: spot.x, y: spot.y, ...foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
     if (hasSpacing(p.size as Size)) pl.spacing = sp;
     if (!easy) applyBehavior(pl, withKiteMount(chooseBehavior(p, sp, splashShare, o.rng, ctx), choice));
