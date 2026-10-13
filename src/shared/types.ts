@@ -255,6 +255,15 @@ export interface Placement {
   hold?: boolean;
   /** stay at max weapon range, backing away from enemies that close in. Hidden like `target`. */
   kite?: boolean;
+  /** prefer the target nearby allies are already shooting (combined with `target`) */
+  focus?: boolean;
+  stance?: Stance;
+  /** seconds to wait before moving (one of START_DELAYS); weapons still fire at anything in range */
+  delay?: number;
+  /** below 30% hp fall back toward own lines / nearest repair source, return when healed above 70% */
+  retreat?: boolean;
+  /** Placement only: uid of a friendly block to stay close to and protect */
+  escort?: number;
 }
 
 /** Battle AI settings. A Design carries defaults (set in the garage); each Placement copies them when placed and
@@ -266,13 +275,41 @@ export interface UnitBehavior {
   hold?: boolean;
   /** stay at max weapon range and back away from enemies that close in */
   kite?: boolean;
+  focus?: boolean;
+  stance?: Stance;
+  delay?: number;
+  retreat?: boolean;
 }
 
 /** Who a unit prefers to shoot, among valid targets it could engage.
  *  closest/farthest: by distance · threat: whoever last damaged this unit or its squad (else closest) ·
  *  lowestHp/highestHp: by current hp · highestDps/lowestDps: by the target's damage output. */
-export type TargetPriority = 'closest' | 'farthest' | 'threat' | 'lowestHp' | 'highestHp' | 'highestDps' | 'lowestDps';
-export const TARGET_PRIORITIES: TargetPriority[] = ['closest', 'farthest', 'threat', 'lowestHp', 'highestHp', 'highestDps', 'lowestDps'];
+export type TargetPriority =
+  | 'closest' | 'farthest' | 'threat' | 'lowestHp' | 'highestHp' | 'highestDps' | 'lowestDps'
+  /** aircraft first (falls back to ground) */
+  | 'aircraft'
+  /** highest armor first */
+  | 'armored'
+  /** longest weapon range first (hunt artillery & snipers) */
+  | 'longestRange'
+  /** support first: repair, shields/domes, uplinks, jammers, sensors */
+  | 'support'
+  /** highest unitCost first */
+  | 'valuable'
+  /** smallest / cheapest first (clear swarms) */
+  | 'swarm';
+export const TARGET_PRIORITIES: TargetPriority[] = [
+  'closest', 'farthest', 'threat', 'lowestHp', 'highestHp', 'highestDps', 'lowestDps',
+  'aircraft', 'armored', 'longestRange', 'support', 'valuable', 'swarm',
+];
+
+/** Movement stance. advance: default approach-and-engage · holdPos: never move, fire from where placed ·
+ *  charge: never stop to shoot, close to contact · flankLeft/flankRight: swing wide along that side (from the
+ *  owner's view) before turning in to engage. */
+export type Stance = 'advance' | 'holdPos' | 'charge' | 'flankLeft' | 'flankRight';
+export const STANCES: Stance[] = ['advance', 'holdPos', 'charge', 'flankLeft', 'flankRight'];
+/** allowed start delays (seconds) */
+export const START_DELAYS = [0, 3, 6, 10] as const;
 
 /** Change the hidden battle settings of a unit already on the board (any round). */
 export interface UnitConfig {
@@ -280,6 +317,12 @@ export interface UnitConfig {
   target?: TargetPriority;
   hold?: boolean;
   kite?: boolean;
+  focus?: boolean;
+  stance?: Stance;
+  delay?: number;
+  retreat?: boolean;
+  /** uid of a friendly block to escort; -1 clears */
+  escort?: number;
 }
 
 export interface DeployAction {
