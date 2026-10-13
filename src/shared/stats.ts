@@ -69,8 +69,11 @@ export function accuracyRating(w: ModuleDef): number {
 // when the model under-rates them); the power term is what keeps army sizes balanced.
 // ---------------------------------------------------------------------------------------------
 
-export const PARTS_WEIGHT = 0.3;
-export const POWER_K = 0.36;
+// DEVCAL-BEGIN
+const devNum = (k: string, d: number) => Number((globalThis as any).process?.env?.[k] ?? d);
+// DEVCAL-END
+export const PARTS_WEIGHT = devNum('BAL_PW', 0.3);
+export const POWER_K = devNum('BAL_PK', 0.36);
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;

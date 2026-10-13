@@ -14,10 +14,10 @@
 
 import type { Placement, Side, Size } from './types.ts';
 
-export const FIELD_W = 24;
-export const FIELD_H = 32;
+export const FIELD_W = 48;
+export const FIELD_H = 46;
 export const DEPLOY_W = FIELD_W;
-export const DEPLOY_D = 9;
+export const DEPLOY_D = 12;
 
 /** Top-left world cell of a placement of the given size. */
 export function localToWorldCell(side: Side, x: number, y: number, size: Size): { col: number; row: number } {

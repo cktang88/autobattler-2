@@ -8,7 +8,7 @@ import type { Design, Placement, Side, UnitStats } from '../types.ts';
 
 export const TICK_RATE = 20; // ticks per second
 export const DT = 1 / TICK_RATE;
-export const MAX_TICKS = TICK_RATE * 90; // 90s battle cap
+export const MAX_TICKS = TICK_RATE * 120; // 120s battle cap
 
 export interface SideInput {
   /** the player's deck; placements reference these by id */

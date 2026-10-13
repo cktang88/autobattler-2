@@ -67,7 +67,7 @@ test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
   // big unit overlapping a small one
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 5, 5), pl(2, 4, 4, big.id)], upgrade: [] })!, /overlap/);
   // out of zone
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 23, 8, big.id)], upgrade: [] })!, /zone/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 47, 11, big.id)], upgrade: [] })!, /zone/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, -1, 0)], upgrade: [] })!, /zone/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0.5, 0)], upgrade: [] })!, /zone/);
   // over budget

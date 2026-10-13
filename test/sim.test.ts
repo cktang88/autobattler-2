@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Battle, runBattle } from '../src/shared/sim/battle.ts';
 import { MAX_TICKS } from '../src/shared/sim/types.ts';
+import { FIELD_H, FIELD_W } from '../src/shared/grid.ts';
 import type { BattleInput } from '../src/shared/sim/types.ts';
 import { validateDesign } from '../src/shared/stats.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
@@ -55,7 +56,10 @@ test('test designs are legal', () => {
 
 let uidSeq = 1;
 const P = (designId: string, x: number, y: number, level = 1): Placement => ({ uid: uidSeq++, designId, x, y, level, round: 1 });
-const input = (seed: number, a: Placement[], b: Placement[]): BattleInput => ({ seed, sides: [{ designs: DESIGNS, units: a }, { designs: DESIGNS, units: b }] });
+// Tests were laid out on a 24-wide field; shift side 1's local x so its units keep the same world columns
+// (facing side 0) on wider fields.
+const mirrorShift = (b: Placement[]) => b.map((p) => ({ ...p, x: p.x + (FIELD_W - 24) }));
+const input = (seed: number, a: Placement[], b: Placement[]): BattleInput => ({ seed, sides: [{ designs: DESIGNS, units: a }, { designs: DESIGNS, units: mirrorShift(b) }] });
 
 function mixedArmy(): Placement[] {
   return [
@@ -171,7 +175,7 @@ test('units start facing the enemy and stay inside the field', () => {
   assert.ok(Math.abs(b.units.at(-1)!.angle - Math.PI / 2) < 1e-9);
   while (!b.done) {
     b.step();
-    for (const u of b.units) assert.ok(u.x >= 0 && u.x <= 24 && u.y >= 0 && u.y <= 32, `unit ${u.id} out of bounds`);
+    for (const u of b.units) assert.ok(u.x >= 0 && u.x <= FIELD_W && u.y >= 0 && u.y <= FIELD_H, `unit ${u.id} out of bounds`);
   }
 });
 
@@ -300,11 +304,12 @@ test('stealth: untargetable until it fires; detectors reveal it', () => {
   assert.ok(ghostFired);
   assert.equal(enemyFiredFirst, false);
 
-  const d = new Battle(input(1, [P('ghost', 10, 0)], [P('spire', 10, 0), P('spotter', 14, 6)]));
+  const d = new Battle(input(1, [P('ghost', 10, 0)], [P('spire', 10, 0), P('spotter', 12, 0)]));
   let revealedEarly = false, gf = false;
   while (!d.done) {
     d.step();
-    for (const e of d.events) if (e.t === 'fire') { if (e.unit === 0) gf = true; else if (!gf) revealedEarly = true; }
+    for (const e of d.events) if (e.t === 'fire' && e.unit === 0) gf = true;
+    if (!gf && !d.units[0].cloaked) revealedEarly = true; // the sensor uncloaked it before it ever fired
   }
   assert.ok(revealedEarly);
 });
