@@ -325,8 +325,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function renderSide() {
     const rem = remaining();
-    supplyVal.textContent = String(rem);
-    supplyVal.classList.toggle('low', rem < 0);
+    // during a replay/result the state already holds next round's supply; don't show it until deploy
+    const replaying = phase === 'battle' || phase === 'result';
+    supplyVal.textContent = replaying ? '—' : String(rem);
+    supplyVal.classList.toggle('low', !replaying && rem < 0);
     const deploying = phase === 'deploy';
     undoBtn.disabled = !deploying || ops.length === 0;
     clearBtn.disabled = !deploying || (ops.length === 0 && cfg.size === 0);
