@@ -72,6 +72,10 @@ export function accuracyRating(w: ModuleDef): number {
 
 export const PARTS_WEIGHT = 0.3;
 export const POWER_K = 0.36;
+/** Size-class price factor on the whole unit cost, by chassis size 1..5 (size 1 = per unit of a 4-unit squad).
+ *  Sim effects that scale with size (overkill, focus fire, chip damage vs a few big targets, squad splash exposure,
+ *  retargeting) are not visible to the analytic power term; this one multiplier per class soaks them up. */
+export const SIZE_K: number[] = [1, 1, 1, 1, 1];
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -102,7 +106,7 @@ export function hitFactor(w: ModuleDef): number {
  *  multiplier per module id. Weapons: multiplies weaponValue. Utilities: scales the strength of the effect terms
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
-const MODULE_CAL: Record<string, number> = {
+export const MODULE_CAL: Record<string, number> = {
   aamissile: 0.86, ac20: 1.19, ac40: 0.83, arclance: 0.51, atgm: 1.31, autocannon: 0.75,
   autoloader: 2.29, barrage: 0.97, buzzsaw: 0.35, cannon: 1.1, cannon75: 1.15, chainsaw: 1.04,
   claw: 1.28, cruise: 0.52, disarm: 0.37, dome: 0.67, drill: 1.44, empcannon: 0.29,
@@ -224,7 +228,7 @@ export function computeStats(d: Design): UnitStats {
   if (flying) ehp *= 1.2; // only anti-air can answer it
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const unitCost = Math.max(10, PARTS_WEIGHT * partsCost + POWER_K * power);
+  const unitCost = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * (SIZE_K[size - 1] ?? 1));
   const squad = squadSize(size);
   const cost = roundCost(unitCost * squad);
 

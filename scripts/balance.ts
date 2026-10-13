@@ -13,12 +13,16 @@
 import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import { applyDeploy, newMatch, newPlayer, resolveRound, validateDeploy } from '../src/shared/match.ts';
 import { CATEGORIES, CHASSIS, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
-import { computeStats, validateDesign } from '../src/shared/stats.ts';
+import { MODULE_CAL, SIZE_K, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
 import { writeFileSync } from 'node:fs';
 import { fork } from 'node:child_process';
 import type { Design, Placement } from '../src/shared/types.ts';
+
+// fit_cal.py injects trial calibrations here (children inherit the env)
+if (process.env.BAL_CAL) Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CAL));
+if (process.env.BAL_SIZEK) SIZE_K.splice(0, 5, ...(JSON.parse(process.env.BAL_SIZEK) as number[]));
 
 const mode = process.argv[2] ?? 'all';
 const N = Number(process.argv[3] ?? 3);
@@ -54,15 +58,62 @@ function matches() {
 }
 
 const ARMY_SUPPLY = 1500;
+/** Budget when a giant/titan is involved on either side (a titan block costs ~3000). */
+const BIG_SUPPLY = 3500;
 const SHARDS = 4;
 
-/** Buy ARMY_SUPPLY of one design and place it with the normal AI's formation logic. */
-function army(d: Design, side: 0 | 1, seed: number): Placement[] {
-  const deck = [{ ...d, id: 'x' }];
-  const m = newMatch('a', 'ai', seed, newPlayer('a', deck, true), newPlayer('b', deck, true));
-  m.players[side].supply = ARMY_SUPPLY;
-  const a = aiDeploy(m, side, 'normal');
-  return a.place;
+/** Fillers that top up a giant/titan army (bought in equal supply shares): a balanced, cheap-ish mix. */
+const FILLER_IDS = ['starter-bulwark', 'starter-lancer', 'starter-tankbuster', 'starter-skyguard'];
+const FILLER: Design[] = STARTER_DESIGNS.filter((d) => FILLER_IDS.includes(d.id));
+
+const stats = new Map<string, ReturnType<typeof computeStats>>();
+const st = (d: Design) => {
+  const k = `${d.chassis}/${d.mobility}/${d.mounts.join(',')}`;
+  let s = stats.get(k);
+  if (!s) stats.set(k, (s = computeStats(d)));
+  return s;
+};
+/** Rounding-free block cost: the model's unit cost times the squad size. Armies are sized with this so the
+ *  50-supply price rounding (a separate, per-design matter, see the starter table) does not pollute the
+ *  per-module calibration; the supply actually granted is blocks * the real block price. */
+const rawCost = (d: Design) => st(d).unitCost * st(d).squad;
+
+interface Spec { d: Design; n: number }
+/** Army of ~`S` raw supply: pure blocks of one design; giants/titans (size >= 4) are bought as ~55% of the budget
+ *  in big blocks (at least one) with the rest spent on FILLER, i.e. "a 3500-supply army containing one titan". */
+function plan(d: Design, S: number): { specs: Spec[]; spend: number } {
+  const raw = rawCost(d);
+  if (st(d).size < 4) {
+    const n = Math.max(1, Math.round(S / raw));
+    return { specs: [{ d, n }], spend: n * raw };
+  }
+  const nBig = Math.max(1, Math.round((0.55 * S) / raw));
+  const specs: Spec[] = [{ d, n: nBig }];
+  let spend = nBig * raw;
+  const rest = S - spend;
+  if (rest > 150) for (const f of FILLER) {
+    const n = Math.round(rest / FILLER.length / rawCost(f));
+    if (n > 0) { specs.push({ d: f, n }); spend += n * rawCost(f); }
+  }
+  return { specs, spend };
+}
+
+/** Place the specs on `side` with the normal AI's formation logic, one design at a time. */
+function army(specs: Spec[], side: 0 | 1, seed: number): { place: Placement[]; designs: Design[] } {
+  const designs = specs.map((s, i) => ({ ...s.d, id: `x${i}` }));
+  const m = newMatch('a', 'ai', seed, newPlayer('a', designs.slice(0, 1), true), newPlayer('b', designs.slice(0, 1), true));
+  const me = m.players[side];
+  const place: Placement[] = [];
+  specs.forEach((s, i) => {
+    // earlier designs stay in the deck (so the AI knows their footprints) but are made unbuyable via an empty name
+    const deck = designs.map((d, j) => (j === i ? d : { ...d, name: '' }));
+    me.deck = deck;
+    m.players[1 - side as 0 | 1].deck = deck;
+    me.supply = s.n * st(s.d).cost;
+    const a = aiDeploy(m, side, 'normal');
+    for (const p of a.place) { place.push(p); me.board.push(p); me.nextUid = Math.max(me.nextUid, p.uid + 1); }
+  });
+  return { place, designs };
 }
 
 interface TestDesign { d: Design; module: string | null; base: boolean; carrier: string }
@@ -80,6 +131,7 @@ function moduleDesigns(): TestDesign[] {
     const m = mod.id;
     if (mod.kind === 'weapon') {
       const melee = mod.projectile === 'melee';
+      const f = (x: string | null) => (mod.targetsGround === false ? null : x); // anti-air-only designs stay anti-air-only
       if (mod.mount === 'L') {
         add(`t-${m}-a`, m, false, '', 'raider', melee ? 'hover' : 'halftrack', [m, null]);
         add(`t-${m}-b`, m, false, '', 'raider', melee ? 'jumpjets' : 'legs', [m, m]);
@@ -88,29 +140,40 @@ function moduleDesigns(): TestDesign[] {
         add(`t-${m}-a`, m, false, '', 'warden', melee ? 'treads' : 'halftrack', [m, melee ? 'plateL' : null]);
         add(`t-${m}-b`, m, false, '', 'striker', melee ? 'jumpjets' : 'halftrack', [m, m, null]);
         add(`t-${m}-c`, m, false, '', melee ? 'striker' : 'gunship', melee ? 'treads' : 'rotor', melee ? [m, 'plateM', 'plateL'] : [m, null]);
-      } else {
+      } else if (mod.mount === 'H') {
         add(`t-${m}-a`, m, false, '', 'longarm', melee ? 'treads' : 'halftrack', [m]);
         add(`t-${m}-b`, m, false, '', 'bastion', 'treads', [m, 'plateM', null]);
         add(`t-${m}-c`, m, false, '', 'colossus', 'treads', [m, melee ? 'plateH' : null, null, null]);
+      } else if (mod.mount === 'G') {
+        add(`t-${m}-a`, m, false, '', 'goliath', 'megatracks', melee ? [m, 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), f('autocannon')]);
+        add(`t-${m}-b`, m, false, '', 'leviathan', 'megatracks', melee ? [m, m, 'plateM', 'plateM'] : [m, m, f('autocannon'), f('autocannon')]);
+        add(`t-${m}-c`, m, false, '', 'goliath', 'spider', [m, null, null, null]);
+        add(`t-${m}-d`, m, false, '', 'carrier', 'gravlift', [m, null, null, null]);
+      } else {
+        add(`t-${m}-a`, m, false, '', 'titan', 'megatracks', melee ? [m, 'plateG', 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), f('cannon'), f('autocannon')]);
+        add(`t-${m}-b`, m, false, '', 'citadel', 'megatracks', melee ? [m, m, 'plateG', 'plateM', 'plateM', 'plateL'] : [m, m, f('cannon'), f('autocannon'), f('autocannon'), f('laser')]);
+        add(`t-${m}-c`, m, false, '', 'titan', 'titanlegs', [m, null, null, null, null]);
       }
     } else {
       // carriers: [chassis, mobility, mounts-with-slot-index-of-util, mounts-without]
       const carriers: [string, string, (string | null)[], number][] =
         mod.mount === 'L' ? [['warden', 'halftrack', ['autocannon', 'U'], 1], ['raider', 'legs', ['laser', 'U'], 1], ['striker', 'treads', ['cannon75', 'autocannon', 'U'], 2]]
         : mod.mount === 'M' ? [['striker', 'halftrack', ['autocannon', 'U', 'hmg'], 1], ['warden', 'treads', ['U', 'hmg'], 0], ['striker', 'spider', ['cannon75', 'U', 'laser'], 1]]
-        : [['bastion', 'treads', ['U', 'autocannon', 'cannon75'], 0], ['colossus', 'treads', ['cannon', 'U', 'autocannon', 'laser'], 1]];
+        : mod.mount === 'H' ? [['bastion', 'treads', ['U', 'autocannon', 'cannon75'], 0], ['colossus', 'treads', ['cannon', 'U', 'autocannon', 'laser'], 1]]
+        : mod.mount === 'G' ? [['goliath', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon'], 0], ['leviathan', 'megatracks', ['U', 'cannon', 'autocannon', 'autocannon'], 0], ['goliath', 'titanlegs', ['U', 'hmg', 'cannon', 'autocannon'], 0]]
+        : [['titan', 'megatracks', ['U', 'cannon', 'cannon', 'cannon', 'autocannon'], 0], ['citadel', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon', 'autocannon', 'laser'], 0], ['titan', 'titanlegs', ['U', 'cannon', 'cannon', 'hmg', 'autocannon'], 0]];
       carriers.forEach(([ch, mob, mounts], i) => {
         const key = `${ch}/${mob}/${mounts.join(',')}`;
         add(`t-${m}-${i}`, m, false, key, ch, mob, mounts.map((x) => (x === 'U' ? m : x)));
         if (!seenBase.has(key)) {
           seenBase.add(key);
-          add(`base-${i}-${ch}-${mob}-${mounts.map((x) => x === 'U' ? '_' : x).join('+')}`.slice(0, 40), null, true, key, ch, mob, mounts.map((x) => (x === 'U' ? null : x)));
+          add(`base-${seenBase.size}-${ch}-${mob}`, null, true, key, ch, mob, mounts.map((x) => (x === 'U' ? null : x)));
         }
       });
     }
   }
   // plain frames: every legal chassis/mobility pairing with a neutral loadout (calibrates hulls and drives)
-  const FILL: Record<string, string> = { L: 'laser', M: 'autocannon', H: 'cannon' };
+  const FILL: Record<string, string> = { L: 'laser', M: 'autocannon', H: 'cannon', G: 'cannon', T: 'cannon' };
   for (const c of CHASSIS) {
     for (const mob of MOBILITY) {
       if (pairingError(c.id, mob.id)) continue;
@@ -126,6 +189,7 @@ const AIR_FIELD: Design[] = [
   { id: 't-air-dart', name: 'Dart', chassis: 'drone', mobility: 'jet', mounts: ['laser'] },
   { id: 't-air-raider', name: 'Air Raider', chassis: 'raider', mobility: 'rotor', mounts: ['hmg', 'atgm'] },
   { id: 't-air-jetwing', name: 'Jetwing', chassis: 'gunship', mobility: 'jet', mounts: ['swarm', 'laser'] },
+  { id: 't-air-carrier', name: 'Sky Carrier', chassis: 'carrier', mobility: 'gravlift', mounts: ['missilebattery', 'cannon', 'autocannon', 'autocannon'] },
 ].filter((d) => validateDesign(d).length === 0);
 
 const antiAirOnly = (d: Design) => {
@@ -144,15 +208,19 @@ function runShard(pool: Design[], seeds: number, shard: number): Result[] {
     const field = antiAirOnly(d) ? AIR_FIELD : STARTER_DESIGNS;
     for (const e of field) {
       if (e.id === d.id) continue;
+      // giants/titans on either side -> the big budget for the whole pairing
+      const S = st(d).size >= 4 || st(e).size >= 4 ? BIG_SUPPLY : ARMY_SUPPLY;
+      const pd = plan(d, S);
+      const pe = plan(e, pd.spend);
       for (let s = 0; s < seeds; s++) {
         for (const side of [0, 1] as const) {
           const other = (1 - side) as 0 | 1;
+          const A = army(pd.specs, side, s + 1);
+          const B = army(pe.specs, other, s + 101);
           const units: [Placement[], Placement[]] = [[], []];
-          units[side] = army(d, side, s + 1);
-          units[other] = army(e, other, s + 101);
           const designs: [Design[], Design[]] = [[], []];
-          designs[side] = [{ ...d, id: 'x' }];
-          designs[other] = [{ ...e, id: 'x' }];
+          units[side] = A.place; designs[side] = A.designs;
+          units[other] = B.place; designs[other] = B.designs;
           const r = runBattle({ seed: 1000 + s * 31 + side, sides: [{ designs: designs[0], units: units[0] }, { designs: designs[1], units: units[1] }] });
           score += r.winner === side ? 1 : r.winner === -1 ? 0.5 : 0;
           games++;
@@ -183,6 +251,8 @@ function buildPool(filter: string): { tests: TestDesign[]; pool: Design[] } {
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 const flag = (r: number) => (r >= 0.65 ? '  HIGH' : r <= 0.35 ? '  LOW' : '');
 
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+
 async function armyTest() {
   const seeds = Math.max(1, Math.min(N, 6));
   const filter = process.argv[4] ?? '';
@@ -194,49 +264,73 @@ async function armyTest() {
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`shard ${shard} exited ${code}`))));
   })));
   void pool;
+  const byId = new Map<string, Design>([...STARTER_DESIGNS, ...tests.map((t) => t.d)].map((d) => [d.id, d]));
   if (process.env.BAL_OUT) {
     const dump = results.map((r) => {
-      const d = [...STARTER_DESIGNS, ...tests.map((t) => t.d)].find((x) => x.id === r.id)!;
-      const st = computeStats(d);
+      const d = byId.get(r.id)!;
+      const s = computeStats(d);
       const t = tests.find((x) => x.d.id === r.id);
-      return { id: r.id, module: t?.module ?? null, base: t?.base ?? false, carrier: t?.carrier ?? '', rate: r.score / r.games, mounts: d.mounts, chassis: d.chassis, mobility: d.mobility, cost: st.cost, hp: st.hp, armor: st.armor, speed: st.speed, range: st.range, offense: st.offense, ehp: st.ehp, flying: st.flying };
+      return { id: r.id, module: t?.module ?? null, base: t?.base ?? false, carrier: t?.carrier ?? '', rate: r.score / r.games, mounts: d.mounts, chassis: d.chassis, mobility: d.mobility, size: s.size, cost: s.cost, unitCost: s.unitCost, hp: s.hp, armor: s.armor, speed: s.speed, range: s.range, offense: s.offense, ehp: s.ehp, flying: s.flying };
     });
     writeFileSync(process.env.BAL_OUT, JSON.stringify(dump));
   }
   const rate = new Map(results.map((r) => [r.id, r.score / r.games]));
-  const byId = new Map<string, Design>([...STARTER_DESIGNS, ...tests.map((t) => t.d)].map((d) => [d.id, d]));
   const baseRate = new Map(tests.filter((t) => t.base).map((t) => [t.carrier, rate.get(t.d.id)!]));
 
-  console.log(`\nEqual-cost armies (${ARMY_SUPPLY} supply each, ${seeds} seeds, both sides); AA-only designs face an air field.\n--- per design ---`);
+  console.log(`\nEqual-cost armies (${ARMY_SUPPLY} supply, ${BIG_SUPPLY} when a giant/titan is involved; ${seeds} seeds, both sides); AA-only designs face an air field.\n--- per design (cost = block price) ---`);
   const rows = [...byId.values()].filter((d) => rate.has(d.id)).sort((a, b) => rate.get(b.id)! - rate.get(a.id)!);
   for (const d of rows) {
     const r = rate.get(d.id)!;
-    console.log(`${pct(r).padStart(4)}  ${String(computeStats(d).cost).padStart(4)}  ${d.id.padEnd(30)} ${d.chassis}/${d.mobility} [${d.mounts.join(',')}]${antiAirOnly(d) ? ' (vs air)' : ''}${flag(r)}`);
+    const s = computeStats(d);
+    console.log(`${pct(r).padStart(4)}  ${String(s.cost).padStart(4)}  ${d.id.padEnd(30)} ${d.chassis}/${d.mobility} [${d.mounts.join(',')}]${antiAirOnly(d) ? ' (vs air)' : ''}${flag(r)}`);
   }
 
   // per module
-  const modRows: { id: string; cat: string; rate: number; delta: number | null; n: number }[] = [];
+  const modRows: { id: string; cat: string; mount: string; rate: number; delta: number | null; n: number }[] = [];
   for (const mod of MODULES) {
     const ts = tests.filter((t) => t.module === mod.id && rate.has(t.d.id));
     if (!ts.length) continue;
-    const r = ts.reduce((a, t) => a + rate.get(t.d.id)!, 0) / ts.length;
+    const r = mean(ts.map((t) => rate.get(t.d.id)!));
     const deltas = ts.filter((t) => t.carrier && baseRate.has(t.carrier)).map((t) => rate.get(t.d.id)! - baseRate.get(t.carrier)!);
-    modRows.push({ id: mod.id, cat: mod.category, rate: r, delta: deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : null, n: ts.length });
+    modRows.push({ id: mod.id, cat: mod.category, mount: mod.mount, rate: r, delta: deltas.length ? mean(deltas) : null, n: ts.length });
   }
   modRows.sort((a, b) => b.rate - a.rate);
   console.log('\n--- per module (mean win rate of its designs; delta = vs same carrier without the module) ---');
   for (const r of modRows) {
-    console.log(`${pct(r.rate).padStart(4)}  ${r.id.padEnd(14)} ${r.cat.padEnd(11)} n=${r.n}${r.delta == null ? '' : `  delta ${r.delta >= 0 ? '+' : ''}${(r.delta * 100).toFixed(0)}`}${flag(r.rate)}`);
+    console.log(`${pct(r.rate).padStart(4)}  ${r.id.padEnd(14)} ${r.cat.padEnd(11)} ${r.mount} n=${r.n}${r.delta == null ? '' : `  delta ${r.delta >= 0 ? '+' : ''}${(r.delta * 100).toFixed(0)}`}${flag(r.rate)}`);
   }
 
   console.log('\n--- per category (mean of module means) ---');
   const cats = CATEGORIES.map((c) => {
     const ms = modRows.filter((m) => m.cat === c.id);
-    return { id: c.id, rate: ms.reduce((a, m) => a + m.rate, 0) / Math.max(1, ms.length), n: ms.length, lo: Math.min(...ms.map((m) => m.rate)), hi: Math.max(...ms.map((m) => m.rate)) };
+    return { id: c.id, rate: mean(ms.map((m) => m.rate)), n: ms.length, lo: Math.min(...ms.map((m) => m.rate)), hi: Math.max(...ms.map((m) => m.rate)) };
   }).filter((c) => c.n > 0).sort((a, b) => b.rate - a.rate);
   for (const c of cats) console.log(`${pct(c.rate).padStart(4)}  ${c.id.padEnd(12)} modules=${c.n}  range ${pct(c.lo)}-${pct(c.hi)}`);
+
+  console.log('\n--- per module mount class (mean of module means) ---');
+  for (const mc of ['L', 'M', 'H', 'G', 'T']) {
+    const ms = modRows.filter((m) => m.mount === mc);
+    if (ms.length) console.log(`${pct(mean(ms.map((m) => m.rate))).padStart(4)}  ${mc}  modules=${ms.length}`);
+  }
+
+  console.log('\n--- per design size class (chassis size; non-base designs) ---');
+  const sizeOf = (d: Design) => computeStats(d).size;
+  const nb = rows.filter((d) => !tests.find((t) => t.d.id === d.id && t.base));
+  const groups: [string, (d: Design) => boolean][] = [['starters', (d) => d.id.startsWith('starter-')], ['module designs', (d) => d.id.startsWith('t-')], ['plain frames', (d) => d.id.startsWith('f-')], ['all', () => true]];
+  for (const [name, f] of groups) {
+    const parts: string[] = [];
+    for (let z = 1; z <= 5; z++) {
+      const xs = nb.filter((d) => sizeOf(d) === z && f(d)).map((d) => rate.get(d.id)!);
+      if (xs.length) parts.push(`size${z} ${pct(mean(xs))} (n=${xs.length})`);
+    }
+    console.log(`${name.padEnd(15)} ${parts.join('   ')}`);
+  }
+  const big = nb.filter((d) => sizeOf(d) >= 4).map((d) => ({ id: d.id, r: rate.get(d.id)! }));
+  const bigBad = big.filter((x) => x.r < 0.35 || x.r > 0.65);
+  if (bigBad.length) console.log(`giant/titan designs outside 35-65%: ${bigBad.map((x) => `${x.id} ${pct(x.r)}`).join(', ')}`);
+
   const inBand = modRows.filter((m) => m.rate >= 0.35 && m.rate <= 0.65).length;
-  const sd = Math.sqrt(modRows.reduce((a, m) => a + (m.rate - 0.5) ** 2, 0) / Math.max(1, modRows.length));
+  const sd = Math.sqrt(mean(modRows.map((m) => (m.rate - 0.5) ** 2)));
   console.log(`\n${inBand}/${modRows.length} modules within 35-65%; rms deviation from 50%: ${(sd * 100).toFixed(1)} pts`);
 }
 
