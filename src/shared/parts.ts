@@ -4,23 +4,23 @@
 import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass } from './types.ts';
 
 export const CHASSIS: ChassisDef[] = [
-  { id: 'scout', name: 'Scout Frame', desc: 'Tiny, cheap and quick. One light mount.', size: 1, hp: 140, armor: 0, weight: 3, cost: 25, mounts: ['L'], traits: [], shape: 'wedge' },
-  { id: 'drone', name: 'Drone Core', desc: 'Featherweight core. Pairs well with rotors and jets.', size: 1, hp: 90, armor: 0, weight: 1.5, cost: 20, mounts: ['L'], traits: ['compact'], shape: 'pod' },
-  { id: 'raider', name: 'Raider Frame', desc: 'Light skirmisher with twin light mounts.', size: 1, hp: 210, armor: 2, weight: 5, cost: 45, mounts: ['L', 'L'], traits: [], shape: 'box' },
-  { id: 'warden', name: 'Warden Hull', desc: 'Sturdy medium hull built to hold a line.', size: 2, hp: 560, armor: 6, weight: 14, cost: 100, mounts: ['M', 'L'], traits: [], shape: 'hex' },
-  { id: 'striker', name: 'Striker Frame', desc: 'Aggressive medium frame with three mounts.', size: 2, hp: 430, armor: 4, weight: 12, cost: 115, mounts: ['M', 'M', 'L'], traits: [], shape: 'cross' },
-  { id: 'longarm', name: 'Longarm Platform', desc: 'Stabilized platform: one heavy mount, +20% weapon range.', size: 2, hp: 360, armor: 3, weight: 12, cost: 105, mounts: ['H'], traits: ['rangeBoost'], shape: 'long' },
-  { id: 'aegis', name: 'Aegis Frame', desc: 'Support frame. Field-repairs nearby allies.', size: 2, hp: 470, armor: 4, weight: 13, cost: 135, mounts: ['M', 'L'], traits: ['repairAura'], shape: 'round' },
-  { id: 'gunship', name: 'Gunship Airframe', desc: 'Aerodynamic hull. Must fly: rotors or jets only.', size: 2, hp: 380, armor: 3, weight: 8, cost: 120, mounts: ['M', 'M'], traits: ['airOnly'], shape: 'airframe' },
-  { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 240, mounts: ['H', 'M', 'M'], traits: [], shape: 'fortress' },
-  { id: 'colossus', name: 'Colossus Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 280, mounts: ['H', 'H', 'M', 'L'], traits: [], shape: 'titan' },
+  { id: 'scout', name: 'Scout Frame', desc: 'Tiny, cheap and quick. One light mount.', size: 1, hp: 140, armor: 0, weight: 3, cost: 25, mounts: ['L'], agility: 1.3, traits: [], shape: 'wedge' },
+  { id: 'drone', name: 'Drone Core', desc: 'Featherweight core. Pairs well with rotors and jets.', size: 1, hp: 90, armor: 0, weight: 1.5, cost: 20, mounts: ['L'], agility: 1.4, traits: ['compact'], shape: 'pod' },
+  { id: 'raider', name: 'Raider Frame', desc: 'Light skirmisher with twin light mounts.', size: 1, hp: 210, armor: 2, weight: 5, cost: 45, mounts: ['L', 'L'], agility: 1.15, traits: [], shape: 'box' },
+  { id: 'warden', name: 'Warden Hull', desc: 'Sturdy medium hull built to hold a line.', size: 2, hp: 560, armor: 6, weight: 14, cost: 100, mounts: ['M', 'L'], agility: 0.95, traits: [], shape: 'hex' },
+  { id: 'striker', name: 'Striker Frame', desc: 'Aggressive medium frame with three mounts.', size: 2, hp: 430, armor: 4, weight: 12, cost: 115, mounts: ['M', 'M', 'L'], agility: 1.0, traits: [], shape: 'cross' },
+  { id: 'longarm', name: 'Longarm Platform', desc: 'Stabilized platform: one heavy mount, +20% weapon range.', size: 2, hp: 360, armor: 3, weight: 12, cost: 105, mounts: ['H'], agility: 0.85, traits: ['rangeBoost'], shape: 'long' },
+  { id: 'aegis', name: 'Aegis Frame', desc: 'Support frame. Field-repairs nearby allies.', size: 2, hp: 470, armor: 4, weight: 13, cost: 135, mounts: ['M', 'L'], agility: 0.95, traits: ['repairAura'], shape: 'round' },
+  { id: 'gunship', name: 'Gunship Airframe', desc: 'Aerodynamic hull. Must fly: rotors or jets only.', size: 2, hp: 380, armor: 3, weight: 8, cost: 120, mounts: ['M', 'M'], agility: 1.1, traits: ['airOnly'], shape: 'airframe' },
+  { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 240, mounts: ['H', 'M', 'M'], agility: 0.8, traits: [], shape: 'fortress' },
+  { id: 'colossus', name: 'Colossus Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 280, mounts: ['H', 'H', 'M', 'L'], agility: 0.85, traits: [], shape: 'titan' },
   // ---- Giant class (size 4, 20 m) ----
-  { id: 'goliath', name: 'Goliath Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 3200, armor: 16, weight: 70, cost: 420, mounts: ['G', 'H', 'H', 'M'], traits: [], shape: 'goliath' },
-  { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 470, mounts: ['G', 'G', 'M', 'M'], traits: [], shape: 'leviathan' },
-  { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2400, armor: 10, weight: 50, cost: 430, mounts: ['G', 'H', 'M', 'M'], traits: ['airOnly'], shape: 'carrier' },
+  { id: 'goliath', name: 'Goliath Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 3200, armor: 16, weight: 70, cost: 420, mounts: ['G', 'H', 'H', 'M'], agility: 0.75, traits: [], shape: 'goliath' },
+  { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 470, mounts: ['G', 'G', 'M', 'M'], agility: 0.65, traits: [], shape: 'leviathan' },
+  { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2400, armor: 10, weight: 50, cost: 430, mounts: ['G', 'H', 'M', 'M'], agility: 0.8, traits: ['airOnly'], shape: 'carrier' },
   // ---- Titan class (size 5, 25 m) ----
-  { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 760, mounts: ['T', 'G', 'H', 'H', 'M'], traits: [], shape: 'colossal' },
-  { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 840, mounts: ['T', 'T', 'G', 'M', 'M', 'L'], traits: [], shape: 'citadel' },
+  { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 760, mounts: ['T', 'G', 'H', 'H', 'M'], agility: 0.7, traits: [], shape: 'colossal' },
+  { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 840, mounts: ['T', 'T', 'G', 'M', 'M', 'L'], agility: 0.55, traits: [], shape: 'citadel' },
 ];
 
 export const MOBILITY: MobilityDef[] = [
@@ -243,7 +243,7 @@ export const MODULES: ModuleDef[] = [
   util({ id: 'domeG', name: 'Fortress Dome', family: 'Giant dome', desc: 'Projects a 400-point shield onto every ally within 5 cells.', category: 'support', visual: 'dome', caliber: 1, mount: 'G', weight: 14, cost: 110, shieldAura: { radius: 5, amount: 400 } }),
   { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'G', kind: 'armor', weight: 26, cost: 70, armor: 16, hp: 1200 },
   // ---------------- Titan class (T mounts, size-5 chassis) ----------------
-  wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. Pierces an entire battle line at extreme range.', category: 'precision', visual: 'rail', barrels: 2, caliber: 1, mount: 'T', weight: 38, cost: 220,
+  wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.', category: 'precision', visual: 'rail', turretTurn: 0.5, barrels: 2, caliber: 1, mount: 'T', weight: 38, cost: 220,
     damage: 1400, cooldown: 6, range: 20, ...GA, projectile: 'rail', ap: 1, pierce: true }),
   wpn({ id: 'doomsday', name: 'Doomsday Howitzer', family: 'Titan artillery', desc: 'Twin super-heavy howitzer. Craters half a company per salvo. Minimum range 6.', category: 'artillery', visual: 'artillery', barrels: 2, caliber: 1, mount: 'T', weight: 40, cost: 230,
     damage: 700, cooldown: 8, range: 26, minRange: 6, ...G, projectile: 'arc', projectileSpeed: 7, splash: 4, ap: 0.5, spread: 1.5 }),

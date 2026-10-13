@@ -23,6 +23,8 @@ export interface ChassisDef {
   weight: number;
   cost: number;
   mounts: MountClass[];
+  /** body turn-rate multiplier of the hull (nimble frames > 1, lumbering hulls < 1) */
+  agility: number;
   traits: ChassisTrait[];
   /** Render hint: silhouette family for procedural art. */
   shape: 'wedge' | 'box' | 'pod' | 'hex' | 'long' | 'round' | 'cross' | 'fortress' | 'titan' | 'airframe'
@@ -82,6 +84,8 @@ export interface ModuleDef {
   /** sub-category label shown in UI, e.g. "30mm" or "Twin 30mm" */
   family: string;
   visual: ModuleVisual;
+  /** turret traverse speed in rad/s; omit to derive from mount class and weapon type (stats.ts turretTurnRate) */
+  turretTurn?: number;
   /** visual barrel / tube count (1 if omitted) */
   barrels?: number;
   /** visual size 0..1 within its mount class */

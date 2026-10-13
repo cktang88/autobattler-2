@@ -191,7 +191,9 @@ export function computeStats(d: Design): UnitStats {
   for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.projectile === 'melee' ? mod.range : mod.range * rangeMult);
   const sizeSpeed = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
   const speed = m.kind === 'static' ? 0 : m.speed * loadSpeedFactor(load) * sizeSpeed * (1 + speedBonus);
-  const turn = m.turn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
+  // body turn rate: mobility base x hull agility x size inertia, slowed when overloaded (heavier armament = slower)
+  const sizeTurn = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
+  const turn = m.turn * c.agility * sizeTurn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
   const flying = m.kind === 'air';
   const isStatic = m.kind === 'static';
 
@@ -239,6 +241,19 @@ export function computeStats(d: Design): UnitStats {
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
   };
+}
+
+const CLASS_TRAVERSE: Record<string, number> = { L: 7, M: 5, H: 3.2, G: 2, T: 1.2 };
+const VISUAL_TRAVERSE: Partial<Record<string, number>> = {
+  gatling: 1.1, shotgun: 1.2, sniper: 0.6, rail: 0.7, gauss: 0.7, cannon: 0.8, artillery: 0.5, mortar: 0.8, flak: 1.3,
+  missileRack: 1.4, cruise: 0.6, rocketPod: 1.1, laser: 1.2, heatray: 1.0, plasma: 0.9, flamer: 1.2, tesla: 1.5, emp: 1.1,
+  slowbeam: 1.1, sonic: 1.1, gravity: 0.9, repair: 1.4,
+  saw: 1.4, chainsaw: 1.4, hammer: 1.1, claw: 1.4, blade: 1.5, drill: 1.2, prod: 1.5, ram: 1.0,
+};
+/** Turret traverse speed (rad/s) of a module: explicit turretTurn, else mount-class base x weapon-type factor. */
+export function turretTurnRate(mod: ModuleDef): number {
+  if (mod.turretTurn != null) return mod.turretTurn;
+  return (CLASS_TRAVERSE[mod.mount] ?? 4) * (VISUAL_TRAVERSE[mod.visual] ?? 1);
 }
 
 /** Round a supply cost to a friendly number: nearest 50 (min 50). */

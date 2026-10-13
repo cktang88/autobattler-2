@@ -5,7 +5,7 @@
 // auras -> projectiles -> bookkeeping -> end check.
 
 import { MODULE_BY_ID } from '../parts.ts';
-import { computeStats, isValidDesign, levelMult, weaponDps } from '../stats.ts';
+import { computeStats, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -14,7 +14,6 @@ import { DT, MAX_TICKS, TICK_RATE } from './types.ts';
 import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
 
 // ---- tuning ----
-const TURRET_TURN = 6; // rad/s
 const AIM_TOLERANCE = 0.2; // rad
 const RETARGET_EVERY = 0.3; // s
 const GOAL_EVERY = 0.4; // s
@@ -87,6 +86,8 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 
 interface Wpn {
   def: ModuleDef;
+  /** turret traverse rad/s */
+  traverse: number;
   heal: number;
   range: number;
   minRange: number;
@@ -406,6 +407,7 @@ export class Battle {
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
+        traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
         melee, cls: damageClass(def),
       };
@@ -920,7 +922,7 @@ export class Battle {
         ax = p.x; ay = p.y;
         want = Math.atan2(ay - u.y, ax - u.x);
       }
-      m.angle = turnToward(m.angle, want, TURRET_TURN * DT);
+      m.angle = turnToward(m.angle, want, w.traverse * DT);
 
       // burst continuation
       if (w.burstLeft > 0) {
@@ -1105,11 +1107,11 @@ export class Battle {
       t = cand >= 0 ? this.units[cand] : null;
     }
     if (!t) {
-      m.angle = turnToward(m.angle, u.angle, TURRET_TURN * DT);
+      m.angle = turnToward(m.angle, u.angle, w.traverse * DT);
       if (w.healAcc > 0) this.flushHeal(u, w, m, null);
       return;
     }
-    m.angle = turnToward(m.angle, Math.atan2(t.y - u.y, t.x - u.x), TURRET_TURN * DT);
+    m.angle = turnToward(m.angle, Math.atan2(t.y - u.y, t.x - u.x), w.traverse * DT);
     const amt = Math.min(w.heal * DT, t.maxHp - t.hp);
     t.hp += amt;
     w.healAcc += amt;
