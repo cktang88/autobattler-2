@@ -14,9 +14,11 @@ import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, d
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
+import { BALL_FRAMES, ballFrames, ballR, ballShadow, curlOf, rolls } from './droidart.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
+const P2U = Math.PI * 2;
 
 export interface MountSlot {
   x: number;
@@ -725,7 +727,7 @@ function chamferPlate(g: Ctx, w: number, h: number, c: number, lit: string, dark
  *  tier 1: short skirts with the road wheels showing, 2: deep skirts, 3: full-depth skirts with a heavy lip. */
 export function drawSkirts(g: Ctx, L: UnitLayout, tier: number, pal: TeamPal, o: number): void {
   const S = L.S, id = L.mob.id;
-  if (!tier || S >= 4 || L.air || CREATURE_SHAPES.has(L.shape) && L.shape !== 'riot' && L.shape !== 'juggernaut' && L.shape !== 'hunter' && L.shape !== 'siegeplat') return;
+  if (!tier || S >= 4 || L.air || L.shape === 'riot' || CREATURE_SHAPES.has(L.shape) && L.shape !== 'juggernaut' && L.shape !== 'hunter' && L.shape !== 'siegeplat') return;
   const panel = (x0: number, x1: number, yc: number, ww: number, s: number, chamferFront: boolean) => {
     const p = new Path2D();
     const yi = yc - s * ww / 2, yo = yc + s * ww / 2;
@@ -963,7 +965,7 @@ export function drawMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
   } else if (id === 'hover') {
     const sk = new Path2D();
     if (L.shape === 'saucer' || L.shape === 'round' || L.shape === 'crab') sk.ellipse(-0.01 * X, 0, (L.shape === 'crab' ? 0.36 : 0.49) * X, 0.47 * Y, 0, 0, Math.PI * 2);
-    else { const hy = Math.min(0.37 * Y, L.hw * S + 0.13 * S); roundRect(sk, -0.46 * X, -hy, 0.9 * X, 2 * hy, Math.min(0.22 * S, hy * 0.7)); }
+    else { const hy = L.shape === 'riot' ? 0.48 * Y : Math.min(0.37 * Y, L.hw * S + 0.13 * S); roundRect(sk, -0.46 * X, -hy, 0.9 * X, 2 * hy, Math.min(0.22 * S, hy * 0.7)); }
     g.fillStyle = '#202326';
     g.fill(sk);
     g.save();
@@ -1528,6 +1530,11 @@ export function altitudeOf(p: UnitPose, L: UnitLayout): number {
 
 export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAULT_DIRS): void {
   const L = layoutOf(p.design);
+  if (rolls(L) && curlOf(p.seed ?? 0, !!p.moving, p.time) > 0.5) {
+    const alt = altitudeOf(p, L), off = 0.06 + alt * 0.75;
+    ballShadow(g, p.x + dirs.sx * off, p.y + dirs.sy * off, ballR(L), (p.alpha ?? 1) * (p.leap ? 0.6 : 1));
+    return;
+  }
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
   // load: overloaded designs squat low on strained suspension (tight shadow), light ones ride high
@@ -1542,36 +1549,60 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
 }
 
 export function rotorBlur(g: Ctx, x: number, y: number, r: number, blades: number, t: number, px: number): void {
-  g.fillStyle = 'rgba(210,220,230,0.07)';
-  g.beginPath();
-  g.arc(x, y, r, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = 'rgba(220,230,240,0.22)';
-  g.lineWidth = Math.max(1 / px, r * 0.035);
-  g.beginPath();
-  g.arc(x, y, r * 0.95, 0, Math.PI * 2);
-  g.stroke();
+  // readable at any zoom and in still previews: a tinted semi-opaque disc with a crisp rim, trailing motion-blur
+  // sectors behind each blade and dark blade streaks (the disc itself stays see-through enough to show the hull)
+  const P2 = Math.PI * 2;
+  const disc = g.createRadialGradient(x, y, r * 0.15, x, y, r);
+  disc.addColorStop(0, 'rgba(160,172,184,0.30)');
+  disc.addColorStop(0.75, 'rgba(190,202,214,0.22)');
+  disc.addColorStop(0.93, 'rgba(225,235,245,0.34)');
+  disc.addColorStop(1, 'rgba(225,235,245,0.10)');
+  g.fillStyle = disc;
+  g.beginPath(); g.arc(x, y, r, 0, P2); g.fill();
+  const lw = Math.max(1 / px, r * 0.03);
+  g.lineWidth = lw;
+  g.strokeStyle = 'rgba(10,12,14,0.55)';
+  g.beginPath(); g.arc(x, y, r + lw, 0, P2); g.stroke();
+  g.strokeStyle = 'rgba(235,242,250,0.6)';
+  g.beginPath(); g.arc(x, y, r * 0.97, 0, P2); g.stroke();
+  // tip-path ticks (blade tips smear into a dashed ring)
+  g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = Math.max(1 / px, r * 0.05);
+  g.setLineDash([r * 0.18, r * 0.12]);
+  g.beginPath(); g.arc(x, y, r * 0.86, t * 3, t * 3 + P2); g.stroke();
+  g.setLineDash([]);
   const spin = t * 31;
-  g.lineCap = 'round';
-  for (let k = 0; k < 3; k++) {
-    g.strokeStyle = k === 0 ? 'rgba(25,28,32,0.75)' : `rgba(190,200,210,${0.22 - k * 0.06})`;
-    g.lineWidth = Math.max(1.4 / px, r * (k === 0 ? 0.09 : 0.14));
-    g.beginPath();
-    for (let i = 0; i < blades; i++) {
-      const a = spin - k * 0.3 + (i / blades) * Math.PI * 2;
-      g.moveTo(x + Math.cos(a) * r * 0.12, y + Math.sin(a) * r * 0.12);
-      g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  // motion-blur sectors trailing each blade
+  for (let i = 0; i < blades; i++) {
+    const a = spin + (i / blades) * P2;
+    for (let k = 0; k < 3; k++) {
+      g.fillStyle = `rgba(215,225,235,${0.16 - k * 0.045})`;
+      g.beginPath(); g.moveTo(x, y); g.arc(x, y, r * 0.96, a - 0.22 - k * 0.22, a - k * 0.22); g.closePath(); g.fill();
     }
-    g.stroke();
   }
+  g.lineCap = 'round';
+  g.strokeStyle = 'rgba(18,20,24,0.85)';
+  g.lineWidth = Math.max(1.4 / px, r * 0.085);
+  g.beginPath();
+  for (let i = 0; i < blades; i++) {
+    const a = spin + (i / blades) * P2;
+    g.moveTo(x + Math.cos(a) * r * 0.12, y + Math.sin(a) * r * 0.12);
+    g.lineTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95);
+  }
+  g.stroke();
+  g.strokeStyle = 'rgba(200,210,220,0.5)';
+  g.lineWidth = Math.max(0.7 / px, r * 0.03);
+  g.beginPath();
+  for (let i = 0; i < blades; i++) {
+    const a = spin + (i / blades) * P2 - 0.03;
+    g.moveTo(x + Math.cos(a) * r * 0.2, y + Math.sin(a) * r * 0.2);
+    g.lineTo(x + Math.cos(a) * r * 0.9, y + Math.sin(a) * r * 0.9);
+  }
+  g.stroke();
   g.fillStyle = '#2b3035';
-  g.beginPath();
-  g.arc(x, y, r * 0.13, 0, Math.PI * 2);
-  g.fill();
+  g.beginPath(); g.arc(x, y, r * 0.14, 0, P2); g.fill();
+  g.lineWidth = Math.max(0.8 / px, r * 0.02); g.strokeStyle = '#0b0d0f'; g.stroke();
   g.fillStyle = '#b0b8c0';
-  g.beginPath();
-  g.arc(x - r * 0.03, y - r * 0.03, r * 0.06, 0, Math.PI * 2);
-  g.fill();
+  g.beginPath(); g.arc(x - r * 0.03, y - r * 0.03, r * 0.06, 0, P2); g.fill();
 }
 
 export function flame(g: Ctx, x: number, y: number, ang: number, len: number, w: number, hot: string): void {
@@ -1596,7 +1627,27 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   const alt = altitudeOf(p, L);
   const lift = L.air || p.flying ? 0.12 : alt * 0.35;
   const x = p.x + dirs.ux * lift, y = p.y + dirs.uy * lift;
-  const sc = 1 + (p.leap ?? 0) * 0.3 + (L.air ? 0.04 : 0);
+  let sc = 1 + (p.leap ?? 0) * 0.3 + (L.air ? 0.04 : 0);
+  if (rolls(L)) {
+    // destroyer droid: rolls as an armoured ball while it travels, unfolds onto its tripod when it stops
+    const c = curlOf(p.seed ?? 0, !!p.moving, p.time);
+    if (c > 0.5) {
+      const R = ballR(L), fr = ballFrames(L, p.team, Math.max(4, Math.round(px)));
+      const per = (P2U * R) / 6;
+      const ph = ((p.odometer ?? 0) / per) % 1;
+      const idx = Math.min(BALL_FRAMES - 1, Math.max(0, Math.floor((ph < 0 ? ph + 1 : ph) * BALL_FRAMES))) || 0;
+      let a = p.alpha ?? 1;
+      if (p.cloak === 'own') a *= 0.45; else if (p.cloak === 'enemy') a *= 0.08;
+      g.globalAlpha = a;
+      blit(g, fr[idx], x, y, p.angle, R * 1.25, sc * (0.7 + 0.6 * (c - 0.5)));
+      const hf = p.hitFlash ?? 0;
+      if (hf > 0.02) { g.globalAlpha = a * Math.min(0.5, hf * 0.55); g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, R * sc, 0, P2U); g.fill(); }
+      if ((p.stun ?? 0) > 0) drawSparks(g, x, y, R * 1.1, p.time, px);
+      g.globalAlpha = 1;
+      return;
+    }
+    sc *= 0.7 + 0.3 * (1 - c * 2);
+  }
   const pal = TEAM_PAL[p.team];
   const ang = p.angle;
   const cs = Math.cos(ang), sn = Math.sin(ang);

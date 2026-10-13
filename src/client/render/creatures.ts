@@ -296,12 +296,13 @@ export function creatureHullPath(shape: string, S: number): Path2D | null {
     // spiked carapace: sawtooth shell rim
     case 'crab': return sharp([0.3, 0, 0.29, -0.08, 0.27, -0.16, 0.3, -0.22, 0.24, -0.3, 0.2, -0.38, 0.14, -0.39, 0.1, -0.44, 0.04, -0.4, -0.04, -0.45, -0.1, -0.4, -0.18, -0.43, -0.22, -0.36, -0.28, -0.34, -0.3, -0.26, -0.36, -0.2, -0.32, -0.12, -0.36, -0.05, -0.33, 0], S);
     case 'saucer': {
-      // manta disc: bridge prow, twin side nacelles and a split tail jutting out past the turret ring
+      // asymmetric disc (light-freighter grammar): an offset cockpit pod forward-right, a long sensor boom to port, one
+      // big engine nacelle aft-right, a cargo hump aft-left and a stubby prow
       const p = new Path2D();
       const bump = (a: number, c: number, wdt: number, h: number) => { let d = Math.abs(a - c); d = Math.min(d, P2 - d); return d < wdt ? h * (1 - Math.pow(d / wdt, 4)) : 0; };
       for (let i = 0; i < 128; i++) {
         const a = (i / 128) * P2;
-        const r = 0.44 + bump(a, 0, 0.2, 0.12) + bump(a, 1.75, 0.2, 0.08) + bump(a, P2 - 1.75, 0.2, 0.08) + bump(a, 2.85, 0.13, 0.09) + bump(a, P2 - 2.85, 0.13, 0.09);
+        const r = 0.44 + bump(a, 0, 0.16, 0.07) + bump(a, 0.62, 0.2, 0.13) + bump(a, P2 - 1.45, 0.09, 0.16) + bump(a, 2.35, 0.32, 0.09) + bump(a, P2 - 2.6, 0.3, 0.06);
         i ? p.lineTo(Math.cos(a) * r * S, Math.sin(a) * r * S) : p.moveTo(Math.cos(a) * r * S, Math.sin(a) * r * S);
       }
       p.closePath();
@@ -475,6 +476,24 @@ export function creatureDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, 
       dg.addColorStop(0, '#ffffff'); dg.addColorStop(0.25, shade(E, 0.3)); dg.addColorStop(0.7, shade(E, -0.45)); dg.addColorStop(1, '#0a1218');
       raised(g, dome, dg, o, S, 0.6, 0.015, 0.6);
       dot(g, -0.045 * S, -0.045 * S, 0.03 * S, 'rgba(255,255,255,0.7)');
+      // the asymmetric add-ons that jut past the spinning ring
+      const at = (a: number, r: number) => [Math.cos(a) * r * S, Math.sin(a) * r * S] as const;
+      // cockpit pod forward-right: canopy glass + frame
+      { const [cx, cy] = at(0.62, 0.5); const cp = new Path2D(); cp.ellipse(cx, cy, 0.09 * S, 0.065 * S, 0.62, 0, P2);
+        raised(g, cp, grad(g, S, shade(pal.light, 0.08), pal.dark, cx / S - 0.08, cy / S - 0.08, cx / S + 0.08, cy / S + 0.08), o, S, 1.2, 0.012, 0.5);
+        const gl = new Path2D(); gl.ellipse(cx + 0.02 * S, cy + 0.012 * S, 0.05 * S, 0.035 * S, 0.62, 0, P2);
+        g.fillStyle = '#0e1c26'; g.fill(gl); g.fillStyle = rgba(pal.glow, 0.6); g.beginPath(); g.ellipse(cx + 0.03 * S, cy, 0.025 * S, 0.012 * S, 0.62, 0, P2); g.fill();
+        g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(gl); }
+      // sensor boom to port with a dish at the tip
+      { const [bx, by] = at(-1.45, 0.4), [tx, ty] = at(-1.45, 0.59);
+        g.lineCap = 'round'; g.strokeStyle = OUTLINE; g.lineWidth = 0.05 * S; g.beginPath(); g.moveTo(bx, by); g.lineTo(tx, ty); g.stroke();
+        g.strokeStyle = METAL.light; g.lineWidth = 0.03 * S; g.stroke();
+        dot(g, tx, ty, 0.05 * S, OUTLINE); dot(g, tx, ty, 0.042 * S, METAL.base); dot(g, tx - 0.01 * S, ty - 0.01 * S, 0.025 * S, METAL.light); dot(g, tx, ty, 0.012 * S, E); }
+      // engine nacelle aft-right with a hot nozzle, cargo hump aft-left with hatches
+      { const [nx, ny] = at(2.35, 0.48); const np = new Path2D(); roundRect(np, nx - 0.09 * S, ny - 0.06 * S, 0.18 * S, 0.12 * S, 0.05 * S);
+        raised(g, np, grad(g, S, METAL.light, METAL.dark, nx / S - 0.09, ny / S - 0.06, nx / S + 0.09, ny / S + 0.06), o, S, 1, 0.01, 0.5);
+        dot(g, nx - 0.07 * S, ny, 0.035 * S, '#07080a'); dot(g, nx - 0.07 * S, ny, 0.02 * S, 'rgba(255,140,60,0.9)'); }
+      { const [hx, hy] = at(-2.6, 0.47); for (const d of [-0.04, 0.04]) { const hp = new Path2D(); roundRect(hp, hx + d * S - 0.03 * S, hy - 0.035 * S, 0.06 * S, 0.07 * S, 0.01 * S); g.fillStyle = shade(pal.dark, 0.1); g.fill(hp); g.lineWidth = o * 0.6; g.strokeStyle = OUTLINE; g.stroke(hp); } }
       break;
     }
     case 'delta': {

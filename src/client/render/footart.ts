@@ -8,7 +8,7 @@
 // so features stay round and crisp however the box is stretched. Local frame: nose +x, +y right.
 
 import { METAL, OUTLINE, mirrorPoly, rgba, roundRect, shade, type Ctx, type TeamPal } from './palette.ts';
-import { bevel, dot, emis, fxHooks, glowLine, grille, hazard, lamp, merlons, raised, reactor, recess, rivetRow, seam, stack, type GLight } from './giantart.ts';
+import { bevel, dot, emis, fxHooks, glowLine, grad, grille, hazard, lamp, merlons, raised, reactor, recess, rivetRow, seam, stack, type GLight } from './giantart.ts';
 import {
   beam, buildParts, cables, canister, creatureHooks, fillOut, joint as cjoint, lens, piston, profilePath, sleekShell, seamGlow, floatGap, visor,
   type CLight, type LegRig, type PartDef,
@@ -41,7 +41,28 @@ const union = (...ps: Path2D[]): Path2D => { const p = new Path2D(); for (const 
 // union parts must share one winding (nonzero fill): mirrored outlines run nose -> port -> tail -> starboard, so
 // ellipses are traced anticlockwise and rects are built mirrored in y
 const ellU = (x: number, y: number, rx: number, ry: number): Path2D => { const p = new Path2D(); p.ellipse(x, y, rx, ry, 0, 0, P2, true); return p; };
+const ellR = (x: number, y: number, rx: number, ry: number, rot: number): Path2D => { const p = new Path2D(); p.ellipse(x, y, rx, ry, rot, 0, P2, true); return p; };
 const rectU = (x0: number, y0: number, x1: number, y1: number, r = 0.02): Path2D => { const q = new Path2D(); roundRect(q, x0, -y1, x1 - x0, y1 - y0, r); const p = new Path2D(); p.addPath(q, new DOMMatrix([1, 0, 0, -1, 0, 0])); return p; };
+
+/** Segmented orb shell: an ellipse built from n armour plates whose trailing edges step out (a scalloped, plated
+ *  rim), plus leg-hub knobs at the given angles (radians from the nose, mirrored to both sides). */
+const orbU = (cx: number, rx: number, ry: number, n: number, step: number, hubs: number[], hubR: number, aspect: number): Path2D => {
+  const p = new Path2D();
+  for (let i = 0; i <= n * 4; i++) {
+    const f = i / (n * 4), a = -f * P2, ph = (f * n) % 1;
+    const k = 1 - step + step * Math.min(1, ph * 1.6);
+    const x = cx + Math.cos(a) * rx * k, y = Math.sin(a) * ry * k;
+    i ? p.lineTo(x, y) : p.moveTo(x, y);
+  }
+  p.closePath();
+  const q = union(p);
+  for (const a of hubs) for (const s of [-1, 1]) q.addPath(ellU(cx + Math.cos(a) * rx * 0.97, s * Math.sin(a) * ry * 0.97, hubR, hubR * aspect));
+  return q;
+};
+/** Aegis emitter vanes: [u, v, angle] - two swept forward, one astern */
+const AEGIS_PODS: [number, number, number][] = [[0.2, -0.3, -0.98], [0.2, 0.3, 0.98], [-0.38, 0, 0]];
+/** Leg-hub angles of the orb spiders (match their leg rigs) */
+const ORB_HUBS: Record<string, number[]> = { broodmother: [0.55, 1.15, 1.9, 2.55], arachne: [0.5, 1.1, 1.85, 2.6] };
 
 /* ------------------------------------------------------------------------------------------- detail kit */
 
@@ -114,6 +135,24 @@ class K {
     g.save(); g.clip(p);
     g.fillStyle = 'rgba(255,255,255,0.16)'; g.beginPath(); g.ellipse((x0 + x1) / 2 - r * 0.1, y - r * 0.4, Math.abs(x1 - x0) * 0.38, r * 0.3, 0, 0, P2); g.fill();
     g.restore();
+    return p;
+  }
+  /** plated droid sphere at (u, v), radius r (cells): team shading, latitude bands and staggered plate seams */
+  sphere(u: number, v: number, r: number, bands = 3, tone = 0): Path2D {
+    const g = this.g, x = u * this.X, y = v * this.Y;
+    const p = new Path2D(); p.arc(x, y, r, 0, P2);
+    g.save(); g.translate(this.o * 0.8, this.o * 1.4); g.fillStyle = 'rgba(0,0,0,0.5)'; g.fill(p); g.restore();
+    const gr = g.createRadialGradient(x - r * 0.38, y - r * 0.38, r * 0.05, x, y, r * 1.05);
+    gr.addColorStop(0, shade(this.pal.light, 0.2 + tone)); gr.addColorStop(0.45, shade(this.pal.body, tone)); gr.addColorStop(1, shade(this.pal.deep, -0.05));
+    g.fillStyle = gr; g.fill(p);
+    g.save(); g.clip(p);
+    g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = this.o * 0.7;
+    for (let i = 1; i <= bands; i++) { const f = i / (bands + 1) * 2 - 1; g.beginPath(); g.ellipse(x + f * r, y, r * 0.22 * (1 - Math.abs(f)) + this.o, r * Math.sqrt(1 - f * f), 0, 0, P2); g.stroke(); }
+    g.beginPath(); g.moveTo(x - r, y); g.lineTo(x + r, y); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = this.o * 0.6;
+    g.beginPath(); g.arc(x, y, r * 0.8, Math.PI * 1.05, Math.PI * 1.45); g.stroke();
+    g.restore();
+    g.lineWidth = this.o; g.strokeStyle = OUTLINE; g.stroke(p);
     return p;
   }
   /** droid canopy dome / bubble turret glass */
@@ -264,20 +303,31 @@ const SPECS: Record<string, Spec> = {
       sharpU([0.26, 0, 0.25, -0.14, 0.2, -0.4, 0.1, -0.42, 0.06, -0.35, -0.04, -0.35, -0.08, -0.42, -0.22, -0.42, -0.26, -0.35, -0.36, -0.35, -0.4, -0.41, -0.47, -0.32, -0.49, -0.14, -0.48, 0]),
     ),
   },
-  // ---- mantis: lanky insect skirmisher - slim thorax, raised head, long abdomen; cutter arms ride the forelimbs
+  // ---- mantis: destroyer-droid grammar - a curled armour shell astern, slim bronze-ribbed body, a flat crescent head
+  //      forward; twin gun arms ride the shoulders. Curls into a rolling ball when it travels (see droidart.ts).
   mantis: {
-    hw: 0.24, mounts: [[0.3, -0.3], [0.3, 0.3]], scale: [0.72], extPad: 0.15,
-    hull: () => smoothU([0.5, 0, 0.48, 0.11, 0.43, 0.18, 0.36, 0.15, 0.3, 0.08, 0.18, 0.09, 0.05, 0.1, -0.04, 0.12, -0.14, 0.22, -0.3, 0.27, -0.44, 0.2, -0.5, 0]),
+    hw: 0.42, mounts: [[0.3, -0.3], [0.3, 0.3]], scale: [0.72], extPad: 0.35,
+    hull: () => union(
+      smoothU([0.47, 0, 0.46, 0.12, 0.41, 0.22, 0.33, 0.25, 0.26, 0.17, 0.2, 0.08, 0.1, 0.08, 0.02, 0.2]),
+      smoothU([0.06, 0, 0.04, 0.26, -0.04, 0.38, -0.18, 0.45, -0.34, 0.42, -0.45, 0.3, -0.5, 0.12, -0.5, 0]),
+    ),
   },
   // ---- crab: wide, low scuttling bunker (crab-droid grammar) - a broad shell with a sensor brow, claws out front
   crab: {
     hw: 0.46, mounts: [[0.3, -0.4], [0.3, 0.4], [-0.08, 0]], scale: [0.75], extPad: 0.15,
     hull: () => sharpU([0.38, 0, 0.37, -0.08, 0.32, -0.14, 0.33, -0.22, 0.27, -0.3, 0.26, -0.38, 0.17, -0.4, 0.12, -0.47, 0.02, -0.44, -0.06, -0.49, -0.14, -0.44, -0.24, -0.46, -0.3, -0.37, -0.38, -0.33, -0.42, -0.2, -0.46, -0.12, -0.43, 0]),
   },
-  // ---- warlord: broad-shouldered heavy mech - wide yoke, a hunched cockpit head, reactor backpack
+  // ---- warlord: heavy chicken-walker (AT-ST grammar, scaled up) - a broad armoured command cab on a hip, chin
+  //      guns, big shoulder cannon pods either side, reactor bustle astern; backward-knee legs step out fore and aft
   warlord: {
-    hw: 0.48, mounts: [[-0.06, -0.3], [0.3, 0.38], [0.3, -0.38], [-0.33, 0]], scale: [0.9],
-    hull: () => sharpU([0.36, 0, 0.35, -0.05, 0.3, -0.09, 0.26, -0.18, 0.16, -0.26, 0.1, -0.44, -0.08, -0.47, -0.2, -0.42, -0.26, -0.24, -0.38, -0.2, -0.46, -0.11, -0.46, 0]),
+    hw: 0.3, mounts: [[-0.04, 0], [0.06, -0.39], [0.06, 0.39], [0.2, 0]], scale: [0.9, 0.9, 0.9, 0.8], extPad: 0.1,
+    hull: () => sharpU([0.27, 0, 0.27, -0.09, 0.24, -0.16, 0.16, -0.24, 0.06, -0.27, -0.12, -0.27, -0.2, -0.23, -0.22, -0.18, -0.3, -0.15, -0.34, -0.09, -0.34, 0]),
+  },
+  // ---- strider: chicken-walker scout (AT-ST grammar) - boxy head cab with a viewport slit and chin blasters, side
+  //      weapon pods, everything perched on a hip over two backward-knee legs
+  mech: {
+    hw: 0.3, mounts: [[-0.04, 0], [0.04, -0.37], [0.04, 0.37]], scale: [0.85, 0.85, 0.85], extPad: 0.1,
+    hull: () => sharpU([0.2, 0, 0.2, -0.11, 0.16, -0.19, 0.08, -0.24, -0.1, -0.24, -0.17, -0.2, -0.21, -0.11, -0.24, -0.05, -0.24, 0]),
   },
   // ---- scorpion: long armoured crawler - pincers forward, a tail of modules arching over the back to the heavy gun
   scorpion: {
@@ -292,13 +342,13 @@ const SPECS: Record<string, Spec> = {
   // ---- broodmother: orb walker (homing-spider grammar) - a huge armoured sphere slung between long legs, a prow cab
   broodmother: {
     hw: 0.42, extPad: 0.3, mounts: [[-0.06, 0], [0.34, 0], [-0.08, -0.24], [-0.08, 0.24], [-0.38, 0]],
-    hull: () => union(ellU(-0.06, 0, 0.42, 0.4), smoothU([0.5, 0, 0.49, 0.06, 0.44, 0.1, 0.32, 0.11, 0.24, 0.1, 0.2, 0])),
+    hull: () => union(orbU(-0.06, 0.42, 0.4, 10, 0.06, ORB_HUBS.broodmother, 0.07, 0.8), ellU(-0.47, 0, 0.06, 0.1), smoothU([0.5, 0, 0.49, 0.07, 0.44, 0.12, 0.36, 0.13, 0.3, 0.09, 0.24, 0.11, 0.18, 0])),
   },
   // ---- arachne: titan orb spider (dwarf-spider grammar) - a great sphere around a central titan cannon on eight
   //      needle legs, cab forward
   arachne: {
     hw: 0.38, extPad: 0.3, mounts: [[-0.06, 0], [0.22, -0.16], [0.22, 0.16], [-0.38, 0]],
-    hull: () => union(ellU(-0.06, 0, 0.4, 0.36), smoothU([0.5, 0, 0.49, 0.06, 0.45, 0.1, 0.34, 0.12, 0.26, 0.1, 0.22, 0])),
+    hull: () => union(orbU(-0.06, 0.4, 0.36, 12, 0.05, ORB_HUBS.arachne, 0.06, 0.82), smoothU([0.5, 0, 0.49, 0.06, 0.45, 0.1, 0.39, 0.12, 0.36, 0.08, 0.3, 0.12, 0.22, 0])),
   },
   // ---- riot: wide crown-wedge (hover-tank grammar) - a knife prow flanked by two forward tusk pods with fixed
   //      blasters, crew bunker behind, gun sponsons on the shoulders
@@ -326,12 +376,44 @@ const SPECS: Record<string, Spec> = {
   // ---- titan walker: colossal humanoid war machine, broad as it is long - forearm weapon pods, pauldrons
   colossal: {
     hw: 0.48, mounts: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
-    hull: () => sharpU([0.32, 0, 0.31, -0.05, 0.26, -0.09, 0.22, -0.2, 0.12, -0.28, 0.06, -0.47, -0.16, -0.48, -0.26, -0.3, -0.34, -0.16, -0.42, -0.12, -0.46, -0.05, -0.45, 0]),
+    // head jutting forward, chest, a notch at the arm-pits, forearm pods reaching forward, stepped pauldrons, a pinched
+    // waist and a reactor backpack with twin exhaust stacks
+    hull: () => sharpU([0.4, 0, 0.39, -0.045, 0.34, -0.075, 0.3, -0.09, 0.27, -0.2, 0.2, -0.24, 0.18, -0.28, 0.31, -0.3, 0.34, -0.34, 0.34, -0.44, 0.3, -0.47, 0.1, -0.47, 0.08, -0.52, -0.2, -0.52, -0.28, -0.44, -0.3, -0.3, -0.22, -0.24, -0.24, -0.19, -0.34, -0.19, -0.38, -0.15, -0.5, -0.15, -0.5, -0.04, -0.44, -0.04, -0.44, 0]),
   },
   // ---- citadel: mobile star fort - curtain walls, corner bastions, keep and gatehouse on a 6 x 5 footprint
   citadel: {
     hw: 0.5, mounts: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
     hull: () => sharpU([0.48, 0, 0.48, -0.08, 0.43, -0.12, 0.43, -0.26, 0.47, -0.31, 0.52, -0.385, 0.385, -0.52, 0.31, -0.47, 0.2, -0.45, 0.1, -0.45, 0.06, -0.41, -0.06, -0.41, -0.1, -0.45, -0.2, -0.45, -0.31, -0.47, -0.385, -0.52, -0.52, -0.385, -0.47, -0.31, -0.45, -0.2, -0.48, -0.12, -0.48, 0]),
+  },
+  // ---- drone: tri-rotor recon probe (probe-droid grammar) - a plated sensor orb with a big lens eye in a forward
+  //      head housing, two ducted fans swept forward on arms and a third on a tail boom
+  pod: {
+    hw: 0.24, mounts: [[-0.04, 0]], scale: [0.8], extPad: 0.1,
+    hull: () => union(ellU(-0.04, 0, 0.23, 0.23), ellU(0.17, 0, 0.13, 0.15), sharpU([-0.2, -0.05, -0.3, -0.06, -0.3, 0])),
+    rotors: (X, Y, S) => [{ x: 0.19 * X, y: -0.32 * Y, r: 0.15 * S, blades: 3 }, { x: 0.19 * X, y: 0.32 * Y, r: 0.15 * S, blades: 3 }, { x: -0.4 * X, y: 0, r: 0.13 * S, blades: 3 }],
+  },
+  // ---- raider: one-wheel tank droid (persuader grammar) - two bulbous armoured pods straddle a slot down the
+  //      centreline; on wheels a single huge drive wheel runs in it, showing fore and aft
+  box: {
+    hw: 0.34, mounts: [[0.06, -0.24], [0.06, 0.24]], scale: [0.85],
+    hull: () => sharpU([0.14, 0, 0.14, -0.11, 0.42, -0.12, 0.47, -0.17, 0.46, -0.25, 0.38, -0.34, -0.26, -0.35, -0.38, -0.32, -0.44, -0.24, -0.43, -0.13, -0.18, -0.11, -0.18, 0]),
+  },
+  // ---- warden: line-holder droid tank - a forked prow (two armoured mandible prongs with sensor tips), stepped
+  //      shoulder fins, a pinched waist and a rear reactor bulb
+  hex: {
+    hw: 0.42, mounts: [[0.04, 0], [-0.24, 0]], scale: [1, 0.9],
+    hull: () => sharpU([0.34, 0, 0.38, -0.07, 0.5, -0.12, 0.5, -0.2, 0.42, -0.27, 0.32, -0.3, 0.3, -0.39, 0.2, -0.47, -0.02, -0.47, -0.06, -0.38, -0.14, -0.35, -0.18, -0.43, -0.38, -0.43, -0.43, -0.32, -0.38, -0.22, -0.46, -0.18, -0.5, -0.08, -0.5, 0]),
+  },
+  // ---- aegis: repair droid - a plated core orb with three emitter pods on stub arms (two swept forward, one astern)
+  //      and a sensor nub on the nose: a trefoil you can pick out at any size
+  round: {
+    hw: 0.42, mounts: [[-0.02, 0], [-0.39, 0]], scale: [1, 0.85],
+    hull: () => union(
+      ellU(-0.02, 0, 0.3, 0.3),
+      ...AEGIS_PODS.map(([u, v, a]) => ellR(u, v, 0.17, 0.085, a)),
+      sharpU([-0.2, -0.1, -0.4, -0.08, -0.42, 0]),
+      ellU(0.31, 0, 0.09, 0.08),
+    ),
   },
 };
 
@@ -381,6 +463,18 @@ export function footUnderlay(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): bo
     case 'crab':
       for (const s of [-1, 1]) beam(g, k.x(0.22), k.y(s * 0.08), 0.03 * S, k.x(0.42), k.y(s * 0.12), 0.022 * S, METAL.light, METAL.dark, o);
       break;
+    case 'pod':
+      // probe-droid manipulators dangling forward under the head, sensor whiskers trailing astern
+      for (const s of [-1, 1]) {
+        beam(g, k.x(0.12), k.y(s * 0.08), 0.022 * S, k.x(0.3), k.y(s * 0.17), 0.016 * S, METAL.light, METAL.dark, o * 0.8);
+        beam(g, k.x(0.3), k.y(s * 0.17), 0.016 * S, k.x(0.42), k.y(s * 0.12), 0.012 * S, METAL.base, METAL.deep, o * 0.8);
+        cjoint(g, k.x(0.3), k.y(s * 0.17), 0.02 * S, o * 0.7, METAL.base);
+        g.strokeStyle = OUTLINE; g.lineWidth = 0.02 * S; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(k.x(-0.2), k.y(s * 0.1)); g.quadraticCurveTo(k.x(-0.34), k.y(s * 0.2), k.x(-0.46), k.y(s * 0.3)); g.stroke();
+        g.strokeStyle = METAL.light; g.lineWidth = 0.009 * S; g.stroke();
+        dot(g, k.x(-0.46), k.y(s * 0.3), 0.014 * S, emis(pal));
+      }
+      break;
   }
   return true;
 }
@@ -395,6 +489,89 @@ export function footDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): boo
 }
 
 const DETAILS: Record<string, (k: K) => void> = {
+
+  pod(k) {
+    const S = k.S, g = k.g, E = k.E;
+    // plated sensor orb; armour skirt ring where the gun mount sits
+    k.sphere(-0.04, 0, 0.21 * S, 2, 0.02);
+    g.strokeStyle = rgba(k.pal.accent, 0.9); g.lineWidth = k.o; g.beginPath(); g.arc(k.x(-0.04), 0, 0.165 * S, Math.PI * 0.6, Math.PI * 1.4); g.stroke();
+    for (const s of [-1, 1]) { k.grille(-0.08, s * 0.14, 0.06 * S, 0.05 * S, 3, 0.7); k.lamp(-0.2, s * 0.08, 0.016 * S, s < 0 ? '#ff4040' : '#40ff70'); }
+    // forward head housing with a big lens eye and two side optics
+    const hd = k.B([0.3, 0, 0.29, 0.07, 0.24, 0.13, 0.14, 0.15, 0.08, 0.1, 0.07, 0]);
+    k.dark(hd, 0.07, -0.15, 0.3, 0.15, 1.2);
+    k.seam([0.12, -0.12, 0.12, 0.12]);
+    k.eye(0.24, 0, 0.055 * S);
+    for (const s of [-1, 1]) k.eye(0.17, s * 0.1, 0.022 * S);
+    k.dot(-0.28, 0, 0.03 * S, METAL.dark);
+  },
+  box(k) {
+    const S = k.S, g = k.g;
+    // centre slot floor (shows the drive wheel through the fork) + axle housing bridge
+    k.dark(k.R(-0.02, 0, 0.18, 0.3, 0.03), -0.11, -0.15, 0.07, 0.15, 1.2);
+    k.seam([-0.02, -0.12, -0.02, 0.12]);
+    k.eye(0.05, 0, 0.03 * S);
+    // two bulbous armoured pods
+    for (const s of [-1, 1]) {
+      k.pod(-0.4, 0.46, s * 0.23, 0.1 * S, 0.02);
+      k.seam([0.24, s * 0.14, 0.24, s * 0.32, -0.22, s * 0.14, -0.22, s * 0.32]);
+      k.stripe([-0.32, s * 0.31, 0.32, s * 0.31], k.o * 1.1);
+      k.lamp(0.43, s * 0.22, 0.02 * S);
+      k.grille(-0.33, s * 0.23, 0.07 * S, 0.1 * S, 3, 0.5);
+      k.dot(0.44, s * 0.17, 0.014 * S, '#07080a');
+    }
+    void g;
+  },
+  hex(k) {
+    const S = k.S, g = k.g;
+    // armoured casemate down the middle
+    k.plate(k.M([0.36, 0, 0.36, -0.12, 0.28, -0.2, -0.3, -0.2, -0.36, -0.12, -0.36, 0]), -0.36, -0.2, 0.36, 0.2, 0.06, 1.3);
+    k.seam([0.2, -0.2, 0.2, 0.2, -0.12, -0.2, -0.12, 0.2]);
+    // mandible prongs with sensor tips and fixed blasters
+    for (const s of [-1, 1]) {
+      const pr = k.P([0.5, s * 0.12, 0.5, s * 0.2, 0.42, s * 0.27, 0.3, s * 0.27, 0.32, s * 0.12]);
+      k.dark(pr, 0.3, s * 0.12, 0.5, s * 0.27, 1.2);
+      k.eye(0.46, s * 0.16, 0.025 * S);
+      k.barrel(0.36, s * 0.235, 0.16 * S, 0.022 * S);
+      // shoulder fins and rear fins
+      const f1 = k.P([0.3, s * 0.3, 0.3, s * 0.39, 0.2, s * 0.47, -0.02, s * 0.47, -0.06, s * 0.38, -0.06, s * 0.3]);
+      k.plate(f1, -0.06, s * 0.3, 0.3, s * 0.47, -0.04, 1.1);
+      k.stripe([0.18, s * 0.44, 0.0, s * 0.44]);
+      k.rivets(0.24, s * 0.35, -0.02, s * 0.35, 4);
+      const f2 = k.P([-0.18, s * 0.34, -0.18, s * 0.43, -0.38, s * 0.43, -0.43, s * 0.32, -0.38, s * 0.24]);
+      k.plate(f2, -0.43, s * 0.24, -0.18, s * 0.43, -0.08, 1);
+      k.grille(-0.29, s * 0.35, 0.12 * S, 0.08 * S, 4, 0.6);
+    }
+    // rear reactor bulb
+    const rb = k.M([-0.38, -0.0, -0.38, -0.16, -0.46, -0.16, -0.5, -0.08, -0.5, 0]);
+    k.dark(rb, -0.5, -0.16, -0.38, 0.16, 1.2);
+    k.reactor(-0.44, 0, 0.06 * S);
+    void g;
+  },
+  round(k) {
+    const S = k.S, g = k.g, E = k.E;
+    // stub arms with repair conduits out to three emitter pods
+    const pods = AEGIS_PODS;
+    for (const [u, v] of pods) { g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 0.05 * S; g.beginPath(); g.moveTo(k.x(-0.02), 0); g.lineTo(k.x(u), k.y(v)); g.stroke(); k.glow([-0.02 + u * 0.4, v * 0.4, u * 0.8, v * 0.8], k.o * 0.9); }
+    k.sphere(-0.02, 0, 0.27 * S, 3, 0);
+    // halo ring of the repair field
+    g.strokeStyle = rgba(k.pal.glow, 0.8); g.lineWidth = k.o * 1.1;
+    g.beginPath(); g.arc(k.x(-0.02), 0, 0.225 * S, -2.6, -0.9); g.arc(k.x(-0.02), 0, 0.225 * S, 0.9, 2.6); g.stroke();
+    for (const [u, v, a] of pods) {
+      const r = 0.075;
+      const pd = new Path2D(); pd.ellipse(k.x(u), k.y(v), 0.155 * S, 0.072 * S, a, 0, P2);
+      k.dark(pd, u - 0.15, v - 0.15, u + 0.15, v + 0.15, 1.2);
+      g.strokeStyle = rgba(k.pal.accent, 0.9); g.lineWidth = k.o; g.beginPath(); g.ellipse(k.x(u), k.y(v), 0.12 * S, 0.05 * S, a, 0, P2); g.stroke();
+      k.dot(u, v, r * S * 0.42, '#05080b');
+      const gg = g.createRadialGradient(k.x(u), k.y(v), 0, k.x(u), k.y(v), r * S * 0.4);
+      gg.addColorStop(0, '#ffffff'); gg.addColorStop(0.35, '#7dffb0'); gg.addColorStop(1, rgba('#2bd47a', 0));
+      k.dot(u, v, r * S * 0.4, gg);
+    }
+    // sensor nub
+    k.dark(k.C(0.31, 0, 0.075 * S), 0.24, -0.08, 0.38, 0.08, 1);
+    k.eye(0.33, 0, 0.03 * S);
+    void E;
+  },
+  mech(k) { walkerCab(k, false); },
   long(k) {
     const S = k.S, g = k.g;
     // reactor bulb astern of the turret
@@ -649,16 +826,24 @@ const DETAILS: Record<string, (k: K) => void> = {
   },
   mantis(k) {
     const S = k.S, E = k.E, g = k.g;
-    const pack = k.B([-0.06, 0, -0.12, 0.2, -0.28, 0.24, -0.42, 0.18, -0.48, 0]);
-    floatGap(g, pack, E, k.o, 1);
-    sleekShell(g, pack, k.pal, k.o, 1, k.x(-0.1), k.y(-0.24), k.x(-0.44), k.y(0.24));
-    seamGlow(g, k.A([-0.1, -0.14, -0.28, -0.22, -0.44, -0.08, -0.1, 0.14, -0.28, 0.22, -0.44, 0.08]), 1, E, k.o * 0.8);
-    cables(g, k.A([0.08, 0, -0.08, 0]), 1, 0.03 * S, 2);
-    const th = k.B([0.28, 0, 0.24, 0.08, 0.12, 0.1, 0.02, 0.08, 0.0, 0]);
-    sleekShell(g, th, k.pal, k.o, 1, k.x(0.02), k.y(-0.1), k.x(0.26), k.y(0.1));
-    const hd = k.B([0.49, 0, 0.47, 0.1, 0.42, 0.17, 0.36, 0.15, 0.32, 0.08, 0.31, 0]);
-    sleekShell(g, hd, k.pal, k.o, 1, k.x(0.31), k.y(-0.17), k.x(0.49), k.y(0.17));
-    seamGlow(g, k.A([0.43, -0.12, 0.48, 0, 0.43, 0.12]), 1, E, k.o * 1.4);
+    // curled armour shell astern: three overlapping banded lames (they wrap round into the ball when it rolls)
+    for (let i = 0; i < 3; i++) {
+      const u0 = 0.02 - i * 0.16;
+      const lame = k.B([u0, 0, u0 - 0.02, 0.27 - i * 0.02, u0 - 0.08, 0.4 - i * 0.03, u0 - 0.17, 0.44 - i * 0.05, u0 - 0.26, 0.37 - i * 0.07, Math.max(-0.5, u0 - 0.31), 0.18, Math.max(-0.5, u0 - 0.32), 0]);
+      sleekShell(g, lame, k.pal, k.o, 1, k.x(u0), k.y(-0.44), k.x(u0 - 0.3), k.y(0.44));
+      k.seam([u0 - 0.06, -0.3 + i * 0.03, u0 - 0.06, 0.3 - i * 0.03], k.o * 0.5);
+    }
+    k.stripe([-0.12, -0.36, -0.12, -0.2, -0.12, 0.2, -0.12, 0.36], k.o * 1.2);
+    seamGlow(g, k.A([-0.38, -0.2, -0.44, 0, -0.38, 0.2]), 1, E, k.o * 0.9);
+    // ribbed bronze body / neck
+    cables(g, k.A([0.2, 0, 0.0, 0]), 1, 0.045 * S, 3);
+    for (const u of [0.06, 0.11, 0.16]) k.dot(u, 0, 0.05 * S, METAL.base);
+    // flat crescent head with a sensor slit
+    const hd = k.B([0.47, 0, 0.46, 0.12, 0.41, 0.22, 0.33, 0.25, 0.27, 0.17, 0.24, 0.08, 0.22, 0]);
+    sleekShell(g, hd, k.pal, k.o, 1, k.x(0.24), k.y(-0.25), k.x(0.47), k.y(0.25));
+    k.seam([0.3, -0.18, 0.4, 0, 0.3, 0.18, 0.4, 0]);
+    k.visor(0.44, -0.1, 0.44, 0.1, 0.018 * S);
+    for (const s of [-1, 1]) k.eye(0.36, s * 0.14, 0.022 * S);
   },
   crab(k) {
     const S = k.S;
@@ -681,28 +866,7 @@ const DETAILS: Record<string, (k: K) => void> = {
     k.dark(k.M([0.37, -0.0, 0.36, -0.12, 0.3, -0.14, 0.29, 0]), 0.29, -0.14, 0.37, 0.14, 1);
     k.visor(0.345, -0.1, 0.345, 0.1, 0.018 * S);
   },
-  warlord(k) {
-    const S = k.S;
-    // reactor backpack
-    k.dark(k.R(-0.38, 0, 0.16, 0.34, 0.1), -0.46, -0.17, -0.3, 0.17, 1.3);
-    for (const s of [-1, 1]) k.stack(-0.42, s * 0.1, 0.06 * S);
-    // chest + reactor core
-    k.plate(k.M([0.24, -0.04, 0.2, -0.13, 0.1, -0.2, -0.14, -0.18, -0.2, -0.06, -0.2, 0]), -0.2, -0.2, 0.24, 0.2, 0.06, 1.4);
-    k.seam([0.1, -0.2, 0.03, -0.06, 0.1, 0.2, 0.03, 0.06, -0.14, -0.18, -0.07, -0.06, -0.14, 0.18, -0.07, 0.06]);
-    k.reactor(0.02, 0, 0.13);
-    // hunched cockpit head
-    k.plate(k.B([0.35, 0, 0.34, 0.04, 0.3, 0.07, 0.22, 0.07, 0.2, 0]), 0.2, -0.07, 0.35, 0.07, 0.12, 1.3);
-    k.visor(0.31, -0.04, 0.31, 0.04, 0.025 * S);
-    // shoulder yoke pauldrons
-    for (const s of [-1, 1]) {
-      const pd = k.B([0.12, 0, 0.1, 0.06, 0.04, 0.09, -0.08, 0.1, -0.18, 0.07, -0.21, 0]);
-      const g = k.g; g.save(); g.translate(0, k.y(s * 0.36));
-      k.plate(pd, -0.2, -0.1, 0.12, 0.1, 0.1, 1.5);
-      k.stripe([-0.16, s * 0.08, 0.06, s * 0.08], k.o * 1.3);
-      for (const u of [0.06, -0.04, -0.14]) k.seam([u, -0.08, u - 0.01, 0.08]);
-      g.restore();
-    }
-  },
+  warlord(k) { walkerCab(k, true); },
   scorpion(k) {
     const S = k.S;
     // spine plate, side sponsons, sensor head
@@ -832,8 +996,9 @@ const DETAILS: Record<string, (k: K) => void> = {
     k.plate(k.M([0.22, -0.08, 0.18, -0.18, 0.06, -0.25, -0.12, -0.25, -0.17, -0.12, -0.17, 0]), -0.17, -0.25, 0.22, 0.25, 0.08, 1.5);
     k.reactor(0.03, 0, 0.3);
     k.glow([0.12, -0.05, 0.19, -0.15, 0.12, 0.05, 0.19, 0.15, -0.06, -0.1, -0.12, -0.21, -0.06, 0.1, -0.12, 0.21], k.o);
-    k.plate(k.M([0.32, -0.04, 0.3, -0.085, 0.2, -0.095, 0.17, -0.06, 0.17, 0]), 0.17, -0.095, 0.32, 0.095, 0.12, 1.4);
-    k.visor(0.3, -0.05, 0.3, 0.05, 0.04 * S * 0.5);
+    k.plate(k.M([0.39, -0.03, 0.37, -0.065, 0.3, -0.085, 0.2, -0.095, 0.17, -0.06, 0.17, 0]), 0.17, -0.095, 0.39, 0.095, 0.12, 1.4);
+    k.visor(0.36, -0.05, 0.36, 0.05, 0.04 * S * 0.5);
+    for (const s of [-1, 1]) { k.dark(k.R(-0.44, s * 0.095, 0.12, 0.08, 0.03), -0.5, s * 0.06, -0.38, s * 0.13, 1.2); k.dot(-0.49, s * 0.095, 0.08, '#07080a'); }
   },
   citadel(k) {
     const S = k.S, g = k.g;
@@ -860,11 +1025,115 @@ const DETAILS: Record<string, (k: K) => void> = {
   },
 };
 
+/** Chicken-walker head cab (strider / warlord): boxy armoured cab, chamfered nose with a viewport slit, chin
+ *  blasters, roof hatch, side cheek plates, reactor bustle; warlord adds a command cupola and heavier detail. */
+function walkerCab(k: K, big: boolean): void {
+  const S = k.S, g = k.g, m = k.m;
+  const nose = big ? 0.27 : 0.2, half = big ? 0.27 : 0.24, rear = big ? -0.34 : -0.24;
+  // reactor bustle astern
+  const bus = k.R(rear + 0.06, 0, 0.12, half * 0.9, 0.06);
+  k.dark(bus, rear, -half * 0.45, rear + 0.12, half * 0.45, 1.2);
+  k.grille(rear + 0.06, 0, 0.07 * m, half * 0.6 * k.Y, 4, 0.7);
+  for (const s of [-1, 1]) k.stack(rear + 0.05, s * half * 0.62, 0.045 * m);
+  // cab roof: raised team armour with a chamfered nose
+  const roof = k.M([nose - 0.03, 0, nose - 0.03, -half * 0.42, nose - 0.08, -half * 0.75, 0.04, -half * 0.88, -0.16, -half * 0.88, -0.2, -half * 0.6, -0.2, 0]);
+  k.plate(roof, -0.2, -half, nose, half, 0.08, 1.5);
+  k.seam([0.02, -half * 0.86, 0.02, half * 0.86, -0.12, -half * 0.86, -0.12, half * 0.86]);
+  for (const s of [-1, 1]) {
+    // cheek plates + team stripe
+    k.stripe([nose - 0.1, s * half * 0.8, -0.14, s * half * 0.8], k.o * 1.2);
+    k.rivets(nose - 0.06, s * half * 0.6, -0.14, s * half * 0.6, big ? 5 : 4);
+    k.dot(nose - 0.02, s * half * 0.55, 0.018 * m, '#fff3c4');
+  }
+  // viewport slit across the nose + chin blasters
+  k.visor(nose - 0.035, -half * 0.45, nose - 0.035, half * 0.45, (big ? 0.035 : 0.03) * m);
+  for (const s of [-1, 1]) k.barrel(nose - 0.02, s * half * (big ? 0.22 : 0.18), (big ? 0.16 : 0.18) * m, (big ? 0.035 : 0.028) * m);
+  k.haz(-0.17, 0, 0.03 * m, half * 0.9 * k.Y, true);
+  // roof hatch (turret ring sits behind it) / command cupola
+  if (big) { k.dark(k.C(0.12, -half * 0.42, 0.07 * m), 0.06, -half * 0.6, 0.18, -half * 0.25, 1.2); k.eye(0.15, -half * 0.42, 0.02 * m); }
+  else { k.metal(k.C(0.08, half * 0.45, 0.05 * m), 0.04, half * 0.3, 0.12, half * 0.6, 1); }
+  void g;
+}
+
+/** Backward-knee walker legs (AT-ST grammar): a hip block under the cab, armoured thighs sweeping back to high
+ *  knees behind the cab, shins forward to big three-toed feet that step out in front of it. */
+export function chickenLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: boolean, o: number, big: boolean): void {
+  const X = L.X, Y = L.Y, m = Math.min(X, Y), S = L.S;
+  const hipY = (big ? 0.13 : 0.12) * Y, footY = (big ? 0.15 : 0.13) * Y, kneeY = (big ? 0.2 : 0.19) * Y;
+  const fx0 = (big ? 0.4 : 0.36) * X, stride = (big ? 0.12 : 0.13) * X;
+  const W = (big ? 0.075 : 0.085) * m;
+  const E = emis(pal);
+  // hip block
+  const hip = new Path2D(); roundRect(hip, -0.12 * X, -hipY - W, 0.2 * X, (hipY + W) * 2, W * 0.6);
+  fillOut(g, hip, METAL.dark, o);
+  for (const s of [-1, 1]) {
+    const ph = phase * P2 + (s > 0 ? Math.PI : 0);
+    const sw = rest ? (s > 0 ? 0.25 : -0.35) : Math.sin(ph);
+    const lift = rest ? 0 : Math.max(0, Math.cos(ph));
+    const fx = fx0 + sw * stride, fy = s * footY;
+    const hx = -0.02 * X, hy = s * hipY;
+    const kx = -(big ? 0.52 : 0.44) * X + sw * 0.05 * X + lift * 0.04 * X, ky = s * kneeY;
+    const ax = fx - 0.05 * X, ay = fy;
+    // shin (behind the thigh in draw order) with a ram, then the armoured thigh
+    beam(g, kx, ky, W * 0.75, ax, ay, W * 0.6, METAL.light, METAL.dark, o);
+    piston(g, kx + (ax - kx) * 0.15, ky - s * W * 0.9, kx + (ax - kx) * 0.75, ay - s * W * 0.7, W * 0.32, o * 0.6);
+    beam(g, hx, hy, W * 1.15, kx, ky, W, shade(pal.light, 0.04), pal.dark, o);
+    g.strokeStyle = rgba(pal.accent, 0.9); g.lineWidth = o * 1.1; g.beginPath(); g.moveTo(hx + (kx - hx) * 0.2, hy + (ky - hy) * 0.2 + s * W * 0.5); g.lineTo(hx + (kx - hx) * 0.75, hy + (ky - hy) * 0.75 + s * W * 0.5); g.stroke();
+    // armoured knee cap (team plate) over the joint
+    const kc = new Path2D(); kc.ellipse(kx - W * 0.2, ky, W * 1.0, W * 0.8, 0, 0, P2);
+    raised(g, kc, grad(g, 1, shade(pal.light, 0.08), pal.dark, kx - W, ky - W, kx + W, ky + W), o, m, 1.2, 0.01, 0.5);
+    dot(g, kx - W * 0.2, ky, W * 0.4, big ? E : METAL.base);
+    cjoint(g, hx, hy, W * 0.95, o, METAL.dark);
+    // foot: three splayed toes forward, a spur behind; a lifted foot grows and brightens
+    const z = 1 + lift * 0.2;
+    g.save(); g.translate(ax, ay); g.scale(z, z);
+    const tl = (big ? 0.16 : 0.2) * X * 0.62, tw = W * 0.55;
+    for (const a of [-0.45, 0, 0.45]) {
+      const ex = Math.cos(a) * tl, ey = Math.sin(a) * tl * 0.7;
+      beam(g, 0, 0, tw, ex, ey, tw * 0.7, lift > 0.1 ? METAL.light : METAL.base, METAL.deep, o * 0.8);
+    }
+    beam(g, 0, 0, tw, -tl * 0.45, 0, tw * 0.6, METAL.base, METAL.deep, o * 0.8);
+    cjoint(g, 0, 0, W * 0.8, o, lift > 0.1 ? shade(pal.dark, 0.25) : pal.dark);
+    g.restore();
+  }
+  void S;
+}
+
+/** Destroyer-droid tripod: two thin legs splayed forward-out from the shoulders, one straight back from under the
+ *  shell, each ending in a flat hoof pad. */
+function tripodLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number, rest: boolean, o: number): void {
+  const X = L.X, Y = L.Y, m = Math.min(X, Y);
+  const W = 0.04 * m;
+  const legs: [number, number, number, number, number, number, number][] = [
+    // hip u, v, knee u, v, foot u, v, gait offset
+    [0.06, -0.1, 0.12, -0.52, 0.3, -0.64, 0], [0.06, 0.1, 0.12, 0.52, 0.3, 0.64, Math.PI], [-0.12, 0, -0.42, 0.08, -0.62, 0, Math.PI / 2],
+  ];
+  for (const [hu, hv, ku, kv, fu, fv, off] of legs) {
+    const ph = phase * P2 + off;
+    const sw = rest ? 0 : Math.sin(ph) * 0.06, lift = rest ? 0 : Math.max(0, Math.cos(ph));
+    const fx = (fu + sw) * X, fy = fv * Y, kx = (ku + sw * 0.5) * X, ky = kv * Y * (1 + lift * 0.06);
+    beam(g, kx, ky, W * 0.8, fx, fy, W * 0.65, METAL.light, METAL.dark, o * 0.8);
+    beam(g, hu * X, hv * Y, W, kx, ky, W * 0.85, shade(pal.light, -0.05), pal.dark, o * 0.8);
+    cjoint(g, kx, ky, W * 1.1, o * 0.8, METAL.base);
+    const z = 1 + lift * 0.2;
+    const hoof = new Path2D(); hoof.ellipse(fx, fy, W * 1.9 * z, W * 1.4 * z, Math.atan2(fy - ky, fx - kx), 0, P2);
+    fillOut(g, hoof, lift > 0.1 ? METAL.light : METAL.base, o * 0.8);
+    dot(g, fx, fy, W * 0.6, METAL.deep);
+  }
+}
+
 /** Broodmother / Arachne: an armoured orb slung between the legs, banded with emissive seams, cab forward. */
 function orbDetails(k: K, titan: boolean): void {
   const S = k.S, g = k.g, E = k.E;
   const cx = -0.06, rx = titan ? 0.4 : 0.42, ry = titan ? 0.36 : 0.4;
-  const orb = new Path2D(); orb.ellipse(k.x(cx), 0, k.x(rx), k.y(ry), 0, 0, P2);
+  const nP = titan ? 12 : 10, step = titan ? 0.05 : 0.06;
+  const hubs = ORB_HUBS[titan ? 'arachne' : 'broodmother'];
+  // leg hubs first (the shell overlaps their inner half)
+  for (const a of hubs) for (const s of [-1, 1]) {
+    const hu = cx + Math.cos(a) * rx * 0.97, hv = s * Math.sin(a) * ry * 0.97;
+    k.dark(k.C(hu, hv, (titan ? 0.06 : 0.07) * k.X * 0.95), hu - 0.06, hv - 0.06, hu + 0.06, hv + 0.06, 1.3);
+  }
+  const orb = new Path2D(); orb.addPath(orbU(cx, rx, ry, nP, step, [], 0, 1), new DOMMatrix([k.X, 0, 0, k.Y, 0, 0]));
   // shading: big sphere highlight + terminator
   const gr = g.createRadialGradient(k.x(cx - rx * 0.35), k.y(-ry * 0.35), 0, k.x(cx), 0, Math.max(k.x(rx), k.y(ry)) * 1.05);
   gr.addColorStop(0, shade(k.pal.light, 0.18)); gr.addColorStop(0.45, k.pal.body); gr.addColorStop(1, shade(k.pal.deep, -0.1));
@@ -874,8 +1143,21 @@ function orbDetails(k: K, titan: boolean): void {
   g.strokeStyle = 'rgba(0,0,0,0.42)'; g.lineWidth = k.o * 0.8;
   for (const f of [-0.6, -0.25, 0.25, 0.6]) { g.beginPath(); g.ellipse(k.x(cx), 0, k.x(rx) * Math.sqrt(1 - f * f) * 1.0, k.y(ry), 0, 0, P2); g.stroke(); }
   for (const f of [-0.5, 0, 0.5]) { g.beginPath(); g.ellipse(k.x(cx), k.y(ry * f), k.x(rx), k.y(ry) * 0.18, 0, 0, P2); g.stroke(); }
+  // plate joints: a seam from each scallop step in toward the barbette, lit lip on the step
+  for (let i = 0; i < nP; i++) {
+    const a = -(i / nP) * P2;
+    const x0 = k.x(cx) + Math.cos(a) * k.x(rx), y0 = Math.sin(a) * k.y(ry);
+    const x1 = k.x(cx) + Math.cos(a) * k.x(rx) * 0.55, y1 = Math.sin(a) * k.y(ry) * 0.55;
+    g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = k.o * 1.1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = k.o * 0.6; g.beginPath(); g.moveTo(x0 + k.o, y0 + k.o); g.lineTo(x1 + k.o, y1 + k.o); g.stroke();
+  }
   g.restore();
   g.lineWidth = k.o * 1.2; g.strokeStyle = OUTLINE; g.stroke(orb);
+  // hub caps with actuator cores
+  for (const a of hubs) for (const s of [-1, 1]) {
+    const hu = cx + Math.cos(a) * rx * 0.97, hv = s * Math.sin(a) * ry * 0.97;
+    cjoint(g, k.x(hu), k.y(hv), (titan ? 0.042 : 0.05) * k.X, k.o, METAL.base, E);
+  }
   if (titan) {
     // glowing meridian seams and vents
     seamGlow(g, k.A([cx + rx * 0.6, -ry * 0.75, cx, -ry * 0.98, cx - rx * 0.7, -ry * 0.7, cx + rx * 0.6, ry * 0.75, cx, ry * 0.98, cx - rx * 0.7, ry * 0.7]), 1, E, k.o * 1.2);
@@ -899,6 +1181,12 @@ function orbDetails(k: K, titan: boolean): void {
   k.seam([0.24, 0, 0.42, 0]);
   k.visor(0.47, -0.06, 0.47, 0.06, 0.012 * S);
   for (const s of [-1, 1]) k.eye(0.44, s * 0.07, 0.02 * S);
+  // sensor turret on the cab roof: dome with a rotating-dish brow and a whip antenna
+  k.dark(k.C(0.33, 0, 0.055 * k.X), 0.28, -0.06, 0.38, 0.06, 1.3);
+  k.dome(0.33, 0, 0.035 * k.X, 0.035 * k.X);
+  k.stripe([0.27, -0.08, 0.27, 0.08], k.o * 1.2);
+  // rear spinner / reactor bulb
+  if (!titan) { k.dark(k.C(-0.47, 0, 0.055 * k.X), -0.53, -0.08, -0.41, 0.08, 1.2); k.reactor(-0.47, 0, 0.035 * k.X); }
 }
 
 /* ------------------------------------------------------------------------------------------- running gear */
@@ -913,14 +1201,52 @@ export function footMobility(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number,
     return true;
   }
   if (!SPECS[L.shape]) return false;
-  // single wide snail tread under a wedge, outrigger skids either side
-  if (id === 'treads' && L.shape === 'riot') {
-    for (const s of [-1, 1]) {
-      beam(g, 0, s * 0.18 * L.Y, 0.05 * S, -0.1 * L.X, s * 0.44 * L.Y, 0.04 * S, METAL.light, METAL.dark, o);
-      const sk = new Path2D(); roundRect(sk, -0.3 * L.X, s * 0.44 * L.Y - 0.06 * S, 0.5 * L.X, 0.12 * S, 0.06 * S);
-      fillOut(g, sk, METAL.dark, o);
+  const X = L.X, Y = L.Y;
+  // drone: arms out to three ducted fans (the blur discs are drawn over everything by drawUnit)
+  if (id === 'rotor' && L.shape === 'pod') {
+    for (const r of L.rotors) {
+      beam(g, r.x * 0.15, r.y * 0.15, 0.045 * S, r.x, r.y, 0.035 * S, shade(pal.dark, 0.1), pal.deep, o);
+      const duct = new Path2D(); duct.arc(r.x, r.y, r.r * 1.16, 0, P2); duct.arc(r.x, r.y, r.r * 0.98, 0, P2, true);
+      g.save(); g.translate(o * 0.6, o * 1.2); g.fillStyle = 'rgba(0,0,0,0.45)'; g.fill(duct); g.restore();
+      const dg = g.createLinearGradient(r.x - r.r, r.y - r.r, r.x + r.r, r.y + r.r);
+      dg.addColorStop(0, shade(pal.light, 0.05)); dg.addColorStop(1, pal.deep);
+      g.fillStyle = dg; g.fill(duct); g.lineWidth = o * 0.8; g.strokeStyle = OUTLINE; g.stroke(duct);
+      g.strokeStyle = rgba(pal.accent, 0.9); g.lineWidth = o * 0.8; g.beginPath(); g.arc(r.x, r.y, r.r * 1.07, Math.PI * 0.9, Math.PI * 1.6); g.stroke();
+      g.fillStyle = 'rgba(8,10,12,0.55)'; g.beginPath(); g.arc(r.x, r.y, r.r * 0.98, 0, P2); g.fill();
+      g.strokeStyle = METAL.dark; g.lineWidth = 0.02 * S; g.beginPath(); g.moveTo(r.x - r.r, r.y); g.lineTo(r.x + r.r, r.y); g.moveTo(r.x, r.y - r.r); g.lineTo(r.x, r.y + r.r); g.stroke();
+      cjoint(g, r.x, r.y, 0.035 * S, o, METAL.base);
     }
-    bigTread(g, -0.48 * L.X, 0.48 * L.X, 0, 0.5 * L.Y, phase, S, o);
+    return true;
+  }
+  // raider on wheels: one huge drive wheel down the centre slot
+  if (id === 'wheels' && L.shape === 'box') {
+    for (const s of [-1, 1]) bigWheel(g, -0.34 * X, s * 0.4 * Y, 0.16 * X, 0.08 * Y, phase, o);
+    hoopWheel(g, 0, 0, 0.98 * X, 0.21 * Y, phase, pal, o);
+    return true;
+  }
+  // riot: running gear sits out in the rear flank notches so it reads past the wide crown
+  if (L.shape === 'riot' && (id === 'treads' || id === 'wheels' || id === 'halftrack')) {
+    const y = 0.44 * Y, w = 0.115 * Y;
+    for (const s of [-1, 1]) {
+      beam(g, -0.1 * X, s * 0.2 * Y, 0.05 * S, -0.16 * X, s * y, 0.04 * S, METAL.light, METAL.dark, o);
+      if (id === 'treads') bigTread(g, -0.49 * X, 0.04 * X, s * y, w, phase, S, o);
+      else if (id === 'halftrack') { bigTread(g, -0.49 * X, -0.17 * X, s * y, w, phase, S, o); bigWheel(g, -0.05 * X, s * y, 0.2 * X, w * 0.9, phase, o); }
+      else for (const u of [-0.34, -0.08]) bigWheel(g, u * X, s * y, 0.22 * X, w * 0.9, phase, o);
+    }
+    return true;
+  }
+  // chicken walkers
+  if ((L.shape === 'mech' && (id === 'legs' || id === 'jumpjets')) || (L.shape === 'warlord' && id === 'titanlegs')) {
+    chickenLegs(g, L, pal, phase, rest, o, L.shape === 'warlord');
+    if (id === 'jumpjets') for (const n of L.nozzles) {
+      const p = new Path2D(); roundRect(p, n.x, n.y - n.w, 0.16 * S, n.w * 2, n.w * 0.5);
+      fillOut(g, p, METAL.dark, o); dot(g, n.x + 0.02 * S, n.y, n.w * 0.6, '#0a0a0a');
+    }
+    return true;
+  }
+  // destroyer droid deployed on its tripod (it rolls as a ball when moving - drawUnit swaps the sprite)
+  if (L.shape === 'mantis' && (id === 'legs' || id === 'jumpjets')) {
+    tripodLegs(g, L, pal, phase, rest, o);
     return true;
   }
   // wheel trains: five / six tall wheels a side on huge walking-beam bogies
@@ -1005,14 +1331,10 @@ function footParts(L: UnitLayout): PartDef[] | null {
   const ps = buildParts(L);
   const spread = (p: PartDef) => { if (p.parent === undefined) { p.px *= kx; p.py *= ky; } };
   switch (L.shape) {
-    case 'mantis':
-      for (const p of ps) { p.px = 0.2 * L.X; p.py = Math.sign(p.py) * 0.12 * L.Y; p.mountAt = [0.16 * S, Math.sign(p.py) * 0.115 * S]; }
-      break;
+    case 'mantis': return droidekaArms(L);
+    case 'mech': case 'warlord': return walkerPods(L);
     case 'crab':
       for (const p of ps) if (p.parent === undefined) { const s = Math.sign(p.py); p.px = 0.22 * L.X; p.py = s * 0.34 * L.Y; p.mountAt = [0.16 * S, s * 0.11 * S]; }
-      break;
-    case 'warlord':
-      for (const p of ps) { const s = Math.sign(p.py); p.px = -0.02 * L.X; p.py = s * 0.4 * L.Y; p.mountAt = [0.34 * S, s * 0.05 * S]; }
       break;
     case 'scorpion': {
       // claws (2 x [arm, finger]) then the tail chain (root + relative links, scaled along the length)
@@ -1041,6 +1363,66 @@ function footParts(L: UnitLayout): PartDef[] | null {
   return ps;
 }
 
+const wobF = (t: number, seed: number, f: number, ph: number) => Math.sin(t * f + seed * 1.7 + ph);
+
+/** Chicken-walker side weapon pods (strider: blaster / launcher pods; warlord: heavy shoulder cannon pods). */
+function walkerPods(L: UnitLayout): PartDef[] {
+  const big = L.shape === 'warlord', m = Math.min(L.X, L.Y);
+  const out: PartDef[] = [];
+  const len = (big ? 0.2 : 0.17) * m, r = (big ? 0.085 : 0.075) * m, off = (big ? 0.05 : 0.04) * m;
+  for (const s of [-1, 1]) {
+    const mi = big ? (s < 0 ? 1 : 2) : (s < 0 ? 1 : 2);
+    out.push({
+      px: (big ? 0.02 : 0.0) * L.X, py: s * (big ? 0.29 : 0.27) * L.Y, ext: len + r + off + 0.05, layer: 'over', mounts: [mi], mountAt: [len * 0.15, s * off],
+      draw: (g, pal, o) => {
+        // pylon from the cab cheek, then the pod: a team-armour capsule with a muzzle shroud and vents
+        beam(g, 0, 0, r * 0.45, 0, s * off, r * 0.4, METAL.light, METAL.dark, o);
+        const pod = new Path2D(); roundRect(pod, -len, s * off - r, len * 2, r * 2, r);
+        raised(g, pod, grad(g, 1, shade(pal.light, 0.06), shade(pal.dark, -0.05), -len, s * off - r, len, s * off + r), o, m, 1.3, 0.015, 0.6);
+        g.save(); g.clip(pod);
+        g.fillStyle = 'rgba(255,255,255,0.16)'; g.beginPath(); g.ellipse(-len * 0.1, s * off - r * 0.4, len * 0.7, r * 0.3, 0, 0, P2); g.fill();
+        g.restore();
+        seam(g, [-len * 0.4, s * off - r, -len * 0.4, s * off + r, len * 0.45, s * off - r, len * 0.45, s * off + r], 1, o * 0.5);
+        g.strokeStyle = rgba(pal.accent, 0.95); g.lineWidth = o * 1.1; g.beginPath(); g.moveTo(-len * 0.8, s * (off + r * 0.6)); g.lineTo(len * 0.3, s * (off + r * 0.6)); g.stroke();
+        const sh = new Path2D(); roundRect(sh, len * 0.75, s * off - r * 0.7, len * 0.4, r * 1.4, r * 0.3);
+        fillOut(g, sh, METAL.dark, o * 0.8);
+        dot(g, len * 1.05, s * off, r * 0.32, '#07080a');
+        grille(g, -len * 0.72, s * off, len * 0.35, r * 1.1, 3, o, emis(pal), 0.5);
+        cjoint(g, 0, 0, r * 0.5, o, METAL.base);
+      },
+      anim: (a) => ({ r: s * 0.05 * wobF(a.t, a.seed, 0.9, s), dx: (a.moving ? 0.012 * Math.sin(a.walk * 2) : 0) * m }),
+    });
+  }
+  return out;
+}
+
+/** Destroyer-droid gun arms: shoulder ball, short upper arm out, forearm forward with a twin-blaster cluster. */
+function droidekaArms(L: UnitLayout): PartDef[] {
+  const m = Math.min(L.X, L.Y);
+  const out: PartDef[] = [];
+  for (const s of [-1, 1]) {
+    out.push({
+      px: 0.16 * L.X, py: s * 0.15 * L.Y, ext: 0.5 * m, layer: 'over', mounts: [s < 0 ? 0 : 1], mountAt: [0.26 * m, s * 0.17 * m],
+      draw: (g, pal, o) => {
+        const ex = 0.06 * m, ey = s * 0.16 * m;
+        beam(g, 0, 0, 0.035 * m, ex, ey, 0.03 * m, shade(pal.light, 0.05), pal.dark, o);
+        beam(g, ex, ey, 0.032 * m, 0.3 * m, s * 0.18 * m, 0.03 * m, METAL.light, METAL.dark, o);
+        for (const d of [-0.025, 0.025]) {
+          const b = new Path2D(); roundRect(b, 0.28 * m, s * 0.18 * m + d * m - 0.011 * m, 0.14 * m, 0.022 * m, 0.008 * m);
+          fillOut(g, b, METAL.base, o * 0.7);
+          dot(g, 0.415 * m, s * 0.18 * m + d * m, 0.008 * m, '#07080a');
+        }
+        const hs = new Path2D(); roundRect(hs, 0.18 * m, s * 0.18 * m - 0.045 * m, 0.12 * m, 0.09 * m, 0.03 * m);
+        raised(g, hs, grad(g, 1, shade(pal.light, 0.08), pal.dark, 0.18 * m, s * 0.14 * m, 0.3 * m, s * 0.22 * m), o, m, 1.1, 0.01, 0.5);
+        cjoint(g, ex, ey, 0.032 * m, o, METAL.base);
+        cjoint(g, 0, 0, 0.04 * m, o, METAL.dark);
+      },
+      anim: (a) => ({ r: s * 0.06 * wobF(a.t, a.seed, 1.4, s) }),
+    });
+  }
+  return out;
+}
+
 function footRig(L: UnitLayout): LegRig | null {
   const legs: LegRig['legs'] = [];
   if (L.shape === 'saucer') {
@@ -1053,7 +1435,7 @@ function footRig(L: UnitLayout): LegRig | null {
   const radial = (cx: number, hr: number, ry: number, rx: number, angs: number[]) => angs.forEach((a, i) => { for (const s of [-1, 1]) legs.push({ hx: cx + Math.cos(a) * hr, hy: s * Math.sin(a) * hr * 1.2, fx: cx + Math.cos(a) * rx, fy: s * Math.sin(a) * ry, grp: (i + (s > 0 ? 1 : 0)) % 2 }); });
   let w = 0.065, stride = 0.08, armour = false, style: LegRig['style'] = 'ind';
   switch (L.shape) {
-    case 'mantis': row([0.08, -0.08], 0.1, 0.46, [0.22, -0.3]); w = 0.06; stride = 0.12; style = 'sleek'; break;
+    case 'mantis': row([0.08, -0.08], 0.1, 0.66, [0.22, -0.3]); w = 0.06; stride = 0.12; style = 'sleek'; break;
     case 'crab': row([0.16, -0.06, -0.26], 0.32, 0.5, [0.08, -0.02, -0.12]); w = 0.075; stride = 0.05; armour = true; style = 'stub'; break;
     case 'scorpion': row([0.22, 0.08, -0.06, -0.2], 0.24, 0.5, [0.06, 0.02, -0.02, -0.08]); w = 0.06; stride = 0.05; armour = true; break;
     case 'centipede': row([0.36, 0.2, 0.05, -0.1, -0.25, -0.4], 0.24, 0.48, [0.02, 0.01, 0, -0.01, -0.02, -0.03]); w = 0.055; stride = 0.03; style = 'stub'; break;
@@ -1078,9 +1460,10 @@ function footCreatureLights(L: UnitLayout): CLight[] | null {
   const X = L.X, Y = L.Y, S = L.S;
   const eye = (u: number, v: number, r: number) => [-1, 1].map((s) => ({ x: u * X, y: s * v * Y, r: r * S, k: 'eye' as const, ph: s }));
   switch (L.shape) {
-    case 'mantis': return eye(0.44, 0.11, 0.06);
+    case 'mantis': return eye(0.36, 0.14, 0.035);
     case 'crab': return eye(0.3, 0.16, 0.03);
-    case 'warlord': return [{ x: 0.31 * X, y: 0, r: 0.05 * S, k: 'eye', ph: 0 }];
+    case 'warlord': return [{ x: 0.235 * X, y: 0, r: 0.045 * S, k: 'eye', ph: 0 }];
+    case 'mech': return [{ x: 0.185 * X, y: 0, r: 0.05 * S, k: 'eye', ph: 0 }];
     case 'scorpion': return eye(0.27, 0.13, 0.025);
     case 'centipede': return eye(0.41, 0.15, 0.025);
     case 'broodmother': case 'arachne': return eye(0.44, 0.07, 0.03);
@@ -1115,7 +1498,7 @@ function footGiantLights(L: UnitLayout): GLight[] | null {
       break;
     case 'colossal':
       o.push({ x: 0.03 * X, y: 0, r: 0.075 * S, k: 'core' });
-      o.push({ x: 0.3 * X, y: 0, r: 0.1 * S, k: 'visor' });
+      o.push({ x: 0.36 * X, y: 0, r: 0.1 * S, k: 'visor' });
       o.push({ x: -0.26 * X, y: 0, r: 0.1 * S, k: 'vent' });
       for (const s of [-1, 1]) { o.push({ x: -0.4 * X, y: s * 0.1 * Y, r: 0.042 * S, k: 'stack' }); nav(-0.02, s * 0.48, s); }
       break;
