@@ -241,7 +241,6 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let tipSize = { w: 0, h: 0 };
   let tipKey = '';
   let sheetOff: (() => void) | null = null;
-  const sheetMode = () => window.matchMedia('(max-width: 760px), (hover: none)').matches;
   function hideTip() { tipEl?.remove(); tipEl = null; tipKey = ''; sheetOff?.(); sheetOff = null; ringHi = null; }
   function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean): HTMLElement {
     const lv = Math.max(1, Math.min(MAX_LEVEL, level));
@@ -266,10 +265,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     el.append(tip);
     tipSize = { w: tip.offsetWidth, h: tip.offsetHeight };
   }
-  function showDeckTip(b: HTMLElement, d: Design) {
+  function showDeckTip(b: HTMLElement, d: Design, sheet: boolean) {
     const st = statsOf(d);
     if (!st) return;
-    const sheet = sheetMode();
     mountTip(tipFor(d, st, 1, 'In shop', true, spacingOfCard(d), sheet), sheet);
     if (sheet) return;
     const r = b.getBoundingClientRect(), er = el.getBoundingClientRect();
@@ -293,7 +291,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const mine = t.side === side;
     const lv = p.level + (mine && !t.pending ? pendingUps(p.uid) : 0);
     const key = `${t.side}:${t.uid}:${t.pending}:${lv}`;
-    const sheet = sheetMode();
+    const sheet = !at; // no pointer position = touch long-press: bottom sheet
     if (key !== tipKey || !tipEl) {
       mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet), sheet);
       tipKey = key;
@@ -309,14 +307,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
   function attachDeckTip(b: HTMLElement, d: Design) {
     let timer = 0;
-    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showDeckTip(b, d); });
+    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showDeckTip(b, d, false); });
     b.addEventListener('pointerleave', (e) => { clearTimeout(timer); if (e.pointerType === 'mouse') hideTip(); });
     b.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse') return;
       clearTimeout(timer);
-      timer = window.setTimeout(() => { showDeckTip(b, d); b.dataset.lp = '1'; }, 450);
+      timer = window.setTimeout(() => { showDeckTip(b, d, true); b.dataset.lp = '1'; }, 450);
     });
-    const cancel = () => clearTimeout(timer);
+    const cancel = () => { clearTimeout(timer); if (b.dataset.lp) setTimeout(() => delete b.dataset.lp, 400); };
     b.addEventListener('pointerup', cancel);
     b.addEventListener('pointercancel', cancel);
     b.addEventListener('contextmenu', (e) => { if (b.dataset.lp) e.preventDefault(); });
@@ -843,8 +841,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       hoverUnit = hu && !(sel && hu.side === sel.side && hu.uid === sel.uid && hu.pending === sel.pending) ? hu : null;
     } else hoverUnit = null;
     if (e.pointerType === 'mouse') {
-      if (hoverUnit && !sheetMode()) showUnitTip(hoverUnit, { x: e.clientX, y: e.clientY });
-      else if (tipKey && !sheetMode()) hideTip();
+      if (hoverUnit) showUnitTip(hoverUnit, { x: e.clientX, y: e.clientY });
+      else if (tipKey) hideTip();
     }
     if (phase !== 'deploy' || selCard < 0) return;
     if (e.pointerType === 'touch' && !downAt) return;

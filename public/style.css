@@ -368,7 +368,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .rbtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px; font-size: 0.9rem; background: rgba(20, 27, 36, 0.94); }
 .rbtn.active { background: var(--accent); color: #04201d; border-color: var(--accent); }
 .rbtn.foe.active { background: var(--enemy); border-color: var(--enemy); color: #1c0a04; }
-.rlegend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 5px 10px; background: rgba(8, 11, 15, 0.88); border: 1px solid var(--line); border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.rlegend { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 4px 10px; background: rgba(8, 11, 15, 0.88); border: 1px solid var(--line); border-radius: 6px; font-size: 0.87rem; font-weight: 600; color: var(--text); }
 .rlegend span { display: inline-flex; align-items: center; gap: 6px; }
 .rlegend span::before { content: ''; width: 16px; height: 0; border-top: 3px solid var(--c); border-radius: 2px; }
 .rlegend .sup::before { border-top-style: dotted; }
@@ -458,7 +458,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 
 .info { width: 340px; }
 @media (max-width: 760px), (hover: none) {
-  .info { width: auto; }
+  .info { width: auto; max-height: 52%; }
   .sc-tile b { font-size: 1.35rem; }
 }
 .info .sc { margin-bottom: 8px; }
