@@ -82,6 +82,8 @@ interface UVis {
   swing: number[];
   seen: number;
   lastPh?: number;
+  /** per-mount sustained-fire heat (annihilator warm-up) */
+  heat?: number[];
 }
 
 interface PSnap {
@@ -565,7 +567,10 @@ export class FieldView {
     }
     this.fx.update(dt);
     this.stepCamera(dt);
-    for (const v of this.vis.values()) for (let i = 0; i < v.swing.length; i++) v.swing[i] = Math.max(0, v.swing[i] - dt * 3.5);
+    for (const v of this.vis.values()) {
+      for (let i = 0; i < v.swing.length; i++) v.swing[i] = Math.max(0, v.swing[i] - dt * 3.5);
+      if (v.heat) for (let i = 0; i < v.heat.length; i++) v.heat[i] = Math.max(0, v.heat[i] - dt * 0.9);
+    }
 
     const g = this.g;
     const tr = this.fx.trauma * this.fx.trauma;
@@ -610,10 +615,26 @@ export class FieldView {
     this.setScreen();
     for (const { u, p } of bars) this.drawBar(u, p, dt);
     this.drawVignette();
+    this.drawFlash();
     this.drawScaleBar();
   }
 
+  /** Full-screen white-out for titan weapon moments (nuke, mass driver, doomsday, titan deaths). */
+  private drawFlash(): void {
+    const a = this.fx.flashA;
+    if (a <= 0.01) return;
+    const g = this.g;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = Math.min(0.85, a * 0.8);
+    g.fillStyle = this.fx.flashC;
+    g.fillRect(0, 0, this.cssW, this.cssH);
+    g.restore();
+  }
+
   private landed = new Set<string>();
+  /** heat of the annihilator that fired most recently (fire event precedes its beam event) */
+  private beamHeat = 0;
 
   private visOf(u: SimUnit): UVis {
     let v = this.vis.get(u.id);
@@ -639,9 +660,9 @@ export class FieldView {
       odo = lerp(pr.odo, c.odo, a);
       mounts = u.mounts.map((m, i) => ({
         angle: lerpAngle(pr.mounts[i] ?? m.angle, c.mounts[i] ?? m.angle, a),
-        flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading,
+        flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0,
       }));
-    } else mounts = u.mounts.map((m, i) => ({ angle: m.angle, flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading }));
+    } else mounts = u.mounts.map((m, i) => ({ angle: m.angle, flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0 }));
     const ext = u as SimUnit & { cloaked?: boolean };
     return {
       design: u.design, team: this.teamOf(u.side), x, y, angle: ang, time: this.time, odometer: odo, moving: u.moving,
@@ -1045,6 +1066,11 @@ export class FieldView {
           if (ur.u.flying) { mx += this.dirs.ux * 0.12; my += this.dirs.uy * 0.12; }
           const v = this.visOf(ur.u);
           if (mod?.category === 'melee') v.swing[e.mount] = 1;
+          if (mod?.id === 'annihilator') {
+            if (!v.heat) v.heat = ur.u.mounts.map(() => 0);
+            v.heat[e.mount] = Math.min(1, (v.heat[e.mount] ?? 0) + 0.3);
+            this.beamHeat = v.heat[e.mount];
+          }
         }
         const cs = Math.cos(e.angle), sn = Math.sin(e.angle);
         const cal = mod?.caliber ?? 0.5;
@@ -1055,8 +1081,26 @@ export class FieldView {
           fx.glow(mx, my, (T ? 1.8 : 1.0) * (mod.cooldown && mod.cooldown < 0.2 ? 0.4 : 1), cc, 0.16);
           if (mod.cooldown === undefined || mod.cooldown >= 0.2) {
             fx.ring(mx, my, 0.1, T ? 2.4 : 1.4, cc, 0.3, 0.7);
-            if (mod.id === 'doomsday' || mod.id === 'siege240') { fx.shockwave(mx, my, T ? 3.2 : 1.8, '#e0c8a0', 0.6); fx.shake(T ? 0.4 : 0.2); for (let i = 0; i < 6; i++) fx.smoke(mx + cs * 0.3, my + sn * 0.3, 0.4, 1.6, '#6a6660', cs * 1.5 + (Math.random() - 0.5), sn * 1.5 + (Math.random() - 0.5), 0.5); }
-            else if (mod.id === 'tactnuke') { for (let i = 0; i < 10; i++) fx.smoke(mx - cs * 0.6, my - sn * 0.6, 0.5, 2.4, '#8a8680', -cs * 2 + (Math.random() - 0.5) * 2, -sn * 2 + (Math.random() - 0.5) * 2, 0.6); fx.shake(0.35); }
+            if (mod.id === 'doomsday' || mod.id === 'siege240') {
+              fx.shockwave(mx, my, T ? 3.2 : 1.8, '#e0c8a0', 0.6); fx.shake(T ? 0.55 : 0.2);
+              for (let i = 0; i < (T ? 10 : 6); i++) fx.smoke(mx + cs * 0.3, my + sn * 0.3, T ? 0.6 : 0.4, T ? 2.2 : 1.6, '#6a6660', cs * (T ? 2.4 : 1.5) + (Math.random() - 0.5) * 1.5, sn * (T ? 2.4 : 1.5) + (Math.random() - 0.5) * 1.5, 0.5);
+              if (T) {
+                // doomsday: a muzzle blast the size of a tank — twin fire cones, blinding star, ground ring
+                fx.flash(0.28, '#ffe8c0');
+                const sx = -sn, sy = cs;
+                for (const k of [-0.55, 0.55]) {
+                  const bx = mx + sx * k * d * 0.5, by = my + sy * k * d * 0.5;
+                  fx.star(bx + cs * 0.6, by + sn * 0.6, 2.6, '#fff0c0', e.angle, 0.16);
+                  fx.glow(bx + cs * 0.8, by + sn * 0.8, 2.4, '#ffb060', 0.3, 0.9);
+                  for (let i = 0; i < 9; i++) { const a = e.angle + (Math.random() - 0.5) * 0.7, v = 3 + Math.random() * 6; fx.fire(bx + cs * 0.3, by + sn * 0.3, 0.35 + Math.random() * 0.35, 0.35 + Math.random() * 0.25, Math.cos(a) * v, Math.sin(a) * v); }
+                }
+                fx.glow(mx, my, 3.6, '#ffffff', 0.12);
+                fx.ring(mx, my, 0.3, 4.5, '#fff0d0', 0.45, 0.7);
+                fx.sparks(mx, my, 24, '#ffd890', 9, e.angle, 0.5, 0.4);
+                fx.dust(mx - cs * 1.2, my - sn * 1.2, 1.4, 10, 1.2);
+              }
+            }
+            else if (mod.id === 'tactnuke') { fx.flash(0.18, '#ffd8a0'); fx.glow(mx, my, 2.4, '#ffb060', 0.35); for (let i = 0; i < 14; i++) fx.smoke(mx - cs * 0.6, my - sn * 0.6, 0.6, 2.8, '#8a8680', -cs * 2 + (Math.random() - 0.5) * 3, -sn * 2 + (Math.random() - 0.5) * 3, 0.65); fx.dust(mx, my, 1.4, 10, 1.4); fx.shake(0.45); }
             else if (T) fx.shake(0.25);
           }
         }
@@ -1114,7 +1158,18 @@ export class FieldView {
         let impact = true;
         switch (vis) {
           case 'heatray': fx.beam('heat', pts, '#ff6a1a', 0.07, 0.14); break;
-          case 'plasma': fx.beam('plasma', pts, '#e070ff', 0.09, 0.17); break;
+          case 'plasma': {
+            if (mod?.id === 'annihilator') {
+              // warm-up: starts as a thin flickering lance and swells into a blinding river over ~1.5 s of fire
+              const h = this.beamHeat;
+              fx.beam('plasma', pts, '#e070ff', 0.08 + 0.34 * h * h, 0.24);
+              fx.glow(e.x1, e.y1, 0.6 + 1.4 * h, '#ff80f0', 0.12, 0.9);
+              fx.glow(e.x2, e.y2, 0.5 + 1.3 * h, '#ff90ff', 0.14, 0.9);
+              if (h > 0.6) { fx.sparks(e.x2, e.y2, 5, '#ffd0ff', 6, undefined, Math.PI, 0.3); if (Math.random() < 0.3) fx.decal('scorch', e.x2, e.y2, 0.5); }
+              if (h > 0.85) fx.shake(0.04);
+            } else fx.beam('plasma', pts, '#e070ff', 0.09, 0.17);
+            break;
+          }
           case 'slowbeam': fx.beam('slow', pts, '#b47cff', 0.05, 0.22); break;
           case 'repair': fx.beam('repair', pts, '#6dff9a', 0.05, 0.25); impact = false; if (Math.random() < 0.3) fx.heal(e.x2, e.y2); break;
           case 'emp': fx.beam('scramble', pts, glowC, 0.05, 0.22); break;
@@ -1132,7 +1187,18 @@ export class FieldView {
           case 'rail': {
             const heavy = (mod?.caliber ?? 0.5) > 0.7;
             const huge = mod?.mount === 'T';
-            fx.beam('rail', pts, '#9fe8ff', huge ? 0.24 : heavy ? 0.1 : 0.06, huge ? 0.8 : heavy ? 0.5 : 0.35);
+            fx.beam('rail', pts, '#9fe8ff', huge ? 0.5 : heavy ? 0.1 : 0.06, huge ? 0.9 : heavy ? 0.5 : 0.35);
+            if (huge) {
+              // spinal mass driver: blinding flash, ionised trail, the ground torn up along the line
+              fx.flash(0.5, '#d8f6ff');
+              fx.glow(e.x1, e.y1, 3.2, '#ffffff', 0.18);
+              const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1), n = Math.min(14, Math.floor(len / 1.4));
+              for (let i = 1; i <= n; i++) {
+                const f = i / (n + 1), qx = e.x1 + (e.x2 - e.x1) * f, qy = e.y1 + (e.y2 - e.y1) * f;
+                fx.schedule(i * 0.012, () => { fx.dust(qx, qy, 0.5, 2, 0.9); fx.glow(qx, qy, 0.7, '#9fe8ff', 0.25, 0.6); });
+              }
+              fx.boom(e.x2, e.y2, 1.0, 'plasma');
+            }
             fx.glow(e.x1, e.y1, huge ? 1.6 : heavy ? 0.7 : 0.45, '#9fe8ff', huge ? 0.35 : 0.2);
             fx.sparks(e.x2, e.y2, huge ? 24 : 10, '#cff4ff', huge ? 8 : 5, undefined, Math.PI, 0.3);
             if (huge) { fx.shockwave(e.x2, e.y2, 1.6, '#9fe8ff', 0.5); fx.ring(e.x1, e.y1, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }

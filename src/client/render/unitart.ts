@@ -9,7 +9,7 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
 import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
-import { GIANT_SHAPES, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath } from './giantart.ts';
+import { GIANT_SHAPES, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
 
@@ -50,7 +50,7 @@ export interface UnitLayout {
 
 const SHAPE_HW: Record<Shape, number> = {
   wedge: 0.26, pod: 0.24, box: 0.28, hex: 0.3, cross: 0.3, long: 0.2, round: 0.34, airframe: 0.14, fortress: 0.4, titan: 0.3,
-  goliath: 0.36, leviathan: 0.4, carrier: 0.4, colossal: 0.32, citadel: 0.44,
+  goliath: 0.36, leviathan: 0.3, carrier: 0.42, colossal: 0.27, citadel: 0.42,
 };
 
 /** Mount points per chassis, fractions of S. */
@@ -65,14 +65,18 @@ const MOUNT_PTS: Record<string, [number, number][]> = {
   gunship: [[-0.03, -0.28], [-0.03, 0.28]],
   bastion: [[0.06, 0], [-0.24, -0.25], [-0.24, 0.25]],
   colossus: [[0.0, -0.31], [0.0, 0.31], [0.18, 0], [-0.24, 0]],
-  goliath: [[0.12, 0], [-0.12, -0.28], [-0.12, 0.28], [-0.32, 0]],
-  leviathan: [[0.12, -0.2], [0.12, 0.2], [-0.25, -0.22], [-0.25, 0.22]],
-  carrier: [[0.1, 0], [-0.1, -0.3], [-0.28, -0.12], [-0.28, 0.12]],
-  titan: [[0.1, 0], [-0.08, -0.32], [-0.08, 0.32], [-0.3, -0.15], [-0.3, 0.15]],
-  citadel: [[0.14, -0.2], [0.14, 0.2], [-0.12, 0], [-0.3, -0.28], [-0.3, 0.28], [-0.36, 0]],
+  // giants / titans: turrets sit ON the hull with clear deck between them (hull dominates the silhouette)
+  goliath: [[0.08, 0], [-0.07, -0.34], [-0.07, 0.34], [-0.31, 0]],
+  leviathan: [[0.27, 0], [-0.28, 0], [0.0, -0.205], [0.0, 0.205]],
+  carrier: [[0.33, 0], [-0.07, -0.31], [-0.37, -0.25], [-0.37, 0.25]],
+  // titan walker: T on the right forearm, G on the left forearm, heavies on the shoulder blades, M on the backpack
+  titan: [[0.15, 0.37], [0.15, -0.37], [-0.115, -0.165], [-0.115, 0.165], [-0.34, 0]],
+  citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
 };
 
 const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64, G: 0.95, T: 1.1 };
+/** Turret base diameters (cells) on giant/titan hulls: big guns, but sized like real turrets on a huge hull. */
+const GIANT_D: Record<MountClass, number> = { L: 0.4, M: 0.52, H: 0.68, G: 0.86, T: 1.22 };
 
 const layoutCache = new Map<string, UnitLayout>();
 export const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
@@ -92,7 +96,7 @@ export function layoutOf(d: Design): UnitLayout {
     const cls = mod?.mount ?? slot;
     const cal = mod?.caliber ?? 0.5;
     const p = pts[i] ?? [0, 0];
-    const dd = CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
+    const dd = S >= 4 ? GIANT_D[cls] * (0.88 + 0.12 * cal) * (S >= 5 ? 1.06 : 1) : CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
     return { x: p[0] * S, y: p[1] * S, slot, mod, d: dd, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const air = mob.kind === 'air';
@@ -745,6 +749,8 @@ export interface UnitSprites {
   haloExt: number;
   sil: Map<string, HTMLCanvasElement>;
   anchor?: HTMLCanvasElement;
+  /** parts drawn above the turrets (titan pauldrons) */
+  top?: HTMLCanvasElement;
 }
 
 const spriteCache = new Map<string, UnitSprites>();
@@ -780,9 +786,16 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   hullDetails(hull.g, L, pal, o);
   drawPlates(hull.g, L, pal, o);
   // empty mount sockets
-  for (const m of L.mounts) if (!m.mod) {
+  if (L.S >= 4) {
+    for (const m of L.mounts) if (m.turret || !m.mod) drawBarbette(hull.g, m.x, m.y, m.d * (m.turret ? 0.6 : 0.42), pal, o, !m.mod);
+  } else for (const m of L.mounts) if (!m.mod) {
     dotAt(hull.g, m.x, m.y, m.d * 0.32, 'rgba(0,0,0,0.45)');
     dotAt(hull.g, m.x, m.y, m.d * 0.18, 'rgba(255,255,255,0.08)');
+  }
+  let top: HTMLCanvasElement | undefined;
+  if (GIANT_SHAPES.has(L.shape)) {
+    const tp = beginSprite(px, ext);
+    if (giantTopLayer(tp.g, L, pal, o)) top = tp.c;
   }
   const rest = beginSprite(px, ext);
   if (L.mob.id !== 'anchor') drawMobility(rest.g, L, pal, 0, true, o);
@@ -799,11 +812,12 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   if (anchor) sh.g.drawImage(anchor, 0, 0);
   sh.g.drawImage(rest.c, 0, 0);
   sh.g.drawImage(hull.c, 0, 0);
+  if (top) sh.g.drawImage(top, 0, 0);
   sh.g.filter = 'none';
   sh.g.globalCompositeOperation = 'source-in';
   sh.g.fillStyle = '#000';
   sh.g.fillRect(0, 0, sh.c.width, sh.c.height);
-  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: new Map(), anchor };
+  s = { px, ext, hull: hull.c, mob: new Array(L.frames), rest: rest.c, shadow: sh.c, halo: sh.c, haloExt: ext, sil: new Map(), anchor, top };
   const hl = buildHalo(s, pal);
   s.halo = hl.c;
   s.haloExt = hl.ext;
@@ -866,6 +880,7 @@ export function silhouette(s: UnitSprites, color: string): HTMLCanvasElement {
   const g = ctx2d(c);
   g.drawImage(s.rest, 0, 0);
   g.drawImage(s.hull, 0, 0);
+  if (s.top) g.drawImage(s.top, 0, 0);
   g.globalCompositeOperation = 'source-in';
   g.fillStyle = color;
   g.fillRect(0, 0, c.width, c.height);
@@ -887,7 +902,7 @@ export function turretSprite(m: ModuleDef, team: Team, d: number, px: number): H
   sp.g.beginPath();
   sp.g.arc(dq * 0.06, dq * 0.08, dq * 0.5, 0, Math.PI * 2);
   sp.g.fill();
-  drawTurret(sp.g, m, TEAM_PAL[team], dq, Math.max(1.1 / px, dq * 0.07));
+  drawTurret(sp.g, m, TEAM_PAL[team], dq, Math.max(1.1 / px, dq * 0.07), true);
   turretCache.set(key, sp.c);
   return sp.c;
 }
@@ -901,6 +916,7 @@ export function wreckSprite(design: Design, team: Team, px: number): HTMLCanvasE
   const g = ctx2d(c);
   g.drawImage(s.rest, 0, 0);
   g.drawImage(s.hull, 0, 0);
+  if (s.top) g.drawImage(s.top, 0, 0);
   g.globalCompositeOperation = 'source-atop';
   // desaturate + near-black so a wreck never reads as a live unit
   g.fillStyle = 'rgba(20,21,22,0.93)';
@@ -928,6 +944,12 @@ export interface MountPose {
   swing?: number;
   /** magazine reloading */
   reloading?: boolean;
+  /** seconds until the mount can fire again (sim MountState.cooldown) */
+  cd?: number;
+  /** mount has a target */
+  armed?: boolean;
+  /** 0..1 sustained-fire heat (beam warm-up), tracked by the field view */
+  heat?: number;
 }
 
 export interface UnitPose {
@@ -989,9 +1011,9 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
   const off = 0.09 * L.S + alt * 0.75;
-  const a = (p.alpha ?? 1) * (L.air || p.flying ? (L.S >= 3 ? 0.5 : 0.38) : p.leap ? 0.55 - p.leap * 0.15 : 0.62);
+  const a = (p.alpha ?? 1) * (L.air || p.flying ? (L.S >= 4 ? 0.62 : L.S >= 3 ? 0.5 : 0.38) : p.leap ? 0.55 - p.leap * 0.15 : L.S >= 4 ? 0.72 : 0.62);
   g.globalAlpha = a;
-  const sc = L.air || p.flying ? 0.85 : 1 - (p.leap ?? 0) * 0.15;
+  const sc = L.air || p.flying ? (L.S >= 4 ? 0.97 : 0.85) : 1 - (p.leap ?? 0) * 0.15;
   blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, L.mob.id === 'anchor' ? 0 : p.angle, s.ext, sc);
   g.globalAlpha = 1;
 }
@@ -1123,7 +1145,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     if (dis) g.globalAlpha = alpha * (0.55 + 0.45 * (Math.sin(p.time * 37 + i * 2) > 0 ? 1 : 0.3));
     blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
     g.globalAlpha = alpha;
-    if (m.mod.id === 'grinder' || m.mod.mount === 'T' || m.mod.mount === 'G') drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha);
+    if (m.mod.id === 'grinder' || m.mod.mount === 'T' || m.mod.mount === 'G') drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha, chargeOf(m.mod, mp));
     if ((m.mod.visual === 'saw' || m.mod.visual === 'drill') && m.mod.id !== 'grinder') {
       // spinning blade / bore highlight
       const ml = muzzleLen(m.mod) * m.d * (m.mod.visual === 'saw' ? 0.95 : 0.7);
@@ -1168,6 +1190,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
       g.globalCompositeOperation = prev;
     }
   }
+  if (s.top) blit(g, s.top, x, y, ang, s.ext, sc);
   // rotors on top
   for (const r of L.rotors) {
     const rx = x + (cs * r.x - sn * r.y) * sc, ry = y + (sn * r.x + cs * r.y) * sc;
@@ -1234,6 +1257,24 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     g.fill();
   }
   g.globalAlpha = 1;
+}
+
+/** 0..1 weapon-moment state for titan guns: mass-driver charge over the last second of its cooldown, nuke erector
+ *  raise over the last two seconds (or while it has a target), annihilator beam heat while firing. */
+function chargeOf(m: ModuleDef, mp: MountPose | undefined): number {
+  if (!mp) return m.id === 'tactnuke' ? 0 : 0.15;
+  const cd = mp.cd ?? 0;
+  switch (m.id) {
+    case 'massdriver': return mp.armed || cd > 0 ? clamp(1 - cd, 0, 1) : 0.2;
+    case 'tactnuke': {
+      const full = m.cooldown ?? 20;
+      if (cd > full - 1.6) return -1; // just launched: rails empty
+      return cd < 2 ? (mp.armed || cd > 0 ? clamp(1 - cd / 2, 0, 1) : 0) : 0;
+    }
+    case 'doomsday': case 'siege240': return cd < 1 && (mp.armed || cd > 0) ? clamp(1 - cd, 0, 1) : 0;
+    case 'annihilator': return clamp(mp.heat ?? 0, 0, 1);
+  }
+  return 0;
 }
 
 function markerPath(g: Ctx, team: Team, x: number, y: number, r: number): void {

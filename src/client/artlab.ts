@@ -212,6 +212,22 @@ function fieldSection(): void {
   ($('#reset') as HTMLButtonElement).onclick = () => { battle = null; seed++; input = setup(); playMusic('deploy'); unlockAudio(); };
   ($('#speed') as HTMLSelectElement).onchange = (e) => { speed = Number((e.target as HTMLSelectElement).value); };
   if (params.get('battle') === '1') battle = new Battle(input);
+  const manual = !!params.get('manual');
+  if (manual) {
+    // scripted capture hook (Playwright): start a custom battle, step ticks, draw frames deterministically
+    (window as unknown as Record<string, unknown>).__lab = {
+      view,
+      start(decks: [Design[], Design[]], units: [Placement[], Placement[]], s = 7) {
+        battle = new Battle({ seed: s, sides: [{ designs: decks[0], units: units[0] }, { designs: decks[1], units: units[1] }] });
+        view.fit(true);
+      },
+      step(n = 1, dt = 1 / TICK_RATE) {
+        for (let i = 0; i < n && battle && !battle.done; i++) { battle.step(); view.pushEvents(battle.events); view.drawBattle(battle, dt); }
+      },
+      draw(dt = 1 / 60) { if (battle) view.drawBattle(battle, dt); },
+      get battle() { return battle; },
+    };
+  }
 
   let hover: { col: number; row: number; size: number; valid: boolean } | null = null;
   canvas.addEventListener('mousemove', (e) => {
@@ -228,7 +244,7 @@ function fieldSection(): void {
     fps = fps * 0.95 + (1 / Math.max(0.001, (now - last) / 1000)) * 0.05;
     last = now;
     const t0 = performance.now();
-    if (battle) {
+    if (manual) { /* driven by __lab */ } else if (battle) {
       acc += dt * TICK_RATE * speed;
       let n = 0;
       while (acc >= 1 && !battle.done && n++ < 40) {

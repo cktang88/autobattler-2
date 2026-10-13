@@ -51,6 +51,9 @@ export class Fx {
   private later: { t: number; fn: () => void }[] = [];
   trauma = 0;
   time = 0;
+  /** full-screen flash (0..1) and its colour, for titan-class weapon moments */
+  flashA = 0;
+  flashC = '#ffffff';
   // decals
   decals: Decal[] = [];
   decalCanvas: HTMLCanvasElement | null = null;
@@ -64,6 +67,7 @@ export class Fx {
     this.later.length = 0;
     this.decals.length = 0;
     this.trauma = 0;
+    this.flashA = 0;
     if (this.decalCanvas) ctx2d(this.decalCanvas).clearRect(0, 0, this.decalCanvas.width, this.decalCanvas.height);
   }
 
@@ -87,6 +91,12 @@ export class Fx {
 
   shake(amount: number): void {
     this.trauma = Math.min(1, this.trauma + amount);
+  }
+
+  /** Blinding full-screen flash. */
+  flash(a: number, color = '#ffffff'): void {
+    if (a >= this.flashA) this.flashC = color;
+    this.flashA = Math.min(1, Math.max(this.flashA, a));
   }
 
   /* ---------------------------------------------------------------------------------------- spawners */
@@ -236,6 +246,8 @@ export class Fx {
   /** Tactical nuke: blinding flash, double shockwave, fireball, rising mushroom of smoke, embers and a huge crater. */
   nuke(x: number, y: number, r: number): void {
     this.shake(1);
+    this.flash(0.95, '#fff4e0');
+    this.schedule(0.08, () => this.flash(0.6, '#ffd8a0'));
     this.glow(x, y, r * 3.2, '#ffffff', 0.35);
     this.glow(x, y, r * 2.2, '#ffe0a0', 0.6, 0.9);
     this.glow(x, y, r * 1.6, '#ff9a40', 1.1, 0.7);
@@ -276,7 +288,9 @@ export class Fx {
       const a = rnd() * Math.PI * 2, d = rnd() * R * 2.2;
       this.schedule(0.15 + i * 0.16, () => { this.boom(x + Math.cos(a) * d, y + Math.sin(a) * d, R * rr(0.7, 1.3), 'fire', i % 2 === 0); if (i % 3 === 0) this.shake(0.3); });
     }
+    this.flash(0.35, '#ffe8c8');
     this.schedule(0.2 + (4 + S) * 0.16, () => {
+      this.flash(0.55, '#fff0d8');
       this.glow(x, y, R * 6, '#ffffff', 0.25);
       this.shockwave(x, y, R * 6.5, '#fff0d0', 1.0);
       this.boom(x, y, R * 3.2, 'big');
@@ -378,6 +392,7 @@ export class Fx {
       }
     }
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    this.flashA = Math.max(0, this.flashA - dt * (this.flashA > 0.5 ? 2.2 : 3.2));
     const P = this.parts;
     for (let i = P.length - 1; i >= 0; i--) {
       const p = P[i];

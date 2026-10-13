@@ -2,7 +2,7 @@
 // Drawn in turret-local cell units: pivot at origin, barrels pointing +x. `d` = turret base diameter (cells).
 
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
-import { METAL, OUTLINE, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
+import { METAL, OUTLINE, clamp, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
 
 /** Glow colour used by a weapon family (beams, lenses, projectiles). null = use team glow. */
 export function visualGlow(v: ModuleVisual | undefined, pal: TeamPal): string {
@@ -503,8 +503,13 @@ function spreadOffsets(n: number, span: number): number[] {
   return out;
 }
 
-/** Draw a turret for module m with base diameter d (cells). o = outline width (cells). */
-export function drawTurret(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, o: number): void {
+/** true while baking a unit turret sprite: parts animated by drawTurretDynamic (the nuke) are left out. */
+let BAKE = false;
+
+/** Draw a turret for module m with base diameter d (cells). o = outline width (cells). bake = unit sprite (skip
+ *  parts drawTurretDynamic animates). */
+export function drawTurret(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, o: number, bake = false): void {
+  BAKE = bake;
   const r = d / 2;
   const c = m.caliber ?? 0.5;
   const n = m.barrels ?? 1;
@@ -1403,23 +1408,12 @@ function drawGiantTurret(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: numbe
         shape(g, METAL.dark, o, () => roundRect(g, -r * 0.9, s * r * 0.68 - r * 0.1, r * 3.0, r * 0.2, r * 0.05));
         g.fillStyle = '#e8b81c'; for (let i = 0; i < 6; i++) g.fillRect(-r * 0.7 + i * r * 0.5, s * r * 0.68 - r * 0.06, r * 0.18, r * 0.12);
       }
-      // hydraulic ram
-      g.strokeStyle = OUTLINE; lw(g, r * 0.2); g.beginPath(); g.moveTo(-r * 0.9, r * 0.2); g.lineTo(r * 0.5, r * 0.62); g.stroke();
-      g.strokeStyle = METAL.light; lw(g, r * 0.1); g.stroke();
-      // missile
-      shape(g, '#d8d6c8', o, () => roundRect(g, -r * 0.2, -r * 0.38, r * 3.0, r * 0.76, r * 0.38));
-      const mg = g.createLinearGradient(0, -r * 0.38, 0, r * 0.38);
-      mg.addColorStop(0, 'rgba(255,255,255,0.45)'); mg.addColorStop(0.5, 'rgba(255,255,255,0)'); mg.addColorStop(1, 'rgba(0,0,0,0.35)');
-      g.fillStyle = mg; g.beginPath(); roundRect(g, -r * 0.2, -r * 0.38, r * 3.0, r * 0.76, r * 0.38); g.fill();
-      shape(g, '#c0392b', o, () => { g.moveTo(r * 2.78, -r * 0.37); g.lineTo(r * 3.5, 0); g.lineTo(r * 2.78, r * 0.37); g.closePath(); });
-      g.fillStyle = '#e8b81c'; g.fillRect(r * 2.35, -r * 0.37, r * 0.18, r * 0.74); g.fillRect(r * 2.0, -r * 0.37, r * 0.08, r * 0.74);
-      shape(g, '#7a7a74', o * 0.7, () => { g.moveTo(-r * 0.2, -r * 0.4); g.lineTo(r * 0.5, -r * 0.95); g.lineTo(r * 0.7, -r * 0.4); g.closePath(); });
-      shape(g, '#7a7a74', o * 0.7, () => { g.moveTo(-r * 0.2, r * 0.4); g.lineTo(r * 0.5, r * 0.95); g.lineTo(r * 0.7, r * 0.4); g.closePath(); });
-      // trefoil
-      shape(g, '#e8b81c', o * 0.6, () => g.arc(r * 1.3, 0, r * 0.31, 0, P2));
-      g.fillStyle = '#151515';
-      for (let i = 0; i < 3; i++) { const a = (i / 3) * P2 + Math.PI / 2 + 0.2; g.beginPath(); g.moveTo(r * 1.3, 0); g.arc(r * 1.3, 0, r * 0.27, a, a + 1.0); g.closePath(); g.fill(); }
-      shape(g, '#e8b81c', 0, () => g.arc(r * 1.3, 0, r * 0.07, 0, P2));
+      // hydraulic ram (animated with the missile on unit sprites)
+      if (!BAKE) {
+        g.strokeStyle = OUTLINE; lw(g, r * 0.2); g.beginPath(); g.moveTo(-r * 0.9, r * 0.2); g.lineTo(r * 0.5, r * 0.62); g.stroke();
+        g.strokeStyle = METAL.light; lw(g, r * 0.1); g.stroke();
+      }
+      if (!BAKE) nukeMissile(g, r, o, 0);
       // clamps
       for (const x of [0.2, 1.8]) shape(g, METAL.dark, o * 0.8, () => roundRect(g, r * x, -r * 0.62, r * 0.28, r * 1.24, r * 0.06));
       // pivot housing
@@ -1492,12 +1486,53 @@ function drawGiantTurret(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: numbe
   return false;
 }
 
+/** The tactical nuke on its erector. k = 0 lying on the rails .. 1 raised near vertical (foreshortened, closer to
+ *  the camera so slightly larger, nose toward the viewer). Pivot at the missile's tail. */
+function nukeMissile(g: Ctx, r: number, o: number, k: number): void {
+  const th = k * 1.2;
+  const L = r * 3.7, x0 = -r * 0.2;
+  const len = L * Math.cos(th) + r * 0.25 * Math.sin(th);
+  const grow = 1 + 0.38 * Math.sin(th);
+  const w0 = r * 0.38, w1 = r * 0.38 * grow;
+  if (k > 0.02) {
+    // shadow cast along the rails while raised
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.beginPath(); roundRect(g, x0 + r * 0.3 * k, -w0 + r * 0.25 * k, L * (1 - 0.15 * k), w0 * 2, w0); g.fill();
+  }
+  const xN = x0 + len;
+  // body (tapers wider toward the nose as it rises toward the camera)
+  shape(g, '#d8d6c8', o, () => { g.moveTo(x0, -w0); g.lineTo(xN - w1 * 0.8, -w1); g.lineTo(xN - w1 * 0.8, w1); g.lineTo(x0, w0); g.closePath(); });
+  const mg = g.createLinearGradient(0, -w1, 0, w1);
+  mg.addColorStop(0, 'rgba(255,255,255,0.45)'); mg.addColorStop(0.5, 'rgba(255,255,255,0)'); mg.addColorStop(1, 'rgba(0,0,0,0.35)');
+  g.fillStyle = mg; g.beginPath(); g.moveTo(x0, -w0); g.lineTo(xN - w1 * 0.8, -w1); g.lineTo(xN - w1 * 0.8, w1); g.lineTo(x0, w0); g.closePath(); g.fill();
+  const at = (f: number) => x0 + (xN - w1 * 0.8 - x0) * f;
+  const wAt = (f: number) => w0 + (w1 - w0) * f;
+  g.fillStyle = '#e8b81c';
+  g.fillRect(at(0.7), -wAt(0.7), r * 0.18 * (1 - k * 0.5), wAt(0.7) * 2);
+  g.fillRect(at(0.6), -wAt(0.6), r * 0.08 * (1 - k * 0.5), wAt(0.6) * 2);
+  // nose cone: a long red cone lying down, a red disc with a bright tip when pointing at the camera
+  shape(g, '#c0392b', o, () => { g.moveTo(xN - w1 * 0.8, -w1); g.lineTo(xN - w1 * 0.8 + r * 0.72 * Math.cos(th), 0); g.lineTo(xN - w1 * 0.8, w1); g.closePath(); });
+  if (k > 0.5) {
+    shape(g, '#c0392b', o * 0.8, () => g.arc(xN - w1 * 0.6, 0, w1 * 0.95, 0, P2));
+    shape(g, '#ff6a50', 0, () => g.arc(xN - w1 * 0.75, -w1 * 0.2, w1 * 0.4, 0, P2));
+  }
+  // fins
+  shape(g, '#7a7a74', o * 0.7, () => { g.moveTo(x0, -w0 * 1.05); g.lineTo(x0 + r * 0.7 * Math.cos(th), -r * 0.95); g.lineTo(x0 + r * 0.9 * Math.cos(th), -w0 * 1.05); g.closePath(); });
+  shape(g, '#7a7a74', o * 0.7, () => { g.moveTo(x0, w0 * 1.05); g.lineTo(x0 + r * 0.7 * Math.cos(th), r * 0.95); g.lineTo(x0 + r * 0.9 * Math.cos(th), w0 * 1.05); g.closePath(); });
+  // trefoil
+  const tx = at(0.42), tw = wAt(0.42) * 0.82;
+  shape(g, '#e8b81c', o * 0.6, () => g.arc(tx, 0, tw, 0, P2));
+  g.fillStyle = '#151515';
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * P2 + Math.PI / 2 + 0.2; g.beginPath(); g.moveTo(tx, 0); g.arc(tx, 0, tw * 0.87, a, a + 1.0); g.closePath(); g.fill(); }
+  shape(g, '#e8b81c', 0, () => g.arc(tx, 0, tw * 0.22, 0, P2));
+}
+
 function dot2(g: Ctx, x: number, y: number, rad: number, c: string): void {
   g.fillStyle = c; g.beginPath(); g.arc(x, y, rad, 0, P2); g.fill();
 }
 
 /** Per-frame animated bits of giant/titan turrets, drawn over the baked sprite. Local frame: pivot at (mx, my), barrels along ang. */
-export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, mx: number, my: number, ang: number, sc: number, t: number, flash: number, swing: number, px: number, alpha: number): void {
+export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, mx: number, my: number, ang: number, sc: number, t: number, flash: number, swing: number, px: number, alpha: number, ch?: number): void {
   const r = d / 2;
   const cs = Math.cos(ang) * sc, sn = Math.sin(ang) * sc;
   const tr = g.getTransform();
@@ -1516,26 +1551,65 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
       break;
     }
     case 'massdriver': {
-      const ch = 0.35 + 0.3 * pulse + flash * 0.8;
-      glowAt(r * 3.45, 0, r * (0.8 + flash * 1.4), '#9fe8ff', ch);
-      g.globalAlpha = alpha * 0.9;
-      for (let i = 0; i < 3; i++) {
-        const f = (t * 1.2 + i / 3) % 1;
-        glowAt(r * (0.5 + f * 2.9), 0, r * 0.26, '#cff4ff', 0.9 * (1 - Math.abs(f - 0.5) * 1.2));
+      // charge: capacitors fill, coils light up one by one down the rails, arcs crackle, the muzzle goes white-hot
+      const c = Math.max(0, ch ?? 0.2);
+      const cc = c * c;
+      const flick = 0.85 + 0.15 * Math.sin(t * 60);
+      for (let i = 0; i < 3; i++) glowAt(-r * 0.45, (i - 1) * r * 0.62, r * (0.35 + 0.35 * cc), '#9fe8ff', 0.15 + 0.85 * c * flick);
+      for (let i = 0; i < 6; i++) {
+        const on = clamp(c * 7 - i, 0, 1);
+        if (on > 0) { glowAt(r * (0.73 + i * 0.5), -r * 0.6, r * 0.28, '#9fe8ff', on * flick); glowAt(r * (0.73 + i * 0.5), r * 0.6, r * 0.28, '#9fe8ff', on * flick); }
       }
-      glowAt(r * 0.1, 0, r * 1.0, '#6ac8ff', 0.1 + 0.12 * pulse);
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = alpha * (0.3 + 0.7 * c);
+      g.strokeStyle = '#cff4ff'; g.lineCap = 'round';
+      g.lineWidth = Math.max(1.5 / px, r * (0.08 + 0.18 * cc));
+      g.beginPath(); g.moveTo(r * 0.4, 0); g.lineTo(r * 3.4, 0); g.stroke();
+      if (c > 0.55) {
+        const k = Math.floor(t * 24);
+        for (const y of [-0.36, 0.36]) jag(g, r * (0.6 + ((k * 0.37) % 1) * 1.5), y * r, r * (1.6 + ((k * 0.61) % 1) * 1.6), -y * r * 0.2, k + (y > 0 ? 7 : 3), r * 0.25, '#e8faff', Math.max(1 / px, r * 0.035));
+      }
+      glowAt(r * 3.45, 0, r * (0.6 + 2.4 * cc + flash * 2.2), '#9fe8ff', 0.25 + 0.75 * c + flash);
+      if (c > 0.7 || flash > 0.1) glowAt(r * 3.45, 0, r * (0.4 + 1.2 * cc + flash), '#ffffff', (c - 0.7) * 3 + flash);
+      glowAt(r * 0.1, 0, r * (1.0 + cc), '#6ac8ff', 0.1 + 0.4 * cc);
       break;
     }
     case 'annihilator': {
-      const w = 0.35 + 0.35 * pulse + flash;
-      glowAt(r * 2.95, 0, r * (0.9 + flash), '#ff80f0', w);
-      glowAt(r * 2.95, 0, r * 0.3, '#ffffff', 0.5 + flash);
+      const h = Math.max(0, ch ?? 0);
+      const w = 0.3 + 0.3 * pulse + h + flash * 0.5;
+      for (const s of [-1, 1]) glowAt(-r * 0.2, s * r * 0.5, r * (0.35 + 0.4 * h), '#e070ff', 0.3 + 0.7 * h);
+      for (const s of [-1, 1]) for (let i = 0; i < 4; i++) glowAt(r * (0.76 + i * 0.4), s * r * 0.48, r * 0.22, '#ff80f0', clamp(h * 5 - i, 0, 1) * 0.9);
+      glowAt(r * 2.95, 0, r * (0.8 + 1.6 * h + flash * 0.5), '#ff80f0', w);
+      glowAt(r * 2.95, 0, r * (0.3 + 0.5 * h), '#ffffff', 0.4 + h + flash);
       break;
     }
-    case 'tactnuke':
-      glowAt(r * 1.3, 0, r * 0.7, '#9aff50', 0.3 + 0.25 * pulse);
-      glowAt(r * 3.4, 0, r * 0.3, '#ff4030', 0.2 + 0.2 * pulse);
+    case 'tactnuke': {
+      if (ch !== undefined) {
+        g.globalCompositeOperation = prev;
+        g.globalAlpha = alpha;
+        const o = Math.max(1.1 / px, d * 0.07);
+        if (ch >= 0) {
+          // erector ram pushes the missile up
+          const k = ch;
+          g.strokeStyle = OUTLINE; g.lineWidth = r * 0.24; g.lineCap = 'round';
+          g.beginPath(); g.moveTo(-r * 0.9, r * 0.2); g.lineTo(r * (0.5 + 0.2 * k) * Math.cos(k * 1.2) + r * 0.1, r * 0.55); g.stroke();
+          g.strokeStyle = METAL.light; g.lineWidth = r * 0.12; g.stroke();
+          nukeMissile(g, r, o, k);
+          if (k > 0.05) {
+            // warning strobe + hot exhaust venting while it rises
+            const on = (t * 4) % 1 < 0.5;
+            glowAt(-r * 1.25, -r * 0.8, r * 0.45, '#ff3020', on ? 0.95 : 0.15);
+            glowAt(-r * 1.25, r * 0.8, r * 0.45, '#ff3020', on ? 0.15 : 0.95);
+            glowAt(-r * 0.25, 0, r * (0.4 + 0.5 * k), '#ffb060', k * (0.45 + 0.25 * Math.sin(t * 40)));
+          }
+          glowAt(r * 1.3 * Math.cos(k * 1.2), 0, r * 0.6, '#9aff50', 0.25 + 0.25 * pulse + k * 0.3);
+        }
+      } else {
+        glowAt(r * 1.3, 0, r * 0.7, '#9aff50', 0.3 + 0.25 * pulse);
+        glowAt(r * 3.4, 0, r * 0.3, '#ff4030', 0.2 + 0.2 * pulse);
+      }
       break;
+    }
     case 'siegeplasma':
       glowAt(-r * 0.1, 0, r * 0.9, '#e070ff', 0.35 + 0.3 * pulse + flash);
       glowAt(r * 2.4, 0, r * 0.5, '#e070ff', 0.4 + 0.4 * flash + 0.2 * pulse);
@@ -1562,13 +1636,22 @@ export function drawTurretDynamic(g: Ctx, m: ModuleDef, pal: TeamPal, d: number,
       }
       break;
     case 'doomsday':
-    case 'siege240':
+    case 'siege240': {
+      const c = Math.max(0, ch ?? 0);
+      if (c > 0 && m.id === 'doomsday') {
+        // breech glow + loader lights as the next salvo is rammed home
+        for (const y of [-0.55, 0.55]) glowAt(r * 0.3, y * r, r * (0.3 + 0.3 * c), '#ffb060', c * 0.7);
+        const on = (t * 3) % 1 < 0.5;
+        glowAt(-r * 2.0, -r * 1.15, r * 0.35, '#ffcc40', on ? c : 0.1);
+        glowAt(-r * 2.0, r * 1.15, r * 0.35, '#ffcc40', on ? 0.1 : c);
+      }
       if (flash > 0.15) {
         const bx = m.id === 'siege240' ? r * 3.4 : r * 3.45;
         const ys = m.id === 'siege240' ? [0] : [-0.55, 0.55];
         for (const y of ys) { glowAt(bx, y * r, r * (1.2 + flash * 1.6), '#ffd890', flash); glowAt(bx, y * r, r * 0.5, '#ffffff', flash); }
       }
       break;
+    }
     case 'skyfortress': {
       const on = (t * 1.4) % 1 < 0.2;
       if (on) glowAt(0, 0, r * 0.3, '#ff4040', 0.9);
