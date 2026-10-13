@@ -57,9 +57,16 @@ export function settingsScreen(app: App): Screen {
           h('div.panel-title', null, 'Visual comfort'),
           slider('shake', 'Screen shake'),
           slider('flashes', 'Screen flashes'),
-          h('label.setting.check', null,
-            h('input', { type: 'checkbox', checked: s.alwaysHealth || null, onchange: (e: Event) => { s.alwaysHealth = (e.target as HTMLInputElement).checked; saveSettings(s); sfx('click'); } }),
-            ' Always show health bars (otherwise shown briefly after damage; hold Alt in battle)'),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Always show health bars', on: !!s.alwaysHealth,
+              title: 'Otherwise bars show briefly after damage; hold Alt in battle',
+              onChange: (v) => { s.alwaysHealth = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'Otherwise shown briefly after damage; hold Alt in battle')),
         ),
         h('div.panel', null,
           h('div.panel-title', null, 'Gameplay'),

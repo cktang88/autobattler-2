@@ -480,3 +480,5 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .stat-tip .sc-dmg b { font-size: 1.35rem; color: #ffcb5c; line-height: 1; }
 .stat-tip .sc-dmg em { margin-left: auto; font-style: normal; font-size: 0.9rem; color: #f1ece0; }
 .stat-tip .sc-dmg.none { display: block; font-size: 0.86rem; color: #b4b9bd; border-left-color: #5e666d; background: rgba(255, 255, 255, 0.04); }
+.setting.check { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.setting.check .k-toggle { white-space: nowrap; }
