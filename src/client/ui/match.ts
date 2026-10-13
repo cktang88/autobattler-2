@@ -854,10 +854,54 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let downAt: { x: number; y: number } | null = null;
   let lpTimer = 0;
   let lpDone = false;
+  /** dragging one of this round's blocks to a new spot (camera panning is off for the gesture) */
+  let moveDrag: { uid: number; offX: number; offY: number; ox: number; oy: number; started: boolean; reason: string | null } | null = null;
+
+  /** this round's (still refundable) block of ours under the pointer, if any */
+  function myPendingAt(px: number, rawY: number): Placement | null {
+    const hit = unitAt(px, rawY);
+    return hit && hit.pending && hit.side === side ? place.find((p) => p.uid === hit.uid) ?? null : null;
+  }
+
+  /** move the dragged block under the pointer (snapped to cells, clamped to the zone) and validate it */
+  function dragMoveTo(px: number, py: number) {
+    if (!moveDrag) return;
+    const p = place.find((q) => q.uid === moveDrag!.uid);
+    const d = p && designOf(side, p.designId);
+    if (!p || !d) return;
+    const size = sizeOf(d);
+    const { w: bw, h: bh } = blockDims(size, p.spacing, footOf(d));
+    let wp: { x: number; y: number };
+    try { wp = view.screenToWorld(px, py); } catch { return; }
+    let { x, y } = worldToLocalRect(side, Math.round(wp.x - moveDrag.offX), Math.round(wp.y - moveDrag.offY), bw, bh);
+    x = Math.max(0, Math.min(DEPLOY_W - bw, x));
+    y = Math.max(0, Math.min(DEPLOY_D - bh, y));
+    if (x === p.x && y === p.y && moveDrag.started) return;
+    p.x = x; p.y = y;
+    moveDrag.reason = !blockInZone(x, y, size, p.spacing, footOf(d)) ? 'Outside your deploy zone' : check(action());
+    hover = { x, y, size, spacing: p.spacing ?? 0, w: bw, h: bh, valid: !moveDrag.reason, reason: moveDrag.reason };
+    renderHint();
+  }
+
   canvas.addEventListener('pointerdown', (e) => {
     downAt = { x: e.clientX, y: e.clientY };
     lpDone = false;
     clearTimeout(lpTimer);
+    moveDrag = null;
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0) {
+      const { px, rawY } = local(e);
+      const p = myPendingAt(px, rawY);
+      const d = p && designOf(side, p.designId);
+      if (p && d) {
+        let wp: { x: number; y: number } | null = null;
+        try { wp = view.screenToWorld(px, rawY); } catch { /* */ }
+        if (wp) {
+          const r = blockWorldRect(side, p, sizeOf(d), footOf(d));
+          moveDrag = { uid: p.uid, offX: wp.x - r.col, offY: wp.y - r.row, ox: p.x, oy: p.y, started: false, reason: null };
+          view.controls.enabled = false; // this gesture moves the block, not the camera
+        }
+      }
+    }
     if (e.pointerType === 'touch' && (phase === 'deploy' || phase === 'waiting') && selCard < 0) {
       const { px, rawY } = local(e);
       lpTimer = window.setTimeout(() => { // long-press a unit: peek at its stats without selecting it
@@ -876,6 +920,18 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const lp = local(e);
     lastPtr = { px: lp.px, py: lp.py };
     if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) clearTimeout(lpTimer);
+    if (moveDrag && downAt) {
+      if (!moveDrag.started && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) {
+        moveDrag.started = true;
+        hoverUnit = null;
+        if (tipKey) hideTip();
+        canvas.style.cursor = 'grabbing';
+      }
+      if (moveDrag.started) { dragMoveTo(lp.px, lp.rawY); return; }
+    }
+    if (phase === 'deploy' && selCard < 0 && e.pointerType === 'mouse' && !downAt) {
+      canvas.style.cursor = myPendingAt(lp.px, lp.rawY) ? 'grab' : '';
+    }
     if ((phase === 'deploy' || phase === 'waiting') && (selCard < 0 || phase !== 'deploy') && e.pointerType === 'mouse') {
       const hu = unitAt(lp.px, lp.rawY);
       hoverUnit = hu && !(sel && hu.side === sel.side && hu.uid === sel.uid && hu.pending === sel.pending) ? hu : null;
@@ -894,11 +950,31 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   canvas.addEventListener('pointerleave', (e) => {
     if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; if (tipKey) hideTip(); renderHint(); }
   });
-  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; clearTimeout(lpTimer); });
+  /** finish (or abandon) a block move: invalid spots snap back */
+  function endMove(commit: boolean) {
+    const md = moveDrag;
+    moveDrag = null;
+    view.controls.enabled = true;
+    canvas.style.cursor = '';
+    if (!md || !md.started) return false;
+    const p = place.find((q) => q.uid === md.uid);
+    if (p && (!commit || md.reason)) {
+      p.x = md.ox; p.y = md.oy;
+      if (commit && md.reason) { sfx('invalid'); app.toast(md.reason, 'error'); }
+    } else if (p) {
+      sfx('place');
+      sel = { side, uid: p.uid, pending: true };
+    }
+    hover = null;
+    renderAll();
+    return true;
+  }
+  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; clearTimeout(lpTimer); endMove(false); });
   canvas.addEventListener('pointerup', (e) => {
     const start = downAt;
     downAt = null;
     clearTimeout(lpTimer);
+    if (endMove(true)) return; // a drag-move, not a click
     if (lpDone) { lpDone = false; return; }
     if (!start || e.button > 0) return;
     if (view.wasDrag) { // end of a pan / pinch: not a click or tap
