@@ -162,9 +162,10 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .deck-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .deck-card canvas { width: 100%; height: 86px; display: block; }
-.deck-card .name { font-family: var(--font-head); font-weight: 600; font-size: 1rem; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.deck-card .name { font-family: var(--font-head); font-weight: 600; font-size: 1rem; line-height: 1.25; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .deck-card .meta { font-size: 0.8rem; color: var(--muted); display: flex; gap: 8px; }
-.start-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.start-row { display: flex; gap: 10px; justify-content: flex-end; align-items: center; flex-wrap: wrap; position: sticky; bottom: 0; z-index: 2; padding: 10px 0 calc(4px + var(--safe-b)); background: linear-gradient(180deg, transparent, var(--bg) 35%); }
+.hide-sm { display: inline; }
 
 /* ---------- settings ---------- */
 .setting { display: grid; grid-template-columns: 110px 1fr 46px; align-items: center; gap: 10px; padding: 6px 0; }
@@ -206,7 +207,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
   text-transform: none; letter-spacing: 0; font-family: var(--font-body); font-weight: 400; clip-path: none; text-align: left;
 }
 .card canvas { width: 100%; height: 64px; display: block; pointer-events: none; }
-.card .name { font-family: var(--font-head); font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .name { font-family: var(--font-head); font-weight: 600; font-size: 0.95rem; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .meta { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--muted); }
 .card .cost { color: var(--gold); font-weight: 600; font-family: var(--font-head); font-size: 0.95rem; }
 .card .key { position: absolute; top: 4px; left: 6px; font-family: var(--font-head); font-size: 0.75rem; color: var(--muted); }
@@ -288,5 +289,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
   .deck-card canvas { height: 64px; }
   .setting { grid-template-columns: 80px 1fr 40px; }
   .kbd-hint { display: none; }
+  .hide-sm { display: none; }
+  .start-row .big { flex: 1; }
+  .start-row .muted { font-size: 0.8rem; }
 }
 @media (hover: none) { .kbd-hint { display: none; } }

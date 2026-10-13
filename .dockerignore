@@ -1,0 +1,5 @@
+node_modules
+data
+.git
+public/game.js
+public/game.js.map

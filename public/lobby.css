@@ -1,0 +1,107 @@
+/* Multiplayer lobby (src/client/ui/lobby.ts). Everything is scoped under .lobby. */
+
+.lobby .page { max-width: 860px; }
+.lobby-busy button { pointer-events: none; opacity: 0.6; }
+
+.lobby .topbar button { white-space: nowrap; }
+.lobby .topbar h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lobby .lobby-user { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lobby .lobby-callsign {
+  font-family: var(--font-head, system-ui); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent, #2ed3c0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw;
+}
+.lobby button.lobby-link {
+  background: none; border: none; clip-path: none; min-height: 32px; padding: 4px 6px;
+  color: var(--muted, #8193a5); font-size: 0.85rem; text-decoration: underline; text-underline-offset: 3px;
+}
+.lobby button.lobby-link:hover:not(:disabled) { background: none; color: var(--accent, #2ed3c0); }
+.lobby .lobby-spin { animation: lobby-spin 0.8s linear infinite; }
+@keyframes lobby-spin { to { transform: rotate(360deg); } }
+
+.lobby .lobby-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.lobby .lobby-head .panel-title { margin-bottom: 0; }
+.lobby .lobby-small { font-size: 0.82rem; margin: 6px 0 0; }
+.lobby .lobby-warn { color: var(--warn, #f2a93b); margin: 8px 0 0; }
+.lobby .lobby-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.lobby .lobby-input {
+  flex: 1 1 160px; min-width: 0; min-height: 40px; padding: 8px 10px; font-size: 1rem;
+  background: var(--bg, #0b0f14); color: var(--text, #dfe7ee);
+  border: 1px solid var(--line, #2c3a4a); border-radius: var(--radius, 6px);
+}
+.lobby .lobby-input:focus { outline: none; border-color: var(--accent, #2ed3c0); }
+.lobby .lobby-code-input { text-transform: uppercase; letter-spacing: 0.18em; font-family: var(--font-head, monospace); }
+
+/* login */
+.lobby .lobby-login { max-width: 520px; width: 100%; margin: 6vh auto 0; }
+
+/* deck */
+.lobby .lobby-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.lobby .lobby-chip {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  background: var(--bg2, var(--bg, #0f151c)); border: 1px solid var(--line, #2c3a4a); font-size: 0.9rem; white-space: nowrap;
+}
+.lobby .lobby-chip small { color: var(--gold, var(--warn, #f2c94c)); font-family: var(--font-head, inherit); }
+
+/* actions */
+.lobby .lobby-buttons { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.lobby .lobby-quick { font-size: 1.1rem; }
+.lobby .lobby-fresh {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; padding: 10px 12px;
+  border: 1px dashed var(--accent, #2ed3c0); border-radius: var(--radius, 6px); background: rgba(46, 211, 192, 0.06);
+}
+.lobby .lobby-code {
+  font-family: var(--font-head, monospace); font-weight: 700; font-size: 1.25rem; letter-spacing: 0.22em;
+  color: var(--accent, #2ed3c0); user-select: all;
+}
+.lobby .lobby-fresh .lobby-code { font-size: 1.6rem; }
+
+/* match lists */
+.lobby .lobby-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.lobby .lobby-match {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 56px;
+  background: var(--bg2, var(--bg, #0f151c)); border: 1px solid var(--line, #2c3a4a); border-left: 3px solid var(--line, #2c3a4a);
+  border-radius: var(--radius, 6px);
+}
+.lobby .lobby-match.is-turn { border-left-color: var(--accent, #2ed3c0); box-shadow: inset 0 0 0 1px rgba(46, 211, 192, 0.18); }
+.lobby .lobby-match.is-done { opacity: 0.75; }
+.lobby .lobby-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lobby .lobby-info { min-width: 0; }
+.lobby .lobby-name { font-family: var(--font-head, inherit); font-weight: 600; font-size: 1.08rem; letter-spacing: 0.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby .lobby-meta { font-size: 0.82rem; color: var(--muted, #8193a5); }
+.lobby .lobby-hp { font-family: var(--font-head, inherit); font-weight: 700; font-size: 1.15rem; white-space: nowrap; }
+.lobby .lobby-btns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.lobby .lobby-btns button { min-height: 36px; padding: 6px 12px; }
+.lobby .lobby-forfeit { color: var(--muted, #8193a5); }
+.lobby .lobby-forfeit:hover:not(:disabled) { color: var(--bad, #ef4d4d); border-color: var(--bad, #ef4d4d); }
+
+.lobby .lobby-badge {
+  display: inline-block; font-family: var(--font-head, inherit); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--line2, var(--line, #3b4d61));
+  color: var(--muted, #8193a5); white-space: nowrap;
+}
+.lobby .lobby-badge.turn { color: #04201d; background: var(--accent, #2ed3c0); border-color: var(--accent, #2ed3c0); animation: lobby-pulse 1.6s ease-in-out infinite; }
+.lobby .lobby-badge.victory { color: var(--good, #5cd66b); border-color: var(--good, #5cd66b); }
+.lobby .lobby-badge.defeat { color: var(--bad, #ef4d4d); border-color: var(--bad, #ef4d4d); }
+.lobby .lobby-badge.draw { color: var(--warn, #f2a93b); border-color: var(--warn, #f2a93b); }
+@keyframes lobby-pulse { 50% { box-shadow: 0 0 12px rgba(46, 211, 192, 0.55); } }
+@media (prefers-reduced-motion: reduce) { .lobby .lobby-badge.turn, .lobby .lobby-spin { animation: none; } }
+
+.lobby .lobby-done { margin-top: 10px; }
+.lobby .lobby-done summary { cursor: pointer; color: var(--muted, #8193a5); font-family: var(--font-head, inherit); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.9rem; }
+
+@media (max-width: 600px) {
+  .lobby .page { padding: 10px; gap: 10px; }
+  .lobby .lobby-buttons { grid-template-columns: 1fr 1fr; }
+  .lobby .lobby-quick { grid-column: 1 / -1; }
+  .lobby .lobby-match { flex-wrap: wrap; gap: 8px; }
+  .lobby .lobby-left { flex-basis: 100%; }
+  .lobby .lobby-hp { order: 2; }
+  .lobby .lobby-btns { order: 3; margin-left: auto; }
+  .lobby .lobby-open .lobby-match { flex-wrap: nowrap; }
+  .lobby .lobby-open .lobby-left { flex-basis: auto; }
+  .lobby .topbar { gap: 6px; }
+  .lobby .topbar h2 { font-size: 1.2rem; }
+  .lobby .lobby-user { gap: 2px; flex-direction: column; align-items: flex-end; }
+  .lobby .lobby-callsign { max-width: 34vw; font-size: 0.9rem; }
+  .lobby button.lobby-link { min-height: 22px; padding: 0 2px; font-size: 0.75rem; }
+}

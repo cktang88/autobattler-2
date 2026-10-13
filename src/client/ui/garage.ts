@@ -79,6 +79,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const errorsEl = h('ul.g-errors', { 'aria-live': 'polite' });
   const statsEl = h('div.g-stats');
   const loadEl = h('div.g-load');
+  const costEl = h('div.g-cost');
   const chassisEl = h('div.g-cards.g-chassis-cards', { role: 'group', 'aria-label': 'Chassis' });
   const mobilityEl = h('div.g-cards.g-mob-cards', { role: 'group', 'aria-label': 'Mobility' });
   const mountsEl = h('div.g-mounts');
@@ -110,6 +111,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         ),
         listEl,
       ),
+      h('div.g-main', null,
       h('section.g-center', null,
         h('div.g-stage', null,
           preview,
@@ -121,11 +123,13 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         errorsEl,
         statsEl,
         loadEl,
+        costEl,
       ),
       h('section.g-parts', null,
         step('01', 'Chassis', 'Hull size, armor and mount slots', chassisEl),
         step('02', 'Mobility', 'Weight capacity sets speed', mobilityEl),
         step('03', 'Loadout', 'A slot takes its class or smaller', mountsEl),
+      ),
       ),
     ),
   );
@@ -163,6 +167,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     openSlot = null;
     nameInput.value = draft.name;
     update();
+    listEl.querySelector('.g-item.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   async function select(id: string) {
@@ -384,7 +389,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     ].filter((x): x is HTMLSpanElement => !!x));
     previewCost.replaceChildren(icon('cost'), h('b', null, s ? String(s.cost) : '–'), h('span', null, 'supply'));
 
-    if (!s) { statsEl.replaceChildren(); loadEl.replaceChildren(); return; }
+    if (!s) { statsEl.replaceChildren(); loadEl.replaceChildren(); costEl.replaceChildren(); return; }
+    renderCost(s, ss);
     const dl = (k: keyof UnitStats) => (ss ? (s[k] as number) - (ss[k] as number) : null);
     const traits = [...new Set(s.traits)];
     statsEl.replaceChildren(
@@ -425,6 +431,40 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('div.g-load-f', null,
         h('span.g-speednote', { class: spd < 0 || s.load > MAX_LOAD ? 'neg' : 'pos' }, speedNote),
         h('span', null, `${mob?.name ?? ''} capacity ${s.capacity}`),
+      ),
+    );
+  }
+
+  function renderCost(s: UnitStats, ss: UnitStats | null) {
+    const parts = PARTS_WEIGHT * s.partsCost;
+    const pow = POWER_K * s.power;
+    const tot = parts + pow || 1;
+    const d = (k: 'offense' | 'ehp' | 'partsCost' | 'power') => {
+      if (!ss) return null;
+      const v = s[k] - ss[k];
+      return Math.abs(v) < 0.5 ? null : h('span.g-delta', { class: v > 0 ? 'up' : 'down' }, `${v > 0 ? '+' : ''}${Math.round(v)}`);
+    };
+    const tip = 'Cost scales with predicted deadliness, so equal-supply armies are balanced.\n' +
+      `Cost = ${PARTS_WEIGHT} × parts + ${POWER_K} × power, rounded up to 5.\n` +
+      'Power = √(offense × effective hp) × mobility.';
+    costEl.replaceChildren(
+      h('div.g-cost-h', { title: tip },
+        h('span', null, icon('cost'), 'Cost breakdown', h('span.g-info', { tabindex: '0', 'aria-label': tip }, 'i')),
+        h('span.g-cost-total', null, h('b', null, String(s.cost)), ' supply'),
+      ),
+      h('div.g-cost-bar', { 'aria-hidden': 'true' },
+        h('span.parts', { style: { width: `${(parts / tot) * 100}%` } }),
+        h('span.power', { style: { width: `${(pow / tot) * 100}%` } }),
+      ),
+      h('div.g-cost-rows', null,
+        h('div.g-cost-row.parts', { title: 'Sum of base part costs: complexity of fielding this design' },
+          h('span.g-cost-k', null, h('i'), 'Parts complexity'), h('span', null, String(Math.round(s.partsCost)), d('partsCost')), h('em', null, `≈${Math.round(parts)}`)),
+        h('div.g-cost-row.power', { title: 'Predicted combat power: √(offense × effective hp) × mobility' },
+          h('span.g-cost-k', null, h('i'), 'Combat power'), h('span', null, String(s.power), d('power')), h('em', null, `≈${Math.round(pow)}`)),
+        h('div.g-cost-row.sub', { title: 'Damage output rated vs a mix of armor, incl. splash, chain, stun, burn, range' },
+          h('span.g-cost-k', null, 'Offense rating'), h('span', null, String(s.offense), d('offense')), h('em')),
+        h('div.g-cost-row.sub', { title: 'HP + shield, scaled by armor, evasion and flight' },
+          h('span.g-cost-k', null, 'Effective HP'), h('span', null, String(s.ehp), d('ehp')), h('em')),
       ),
     );
   }

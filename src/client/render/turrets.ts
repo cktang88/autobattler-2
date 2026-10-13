@@ -1,0 +1,483 @@
+// Turret / module art. One drawing per ModuleVisual family, varied by `barrels` and `caliber`.
+// Drawn in turret-local cell units: pivot at origin, barrels pointing +x. `d` = turret base diameter (cells).
+
+import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
+import { METAL, OUTLINE, shade, rgba, roundRect, type Ctx, type TeamPal } from './palette.ts';
+
+/** Glow colour used by a weapon family (beams, lenses, projectiles). null = use team glow. */
+export function visualGlow(v: ModuleVisual | undefined, pal: TeamPal): string {
+  switch (v) {
+    case 'laser': return pal.glow;
+    case 'heatray': return '#ff7a2a';
+    case 'plasma': return '#e070ff';
+    case 'rail': case 'gauss': return '#9fe8ff';
+    case 'tesla': case 'emp': return '#a8d8ff';
+    case 'slowbeam': return '#b47cff';
+    case 'repair': return '#6dff9a';
+    case 'shield': return '#7fd8ff';
+    case 'flamer': return '#ffa040';
+    default: return '#ffd27a';
+  }
+}
+
+/** Distance from pivot to the muzzle, as a multiple of d (for muzzle flashes / beam origins). */
+export function muzzleLen(m: ModuleDef | undefined): number {
+  if (!m) return 0.8;
+  const c = m.caliber ?? 0.5;
+  switch (m.visual) {
+    case 'gun': return 0.95 + c * 0.45;
+    case 'gatling': return 1.05;
+    case 'shotgun': return 0.9;
+    case 'cannon': return 1.25;
+    case 'gauss': return 1.3;
+    case 'sniper': return 1.45;
+    case 'rail': return 1.4;
+    case 'artillery': return (m.barrels ?? 1) > 1 ? 1.2 : 1.5;
+    case 'laser': return 0.95;
+    case 'heatray': return 0.6;
+    case 'plasma': return 1.1;
+    case 'flamer': return 0.85;
+    case 'tesla': return 0.25;
+    case 'emp': return 0.75;
+    case 'slowbeam': return 0.7;
+    case 'flak': return 0.95;
+    case 'repair': return 0.6;
+    case 'mortar': return 0.25;
+    case 'rocketPod': case 'missileRack': case 'cruise': return 0.6;
+    default: return 0.6;
+  }
+}
+
+/** Half-extent of the turret sprite, as a multiple of d. */
+export const TURRET_EXT = 1.75;
+
+type Fill = string | CanvasGradient;
+const lw = (g: Ctx, w: number) => { g.lineWidth = w; };
+
+function shape(g: Ctx, fill: Fill, outline: number, path: () => void): void {
+  g.beginPath();
+  path();
+  g.fillStyle = fill;
+  g.fill();
+  if (outline > 0) {
+    lw(g, outline);
+    g.strokeStyle = OUTLINE;
+    g.stroke();
+  }
+}
+
+/** A barrel from x0 to x1 at lateral offset y, width w. Metallic with a highlight line. */
+function barrel(g: Ctx, x0: number, x1: number, y: number, w: number, o: number, color = METAL.base): void {
+  shape(g, color, o, () => roundRect(g, x0, y - w / 2, x1 - x0, w, w * 0.3));
+  g.fillStyle = 'rgba(255,255,255,0.28)';
+  g.fillRect(x0 + w * 0.3, y - w * 0.32, (x1 - x0) - w * 0.6, w * 0.22);
+}
+
+function muzzle(g: Ctx, x: number, y: number, w: number, len: number, o: number): void {
+  shape(g, METAL.dark, o, () => roundRect(g, x - len, y - w / 2, len, w, w * 0.2));
+}
+
+function teamGrad(g: Ctx, pal: TeamPal, r: number): CanvasGradient {
+  const gr = g.createLinearGradient(-r, -r, r, r);
+  gr.addColorStop(0, pal.light);
+  gr.addColorStop(0.55, pal.body);
+  gr.addColorStop(1, pal.dark);
+  return gr;
+}
+
+function metalGrad(g: Ctx, r: number, base = METAL.base): CanvasGradient {
+  const gr = g.createLinearGradient(-r, -r, r, r);
+  gr.addColorStop(0, shade(base, 0.35));
+  gr.addColorStop(0.6, base);
+  gr.addColorStop(1, shade(base, -0.45));
+  return gr;
+}
+
+function hatch(g: Ctx, x: number, y: number, r: number, o: number): void {
+  shape(g, METAL.dark, o * 0.6, () => g.arc(x, y, r, 0, Math.PI * 2));
+  g.fillStyle = 'rgba(255,255,255,0.18)';
+  g.beginPath();
+  g.arc(x - r * 0.25, y - r * 0.25, r * 0.45, 0, Math.PI * 2);
+  g.fill();
+}
+
+function glowDot(g: Ctx, x: number, y: number, r: number, color: string): void {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r * 2.4);
+  gr.addColorStop(0, '#ffffff');
+  gr.addColorStop(0.25, color);
+  gr.addColorStop(1, rgba(color.length === 7 ? color : '#ffffff', 0));
+  g.fillStyle = gr;
+  g.beginPath();
+  g.arc(x, y, r * 2.4, 0, Math.PI * 2);
+  g.fill();
+}
+
+function rivets(g: Ctx, pts: number[], r: number): void {
+  g.fillStyle = 'rgba(0,0,0,0.45)';
+  for (let i = 0; i < pts.length; i += 2) {
+    g.beginPath();
+    g.arc(pts[i], pts[i + 1], r, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = 'rgba(255,255,255,0.25)';
+  for (let i = 0; i < pts.length; i += 2) {
+    g.beginPath();
+    g.arc(pts[i] - r * 0.3, pts[i + 1] - r * 0.3, r * 0.5, 0, Math.PI * 2);
+    g.fill();
+  }
+}
+
+/** Lateral offsets for n parallel barrels within width span. */
+function spreadOffsets(n: number, span: number): number[] {
+  if (n <= 1) return [0];
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) out.push(-span / 2 + (span * i) / (n - 1));
+  return out;
+}
+
+/** Draw a turret for module m with base diameter d (cells). o = outline width (cells). */
+export function drawTurret(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, o: number): void {
+  const r = d / 2;
+  const c = m.caliber ?? 0.5;
+  const n = m.barrels ?? 1;
+  const glow = visualGlow(m.visual, pal);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  switch (m.visual) {
+    case 'gun': {
+      const bw = r * (0.2 + 0.28 * c) * (n >= 4 ? 0.75 : 1);
+      const len = r * (1.7 + c * 0.9);
+      const offs = n >= 4 ? [-0.42, -0.14, 0.14, 0.42].map((v) => v * r * 1.6) : spreadOffsets(n, r * 0.75);
+      for (const y of offs) {
+        barrel(g, 0, len, y, bw, o);
+        if (c >= 0.45) muzzle(g, len, y, bw * 1.45, bw * 1.4, o * 0.7);
+      }
+      // mantlet + housing
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.95, -r * (n >= 2 ? 0.95 : 0.8), r * 1.75, r * (n >= 2 ? 1.9 : 1.6), r * 0.35));
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.55, -r * (n >= 2 ? 0.7 : 0.45), r * 0.4, r * (n >= 2 ? 1.4 : 0.9), r * 0.12));
+      if (n >= 4) {
+        // AA director dish
+        shape(g, METAL.light, o * 0.6, () => g.ellipse(-r * 0.45, 0, r * 0.22, r * 0.45, 0, 0, Math.PI * 2));
+      } else hatch(g, -r * 0.35, -r * 0.25, r * 0.28, o);
+      // ammo feed box
+      shape(g, shade(pal.dark, -0.2), o * 0.6, () => roundRect(g, -r * 0.8, r * 0.25, r * 0.6, r * 0.45, r * 0.08));
+      break;
+    }
+    case 'gatling': {
+      const len = r * 2.0;
+      shape(g, metalGrad(g, r * 0.5, METAL.dark), o, () => roundRect(g, r * 0.2, -r * 0.42, len - r * 0.2, r * 0.84, r * 0.2));
+      g.strokeStyle = METAL.light;
+      lw(g, r * 0.07);
+      for (const y of [-0.27, -0.09, 0.09, 0.27]) {
+        g.beginPath(); g.moveTo(r * 0.5, y * r); g.lineTo(len - r * 0.05, y * r); g.stroke();
+      }
+      for (const x of [0.75, 1.45]) shape(g, METAL.base, o * 0.6, () => roundRect(g, x * r, -r * 0.5, r * 0.18, r, r * 0.05));
+      shape(g, METAL.deep, 0, () => g.arc(len, 0, r * 0.18, 0, Math.PI * 2));
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(-r * 0.1, 0, r * 0.82, 0, Math.PI * 2));
+      shape(g, METAL.base, o * 0.6, () => roundRect(g, -r * 0.4, -r * 0.95, r * 0.7, r * 0.35, r * 0.08));
+      hatch(g, -r * 0.25, r * 0.15, r * 0.25, o);
+      break;
+    }
+    case 'shotgun': {
+      const len = r * 1.75;
+      shape(g, METAL.base, o, () => { g.moveTo(r * 0.2, -r * 0.24); g.lineTo(len, -r * 0.38); g.lineTo(len, r * 0.38); g.lineTo(r * 0.2, r * 0.24); g.closePath(); });
+      shape(g, METAL.deep, 0, () => g.ellipse(len - r * 0.05, 0, r * 0.08, r * 0.3, 0, 0, Math.PI * 2));
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.65, -r * 0.3, r * 0.45, r * 0.6, r * 0.1));
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.9, -r * 0.75, r * 1.4, r * 1.5, r * 0.3));
+      rivets(g, [-r * 0.6, -r * 0.45, -r * 0.6, r * 0.45, r * 0.2, -r * 0.45, r * 0.2, r * 0.45], r * 0.07);
+      break;
+    }
+    case 'cannon': {
+      const bw = r * (0.24 + 0.12 * c);
+      const len = r * 2.45;
+      for (const y of spreadOffsets(n, r * 0.7)) {
+        barrel(g, 0, len, y, bw, o);
+        shape(g, METAL.base, o * 0.7, () => roundRect(g, len * 0.48, y - bw * 0.72, len * 0.16, bw * 1.44, bw * 0.4));
+        muzzle(g, len + bw * 0.25, y, bw * 1.5, bw * 1.1, o * 0.7);
+      }
+      shape(g, teamGrad(g, pal, r), o, () => {
+        g.moveTo(r * 0.85, -r * 0.55); g.lineTo(r * 0.6, -r * 0.92); g.lineTo(-r * 0.75, -r * 0.92); g.lineTo(-r * 1.0, -r * 0.5);
+        g.lineTo(-r * 1.0, r * 0.5); g.lineTo(-r * 0.75, r * 0.92); g.lineTo(r * 0.6, r * 0.92); g.lineTo(r * 0.85, r * 0.55); g.closePath();
+      });
+      g.strokeStyle = rgba(pal.deep, 0.5); lw(g, o * 0.5);
+      g.beginPath(); g.moveTo(-r * 0.2, -r * 0.88); g.lineTo(-r * 0.2, r * 0.88); g.stroke();
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.55, -r * 0.42 * (n > 1 ? 1.5 : 1), r * 0.35, r * 0.84 * (n > 1 ? 1.5 : 1), r * 0.1));
+      hatch(g, -r * 0.55, -r * 0.4, r * 0.24, o);
+      hatch(g, -r * 0.55, r * 0.4, r * 0.18, o);
+      shape(g, pal.accent, 0, () => roundRect(g, -r * 0.95, -r * 0.12, r * 0.18, r * 0.24, r * 0.05));
+      break;
+    }
+    case 'gauss': {
+      const len = r * 2.55;
+      shape(g, METAL.dark, o, () => roundRect(g, 0, -r * 0.3, len, r * 0.6, r * 0.12));
+      g.strokeStyle = glow; lw(g, r * 0.08);
+      g.beginPath(); g.moveTo(r * 0.2, 0); g.lineTo(len - r * 0.05, 0); g.stroke();
+      for (let i = 0; i < 6; i++) {
+        const x = r * (0.45 + i * 0.33);
+        shape(g, '#c27a3a', o * 0.5, () => roundRect(g, x, -r * 0.38, r * 0.16, r * 0.76, r * 0.05));
+      }
+      glowDot(g, len, 0, r * 0.12, glow);
+      shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 0.7, -r * 0.6); g.lineTo(-r * 0.4, -r * 0.95); g.lineTo(-r * 1.0, -r * 0.6); g.lineTo(-r * 1.0, r * 0.6); g.lineTo(-r * 0.4, r * 0.95); g.lineTo(r * 0.7, r * 0.6); g.closePath(); });
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, -r * 0.75, -r * 0.35, r * 0.7, r * 0.7, r * 0.1));
+      glowDot(g, -r * 0.4, 0, r * 0.12, glow);
+      break;
+    }
+    case 'sniper': {
+      const len = r * 2.9;
+      barrel(g, 0, len, 0, r * 0.16, o);
+      muzzle(g, len, 0, r * 0.28, r * 0.3, o * 0.7);
+      shape(g, METAL.deep, o * 0.6, () => roundRect(g, r * 0.1, -r * 0.42, r * 0.9, r * 0.2, r * 0.08));
+      shape(g, '#7fd0ff', 0, () => g.arc(r * 1.0, -r * 0.32, r * 0.07, 0, Math.PI * 2));
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.85, -r * 0.55, r * 1.25, r * 1.1, r * 0.3));
+      shape(g, METAL.dark, o * 0.5, () => roundRect(g, -r * 0.6, r * 0.15, r * 0.5, r * 0.25, r * 0.06));
+      break;
+    }
+    case 'rail': {
+      const len = r * (2.3 + c * 0.5);
+      shape(g, METAL.deep, 0, () => g.rect(r * 0.3, -r * 0.14, len - r * 0.3, r * 0.28));
+      g.strokeStyle = glow; lw(g, r * 0.1);
+      g.beginPath(); g.moveTo(r * 0.3, 0); g.lineTo(len, 0); g.stroke();
+      for (const y of [-0.24, 0.24]) barrel(g, 0, len, y * r, r * 0.2, o, METAL.light);
+      for (let i = 0; i < 3; i++) shape(g, METAL.dark, o * 0.5, () => roundRect(g, r * (0.6 + i * 0.55), -r * 0.4, r * 0.12, r * 0.8, r * 0.04));
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.0, -r * 0.8, r * 1.5, r * 1.6, r * 0.18));
+      for (const y of [-0.5, 0.5]) shape(g, METAL.dark, o * 0.5, () => roundRect(g, -r * 0.85, y * r - r * 0.18, r * 1.0, r * 0.36, r * 0.06));
+      glowDot(g, -r * 0.35, -r * 0.5, r * 0.08, glow);
+      glowDot(g, -r * 0.35, r * 0.5, r * 0.08, glow);
+      break;
+    }
+    case 'rocketPod': {
+      const cols = n >= 12 ? 4 : n >= 4 ? 2 : 1;
+      const rows = Math.ceil(n / cols);
+      const cell = r * (n >= 12 ? 0.48 : 0.62);
+      const w = cols * cell, h = rows * cell;
+      const x0 = -w / 2 + r * 0.25;
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, x0 - cell * 0.15, -h / 2 - cell * 0.15, w + cell * 0.3, h + cell * 0.3, cell * 0.2));
+      for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+        const cx = x0 + (j + 0.5) * cell, cy = -h / 2 + (i + 0.5) * cell;
+        shape(g, METAL.deep, o * 0.4, () => g.arc(cx, cy, cell * 0.38, 0, Math.PI * 2));
+        shape(g, j === cols - 1 ? '#d8d2c0' : '#9a9384', 0, () => g.arc(cx + cell * 0.06, cy, cell * 0.2, 0, Math.PI * 2));
+        g.fillStyle = '#c0392b';
+        g.beginPath(); g.arc(cx + cell * 0.1, cy, cell * 0.1, 0, Math.PI * 2); g.fill();
+      }
+      shape(g, pal.accent, 0, () => g.rect(x0 - cell * 0.15, -h / 2 - cell * 0.15, cell * 0.12, h + cell * 0.3));
+      break;
+    }
+    case 'missileRack': {
+      const rows = n >= 8 ? 4 : n >= 4 ? 2 : n;
+      const per = n >= 8 ? 2 : n >= 4 ? 2 : 1;
+      const ml = r * (n >= 8 ? 1.0 : 1.55);
+      const mw = r * (n >= 8 ? 0.2 : 0.26);
+      const span = rows * mw * 1.5;
+      shape(g, METAL.dark, o, () => roundRect(g, -r * 0.85, -span / 2 - mw * 0.4, r * 1.6 + (per > 1 ? 0 : r * 0.2), span + mw * 0.8, mw * 0.4));
+      for (let i = 0; i < rows; i++) {
+        const y = -span / 2 + (i + 0.5) * mw * 1.5;
+        for (let k = 0; k < per; k++) {
+          const xs = per > 1 ? -r * 0.8 + k * ml * 1.02 : -r * 0.75;
+          const len = per > 1 ? ml * 0.95 : ml;
+          shape(g, '#e4e2da', o * 0.5, () => roundRect(g, xs, y - mw / 2, len, mw, mw / 2));
+          g.fillStyle = k === per - 1 ? pal.accent : '#c0392b';
+          g.beginPath(); g.moveTo(xs + len, y); g.lineTo(xs + len - mw * 1.1, y - mw / 2); g.lineTo(xs + len - mw * 1.1, y + mw / 2); g.closePath(); g.fill();
+          g.fillStyle = '#8b8b84';
+          g.fillRect(xs, y - mw * 0.75, mw * 0.6, mw * 1.5);
+        }
+      }
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.0, -r * 0.35, r * 0.4, r * 0.7, r * 0.1));
+      break;
+    }
+    case 'cruise': {
+      const len = r * 3.0;
+      shape(g, METAL.dark, o, () => roundRect(g, -r * 1.2, -r * 0.55, r * 2.3, r * 1.1, r * 0.15));
+      shape(g, '#dedbd0', o, () => roundRect(g, -r * 1.35, -r * 0.3, len, r * 0.6, r * 0.3));
+      g.fillStyle = pal.accent;
+      g.fillRect(-r * 0.2, -r * 0.3, r * 0.15, r * 0.6);
+      g.fillStyle = '#b8352a';
+      g.beginPath(); g.moveTo(len - r * 1.35, 0); g.lineTo(len - r * 1.9, -r * 0.3); g.lineTo(len - r * 1.9, r * 0.3); g.closePath(); g.fill();
+      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(-r * 0.9, -r * 0.3); g.lineTo(-r * 1.35, -r * 0.75); g.lineTo(-r * 1.45, -r * 0.75); g.lineTo(-r * 1.3, -r * 0.3); g.closePath(); });
+      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(-r * 0.9, r * 0.3); g.lineTo(-r * 1.35, r * 0.75); g.lineTo(-r * 1.45, r * 0.75); g.lineTo(-r * 1.3, r * 0.3); g.closePath(); });
+      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(r * 0.5, -r * 0.3); g.lineTo(r * 0.25, -r * 0.55); g.lineTo(r * 0.1, -r * 0.55); g.lineTo(r * 0.15, -r * 0.3); g.closePath(); });
+      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(r * 0.5, r * 0.3); g.lineTo(r * 0.25, r * 0.55); g.lineTo(r * 0.1, r * 0.55); g.lineTo(r * 0.15, r * 0.3); g.closePath(); });
+      break;
+    }
+    case 'mortar': {
+      shape(g, METAL.dark, o, () => { for (let i = 0; i < 3; i++) { const a = Math.PI * 0.66 * i + Math.PI; g.moveTo(0, 0); g.lineTo(Math.cos(a) * r * 1.0, Math.sin(a) * r * 1.0); } });
+      g.strokeStyle = METAL.dark; lw(g, r * 0.14);
+      g.beginPath(); for (let i = 0; i < 3; i++) { const a = Math.PI * 0.66 * i + Math.PI; g.moveTo(0, 0); g.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95); } g.stroke();
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(-r * 0.1, 0, r * 0.75, 0, Math.PI * 2));
+      shape(g, metalGrad(g, r * 0.5), o, () => g.ellipse(r * 0.35, 0, r * 0.6, r * 0.52, 0, 0, Math.PI * 2));
+      shape(g, METAL.deep, 0, () => g.ellipse(r * 0.45, 0, r * 0.36, r * 0.32, 0, 0, Math.PI * 2));
+      g.strokeStyle = 'rgba(255,255,255,0.25)'; lw(g, r * 0.05);
+      g.beginPath(); g.ellipse(r * 0.35, 0, r * 0.5, r * 0.43, 0, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
+      break;
+    }
+    case 'artillery': {
+      const multi = n > 1;
+      const len = r * (multi ? 2.25 : 2.9);
+      const bw = r * (multi ? 0.2 : 0.3);
+      for (const y of spreadOffsets(n, r * 0.9)) {
+        barrel(g, 0, len, y, bw, o);
+        muzzle(g, len + bw * 0.3, y, bw * 1.6, bw * 1.3, o * 0.7);
+        if (!multi) for (const s of [-1, 1]) shape(g, METAL.light, o * 0.5, () => roundRect(g, r * 0.4, y + s * bw * 0.85 - bw * 0.2, r * 0.8, bw * 0.4, bw * 0.2));
+      }
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 1.1, -r * 0.9, r * 1.8, r * 1.8, r * 0.25));
+      shape(g, METAL.dark, o * 0.7, () => roundRect(g, r * 0.25, -r * 0.65, r * 0.6, r * 1.3, r * 0.15));
+      g.strokeStyle = rgba(pal.deep, 0.5); lw(g, o * 0.5);
+      for (const x of [-0.6, -0.15]) { g.beginPath(); g.moveTo(x * r, -r * 0.85); g.lineTo(x * r, r * 0.85); g.stroke(); }
+      rivets(g, [-r * 0.9, -r * 0.7, -r * 0.9, r * 0.7, r * 0.5, -r * 0.75, r * 0.5, r * 0.75], r * 0.06);
+      break;
+    }
+    case 'laser': {
+      const len = r * 1.85;
+      for (const y of spreadOffsets(n, r * 0.8)) {
+        shape(g, METAL.dark, o, () => roundRect(g, 0, y - r * 0.16, len, r * 0.32, r * 0.14));
+        g.strokeStyle = METAL.light; lw(g, r * 0.05);
+        for (let i = 0; i < 4; i++) { const x = r * (0.6 + i * 0.25); g.beginPath(); g.moveTo(x, y - r * 0.15); g.lineTo(x, y + r * 0.15); g.stroke(); }
+        glowDot(g, len, y, r * 0.11, glow);
+      }
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(0, 0, r * 0.82, 0, Math.PI * 2));
+      shape(g, rgba(glow, 0.9), o * 0.5, () => g.ellipse(-r * 0.15, 0, r * 0.32, r * 0.22, 0, 0, Math.PI * 2));
+      g.fillStyle = 'rgba(255,255,255,0.7)';
+      g.beginPath(); g.arc(-r * 0.25, -r * 0.08, r * 0.08, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case 'heatray': {
+      shape(g, METAL.dark, o, () => roundRect(g, 0, -r * 0.15, r * 0.7, r * 0.3, r * 0.1));
+      // parabolic dish
+      shape(g, metalGrad(g, r, METAL.light), o, () => { g.moveTo(r * 0.45, -r * 0.95); g.quadraticCurveTo(r * 0.0, 0, r * 0.45, r * 0.95); g.lineTo(r * 0.62, r * 0.88); g.quadraticCurveTo(r * 0.25, 0, r * 0.62, -r * 0.88); g.closePath(); });
+      g.strokeStyle = METAL.dark; lw(g, r * 0.06);
+      g.beginPath(); g.moveTo(r * 0.5, -r * 0.8); g.lineTo(r * 1.05, 0); g.lineTo(r * 0.5, r * 0.8); g.stroke();
+      glowDot(g, r * 1.05, 0, r * 0.14, glow);
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.95, -r * 0.6, r * 0.95, r * 1.2, r * 0.3));
+      g.fillStyle = rgba('#ff7a2a', 0.8);
+      for (const y of [-0.3, 0, 0.3]) g.fillRect(-r * 0.75, y * r - r * 0.05, r * 0.5, r * 0.1);
+      break;
+    }
+    case 'plasma': {
+      const big = c > 0.7;
+      const len = r * (big ? 2.2 : 1.8);
+      const bw = r * (big ? 0.42 : 0.5);
+      shape(g, METAL.dark, o, () => roundRect(g, 0, -bw / 2, len, bw, bw * 0.4));
+      for (let i = 0; i < (big ? 4 : 2); i++) {
+        const x = r * (0.5 + i * 0.4);
+        shape(g, '#8a3fb0', o * 0.5, () => roundRect(g, x, -bw * 0.68, r * 0.16, bw * 1.36, r * 0.06));
+        g.fillStyle = rgba(glow, 0.9);
+        g.fillRect(x + r * 0.04, -bw * 0.5, r * 0.08, bw);
+      }
+      glowDot(g, len, 0, r * (big ? 0.16 : 0.22), glow);
+      shape(g, teamGrad(g, pal, r), o, () => g.ellipse(-r * 0.15, 0, r * 0.95, r * 0.85, 0, 0, Math.PI * 2));
+      shape(g, METAL.dark, o * 0.6, () => g.arc(-r * 0.35, 0, r * 0.38, 0, Math.PI * 2));
+      glowDot(g, -r * 0.35, 0, r * 0.16, glow);
+      break;
+    }
+    case 'flamer': {
+      const twin = c > 0.5;
+      const len = r * 1.6;
+      shape(g, METAL.base, o, () => { g.moveTo(r * 0.1, -r * 0.18); g.lineTo(len, -r * 0.26); g.lineTo(len, r * 0.26); g.lineTo(r * 0.1, r * 0.18); g.closePath(); });
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, len - r * 0.25, -r * 0.3, r * 0.3, r * 0.6, r * 0.08));
+      glowDot(g, len + r * 0.08, r * 0.18, r * 0.06, '#ff9030');
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.5, -r * 0.6, r * 0.95, r * 1.2, r * 0.25));
+      const tanks = twin ? [-0.42, 0.42] : [0];
+      for (const y of tanks) {
+        shape(g, '#b8552a', o, () => roundRect(g, -r * 1.15, y * r - r * 0.3, r * 0.85, r * 0.6, r * 0.3));
+        g.fillStyle = 'rgba(255,255,255,0.3)';
+        g.fillRect(-r * 1.0, y * r - r * 0.18, r * 0.55, r * 0.08);
+        g.fillStyle = '#1a1a1a';
+        for (const x of [-0.95, -0.62]) g.fillRect(x * r, y * r - r * 0.3, r * 0.06, r * 0.6);
+      }
+      break;
+    }
+    case 'tesla': {
+      const big = c > 0.7;
+      shape(g, teamGrad(g, pal, r), o, () => { for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + Math.PI / 6; const f = i === 0 ? g.moveTo.bind(g) : g.lineTo.bind(g); f(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95); } g.closePath(); });
+      for (let i = 0; i < (big ? 3 : 2); i++) {
+        const rr = r * (0.75 - i * 0.2);
+        g.strokeStyle = '#c88a3c'; lw(g, r * 0.11);
+        g.beginPath(); g.arc(0, 0, rr, 0, Math.PI * 2); g.stroke();
+        g.strokeStyle = '#6a3e14'; lw(g, r * 0.03);
+        g.beginPath(); g.arc(0, 0, rr, 0, Math.PI * 2); g.stroke();
+      }
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        shape(g, METAL.light, o * 0.4, () => g.arc(Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.85, r * 0.1, 0, Math.PI * 2));
+      }
+      shape(g, '#dff3ff', o * 0.6, () => g.arc(0, 0, r * 0.28, 0, Math.PI * 2));
+      glowDot(g, 0, 0, r * 0.18, glow);
+      break;
+    }
+    case 'emp': {
+      const len = r * 1.45;
+      for (const s of [-1, 1]) shape(g, METAL.light, o, () => { g.moveTo(r * 0.2, s * r * 0.15); g.lineTo(len, s * r * 0.32); g.lineTo(len, s * r * 0.18); g.lineTo(r * 0.35, s * r * 0.02); g.closePath(); });
+      glowDot(g, len * 0.85, 0, r * 0.14, glow);
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(-r * 0.1, 0, r * 0.75, 0, Math.PI * 2));
+      shape(g, '#1c2a3a', o * 0.6, () => g.arc(-r * 0.1, 0, r * 0.45, 0, Math.PI * 2));
+      g.strokeStyle = glow; lw(g, r * 0.06);
+      g.beginPath(); g.arc(-r * 0.1, 0, r * 0.32, 0, Math.PI * 2); g.stroke();
+      glowDot(g, -r * 0.1, 0, r * 0.12, glow);
+      break;
+    }
+    case 'slowbeam': {
+      shape(g, METAL.dark, o, () => roundRect(g, 0, -r * 0.14, r * 1.1, r * 0.28, r * 0.1));
+      for (const x of [0.45, 0.75]) shape(g, METAL.light, o * 0.4, () => g.ellipse(x * r, 0, r * 0.06, r * 0.3, 0, 0, Math.PI * 2));
+      shape(g, rgba(glow, 0.95), o * 0.6, () => { g.moveTo(r * 1.45, 0); g.lineTo(r * 1.15, -r * 0.18); g.lineTo(r * 0.95, 0); g.lineTo(r * 1.15, r * 0.18); g.closePath(); });
+      glowDot(g, r * 1.2, 0, r * 0.12, glow);
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.85, -r * 0.7, r * 1.15, r * 1.4, r * 0.45));
+      shape(g, rgba(glow, 0.7), o * 0.4, () => g.arc(-r * 0.3, 0, r * 0.25, 0, Math.PI * 2));
+      break;
+    }
+    case 'flak': {
+      const nb = n > 1 ? n : 2;
+      const bw = r * 0.22;
+      const len = r * 1.75;
+      for (const y of spreadOffsets(nb, r * (nb >= 3 ? 1.0 : 0.55))) {
+        barrel(g, 0, len, y, bw, o);
+        muzzle(g, len, y, bw * 1.5, bw * 1.6, o * 0.6);
+      }
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.95, -r * 0.9, r * 1.5, r * 1.8, r * 0.5));
+      // radar
+      shape(g, METAL.light, o * 0.6, () => g.ellipse(-r * 0.55, 0, r * 0.18, r * 0.5, 0, 0, Math.PI * 2));
+      g.strokeStyle = METAL.dark; lw(g, r * 0.05);
+      g.beginPath(); g.moveTo(-r * 0.55, -r * 0.45); g.lineTo(-r * 0.55, r * 0.45); g.stroke();
+      shape(g, pal.accent, 0, () => g.arc(r * 0.15, 0, r * 0.12, 0, Math.PI * 2));
+      break;
+    }
+    case 'repair': {
+      shape(g, METAL.base, o, () => roundRect(g, 0, -r * 0.13, r * 1.0, r * 0.26, r * 0.1));
+      shape(g, METAL.dark, o * 0.6, () => g.arc(r * 1.0, 0, r * 0.2, 0, Math.PI * 2));
+      glowDot(g, r * 1.05, 0, r * 0.1, glow);
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(-r * 0.1, 0, r * 0.78, 0, Math.PI * 2));
+      shape(g, '#f2f2ea', o * 0.5, () => g.arc(-r * 0.1, 0, r * 0.5, 0, Math.PI * 2));
+      g.fillStyle = '#2bd46a';
+      g.fillRect(-r * 0.4, -r * 0.1, r * 0.6, r * 0.2);
+      g.fillRect(-r * 0.2, -r * 0.3, r * 0.2, r * 0.6);
+      break;
+    }
+    case 'shield': {
+      shape(g, METAL.dark, o, () => g.arc(0, 0, r * 0.95, 0, Math.PI * 2));
+      const gr = g.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.05, 0, 0, r * 0.8);
+      gr.addColorStop(0, '#ffffff');
+      gr.addColorStop(0.35, glow);
+      gr.addColorStop(1, shade(pal.dark, -0.2));
+      shape(g, gr, o * 0.6, () => g.arc(0, 0, r * 0.72, 0, Math.PI * 2));
+      g.strokeStyle = 'rgba(255,255,255,0.45)'; lw(g, r * 0.04);
+      g.beginPath();
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.moveTo(0, 0); g.lineTo(Math.cos(a) * r * 0.72, Math.sin(a) * r * 0.72); }
+      g.stroke();
+      for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; shape(g, pal.accent, o * 0.4, () => g.arc(Math.cos(a) * r * 0.86, Math.sin(a) * r * 0.86, r * 0.08, 0, Math.PI * 2)); }
+      break;
+    }
+    case 'sensor': {
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.7, -r * 0.55, r * 1.2, r * 1.1, r * 0.25));
+      shape(g, metalGrad(g, r, METAL.light), o, () => { g.ellipse(r * 0.2, 0, r * 0.35, r * 0.85, 0, -Math.PI / 2, Math.PI / 2); g.closePath(); });
+      g.strokeStyle = METAL.dark; lw(g, r * 0.06);
+      g.beginPath(); g.moveTo(r * 0.2, 0); g.lineTo(r * 0.7, 0); g.stroke();
+      glowDot(g, r * 0.72, 0, r * 0.08, '#ff5050');
+      g.strokeStyle = METAL.light; lw(g, r * 0.05);
+      g.beginPath(); g.moveTo(-r * 0.45, -r * 0.3); g.lineTo(-r * 0.45, -r * 0.9); g.stroke();
+      break;
+    }
+    default: {
+      // generic gun
+      barrel(g, 0, r * 1.6, 0, r * 0.25, o);
+      shape(g, teamGrad(g, pal, r), o, () => g.arc(0, 0, r * 0.8, 0, Math.PI * 2));
+    }
+  }
+}

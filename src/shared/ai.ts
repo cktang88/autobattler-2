@@ -120,19 +120,40 @@ function shuffled<T>(rng: Rng, arr: readonly T[]): T[] {
   return a;
 }
 
-/** Weight a module for a target role. 0 = never. */
+/** Weight a module for a target role. 0 = never. Uses ModuleDef.category plus raw weapon fields. */
 function moduleWeight(m: ModuleDef, role: Role, firstSlot: boolean): number {
   const isW = m.kind === 'weapon';
+  const hitsGround = isW && m.targetsGround !== false;
   const dps = weaponDps(m);
+  const cat = m.category;
+  const armorW = m.kind === 'armor' && !firstSlot;
   switch (role) {
-    case 'antiAir': return isW && m.targetsAir ? 1 + (m.airBonus ?? 1) * (m.targetsGround ? 1 : 2) : m.kind === 'armor' && !firstSlot ? 0.5 : 0;
-    case 'antiArmor': return isW && (m.ap ?? 0) >= 0.5 && m.targetsGround !== false ? 2 + (m.ap ?? 0) * 2 : m.kind === 'armor' && !firstSlot ? 0.6 : 0;
-    case 'artillery': return isW && (m.range ?? 0) >= 8 && m.targetsGround !== false ? 3 : 0;
-    case 'frontline': return m.kind === 'armor' && !firstSlot ? 2 : isW && m.targetsGround !== false && (m.range ?? 0) <= 7 ? 1.5 : m.shield ? 1.5 : 0;
-    case 'support': return m.heal ? (firstSlot ? 4 : 1) : isW ? 0.8 : m.shield ? 1 : 0;
-    case 'flyer': return isW && m.targetsGround !== false ? 1 + dps / 80 : 0;
-    case 'swarm': return isW && m.targetsGround !== false && m.cost <= 20 ? 2 : 0;
-    default: return isW ? 1 + dps / 100 : m.kind === 'armor' && !firstSlot ? 0.4 : 0;
+    case 'antiAir':
+      if (cat === 'antiair') return 4;
+      return isW && m.targetsAir ? 1 + (m.airBonus ?? 1) * (hitsGround ? 1 : 2) : armorW ? 0.5 : 0;
+    case 'antiArmor':
+      if (cat === 'cannon' || (cat === 'missile' && m.targetsGround !== false && (m.ap ?? 0) >= 0.5)) return 4;
+      return hitsGround && (m.ap ?? 0) >= 0.5 ? 2 + (m.ap ?? 0) * 2 : armorW ? 0.6 : m.rangeBonus && !firstSlot ? 0.5 : 0;
+    case 'artillery':
+      if (cat === 'artillery') return 5;
+      if (m.rangeBonus && !firstSlot) return 1.5;
+      return hitsGround && (m.range ?? 0) >= 8 ? 2.5 : 0;
+    case 'frontline':
+      if (armorW) return 2;
+      if (m.shield) return 1.5;
+      if (cat === 'flame' || cat === 'disruption') return 1.4;
+      return hitsGround && (m.range ?? 0) <= 7 ? 1.3 : 0;
+    case 'support':
+      if (m.heal) return firstSlot ? 4 : 1.5;
+      return m.shield ? 1 : isW ? 0.8 : 0;
+    case 'flyer':
+      if (cat === 'artillery') return 0;
+      return hitsGround ? 1 + dps / 80 + (cat === 'rocket' ? 0.8 : 0) : 0;
+    case 'swarm':
+      return hitsGround && m.mount === 'L' && m.cost <= 20 ? 2 + (cat === 'machinegun' || cat === 'flame' ? 1 : 0) : 0;
+    default:
+      if (cat === 'disruption' && !firstSlot) return 1.2;
+      return isW ? 1 + dps / 100 : armorW ? 0.4 : m.rangeBonus && !firstSlot ? 0.4 : 0;
   }
 }
 
@@ -508,7 +529,7 @@ function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: 
   return dmg[oppSide] - dmg[side] + (sum.winner === side ? 5 : sum.winner === oppSide ? -5 : 0);
 }
 
-const HARD_CANDIDATES = 6;
+const HARD_CANDIDATES = 9;
 
 /** Decide the AI's deployment for the current round. Must pass validateDeploy. */
 export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): DeployAction {

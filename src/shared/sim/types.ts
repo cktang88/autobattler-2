@@ -62,13 +62,19 @@ export interface SimUnit {
   mounts: MountState[];
   /** recent damage taken, 0..1 decaying (hit flash) */
   hitFlash: number;
+  /** seconds of paralysis remaining (can't move, turn or fire) */
+  stun: number;
+  /** current slow fraction 0..0.6 (reduces move speed and fire rate) */
+  slow: number;
+  /** seconds of burning remaining */
+  burning: number;
 }
 
 export interface SimProjectile {
   id: number;
   side: Side;
   moduleId: string;
-  kind: 'bullet' | 'shell' | 'rocket' | 'missile' | 'flame' | 'arc';
+  kind: 'bullet' | 'shell' | 'rocket' | 'missile' | 'flame' | 'arc' | 'orb';
   x: number;
   y: number;
   /** height above ground in cells (arc shells, missiles) */
