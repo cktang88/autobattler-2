@@ -5531,6 +5531,8 @@ var forwardAngle = (side2) => side2 === 0 ? -Math.PI / 2 : Math.PI / 2;
 var FieldView = class {
   canvas;
   viewerSide;
+  /** when true, battle events produce no sound (e.g. menu background skirmish) */
+  muted = false;
   g;
   dpr = 1;
   cssW = 0;
@@ -5835,7 +5837,7 @@ var FieldView = class {
     const events = newTicks ?? this.pending;
     if (events.length) {
       for (const e of events) this.handleEvent(e);
-      try {
+      if (!this.muted) try {
         battleSfx(events);
       } catch {
       }

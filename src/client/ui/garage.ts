@@ -9,7 +9,7 @@ import { DECK_SIZE } from '../../shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, fitsMount, pairingError } from '../../shared/parts.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, computeStats, loadSpeedFactor, validateDesign } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MountClass, UnitStats } from '../../shared/types.ts';
-import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleStats, moduleTooltip, sizeLabel } from './garage-parts.ts';
+import { KIND_LABEL, TRAIT_LABEL, fmt, icon, modal, moduleCategoryColor, moduleStats, moduleTooltip, partIcon, sizeLabel, CATEGORY_COLOR } from './garage-parts.ts';
 
 const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3 };
 const NAME_MAX = 24;
@@ -476,7 +476,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         type: 'button', class: sel ? 'sel' : null, 'aria-pressed': String(sel), 'data-fk': `ch-${c.id}`,
         title: c.desc, onclick: () => pickChassis(c.id),
       },
-      h('span.g-card-top', null, h('span.g-card-name', null, c.name), h('span.g-size', null, sizeLabel(c.size))),
+      h('span.g-card-top', null, partIcon('chassis', c.id, 48), h('span.g-card-name', null, c.name), h('span.g-size', null, sizeLabel(c.size))),
       h('span.g-card-stats', null,
         h('span', null, h('b', null, String(c.hp)), ' hp'),
         h('span', null, h('b', null, String(c.armor)), ' arm'),
@@ -504,6 +504,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         title: err ?? m.desc, onclick: () => pickMobility(m.id),
       },
       h('span.g-card-top', null,
+        partIcon('mobility', m.id, 48),
         h('span.g-card-name', null, icon(m.kind === 'air' ? 'air' : m.kind === 'static' ? 'static' : 'ground', `k-${m.kind}`), m.name),
         h('span.g-kind', null, KIND_LABEL[m.kind]),
       ),
@@ -532,9 +533,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         onclick: () => { openSlot = open ? null : i; pickerCat = cur?.category ?? null; sfx('click'); update(); },
       },
       h('span.g-chip.big', { class: `c${cls}` }, cls),
+      cur ? partIcon('module', cur.id, 40, true) : h('span.g-particon.blank', { style: { width: '40px', height: '40px' } }),
       cur
         ? h('span.g-slot-cur', null,
-          h('span.g-slot-name', null, icon(cur.kind, `k-${cur.kind}`), cur.name, h('span.g-fam', null, cur.family), cur.mount !== cls ? h('span.g-chip', { class: `c${cur.mount}` }, cur.mount) : null),
+          h('span.g-slot-name', null, cur.name, h('span.g-fam', null, cur.family), cur.mount !== cls ? h('span.g-chip', { class: `c${cur.mount}` }, cur.mount) : null),
           moduleStats(cur, true))
         : h('span.g-slot-cur.empty', null, h('span.g-slot-name', null, 'Empty slot'), h('span.g-modstats', null, 'Choose a module')),
       h('span.g-slot-chev', null, icon('chevron')),
@@ -552,9 +554,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
             type: 'button', class: [sel ? 'sel' : '', warn, mod ? `k-${mod.kind}` : 'k-empty'].join(' '),
             'aria-pressed': String(sel), 'data-fk': `opt-${i}-${id ?? 'none'}`,
             title: mod ? moduleTooltip(mod) : 'Leave this slot empty',
+            style: mod ? { '--cat': moduleCategoryColor(mod.id) } : null,
             onclick: () => pickModule(i, id),
           },
-          h('span.g-opt-name', null, mod ? icon(mod.kind, `k-${mod.kind}`) : icon('x'), mod ? mod.name : 'Empty slot',
+          h('span.g-opt-ico', null, mod ? partIcon('module', mod.id, 38, true) : icon('x')),
+          h('span.g-opt-name', null, mod ? mod.name : 'Empty slot',
             mod ? h('span.g-fam', null, mod.family) : null,
             mod ? h('span.g-chip', { class: `c${mod.mount}` }, mod.mount) : null),
           mod ? moduleStats(mod, true) : h('span.g-modstats', null, 'Leave this mount empty'),
@@ -577,7 +581,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
             type: 'button', role: 'tab', 'aria-selected': String(on), class: [on ? 'on' : '', hasCur ? 'has' : ''].join(' '),
             'data-fk': `tab-${i}-${k.id}`, title: k.desc,
             onclick: () => { pickerCat = k.id; sfx('click'); update(); },
-          }, k.name, h('small', null, String(n)));
+          }, h('i.g-catdot', { style: { background: CATEGORY_COLOR[k.id] ?? '#b0b8c0' } }), k.name, h('small', null, String(n)));
         }));
         const list = fits.filter((m) => m.category === pickerCat)
           .sort((x, y) => RANK[x.mount] - RANK[y.mount] || x.cost - y.cost);

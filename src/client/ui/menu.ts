@@ -1,8 +1,7 @@
 // Main menu: title, animated background (looping AI-vs-AI skirmish, or idling units), navigation.
 
 import { h, type App, type Screen } from '../app.ts';
-import { playMusic, setVolumes, sfx } from '../audio.ts';
-import { loadSettings } from '../storage.ts';
+import { playMusic, sfx } from '../audio.ts';
 import { FieldView, type BoardUnit } from '../render/field.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
@@ -74,16 +73,11 @@ export function menuScreen(app: App): Screen {
   let view: FieldView | null = null;
   try { view = new FieldView(canvas, 0); } catch (e) { console.warn(e); }
 
-  // FieldView.drawBattle plays battle sfx; keep the background skirmish silent while the menu is shown.
-  const vol = loadSettings();
-  const restoreSfx = () => setVolumes({ master: vol.master, music: vol.music, sfx: vol.sfx });
-  const muteSfx = () => setVolumes({ master: vol.master, music: vol.music, sfx: 0 });
-  let muted = false;
-  const go = (fn: () => void, stay = false) => () => {
-    restoreSfx();
+  // keep the background skirmish silent
+  if (view) view.muted = true;
+  const go = (fn: () => void) => () => {
     sfx('click');
     fn();
-    if (stay && muted) setTimeout(() => { if (muted) muteSfx(); }, 300);
   };
   const resumable = LocalDriver.resumable();
   const resumeBtn = resumable
@@ -111,7 +105,7 @@ export function menuScreen(app: App): Screen {
         h('button.big', { onclick: go(() => app.go({ name: 'garage' })) }, 'Garage'),
         h('div.row', null,
           h('button.grow', { onclick: go(() => app.go({ name: 'settings' })) }, 'Settings'),
-          h('button.grow', { onclick: go(() => openModal('How to play', howToPlay()), true) }, 'How to play'),
+          h('button.grow', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),
         ),
       ),
       h('div.menu-foot', null, 'Build your army from parts. Outthink, outgun, outlast.'),
@@ -138,7 +132,6 @@ export function menuScreen(app: App): Screen {
       battle = new Battle(input);
       battle.step();
       if (battle.done) { battleWorks = false; battle = null; } // sim not available yet → idle board only
-      else if (!muted) { muted = true; muteSfx(); }
     } catch (e) {
       battleWorks = false;
       battle = null;
@@ -189,8 +182,6 @@ export function menuScreen(app: App): Screen {
       cancelAnimationFrame(raf);
       ro.disconnect();
       view?.destroy();
-      muted = false;
-      restoreSfx();
     },
   };
 }

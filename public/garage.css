@@ -365,7 +365,7 @@
 .garage .g-catdesc { margin: 0; font-size: 0.82rem; color: var(--g-muted); font-style: italic; padding: 0 2px; }
 .garage .g-optlist { display: flex; flex-direction: column; gap: 4px; }
 .garage .g-opt {
-  display: grid !important; grid-template-columns: 1fr auto; grid-template-areas: 'name side' 'stats side'; gap: 3px 10px;
+  display: grid !important; grid-template-columns: auto 1fr auto; grid-template-areas: 'ico name side' 'ico stats side'; gap: 3px 10px; --cat: var(--g-line2);
   padding: 7px 10px !important; border: 1px solid var(--g-line) !important; border-radius: 4px !important;
   background: var(--g-panel2) !important; cursor: pointer; width: 100%;
 }
@@ -433,3 +433,20 @@
 @media (prefers-reduced-motion: reduce) {
   .garage * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- part icons ---------- */
+.garage .g-particon { flex: none; display: block; }
+.garage .g-particon.blank { border: 1px dashed var(--g-line); border-radius: 50%; opacity: 0.5; }
+.garage .g-card-top .g-particon { margin-right: 2px; }
+.garage .g-card-top .g-card-name { flex: 1; min-width: 0; }
+.garage .g-opt-ico { grid-area: ico; align-self: center; display: flex; align-items: center; justify-content: center; width: 38px; color: var(--g-muted); }
+.garage .g-opt { border-left: 3px solid var(--cat) !important; background: linear-gradient(90deg, color-mix(in srgb, var(--cat) 14%, transparent), transparent 45%), var(--g-panel2) !important; }
+.garage .g-opt.k-empty { border-left: 1px dashed var(--g-line) !important; }
+.garage .g-catdot { width: 8px; height: 8px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); }
+.garage .g-tab.has::before { display: none; }
+.garage .g-tab.has small::after { content: ' \2022'; color: var(--g-accent); }
+@media (max-width: 700px) {
+  .garage .g-slot-head { gap: 8px; padding: 8px !important; }
+  .garage .g-card-top { flex-wrap: wrap; }
+}
+.garage .g-opt.sel { border-left-color: var(--g-accent) !important; }

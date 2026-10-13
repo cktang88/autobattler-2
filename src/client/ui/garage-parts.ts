@@ -3,6 +3,36 @@
 import { h } from '../app.ts';
 import { accuracyRating, firingStyle, weaponDps } from '../../shared/stats.ts';
 import type { ModuleDef, MoveKind } from '../../shared/types.ts';
+import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
+import { CATEGORY_COLOR } from '../render/turrets.ts';
+
+export { moduleCategoryColor, CATEGORY_COLOR };
+
+const iconCache = new Map<string, HTMLCanvasElement>();
+
+/** Part icon canvas of a fixed CSS size. Drawn once, after layout (icons are static); repeats reuse a cached bitmap. */
+export function partIcon(kind: PartKind, id: string, size: number, backdrop = false): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.className = 'g-particon';
+  c.style.width = c.style.height = `${size}px`;
+  c.setAttribute('aria-hidden', 'true');
+  const key = `${kind}:${id}:${size}:${window.devicePixelRatio || 1}:${backdrop}`;
+  const cached = iconCache.get(key);
+  const paint = () => {
+    if (cached) {
+      c.width = cached.width; c.height = cached.height;
+      c.getContext('2d')?.drawImage(cached, 0, 0);
+      return;
+    }
+    try { drawPartIcon(c, kind, id, { backdrop }); } catch { return; }
+    const snap = document.createElement('canvas');
+    snap.width = c.width; snap.height = c.height;
+    snap.getContext('2d')?.drawImage(c, 0, 0);
+    iconCache.set(key, snap);
+  };
+  requestAnimationFrame(paint);
+  return c;
+}
 
 const ICONS: Record<string, string> = {
   ground: '<path d="M3 18h18"/><path d="M5 14h14l-2.5-5h-9z"/><path d="M10 9V6h6"/>',

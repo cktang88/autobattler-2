@@ -103,6 +103,8 @@ const forwardAngle = (side: Side) => (side === 0 ? -Math.PI / 2 : Math.PI / 2);
 export class FieldView {
   canvas: HTMLCanvasElement;
   viewerSide: Side;
+  /** when true, battle events produce no sound (e.g. menu background skirmish) */
+  muted = false;
   private g: Ctx;
   private dpr = 1;
   private cssW = 0;
@@ -412,7 +414,7 @@ export class FieldView {
     const events = newTicks ?? this.pending;
     if (events.length) {
       for (const e of events) this.handleEvent(e);
-      try { battleSfx(events); } catch { /* audio optional */ }
+      if (!this.muted) try { battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
     }
     this.fx.update(dt);
