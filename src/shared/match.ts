@@ -16,6 +16,7 @@
 import { computeStats, levelMult, MAX_LEVEL, roundCost, validateDesign } from './stats.ts';
 import { MAX_SPACING, blockCells, blockInZone, hasSpacing, normSpacing, overlaps, squadSize } from './grid.ts';
 import { mixSeed } from './rng.ts';
+import { MODULE_BY_ID } from './parts.ts';
 import { runBattle } from './sim/battle.ts';
 import type { BattleInput } from './sim/types.ts';
 import { STANCES, START_DELAYS, TARGET_PRIORITIES } from './types.ts';
@@ -219,6 +220,7 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     }
     const be = behaviorError(behaviorOf(pl));
     if (be) return `${d.name}: ${be}`;
+    if (pl.kiteMount !== undefined && !validKiteMount(d, pl.kiteMount, false)) return `${d.name}: Bad kite weapon`;
     if (pl.escort !== undefined && (!isInt(pl.escort) || pl.escort === pl.uid || !knownUids.has(pl.escort))) return `${d.name}: Bad escort target`;
     const s = blockCells(size, pl.spacing);
     simUnits += squadSize(size);
@@ -236,6 +238,10 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
       if (!p.board.some((u) => u.uid === c.uid)) return `Can't configure unknown unit ${String(c.uid)}`;
       const be = behaviorError(behaviorOf(c));
       if (be) return be;
+      if (c.kiteMount !== undefined) {
+        const ub = p.board.find((u) => u.uid === c.uid)!;
+        if (!validKiteMount(designs.get(ub.designId), c.kiteMount, true)) return 'Bad kite weapon';
+      }
       if (c.escort !== undefined && (!isInt(c.escort) || (c.escort !== -1 && (c.escort === c.uid || !knownUids.has(c.escort))))) return 'Bad escort target';
     }
   }
@@ -287,6 +293,7 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     if (c.target !== undefined) u.target = c.target;
     if (c.hold !== undefined) u.hold = c.hold;
     if (c.kite !== undefined) u.kite = c.kite;
+    if (c.kiteMount !== undefined) { if (c.kiteMount === -1) delete u.kiteMount; else u.kiteMount = c.kiteMount; }
     if (c.focus !== undefined) u.focus = c.focus;
     if (c.stance !== undefined) u.stance = c.stance;
     if (c.delay !== undefined) u.delay = c.delay;
@@ -300,6 +307,7 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     if (pl.target !== undefined) b.target = pl.target;
     if (pl.hold !== undefined) b.hold = pl.hold;
     if (pl.kite !== undefined) b.kite = pl.kite;
+    if (pl.kiteMount !== undefined) b.kiteMount = pl.kiteMount;
     if (pl.focus !== undefined) b.focus = pl.focus;
     if (pl.stance !== undefined) b.stance = pl.stance;
     if (pl.delay !== undefined) b.delay = pl.delay;
@@ -390,7 +398,7 @@ export function redactFor(m: MatchState, viewer: Side): MatchState {
     .filter((u) => u.round < c.round)
     .map((u) => {
       const v = { ...u, level: prevLevel.get(u.uid) ?? u.level };
-      delete v.target; delete v.hold; delete v.kite; delete v.focus; delete v.stance; delete v.delay; delete v.retreat; delete v.escort;
+      delete v.target; delete v.hold; delete v.kite; delete v.kiteMount; delete v.focus; delete v.stance; delete v.delay; delete v.retreat; delete v.escort;
       return v;
     });
   for (const d of opp.deck) delete d.behavior;
@@ -412,6 +420,14 @@ export function battleInputFor(m: MatchState, rec: RoundRecord): BattleInput {
 
 // ---------------------------------------------------------------------------------------------
 
+/** kiteMount must index an occupied weapon mount of the design (-1 = clear, configure only). */
+function validKiteMount(d: Design | undefined, i: unknown, allowClear: boolean): boolean {
+  if (!isInt(i)) return false;
+  if (i === -1) return allowClear;
+  const id = d && i >= 0 && i < d.mounts.length ? d.mounts[i] : null;
+  return !!id && MODULE_BY_ID.get(id)?.kind === 'weapon';
+}
+
 function sizeOf(d: Design | undefined): Size {
   if (!d) return 1;
   try { return computeStats(d).size; } catch { return 1; }
@@ -422,6 +438,7 @@ function clonePlacement(p: Placement): Placement {
   if (p.target !== undefined) c.target = p.target;
   if (p.hold !== undefined) c.hold = p.hold;
   if (p.kite !== undefined) c.kite = p.kite;
+  if (p.kiteMount !== undefined) c.kiteMount = p.kiteMount;
   if (p.focus !== undefined) c.focus = p.focus;
   if (p.stance !== undefined) c.stance = p.stance;
   if (p.delay !== undefined) c.delay = p.delay;

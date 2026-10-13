@@ -112,6 +112,10 @@ export function sanitizeAction(raw: unknown): DeployAction {
       pl.spacing = o.spacing as number;
     }
     Object.assign(pl, readBehavior(o, 'placement'));
+    if (o.kiteMount !== undefined) {
+      if (!isInt(o.kiteMount) || (o.kiteMount as number) < 0 || (o.kiteMount as number) > 16) bad('placement.kiteMount must be a mount index');
+      pl.kiteMount = o.kiteMount as number;
+    }
     if (o.escort !== undefined) {
       if (!isInt(o.escort) || Math.abs(o.escort as number) > 1e6) bad('placement.escort must be a unit uid');
       pl.escort = o.escort as number;
@@ -130,6 +134,10 @@ export function sanitizeAction(raw: unknown): DeployAction {
       const o = c as Record<string, unknown>;
       if (!isInt(o.uid) || Math.abs(o.uid as number) > 1e6) bad('configure.uid must be an integer');
       const cfg: UnitConfig = { uid: o.uid as number, ...readBehavior(o, 'configure') };
+      if (o.kiteMount !== undefined) {
+        if (!isInt(o.kiteMount) || (o.kiteMount as number) < -1 || (o.kiteMount as number) > 16) bad('configure.kiteMount must be a mount index or -1');
+        cfg.kiteMount = o.kiteMount as number;
+      }
       if (o.escort !== undefined) {
         if (!isInt(o.escort) || Math.abs(o.escort as number) > 1e6) bad('configure.escort must be a unit uid or -1');
         cfg.escort = o.escort as number;

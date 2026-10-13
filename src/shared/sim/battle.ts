@@ -185,6 +185,8 @@ interface Internal {
   prio: TargetPriority;
   hold: boolean;
   kite: boolean;
+  /** weapon range the kiting distances are measured from */
+  kiteRange: number;
   focus: boolean;
   stance: Stance;
   /** movement is gated until this tick */
@@ -224,6 +226,12 @@ interface Smoke {
   y: number;
   r: number;
   t: number;
+}
+
+/** Range a kiting unit keeps to: the chosen mount's (non-melee, armed) weapon, else the longest range. */
+function kiteRangeOf(wpns: (Wpn | null)[], mount: number, fallback: number): number {
+  const w = Number.isInteger(mount) && mount >= 0 ? wpns[mount] : null;
+  return w && w.heal <= 0 && !w.melee && w.range > 0 ? w.range : fallback;
 }
 
 /** Damage class of a weapon for reactive armor / energy resist. */
@@ -342,7 +350,7 @@ export class Battle {
         const delay = p.delay !== undefined && (START_DELAYS as readonly number[]).includes(p.delay) ? p.delay : 0;
         for (const c of cs) {
           this.blockUnits[block].push(this.units.length);
-          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: !!p.kite, focus: !!p.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
+          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: !!p.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: !!p.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
         }
       }
     }
@@ -376,7 +384,7 @@ export class Battle {
     this.rebuildHash();
   }
 
-  private addUnit(side: Side, uid: number, design: Design, level: number, cx: number, cy: number, cfg: { block: number; prio: TargetPriority; hold: boolean; kite: boolean; focus: boolean; stance: Stance; delay: number; retreat: boolean; offx: number; offy: number; sepMin: number }): void {
+  private addUnit(side: Side, uid: number, design: Design, level: number, cx: number, cy: number, cfg: { block: number; prio: TargetPriority; hold: boolean; kite: boolean; kiteMount: number; focus: boolean; stance: Stance; delay: number; retreat: boolean; offx: number; offy: number; sepMin: number }): void {
     const stats = computeStats(design);
     const lm = levelMult(level);
     const c = { x: cx, y: cy };
@@ -459,7 +467,7 @@ export class Battle {
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
       blastDmg: blastDmg * lm, blastR, blastModule, blocker: !hasWeapon && !hasHeal,
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0,
-      prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, focus: cfg.focus, stance: cfg.stance,
+      prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteRange: kiteRangeOf(wpns, cfg.kiteMount, maxRange), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
       escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
@@ -1405,7 +1413,7 @@ export class Battle {
         stopDist = 0.6;
         // close enough to the ally already: don't shove it around
         if (d - I.radius - this.ints[goal.id].radius <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
-      } else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius < 0.7 * I.maxRange) {
+      } else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius < 0.7 * I.kiteRange) {
         // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
         if (!I.fireOnMove && I.wpns.some((w, wi) => w && w.heal <= 0 && u.mounts[wi].cooldown <= 0.15 && u.mounts[wi].target >= 0)) return;
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
@@ -1455,7 +1463,7 @@ export class Battle {
         gy = u.y + hy;
         stopDist = 0;
         if (charge) wantMove = I.meleeOnly || d - this.ints[goal.id].radius > CHARGE_GUN_FRAC * engageR;
-        else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius <= 0.9 * engageR) wantMove = false;
+        else if (kiteOn && !I.meleeOnly && d - this.ints[goal.id].radius <= 0.9 * I.kiteRange) wantMove = false;
         else if (engaged && (!I.fireOnMove || I.meleeOnly)) wantMove = false;
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
         else if (I.fireOnMove && engageR > 2.5 && d - this.ints[goal.id].radius <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target

@@ -3,7 +3,7 @@
 import { h } from '../app.ts';
 import type { ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
-import { ordersControl, ordersOf, orderFields } from './match-ui.ts';
+import { kiteOptions, ordersControl, ordersOf, orderFields } from './match-ui.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
@@ -330,7 +330,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   function renderAI() {
     const sq = (statsOf(draft)?.squad ?? 1) > 1;
-    const o = ordersOf(draft.behavior);
+    const ko = kiteOptions(draft);
+    const o0 = ordersOf(draft.behavior);
+    // drop a kite weapon that no longer exists in the loadout
+    const o = ko.some((k) => k.mount === o0.kiteMount) ? o0 : { ...o0, kiteMount: -1 };
+    if (o.kiteMount !== o0.kiteMount) {
+      const b = orderFields({ ...o, hold: sq && o.hold });
+      const { behavior: _b, ...rest } = draft;
+      draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
+    }
     aiEl.replaceChildren(ordersControl({ ...o, hold: sq && o.hold }, sq, (patch) => {
       const next = { ...o, ...patch };
       const b = orderFields({ ...next, hold: sq && next.hold });
@@ -338,7 +346,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
       sfx('click');
       update();
-    }, { custom: false }));
+    }, { custom: false, kiteOptions: ko }));
   }
 
   function renderHeader() {

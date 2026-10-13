@@ -15,7 +15,7 @@ import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../sha
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
-import { confirmModal, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, sizeLabel, type EscortUi, type Orders } from './match-ui.ts';
+import { confirmModal, kiteOptions, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, sizeLabel, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
@@ -381,7 +381,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (sl.pending) {
       const i = place.findIndex((x) => x.uid === sl.uid);
       if (i < 0) return;
-      const { target: _t, hold: _h, kite: _k, focus: _f, stance: _s, delay: _d, retreat: _r, escort: _e, ...rest } = place[i];
+      const { target: _t, hold: _h, kite: _k, kiteMount: _km, focus: _f, stance: _s, delay: _d, retreat: _r, escort: _e, ...rest } = place[i];
       const np: Placement = { ...rest, ...orderFields({ ...next, hold: next.hold && hasSpacing(sizeOf(designOf(side, rest.designId))) }), ...(esc != null ? { escort: esc } : {}) };
       const cand = action();
       cand.place[i] = np;
@@ -535,7 +535,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         st.shield ? stat('Shield', String(st.shield)) : null,
         st.heal ? stat('Repair', `${st.heal}/s`) : null,
       ),
-      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s) } : {})) : '',
+      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)) } : {})) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null)) : '',
       h('div.parts', null, parts),
       loadout.length ? h('div.loadout', null, h('div.lo-title', null, 'Loadout'), h('ul', null, ...loadout)) : '',

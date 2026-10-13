@@ -4,6 +4,8 @@ import { h } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { drawUnitPreview } from '../render/field.ts';
 import { computeStats } from '../../shared/stats.ts';
+import { fmtMeters } from '../../shared/grid.ts';
+import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { START_DELAYS, STANCES, TARGET_PRIORITIES, type Design, type Side, type Stance, type TargetPriority, type UnitBehavior } from '../../shared/types.ts';
 
 export interface ModalHandle { close(): void; el: HTMLElement }
@@ -88,8 +90,10 @@ export const STANCE_INFO: Record<Stance, { label: string; tip: string }> = {
 };
 export type Orders = {
   target: TargetPriority; focus: boolean; stance: Stance; kite: boolean; hold: boolean; delay: number; retreat: boolean;
+  /** mount index kiting keeps range to; -1 = longest-range weapon (default) */
+  kiteMount: number;
 };
-export const DEFAULT_ORDERS: Orders = { target: 'closest', focus: false, stance: 'advance', kite: false, hold: false, delay: 0, retreat: false };
+export const DEFAULT_ORDERS: Orders = { target: 'closest', focus: false, stance: 'advance', kite: false, hold: false, delay: 0, retreat: false, kiteMount: -1 };
 export const ordersOf = (b: UnitBehavior | undefined): Orders => ({
   target: b?.target && TARGET_PRIORITIES.includes(b.target) ? b.target : 'closest',
   focus: !!b?.focus,
@@ -98,6 +102,7 @@ export const ordersOf = (b: UnitBehavior | undefined): Orders => ({
   hold: !!b?.hold,
   delay: (START_DELAYS as readonly number[]).includes(b?.delay ?? 0) ? (b?.delay ?? 0) : 0,
   retreat: !!b?.retreat,
+  kiteMount: b?.kiteMount != null && b.kiteMount >= 0 ? b.kiteMount : -1,
 });
 export const ordersEqual = (a: Orders, b: Orders) => (Object.keys(DEFAULT_ORDERS) as (keyof Orders)[]).every((k) => a[k] === b[k]);
 export const isCustomOrders = (o: Orders) => !ordersEqual(o, DEFAULT_ORDERS);
@@ -107,16 +112,32 @@ export const orderFields = (o: Orders): UnitBehavior => ({
   ...(o.focus ? { focus: true } : {}),
   ...(o.stance !== 'advance' ? { stance: o.stance } : {}),
   ...(o.kite ? { kite: true } : {}),
+  ...(o.kite && o.kiteMount >= 0 ? { kiteMount: o.kiteMount } : {}),
   ...(o.hold ? { hold: true } : {}),
   ...(o.delay ? { delay: o.delay } : {}),
   ...(o.retreat ? { retreat: true } : {}),
 });
 
+export interface KiteOption { mount: number; label: string }
+/** Ranged weapon mounts a kiting block can keep to; empty unless 2+ distinct ranges exist (melee excluded). */
+export function kiteOptions(d: Design | undefined): KiteOption[] {
+  if (!d) return [];
+  const rm = safeStats(d)?.rangeMult ?? 1;
+  const out: (KiteOption & { range: number })[] = [];
+  d.mounts.forEach((id, i) => {
+    const mod = id ? MODULE_BY_ID.get(id) : undefined;
+    if (!mod || mod.kind !== 'weapon' || !mod.range || mod.projectile === 'melee') return;
+    const range = mod.range * rm;
+    out.push({ mount: i, range, label: `${mod.name} · ${fmtMeters(range)}` });
+  });
+  return new Set(out.map((o) => Math.round(o.range * 100))).size >= 2 ? out : [];
+}
+
 export interface EscortUi { label: string | null; picking: boolean; onPick(): void; onClear(): void }
 
 /** Compact battle-AI panel. Targeting (priority + focus fire) / Movement (stance, kite, keep spread, delay, retreat, escort). */
 export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void,
-  opts: { custom?: boolean; escort?: EscortUi } = {}): HTMLElement {
+  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[] } = {}): HTMLElement {
   const chip = (label: string, tip: string, v: boolean, key: keyof Orders) => h('button.chip', {
     type: 'button', class: v ? 'on' : null, 'aria-pressed': String(v), title: tip, 'data-orders': String(key), onclick: () => on({ [key]: !v }),
   }, label);
@@ -131,6 +152,15 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
   const stance = sel('Stance', o.stance,
     STANCES.map((t) => ({ v: t, text: STANCE_INFO[t].label, tip: STANCE_INFO[t].tip })), 'stance', STANCE_INFO[o.stance].tip);
   const esc = opts.escort;
+  const ko = opts.kiteOptions ?? [];
+  const kiteSel = o.kite && ko.length >= 2 ? (() => {
+    const el = h('select.ord-sel', { 'aria-label': 'Kite with', 'data-orders': 'kiteMount', title: 'Which weapon\'s range to keep to while kiting',
+      onchange: () => on({ kiteMount: Number(el.value) }) },
+      h('option', { value: '-1' }, 'Longest range (default)'),
+      ...ko.map((k) => h('option', { value: String(k.mount) }, k.label)));
+    el.value = String(ko.some((k) => k.mount === o.kiteMount) ? o.kiteMount : -1);
+    return h('div.ord-row', null, h('span', null, 'Kite with'), el);
+  })() : null;
   return h('div.orders', null,
     h('div.sp-head', null, h('span', null, 'Battle orders'), opts.custom !== false && isCustomOrders(o) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
     h('div.ord-group', null,
@@ -145,6 +175,7 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
         squad ? chip('Keep spread', 'Squad units hold their deployed spacing while moving', o.hold, 'hold') : null,
         chip('Retreat', 'Below 30% HP fall back toward your lines or repair; return above 70%', o.retreat, 'retreat'),
       ),
+      kiteSel,
       h('div.hold-row', null,
         h('span', { title: 'Wait before moving; weapons still fire at anything in range' }, 'Start delay'),
         h('div.sp-segs.four', { role: 'group', 'aria-label': 'Start delay' }, ...START_DELAYS.map((d) => h('button.seg', {
