@@ -74,6 +74,12 @@ export function settingsScreen(app: App): Screen {
             h('button.danger', { onclick: reset }, 'Reset garage'),
           ),
         ),
+        h('div.panel.credits', null,
+          h('div.panel-title', null, 'Credits'),
+          h('p.muted', null, 'Music: Eric Skiff — We\u2019re all under the stars / Searching / Underclocked (underunderclocked mix) / We\u2019re the Resistors — Resistor Anthems — EricSkiff.com/music (CC BY 4.0).'),
+          h('p.muted', null, '\u201cIn a Heartbeat\u201d Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 3.0.'),
+          h('p.muted', null, 'Fonts: Barlow by Jeremy Tribby (SIL OFL). Effect textures: Zero-K (public domain). Weapon ideas inspired by Zero-K.'),
+        ),
       ),
     ),
   );
