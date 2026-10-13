@@ -35,6 +35,8 @@ fit_size = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
 IGNORE = {'starter-skyguard'}
 BASE = json.load(open(os.environ.get('FIT_BASE', f'{FIT}/base_chassis.json')))  # untouched hull numbers
 CHASSIS_MIN = 0.35
+CGAIN = float(os.environ.get('FIT_CGAIN', '0.22'))
+CSTEP = float(os.environ.get('FIT_CSTEP', '0.08'))
 ONLY_CHASSIS = os.environ.get('FIT_ONLY_CHASSIS') == '1'  # frames-only run (filter f-): fit hulls + drives only
 ETA = {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}
 STEP_S = float(os.environ.get('FIT_STEP_S', '0.12'))
@@ -87,12 +89,18 @@ for it in range(iters):
             v = min(4.0, max(0.25, v))
         cal[k] = v
     if fit_size and not ONLY_CHASSIS:
-        for z in (1, 3, 4, 5):
+        # all five classes are fitted toward 50%; the mean log-step is removed (a common factor on every price is a
+        # gauge freedom: it leaves equal-supply fights unchanged)
+        steps = {}
+        for z in (1, 2, 3, 4, 5):
             s, w = sacc[z]
             if w == 0:
                 continue
-            step = max(-STEP_S, min(STEP_S, ETA['s'] * s / (w + 1.0)))
-            sizek[z - 1] = max(0.4, min(2.5, sizek[z - 1] * math.exp(step)))
+            steps[z] = max(-STEP_S, min(STEP_S, ETA['s'] * s / (w + 1.0)))
+        if steps:
+            mean_step = sum(steps.values()) / len(steps)
+            for z, st in steps.items():
+                sizek[z - 1] = max(0.4, min(2.5, sizek[z - 1] * math.exp(st - mean_step)))
     # mobility: within-chassis contrast of plain frames
     fr = [r for r in rows if r['id'].startswith('f-')]
     chl = collections.defaultdict(list)
@@ -131,7 +139,7 @@ for it in range(iters):
             st = chk.setdefault(c, {'p': 0.0, 'hp': BASE[c]['hp'], 'cost': BASE[c]['cost']})
             if abs(res) < 0.1:
                 continue
-            st['p'] = max(-0.9, min(0.9, st['p'] + max(-0.08, min(0.08, 0.22 * res))))
+            st['p'] = max(-0.9, min(0.9, st['p'] + max(-CSTEP, min(CSTEP, CGAIN * res))))
             P = sum(price[c]) / len(price[c]) / math.exp(0.0)  # current mean unit price (already includes the current p)
             P0 = P  # price at the current realisation; Delta is relative to the base realisation below
             # price at base (p=0) is P / (1 + dprice/P0): recover it from the current cost delta

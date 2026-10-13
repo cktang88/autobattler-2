@@ -14,6 +14,7 @@
 // No Math.random / Date: callers pass `now` for timestamps.
 
 import { computeStats, levelMult, MAX_LEVEL, roundCost, validateDesign } from './stats.ts';
+import type { UnitFoot } from './grid.ts';
 import { MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadSize } from './grid.ts';
 import { mixSeed } from './rng.ts';
 import { MODULE_BY_ID } from './parts.ts';
@@ -202,7 +203,10 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   // escort may reference any block already on the board or bought in this very action
   const knownUids = new Set<number>(seenUids);
   for (const pl of a.place) if (pl && typeof pl === 'object' && isInt(pl.uid)) knownUids.add(pl.uid);
-  const footprints: { x: number; y: number; spacing?: number; size: Size }[] = p.board.map((u) => ({ x: u.x, y: u.y, spacing: u.spacing, size: sizeOf(designs.get(u.designId)) }));
+  const footprints: { x: number; y: number; spacing?: number; size: Size; foot: UnitFoot }[] = p.board.map((u) => {
+    const dd = designs.get(u.designId);
+    return { x: u.x, y: u.y, spacing: u.spacing, size: sizeOf(dd), foot: footOf(dd) };
+  });
   let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
 
   for (const pl of a.place) {
@@ -215,6 +219,7 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     if (pl.level !== 1) return 'New units start at level 1';
     if (pl.round !== m.round) return 'Placement round mismatch';
     const size = sizeOf(d);
+    const foot = footOf(d);
     if (pl.spacing !== undefined) {
       if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
       if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
@@ -225,9 +230,9 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     if (pl.escort !== undefined && (!isInt(pl.escort) || pl.escort === pl.uid || !knownUids.has(pl.escort))) return `${d.name}: Bad escort target`;
     simUnits += squadSize(size);
     if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
-    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing)) return `${d.name} is outside the deploy zone`;
-    for (const f of footprints) if (blocksOverlap(pl, size, f, f.size)) return `${d.name} overlaps another unit`;
-    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, size });
+    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing, foot)) return `${d.name} is outside the deploy zone`;
+    for (const f of footprints) if (blocksOverlap(pl, size, f, f.size, foot, f.foot)) return `${d.name} overlaps another unit`;
+    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, size, foot });
     cost += designCost(d);
   }
 
@@ -428,6 +433,10 @@ function validKiteMount(d: Design | undefined, i: unknown, allowClear: boolean):
   return !!id && MODULE_BY_ID.get(id)?.kind === 'weapon';
 }
 
+function footOf(d: Design | undefined): UnitFoot {
+  if (!d) return undefined;
+  try { const s = computeStats(d); return { fw: s.fw, fh: s.fh }; } catch { return undefined; }
+}
 function sizeOf(d: Design | undefined): Size {
   if (!d) return 1;
   try { return computeStats(d).size; } catch { return 1; }

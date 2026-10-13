@@ -539,7 +539,11 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     const d = byId.get(u.designId);
     if (d) { const r = profile(d).role; roles.set(r, (roles.get(r) ?? 0) + 1); }
   }
-  const occ: Foot[] = me.board.map((u) => ({ x: u.x, y: u.y, ...blockDims(byId.get(u.designId) ? (profile(byId.get(u.designId)!).size as Size) : 2, u.spacing) }));
+  const occ: Foot[] = me.board.map((u) => {
+    const pd = byId.get(u.designId);
+    const pp = pd ? profile(pd) : null;
+    return { x: u.x, y: u.y, ...blockDims(pp ? (pp.size as Size) : 2, u.spacing, pp?.stats) };
+  });
   let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as Size) : 1), 0);
   const splashShare = opp.total > 0 ? opp.splashy / opp.total : 0;
   let nextUid = me.nextUid;
@@ -613,11 +617,11 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.size as Size) ? 1 : 0) : chooseSpacing(p, splashShare);
     let sp = normSpacing(p.size as Size, spacing);
     // a spread squad is (8+7s) wide: when no spot is left at this spacing, tighten up before giving up
-    let foot = blockDims(p.size as Size, sp);
+    let foot = blockDims(p.size as Size, sp, p.stats);
     let spot = findSpot(p, foot.w, foot.h, occ, o.rng, easy, o.flank);
     while (!spot && sp > 0) {
       sp--;
-      foot = blockDims(p.size as Size, sp);
+      foot = blockDims(p.size as Size, sp, p.stats);
       spot = findSpot(p, foot.w, foot.h, occ, o.rng, easy, o.flank);
     }
     if (!spot) {
@@ -626,7 +630,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       if (!deck.length) break;
       continue;
     }
-    if (!blockInZone(spot.x, spot.y, p.size as Size, sp)) break;
+    if (!blockInZone(spot.x, spot.y, p.size as Size, sp, p.stats)) break;
     occ.push({ x: spot.x, y: spot.y, ...foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
     if (hasSpacing(p.size as Size)) pl.spacing = sp;
