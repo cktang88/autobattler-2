@@ -821,3 +821,19 @@ test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar',
   assert.ok(onMg < onMortar - 1, `mg ${onMg} vs mortar ${onMortar}`);
   assert.ok(Math.abs(dflt - onMortar) < 0.5, 'default = longest-range weapon');
 });
+
+test('non-square footprints: long units spawn on their footprint centre and contact uses the long axis', () => {
+  const long = D('longone', 'longarm', 'halftrack', ['cannon']); // 1 wide x 3 long
+  const designs = [...DESIGNS, long];
+  const st = computeStats(long);
+  assert.equal(st.fh, 3);
+  const mk = (blocks: Placement[]) => new Battle({ seed: 3, sides: [{ designs, units: blocks }, { designs, units: [] }] });
+  const b = mk([P('longone', 10, 2)]);
+  const c = placementUnitCenters(0, { x: 10, y: 2 }, st.size, st)[0];
+  assert.deepEqual([b.units[0].x, b.units[0].y], [c.x, c.y]);
+  assert.deepEqual([c.x, c.y], [10.5, FIELD_H - 12 + 2 + 1.5]);
+  // deterministic and still resolves a full fight
+  const a0 = [P('longone', 4, 0), P('longone', 8, 0)], a1 = mirrorShift([P('buggy', 4, 0), P('bulwark', 20, 0)]);
+  const inp = (): BattleInput => structuredClone({ seed: 5, sides: [{ designs, units: a0 }, { designs, units: a1 }] });
+  assert.deepEqual(runBattle(inp()), runBattle(inp()));
+});

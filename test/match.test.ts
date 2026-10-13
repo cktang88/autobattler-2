@@ -7,7 +7,7 @@ import {
   resolveRound, redactFor, battleInputFor, supplyForRound, upgradeCost, submitDeploy, isPlaceholder, roundDamage,
 } from '../src/shared/match.ts';
 import { blockDims, blockInZone, blocksOverlap, rectInZone, rectsOverlap, localRectToWorld, placementUnitCenters, squadSize, FIELD_W, FIELD_H } from '../src/shared/grid.ts';
-import type { DeployAction, MatchState, Placement } from '../src/shared/types.ts';
+import type { DeployAction, Design, MatchState, Placement } from '../src/shared/types.ts';
 
 test('starter designs are valid, unique and cover sizes/flyers/static', () => {
   assert.ok(STARTER_DESIGNS.length >= 10);
@@ -359,4 +359,28 @@ test('kiteMount: validated against weapon mounts, configure/clear, redacted', ()
   assert.equal(redactFor(m, 1).history[0].boards[0][0].kiteMount, weapon);
   submitDeploy(m, 0, { round: 2, place: [], upgrade: [], configure: [{ uid: 1, kiteMount: -1 }] });
   assert.equal(m.players[0].board[0].kiteMount, undefined);
+});
+
+test('non-square footprints: validateDeploy zone + overlap use the real w x h', () => {
+  const long: Design = { id: 'lg', name: 'Long', chassis: 'longarm', mobility: 'halftrack', mounts: ['cannon'] }; // 1 wide x 3 long
+  const wide: Design = { id: 'wd', name: 'Wide', chassis: 'crab', mobility: 'treads', mounts: ['mg', 'mg', null] }; // 3 wide x 2 long
+  const st = computeStats(long), sw = computeStats(wide);
+  assert.deepEqual([st.fw, st.fh, sw.fw, sw.fh], [1, 3, 3, 2]);
+  assert.deepEqual(blockDims(st.size, 0, st), { w: 1, h: 3 });
+  const m = newMatch('mf', 'ai', 7, newPlayer('A', [long, wide, ...deck].slice(0, DECK_SIZE)), newPlayer('B', deck, true), 1000);
+  m.players[0].supply = 5000;
+  const at = (uid: number, x: number, y: number, id: string): Placement => pl(uid, x, y, id);
+  const v = (...place: Placement[]) => validateDeploy(m, 0, { round: 1, place, upgrade: [] });
+  // zone: 1x3 fits down to y=9, not y=10; 3 wide at the right edge
+  assert.equal(v(at(1, 0, 9, 'lg')), null);
+  assert.match(v(at(1, 0, 10, 'lg'))!, /zone/);
+  assert.equal(v(at(1, 45, 0, 'wd')), null);
+  assert.match(v(at(1, 46, 0, 'wd'))!, /zone/);
+  // a 1x3 block and a 3x1-ish (3 wide x 2 long) block: overlap exactly when the rectangles intersect
+  assert.ok(blocksOverlap({ x: 5, y: 0 }, st.size, { x: 3, y: 2 }, sw.size, st, sw));
+  assert.ok(!blocksOverlap({ x: 5, y: 0 }, st.size, { x: 3, y: 3 }, sw.size, st, sw));
+  assert.ok(!blocksOverlap({ x: 5, y: 0 }, st.size, { x: 6, y: 0 }, sw.size, st, sw));
+  assert.match(v(at(1, 5, 0, 'lg'), at(2, 3, 2, 'wd'))!, /overlap/);
+  assert.equal(v(at(1, 5, 0, 'lg'), at(2, 3, 3, 'wd')), null);
+  assert.equal(v(at(1, 5, 0, 'lg'), at(2, 6, 0, 'wd')), null);
 });
