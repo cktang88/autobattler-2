@@ -258,6 +258,8 @@ export interface Placement {
   hold?: boolean;
   /** stay at max weapon range, backing away from enemies that close in. Hidden like `target`. */
   kite?: boolean;
+  /** mount index (into design.mounts) whose range kiting keeps to; absent/invalid = the longest-range weapon */
+  kiteMount?: number;
   /** prefer the target nearby allies are already shooting (combined with `target`) */
   focus?: boolean;
   stance?: Stance;
@@ -278,6 +280,7 @@ export interface UnitBehavior {
   hold?: boolean;
   /** stay at max weapon range and back away from enemies that close in */
   kite?: boolean;
+  kiteMount?: number;
   focus?: boolean;
   stance?: Stance;
   delay?: number;
@@ -320,6 +323,8 @@ export interface UnitConfig {
   target?: TargetPriority;
   hold?: boolean;
   kite?: boolean;
+  /** -1 clears (back to longest-range weapon) */
+  kiteMount?: number;
   focus?: boolean;
   stance?: Stance;
   delay?: number;
