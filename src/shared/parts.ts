@@ -1,4 +1,4 @@
-// Part catalog: 10 chassis, 10 mobility systems, 52 mount modules (46 weapons in 11 categories + support + armor).
+// Part catalog: 10 chassis, 10 mobility systems, 82 mount modules (54 weapons in 12 categories + 25 utilities + armor).
 // Balance numbers live here; stats.ts turns a Design into UnitStats.
 
 import type { ChassisDef, MobilityDef, ModuleCategory, ModuleDef, MountClass } from './types.ts';
@@ -41,7 +41,11 @@ export const CATEGORIES: { id: ModuleCategory; name: string; desc: string }[] = 
   { id: 'flame', name: 'Flame', desc: 'Short-range fire that ignores armor and sets targets burning.' },
   { id: 'disruption', name: 'Stun & Disruption', desc: 'Lightning, EMP stuns and slow beams that cripple enemies.' },
   { id: 'antiair', name: 'Flak', desc: 'Dedicated anti-air. Bursting shells shred aircraft.' },
-  { id: 'support', name: 'Support', desc: 'Repair, shields and targeting systems.' },
+  { id: 'melee', name: 'Melee', desc: 'Saws, claws, hammers and drills. Devastating on contact, but you have to get there.' },
+  { id: 'support', name: 'Support', desc: 'Repair beams, shield domes and command uplinks that empower allies.' },
+  { id: 'defense', name: 'Defense', desc: 'Shields, point defense, smoke, reactive and resistant coatings.' },
+  { id: 'stealth', name: 'Stealth & ECM', desc: 'Cloaks, jammers and sensors. Hide your units or find theirs.' },
+  { id: 'systems', name: 'Systems', desc: 'Engines, targeting, stabilizers, autoloaders and other upgrades.' },
   { id: 'armor', name: 'Armor', desc: 'Plating: more hp and armor, at the cost of weight.' },
 ];
 
@@ -49,6 +53,8 @@ type W = Omit<ModuleDef, 'kind'> & { kind?: ModuleDef['kind'] };
 const G = { targetsGround: true, targetsAir: false };
 const A = { targetsGround: false, targetsAir: true };
 const GA = { targetsGround: true, targetsAir: true };
+const MELEE = { targetsGround: true, targetsAir: false, projectile: 'melee' as const };
+const util = (m: Omit<ModuleDef, 'kind'>): ModuleDef => ({ kind: 'utility', ...m });
 const wpn = (m: W): ModuleDef => ({ kind: 'weapon', ...m }) as ModuleDef;
 
 export const MODULES: ModuleDef[] = [
@@ -112,11 +118,11 @@ export const MODULES: ModuleDef[] = [
     damage: 480, cooldown: 10, range: 18, minRange: 4, ...G, projectile: 'missile', projectileSpeed: 6, splash: 2.2, ap: 0.6 }),
   // ---------------- Artillery ----------------
   wpn({ id: 'mortar', name: 'Mortar', family: '81mm', desc: 'Lobbed shells over the front line. Minimum range 3.', category: 'artillery', visual: 'mortar', caliber: 0.5, mount: 'M', weight: 3.5, cost: 30,
-    damage: 60, cooldown: 3, range: 10, minRange: 3, ...G, projectile: 'arc', projectileSpeed: 7, splash: 1.2, ap: 0.2, spread: 0.8 }),
+    damage: 60, cooldown: 3, range: 10, minRange: 3, ...G, projectile: 'arc', projectileSpeed: 5.5, splash: 1.2, ap: 0.2, spread: 0.8 }),
   wpn({ id: 'howitzer', name: 'Howitzer', family: '155mm', desc: 'Long-range artillery with huge splash. Minimum range 5.', category: 'artillery', visual: 'artillery', caliber: 0.9, mount: 'H', weight: 10, cost: 75,
-    damage: 150, cooldown: 5, range: 16, minRange: 5, ...G, projectile: 'arc', projectileSpeed: 8, splash: 2, ap: 0.3, spread: 1.2 }),
+    damage: 150, cooldown: 5, range: 16, minRange: 5, ...G, projectile: 'arc', projectileSpeed: 6.5, splash: 2, ap: 0.3, spread: 1.2 }),
   wpn({ id: 'barrage', name: 'Barrage Cannon', family: 'Scatter artillery', desc: 'Fires six shells at once that blanket an area. Minimum range 4.', category: 'artillery', visual: 'artillery', barrels: 3, caliber: 0.8, mount: 'H', weight: 11, cost: 80,
-    damage: 42, pellets: 6, cooldown: 3.5, range: 12, minRange: 4, ...G, projectile: 'arc', projectileSpeed: 8, splash: 1, ap: 0.2, spread: 2 }),
+    damage: 42, pellets: 6, cooldown: 3.5, range: 12, minRange: 4, ...G, projectile: 'arc', projectileSpeed: 6, splash: 1, ap: 0.2, spread: 2 }),
   // ---------------- Energy ----------------
   wpn({ id: 'laser', name: 'Pulse Laser', family: 'Pulse', desc: 'Accurate hitscan pulses with some armor pierce.', category: 'energy', visual: 'laser', caliber: 0.3, mount: 'L', weight: 1.2, cost: 18,
     damage: 24, cooldown: 0.6, range: 5.5, ...GA, projectile: 'beam', ap: 0.3 }),
@@ -155,11 +161,50 @@ export const MODULES: ModuleDef[] = [
     damage: 45, cooldown: 0.45, range: 7.5, ...A, magazine: 5, reload: 2.5, projectile: 'shell', projectileSpeed: 16, splash: 1.3, ap: 0.2, airBonus: 1.5 }),
   wpn({ id: 'heavyflak', name: 'Heavy Flak Battery', family: 'Heavy flak', desc: 'Three-gun flak battery. Clears the sky at long range.', category: 'antiair', visual: 'flak', barrels: 3, caliber: 0.9, mount: 'H', weight: 9, cost: 60,
     damage: 70, burst: 3, cooldown: 2.2, range: 10, ...A, projectile: 'shell', projectileSpeed: 18, splash: 1.8, ap: 0.2, airBonus: 1.5 }),
-  // ---------------- Support ----------------
-  { id: 'repair', name: 'Repair Beam', family: 'Light repair', desc: 'Heals the most damaged ally in range.', category: 'support', visual: 'repair', caliber: 0.3, mount: 'L', kind: 'utility', weight: 1, cost: 20, heal: 22, range: 4 },
-  { id: 'repairM', name: 'Repair Array', family: 'Heavy repair', desc: 'Industrial nano-repair array with longer reach.', category: 'support', visual: 'repair', caliber: 0.6, mount: 'M', kind: 'utility', weight: 2.5, cost: 40, heal: 55, range: 5 },
-  { id: 'shield', name: 'Shield Projector', family: 'Energy shield', desc: 'Personal energy shield that absorbs 260 damage and regenerates.', category: 'support', visual: 'shield', caliber: 0.5, mount: 'M', kind: 'utility', weight: 2.5, cost: 32, shield: 260 },
-  { id: 'targeting', name: 'Targeting Computer', family: 'Sensors', desc: '+15% range for all weapons and tighter spread.', category: 'support', visual: 'sensor', caliber: 0.3, mount: 'L', kind: 'utility', weight: 0.8, cost: 15, rangeBonus: 0.15, spreadMult: 0.6 },
+  // ---------------- Melee ----------------
+  wpn({ id: 'buzzsaw', name: 'Buzzsaw', family: 'Circular saw', desc: 'Spinning blade. Chews through light armor at contact range.', category: 'melee', visual: 'saw', caliber: 0.4, mount: 'L', weight: 1.4, cost: 10,
+    damage: 18, cooldown: 0.25, range: 0.6, ...MELEE, ap: 0.3 }),
+  wpn({ id: 'shockprod', name: 'Shock Prod', family: 'Stun prod', desc: 'Electrified spike that stuns on contact.', category: 'melee', visual: 'prod', caliber: 0.3, mount: 'L', weight: 1, cost: 12,
+    damage: 22, cooldown: 1, range: 0.7, ...MELEE, ap: 0.5, stun: 0.8 }),
+  wpn({ id: 'ram', name: 'Spike Ram', family: 'Ram', desc: 'Armored ram that batters targets backwards.', category: 'melee', visual: 'ram', caliber: 0.5, mount: 'L', weight: 2, cost: 10,
+    damage: 70, cooldown: 1.5, range: 0.4, ...MELEE, ap: 0.5, impulse: 1.2 }),
+  wpn({ id: 'chainsaw', name: 'Chainsaw Arm', family: 'Chainsaw', desc: 'Relentless ripping teeth. Constant damage while locked on.', category: 'melee', visual: 'chainsaw', caliber: 0.6, mount: 'M', weight: 3, cost: 22,
+    damage: 30, cooldown: 0.2, range: 0.7, ...MELEE, ap: 0.4 }),
+  wpn({ id: 'claw', name: 'Power Claw', family: 'Hydraulic claw', desc: 'Crushing hydraulic pincer with heavy armor pierce.', category: 'melee', visual: 'claw', caliber: 0.6, mount: 'M', weight: 3.5, cost: 26,
+    damage: 95, cooldown: 1, range: 0.8, ...MELEE, ap: 0.7 }),
+  wpn({ id: 'plasmablade', name: 'Plasma Blade', family: 'Energy blade', desc: 'Superheated blade that sweeps through adjacent enemies.', category: 'melee', visual: 'blade', caliber: 0.6, mount: 'M', weight: 2.5, cost: 30,
+    damage: 55, cooldown: 0.5, range: 0.9, ...MELEE, splash: 0.8, ap: 0.8 }),
+  wpn({ id: 'hammer', name: 'Siege Hammer', family: 'Ground pound', desc: 'Colossal hammer. Shockwave damages and knocks back everything nearby.', category: 'melee', visual: 'hammer', caliber: 0.9, mount: 'H', weight: 9, cost: 55,
+    damage: 260, cooldown: 2, range: 0.9, ...MELEE, splash: 1.3, ap: 0.6, impulse: 1 }),
+  wpn({ id: 'drill', name: 'Drill Lance', family: 'Bore drill', desc: 'Armor-boring drill. Ignores all armor.', category: 'melee', visual: 'drill', caliber: 0.9, mount: 'H', weight: 8, cost: 50,
+    damage: 48, cooldown: 0.15, range: 0.8, ...MELEE, ap: 1 }),
+  // ---------------- Support (allies) ----------------
+  util({ id: 'repair', name: 'Repair Beam', family: 'Light repair', desc: 'Heals the most damaged ally in range.', category: 'support', visual: 'repair', caliber: 0.3, mount: 'L', weight: 1, cost: 20, heal: 22, range: 4 }),
+  util({ id: 'repairM', name: 'Repair Array', family: 'Heavy repair', desc: 'Industrial nano-repair array with longer reach.', category: 'support', visual: 'repair', caliber: 0.6, mount: 'M', weight: 2.5, cost: 40, heal: 55, range: 5 }),
+  util({ id: 'dome', name: 'Shield Dome', family: 'Area shield', desc: 'Projects a 150-point shield onto every ally within 3 cells.', category: 'support', visual: 'dome', caliber: 0.8, mount: 'H', weight: 6, cost: 60, shieldAura: { radius: 3, amount: 150 } }),
+  util({ id: 'uplink', name: 'Command Uplink', family: 'Command', desc: 'Allies within 4 cells fire 15% faster.', category: 'support', visual: 'uplink', caliber: 0.5, mount: 'M', weight: 2, cost: 35, fireRateAura: { radius: 4, bonus: 0.15 } }),
+  util({ id: 'sensor', name: 'Sensor Mast', family: 'Detection', desc: 'Reveals cloaked enemies within 7 cells for your whole army.', category: 'stealth', visual: 'sensor', caliber: 0.4, mount: 'L', weight: 1, cost: 15, detect: 7 }),
+  // ---------------- Defense ----------------
+  util({ id: 'shield', name: 'Shield Projector', family: 'Energy shield', desc: 'Personal energy shield that absorbs 260 damage and regenerates.', category: 'defense', visual: 'shield', caliber: 0.5, mount: 'M', weight: 2.5, cost: 32, shield: 260 }),
+  util({ id: 'shieldL', name: 'Shield Emitter', family: 'Light shield', desc: 'Small personal shield: absorbs 100 damage, regenerates.', category: 'defense', visual: 'shield', caliber: 0.25, mount: 'L', weight: 1, cost: 14, shield: 100 }),
+  util({ id: 'shieldH', name: 'Aegis Barrier', family: 'Heavy shield', desc: 'Massive personal barrier: absorbs 700 damage.', category: 'defense', visual: 'shield', caliber: 0.9, mount: 'H', weight: 6, cost: 60, shield: 700 }),
+  util({ id: 'pointdef', name: 'Point Defense Laser', family: 'APS', desc: 'Zaps incoming rockets, missiles and shells within 2.5 cells.', category: 'defense', visual: 'pointdef', caliber: 0.4, mount: 'L', weight: 1.2, cost: 24, pointDefense: { range: 2.5, cooldown: 0.6 } }),
+  util({ id: 'smoke', name: 'Smoke Launchers', family: 'Obscurant', desc: 'Below 60% hp, pops a smoke screen: nothing outside 2.5 cells can target units inside for 5s.', category: 'defense', visual: 'smoke', caliber: 0.3, mount: 'L', weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
+  util({ id: 'reactive', name: 'Reactive Armor', family: 'ERA', desc: 'Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.', category: 'defense', visual: 'plate', caliber: 0.5, mount: 'M', weight: 3, cost: 22, reactive: 6, armor: 1 }),
+  util({ id: 'mirror', name: 'Mirror Coating', family: 'Reflective', desc: 'Takes 45% less damage from beams, lightning, rails, plasma and flame.', category: 'defense', visual: 'plate', caliber: 0.4, mount: 'L', weight: 1, cost: 14, energyResist: 0.45 }),
+  util({ id: 'hardened', name: 'Hardened Systems', family: 'EMP shielding', desc: 'Immune to stun, slow, disarm, burning and knockback.', category: 'defense', visual: 'coolant', caliber: 0.4, mount: 'L', weight: 1.2, cost: 16, hardened: true }),
+  util({ id: 'nanite', name: 'Nanite Hull', family: 'Self-repair', desc: 'Regenerates 2.5% max hp per second when out of combat for 2s.', category: 'defense', visual: 'nanite', caliber: 0.4, mount: 'L', weight: 1, cost: 18, regen: 0.025 }),
+  // ---------------- Stealth & ECM ----------------
+  util({ id: 'stealth', name: 'Stealth Cloak', family: 'Optical cloak', desc: 'Untargetable unless an enemy comes within 2.5 cells or it has just fired.', category: 'stealth', visual: 'cloak', caliber: 0.5, mount: 'M', weight: 2, cost: 40, cloak: 'stealth' }),
+  util({ id: 'phantom', name: 'Phantom Field', family: 'Phase cloak', desc: 'Untargetable at any range, except for 3s after each shot it fires.', category: 'stealth', visual: 'cloak', caliber: 0.8, mount: 'H', weight: 4, cost: 70, cloak: 'phantom' }),
+  util({ id: 'jammer', name: 'ECM Jammer', family: 'Jammer', desc: 'Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.', category: 'stealth', visual: 'jammer', caliber: 0.5, mount: 'M', weight: 2, cost: 30, jammer: 3 }),
+  // ---------------- Systems ----------------
+  util({ id: 'targeting', name: 'Targeting Computer', family: 'Fire control', desc: '+15% range for all weapons and tighter spread.', category: 'systems', visual: 'sensor', caliber: 0.3, mount: 'L', weight: 0.8, cost: 15, rangeBonus: 0.15, spreadMult: 0.6 }),
+  util({ id: 'turbo', name: 'Turbo Engine', family: 'Engine', desc: '+20% move speed.', category: 'systems', visual: 'engine', caliber: 0.4, mount: 'L', weight: 1.2, cost: 14, speedBonus: 0.2 }),
+  util({ id: 'gyro', name: 'Gyro Stabilizer', family: 'Stabilizer', desc: 'All weapons can fire on the move, with tighter spread.', category: 'systems', visual: 'gyro', caliber: 0.3, mount: 'L', weight: 1, cost: 16, gyro: true, spreadMult: 0.85 }),
+  util({ id: 'autoloader', name: 'Autoloader', family: 'Ammo feed', desc: 'Clip weapons reload 40% faster.', category: 'systems', visual: 'coolant', caliber: 0.3, mount: 'L', weight: 1, cost: 14, reloadBonus: 0.4 }),
+  util({ id: 'overclock', name: 'Overclocked Core', family: 'Overclock', desc: 'All weapons fire 20% faster.', category: 'systems', visual: 'coolant', caliber: 0.5, mount: 'M', weight: 2, cost: 30, fireRateBonus: 0.2 }),
+  util({ id: 'selfdestruct', name: 'Self-Destruct Charge', family: 'Demolition', desc: 'Detonates on death for 300 damage in a 2-cell radius.', category: 'systems', visual: 'charge', caliber: 0.4, mount: 'L', weight: 1.5, cost: 12, deathBlast: { damage: 300, radius: 2 } }),
   // ---------------- Armor ----------------
   { id: 'plateL', name: 'Armor Plate', family: 'Light plate', desc: '+3 armor, +60 hp.', category: 'armor', visual: 'plate', caliber: 0.3, mount: 'L', kind: 'armor', weight: 2, cost: 8, armor: 3, hp: 60 },
   { id: 'plateM', name: 'Composite Armor', family: 'Composite', desc: '+6 armor, +150 hp.', category: 'armor', visual: 'plate', caliber: 0.6, mount: 'M', kind: 'armor', weight: 5, cost: 20, armor: 6, hp: 150 },

@@ -7,6 +7,8 @@ export type MoveKind = 'ground' | 'air' | 'static';
 export type Side = 0 | 1;
 
 export type ChassisTrait = 'rangeBoost' | 'repairAura' | 'airOnly' | 'compact';
+/** distance (cells, edge to edge) at which a 'stealth' cloak is revealed */
+export const CLOAK_REVEAL = 2.5;
 export type MobilityTrait = 'fireOnMove' | 'evasive' | 'leap' | 'fortified' | 'stable' | 'strafe' | 'crush';
 
 export interface ChassisDef {
@@ -46,18 +48,25 @@ export interface MobilityDef {
   traits: MobilityTrait[];
 }
 
-export type ProjectileKind = 'bullet' | 'shell' | 'rocket' | 'missile' | 'beam' | 'flame' | 'arc' | 'lightning' | 'rail' | 'orb' | 'none';
+/** 'melee' = instant contact strike; its range is measured EDGE to edge (shooter radius + target radius excluded),
+ *  ground targets only. 'arc' = lobbed shell with a real flight time that lands where the target WAS. */
+export type ProjectileKind = 'bullet' | 'shell' | 'rocket' | 'missile' | 'beam' | 'flame' | 'arc' | 'lightning' | 'rail' | 'orb' | 'melee' | 'none';
 
 /** Main weapon/module categories (UI grouping + AI roles). */
 export type ModuleCategory =
   | 'machinegun' | 'autocannon' | 'cannon' | 'precision' | 'rocket' | 'missile' | 'artillery'
-  | 'energy' | 'flame' | 'disruption' | 'antiair' | 'support' | 'armor';
+  | 'energy' | 'flame' | 'disruption' | 'antiair' | 'melee'
+  | 'support' | 'defense' | 'stealth' | 'systems' | 'armor';
 
 /** Render family: the renderer draws a turret per visual kind, varied by barrels & caliber. */
 export type ModuleVisual =
   | 'gun' | 'gatling' | 'shotgun' | 'cannon' | 'gauss' | 'sniper' | 'rail' | 'rocketPod' | 'missileRack' | 'cruise'
   | 'mortar' | 'artillery' | 'laser' | 'heatray' | 'plasma' | 'flamer' | 'tesla' | 'emp' | 'slowbeam' | 'flak'
-  | 'repair' | 'shield' | 'sensor' | 'plate' | 'sonic' | 'gravity';
+  | 'repair' | 'shield' | 'sensor' | 'plate' | 'sonic' | 'gravity'
+  // melee
+  | 'saw' | 'chainsaw' | 'hammer' | 'claw' | 'blade' | 'drill' | 'prod' | 'ram'
+  // utilities
+  | 'cloak' | 'jammer' | 'smoke' | 'pointdef' | 'engine' | 'uplink' | 'charge' | 'gyro' | 'coolant' | 'dome' | 'nanite';
 export type ModuleKind = 'weapon' | 'armor' | 'utility';
 
 export interface ModuleDef {
@@ -135,6 +144,40 @@ export interface ModuleDef {
   rangeBonus?: number;
   /** utility: multiplies weapon spread (e.g. 0.6) */
   spreadMult?: number;
+  // ---- more utilities (each is optional; a module may combine several) ----
+  /** 'stealth': can't be targeted unless an enemy is within CLOAK_REVEAL cells or it fired in the last 1.5s.
+   *  'phantom': can't be targeted except for 3s after each time it fires (proximity doesn't reveal it). */
+  cloak?: 'stealth' | 'phantom';
+  /** reveals cloaked enemies within this many cells (for all allies) */
+  detect?: number;
+  /** projects an energy shield onto allies (not self) within radius; each ally gets up to `amount` shield, regenerating */
+  shieldAura?: { radius: number; amount: number };
+  /** self-repair: fraction of max hp per second (only after 2s without damage) */
+  regen?: number;
+  /** +fraction move speed (applied in stats.speed) */
+  speedBonus?: number;
+  /** +fraction rate of fire for all of this unit's weapons */
+  fireRateBonus?: number;
+  /** -fraction reload time for clip weapons */
+  reloadBonus?: number;
+  /** allies within radius get +bonus rate of fire (doesn't stack between uplinks) */
+  fireRateAura?: { radius: number; bonus: number };
+  /** shoots down incoming enemy rockets/missiles/shells/arc/orb projectiles within range, one per cooldown */
+  pointDefense?: { range: number; cooldown: number };
+  /** enemy missiles aimed at allies within radius lose homing; enemy spread doubled vs them */
+  jammer?: number;
+  /** when first dropping below 60% hp: smoke cloud of radius for duration; units inside can't be targeted from > 2.5 cells */
+  smoke?: { radius: number; duration: number };
+  /** number of explosive hits (shell/rocket/missile/arc/orb) reduced by 75% */
+  reactive?: number;
+  /** fraction of damage removed from beam/lightning/rail/plasma/flame hits */
+  energyResist?: number;
+  /** immune to stun, slow, disarm, burn and knockback */
+  hardened?: boolean;
+  /** explodes on death */
+  deathBlast?: { damage: number; radius: number };
+  /** grants fire-on-move to the whole unit */
+  gyro?: boolean;
 }
 
 /** A player-authored unit blueprint. */

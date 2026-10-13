@@ -27,6 +27,12 @@ const DESIGNS: Design[] = [
   D('fortress', 'bastion', 'treads', ['plateH', 'plateM', 'repairM']),
   D('fortgun', 'bastion', 'treads', ['plateH', 'plateM', 'autocannon']),
   D('rotorflak', 'drone', 'rotor', ['aamissile']),
+  D('dummy', 'raider', 'halftrack', ['plateL', 'repair']),
+  D('sniper', 'scout', 'halftrack', ['sniper']),
+  D('gunner', 'warden', 'halftrack', ['minigun', null]),
+  D('sonic', 'warden', 'halftrack', ['sonic', null]),
+  D('disarmer', 'warden', 'halftrack', ['disarm', null]),
+  D('pulse', 'warden', 'halftrack', ['twinlaser', null]),
 ];
 
 test('test designs are legal', () => {
@@ -169,4 +175,56 @@ test('performance: 60 units per side simulates quickly', () => {
   const ms = performance.now() - t0;
   console.log(`  60v60: ${ms.toFixed(0)}ms, ${s.ticks} ticks, winner ${s.winner}`);
   assert.ok(ms < 1000, `took ${ms}ms`);
+});
+
+function fireLog(b: Battle) {
+  const fires: { tick: number; unit: number; mount: number; moduleId: string }[] = [];
+  const hits: Record<string, number> = {};
+  while (!b.done) {
+    b.step();
+    for (const e of b.events) {
+      if (e.t === 'fire') fires.push({ tick: b.tick, unit: e.unit, mount: e.mount, moduleId: e.moduleId });
+      if (e.t === 'hit') hits[e.moduleId] = (hits[e.moduleId] ?? 0) + 1;
+    }
+  }
+  return { fires, hits };
+}
+
+test('magazines pause for reload', () => {
+  const b = new Battle(input(1, [P('pulse', 10, 0)], [P('fortress', 9, 0)]));
+  const { fires } = fireLog(b);
+  const ticks = fires.filter((f) => f.unit === 0).map((f) => f.tick);
+  assert.ok(ticks.length > 12);
+  const gaps = ticks.slice(1).map((t, i) => (t - ticks[i]) / 20);
+  // 6-shot magazine at 0.15s, then a 1.5s reload
+  assert.ok(gaps.slice(0, 5).every((g) => g < 0.3), `gaps ${gaps.slice(0, 8)}`);
+  assert.ok(gaps[5] >= 1.4, `reload gap ${gaps[5]}`);
+});
+
+test('accuracy: sniper is pinpoint, minigun sprays', () => {
+  const sn = fireLog(new Battle(input(3, [P('sniper', 10, 0)], [P('dummy', 10, 0)])));
+  const mg = fireLog(new Battle(input(3, [P('gunner', 10, 0)], [P('dummy', 10, 0)])));
+  const ratio = (r: ReturnType<typeof fireLog>, id: string) => (r.hits[id] ?? 0) / r.fires.filter((f) => f.moduleId === id).length;
+  const rs = ratio(sn, 'sniper'), rm = ratio(mg, 'minigun');
+  assert.ok(rs > 0.9, `sniper ${rs}`);
+  assert.ok(rm < rs - 0.1, `minigun ${rm} vs sniper ${rs}`);
+});
+
+test('impulse knocks units back; disarm stops firing', () => {
+  const b = new Battle(input(2, [P('sonic', 10, 0)], [P('dummy', 10, 0)]));
+  while (!b.done && b.tick < 20 * 20) b.step();
+  assert.ok(b.units[1].odometer > 0.5, `pushed ${b.units[1].odometer}`);
+
+  const d = new Battle(input(2, [P('disarmer', 10, 0)], [P('buster', 10, 0)]));
+  let disarmedTicks = 0, firedWhileDisarmed = 0;
+  while (!d.done) {
+    const wasDisarmed = d.units[1].alive && d.units[1].disarm > 0.06;
+    d.step();
+    if (wasDisarmed) {
+      disarmedTicks++;
+      for (const e of d.events) if (e.t === 'fire' && e.unit === 1) firedWhileDisarmed++;
+    }
+  }
+  assert.ok(disarmedTicks > 0);
+  assert.equal(firedWhileDisarmed, 0);
 });

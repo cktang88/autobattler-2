@@ -16,6 +16,8 @@ export function visualGlow(v: ModuleVisual | undefined, pal: TeamPal): string {
     case 'repair': return '#6dff9a';
     case 'shield': return '#7fd8ff';
     case 'flamer': return '#ffa040';
+    case 'sonic': return '#5ec8ff';
+    case 'gravity': return '#b070ff';
     default: return '#ffd27a';
   }
 }
@@ -43,6 +45,8 @@ export function muzzleLen(m: ModuleDef | undefined): number {
     case 'flak': return 0.95;
     case 'repair': return 0.6;
     case 'mortar': return 0.25;
+    case 'sonic': return 1.3;
+    case 'gravity': return 1.1;
     case 'rocketPod': case 'missileRack': case 'cruise': return 0.6;
     default: return 0.6;
   }
@@ -462,6 +466,29 @@ export function drawTurret(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, o: num
       for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.moveTo(0, 0); g.lineTo(Math.cos(a) * r * 0.72, Math.sin(a) * r * 0.72); }
       g.stroke();
       for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; shape(g, pal.accent, o * 0.4, () => g.arc(Math.cos(a) * r * 0.86, Math.sin(a) * r * 0.86, r * 0.08, 0, Math.PI * 2)); }
+      break;
+    }
+    case 'sonic': {
+      // wide-mouthed horn emitter
+      shape(g, metalGrad(g, r, METAL.light), o, () => { g.moveTo(r * 0.1, -r * 0.25); g.lineTo(r * 1.3, -r * 0.8); g.quadraticCurveTo(r * 1.45, 0, r * 1.3, r * 0.8); g.lineTo(r * 0.1, r * 0.25); g.closePath(); });
+      shape(g, METAL.deep, 0, () => g.ellipse(r * 1.28, 0, r * 0.12, r * 0.7, 0, 0, Math.PI * 2));
+      g.strokeStyle = rgba(glow, 0.8); lw(g, r * 0.05);
+      for (const x of [0.55, 0.85]) { g.beginPath(); g.ellipse(x * r, 0, r * 0.06, r * (0.25 + (x - 0.1) * 0.45), 0, 0, Math.PI * 2); g.stroke(); }
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, -r * 0.9, -r * 0.65, r * 1.1, r * 1.3, r * 0.35));
+      shape(g, METAL.dark, o * 0.5, () => g.arc(-r * 0.35, 0, r * 0.3, 0, Math.PI * 2));
+      shape(g, METAL.light, 0, () => g.arc(-r * 0.35, 0, r * 0.14, 0, Math.PI * 2));
+      break;
+    }
+    case 'gravity': {
+      // twin prongs with a dark graviton core
+      for (const s of [-1, 1]) shape(g, METAL.dark, o, () => { g.moveTo(-r * 0.1, s * r * 0.35); g.lineTo(r * 1.5, s * r * 0.42); g.lineTo(r * 1.6, s * r * 0.22); g.lineTo(r * 0.5, s * r * 0.16); g.closePath(); });
+      for (let i = 0; i < 3; i++) shape(g, '#5a2a8a', o * 0.5, () => g.ellipse(r * (0.6 + i * 0.3), 0, r * 0.07, r * 0.4, 0, 0, Math.PI * 2));
+      const gg = g.createRadialGradient(r * 1.1, 0, 0, r * 1.1, 0, r * 0.35);
+      gg.addColorStop(0, '#000000'); gg.addColorStop(0.5, '#3a0066'); gg.addColorStop(1, 'rgba(160,80,255,0)');
+      g.fillStyle = gg; g.beginPath(); g.arc(r * 1.1, 0, r * 0.35, 0, Math.PI * 2); g.fill();
+      shape(g, teamGrad(g, pal, r), o, () => { for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; const f = i === 0 ? g.moveTo.bind(g) : g.lineTo.bind(g); f(Math.cos(a) * r * 0.95 - r * 0.15, Math.sin(a) * r * 0.95); } g.closePath(); });
+      shape(g, '#1a0a2a', o * 0.6, () => g.arc(-r * 0.15, 0, r * 0.45, 0, Math.PI * 2));
+      glowDot(g, -r * 0.15, 0, r * 0.15, '#b070ff');
       break;
     }
     case 'sensor': {

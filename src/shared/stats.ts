@@ -121,11 +121,13 @@ export function computeStats(d: Design): UnitStats {
   let shield = 0;
   let heal = 0;
   let dps = 0;
-  const traits = [...c.traits, ...m.traits];
+  const traits: string[] = [...c.traits, ...m.traits];
   let rangeMult = 1;
   if (traits.includes('rangeBoost')) rangeMult += 0.2;
   if (traits.includes('fortified')) rangeMult += 0.15;
   let spreadMult = traits.includes('stable') ? 0.5 : 1;
+  let speedBonus = 0;
+  let fireRate = 1;
   for (const mod of mods) {
     hp += mod.hp ?? 0;
     armor += mod.armor ?? 0;
@@ -136,13 +138,18 @@ export function computeStats(d: Design): UnitStats {
     dps += weaponDps(mod);
     rangeMult += mod.rangeBonus ?? 0;
     if (mod.spreadMult) spreadMult *= mod.spreadMult;
+    speedBonus += mod.speedBonus ?? 0;
+    fireRate += mod.fireRateBonus ?? 0;
+    if (mod.gyro && !traits.includes('fireOnMove')) traits.push('fireOnMove');
+    if (mod.cloak && !traits.includes(mod.cloak)) traits.push(mod.cloak);
+    if (mod.hardened && !traits.includes('hardened')) traits.push('hardened');
   }
   const capacity = m.capacity[size - 1] || 1;
   const load = weight / capacity;
   let range = 0;
-  for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.range * rangeMult);
+  for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.projectile === 'melee' ? mod.range : mod.range * rangeMult);
   const sizeSpeed = size === 3 ? 0.85 : size === 2 ? 0.95 : 1;
-  const speed = m.kind === 'static' ? 0 : m.speed * loadSpeedFactor(load) * sizeSpeed;
+  const speed = m.kind === 'static' ? 0 : m.speed * loadSpeedFactor(load) * sizeSpeed * (1 + speedBonus);
   const turn = m.turn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
   const flying = m.kind === 'air';
   const isStatic = m.kind === 'static';
@@ -151,8 +158,28 @@ export function computeStats(d: Design): UnitStats {
   let offense = 0;
   for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1);
   if (traits.includes('repairAura')) offense += 25;
+  // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
+  offense *= fireRate;
+  let reactiveHp = 0;
+  let ehpMult = 1;
+  for (const mod of mods) {
+    if (mod.reloadBonus) offense *= 1 + 0.25 * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
+    if (mod.shieldAura) offense += mod.shieldAura.amount * 0.3;
+    if (mod.fireRateAura) offense += mod.fireRateAura.bonus * 300;
+    if (mod.detect) offense += 12;
+    if (mod.jammer) { offense += 15; ehpMult *= 1.1; }
+    if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06;
+    if (mod.regen) ehpMult *= 1 + mod.regen * 12;
+    if (mod.pointDefense) ehpMult *= 1.2;
+    if (mod.smoke) ehpMult *= 1.12;
+    if (mod.reactive) reactiveHp += mod.reactive * 60;
+    if (mod.energyResist) ehpMult *= 1 + mod.energyResist * 0.4;
+    if (mod.hardened) ehpMult *= 1.08;
+    if (mod.cloak === 'stealth') ehpMult *= 1.35;
+    if (mod.cloak === 'phantom') ehpMult *= 1.5;
+  }
   offense = Math.max(offense, 5);
-  let ehp = (hp + 1.2 * shield) * (1 + armor / 15);
+  let ehp = (hp + 1.2 * shield + reactiveHp) * (1 + armor / 15) * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);

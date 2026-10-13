@@ -410,8 +410,8 @@ export class Battle {
       const w = I.wpns[mi];
       if (!w) continue;
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
-      if (m.cooldown > 0) m.cooldown -= DT * (1 - u.slow);
-      if (m.reloading && m.cooldown <= 0) { m.reloading = false; m.ammo = w.def.magazine; }
+      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow);
+      if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
 
       if (w.heal > 0) {
         this.updateHeal(I, w, m);
@@ -459,9 +459,9 @@ export class Battle {
         }
         continue;
       }
-      if (t && m.cooldown <= 0 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
+      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
         w.aimX = ax; w.aimY = ay;
-        m.cooldown = w.def.cooldown ?? 1;
+        m.cooldown = Math.max(m.cooldown, -DT) + (w.def.cooldown ?? 1); // carry sub-tick remainder
         if (m.ammo !== undefined) {
           m.ammo--;
           if (m.ammo <= 0) { m.ammo = 0; m.reloading = true; m.cooldown = Math.max(m.cooldown, w.def.reload ?? 0); }
