@@ -4,7 +4,8 @@
 // Each tick: weapons (targeting, turrets, firing) -> movement -> spatial hash -> separation/crush ->
 // auras -> projectiles -> bookkeeping -> end check.
 
-import { MODULE_BY_ID } from '../parts.ts';
+import { CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
+import { approxTurretD, mountOffsets } from '../mountgeo.ts';
 import { computeStats, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
@@ -121,6 +122,13 @@ interface Wpn {
   preaim: number;
   /** direction (+1/-1) of the last full-speed swing; keeps a turret committed when the target sits ~180° away */
   turnDir: number;
+  /** [mount origins] hull-local mount offset (cells, +x = forward, +y = right; same point the art draws the turret
+   *  at, see shared/mountgeo.ts). Ranges, aim and shot origins are measured from here. 0,0 for melee (reach stays
+   *  measured from the hull edge). */
+  ox: number;
+  oy: number;
+  /** [mount origins] muzzle reach from the mount centre along the barrel (cells, ~half the turret diameter) */
+  muz: number;
 }
 
 interface Internal {
@@ -251,6 +259,10 @@ interface Internal {
   avoidSide: number;
   avoidT: number;
   stuckT: number;
+  /** [mount origins] cos/sin of the hull angle, recomputed only when u.angle changes (see mountAt) */
+  trigA: number;
+  cosA: number;
+  sinA: number;
 }
 
 interface Smoke {
@@ -432,6 +444,9 @@ export class Battle {
     const mounts: MountState[] = [];
     const wpns: (Wpn | null)[] = [];
     let canHitG = false, canHitA = false, maxRange = 0, minWeaponRange = Infinity, hasWeapon = false, hasHeal = false;
+    // [mount origins] rest-pose mount offsets (identical to the render layout) + hull size for the muzzle reach
+    const offs = mountOffsets(design);
+    const hullS = (CHASSIS_BY_ID.get(design.chassis) ?? CHASSIS_BY_ID.get('scout')!).size;
         for (const mid of design.mounts) {
       const def = mid ? MODULE_BY_ID.get(mid) ?? null : null;
       mounts.push({ moduleId: mid ?? null, angle: heading, cooldown: 0, flash: 0, target: -1 });
@@ -447,6 +462,8 @@ export class Battle {
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
         melee, cls: damageClass(def),
+        ox: melee ? 0 : offs[mounts.length - 1]?.x ?? 0, oy: melee ? 0 : offs[mounts.length - 1]?.y ?? 0,
+        muz: melee ? 0 : 0.5 * approxTurretD(def.mount, hullS),
       };
       if (isWeapon) {
         hasWeapon = true;
@@ -507,7 +524,7 @@ export class Battle {
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
       blastDmg: blastDmg * lm, blastR, blastModule, blocker: !hasWeapon && !hasHeal,
-      meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0,
+      meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteRange: kiteRangeOf(wpns, cfg.kiteMount, maxRange), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
       escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
@@ -822,14 +839,33 @@ export class Battle {
     return this.edgeC(O, I.u.x, I.u.y) - ext;
   }
 
+  // [mount origins] world position of a weapon's mount, written to mpx/mpy (no allocation). The hull angle's
+  // cos/sin are cached on the unit and only recomputed when u.angle has changed since the last call.
+  private mpx = 0;
+  private mpy = 0;
+  private mountAt(I: Internal, w: Wpn): void {
+    const u = I.u;
+    if (w.ox === 0 && w.oy === 0) { this.mpx = u.x; this.mpy = u.y; return; }
+    if (I.trigA !== u.angle) { I.trigA = u.angle; I.cosA = Math.cos(u.angle); I.sinA = Math.sin(u.angle); }
+    this.mpx = u.x + I.cosA * w.ox - I.sinA * w.oy;
+    this.mpy = u.y + I.sinA * w.ox + I.cosA * w.oy;
+  }
+
   private inRange(u: SimUnit, w: Wpn, t: SimUnit, mult: number): number {
-    const dx = t.x - u.x, dy = t.y - u.y;
+    this.mountAt(this.ints[u.id], w);
+    return this.inRangeFrom(this.mpx, this.mpy, u, w, t, mult);
+  }
+
+  /** [mount origins] range check measured from the weapon's mount point (px, py); returns the mount-to-target-centre
+   *  distance, or -1 when out of range. Melee mounts sit at the unit centre (ox = oy = 0). */
+  private inRangeFrom(px: number, py: number, u: SimUnit, w: Wpn, t: SimUnit, mult: number): number {
+    const dx = t.x - px, dy = t.y - py;
     const T = this.ints[t.id], U = this.ints[u.id];
     const lim = w.range * mult + T.bound + (w.melee ? U.bound : 0);
     if (dx * dx + dy * dy > lim * lim) return -1;
     const d = Math.sqrt(dx * dx + dy * dy);
     // edge-to-edge: nearest point of the target's (oriented) footprint, minus our own reach toward it for melee
-    let edge = T.elong ? this.boxDist(T, u.x, u.y) : d - T.radius;
+    let edge = T.elong ? this.boxDist(T, px, py) : d - T.radius;
     if (w.melee) edge -= U.elong ? this.extToward(U, dx, dy) : U.radius;
     if (edge > w.range * mult || d < w.minRange) return -1;
     return d;
@@ -844,11 +880,14 @@ export class Battle {
     const u = I.u;
     const units = this.units;
     const prio = I.prio;
+    // [mount origins] ranges are measured from this weapon's mount, computed once per call
+    this.mountAt(I, w);
+    const mx = this.mpx, my = this.mpy;
     if (prio === 'threat') {
       const a = this.blockAtk[I.block];
       if (a >= 0 && this.tick - this.blockAtkT[I.block] <= THREAT_MEMORY) {
         const o = units[a];
-        if (o.alive && o.side !== u.side && this.canHit(w, o) && this.inRange(u, w, o, mult) >= 0 && this.visible(u, o)) return a;
+        if (o.alive && o.side !== u.side && this.canHit(w, o) && this.inRangeFrom(mx, my, u, w, o, mult) >= 0 && this.visible(u, o)) return a;
       }
     }
     // focus: enemies that allies nearby (and we ourselves) are already shooting are preferred
@@ -870,12 +909,12 @@ export class Battle {
     let src: ArrayLike<number> = this.liveIdx[u.side === 0 ? 1 : 0];
     let cnt = src.length;
     const reach = w.range * mult + MAX_RADIUS + (w.melee ? I.bound : 0) + 1.5;
-    if (reach <= 12) { cnt = this.gather(u.x, u.y, reach); src = this.scratch; }
+    if (reach <= 12) { cnt = this.gather(mx, my, reach); src = this.scratch; } // [mount origins] around the mount
     for (let k = 0; k < cnt; k++) {
       const j = src[k];
       const o = units[j];
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
-      const d = this.inRange(u, w, o, mult);
+      const d = this.inRangeFrom(mx, my, u, w, o, mult);
       if (d < 0 || !this.visible(u, o)) continue;
       const O = this.ints[j];
       let sc: number;
@@ -947,12 +986,14 @@ export class Battle {
     const units = this.units;
     let best = -1, bestR = 0.999;
     const r2 = w.range * w.range;
+    this.mountAt(this.ints[u.id], w); // [mount origins] heal range from the emitter's mount
+    const mx = this.mpx, my = this.mpy;
     for (let j = 0; j < units.length; j++) {
       const o = units[j];
       if (!o.alive || o.side !== u.side || o === u) continue;
       const ratio = o.hp / o.maxHp;
       if (ratio >= bestR) continue;
-      const dx = o.x - u.x, dy = o.y - u.y;
+      const dx = o.x - mx, dy = o.y - my;
       if (dx * dx + dy * dy > r2) continue;
       bestR = ratio;
       best = j;
@@ -994,7 +1035,8 @@ export class Battle {
         else if (cand >= 0 && cand !== m.target && (I.prio !== 'closest' || I.focus)) m.target = cand;
         else if (cand >= 0 && cand !== m.target) {
           const c = units[cand];
-          const dc = Math.hypot(c.x - u.x, c.y - u.y);
+          this.mountAt(I, w); // [mount origins] same origin as curD
+          const dc = Math.hypot(c.x - this.mpx, c.y - this.mpy);
           if (dc < curD * 0.6) m.target = cand;
         }
       }
@@ -1002,16 +1044,19 @@ export class Battle {
       const t = m.target >= 0 ? units[m.target] : null;
       let want = u.angle;
       let ax = 0, ay = 0;
+      // [mount origins] the turret aims from its own mount point
+      this.mountAt(I, w);
+      const mx = this.mpx, my = this.mpy;
       if (t) {
         w.preaim = -1;
-        const p = this.aimPoint(I, w, t);
+        const p = this.aimPoint(I, w, t, mx, my);
         ax = p.x; ay = p.y;
-        want = Math.atan2(ay - u.y, ax - u.x);
+        want = Math.atan2(ay - my, ax - mx);
       } else {
         // nothing in range: swing toward whatever is closing in (aim only, never fires)
         if (refreshed) w.preaim = this.pickTarget(I, w, PREAIM_MULT);
         const pa = w.preaim >= 0 ? units[w.preaim] : null;
-        if (pa && pa.alive && this.visible(u, pa)) want = Math.atan2(pa.y - u.y, pa.x - u.x);
+        if (pa && pa.alive && this.visible(u, pa)) want = Math.atan2(pa.y - my, pa.x - mx);
         else w.preaim = -1;
       }
       m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
@@ -1048,7 +1093,7 @@ export class Battle {
    *  projectile speed meets a target moving at its current velocity (artillery and rockets need this most; fast
    *  rounds get a small lead so they reliably connect). Homing missiles, beams, rails, lightning and melee aim at
    *  the target itself. A target that changes course after the shot can still slip a slow shell. */
-  private aimPoint(I: Internal, w: Wpn, t: SimUnit): { x: number; y: number } {
+  private aimPoint(I: Internal, w: Wpn, t: SimUnit, mx: number, my: number): { x: number; y: number } {
     const p = this.aimScratch;
     p.x = t.x; p.y = t.y;
     const kind = w.def.projectile ?? 'bullet';
@@ -1062,7 +1107,7 @@ export class Battle {
     else {
       // |d + v t| = s t  ->  (v.v - s^2) t^2 + 2 (d.v) t + d.d = 0
       const s = w.def.projectileSpeed ?? 15;
-      const dx = t.x - u.x, dy = t.y - u.y;
+      const dx = t.x - mx, dy = t.y - my; // [mount origins] the round leaves from the mount
       const a = vx * vx + vy * vy - s * s, b = 2 * (dx * vx + dy * vy), c = dx * dx + dy * dy;
       if (Math.abs(a) < 1e-6) tof = b < 0 ? -c / b : Math.sqrt(c) / s;
       else {
@@ -1095,11 +1140,14 @@ export class Battle {
     const m = u.mounts[mi];
     m.flash = 1;
     I.sinceFire = 0;
-    const aim = Math.atan2(ay - u.y, ax - u.x);
-    const mx = u.x + Math.cos(aim) * I.radius * 0.8;
-    const my = u.y + Math.sin(aim) * I.radius * 0.8;
+    // [mount origins] shots leave the muzzle: mount point + barrel direction * muzzle reach
+    this.mountAt(I, w);
+    const px = this.mpx, py = this.mpy;
+    const aim = Math.atan2(ay - py, ax - px);
+    const mx = px + Math.cos(aim) * w.muz;
+    const my = py + Math.sin(aim) * w.muz;
     this.events.push({ t: 'fire', unit: u.id, mount: mi, moduleId: def.id, x: mx, y: my, angle: aim });
-    const dist0 = Math.hypot(ax - u.x, ay - u.y);
+    const dist0 = Math.hypot(ax - px, ay - py);
     let raw = (def.damage ?? 0) * I.dmgMult;
     if (def.falloff != null && def.falloff !== 1 && w.range > 0) raw *= 1 + (def.falloff - 1) * Math.min(1, dist0 / w.range);
     const kind = def.projectile ?? 'bullet';
@@ -1221,7 +1269,8 @@ export class Battle {
     const u = I.u;
     w.retarget -= DT;
     let t = m.target >= 0 ? this.units[m.target] : null;
-    if (t && (!t.alive || t.hp >= t.maxHp || Math.hypot(t.x - u.x, t.y - u.y) > w.range * RANGE_KEEP)) { t = null; m.target = -1; }
+    this.mountAt(I, w); // [mount origins] heal range / aim from the emitter's mount
+    if (t && (!t.alive || t.hp >= t.maxHp || Math.hypot(t.x - this.mpx, t.y - this.mpy) > w.range * RANGE_KEEP)) { t = null; m.target = -1; }
     if (w.retarget <= 0 || !t) {
       if (w.retarget <= 0) w.retarget = 0.5;
       const cand = this.findHealTarget(u, w);
@@ -1233,7 +1282,8 @@ export class Battle {
       if (w.healAcc > 0) this.flushHeal(u, w, m, null);
       return;
     }
-    m.angle = turnToward(m.angle, Math.atan2(t.y - u.y, t.x - u.x), w.traverse * DT);
+    this.mountAt(I, w);
+    m.angle = turnToward(m.angle, Math.atan2(t.y - this.mpy, t.x - this.mpx), w.traverse * DT);
     const amt = Math.min(w.heal * DT, t.maxHp - t.hp);
     t.hp += amt;
     w.healAcc += amt;
@@ -1248,7 +1298,8 @@ export class Battle {
     const target = t ?? null;
     if (target) {
       this.events.push({ t: 'heal', unit: target.id, amount: w.healAcc, from: u.id });
-      this.events.push({ t: 'beam', moduleId: w.def.id, x1: u.x, y1: u.y, x2: target.x, y2: target.y, side: u.side, unit: u.id, mount: u.mounts.indexOf(m) });
+      this.mountAt(this.ints[u.id], w); // [mount origins] heal beam leaves the emitter's mount
+      this.events.push({ t: 'beam', moduleId: w.def.id, x1: this.mpx, y1: this.mpy, x2: target.x, y2: target.y, side: u.side, unit: u.id, mount: u.mounts.indexOf(m) });
     }
     w.healAcc = 0;
     void m;
