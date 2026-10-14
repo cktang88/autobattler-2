@@ -174,8 +174,8 @@ export function buildLift(root: THREE.Group, kit: Kit, lift: Lift[]): (t: number
         const nf = 6;
         for (let i = 0; i < nf; i++) {
           const a = (i / nf) * Math.PI * 2, cx = Math.cos(a) * r * 1.22, cz = Math.sin(a) * r * 1.22;
-          rb.box(kit.panel, r * 0.42, h * 0.12, r * 0.14, cx, 0, cz, 0.004, [0, -a + Math.PI / 2, 0]);
-          rb.box(kit.glow, r * 0.08, h * 0.14, r * 0.08, cx, 0, cz, 0.002, [0, -a, 0]);
+          rb.g(new THREE.BoxGeometry(r * 0.42, h * 0.12, r * 0.14), kit.panel, mtx([cx, 0, cz], [0, -a + Math.PI / 2, 0]));
+          rb.g(new THREE.BoxGeometry(r * 0.08, h * 0.14, r * 0.08), kit.glow, mtx([cx, 0, cz], [0, -a, 0]));
         }
         rb.mount(ring);
         root.add(ring);
