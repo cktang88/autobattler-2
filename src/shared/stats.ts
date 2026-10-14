@@ -91,6 +91,11 @@ const RANGE_EXP = 1.0;
  *  the reference moved with them so a gun's price is unchanged by the stretch. Repair beams kept their range, so
  *  their MODULE_CAL was scaled by 6.5 / 5 to keep their price; weapon MODULE_CAL re-fitted with fit_cal.py. */
 const RANGE_REF = 6.5;
+/** Effective-hp floor for long-reach units (see computeStats): ramps in from SHELTER_FROM cells of reach to full
+ *  at SHELTER_FROM + SHELTER_SPAN. Fitted with `node scripts/duels.ts groups` (cheap mortar carts vs tanks). */
+export const SHELTER_EHP = Number(process.env.SHELTER_EHP ?? 400);
+const SHELTER_FROM = 10;
+const SHELTER_SPAN = 10;
 const RANGE_CAP = 2.8;
 
 /** Fraction of raw damage that gets through the reference armor mix (sim damage formula). */
@@ -102,14 +107,16 @@ export function armorEfficiency(damage: number, ap: number): number {
 
 /** Predicted damage-output rating of one weapon (or healing value of a repair module). */
 /** Expected fraction of shots that connect with a (mostly engaged, slowly moving) target. Hitscan, homing and
- *  melee never miss; unguided projectiles lose to spread and to target drift during flight (no lead in the sim). */
+ *  melee never miss; unguided projectiles lose to spread, and a little to flight time: the sim leads moving targets
+ *  (constant-velocity intercept), so only targets that turn or stop mid-flight dodge. MODULE_CAL was rescaled when
+ *  this went from 0.25 to 0.04 per second of flight, keeping every price unchanged. */
 export function hitFactor(w: ModuleDef): number {
   const p = w.projectile;
   if (p === 'beam' || p === 'lightning' || p === 'rail' || p === 'melee' || (p === 'missile' && !w.spread)) return 1;
   const spread = (w.spread ?? 0) * 0.7;
   const flight = w.projectileSpeed ? (w.range ?? 5) / w.projectileSpeed : 0;
   const target = 0.45 + 0.6 * (w.splash ?? 0);
-  return target / (target + spread + 0.25 * flight) / 0.7;
+  return target / (target + spread + 0.04 * flight) / 0.7;
 }
 
 /** Empirical calibration, fitted with `node scripts/balance.ts` (equal-supply armies of every module vs a reference
@@ -119,20 +126,20 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 2.67, ac20: 3.40, ac40: 3.24, aegisT: 1.25, annihilator: 5.47, arclance: 1.93, atgm: 6.95,
-  autocannon: 2.31, autoloader: 2.35, avenger: 3.93, barrage: 6.83, bombs: 2.32, bulwarkshield: 1.53, buzzsaw: 0.67,
-  cannon: 1.35, cannon75: 3.51, chainsaw: 1.54, claw: 1.97, clusterbombs: 3.84, cruise: 6.89, disarm: 0.05,
-  dome: 0.10, domeG: 1.04, doomsday: 9.90, drill: 1.08, empcannon: 0.59, flak: 1.48, flamer: 0.95, gauss: 3.44,
+  aamissile: 2.67, ac20: 3.112, ac40: 2.955, aegisT: 1.25, annihilator: 5.47, arclance: 1.93, atgm: 6.95,
+  autocannon: 2.096, autoloader: 2.35, avenger: 3.625, barrage: 5.701, bombs: 2.263, bulwarkshield: 1.53, buzzsaw: 0.67,
+  cannon: 1.205, cannon75: 3.152, chainsaw: 1.54, claw: 1.97, clusterbombs: 3.747, cruise: 6.89, disarm: 0.05,
+  dome: 0.10, domeG: 1.04, doomsday: 8.613, drill: 1.08, empcannon: 0.496, flak: 1.34, flamer: 0.874, gauss: 3.021,
   gravity: 1.81, grinder: 4.33, guidedrocket: 3.31, gyro: 0.10, hammer: 1.22, hardened: 0.13, heatray: 0.33,
-  heavyflak: 2.56, hmg: 2.46, howitzer: 4.99, incendiary: 0.78, inferno: 2.20, jammer: 0.10, laser: 3.65,
-  lightrail: 9.06, massdriver: 3.67, mg: 2.11, minigun: 1.52, mirror: 0.31, missilebattery: 2.93, mlrs: 5.79,
-  mortar: 3.23, nanite: 0.10, napalm: 0.95, overclock: 0.22, phantom: 0.14, plasma: 3.03, plasmablade: 1.34,
-  plasmaorb: 2.61, pointdef: 2.63, quad20: 2.90, railgun: 5.38, ram: 0.37, reactive: 0.88, repair: 5.20,
-  repairM: 4.17, rocketL: 2.26, rockets: 1.78, sam: 1.92, selfdestruct: 0.22, sensor: 0.11, shield: 1.04,
-  shieldH: 1.11, shieldL: 0.84, shockprod: 1.85, shotgun: 2.97, siege240: 2.12, siegeplasma: 3.32, skyfortress: 4.42,
-  slowbeam: 3.16, smoke: 4.00, sniper: 18.50, sonic: 0.00, stealth: 0.20, stormcore: 2.55, stormtower: 3.05,
-  stungun: 1.29, swarm: 3.39, tactnuke: 5.72, targeting: 3.45, tesla: 1.22, titanfist: 3.39, turbo: 0.10,
-  twin120: 2.87, twin30: 1.83, twinlaser: 2.76, twinmg: 2.53, uplink: 0.17,
+  heavyflak: 2.318, hmg: 2.268, howitzer: 4.149, incendiary: 0.699, inferno: 2.032, jammer: 0.10, laser: 3.65,
+  lightrail: 9.06, massdriver: 3.67, mg: 1.964, minigun: 1.438, mirror: 0.31, missilebattery: 2.93, mlrs: 4.942,
+  mortar: 2.51, nanite: 0.10, napalm: 0.864, overclock: 0.22, phantom: 0.14, plasma: 3.03, plasmablade: 1.34,
+  plasmaorb: 2.186, pointdef: 2.63, quad20: 2.639, railgun: 5.38, ram: 0.37, reactive: 0.88, repair: 5.20,
+  repairM: 4.17, rocketL: 2.012, rockets: 1.595, sam: 1.92, selfdestruct: 0.22, sensor: 0.11, shield: 1.04,
+  shieldH: 1.11, shieldL: 0.84, shockprod: 1.85, shotgun: 2.873, siege240: 1.88, siegeplasma: 2.885, skyfortress: 4.001,
+  slowbeam: 3.16, smoke: 4.00, sniper: 16.717, sonic: 0, stealth: 0.20, stormcore: 2.55, stormtower: 3.05,
+  stungun: 1.29, swarm: 2.717, tactnuke: 5.72, targeting: 3.45, tesla: 1.22, titanfist: 3.39, turbo: 0.10,
+  twin120: 2.574, twin30: 1.666, twinlaser: 2.76, twinmg: 2.369, uplink: 0.17,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
@@ -241,6 +248,9 @@ export function computeStats(d: Design): UnitStats {
   let ehp = (hp + 1.2 * shield * shieldCal + reactiveHp) * (1 + armor / 15) * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
+  // long reach shelters a fragile hull: artillery behind a front line is rarely shot, so a paper-thin carriage with a
+  // mortar is priced as if it were at least moderately tough (sturdy hulls are already above the floor: no change)
+  ehp = Math.max(ehp, SHELTER_EHP * Math.min(1, Math.max(0, (range - SHELTER_FROM) / SHELTER_SPAN)));
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
   const unitCost = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1));
