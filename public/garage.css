@@ -264,7 +264,7 @@
   border: 2px dashed var(--c); background: radial-gradient(circle, color-mix(in srgb, var(--c) 22%, transparent), rgba(5, 7, 9, 0.55) 70%);
   box-shadow: 0 0 0 2px rgba(5, 7, 9, 0.7); animation: g-sockpulse 2.2s ease-in-out infinite;
 }
-.garage .g-sock.full .g-sock-ring { border: 2px solid color-mix(in srgb, var(--c) 45%, transparent); }
+.garage .g-sock.full .g-sock-ring { border: 2px solid color-mix(in srgb, var(--c) 85%, transparent); box-shadow: 0 0 0 1.5px rgba(5, 7, 9, 0.8), inset 0 0 0 1.5px rgba(5, 7, 9, 0.6); }
 .garage .g-sock.full:hover .g-sock-ring, .garage .g-sock.full:focus-visible .g-sock-ring { border-color: var(--c); box-shadow: 0 0 0 2px var(--ink), 0 0 14px color-mix(in srgb, var(--c) 60%, transparent); }
 .garage .g-sock-plus { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--head); font-weight: 700; font-size: calc(var(--r) * 0.9); color: var(--c); text-shadow: 0 1px 0 var(--ink); pointer-events: none; }
 .garage .g-sock-tag {
