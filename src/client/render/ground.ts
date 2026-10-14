@@ -171,12 +171,12 @@ function paintScatter(g: Ctx, th: MapTheme, x0: number, y0: number, x1: number, 
         g.beginPath(); g.ellipse(x - rr * 0.25, y - rr * 0.25, rr * 0.45, rr * 0.3, 0, 0, Math.PI * 2); g.fill();
       }
       // hardpan cracks in the darker patches
-      if (r(8) < 0.05 && fbm(cx * 0.16 + 40, cy * 0.16, s + 3, 3) > 0.55) {
-        g.strokeStyle = 'rgba(40,26,16,0.35)';
-        g.lineWidth = lw * 1.1;
+      if (r(8) < 0.018 && fbm(cx * 0.16 + 40, cy * 0.16, s + 3, 3) > 0.58) {
+        g.strokeStyle = 'rgba(40,26,16,0.28)';
+        g.lineWidth = lw * 0.9;
         let x = cx + r(9), y = cy + r(10), a = r(11) * 6.28;
         g.beginPath(); g.moveTo(x, y);
-        for (let k = 0; k < 5; k++) { a += (r(12 + k) - 0.5) * 1.6; x += Math.cos(a) * 0.35; y += Math.sin(a) * 0.35; g.lineTo(x, y); }
+        for (let k = 0; k < 5; k++) { a += (r(12 + k) - 0.5) * 0.7; x += Math.cos(a) * 0.3; y += Math.sin(a) * 0.3; g.lineTo(x, y); }
         g.stroke();
       }
     } else if (th.id === 'plains') {

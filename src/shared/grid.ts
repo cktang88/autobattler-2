@@ -14,14 +14,14 @@
 
 import type { Placement, Side, Size } from './types.ts';
 
-/** Real-world scale: one grid cell is 5 m x 5 m (Mechabellum-style). The field is 240 m x 230 m.
+/** Real-world scale: one grid cell is 5 m x 5 m (Mechabellum-style). The field is 480 m x 460 m.
  *  A size-1 unit is a 5 m light vehicle, size 2 a 10 m tank, size 3 a 15 m walker. All ranges/speeds in
  *  data are in cells; multiply by METERS_PER_CELL for display. */
 export const METERS_PER_CELL = 5;
-export const FIELD_W = 48;
-export const FIELD_H = 46;
+export const FIELD_W = 96;
+export const FIELD_H = 92;
 export const DEPLOY_W = FIELD_W;
-export const DEPLOY_D = 12;
+export const DEPLOY_D = 24;
 
 /** Top-left world cell of a placement of the given size. */
 export function localToWorldCell(side: Side, x: number, y: number, size: number): { col: number; row: number } {

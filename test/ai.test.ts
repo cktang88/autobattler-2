@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aiDeck, aiDeploy, profile, type AiDifficulty } from '../src/shared/ai.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateDeploy, applyDeploy, resolveRound, redactFor, DECK_SIZE } from '../src/shared/match.ts';
-import { blockDims, squadSize, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, blockDims, squadSize, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
 import { computeStats } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
 
@@ -158,7 +158,7 @@ test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone
     for (const p of a.place) {
       const st = computeStats(m.players[0].deck.find((d) => d.id === p.designId)!);
       const { w, h } = blockDims(st.size, p.spacing ?? 0, st);
-      assert.ok(p.x + w <= 48 && p.y + h <= 12, 'footprint inside zone');
+      assert.ok(p.x + w <= DEPLOY_W && p.y + h <= DEPLOY_D, 'footprint inside zone');
     }
   }
 });
