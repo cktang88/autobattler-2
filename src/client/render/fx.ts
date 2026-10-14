@@ -217,7 +217,7 @@ export class Fx {
     n = Math.max(1, Math.round(n * (this.busy > 0.7 ? 0.5 : 1)));
     for (let i = 0; i < n; i++) {
       const a = rnd() * PI2, v = rr(0.3, 1.2) * r * 1.6;
-      this.add(DUST, x, y, { size: r * rr(0.4, 0.8), grow: r * 1.2, max: life * rr(0.7, 1.2), vx: Math.cos(a) * v, vy: Math.sin(a) * v, drag: 3, color: '#8a7a62', alpha: 0.5 });
+      this.add(DUST, x, y, { size: r * rr(0.4, 0.8), grow: r * 1.2, max: life * rr(0.7, 1.2), vx: Math.cos(a) * v, vy: Math.sin(a) * v, drag: 3, color: '#bfb196', alpha: 0.55 });
     }
   }
 
@@ -237,7 +237,7 @@ export class Fx {
   }
 
   /** Dusty ground ring (normal blend): the displaced dirt wave. */
-  dustRing(x: number, y: number, r0: number, r1: number, life = 0.6, alpha = 0.5, color = '#9a8a6c'): void {
+  dustRing(x: number, y: number, r0: number, r1: number, life = 0.6, alpha = 0.55, color = '#c8baa0'): void {
     if (this.busy > 0.85) return;
     this.add(DRING, x, y, { size: r0, r1, max: life, color, alpha });
   }
@@ -324,6 +324,9 @@ export class Fx {
 
   /** A shell striking the ground / a hull with no explosion of its own: pop, ring scaled by calibre, dust cloud, chunks, scorch. */
   shellImpact(x: number, y: number, cal: number): void {
+    cal = Math.min(1.2, cal * 1.3);
+    if (cal > 0.4) this.fball(x, y, 0.16 + 0.3 * cal, 0.28 + 0.2 * cal, 0, 0, 0.3);
+    if (cal > 0.5) this.star(x, y, 0.5 + 0.8 * cal, '#fff0d0', rnd() * 6, 0.08);
     this.glow(x, y, 0.3 + 0.6 * cal, '#ffd8a0', 0.08, 0.9);
     this.light(x, y, 1.2 + 2.4 * cal, '#ffb060', 0.25, 0.3);
     this.ring(x, y, 0.05, 0.4 + 1.1 * cal, '#ffe0b0', 0.22 + 0.1 * cal, 0.7);
@@ -331,7 +334,7 @@ export class Fx {
     this.dust(x, y, 0.2 + 0.35 * cal, 3 + Math.round(cal * 5), 0.8 + cal * 0.9);
     this.sparks(x, y, 5 + cal * 9, '#ffd890', 4.5, undefined, Math.PI, 0.3, true);
     this.debris(x, y, 1 + Math.round(cal * 4), '#4a4034', 2.6, 0.045, cal > 0.6 ? 1 : 0);
-    if (cal > 0.4) this.smoke(x, y, 0.15 + 0.2 * cal, 1.8, '#3a342e', this.wind.x * 0.5, 0, 0.4, 0.7, 0.2);
+    this.smoke(x, y, 0.14 + 0.22 * cal, 1.6 + cal, '#3a342e', this.wind.x * 0.5, 0, 0.5, 0.7, 0.2);
     this.decal('scorch', x, y, 0.2 + 0.3 * cal);
   }
 
@@ -409,7 +412,7 @@ export class Fx {
       this.star(x, y, r * 1.2, '#ffe0a0', rnd() * 6, 0.07);
       this.sparks(x, y, 20 * q, '#ffc050', 7 * r, undefined, Math.PI, 0.3);
       this.sparks(x, y, 6 * q, '#ffffff', 4 * r, undefined, Math.PI, 0.15);
-      for (let i = 0; i < 4; i++) this.smoke(x + rr(-0.3, 0.3) * r, y + rr(-0.3, 0.3) * r, r * rr(0.4, 0.6), rr(1.4, 2.2), i ? '#2e2824' : '#4a423a', 0, 0, 0.6, rr(0.1, 0.4));
+      for (let i = 0; i < 4; i++) this.smoke(x + rr(-0.4, 0.4) * r, y + rr(-0.4, 0.4) * r, r * rr(0.5, 0.8), rr(1.6, 2.6), i ? '#2e2824' : '#4a423a', this.wind.x * 0.3, 0, 0.6, rr(0.1, 0.4), 0.6);
       return;
     }
     const big = style === 'big' || r > 1.4;
@@ -881,19 +884,16 @@ export class Fx {
           break;
         }
         case FIRE: {
+          // soft additive flame: red-orange body that darkens as it rises, yellow-white core that dies first
           const u = 1 - t, s = p.size;
           if (s * px < 1.2) break;
           const a = t > 0.8 ? (1 - t) * 5 : t * 1.25;
-          const cs = Math.cos(p.rot), sn = Math.sin(p.rot);
-          const tr = g.getTransform();
-          g.transform(cs, sn, -sn, cs, x, y);
-          g.globalAlpha = clamp(a * 0.9, 0, 1);
-          g.drawImage(fireTex(u < 0.55 ? 2 : 3, p.seed), -s, -s, s * 2, s * 2);
-          if (u < 0.5) {
-            g.globalAlpha = clamp(a * (1 - u * 2), 0, 1);
-            g.drawImage(fireTex(1, p.seed + 1), -s * 0.55, -s * 0.55, s * 1.1, s * 1.1);
+          g.globalAlpha = clamp(a * 0.75, 0, 1);
+          g.drawImage(glowTex(u < 0.45 ? '#ff9a38' : u < 0.75 ? '#e0521c' : '#a02c10'), x - s * 1.5, y - s * 1.5, s * 3, s * 3);
+          if (u < 0.6) {
+            g.globalAlpha = clamp(a * (1 - u / 0.6), 0, 1);
+            g.drawImage(glowTex('#ffe090'), x - s * 0.75, y - s * 0.75, s * 1.5, s * 1.5);
           }
-          g.setTransform(tr);
           break;
         }
         case FBALL: {
@@ -1290,7 +1290,7 @@ export class Fx {
     }
     const main = b.bolt, forks = b.forks ?? [];
     const c = calm ? 0.8 : 1;
-    const halo = mixHex(b.color, '#7a5cff', 0.45);
+    const halo = mixHex(b.color, '#5a4cff', 0.65);
     // ionised air: a wide pale halo, then the coloured glow
     stroke(g, main, halo, Math.max(minW * 9, b.width * 20), 0.09 * fade * c);
     stroke(g, main, b.color, Math.max(minW * 4, b.width * 6.5), 0.3 * fade * c);

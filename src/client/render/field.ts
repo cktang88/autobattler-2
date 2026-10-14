@@ -26,7 +26,7 @@
 //   call it from a pointerup/click handler to ignore that gesture (controls' listeners run before yours).
 
 import { CREATURE_SHAPES } from './creatures.ts';
-import { battleSfx, setPanFlip } from '../audio.ts';
+import { battleSfx, setPanFlip, setSfxView } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../../shared/grid.ts';
 import { moduleTier } from '../../shared/parts.ts';
 import { Camera, CameraControls } from './camera.ts';
@@ -737,7 +737,7 @@ export class FieldView {
     if (events.length) {
       for (const e of events) this.handleEvent(e);
       this.shotFrom.clear();
-      if (!this.muted) try { battleSfx(events); } catch { /* audio optional */ }
+      if (!this.muted) try { setSfxView(this.cam.k / this.cam.minK); battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
     }
     this.fx.up = { x: this.dirs.ux, y: this.dirs.uy };
@@ -1731,7 +1731,7 @@ export class FieldView {
         const air = mod ? !mod.targetsGround && !!mod.targetsAir : false;
         if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
         else if (mod?.id === 'doomsday') { fx.boom(e.x, e.y, r * 0.8, 'big'); fx.shake(0.45); }
-        else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.4, r * 0.7), 'flak', false);
+        else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.6, r * 0.9), 'flak', false);
         else if (vis === 'emp') fx.boom(e.x, e.y, Math.max(0.4, r), 'emp');
         else if (vis === 'plasma') fx.boom(e.x, e.y, Math.max(0.4, r * 0.8), 'plasma');
         else if (vis === 'sonic') fx.boom(e.x, e.y, Math.max(0.5, r), 'sonic');
