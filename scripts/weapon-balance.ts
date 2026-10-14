@@ -261,6 +261,8 @@ function costReport() {
   }
 }
 
+/** Lower bound for fitted weapon cals (BAL_MINCAL): a weapon that wants to go below it is too weak at any sane price and needs its numbers buffed instead. */
+const MIN_CAL = Number(process.env.BAL_MINCAL ?? 0.1);
 const mode = process.argv[2] ?? 'run';
 if (mode === 'shard') {
   const seeds = Number(process.argv[3]); const filter = process.argv[4] ?? '';
@@ -315,7 +317,7 @@ if (mode === 'shard') {
       const sc = Number.isNaN(r.peersM) ? refC : 0.5 * refC + 0.5 * r.peersM;
       const c = Math.min(0.95, Math.max(0.05, sc));
       const step = Math.pow(c / (1 - c), gain);
-      const cal = Math.round(Math.min(15, Math.max(0.1, (MODULE_CAL[r.id] || 0.1) * Math.min(1.7, Math.max(0.6, step)))) * 100) / 100;
+      const cal = Math.round(Math.min(15, Math.max(MIN_CAL, (MODULE_CAL[r.id] || MIN_CAL) * Math.min(1.7, Math.max(0.6, step)))) * 100) / 100;
       upd[r.id] = cal;
       (hist[r.id] ??= []).push(MODULE_CAL[r.id] ?? 1);
     }
