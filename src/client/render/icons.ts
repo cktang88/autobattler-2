@@ -8,7 +8,7 @@
 
 import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import type { Design } from '../../shared/types.ts';
-import { TEAM_PAL, ctx2d, makeCanvas, shade, type Ctx, type TeamPal } from './palette.ts';
+import { TEAM_PAL, ctx2d, makeCanvas, mix, shade, type Ctx, type TeamPal } from './palette.ts';
 import { CATEGORY_COLOR, drawTurret, drawTurretDynamic } from './turrets.ts';
 import { GIANT_SHAPES, drawGiantFx } from './giantart.ts';
 import { weaponD } from './weaponsize.ts';
@@ -29,10 +29,13 @@ export interface PartIconOpts {
   backdrop?: boolean;
 }
 
+/** A paint scheme from a UI colour: the colour becomes the stripe/light accent over a faintly tinted military
+ *  finish (never a full-body fill). */
 export function palFromColor(color: string): TeamPal {
+  const body = mix(TEAM_PAL[0].body, color, 0.12);
   return {
-    body: color, light: shade(color, 0.4), dark: shade(color, -0.4), deep: shade(color, -0.7),
-    accent: shade(color, 0.65), glow: shade(color, 0.75), glowRgb: '200,230,255', bar: color, rim: shade(color, 0.3),
+    body, light: shade(body, 0.3), dark: shade(body, -0.36), deep: shade(body, -0.64), camo: shade(body, -0.12),
+    accent: color, glow: shade(color, 0.5), glowRgb: '200,230,255', bar: color, rim: color,
   };
 }
 
@@ -105,7 +108,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
       g.fillStyle = pal.body;
       g.fill();
       g.lineWidth = o;
-      g.strokeStyle = '#0b0d0f';
+      g.strokeStyle = 'rgba(10,12,14,0.4)';
       g.stroke();
       drawPlates(g, L, pal, o);
     } else {

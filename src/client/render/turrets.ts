@@ -2,7 +2,7 @@
 // Drawn in turret-local cell units: pivot at origin, barrels pointing +x. `d` = turret base diameter (cells).
 
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
-import { METAL, OUTLINE, clamp, mix, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
+import { MAT, METAL, OUTLINE, clamp, mix, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
 import { boreFrac, calibreMm } from './weaponsize.ts';
 
 /** Barrel width for a module drawn at turret radius r: from its real calibre (weaponsize.ts), not hand-tuned. */
@@ -153,24 +153,24 @@ function barrel(g: Ctx, x0: number, x1: number, y: number, w: number, o: number,
   gr.addColorStop(0.55, color);
   gr.addColorStop(1, shade(color, -0.55));
   shape(g, gr, o, () => roundRect(g, x0, y - w / 2, x1 - x0, w, w * 0.3));
-  g.fillStyle = 'rgba(255,255,255,0.75)';
+  g.fillStyle = 'rgba(235,242,248,0.55)';
   g.fillRect(x0 + w * 0.3, y - w * 0.27, (x1 - x0) - w * 0.6, Math.max(w * 0.09, o * 0.45));
 }
 
-/** Gun steel (barrels) and ceramic armour (housings): neutral, lighter than any hull so weapons pop. */
-const GUN = '#69747d';
-const CERAMIC = ['#f2f5f7', '#c3cbd1', '#7b8790'];
+/** Gun steel (barrels): bare blued steel with a sheen. Housings: the hull paint over cast/composite armour. */
+const GUN = '#5f686f';
 
 function muzzle(g: Ctx, x: number, y: number, w: number, len: number, o: number): void {
   shape(g, METAL.dark, o, () => roundRect(g, x - len, y - w / 2, len, w, w * 0.2));
 }
 
-/** Turret housing material: light ceramic gun-armour with only a faint team tint (team colour lives on the hull). */
+/** Turret housing material: the faction paint over composite armour, a touch lighter than the hull (raised, it
+ *  catches more of the key light), lit from the upper left. */
 function teamGrad(g: Ctx, pal: TeamPal, r: number): CanvasGradient {
   const gr = g.createLinearGradient(-r, -r, r, r);
-  gr.addColorStop(0, mix(CERAMIC[0], pal.light, 0.1));
-  gr.addColorStop(0.45, mix(CERAMIC[1], pal.body, 0.1));
-  gr.addColorStop(1, mix(CERAMIC[2], pal.dark, 0.14));
+  gr.addColorStop(0, shade(mix(pal.light, MAT.composite, 0.2), 0.08));
+  gr.addColorStop(0.5, mix(pal.body, MAT.composite, 0.15));
+  gr.addColorStop(1, shade(pal.dark, -0.1));
   return gr;
 }
 
