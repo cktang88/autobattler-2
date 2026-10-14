@@ -181,7 +181,7 @@ export const MODULES: ModuleDef[] = [
   wpn({ id: 'stungun', name: 'Stun Gun', family: 'Paralyzer', desc: 'Electric bolt that paralyzes its target for 1.2s.', category: 'disruption', visual: 'emp', caliber: 0.3, mount: 'S', weight: 1.2, cost: 18,
     damage: 8, cooldown: 1.5, range: 6, ...GA, projectile: 'lightning', chain: 0, ap: 1, stun: 1.2 }),
   wpn({ id: 'empcannon', name: 'EMP Cannon', family: 'EMP burst', desc: 'Electromagnetic orb that stuns everything in the blast.', category: 'disruption', visual: 'emp', caliber: 0.6, mount: 'M', weight: 3.5, cost: 38,
-    damage: 60, cooldown: 3, range: 9, ...G, projectile: 'orb', projectileSpeed: 7, splash: 1.2, ap: 1, stun: 1.5, spread: 0.3 }),
+    damage: 80, cooldown: 2.5, range: 9, ...G, projectile: 'orb', projectileSpeed: 7, splash: 1.2, ap: 1, stun: 2, spread: 0.3 }),
   wpn({ id: 'slowbeam', name: 'Slow Beam', family: 'Disruptor', desc: 'Beam that cuts target speed and rate of fire by up to 60%.', category: 'disruption', visual: 'slowbeam', caliber: 0.5, mount: 'M', weight: 3, cost: 28,
     damage: 12, cooldown: 0.2, range: 7.5, ...GA, projectile: 'beam', ap: 1, slow: 0.15 }),
   wpn({ id: 'arclance', name: 'Arc Lance', family: 'Storm', desc: 'Heavy lightning that chains through 6 enemies and jolts them.', category: 'disruption', visual: 'tesla', caliber: 0.9, mount: 'M', weight: 9, cost: 75,
