@@ -3,7 +3,7 @@
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
 import { meleeSlots } from './mountgeo.ts';
 import { squadSize } from './grid.ts';
-import type { Design, ModuleDef, UnitStats } from './types.ts';
+import type { ChassisDef, Design, ModuleDef, UnitStats } from './types.ts';
 
 /** Above this load (weight / capacity) a design is illegal. */
 export const MAX_LOAD = 1.5;
@@ -295,6 +295,20 @@ export function roundPrice(v: number): number {
 /** Level multiplier for hp and damage. */
 export const levelMult = (level: number) => 1 + LEVEL_BONUS * (Math.max(1, Math.min(MAX_LEVEL, level)) - 1);
 
+/** Why module `mod` can't go in slot `i` of chassis `c` with mobility `mobilityId` (null = legal). Single source of truth
+ *  for validateDesign, the garage (socket highlighting, drop messages) and the AI. */
+export function slotError(c: ChassisDef, mobilityId: string | null | undefined, i: number, mod: ModuleDef): string | null {
+  if (!fitsMount(c.mounts[i], mod.mount)) return `${mod.name} (${mod.mount}) doesn't fit a ${c.mounts[i]} mount`;
+  const flies = mobilityId ? MOBILITY_BY_ID.get(mobilityId)?.kind === 'air' : (c.domain ?? 'ground') !== 'ground';
+  if (mod.category === 'melee') {
+    if (flies || (c.domain ?? 'ground') !== 'ground') return `${mod.name} can't go on aircraft: melee weapons can only go on ground units`;
+    if (!meleeSlots(c)[i]) return `${mod.name} can't fit in mount ${i + 1}: melee weapons need a mount near the edge of the chassis`;
+  }
+  if (mod.requires === 'air' && !flies) return `${mod.name} can only be mounted on flying designs`;
+  if (mod.requires === 'ground' && flies) return `${mod.name} can't be mounted on flying designs`;
+  return null;
+}
+
 /** Returns a list of problems; empty means the design is legal. */
 export function validateDesign(d: Design): string[] {
   const errs: string[] = [];
@@ -310,14 +324,8 @@ export function validateDesign(d: Design): string[] {
     if (id == null) return;
     const mod = MODULE_BY_ID.get(id);
     if (!mod) { errs.push(`Unknown module ${id}`); return; }
-    if (!fitsMount(c.mounts[i], mod.mount)) errs.push(`${mod.name} (${mod.mount}) doesn't fit a ${c.mounts[i]} mount`);
-    const flies = MOBILITY_BY_ID.get(d.mobility)?.kind === 'air';
-    if (mod.category === 'melee') {
-      if (flies || (c.domain ?? 'ground') !== 'ground') errs.push(`${mod.name} can't go on aircraft: melee weapons can only go on ground units`);
-      else if (!meleeSlots(c)[i]) errs.push(`${mod.name} can't fit in mount ${i + 1}: melee weapons need a mount near the edge of the chassis`);
-    }
-    if (mod.requires === 'air' && !flies) errs.push(`${mod.name} can only be mounted on flying designs`);
-    if (mod.requires === 'ground' && flies) errs.push(`${mod.name} can't be mounted on flying designs`);
+    const why = slotError(c, d.mobility, i, mod);
+    if (why) errs.push(why);
     if (mod.kind === 'weapon' || mod.kind === 'utility') weapons++;
   });
   if (weapons === 0) errs.push('Needs at least one weapon or utility module');

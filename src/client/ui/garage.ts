@@ -13,6 +13,8 @@ import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
+import { slotError } from '../../shared/stats.ts';
+import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, defaultOrders, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
@@ -88,14 +90,14 @@ function statsOf(d: Design): UnitStats | null {
 const firstLegalMobility = (chassisId: string) => MOBILITY.find((m) => !pairingError(chassisId, m.id))?.id ?? MOBILITY[0].id;
 
 /** Re-seat modules onto a new chassis: biggest modules first, each into the smallest free slot that fits. */
-function reseat(mods: (string | null)[], c: ChassisDef): (string | null)[] {
+function reseat(mods: (string | null)[], c: ChassisDef, mobility: string): (string | null)[] {
   const out: (string | null)[] = c.mounts.map(() => null);
   const list = mods.filter((m): m is string => !!m && MODULE_BY_ID.has(m))
     .sort((a, b) => RANK[MODULE_BY_ID.get(b)!.mount] - RANK[MODULE_BY_ID.get(a)!.mount]);
   const slots = c.mounts.map((cls, i) => ({ cls, i })).sort((a, b) => RANK[a.cls] - RANK[b.cls]);
   for (const id of list) {
     const mod = MODULE_BY_ID.get(id)!;
-    const s = slots.find((s) => out[s.i] === null && fitsMount(s.cls, mod.mount));
+    const s = slots.find((s) => out[s.i] === null && !slotError(c, mobility, s.i, mod));
     if (s) out[s.i] = id;
   }
   return out;
@@ -417,7 +419,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const c = CHASSIS_BY_ID.get(id)!;
     const mobility = pairingError(id, draft.mobility) ? firstLegalMobility(id) : draft.mobility;
     const before = draft.mounts.filter(Boolean).length;
-    draft = { ...draft, chassis: id, mobility, mounts: reseat(draft.mounts, c) };
+    draft = { ...draft, chassis: id, mobility, mounts: reseat(draft.mounts, c, mobility) };
     const lost = before - draft.mounts.filter(Boolean).length;
     if (autoName) { draft.name = randomDesignName(id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
     activeSlot = null;
@@ -434,7 +436,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const mobility = firstLegalMobility(c.id);
     const before = draft.mounts.filter(Boolean).length;
     const usable = draft.mounts.map((id) => (id && !reqReason(MODULE_BY_ID.get(id) ?? {}, mobility) ? id : null));
-    draft = { ...draft, chassis: c.id, mobility, mounts: reseat(usable, c) };
+    draft = { ...draft, chassis: c.id, mobility, mounts: reseat(usable, c, mobility) };
     const lost = before - draft.mounts.filter(Boolean).length;
     if (autoName) { draft.name = randomDesignName(c.id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
     pinned.hull = { kind: 'chassis', id: c.id };
@@ -463,13 +465,25 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     return null;
   }
 
-  /** null if `mod` can go into socket `i`, else the reason it can't */
+  /** null if `mod` can go into socket `i`, else the reason it can't (shared rules: size, melee edge, air/ground) */
   function slotBlock(mod: ModuleDef, i: number): string | null {
     const cls = chassis().mounts[i];
     if (!cls) return 'No such socket';
     if (!fitsMount(cls, mod.mount)) return `Needs a size ${ML[mod.mount]} socket (this is ${ML[cls]})`;
-    return reqReason(mod);
+    return slotError(chassis(), draft.mobility, i, mod);
   }
+
+  /** why `mod` fits no socket of the current chassis + mobility (null = it fits somewhere) */
+  function noFitReason(mod: ModuleDef): string | null {
+    const c = chassis();
+    const errs = c.mounts.map((_, i) => slotBlock(mod, i));
+    if (errs.some((e) => !e)) return null;
+    const sized = errs.filter((e) => e && !e.startsWith('Needs a size'));
+    if (!sized.length) return `Needs a size ${ML[mod.mount]} socket or bigger — the ${c.name} has none`;
+    return sized[0]!;
+  }
+
+  const isEdge = (i: number) => !!meleeSlots(chassis())[i];
 
   /** Best socket for a module: the active one if it fits, else the smallest empty one, else the smallest occupied one. */
   function autoSlot(mod: ModuleDef): number | null {
@@ -497,7 +511,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const slot = autoSlot(mod);
     if (slot === null) {
       sfx('invalid');
-      app.toast(reqReason(mod) ?? `No size ${ML[mod.mount]} socket on the ${chassis().name}`, 'error');
+      app.toast(noFitReason(mod) ?? `No size ${ML[mod.mount]} socket on the ${chassis().name}`, 'error');
       return;
     }
     equip(slot, id);
@@ -558,6 +572,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   /** Click on a socket: select it and open the matching bay tab. */
   function focusSlot(i: number) {
+    const why = el.classList.contains('picking') ? el.querySelector<HTMLElement>(`.g-sock[data-sock="${i}"]`)?.dataset.why : '';
+    if (why && !draft.mounts[i]) { sfx('invalid'); app.toast(why, 'error'); }
     if (activeSlot === i) { activeSlot = null; sfx('click'); update(); return; }
     activeSlot = i;
     const cur = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
@@ -670,6 +686,21 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     ghost?.remove();
     el.classList.remove('dragging', 'drag-out');
     for (const s of sockets()) s.el.classList.remove('can', 'cant', 'hot');
+    applyPick();
+  }
+
+  /** While a module is selected in the bay (not dragging), light up the sockets it can legally go in. */
+  function applyPick() {
+    if (drag?.started) return;
+    const sel = tab === 'weapons' || tab === 'systems' ? pinned[tab] : null;
+    const mod = sel?.kind === 'module' ? MODULE_BY_ID.get(sel.id) : undefined;
+    el.classList.toggle('picking', !!mod);
+    for (const s of sockets()) {
+      const why = mod ? slotBlock(mod, s.i) : null;
+      s.el.classList.toggle('can', !!mod && !why);
+      s.el.classList.toggle('cant', !!mod && !!why);
+      if (mod) s.el.dataset.why = why ?? ''; else delete s.el.dataset.why;
+    }
   }
 
   function cancelDrag() {
@@ -710,6 +741,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     renderBench();
     renderSockets();
     renderBay();
+    applyPick();
     if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
@@ -867,7 +899,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const cur = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
       const card = h('div.g-lslot', {
         role: 'listitem', 'data-sock': String(i),
-        class: [cur ? `k-${cur.kind}` : 'empty', activeSlot === i ? 'active' : ''].join(' '),
+        class: [cur ? `k-${cur.kind}` : 'empty', activeSlot === i ? 'active' : '', isEdge(i) ? 'edge' : ''].join(' '),
         style: cur ? { '--cat': moduleCategoryColor(cur.id) } : null,
       },
       h('button.g-lslot-main', {
@@ -879,6 +911,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]),
       cur ? partIcon('module', cur.id, 30, true) : h('span.g-lslot-empty', null, icon('plus')),
       h('span.g-lslot-name', null, cur ? cur.name : 'Empty'),
+      isEdge(i) ? h('span.g-lslot-edge', { title: 'Edge mount: fits melee weapons' }, '\u2694 edge') : null,
       ),
       cur ? h('button.g-lslot-x', { type: 'button', title: `Unmount ${cur.name}`, 'aria-label': `Unmount ${cur.name} from socket ${i + 1}`, 'data-fk': `unmount-${i}`, onclick: () => equip(i, null) }, icon('x')) : null,
       );
@@ -894,15 +927,16 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const cur = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
       const b = h('button.g-sock', {
         type: 'button', 'data-sock': String(i), tabindex: '-1',
-        class: [cur ? 'full' : 'empty', `c${cls}`, activeSlot === i ? 'active' : ''].join(' '),
+        class: [cur ? 'full' : 'empty', `c${cls}`, activeSlot === i ? 'active' : '', isEdge(i) ? 'edge' : ''].join(' '),
         style: cur ? { '--cat': moduleCategoryColor(cur.id) } : null,
-        title: cur ? `Socket ${i + 1} (size ${ML[cls]}): ${cur.name}` : `Socket ${i + 1}: empty size ${ML[cls]} socket`,
+        title: (cur ? `Socket ${i + 1} (size ${ML[cls]}): ${cur.name}` : `Socket ${i + 1}: empty size ${ML[cls]} socket`) + (isEdge(i) ? ' — Edge mount: fits melee weapons' : ''),
         'aria-label': cur ? `Socket ${i + 1}, ${cur.name}` : `Socket ${i + 1}, empty size ${ML[cls]}`,
         onclick: () => { if (!suppressClick) focusSlot(i); },
       },
       h('span.g-sock-ring'),
       h('span.g-sock-tag', null, h('b', null, String(i + 1)), ML[cls]),
       cur ? null : h('span.g-sock-plus', null, '+'),
+      isEdge(i) ? h('span.g-sock-edge', { 'aria-hidden': 'true' }, '\u2694') : null,
       );
       if (cur) armDrag(b, () => (draft.mounts[i] ? { mod: draft.mounts[i]!, from: i } : null), true);
       return b;
@@ -910,6 +944,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     lastSockKey = '';
   }
 
+  let showAllMods = false;
   let lastSockKey = '';
   function placeSockets() {
     if (!geom) return;
@@ -1066,7 +1101,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const q = modQuery.trim().toLowerCase();
     const counts = new Map<string, number>();
     for (const id of draft.mounts) if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-    const fitsHull = (m: ModuleDef) => c.mounts.some((_, i) => !slotBlock(m, i));
+    const fitsHull = (m: ModuleDef) => !noFitReason(m);
     const mountedIn = (g: Group) => draft.mounts.some((id) => id && g.cats.includes(MODULE_BY_ID.get(id)!.category));
     // search looks across the whole tab; otherwise the selected group
     const cats = q ? groups.flatMap((g) => g.cats) : groups.find((g) => g.id === gid)!.cats;
@@ -1077,7 +1112,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const t = partTile({
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
         cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
-        fk: `mod-${m.id}`, title: fh ? undefined : reqReason(m) ?? `Needs a size ${ML[m.mount]} socket`,
+        fk: `mod-${m.id}`, title: fh ? (m.category === 'melee' ? 'Melee: fits edge mounts only' : undefined) : noFitReason(m) ?? undefined,
         onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
@@ -1086,18 +1121,20 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return t;
     };
     const sections: HTMLElement[] = [];
+    let hiddenN = 0;
     for (const catId of cats) {
       const def = CATEGORIES.find((k) => k.id === catId);
       const mods = MODULES.filter((m) => m.category === catId && ((!q && counts.has(m.id)) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
         .sort((a, b) => a.weight - b.weight || a.cost - b.cost);
       if (!mods.length) continue;
       const ok = mods.filter(fitsHull), no = mods.filter((m) => !fitsHull(m));
+      hiddenN += no.length;
       sections.push(
         h('div.g-sec', { style: { '--cat': CATEGORY_COLOR[catId] ?? '#b0b8c0' } },
           h('span.g-sec-name', null, def?.name ?? catId),
           h('span.g-sec-desc', null, def?.desc ?? '')),
         ...(ok.length ? [h('div.g-ptiles', { role: 'group', 'aria-label': def?.name ?? catId }, ...ok.map(tile))] : []),
-        ...overflow(`${which}-${catId}`, no.length === 1 ? 'needs a bigger socket' : 'need bigger sockets', no.map(tile)),
+        ...(showAllMods && no.length ? [h('div.g-ptiles.g-dimmed', null, ...no.map(tile))] : []),
       );
     }
     const search = kit.textField({
@@ -1124,6 +1161,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       activeSlot !== null ? h('div.g-slotnote', null,
         h('span', null, 'Fitting socket ', h('b', null, String(activeSlot + 1)), ' ', h('span.g-chip', { class: `c${slotCls}` }, ML[slotCls!]), ' · double-click a part to mount it'),
         h('button.g-rclear', { type: 'button', onclick: () => { activeSlot = null; sfx('click'); update(); } }, icon('x'), 'Done')) : null,
+      hiddenN || showAllMods ? h('button.g-showall', {
+        type: 'button', 'aria-pressed': String(showAllMods), 'data-fk': 'showall',
+        title: 'Parts that fit no socket on this chassis + drive are hidden; show them greyed out',
+        onclick: () => { showAllMods = !showAllMods; sfx('click'); update(); },
+      }, showAllMods ? 'Hide unusable parts' : `Show all (${hiddenN} hidden)`) : null,
       ...(sections.length ? sections : [h('p.g-nomatch', null, `No ${which} match.`)]),
     ].filter(Boolean) as HTMLElement[];
   }
@@ -1202,7 +1244,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const cur = c.id === draft.chassis;
     const next = cur ? null : (() => {
       const mobility = pairingError(c.id, draft.mobility) ? firstLegalMobility(c.id) : draft.mobility;
-      return { ...draft, chassis: c.id, mobility, mounts: reseat(draft.mounts, c) };
+      return { ...draft, chassis: c.id, mobility, mounts: reseat(draft.mounts, c, mobility) };
     })();
     return [
       inspHead('chassis', c.id, c.name, [h('span.g-plate', null, `${footprintLabel(c.size)} × ${footprintLabel(c.size)}`), roleTags(c.roles, 2)]),
@@ -1299,7 +1341,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('p.g-insp-desc', null, m.desc),
       next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
-        h('span.g-sec-l', null, lock ?? (c.mounts.some((_, i) => !slotBlock(m, i)) ? 'Mount in' : `Needs a size ${ML[m.mount]} socket`)),
+        h('span.g-sec-l', null, lock ?? noFitReason(m) ?? 'Mount in'),
         h('div.g-sockbtns', null, ...socketBtns)),
       ...details(specs, [fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null]),
     ].filter(Boolean) as HTMLElement[];

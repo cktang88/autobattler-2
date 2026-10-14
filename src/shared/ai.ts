@@ -15,7 +15,7 @@
 //    an empty action, which is always legal while the side may deploy.
 
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from './parts.ts';
-import { computeStats, defaultOrders, designModules, MAX_LEVEL, validateDesign, type DefaultOrders } from './stats.ts';
+import { computeStats, defaultOrders, designModules, MAX_LEVEL, slotError, validateDesign, type DefaultOrders } from './stats.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap, squadSize } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
@@ -201,7 +201,7 @@ export function generateDesign(rng: Rng, role: Role, id: string, giant = false):
     if (!mobPool.length) continue;
     const mob = pick(rng, mobPool);
     const mounts: (string | null)[] = c.mounts.map((slot, i) => {
-      const cands = MODULES.filter((m) => fitsMount(slot, m.mount))
+      const cands = MODULES.filter((m) => !slotError(c, mob.id, i, m))
         .map((m) => ({ item: m.id, w: moduleWeight(m, role, i === 0) * (m.mount === slot ? 1.6 : 0.6) }));
       return weightedPick(rng, cands);
     });

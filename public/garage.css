@@ -284,12 +284,17 @@
 
 /* drag feedback (stage + strip) */
 .garage.dragging .g-sock.can .g-sock-ring { border: 3px solid var(--teal) !important; background: radial-gradient(circle, rgba(53, 214, 191, 0.3), rgba(5, 7, 9, 0.4) 70%); box-shadow: 0 0 0 2px var(--ink), 0 0 18px rgba(53, 214, 191, 0.6); animation: g-sockpulse 0.9s ease-in-out infinite; }
+.garage.picking:not(.dragging) .g-sock.can .g-sock-ring { border: 3px solid var(--teal) !important; background: radial-gradient(circle, rgba(53, 214, 191, 0.3), rgba(5, 7, 9, 0.4) 70%); box-shadow: 0 0 0 2px var(--ink), 0 0 18px rgba(53, 214, 191, 0.6);  }
 .garage.dragging .g-sock.cant { opacity: 0.35; }
+.garage.picking:not(.dragging) .g-sock.cant { opacity: 0.35; }
 .garage.dragging .g-sock.cant .g-sock-ring { border: 2px solid var(--red) !important; animation: none; background: rgba(60, 10, 8, 0.5); }
+.garage.picking:not(.dragging) .g-sock.cant .g-sock-ring { border: 2px solid var(--red) !important; animation: none; background: rgba(60, 10, 8, 0.5); }
 .garage.dragging .g-sock.hot.can .g-sock-ring { transform: scale(1.22); border-color: var(--amber) !important; background: radial-gradient(circle, rgba(255, 178, 30, 0.45), rgba(5, 7, 9, 0.3) 70%); box-shadow: 0 0 0 2px var(--ink), 0 0 26px rgba(255, 178, 30, 0.8); }
 .garage.dragging .g-sock-tag { opacity: 1; }
 .garage.dragging .g-lslot.can { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--teal); }
+.garage.picking:not(.dragging) .g-lslot.can { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--teal); }
 .garage.dragging .g-lslot.cant { opacity: 0.4; }
+.garage.picking:not(.dragging) .g-lslot.cant { opacity: 0.4; }
 .garage.dragging .g-lslot.hot.can { background: #3a3218; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--amber); }
 .garage.drag-out .g-stage { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px #4a2a20, inset 0 0 70px rgba(0, 0, 0, 0.65); }
 
@@ -849,3 +854,19 @@
 .garage .g-zoomlbl { min-width: 38px; text-align: center; font-family: var(--head); font-weight: 700; font-size: 0.94rem; color: var(--dim); }
 .garage .g-stage { cursor: grab; }
 .garage .g-stage.panning { cursor: grabbing; }
+
+/* melee-capable "edge" mounts: hazard-striped serrated ring + blade glyph */
+.garage .g-sock.edge .g-sock-ring { outline: 2px dashed #ffb21e; outline-offset: 3px; }
+.garage .g-sock.edge.full .g-sock-ring { border-color: #ffb21e; border-style: double; }
+.garage .g-sock.edge::before {
+  content: ''; position: absolute; inset: -6px; border-radius: 50%; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, #ffb21e 0 12deg, transparent 12deg 24deg);
+  -webkit-mask: radial-gradient(circle, transparent calc(50% - 4px), #000 calc(50% - 3px), #000 50%, transparent calc(50% + 1px));
+  mask: radial-gradient(circle, transparent calc(50% - 4px), #000 calc(50% - 3px), #000 50%, transparent calc(50% + 1px));
+  opacity: 0.9;
+}
+.garage .g-sock-edge { position: absolute; right: -7px; top: -9px; width: 15px; height: 15px; border-radius: 50%; background: var(--ink); color: #ffb21e; font-size: 11px; line-height: 15px; text-align: center; pointer-events: none; box-shadow: 0 0 0 1px #ffb21e; }
+.garage .g-lslot.edge { background-image: repeating-linear-gradient(-45deg, rgba(255, 178, 30, 0.16) 0 6px, transparent 6px 12px); }
+.garage .g-lslot-edge { font-family: var(--head); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #ffb21e; padding: 1px 5px; box-shadow: inset 0 0 0 1px rgba(255, 178, 30, 0.6); white-space: nowrap; }
+.garage .g-showall { display: block; margin: 8px 0; padding: 4px 10px; font-family: var(--head); font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim2); background: transparent; border: 1px dashed var(--plate4); cursor: pointer; }
+.garage .g-showall:hover, .garage .g-showall[aria-pressed="true"] { color: var(--txt); border-color: var(--txt); }
