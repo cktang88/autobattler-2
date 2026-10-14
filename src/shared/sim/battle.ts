@@ -4,7 +4,7 @@
 // Each tick: weapons (targeting, turrets, firing) -> movement -> spatial hash -> separation/crush ->
 // auras -> projectiles -> bookkeeping -> end check.
 
-import { CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
+import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, mountOffsets } from '../mountgeo.ts';
 import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
@@ -73,6 +73,8 @@ const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will 
 const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
+/** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
+const KITE_PAUSE = 0.15;
 const ENGAGE_SHARE = 0.999; // halt once ALL weapons that can hit the goal are in range (no reason to close further unless melee/charge)
 
 // spatial hash
@@ -81,7 +83,8 @@ const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
 const SAT_N = (HCOLS + 1) * (HROWS + 1);
-const MAX_RADIUS = 4.0; // bounding radius of the largest hull (titans up to 8x8: ~0.45 * 8 = 3.6)
+/** bounding radius of the largest hull (0.45 * longest footprint side; the 10x10 weaver titan reaches 4.5), at least 4 */
+const MAX_RADIUS = CHASSIS.reduce((m, c) => Math.max(m, 0.45 * Math.max(c.footprint?.[0] ?? c.size, c.footprint?.[1] ?? c.size)), 4.0);
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
@@ -1391,7 +1394,9 @@ export class Battle {
 
   private rail(u: SimUnit, w: Wpn, aim: number, raw: number, ap: number, airBonus: number, mx: number, my: number, fx: ModuleDef | null, lm: number, mi = -1): void {
     const c = Math.cos(aim), s = Math.sin(aim);
-    const len = w.range;
+    // reaches as far as a held target may be (range * RANGE_KEEP, to the target's footprint, like inRange): measured to
+    // the centre, a big hull whose edge is in range sat beyond the slug and every shot missed
+    const len = w.range * RANGE_KEEP;
     const ex = mx + c * len, ey = my + s * len;
     const units = this.units;
     for (let j = 0; j < units.length; j++) {
@@ -1399,9 +1404,10 @@ export class Battle {
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const dx = o.x - mx, dy = o.y - my;
       const along = dx * c + dy * s;
-      if (along < -0.3 || along > len + 0.3) continue;
+      const ob = this.ints[j].bound;
+      if (along < -0.3 || along > len + ob) continue;
       const perp = Math.abs(-dx * s + dy * c);
-      if (perp <= this.ints[j].bound + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
+      if (perp <= ob + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
     }
     this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side, unit: u.id, mount: mi });
   }
@@ -1667,13 +1673,47 @@ export class Battle {
       const id = this.scratch[q];
       const o = this.units[id];
       if (!o.alive || o.side === p.side || o.flying !== p.air || id === p.ignore || (p.pierce && p.hits.includes(id))) continue;
-      const r = this.ints[id].radius;
+      const O = this.ints[id];
+      if (O.elong) {
+        // elongated hull: its capsule (the same shape separation uses), not the mean-radius circle -- a long hull
+        // seen end-on reaches ~hl toward the shooter, where range checks find it but a circle let flames fall short
+        const t = this.segCapsule(ox, oy, sx, sy, O);
+        if (t >= 0 && (t < bestT || (t === bestT && id < best))) { bestT = t; best = id; }
+        continue;
+      }
+      const r = O.radius;
       let t = len2 > 0 ? ((o.x - ox) * sx + (o.y - oy) * sy) / len2 : 0;
       t = clamp(t, 0, 1);
       const qx = ox + sx * t - o.x, qy = oy + sy * t - o.y;
       if (qx * qx + qy * qy <= r * r && (t < bestT || (t === bestT && id < best))) { bestT = t; best = id; }
     }
     return best;
+  }
+
+  /** Does the segment (ox, oy) + (sx, sy) * t, t in [0, 1], touch O's capsule? Returns t of its closest approach, or -1. */
+  private segCapsule(ox: number, oy: number, sx: number, sy: number, O: Internal): number {
+    const o = O.u;
+    const ar = O.capAcross ? o.angle + Math.PI / 2 : o.angle;
+    const vx = Math.cos(ar) * O.capS, vy = Math.sin(ar) * O.capS;
+    // closest points of P(t) = A + d1 t and Q(s) = B + d2 s, t, s in [0, 1] (core segment B = centre - v, d2 = 2v)
+    const d1x = sx, d1y = sy, d2x = 2 * vx, d2y = 2 * vy;
+    const rx = ox - (o.x - vx), ry = oy - (o.y - vy);
+    const a = d1x * d1x + d1y * d1y, e = d2x * d2x + d2y * d2y, f = d2x * rx + d2y * ry;
+    let t = 0, s = 0;
+    if (a <= 1e-12) s = e > 1e-12 ? clamp(f / e, 0, 1) : 0;
+    else {
+      const c = d1x * rx + d1y * ry;
+      if (e <= 1e-12) t = clamp(-c / a, 0, 1);
+      else {
+        const b = d1x * d2x + d1y * d2y, den = a * e - b * b;
+        t = den > 1e-12 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+        s = (b * t + f) / e;
+        if (s < 0) { s = 0; t = clamp(-c / a, 0, 1); }
+        else if (s > 1) { s = 1; t = clamp((b - c) / a, 0, 1); }
+      }
+    }
+    const qx = rx + d1x * t - d2x * s, qy = ry + d1y * t - d2y * s;
+    return qx * qx + qy * qy <= O.capR * O.capR ? t : -1;
   }
 
   // ---------------------------------------------------------------- movement
@@ -1730,12 +1770,12 @@ export class Battle {
     // Engaged = every weapon that could hit our goal is holding a target, i.e. the whole armament is in range.
     // Until then keep closing (so a long-range gun alone doesn't park a brawler out of reach of its main guns);
     // after that, stop — there's no reason to close further unless melee or Charge.
-    let engagedDps = 0, relevantDps = 0;
+    let engagedDps = 0, relevantDps = 0, relevantR = 0;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
       if (!w || w.heal > 0) continue;
       const tg = u.mounts[mi].target;
-      if (!goal || this.canHit(w, goal)) relevantDps += w.dps;
+      if (!goal || this.canHit(w, goal)) { relevantDps += w.dps; relevantR = Math.max(relevantR, w.range); }
       if (tg >= 0) engagedDps += w.dps;
     }
     const engaged = engagedDps > 0 && engagedDps >= ENGAGE_SHARE * relevantDps;
@@ -1773,7 +1813,10 @@ export class Battle {
         if (this.gap(I, this.ints[goal.id]) <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
       } else if (kiteR < 0.7) {
         // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
-        if (!I.fireOnMove && I.wpns.some((w, wi) => w && w.heal <= 0 && u.mounts[wi].cooldown <= 0.15 && u.mounts[wi].target >= 0)) return;
+        // Only the kite gun counts, and only one with a real reload cycle: a rapid-fire gun (mg: 0.15 s) is "about to
+        // fire" every tick and would pin the kiter in place for good while the enemy closes.
+        const kw = I.wpns[kiteMi]!, km = u.mounts[kiteMi];
+        if (!I.fireOnMove && (kw.def.cooldown ?? 1) > 2 * KITE_PAUSE && km.cooldown <= KITE_PAUSE && km.target >= 0 && u.disarm <= 0) return; // (a disarmed gun will not fire: keep running)
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
         gy = clamp(u.y - (dy / Math.max(d, 1e-6)) * 3, I.radius, FIELD_H - I.radius);
         stopDist = 0;
@@ -1809,13 +1852,17 @@ export class Battle {
           }
         }
         // far away: advance mostly straight ahead so formations hold their shape
-        const engageR = I.maxRange;
+        // only the guns that can hit this goal count (an AA-only long gun must not park us out of reach of a ground goal)
+        const engageR = relevantR > 0 ? relevantR : I.maxRange;
         const lw = clamp(1 - (d - engageR - 2) / 8, 0.3, 1);
         let hx = dx, hy = dy;
         if (I.hold && this.anchorN[I.block] > 0) {
-          // formation: aim at our slot around the goal, pulled toward our slot around the squad's anchor
-          hx += I.offx + 0.6 * (this.anchorX[I.block] + I.offx - u.x);
-          hy += I.offy + 0.6 * (this.anchorY[I.block] + I.offy - u.y);
+          // formation: aim at our slot around the goal, pulled toward our slot around the squad's anchor. The pull
+          // fades out as we close to our own weapon range: an outer member's slot can lie farther from the goal than
+          // its guns reach, and it used to park there for good (squadmate spacing is still kept by separation).
+          const kf = clamp((d - engageR) / (Math.hypot(I.offx, I.offy) + 1), 0, 1);
+          hx += kf * (I.offx + 0.6 * (this.anchorX[I.block] + I.offx - u.x));
+          hy += kf * (I.offy + 0.6 * (this.anchorY[I.block] + I.offy - u.y));
         }
         gx = u.x + hx * lw;
         gy = u.y + hy;
