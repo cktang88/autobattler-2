@@ -1,7 +1,7 @@
 // Size-class balance check: equal-supply fights by chassis size and giant/titan designs vs mixed armies.
 // Usage: node scripts/size-check.ts 1,1,1,1,1   (multipliers applied on top of SIZE_K for experiments)
 import { Battle } from '../src/shared/sim/battle.ts';
-import { computeStats, SIZE_K } from '../src/shared/stats.ts';
+import { computeStats, PRICE_DIV, SIZE_K } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { blockDims, DEPLOY_W, DEPLOY_D, rectsOverlap } from '../src/shared/grid.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
@@ -18,7 +18,7 @@ function pack(list: Design[]): Placement[] {
 }
 function army(budget: number, pool: Design[], seed: number): Design[] {
   const out: Design[] = []; let left = budget; let i = seed * 5;
-  for (let g = 0; g < 400 && left >= 50; g++) { const d = pool[i++ % pool.length]; const c = computeStats(d).cost; if (c <= left) { out.push(d); left -= c; } }
+  for (let g = 0; g < 400 && left >= 50 / PRICE_DIV; g++) { const d = pool[i++ % pool.length]; const c = computeStats(d).cost; if (c <= left) { out.push(d); left -= c; } }
   return out;
 }
 function fight(a: Design[], b: Design[], seed: number) {
@@ -30,10 +30,10 @@ const big = [D('garg', 'goliath', 'megatracks', ['avenger', 'cannon', 'twin120',
   ...STARTER_DESIGNS.filter((d) => computeStats(d).size >= 4)];
 const by = (k: number) => STARTER_DESIGNS.filter((d) => computeStats(d).size === k);
 const mixed = STARTER_DESIGNS.filter((d) => computeStats(d).size <= 2);
-const N = 4; const res: string[] = [];
+const N = Number(process.env.N ?? 4); const res: string[] = [];
 const vs = (A: (s: number) => Design[], Bf: (s: number) => Design[]) => { let w = 0, n = 0; for (let s = 0; s < N; s++) { const a = A(s), b = Bf(s); if (fight(a, b, 10 + s) === 0) w++; n++; if (fight(b, a, 20 + s) === 1) w++; n++; } return Math.round(100 * w / n); };
-res.push('s1v2 ' + vs((s) => army(6000, by(1), s), (s) => army(6000, by(2), s)));
-res.push('s2v3 ' + vs((s) => army(6000, by(2), s), (s) => army(6000, by(3), s)));
-res.push('s3vMix ' + vs((s) => army(6000, by(3), s), (s) => army(6000, mixed, s)));
+res.push('s1v2 ' + vs((s) => army(6000 / PRICE_DIV, by(1), s), (s) => army(6000 / PRICE_DIV, by(2), s)));
+res.push('s2v3 ' + vs((s) => army(6000 / PRICE_DIV, by(2), s), (s) => army(6000 / PRICE_DIV, by(3), s)));
+res.push('s3vMix ' + vs((s) => army(6000 / PRICE_DIV, by(3), s), (s) => army(6000 / PRICE_DIV, mixed, s)));
 for (const b of big) { const c = computeStats(b).cost; res.push(`${b.id}(${c}) ` + vs(() => [b], (s) => army(c, mixed, s))); }
 console.log(mult.join(','), '|', res.join('  '));

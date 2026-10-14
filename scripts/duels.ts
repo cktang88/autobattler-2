@@ -61,7 +61,7 @@ const DESIGNS: Design[] = [
   D('hoverraid', 'scout', 'hover', ['hmg']), // fastest ground raider squad
   D('wheelraid', 'raider', 'wheels', ['hmg', 'hmg']),
   // melee / short range
-  D('ripper', 'raider', 'legs', ['buzzsaw', 'shockprod']), // starter Gnasher (squad)
+  D('ripper', 'mantis', 'legs', ['buzzsaw', 'shockprod']), // starter Gnasher (squad)
   D('mantis', 'mantis', 'jumpjets', ['buzzsaw', 'buzzsaw']),
   D('torch', 'scout', 'halftrack', ['flamer']), // starter Torchbug (squad)
   D('brawler', 'striker', 'halftrack', ['minigun', 'twin30', 'shotgun']), // starter Voltrider

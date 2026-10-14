@@ -128,20 +128,20 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 2.67, ac20: 3.112, ac40: 2.955, aegisT: 1.25, annihilator: 5.47, arclance: 1.93, atgm: 6.95,
-  autocannon: 2.096, autoloader: 2.35, avenger: 3.625, barrage: 5.701, bombs: 2.263, bulwarkshield: 1.53, buzzsaw: 0.67,
-  cannon: 1.205, cannon75: 3.152, chainsaw: 1.54, claw: 1.97, clusterbombs: 3.747, cruise: 6.89, disarm: 0.05,
-  dome: 1.0, domeG: 1.0, doomsday: 8.613, drill: 1.08, empcannon: 0.496, flak: 1.34, flamer: 0.874, gauss: 3.021,
-  gravity: 1.81, grinder: 4.33, guidedrocket: 3.31, gyro: 0.10, hammer: 1.22, hardened: 0.13, heatray: 0.33,
-  heavyflak: 2.318, hmg: 2.268, howitzer: 4.149, incendiary: 0.699, inferno: 2.032, jammer: 0.25, laser: 3.65,
-  lightrail: 9.06, massdriver: 3.67, mg: 1.964, minigun: 1.438, mirror: 0.31, missilebattery: 2.93, mlrs: 4.942,
-  mortar: 2.51, nanite: 0.10, napalm: 0.864, overclock: 0.22, phantom: 0.14, plasma: 3.03, plasmablade: 1.34,
-  plasmaorb: 2.186, pointdef: 3.3, quad20: 2.639, railgun: 5.38, ram: 0.37, reactive: 0.88, repair: 4.2,
-  repairM: 4.17, rocketL: 2.012, rockets: 1.595, sam: 1.92, selfdestruct: 0.22, sensor: 1.0, shield: 1.04,
-  shieldH: 1.11, shieldL: 0.84, shockprod: 1.85, shotgun: 2.873, siege240: 1.88, siegeplasma: 2.885, skyfortress: 4.001,
-  slowbeam: 3.16, smoke: 4.00, sniper: 16.717, sonic: 0, stealth: 0.20, stormcore: 2.55, stormtower: 3.05,
-  stungun: 1.29, swarm: 2.717, tactnuke: 5.72, targeting: 3.45, tesla: 1.22, titanfist: 3.39, turbo: 0.10,
-  twin120: 2.574, twin30: 1.666, twinlaser: 2.76, twinmg: 2.369, uplink: 0.3,
+  aamissile: 3.74, ac20: 3.07, ac40: 2.44, aegisT: 1.25, annihilator: 3.56, arclance: 2.20, atgm: 1.22,
+  autocannon: 2.46, autoloader: 2.35, avenger: 0.67, barrage: 7.54, bombs: 1.16, bulwarkshield: 1.53, buzzsaw: 0.35,
+  cannon: 0.96, cannon75: 4.91, chainsaw: 0.90, claw: 1.46, clusterbombs: 5.60, cruise: 8.78, disarm: 1.46,
+  dome: 1.0, domeG: 1.0, doomsday: 8.01, drill: 2.29, empcannon: 0.39, flak: 1.37, flamer: 0.37, gauss: 5.56,
+  gravity: 3.09, grinder: 2.29, guidedrocket: 2.42, gyro: 0.10, hammer: 1.25, hardened: 0.13, heatray: 0.60,
+  heavyflak: 5.46, hmg: 3.17, howitzer: 13.25, incendiary: 0.50, inferno: 2.36, jammer: 0.25, laser: 5.85,
+  lightrail: 7.45, massdriver: 0.30, mg: 2.95, minigun: 0.77, mirror: 0.31, missilebattery: 2.28, mlrs: 4.86,
+  mortar: 2.54, nanite: 0.10, napalm: 1.33, overclock: 0.22, phantom: 0.14, plasma: 6.39, plasmablade: 1.04,
+  plasmaorb: 2.20, pointdef: 3.3, quad20: 2.97, railgun: 11.66, ram: 0.76, reactive: 0.88, repair: 4.2,
+  repairM: 4.17, rocketL: 2.18, rockets: 0.74, sam: 3.14, selfdestruct: 0.22, sensor: 1.0, shield: 1.04,
+  shieldH: 1.11, shieldL: 0.84, shockprod: 0.68, shotgun: 1.39, siege240: 1.54, siegeplasma: 0.48, skyfortress: 2.80,
+  slowbeam: 5.00, smoke: 4.00, sniper: 30.00, sonic: 1.04, stealth: 0.20, stormcore: 0.33, stormtower: 2.09,
+  stungun: 1.22, swarm: 2.64, tactnuke: 5.85, targeting: 3.45, tesla: 1.37, titanfist: 2.82, turbo: 0.10,
+  twin120: 0.50, twin30: 2.76, twinlaser: 2.86, twinmg: 5.39, uplink: 0.3,
   // [aura balance] aura strengths (uplink, dome, domeG, jammer, sensor above and these two) were set by hand after the
   // radius rework: `node scripts/balance.ts army 3 <id>` (every unit carries the aura -> heavy overlap) lands at a
   // delta of -7..+2, i.e. a little overpriced when massed, and `node scripts/auras.ts field` (ONE carrier escorting a

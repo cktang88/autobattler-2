@@ -268,7 +268,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'L', kind: 'armor', weight: 26, cost: 130, armor: 16, hp: 1200 },
   // ---------------- Titan class (T mounts, size-5 chassis) ----------------
   wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.', category: 'precision', visual: 'rail', turretTurn: 0.5, barrels: 2, caliber: 1, mount: 'XL', weight: 38, cost: 220,
-    damage: 1400, cooldown: 6, range: 28, ...GA, projectile: 'rail', ap: 1, pierce: true }),
+    damage: 1700, cooldown: 6, range: 28, ...GA, projectile: 'rail', ap: 1, pierce: true }),
   wpn({ id: 'doomsday', name: 'Doomsday Howitzer', family: 'Titan artillery', desc: 'Twin super-heavy howitzer. Craters half a company per salvo. Minimum range 50 m.', category: 'artillery', visual: 'artillery', barrels: 2, caliber: 1, mount: 'XL', weight: 40, cost: 230,
     damage: 700, cooldown: 8, range: 40, minRange: 10, ...G, projectile: 'arc', projectileSpeed: 14, splash: 4, ap: 0.5, spread: 1.5 }),
   wpn({ id: 'annihilator', name: 'Annihilator Beam', family: 'Titan beam', desc: 'Continuous plasma beam that cuts through anything.', category: 'energy', visual: 'plasma', barrels: 2, caliber: 1, mount: 'XL', weight: 36, cost: 220,

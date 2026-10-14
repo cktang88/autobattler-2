@@ -322,6 +322,22 @@ if (mode === 'shard') {
       upd[r.id] = (MODULE_CAL[r.id] || MIN_CAL) * Math.min(1.7, Math.max(0.6, step));
       (hist[r.id] ??= []).push(MODULE_CAL[r.id] ?? 1);
     }
+    // BAL_LEVEL=1: on the first iteration also move each group's anchored level once towards 50% vs the reference
+    // (its class-mean-centred ref score, damped: step = (c/(1-c))^0.5 within 0.7..1.4; anti-air groups use the raw air-ref score).
+    if (it === 0 && process.env.BAL_LEVEL) {
+      const cm: Record<string, number> = {};
+      for (const z of ['S', 'M', 'L', 'XL']) { const xs = rows.filter((r) => r.size === z && !GROUPS.find((g) => g.size === r.size && g.name === r.group)?.air).map((r) => r.refM); cm[z] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0.5; }
+      for (const g of GROUPS) {
+        const rs = rows.filter((r) => r.size === g.size && r.group === g.name);
+        if (!rs.length) continue;
+        const gm = rs.reduce((a, r) => a + r.refM, 0) / rs.length;
+        const c = Math.min(0.9, Math.max(0.1, g.air ? gm : gm - cm[g.size] + 0.5));
+        const m = Math.min(1.4, Math.max(0.7, Math.pow(c / (1 - c), 0.5)));
+        const ids = g.ids.filter((id) => id in upd);
+        anchor[`${g.size} ${g.name}`] = Math.exp(ids.reduce((a, id) => a + Math.log(MODULE_CAL[id] || MIN_CAL), 0) / ids.length) * m;
+        console.log(`level ${g.size} ${g.name}: ref ${(gm * 100).toFixed(0)}% -> x${m.toFixed(2)}`);
+      }
+    }
     for (const g of GROUPS) {
       const ids = g.ids.filter((id) => id in upd);
       if (!ids.length) continue;
