@@ -5,7 +5,7 @@ import { h } from '../app.ts';
 import * as kit from './kit.ts';
 import { sfx } from '../audio.ts';
 import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
-import { computeStats, firingStyle, levelMult, weaponDps } from '../../shared/stats.ts';
+import { computeStats, firingStyle, levelMult, weaponDps, type DefaultOrders } from '../../shared/stats.ts';
 import { blockDims, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { START_DELAYS, STANCES, TARGET_PRIORITIES, type Design, type ModuleDef, type Side, type Size, type Stance, type TargetPriority, type UnitBehavior, type UnitStats } from '../../shared/types.ts';
@@ -96,24 +96,27 @@ export type Orders = {
   kiteMount: number;
 };
 export const DEFAULT_ORDERS: Orders = { target: 'closest', focus: false, stance: 'advance', kite: false, hold: false, delay: 0, retreat: false, kiteMount: -1 };
-export const ordersOf = (b: UnitBehavior | undefined): Orders => ({
+const NO_DEFAULTS: DefaultOrders = { kite: false, focus: false };
+/** Full orders from stored fields; kite / focus left unset fall back to the design's defaults (defaultOrders(design)). */
+export const ordersOf = (b: UnitBehavior | undefined, defs: DefaultOrders = NO_DEFAULTS): Orders => ({
   target: b?.target && TARGET_PRIORITIES.includes(b.target) ? b.target : 'closest',
-  focus: !!b?.focus,
+  focus: typeof b?.focus === 'boolean' ? b.focus : defs.focus,
   stance: b?.stance && STANCES.includes(b.stance) ? b.stance : 'advance',
-  kite: !!b?.kite,
+  kite: typeof b?.kite === 'boolean' ? b.kite : defs.kite,
   hold: !!b?.hold,
   delay: (START_DELAYS as readonly number[]).includes(b?.delay ?? 0) ? (b?.delay ?? 0) : 0,
   retreat: !!b?.retreat,
   kiteMount: b?.kiteMount != null && b.kiteMount >= 0 ? b.kiteMount : -1,
 });
 export const ordersEqual = (a: Orders, b: Orders) => (Object.keys(DEFAULT_ORDERS) as (keyof Orders)[]).every((k) => a[k] === b[k]);
-export const isCustomOrders = (o: Orders) => !ordersEqual(o, DEFAULT_ORDERS);
-/** compact form: only non-default fields (what Placement / Design.behavior store) */
-export const orderFields = (o: Orders): UnitBehavior => ({
+export const isCustomOrders = (o: Orders, defs: DefaultOrders = NO_DEFAULTS) => !ordersEqual(o, { ...DEFAULT_ORDERS, ...defs });
+/** compact form: only non-default fields (what Placement / Design.behavior store); kite / focus are stored (as
+ *  true or false) only when they differ from the design's defaults, so unset keeps following the defaults */
+export const orderFields = (o: Orders, defs: DefaultOrders = NO_DEFAULTS): UnitBehavior => ({
   ...(o.target !== 'closest' ? { target: o.target } : {}),
-  ...(o.focus ? { focus: true } : {}),
+  ...(o.focus !== defs.focus ? { focus: o.focus } : {}),
   ...(o.stance !== 'advance' ? { stance: o.stance } : {}),
-  ...(o.kite ? { kite: true } : {}),
+  ...(o.kite !== defs.kite ? { kite: o.kite } : {}),
   ...(o.kite && o.kiteMount >= 0 ? { kiteMount: o.kiteMount } : {}),
   ...(o.hold ? { hold: true } : {}),
   ...(o.delay ? { delay: o.delay } : {}),
@@ -139,7 +142,7 @@ export interface EscortUi { label: string | null; picking: boolean; onPick(): vo
 
 /** Compact battle-AI panel. Targeting (priority + focus fire) / Movement (stance, kite, keep spread, delay, retreat, escort). */
 export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void,
-  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[] } = {}): HTMLElement {
+  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[]; defaults?: DefaultOrders } = {}): HTMLElement {
   const chip = (label: string, tip: string, v: boolean, key: keyof Orders) =>
     kit.toggle({ label, on: v, title: tip, className: `ord-${String(key)}`, onChange: (nv) => on({ [key]: nv }) });
   const tgt = kit.select({
@@ -161,7 +164,7 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
     onChange: (v) => on({ kiteMount: Number(v) }),
   })) : null;
   return h('div.orders', null,
-    h('div.sp-head', null, h('span', null, 'Battle orders'), opts.custom !== false && isCustomOrders(o) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
+    h('div.sp-head', null, h('span', null, 'Battle orders'), opts.custom !== false && isCustomOrders(o, opts.defaults) ? h('span.custom-tag', { title: 'Differs from the default orders' }, 'custom') : null),
     h('div.ord-group', null,
       h('div.ord-title', null, 'Targeting'),
       h('div.ord-row', null, tgt, chip('Focus fire', 'Prefer the target nearby allies are already shooting', o.focus, 'focus')),
@@ -170,7 +173,7 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
       h('div.ord-title', null, 'Movement'),
       h('div.ord-row', null, stance),
       h('div.ord-row.chips', null,
-        chip('Kite', 'Stay at maximum weapon range and back away from enemies that close in', o.kite, 'kite'),
+        chip('Kite', 'Hold at the edge of your own weapon range: close in until in range, back away from enemies that come closer', o.kite, 'kite'),
         squad ? chip('Keep spread', 'Squad units hold their deployed spacing while moving', o.hold, 'hold') : null,
         chip('Retreat', 'Below 30% HP fall back toward your lines or repair; return above 70%', o.retreat, 'retreat'),
       ),

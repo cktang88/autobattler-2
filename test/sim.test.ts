@@ -4,7 +4,7 @@ import { Battle as SimBattle } from '../src/shared/sim/battle.ts';
 import { MAX_TICKS } from '../src/shared/sim/types.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, placementUnitCenters } from '../src/shared/grid.ts';
 import type { BattleInput } from '../src/shared/sim/types.ts';
-import { validateDesign } from '../src/shared/stats.ts';
+import { defaultOrders, validateDesign } from '../src/shared/stats.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
@@ -495,7 +495,7 @@ import { computeStats } from '../src/shared/stats.ts';
 import type { TargetPriority } from '../src/shared/types.ts';
 
 function pickedTarget(prio: TargetPriority, enemyA: string, enemyB: string, tweak?: (near: Battle['units'][number], far: Battle['units'][number]) => void): { near: number; far: number; got: number } {
-  const b = new Battle(input(1, [{ ...P('sniperw', 10, 0), target: prio }], [P(enemyA, 8, 0), P(enemyB, 12, 1)]));
+  const b = new Battle(input(1, [{ ...P('sniperw', 10, 0), target: prio, kite: false, focus: false }], [P(enemyA, 8, 0), P(enemyB, 12, 1)]));
   const near = b.units[1], far = b.units[2];
   tweak?.(near, far);
   for (let i = 0; i < 600 && b.units[0].mounts[0].target < 0; i++) b.step();
@@ -853,6 +853,48 @@ test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar',
   const onMortar = run(0), onMg = run(1), dflt = run();
   assert.ok(onMg < onMortar - 1, `mg ${onMg} vs mortar ${onMortar}`);
   assert.ok(Math.abs(dflt - onMortar) < 0.5, 'default = longest-range weapon');
+});
+
+test('kite: an outranged kiter closes in to its own firing range (from its mount) and never backs off while out of range', () => {
+  // flamerear: a rear-mounted short-range gun (the old hull-centre distance parked it just out of reach for good)
+  const rear = D('flamerear', 'longarm', 'treads', ['flamer']);
+  assert.deepEqual(validateDesign(rear), []);
+  const designs = [...DESIGNS, rear];
+  for (const kd of ['flamerear', 'mgtank']) {
+    const b = new Battle({ seed: 3, sides: [{ designs, units: [{ ...P(kd, 10, 0), kite: true }] }, { designs, units: mirrorShift([{ ...P('sniperw', 10, 0), stance: 'holdPos' }]) }] });
+    const k = b.units[0], e = b.units[1];
+    e.x = k.x; e.y = k.y - 20;
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    const hp0 = e.hp;
+    let prev = Infinity, hitAt = -1;
+    for (let i = 0; i < 500 && !b.done && hitAt < 0; i++) {
+      b.step();
+      const d = Math.hypot(k.x - e.x, k.y - e.y);
+      if (e.hp < hp0) hitAt = i;
+      else assert.ok(d <= prev + 1e-9, `${kd} backed off while out of range at tick ${i}: ${d} > ${prev}`);
+      prev = d;
+    }
+    assert.ok(hitAt >= 0 && e.hp < hp0, `${kd} never damaged the longer-ranged enemy`);
+  }
+});
+
+test('default orders: kite / focus derived from the design; unset placements use them, explicit values win', () => {
+  const des = (id: string) => DESIGNS.find((d) => d.id === id)!;
+  const want: Record<string, [boolean, boolean]> = {
+    sniperw: [true, true], arty: [true, true], mortartruck: [true, true], // long guns: kite + focus
+    bulwark: [false, true], gunner: [false, true], buggy: [false, true], // frontline-range guns: focus only
+    torch: [false, false], brawler: [false, false], sonic: [false, false], // flamers / melee / short range: neither
+    spire: [false, true], hornet: [false, true], // static / flying: never kite by default
+  };
+  for (const [id, [kite, focus]] of Object.entries(want)) assert.deepEqual(defaultOrders(des(id)), { kite, focus }, id);
+  type Ints = { ints: { kite: boolean; focus: boolean }[] };
+  const mk = (pl: Placement) => new Battle({ seed: 1, sides: [{ designs: DESIGNS, units: [pl] }, { designs: DESIGNS, units: mirrorShift([P('bulwark', 10, 0)]) }] }) as unknown as Ints;
+  const unset = mk(P('sniperw', 10, 0)).ints[0];
+  assert.deepEqual([unset.kite, unset.focus], [true, true]);
+  const off = mk({ ...P('sniperw', 10, 0), kite: false, focus: false }).ints[0];
+  assert.deepEqual([off.kite, off.focus], [false, false]);
+  const on = mk({ ...P('bulwark', 10, 0), kite: true }).ints[0];
+  assert.deepEqual([on.kite, on.focus], [true, true]);
 });
 
 test('non-square footprints: long units spawn on their footprint centre and contact uses the long axis', () => {

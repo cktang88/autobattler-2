@@ -17,7 +17,7 @@ import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockD
 import { mountOffsets } from '../../shared/mountgeo.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
-import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
+import { MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
 import { mapForRound } from '../render/ground.ts';
@@ -564,11 +564,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
   type OrdersPatch = Partial<Orders> & { escort?: number }; // escort -1 = clear
   const blockSrc = (sl: NonNullable<Sel>) => (sl.pending ? place.find((x) => x.uid === sl.uid) : m.players[sl.side].board.find((x) => x.uid === sl.uid));
+  /** the design's default kite / focus orders (what unset placement fields resolve to, as in the sim) */
+  const defsOf = (s: Side, designId: string) => defaultOrders(designOf(s, designId));
   const blockOrders = (sl: NonNullable<Sel>): Orders | null => {
     const p = blockSrc(sl);
     if (!p) return null;
     const c = sl.pending ? undefined : cfg.get(p.uid);
-    return ordersOf({ ...p, ...(c ?? {}) });
+    return ordersOf({ ...p, ...(c ?? {}) }, defsOf(sl.side, p.designId));
   };
   const blockEscort = (sl: NonNullable<Sel>): number | undefined => {
     const p = blockSrc(sl);
@@ -590,7 +592,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const i = place.findIndex((x) => x.uid === sl.uid);
       if (i < 0) return;
       const { target: _t, hold: _h, kite: _k, kiteMount: _km, focus: _f, stance: _s, delay: _d, retreat: _r, escort: _e, ...rest } = place[i];
-      const np: Placement = { ...rest, ...orderFields({ ...next, hold: next.hold && hasSpacing(sizeOf(designOf(side, rest.designId))) }), ...(esc != null ? { escort: esc } : {}) };
+      const np: Placement = { ...rest, ...orderFields({ ...next, hold: next.hold && hasSpacing(sizeOf(designOf(side, rest.designId))) }, defsOf(side, rest.designId)), ...(esc != null ? { escort: esc } : {}) };
       const cand = action();
       cand.place[i] = np;
       const err = check(cand);
@@ -601,7 +603,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (!base) return;
       const prev = cfg.get(sl.uid);
       const entry: UnitConfig = { uid: sl.uid, ...next, escort: esc ?? -1 };
-      const same = ordersEqual(next, ordersOf(base)) && (esc ?? -1) === (base.escort ?? -1);
+      const same = ordersEqual(next, ordersOf(base, defsOf(side, base.designId))) && (esc ?? -1) === (base.escort ?? -1);
       if (same) cfg.delete(sl.uid); else cfg.set(sl.uid, entry);
       const err = check(action());
       if (err) { if (prev) cfg.set(sl.uid, prev); else cfg.delete(sl.uid); sfx('invalid'); app.toast(err, 'error'); return; }
@@ -613,7 +615,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function dropEscortsTo(uid: number) {
     place = place.map((p) => { if (p.escort !== uid) return p; const { escort: _e, ...r } = p; return r; });
     for (const [k, c] of cfg) if (c.escort === uid) { const b = m.players[side].board.find((x) => x.uid === k); if (b?.escort != null && b.escort >= 0) c.escort = -1; else cfg.delete(k); }
-    for (const b of m.players[side].board) if (b.escort === uid && !cfg.has(b.uid)) cfg.set(b.uid, { uid: b.uid, ...ordersOf(b), escort: -1 });
+    for (const b of m.players[side].board) if (b.escort === uid && !cfg.has(b.uid)) cfg.set(b.uid, { uid: b.uid, ...ordersOf(b, defsOf(side, b.designId)), escort: -1 });
   }
 
   function setCardSpacing(v: number) {
@@ -788,7 +790,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost)), squad > 1 ? h('span.sc-blk', null, ` block of ${squad}`) : null),
       )),
       statCard({ design: d, st, level: lv, spacing: sp, upgraded: ups > 0, onRing: onRingHi }),
-      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)) } : {})) : '',
+      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)), defaults: defsOf(s.side, p.designId) } : { defaults: defsOf(s.side, p.designId) })) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, footOf(d))) : '',
       h('div.parts', null, parts),
       actions.length ? h('div.actions', null, ...actions) : '',
@@ -866,7 +868,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   // ---------- deploy actions ----------
-  const newOrders = (designId: string, size: Size) => { const o = ordersOf(designOf(side, designId)?.behavior); return orderFields({ ...o, hold: hasSpacing(size) && o.hold }); };
+  const newOrders = (designId: string, size: Size) => { const defs = defsOf(side, designId); const o = ordersOf(designOf(side, designId)?.behavior, defs); return orderFields({ ...o, hold: hasSpacing(size) && o.hold }, defs); };
 
   function computeHover(px: number, py: number): typeof hover {
     const d = deck()[selCard];
