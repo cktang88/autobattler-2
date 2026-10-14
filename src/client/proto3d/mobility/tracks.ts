@@ -218,9 +218,10 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
     } else if (style === 'round') {
       for (const z of zs) {
         // short nacelles set back: the hull's prow runs out ahead of them
-        const s = Math.sign(z), TL = c.L * 0.8, xb = new XBld(b, place(-c.L * 0.08, 0, 0));
-        trackUnit(xb, k, TL, h, w, z, s, { skirt: false, noFender: true, cleatMaxY: h * 0.42 });
-        trackNacelle(xb, k, TL, h, w, z, s);
+        // and toed in at the front, so hull + nacelles read as one arrowhead from above
+        const s = Math.sign(z), TL = c.L * 0.74, xb = new XBld(b, place(-c.L * 0.1, 0, z - s * w * 0.08, s * 0.09));
+        trackUnit(xb, k, TL, h, w, 0, s, { skirt: false, noFender: true, cleatMaxY: h * 0.42 });
+        trackNacelle(xb, k, TL, h, w, 0, s);
       }
     } else if (style === 'pods') {
       const PL = c.L * 0.4;
@@ -259,7 +260,7 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
       for (const f of [-1, 1]) b.cyl(k.metal, h * 0.09, h * 0.09, c.W * 0.86, [f * c.L * 0.32, h * 0.5, -c.W * 0.43], 'z', 8);
     } else if (style === 'wall') {
       // walls set back so the ram prow leads
-      for (const z of zs) wallSkirt(new XBld(b, place(-c.L * 0.08, 0, 0)), k, c.L * 0.8, h, w, z, Math.sign(z));
+      for (const z of zs) wallSkirt(new XBld(b, place(-c.L * 0.14, 0, 0)), k, c.L * 0.66, h, w, z, Math.sign(z));
     } else if (style === 'twin') {
       // long inner tracks under the spine (set back), short outer tracks in rounded nacelles under the sponsons
       for (const z of zs) {

@@ -41,8 +41,8 @@ function goliath(c: ChassisCtx): ChassisOut {
     [-2.45 * kx, 0.9 * kz, yt - 0.06, yt + 0.1 * v, yt + 0.32 * v, 0.6],
     [-2.0 * kx, 1.25 * kz, yt - 0.08, yt + 0.14 * v, yt + 0.5 * v, 0.66],
     [-0.75 * kx, 1.62 * kz, yt - 0.1, yt + 0.2 * v, yt + 0.85 * v, 0.66],
-    [0.45 * kx, 1.72 * kz, yt - 0.1, yt + 0.24 * v, yt + 1.32 * v, 0.6],
-    [1.35 * kx, 1.5 * kz, yt - 0.08, yt + 0.22 * v, yt + 1.28 * v, 0.56],
+    [0.45 * kx, 1.72 * kz, yt - 0.1, yt + 0.24 * v, yt + 1.5 * v, 0.6],
+    [1.35 * kx, 1.5 * kz, yt - 0.08, yt + 0.22 * v, yt + 1.45 * v, 0.56],
     [2.15 * kx, 1.05 * kz, yt - 0.06, yt + 0.14 * v, yt + 0.7 * v, 0.56],
   ];
   stationHull(b, kit.hull, st, 0, 0.92);
@@ -51,7 +51,13 @@ function goliath(c: ChassisCtx): ChassisOut {
   block(b, kit.trim, fx, yt - 0.04, 0, 0.5 * kx, 1.9 * kz, 0.5 * v, { top: [0.4, 0.9], shift: [0.1 * kx, 0], ch: 0.2 * k, bev: 0.04 });
   glow(b, kit, fx + 0.2 * kx, fy + 0.12 * v, 0, 0.06, 0.07 * v, 1.2 * kz, [0, 0, -0.75]);
   both((s) => glow(b, kit, fx + 0.12 * kx, fy + 0.1 * v, s * 0.78 * kz, 0.06, 0.06 * v, 0.24 * kz, [s * 0.35, 0, -0.75]));
-  block(b, kit.panel, 1.62 * kx, stationTop(st, 1.62 * kx, 0) - 0.06, 0, 0.7 * kx, 1.6 * kz, 0.16 * v, { top: [0.7, 0.85], shift: [0.08 * kx, 0], ch: 0.2 * k, bev: 0.05 });
+  // angry slanted eye slits on the brow slope (the brawler's face from the RTS camera)
+  both((s) => {
+    const ex = 1.85 * kx, ez = s * 0.5 * kz, ey = stationTop(st, ex, ez);
+    b.box(kit.trim, 0.42 * kx, 0.06, 0.4 * kz, ex, ey + 0.01, ez, 0.02, [s * 0.25, s * 0.3, -0.75]);
+    glow(b, kit, ex + 0.02, ey + 0.04, ez, 0.3 * kx, 0.05, 0.12 * kz, [s * 0.25, s * 0.3, -0.75]);
+  });
+  block(b, kit.panel, 1.3 * kx, stationTop(st, 1.3 * kx, 0) - 0.06, 0, 0.7 * kx, 1.6 * kz, 0.16 * v, { top: [0.7, 0.85], shift: [0.08 * kx, 0], ch: 0.2 * k, bev: 0.05 });
   // dozer ram between the front pods: angled blade, hazard band, tusks at the corners
   if (!legged) {
     const rx = 2.42 * kx, rw = Math.min(2.2 * kz, wi * 2.05);
@@ -159,7 +165,7 @@ function leviathan(c: ChassisCtx): ChassisOut {
   const fwdY = bar(fwdX, 0.3 * v), aftY = bar(aftX, 0.42 * v);
   // bridge tower: stepped pagoda between the big guns, glass bridge band, mast with radar yard
   const bx = -0.2 * kx, d0 = deck(bx, 0);
-  const t1 = d0 + 0.6 * v, t2 = t1 + 0.55 * v, t3 = t2 + 0.4 * v;
+  const t1 = d0 + 0.75 * v, t2 = t1 + 0.7 * v, t3 = t2 + 0.5 * v;
   block(b, kit.hull, bx, d0 - 0.04, 0, 1.6 * kx, 1.0 * kz, t1 - d0 + 0.04, { top: [0.9, 0.86], ch: 0.3 * k, bev: 0.05, bot: 0.04 });
   block(b, kit.panel, bx - 0.05 * kx, t1 - 0.02, 0, 1.1 * kx, 0.8 * kz, t2 - t1 + 0.02, { top: [0.86, 0.84], shift: [-0.04 * kx, 0], ch: 0.24 * k, bev: 0.04 });
   block(b, kit.hull, bx + 0.05 * kx, t2 - 0.02, 0, 0.8 * kx, 0.95 * kz, t3 - t2 + 0.02, { top: [0.8, 0.86], shift: [0.04 * kx, 0], ch: 0.22 * k, bev: 0.05 });
@@ -167,8 +173,12 @@ function leviathan(c: ChassisCtx): ChassisOut {
   glow(b, kit, bx + 0.44 * kx, t2 + 0.06 * v, 0, 0.04, 0.04, 0.74 * kz, [0, 0, -0.5]);
   // bridge wings reaching out over the sponsons
   both((s) => { block(b, kit.hull, bx + 0.25 * kx, t2 + 0.1 * v, s * 0.62 * kz, 0.4 * kx, 0.42 * kz, 0.14 * v, { top: [0.8, 0.8], ch: 0.08 * k }); glow(b, kit, bx + 0.45 * kx, t2 + 0.17 * v, s * 0.62 * kz, 0.03, 0.04, 0.3 * kz); });
-  mast(b, kit, bx - 0.1 * kx, t3, 0, 1.3 * v, 0.045);
-  b.box(kit.metal, 0.06, 0.06, 0.9 * kz, bx - 0.1 * kx, t3 + 0.85 * v, 0, 0.01);
+  mast(b, kit, bx - 0.1 * kx, t3, 0, 1.7 * v, 0.05);
+  b.box(kit.metal, 0.06, 0.06, 1.1 * kz, bx - 0.1 * kx, t3 + 1.1 * v, 0, 0.01);
+  b.box(kit.metal, 0.05, 0.05, 0.7 * kz, bx - 0.1 * kx, t3 + 1.4 * v, 0, 0.01);
+  // rotating-radar style dish on the bridge roof
+  b.lathe(kit.panel, [[0, 0], [0.3 * k, 0.1 * k], [0.34 * k, 0.16 * k], [0, 0.05 * k]], [bx + 0.15 * kx, t3 + 0.25 * v, 0.25 * kz], 'y', 12, [0, 0, 0.6]);
+  b.cyl(kit.metal, 0.04, 0.04, 0.25 * v, [bx + 0.15 * kx, t3, 0.25 * kz], 'y', 6);
   sensor(b, kit, bx + 0.1 * kx, t3 + 0.08 * v, 0, 0.2 * k);
   // raked funnel behind the bridge
   const fx = -0.95 * kx, fy = deck(fx, 0);
@@ -205,9 +215,9 @@ registerChassis('leviathan', leviathan);
 function broodmother(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   // authored for the 5 (long) x 7 (wide) footprint; art box ~3.75 x 4.9 holds the body, legs splay to the footprint
-  const kx = L / 5, kz = W / 7, k = Math.min(kx, kz);
+  const kx = L / 5 * 1.12, kz = W / 7 * 1.12, k = Math.min(kx, kz);
   const spider = stance.legs === 'spider';
-  const by = spider ? stance.hipY : stance.legs === 'biped' ? stance.hipY + 0.1 : Math.max(stance.yt, 0.5) + 0.55 * k;
+  const by = spider ? stance.hipY * 1.3 : stance.legs === 'biped' ? stance.hipY + 0.1 : Math.max(stance.yt, 0.5) + 0.55 * k;
   if (!spider && stance.legs !== 'biped') {
     // anchored: squat armoured plinth under the body
     planLoft(b, kit.trim, ngon(8, 1.5 * kx, 1.5 * kz), [[0, 1.1], [by - 0.3, 1.0], [by, 0.85]], [-0.3 * kx, 0]);

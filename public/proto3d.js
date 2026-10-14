@@ -38070,7 +38070,7 @@ function warden(c) {
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.12 * k);
   const wi = Math.min(stance.wi, 0.62 * kz);
   frustum(b, kit.trim, sc(mirrorPlan([[0.9, wi * 0.45], [0.62, wi], [-0.84, wi], [-0.95, wi * 0.8]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.02 });
-  const up = sc(mirrorPlan([[1.06, 0.14], [0.3, 0.9], [-0.5, 0.9], [-0.98, 0.5]]), kx, kz);
+  const up = sc(mirrorPlan([[1.1, 0.12], [0.22, 0.76], [-0.42, 0.76], [-1, 0.3]]), kx, kz);
   const hU = 0.3 * k, uy = yt - 0.03 * k;
   frustum(b, kit.hull, up, uy, hU, { top: [0.76, 0.66], shift: [-0.1 * kx, 0], bot: 0.03 * k, bev: 0.035 * k, mid: [[0.42, 0.95, 0.94]] });
   const deckY = uy + hU;
@@ -38079,10 +38079,10 @@ function warden(c) {
   b.slab(kit.panel, sc([[1.07, 0], [0.74, 0.66], [0.6, 0.66], [0.93, 0], [0.6, -0.66], [0.74, -0.66]], kx, kz), (yt - y0) * 0.9, 0.02 * k, 0, y0 + 0.02 * k, 0);
   hazard(b, kit, 0.9 * kx, y0 + (yt - y0) * 0.92 + 0.02 * k, 0, 0.14 * kx, 0.12 * kz, 2, 0);
   both((s) => {
-    block(b, kit.panel, -0.1 * kx, uy + 0.02 * k, s * 0.82 * kz, 0.7 * kx, 0.12 * kz, hU * 0.6, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
-    glow(b, kit, -0.1 * kx, uy + hU * 0.42, s * 0.86 * kz, 0.5 * kx, 0.025 * k, 0.025 * k);
+    block(b, kit.panel, -0.1 * kx, uy + 0.02 * k, s * 0.7 * kz, 0.56 * kx, 0.12 * kz, hU * 0.6, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
+    glow(b, kit, -0.1 * kx, uy + hU * 0.42, s * 0.74 * kz, 0.4 * kx, 0.025 * k, 0.025 * k);
     b.box(kit.lamp, 0.03 * k, 0.05 * k, 0.1 * k, 0.86 * kx, uy + hU * 0.3, s * 0.24 * kz, 0.01, [0, s * 0.9, 0]);
-    exhaust(b, kit, -0.84 * kx, deckY - 0.1 * k, s * 0.38 * kz, 0.06 * k, 0.12 * k);
+    exhaust(b, kit, -0.72 * kx, deckY - 0.12 * k, s * 0.36 * kz, 0.06 * k, 0.14 * k);
   });
   vent(b, kit, -0.62 * kx, deckY - 5e-3, 0, 0.18 * kx, 0.4 * kz, 3, "x");
   b.decal(0.18 * k, 0.18 * k, 0.4 * kx, deckY + 3e-3, -0.22 * kz, atlasUV(1), 0);
@@ -38314,11 +38314,11 @@ function juggernaut(c) {
   const kx = L / 3, kz = W / 4, k = Math.min(kx, kz);
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
   frustum(b, kit.trim, sc(mirrorPlan([[1.3, 0.5], [1, Math.min(stance.wi, 1.5)], [-1.3, Math.min(stance.wi, 1.5)], [-1.45, 1]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.03 });
-  const t1 = sc(mirrorPlan([[1.5, 0.36], [0.62, 1.98], [-1.2, 1.98], [-1.48, 1.4]]), kx, kz);
+  const t1 = sc(mirrorPlan([[1.52, 0.3], [0.45, 1.98], [-0.95, 1.98], [-1.48, 1.1]]), kx, kz);
   const h1 = 0.4 * k, y1 = yt - 0.06 * k;
   frustum(b, kit.hull, t1, y1, h1, { top: [0.9, 0.93], shift: [-0.06 * kx, 0], bot: 0.05 * k, bev: 0.05 * k });
   const d1 = y1 + h1;
-  const t2 = sc(mirrorPlan([[0.74, 0.3], [0.18, 1.4], [-1.1, 1.4], [-1.3, 1]]), kx, kz);
+  const t2 = sc(mirrorPlan([[0.74, 0.26], [0.05, 1.4], [-0.85, 1.4], [-1.3, 0.8]]), kx, kz);
   const h2 = 0.3 * k;
   frustum(b, kit.trim, scalePlan(t2, 1.04, 1.03), d1 - 0.03 * k, 0.07 * k, { top: [0.99, 0.99], bev: 0.015 * k });
   frustum(b, kit.hull, t2, d1 + 0.02 * k, h2 - 0.02 * k, { top: [0.86, 0.88], shift: [-0.06 * kx, 0], bev: 0.04 * k, mid: [[0.3, 0.98, 0.99]] });
@@ -38328,16 +38328,16 @@ function juggernaut(c) {
   const mx = main?.x ?? -0.42 * kx, mz = main?.z ?? 0;
   const keepY = d2 + 0.2 * k;
   frustum(b, kit.hull, ngon(6, 0.62 * k, 0.66 * k, 0, mx, mz), d2 - 0.03 * k, keepY - d2 + 0.03 * k, { top: [0.86, 0.86], bev: 0.03 * k });
-  b.slab(kit.panel, sc([[1.62, 0], [1.1, 1.95], [0.92, 1.95], [1.4, 0], [0.92, -1.95], [1.1, -1.95]], kx, kz), yt - y0 + 0.14 * k, 0.03 * k, 0, y0 - 0.04 * k, 0);
+  b.slab(kit.panel, sc([[1.74, 0], [0.62, 2], [0.44, 2], [1.55, 0], [0.44, -2], [0.62, -2]], kx, kz), yt - y0 + 0.14 * k, 0.03 * k, 0, y0 - 0.04 * k, 0);
   for (const z of [-0.95, 0, 0.95]) {
-    const x = (z === 0 ? 1.62 : 1.36) * kx;
+    const x = (z === 0 ? 1.74 : 1.2) * kx;
     b.cyl(kit.steel, 0.09 * k, 5e-3, 0.2 * k, [x - 0.02 * kx, y0 + (yt - y0) * 0.5, z * kz], "x", 8);
   }
   both((s) => {
-    hazard(b, kit, 1.3 * kx, yt + 0.11 * k, s * 0.55 * kz, 0.5 * kx, 0.1 * kz, 4, s * -1.26);
-    glow(b, kit, 0.5 * kx, d1 + h2 * 0.5, s * 0.75 * kz, 0.03 * k, 0.04 * k, 0.7 * kz, [0, s * 1.2, -0.5]);
-    b.box(kit.lamp, 0.03 * k, 0.06 * k, 0.12 * k, 0.98 * kx, y1 + h1 * 0.45, s * 1.25 * kz, 0.012, [0, s * 1.07, 0]);
-    block(b, kit.hull, -0.3 * kx, d1 - 0.02 * k, s * 1.7 * kz, 1.2 * kx, 0.22 * kz, 0.12 * k, { top: [0.9, 0.6], shift: [0, -s * 0.04 * kz], ch: 0.05 * k, bev: 0.03 * k });
+    hazard(b, kit, 1.33 * kx, yt + 0.11 * k, s * 0.6 * kz, 0.6 * kx, 0.1 * kz, 4, s * 1.06);
+    glow(b, kit, 0.4 * kx, d1 + h2 * 0.5, s * 0.75 * kz, 0.03 * k, 0.04 * k, 0.7 * kz, [0, s * 1.2, -0.5]);
+    b.box(kit.lamp, 0.03 * k, 0.06 * k, 0.12 * k, 0.86 * kx, y1 + h1 * 0.45, s * 1.25 * kz, 0.012, [0, s * 1, 0]);
+    block(b, kit.hull, -0.3 * kx, d1 - 0.02 * k, s * 1.7 * kz, 0.9 * kx, 0.22 * kz, 0.12 * k, { top: [0.9, 0.6], shift: [0, -s * 0.04 * kz], ch: 0.05 * k, bev: 0.03 * k });
     exhaust(b, kit, -1.3 * kx, d1 - 0.04 * k, s * 0.5 * kz, 0.07 * k, 0.16 * k);
   });
   vent(b, kit, -1.18 * kx, d1 - 5e-3, -0.1 * kz, 0.16 * kx, 0.5 * kz, 3, "x");
@@ -38466,8 +38466,8 @@ function goliath(c) {
     [-2.45 * kx, 0.9 * kz, yt - 0.06, yt + 0.1 * v, yt + 0.32 * v, 0.6],
     [-2 * kx, 1.25 * kz, yt - 0.08, yt + 0.14 * v, yt + 0.5 * v, 0.66],
     [-0.75 * kx, 1.62 * kz, yt - 0.1, yt + 0.2 * v, yt + 0.85 * v, 0.66],
-    [0.45 * kx, 1.72 * kz, yt - 0.1, yt + 0.24 * v, yt + 1.32 * v, 0.6],
-    [1.35 * kx, 1.5 * kz, yt - 0.08, yt + 0.22 * v, yt + 1.28 * v, 0.56],
+    [0.45 * kx, 1.72 * kz, yt - 0.1, yt + 0.24 * v, yt + 1.5 * v, 0.6],
+    [1.35 * kx, 1.5 * kz, yt - 0.08, yt + 0.22 * v, yt + 1.45 * v, 0.56],
     [2.15 * kx, 1.05 * kz, yt - 0.06, yt + 0.14 * v, yt + 0.7 * v, 0.56]
   ];
   stationHull(b, kit.hull, st, 0, 0.92);
@@ -38475,7 +38475,12 @@ function goliath(c) {
   block(b, kit.trim, fx2, yt - 0.04, 0, 0.5 * kx, 1.9 * kz, 0.5 * v, { top: [0.4, 0.9], shift: [0.1 * kx, 0], ch: 0.2 * k, bev: 0.04 });
   glow(b, kit, fx2 + 0.2 * kx, fy + 0.12 * v, 0, 0.06, 0.07 * v, 1.2 * kz, [0, 0, -0.75]);
   both((s) => glow(b, kit, fx2 + 0.12 * kx, fy + 0.1 * v, s * 0.78 * kz, 0.06, 0.06 * v, 0.24 * kz, [s * 0.35, 0, -0.75]));
-  block(b, kit.panel, 1.62 * kx, stationTop(st, 1.62 * kx, 0) - 0.06, 0, 0.7 * kx, 1.6 * kz, 0.16 * v, { top: [0.7, 0.85], shift: [0.08 * kx, 0], ch: 0.2 * k, bev: 0.05 });
+  both((s) => {
+    const ex = 1.85 * kx, ez = s * 0.5 * kz, ey = stationTop(st, ex, ez);
+    b.box(kit.trim, 0.42 * kx, 0.06, 0.4 * kz, ex, ey + 0.01, ez, 0.02, [s * 0.25, s * 0.3, -0.75]);
+    glow(b, kit, ex + 0.02, ey + 0.04, ez, 0.3 * kx, 0.05, 0.12 * kz, [s * 0.25, s * 0.3, -0.75]);
+  });
+  block(b, kit.panel, 1.3 * kx, stationTop(st, 1.3 * kx, 0) - 0.06, 0, 0.7 * kx, 1.6 * kz, 0.16 * v, { top: [0.7, 0.85], shift: [0.08 * kx, 0], ch: 0.2 * k, bev: 0.05 });
   if (!legged) {
     const rx = 2.42 * kx, rw = Math.min(2.2 * kz, wi * 2.05);
     block(b, kit.metal, rx - 0.15 * kx, 0.1, 0, 0.36 * kx, rw * 0.8, y0 + 0.2, { ch: 0.1 * k });
@@ -38574,7 +38579,7 @@ function leviathan(c) {
   };
   const fwdY = bar(fwdX, 0.3 * v), aftY = bar(aftX, 0.42 * v);
   const bx2 = -0.2 * kx, d0 = deck(bx2, 0);
-  const t1 = d0 + 0.6 * v, t2 = t1 + 0.55 * v, t3 = t2 + 0.4 * v;
+  const t1 = d0 + 0.75 * v, t2 = t1 + 0.7 * v, t3 = t2 + 0.5 * v;
   block(b, kit.hull, bx2, d0 - 0.04, 0, 1.6 * kx, 1 * kz, t1 - d0 + 0.04, { top: [0.9, 0.86], ch: 0.3 * k, bev: 0.05, bot: 0.04 });
   block(b, kit.panel, bx2 - 0.05 * kx, t1 - 0.02, 0, 1.1 * kx, 0.8 * kz, t2 - t1 + 0.02, { top: [0.86, 0.84], shift: [-0.04 * kx, 0], ch: 0.24 * k, bev: 0.04 });
   block(b, kit.hull, bx2 + 0.05 * kx, t2 - 0.02, 0, 0.8 * kx, 0.95 * kz, t3 - t2 + 0.02, { top: [0.8, 0.86], shift: [0.04 * kx, 0], ch: 0.22 * k, bev: 0.05 });
@@ -38584,8 +38589,11 @@ function leviathan(c) {
     block(b, kit.hull, bx2 + 0.25 * kx, t2 + 0.1 * v, s * 0.62 * kz, 0.4 * kx, 0.42 * kz, 0.14 * v, { top: [0.8, 0.8], ch: 0.08 * k });
     glow(b, kit, bx2 + 0.45 * kx, t2 + 0.17 * v, s * 0.62 * kz, 0.03, 0.04, 0.3 * kz);
   });
-  mast(b, kit, bx2 - 0.1 * kx, t3, 0, 1.3 * v, 0.045);
-  b.box(kit.metal, 0.06, 0.06, 0.9 * kz, bx2 - 0.1 * kx, t3 + 0.85 * v, 0, 0.01);
+  mast(b, kit, bx2 - 0.1 * kx, t3, 0, 1.7 * v, 0.05);
+  b.box(kit.metal, 0.06, 0.06, 1.1 * kz, bx2 - 0.1 * kx, t3 + 1.1 * v, 0, 0.01);
+  b.box(kit.metal, 0.05, 0.05, 0.7 * kz, bx2 - 0.1 * kx, t3 + 1.4 * v, 0, 0.01);
+  b.lathe(kit.panel, [[0, 0], [0.3 * k, 0.1 * k], [0.34 * k, 0.16 * k], [0, 0.05 * k]], [bx2 + 0.15 * kx, t3 + 0.25 * v, 0.25 * kz], "y", 12, [0, 0, 0.6]);
+  b.cyl(kit.metal, 0.04, 0.04, 0.25 * v, [bx2 + 0.15 * kx, t3, 0.25 * kz], "y", 6);
   sensor(b, kit, bx2 + 0.1 * kx, t3 + 0.08 * v, 0, 0.2 * k);
   const fx2 = -0.95 * kx, fy = deck(fx2, 0);
   block(b, kit.trim, fx2, fy - 0.03, 0, 0.75 * kx, 0.66 * kz, 1.25 * v, { top: [0.8, 0.8], shift: [-0.12 * kx, 0], ch: 0.2 * k, bev: 0.04 });
@@ -38625,9 +38633,9 @@ function leviathan(c) {
 registerChassis("leviathan", leviathan);
 function broodmother(c) {
   const { b, kit, L, W, stance } = c;
-  const kx = L / 5, kz = W / 7, k = Math.min(kx, kz);
+  const kx = L / 5 * 1.12, kz = W / 7 * 1.12, k = Math.min(kx, kz);
   const spider = stance.legs === "spider";
-  const by = spider ? stance.hipY : stance.legs === "biped" ? stance.hipY + 0.1 : Math.max(stance.yt, 0.5) + 0.55 * k;
+  const by = spider ? stance.hipY * 1.3 : stance.legs === "biped" ? stance.hipY + 0.1 : Math.max(stance.yt, 0.5) + 0.55 * k;
   if (!spider && stance.legs !== "biped") {
     planLoft(b, kit.trim, ngon2(8, 1.5 * kx, 1.5 * kz), [[0, 1.1], [by - 0.3, 1], [by, 0.85]], [-0.3 * kx, 0]);
   }
@@ -38760,7 +38768,7 @@ function titanWalker(c) {
     glowGrille(b, kit, 0.62 * u, ty0 + 0.65 * u, s * 0.95 * u, 0.5 * u, 0.4 * u, 3);
     glow(b, kit, -0.5 * u, ty1 - 0.3 * u, s * 1.62 * u, 1.3 * u, 0.06 * u, 0.06 * u);
   });
-  const hy = ty1 - 0.2 * u;
+  const hy = ty1 - 0.05 * u;
   block(b, kit.trim, 0.3 * u, ty1 - 0.35 * u, 0, 1.1 * u, 1.3 * u, 0.5 * u, { top: [0.8, 0.8], ch: 0.3 * u });
   block(b, kit.hull, 0.62 * u, hy, 0, 0.9 * u, 0.85 * u, 0.62 * u, { top: [0.6, 0.72], shift: [-0.1 * u, 0], ch: 0.24 * u, bev: 0.06 * u });
   glow(b, kit, 1.02 * u, hy + 0.33 * u, 0, 0.07 * u, 0.09 * u, 0.62 * u, [0, 0, -0.9]);
@@ -39035,9 +39043,9 @@ registerMobility(["treads", "halftrack", "megatracks"], {
       block(b, k.trim, 0, h * 0.25, 0, c.L * 0.66, c.W * 0.56, h * 0.6, { ch: h * 0.2 });
     } else if (style === "round") {
       for (const z of zs2) {
-        const s = Math.sign(z), TL = c.L * 0.8, xb = new XBld(b, place(-c.L * 0.08, 0, 0));
-        trackUnit(xb, k, TL, h, w, z, s, { skirt: false, noFender: true, cleatMaxY: h * 0.42 });
-        trackNacelle(xb, k, TL, h, w, z, s);
+        const s = Math.sign(z), TL = c.L * 0.74, xb = new XBld(b, place(-c.L * 0.1, 0, z - s * w * 0.08, s * 0.09));
+        trackUnit(xb, k, TL, h, w, 0, s, { skirt: false, noFender: true, cleatMaxY: h * 0.42 });
+        trackNacelle(xb, k, TL, h, w, 0, s);
       }
     } else if (style === "pods") {
       const PL = c.L * 0.4;
@@ -39072,7 +39080,7 @@ registerMobility(["treads", "halftrack", "megatracks"], {
       }
       for (const f of [-1, 1]) b.cyl(k.metal, h * 0.09, h * 0.09, c.W * 0.86, [f * c.L * 0.32, h * 0.5, -c.W * 0.43], "z", 8);
     } else if (style === "wall") {
-      for (const z of zs2) wallSkirt(new XBld(b, place(-c.L * 0.08, 0, 0)), k, c.L * 0.8, h, w, z, Math.sign(z));
+      for (const z of zs2) wallSkirt(new XBld(b, place(-c.L * 0.14, 0, 0)), k, c.L * 0.66, h, w, z, Math.sign(z));
     } else if (style === "twin") {
       for (const z of zs2) {
         const s = Math.sign(z);
@@ -40816,7 +40824,7 @@ function arachne(c) {
   const { b, kit, L, W, stance } = c;
   const u = Math.min(L, W) / 10;
   const spider = stance.legs === "spider";
-  const by = spider ? stance.hipY * 1.3 : stance.legs === "biped" ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1 * u;
+  const by = spider ? stance.hipY * 1.75 : stance.legs === "biped" ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1 * u;
   if (!spider && stance.legs !== "biped") planLoft(b, kit.trim, ngon2(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1], [by, 0.85]], [-0.4 * u, 0]);
   const cx = -0.4 * u, cp = ngon2(10, 2.65 * u, 2.85 * u, 0);
   const cTop = by + 1.6 * u;
@@ -40830,8 +40838,13 @@ function arachne(c) {
     const a2 = a + Math.PI / 10;
     glow(b, kit, cx + Math.cos(a2) * 2.75 * u, by + 0.3 * u, Math.sin(a2) * 2.93 * u, 0.5 * u, 0.06 * u, 0.06 * u, [0, -a2 + Math.PI / 2, 0]);
   }
-  const tY = cTop + 0.75 * u;
-  planLoft(b, kit.hull, ngon2(8, 1 * u, 1 * u), [[cTop - 0.2 * u, 1], [tY - 0.1 * u, 0.92], [tY, 0.86]], [cx, 0]);
+  const tY = cTop + 1.35 * u;
+  planLoft(b, kit.hull, ngon2(8, 1.15 * u, 1.15 * u), [[cTop - 0.3 * u, 1], [cTop + 0.5 * u, 0.86], [tY - 0.12 * u, 0.82], [tY, 0.76]], [cx, 0]);
+  b.lathe(kit.glow, [[0.98 * u, 0], [1.03 * u, 0], [1.03 * u, 0.1 * u], [0.98 * u, 0.1 * u]], [cx, cTop + 0.62 * u, 0], "y", 16);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 + Math.PI / 6, rx = Math.cos(a), rz = Math.sin(a);
+    beam(b, i % 2 ? kit.panel : kit.accent, [cx + rx * 0.95 * u, cTop + 0.1 * u, rz * 0.95 * u], [cx + rx * 1.45 * u, tY + 0.35 * u, rz * 1.45 * u], 0.12 * u, 0.42 * u, [rx, 0, rz]);
+  }
   both((s) => hazard(b, kit, cx + 0.75 * u, tY - 0.2 * u, s * 0.45 * u, 0.5 * u, 0.16 * u, 3, 0.5 * s));
   const hx = 2.3 * u, hy = by + 0.15 * u;
   planLoft(b, kit.hull, [[1.25 * u, 0], [0.7 * u, 0.95 * u], [-0.6 * u, 1.05 * u], [-0.8 * u, 0], [-0.6 * u, -1.05 * u], [0.7 * u, -0.95 * u]], [[hy - 0.6 * u, 0.7], [hy - 0.2 * u, 1], [hy + 0.5 * u, 0.95], [hy + 0.75 * u, 0.7]], [hx, 0]);

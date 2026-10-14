@@ -16,7 +16,7 @@
 import { atlasUV } from '../materials.ts';
 import type { P2, V3 } from '../geo.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
-import { block, both, collar, dome, exhaust, glow, hazard, pod, sensor, vent, beam } from './shapes.ts';
+import { block, both, collar, exhaust, glow, hazard, pod, sensor, vent, beam } from './shapes.ts';
 import { drum, frustum, inPlan, mirrorPlan, ngon, scalePlan, xLoft, xTop, type Sec } from './tanks-kit.ts';
 
 const sc = (p: P2[], kx: number, kz: number): P2[] => p.map(([x, z]) => [x * kx, z * kz]);
@@ -32,7 +32,7 @@ function warden(c: ChassisCtx): ChassisOut {
   // belly between the running gear
   frustum(b, kit.trim, sc(mirrorPlan([[0.9, wi * 0.45], [0.62, wi], [-0.84, wi], [-0.95, wi * 0.8]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.02 });
   // arrowhead-hex upper hull: a faceted pyramid frustum, every face sloped (reads as a hex from the top camera)
-  const up = sc(mirrorPlan([[1.06, 0.14], [0.3, 0.9], [-0.5, 0.9], [-0.98, 0.5]]), kx, kz);
+  const up = sc(mirrorPlan([[1.1, 0.12], [0.22, 0.76], [-0.42, 0.76], [-1.0, 0.3]]), kx, kz);
   const hU = 0.3 * k, uy = yt - 0.03 * k;
   frustum(b, kit.hull, up, uy, hU, { top: [0.76, 0.66], shift: [-0.1 * kx, 0], bot: 0.03 * k, bev: 0.035 * k, mid: [[0.42, 0.95, 0.94]] });
   const deckY = uy + hU;
@@ -44,10 +44,10 @@ function warden(c: ChassisCtx): ChassisOut {
   hazard(b, kit, 0.9 * kx, y0 + (yt - y0) * 0.92 + 0.02 * k, 0, 0.14 * kx, 0.12 * kz, 2, 0);
   both((s) => {
     // angled cheek armour on the flank facets, glow slit, lamps on the nose facets
-    block(b, kit.panel, -0.1 * kx, uy + 0.02 * k, s * 0.82 * kz, 0.7 * kx, 0.12 * kz, hU * 0.6, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
-    glow(b, kit, -0.1 * kx, uy + hU * 0.42, s * 0.86 * kz, 0.5 * kx, 0.025 * k, 0.025 * k);
+    block(b, kit.panel, -0.1 * kx, uy + 0.02 * k, s * 0.7 * kz, 0.56 * kx, 0.12 * kz, hU * 0.6, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
+    glow(b, kit, -0.1 * kx, uy + hU * 0.42, s * 0.74 * kz, 0.4 * kx, 0.025 * k, 0.025 * k);
     b.box(kit.lamp, 0.03 * k, 0.05 * k, 0.1 * k, 0.86 * kx, uy + hU * 0.3, s * 0.24 * kz, 0.01, [0, s * 0.9, 0]);
-    exhaust(b, kit, -0.84 * kx, deckY - 0.1 * k, s * 0.38 * kz, 0.06 * k, 0.12 * k);
+    exhaust(b, kit, -0.72 * kx, deckY - 0.12 * k, s * 0.36 * kz, 0.06 * k, 0.14 * k);
   });
   vent(b, kit, -0.62 * kx, deckY - 0.005, 0, 0.18 * kx, 0.4 * kz, 3, 'x');
   b.decal(0.18 * k, 0.18 * k, 0.4 * kx, deckY + 0.003, -0.22 * kz, atlasUV(1), 0);
@@ -301,12 +301,12 @@ function juggernaut(c: ChassisCtx): ChassisOut {
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
   frustum(b, kit.trim, sc(mirrorPlan([[1.3, 0.5], [1.0, Math.min(stance.wi, 1.5)], [-1.3, Math.min(stance.wi, 1.5)], [-1.45, 1.0]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.03 });
   // tier 1: chevron shield hull, wider than long
-  const t1 = sc(mirrorPlan([[1.5, 0.36], [0.62, 1.98], [-1.2, 1.98], [-1.48, 1.4]]), kx, kz);
+  const t1 = sc(mirrorPlan([[1.52, 0.3], [0.45, 1.98], [-0.95, 1.98], [-1.48, 1.1]]), kx, kz);
   const h1 = 0.4 * k, y1 = yt - 0.06 * k;
   frustum(b, kit.hull, t1, y1, h1, { top: [0.9, 0.93], shift: [-0.06 * kx, 0], bot: 0.05 * k, bev: 0.05 * k });
   const d1 = y1 + h1;
   // tier 2: stepped casemate, set back
-  const t2 = sc(mirrorPlan([[0.74, 0.3], [0.18, 1.4], [-1.1, 1.4], [-1.3, 1.0]]), kx, kz);
+  const t2 = sc(mirrorPlan([[0.74, 0.26], [0.05, 1.4], [-0.85, 1.4], [-1.3, 0.8]]), kx, kz);
   const h2 = 0.3 * k;
   frustum(b, kit.trim, scalePlan(t2, 1.04, 1.03), d1 - 0.03 * k, 0.07 * k, { top: [0.99, 0.99], bev: 0.015 * k });
   frustum(b, kit.hull, t2, d1 + 0.02 * k, h2 - 0.02 * k, { top: [0.86, 0.88], shift: [-0.06 * kx, 0], bev: 0.04 * k, mid: [[0.3, 0.98, 0.99]] });
@@ -318,18 +318,18 @@ function juggernaut(c: ChassisCtx): ChassisOut {
   const keepY = d2 + 0.2 * k;
   frustum(b, kit.hull, ngon(6, 0.62 * k, 0.66 * k, 0, mx, mz), d2 - 0.03 * k, keepY - d2 + 0.03 * k, { top: [0.86, 0.86], bev: 0.03 * k });
   // toothed ram prow: a thick chevron blade low across the front, three spikes, hazard edge
-  b.slab(kit.panel, sc([[1.62, 0], [1.1, 1.95], [0.92, 1.95], [1.4, 0], [0.92, -1.95], [1.1, -1.95]], kx, kz), (yt - y0) + 0.14 * k, 0.03 * k, 0, y0 - 0.04 * k, 0);
+  b.slab(kit.panel, sc([[1.74, 0], [0.62, 2.0], [0.44, 2.0], [1.55, 0], [0.44, -2.0], [0.62, -2.0]], kx, kz), (yt - y0) + 0.14 * k, 0.03 * k, 0, y0 - 0.04 * k, 0);
   for (const z of [-0.95, 0, 0.95]) {
-    const x = (z === 0 ? 1.62 : 1.36) * kx;
+    const x = (z === 0 ? 1.74 : 1.2) * kx;
     b.cyl(kit.steel, 0.09 * k, 0.005, 0.2 * k, [x - 0.02 * kx, y0 + (yt - y0) * 0.5, z * kz], 'x', 8);
   }
   both((s) => {
-    hazard(b, kit, 1.3 * kx, yt + 0.11 * k, s * 0.55 * kz, 0.5 * kx, 0.1 * kz, 4, s * -1.26);
+    hazard(b, kit, 1.33 * kx, yt + 0.11 * k, s * 0.6 * kz, 0.6 * kx, 0.1 * kz, 4, s * 1.06);
     // brow vision slit on the casemate front facets
-    glow(b, kit, 0.5 * kx, d1 + h2 * 0.5, s * 0.75 * kz, 0.03 * k, 0.04 * k, 0.7 * kz, [0, s * 1.2, -0.5]);
-    b.box(kit.lamp, 0.03 * k, 0.06 * k, 0.12 * k, 0.98 * kx, y1 + h1 * 0.45, s * 1.25 * kz, 0.012, [0, s * 1.07, 0]);
+    glow(b, kit, 0.4 * kx, d1 + h2 * 0.5, s * 0.75 * kz, 0.03 * k, 0.04 * k, 0.7 * kz, [0, s * 1.2, -0.5]);
+    b.box(kit.lamp, 0.03 * k, 0.06 * k, 0.12 * k, 0.86 * kx, y1 + h1 * 0.45, s * 1.25 * kz, 0.012, [0, s * 1.0, 0]);
     // armour bolsters on the tier-1 shoulders
-    block(b, kit.hull, -0.3 * kx, d1 - 0.02 * k, s * 1.7 * kz, 1.2 * kx, 0.22 * kz, 0.12 * k, { top: [0.9, 0.6], shift: [0, -s * 0.04 * kz], ch: 0.05 * k, bev: 0.03 * k });
+    block(b, kit.hull, -0.3 * kx, d1 - 0.02 * k, s * 1.7 * kz, 0.9 * kx, 0.22 * kz, 0.12 * k, { top: [0.9, 0.6], shift: [0, -s * 0.04 * kz], ch: 0.05 * k, bev: 0.03 * k });
     exhaust(b, kit, -1.3 * kx, d1 - 0.04 * k, s * 0.5 * kz, 0.07 * k, 0.16 * k);
   });
   vent(b, kit, -1.18 * kx, d1 - 0.005, -0.1 * kz, 0.16 * kx, 0.5 * kz, 3, 'x');
@@ -348,7 +348,6 @@ function juggernaut(c: ChassisCtx): ChassisOut {
   };
 }
 
-void dome;
 registerChassis('hex', warden);
 registerChassis('fortress', bastion);
 registerChassis(['long', 'longarm'], longarm);

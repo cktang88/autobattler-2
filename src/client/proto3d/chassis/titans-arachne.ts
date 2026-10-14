@@ -30,8 +30,14 @@ function arachne(c: ChassisCtx): ChassisOut {
     glow(b, kit, cx + Math.cos(a2) * 2.75 * u, by + 0.3 * u, Math.sin(a2) * 2.93 * u, 0.5 * u, 0.06 * u, 0.06 * u, [0, -a2 + Math.PI / 2, 0]);
   }
   // turret tower for the titan gun on top of the dome
-  const tY = cTop + 0.75 * u;
-  planLoft(b, kit.hull, ngon(8, 1.0 * u, 1.0 * u), [[cTop - 0.2 * u, 1.0], [tY - 0.1 * u, 0.92], [tY, 0.86]], [cx, 0]);
+  const tY = cTop + 1.35 * u;
+  planLoft(b, kit.hull, ngon(8, 1.15 * u, 1.15 * u), [[cTop - 0.3 * u, 1.0], [cTop + 0.5 * u, 0.86], [tY - 0.12 * u, 0.82], [tY, 0.76]], [cx, 0]);
+  b.lathe(kit.glow, [[0.98 * u, 0], [1.03 * u, 0], [1.03 * u, 0.1 * u], [0.98 * u, 0.1 * u]], [cx, cTop + 0.62 * u, 0], 'y', 16);
+  // crown: swept armour fins ringing the turret tower
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6, rx = Math.cos(a), rz = Math.sin(a);
+    beam(b, i % 2 ? kit.panel : kit.accent, [cx + rx * 0.95 * u, cTop + 0.1 * u, rz * 0.95 * u], [cx + rx * 1.45 * u, tY + 0.35 * u, rz * 1.45 * u], 0.12 * u, 0.42 * u, [rx, 0, rz]);
+  }
   both((s) => hazard(b, kit, cx + 0.75 * u, tY - 0.2 * u, s * 0.45 * u, 0.5 * u, 0.16 * u, 3, 0.5 * s));
   // head: armoured prow with a cyclops lens and an eye ring
   const hx = 2.3 * u, hy = by + 0.15 * u;

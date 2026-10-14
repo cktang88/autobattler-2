@@ -74,7 +74,7 @@ function titanWalker(c: ChassisCtx): ChassisOut {
     glow(b, kit, -0.5 * u, ty1 - 0.3 * u, s * 1.62 * u, 1.3 * u, 0.06 * u, 0.06 * u);
   });
   // head: small, sunk in a gorget, glowing visor, accent crest fin, sensor horns
-  const hy = ty1 - 0.2 * u;
+  const hy = ty1 - 0.05 * u;
   block(b, kit.trim, 0.3 * u, ty1 - 0.35 * u, 0, 1.1 * u, 1.3 * u, 0.5 * u, { top: [0.8, 0.8], ch: 0.3 * u });
   block(b, kit.hull, 0.62 * u, hy, 0, 0.9 * u, 0.85 * u, 0.62 * u, { top: [0.6, 0.72], shift: [-0.1 * u, 0], ch: 0.24 * u, bev: 0.06 * u });
   glow(b, kit, 1.02 * u, hy + 0.33 * u, 0, 0.07 * u, 0.09 * u, 0.62 * u, [0, 0, -0.9]);
