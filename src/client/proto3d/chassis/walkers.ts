@@ -5,7 +5,7 @@ import type { V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import type { Bld } from '../geo.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
-import { beam, block, both, collar, dome, glow, pod, sensor, vent } from './shapes.ts';
+import { beam, block, both, collar, dome, exhaust, glow, hazard, pod, sensor, vent } from './shapes.ts';
 
 /** humanoid arm: shoulder drum, upper arm down to the elbow, forearm weapon pod (top face at podTop) */
 export function mechArm(b: Bld, kit: Kit, side: number, sh: V3, el: V3, pod0: V3, podL: number, podW: number, podH: number, t: number): number {
@@ -124,5 +124,159 @@ function orbwalker(c: ChassisCtx): ChassisOut {
   };
 }
 
+// ---- Needle Frame (mantis) ---------------------------------------------------------------------------------------------
+// A lanky fencer droid: slim spindle body, a hammerhead sensor head with a glowing slit, a long needle tail boom for
+// balance, and two raised blade arms whose wrists carry the guns with straight lance blades reaching past them.
+function needle(c: ChassisCtx): ChassisOut {
+  const { b, kit, W, L, stance } = c;
+  const k = Math.min(W, L / 2); // authored for the 1 x 2 frame
+  const biped = stance.legs === 'biped', spider = stance.legs === 'spider';
+  const bp = biped ? stance.hipY : spider ? stance.hipY + 0.08 * k : stance.y0 + 0.12 * k;
+  // pelvis drum between the hips + belly keel
+  b.cylb(kit.metal, 0.085 * k, 0.26 * k, 0.015 * k, [-0.1 * k, bp, -0.13 * k], 'z', 10);
+  // spindle body: dark keel + armoured shell, nose up
+  pod(b, kit.trim, [-0.02 * k, bp + 0.12 * k, 0], 0.28 * k, 0.09 * k, 0.11 * k, 8, 5, 2.2);
+  pod(b, kit.hull, [0.02 * k, bp + 0.2 * k, 0], 0.32 * k, 0.1 * k, 0.13 * k, 10, 5, 2.4, 0.4);
+  b.box(kit.accent, 0.3 * k, 0.012 * k, 0.04 * k, -0.02 * k, bp + 0.3 * k, 0, 0.004);
+  // tail needle: tapering boom with vanes and a glowing tip
+  b.strut(kit.hull, [-0.2 * k, bp + 0.22 * k, 0], [-0.98 * k, bp + 0.46 * k, 0], 0.055 * k, 0.012 * k, 6);
+  b.strut(kit.trim, [-0.2 * k, bp + 0.17 * k, 0], [-0.62 * k, bp + 0.3 * k, 0], 0.04 * k, 0.02 * k, 6);
+  both((s) => b.box(kit.panel, 0.16 * k, 0.012 * k, 0.12 * k, -0.6 * k, bp + 0.36 * k, s * 0.07 * k, 0.004, [0, s * 0.35, 0.3]));
+  glow(b, kit, -0.98 * k, bp + 0.46 * k, 0, 0.05 * k, 0.03 * k, 0.03 * k);
+  // neck + hammerhead: wide flat wedge, glowing slit across the front, swept-back antennae
+  beam(b, kit.trim, [0.22 * k, bp + 0.22 * k, 0], [0.44 * k, bp + 0.38 * k, 0], 0.06 * k, 0.06 * k);
+  block(b, kit.hull, 0.46 * k, bp + 0.34 * k, 0, 0.24 * k, 0.32 * k, 0.1 * k, { top: [0.55, 0.7], shift: [-0.04 * k, 0], ch: 0.08 * k, bev: 0.02 * k });
+  glow(b, kit, 0.575 * k, bp + 0.38 * k, 0, 0.02 * k, 0.025 * k, 0.22 * k);
+  both((s) => b.strut(kit.metal, [0.4 * k, bp + 0.42 * k, s * 0.1 * k], [0.16 * k, bp + 0.58 * k, s * 0.17 * k], 0.01 * k, 0.006 * k, 4));
+  // blade arms: shoulder drum, upper arm raised, forearm diving to the wrist gun, lance blade past the wrist
+  const podTop = new Map<MountSpec, number>();
+  both((s) => {
+    const m = c.mounts.find((q) => Math.sign(q.z) === s && Math.abs(q.z) > 0.15 * k);
+    const mx = m ? m.x : 0.54 * k, mz = m ? m.z : s * 0.3 * k;
+    const sh: V3 = [0.14 * k, bp + 0.24 * k, s * 0.14 * k], el: V3 = [0.22 * k, bp + 0.5 * k, s * 0.26 * k];
+    const wy = bp + 0.04 * k;
+    b.cylb(kit.metal, 0.05 * k, 0.07 * k, 0.01 * k, [sh[0], sh[1], sh[2]], s > 0 ? 'z' : '-z', 8);
+    beam(b, kit.hull, sh, el, 0.06 * k, 0.07 * k, [1, 0, 0]);
+    b.cylb(kit.metal, 0.04 * k, 0.07 * k, 0.01 * k, [el[0], el[1], el[2] - s * 0.035 * k], s > 0 ? 'z' : '-z', 8);
+    beam(b, kit.trim, el, [mx - 0.04 * k, wy + 0.06 * k, mz], 0.05 * k, 0.05 * k);
+    beam(b, kit.panel, [el[0] + 0.02 * k, el[1] + 0.03 * k, el[2]], [mx - 0.06 * k, wy + 0.1 * k, mz], 0.07 * k, 0.03 * k);
+    // wrist gun cradle
+    block(b, kit.hull, mx, wy, mz, 0.24 * k, 0.2 * k, 0.08 * k, { top: [0.8, 0.85], ch: 0.05 * k, bev: 0.015 * k });
+    // lance blade: from under the elbow down past the wrist, well ahead of the gun
+    const melee = m && (m.mod.category === 'melee' || m.mod.projectile === 'melee');
+    const tip: V3 = [mx + (melee ? 0.5 : 0.36) * k, wy - 0.12 * k, mz + s * 0.02 * k];
+    beam(b, kit.steel, [el[0] + 0.06 * k, el[1] - 0.06 * k, el[2]], tip, 0.018 * k, 0.07 * k, [0, 0, s]);
+    if (m) podTop.set(m, wy + 0.08 * k);
+  });
+  let hips: Hip[] | undefined;
+  if (biped) {
+    hips = ([-1, 1] as const).map((s) => ({ p: [-0.1 * k, stance.hipY, s * 0.13 * k] as V3, side: s, t: stance.thick, foot: [-0.08 * k, 0, s * 0.17 * k] as V3, phase: s > 0 ? Math.PI : 0 }));
+  } else if (spider) {
+    hips = [];
+    for (const [hx, fx, fz, ph] of [[0.06, 0.42, 0.55, 0], [-0.24, -0.66, 0.5, Math.PI]] as [number, number, number, number][]) for (const s of [-1, 1] as const) {
+      hips.push({ p: [hx * k, stance.hipY, s * 0.1 * k], side: s, t: stance.thick, foot: [fx * k, 0, s * fz * k], phase: ph + (s > 0 ? Math.PI : 0) });
+    }
+  }
+  const top = bp + 0.3 * k;
+  return {
+    deckAt: (x, z) => (Math.abs(z) < 0.1 * k && Math.abs(x) < 0.25 * k ? top : -1), top: bp + 0.46 * k, hips, custom: true,
+    seat: (m) => {
+      const pt = podTop.get(m);
+      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.03 * k, 12); return { y: pt, socket: true }; }
+      collar(b, kit, m.x, top, m.z, m.r, top - 0.05 * k, 12);
+      return { y: top, socket: true };
+    },
+  };
+}
+
+// ---- Warlord Mech -------------------------------------------------------------------------------------------------------
+// A hunched heavy brute: huge rounded pauldrons, a sunken head with two glowing eyes under a heavy brow, the chin gun on
+// a jutting jaw ledge, the main cannon on a dorsal hump, long arms ending in massive forearm gauntlets that nearly
+// drag (the arm weapons ride on them), and a cross-mounted reactor drum on the back.
+function warlord(c: ChassisCtx): ChassisOut {
+  const { b, kit, W, L, stance } = c;
+  const k = Math.min(W / 4, L / 3);
+  const biped = stance.legs === 'biped';
+  const t = biped ? stance.thick : 0.24 * k;
+  let pelvisY: number;
+  if (biped) pelvisY = stance.hipY;
+  else {
+    pelvisY = stance.legs === 'spider' ? stance.hipY + 0.4 * k : stance.y0 + 0.55 * k;
+    // pedestal: armoured drum the torso turns on
+    b.cylb(kit.trim, 0.62 * k, pelvisY - stance.y0 + 0.02, 0.06 * k, [-0.1 * k, stance.y0 - 0.02, 0], 'y', 14);
+  }
+  // pelvis + tassets
+  block(b, kit.trim, -0.12 * k, pelvisY - 0.28 * k, 0, 0.7 * k, 0.8 * k, 0.48 * k, { top: [0.86, 1.08], ch: 0.14 * k, bev: 0.03 * k });
+  block(b, kit.hull, 0.25 * k, pelvisY - 0.26 * k, 0, 0.2 * k, 0.6 * k, 0.4 * k, { top: [0.55, 0.85], shift: [-0.04 * k, 0], ch: 0.07 * k });
+  block(b, kit.metal, -0.15 * k, pelvisY + 0.12 * k, 0, 0.6 * k, 0.7 * k, 0.16 * k, { ch: 0.14 * k });
+  const ty0 = pelvisY + 0.22 * k, th = 0.95 * k, ty1 = ty0 + th;
+  // barrel chest, hunched forward, mid bulge
+  block(b, kit.hull, -0.08 * k, ty0, 0, 1.15 * k, 1.5 * k, th, { top: [0.78, 0.84], shift: [0.12 * k, 0], ch: 0.3 * k, bev: 0.08 * k, bot: 0.06 * k, mid: [[0.42, 1.08, 1.06]] });
+  block(b, kit.panel, 0.38 * k, ty0 + 0.1 * k, 0, 0.36 * k, 1.1 * k, th * 0.62, { top: [0.5, 0.8], shift: [0.08 * k, 0], ch: 0.16 * k, bev: 0.04 * k });
+  // jaw ledge (chin gun seat)
+  const jawY = ty0 + 0.36 * k;
+  block(b, kit.hull, 0.52 * k, ty0 + 0.02 * k, 0, 0.42 * k, 0.62 * k, jawY - ty0 - 0.02 * k, { top: [0.9, 0.86], shift: [0.04 * k, 0], ch: 0.12 * k, bev: 0.04 * k, bot: 0.04 * k });
+  hazard(b, kit, 0.74 * k, ty0 + 0.12 * k, 0, 0.06 * k, 0.4 * k, 4, Math.PI / 2);
+  // dorsal hump (main cannon platform)
+  pod(b, kit.hull, [-0.28 * k, ty1 - 0.12 * k, 0], 0.62 * k, 0.4 * k, 0.6 * k, 12, 6, 2.4, 0.4);
+  const humpY = ty1 + 0.24 * k;
+  // sunken head: heavy brow over two glowing eyes
+  const hy = ty1 - 0.36 * k;
+  block(b, kit.trim, 0.36 * k, hy, 0, 0.42 * k, 0.48 * k, 0.32 * k, { top: [0.7, 0.8], ch: 0.1 * k, bev: 0.03 * k });
+  both((s) => glow(b, kit, 0.57 * k, hy + 0.18 * k, s * 0.1 * k, 0.03 * k, 0.06 * k, 0.09 * k));
+  block(b, kit.hull, 0.4 * k, hy + 0.24 * k, 0, 0.44 * k, 0.6 * k, 0.14 * k, { top: [0.7, 0.86], shift: [0.06 * k, 0], ch: 0.1 * k, bev: 0.03 * k });
+  // reactor drum across the back + stacks
+  b.cylb(kit.trim, 0.3 * k, 1.1 * k, 0.05 * k, [-0.78 * k, ty0 + 0.42 * k, -0.55 * k], 'z', 16);
+  both((s) => { b.cyl(kit.glow, 0.2 * k, 0.2 * k, 0.03 * k, [-0.78 * k, ty0 + 0.42 * k, s * 0.56 * k], s > 0 ? 'z' : '-z', 12); exhaust(b, kit, -0.78 * k, ty0 + 0.66 * k, s * 0.3 * k, 0.07 * k, 0.32 * k); });
+  // pauldrons + arms with forearm gauntlets carrying the arm weapons
+  const armM = c.mounts.filter((m) => Math.abs(m.z) > 0.9 * k);
+  const podTop = new Map<MountSpec, number>();
+  both((s) => {
+    const m = armM.find((q) => Math.sign(q.z) === s);
+    const az = m ? m.z : s * 1.34 * k, ax = m ? m.x : 0.11 * k;
+    const melee = !!m && (m.mod.category === 'melee' || m.mod.projectile === 'melee');
+    const shY = ty1 - 0.24 * k;
+    const podL = 1.05 * k, podW = Math.max(0.5 * k, (m?.r ?? 0.39 * k) * 2.0), podH = 0.42 * k;
+    const px = melee ? ax - podL * 0.2 : ax + 0.15 * k;
+    const top = mechArm(b, kit, s, [-0.12 * k, shY, s * 0.92 * k], [-0.2 * k, ty0 - 0.02 * k, az - s * 0.04 * k], [px, ty0 - 0.62 * k, az], podL, podW, podH, 0.17 * k);
+    if (m) podTop.set(m, top);
+    // knuckles: three heavy fingers curled under the gauntlet nose (claw spread when the arm carries a melee tool)
+    for (const dz of [-0.3, 0, 0.3]) {
+      const f0: V3 = [px + podL * 0.42, ty0 - 0.5 * k, az + dz * podW];
+      beam(b, kit.metal, f0, [f0[0] + (melee ? 0.34 : 0.12) * k, f0[1] - (melee ? 0.1 : 0.2) * k, f0[2] + dz * (melee ? 0.3 : 0.05) * k], 0.1 * k, 0.12 * k);
+    }
+    // pauldron: big rounded shell, panel cap, accent stripe
+    pod(b, kit.hull, [-0.12 * k, shY + 0.12 * k, s * 1.0 * k], 0.5 * k, 0.32 * k, 0.4 * k, 12, 6, 2.2, 0.5);
+    pod(b, kit.panel, [-0.14 * k, shY + 0.32 * k, s * 1.04 * k], 0.36 * k, 0.12 * k, 0.26 * k, 10, 4, 2.2, 0.8);
+    b.box(kit.accent, 0.5 * k, 0.03 * k, 0.06 * k, -0.12 * k, shY + 0.3 * k, s * 1.36 * k, 0.01, [s * 0.5, 0, 0]);
+  });
+  // asymmetric kit: a sensor mast on the left pauldron, hazard band on the right
+  b.strut(kit.metal, [-0.3 * k, ty1 + 0.2 * k, -1.02 * k], [-0.45 * k, ty1 + 0.85 * k, -1.08 * k], 0.025 * k, 0.012 * k, 5);
+  sensor(b, kit, -0.42 * k, ty1 + 0.72 * k, -1.07 * k, 0.1 * k, kit.lamp);
+  hazard(b, kit, -0.12 * k, ty1 + 0.2 * k, 1.0 * k, 0.5 * k, 0.16 * k, 4, 0);
+  const hips: Hip[] | undefined = biped ? ([-1, 1] as const).map((s) => ({
+    p: [-0.15 * k, stance.hipY, s * 0.6 * k] as V3, side: s, t, foot: [-0.12 * k, 0, s * 0.72 * k] as V3, phase: s > 0 ? Math.PI : 0,
+  })) : stance.legs === 'spider' ? (() => {
+    const out: Hip[] = [];
+    for (const [hx, fx, ph] of [[0.25, 0.95, 0], [-0.5, -1.25, Math.PI]] as [number, number, number][]) for (const s of [-1, 1] as const) {
+      out.push({ p: [hx * k, stance.hipY, s * 0.5 * k], side: s, t: stance.thick, foot: [fx * k, 0, s * 1.35 * k], phase: ph + (s > 0 ? Math.PI : 0) });
+    }
+    return out;
+  })() : undefined;
+  const deck = (x: number, z: number) => (Math.abs(z) < 0.6 * k && x > -0.7 * k && x < 0.4 * k ? ty1 : -1);
+  return {
+    deckAt: deck, top: humpY, hips, custom: true,
+    seat: (m) => {
+      const pt = podTop.get(m);
+      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.08 * k, 14); return { y: pt, socket: true }; }
+      if (m.x > 0.4 * k) { collar(b, kit, m.x, jawY, m.z, m.r, jawY - 0.08 * k, 14); return { y: jawY, socket: true }; }
+      collar(b, kit, m.x, humpY, m.z, m.r, humpY - 0.2 * k, 16);
+      return { y: humpY, socket: true };
+    },
+  };
+}
+
 registerChassis('mech', strider);
+registerChassis('mantis', needle);
+registerChassis('warlord', warlord);
 registerChassis('arachnid', orbwalker);

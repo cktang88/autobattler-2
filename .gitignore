@@ -8,3 +8,8 @@ public/artlab.js.map
 # agent worktrees (local only)
 .claude/worktrees/
 public/chunks/
+
+# downloaded third-party 3D packs (large; see assets-src/LICENSES.md)
+assets-src/*
+!assets-src/LICENSES.md
+public/assetlab.js*

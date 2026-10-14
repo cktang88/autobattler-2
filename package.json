@@ -7,7 +7,8 @@
     "start": "npm run build && node src/server/main.ts",
     "test": "node --test 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "build:proto3d": "esbuild src/client/proto3d/main.ts --bundle --format=esm --outfile=public/proto3d.js --sourcemap"
+    "build:proto3d": "esbuild src/client/proto3d/main.ts --bundle --format=esm --outfile=public/proto3d.js --sourcemap",
+    "build:assetlab": "esbuild src/client/assetlab/main.ts --bundle --format=esm --outfile=public/assetlab.js --sourcemap"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

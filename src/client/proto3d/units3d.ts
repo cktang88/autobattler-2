@@ -11,7 +11,7 @@ import { makeKit, rng } from './materials.ts';
 import { buildTurret, type Turret } from './weapons3d.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
-import { chassisBuilder, mobilityBuilder, type ChassisOut, type MountSpec } from './chassis/registry.ts';
+import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
 import { buildJet, buildRotor, type Air } from './air3d.ts';
 
 export interface Unit3D {
@@ -71,7 +71,10 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const specs: MountSpec[] = [];
   tur.forEach((tu, i) => { if (tu && offs[i]) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
 
-  if (flying) {
+  // flyers with a registered airframe (chassis/air.ts) take the registry path like ground units; the airframe returns
+  // its lift points (AirOut.lift) and the air mobility (mobility/air.ts) renders rotors / fans / nozzles / grav pods
+  const reg = registered().chassis;
+  if (flying && !reg.includes(ch.id) && !reg.includes(ch.shape)) {
     if (ch.domain === 'jet' || mob.id === 'jet') air = buildJet(hb, kit, L, W, S);
     else air = buildRotor(hb, kit, body, ch.id, L, W, S);
     updates.push((t) => air!.update(t));
@@ -79,7 +82,8 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const mb = mobilityBuilder(mob.id);
     const stance = mb.stance({ mobId: mob.id, L, W, S, shape: ch.shape });
     out = chassisBuilder(ch)({ b: hb, kit, design, ch, mob, L, W, S, stance, mounts: specs, rnd, body, root, updates });
-    const upd = mb.build({ root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out.hips });
+    const mctx: MobilityCtx & { lift?: unknown } = { root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out.hips, lift: (out as { lift?: unknown }).lift };
+    const upd = mb.build(mctx);
     if (upd) updates.push((t, _dt, mv) => upd(t, mv));
   }
 
@@ -87,8 +91,8 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   for (const m of specs) {
     const tu = tur[m.i]!;
     let y: number;
-    if (flying) {
-      y = air!.hpY(m.x, m.z);
+    if (air) {
+      y = air.hpY(m.x, m.z);
       // pylon from the airframe to the weapon
       if (ch.domain === 'jet' || mob.id === 'jet') hb.box(kit.trim, 0.2 * tu.r + 0.1, Math.abs(y) + 0.05, 0.05, air!.hpX ? air!.hpX(m.x, m.z) : m.x, y / 2 + 0.02, m.z, 0.008);
     } else {
@@ -106,7 +110,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
         if (S >= 3) hb.cylb(kit.trim, r * 1.1, 0.02, 0.004, [m.x, y, m.z], 'y', 20);
       }
     }
-    tu.yaw.position.set(flying && air?.hpX ? air.hpX(m.x, m.z) : m.x, y, m.z);
+    tu.yaw.position.set(air?.hpX ? air.hpX(m.x, m.z) : m.x, y, m.z);
     body.add(tu.yaw);
     turrets.push(tu);
   }
