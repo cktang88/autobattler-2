@@ -184,11 +184,10 @@
 }
 /* the chip's text is drawn in ink on a coloured fill */
 .garage .g-chip { -webkit-text-fill-color: var(--ink); }
-.garage .g-chip.cL { color: var(--cL); }
+.garage .g-chip.cS { color: var(--cL); }
 .garage .g-chip.cM { color: var(--cM); }
-.garage .g-chip.cH { color: var(--cH); }
-.garage .g-chip.cG { color: var(--cG); }
-.garage .g-chip.cT { color: var(--cT); }
+.garage .g-chip.cL { color: var(--cH); }
+.garage .g-chip.cXL { color: var(--cT); }
 .garage .g-chip.mini { width: 16px; height: 16px; font-size: 0.7rem; }
 .garage .g-chips { display: inline-flex; gap: 3px; flex-wrap: wrap; }
 .garage .g-sockno {
@@ -255,11 +254,10 @@
   margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1);
   display: block !important; pointer-events: auto; cursor: pointer; touch-action: none; border-radius: 50% !important;
 }
-.garage .g-sock.cL { --c: var(--cL); }
+.garage .g-sock.cS { --c: var(--cL); }
 .garage .g-sock.cM { --c: var(--cM); }
-.garage .g-sock.cH { --c: var(--cH); }
-.garage .g-sock.cG { --c: var(--cG); }
-.garage .g-sock.cT { --c: var(--cT); }
+.garage .g-sock.cL { --c: var(--cH); }
+.garage .g-sock.cXL { --c: var(--cT); }
 .garage .g-sock.full { cursor: grab; }
 .garage .g-sock-ring { position: absolute; inset: 0; border-radius: 50%; transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s, background 0.12s; }
 .garage .g-sock.empty .g-sock-ring {

@@ -1,6 +1,6 @@
 // Design -> UnitStats, plus design validation.
 
-import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, pairingError } from './parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
 import { squadSize } from './grid.ts';
 import type { Design, ModuleDef, UnitStats } from './types.ts';
 
@@ -252,7 +252,7 @@ export function computeStats(d: Design): UnitStats {
   };
 }
 
-const CLASS_TRAVERSE: Record<string, number> = { L: 7, M: 5, H: 3.2, G: 2, T: 1.2 };
+const TIER_TRAVERSE = [7, 5, 3.2, 2, 1.2];
 const VISUAL_TRAVERSE: Partial<Record<string, number>> = {
   gatling: 1.1, shotgun: 1.2, sniper: 0.6, rail: 0.7, gauss: 0.7, cannon: 0.8, artillery: 0.5, mortar: 0.8, flak: 1.3,
   missileRack: 1.4, cruise: 0.6, rocketPod: 1.1, laser: 1.2, heatray: 1.0, plasma: 0.9, flamer: 1.2, tesla: 1.5, emp: 1.1,
@@ -262,7 +262,7 @@ const VISUAL_TRAVERSE: Partial<Record<string, number>> = {
 /** Turret traverse speed (rad/s) of a module: explicit turretTurn, else mount-class base x weapon-type factor. */
 export function turretTurnRate(mod: ModuleDef): number {
   if (mod.turretTurn != null) return mod.turretTurn;
-  return (CLASS_TRAVERSE[mod.mount] ?? 4) * (VISUAL_TRAVERSE[mod.visual] ?? 1);
+  return TIER_TRAVERSE[moduleTier(mod) - 1] * (VISUAL_TRAVERSE[mod.visual] ?? 1);
 }
 
 /** Round a supply cost to a friendly number: nearest 50 (min 50). */

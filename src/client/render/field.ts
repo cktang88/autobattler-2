@@ -28,6 +28,7 @@
 import { CREATURE_SHAPES } from './creatures.ts';
 import { battleSfx, setPanFlip } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../../shared/grid.ts';
+import { moduleTier } from '../../shared/parts.ts';
 import { Camera, CameraControls } from './camera.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types.ts';
@@ -1004,7 +1005,7 @@ export class FieldView {
       switch (kind) {
         case 'bullet': {
           const sniper = vis === 'sniper';
-          const big = mod ? (mod.mount === 'M' ? 1.4 : mod.mount === 'H' ? 1.8 : 1) * (0.6 + cal) : 1;
+          const big = mod ? (moduleTier(mod) === 2 ? 1.4 : moduleTier(mod) >= 3 ? 1.8 : 1) * (0.6 + cal) : 1;
           const len = sniper ? 0.9 : 0.22 + 0.2 * big;
           const w = sniper ? 0.05 : 0.025 + 0.022 * big;
           const col = sniper ? '#ff5050' : mod?.category === 'autocannon' ? '#ffb050' : '#ffe27a';
@@ -1035,7 +1036,7 @@ export class FieldView {
             g.globalAlpha = blink;
             g.drawImage(softDot('#ffd080', 0.3), x - 0.12, y - 0.12, 0.24, 0.24);
           } else {
-            const r = 0.07 + 0.08 * cal * (mod?.mount === 'H' ? 1.3 : 1);
+            const r = 0.07 + 0.08 * cal * (mod && moduleTier(mod) === 3 ? 1.3 : 1);
             g.drawImage(softDot('rgba(255,170,80,0.8)'), x - r * 3, y - r * 3, r * 6, r * 6);
             g.strokeStyle = '#ffe8c0';
             g.lineWidth = Math.max(minW, r * 1.1);
@@ -1130,7 +1131,7 @@ export class FieldView {
             } else g.drawImage(softDot('#7ab8ff', 0.3), x - r, y - r, r * 2, r * 2);
             if (Math.random() < dt * 20) this.fx.sparks(x, y, 1, '#cfe9ff', 2, undefined, Math.PI, 0.12);
           } else {
-            const r = (0.18 + 0.12 * cal) * (mod?.mount === 'G' ? 2.1 : 1);
+            const r = (0.18 + 0.12 * cal) * (mod && moduleTier(mod) === 4 ? 2.1 : 1);
             g.drawImage(softDot(rgba(glowC.length === 7 ? glowC : '#e070ff', 0.6)), x - r * 2.5, y - r * 2.5, r * 5, r * 5);
             g.drawImage(softDot('#ffffff', 0.4), x - r * 0.6, y - r * 0.6, r * 1.2, r * 1.2);
             this.trail(p.id, x, y, r * 0.8, '#e070ff', 0.05, true);
@@ -1264,8 +1265,8 @@ export class FieldView {
         const cs = Math.cos(e.angle), sn = Math.sin(e.angle);
         const cal = mod?.caliber ?? 0.5;
         const glowC = moduleGlow(mod, TEAM_PAL[ur ? this.teamOf(ur.u.side) : 0]);
-        if (mod && (mod.mount === 'G' || mod.mount === 'T') && mod.kind === 'weapon' && mod.category !== 'melee') {
-          const T = mod.mount === 'T';
+        if (mod && moduleTier(mod) >= 4 && mod.kind === 'weapon' && mod.category !== 'melee') {
+          const T = moduleTier(mod) === 5;
           const cc = mod.id === 'massdriver' ? '#9fe8ff' : mod.id === 'annihilator' || mod.id === 'siegeplasma' ? '#e070ff' : mod.id === 'stormcore' || mod.id === 'stormtower' ? '#a8d8ff' : '#ffd890';
           fx.glow(mx, my, (T ? 1.8 : 1.0) * (mod.cooldown && mod.cooldown < 0.2 ? 0.4 : 1), cc, 0.16);
           if (mod.cooldown === undefined || mod.cooldown >= 0.2) {
@@ -1303,7 +1304,7 @@ export class FieldView {
             if (heavy || vis === 'shotgun') {
               fx.sparks(mx, my, heavy ? 6 : 4, '#ffd890', 5, e.angle, 0.35, 0.18);
               for (let i = 0; i < (heavy ? 3 : 1); i++) fx.smoke(mx + cs * 0.15, my + sn * 0.15, r * 0.5, 1.0, '#4a4640', cs * 1.2, sn * 1.2, 0.45);
-              if (heavy && mod?.mount === 'H') fx.shake(0.12);
+              if (heavy && mod && moduleTier(mod) === 3) fx.shake(0.12);
               if (heavy) fx.dust(mx - cs * d, my - sn * d, d * 0.8, 2, 0.5);
             } else if (fx.busy < 0.4 && Math.random() < 0.25) fx.debris(mx - cs * d, my - sn * d, 1, '#d8b040', 1.5, 0.02);
             break;
@@ -1381,7 +1382,7 @@ export class FieldView {
           }
           case 'rail': {
             const heavy = (mod?.caliber ?? 0.5) > 0.7;
-            const huge = mod?.mount === 'T';
+            const huge = !!mod && moduleTier(mod) === 5;
             fx.beam('rail', pts, '#9fe8ff', huge ? 0.5 : heavy ? 0.1 : 0.06, huge ? 0.9 : heavy ? 0.5 : 0.35);
             if (huge) {
               // spinal mass driver: blinding flash, ionised trail, the ground torn up along the line

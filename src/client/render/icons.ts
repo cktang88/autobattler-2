@@ -6,7 +6,7 @@
 // padding) into the canvas on a transparent background. Canvas pixel size is taken from its CSS size x
 // devicePixelRatio when it is laid out, otherwise from canvas.width/height.
 
-import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
+import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, moduleTier } from '../../shared/parts.ts';
 import type { Design } from '../../shared/types.ts';
 import { TEAM_PAL, ctx2d, makeCanvas, mix, shade, type Ctx, type TeamPal } from './palette.ts';
 import { CATEGORY_COLOR, drawTurret, drawTurretDynamic } from './turrets.ts';
@@ -114,7 +114,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
     } else {
       g.rotate(-Math.PI / 4);
       drawTurret(g, m, pal, d, Math.max(o, d * 0.035));
-      if (m.mount === 'G' || m.mount === 'T') drawTurretDynamic(g, m, pal, d, 0, 0, 0, 1, 0.35, 0, 0, PX, 1);
+      if (moduleTier(m) >= 4) drawTurretDynamic(g, m, pal, d, 0, 0, 0, 1, 0.35, 0, 0, PX, 1);
     }
     return cropAlpha(c);
   }

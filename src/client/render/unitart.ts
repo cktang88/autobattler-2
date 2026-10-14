@@ -5,7 +5,7 @@
 // design + team + device-pixels-per-cell; per frame a unit costs a handful of drawImage calls plus a few
 // dynamic strokes (rotor blades, thruster flames, status effects).
 
-import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, moduleTier } from '../../shared/parts.ts';
 import { computeStats } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
 import { MAT, METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, strHash, type Ctx, type Team, type TeamPal } from './palette.ts';
@@ -121,7 +121,7 @@ const MOUNT_SCALE: Record<string, number> = {
   broodmother: 0.92, arachne: 0.95, juggernaut: 0.9, interceptor: 0.8, hunter: 0.9, carriage: 1.0, siegeplat: 1.0, bomberhull: 0.85,
 };
 
-const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+const RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
 /** frames whose mounts ride animated anatomy (limbs, claws, tails): hardpoints are fixed to the part */
 const PART_SHAPES = new Set(['mantis', 'mech', 'warlord', 'arachnid', 'broodmother', 'arachne', 'crab', 'saucer', 'scorpion', 'centipede']);
 
@@ -1996,7 +1996,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const sway = Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
     const ta = mp ? mp.angle : ang + sway;
     const fl = mp ? Math.max(0, Math.min(1, mp.flash)) : 0;
-    let rec = fl * fl * m.d * (m.mod.mount === 'T' || m.mod.mount === 'G' ? 0.34 : 0.18);
+    let rec = fl * fl * m.d * (moduleTier(m.mod) >= 4 ? 0.34 : 0.18);
     let rot = 0;
     const sw = mp?.swing ?? 0;
     if (sw > 0 && m.mod.category === 'melee') {
@@ -2021,7 +2021,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     if (dis) g.globalAlpha = alpha * (0.6 + 0.3 * Math.sin(p.time * 11 + i * 2));
     blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
     g.globalAlpha = alpha;
-    if (m.mod.id === 'grinder' || m.mod.mount === 'T' || m.mod.mount === 'G') drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha, chargeOf(m.mod, mp));
+    if (m.mod.id === 'grinder' || moduleTier(m.mod) >= 4) drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha, chargeOf(m.mod, mp));
     if ((m.mod.visual === 'saw' || m.mod.visual === 'drill') && m.mod.id !== 'grinder') {
       // spinning blade / bore highlight
       const ml = muzzleLen(m.mod) * m.d * (m.mod.visual === 'saw' ? 0.95 : 0.7);

@@ -2,9 +2,9 @@
 
 /** chassis size class: 1 light (5 m) · 2 medium (10 m) · 3 heavy (15 m) · 4 GIANT (20 m) · 5 TITAN (25 m) */
 export type Size = 1 | 2 | 3 | 4 | 5;
-/** Weapon mount class. A slot of class X accepts modules of class X or smaller (L < M < H < G < T).
- *  G = giant-class (size-4 chassis), T = titan-class (size-5 chassis). */
-export type MountClass = 'L' | 'M' | 'H' | 'G' | 'T';
+/** Weapon mount size, like T-shirt sizes: S < M < L < XL. A slot accepts modules of its size or smaller.
+ *  XL = giant/titan-class weapons (only giant and titan hulls have XL slots). */
+export type MountClass = 'S' | 'M' | 'L' | 'XL';
 export type MoveKind = 'ground' | 'air' | 'static';
 /** Unit class, chosen first in the designer: chassis and mobility must share a domain.
  *  ground = tanks/walkers/hover/emplacements · jet = fixed-wing aircraft · heli = rotorcraft & grav-lift VTOLs */

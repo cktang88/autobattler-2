@@ -86,9 +86,9 @@ function gridSection(): void {
 }
 
 function refChassis(m: ModuleDef): { chassis: string; mobility: string; slot: number } {
-  if (m.mount === 'T') return { chassis: 'titan', mobility: 'titanlegs', slot: 0 };
-  if (m.mount === 'G') return { chassis: 'leviathan', mobility: 'megatracks', slot: 0 };
-  if (m.mount === 'L') return { chassis: 'scout', mobility: 'wheels', slot: 0 };
+  if (m.mount === 'XL' && m.weight >= 25) return { chassis: 'titan', mobility: 'titanlegs', slot: 0 };
+  if (m.mount === 'XL') return { chassis: 'leviathan', mobility: 'megatracks', slot: 0 };
+  if (m.mount === 'S') return { chassis: 'scout', mobility: 'wheels', slot: 0 };
   if (m.mount === 'M') return { chassis: 'warden', mobility: 'halftrack', slot: 0 };
   return { chassis: 'longarm', mobility: 'treads', slot: 0 };
 }
@@ -101,7 +101,7 @@ function modulesSection(): void {
     const mounts: (string | null)[] = c.mounts.map(() => null);
     mounts[r.slot] = m.id;
     const d: Design = { id: 'm_' + m.id, name: m.name, chassis: r.chassis, mobility: r.mobility, mounts };
-    host.append(preview(d, m.mount === 'G' || m.mount === 'T' ? 230 : 110, m.name, `${m.id} · ${m.mount} · ${m.visual}`));
+    host.append(preview(d, m.mount === 'XL' ? 230 : 110, m.name, `${m.id} · ${m.mount} · ${m.visual}`));
   }
 }
 
@@ -374,7 +374,7 @@ const dOf = (d: Design, slot: number) => layoutOf(d).mounts[slot]?.d ?? 0;
 function calibreSection(): void {
   const host = labSection('calibre', 'Gun family by calibre (same chassis: Bastion Hull, heavy slot)');
   const GUNV = new Set(['gun', 'cannon', 'artillery', 'flak', 'gatling', 'sniper', 'rail', 'gauss']);
-  const RK: Record<string, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+  const RK: Record<string, number> = { S: 1, M: 2, L: 3, XL: 4 };
   const guns = MODULES.filter((m) => m.kind === 'weapon' && GUNV.has(m.visual) && RK[m.mount] <= 3)
     .sort((a, b) => RK[a.mount] - RK[b.mount] || calibreMm(a) - calibreMm(b));
   for (const m of guns) {
@@ -397,10 +397,10 @@ function calibreSection(): void {
 function classesSection(): void {
   const host = labSection('classes', 'Weapon class x slot class (Monarch Frame: H H M L) - ring sized to the weapon, socket to the slot');
   const W: Record<string, string> = { L: 'hmg', M: 'cannon75', H: 'cannon' };
-  const slots: [number, string][] = [[0, 'H'], [2, 'M'], [3, 'L']];
-  const RK: Record<string, number> = { L: 1, M: 2, H: 3 };
+  const slots: [number, string][] = [[0, 'L'], [2, 'M'], [3, 'S']];
+  const RK: Record<string, number> = { S: 1, M: 2, L: 3 };
   for (const [si, sc] of slots) {
-    for (const wc of ['L', 'M', 'H', '-']) {
+    for (const wc of ['S', 'M', 'L', '-']) {
       if (wc !== '-' && RK[wc] > RK[sc]) continue;
       const mounts: (string | null)[] = [null, null, null, null];
       if (wc !== '-') mounts[si] = W[wc];

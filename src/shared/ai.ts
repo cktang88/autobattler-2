@@ -158,7 +158,7 @@ function moduleWeight(m: ModuleDef, role: Role, firstSlot: boolean): number {
       if (cat === 'artillery') return 0;
       return hitsGround ? 1 + dps / 80 + (cat === 'rocket' ? 0.8 : 0) : 0;
     case 'swarm':
-      return hitsGround && m.mount === 'L' && m.cost <= 20 ? 2 + (cat === 'machinegun' || cat === 'flame' ? 1 : 0) : 0;
+      return hitsGround && m.mount === 'S' && m.cost <= 20 ? 2 + (cat === 'machinegun' || cat === 'flame' ? 1 : 0) : 0;
     default:
       if (cat === 'disruption' && !firstSlot) return 1.2;
       return isW ? 1 + dps / 100 : armorW ? 0.4 : m.rangeBonus && !firstSlot ? 0.4 : 0;
