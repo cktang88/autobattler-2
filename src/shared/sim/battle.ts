@@ -1480,16 +1480,12 @@ export class Battle {
     // Engaged = weapons holding targets make up a meaningful share of the firepower that could hit our goal
     // (so a long-range gun alone doesn't park a brawler out of reach of its main armament).
     let engagedDps = 0, relevantDps = 0;
-    let targetAngle = NaN;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
       if (!w || w.heal > 0) continue;
       const tg = u.mounts[mi].target;
       if (!goal || this.canHit(w, goal)) relevantDps += w.dps;
-      if (tg >= 0) {
-        engagedDps += w.dps;
-        if (Number.isNaN(targetAngle)) targetAngle = Math.atan2(this.units[tg].y - u.y, this.units[tg].x - u.x);
-      }
+      if (tg >= 0) engagedDps += w.dps;
     }
     const engaged = engagedDps > 0 && engagedDps >= ENGAGE_SHARE * relevantDps;
 
@@ -1568,8 +1564,8 @@ export class Battle {
         else if (I.fireOnMove && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
         else wantMove = true;
         if (!wantMove) {
-          // face the fight while holding
-          if (!u.flying && !Number.isNaN(targetAngle)) u.angle = turnToward(u.angle, targetAngle, I.turn * DT * 0.5);
+          // holding: turrets do the aiming; only a gun that traverses slower than the hull turns swings the hull toward the fight
+          this.faceTarget(I);
           return;
         }
       }
@@ -1585,16 +1581,27 @@ export class Battle {
     this.steer(I, gx, gy, stopDist, goal ? goal.id : -1);
   }
 
-  /** Turn the body toward whatever the first engaged weapon targets (ground units only). */
+  /** While parked, the turrets do the aiming and the hull stays put. The exception is a gun whose traverse is slower
+   *  than the hull's turn rate (e.g. the spinal mass driver): then swinging the whole vehicle is the faster way to
+   *  bring it on target, so the hull turns toward that weapon's target (the highest-dps such weapon that is engaged)
+   *  and carries the barrel with it. Ground units only; the hull only otherwise turns to steer while moving. */
   private faceTarget(I: Internal): void {
     const u = I.u;
     if (u.flying || u.stun > 0) return;
-    for (const m of u.mounts) {
-      if (m.target < 0) continue;
-      const t = this.units[m.target];
-      u.angle = turnToward(u.angle, Math.atan2(t.y - u.y, t.x - u.x), I.turn * DT * 0.5);
-      return;
+    let best = -1, bestDps = -1;
+    for (let mi = 0; mi < I.wpns.length; mi++) {
+      const w = I.wpns[mi];
+      if (!w || w.heal > 0 || w.traverse >= I.turn || u.mounts[mi].target < 0) continue;
+      if (w.dps > bestDps) { bestDps = w.dps; best = mi; }
     }
+    if (best < 0) return;
+    const m = u.mounts[best];
+    const t = this.units[m.target];
+    const want = Math.atan2(t.y - u.y, t.x - u.x);
+    const prev = u.angle;
+    u.angle = turnToward(u.angle, want, I.turn * DT * 0.5);
+    // the slow mount rides the hull round (never past its target)
+    m.angle = turnToward(m.angle, want, Math.abs(angDiff(prev, u.angle)));
   }
 
   /** Fall back to the nearest friendly repair source (healer / repair aura), else the rear of the own deploy zone. */
