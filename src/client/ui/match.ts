@@ -134,7 +134,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   /** no replay watched this session (match resumed): quietly re-run the last round, the sim is deterministic */
   function ensureLastDamage() {
     const rec = m.history[m.history.length - 1];
-    if (!rec || lastDmg?.round === rec.round) return;
+    if (destroyed || !rec || lastDmg?.round === rec.round) return; // (also runs off a timer: skip once the screen is gone)
     try {
       const b = new Battle(battleInputFor(m, rec));
       let n = 0;
