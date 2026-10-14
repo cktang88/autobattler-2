@@ -136,18 +136,31 @@ function place(specs: Spec[], side: 0 | 1, seed: number): { place: Placement[]; 
   return { place: out, designs };
 }
 
-/** One fight set between two spec lists (both sides, alternate), returns score of A in 0..1. */
-function fightSpecs(A: Spec[], B: Spec[], seeds: number): number {
-  let score = 0, games = 0;
-  for (let s = 0; s < seeds; s++) for (const side of [0, 1] as const) {
-    const other = (1 - side) as 0 | 1;
-    const a = place(A, side, s + 1), b = place(B, other, s + 101);
-    const units: [Placement[], Placement[]] = [[], []]; const designs: [Design[], Design[]] = [[], []];
-    units[side] = a.place; designs[side] = a.designs; units[other] = b.place; designs[other] = b.designs;
-    const r = runBattle({ seed: 1000 + s * 31 + side, sides: [{ designs: designs[0], units: units[0] }, { designs: designs[1], units: units[1] }] });
-    score += r.winner === side ? 1 : r.winner === -1 ? 0.5 : 0; games++;
+interface Score { win: number; margin: number }
+/** One fight set between two armies (built per seed so mixed references vary), both sides. `win` is A's win rate
+ *  (draw = half); `margin` is a smoother 0..1 score = 0.5 + 0.5 * (A's surviving share of its supply - B's), used for
+ *  fitting because win/lose results of a few big units are very noisy. */
+function fightSpecs(mkA: (s: number) => Spec[], mkB: (s: number) => Spec[], seeds: number): Score {
+  let win = 0, margin = 0, games = 0;
+  for (let s = 0; s < seeds; s++) {
+    const A = mkA(s), B = mkB(s);
+    for (const side of [0, 1] as const) {
+      const other = (1 - side) as 0 | 1;
+      const a = place(A, side, s + 1), b = place(B, other, s + 101);
+      const units: [Placement[], Placement[]] = [[], []]; const designs: [Design[], Design[]] = [[], []];
+      units[side] = a.place; designs[side] = a.designs; units[other] = b.place; designs[other] = b.designs;
+      const r = runBattle({ seed: 1000 + s * 31 + side, sides: [{ designs: designs[0], units: units[0] }, { designs: designs[1], units: units[1] }] });
+      win += r.winner === side ? 1 : r.winner === -1 ? 0.5 : 0;
+      const share = (sd: 0 | 1, specs: Spec[], pl: Placement[]) => {
+        const price = new Map(specs.map((x, i) => [`x${i}`, st(x.d).cost]));
+        let tot = 0, left = 0;
+        for (const p of pl) { const c = price.get(p.designId) ?? 0; tot += c; left += c * (r.aliveFraction[sd][p.uid] ?? 0); }
+        return tot ? left / tot : 0;
+      };
+      margin += 0.5 + 0.5 * (share(side, A, a.place) - share(other, B, b.place)); games++;
+    }
   }
-  return score / games;
+  return { win: win / games, margin: margin / games };
 }
 
 /** Anti-air weapon armies: half the budget in the AA design, half in air bait (the AA carriers are ground units that
@@ -158,21 +171,19 @@ function aaSpecs(d: Design, T: number, seed: number): Spec[] {
 }
 
 type Task = { a: string; b: string | 'REF'; size: Size; air: boolean };
-function runTask(t: Task, seeds: number): number {
+function runTask(t: Task, seeds: number): Score {
   const da = carrier(t.size, t.a);
   const T0 = BUDGET[t.size];
   if (t.b === 'REF') {
     const T = Math.max(T0, 1.15 * rawCost(da));
-    if (t.air) {
-      // AA design alone (60% budget) vs a pure air army of the whole budget
-      return fightSpecs(plan(da, T, 1).specs, poolArmy(AIR_REF, T, 3), seeds);
-    }
-    return fightSpecs(plan(da, T, 0.6).specs, poolArmy(GROUND_REF, T, 3), seeds);
+    // AA design alone vs a pure air army of the whole budget; otherwise ~60% of the budget in the design vs a mixed field
+    if (t.air) return fightSpecs(() => plan(da, T, 1).specs, (s) => poolArmy(AIR_REF, T, s), seeds);
+    return fightSpecs(() => plan(da, T, 0.6).specs, (s) => poolArmy(GROUND_REF, T, s), seeds);
   }
   const db = carrier(t.size, t.b);
   const T = Math.max(T0, 1.15 * Math.max(rawCost(da), rawCost(db)));
-  if (t.air) return fightSpecs(aaSpecs(da, T, 3), aaSpecs(db, T, 3), seeds);
-  return fightSpecs(plan(da, T, 0.6).specs, plan(db, T, 0.6).specs, seeds);
+  if (t.air) return fightSpecs((s) => aaSpecs(da, T, s), (s) => aaSpecs(db, T, s), seeds);
+  return fightSpecs(() => plan(da, T, 0.6).specs, () => plan(db, T, 0.6).specs, seeds);
 }
 
 function tasks(filter: string): Task[] {
@@ -190,32 +201,33 @@ function tasks(filter: string): Task[] {
 }
 
 const SHARDS = 4;
-async function runAll(filter: string, seeds: number): Promise<{ t: Task; r: number }[]> {
+async function runAll(filter: string, seeds: number): Promise<{ t: Task; r: Score }[]> {
   const all = tasks(filter);
-  const res: { t: Task; r: number }[] = [];
+  const res: { t: Task; r: Score }[] = [];
   await Promise.all(Array.from({ length: SHARDS }, (_, shard) => new Promise<void>((resolve, reject) => {
     const child = fork(process.argv[1], ['shard', String(seeds), filter], { env: { ...process.env, BAL_SHARD: String(shard) }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
-    child.on('message', (m) => { res.push(...(m as { t: Task; r: number }[])); });
+    child.on('message', (m) => { res.push(...(m as { t: Task; r: Score }[])); });
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`shard ${shard} exited ${code}`))));
   })));
   void all;
   return res;
 }
 
-interface WRow { id: string; size: Size; group: string; cost: number; ref: number; peers: number; n: number }
-function summarize(res: { t: Task; r: number }[]): WRow[] {
+interface WRow { id: string; size: Size; group: string; cost: number; ref: number; peers: number; n: number; refM: number; peersM: number }
+function summarize(res: { t: Task; r: Score }[]): WRow[] {
   const rows: WRow[] = [];
+  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
   for (const g of GROUPS) {
     for (const id of g.ids) {
       const refT = res.find((x) => x.t.a === id && x.t.b === 'REF' && x.t.size === g.size);
       if (!refT) continue;
-      const peerScores: number[] = [];
+      const w: number[] = [], m: number[] = [];
       for (const x of res) {
         if (x.t.size !== g.size || x.t.b === 'REF') continue;
-        if (x.t.a === id) peerScores.push(x.r);
-        else if (x.t.b === id && g.ids.includes(x.t.a)) peerScores.push(1 - x.r);
+        if (x.t.a === id) { w.push(x.r.win); m.push(x.r.margin); }
+        else if (x.t.b === id && g.ids.includes(x.t.a)) { w.push(1 - x.r.win); m.push(1 - x.r.margin); }
       }
-      rows.push({ id, size: g.size, group: g.name, cost: st(carrier(g.size, id)).cost, ref: refT.r, peers: peerScores.length ? peerScores.reduce((a, b) => a + b, 0) / peerScores.length : NaN, n: peerScores.length });
+      rows.push({ id, size: g.size, group: g.name, cost: computeStats(carrier(g.size, id)).cost, ref: refT.r.win, refM: refT.r.margin, peers: avg(w), peersM: avg(m), n: w.length });
     }
   }
   return rows;
@@ -227,7 +239,7 @@ function printRows(rows: WRow[]) {
     const key = `${r.size} ${r.group}`;
     if (key !== last) { console.log(`\n== ${key} ==`); last = key; }
     const flag = (r.ref < 0.35 || r.ref > 0.65 || r.peers < 0.35 || r.peers > 0.65) ? '  <--' : '';
-    console.log(`${r.id.padEnd(15)} cost ${String(r.cost).padStart(6)}  vs peers ${pct(r.peers)}  vs ref ${pct(r.ref)}  cal ${(MODULE_CAL[r.id] ?? 1).toFixed(2)}${flag}`);
+    console.log(`${r.id.padEnd(15)} cost ${String(r.cost).padStart(6)}  vs peers ${pct(r.peers)} (${pct(r.peersM)})  vs ref ${pct(r.ref)} (${pct(r.refM)})  cal ${(MODULE_CAL[r.id] ?? 1).toFixed(2)}${flag}`);
   }
   const rms = (xs: number[]) => Math.sqrt(xs.reduce((a, x) => a + (x - 0.5) ** 2, 0) / Math.max(1, xs.length));
   const inb = (x: number) => x >= 0.4 && x <= 0.6;
@@ -263,7 +275,7 @@ if (mode === 'shard') {
   const da = carrier(size, a);
   const T = Math.max(BUDGET[size], 1.15 * rawCost(da));
   const A = plan(da, T, 0.6).specs;
-  const B = b === 'REF' ? poolArmy(g.air ? AIR_REF : GROUND_REF, T, 3) : plan(carrier(size, b), T, 0.6).specs;
+  const B = b === 'REF' ? poolArmy(g.air ? AIR_REF : GROUND_REF, T, 0) : plan(carrier(size, b), T, 0.6).specs;
   const show = (x: Spec[]) => x.map((s) => `${s.n}x${s.d.id}(${rawCost(s.d)}${s.d.id.startsWith('w-') ? '' : ''})`).join(' ');
   console.log('T', T, '\nA', show(A), '\nB', show(B));
   for (const side of [0, 1] as const) {
@@ -285,20 +297,29 @@ if (mode === 'shard') {
   console.log(`(${((Date.now() - t0) / 1000).toFixed(0)}s)`);
 } else if (mode === 'fit') {
   const iters = Number(process.argv[3] ?? 4); const seeds = Number(process.argv[4] ?? 4); const filter = process.argv[5] ?? '';
+  const hist: Record<string, number[]> = {};
   for (let it = 0; it < iters; it++) {
     const rows = summarize(await runAll(filter, seeds));
     console.log(`\n##### iteration ${it} #####`);
     printRows(rows);
-    // log-odds of the blended score -> multiplicative cal step (damped). Cost ~ sqrt(power) so strength ratio ~ cal^-1.
+    // Smooth (margin) scores -> multiplicative cal step. Cost ~ cal^0.5 and score logit ~ -2.5 * ln(cost), so
+    // ln(cal) moves ~0.8 * logit; the gain decays so the fit settles instead of oscillating.
+    const gain = 0.8 / (1 + 0.2 * it);
     const upd: Record<string, number> = {};
     for (const r of rows) {
-      const sc = Number.isNaN(r.peers) ? r.ref : 0.5 * r.ref + 0.5 * r.peers;
-      const c = Math.min(0.97, Math.max(0.03, sc));
-      const step = Math.pow(c / (1 - c), 0.5);
-      upd[r.id] = Math.round((MODULE_CAL[r.id] ?? 1) * Math.min(1.8, Math.max(0.55, step)) * 100) / 100;
+      const sc = Number.isNaN(r.peersM) ? r.refM : 0.5 * r.refM + 0.5 * r.peersM;
+      const c = Math.min(0.95, Math.max(0.05, sc));
+      const step = Math.pow(c / (1 - c), gain);
+      const cal = Math.round((MODULE_CAL[r.id] ?? 1) * Math.min(1.7, Math.max(0.6, step)) * 100) / 100;
+      upd[r.id] = cal;
+      (hist[r.id] ??= []).push(MODULE_CAL[r.id] ?? 1);
     }
     Object.assign(MODULE_CAL, upd);
     process.env.BAL_CAL = JSON.stringify({ ...JSON.parse(process.env.BAL_CAL ?? '{}'), ...upd });
     console.log('CAL ' + JSON.stringify(upd));
   }
+  // geometric mean of the last iterations' cals (the fit hovers around the optimum)
+  const fin: Record<string, number> = {};
+  for (const [id, h] of Object.entries(hist)) { const t = [...h.slice(-3), MODULE_CAL[id]]; fin[id] = Math.round(Math.exp(t.reduce((a, x) => a + Math.log(x), 0) / t.length) * 100) / 100; }
+  console.log('FINAL ' + JSON.stringify(fin));
 }
