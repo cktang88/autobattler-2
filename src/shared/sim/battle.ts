@@ -45,8 +45,12 @@ const MAX_STUN = 4;
  *  second, and is capped so one stun lasts at most MAX_STUN seconds. Hits while stunned extend the stun. */
 export const PARA_PER_STUN = 150;
 const PARA_DECAY = 1 / 20;
+/** Disarm works like paralysis (disarm damage vs max hp); slow damage builds toward MAX_SLOW at max hp (Zero-K style)
+ *  and drains at maxHp * SLOW_DMG_DECAY per second. */
+const DISARM_PER_S = 150;
+const SLOW_PER = 1000;
+const SLOW_DMG_DECAY = 0.5;
 const MAX_SLOW = 0.6;
-const SLOW_DECAY = 0.3; // per s (0.6 fully decays over 2s)
 const BURN_EVERY = 0.5; // s between burn damage pulses
 const STEALTH_FIRE_REVEAL = 1.5; // s a stealth unit stays visible after firing
 const PHANTOM_FIRE_REVEAL = 3;
@@ -194,6 +198,9 @@ interface Internal {
   strafeT: number;
   crushCd: number;
   burnDps: number;
+  /** accumulated slow / disarm damage (see SLOW_PER, DISARM_PER_S); u.slow / u.disarm are derived from them */
+  slowDmg: number;
+  disarmDmg: number;
   burnSide: Side;
   /** SimUnit.id that set the unit alight (damage tally) */
   burnSrc: number;
@@ -580,7 +587,7 @@ export class Battle {
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
-      burnDps: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
+      burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
@@ -622,8 +629,15 @@ export class Battle {
         u.para = Math.max(0, u.para - rate * DT);
         u.stun = u.para > u.maxHp ? (u.para - u.maxHp) / rate : 0;
       } else if (u.stun > 0) u.stun = 0;
-      if (u.disarm > 0) u.disarm = Math.max(0, u.disarm - DT);
-      if (u.slow > 0) u.slow = Math.max(0, u.slow - SLOW_DECAY * DT);
+      if (I.disarmDmg > 0) {
+        const rate = u.maxHp * PARA_DECAY;
+        I.disarmDmg = Math.max(0, I.disarmDmg - rate * DT);
+        u.disarm = I.disarmDmg > u.maxHp ? (I.disarmDmg - u.maxHp) / rate : 0;
+      } else if (u.disarm > 0) u.disarm = 0;
+      if (I.slowDmg > 0) {
+        I.slowDmg = Math.max(0, I.slowDmg - u.maxHp * SLOW_DMG_DECAY * DT);
+        u.slow = MAX_SLOW * Math.min(1, I.slowDmg / u.maxHp);
+      } else if (u.slow > 0) u.slow = 0;
       if (u.burning > 0) {
         I.burnTick += DT;
         if (I.burnTick >= BURN_EVERY || u.burning <= DT) {
@@ -1434,10 +1448,24 @@ export class Battle {
     if (!t.alive) return;
     const T = this.ints[t.id];
     if (this.curSrc >= 0 && this.units[this.curSrc].side !== t.side) { this.blockAtk[T.block] = this.curSrc; this.blockAtkT[T.block] = this.tick; }
-    if (fx && !T.hardened) {
-      if (fx.disarm) t.disarm = Math.min(MAX_STUN, t.disarm + fx.disarm);
+    // an up shield stops the shot before it touches the hull: no status effects; paralysis drains the shield instead
+    const shielded = t.shield > 0 || t.auraShield > 0;
+    if (fx && !T.hardened && shielded && fx.stun) {
+      const drain = fx.stun * PARA_PER_STUN * fxMult * 0.5;
+      const a = Math.min(t.shield, drain);
+      t.shield -= a;
+      t.auraShield = Math.max(0, t.auraShield - (drain - a));
+    }
+    if (fx && !T.hardened && !shielded) {
+      // disarm: like paralysis, builds against max hp
+      if (fx.disarm) {
+        const rate = t.maxHp * PARA_DECAY;
+        T.disarmDmg = Math.min(t.maxHp + rate * MAX_STUN, T.disarmDmg + fx.disarm * DISARM_PER_S * fxMult);
+        t.disarm = T.disarmDmg > t.maxHp ? (T.disarmDmg - t.maxHp) / rate : 0;
+      }
       if (fx.impulse && !t.flying && !t.stats.isStatic && !Number.isNaN(ox)) {
-        const mag = fx.impulse * (t.stats.size === 1 ? 1 : t.stats.size === 2 ? 0.5 : 0.25);
+        // knockback by mass: light raiders fly, tanks shrug, titans barely notice
+        const mag = fx.impulse * Math.min(1.2, Math.pow(10 / Math.max(1, t.stats.weight), 0.6));
         let dx = t.x - ox, dy = t.y - oy;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d > 1e-6) {
@@ -1454,9 +1482,13 @@ export class Battle {
         t.para = Math.min(t.maxHp + rate * MAX_STUN, t.para + fx.stun * PARA_PER_STUN * fxMult);
         t.stun = t.para > t.maxHp ? (t.para - t.maxHp) / rate : 0;
       }
-      if (fx.slow) t.slow = Math.min(MAX_SLOW, t.slow + fx.slow);
+      if (fx.slow) {
+        T.slowDmg = Math.min(t.maxHp, T.slowDmg + fx.slow * SLOW_PER * fxMult);
+        t.slow = MAX_SLOW * Math.min(1, T.slowDmg / t.maxHp);
+      }
       if (fx.burn) {
-        const dps = fx.burn.dps * fxMult;
+        // armour sheds some of the heat: 10 armour halves the burn
+        const dps = fx.burn.dps * fxMult * (10 / (10 + t.stats.armor));
         if (t.burning <= 0 || dps >= T.burnDps) { T.burnDps = dps; T.burnSide = side; T.burnSrc = this.dmgSrc; T.burnModule = moduleId; }
         t.burning = Math.max(t.burning, fx.burn.duration);
       }
