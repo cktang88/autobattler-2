@@ -166,6 +166,12 @@ export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (
   return best;
 }
 
+/** Melee tools (saws, prods, claws, rams...) sit at the hull's front edge so the tool reaches out ahead of it, not on a
+ *  mid-deck gun mount. x is hull-local cells (+x forward), X the footprint length. Anatomical frames keep their points. */
+export function meleeFront(mod: ModuleDef | null, x: number, X: number): number {
+  return mod && mod.kind === 'weapon' && mod.projectile === 'melee' ? Math.max(x, 0.3 * X) : x;
+}
+
 /** Unit-size factor on turret diameters: a bigger hull carries a slightly bigger mount for the same weapon. */
 export const unitK = (S: number) => (S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1));
 
@@ -197,7 +203,7 @@ export function mountOffsets(d: Design): { x: number; y: number }[] {
     const r = rest?.[i];
     if (r) return { x: r[0], y: r[1] };
     const p = pts[perm[i]] ?? [0, 0];
-    return { x: p[0] * X, y: p[1] * Y };
+    return { x: PART_SHAPES.has(chassis.shape) ? p[0] * X : meleeFront(mods[i], p[0] * X, X), y: p[1] * Y };
   });
   offCache.set(key, out);
   return out;

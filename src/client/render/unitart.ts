@@ -16,7 +16,7 @@ import { setDetailPx } from './titandetail.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
 import { CLASS_RANK, sizeKey, slotD, weaponD } from './weaponsize.ts';
-import { PART_SHAPES, RANK, hardpointsOf, mountPerm, unitK } from '../../shared/mountgeo.ts';
+import { PART_SHAPES, RANK, hardpointsOf, meleeFront, mountPerm, unitK } from '../../shared/mountgeo.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -169,7 +169,7 @@ export function layoutOf(d: Design): UnitLayout {
     const ms = chassisK(F?.scale ? (F.scale[j] ?? F.scale[0]) : MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1);
     const k = unitK(S) * ms;
     const dd = (mod ? weaponD(mod, cls) : slotD(cap)) * k;
-    return { x: p[0] * X, y: p[1] * Y, slot: cap, mod, d: dd, sd: slotD(cap) * k, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
+    return { x: PART_SHAPES.has(shape) ? p[0] * X : meleeFront(mod, p[0] * X, X), y: p[1] * Y, slot: cap, mod, d: dd, sd: slotD(cap) * k, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const main = PART_SHAPES.has(shape) ? -1 : scaleMounts(mounts, S);
   enforceOrder(mounts);
@@ -1904,7 +1904,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const m = L.mounts[i];
     if (!m.turret || !m.mod) continue;
     const mp = p.mounts?.[i];
-    const sway = Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
+    const sway = m.mod.projectile === 'melee' ? 0 : Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
     const ta = mp ? mp.angle : ang + sway;
     const fl = mp ? Math.max(0, Math.min(1, mp.flash)) : 0;
     let rec = fl * fl * m.d * (moduleTier(m.mod) >= 4 ? 0.34 : 0.18);
