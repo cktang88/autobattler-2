@@ -70,7 +70,7 @@ const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
 const SAT_N = (HCOLS + 1) * (HROWS + 1);
-const MAX_RADIUS = 3.0; // bounding radius of the largest hull (long axis * 0.45 for non-square footprints)
+const MAX_RADIUS = 4.0; // bounding radius of the largest hull (titans up to 8x8: ~0.45 * 8 = 3.6)
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
