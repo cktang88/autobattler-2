@@ -38,6 +38,10 @@ export interface ChassisDef {
   /** unit footprint in cells [w across, h long/deep] when not square (default [size, size]).
    *  h is the unit's LENGTH along its facing; w its width. Size class (mount classes, stats) stays `size`. */
   footprint?: [number, number];
+  /** box (cells, [w across, l along]) the art is drawn into when it differs from the footprint: legs, claws, tails,
+   *  rotors or wings reaching past the hull get a bigger footprint over the same art, or the art shrinks to fit.
+   *  Default = footprint. Hardpoints scale with it (shared/mountgeo.ts artBox). */
+  art?: [number, number];
   /** if set, only these mobility ids fit this chassis (e.g. mechs need legs) */
   mobility?: string[];
   /** roles this hull is built for */

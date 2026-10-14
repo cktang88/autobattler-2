@@ -87,7 +87,12 @@ function statsOf(d: Design): UnitStats | null {
   try { return computeStats(d); } catch { return null; }
 }
 
-const firstLegalMobility = (chassisId: string) => MOBILITY.find((m) => !pairingError(chassisId, m.id))?.id ?? MOBILITY[0].id;
+/** Chassis footprint as "w × l" (square: one edge, or "a × a" when `full`). */
+const footDims = (c: ChassisDef, full = false) => {
+  const w = c.footprint?.[0] ?? c.size, l = c.footprint?.[1] ?? c.size;
+  return w === l && !full ? footprintLabel(w) : `${footprintLabel(w)} × ${footprintLabel(l)}`;
+};
+const firstLegalMobility =(chassisId: string) => MOBILITY.find((m) => !pairingError(chassisId, m.id))?.id ?? MOBILITY[0].id;
 
 /** Re-seat modules onto a new chassis: biggest modules first, each into the smallest free slot that fits. */
 function reseat(mods: (string | null)[], c: ChassisDef, mobility: string): (string | null)[] {
@@ -835,7 +840,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
     const c = chassis();
     stageTags.replaceChildren(...[
-      h('span.g-plate.big', { title: `${c.name}: ${footprintLabel(c.size)} × ${footprintLabel(c.size)} footprint` }, h('b', null, sizeLabel(c.size)), ` ${footprintLabel(c.size)}`),
+      h('span.g-plate.big', { title: `${c.name}: ${footDims(c)} footprint` }, h('b', null, sizeLabel(c.size, c.footprint?.[0], c.footprint?.[1])), ` ${footDims(c)}`),
       s && s.squad > 1 ? h('span.g-plate.squad', { title: `One purchase deploys a block of ${s.squad} units with adjustable spacing` }, `Squad ×${s.squad}`) : null,
       s?.flying ? h('span.g-plate.air', null, icon('air'), 'Flying') : null,
       s?.isStatic ? h('span.g-plate.static', null, icon('static'), 'Static') : null,
@@ -1043,7 +1048,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const shown = pool.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
       .sort((a, b) => a.size - b.size || a.weight - b.weight);
     const tiles = shown.map((c) => partTile({
-      kind: 'chassis', id: c.id, name: c.name, sub: `${footprintLabel(c.size)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')}`,
+      kind: 'chassis', id: c.id, name: c.name, sub: `${footDims(c)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')}`,
       cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `ch-${c.id}`,
       onclick: () => pickChassis(c.id),
     }));
@@ -1247,7 +1252,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return { ...draft, chassis: c.id, mobility, mounts: reseat(draft.mounts, c, mobility) };
     })();
     return [
-      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, `${footprintLabel(c.size)} × ${footprintLabel(c.size)}`), roleTags(c.roles, 2)]),
+      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), roleTags(c.roles, 2)]),
       h('div.g-kstats', null,
         kstat('Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),
@@ -1415,7 +1420,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, 'Profile'),
         h('div.g-specs', null,
-          row('Footprint', `${footprintLabel(s.size)} × ${footprintLabel(s.size)}`),
+          row('Footprint', `${footprintLabel(s.fw)} × ${footprintLabel(s.fh)}`),
           row('Weight', `${fmt(s.weight)} / ${s.capacity}`),
           row('Turn', s.isStatic ? '—' : `${deg(s.turn)}°/s`),
         ),
@@ -1441,7 +1446,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rings = rangesOn ? rangeRings() : [];
-    const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label + o.mounts.join(":")).join(",")}|${g.mounts.map((q) => `${q.x.toFixed(0)},${q.y.toFixed(0)}`).join(";")}`;
+    const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${g.fw}x${g.fl}|${rings.map((o) => o.r + o.label + o.mounts.join(":")).join(",")}|${g.mounts.map((q) => `${q.x.toFixed(0)},${q.y.toFixed(0)}`).join(";")}`;
     if (key === gridKey) return;
     gridKey = key;
     gridCv.width = Math.round(r.width * dpr);
@@ -1449,9 +1454,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const x = gridCv.getContext('2d');
     if (!x) return;
     x.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const W = r.width, H = r.height, P = g.px, S = g.S;
+    const W = r.width, H = r.height, P = g.px, FW = g.fw, FL = g.fl;
     // footprint is centred on the hull's ground point
-    const fx0 = g.cx - (S / 2) * P, fy0 = g.cy - (S / 2) * P;
+    const fx0 = g.cx - (FW / 2) * P, fy0 = g.cy - (FL / 2) * P;
     x.clearRect(0, 0, W, H);
     // 1 m minor lines, 5 m (one cell) major lines, aligned to the footprint
     const sub = P / METERS_PER_CELL;
@@ -1477,26 +1482,25 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     }
     x.stroke();
     // footprint
-    const fw = S * P;
+    const fw = FW * P, fl = FL * P;
     x.fillStyle = 'rgba(255, 176, 0, 0.06)';
-    x.fillRect(fx0, fy0, fw, fw);
+    x.fillRect(fx0, fy0, fw, fl);
     x.setLineDash([6, 5]);
     x.strokeStyle = 'rgba(255, 176, 0, 0.55)';
     x.lineWidth = 1.5;
-    x.strokeRect(Math.round(fx0) + 0.5, Math.round(fy0) + 0.5, Math.round(fw), Math.round(fw));
+    x.strokeRect(Math.round(fx0) + 0.5, Math.round(fy0) + 0.5, Math.round(fw), Math.round(fl));
     x.setLineDash([]);
     // dimension lines (top + left)
-    const label = `${S * METERS_PER_CELL} m`;
+    const label = (n: number) => `${n * METERS_PER_CELL} m`;
     x.font = '600 14px "Barlow Condensed", system-ui, sans-serif';
     x.fillStyle = 'rgba(255, 196, 64, 0.95)';
     x.strokeStyle = 'rgba(255, 196, 64, 0.7)';
     x.lineWidth = 1;
     // keep the dimension lines clear of the sprite (giants overhang their footprint)
-    const off = Math.max(16, g.half - (S / 2) * P + 12);
-    const dy = Math.max(14, fy0 - off);
-    dimLine(x, fx0, dy, fx0 + fw, dy, label, false);
-    const dx = Math.max(14, fx0 - off);
-    dimLine(x, dx, fy0, dx, fy0 + fw, label, true);
+    const dy = Math.max(14, fy0 - Math.max(16, g.half - (FL / 2) * P + 12));
+    dimLine(x, fx0, dy, fx0 + fw, dy, label(FW), false);
+    const dx = Math.max(14, fx0 - Math.max(16, g.half - (FW / 2) * P + 12));
+    dimLine(x, dx, fy0, dx, fy0 + fl, label(FL), true);
     // range rings
     rings.forEach((o, i) => {
       const R = o.r * P;

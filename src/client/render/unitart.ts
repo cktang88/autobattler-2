@@ -16,7 +16,7 @@ import { setDetailPx } from './titandetail.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
 import { CLASS_RANK, sizeKey, slotD, weaponD } from './weaponsize.ts';
-import { PART_SHAPES, RANK, hardpointsOf, mountPerm, unitK } from '../../shared/mountgeo.ts';
+import { PART_SHAPES, RANK, artBox, hardpointsOf, meleeFront, mountPerm, unitK } from '../../shared/mountgeo.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -43,9 +43,13 @@ export interface UnitLayout {
   shape: Shape;
   /** hull half width (fraction of S; hw * S = half width in cells) */
   hw: number;
-  /** footprint: X = length along the facing (cells), Y = width across (cells); square chassis X = Y = S */
+  /** art box: X = length along the facing (cells), Y = width across (cells); square chassis X = Y = S. Usually the
+   *  footprint; ChassisDef.art when the drawn unit needs a different box to sit inside its footprint */
   X: number;
   Y: number;
+  /** footprint (cells): FX along the facing, FY across (collision / deploy box, selection outline) */
+  FX: number;
+  FY: number;
   /** largest footprint edge (overall visual size) */
   D: number;
   mounts: MountSlot[];
@@ -151,8 +155,8 @@ export function layoutOf(d: Design): UnitLayout {
   const mob = MOBILITY_BY_ID.get(d.mobility) ?? MOBILITY_BY_ID.get('wheels')!;
   const S = chassis.size;
   const shape = chassis.shape;
-  // footprint: Y = width across, X = length along the facing (square chassis: S x S)
-  const Y = chassis.footprint?.[0] ?? S, X = chassis.footprint?.[1] ?? S;
+  // art box: Y = width across, X = length along the facing (square chassis: S x S); the footprint may be larger
+  const [Y, X] = artBox(chassis);
   const F = FOOT[shape];
   const pts = hardpointsOf(chassis);
   const mods = chassis.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
@@ -169,7 +173,7 @@ export function layoutOf(d: Design): UnitLayout {
     const ms = chassisK(F?.scale ? (F.scale[j] ?? F.scale[0]) : MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1);
     const k = unitK(S) * ms;
     const dd = (mod ? weaponD(mod, cls) : slotD(cap)) * k;
-    return { x: p[0] * X, y: p[1] * Y, slot: cap, mod, d: dd, sd: slotD(cap) * k, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
+    return { x: PART_SHAPES.has(shape) ? p[0] * X : meleeFront(mod, p[0] * X, X), y: p[1] * Y, slot: cap, mod, d: dd, sd: slotD(cap) * k, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const main = PART_SHAPES.has(shape) ? -1 : scaleMounts(mounts, S);
   enforceOrder(mounts);
@@ -197,7 +201,7 @@ export function layoutOf(d: Design): UnitLayout {
   const legged = mob.id === 'legs' || mob.id === 'spider' || mob.id === 'jumpjets' || mob.id === 'titanlegs';
   const rolled = mob.id === 'treads' || mob.id === 'wheels' || mob.id === 'halftrack' || mob.id === 'megatracks';
   L = {
-    key, S, chassis, mob, shape, hw: F ? (F.hw * Y) / S : SHAPE_HW[shape] ?? 0.28, X, Y, D: Math.max(X, Y), mounts, air, quad, rotors, nozzles, main,
+    key, S, chassis, mob, shape, hw: F ? (F.hw * Y) / S : SHAPE_HW[shape] ?? 0.28, X, Y, FX: chassis.footprint?.[1] ?? S, FY: chassis.footprint?.[0] ?? S, D: Math.max(X, Y), mounts, air, quad, rotors, nozzles, main,
     axles: Math.min(6, Math.max(2, Math.round(X * 1.1) + 1 + (heavyLift ? 1 : 0) - (X >= 3 ? 1 : 0))),
     ext: 0.8 * Math.max(X, Y) + (F?.extPad ?? 0) * S,
     frames: legged ? 8 : mob.id === 'megatracks' ? 6 : rolled ? 4 : 1,
@@ -1864,7 +1868,8 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   blit(g, frame, x, y, ang, s.ext, sc);
   // jets: afterburner
   if (L.mob.id === 'jet') {
-    const fl = 0.85 + Math.random() * 0.3;
+    // parked (designer / still previews): idle burn that stays inside the footprint; full afterburner in flight
+    const fl = (0.85 + Math.random() * 0.3) * (p.moving === false ? 0.4 : 1);
     for (const n of L.nozzles) {
       const nx = x + (cs * (n.x - 0.02) - sn * n.y) * sc, ny = y + (sn * (n.x - 0.02) + cs * n.y) * sc;
       flame(g, nx, ny, ang + Math.PI, 0.35 * L.S * fl, n.w * 1.1, 'rgba(255,150,60,0.8)');
@@ -1904,7 +1909,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const m = L.mounts[i];
     if (!m.turret || !m.mod) continue;
     const mp = p.mounts?.[i];
-    const sway = Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
+    const sway = m.mod.projectile === 'melee' ? 0 : Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
     const ta = mp ? mp.angle : ang + sway;
     const fl = mp ? Math.max(0, Math.min(1, mp.flash)) : 0;
     let rec = fl * fl * m.d * (moduleTier(m.mod) >= 4 ? 0.34 : 0.18);
