@@ -73,19 +73,19 @@ export function fireTex(stage: number, variant: number): HTMLCanvasElement {
   const lobes = 11;
   for (let i = 0; i < lobes; i++) {
     const a = (i / lobes) * Math.PI * 2 + R() * 0.5;
-    const d = 12 + R() * 14;
+    const d = 14 + R() * 16;
     const x = 48 + Math.cos(a) * d, y = 48 + Math.sin(a) * d;
-    const rad = 16 + R() * 14;
+    const rad = 13 + R() * 11;
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
-    gr.addColorStop(0, `rgba(${r},${gg},${b},0.75)`);
-    gr.addColorStop(0.55, `rgba(${r},${gg},${b},0.4)`);
+    gr.addColorStop(0, `rgba(${r},${gg},${b},0.9)`);
+    gr.addColorStop(0.62, `rgba(${r},${gg},${b},0.62)`);
     gr.addColorStop(1, `rgba(${r},${gg},${b},0)`);
     g.fillStyle = gr;
     g.fillRect(0, 0, 96, 96);
   }
-  const gr = g.createRadialGradient(48, 48, 0, 48, 48, 34);
+  const gr = g.createRadialGradient(48, 48, 0, 48, 48, 26);
   gr.addColorStop(0, `rgba(${r},${gg},${b},0.9)`);
-  gr.addColorStop(0.6, `rgba(${r},${gg},${b},0.45)`);
+  gr.addColorStop(0.6, `rgba(${r},${gg},${b},0.4)`);
   gr.addColorStop(1, `rgba(${r},${gg},${b},0)`);
   g.fillStyle = gr;
   g.fillRect(0, 0, 96, 96);

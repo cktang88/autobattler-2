@@ -419,11 +419,11 @@ export class Fx {
     if (r >= 0.45) this.star(x, y, r * 2.0, '#fff2d0', rnd() * 6, 0.09);
     this.ring(x, y, r * 0.25, r * (big ? 2.7 : 2.0), '#ffe2b0', 0.26 + 0.06 * rs, 0.85);
     // (2) fireball: central white-hot ball + turbulent lobes thrown outward
-    this.fball(x, y, r * 0.95, life * 0.9, 0, 0, 0.3);
-    const nf = Math.min(16, Math.round((3 + r * 4) * q));
+    this.fball(x, y, r * 0.8, life * 0.75, 0, 0, 0.3);
+    const nf = Math.min(18, Math.round((4 + r * 5) * q));
     for (let i = 0; i < nf; i++) {
-      const a = rnd() * PI2, d = rnd() * r * 0.35, v = rr(0.9, 2.4) * r;
-      this.fball(x + Math.cos(a) * d, y + Math.sin(a) * d, r * rr(0.38, 0.72), life * rr(0.7, 1.1), Math.cos(a) * v, Math.sin(a) * v, rr(0, 0.8));
+      const a = (i / nf) * PI2 + rr(-0.4, 0.4), d = r * rr(0.15, 0.55), v = rr(1.0, 2.8) * r;
+      this.fball(x + Math.cos(a) * d, y + Math.sin(a) * d, r * rr(0.28, 0.55), life * rr(0.7, 1.1), Math.cos(a) * v, Math.sin(a) * v, rr(0, 0.8));
     }
     // second wave rolls up: lobes lifting off the ground
     const nu = Math.min(8, Math.round((1 + r * 2) * q));
@@ -443,11 +443,11 @@ export class Fx {
     if (r >= 0.55) this.debris(x, y, Math.min(14, Math.round(2 + r * 4)), '#2a2622', 3.5 * rs, 0.05 + 0.02 * rs, r >= 1 ? 1 : 0);
     // (4) smoke column rolling up and lingering
     const ns = Math.min(12, Math.round((3 + r * 3.5) * q));
-    const sl = (2.4 + 0.9 * rs) * (big ? 1.2 : 1);
+    const sl = (2.0 + 0.8 * rs) * (big ? 1.2 : 1);
     for (let i = 0; i < ns; i++) {
       this.add(SMOKE, x + rr(-0.35, 0.35) * r, y + rr(-0.35, 0.35) * r, {
-        size: r * rr(0.32, 0.55), grow: r * rr(0.7, 1.1), max: sl * rr(0.75, 1.15), color: i % 3 ? '#26221e' : '#39332d',
-        vx: this.wind.x + rr(-0.2, 0.2), vy: this.wind.y + rr(-0.2, 0.2), vz: rr(0.45, 1.0) * (0.7 + 0.3 * rs), z: rr(0.05, 0.35) * rs, drag: 0.9, alpha: 0.6, vr: rr(-0.5, 0.5),
+        size: r * rr(0.24, 0.42), grow: r * rr(0.45, 0.75), max: sl * rr(0.75, 1.15), color: i % 3 ? '#2c2824' : '#3d3730',
+        vx: this.wind.x + rr(-0.2, 0.2), vy: this.wind.y + rr(-0.2, 0.2), vz: rr(0.7, 1.5) * (0.7 + 0.3 * rs), z: rr(0.1, 0.4) * rs, drag: 0.8, alpha: 0.5, vr: rr(-0.5, 0.5),
       });
     }
     // a lighter cap of smoke follows a moment later
@@ -455,8 +455,8 @@ export class Fx {
       this.schedule(0.22, () => {
         for (let i = 0; i < Math.min(5, Math.round((2 + r) * q)); i++) {
           this.add(SMOKE, x + rr(-0.3, 0.3) * r, y + rr(-0.3, 0.3) * r, {
-            size: r * rr(0.4, 0.6), grow: r * rr(0.7, 1.0), max: sl * rr(0.8, 1.1), color: '#5b554e',
-            vx: this.wind.x + rr(-0.15, 0.15), vy: this.wind.y + rr(-0.15, 0.15), vz: rr(0.35, 0.8) * (0.7 + 0.3 * rs), z: 0.5 * rs, drag: 0.9, alpha: 0.45, vr: rr(-0.4, 0.4),
+            size: r * rr(0.3, 0.45), grow: r * rr(0.45, 0.7), max: sl * rr(0.8, 1.1), color: '#5b554e',
+            vx: this.wind.x + rr(-0.15, 0.15), vy: this.wind.y + rr(-0.15, 0.15), vz: rr(0.6, 1.2) * (0.7 + 0.3 * rs), z: 0.5 * rs, drag: 0.8, alpha: 0.4, vr: rr(-0.4, 0.4),
           });
         }
       });
