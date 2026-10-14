@@ -264,11 +264,22 @@ const panOf = (x: number) => {
 
 function explosion(r: number, pan: number, big: boolean): void {
   const s = Math.min(2.5, Math.max(0.3, r));
+  // layered: sharp crack (transient), mid body, low thump (sine drop), rumbling tail; big blasts add a delayed far boom
   noise('highpass', 0.7, 2500, 2500, 0.008, 0.4 + 0.2 * s, { pan });
+  noise('bandpass', 0.9, 1800, 500, 0.07 + 0.03 * s, 0.3 + 0.15 * s, { pan });
   tone('sine', 90 / (0.6 + s * 0.3), 28, 0.25 + s * 0.25, Math.min(1, 0.45 + s * 0.25), { pan });
   noise('lowpass', 0.8, 1400 / (0.5 + s * 0.3), 70, 0.3 + s * 0.35, Math.min(1, 0.4 + s * 0.3), { pan });
-  if (big) noise('lowpass', 0.7, 400, 60, 1.2, 0.35, { pan, delay: 0.08 });
+  if (big) {
+    noise('lowpass', 0.7, 400, 60, 1.2, 0.35, { pan, delay: 0.08 });
+    tone('sine', 60, 24, 0.7, 0.55, { pan, delay: 0.05 });
+    noise('lowpass', 0.7, 300, 50, 1.6, 0.22, { pan, delay: 0.3 });
+  }
 }
+
+/** Camera zoom relative to the fit view (1 = whole field): far away, light weapon chatter is thinned so a 300-unit battle
+ *  stays punchy instead of clipping; heavy weapons and explosions always play. */
+let viewZoom = 1;
+export function setSfxView(zoom: number): void { viewZoom = zoom; }
 
 /** Play sounds for a tick's battle events (positional pan from x in world cells, 0..FIELD_W). */
 export function battleSfx(events: BattleEvent[]): void {
@@ -281,7 +292,9 @@ export function battleSfx(events: BattleEvent[]): void {
       switch (e.t) {
         case 'fire': {
           const w = weaponSound(e.moduleId);
-          if (!w || !gate('w:' + w.key, w.gap, w.max, w.dur)) break;
+          if (!w) break;
+          if (w.dur <= 0.12 && Math.random() > Math.min(1, 0.4 + 0.3 * viewZoom)) break;
+          if (!gate('w:' + w.key, w.gap, w.max, w.dur)) break;
           R[w.key]?.(panOf(e.x), w.k);
           break;
         }

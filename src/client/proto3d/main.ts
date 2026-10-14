@@ -8,7 +8,7 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
 import { buildUnit, type Unit3D } from './units3d.ts';
 import { buildTerrain } from './terrain3d.ts';
 import { createRenderer, setupStage, setupPost, type Post } from './stage3d.ts';
-import type { Turret } from './weapons3d.ts';
+import { aimTurret, recoilKick, recoilRelax, type Turret } from './weapons3d.ts';
 
 const params = new URLSearchParams(location.search);
 const has = (k: string, d = false) => (params.has(k) ? params.get(k) !== '0' : d);
@@ -17,6 +17,7 @@ const canvas = document.getElementById('c') as HTMLCanvasElement;
 const renderer = createRenderer(canvas);
 const scene = new THREE.Scene();
 renderer.info.autoReset = false;
+if (!has('shadow', true)) renderer.shadowMap.enabled = false;
 const stage = setupStage(renderer, scene);
 
 // ---- camera: low-FOV perspective at a Mechabellum-like tilt ------------------------------------
@@ -27,10 +28,10 @@ controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
 controls.minDistance = 4;
 controls.maxDistance = 160;
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-function setView(tx: number, tz: number, dist: number, tiltDeg = 58, yawDeg = 0) {
+function setView(tx: number, tz: number, dist: number, tiltDeg = 58, yawDeg = 0, ty = 0) {
   const tilt = THREE.MathUtils.degToRad(tiltDeg), yaw = THREE.MathUtils.degToRad(yawDeg);
-  controls.target.set(tx, 0, tz);
-  camera.position.set(tx + Math.sin(yaw) * Math.cos(tilt) * dist, Math.sin(tilt) * dist, tz + Math.cos(yaw) * Math.cos(tilt) * dist);
+  controls.target.set(tx, ty, tz);
+  camera.position.set(tx + Math.sin(yaw) * Math.cos(tilt) * dist, ty + Math.sin(tilt) * dist, tz + Math.cos(yaw) * Math.cos(tilt) * dist);
   controls.update();
 }
 (window as unknown as Record<string, unknown>).setView = setView;
@@ -115,7 +116,7 @@ function fire(tu: Turret, target: THREE.Vector3) {
   const dir = target.clone().sub(from);
   const dist = dir.length(); dir.normalize();
   spawnFlash(from, 0.5 + tu.r * 0.9);
-  tu.recoil.position.x = -tu.r * 0.18;
+  recoilKick(tu);
   if (tu.shot === 'beam') {
     const len = Math.min(dist, 18);
     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 6).rotateX(Math.PI / 2).translate(0, 0, len / 2), mats.beam.clone());
@@ -191,12 +192,8 @@ function frame() {
       }
       if (best && bd < 60 && !tu.fixed) {
         tgt.copy(best.u.root.position); tgt.y += 0.5;
-        // aim in unit-local space for traverse
         const loc = u.root.worldToLocal(tgt.clone());
-        const want = -Math.atan2(loc.z - tu.yaw.position.z, loc.x - tu.yaw.position.x);
-        let diff = want - tu.yaw.rotation.y;
-        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        tu.yaw.rotation.y += diff * Math.min(1, dt * 3);
+        const diff = aimTurret(tu, loc.x, loc.z, dt);
         const gx = Math.abs(diff) < 0.25;
         const ns = nextShot.get(tu) ?? (t + 1 + ((i * 0.37 + p.x * 0.13) % 2));
         if (gx && t >= ns && !frozen) {
@@ -206,8 +203,7 @@ function frame() {
       } else if (!tu.fixed) {
         tu.yaw.rotation.y = Math.sin(t * 0.4 + i * 1.7 + p.x) * 0.5;
       }
-      tu.recoil.position.x *= Math.max(0, 1 - dt * 9);
-      if (tu.spin) tu.spin.rotation.x += dt * (tu.recoil.position.x < -0.01 ? 30 : 6);
+      recoilRelax(tu, dt);
     }
   }
   for (let i = fx.length - 1; i >= 0; i--) {
@@ -240,3 +236,4 @@ requestAnimationFrame(frame);
 (window as unknown as Record<string, unknown>).ready = true;
 
 (window as unknown as Record<string, unknown>).unitStats = () => units.map((e) => { let meshes = 0; e.u.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; }); return `${e.p.id}/${e.p.team}: meshes ${meshes} tris ${Math.round(e.u.tris)}`; });
+(window as unknown as Record<string, unknown>).units = units;

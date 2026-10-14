@@ -392,5 +392,21 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false):
   return t;
 }
 
+/** Slew a turret's yaw toward a target given in the owning unit's local XZ plane (x fwd, z right). Returns the remaining error (rad). */
+export function aimTurret(t: Turret, lx: number, lz: number, dt: number, rate = 3): number {
+  if (t.fixed) return 0;
+  const want = -Math.atan2(lz - t.yaw.position.z, lx - t.yaw.position.x);
+  let diff = want - t.yaw.rotation.y;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  t.yaw.rotation.y += diff * Math.min(1, dt * rate);
+  return Math.abs(diff);
+}
+/** Kick the barrel assembly back (call on each shot) and relax it each frame with recoilRelax. */
+export function recoilKick(t: Turret): void { t.recoil.position.x = -t.r * 0.18; }
+export function recoilRelax(t: Turret, dt: number): void {
+  t.recoil.position.x *= Math.max(0, 1 - dt * 9);
+  if (t.spin) t.spin.rotation.x += dt * (t.recoil.position.x < -0.01 ? 30 : 6);
+}
+
 export { loft };
 export type { P2 };

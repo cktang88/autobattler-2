@@ -47,7 +47,7 @@ export function contactShadow(L: number, W: number): THREE.Mesh {
   return m;
 }
 
-const DECK_H = [0, 0.14, 0.2, 0.28, 0.42, 0.55];
+const DECK_H = [0, 0.17, 0.25, 0.36, 0.5, 0.65];
 
 export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const ch = CHASSIS_BY_ID.get(design.chassis)!;
@@ -84,17 +84,18 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     if (gear.update) updates.push((t, _dt, mv) => gear.update!(t, mv));
     const Hd = DECK_H[Math.min(5, S)] * (S >= 4 ? 1 : 1);
     hull = buildHull(hb, kit, ch.shape, L, W, gear.y0, gear.yt, Hd, gear.wi, gear.tracked);
-    if (S >= 3 || ch.shape === 'long') {
+    if (S >= 2) {
       // superstructure on the best free stretch of deck
-      const rcase = Math.min(0.12 * L, 0.5), hw = Math.min(W * 0.2, 0.22 * S);
+      const rcase = Math.min(S === 2 ? 0.16 * L : 0.12 * L, 0.5), hw = Math.min(W * (S === 2 ? 0.17 : 0.2), 0.22 * S);
       let best = 0, bx = 0;
       for (let k = 0; k < 24; k++) {
         const cx = -L * 0.42 + k * L * 0.026;
+        if (S === 2 && cx > -L * 0.12) continue;
         const clear = Math.min(...mounts.map((m) => Math.max(Math.abs(m.x - cx) - rcase, Math.abs(m.z) - hw) - m.r * 0.95), 5);
         if (clear > best && deckAt(hull, cx - rcase, 0) > 0 && deckAt(hull, cx + rcase, 0) > 0) { best = clear; bx = cx; }
       }
-      if (best > 0.02 && S >= 3) {
-        addCasemate(hb, kit, hull, bx, rcase, hw, Hd * 0.75);
+      if (best > 0.02) {
+        addCasemate(hb, kit, hull, bx, rcase, hw, Hd * (S >= 3 ? 0.75 : 0.55));
         mounts.push({ x: bx, z: 0, r: Math.max(rcase, hw) * 1.1 });
         if (S >= 4) addBridge(hb, kit, hull, bx - rcase * 0.1, S * 0.55);
       }
@@ -110,7 +111,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     if (flying) {
       y = air!.hpY(o.x, o.y);
       // pylon from the airframe to the weapon
-      if (ch.domain === 'jet' || mob.id === 'jet') hb.box(kit.trim, 0.2 * tu.r + 0.1, Math.abs(y) + 0.05, 0.05, o.x, y / 2 + 0.02, o.y, 0.008);
+      if (ch.domain === 'jet' || mob.id === 'jet') hb.box(kit.trim, 0.2 * tu.r + 0.1, Math.abs(y) + 0.05, 0.05, air!.hpX ? air!.hpX(o.x, o.y) : o.x, y / 2 + 0.02, o.y, 0.008);
     } else {
       y = deckAt(hull!, o.x, o.y);
       if (y < 0) y = hullTop;
@@ -127,7 +128,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
         if (S >= 3) hb.cylb(kit.trim, r * 1.1, 0.02, 0.004, [o.x, y, o.y], 'y', 20);
       }
     }
-    tu.yaw.position.set(o.x, y, o.y);
+    tu.yaw.position.set(flying && air?.hpX ? air.hpX(o.x, o.y) : o.x, y, o.y);
     body.add(tu.yaw);
     turrets.push(tu);
     tris += tu.tris;

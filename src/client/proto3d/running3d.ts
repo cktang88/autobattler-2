@@ -89,7 +89,7 @@ export function trackAssembly(b: Bld, kit: Kit, L: number, h: number, w: number,
     const sl = (L * 0.86) / ns;
     for (let i = 0; i < ns; i++) {
       const sxc = -L * 0.43 + sl * (i + 0.5);
-      b.box(i === 0 ? kit.hull : kit.trim, sl * 0.94, h * 0.62, w * 0.1, sxc, y + h * 0.66, z + side * (w * 0.5 + w * 0.12), Math.min(0.012, w * 0.05), [side * 0.06, 0, 0]);
+      b.box(i % 3 === 1 ? kit.panel : kit.hull, sl * 0.94, h * 0.62, w * 0.1, sxc, y + h * 0.66, z + side * (w * 0.5 + w * 0.12), Math.min(0.012, w * 0.05), [side * 0.06, 0, 0]);
     }
   }
 }
@@ -148,9 +148,9 @@ export function buildGear(parent: THREE.Group, mobId: string, L: number, W: numb
     }
     case 'legs': case 'spider': case 'titanlegs': case 'jumpjets': {
       const spider = mobId === 'spider';
-      const hy = (spider ? 0.4 : 0.58) * hf + 0.2 * S;
+      const hy = (spider ? 0.4 : 0.85) * hf + 0.2 * S;
       const nLegs = spider ? 6 : 2;
-      const thick = (spider ? 0.034 : 0.06) * Math.min(S, 3.4) + 0.03;
+      const thick = (spider ? 0.046 : 0.05) * Math.min(S, 3.4) + 0.03;
       for (let i = 0; i < nLegs; i++) {
         const sg = i % 2 ? 1 : -1;
         const row = spider ? Math.floor(i / 2) - 1 : 0;
@@ -158,7 +158,9 @@ export function buildGear(parent: THREE.Group, mobId: string, L: number, W: numb
         const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
         const footX = hipX + (spider ? row * L * 0.2 : 0);
         const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
-        legsOut.push(makeLeg(parent, kit, [hipX, hy, hipZ], [footX, 0, footZ], thick, spider ? [0, 1, sg * 0.35] : [1, 0.12, 0], spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : (i % 2) * Math.PI, spider));
+        b.box(kit.trim, thick * 3.2, thick * 3.0, thick * 3.2, hipX, hy, hipZ - sg * thick * 0.4, thick * 0.3);
+        b.box(kit.hull, thick * 2.4, thick * 0.5, thick * 2.6, hipX, hy + thick * 1.6, hipZ - sg * thick * 0.4, thick * 0.12);
+        legsOut.push(makeLeg(parent, kit, [hipX, hy, hipZ], [footX, 0, footZ], thick, spider ? [0, 0.75, sg * 0.7] : [1, 0.12, 0], spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : (i % 2) * Math.PI, spider));
       }
       gear = { y0: hy - 0.05, yt: hy + 0.05, wi: W * 0.34, tracked: false, update: (t, mv) => legsOut.forEach((lg) => lg.step(t, mv)) };
       break;

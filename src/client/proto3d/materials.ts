@@ -50,10 +50,10 @@ function makePanelTexture(): THREE.DataTexture {
     // seam groove: dark in height + albedo
     gg.strokeStyle = 'rgb(40,40,40)'; gg.lineWidth = 4; gg.strokeRect(x + 2, y + 2, w - 4, h - 4);
     gg.strokeStyle = 'rgb(190,190,190)'; gg.lineWidth = 2; gg.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
-    gr.strokeStyle = 'rgba(20,20,20,0.7)'; gr.lineWidth = 2.5; gr.strokeRect(x + 2, y + 2, w - 4, h - 4);
+    gr.strokeStyle = 'rgba(20,20,20,0.45)'; gr.lineWidth = 2.5; gr.strokeRect(x + 2, y + 2, w - 4, h - 4);
     // rivets
-    for (let px = x + 14; px < x + w - 10; px += 20) for (const py of [y + 14, y + h - 14]) { gg.fillStyle = 'rgb(235,235,235)'; gg.beginPath(); gg.arc(px, py, 2.6, 0, 7); gg.fill(); }
-    for (let py = y + 14; py < y + h - 10; py += 20) for (const px of [x + 14, x + w - 14]) { gg.fillStyle = 'rgb(235,235,235)'; gg.beginPath(); gg.arc(px, py, 2.6, 0, 7); gg.fill(); }
+    for (let px = x + 14; px < x + w - 10; px += 36) for (const py of [y + 14, y + h - 14]) { gg.fillStyle = 'rgb(235,235,235)'; gg.beginPath(); gg.arc(px, py, 2.6, 0, 7); gg.fill(); }
+    for (let py = y + 14; py < y + h - 10; py += 36) for (const px of [x + 14, x + w - 14]) { gg.fillStyle = 'rgb(235,235,235)'; gg.beginPath(); gg.arc(px, py, 2.6, 0, 7); gg.fill(); }
     // wear along the edges: chipped paint
     for (let i = 0; i < w / 6; i++) {
       const o = r() < 0.5;
@@ -204,8 +204,8 @@ export function paint(color: string, o: PaintOpts = {}): THREE.MeshStandardMater
           float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
           float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
           vec3 cc = camoA;
-          cc = mix(cc, camoB, smoothstep(0.50, 0.53, n1));
-          cc = mix(cc, camoC, smoothstep(0.58, 0.61, n2) * (1.0 - smoothstep(0.50, 0.53, n1) * 0.4));
+          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
+          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
           diffuseColor.rgb = cc;
         }
         diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
@@ -236,7 +236,7 @@ function makeUber(rows: Row[], camo: [string, string, string]): THREE.MeshStanda
     const c = new THREE.Color(r.color);
     A.push(new THREE.Vector4(c.r, c.g, c.b, r.rough));
     B.push(new THREE.Vector4(r.metal, r.camo ? 1 : 0, r.wear ?? 0.6, r.dirt ?? 1));
-    Cq.push(new THREE.Vector4(r.scale ?? 0.9, r.bump ?? 2.2, 0, 0));
+    Cq.push(new THREE.Vector4(r.scale ?? 0.9, (r.bump ?? 2.2) * 0.7, 0, 0));
     const e = new THREE.Color(r.em ?? '#000');
     E.push(new THREE.Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), 0));
   }
@@ -264,12 +264,12 @@ ${GLSL_FNS}`)
         float tH = tc.g; float tWear = tc.b;
         diffuseColor.rgb = rA.rgb;
         if (rB.y > 0.5) {
-          vec3 cp = vTP * 1.25;
+          vec3 cp = vTP * 0.85;
           float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
           float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
           vec3 cc = camoA;
-          cc = mix(cc, camoB, smoothstep(0.50, 0.53, n1));
-          cc = mix(cc, camoC, smoothstep(0.58, 0.61, n2) * (1.0 - smoothstep(0.50, 0.53, n1) * 0.4));
+          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
+          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
           diffuseColor.rgb = cc;
         }
         diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
@@ -304,8 +304,8 @@ export interface Kit {
 }
 
 const TEAM_CAMO: [[string, string, string], [string, string, string]] = [
-  ['#5a646a', '#3b444a', '#7f8a8c'], // viewer: cool slate-grey three-tone
-  ['#7b704f', '#4c4f36', '#a39064'], // enemy: khaki / olive / sand
+  ['#5a646a', '#3a4349', '#76828a'], // viewer: cool slate-grey three-tone
+  ['#6a664a', '#3d4026', '#a09166'], // enemy: khaki / olive / sand
 ];
 const kits: (Kit | null)[] = [null, null];
 
@@ -317,7 +317,7 @@ export function makeKit(team: 0 | 1): Kit {
   const camo = TEAM_CAMO[team];
   const names = ['hull', 'trim', 'panel', 'metal', 'steel', 'rubber', 'glass', 'canvas', 'hazard', 'accent', 'glow', 'lamp', 'hot', 'plasma', 'rail'] as const;
   const rows: Row[] = [
-    { color: camo[0], rough: 0.74, metal: 0.12, camo: true, scale: 0.8 },
+    { color: camo[0], rough: 0.74, metal: 0.12, camo: true, scale: 0.5, bump: 1.3 },
     { color: team === 0 ? '#2c3237' : '#35342a', rough: 0.8, metal: 0.2, scale: 1.0 },
     { color: team === 0 ? '#6c777c' : '#8b8160', rough: 0.78, metal: 0.1, scale: 0.9 },
     { color: '#3a3d3f', rough: 0.46, metal: 0.85, scale: 1.7, wear: 0.9, dirt: 0.6 },

@@ -34531,16 +34531,16 @@ function makePanelTexture() {
     gg.strokeStyle = "rgb(190,190,190)";
     gg.lineWidth = 2;
     gg.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
-    gr.strokeStyle = "rgba(20,20,20,0.7)";
+    gr.strokeStyle = "rgba(20,20,20,0.45)";
     gr.lineWidth = 2.5;
     gr.strokeRect(x + 2, y + 2, w - 4, h - 4);
-    for (let px2 = x + 14; px2 < x + w - 10; px2 += 20) for (const py2 of [y + 14, y + h - 14]) {
+    for (let px2 = x + 14; px2 < x + w - 10; px2 += 36) for (const py2 of [y + 14, y + h - 14]) {
       gg.fillStyle = "rgb(235,235,235)";
       gg.beginPath();
       gg.arc(px2, py2, 2.6, 0, 7);
       gg.fill();
     }
-    for (let py2 = y + 14; py2 < y + h - 10; py2 += 20) for (const px2 of [x + 14, x + w - 14]) {
+    for (let py2 = y + 14; py2 < y + h - 10; py2 += 36) for (const px2 of [x + 14, x + w - 14]) {
       gg.fillStyle = "rgb(235,235,235)";
       gg.beginPath();
       gg.arc(px2, py2, 2.6, 0, 7);
@@ -34753,8 +34753,8 @@ function paint(color, o = {}) {
           float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
           float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
           vec3 cc = camoA;
-          cc = mix(cc, camoB, smoothstep(0.50, 0.53, n1));
-          cc = mix(cc, camoC, smoothstep(0.58, 0.61, n2) * (1.0 - smoothstep(0.50, 0.53, n1) * 0.4));
+          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
+          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
           diffuseColor.rgb = cc;
         }
         diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
@@ -34779,7 +34779,7 @@ function makeUber(rows, camo) {
     const c = new Color(r.color);
     A2.push(new Vector4(c.r, c.g, c.b, r.rough));
     B.push(new Vector4(r.metal, r.camo ? 1 : 0, r.wear ?? 0.6, r.dirt ?? 1));
-    Cq.push(new Vector4(r.scale ?? 0.9, r.bump ?? 2.2, 0, 0));
+    Cq.push(new Vector4(r.scale ?? 0.9, (r.bump ?? 2.2) * 0.7, 0, 0));
     const e = new Color(r.em ?? "#000");
     E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), 0));
   }
@@ -34811,12 +34811,12 @@ ${GLSL_FNS}`).replace(
         float tH = tc.g; float tWear = tc.b;
         diffuseColor.rgb = rA.rgb;
         if (rB.y > 0.5) {
-          vec3 cp = vTP * 1.25;
+          vec3 cp = vTP * 0.85;
           float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
           float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
           vec3 cc = camoA;
-          cc = mix(cc, camoB, smoothstep(0.50, 0.53, n1));
-          cc = mix(cc, camoC, smoothstep(0.58, 0.61, n2) * (1.0 - smoothstep(0.50, 0.53, n1) * 0.4));
+          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
+          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
           diffuseColor.rgb = cc;
         }
         diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
@@ -34831,9 +34831,9 @@ ${GLSL_FNS}`).replace(
   return m;
 }
 var TEAM_CAMO = [
-  ["#5a646a", "#3b444a", "#7f8a8c"],
+  ["#5a646a", "#3a4349", "#76828a"],
   // viewer: cool slate-grey three-tone
-  ["#7b704f", "#4c4f36", "#a39064"]
+  ["#6a664a", "#3d4026", "#a09166"]
   // enemy: khaki / olive / sand
 ];
 var kits = [null, null];
@@ -34844,7 +34844,7 @@ function makeKit(team) {
   const camo = TEAM_CAMO[team];
   const names = ["hull", "trim", "panel", "metal", "steel", "rubber", "glass", "canvas", "hazard", "accent", "glow", "lamp", "hot", "plasma", "rail"];
   const rows = [
-    { color: camo[0], rough: 0.74, metal: 0.12, camo: true, scale: 0.8 },
+    { color: camo[0], rough: 0.74, metal: 0.12, camo: true, scale: 0.5, bump: 1.3 },
     { color: team === 0 ? "#2c3237" : "#35342a", rough: 0.8, metal: 0.2, scale: 1 },
     { color: team === 0 ? "#6c777c" : "#8b8160", rough: 0.78, metal: 0.1, scale: 0.9 },
     { color: "#3a3d3f", rough: 0.46, metal: 0.85, scale: 1.7, wear: 0.9, dirt: 0.6 },
@@ -35021,6 +35021,98 @@ function mergeAttributes(attributes) {
   if (gpuType !== void 0) {
     result.gpuType = gpuType;
   }
+  return result;
+}
+function mergeVertices(geometry, tolerance = 1e-4) {
+  tolerance = Math.max(tolerance, Number.EPSILON);
+  const hashToIndex = {};
+  const indices = geometry.getIndex();
+  const positions = geometry.getAttribute("position");
+  const vertexCount = indices ? indices.count : positions.count;
+  let nextIndex = 0;
+  const attributeNames = Object.keys(geometry.attributes);
+  const tmpAttributes = {};
+  const tmpMorphAttributes = {};
+  const newIndices = [];
+  const getters = ["getX", "getY", "getZ", "getW"];
+  const setters = ["setX", "setY", "setZ", "setW"];
+  for (let i = 0, l = attributeNames.length; i < l; i++) {
+    const name = attributeNames[i];
+    const attr = geometry.attributes[name];
+    tmpAttributes[name] = new attr.constructor(
+      new attr.array.constructor(attr.count * attr.itemSize),
+      attr.itemSize,
+      attr.normalized
+    );
+    const morphAttributes = geometry.morphAttributes[name];
+    if (morphAttributes) {
+      if (!tmpMorphAttributes[name]) tmpMorphAttributes[name] = [];
+      morphAttributes.forEach((morphAttr, i2) => {
+        const array = new morphAttr.array.constructor(morphAttr.count * morphAttr.itemSize);
+        tmpMorphAttributes[name][i2] = new morphAttr.constructor(array, morphAttr.itemSize, morphAttr.normalized);
+      });
+    }
+  }
+  const halfTolerance = tolerance * 0.5;
+  const exponent = Math.log10(1 / tolerance);
+  const hashMultiplier = Math.pow(10, exponent);
+  const hashAdditive = halfTolerance * hashMultiplier;
+  for (let i = 0; i < vertexCount; i++) {
+    const index = indices ? indices.getX(i) : i;
+    let hash = "";
+    for (let j = 0, l = attributeNames.length; j < l; j++) {
+      const name = attributeNames[j];
+      const attribute = geometry.getAttribute(name);
+      const itemSize = attribute.itemSize;
+      for (let k = 0; k < itemSize; k++) {
+        hash += `${Math.trunc(attribute[getters[k]](index) * hashMultiplier + hashAdditive)},`;
+      }
+    }
+    if (hash in hashToIndex) {
+      newIndices.push(hashToIndex[hash]);
+    } else {
+      for (let j = 0, l = attributeNames.length; j < l; j++) {
+        const name = attributeNames[j];
+        const attribute = geometry.getAttribute(name);
+        const morphAttributes = geometry.morphAttributes[name];
+        const itemSize = attribute.itemSize;
+        const newArray = tmpAttributes[name];
+        const newMorphArrays = tmpMorphAttributes[name];
+        for (let k = 0; k < itemSize; k++) {
+          const getterFunc = getters[k];
+          const setterFunc = setters[k];
+          newArray[setterFunc](nextIndex, attribute[getterFunc](index));
+          if (morphAttributes) {
+            for (let m = 0, ml = morphAttributes.length; m < ml; m++) {
+              newMorphArrays[m][setterFunc](nextIndex, morphAttributes[m][getterFunc](index));
+            }
+          }
+        }
+      }
+      hashToIndex[hash] = nextIndex;
+      newIndices.push(nextIndex);
+      nextIndex++;
+    }
+  }
+  const result = geometry.clone();
+  for (const name in geometry.attributes) {
+    const tmpAttribute = tmpAttributes[name];
+    result.setAttribute(name, new tmpAttribute.constructor(
+      tmpAttribute.array.slice(0, nextIndex * tmpAttribute.itemSize),
+      tmpAttribute.itemSize,
+      tmpAttribute.normalized
+    ));
+    if (!(name in tmpMorphAttributes)) continue;
+    for (let j = 0; j < tmpMorphAttributes[name].length; j++) {
+      const tmpMorphAttribute = tmpMorphAttributes[name][j];
+      result.morphAttributes[name][j] = new tmpMorphAttribute.constructor(
+        tmpMorphAttribute.array.slice(0, nextIndex * tmpMorphAttribute.itemSize),
+        tmpMorphAttribute.itemSize,
+        tmpMorphAttribute.normalized
+      );
+    }
+  }
+  result.setIndex(newIndices);
   return result;
 }
 
@@ -35684,6 +35776,21 @@ function buildTurret(mod, S, kit, fixed = false) {
   t.tris = b.tris - tris0 + p.tris + rc.tris + sp.tris;
   return t;
 }
+function aimTurret(t, lx, lz, dt, rate = 3) {
+  if (t.fixed) return 0;
+  const want = -Math.atan2(lz - t.yaw.position.z, lx - t.yaw.position.x);
+  let diff = want - t.yaw.rotation.y;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  t.yaw.rotation.y += diff * Math.min(1, dt * rate);
+  return Math.abs(diff);
+}
+function recoilKick(t) {
+  t.recoil.position.x = -t.r * 0.18;
+}
+function recoilRelax(t, dt) {
+  t.recoil.position.x *= Math.max(0, 1 - dt * 9);
+  if (t.spin) t.spin.rotation.x += dt * (t.recoil.position.x < -0.01 ? 30 : 6);
+}
 
 // src/client/proto3d/running3d.ts
 var rr = (k) => k;
@@ -35758,7 +35865,7 @@ function trackAssembly(b, kit, L, h, w, z, y, opts) {
     const sl = L * 0.86 / ns;
     for (let i = 0; i < ns; i++) {
       const sxc = -L * 0.43 + sl * (i + 0.5);
-      b.box(i === 0 ? kit.hull : kit.trim, sl * 0.94, h * 0.62, w * 0.1, sxc, y + h * 0.66, z + side * (w * 0.5 + w * 0.12), Math.min(0.012, w * 0.05), [side * 0.06, 0, 0]);
+      b.box(i % 3 === 1 ? kit.panel : kit.hull, sl * 0.94, h * 0.62, w * 0.1, sxc, y + h * 0.66, z + side * (w * 0.5 + w * 0.12), Math.min(0.012, w * 0.05), [side * 0.06, 0, 0]);
     }
   }
 }
@@ -35825,9 +35932,9 @@ function buildGear(parent, mobId, L, W, S, kit, legsOut) {
     case "titanlegs":
     case "jumpjets": {
       const spider = mobId === "spider";
-      const hy = (spider ? 0.4 : 0.58) * hf + 0.2 * S;
+      const hy = (spider ? 0.4 : 0.85) * hf + 0.2 * S;
       const nLegs = spider ? 6 : 2;
-      const thick = (spider ? 0.034 : 0.06) * Math.min(S, 3.4) + 0.03;
+      const thick = (spider ? 0.046 : 0.05) * Math.min(S, 3.4) + 0.03;
       for (let i = 0; i < nLegs; i++) {
         const sg = i % 2 ? 1 : -1;
         const row = spider ? Math.floor(i / 2) - 1 : 0;
@@ -35835,7 +35942,9 @@ function buildGear(parent, mobId, L, W, S, kit, legsOut) {
         const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
         const footX = hipX + (spider ? row * L * 0.2 : 0);
         const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
-        legsOut.push(makeLeg(parent, kit, [hipX, hy, hipZ], [footX, 0, footZ], thick, spider ? [0, 1, sg * 0.35] : [1, 0.12, 0], spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : i % 2 * Math.PI, spider));
+        b.box(kit.trim, thick * 3.2, thick * 3, thick * 3.2, hipX, hy, hipZ - sg * thick * 0.4, thick * 0.3);
+        b.box(kit.hull, thick * 2.4, thick * 0.5, thick * 2.6, hipX, hy + thick * 1.6, hipZ - sg * thick * 0.4, thick * 0.12);
+        legsOut.push(makeLeg(parent, kit, [hipX, hy, hipZ], [footX, 0, footZ], thick, spider ? [0, 0.75, sg * 0.7] : [1, 0.12, 0], spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : i % 2 * Math.PI, spider));
       }
       gear = { y0: hy - 0.05, yt: hy + 0.05, wi: W * 0.34, tracked: false, update: (t, mv) => legsOut.forEach((lg) => lg.step(t, mv)) };
       break;
@@ -35970,9 +36079,9 @@ function makeLeg(g, kit, hip, foot, thick, bend, phase, spider) {
 
 // src/client/proto3d/hulls3d.ts
 var RECIPES = {
-  wedge: [[-1, 0.8, 0.82, 0.7], [-0.9, 1, 0.86, 0.95], [0.1, 1, 0.8, 1], [0.62, 0.9, 0.6, 0.62], [1, 0.52, 0.5, 0.3]],
-  box: [[-1, 0.9, 0.9, 0.82], [-0.92, 1, 0.92, 1], [0.6, 1, 0.88, 1], [0.78, 0.95, 0.7, 0.7], [1, 0.78, 0.6, 0.45]],
-  hex: [[-1, 0.7, 0.8, 0.8], [-0.82, 0.96, 0.85, 1], [-0.2, 1, 0.82, 1], [0.45, 0.96, 0.7, 0.85], [1, 0.5, 0.5, 0.4]],
+  wedge: [[-1, 0.8, 0.82, 0.8], [-0.9, 1, 0.86, 1.05], [-0.1, 1, 0.8, 1.05], [0.15, 1, 0.78, 0.85], [0.62, 0.9, 0.6, 0.6], [1, 0.52, 0.5, 0.3]],
+  box: [[-1, 0.9, 0.9, 0.85], [-0.92, 1, 0.92, 1.08], [-0.1, 1, 0.9, 1.08], [0.15, 1, 0.88, 0.9], [0.6, 1, 0.86, 0.9], [0.78, 0.95, 0.7, 0.68], [1, 0.78, 0.6, 0.42]],
+  hex: [[-1, 0.7, 0.8, 0.85], [-0.82, 0.96, 0.85, 1.12], [-0.2, 1, 0.82, 1.12], [0.05, 1, 0.8, 0.92], [0.45, 0.96, 0.7, 0.82], [1, 0.5, 0.5, 0.38]],
   long: [[-1, 0.7, 0.8, 0.8], [-0.9, 0.95, 0.86, 0.95], [0.5, 0.98, 0.8, 1], [0.82, 0.85, 0.6, 0.75], [1, 0.55, 0.5, 0.4]],
   cross: [[-1, 0.74, 0.8, 0.8], [-0.8, 0.9, 0.8, 0.95], [-0.3, 1, 0.8, 1], [0.3, 1, 0.8, 1], [0.6, 0.8, 0.7, 0.8], [1, 0.46, 0.5, 0.45]],
   round: [[-1, 0.5, 0.7, 0.7], [-0.8, 0.9, 0.8, 0.95], [-0.4, 1, 0.8, 1], [0.4, 1, 0.8, 1], [0.8, 0.9, 0.7, 0.85], [1, 0.5, 0.6, 0.55]],
@@ -36111,6 +36220,27 @@ function greeble(b, kit, hull, S, rnd, mounts) {
       b.cyl(kit.lamp, u * 0.3, u * 0.3, u * 0.12, [x + u * 0.4, top2 + u * 0.25, z], "x", 8);
     }
   }
+  if (S >= 2) {
+    const wt = hull.lofts[0].pts[2].wt;
+    for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const x = L * (-0.3 + i * 0.2) + (rnd() - 0.5) * 0.1, z = sg * wt * 0.9;
+      const top2 = flat(x, z, u * 1.6);
+      if (top2 < 0 || !free(x, z, u * 1.6)) continue;
+      const k = (i + (sg > 0 ? 1 : 0)) % 3;
+      if (k === 0) {
+        b.box(kit.panel, u * 3, u * 1.1, u * 1.5, x, top2 + u * 0.55, z, 8e-3);
+        b.box(kit.metal, u * 0.2, u * 1.15, u * 1.55, x, top2 + u * 0.56, z, 2e-3);
+      } else if (k === 1) {
+        b.cylb(kit.canvas, u * 0.65, u * 3.2, u * 0.12, [x - u * 1.6, top2 + u * 0.7, z], "x", 10);
+        b.strut(kit.metal, [x - u * 0.6, top2, z - u * 0.7], [x - u * 0.6, top2 + u * 1.4, z + u * 0.7], u * 0.06, u * 0.06, 4);
+      } else {
+        for (let q = 0; q < 2; q++) {
+          b.box(kit.hull, u * 0.9, u * 1.3, u * 0.5, x, top2 + u * 0.65, z + (q - 0.5) * u * 0.8, 6e-3);
+          b.box(kit.metal, u * 0.5, u * 0.14, u * 0.3, x, top2 + u * 1.35, z + (q - 0.5) * u * 0.8, 2e-3);
+        }
+      }
+    }
+  }
   const rx = -L * 0.5 + Math.max(0.1, L * 0.14);
   const top = deckAt(hull, rx, 0);
   if (top > 0) {
@@ -36198,13 +36328,13 @@ function giantDetails(b, kit, hull, S, rnd, mounts) {
   if (best && bestD > u * 2.4) {
     const [x, z] = best;
     const top = deckAt(hull, x, z);
-    const rr2 = Math.min(u * 1.9, bestD * 0.85);
+    const rr2 = Math.min(u * 1.35, bestD * 0.8);
     b.cylb(kit.trim, rr2 * 1.15, rr2 * 0.18, rr2 * 0.05, [x, top, z], "y", 16);
-    b.lathe(kit.hull, [[0, 0], [rr2, 0], [rr2, rr2 * 1.2], [rr2 * 0.86, rr2 * 1.45], [0, rr2 * 1.5]], [x, top + rr2 * 0.18, z], "y", 16);
-    for (let k = 0; k < 3; k++) b.cylb(kit.steel, rr2 * 1.04, rr2 * 0.07, 3e-3, [x, top + rr2 * (0.4 + k * 0.38), z], "y", 16);
-    for (let k = 0; k < 8; k++) {
-      const a = k / 8 * Math.PI * 2;
-      b.box(kit.hot, rr2 * 0.05, rr2 * 0.5, rr2 * 0.16, x + Math.cos(a) * rr2 * 0.98, top + rr2 * 0.9, z + Math.sin(a) * rr2 * 0.98, 2e-3, [0, -a, 0]);
+    b.lathe(kit.hull, [[0, 0], [rr2, 0], [rr2, rr2 * 0.8], [rr2 * 0.86, rr2 * 1], [0, rr2 * 1.05]], [x, top + rr2 * 0.18, z], "y", 16);
+    for (let k = 0; k < 2; k++) b.cylb(kit.steel, rr2 * 1.04, rr2 * 0.07, 3e-3, [x, top + rr2 * (0.35 + k * 0.4), z], "y", 16);
+    for (let k = 0; k < 6; k++) {
+      const a = k / 6 * Math.PI * 2 + 0.3;
+      b.box(kit.hot, rr2 * 0.04, rr2 * 0.16, rr2 * 0.1, x + Math.cos(a) * rr2 * 0.99, top + rr2 * 0.55, z + Math.sin(a) * rr2 * 0.99, 2e-3, [0, -a, 0]);
     }
     for (const sg of [-1, 1]) {
       b.cylb(kit.metal, rr2 * 0.22, rr2 * 1.7, rr2 * 0.03, [x - rr2 * 0.2, top + rr2 * 0.3, z + sg * rr2 * 0.62], "y", 8);
@@ -36278,8 +36408,20 @@ function buildJet(b, kit, L, W, S) {
   b.decal(R * 2, R * 0.9, -hl * 0.1, R * 1.06, 0, atlasUV(2), Math.PI / 2 * 0);
   b.decal(R * 0.7, R * 0.7, -hl * 0.52, R * 0.92 + 4e-3, 0, atlasUV(4 + Math.floor(L * 7) % 10), 0);
   void S;
+  const lerpK = (f, k) => {
+    for (let i = 0; i < k.length - 1; i++) if (f <= k[i + 1][0]) {
+      const t = (f - k[i][0]) / (k[i + 1][0] - k[i][0]);
+      return k[i][1] + (k[i + 1][1] - k[i][1]) * t;
+    }
+    return k[k.length - 1][1];
+  };
+  const hpX = (x, z) => {
+    if (Math.abs(z) < 0.15) return x;
+    const f = Math.min(1, Math.abs(z) / (W * 0.5));
+    return lerpK(f, [[0.08, -hl * 0.02], [0.5, -hl * 0.4], [1, -hl * 0.78]]) - lerpK(f, [[0.08, L * 0.5], [0.5, L * 0.3], [1, L * 0.13]]) * 0.4;
+  };
   return { top: R, update: () => {
-  }, hpY: () => -R * 0.35 };
+  }, hpY: (_x2, z) => Math.abs(z) < 0.15 ? -R * 0.55 : wy - R * 0.2, hpX };
 }
 function blade(b, kit, R, chord, twist = 0.35) {
   const rings = [];
@@ -36388,7 +36530,7 @@ function contactShadow(L, W) {
   m.renderOrder = 0;
   return m;
 }
-var DECK_H = [0, 0.14, 0.2, 0.28, 0.42, 0.55];
+var DECK_H = [0, 0.17, 0.25, 0.36, 0.5, 0.65];
 function buildUnit(design, team) {
   const ch = CHASSIS_BY_ID.get(design.chassis);
   const mob = MOBILITY_BY_ID.get(design.mobility);
@@ -36422,19 +36564,20 @@ function buildUnit(design, team) {
     if (gear.update) updates.push((t, _dt, mv) => gear.update(t, mv));
     const Hd = DECK_H[Math.min(5, S)] * (S >= 4 ? 1 : 1);
     hull = buildHull(hb, kit, ch.shape, L, W, gear.y0, gear.yt, Hd, gear.wi, gear.tracked);
-    if (S >= 3 || ch.shape === "long") {
-      const rcase = Math.min(0.12 * L, 0.5), hw = Math.min(W * 0.2, 0.22 * S);
+    if (S >= 2) {
+      const rcase = Math.min(S === 2 ? 0.16 * L : 0.12 * L, 0.5), hw = Math.min(W * (S === 2 ? 0.17 : 0.2), 0.22 * S);
       let best = 0, bx = 0;
       for (let k = 0; k < 24; k++) {
         const cx = -L * 0.42 + k * L * 0.026;
+        if (S === 2 && cx > -L * 0.12) continue;
         const clear = Math.min(...mounts.map((m) => Math.max(Math.abs(m.x - cx) - rcase, Math.abs(m.z) - hw) - m.r * 0.95), 5);
         if (clear > best && deckAt(hull, cx - rcase, 0) > 0 && deckAt(hull, cx + rcase, 0) > 0) {
           best = clear;
           bx = cx;
         }
       }
-      if (best > 0.02 && S >= 3) {
-        addCasemate(hb, kit, hull, bx, rcase, hw, Hd * 0.75);
+      if (best > 0.02) {
+        addCasemate(hb, kit, hull, bx, rcase, hw, Hd * (S >= 3 ? 0.75 : 0.55));
         mounts.push({ x: bx, z: 0, r: Math.max(rcase, hw) * 1.1 });
         if (S >= 4) addBridge(hb, kit, hull, bx - rcase * 0.1, S * 0.55);
       }
@@ -36447,7 +36590,7 @@ function buildUnit(design, team) {
     let y;
     if (flying) {
       y = air.hpY(o.x, o.y);
-      if (ch.domain === "jet" || mob.id === "jet") hb.box(kit.trim, 0.2 * tu.r + 0.1, Math.abs(y) + 0.05, 0.05, o.x, y / 2 + 0.02, o.y, 8e-3);
+      if (ch.domain === "jet" || mob.id === "jet") hb.box(kit.trim, 0.2 * tu.r + 0.1, Math.abs(y) + 0.05, 0.05, air.hpX ? air.hpX(o.x, o.y) : o.x, y / 2 + 0.02, o.y, 8e-3);
     } else {
       y = deckAt(hull, o.x, o.y);
       if (y < 0) y = hullTop;
@@ -36466,7 +36609,7 @@ function buildUnit(design, team) {
         if (S >= 3) hb.cylb(kit.trim, r * 1.1, 0.02, 4e-3, [o.x, y, o.y], "y", 20);
       }
     }
-    tu.yaw.position.set(o.x, y, o.y);
+    tu.yaw.position.set(flying && air?.hpX ? air.hpX(o.x, o.y) : o.x, y, o.y);
     body.add(tu.yaw);
     turrets.push(tu);
     tris += tu.tris;
@@ -36555,8 +36698,11 @@ var hex = (s) => {
   return [n >> 16 & 255, n >> 8 & 255, n & 255];
 };
 var mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-function makeMaps(w, h, o) {
+function makeMaps(w, h, pad, o) {
   const PPC = o.ppc;
+  const IW = Math.round(w * PPC), IH = Math.round(h * PPC);
+  w += pad * 2;
+  h += pad * 2;
   const W = Math.round(w * PPC), H = Math.round(h * PPC);
   const { fbm, noise } = makeNoise(o.seed);
   const r = rng(o.seed + 5);
@@ -36568,7 +36714,7 @@ function makeMaps(w, h, o) {
   height.height = H;
   const ga = albedo.getContext("2d"), gh = height.getContext("2d");
   const ia = ga.createImageData(W, H), ih = gh.createImageData(W, H);
-  const soil = hex("#7b6b4b"), sand = hex("#a4925f"), dirt = hex("#4d4130"), gravel = hex("#706a5c"), scrub = hex("#585f3c"), dry = hex("#8d7f56");
+  const soil = hex("#645b4a"), sand = hex("#7e745d"), dirt = hex("#463e34"), gravel = hex("#66635a"), scrub = hex("#4f5538"), dry = hex("#72694f");
   const k = 1 / PPC;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -36576,12 +36722,12 @@ function makeMaps(w, h, o) {
       const n1 = fbm(cx * 0.09, cy * 0.09, 4), n2 = fbm(cx * 0.24 + 40, cy * 0.24 + 40, 4), n3 = fbm(cx * 0.55 + 90, cy * 0.55 + 90, 3);
       let c = mixc(soil, sand, sm(0.42, 0.62, n1));
       c = mixc(c, dry, sm(0.5, 0.72, fbm(cx * 0.15 + 7, cy * 0.15 + 7, 3)) * 0.5);
-      c = mixc(c, dirt, sm(0.56, 0.72, n2) * 0.8);
+      c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.5);
       const gv = sm(0.54, 0.68, fbm(cx * 0.35 + 200, cy * 0.35 + 200, 4));
       const grain = noise(x * 0.9, y * 0.9) * 0.6 + noise(x * 2.3 + 11, y * 2.3 + 5) * 0.4;
       c = mixc(c, gravel, gv * (0.45 + 0.4 * grain));
       const sc = sm(0.6, 0.72, fbm(cx * 0.2 + 300, cy * 0.2 + 300, 4));
-      c = mixc(c, scrub, sc * (0.35 + 0.5 * noise(x * 0.5, y * 0.5)));
+      c = mixc(c, scrub, sc * (0.25 + 0.35 * noise(x * 0.5, y * 0.5)));
       const m = 0.78 + 0.44 * (n3 * 0.5 + grain * 0.5) + (gv > 0.2 ? (grain - 0.5) * 0.35 * gv : 0);
       const i = (y * W + x) * 4;
       ia.data[i] = c[0] * m;
@@ -36626,13 +36772,13 @@ function makeMaps(w, h, o) {
       gh.stroke();
     }
   };
-  for (let i = 0; i < 9; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1.2), PPC * (0.14 + r() * 0.12), 0.1 + r() * 0.12);
-  for (let i = 0; i < 4; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.22, 0.12);
+  for (let i = 0; i < 6; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1), PPC * (0.07 + r() * 0.06), 0.05 + r() * 0.06);
+  for (let i = 0; i < 2; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.1, 0.07);
   for (let i = 0; i < 26; i++) {
     const x = r() * W, y = r() * H, rad = PPC * (0.25 + r() * r() * 1.5);
     const sc = ga.createRadialGradient(x, y, rad * 0.1, x, y, rad * 1.7);
-    sc.addColorStop(0, "rgba(18,14,10,0.7)");
-    sc.addColorStop(0.5, "rgba(28,22,15,0.4)");
+    sc.addColorStop(0, "rgba(18,14,10,0.55)");
+    sc.addColorStop(0.5, "rgba(28,22,15,0.28)");
     sc.addColorStop(1, "rgba(0,0,0,0)");
     ga.fillStyle = sc;
     ga.beginPath();
@@ -36669,44 +36815,50 @@ function makeMaps(w, h, o) {
     ga.ellipse(x, y, rad, rad * (0.5 + r() * 0.5), r() * 3, 0, 7);
     ga.fill();
   }
-  const zw = W * o.zoneFrac;
+  const zw = IW * o.zoneFrac;
+  ga.save();
+  ga.translate(pad * PPC, pad * PPC);
+  const W0 = W, H0 = H;
+  void W0;
+  void H0;
   if (o.zoneFrac > 0) {
     ga.fillStyle = "rgba(70,150,190,0.05)";
-    ga.fillRect(0, 0, zw, H);
+    ga.fillRect(0, 0, zw, IH);
     ga.fillStyle = "rgba(210,100,50,0.05)";
-    ga.fillRect(W - zw, 0, zw, H);
+    ga.fillRect(IW - zw, 0, zw, IH);
     ga.setLineDash([PPC * 0.3, PPC * 0.2]);
     ga.lineWidth = 3;
     ga.strokeStyle = "rgba(130,215,240,0.4)";
     ga.beginPath();
     ga.moveTo(zw, 0);
-    ga.lineTo(zw, H);
+    ga.lineTo(zw, IH);
     ga.stroke();
     ga.strokeStyle = "rgba(255,150,100,0.4)";
     ga.beginPath();
-    ga.moveTo(W - zw, 0);
-    ga.lineTo(W - zw, H);
+    ga.moveTo(IW - zw, 0);
+    ga.lineTo(IW - zw, IH);
     ga.stroke();
     ga.setLineDash([]);
   }
   if (o.grid) {
-    for (let i = 0; i <= w; i++) {
+    for (let i = 0; i <= IW / PPC; i++) {
       ga.strokeStyle = i % 5 === 0 ? "rgba(235,232,210,0.11)" : "rgba(235,232,210,0.045)";
       ga.lineWidth = i % 5 === 0 ? 2 : 1;
       ga.beginPath();
       ga.moveTo(i * PPC, 0);
-      ga.lineTo(i * PPC, H);
+      ga.lineTo(i * PPC, IH);
       ga.stroke();
     }
-    for (let j = 0; j <= h; j++) {
+    for (let j = 0; j <= IH / PPC; j++) {
       ga.strokeStyle = j % 5 === 0 ? "rgba(235,232,210,0.11)" : "rgba(235,232,210,0.045)";
       ga.lineWidth = j % 5 === 0 ? 2 : 1;
       ga.beginPath();
       ga.moveTo(0, j * PPC);
-      ga.lineTo(W, j * PPC);
+      ga.lineTo(IW, j * PPC);
       ga.stroke();
     }
   }
+  ga.restore();
   const map = new CanvasTexture(albedo);
   map.colorSpace = SRGBColorSpace;
   map.anisotropy = 16;
@@ -36760,7 +36912,7 @@ function groundMaterial(map, bump) {
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vGP; uniform sampler2D detailMap;").replace("#include <map_fragment>", `#include <map_fragment>
         vec4 dt1 = texture2D(detailMap, vGP * 0.9); vec4 dt2 = texture2D(detailMap, vGP * 0.23 + 0.37);
         float dtl = dt1.r * 0.65 + dt2.r * 0.35;
-        diffuseColor.rgb *= 0.55 + 0.9 * dtl;
+        diffuseColor.rgb *= 0.72 + 0.56 * dtl;
         float dH = dt1.g * 0.7 + dt2.g * 0.3;`).replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
         {
           vec3 sx = normalize(dFdx(-vViewPosition)), sy = normalize(dFdy(-vViewPosition));
@@ -36775,16 +36927,26 @@ function groundMaterial(map, bump) {
 }
 function rockGeometry(seed, flat) {
   const { fbm } = makeNoise(seed);
-  const g = new IcosahedronGeometry(1, 2);
+  let g = new IcosahedronGeometry(1, 4);
+  g.deleteAttribute("uv");
+  g.deleteAttribute("normal");
+  g = mergeVertices(g, 1e-4);
   const pos = g.attributes.position;
   const v = new Vector3();
   const r = rng(seed);
   const ax = 0.8 + r() * 0.5, az = 0.8 + r() * 0.5;
+  const cuts = [];
+  for (let i = 0; i < 5; i++) cuts.push(new Vector3(r() - 0.5, (r() - 0.3) * 0.8, r() - 0.5).normalize());
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
-    const n = fbm(v.x * 1.7 + 5, v.z * 1.7 + v.y * 1.3 + 9, 3);
-    const d = 0.7 + n * 0.75;
-    pos.setXYZ(i, v.x * d * ax, Math.max(-0.2, v.y * d * flat), v.z * d * az);
+    const n = fbm(v.x * 1.5 + 5, v.z * 1.5 + v.y * 1.2 + 9, 4);
+    const rid = 1 - Math.abs(fbm(v.x * 3.1 + 2, v.y * 3.1 + v.z * 2.7 + 4, 3) * 2 - 1);
+    let d = 0.74 + n * 0.55 + rid * 0.12;
+    for (const c of cuts) {
+      const k = v.dot(c);
+      if (k > 0.55) d = Math.min(d, 0.92 / k * 0.82);
+    }
+    pos.setXYZ(i, v.x * d * ax, Math.max(-0.25, v.y * d * flat), v.z * d * az);
   }
   g.computeVertexNormals();
   return g;
@@ -36793,8 +36955,9 @@ function buildTerrain(w, h, opts = {}) {
   const seed = opts.seed ?? 99;
   const group = new Group();
   group.name = "terrain";
-  const { map, bump } = makeMaps(w, h, { seed, ppc: opts.ppc ?? 36, grid: opts.grid ?? true, zoneFrac: opts.zoneFrac ?? 0.22 });
-  const ground = new Mesh(new PlaneGeometry(w, h).rotateX(-Math.PI / 2), groundMaterial(map, bump));
+  const pad = 12;
+  const { map, bump } = makeMaps(w, h, pad, { seed, ppc: opts.ppc ?? 24, grid: opts.grid ?? true, zoneFrac: opts.zoneFrac ?? 0.22 });
+  const ground = new Mesh(new PlaneGeometry(w + pad * 2, h + pad * 2).rotateX(-Math.PI / 2), groundMaterial(map, bump));
   ground.receiveShadow = true;
   group.add(ground);
   {
@@ -36864,26 +37027,6 @@ function buildTerrain(w, h, opts = {}) {
     col.copy(tones[Math.floor(r() * tones.length)]).multiplyScalar(0.8 + r() * 0.3);
     return true;
   }, false);
-  const scrubGeo = (() => {
-    const g = new IcosahedronGeometry(1, 1);
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) p.setY(i, Math.max(0, p.getY(i)) * 0.55 + (p.getY(i) < 0 ? 0 : 0));
-    g.computeVertexNormals();
-    return g;
-  })();
-  const scrubMat = new MeshStandardMaterial({ color: "#ffffff", roughness: 1, flatShading: true });
-  const sTones = ["#4b5233", "#5d5b36", "#6b6840", "#3f4a2f"].map((s) => new Color(s));
-  mk(scrubGeo, scrubMat, 150, (_i, m, col) => {
-    const x = (r() - 0.5) * w, z = (r() - 0.5) * h;
-    for (let k = 0; k < 1; k++) {
-      const s = 0.12 + r() * 0.22;
-      e.set(0, r() * 7, 0);
-      q.setFromEuler(e);
-      m.compose(vv.set(x, 0, z), q, sc.set(s * (1 + r() * 0.8), s * (0.5 + r() * 0.6), s * (1 + r() * 0.8)));
-      col.copy(sTones[Math.floor(r() * sTones.length)]).multiplyScalar(0.8 + r() * 0.4);
-    }
-    return !keep(x, z) || r() < 0.2;
-  });
   const b = new Bld();
   const conc = paint("#8e8b80", { rough: 0.9, metal: 0, scale: 0.7, wear: 0.2, bump: 1.6 });
   const rust = paint("#5b4a3a", { rough: 0.85, metal: 0.4, scale: 1.5, wear: 0.8 });
@@ -39467,8 +39610,8 @@ function setupStage(renderer2, scene2, o = {}) {
   if (o.fog !== false) scene2.fog = new Fog(fogCol, 110, 300);
   const sunPos = new Vector3(-30, 40, 20);
   scene2.environment = skyEnvironment(renderer2, sunPos);
-  scene2.environmentIntensity = 0.62;
-  const sun = new DirectionalLight("#ffe2b8", 3.3);
+  scene2.environmentIntensity = 0.5;
+  const sun = new DirectionalLight("#ffe0b0", 3.8);
   sun.position.copy(sunPos);
   sun.castShadow = true;
   const res = o.shadowRes ?? 4096;
@@ -39477,7 +39620,7 @@ function setupStage(renderer2, scene2, o = {}) {
   sun.shadow.normalBias = 0.025;
   sun.shadow.radius = 2.5;
   scene2.add(sun, sun.target);
-  const hemi = new HemisphereLight("#9fb8d4", "#54493a", 0.42);
+  const hemi = new HemisphereLight("#9fb8d4", "#54493a", 0.3);
   scene2.add(hemi);
   const dir = sunPos.clone();
   const fitShadow = (cx, cz, radius) => {
@@ -39556,6 +39699,7 @@ var canvas = document.getElementById("c");
 var renderer = createRenderer(canvas);
 var scene = new Scene();
 renderer.info.autoReset = false;
+if (!has("shadow", true)) renderer.shadowMap.enabled = false;
 var stage = setupStage(renderer, scene);
 var camera = new PerspectiveCamera(Number(params.get("fov") ?? 24), 1, 1, 500);
 var controls = new OrbitControls(camera, canvas);
@@ -39564,10 +39708,10 @@ controls.maxPolarAngle = MathUtils.degToRad(82);
 controls.minDistance = 4;
 controls.maxDistance = 160;
 controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
-function setView(tx, tz, dist2, tiltDeg = 58, yawDeg = 0) {
+function setView(tx, tz, dist2, tiltDeg = 58, yawDeg = 0, ty = 0) {
   const tilt = MathUtils.degToRad(tiltDeg), yaw = MathUtils.degToRad(yawDeg);
-  controls.target.set(tx, 0, tz);
-  camera.position.set(tx + Math.sin(yaw) * Math.cos(tilt) * dist2, Math.sin(tilt) * dist2, tz + Math.cos(yaw) * Math.cos(tilt) * dist2);
+  controls.target.set(tx, ty, tz);
+  camera.position.set(tx + Math.sin(yaw) * Math.cos(tilt) * dist2, ty + Math.sin(tilt) * dist2, tz + Math.cos(yaw) * Math.cos(tilt) * dist2);
   controls.update();
 }
 window.setView = setView;
@@ -39661,7 +39805,7 @@ function fire(tu, target) {
   const dist2 = dir.length();
   dir.normalize();
   spawnFlash(from, 0.5 + tu.r * 0.9);
-  tu.recoil.position.x = -tu.r * 0.18;
+  recoilKick(tu);
   if (tu.shot === "beam") {
     const len = Math.min(dist2, 18);
     const b = new Mesh(new CylinderGeometry(0.035, 0.035, len, 6).rotateX(Math.PI / 2).translate(0, 0, len / 2), mats.beam.clone());
@@ -39744,10 +39888,7 @@ function frame() {
         tgt.copy(best.u.root.position);
         tgt.y += 0.5;
         const loc = u.root.worldToLocal(tgt.clone());
-        const want = -Math.atan2(loc.z - tu.yaw.position.z, loc.x - tu.yaw.position.x);
-        let diff = want - tu.yaw.rotation.y;
-        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        tu.yaw.rotation.y += diff * Math.min(1, dt * 3);
+        const diff = aimTurret(tu, loc.x, loc.z, dt);
         const gx = Math.abs(diff) < 0.25;
         const ns = nextShot.get(tu) ?? t + 1 + (i * 0.37 + p.x * 0.13) % 2;
         if (gx && t >= ns && !frozen) {
@@ -39757,8 +39898,7 @@ function frame() {
       } else if (!tu.fixed) {
         tu.yaw.rotation.y = Math.sin(t * 0.4 + i * 1.7 + p.x) * 0.5;
       }
-      tu.recoil.position.x *= Math.max(0, 1 - dt * 9);
-      if (tu.spin) tu.spin.rotation.x += dt * (tu.recoil.position.x < -0.01 ? 30 : 6);
+      recoilRelax(tu, dt);
     }
   }
   for (let i = fx.length - 1; i >= 0; i--) {
@@ -39810,6 +39950,7 @@ window.unitStats = () => units.map((e) => {
   });
   return `${e.p.id}/${e.p.team}: meshes ${meshes} tris ${Math.round(e.u.tris)}`;
 });
+window.units = units;
 /*! Bundled license information:
 
 three/build/three.core.js:

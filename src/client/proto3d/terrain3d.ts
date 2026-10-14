@@ -3,6 +3,7 @@
 // buildTerrain(w, h) is independent of any scene: add the returned group wherever it is needed (centred on the origin).
 
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Bld } from './geo.ts';
 import { paint, rng } from './materials.ts';
 
@@ -44,8 +45,10 @@ const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min
 const hex = (s: string): [number, number, number] => { const n = parseInt(s.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const mixc = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-function makeMaps(w: number, h: number, o: Required<Pick<TerrainOpts, 'seed' | 'ppc' | 'grid' | 'zoneFrac'>>) {
+function makeMaps(w: number, h: number, pad: number, o: Required<Pick<TerrainOpts, 'seed' | 'ppc' | 'grid' | 'zoneFrac'>>) {
   const PPC = o.ppc;
+  const IW = Math.round(w * PPC), IH = Math.round(h * PPC); // interior (field) size in px
+  w += pad * 2; h += pad * 2;
   const W = Math.round(w * PPC), H = Math.round(h * PPC);
   const { fbm, noise } = makeNoise(o.seed);
   const r = rng(o.seed + 5);
@@ -53,7 +56,7 @@ function makeMaps(w: number, h: number, o: Required<Pick<TerrainOpts, 'seed' | '
   const height = document.createElement('canvas'); height.width = W; height.height = H;
   const ga = albedo.getContext('2d')!, gh = height.getContext('2d')!;
   const ia = ga.createImageData(W, H), ih = gh.createImageData(W, H);
-  const soil = hex('#7b6b4b'), sand = hex('#a4925f'), dirt = hex('#4d4130'), gravel = hex('#706a5c'), scrub = hex('#585f3c'), dry = hex('#8d7f56');
+  const soil = hex('#645b4a'), sand = hex('#7e745d'), dirt = hex('#463e34'), gravel = hex('#66635a'), scrub = hex('#4f5538'), dry = hex('#72694f');
   const k = 1 / PPC; // cells per pixel
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -61,12 +64,12 @@ function makeMaps(w: number, h: number, o: Required<Pick<TerrainOpts, 'seed' | '
       const n1 = fbm(cx * 0.09, cy * 0.09, 4), n2 = fbm(cx * 0.24 + 40, cy * 0.24 + 40, 4), n3 = fbm(cx * 0.55 + 90, cy * 0.55 + 90, 3);
       let c = mixc(soil, sand, sm(0.42, 0.62, n1));
       c = mixc(c, dry, sm(0.5, 0.72, fbm(cx * 0.15 + 7, cy * 0.15 + 7, 3)) * 0.5);
-      c = mixc(c, dirt, sm(0.56, 0.72, n2) * 0.8);
+      c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.5);
       const gv = sm(0.54, 0.68, fbm(cx * 0.35 + 200, cy * 0.35 + 200, 4));
       const grain = noise(x * 0.9, y * 0.9) * 0.6 + noise(x * 2.3 + 11, y * 2.3 + 5) * 0.4;
       c = mixc(c, gravel, gv * (0.45 + 0.4 * grain));
       const sc = sm(0.6, 0.72, fbm(cx * 0.2 + 300, cy * 0.2 + 300, 4));
-      c = mixc(c, scrub, sc * (0.35 + 0.5 * noise(x * 0.5, y * 0.5)));
+      c = mixc(c, scrub, sc * (0.25 + 0.35 * noise(x * 0.5, y * 0.5)));
       const m = 0.78 + 0.44 * (n3 * 0.5 + grain * 0.5) + (gv > 0.2 ? (grain - 0.5) * 0.35 * gv : 0);
       const i = (y * W + x) * 4;
       ia.data[i] = c[0] * m; ia.data[i + 1] = c[1] * m; ia.data[i + 2] = c[2] * m; ia.data[i + 3] = 255;
@@ -92,14 +95,14 @@ function makeMaps(w: number, h: number, o: Required<Pick<TerrainOpts, 'seed' | '
       gh.strokeStyle = 'rgba(40,40,40,0.55)'; gh.lineWidth = wd; gh.stroke();
     }
   };
-  for (let i = 0; i < 9; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1.2), PPC * (0.14 + r() * 0.12), 0.1 + r() * 0.12);
-  for (let i = 0; i < 4; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.22, 0.12);
+  for (let i = 0; i < 6; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1.0), PPC * (0.07 + r() * 0.06), 0.05 + r() * 0.06);
+  for (let i = 0; i < 2; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.1, 0.07);
 
   // blast craters with scorched rims, scorch blotches
   for (let i = 0; i < 26; i++) {
     const x = r() * W, y = r() * H, rad = PPC * (0.25 + r() * r() * 1.5);
     const sc = ga.createRadialGradient(x, y, rad * 0.1, x, y, rad * 1.7);
-    sc.addColorStop(0, 'rgba(18,14,10,0.7)'); sc.addColorStop(0.5, 'rgba(28,22,15,0.4)'); sc.addColorStop(1, 'rgba(0,0,0,0)');
+    sc.addColorStop(0, 'rgba(18,14,10,0.55)'); sc.addColorStop(0.5, 'rgba(28,22,15,0.28)'); sc.addColorStop(1, 'rgba(0,0,0,0)');
     ga.fillStyle = sc; ga.beginPath(); ga.arc(x, y, rad * 1.7, 0, 7); ga.fill();
     // radial blast streaks
     ga.strokeStyle = 'rgba(15,12,9,0.18)'; ga.lineWidth = 1.5;
@@ -119,19 +122,23 @@ function makeMaps(w: number, h: number, o: Required<Pick<TerrainOpts, 'seed' | '
   }
 
   // deployment-zone boundaries and a faint cell grid (gameplay readability only)
-  const zw = W * o.zoneFrac;
+  const zw = IW * o.zoneFrac;
+  ga.save(); ga.translate(pad * PPC, pad * PPC);
+  const W0 = W, H0 = H;
+  void W0; void H0;
   if (o.zoneFrac > 0) {
-    ga.fillStyle = 'rgba(70,150,190,0.05)'; ga.fillRect(0, 0, zw, H);
-    ga.fillStyle = 'rgba(210,100,50,0.05)'; ga.fillRect(W - zw, 0, zw, H);
+    ga.fillStyle = 'rgba(70,150,190,0.05)'; ga.fillRect(0, 0, zw, IH);
+    ga.fillStyle = 'rgba(210,100,50,0.05)'; ga.fillRect(IW - zw, 0, zw, IH);
     ga.setLineDash([PPC * 0.3, PPC * 0.2]); ga.lineWidth = 3;
-    ga.strokeStyle = 'rgba(130,215,240,0.4)'; ga.beginPath(); ga.moveTo(zw, 0); ga.lineTo(zw, H); ga.stroke();
-    ga.strokeStyle = 'rgba(255,150,100,0.4)'; ga.beginPath(); ga.moveTo(W - zw, 0); ga.lineTo(W - zw, H); ga.stroke();
+    ga.strokeStyle = 'rgba(130,215,240,0.4)'; ga.beginPath(); ga.moveTo(zw, 0); ga.lineTo(zw, IH); ga.stroke();
+    ga.strokeStyle = 'rgba(255,150,100,0.4)'; ga.beginPath(); ga.moveTo(IW - zw, 0); ga.lineTo(IW - zw, IH); ga.stroke();
     ga.setLineDash([]);
   }
   if (o.grid) {
-    for (let i = 0; i <= w; i++) { ga.strokeStyle = i % 5 === 0 ? 'rgba(235,232,210,0.11)' : 'rgba(235,232,210,0.045)'; ga.lineWidth = i % 5 === 0 ? 2 : 1; ga.beginPath(); ga.moveTo(i * PPC, 0); ga.lineTo(i * PPC, H); ga.stroke(); }
-    for (let j = 0; j <= h; j++) { ga.strokeStyle = j % 5 === 0 ? 'rgba(235,232,210,0.11)' : 'rgba(235,232,210,0.045)'; ga.lineWidth = j % 5 === 0 ? 2 : 1; ga.beginPath(); ga.moveTo(0, j * PPC); ga.lineTo(W, j * PPC); ga.stroke(); }
+    for (let i = 0; i <= IW / PPC; i++) { ga.strokeStyle = i % 5 === 0 ? 'rgba(235,232,210,0.11)' : 'rgba(235,232,210,0.045)'; ga.lineWidth = i % 5 === 0 ? 2 : 1; ga.beginPath(); ga.moveTo(i * PPC, 0); ga.lineTo(i * PPC, IH); ga.stroke(); }
+    for (let j = 0; j <= IH / PPC; j++) { ga.strokeStyle = j % 5 === 0 ? 'rgba(235,232,210,0.11)' : 'rgba(235,232,210,0.045)'; ga.lineWidth = j % 5 === 0 ? 2 : 1; ga.beginPath(); ga.moveTo(0, j * PPC); ga.lineTo(IW, j * PPC); ga.stroke(); }
   }
+  ga.restore();
   const map = new THREE.CanvasTexture(albedo); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 16;
   const bump = new THREE.CanvasTexture(height); bump.anisotropy = 8;
   return { map, bump };
@@ -181,7 +188,7 @@ function groundMaterial(map: THREE.Texture, bump: THREE.Texture): THREE.MeshStan
       .replace('#include <map_fragment>', `#include <map_fragment>
         vec4 dt1 = texture2D(detailMap, vGP * 0.9); vec4 dt2 = texture2D(detailMap, vGP * 0.23 + 0.37);
         float dtl = dt1.r * 0.65 + dt2.r * 0.35;
-        diffuseColor.rgb *= 0.55 + 0.9 * dtl;
+        diffuseColor.rgb *= 0.72 + 0.56 * dtl;
         float dH = dt1.g * 0.7 + dt2.g * 0.3;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
@@ -198,17 +205,23 @@ function groundMaterial(map: THREE.Texture, bump: THREE.Texture): THREE.MeshStan
 
 function rockGeometry(seed: number, flat: number): THREE.BufferGeometry {
   const { fbm } = makeNoise(seed);
-  const g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, 2);
+  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, 4);
+  g.deleteAttribute('uv'); g.deleteAttribute('normal');
+  g = mergeVertices(g, 1e-4);
   const pos = g.attributes.position;
   const v = new THREE.Vector3();
   const r = rng(seed);
   const ax = 0.8 + r() * 0.5, az = 0.8 + r() * 0.5;
-  // displace along the normal with fbm; quantise slightly so facets read as fractured stone
+  // blocky fractured stone: broad fbm lumps + ridged crack lines + a few planar cuts that give hard facets
+  const cuts: THREE.Vector3[] = [];
+  for (let i = 0; i < 5; i++) cuts.push(new THREE.Vector3(r() - 0.5, (r() - 0.3) * 0.8, r() - 0.5).normalize());
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
-    const n = fbm(v.x * 1.7 + 5, v.z * 1.7 + v.y * 1.3 + 9, 3);
-    const d = 0.7 + n * 0.75;
-    pos.setXYZ(i, v.x * d * ax, Math.max(-0.2, v.y * d * flat), v.z * d * az);
+    const n = fbm(v.x * 1.5 + 5, v.z * 1.5 + v.y * 1.2 + 9, 4);
+    const rid = 1 - Math.abs(fbm(v.x * 3.1 + 2, v.y * 3.1 + v.z * 2.7 + 4, 3) * 2 - 1);
+    let d = 0.74 + n * 0.55 + rid * 0.12;
+    for (const c of cuts) { const k = v.dot(c); if (k > 0.55) d = Math.min(d, 0.92 / k * 0.82); }
+    pos.setXYZ(i, v.x * d * ax, Math.max(-0.25, v.y * d * flat), v.z * d * az);
   }
   g.computeVertexNormals();
   return g;
@@ -218,8 +231,9 @@ export function buildTerrain(w: number, h: number, opts: TerrainOpts = {}): Terr
   const seed = opts.seed ?? 99;
   const group = new THREE.Group();
   group.name = 'terrain';
-  const { map, bump } = makeMaps(w, h, { seed, ppc: opts.ppc ?? 36, grid: opts.grid ?? true, zoneFrac: opts.zoneFrac ?? 0.22 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(w, h).rotateX(-Math.PI / 2), groundMaterial(map, bump));
+  const pad = 12;
+  const { map, bump } = makeMaps(w, h, pad, { seed, ppc: opts.ppc ?? 24, grid: opts.grid ?? true, zoneFrac: opts.zoneFrac ?? 0.22 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(w + pad * 2, h + pad * 2).rotateX(-Math.PI / 2), groundMaterial(map, bump));
   ground.receiveShadow = true;
   group.add(ground);
   // apron: dark tiled dirt around the slice so it does not float
@@ -274,20 +288,6 @@ export function buildTerrain(w: number, h: number, opts: TerrainOpts = {}): Terr
     col.copy(tones[Math.floor(r() * tones.length)]).multiplyScalar(0.8 + r() * 0.3);
     return true;
   }, false);
-  // dry scrub clumps: flat dark-olive lumps with a tan under-tone
-  const scrubGeo = (() => { const g = new THREE.IcosahedronGeometry(1, 1); const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, Math.max(0, p.getY(i)) * 0.55 + (p.getY(i) < 0 ? 0 : 0)); g.computeVertexNormals(); return g; })();
-  const scrubMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, flatShading: true });
-  const sTones = ['#4b5233', '#5d5b36', '#6b6840', '#3f4a2f'].map((s) => new THREE.Color(s));
-  mk(scrubGeo, scrubMat, 150, (_i, m, col) => {
-    const x = (r() - 0.5) * w, z = (r() - 0.5) * h;
-    for (let k = 0; k < 1; k++) {
-      const s = 0.12 + r() * 0.22;
-      e.set(0, r() * 7, 0); q.setFromEuler(e);
-      m.compose(vv.set(x, 0, z), q, sc.set(s * (1 + r() * 0.8), s * (0.5 + r() * 0.6), s * (1 + r() * 0.8)));
-      col.copy(sTones[Math.floor(r() * sTones.length)]).multiplyScalar(0.8 + r() * 0.4);
-    }
-    return !keep(x, z) || r() < 0.2;
-  });
   // concrete barriers: short chamfered slabs in a few staggered lines, and czech hedgehogs
   const b = new Bld();
   const conc = paint('#8e8b80', { rough: 0.9, metal: 0, scale: 0.7, wear: 0.2, bump: 1.6 });

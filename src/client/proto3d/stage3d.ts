@@ -62,8 +62,8 @@ export function setupStage(renderer: THREE.WebGLRenderer, scene: THREE.Scene, o:
   if (o.fog !== false) scene.fog = new THREE.Fog(fogCol, 110, 300);
   const sunPos = new THREE.Vector3(-30, 40, 20);
   scene.environment = skyEnvironment(renderer, sunPos);
-  scene.environmentIntensity = 0.62;
-  const sun = new THREE.DirectionalLight('#ffe2b8', 3.3);
+  scene.environmentIntensity = 0.5;
+  const sun = new THREE.DirectionalLight('#ffe0b0', 3.8);
   sun.position.copy(sunPos);
   sun.castShadow = true;
   const res = o.shadowRes ?? 4096;
@@ -72,7 +72,7 @@ export function setupStage(renderer: THREE.WebGLRenderer, scene: THREE.Scene, o:
   sun.shadow.normalBias = 0.025;
   sun.shadow.radius = 2.5;
   scene.add(sun, sun.target);
-  const hemi = new THREE.HemisphereLight('#9fb8d4', '#54493a', 0.42);
+  const hemi = new THREE.HemisphereLight('#9fb8d4', '#54493a', 0.3);
   scene.add(hemi);
   const dir = sunPos.clone();
   const fitShadow = (cx: number, cz: number, radius: number) => {
