@@ -9,11 +9,11 @@ export const CHASSIS: ChassisDef[] = [
   { id: 'raider', name: 'Raider Frame', desc: 'Light skirmisher with twin light mounts.', size: 1, hp: 210, armor: 2, weight: 5, cost: 75, mounts: ['S', 'S'], agility: 1.15, roles: ['raider'], traits: [], shape: 'box' },
   { id: 'warden', name: 'Warden Hull', desc: 'Sturdy medium hull built to hold a line.', size: 2, hp: 560, armor: 6, weight: 14, cost: 115, mounts: ['M', 'S'], agility: 0.95, roles: ['assault', 'tank'], traits: [], shape: 'hex' },
   { id: 'striker', name: 'Striker Frame', desc: 'Aggressive medium frame with three mounts.', size: 2, hp: 430, armor: 4, weight: 12, cost: 160, footprint: [2, 3], mounts: ['M', 'M', 'S'], agility: 1.0, roles: ['skirmisher', 'assault'], traits: [], shape: 'cross' },
-  { id: 'longarm', name: 'Longarm Platform', desc: 'Stabilized platform: one heavy mount, +20% weapon range.', size: 2, hp: 360, armor: 3, weight: 12, cost: 250, footprint: [1, 3], mounts: ['L'], agility: 0.85, roles: ['artillery', 'siege'], traits: ['rangeBoost'], shape: 'long' },
+  { id: 'longarm', name: 'Longarm Platform', desc: 'Stabilized platform: one heavy mount, +20% weapon range.', size: 2, hp: 360, armor: 3, weight: 12, cost: 250, footprint: [1, 3], mounts: ['M'], agility: 0.85, roles: ['artillery', 'siege'], traits: ['rangeBoost'], shape: 'long' },
   { id: 'aegis', name: 'Aegis Frame', desc: 'Support frame. Field-repairs nearby allies.', size: 2, hp: 610, armor: 4, weight: 13, cost: 60, mounts: ['M', 'S'], agility: 0.95, roles: ['support'], traits: ['repairAura'], shape: 'round' },
   { id: 'gunship', name: 'Gunship', desc: 'Attack helicopter airframe with stub-wing mounts.', size: 2, hp: 420, armor: 3, weight: 8, cost: 60, footprint: [2, 3], domain: 'heli', mounts: ['M', 'M'], agility: 1.1, roles: ['flyer'], traits: ['airOnly'], shape: 'airframe' },
-  { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 400, mounts: ['L', 'M', 'M'], agility: 0.8, roles: ['tank', 'assault'], traits: [], shape: 'fortress' },
-  { id: 'colossus', name: 'Monarch Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 405, footprint: [3, 4], mounts: ['L', 'L', 'M', 'S'], agility: 0.85, roles: ['assault', 'siege'], traits: [], shape: 'titan' },
+  { id: 'bastion', name: 'Bastion Hull', desc: 'Massive armored hull. Slow, nearly unbreakable.', size: 3, hp: 1500, armor: 14, weight: 38, cost: 400, mounts: ['M', 'M', 'M'], agility: 0.8, roles: ['tank', 'assault'], traits: [], shape: 'fortress' },
+  { id: 'colossus', name: 'Monarch Frame', desc: 'Walking arsenal with four mounts.', size: 3, hp: 1250, armor: 10, weight: 34, cost: 405, footprint: [3, 4], mounts: ['M', 'M', 'M', 'S'], agility: 0.85, roles: ['assault', 'siege'], traits: [], shape: 'titan' },
   // ---- Odd-shaped frames ----
   { id: 'mantis', name: 'Needle Frame', desc: 'Lanky light strider with twin blade-arm mounts.', size: 1, hp: 185, armor: 1, weight: 4, cost: 35, footprint: [1, 2], mounts: ['S', 'S'], agility: 1.35, mobility: ['legs', 'jumpjets', 'spider', 'hover'], roles: ['raider', 'melee'], traits: [], shape: 'mantis' },
   { id: 'strider', name: 'Strider Mech', desc: 'Humanoid mech: arm guns and a shoulder mount. Needs legs.', size: 2, hp: 480, armor: 5, weight: 12, cost: 140, mounts: ['M', 'S', 'S'], agility: 1.05, mobility: ['legs', 'jumpjets', 'spider', 'anchor'], roles: ['skirmisher'], traits: [], shape: 'mech' },
@@ -21,30 +21,30 @@ export const CHASSIS: ChassisDef[] = [
   { id: 'crab', name: 'Bunker Crawler', desc: 'Wide, low, heavily plated mobile bunker with arm mounts.', size: 2, hp: 600, armor: 8, weight: 15, cost: 240, footprint: [3, 2], mounts: ['M', 'M', 'S'], agility: 0.85, mobility: ['spider', 'halftrack', 'treads', 'hover', 'anchor'], roles: ['riot', 'tank'], traits: [], shape: 'crab' },
   { id: 'saucer', name: 'Saucer Disc', desc: 'Round disc hull with an all-round turret ring. Hovers or walks.', size: 2, hp: 400, armor: 4, weight: 10, cost: 210, mounts: ['M', 'M', 'S'], agility: 1.2, mobility: ['hover', 'anchor', 'spider'], roles: ['skirmisher', 'antiair'], traits: [], shape: 'saucer' },
   { id: 'deltawing', name: 'Delta Wing', desc: 'Triangular strike aircraft. Must fly.', size: 2, hp: 340, armor: 3, weight: 8, cost: 75, footprint: [2, 3], domain: 'jet', mounts: ['M', 'S', 'S'], agility: 1.15, roles: ['flyer', 'bomber'], traits: ['airOnly'], shape: 'delta' },
-  { id: 'warlord', name: 'Warlord Mech', desc: 'Heavy humanoid mech with a shoulder cannon and arm weapons.', size: 3, hp: 1350, armor: 11, weight: 34, cost: 430, footprint: [4, 3], mounts: ['L', 'M', 'M', 'S'], agility: 0.9, mobility: ['titanlegs', 'spider', 'anchor'], roles: ['assault'], traits: [], shape: 'warlord' },
-  { id: 'scorpion', name: 'Tailgun Crawler', desc: 'Armored crawler with a crane-boom heavy weapon over its back and twin arm mounts.', size: 3, hp: 1200, armor: 12, weight: 32, cost: 260, footprint: [3, 4], mounts: ['L', 'M', 'M'], agility: 0.95, mobility: ['spider', 'treads', 'anchor'], roles: ['assault', 'siege'], traits: [], shape: 'scorpion' },
+  { id: 'warlord', name: 'Warlord Mech', desc: 'Heavy humanoid mech with a shoulder cannon and arm weapons.', size: 3, hp: 1350, armor: 11, weight: 34, cost: 430, footprint: [4, 3], mounts: ['M', 'M', 'M', 'S'], agility: 0.9, mobility: ['titanlegs', 'spider', 'anchor'], roles: ['assault'], traits: [], shape: 'warlord' },
+  { id: 'scorpion', name: 'Tailgun Crawler', desc: 'Armored crawler with a crane-boom heavy weapon over its back and twin arm mounts.', size: 3, hp: 1200, armor: 12, weight: 32, cost: 260, footprint: [3, 4], mounts: ['M', 'M', 'M'], agility: 0.95, mobility: ['spider', 'treads', 'anchor'], roles: ['assault', 'siege'], traits: [], shape: 'scorpion' },
   { id: 'centipede', name: 'Landtrain Hull', desc: 'Articulated multi-car land-train with four medium mounts down its spine.', size: 3, hp: 1300, armor: 9, weight: 33, cost: 525, footprint: [2, 5], mounts: ['M', 'M', 'M', 'M'], agility: 0.8, mobility: ['spider', 'halftrack', 'treads'], roles: ['riot', 'assault'], traits: [], shape: 'centipede' },
   // ---- Role-specialist frames ----
   { id: 'carriage', name: 'Gun Carriage', desc: 'Light, thin-skinned carriage that holds a medium weapon. Cheap artillery or tank-hunter.', size: 1, hp: 110, armor: 0, weight: 3, cost: 40, mounts: ['M'], agility: 0.9, roles: ['artillery', 'skirmisher'], traits: [], shape: 'carriage' },
   { id: 'hunter', name: 'Hunter Frame', desc: 'Fast, lightly armored skirmisher frame. Strikes from range and keeps moving.', size: 2, hp: 360, armor: 2, weight: 9, cost: 80, footprint: [1, 2], mounts: ['M', 'S'], agility: 1.25, roles: ['skirmisher', 'raider'], traits: [], shape: 'hunter' },
   { id: 'riot', name: 'Riot Frame', desc: 'Sloped front armor and twin medium mounts. Built to wade into swarms.', size: 2, hp: 650, armor: 9, weight: 15, cost: 230, footprint: [3, 2], mounts: ['M', 'M'], agility: 0.9, roles: ['riot', 'tank'], traits: [], shape: 'riot' },
   { id: 'interceptor', name: 'Interceptor', desc: 'Light fighter airframe. Must fly.', size: 1, hp: 120, armor: 1, weight: 1.2, cost: 15, footprint: [1, 2], domain: 'jet', mounts: ['S', 'S'], agility: 1.3, roles: ['antiair', 'flyer', 'raider'], traits: ['airOnly'], shape: 'interceptor' },
-  { id: 'siegeplat', name: 'Siege Platform', desc: 'Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.', size: 3, hp: 800, armor: 3, weight: 22, cost: 265, footprint: [2, 4], mounts: ['L', 'L'], agility: 0.7, roles: ['artillery', 'siege'], traits: [], shape: 'siegeplat' },
+  { id: 'siegeplat', name: 'Siege Platform', desc: 'Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.', size: 3, hp: 800, armor: 3, weight: 22, cost: 265, footprint: [2, 4], mounts: ['M', 'M'], agility: 0.7, roles: ['artillery', 'siege'], traits: [], shape: 'siegeplat' },
   { id: 'juggernaut', name: 'Monolith Hull', desc: 'A wall of armor with token weapons. Soaks fire for the army behind it.', size: 3, hp: 2100, armor: 18, weight: 40, cost: 250, footprint: [4, 3], mounts: ['M', 'S'], agility: 0.75, roles: ['tank'], traits: [], shape: 'juggernaut' },
   { id: 'bomberhull', name: 'Heavy Bomber', desc: 'Big flying bomb truck with three medium bays. Grav lifters or nothing.', size: 3, hp: 1170, armor: 5, weight: 24, cost: 200, footprint: [3, 4], domain: 'heli', mounts: ['M', 'M', 'M'], agility: 0.7, roles: ['bomber', 'flyer'], traits: ['airOnly'], shape: 'bomber' },
   // ---- Aircraft ----
   { id: 'strikejet', name: 'Strike Jet', desc: 'Multirole fighter-bomber with a centreline and two wing hardpoints.', size: 2, hp: 330, armor: 2, weight: 7, cost: 80, footprint: [2, 3], mounts: ['M', 'S', 'S'], agility: 1.2, domain: 'jet', roles: ['flyer', 'raider', 'antiair'], traits: [], shape: 'strikejet' },
   { id: 'stratobomber', name: 'Strato Bomber', desc: 'Long-range jet bomber with three bomb bays and a tail gun.', size: 3, hp: 900, armor: 4, weight: 18, cost: 300, footprint: [4, 4], mounts: ['M', 'M', 'M', 'S'], agility: 0.8, domain: 'jet', roles: ['bomber', 'flyer'], traits: [], shape: 'stratobomber' },
-  { id: 'heavyheli', name: 'Heavy Helicopter', desc: 'Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.', size: 3, hp: 1000, armor: 6, weight: 20, cost: 280, footprint: [2, 4], mounts: ['L', 'M', 'S'], agility: 0.85, domain: 'heli', roles: ['flyer', 'assault'], traits: [], shape: 'heavyheli' },
+  { id: 'heavyheli', name: 'Heavy Helicopter', desc: 'Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.', size: 3, hp: 1000, armor: 6, weight: 20, cost: 280, footprint: [2, 4], mounts: ['M', 'M', 'S'], agility: 0.85, domain: 'heli', roles: ['flyer', 'assault'], traits: [], shape: 'heavyheli' },
   // ---- Giant class (size 4, 20 m) ----
-  { id: 'goliath', name: 'Warhulk Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 4160, armor: 16, weight: 70, cost: 190, footprint: [4, 5], mounts: ['XL', 'L', 'L', 'M'], agility: 0.75, roles: ['assault'], traits: [], shape: 'goliath' },
-  { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 725, footprint: [3, 6], mounts: ['XL', 'XL', 'M', 'M'], agility: 0.65, roles: ['siege', 'assault'], traits: [], shape: 'leviathan' },
-  { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2100, armor: 10, weight: 50, cost: 1100, footprint: [6, 3], domain: 'heli', mounts: ['XL', 'L', 'M', 'M'], agility: 0.8, roles: ['flyer', 'bomber'], traits: ['airOnly'], shape: 'carrier' },
-  { id: 'broodmother', name: 'Matriarch', desc: 'Giant multi-legged walking fortress with a giant-class dorsal weapon and four more mounts.', size: 4, hp: 3000, armor: 14, weight: 66, cost: 650, footprint: [5, 4], mounts: ['XL', 'L', 'M', 'M', 'S'], agility: 0.85, mobility: ['spider', 'anchor'], roles: ['riot', 'assault'], traits: [], shape: 'broodmother' },
+  { id: 'goliath', name: 'Warhulk Frame', desc: 'Giant assault frame: a giant-class mount backed by two heavies.', size: 4, hp: 4160, armor: 16, weight: 70, cost: 190, footprint: [4, 5], mounts: ['L', 'M', 'M', 'M'], agility: 0.75, roles: ['assault'], traits: [], shape: 'goliath' },
+  { id: 'leviathan', name: 'Leviathan Hull', desc: 'Giant battle hull with twin giant-class mounts.', size: 4, hp: 3800, armor: 20, weight: 82, cost: 725, footprint: [3, 6], mounts: ['L', 'L', 'M', 'M'], agility: 0.65, roles: ['siege', 'assault'], traits: [], shape: 'leviathan' },
+  { id: 'carrier', name: 'Sky Carrier', desc: 'Giant flying hull. Must fly on grav lifters.', size: 4, hp: 2100, armor: 10, weight: 50, cost: 1100, footprint: [6, 3], domain: 'heli', mounts: ['L', 'M', 'M', 'M'], agility: 0.8, roles: ['flyer', 'bomber'], traits: ['airOnly'], shape: 'carrier' },
+  { id: 'broodmother', name: 'Matriarch', desc: 'Giant multi-legged walking fortress with a giant-class dorsal weapon and four more mounts.', size: 4, hp: 3000, armor: 14, weight: 66, cost: 650, footprint: [5, 4], mounts: ['L', 'M', 'M', 'M', 'S'], agility: 0.85, mobility: ['spider', 'anchor'], roles: ['riot', 'assault'], traits: [], shape: 'broodmother' },
   // ---- Titan class (size 5, 25 m) ----
-  { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [5, 4], mounts: ['XL', 'XL', 'L', 'L', 'M'], agility: 0.7, roles: ['assault', 'siege'], traits: [], shape: 'colossal' },
-  { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 1915, footprint: [6, 5], mounts: ['XL', 'XL', 'XL', 'M', 'M', 'S'], agility: 0.55, roles: ['siege', 'tank'], traits: [], shape: 'citadel' },
-  { id: 'arachne', name: 'Weaver Titan', desc: 'Titan-class walking fortress: a titan mount and twin giant mounts on many legs.', size: 5, hp: 7630, armor: 20, weight: 115, cost: 340, footprint: [6, 5], mounts: ['XL', 'XL', 'XL', 'M'], agility: 0.75, mobility: ['spider', 'anchor'], roles: ['assault'], traits: [], shape: 'arachne' },
+  { id: 'titan', name: 'Titan Walker', desc: 'Titan-class war machine with a titan mount and a giant mount.', size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [5, 4], mounts: ['XL', 'L', 'M', 'M', 'M'], agility: 0.7, roles: ['assault', 'siege'], traits: [], shape: 'colossal' },
+  { id: 'citadel', name: 'Citadel Fortress', desc: 'Mobile fortress with twin titan mounts. The biggest thing on the field.', size: 5, hp: 8000, armor: 28, weight: 140, cost: 1915, footprint: [6, 5], mounts: ['XL', 'XL', 'L', 'M', 'M', 'S'], agility: 0.55, roles: ['siege', 'tank'], traits: [], shape: 'citadel' },
+  { id: 'arachne', name: 'Weaver Titan', desc: 'Titan-class walking fortress: a titan mount and twin giant mounts on many legs.', size: 5, hp: 7630, armor: 20, weight: 115, cost: 340, footprint: [6, 5], mounts: ['XL', 'L', 'L', 'M'], agility: 0.75, mobility: ['spider', 'anchor'], roles: ['assault'], traits: [], shape: 'arachne' },
 ];
 
 export const MOBILITY: MobilityDef[] = [
@@ -117,18 +117,18 @@ export const MODULES: ModuleDef[] = [
   // ---------------- Cannons ----------------
   wpn({ id: 'cannon75', name: '75mm Gun', family: '75mm', desc: 'Medium tank gun. Solid armor pierce on a medium mount.', category: 'cannon', visual: 'cannon', caliber: 0.5, mount: 'M', weight: 5, cost: 32,
     damage: 95, cooldown: 0.7, range: 6.5, ...G, magazine: 3, reload: 4, projectile: 'shell', projectileSpeed: 20, splash: 0.3, ap: 0.55, spread: 0.2 }),
-  wpn({ id: 'cannon', name: '120mm Heavy Cannon', family: '120mm', desc: 'Armor-piercing shells. The tank killer.', category: 'cannon', visual: 'cannon', caliber: 0.8, mount: 'L', weight: 8, cost: 50,
+  wpn({ id: 'cannon', name: '120mm Heavy Cannon', family: '120mm', desc: 'Armor-piercing shells. The tank killer.', category: 'cannon', visual: 'cannon', caliber: 0.8, mount: 'M', weight: 8, cost: 50,
     damage: 190, cooldown: 2.2, range: 7, ...G, projectile: 'shell', projectileSpeed: 20, splash: 0.3, ap: 0.7, spread: 0.2 }),
-  wpn({ id: 'twin120', name: 'Twin 120mm Cannon', family: 'Twin 120mm', desc: 'Two heavy cannons in one turret. Twice the punch, huge weight.', category: 'cannon', visual: 'cannon', barrels: 2, caliber: 0.8, mount: 'L', weight: 13, cost: 85,
+  wpn({ id: 'twin120', name: 'Twin 120mm Cannon', family: 'Twin 120mm', desc: 'Two heavy cannons in one turret. Twice the punch, huge weight.', category: 'cannon', visual: 'cannon', barrels: 2, caliber: 0.8, mount: 'M', weight: 13, cost: 85,
     damage: 190, cooldown: 1.1, range: 7, ...G, projectile: 'shell', projectileSpeed: 20, splash: 0.3, ap: 0.7, spread: 0.25 }),
-  wpn({ id: 'gauss', name: 'Gauss Cannon', family: 'Gauss', desc: 'Magnetic slug that punches through every unit in its path.', category: 'cannon', visual: 'gauss', caliber: 0.8, mount: 'L', weight: 10, cost: 75,
+  wpn({ id: 'gauss', name: 'Gauss Cannon', family: 'Gauss', desc: 'Magnetic slug that punches through every unit in its path.', category: 'cannon', visual: 'gauss', caliber: 0.8, mount: 'M', weight: 10, cost: 75,
     damage: 240, cooldown: 2.6, range: 9, ...GA, projectile: 'shell', projectileSpeed: 34, pierce: true, ap: 0.8, spread: 0.1 }),
   // ---------------- Sniper & rail ----------------
   wpn({ id: 'sniper', name: 'Sniper Rifle', family: 'Sniper', desc: 'Long-barrel precision rifle. Picks off units from far away.', category: 'precision', visual: 'sniper', caliber: 0.4, mount: 'S', weight: 1.5, cost: 20,
     damage: 140, cooldown: 3.5, range: 10, ...G, projectile: 'bullet', projectileSpeed: 60, ap: 0.6, spread: 0 }),
   wpn({ id: 'lightrail', name: 'Rail Rifle', family: 'Light rail', desc: 'Compact railgun. Pierces a line of enemies.', category: 'precision', visual: 'rail', caliber: 0.5, mount: 'M', weight: 4, cost: 40,
     damage: 150, cooldown: 3, range: 10, ...GA, projectile: 'rail', ap: 0.9, pierce: true }),
-  wpn({ id: 'railgun', name: 'Railgun', family: 'Heavy rail', desc: 'Pierces everything in a line. Extreme range.', category: 'precision', visual: 'rail', caliber: 0.9, mount: 'L', weight: 9, cost: 75,
+  wpn({ id: 'railgun', name: 'Railgun', family: 'Heavy rail', desc: 'Pierces everything in a line. Extreme range.', category: 'precision', visual: 'rail', caliber: 0.9, mount: 'M', weight: 9, cost: 75,
     damage: 320, cooldown: 4.5, range: 12, ...GA, projectile: 'rail', ap: 1, pierce: true }),
   // ---------------- Rockets ----------------
   wpn({ id: 'rocketL', name: 'Light Rocket Rack', family: '2-tube', desc: 'Pair of unguided rockets.', category: 'rocket', visual: 'rocketPod', barrels: 2, caliber: 0.3, mount: 'S', weight: 1.5, cost: 12,
@@ -137,7 +137,7 @@ export const MODULES: ModuleDef[] = [
     damage: 42, burst: 4, cooldown: 4, range: 7, ...G, projectile: 'rocket', projectileSpeed: 11, splash: 1, ap: 0.2, spread: 0.8 }),
   wpn({ id: 'incendiary', name: 'Incendiary Rockets', family: 'Napalm 4-tube', desc: 'Rockets that leave targets burning.', category: 'rocket', visual: 'rocketPod', barrels: 4, caliber: 0.5, mount: 'M', weight: 3.2, cost: 34,
     damage: 26, burst: 4, cooldown: 4.5, range: 7, ...G, projectile: 'rocket', projectileSpeed: 11, splash: 1, ap: 0.2, spread: 0.8, burn: { dps: 12, duration: 4 } }),
-  wpn({ id: 'mlrs', name: 'MLRS Battery', family: '12-tube', desc: 'Ripple-fires 12 rockets across a huge area. Minimum range 3.', category: 'rocket', visual: 'rocketPod', barrels: 12, caliber: 0.9, mount: 'L', weight: 10, cost: 70,
+  wpn({ id: 'mlrs', name: 'MLRS Battery', family: '12-tube', desc: 'Ripple-fires 12 rockets across a huge area. Minimum range 3.', category: 'rocket', visual: 'rocketPod', barrels: 12, caliber: 0.9, mount: 'M', weight: 10, cost: 70,
     damage: 45, burst: 12, cooldown: 9, range: 13, minRange: 3, ...G, projectile: 'rocket', projectileSpeed: 10, splash: 1, ap: 0.2, spread: 1.6 }),
   // ---------------- Missiles ----------------
   wpn({ id: 'atgm', name: 'ATGM Launcher', family: 'Anti-tank', desc: 'Wire-guided anti-tank missile on a light mount.', category: 'missile', visual: 'missileRack', barrels: 1, caliber: 0.3, mount: 'S', weight: 1.6, cost: 18,
@@ -150,14 +150,14 @@ export const MODULES: ModuleDef[] = [
     damage: 85, cooldown: 3, range: 9, ...GA, projectile: 'missile', projectileSpeed: 9, splash: 0.4, ap: 0.5, airBonus: 1.6 }),
   wpn({ id: 'swarm', name: 'Swarm Missiles', family: 'Swarm', desc: 'Eight micro-missiles that spread across targets.', category: 'missile', visual: 'missileRack', barrels: 8, caliber: 0.5, mount: 'M', weight: 3.5, cost: 40,
     damage: 28, burst: 8, cooldown: 6, range: 8.5, ...GA, projectile: 'missile', projectileSpeed: 10, splash: 0.4, ap: 0.3, spread: 0.4 }),
-  wpn({ id: 'cruise', name: 'Cruise Missile', family: 'Strategic', desc: 'One enormous long-range warhead. Slow to reload.', category: 'missile', visual: 'cruise', caliber: 0.9, mount: 'L', weight: 9, cost: 80,
+  wpn({ id: 'cruise', name: 'Cruise Missile', family: 'Strategic', desc: 'One enormous long-range warhead. Slow to reload.', category: 'missile', visual: 'cruise', caliber: 0.9, mount: 'M', weight: 9, cost: 80,
     damage: 480, cooldown: 10, range: 18, minRange: 4, ...G, projectile: 'missile', projectileSpeed: 6, splash: 2.2, ap: 0.6 }),
   // ---------------- Artillery ----------------
   wpn({ id: 'mortar', name: 'Mortar', family: '81mm', desc: 'Lobbed shells over the front line. Minimum range 3.', category: 'artillery', visual: 'mortar', caliber: 0.5, mount: 'M', weight: 3.5, cost: 30,
     damage: 60, cooldown: 3, range: 10, minRange: 3, ...G, projectile: 'arc', projectileSpeed: 5.5, splash: 1.2, ap: 0.2, spread: 0.8 }),
-  wpn({ id: 'howitzer', name: 'Howitzer', family: '155mm', desc: 'Long-range artillery with huge splash. Minimum range 5.', category: 'artillery', visual: 'artillery', caliber: 0.9, mount: 'L', weight: 10, cost: 75,
+  wpn({ id: 'howitzer', name: 'Howitzer', family: '155mm', desc: 'Long-range artillery with huge splash. Minimum range 5.', category: 'artillery', visual: 'artillery', caliber: 0.9, mount: 'M', weight: 10, cost: 75,
     damage: 150, cooldown: 5, range: 16, minRange: 5, ...G, projectile: 'arc', projectileSpeed: 6.5, splash: 2, ap: 0.3, spread: 1.2 }),
-  wpn({ id: 'barrage', name: 'Barrage Cannon', family: 'Scatter artillery', desc: 'Fires six shells at once that blanket an area. Minimum range 4.', category: 'artillery', visual: 'artillery', barrels: 3, caliber: 0.8, mount: 'L', weight: 11, cost: 80,
+  wpn({ id: 'barrage', name: 'Barrage Cannon', family: 'Scatter artillery', desc: 'Fires six shells at once that blanket an area. Minimum range 4.', category: 'artillery', visual: 'artillery', barrels: 3, caliber: 0.8, mount: 'M', weight: 11, cost: 80,
     damage: 42, pellets: 6, cooldown: 3.5, range: 12, minRange: 4, ...G, projectile: 'arc', projectileSpeed: 6, splash: 1, ap: 0.2, spread: 2 }),
   // ---------------- Energy ----------------
   wpn({ id: 'laser', name: 'Pulse Laser', family: 'Pulse', desc: 'Accurate hitscan pulses with some armor pierce.', category: 'energy', visual: 'laser', caliber: 0.3, mount: 'S', weight: 1.2, cost: 18,
@@ -168,7 +168,7 @@ export const MODULES: ModuleDef[] = [
     damage: 32, cooldown: 0.2, range: 4.5, ...GA, projectile: 'beam', ap: 0.5, falloff: 0.25 }),
   wpn({ id: 'plasmaorb', name: 'Plasma Cannon', family: 'Plasma orb', desc: 'Slow-moving plasma ball that bursts on impact.', category: 'energy', visual: 'plasma', caliber: 0.5, mount: 'M', weight: 4, cost: 36,
     damage: 85, cooldown: 2, range: 6.5, ...G, projectile: 'orb', projectileSpeed: 6, splash: 1.1, ap: 0.5, spread: 0.4 }),
-  wpn({ id: 'plasma', name: 'Plasma Lance', family: 'Plasma beam', desc: 'Searing short-range beam with heavy armor pierce.', category: 'energy', visual: 'plasma', caliber: 0.9, mount: 'L', weight: 8, cost: 65,
+  wpn({ id: 'plasma', name: 'Plasma Lance', family: 'Plasma beam', desc: 'Searing short-range beam with heavy armor pierce.', category: 'energy', visual: 'plasma', caliber: 0.9, mount: 'M', weight: 8, cost: 65,
     damage: 48, cooldown: 0.25, range: 5, ...GA, projectile: 'beam', ap: 0.6 }),
   // ---------------- Flame ----------------
   wpn({ id: 'flamer', name: 'Flamethrower', family: 'Light flame', desc: 'Short-range cone that ignores most armor.', category: 'flame', visual: 'flamer', caliber: 0.3, mount: 'S', weight: 1.5, cost: 14,
@@ -184,13 +184,13 @@ export const MODULES: ModuleDef[] = [
     damage: 20, cooldown: 3.5, range: 7, ...G, projectile: 'orb', projectileSpeed: 7, splash: 1.2, ap: 1, stun: 1.5, spread: 0.3 }),
   wpn({ id: 'slowbeam', name: 'Slow Beam', family: 'Disruptor', desc: 'Beam that cuts target speed and rate of fire by up to 60%.', category: 'disruption', visual: 'slowbeam', caliber: 0.5, mount: 'M', weight: 3, cost: 28,
     damage: 12, cooldown: 0.2, range: 6, ...GA, projectile: 'beam', ap: 1, slow: 0.15 }),
-  wpn({ id: 'arclance', name: 'Arc Lance', family: 'Storm', desc: 'Heavy lightning that chains through 6 enemies and jolts them.', category: 'disruption', visual: 'tesla', caliber: 0.9, mount: 'L', weight: 9, cost: 75,
+  wpn({ id: 'arclance', name: 'Arc Lance', family: 'Storm', desc: 'Heavy lightning that chains through 6 enemies and jolts them.', category: 'disruption', visual: 'tesla', caliber: 0.9, mount: 'M', weight: 9, cost: 75,
     damage: 105, cooldown: 1.6, range: 5.5, ...GA, projectile: 'lightning', chain: 5, ap: 0.5, stun: 0.3 }),
   wpn({ id: 'disarm', name: 'Disarm Ray', family: 'Disarmer', desc: 'Scrambles weapon systems: target can move but not fire for 2s.', category: 'disruption', visual: 'emp', caliber: 0.5, mount: 'M', weight: 3, cost: 34,
     damage: 15, cooldown: 2.5, range: 6.5, ...GA, projectile: 'beam', ap: 1, disarm: 2 }),
   wpn({ id: 'sonic', name: 'Sonic Pulser', family: 'Riot', desc: 'Concussive blast that hurls light units backwards.', category: 'disruption', visual: 'sonic', caliber: 0.5, mount: 'M', weight: 3.5, cost: 30,
     damage: 40, cooldown: 1.4, range: 3.5, ...G, projectile: 'orb', projectileSpeed: 14, splash: 1, ap: 0.3, impulse: 1.6 }),
-  wpn({ id: 'gravity', name: 'Gravity Gun', family: 'Graviton', desc: 'Yanks enemies toward you, dragging them out of formation.', category: 'disruption', visual: 'gravity', caliber: 0.8, mount: 'L', weight: 8, cost: 60,
+  wpn({ id: 'gravity', name: 'Gravity Gun', family: 'Graviton', desc: 'Yanks enemies toward you, dragging them out of formation.', category: 'disruption', visual: 'gravity', caliber: 0.8, mount: 'M', weight: 8, cost: 60,
     damage: 30, cooldown: 0.8, range: 7, ...GA, projectile: 'beam', ap: 1, impulse: -0.9 }),
   // ---------------- Bombs (flyers only) ----------------
   wpn({ id: 'bombs', name: 'Bomb Bay', family: 'Iron bombs', desc: 'Drops bombs on ground units directly below. Flying designs only.', category: 'artillery', visual: 'charge', caliber: 0.5, mount: 'M', weight: 3.5, cost: 28, requires: 'air',
@@ -200,7 +200,7 @@ export const MODULES: ModuleDef[] = [
   // ---------------- Flak ----------------
   wpn({ id: 'flak', name: 'Flak Cannon', family: 'Light flak', desc: 'Anti-air only. Bursting shells wreck aircraft groups.', category: 'antiair', visual: 'flak', caliber: 0.5, mount: 'M', weight: 3, cost: 24,
     damage: 45, cooldown: 0.45, range: 7.5, ...A, magazine: 5, reload: 2.5, projectile: 'shell', projectileSpeed: 16, splash: 1.3, ap: 0.2, airBonus: 1.5 }),
-  wpn({ id: 'heavyflak', name: 'Heavy Flak Battery', family: 'Heavy flak', desc: 'Three-gun flak battery. Clears the sky at long range.', category: 'antiair', visual: 'flak', barrels: 3, caliber: 0.9, mount: 'L', weight: 9, cost: 60,
+  wpn({ id: 'heavyflak', name: 'Heavy Flak Battery', family: 'Heavy flak', desc: 'Three-gun flak battery. Clears the sky at long range.', category: 'antiair', visual: 'flak', barrels: 3, caliber: 0.9, mount: 'M', weight: 9, cost: 60,
     damage: 70, burst: 3, cooldown: 2.2, range: 10, ...A, projectile: 'shell', projectileSpeed: 18, splash: 1.8, ap: 0.2, airBonus: 1.5 }),
   // ---------------- Melee ----------------
   wpn({ id: 'buzzsaw', name: 'Buzzsaw', family: 'Circular saw', desc: 'Spinning blade. Chews through light armor at contact range.', category: 'melee', visual: 'saw', caliber: 0.4, mount: 'S', weight: 1.4, cost: 10,
@@ -215,20 +215,20 @@ export const MODULES: ModuleDef[] = [
     damage: 95, cooldown: 1, range: 0.8, ...MELEE, ap: 0.7 }),
   wpn({ id: 'plasmablade', name: 'Plasma Blade', family: 'Energy blade', desc: 'Superheated blade that sweeps through adjacent enemies.', category: 'melee', visual: 'blade', caliber: 0.6, mount: 'M', weight: 2.5, cost: 30,
     damage: 55, cooldown: 0.5, range: 0.9, ...MELEE, splash: 0.8, ap: 0.8 }),
-  wpn({ id: 'hammer', name: 'Siege Hammer', family: 'Ground pound', desc: 'Colossal hammer. Shockwave damages and knocks back everything nearby.', category: 'melee', visual: 'hammer', caliber: 0.9, mount: 'L', weight: 9, cost: 55,
+  wpn({ id: 'hammer', name: 'Siege Hammer', family: 'Ground pound', desc: 'Colossal hammer. Shockwave damages and knocks back everything nearby.', category: 'melee', visual: 'hammer', caliber: 0.9, mount: 'M', weight: 9, cost: 55,
     damage: 260, cooldown: 2, range: 0.9, ...MELEE, splash: 1.3, ap: 0.6, impulse: 1 }),
-  wpn({ id: 'drill', name: 'Drill Lance', family: 'Bore drill', desc: 'Armor-boring drill. Ignores all armor.', category: 'melee', visual: 'drill', caliber: 0.9, mount: 'L', weight: 8, cost: 50,
+  wpn({ id: 'drill', name: 'Drill Lance', family: 'Bore drill', desc: 'Armor-boring drill. Ignores all armor.', category: 'melee', visual: 'drill', caliber: 0.9, mount: 'M', weight: 8, cost: 50,
     damage: 48, cooldown: 0.15, range: 0.8, ...MELEE, ap: 1 }),
   // ---------------- Support (allies) ----------------
   util({ id: 'repair', name: 'Repair Beam', family: 'Light repair', desc: 'Heals the most damaged ally in range.', category: 'support', visual: 'repair', caliber: 0.3, mount: 'S', weight: 1, cost: 17, heal: 22, range: 4 }),
   util({ id: 'repairM', name: 'Repair Array', family: 'Heavy repair', desc: 'Industrial nano-repair array with longer reach.', category: 'support', visual: 'repair', caliber: 0.6, mount: 'M', weight: 2.5, cost: 40, heal: 55, range: 5 }),
-  util({ id: 'dome', name: 'Shield Dome', family: 'Area shield', desc: 'Projects a 150-point shield onto every ally within 3 cells.', category: 'support', visual: 'dome', caliber: 0.8, mount: 'L', weight: 6, cost: 20, shieldAura: { radius: 3, amount: 150 } }),
+  util({ id: 'dome', name: 'Shield Dome', family: 'Area shield', desc: 'Projects a 150-point shield onto every ally within 3 cells.', category: 'support', visual: 'dome', caliber: 0.8, mount: 'M', weight: 6, cost: 20, shieldAura: { radius: 3, amount: 150 } }),
   util({ id: 'uplink', name: 'Command Uplink', family: 'Command', desc: 'Allies within 4 cells fire 15% faster.', category: 'support', visual: 'uplink', caliber: 0.5, mount: 'M', weight: 2, cost: 6, fireRateAura: { radius: 4, bonus: 0.15 } }),
   util({ id: 'sensor', name: 'Sensor Mast', family: 'Detection', desc: 'Reveals cloaked enemies within 7 cells for your whole army.', category: 'stealth', visual: 'sensor', caliber: 0.4, mount: 'S', weight: 1, cost: 3, detect: 7 }),
   // ---------------- Defense ----------------
   util({ id: 'shield', name: 'Shield Projector', family: 'Energy shield', desc: 'Personal energy shield that absorbs 260 damage and regenerates.', category: 'defense', visual: 'shield', caliber: 0.5, mount: 'M', weight: 2.5, cost: 32, shield: 260 }),
   util({ id: 'shieldL', name: 'Shield Emitter', family: 'Light shield', desc: 'Small personal shield: absorbs 100 damage, regenerates.', category: 'defense', visual: 'shield', caliber: 0.25, mount: 'S', weight: 1, cost: 14, shield: 100 }),
-  util({ id: 'shieldH', name: 'Aegis Barrier', family: 'Heavy shield', desc: 'Massive personal barrier: absorbs 700 damage.', category: 'defense', visual: 'shield', caliber: 0.9, mount: 'L', weight: 6, cost: 60, shield: 700 }),
+  util({ id: 'shieldH', name: 'Aegis Barrier', family: 'Heavy shield', desc: 'Massive personal barrier: absorbs 700 damage.', category: 'defense', visual: 'shield', caliber: 0.9, mount: 'M', weight: 6, cost: 60, shield: 700 }),
   util({ id: 'pointdef', name: 'Point Defense Laser', family: 'APS', desc: 'Zaps incoming rockets, missiles and shells within 2.5 cells.', category: 'defense', visual: 'pointdef', caliber: 0.4, mount: 'S', weight: 1.2, cost: 24, pointDefense: { range: 2.5, cooldown: 0.6 } }),
   util({ id: 'smoke', name: 'Smoke Launchers', family: 'Obscurant', desc: 'Below 60% hp, pops a smoke screen: nothing outside 2.5 cells can target units inside for 5s.', category: 'defense', visual: 'smoke', caliber: 0.3, mount: 'S', weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
   util({ id: 'reactive', name: 'Reactive Armor', family: 'ERA', desc: 'Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.', category: 'defense', visual: 'plate', caliber: 0.5, mount: 'M', weight: 3, cost: 22, reactive: 6, armor: 1 }),
@@ -247,25 +247,25 @@ export const MODULES: ModuleDef[] = [
   util({ id: 'overclock', name: 'Overclocked Core', family: 'Overclock', desc: 'All weapons fire 20% faster.', category: 'systems', visual: 'coolant', caliber: 0.5, mount: 'M', weight: 2, cost: 5, fireRateBonus: 0.2 }),
   util({ id: 'selfdestruct', name: 'Self-Destruct Charge', family: 'Demolition', desc: 'Detonates on death for 300 damage in a 2-cell radius.', category: 'systems', visual: 'charge', caliber: 0.4, mount: 'S', weight: 1.5, cost: 3, deathBlast: { damage: 300, radius: 2 } }),
   // ---------------- Giant class (G mounts, size-4 chassis) ----------------
-  wpn({ id: 'siege240', name: '240mm Siege Cannon', family: '240mm', desc: 'Giant-class gun. Shells that crack fortresses.', category: 'cannon', visual: 'cannon', caliber: 1, mount: 'XL', weight: 18, cost: 110,
+  wpn({ id: 'siege240', name: '240mm Siege Cannon', family: '240mm', desc: 'Giant-class gun. Shells that crack fortresses.', category: 'cannon', visual: 'cannon', caliber: 1, mount: 'L', weight: 18, cost: 110,
     damage: 520, cooldown: 3, range: 9, ...G, projectile: 'shell', projectileSpeed: 18, splash: 0.8, ap: 0.85, spread: 0.2 }),
-  wpn({ id: 'avenger', name: 'Hellstorm Rotary Cannon', family: 'Giant rotary', desc: 'Seven-barrel 30mm rotary cannon. Shreds air and ground alike.', category: 'autocannon', visual: 'gatling', barrels: 7, caliber: 1, mount: 'XL', weight: 16, cost: 110,
+  wpn({ id: 'avenger', name: 'Hellstorm Rotary Cannon', family: 'Giant rotary', desc: 'Seven-barrel 30mm rotary cannon. Shreds air and ground alike.', category: 'autocannon', visual: 'gatling', barrels: 7, caliber: 1, mount: 'L', weight: 16, cost: 110,
     damage: 30, cooldown: 0.035, range: 7, ...GA, projectile: 'bullet', projectileSpeed: 24, splash: 0.2, ap: 0.45, spread: 0.5 }),
-  wpn({ id: 'missilebattery', name: 'Missile Battery', family: '16-cell', desc: 'Sixteen-cell launcher that saturates an area with homing missiles.', category: 'missile', visual: 'missileRack', barrels: 16, caliber: 1, mount: 'XL', weight: 17, cost: 120,
+  wpn({ id: 'missilebattery', name: 'Missile Battery', family: '16-cell', desc: 'Sixteen-cell launcher that saturates an area with homing missiles.', category: 'missile', visual: 'missileRack', barrels: 16, caliber: 1, mount: 'L', weight: 17, cost: 120,
     damage: 70, burst: 16, cooldown: 9, range: 12, ...GA, projectile: 'missile', projectileSpeed: 10, splash: 0.5, ap: 0.5 }),
-  wpn({ id: 'siegeplasma', name: 'Plasma Siege Projector', family: 'Siege plasma', desc: 'Lobs a sun-hot plasma mass that melts everything nearby.', category: 'energy', visual: 'plasma', caliber: 1, mount: 'XL', weight: 18, cost: 115,
+  wpn({ id: 'siegeplasma', name: 'Plasma Siege Projector', family: 'Siege plasma', desc: 'Lobs a sun-hot plasma mass that melts everything nearby.', category: 'energy', visual: 'plasma', caliber: 1, mount: 'L', weight: 18, cost: 115,
     damage: 380, cooldown: 3.5, range: 8, ...G, projectile: 'orb', projectileSpeed: 7, splash: 2, ap: 0.7, spread: 0.4 }),
-  wpn({ id: 'skyfortress', name: 'Flak Fortress', family: 'Giant flak', desc: 'Quad heavy flak turret. A no-fly zone on legs.', category: 'antiair', visual: 'flak', barrels: 4, caliber: 1, mount: 'XL', weight: 15, cost: 95,
+  wpn({ id: 'skyfortress', name: 'Flak Fortress', family: 'Giant flak', desc: 'Quad heavy flak turret. A no-fly zone on legs.', category: 'antiair', visual: 'flak', barrels: 4, caliber: 1, mount: 'L', weight: 15, cost: 95,
     damage: 90, burst: 4, cooldown: 2, range: 13, ...A, projectile: 'shell', projectileSpeed: 20, splash: 2.2, ap: 0.3, airBonus: 1.5 }),
-  wpn({ id: 'stormtower', name: 'Storm Tower', family: 'Giant tesla', desc: 'Lightning that chains through 8 enemies and jolts them.', category: 'disruption', visual: 'tesla', caliber: 1, mount: 'XL', weight: 16, cost: 110,
+  wpn({ id: 'stormtower', name: 'Storm Tower', family: 'Giant tesla', desc: 'Lightning that chains through 8 enemies and jolts them.', category: 'disruption', visual: 'tesla', caliber: 1, mount: 'L', weight: 16, cost: 110,
     damage: 160, cooldown: 1.5, range: 6.5, ...GA, projectile: 'lightning', chain: 7, ap: 0.5, stun: 0.3 }),
-  wpn({ id: 'inferno', name: 'Inferno Projector', family: 'Giant flame', desc: 'A river of fire. Wide cone, ferocious burn.', category: 'flame', visual: 'flamer', caliber: 1, mount: 'XL', weight: 15, cost: 95,
+  wpn({ id: 'inferno', name: 'Inferno Projector', family: 'Giant flame', desc: 'A river of fire. Wide cone, ferocious burn.', category: 'flame', visual: 'flamer', caliber: 1, mount: 'L', weight: 15, cost: 95,
     damage: 22, cooldown: 0.1, range: 5, ...G, projectile: 'flame', projectileSpeed: 9, splash: 1.8, ap: 0.9, burn: { dps: 30, duration: 3 } }),
-  wpn({ id: 'grinder', name: 'Grinder Wheel', family: 'Giant saw', desc: 'Colossal spinning grinder. Sweeps through everything it touches.', category: 'melee', visual: 'saw', caliber: 1, mount: 'XL', weight: 15, cost: 85,
+  wpn({ id: 'grinder', name: 'Grinder Wheel', family: 'Giant saw', desc: 'Colossal spinning grinder. Sweeps through everything it touches.', category: 'melee', visual: 'saw', caliber: 1, mount: 'L', weight: 15, cost: 85,
     damage: 120, cooldown: 0.3, range: 1, ...MELEE, splash: 1.2, ap: 0.6 }),
-  util({ id: 'bulwarkshield', name: 'Bastion Shield Generator', family: 'Giant shield', desc: 'Personal barrier that absorbs 1800 damage.', category: 'defense', visual: 'shield', caliber: 1, mount: 'XL', weight: 12, cost: 90, shield: 1800 }),
-  util({ id: 'domeG', name: 'Fortress Dome', family: 'Giant dome', desc: 'Projects a 400-point shield onto every ally within 5 cells.', category: 'support', visual: 'dome', caliber: 1, mount: 'XL', weight: 14, cost: 110, shieldAura: { radius: 5, amount: 400 } }),
-  { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'XL', kind: 'armor', weight: 26, cost: 130, armor: 16, hp: 1200 },
+  util({ id: 'bulwarkshield', name: 'Bastion Shield Generator', family: 'Giant shield', desc: 'Personal barrier that absorbs 1800 damage.', category: 'defense', visual: 'shield', caliber: 1, mount: 'L', weight: 12, cost: 90, shield: 1800 }),
+  util({ id: 'domeG', name: 'Fortress Dome', family: 'Giant dome', desc: 'Projects a 400-point shield onto every ally within 5 cells.', category: 'support', visual: 'dome', caliber: 1, mount: 'L', weight: 14, cost: 110, shieldAura: { radius: 5, amount: 400 } }),
+  { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'L', kind: 'armor', weight: 26, cost: 130, armor: 16, hp: 1200 },
   // ---------------- Titan class (T mounts, size-5 chassis) ----------------
   wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.', category: 'precision', visual: 'rail', turretTurn: 0.5, barrels: 2, caliber: 1, mount: 'XL', weight: 38, cost: 220,
     damage: 1400, cooldown: 6, range: 20, ...GA, projectile: 'rail', ap: 1, pierce: true }),
@@ -284,7 +284,7 @@ export const MODULES: ModuleDef[] = [
   // ---------------- Armor ----------------
   { id: 'plateL', name: 'Armor Plate', family: 'Light plate', desc: '+3 armor, +60 hp.', category: 'armor', visual: 'plate', caliber: 0.3, mount: 'S', kind: 'armor', weight: 2, cost: 8, armor: 3, hp: 60 },
   { id: 'plateM', name: 'Composite Armor', family: 'Composite', desc: '+6 armor, +150 hp.', category: 'armor', visual: 'plate', caliber: 0.6, mount: 'M', kind: 'armor', weight: 5, cost: 12, armor: 6, hp: 150 },
-  { id: 'plateH', name: 'Heavy Armor', family: 'Heavy plate', desc: '+10 armor, +400 hp.', category: 'armor', visual: 'plate', caliber: 0.9, mount: 'L', kind: 'armor', weight: 12, cost: 15, armor: 10, hp: 400 },
+  { id: 'plateH', name: 'Heavy Armor', family: 'Heavy plate', desc: '+10 armor, +400 hp.', category: 'armor', visual: 'plate', caliber: 0.9, mount: 'M', kind: 'armor', weight: 12, cost: 15, armor: 10, hp: 400 },
 ];
 
 const byId = <T extends { id: string }>(list: T[]) => new Map(list.map((p) => [p.id, p] as const));
@@ -302,16 +302,17 @@ export const chassisDomain = (c: ChassisDef): Domain => c.domain ?? 'ground';
 export const mobilityDomain = (m: MobilityDef): Domain => m.domain ?? 'ground';
 
 export const MOUNT_RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
-/** Visual/physical scale tier of a module for rendering & traverse: 1 S, 2 M, 3 L, 4 giant-scale XL, 5 titan-scale XL. */
+/** Visual/physical scale tier of a module for rendering & traverse: 1 small, 2 medium, 3 heavy medium (weight >= 6),
+ *  4 giant-class (L), 5 titan-class (XL). */
 export function moduleTier(m: ModuleDef): 1 | 2 | 3 | 4 | 5 {
   if (m.mount === 'S') return 1;
-  if (m.mount === 'M') return 2;
-  if (m.mount === 'L') return 3;
-  return m.weight >= 25 ? 5 : 4;
+  if (m.mount === 'M') return m.weight >= 6 ? 3 : 2;
+  if (m.mount === 'L') return 4;
+  return 5;
 }
-/** Player-facing socket sizes, T-shirt style, smallest to biggest: S · M · L · XL (XL = giant/titan weapons). */
+/** Player-facing socket sizes, T-shirt style: S · M · L (giant-class, giant & titan hulls only) · XL (titan-class, titan hulls only). */
 export const MOUNT_LETTER: Record<MountClass, string> = { S: 'S', M: 'M', L: 'L', XL: 'XL' };
-export const MOUNT_NAME: Record<MountClass, string> = { S: 'Small', M: 'Medium', L: 'Large', XL: 'Extra large' };
+export const MOUNT_NAME: Record<MountClass, string> = { S: 'Small', M: 'Medium', L: 'Large (giant-class)', XL: 'Extra large (titan-class)' };
 const RANK = MOUNT_RANK;
 
 export const ROLES: { id: Role; name: string; desc: string }[] = [

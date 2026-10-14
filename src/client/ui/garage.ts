@@ -24,7 +24,7 @@ import {
 
 const RANK: Record<MountClass, number> = MOUNT_RANK;
 const ML = MOUNT_LETTER;
-const sizeTip = (c: MountClass) => `Size ${ML[c]} (${MOUNT_NAME[c].toLowerCase()}). Sockets run S, M, L to XL (giant/titan weapons) and take parts of their size or smaller.`;
+const sizeTip = (c: MountClass) => `Size ${ML[c]} (${MOUNT_NAME[c].toLowerCase()}). Sockets run S, M, L (giant-class) and XL (titan-class) and take parts of their size or smaller.`;
 const NAME_MAX = 24;
 /** Weight bar spans 0..BAR_MAX load. */
 const BAR_MAX = 1.8;

@@ -9,7 +9,7 @@ import type { ModuleDef, MountClass } from '../../shared/types.ts';
 import { moduleTier } from '../../shared/parts.ts';
 import { clamp } from './palette.ts';
 
-export const CLASS_RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
+export const CLASS_RANK: Record<MountClass, number> = { S: 1, M: 2, L: 4, XL: 5 };
 /** size tier 1..5 (S, M, L, XL giant-scale, XL titan-scale); a slot class override maps S1 M2 L3 XL4 */
 const tierOf = (m: ModuleDef, cls?: MountClass): number => (cls && cls !== m.mount ? CLASS_RANK[cls] : moduleTier(m));
 

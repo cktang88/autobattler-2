@@ -170,7 +170,7 @@ export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (
 export const unitK = (S: number) => (S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1));
 
 /** Middle of each class's turret housing band (reference cells; render weaponsize.ts BAND_D). */
-const CLASS_D_MID: Record<MountClass, number> = { S: 0.32, M: 0.47, L: 0.63, XL: 0.95 };
+const CLASS_D_MID: Record<MountClass, number> = { S: 0.32, M: 0.52, L: 0.85, XL: 1.06 };
 /** Approximate turret housing diameter (cells) of a module class on a hull of size S. The exact drawn size also
  *  depends on calibre / overlap clearing (render-only); the sim uses half of this as a weapon's muzzle reach. */
 export const approxTurretD = (cls: MountClass, S: number) => CLASS_D_MID[cls] * unitK(S);
