@@ -76,6 +76,37 @@ function tracerColor(moduleId: string): [number, number, number] {
 const _v3 = new THREE.Vector3();
 const _col = new THREE.Color();
 
+/** Terrain generation is a ~1 s CPU job (fbm per pixel), so built maps are cached and shared across views (menu backdrop, match, ...). */
+interface BuiltTerrain { group: THREE.Group; ground: THREE.Mesh; tint: THREE.Color }
+const terrainCache = new Map<string, BuiltTerrain>();
+function terrainFor(map: MapTheme): BuiltTerrain {
+  let t = terrainCache.get(map.id);
+  if (t) { terrainCache.delete(map.id); terrainCache.set(map.id, t); return t; }
+  const b = buildTerrain(FIELD_H, FIELD_W, { seed: map.seed * 13 + 5, ppc: 14, grid: true, zoneFrac: DEPLOY_D / FIELD_H, props: false });
+  // restyle per map: multiply the sandy base by the 2D theme's mid ramp colour (relative to the base's own tone)
+  const c1 = new THREE.Color().setRGB(map.ramp[1][0] / 255, map.ramp[1][1] / 255, map.ramp[1][2] / 255, THREE.SRGBColorSpace);
+  const ref = new THREE.Color().setRGB(120 / 255, 108 / 255, 84 / 255, THREE.SRGBColorSpace);
+  const tint = new THREE.Color(clamp(c1.r / ref.r, 0.35, 2), clamp(c1.g / ref.g, 0.35, 2), clamp(c1.b / ref.b, 0.35, 2));
+  b.group.children.forEach((o, i) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    if (m?.color) m.color.copy(tint).multiplyScalar(i === 0 ? 1 : 0.8);
+  });
+  t = { group: b.group, ground: b.ground, tint };
+  terrainCache.set(map.id, t);
+  // keep the two most recent maps; older ones free their textures
+  while (terrainCache.size > 2) {
+    const [k, old] = terrainCache.entries().next().value as [string, BuiltTerrain];
+    terrainCache.delete(k);
+    old.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+      const mat = m.material as THREE.MeshStandardMaterial | undefined;
+      if (mat) { mat.map?.dispose(); mat.bumpMap?.dispose(); mat.dispose(); }
+    });
+  }
+  return t;
+}
+
 export class FieldView3D implements BattleView {
   readonly canvas: HTMLCanvasElement;
   viewerSide: Side;
@@ -176,9 +207,9 @@ export class FieldView3D implements BattleView {
     };
     const myTop = viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
-    this.myZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[0].rim, 0.04);
+    this.myZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[0].rim, 0);
     this.myZone.position.set(FIELD_W / 2, 0.03, myTop + DEPLOY_D / 2);
-    this.foeZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[1].rim, 0.04);
+    this.foeZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[1].rim, 0.0);
     this.foeZone.position.set(FIELD_W / 2, 0.03, enTop + DEPLOY_D / 2);
     this.scene.add(this.myZone, this.foeZone);
     // zone front lines
@@ -237,32 +268,19 @@ export class FieldView3D implements BattleView {
   /** Terrain from proto3d, restyled per map: seed + a colour tint from the 2D theme ramp, map void as the background. */
   private setMapNow(map: MapTheme): void {
     this.map = map;
-    if (this.terrain) {
-      this.scene.remove(this.terrain.group);
-      this.terrain.group.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose();
-        const mat = m.material as THREE.MeshStandardMaterial | undefined;
-        if (mat) { mat.map?.dispose(); mat.bumpMap?.dispose(); mat.dispose(); }
-      });
-    }
+    if (this.terrain) this.scene.remove(this.terrain.group);
     for (const r of this.rocks) { this.scene.remove(r); (r as THREE.InstancedMesh).geometry.dispose(); }
     this.rocks = [];
-    const t = buildTerrain(FIELD_H, FIELD_W, { seed: map.seed * 13 + 5, ppc: 16, grid: true, zoneFrac: DEPLOY_D / FIELD_H, props: false });
+    const built = terrainFor(map);
+    // the cached build is shared between views (textures live as long as the cache entry): each view gets a cheap clone
+    const group = built.group.clone(true);
     // terrain is authored with deployment zones at its local +-x ends; our zones run along field y, so turn it a quarter
     // and put team 0 (the viewer's colour) at the viewer's end.
-    t.group.rotation.y = this.viewerSide === 0 ? Math.PI / 2 : -Math.PI / 2;
-    t.group.position.set(FIELD_W / 2, 0, FIELD_H / 2);
-    const c1 = new THREE.Color().setRGB(map.ramp[1][0] / 255, map.ramp[1][1] / 255, map.ramp[1][2] / 255, THREE.SRGBColorSpace);
-    const ref = new THREE.Color().setRGB(120 / 255, 108 / 255, 84 / 255, THREE.SRGBColorSpace);
-    const tint = new THREE.Color(clamp(c1.r / ref.r, 0.35, 2), clamp(c1.g / ref.g, 0.35, 2), clamp(c1.b / ref.b, 0.35, 2));
-    t.group.children.forEach((o, i) => {
-      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-      if (m?.color) m.color.copy(tint).multiplyScalar(i === 0 ? 1 : 0.8);
-    });
-    this.scene.add(t.group);
-    this.terrain = t;
-    this.scatterRocks(map, tint);
+    group.rotation.y = this.viewerSide === 0 ? Math.PI / 2 : -Math.PI / 2;
+    group.position.set(FIELD_W / 2, 0, FIELD_H / 2);
+    this.scene.add(group);
+    this.terrain = { group, ground: built.ground };
+    this.scatterRocks(map, built.tint);
     this.scene.background = new THREE.Color(map.void);
     this.fx.setGround([clamp(map.ramp[1][0] / 255 * 0.9, 0, 1), clamp(map.ramp[1][1] / 255 * 0.9, 0, 1), clamp(map.ramp[1][2] / 255 * 0.9, 0, 1)]);
   }
@@ -433,7 +451,9 @@ export class FieldView3D implements BattleView {
     const aoZoom = this.cam.k >= 9;
     const ao = L === 0 && aoZoom && units <= 120;
     this.fx.lod = L >= 2 ? 0.5 : units > 160 ? 0.6 : 1;
-    return { ao, bloom: L <= 1, shadow: L <= 2, direct: L >= 3 };
+    // very crowded zoomed-out views drop unit shadows first (they double the triangle load)
+    const shadow = L <= 2 && !(units > 250 && this.cam.k < 12);
+    return { ao, bloom: L <= 1, shadow, direct: L >= 3 };
   }
 
   private render(units: number): void {
@@ -500,7 +520,7 @@ export class FieldView3D implements BattleView {
     this.fx.update(dt);
     this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
-    (this.myZone.material as THREE.MeshBasicMaterial).opacity = overlay.showZone ? 0.14 : 0.04;
+    (this.myZone.material as THREE.MeshBasicMaterial).opacity = overlay.showZone ? 0.055 : 0;
     this.grid.visible = !!overlay.showZone;
     const hv = overlay.hover;
     this.hoverFill.visible = this.hoverLine.visible = !!hv;
@@ -571,6 +591,7 @@ export class FieldView3D implements BattleView {
     this.lastTick = -1;
     this.sinceTick = 0;
     this.grid.visible = false;
+    (this.myZone.material as THREE.MeshBasicMaterial).opacity = 0;
     this.hoverFill.visible = this.hoverLine.visible = false;
     this.hideSelRings(0);
     this.releaseBoard();

@@ -18,7 +18,7 @@ export class Overlay {
   readonly mesh: THREE.Mesh;
 
   private cap: number;
-  constructor(cap = 6000) {
+  constructor(cap = 14000) {
     this.cap = cap;
     this.pos = new Float32Array(cap * 12);
     this.col = new Float32Array(cap * 16);
@@ -105,7 +105,7 @@ const shieldFS = /* glsl */ `
     float ring = exp(-pow((ang - rr) * 5.0, 2.0)) * uHit;
     float core = exp(-pow(ang * 2.4, 2.0)) * uHit * 0.55;
     float al = a + ring * 0.9 + core;
-    gl_FragColor = vec4(uCol * (1.0 + ring * 1.6), 1.0) * al;
+    gl_FragColor = vec4(uCol * (1.0 + ring * 1.6), min(1.0, al));
   }`;
 
 export interface Bubble { mesh: THREE.Mesh; mat: THREE.ShaderMaterial }

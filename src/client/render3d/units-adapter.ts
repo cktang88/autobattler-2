@@ -23,7 +23,7 @@ const LOOKS: Look[] = ['normal', 'ghost', 'invalid', 'wreck', 'cloak'];
 const lookMats: Record<Exclude<Look, 'normal'>, THREE.Material> = {
   ghost: new THREE.MeshStandardMaterial({ color: '#9fe8c0', transparent: true, opacity: 0.5, roughness: 0.6, metalness: 0.1, depthWrite: false }),
   invalid: new THREE.MeshStandardMaterial({ color: '#ff5050', transparent: true, opacity: 0.55, roughness: 0.6, metalness: 0.1, depthWrite: false }),
-  wreck: new THREE.MeshStandardMaterial({ color: '#201d1a', roughness: 0.96, metalness: 0.25, envMapIntensity: 0.5 }),
+  wreck: new THREE.MeshStandardMaterial({ color: '#3a352f', roughness: 0.95, metalness: 0.12, envMapIntensity: 0.6 }),
   cloak: new THREE.MeshStandardMaterial({ color: '#8fb8d0', transparent: true, opacity: 0.32, roughness: 0.5, metalness: 0.1, depthWrite: false }),
 };
 
@@ -60,6 +60,8 @@ interface Template {
   /** how far (cells of body travel) one unit of animate()-time is, per mobility, so feet/wheels don't skate */
   phaseK: number;
   animates: boolean;
+  /** instanced pools by look (index into LOOKS) */
+  pool: (Pool | undefined)[];
 }
 
 const _m = new THREE.Matrix4();
@@ -193,7 +195,7 @@ class Pool {
   constructor(tpl: Template, look: Look, group: THREE.Group) { this.tpl = tpl; this.look = look; this.group = group; }
 
   private build(cap: number): void {
-    for (const m of this.meshes) { this.group.remove(m); m.dispose(); }
+    for (const m of this.meshes) if (m) { this.group.remove(m); m.dispose(); }
     this.meshes = [];
     this.cap = cap;
     this.tpl.meshes.forEach((src, j) => {
@@ -319,7 +321,7 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
   const isBlob = meshes.map((m) => (m.material as THREE.Material & { isMeshBasicMaterial?: boolean }).isMeshBasicMaterial === true);
   const tpl: Template = {
     key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, mountTurret,
-    height: Math.max(0.4, box.max.y), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0,
+    height: Math.max(0.4, box.max.y), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [],
   };
   return tpl;
 }
@@ -357,9 +359,9 @@ export class UnitLayer {
 
   /** queue a rig for drawing this frame (its transforms must be up to date) */
   submit(r: Rig, look: Look): void {
-    const key = r.tpl.key + '|' + look;
-    let p = this.pools.get(key);
-    if (!p) { p = new Pool(r.tpl, look, this.group); this.pools.set(key, p); }
+    const li = LOOKS.indexOf(look);
+    let p = r.tpl.pool[li];
+    if (!p) { p = new Pool(r.tpl, look, this.group); r.tpl.pool[li] = p; this.pools.set(r.tpl.key + '|' + look, p); }
     p.rigs.push(r);
   }
   /** write all queued instances; call once per frame after every submit() */

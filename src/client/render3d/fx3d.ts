@@ -13,14 +13,14 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 /** 3-stop colour ramp (rgba x 3) at particle age 0, 0.35, 1. rgb > 1 is HDR (blooms). */
 export type Ramp = readonly number[];
 export const RAMPS = {
-  fire: [3.2, 2.8, 1.8, 1, 2.2, 0.85, 0.2, 0.9, 0.35, 0.08, 0.03, 0],
+  fire: [2.5, 1.9, 1.0, 0.85, 1.7, 0.6, 0.13, 0.7, 0.28, 0.07, 0.02, 0],
   flame: [2.6, 1.7, 0.6, 0.9, 1.9, 0.6, 0.12, 0.7, 0.3, 0.06, 0.02, 0],
   plasma: [2.8, 1.6, 3.2, 1, 1.6, 0.5, 2.4, 0.85, 0.2, 0.05, 0.4, 0],
   emp: [2.4, 3.0, 4.0, 1, 0.9, 1.8, 3.2, 0.8, 0.1, 0.3, 0.8, 0],
   spark: [3.5, 2.6, 1.2, 1, 2.5, 1.0, 0.25, 0.9, 1.0, 0.25, 0.05, 0],
-  flash: [4.0, 3.4, 2.4, 1, 3.0, 2.0, 0.9, 0.7, 1.5, 0.7, 0.2, 0],
-  smoke: [0.1, 0.09, 0.08, 0.7, 0.2, 0.18, 0.16, 0.5, 0.3, 0.28, 0.26, 0],
-  smokeLight: [0.5, 0.49, 0.47, 0.45, 0.5, 0.5, 0.48, 0.28, 0.5, 0.5, 0.5, 0],
+  flash: [3.4, 2.8, 1.8, 1, 2.2, 1.3, 0.5, 0.6, 1.0, 0.45, 0.12, 0],
+  smoke: [0.15, 0.14, 0.13, 0.5, 0.22, 0.2, 0.18, 0.36, 0.3, 0.28, 0.26, 0],
+  smokeLight: [0.45, 0.44, 0.42, 0.32, 0.45, 0.45, 0.43, 0.2, 0.45, 0.45, 0.45, 0],
   heal: [0.7, 2.8, 1.1, 1, 0.3, 1.6, 0.6, 0.6, 0.1, 0.8, 0.3, 0],
   shield: [1.2, 2.6, 3.4, 1, 0.5, 1.5, 2.6, 0.7, 0.2, 0.6, 1.2, 0],
   bolt: [2.8, 3.4, 4.5, 1, 1.6, 2.4, 4.0, 0.8, 0.3, 0.7, 2.0, 0],
@@ -86,7 +86,7 @@ class Particles {
   private geo: THREE.InstancedBufferGeometry;
 
   readonly cap: number;
-  constructor(cap: number, atlas: THREE.Texture, additive: boolean) {
+  constructor(cap: number, atlas: THREE.Texture, mode: 'add' | 'alpha' | 'fire') {
     this.cap = cap;
     const f = (k: number) => new Float32Array(cap * k);
     this.px = f(1); this.py = f(1); this.pz = f(1); this.vx = f(1); this.vy = f(1); this.vz = f(1);
@@ -123,14 +123,17 @@ class Particles {
           float a = texture2D(map, vUv).a * vCol.a;
           if (a < 0.003) discard;
           gl_FragColor = vec4(vCol.rgb, a);
-          ${additive ? 'gl_FragColor.rgb *= a;' : ''}
+          ${mode === 'fire' ? 'gl_FragColor = vec4(vCol.rgb * a, a * 0.5);' : ''}
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
         }`,
       transparent: true, depthWrite: false, depthTest: true,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      blending: mode === 'add' ? THREE.AdditiveBlending : mode === 'fire' ? THREE.CustomBlending : THREE.NormalBlending,
+      ...(mode === 'fire' ? { blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor } : {}),
     });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = additive ? 8 : 6;
+    this.mesh.renderOrder = mode === 'add' ? 8 : mode === 'fire' ? 7 : 6;
   }
 
   get full(): boolean { return this.n >= this.cap; }
@@ -453,8 +456,9 @@ export class Fx3D {
   /** budget scale 0.3..1 (the view lowers it when the frame rate sags) */
   lod = 1;
   private atlas = makeAtlas();
-  private add = new Particles(5000, this.atlas, true);
-  private alpha = new Particles(4500, this.atlas, false);
+  private add = new Particles(4000, this.atlas, 'add');
+  private fire = new Particles(3000, this.atlas, 'fire');
+  private alpha = new Particles(4500, this.atlas, 'alpha');
   private rings: Flats;
   private pools: Flats;
   private debris = new Debris(500);
@@ -466,12 +470,14 @@ export class Fx3D {
   private later: { t: number; fn: () => void }[] = [];
   private smokes: { x: number; z: number; r: number; left: number; acc: number }[] = [];
   private time = 0;
+  /** recent blast count (decays): stacked explosions dim each other so mass deaths don't blow out to white */
+  private heat = 0;
   private dust: number[] = [0.55, 0.46, 0.34, 0.5, 0.5, 0.42, 0.32, 0.3, 0.45, 0.38, 0.3, 0];
 
   constructor() {
     this.group.name = 'fx';
     const ringMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
-    this.rings = new Flats(160, new THREE.RingGeometry(0.86, 1, 48).rotateX(-Math.PI / 2), ringMat, 7);
+    this.rings = new Flats(160, new THREE.RingGeometry(0.955, 1, 48).rotateX(-Math.PI / 2), ringMat, 7);
     const poolTex = this.atlas.clone();
     poolTex.repeat.set(0.5, 0.5); poolTex.offset.set(0, 0); poolTex.needsUpdate = true;
     const poolMat = new THREE.MeshBasicMaterial({ color: '#ffffff', map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
@@ -492,7 +498,7 @@ export class Fx3D {
     this.scorch = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: st, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 256);
     this.scorch.frustumCulled = false; this.scorch.count = 0; this.scorch.renderOrder = 2;
     this.debris.mesh.renderOrder = 3;
-    for (const o of [this.scorch, this.debris.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.proj.group]) this.group.add(o);
+    for (const o of [this.scorch, this.debris.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.fire.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.proj.group]) this.group.add(o);
   }
 
   /** tint ground dust to the map */
@@ -502,13 +508,13 @@ export class Fx3D {
   }
 
   clear(): void {
-    this.add.clear(); this.alpha.clear(); this.rings.clear(); this.pools.clear(); this.debris.clear();
+    this.add.clear(); this.fire.clear(); this.alpha.clear(); this.rings.clear(); this.pools.clear(); this.debris.clear();
     this.scorchN = 0; this.scorch.count = 0;
     this.bolts.length = 0; this.later.length = 0; this.smokes.length = 0;
     this.trauma = 0; this.flashA = 0;
   }
 
-  get particleCount(): number { return this.add.n + this.alpha.n; }
+  get particleCount(): number { return this.add.n + this.fire.n + this.alpha.n; }
 
   /* ---------------------------------------------------------------------------------------------- helpers */
 
@@ -564,7 +570,7 @@ export class Fx3D {
         this.add.emit(x, y, z, R(-0.3, 0.3), R(-0.2, 0.3), R(-0.3, 0.3), 0.28, 0.55 * size, 0.1, 0, 2, 0, 0, ramp ?? RAMPS.plasma, this.hdr);
         break;
       case 'flame':
-        this.add.emit(x + R(-0.1, 0.1), y, z + R(-0.1, 0.1), R(-0.4, 0.4), R(0.2, 1.0), R(-0.4, 0.4), R(0.25, 0.45), 0.3 * size, 0.9 * size, R(-3, 3), 1, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.flame, this.hdr);
+        this.fire.emit(x + R(-0.1, 0.1), y, z + R(-0.1, 0.1), R(-0.4, 0.4), R(0.2, 1.0), R(-0.4, 0.4), R(0.25, 0.45), 0.3 * size, 0.9 * size, R(-3, 3), 1, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.flame, this.hdr);
         break;
       default: break;
     }
@@ -599,12 +605,12 @@ export class Fx3D {
 
   burning(x: number, y: number, z: number, S: number): void {
     const s = 0.25 + S * 0.12;
-    this.add.emit(x + R(-1, 1) * s, y, z + R(-1, 1) * s, R(-0.2, 0.2), R(0.8, 1.6), R(-0.2, 0.2), R(0.35, 0.6), s * 1.5, s * 0.6, R(-2, 2), 0.8, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.flame, this.hdr);
+    this.fire.emit(x + R(-1, 1) * s, y, z + R(-1, 1) * s, R(-0.2, 0.2), R(0.8, 1.6), R(-0.2, 0.2), R(0.35, 0.6), s * 1.5, s * 0.6, R(-2, 2), 0.8, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.flame, this.hdr);
     if (Math.random() < 0.6) this.alpha.emit(x + R(-1, 1) * s, y + 0.1, z + R(-1, 1) * s, R(-0.2, 0.2), R(0.8, 1.6), R(-0.2, 0.2), R(1.1, 2.0), s * 1.2, s * 3.2, R(-1, 1), 0.6, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.smoke);
   }
   wreckSmoke(x: number, z: number, S: number): void {
     this.alpha.emit(x + R(-0.2, 0.2) * S, 0.35 + 0.1 * S, z + R(-0.2, 0.2) * S, R(-0.1, 0.1), R(0.7, 1.4), R(-0.1, 0.1), R(1.6, 2.8), 0.3 + S * 0.12, 0.9 + S * 0.35, R(-0.6, 0.6), 0.4, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.smoke);
-    if (Math.random() < 0.3) this.add.emit(x + R(-0.15, 0.15) * S, 0.3, z + R(-0.15, 0.15) * S, 0, R(0.3, 0.8), 0, R(0.3, 0.5), 0.2 + S * 0.05, 0.1, 0, 0, 0, 1, RAMPS.flame, this.hdr);
+    if (Math.random() < 0.3) this.fire.emit(x + R(-0.15, 0.15) * S, 0.3, z + R(-0.15, 0.15) * S, 0, R(0.3, 0.8), 0, R(0.3, 0.5), 0.2 + S * 0.05, 0.1, 0, 0, 0, 1, RAMPS.flame, this.hdr);
   }
   dustPuff(x: number, z: number, r: number): void {
     const n = this.lodN(4 + Math.round(r * 4));
@@ -623,14 +629,16 @@ export class Fx3D {
     r = clamp(r, 0.3, 9);
     const fire = style === 'plasma' ? RAMPS.plasma : style === 'emp' ? RAMPS.emp : RAMPS.fire;
     const cy = y + 0.15 + r * 0.22;
-    this.add.emit(x, cy, z, 0, 0, 0, 0.13, r * 3.4, r * 2.4, 0, 0, 0, 0, RAMPS.flash, this.hdr);
-    this.pools.add(x, z, y + 0.04, r * 1.2, r * 3.2, 0.5, 2.4 * this.hdr, 1.2 * this.hdr, 0.35 * this.hdr);
+    const kq = 1 / (1 + this.heat * 0.45);
+    this.heat += 1;
+    this.add.emit(x, cy, z, 0, 0, 0, 0.11, r * 2.0, r * 1.5, 0, 0, 0, 0, RAMPS.flash, this.hdr * kq);
+    this.pools.add(x, z, y + 0.04, r * 1.2, r * 3.0, 0.45, 1.0 * this.hdr * kq, 0.5 * this.hdr * kq, 0.15 * this.hdr * kq);
     // fireball puffs
     const nf = this.lodN(4 + Math.round(r * 3.2));
     for (let i = 0; i < nf; i++) {
       const a = Math.random() * 6.283, el = R(0.1, 1.2), sp = r * R(0.9, 2.6);
       const d = Math.random() * r * 0.4;
-      this.add.emit(x + Math.cos(a) * d, cy + R(0, r * 0.3), z + Math.sin(a) * d, Math.cos(a) * sp * 0.6, el * sp * 0.9 + 0.6, Math.sin(a) * sp * 0.6, R(0.45, 0.9) * (0.8 + r * 0.1), r * R(0.7, 1.25), r * R(1.7, 2.4), R(-1.5, 1.5), 2.6, 0.5, 1 + (i & 1), fire, this.hdr);
+      this.fire.emit(x + Math.cos(a) * d, cy + R(0, r * 0.3), z + Math.sin(a) * d, Math.cos(a) * sp * 0.6, el * sp * 0.9 + 0.6, Math.sin(a) * sp * 0.6, R(0.45, 0.9) * (0.8 + r * 0.1), r * R(0.5, 0.9), r * R(1.3, 1.9), R(-1.5, 1.5), 2.6, 0.5, 1 + (i & 1), fire, this.hdr * (0.55 + 0.45 * kq));
     }
     // smoke column
     const ns = this.lodN(3 + Math.round(r * 2.6));
@@ -650,7 +658,7 @@ export class Fx3D {
       const a = Math.random() * 6.283, sp = R(2, 6) + r * 1.5;
       this.add.emit(x, cy, z, Math.cos(a) * sp, R(2.5, 7) + r * 0.8, Math.sin(a) * sp, R(0.45, 1.0), 0.09 + r * 0.025, 0.02, 0, 0.9, -12, 3, RAMPS.spark, this.hdr);
     }
-    this.rings.add(x, z, y + 0.07, r * 0.4, r * 2.9, 0.5 + r * 0.04, 2.0 * this.hdr, 1.5 * this.hdr, 1.0 * this.hdr);
+    this.rings.add(x, z, y + 0.07, r * 0.4, r * 2.6, 0.45 + r * 0.04, 0.6 * this.hdr * kq, 0.42 * this.hdr * kq, 0.24 * this.hdr * kq);
     if (debris) {
       const nc = this.lodN(2 + Math.round(r * 2.5));
       for (let i = 0; i < nc; i++) {
@@ -665,7 +673,7 @@ export class Fx3D {
 
   /** multi-stage blast for big hulls: chain of secondaries, a rolling fireball and a final cook-off */
   bigExplosion(x: number, z: number, size: number, y = 0): void {
-    const r = 0.9 + size * 0.75;
+    const r = 0.6 + size * 0.7;
     this.explosion(x, z, r, 'fire', y);
     const stages = Math.min(8, Math.max(0, size - 1) * 2);
     for (let i = 0; i < stages; i++) {
@@ -693,6 +701,7 @@ export class Fx3D {
 
   update(dt: number): void {
     this.time += dt;
+    this.heat = Math.max(0, this.heat - dt * 4);
     for (let i = this.later.length - 1; i >= 0; i--) if (this.later[i].t <= this.time) { const f = this.later[i].fn; this.later.splice(i, 1); f(); }
     for (let i = this.smokes.length - 1; i >= 0; i--) {
       const s = this.smokes[i];
@@ -706,6 +715,7 @@ export class Fx3D {
       }
     }
     this.add.update(dt);
+    this.fire.update(dt);
     this.alpha.update(dt);
     this.rings.update(dt);
     this.pools.update(dt);
@@ -739,7 +749,7 @@ export class Fx3D {
   }
 
   dispose(): void {
-    this.add.dispose(); this.alpha.dispose();
+    this.add.dispose(); this.fire.dispose(); this.alpha.dispose();
     this.atlas.dispose();
   }
 }
