@@ -1720,7 +1720,7 @@ export class FieldView {
         if (vis === 'heatray') break;
         const col = mod?.category === 'energy' ? '#ffd8a0' : vis === 'tesla' || vis === 'emp' ? '#dfe8ff' : '#ffe0a0';
         fx.armorHit(e.x, e.y, e.damage, col);
-        if (mod && (mod.category === 'cannon' || mod.category === 'artillery') && e.damage >= 60 && !mod.splash) fx.shellImpact(e.x, e.y, (mod.caliber ?? 0.5) * 0.9);
+        if (mod && (mod.category === 'cannon' || mod.category === 'artillery') && e.damage >= 60 && !mod.splash && !mod.projectile) fx.shellImpact(e.x, e.y, (mod.caliber ?? 0.5) * 0.9);
         break;
       }
       case 'explode': {
@@ -1737,9 +1737,12 @@ export class FieldView {
         else if (vis === 'pointdef') fx.boom(e.x, e.y, 0.25, 'flak', false);
         else if (mod?.burn || mod?.id === 'incendiary' || mod?.id === 'napalm') fx.boom(e.x, e.y, Math.max(0.35, r * 0.75), 'napalm');
         else if (r < 0.35) {
-          fx.glow(e.x, e.y, 0.35, '#ffb060', 0.1);
-          fx.sparks(e.x, e.y, 5, '#ffd890', 3, undefined, Math.PI, 0.2);
-          fx.smoke(e.x, e.y, 0.15, 0.7, '#3a3430');
+          if (mod && (mod.category === 'cannon' || mod.category === 'artillery' || mod.category === 'precision')) fx.shellImpact(e.x, e.y, (mod.caliber ?? 0.5) * 0.9);
+          else {
+            fx.glow(e.x, e.y, 0.35, '#ffd090', 0.07, 0.9);
+            fx.sparks(e.x, e.y, 6, '#ffd890', 4, undefined, Math.PI, 0.22, true);
+            fx.smoke(e.x, e.y, 0.13, 0.9, '#3a3430', fx.wind.x * 0.4, 0, 0.35, 0.5, 0.2);
+          }
         } else {
           fx.boom(e.x, e.y, r * 0.8, vis === 'cruise' ? 'big' : 'fire');
           if (r >= 1.5) fx.shake(Math.min(0.5, r * 0.15));
