@@ -3,6 +3,10 @@
 
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
 import { METAL, OUTLINE, clamp, mix, shade, rgba, roundRect, softDot, type Ctx, type TeamPal } from './palette.ts';
+import { boreFrac, calibreMm } from './weaponsize.ts';
+
+/** Barrel width for a module drawn at turret radius r: from its real calibre (weaponsize.ts), not hand-tuned. */
+const boreW = (m: ModuleDef, r: number) => r * boreFrac(m);
 
 /** Glow colour used by a weapon family (beams, lenses, projectiles). null = use team glow. */
 export function visualGlow(v: ModuleVisual | undefined, pal: TeamPal): string {
@@ -44,7 +48,10 @@ const MUZZLE_BY_ID: Record<string, number> = {
   siege240: 1.65, avenger: 1.55, missilebattery: 0.7, siegeplasma: 1.3, skyfortress: 1.28, stormtower: 0.3, inferno: 1.15, grinder: 1.1,
   massdriver: 1.72, doomsday: 1.6, annihilator: 1.5, tactnuke: 1.0, titanfist: 1.75, stormcore: 0.3,
 };
+/** Muzzle distance (x d) of the hand-drawn gun specials, whose barrels are not stretched. */
+const SPECIAL_MUZZLE: Record<string, number> = { mg: 0.9, twinmg: 0.9, hmg: 1.03, ac20: 0.82, autocannon: 1.12, twin30: 1.1, ac40: 1.15, quad20: 0.93, cannon75: 1.3, barrage: 1.03 };
 export function muzzleLen(m: ModuleDef | undefined): number {
+  if (m && SPECIAL_MUZZLE[m.id] !== undefined) return SPECIAL_MUZZLE[m.id];
   return baseMuzzle(m) * barrelStretch(m);
 }
 
@@ -85,7 +92,7 @@ function baseMuzzle(m: ModuleDef | undefined): number {
   if (MUZZLE_BY_ID[m.id] !== undefined) return MUZZLE_BY_ID[m.id];
   const c = m.caliber ?? 0.5;
   switch (m.visual) {
-    case 'gun': return 0.95 + c * 0.45;
+    case 'gun': return 1.02;
     case 'gatling': return 1.05;
     case 'shotgun': return 0.9;
     case 'cannon': return 1.25;
@@ -265,22 +272,24 @@ function drawSpecial(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, g
   if (drawGiantTurret(g, m, pal, r, o, glow)) return true;
   switch (m.id) {
     case 'mg': {
-      barrel(g, 0, r * 1.75, 0, r * 0.13, o);
-      shape(g, METAL.dark, o * 0.5, () => roundRect(g, r * 1.55, -r * 0.1, r * 0.22, r * 0.2, r * 0.05));
+      const W = boreW(m, r);
+      barrel(g, 0, r * 1.75, 0, W, o);
+      shape(g, METAL.dark, o * 0.5, () => roundRect(g, r * 1.55, -W * 0.77, r * 0.22, W * 1.54, W * 0.35));
       housing(g, pal, -r * 0.7, -r * 0.5, r * 1.15, r * 1.0, r * 0.3, o);
       shape(g, METAL.dark, o * 0.5, () => roundRect(g, -r * 0.45, r * 0.5, r * 0.5, r * 0.3, r * 0.06));
       return true;
     }
     case 'twinmg': {
-      for (const y of [-0.24, 0.24]) barrel(g, 0, r * 1.75, y * r, r * 0.13, o);
+      for (const y of [-0.24, 0.24]) barrel(g, 0, r * 1.75, y * r, boreW(m, r), o);
       housing(g, pal, -r * 0.75, -r * 0.62, r * 1.25, r * 1.24, r * 0.3, o);
       shape(g, METAL.dark, o * 0.5, () => roundRect(g, r * 0.3, -r * 0.4, r * 0.2, r * 0.8, r * 0.05));
       return true;
     }
     case 'hmg': {
-      barrel(g, 0, r * 1.95, 0, r * 0.24, o);
-      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.75, -r * 0.2, r * 0.32, r * 0.4, r * 0.06));
-      g.fillStyle = METAL.deep; g.fillRect(r * 1.82, -r * 0.2, r * 0.05, r * 0.4); g.fillRect(r * 1.95, -r * 0.2, r * 0.05, r * 0.4);
+      const W = boreW(m, r);
+      barrel(g, 0, r * 1.95, 0, W, o);
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.75, -W * 0.85, r * 0.32, W * 1.7, W * 0.25));
+      g.fillStyle = METAL.deep; g.fillRect(r * 1.82, -W * 0.85, r * 0.05, W * 1.7); g.fillRect(r * 1.95, -W * 0.85, r * 0.05, W * 1.7);
       shape(g, METAL.base, o * 0.6, () => roundRect(g, r * 0.6, -r * 0.18, r * 0.5, r * 0.36, r * 0.08));
       housing(g, pal, -r * 0.8, -r * 0.6, r * 1.4, r * 1.2, r * 0.25, o);
       shape(g, '#4a5a3a', o * 0.6, () => roundRect(g, -r * 0.55, r * 0.35, r * 0.75, r * 0.55, r * 0.06));
@@ -288,26 +297,29 @@ function drawSpecial(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, g
       return true;
     }
     case 'ac20': {
-      barrel(g, 0, r * 1.35, 0, r * 0.3, o);
-      muzzle(g, r * 1.5, 0, r * 0.38, r * 0.22, o * 0.6);
+      const W = boreW(m, r);
+      barrel(g, 0, r * 1.45, 0, W, o);
+      muzzle(g, r * 1.6, 0, W * 1.35, r * 0.22, o * 0.6);
       housing(g, pal, -r * 0.8, -r * 0.65, r * 1.35, r * 1.3, r * 0.35, o);
       drum(g, -r * 0.2, r * 0.0, r * 0.42, o);
       return true;
     }
     case 'autocannon': {
-      barrel(g, 0, r * 2.05, 0, r * 0.26, o);
+      const W = boreW(m, r);
+      barrel(g, 0, r * 2.05, 0, W, o);
       // slotted flash hider
-      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.85, -r * 0.2, r * 0.42, r * 0.4, r * 0.08));
-      g.fillStyle = METAL.deep; for (let i = 0; i < 3; i++) g.fillRect(r * (1.92 + i * 0.11), -r * 0.2, r * 0.04, r * 0.4);
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.85, -W * 0.8, r * 0.42, W * 1.6, W * 0.3));
+      g.fillStyle = METAL.deep; for (let i = 0; i < 3; i++) g.fillRect(r * (1.92 + i * 0.11), -W * 0.8, r * 0.04, W * 1.6);
       housing(g, pal, -r * 0.9, -r * 0.75, r * 1.65, r * 1.5, r * 0.3, o);
       shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.5, -r * 0.4, r * 0.3, r * 0.8, r * 0.08));
       hatch(g, -r * 0.4, -r * 0.3, r * 0.24, o);
       return true;
     }
     case 'twin30': {
+      const W = boreW(m, r);
       for (const y of [-0.38, 0.38]) {
-        barrel(g, 0, r * 2.0, y * r, r * 0.24, o);
-        shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.82, y * r - r * 0.18, r * 0.36, r * 0.36, r * 0.07));
+        barrel(g, 0, r * 2.0, y * r, W, o);
+        shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.82, y * r - W * 0.75, r * 0.36, W * 1.5, W * 0.3));
       }
       housing(g, pal, -r * 0.95, -r * 0.9, r * 1.75, r * 1.8, r * 0.3, o);
       shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.55, -r * 0.65, r * 0.3, r * 1.3, r * 0.08));
@@ -318,15 +330,17 @@ function drawSpecial(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, g
       // open mount: ring base, gun shield, long barrel with flared flash cone
       shape(g, METAL.dark, o, () => g.arc(-r * 0.1, 0, r * 0.95, 0, Math.PI * 2));
       shape(g, METAL.base, o * 0.6, () => g.arc(-r * 0.1, 0, r * 0.75, 0, Math.PI * 2));
-      barrel(g, -r * 0.3, r * 2.3, 0, r * 0.26, o);
-      shape(g, METAL.light, o * 0.7, () => { g.moveTo(r * 2.2, -r * 0.14); g.lineTo(r * 2.65, -r * 0.3); g.lineTo(r * 2.65, r * 0.3); g.lineTo(r * 2.2, r * 0.14); g.closePath(); });
+      const W = boreW(m, r);
+      barrel(g, -r * 0.3, r * 2.0, 0, W, o);
+      shape(g, METAL.light, o * 0.7, () => { g.moveTo(r * 1.92, -W * 0.55); g.lineTo(r * 2.3, -W * 1.1); g.lineTo(r * 2.3, W * 1.1); g.lineTo(r * 1.92, W * 0.55); g.closePath(); });
       shape(g, teamGrad(g, pal, r), o, () => { g.moveTo(r * 0.35, -r * 0.85); g.lineTo(r * 0.6, -r * 0.3); g.lineTo(r * 0.6, r * 0.3); g.lineTo(r * 0.35, r * 0.85); g.lineTo(r * 0.15, r * 0.8); g.lineTo(r * 0.3, 0); g.lineTo(r * 0.15, -r * 0.8); g.closePath(); });
       shape(g, '#c9a040', o * 0.5, () => roundRect(g, -r * 0.55, -r * 0.18, r * 0.5, r * 0.36, r * 0.05));
       return true;
     }
     case 'quad20': {
-      for (const y of [-0.62, -0.22, 0.22, 0.62]) barrel(g, 0, r * 1.75, y * r, r * 0.17, o);
-      for (const y of [-0.62, -0.22, 0.22, 0.62]) shape(g, METAL.dark, o * 0.4, () => roundRect(g, r * 1.65, y * r - r * 0.12, r * 0.2, r * 0.24, r * 0.04));
+      const W = boreW(m, r);
+      for (const y of [-0.62, -0.22, 0.22, 0.62]) barrel(g, 0, r * 1.75, y * r, W, o);
+      for (const y of [-0.62, -0.22, 0.22, 0.62]) shape(g, METAL.dark, o * 0.4, () => roundRect(g, r * 1.65, y * r - W * 0.7, r * 0.2, W * 1.4, W * 0.25));
       housing(g, pal, -r * 0.95, -r * 0.95, r * 1.6, r * 1.9, r * 0.3, o);
       // radar dish
       shape(g, metalGrad(g, r * 0.5, METAL.light), o * 0.7, () => g.ellipse(-r * 0.45, 0, r * 0.28, r * 0.62, 0, 0, Math.PI * 2));
@@ -336,8 +350,10 @@ function drawSpecial(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, g
       return true;
     }
     case 'cannon75': {
-      barrel(g, 0, r * 2.1, 0, r * 0.26, o);
-      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 2.0, -r * 0.18, r * 0.25, r * 0.36, r * 0.1));
+      const W = boreW(m, r);
+      barrel(g, 0, r * 2.45, 0, W, o);
+      barrel(g, r * 1.2, r * 1.6, 0, W * 1.35, o * 0.7, METAL.base);
+      shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 2.3, -W * 0.72, r * 0.28, W * 1.44, W * 0.35));
       shape(g, teamGrad(g, pal, r), o, () => g.ellipse(-r * 0.1, 0, r * 0.95, r * 0.82, 0, 0, Math.PI * 2));
       shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 0.55, -r * 0.3, r * 0.3, r * 0.6, r * 0.1));
       hatch(g, -r * 0.4, -r * 0.25, r * 0.26, o);
@@ -395,7 +411,8 @@ function drawSpecial(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, o: number, g
       return true;
     }
     case 'barrage': {
-      for (const y of [-0.5, 0, 0.5]) { barrel(g, 0, r * 1.9, y * r, r * 0.3, o); shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.8, y * r - r * 0.2, r * 0.25, r * 0.4, r * 0.06)); }
+      const W = Math.min(boreW(m, r), r * 0.42);
+      for (const y of [-0.5, 0, 0.5]) { barrel(g, 0, r * 1.9, y * r, W, o); shape(g, METAL.dark, o * 0.6, () => roundRect(g, r * 1.8, y * r - W * 0.68, r * 0.25, W * 1.36, W * 0.2)); }
       housing(g, pal, -r * 1.05, -r * 0.95, r * 1.55, r * 1.9, r * 0.2, o);
       for (const y of [-0.5, 0, 0.5]) shape(g, METAL.dark, o * 0.5, () => roundRect(g, -r * 0.8, y * r - r * 0.12, r * 0.9, r * 0.24, r * 0.06));
       return true;
@@ -587,13 +604,13 @@ function categoryTick(g: Ctx, m: ModuleDef, r: number, o: number): void {
 function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n: number, o: number, glow: string): void {
   switch (m.visual) {
     case 'gun': {
-      const bw = r * (0.2 + 0.28 * c) * (n >= 4 ? 0.75 : 1);
-      const len = r * (1.7 + c * 0.9);
+      const bw = boreW(m, r);
+      const len = r * 1.85;
       const offs = n >= 4 ? [-0.42, -0.14, 0.14, 0.42].map((v) => v * r * 1.6) : spreadOffsets(n, r * 0.75);
       stretched(g, m, () => {
         for (const y of offs) {
           barrel(g, 0, len, y, bw, o);
-          if (c >= 0.45) muzzle(g, len, y, bw * 1.45, bw * 1.4, o * 0.7);
+          if (calibreMm(m) >= 20) muzzle(g, len, y, bw * 1.45, bw * 1.4, o * 0.7);
         }
       });
       // mantlet + housing
@@ -632,7 +649,7 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       break;
     }
     case 'cannon': {
-      const bw = r * (0.27 + 0.16 * c);
+      const bw = boreW(m, r);
       const len = r * 2.45;
       stretched(g, m, () => {
         for (const y of spreadOffsets(n, r * 0.7)) {
@@ -675,8 +692,9 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
     case 'sniper': {
       const len = r * 2.9;
       stretched(g, m, () => {
-        barrel(g, 0, len, 0, r * 0.16, o);
-        muzzle(g, len, 0, r * 0.28, r * 0.3, o * 0.7);
+        const W = boreW(m, r);
+        barrel(g, 0, len, 0, W, o);
+        muzzle(g, len, 0, W * 1.75, r * 0.3, o * 0.7);
         // bipod-style barrel support collar halfway down
         shape(g, METAL.dark, o * 0.5, () => roundRect(g, len * 0.55, -r * 0.13, r * 0.14, r * 0.26, r * 0.04));
       });
@@ -768,7 +786,7 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
     case 'artillery': {
       const multi = n > 1;
       const len = r * (multi ? 2.25 : 2.9);
-      const bw = r * (multi ? 0.2 : 0.3);
+      const bw = Math.min(boreW(m, r), r * (multi ? 0.3 : 0.5));
       stretched(g, m, () => {
         for (const y of spreadOffsets(n, r * 0.9)) {
           barrel(g, 0, len, y, bw, o);
@@ -888,7 +906,7 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
     }
     case 'flak': {
       const nb = n > 1 ? n : 2;
-      const bw = r * 0.22;
+      const bw = boreW(m, r);
       const len = r * 1.75;
       for (const y of spreadOffsets(nb, r * (nb >= 3 ? 1.0 : 0.55))) {
         barrel(g, 0, len, y, bw, o);

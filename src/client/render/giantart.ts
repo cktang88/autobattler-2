@@ -47,18 +47,13 @@ export const circ = (x: number, y: number, r: number, S: number): Path2D => {
 /** Device pixels per cell of the current transform (for blur radii). */
 export const devK = (g: Ctx) => Math.hypot(g.getTransform().a, g.getTransform().b) || 1;
 
-/** Soft ambient-occlusion shadow around/under a raised part. */
+/** Hard-edged ambient-occlusion band around/under a raised part (offset down-right along the light, no blur). */
 export function ao(g: Ctx, path: Path2D, S: number, r = 0.022, a = 0.6): void {
-  const k = devK(g);
+  void r;
   g.save();
-  g.filter = `blur(${Math.max(1, r * S * k)}px)`;
-  g.translate(0.006 * S, 0.012 * S);
-  g.fillStyle = `rgba(0,0,0,${a})`;
+  g.translate(0.005 * S, 0.009 * S);
+  g.fillStyle = `rgba(0,0,0,${a * 0.55})`;
   g.fill(path);
-  g.lineJoin = 'round';
-  g.lineWidth = r * S * 1.2;
-  g.strokeStyle = `rgba(0,0,0,${a * 0.8})`;
-  g.stroke(path);
   g.restore();
 }
 
@@ -556,11 +551,8 @@ export function giantTopLayer(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): b
 /** Barbette ring the turret sits on: heavy riveted collar with a team-glow trim and contact shadow. */
 export function drawBarbette(g: Ctx, x: number, y: number, r: number, pal: TeamPal, o: number, empty: boolean): void {
   const E = emis(pal);
-  const k = devK(g);
-  g.save();
-  g.filter = `blur(${Math.max(1, r * 0.25 * k)}px)`;
-  dot(g, x + r * 0.06, y + r * 0.1, r * 1.12, 'rgba(0,0,0,0.6)');
-  g.restore();
+  // hard contact shadow
+  dot(g, x + r * 0.06, y + r * 0.1, r * 1.06, 'rgba(0,0,0,0.42)');
   dot(g, x, y, r, METAL.dark);
   g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke();
   const gr = g.createLinearGradient(x - r, y - r, x + r, y + r);
@@ -790,10 +782,7 @@ export function drawTitanLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: number
     const ky = s * (Math.abs(f.y) + (quad ? 0.09 : colossal ? 0.07 : 0.07) * S);
     // contact shadow of a planted foot
     if (f.lift < 0.3) {
-      g.save();
-      g.filter = `blur(${Math.max(1, 0.02 * S * devK(g))}px)`;
-      dot(g, f.x + 0.02 * S, f.y + 0.02 * S, (quad ? 0.13 : 0.17) * S, 'rgba(0,0,0,0.45)');
-      g.restore();
+      dot(g, f.x + 0.02 * S, f.y + 0.02 * S, (quad ? 0.12 : 0.15) * S, 'rgba(0,0,0,0.32)');
     }
     // thigh + shin
     limbG(g, [row, s * hipY, kx, ky, f.x, f.y], lw, METAL.base, o);

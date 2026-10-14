@@ -1254,12 +1254,12 @@ export function buildParts(L: UnitLayout): PartDef[] {
   return parts;
 }
 
+/** Hard-edged ambient-occlusion band (offset down-right along the light, no blur). */
 export function ao(g: Ctx, path: Path2D, S: number, r = 0.015, a = 0.5): void {
-  const k = devK(g);
+  void r;
   g.save();
-  g.filter = `blur(${Math.max(1, r * S * k)}px)`;
-  g.translate(0.006 * S, 0.012 * S);
-  g.fillStyle = `rgba(0,0,0,${a})`;
+  g.translate(0.005 * S, 0.009 * S);
+  g.fillStyle = `rgba(0,0,0,${a * 0.55})`;
   g.fill(path);
   g.restore();
 }
@@ -1357,10 +1357,7 @@ export function drawSpiderLegs(g: Ctx, L: UnitLayout, pal: TeamPal, phase: numbe
   const idx = geo.map((_, i) => i).sort((p, q) => geo[p].lift - geo[q].lift);
   // contact shadows of planted feet (big walkers)
   if (rig.big) {
-    g.save();
-    g.filter = `blur(${Math.max(1, 0.02 * S * devK(g))}px)`;
-    for (const k of geo) if (k.lift < 0.3) dot(g, k.fx + 0.015 * S, k.fy + 0.015 * S, W * 0.5, 'rgba(0,0,0,0.35)');
-    g.restore();
+    for (const k of geo) if (k.lift < 0.3) dot(g, k.fx + 0.015 * S, k.fy + 0.015 * S, W * 0.45, 'rgba(0,0,0,0.28)');
   }
   if (rig.style !== 'ind') {
     for (const i of idx) {
