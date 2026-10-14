@@ -32,7 +32,7 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- emplacement ----
   { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'anchor', mounts: ['guidedrocket', 'hmg'] },
   // ---- melee: fast hover brawler that dives into the line ----
-  { id: 'starter-ripper', name: 'Gnasher', chassis: 'raider', mobility: 'legs', mounts: ['buzzsaw', 'shockprod'] },
+  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'legs', mounts: ['buzzsaw', 'shockprod'] },
   // ---- stealth: cloaked sniper platform ----
   { id: 'starter-shade', name: 'Shade', chassis: 'striker', mobility: 'halftrack', mounts: ['lightrail', 'stealth', 'sniper'] },
   // ---- shield wall: barrier-heavy anchor of the line ----

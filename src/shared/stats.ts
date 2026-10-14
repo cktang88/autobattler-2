@@ -1,6 +1,7 @@
 // Design -> UnitStats, plus design validation.
 
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
+import { meleeSlots } from './mountgeo.ts';
 import { squadSize } from './grid.ts';
 import type { Design, ModuleDef, UnitStats } from './types.ts';
 
@@ -311,6 +312,10 @@ export function validateDesign(d: Design): string[] {
     if (!mod) { errs.push(`Unknown module ${id}`); return; }
     if (!fitsMount(c.mounts[i], mod.mount)) errs.push(`${mod.name} (${mod.mount}) doesn't fit a ${c.mounts[i]} mount`);
     const flies = MOBILITY_BY_ID.get(d.mobility)?.kind === 'air';
+    if (mod.category === 'melee') {
+      if (flies || (c.domain ?? 'ground') !== 'ground') errs.push(`${mod.name} can't go on aircraft: melee weapons can only go on ground units`);
+      else if (!meleeSlots(c)[i]) errs.push(`${mod.name} can't fit in mount ${i + 1}: melee weapons need a mount near the edge of the chassis`);
+    }
     if (mod.requires === 'air' && !flies) errs.push(`${mod.name} can only be mounted on flying designs`);
     if (mod.requires === 'ground' && flies) errs.push(`${mod.name} can't be mounted on flying designs`);
     if (mod.kind === 'weapon' || mod.kind === 'utility') weapons++;
