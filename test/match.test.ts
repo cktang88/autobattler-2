@@ -6,7 +6,9 @@ import {
   START_HP, DECK_SIZE, MAX_UNITS, MAX_SIM_UNITS, newPlayer, newMatch, joinMatch, validateDeck, validateDeploy, applyDeploy,
   resolveRound, redactFor, battleInputFor, supplyForRound, upgradeCost, submitDeploy, isPlaceholder, roundDamage,
 } from '../src/shared/match.ts';
-import { blockDims, blockInZone, blocksOverlap, rectInZone, rectsOverlap, localRectToWorld, placementUnitCenters, squadSize, FIELD_W, FIELD_H } from '../src/shared/grid.ts';
+import { blockDims, blockInZone, blocksOverlap, rectInZone, rectsOverlap, localRectToWorld, placementUnitCenters, squadSize, FIELD_W, FIELD_H, DEPLOY_W, DEPLOY_D } from '../src/shared/grid.ts';
+/** zone edges, so geometry tests hold at any field size */
+const ZW = DEPLOY_W, ZD = DEPLOY_D;
 import type { DeployAction, Design, MatchState, Placement } from '../src/shared/types.ts';
 
 test('starter designs are valid, unique and cover sizes/flyers/static', () => {
@@ -67,15 +69,15 @@ test('validateDeploy accepts a legal deployment and rejects bad ones', () => {
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 7, 0)], upgrade: [] })!, /overlap/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 1)], upgrade: [] })!, /overlap/);
   assert.equal(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 2)], upgrade: [] }), null);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 41, 0)], upgrade: [] })!, /zone/);
-  assert.equal(validateDeploy(m, 0, { round: 1, place: [pl(1, 40, 10)], upgrade: [] }), null);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 11)], upgrade: [] })!, /zone/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, ZW - 7, 0)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [pl(1, ZW - 8, ZD - 2)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, ZD - 1)], upgrade: [] })!, /zone/);
   // overlap with each other
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 0, 0)], upgrade: [] })!, /overlap/);
   // big unit overlapping a small one
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 5, 5), pl(2, 4, 4, big.id)], upgrade: [] })!, /overlap/);
   // out of zone
-  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 47, 11, big.id)], upgrade: [] })!, /zone/);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, ZW - 1, ZD - 1, big.id)], upgrade: [] })!, /zone/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, -1, 0)], upgrade: [] })!, /zone/);
   assert.match(validateDeploy(m, 0, { round: 1, place: [pl(1, 0.5, 0)], upgrade: [] })!, /zone/);
   // over budget
@@ -140,10 +142,10 @@ test('spacing: footprint grows, validated, stored and redacted', () => {
   assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2), sp(2, 0, 4, 0)], upgrade: [] }), null);
   assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, 2), sp(2, 0, 3, 0)], upgrade: [] })!, /overlap/);
   // zone check uses the spaced footprint
-  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 27, 0, 2)], upgrade: [] })!, /zone/);
-  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 26, 0, 2)], upgrade: [] }), null);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 9, 2)], upgrade: [] })!, /zone/);
-  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 8, 2)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, ZW - 21, 0, 2)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, ZW - 22, 0, 2)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, ZD - 3, 2)], upgrade: [] })!, /zone/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, ZD - 4, 2)], upgrade: [] }), null);
   // bad spacing values
   for (const bad of [-1, 3, 5, 1.5, NaN, '2' as unknown as number]) assert.match(validateDeploy(m, 0, { round: 1, place: [sp(1, 0, 0, bad)], upgrade: [] })!, /spacing/i);
   // non-squads can't be spaced
@@ -163,8 +165,8 @@ test('rectangular footprints: overlap, zone and world mapping', () => {
   assert.ok(rectsOverlap(0, 0, 8, 2, 7, 1, 8, 2));
   assert.ok(!rectsOverlap(0, 0, 8, 2, 8, 0, 8, 2));
   assert.ok(!rectsOverlap(0, 0, 8, 2, 0, 2, 8, 2));
-  assert.ok(rectInZone(40, 10, 8, 2) && !rectInZone(41, 10, 8, 2) && !rectInZone(40, 11, 8, 2) && !rectInZone(0.5, 0, 8, 2));
-  assert.ok(blockInZone(26, 8, 1, 2) && !blockInZone(27, 8, 1, 2) && !blockInZone(26, 9, 1, 2));
+  assert.ok(rectInZone(ZW - 8, ZD - 2, 8, 2) && !rectInZone(ZW - 7, ZD - 2, 8, 2) && !rectInZone(ZW - 8, ZD - 1, 8, 2) && !rectInZone(0.5, 0, 8, 2));
+  assert.ok(blockInZone(ZW - 22, ZD - 4, 1, 2) && !blockInZone(ZW - 21, ZD - 4, 1, 2) && !blockInZone(ZW - 22, ZD - 3, 1, 2));
   assert.ok(blocksOverlap({ x: 0, y: 0, spacing: 2 }, 1, { x: 10, y: 2 }, 1)); // inside the spread squad's 22x4 box
   assert.ok(!blocksOverlap({ x: 0, y: 0, spacing: 2 }, 1, { x: 22, y: 0 }, 1));
   assert.ok(blocksOverlap({ x: 3, y: 1 }, 1, { x: 8, y: 1 }, 2)); // a size-2 unit against a squad
@@ -371,11 +373,11 @@ test('non-square footprints: validateDeploy zone + overlap use the real w x h', 
   m.players[0].supply = 5000;
   const at = (uid: number, x: number, y: number, id: string): Placement => pl(uid, x, y, id);
   const v = (...place: Placement[]) => validateDeploy(m, 0, { round: 1, place, upgrade: [] });
-  // zone: 1x3 fits down to y=9, not y=10; 3 wide at the right edge
-  assert.equal(v(at(1, 0, 9, 'lg')), null);
-  assert.match(v(at(1, 0, 10, 'lg'))!, /zone/);
-  assert.equal(v(at(1, 45, 0, 'wd')), null);
-  assert.match(v(at(1, 46, 0, 'wd'))!, /zone/);
+  // zone: 1x3 fits down to y=ZD-3, not ZD-2; 3 wide at the right edge
+  assert.equal(v(at(1, 0, ZD - 3, 'lg')), null);
+  assert.match(v(at(1, 0, ZD - 2, 'lg'))!, /zone/);
+  assert.equal(v(at(1, ZW - 3, 0, 'wd')), null);
+  assert.match(v(at(1, ZW - 2, 0, 'wd'))!, /zone/);
   // a 1x3 block and a 3x1-ish (3 wide x 2 long) block: overlap exactly when the rectangles intersect
   assert.ok(blocksOverlap({ x: 5, y: 0 }, st.size, { x: 3, y: 2 }, sw.size, st, sw));
   assert.ok(!blocksOverlap({ x: 5, y: 0 }, st.size, { x: 3, y: 3 }, sw.size, st, sw));
@@ -389,10 +391,10 @@ test('rotation: squads turn 90° (8x2 -> 2x8), validated, stored, and units laid
   const m = fresh();
   assert.deepEqual(blockDims(1, 0, undefined, true), { w: 2, h: 8 });
   assert.deepEqual(blockDims(1, 1, undefined, true), { w: 3, h: 15 });
-  // a rotated packed squad is 8 deep: fits in the 12-deep zone at y=4, not at y=5
+  // a rotated packed squad is 8 deep: fits with its back on the zone's rear edge, not one row further
   const r = (uid: number, x: number, y: number): Placement => ({ ...pl(uid, x, y), rot: true });
-  assert.equal(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 4)], upgrade: [] }), null);
-  assert.match(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 5)], upgrade: [] })!, /outside/);
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [r(1, 0, ZD - 8)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [r(1, 0, ZD - 7)], upgrade: [] })!, /outside/);
   // two rotated columns side by side don't overlap; a flat squad across them does
   assert.equal(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 0), r(2, 2, 0)], upgrade: [] }), null);
   assert.match(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 0), pl(2, 0, 3)], upgrade: [] })!, /overlap/);

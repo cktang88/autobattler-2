@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Battle, runBattle } from '../src/shared/sim/battle.ts';
+import { Battle as SimBattle } from '../src/shared/sim/battle.ts';
 import { MAX_TICKS } from '../src/shared/sim/types.ts';
-import { FIELD_H, FIELD_W, placementUnitCenters } from '../src/shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, placementUnitCenters } from '../src/shared/grid.ts';
 import type { BattleInput } from '../src/shared/sim/types.ts';
 import { validateDesign } from '../src/shared/stats.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
@@ -57,10 +57,31 @@ test('test designs are legal', () => {
 });
 
 let uidSeq = 1;
+/** Front-to-front gap the behaviour tests below were tuned for (the original 46-deep field with 12-deep zones). */
+const TEST_GAP = 22;
+/** These tests check *behaviour at contact range* (kiting, dodging, flanking, targeting), so on the larger field side 1
+ *  is moved forward to keep the original 22-cell gap between the two front lines. Real games use the full field. */
+class Battle extends SimBattle {
+  constructor(inp: BattleInput) {
+    super(inp);
+    const dy = FIELD_H - 2 * DEPLOY_D - TEST_GAP;
+    if (dy > 0) {
+      for (const u of this.units) if (u.side === 1) u.y += dy;
+      (this as unknown as { rebuildHash(): void }).rebuildHash();
+    }
+  }
+}
+const runBattle = (inp: BattleInput) => {
+  const b = new Battle(inp);
+  while (!b.done) b.step();
+  return b.summary();
+};
 const P = (designId: string, x: number, y: number, level = 1): Placement => ({ uid: uidSeq++, designId, x, y, level, round: 1 });
 // Tests were laid out on a 24-wide field; shift side 1's local x so its units keep the same world columns
 // (facing side 0) on wider fields.
 const mirrorShift = (b: Placement[]) => b.map((p) => ({ ...p, x: p.x + (FIELD_W - 24) }));
+/** same, for tests laid out on the 48-wide field */
+const shift48 = (b: Placement[]) => b.map((p) => ({ ...p, x: p.x + (FIELD_W - 48) }));
 const input = (seed: number, a: Placement[], b: Placement[]): BattleInput => ({ seed, sides: [{ designs: DESIGNS, units: a }, { designs: DESIGNS, units: mirrorShift(b) }] });
 
 function mixedArmy(): Placement[] {
@@ -189,7 +210,8 @@ test('performance: 240 units per side (15 light squads) simulates in well under 
     for (let i = 0; i < 15; i++) out.push({ ...P(small[i % small.length], (i % 5) * 9, Math.floor(i / 5) * 3), spacing: i % 2 });
     return out;
   };
-  const inp = (): BattleInput => ({ seed: 42, sides: [{ designs: DESIGNS, units: army() }, { designs: DESIGNS, units: army() }] });
+  // laid out 48 wide: shift side 1 so both armies face each other on the wider field
+  const inp = (): BattleInput => ({ seed: 42, sides: [{ designs: DESIGNS, units: army() }, { designs: DESIGNS, units: army().map((p) => ({ ...p, x: p.x + (FIELD_W - 48) })) }] });
   runBattle(inp()); // warm up JIT
   const t0 = performance.now();
   const s = runBattle(inp());
@@ -307,14 +329,17 @@ test('stealth: untargetable until it fires; detectors reveal it', () => {
   assert.ok(ghostFired);
   assert.equal(enemyFiredFirst, false);
 
+  // a sensor reveals a cloaked unit whenever it is within detection range (7 cells), fired or not
   const d = new Battle(input(1, [P('ghost', 10, 0)], [P('spire', 10, 0), P('spotter', 12, 0)]));
-  let revealedEarly = false, gf = false;
+  let inRangeTicks = 0, hiddenInRange = 0;
   while (!d.done) {
     d.step();
-    for (const e of d.events) if (e.t === 'fire' && e.unit === 0) gf = true;
-    if (!gf && !d.units[0].cloaked) revealedEarly = true; // the sensor uncloaked it before it ever fired
+    const g = d.units[0], sp = d.units.find((u) => u.design.id === 'spotter')!;
+    if (!g.alive || !sp.alive) continue;
+    if (Math.hypot(g.x - sp.x, g.y - sp.y) < 6.5) { inRangeTicks++; if (g.cloaked) hiddenInRange++; }
   }
-  assert.ok(revealedEarly);
+  assert.ok(inRangeTicks > 0, 'the ghost came within sensor range');
+  assert.equal(hiddenInRange, 0, 'never cloaked while inside sensor range');
 });
 
 test('point defense shoots down rockets', () => {
@@ -414,14 +439,14 @@ test('blocks: size-1 designs spawn a squad of 16 (8x2) at spacing-dependent posi
 test('side 1 is mirrored: squads and formations are rotated 180 degrees about the field centre', () => {
   for (const spacing of [0, 1, 2]) {
     const p0 = { ...P('buggy', 5, 1), spacing };
-    const a = new Battle({ seed: 1, sides: [{ designs: DESIGNS, units: [p0] }, { designs: DESIGNS, units: [{ ...p0 }] }] });
+    const a = new SimBattle({ seed: 1, sides: [{ designs: DESIGNS, units: [p0] }, { designs: DESIGNS, units: [{ ...p0 }] }] }); // raw spawn positions
     const s0 = a.units.filter((u) => u.side === 0), s1 = a.units.filter((u) => u.side === 1);
     assert.equal(s0.length, 16);
     assert.equal(s1.length, 16);
     for (let i = 0; i < 16; i++) {
       assert.ok(Math.abs(s1[i].x - (FIELD_W - s0[i].x)) < 1e-9 && Math.abs(s1[i].y - (FIELD_H - s0[i].y)) < 1e-9, `unit ${i} spacing ${spacing}`);
     }
-    assert.ok(s0.every((u) => u.y > FIELD_H - 12) && s1.every((u) => u.y < 12), 'each squad starts in its own zone');
+    assert.ok(s0.every((u) => u.y > FIELD_H - DEPLOY_D) && s1.every((u) => u.y < DEPLOY_D), 'each squad starts in its own zone');
   }
 });
 
@@ -665,9 +690,10 @@ test('stance flank: swings toward the owner\'s left/right edge before advancing'
   const at = (side: 0 | 1, stance: 'flankLeft' | 'flankRight') => {
     const mine: Placement = { ...P('lancer', 22, 0), stance };
     const far = P('bulwark', 10, 0);
-    const b = new Battle(side === 0
-      ? { seed: 3, sides: [{ designs: DESIGNS, units: [mine] }, { designs: DESIGNS, units: [{ ...far, x: 22 }] }] }
-      : { seed: 3, sides: [{ designs: DESIGNS, units: [{ ...far, x: 22 }] }, { designs: DESIGNS, units: [mine] }] });
+    // flanking steers by the field's own geometry (edges, midline): run it on the real, unshifted field
+    const b = new SimBattle(side === 0
+      ? { seed: 3, sides: [{ designs: DESIGNS, units: [mine] }, { designs: DESIGNS, units: shift48([{ ...far, x: 22 }]) }] }
+      : { seed: 3, sides: [{ designs: DESIGNS, units: [{ ...far, x: 22 }] }, { designs: DESIGNS, units: shift48([mine]) }] });
     const us = b.units.filter((q) => q.side === side);
     const cx = () => us.reduce((a, q) => a + q.x, 0) / us.length, cy = () => us.reduce((a, q) => a + q.y, 0) / us.length;
     const x0 = cx(), y0 = cy();
@@ -680,7 +706,7 @@ test('stance flank: swings toward the owner\'s left/right edge before advancing'
   assert.ok(l1.dx > 3, `side1 left ${JSON.stringify(l1)}`);
   assert.ok(r1.dx < -3, `side1 right ${JSON.stringify(r1)}`);
   // a plain advancer barely moves laterally
-  const adv = new Battle({ seed: 3, sides: [{ designs: DESIGNS, units: [P('lancer', 22, 0)] }, { designs: DESIGNS, units: [{ ...P('bulwark', 22, 0) }] }] });
+  const adv = new SimBattle({ seed: 3, sides: [{ designs: DESIGNS, units: [P('lancer', 22, 0)] }, { designs: DESIGNS, units: shift48([{ ...P('bulwark', 22, 0) }]) }] });
   const x0 = adv.units[0].x;
   for (let i = 0; i < 80; i++) adv.step();
   assert.ok(Math.abs(adv.units[0].x - x0) < 2);
@@ -810,12 +836,14 @@ test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar',
   const run = (kiteMount?: number) => {
     const u: Placement = { ...P('mortmg', 10, 0), kite: true, kiteMount };
     const b = new Battle({ seed: 4, sides: [{ designs, units: [u] }, { designs, units: mirrorShift([{ ...P('buggy', 10, 0), stance: 'holdPos' }]) }] });
-    // park the enemy squad 6 cells ahead; the kiter must decide how far to back off
+    // park the enemy squad ahead of side 0's front line (17 cells, as on the original field); the kiter must decide
+    // how far to back off
+    const ey = FIELD_H - DEPLOY_D - 17;
     const en = b.units.filter((x) => x.side === 1);
-    en.forEach((x, i) => { x.x = 24 + (i % 2); x.y = 17 + (i >> 1); });
+    en.forEach((x, i) => { x.x = 24 + (i % 2); x.y = ey + (i >> 1); });
     (b as unknown as { rebuildHash(): void }).rebuildHash();
     for (let i = 0; i < 200; i++) b.step();
-    return Math.hypot(b.units[0].x - 24, b.units[0].y - 17.5);
+    return Math.hypot(b.units[0].x - 24, b.units[0].y - (ey + 0.5));
   };
   const onMortar = run(0), onMg = run(1), dflt = run();
   assert.ok(onMg < onMortar - 1, `mg ${onMg} vs mortar ${onMortar}`);
@@ -831,9 +859,10 @@ test('non-square footprints: long units spawn on their footprint centre and cont
   const b = mk([P('longone', 10, 2)]);
   const c = placementUnitCenters(0, { x: 10, y: 2 }, st.size, st)[0];
   assert.deepEqual([b.units[0].x, b.units[0].y], [c.x, c.y]);
-  assert.deepEqual([c.x, c.y], [10.5, FIELD_H - 12 + 2 + 1.5]);
+  assert.deepEqual([c.x, c.y], [10.5, FIELD_H - DEPLOY_D + 2 + 1.5]);
   // deterministic and still resolves a full fight
   const a0 = [P('longone', 4, 0), P('longone', 8, 0)], a1 = mirrorShift([P('buggy', 4, 0), P('bulwark', 20, 0)]);
   const inp = (): BattleInput => structuredClone({ seed: 5, sides: [{ designs, units: a0 }, { designs, units: a1 }] });
   assert.deepEqual(runBattle(inp()), runBattle(inp()));
 });
+
