@@ -17,12 +17,10 @@ import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
 
-type Pt = [number, number];
 interface Spec {
   /** hull half width, fraction of Y */
   hw: number;
-  /** hardpoints, fractions of (X, Y); part-riding ones are overwritten from the part's weapon point */
-  mounts: Pt[];
+  // hardpoints (fractions of X, Y) live in shared/mountgeo.ts FOOT_MOUNTS (the sim aims from them too)
   /** turret scale per hardpoint (one value = all) */
   scale?: number[];
   /** extra sprite half-extent, multiples of S (legs / rotors reaching past the footprint) */
@@ -224,17 +222,17 @@ const SPECS: Record<string, Spec> = {
   // ---- longarm: lance gun-carriage. A spinal coil-gun channel runs the whole hull to a muzzle-brake prow; the heavy
   //      turret sits far aft, the reactor bulb behind it, folding jack legs off both flanks.
   long: {
-    hw: 0.36, mounts: [[-0.17, 0]], scale: [1.05],
+    hw: 0.36, scale: [1.05],
     hull: () => sharpU([0.5, 0, 0.49, -0.12, 0.44, -0.17, 0.36, -0.14, 0.18, -0.17, 0.08, -0.25, 0.02, -0.38, -0.08, -0.44, -0.28, -0.44, -0.36, -0.36, -0.4, -0.26, -0.46, -0.3, -0.5, -0.2, -0.49, 0]),
   },
   // ---- striker: assault hover-tank wedge - knife prow, two fat side pods with single rail guns, faceted cockpit
   cross: {
-    hw: 0.48, mounts: [[0.0, -0.33], [0.0, 0.33], [0.3, 0]],
+    hw: 0.48,
     hull: () => sharpU([0.5, 0, 0.45, -0.06, 0.3, -0.14, 0.24, -0.18, 0.3, -0.27, 0.27, -0.42, 0.18, -0.49, -0.16, -0.49, -0.24, -0.42, -0.26, -0.2, -0.42, -0.24, -0.5, -0.16, -0.5, 0]),
   },
   // ---- gunship: attack helicopter - stepped tandem cockpit, stub wings with bubble-turret pods, long tail boom
   airframe: {
-    hw: 0.18, mounts: [[0.04, -0.37], [0.04, 0.37]], scale: [0.9],
+    hw: 0.18, scale: [0.9],
     hull: () => union(
       smoothU([0.5, 0, 0.48, 0.07, 0.42, 0.12, 0.3, 0.15, 0.12, 0.17, 0.0, 0.15, -0.1, 0.09, -0.2, 0.045, -0.42, 0.035, -0.47, 0.03, -0.5, 0]),
       sharpU([0.14, -0.04, 0.12, -0.3, 0.1, -0.44, -0.02, -0.44, -0.04, -0.3, -0.06, -0.04]),
@@ -244,32 +242,32 @@ const SPECS: Record<string, Spec> = {
   },
   // ---- delta wing: tailless delta with a long nose, canopy, twin canted fins and a pair of engines in the tail
   delta: {
-    hw: 0.42, mounts: [[0.12, 0], [-0.22, -0.28], [-0.22, 0.28]], scale: [0.85, 0.75, 0.75],
+    hw: 0.42, scale: [0.85, 0.75, 0.75],
     hull: () => sharpU([0.5, 0, 0.44, -0.035, 0.32, -0.06, 0.18, -0.09, 0.08, -0.14, -0.3, -0.49, -0.38, -0.49, -0.37, -0.32, -0.43, -0.2, -0.46, -0.1, -0.5, -0.08, -0.5, 0]),
     nozzles: (X, Y, S) => [-1, 1].map((s) => ({ x: -0.5 * X, y: s * 0.045 * Y, w: 0.075 * S })),
   },
   // ---- interceptor: split-wing dart (vulture grammar) - needle fuselage, forward canards, two blade wings a side
   interceptor: {
-    hw: 0.46, mounts: [[-0.06, -0.3], [-0.06, 0.3]], scale: [0.85],
+    hw: 0.46, scale: [0.85],
     hull: () => sharpU([0.5, 0, 0.42, -0.04, 0.3, -0.06, 0.26, -0.18, 0.21, -0.18, 0.18, -0.08, 0.06, -0.1, -0.08, -0.48, -0.17, -0.48, -0.14, -0.13, -0.3, -0.12, -0.44, -0.38, -0.5, -0.36, -0.44, -0.08, -0.5, -0.06, -0.5, 0]),
     nozzles: (X, _Y, S) => [{ x: -0.5 * X, y: 0, w: 0.09 * S }],
   },
   // ---- strike jet: twin-engine, twin-tail multirole fighter - LERX, trapezoid wings, all-moving tailplanes
   strikejet: {
-    hw: 0.48, mounts: [[0.06, 0], [-0.1, -0.33], [-0.1, 0.33]], scale: [0.85, 0.72, 0.72],
+    hw: 0.48, scale: [0.85, 0.72, 0.72],
     hull: () => sharpU([0.5, 0, 0.44, -0.035, 0.33, -0.06, 0.22, -0.08, 0.14, -0.13, 0.04, -0.16, -0.04, -0.48, -0.14, -0.49, -0.18, -0.17, -0.3, -0.15, -0.36, -0.36, -0.46, -0.36, -0.44, -0.12, -0.5, -0.1, -0.5, 0]),
     nozzles: (X, Y, S) => [-1, 1].map((s) => ({ x: -0.5 * X, y: s * 0.05 * Y, w: 0.07 * S })),
   },
   // ---- strato bomber: swing-wing strategic bomber - full-length fuselage, wings swept to the footprint corners,
   //      four podded engines, T-tail; three bay turrets down the spine and a tail gun
   stratobomber: {
-    hw: 0.5, mounts: [[0.28, 0], [0.08, 0], [-0.22, 0], [-0.46, 0]], scale: [0.72, 0.72, 0.72, 0.7],
+    hw: 0.5, scale: [0.72, 0.72, 0.72, 0.7],
     hull: () => sharpU([0.5, 0, 0.46, -0.035, 0.38, -0.06, 0.2, -0.075, 0.12, -0.12, -0.12, -0.5, -0.21, -0.5, -0.12, -0.2, -0.18, -0.075, -0.34, -0.065, -0.4, -0.22, -0.49, -0.22, -0.47, -0.05, -0.5, -0.03, -0.5, 0]),
     nozzles: (X, Y, S) => [-1, 1].flatMap((s) => [{ x: -0.13 * X, y: s * 0.2 * Y, w: 0.06 * S }, { x: -0.2 * X, y: s * 0.32 * Y, w: 0.06 * S }]),
   },
   // ---- heavy helicopter: tandem-rotor hauler - long box fuselage, raised rotor pylons fore and aft, fuel sponsons
   heavyheli: {
-    hw: 0.3, mounts: [[0.42, 0], [-0.02, 0.36], [-0.02, -0.36]], scale: [0.9, 0.85, 0.85],
+    hw: 0.3, scale: [0.9, 0.85, 0.85],
     hull: () => union(
       smoothU([0.5, 0, 0.49, 0.1, 0.45, 0.2, 0.38, 0.24, -0.3, 0.24, -0.42, 0.22, -0.48, 0.16, -0.5, 0]),
       rectU(-0.22, -0.4, 0.18, 0.4, 0.06),
@@ -279,7 +277,7 @@ const SPECS: Record<string, Spec> = {
   // ---- heavy bomber (grav lift): lifting-body bomb truck - fat fuselage, straight high wing with lifter nacelles at
   //      the tips, twin-boom H-tail
   bomber: {
-    hw: 0.5, mounts: [[0.33, 0], [0.0, -0.3], [0.0, 0.3]], scale: [0.85],
+    hw: 0.5, scale: [0.85],
     hull: () => union(
       smoothU([0.5, 0, 0.49, 0.08, 0.44, 0.14, 0.3, 0.17, -0.1, 0.17, -0.3, 0.12, -0.42, 0.06, -0.46, 0]),
       sharpU([0.12, -0.12, 0.1, -0.48, 0.04, -0.5, -0.1, -0.5, -0.12, -0.12]),
@@ -290,130 +288,130 @@ const SPECS: Record<string, Spec> = {
   // ---- sky carrier: a giant flying wing - manta planform spanning six cells, hangar decks out on both wings,
   //      a command island off the centreline
   carrier: {
-    hw: 0.5, mounts: [[0.24, 0], [-0.2, 0.0], [-0.1, -0.33], [-0.1, 0.33]],
+    hw: 0.5,
     hull: () => sharpU([0.5, 0, 0.47, -0.04, 0.38, -0.07, 0.26, -0.12, 0.05, -0.44, -0.04, -0.5, -0.22, -0.5, -0.28, -0.44, -0.22, -0.34, -0.36, -0.22, -0.5, -0.2, -0.46, -0.1, -0.5, 0]),
   },
   // ---- leviathan: land battleship - clipper bow, superfiring giant turrets fore and aft, bridge tower amidships
   leviathan: {
-    hw: 0.44, mounts: [[0.29, 0], [-0.3, 0], [0.0, -0.3], [0.0, 0.3]],
+    hw: 0.44,
     hull: () => sharpU([0.5, 0, 0.47, -0.06, 0.4, -0.18, 0.3, -0.31, 0.18, -0.42, 0.04, -0.46, -0.32, -0.46, -0.4, -0.42, -0.47, -0.34, -0.5, -0.2, -0.48, -0.08, -0.5, 0]),
   },
   // ---- goliath: rolling assault fortress - a sloped glacis wall, stepped sponsons with the heavy guns, a command
   //      tower behind the giant gun, armoured engine block astern
   goliath: {
-    hw: 0.42, mounts: [[0.15, 0], [-0.1, -0.31], [-0.1, 0.31], [-0.34, 0]],
+    hw: 0.42,
     hull: () => sharpU([0.5, 0, 0.48, -0.09, 0.42, -0.17, 0.36, -0.26, 0.38, -0.34, 0.32, -0.46, -0.12, -0.46, -0.16, -0.36, -0.3, -0.36, -0.34, -0.43, -0.46, -0.43, -0.5, -0.32, -0.5, 0]),
   },
   // ---- colossus: long-bodied walking arsenal - no neck: a broad faceted command brow sunk into the front of a long
   //      segmented body, its sensor block offset to starboard, armour bands and a drive section astern
   titan: {
-    hw: 0.42, mounts: [[0.02, -0.3], [0.02, 0.3], [0.38, 0], [-0.34, 0]],
+    hw: 0.42,
     hull: () => sharpU([0.47, 0, 0.47, -0.08, 0.43, -0.2, 0.33, -0.28, 0.25, -0.3, 0.2, -0.4, 0.1, -0.42, 0.06, -0.35, -0.04, -0.35, -0.08, -0.42, -0.22, -0.42, -0.26, -0.35, -0.36, -0.35, -0.4, -0.41, -0.47, -0.32, -0.49, -0.14, -0.48, 0]),
   },
   // ---- mantis (Needle Frame): lanky forward-leaning stilt skirmisher - a sensor lance and faceted head, a swept
   //      shoulder yoke carrying two long gun-blade arms, a tall counterweight spine. On the run the arms fold back
   //      flat along its flanks (an arrowhead); when it engages they snap forward into a firing fork (see needleArms).
   mantis: {
-    hw: 0.3, mounts: [[0.3, -0.27], [0.3, 0.27]], scale: [0.72], extPad: 0.2,
+    hw: 0.3, scale: [0.72], extPad: 0.2,
     hull: () => sharpU(NEEDLE_HULL),
   },
   // ---- crab: wide, low scuttling bunker - a broad shell with a sensor brow, claws out front
   crab: {
-    hw: 0.46, mounts: [[0.3, -0.4], [0.3, 0.4], [-0.08, 0]], scale: [0.75], extPad: 0.15,
+    hw: 0.46, scale: [0.75], extPad: 0.15,
     hull: () => sharpU([0.38, 0, 0.37, -0.08, 0.32, -0.14, 0.33, -0.22, 0.27, -0.3, 0.26, -0.38, 0.17, -0.4, 0.12, -0.47, 0.02, -0.44, -0.06, -0.49, -0.14, -0.44, -0.24, -0.46, -0.3, -0.37, -0.38, -0.33, -0.42, -0.2, -0.46, -0.12, -0.43, 0]),
   },
   // ---- warlord: heavy wedge-cab walker - a hunched armoured hull with a faceted wedge cockpit offset to port and a
   //      sensor turret on the starboard shoulder, heavy gun booms slung under the shoulders, a chin gun on the wedge;
   //      hip-mounted outrigger legs with armoured shin guards and splayed claw feet
   warlord: {
-    hw: 0.3, mounts: [[-0.04, 0], [0.06, -0.39], [0.06, 0.39], [0.2, 0]], scale: [0.9, 0.9, 0.9, 0.8], extPad: 0.1,
+    hw: 0.3, scale: [0.9, 0.9, 0.9, 0.8], extPad: 0.1,
     hull: () => polyU(WARLORD_HULL),
   },
   // ---- strider: wedge-cab walker - the warlord's smaller sibling: offset wedge cockpit, starboard sensor turret,
   //      a dorsal mount on the hunch, forward gun booms off the shoulders, outrigger legs
   mech: {
-    hw: 0.3, mounts: [[-0.04, 0], [0.04, -0.37], [0.04, 0.37]], scale: [0.85, 0.85, 0.85], extPad: 0.1,
+    hw: 0.3, scale: [0.85, 0.85, 0.85], extPad: 0.1,
     hull: () => polyU(STRIDER_HULL),
   },
   // ---- scorpion: long armoured crawler - pincers forward, a tail of modules arching over the back to the heavy gun
   scorpion: {
-    hw: 0.32, mounts: [[-0.33, -0.27], [0.47, -0.3], [0.47, 0.3]], scale: [0.72, 0.8, 0.8], extPad: 0.1,
+    hw: 0.32, scale: [0.72, 0.8, 0.8], extPad: 0.1,
     hull: () => sharpU([0.36, 0, 0.34, -0.09, 0.28, -0.18, 0.2, -0.22, 0.17, -0.31, 0.06, -0.28, 0.0, -0.33, -0.08, -0.28, -0.14, -0.33, -0.22, -0.27, -0.28, -0.22, -0.31, -0.1, -0.3, 0]),
   },
   // ---- centipede: articulated land-train - a cab and five armoured cars coupled down its length
   centipede: {
-    hw: 0.3, mounts: [[0.2, 0], [0.04, 0], [-0.12, 0], [-0.28, 0]], scale: [0.78],
+    hw: 0.3, scale: [0.78],
     hull: () => sharpU([0.5, 0, 0.49, -0.12, 0.46, -0.22, 0.41, -0.28, 0.35, -0.26, 0.32, -0.12, 0.31, 0]),
   },
   // ---- broodmother: orb walker - a huge scalloped armour sphere slung between eight legs, a prow cab
   broodmother: {
-    hw: 0.42, extPad: 0.3, mounts: [[-0.06, 0], [0.34, 0], [-0.08, -0.24], [-0.08, 0.24], [-0.38, 0]],
+    hw: 0.42, extPad: 0.3,
     hull: () => union(orbU(-0.06, 0.42, 0.4, 10, 0.06, ORB_HUBS.broodmother, 0.07, 0.8), ellU(-0.47, 0, 0.06, 0.1), smoothU([0.5, 0, 0.49, 0.07, 0.44, 0.12, 0.36, 0.13, 0.3, 0.09, 0.24, 0.11, 0.18, 0])),
   },
   // ---- arachne: titan orb spider - a great sphere around a central titan cannon on eight
   //      needle legs, cab forward
   arachne: {
-    hw: 0.38, extPad: 0.3, mounts: [[-0.06, 0], [0.22, -0.16], [0.22, 0.16], [-0.38, 0]],
+    hw: 0.38, extPad: 0.3,
     hull: () => union(orbU(-0.06, 0.4, 0.36, 12, 0.05, ORB_HUBS.arachne, 0.06, 0.82), smoothU([0.5, 0, 0.49, 0.06, 0.45, 0.1, 0.39, 0.12, 0.36, 0.08, 0.3, 0.12, 0.22, 0])),
   },
   // ---- riot: wide crown-wedge - a knife prow flanked by two forward tusk pods with fixed
   //      blasters, crew bunker behind, gun sponsons on the shoulders
   riot: {
-    hw: 0.36, mounts: [[-0.12, -0.2], [-0.12, 0.2]],
+    hw: 0.36,
     hull: () => sharpU([0.5, 0, 0.42, -0.06, 0.26, -0.15, 0.22, -0.22, 0.34, -0.29, 0.5, -0.35, 0.47, -0.46, 0.3, -0.5, 0.06, -0.5, 0.0, -0.38, -0.3, -0.38, -0.42, -0.32, -0.5, -0.18, -0.46, 0]),
   },
   // ---- juggernaut: armoured wall - a faceted chevron ram-plough as wide as the hull with stepped cheek blocks,
   //      slab-sided body with side sponsons, a broad engine deck astern with twin fins
   juggernaut: {
-    hw: 0.4, mounts: [[-0.14, 0], [-0.3, 0.2]], scale: [0.9],
+    hw: 0.4, scale: [0.9],
     hull: () => sharpU([0.5, 0, 0.47, -0.1, 0.42, -0.26, 0.38, -0.44, 0.3, -0.49, 0.2, -0.49, 0.15, -0.38, 0.05, -0.36, -0.08, -0.38, -0.12, -0.47, -0.3, -0.49, -0.36, -0.4, -0.44, -0.36, -0.5, -0.3, -0.5, 0]),
   },
   // ---- siege platform: spinal artillery flatbed - tandem heavy guns on a long open deck, four
   //      outrigger jacks, power plant astern
   siegeplat: {
-    hw: 0.36, mounts: [[0.2, 0], [-0.16, 0]],
+    hw: 0.36,
     hull: () => sharpU([0.5, 0, 0.48, -0.12, 0.4, -0.2, 0.31, -0.22, 0.29, -0.33, 0.09, -0.33, 0.05, -0.25, -0.05, -0.25, -0.09, -0.34, -0.36, -0.34, -0.44, -0.28, -0.5, -0.16, -0.5, 0]),
   },
   // ---- hunter: slim skirmisher dart - knife nose, swept fins, a spine of armour; fendered wheels on swing arms
   hunter: {
-    hw: 0.3, mounts: [[0.12, 0], [-0.3, 0]], scale: [0.85],
+    hw: 0.3, scale: [0.85],
     hull: () => sharpU([0.5, 0, 0.36, -0.1, 0.16, -0.17, 0.06, -0.38, -0.06, -0.4, -0.12, -0.2, -0.34, -0.2, -0.42, -0.34, -0.5, -0.3, -0.48, 0]),
   },
   // ---- titan walker: colossal humanoid war machine, broad as it is long - forearm weapon pods, pauldrons
   colossal: {
-    hw: 0.48, mounts: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
+    hw: 0.48,
     // head jutting forward, chest, a notch at the arm-pits, forearm pods reaching forward, stepped pauldrons, a pinched
     // waist and a reactor backpack with twin exhaust stacks
     hull: () => sharpU([0.4, 0, 0.39, -0.045, 0.34, -0.075, 0.3, -0.09, 0.27, -0.2, 0.2, -0.24, 0.18, -0.28, 0.31, -0.3, 0.34, -0.34, 0.34, -0.44, 0.3, -0.47, 0.1, -0.47, 0.08, -0.52, -0.2, -0.52, -0.28, -0.44, -0.3, -0.3, -0.22, -0.24, -0.24, -0.19, -0.34, -0.19, -0.38, -0.15, -0.5, -0.15, -0.5, -0.04, -0.44, -0.04, -0.44, 0]),
   },
   // ---- citadel: mobile star fort - curtain walls, corner bastions, keep and gatehouse on a 6 x 5 footprint
   citadel: {
-    hw: 0.5, mounts: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+    hw: 0.5,
     hull: () => sharpU([0.48, 0, 0.48, -0.08, 0.43, -0.12, 0.43, -0.26, 0.47, -0.31, 0.52, -0.385, 0.385, -0.52, 0.31, -0.47, 0.2, -0.45, 0.1, -0.45, 0.06, -0.41, -0.06, -0.41, -0.1, -0.45, -0.2, -0.45, -0.31, -0.47, -0.385, -0.52, -0.52, -0.385, -0.47, -0.31, -0.45, -0.2, -0.48, -0.12, -0.48, 0]),
   },
   // ---- drone: tri-rotor recon probe - a plated sensor orb with a lens eye in a forward head housing, an offset
   //      sensor boom, two ducted fans swept forward on arms and a third on a tail boom
   pod: {
-    hw: 0.24, mounts: [[-0.04, 0]], scale: [0.8], extPad: 0.1,
+    hw: 0.24, scale: [0.8], extPad: 0.1,
     hull: () => union(ellU(-0.04, 0, 0.23, 0.23), ellU(0.17, 0, 0.13, 0.15), sharpU([-0.2, -0.05, -0.3, -0.06, -0.3, 0])),
     rotors: (X, Y, S) => [{ x: 0.19 * X, y: -0.32 * Y, r: 0.15 * S, blades: 3 }, { x: 0.19 * X, y: 0.32 * Y, r: 0.15 * S, blades: 3 }, { x: -0.4 * X, y: 0, r: 0.13 * S, blades: 3 }],
   },
   // ---- raider: twin-pod skirmisher - two bulbous armoured gun pods bridged by a hunched armoured saddle with a
   //      sensor drum in the prow notch; on wheels it rides four fendered wheels on articulated swing arms
   box: {
-    hw: 0.34, mounts: [[0.06, -0.24], [0.06, 0.24]], scale: [0.85],
+    hw: 0.34, scale: [0.85],
     hull: () => sharpU([0.36, 0, 0.36, -0.06, 0.31, -0.11, 0.42, -0.12, 0.47, -0.17, 0.46, -0.25, 0.38, -0.34, -0.26, -0.35, -0.38, -0.32, -0.44, -0.24, -0.43, -0.13, -0.37, -0.07, -0.37, 0]),
   },
   // ---- warden: line-holder tank - a forked prow (two armoured mandible prongs with sensor tips), stepped
   //      shoulder fins, a pinched waist and a rear reactor bulb
   hex: {
-    hw: 0.42, mounts: [[0.04, 0], [-0.24, 0]], scale: [1, 0.9],
+    hw: 0.42, scale: [1, 0.9],
     hull: () => sharpU([0.34, 0, 0.38, -0.07, 0.5, -0.12, 0.5, -0.2, 0.42, -0.27, 0.32, -0.3, 0.3, -0.39, 0.2, -0.47, -0.02, -0.47, -0.06, -0.38, -0.14, -0.35, -0.18, -0.43, -0.38, -0.43, -0.43, -0.32, -0.38, -0.22, -0.46, -0.18, -0.5, -0.08, -0.5, 0]),
   },
   // ---- aegis: repair frame - a plated core orb with three emitter pods on stub arms (two swept forward, one astern)
   //      and a sensor nub on the nose: a trefoil you can pick out at any size
   round: {
-    hw: 0.42, mounts: [[-0.02, 0], [-0.39, 0]], scale: [1, 0.85],
+    hw: 0.42, scale: [1, 0.85],
     hull: () => union(
       ellU(-0.02, 0, 0.3, 0.3),
       ...AEGIS_PODS.map(([u, v, a]) => ellR(u, v, 0.17, 0.085, a)),
