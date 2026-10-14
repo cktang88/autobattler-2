@@ -918,34 +918,23 @@ export class FieldView {
     g.globalCompositeOperation = prev;
   }
 
+  /** Shield: a faint thin rim hugging the hull that flares briefly when hit (hits draw their own local hex ripple). */
   private drawShields(g: Ctx, list: { u: SimUnit; p: UnitPose }[]): void {
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
+    g.strokeStyle = '#9fe4ff';
     for (const { u, p } of list) {
-      if (u.shield <= 0) continue;
+      if (u.shield <= 0 || p.cloak === 'enemy') continue;
       const v = this.visOf(u);
       const since = this.time - v.shieldT;
-      const hit = since < 0.6 ? 1 - since / 0.6 : 0;
+      const hit = since < 0.4 ? 1 - since / 0.4 : 0;
       const frac = u.maxShield > 0 ? u.shield / u.maxShield : 0.5;
-      const a = 0.07 + 0.05 * frac + hit * 0.45;
-      if (p.cloak === 'enemy') continue;
-      const r = 0.58 * layoutOf(u.design).D;
-      const sl = this.liftVec(0.5 * this.heightOf(p, layoutOf(u.design)));
-      const lx = p.x + this.dirs.ux * (u.flying ? 0.12 : 0) + sl.x, ly = p.y + this.dirs.uy * (u.flying ? 0.12 : 0) + sl.y;
-      g.globalAlpha = a;
-      const hexT = tinted('hex', '#7fd8ff');
-      if (hexT && hit > 0.05) {
-        g.save();
-        g.beginPath();
-        g.arc(lx, ly, r, 0, Math.PI * 2);
-        g.clip();
-        g.drawImage(hexT, lx - r, ly - r, r * 2, r * 2);
-        g.restore();
-      }
-      g.drawImage(softDot('rgba(127,216,255,0.35)', 0.6), lx - r, ly - r, r * 2, r * 2);
-      g.strokeStyle = '#9fe4ff';
-      g.lineWidth = Math.max(1 / this.k, 0.035);
-      g.globalAlpha = Math.min(1, a * 2.2);
+      const L = layoutOf(u.design);
+      const r = shieldR(L);
+      // drawn at ground level, the same place shield-hit flashes are drawn
+      const lx = p.x + this.dirs.ux * (u.flying ? 0.12 : 0), ly = p.y + this.dirs.uy * (u.flying ? 0.12 : 0);
+      g.globalAlpha = 0.05 + 0.06 * frac + hit * 0.35;
+      g.lineWidth = Math.max(1 / this.k, 0.025 + 0.03 * hit);
       g.beginPath();
       g.arc(lx, ly, r, 0, Math.PI * 2);
       g.stroke();
@@ -967,7 +956,8 @@ export class FieldView {
     // footprint: bar width follows the unit's mean edge, and it sits just above the rotated footprint box
     const bh = boxHalf(u.design, p.angle);
     if (u.level > 1) this.drawPips(p.x, p.y, bh.hy, u.level, 0.9);
-    const vis = this.barAlpha(v, S);
+    // bars stay up while a unit carries paralysis, so stun build-up is always readable
+    const vis = Math.max(this.barAlpha(v, S), u.para > 0 ? 1 : 0);
     if (vis <= 0.01) return;
     const g = this.g;
     g.globalAlpha = vis;
@@ -990,7 +980,36 @@ export class FieldView {
       g.fillStyle = '#8fe0ff';
       g.fillRect(x, y - 2, w * clamp(u.shield / u.maxShield, 0, 1), 1.5);
     }
+    this.drawPara(u, x, y + h + 1.5, w);
     g.globalAlpha = 1;
+  }
+
+  /** Paralysis (Zero-K style) under the hp bar: a blue meter filling toward a stun; while stunned it pulses and shows the
+   *  seconds left next to a bolt. */
+  private drawPara(u: SimUnit, x: number, y: number, w: number): void {
+    if (u.para <= 0) return;
+    const g = this.g;
+    const f = clamp(u.para / u.maxHp, 0, 1);
+    const stunned = u.stun > 0;
+    g.fillStyle = 'rgba(0,0,0,0.88)';
+    g.fillRect(x - 1.5, y, w + 3, 4.5);
+    g.fillStyle = stunned ? (Math.sin(this.time * 14) > 0 ? '#e6f6ff' : '#7fd0ff') : '#4aa8ff';
+    g.fillRect(x, y + 1, w * f, 2.5);
+    if (!stunned) return;
+    const tx = x + w + 4, ty = y + 2;
+    g.fillStyle = '#9fe0ff';
+    g.beginPath(); // bolt glyph
+    g.moveTo(tx + 3, ty - 6); g.lineTo(tx - 1, ty + 1); g.lineTo(tx + 2, ty + 1); g.lineTo(tx, ty + 7); g.lineTo(tx + 5, ty - 1); g.lineTo(tx + 2, ty - 1); g.closePath();
+    g.fill();
+    g.font = '700 12px "Barlow Condensed", system-ui, sans-serif';
+    g.textBaseline = 'middle';
+    g.textAlign = 'left';
+    g.lineWidth = 3;
+    g.strokeStyle = 'rgba(0,0,0,0.85)';
+    const txt = `${u.stun.toFixed(1)}s`;
+    g.strokeText(txt, tx + 8, ty + 0.5);
+    g.fillStyle = '#dff4ff';
+    g.fillText(txt, tx + 8, ty + 0.5);
   }
 
   /** screen px the unit's top is raised above its ground footprint (bars ride on top of it) */
@@ -1039,7 +1058,7 @@ export class FieldView {
     // corner ticks
     g.fillStyle = TEAM_PAL[team].rim;
     g.fillRect(x - 5, y - 1, 3, h + 2);
-    g.fillRect(x + w + 2, y - 1, 3, h + 2);
+    g.fillRect(x + w + 2, y - 1, 3, h + 2);    this.drawPara(u, x, y + h + 3.5, w);
   }
 
   /* ------------------------------------------------------------------------------------ projectiles */
@@ -1291,39 +1310,52 @@ export class FieldView {
         }
         case 'orb': {
           if (vis === 'sonic') {
-            const r = 0.25 + clamp(pos.progress, 0, 1) * 0.5;
-            const ring = tinted('shockwave', '#5ec8ff');
-            g.globalAlpha = 0.85;
-            if (ring) g.drawImage(ring, x - r, y - r, r * 2, r * 2);
-            else { g.strokeStyle = '#5ec8ff'; g.lineWidth = 0.05; g.beginPath(); g.arc(x, y, r, pos.angle - 0.9, pos.angle + 0.9); g.stroke(); }
+            // a pressure wave: a few faint arcs bowed forward along the line of travel (no flying disc)
+            const r = 0.3 + clamp(pos.progress, 0, 1) * 0.45;
+            g.strokeStyle = '#bfe8ff';
+            g.lineCap = 'round';
+            for (let k = 0; k < 3; k++) {
+              const rk = r * (1 - k * 0.22);
+              g.globalAlpha = 0.32 * (1 - k * 0.3);
+              g.lineWidth = Math.max(minW, 0.035 * (1 - k * 0.25));
+              g.beginPath(); g.arc(x - cs * k * 0.12, y - sn * k * 0.12, rk, pos.angle - 0.75, pos.angle + 0.75); g.stroke();
+            }
           } else if (vis === 'emp') {
-            const r = 0.3;
-            const img = tex('eball');
-            const rot = this.time * 9 + p.id;
-            if (img) {
-              const tr = g.getTransform();
-              g.transform(Math.cos(rot), Math.sin(rot), -Math.sin(rot), Math.cos(rot), x, y);
-              g.drawImage(img, -r, -r, r * 2, r * 2);
-              g.setTransform(tr);
-            } else g.drawImage(softDot('#7ab8ff', 0.3), x - r, y - r, r * 2, r * 2);
-            if (Math.random() < dt * 20) this.fx.sparks(x, y, 1, '#cfe9ff', 2, undefined, Math.PI, 0.12);
+            // a small crackling charge: hot white-blue core with flickering arcs, not a glowing ball
+            const r = 0.12;
+            g.globalAlpha = 0.8;
+            g.drawImage(glowTex('#8ab8ff'), x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+            g.globalAlpha = 1;
+            g.drawImage(glowTex('#ffffff'), x - r * 0.8, y - r * 0.8, r * 1.6, r * 1.6);
+            g.strokeStyle = '#dff0ff';
+            g.lineWidth = Math.max(minW, 0.018);
+            g.globalAlpha = 0.85;
+            for (let k = 0; k < 2; k++) {
+              const a0 = this.time * 37 + p.id * 1.7 + k * 2.4;
+              g.beginPath(); g.moveTo(x, y);
+              g.lineTo(x + Math.cos(a0) * r * 1.6, y + Math.sin(a0) * r * 1.6);
+              g.lineTo(x + Math.cos(a0 + 0.6) * r * 2.6, y + Math.sin(a0 + 0.6) * r * 2.6);
+              g.stroke();
+            }
           } else {
-            const r = (0.18 + 0.12 * cal) * (mod && moduleTier(mod) === 4 ? 2.1 : 1);
-            const pc = glowC.length === 7 ? glowC : '#e070ff';
-            const pulse = 0.9 + 0.2 * Math.sin(this.time * 24 + p.id);
-            // comet tail: tapered gradient streak behind the head
-            const tl = r * 7;
+            // plasma bolt: a short elongated slug of white-hot gas in a violet sheath, with a fading wake
+            const big = mod && moduleTier(mod) >= 3 ? 1.8 : 1;
+            const r = (0.07 + 0.05 * cal) * big;
+            const pc = '#c25cff';
+            const tl = r * 9;
             const gr = g.createLinearGradient(x, y, x - cs * tl, y - sn * tl);
-            gr.addColorStop(0, rgba(pc, 0.7));
+            gr.addColorStop(0, rgba(pc, 0.55));
             gr.addColorStop(1, rgba(pc, 0));
             g.globalAlpha = 1;
             g.strokeStyle = gr;
             g.lineCap = 'round';
-            g.lineWidth = r * 1.5;
+            g.lineWidth = r * 1.6;
             g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * tl, y - sn * tl); g.stroke();
-            g.drawImage(glowTex(pc), x - r * 3 * pulse, y - r * 3 * pulse, r * 6 * pulse, r * 6 * pulse);
-            g.drawImage(glowTex('#ffffff'), x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
-            this.trail(p.id, x, y, r * 0.8, pc, 0.06, true);
+            g.strokeStyle = '#f6e8ff';
+            g.lineWidth = r * 0.9;
+            g.beginPath(); g.moveTo(x + cs * r, y + sn * r); g.lineTo(x - cs * r * 2.2, y - sn * r * 2.2); g.stroke();
+            g.globalAlpha = 0.5;
+            g.drawImage(glowTex(pc), x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
           }
           break;
         }
@@ -1422,7 +1454,7 @@ export class FieldView {
     this.shotFrom.set(t.id, { x: x1, y: y1 });
     if (t.shield > 0 || t.auraShield > 0) {
       // shielded: stop on the bubble (same radius the shield hex flashes at)
-      const r = 0.58 * layoutOf(t.design).D * 0.9, d = Math.hypot(x1 - t.x, y1 - t.y);
+      const r = shieldR(layoutOf(t.design)), d = Math.hypot(x1 - t.x, y1 - t.y);
       if (d > r) return { x: t.x + ((x1 - t.x) / d) * r, y: t.y + ((y1 - t.y) / d) * r };
     }
     return this.hullEdge(t, x1, y1);
@@ -1486,7 +1518,7 @@ export class FieldView {
         switch (vis) {
           case 'gun': case 'gatling': case 'shotgun': case 'sniper': case 'flak': case 'cannon': case 'artillery': case 'gauss': {
             const heavy = vis === 'cannon' || vis === 'artillery' || vis === 'gauss';
-            const r = Math.max(0.2, d * (0.5 + cal * 0.7)) * (heavy ? 1.5 : 1) * (vis === 'shotgun' ? 1.4 : 1);
+            const r = Math.max(0.2, d * (0.5 + cal * 0.7)) * (heavy ? 1.1 : 1) * (vis === 'shotgun' ? 1.4 : 1);
             const col = vis === 'gauss' ? '#9fe8ff' : vis === 'sniper' ? '#ffe6c0' : mod?.category === 'autocannon' ? '#ffb858' : '#ffd890';
             fx.muzzle(mx, my, e.angle, r, col, heavy);
             if (vis === 'gun' || vis === 'gatling' || vis === 'shotgun') { if (Math.random() < 0.45) fx.casing(mx - cs * d * 0.6, my - sn * d * 0.6, e.angle); }
@@ -1599,7 +1631,7 @@ export class FieldView {
               if (h > 0.6) { fx.sparks(e.x2, e.y2, 5, '#ffd0ff', 6, undefined, Math.PI, 0.35, true); if (Math.random() < 0.3) { fx.decal('scorch', gx, gy, 0.5); fx.hot(gx, gy, 0.8, 2); } }
               if (h > 0.85) fx.shake(0.04);
             } else {
-              fx.beam('plasma', pts, '#e070ff', 0.09, 0.17);
+              fx.beam('plasma', pts, '#c25cff', 0.06, 0.15);
               if (q && Math.random() < 0.5) fx.molten(e.x2, e.y2, 2, '#f0a0ff');
               if (q && Math.random() < 0.1) { fx.decal('scorch', gx, gy, 0.3); fx.hot(gx, gy, 0.5, 1.4); }
             }
@@ -1650,12 +1682,13 @@ export class FieldView {
           case 'pointdef': fx.beam('laser', pts, '#ff6060', 0.025, 0.08); impact = false; break;
           case 'sniper': fx.beam('sniper', pts, '#ff5050', 0.04, 0.2); break;
           default: {
-            fx.beam('laser', pts, glowC, 0.035, 0.12);
+            // pulse lasers: a short, hard red pulse (team colour read from the hull, not the beam)
+            fx.beam('laser', pts, '#ff3322', 0.03, 0.09);
             if (q && Math.random() < 0.35) fx.molten(e.x2, e.y2, 1, '#ffd090');
             if (q && Math.random() < 0.06) fx.hot(gx, gy, 0.3, 1.0);
           }
         }
-        if (impact && q && Math.random() < 0.6) fx.sparks(e.x2, e.y2, 3, glowC, 3.5, back, 1.3, 0.2, true);
+        if (impact && q && Math.random() < 0.6) fx.sparks(e.x2, e.y2, 3, '#ffc080', 3.5, back, 1.3, 0.2, true);
         break;
       }
       case 'chain': {
@@ -1694,14 +1727,14 @@ export class FieldView {
           const from = this.shotFrom.get(ur.id);
           const a = from ? Math.atan2(from.y - ur.y, from.x - ur.x) : Math.random() * Math.PI * 2;
           const far = { x: ur.x + Math.cos(a) * 50, y: ur.y + Math.sin(a) * 50 };
-          const r = 0.58 * layoutOf(ur.design).D * 0.9;
+          const r = shieldR(layoutOf(ur.design));
           const p = e.shieldHit ? { x: ur.x + Math.cos(a) * r, y: ur.y + Math.sin(a) * r } : this.hullEdge(ur, far.x, far.y);
           e = { ...e, x: p.x, y: p.y };
         }
         if (e.shieldHit) {
           const v = this.visOf(ur);
           v.shieldT = this.time;
-          if (fx.busy < 0.7) fx.hex(ur.x, ur.y, 0.58 * layoutOf(ur.design).D, e.x, e.y);
+          if (fx.busy < 0.7) fx.hex(ur.x, ur.y, shieldR(layoutOf(ur.design)), e.x, e.y);
           fx.sparks(e.x, e.y, 3, '#bfefff', 2.5, undefined, Math.PI, 0.2);
           break;
         }
@@ -1824,6 +1857,11 @@ export class FieldView {
     this.vis.clear();
     this.pending = [];
   }
+}
+
+/** Shield radius (cells): just outside the hull's mean half-extent, so long hulls don't get a giant bubble. */
+function shieldR(L: { X: number; Y: number }): number {
+  return 0.36 * (L.X + L.Y) + 0.15;
 }
 
 /** Half extents (cells) of a unit's footprint box rotated to `ang` (screen-axis aligned), plus its mean edge. */

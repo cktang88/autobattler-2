@@ -11,9 +11,10 @@ import type { BattleView } from '../render/view.ts';
 import { makeView } from '../render/viewfactory.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
-import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
+import { MAX_TICKS, TICK_RATE, type BattleEvent, type SimUnit } from '../../shared/sim/types.ts';
 import type { UnitFoot } from '../../shared/grid.ts';
-import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
+import { mountOffsets } from '../../shared/mountgeo.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
@@ -284,9 +285,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     foeBtn.setAttribute('aria-pressed', String(showFoe));
   }
   const infoEl = h('div.panel.info.hidden');
-  const speedBtns = BATTLE_SPEEDS.map((v) => h('button.small', { title: `${speedLabel(v)} speed`, onclick: () => { speed = v; renderSpeed(); } }, speedLabel(v)));
+  const speedBtns = BATTLE_SPEEDS.map((v) => h('button.small', { title: `${speedLabel(v)} speed`, onclick: () => { speed = v; paused = false; renderSpeed(); } }, speedLabel(v)));
   const skipBtn = h('button.small', { onclick: () => skipBattle() }, 'Skip ▸▸');
-  const speedbar = h('div.speedbar.hidden', null, ...speedBtns, skipBtn);
+  let paused = false;
+  const pauseBtn = h('button.small.pause-btn', { title: 'Pause / resume (Space or P)', 'aria-label': 'Pause', onclick: () => togglePause() }, '❚❚');
+  function togglePause(on = !paused) { paused = on; renderSpeed(); }
+  const speedbar = h('div.speedbar.hidden', null, pauseBtn, ...speedBtns, skipBtn);
   const overlayEl = h('div');
   const zoomBar = h('div.zoombtns', null,
     h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => view.zoomBy(1.5) }, '+'),
@@ -323,7 +327,53 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let tipSize = { w: 0, h: 0 };
   let tipKey = '';
   let sheetOff: (() => void) | null = null;
-  function hideTip() { tipEl?.remove(); tipEl = null; tipKey = ''; sheetOff?.(); sheetOff = null; ringHi = null; }
+  function hideTip() { tipEl?.remove(); tipEl = null; tipKey = ''; sheetOff?.(); sheetOff = null; ringHi = null; liveTip = null; }
+  /** unit clicked during a battle replay: its stat card stays up with live hp / damage until you click elsewhere */
+  let liveTip: { id: number; at: { x: number; y: number } } | null = null;
+  let liveTipT = 0;
+  function liveUnitAt(px: number, rawY: number): SimUnit | null {
+    if (!battle) return null;
+    let w: { x: number; y: number };
+    try { w = view.screenToWorld(px, rawY); } catch { return null; }
+    let best: SimUnit | null = null, bd = Infinity;
+    for (const u of battle.units) {
+      if (!u.alive) continue;
+      const r = 0.45 + 0.5 * u.stats.size, d = Math.hypot(u.x - w.x, u.y - w.y);
+      if (d < r && d < bd) { bd = d; best = u; }
+    }
+    return best;
+  }
+  function liveLine(u: SimUnit): HTMLElement {
+    const dealt = battle ? Math.round(battle.blockDamage(u.side, u.uid)) : 0;
+    return h('div.sc-dmg.sc-live', null,
+      h('span', null, u.alive ? 'Now' : 'Destroyed'),
+      u.alive ? h('b', null, `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)} HP${u.shield > 0 ? ` · ${Math.ceil(u.shield)} shield` : ''}`) : null,
+      u.alive && u.para > 0 ? h('em', { style: { color: '#9fe0ff' } }, u.stun > 0 ? `stunned ${u.stun.toFixed(1)}s` : `paralysis ${Math.round((100 * u.para) / u.maxHp)}%`) : null,
+      h('em', null, `dealt ${dealt.toLocaleString()} this battle`));
+  }
+  function showLiveTip(u: SimUnit, at: { x: number; y: number }) {
+    const mine = u.side === side;
+    const tip = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats.size, undefined), false, liveLine(u));
+    mountTip(tip, false);
+    tipKey = `live:${u.id}`;
+    liveTip = { id: u.id, at };
+    const er = el.getBoundingClientRect();
+    const { w, h: ht } = tipSize;
+    let left = at.x - er.left + 18, top = at.y - er.top + 18;
+    if (left + w > er.width - 4) left = at.x - er.left - w - 18;
+    if (top + ht > er.height - 4) top = at.y - er.top - ht - 18;
+    tipEl!.style.left = `${Math.max(4, left)}px`;
+    tipEl!.style.top = `${Math.max(4, top)}px`;
+  }
+  function refreshLiveTip(dt: number) {
+    if (!liveTip || !tipEl || !battle) return;
+    liveTipT += dt;
+    if (liveTipT < 0.2) return;
+    liveTipT = 0;
+    const u = battle.units.find((q) => q.id === liveTip!.id);
+    const old = tipEl.querySelector('.sc-live');
+    if (u && old) old.replaceWith(liveLine(u));
+  }
   function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean, dmg: HTMLElement | null = null): HTMLElement {
     const lv = Math.max(1, Math.min(MAX_LEVEL, level));
     return h('div.stat-tip', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
@@ -663,7 +713,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   function renderSpeed() {
-    speedBtns.forEach((b, i) => b.classList.toggle('active', BATTLE_SPEEDS[i] === speed));
+    speedBtns.forEach((b, i) => b.classList.toggle('active', !paused && BATTLE_SPEEDS[i] === speed));
+    if (phase !== 'battle') paused = false;
+    pauseBtn.classList.toggle('active', paused);
+    fieldwrap.classList.toggle('paused', paused);
+    pauseBtn.textContent = paused ? '▶' : '❚❚';
+    pauseBtn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
     speedbar.classList.toggle('hidden', phase !== 'battle');
     rangeBar.classList.toggle('hidden', phase !== 'deploy' && phase !== 'waiting');
   }
@@ -1047,7 +1102,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     } else hoverUnit = null;
     if (e.pointerType === 'mouse') {
       if (hoverUnit) showUnitTip(hoverUnit, { x: e.clientX, y: e.clientY });
-      else if (tipKey) hideTip();
+      else if (tipKey && !liveTip) hideTip();
     }
     if (phase !== 'deploy' || selCard < 0) return;
     if (e.pointerType === 'touch' && !downAt) return;
@@ -1090,6 +1145,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (e.pointerType === 'touch') { hover = null; renderHint(); }
       return;
     }
+    if (phase === 'battle' || phase === 'result' || phase === 'over') {
+      // battle: click a unit to pin its stats (live hp + damage), click empty ground to close
+      const lp = local(e);
+      const u = liveUnitAt(lp.px, lp.rawY);
+      if (u) { showLiveTip(u, { x: e.clientX, y: e.clientY }); sfx('click'); } else if (tipKey) hideTip();
+      return;
+    }
     if (phase !== 'deploy' && phase !== 'waiting') return;
     const { px, py, rawY } = local(e);
     if (phase === 'deploy' && selCard >= 0) {
@@ -1130,6 +1192,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (rotateBlock()) e.preventDefault();
     } else if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (stepSpacing(e.key === ']' ? 1 : -1)) e.preventDefault();
+    } else if ((e.key === 'p' || e.key === 'P') && phase === 'battle' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      togglePause();
     } else if (e.key === 'Escape') {
       if (tipEl?.classList.contains('sheet')) { hideTip(); return; }
       if (escortPick) escortPick = null;
@@ -1140,7 +1205,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (t && t.tagName === 'BUTTON') return; // let the focused button / kit control handle it
       e.preventDefault();
       if (phase === 'deploy') void submit();
-      else if (phase === 'battle') skipBattle();
+      else if (phase === 'battle') { if (e.key === ' ') togglePause(); else skipBattle(); }
       else if (phase === 'result') continueAfterResult();
     } else if ((e.key === 'Backspace' || (e.key === 'z' && (e.ctrlKey || e.metaKey))) && phase === 'deploy') {
       e.preventDefault();
@@ -1175,6 +1240,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function setPhase(p: Phase) {
     const prev = phase;
     phase = p;
+    if (liveTip && p === 'deploy') hideTip();
     if (p === 'waiting' && prev !== 'waiting' && m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     if (p === 'deploy' && prev !== 'deploy') {
       playMusic('deploy');
@@ -1380,13 +1446,27 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const taken: { x: number; y: number; w: number; h: number }[] = [];
     // weak (all-units) rings first so the focused block's rings sit on top
     for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
-      const centers = placementUnitCenters(t.side, t.pos, t.size, t.st).map((c) => view.worldToScreen(c.x, c.y));
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const c of centers) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x); y1 = Math.max(y1, c.y); }
+      const worldCenters = placementUnitCenters(t.side, t.pos, t.size, t.st);
+      // units deploy facing the enemy; ranges are measured from each weapon's own mount (same offsets as the sim)
+      const offs = mountOffsets(t.design);
+      const head = forwardY(t.side) < 0 ? -Math.PI / 2 : Math.PI / 2, hc = Math.cos(head), hs = Math.sin(head);
+      let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+      const frame = (mounts: number[] | null) => {
+        x0 = Infinity; y0 = Infinity; x1 = -Infinity; y1 = -Infinity;
+        for (const c of worldCenters) {
+          for (const m of mounts ?? [-1]) {
+            const o = m >= 0 ? offs[m] : undefined;
+            const wx = c.x + (o ? hc * o.x - hs * o.y : 0), wy = c.y + (o ? hs * o.x + hc * o.y : 0);
+            const sp = view.worldToScreen(wx, wy);
+            x0 = Math.min(x0, sp.x); y0 = Math.min(y0, sp.y); x1 = Math.max(x1, sp.x); y1 = Math.max(y1, sp.y);
+          }
+        }
+      };
       const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
-      // the ring lives on the ground plane: foreshortened vertically (rounded box around the squad, an ellipse for one unit)
+      // the ring lives on the ground plane (foreshortened by the camera tilt): a circle around the mount for one unit,
+      // the rounded outline of all its circles for a squad
       const ay = view.ay;
-      const uh = (y1 - y0) / ay;
+      let uh = 0;
       let cur = new Path2D();
       const path = (r: number) => {
         const base = new Path2D();
@@ -1396,6 +1476,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       };
       const angles = [-90, -62, -118, -34, -146, -10, -170].map((a) => (a * Math.PI) / 180);
       rings.forEach((rg, i) => {
+        frame(rg.melee ? null : rg.mounts);
+        uh = (y1 - y0) / ay;
         const R = rg.range * k;
         const hi = ringHi != null && rg.key === ringHi;
         const dim = ringHi != null && !hi ? 0.3 : 1;
@@ -1506,7 +1588,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     try {
       if ((phase === 'battle' || phase === 'result' || phase === 'over') && battle) {
         if (phase === 'battle') {
-          acc += dt * TICK_RATE * speed;
+          if (!paused) acc += dt * TICK_RATE * speed;
           let n = 0;
           while (acc >= 1 && !battle.done && n++ < 40) {
             battle.step();
@@ -1519,6 +1601,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           }
         }
         view.drawBattle(battle, dt);
+        refreshLiveTip(dt);
         clearRings();
       } else {
         let hov: BoardOverlay['hover'] = null;

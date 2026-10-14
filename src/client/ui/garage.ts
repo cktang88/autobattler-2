@@ -1385,10 +1385,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   /** Reach rings for the range overlay (cells): weapons (with the design's range bonus), repair beams and auras. */
   /** Reach rings for the range overlay (cells) — the same rings the battlefield draws (ringsOf), so the sim's rules
    *  apply: range bonus scales guns and repair beams, not melee reach or dead zones. */
-  function rangeRings(): { r: number; min: number; color: string; label: string }[] {
+  function rangeRings(): { r: number; min: number; color: string; label: string; mounts: number[]; melee: boolean }[] {
     const st = statsOf(draft);
     if (!st) return [];
-    return ringsOf(draft, st).map((o) => ({ r: o.range, min: o.minRange, color: o.color, label: o.label })).sort((a, b) => b.r - a.r);
+    return ringsOf(draft, st).map((o) => ({ r: o.range, min: o.minRange, color: o.color, label: o.label, mounts: o.mounts, melee: !!o.melee })).sort((a, b) => b.r - a.r);
   }
   const rangeExtent = () => Math.max(MIN_VIEW_CELLS, ...rangeRings().map((o) => o.r * 2.18 + 1));
 
@@ -1398,7 +1398,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rings = rangesOn ? rangeRings() : [];
-    const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label).join(',')}`;
+    const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${rings.map((o) => o.r + o.label + o.mounts.join(":")).join(",")}|${g.mounts.map((q) => `${q.x.toFixed(0)},${q.y.toFixed(0)}`).join(";")}`;
     if (key === gridKey) return;
     gridKey = key;
     gridCv.width = Math.round(r.width * dpr);
@@ -1457,20 +1457,29 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     // range rings
     rings.forEach((o, i) => {
       const R = o.r * P;
+      // measured from each weapon's own mount (melee: from the hull centre); several mounts -> rounded outline of all
+      const pts = o.melee ? [] : o.mounts.map((m) => g.mounts[m]).filter(Boolean);
+      const mx0 = pts.length ? Math.min(...pts.map((q) => q.x)) : g.cx, mx1 = pts.length ? Math.max(...pts.map((q) => q.x)) : g.cx;
+      const my0 = pts.length ? Math.min(...pts.map((q) => q.y)) : g.cy, my1 = pts.length ? Math.max(...pts.map((q) => q.y)) : g.cy;
+      const ring = (rad: number) => { x.roundRect(mx0 - rad, my0 - rad, mx1 - mx0 + 2 * rad, my1 - my0 + 2 * rad, rad); };
+      const ccx = (mx0 + mx1) / 2, ccy = (my0 + my1) / 2;
       x.save();
       x.globalAlpha = 0.12;
       x.fillStyle = o.color;
-      x.beginPath(); x.arc(g.cx, g.cy, R, 0, Math.PI * 2);
-      if (o.min) x.arc(g.cx, g.cy, o.min * P, 0, Math.PI * 2, true);
+      x.beginPath(); ring(R);
+      if (o.min) ring(o.min * P);
       x.fill('evenodd');
       x.globalAlpha = 0.95;
       x.strokeStyle = o.color;
       x.lineWidth = 2;
-      x.beginPath(); x.arc(g.cx, g.cy, R, 0, Math.PI * 2); x.stroke();
-      if (o.min) { x.setLineDash([5, 5]); x.beginPath(); x.arc(g.cx, g.cy, o.min * P, 0, Math.PI * 2); x.stroke(); x.setLineDash([]); }
+      x.beginPath(); ring(R); x.stroke();
+      if (o.min) { x.setLineDash([5, 5]); x.beginPath(); ring(o.min * P); x.stroke(); x.setLineDash([]); }
+      // a dot on each mount the ring is measured from
+      x.fillStyle = o.color;
+      for (const q of pts) { x.beginPath(); x.arc(q.x, q.y, 3, 0, Math.PI * 2); x.fill(); }
       // label on the ring, staggered so stacked rings don't collide
       const a = -Math.PI / 2 + (i % 2 ? 0.42 : -0.42) * Math.ceil(i / 2);
-      const lx = g.cx + Math.cos(a) * R, ly = g.cy + Math.sin(a) * R;
+      const lx = ccx + Math.cos(a) * (R + (mx1 - mx0) / 2), ly = ccy + Math.sin(a) * (R + (my1 - my0) / 2);
       const txt = o.label;
       x.font = '700 14px "Barlow Condensed", system-ui, sans-serif';
       const tw = Math.min(260, x.measureText(txt).width) + 12;
