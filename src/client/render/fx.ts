@@ -306,8 +306,29 @@ export class Fx {
   armorHit(x: number, y: number, damage: number, color = '#ffe0a0'): void {
     const n = clamp(Math.round(2 + Math.sqrt(damage) * 0.5), 2, 12);
     this.sparks(x, y, n, color, 4.5, undefined, Math.PI, 0.2, true);
-    this.glow(x, y, 0.16 + Math.min(0.5, damage / 400), '#fff0d0', 0.05, 1);
-    if (damage > 60) this.glow(x, y, 0.35 + Math.min(0.6, damage / 300), '#ffb060', 0.12, 0.8);
+    this.glow(x, y, 0.2 + Math.min(0.5, damage / 400), '#fff0d0', 0.06, 1);
+    if (damage > 60) this.glow(x, y, 0.4 + Math.min(0.6, damage / 300), '#ffb060', 0.14, 0.8);
+    if (damage >= 70 && this.busy < 0.7) {
+      // heavy strike: hard ring, flung metal and a puff of smoke
+      const k = Math.min(1, damage / 400);
+      this.star(x, y, 0.4 + 0.8 * k, '#fff0d0', rnd() * 6, 0.07);
+      this.ring(x, y, 0.05, 0.4 + 0.8 * k, '#ffe0b0', 0.2, 0.7);
+      this.debris(x, y, 1 + Math.round(k * 3), '#4a4540', 2.4, 0.04);
+      this.smoke(x, y, 0.1 + 0.14 * k, 1.2, '#46403a', this.wind.x * 0.4, 0, 0.4, 0.5, 0.25);
+    }
+  }
+
+  /** A shell striking the ground / a hull with no explosion of its own: pop, ring scaled by calibre, dust cloud, chunks, scorch. */
+  shellImpact(x: number, y: number, cal: number): void {
+    this.glow(x, y, 0.3 + 0.6 * cal, '#ffd8a0', 0.08, 0.9);
+    this.light(x, y, 1.2 + 2.4 * cal, '#ffb060', 0.25, 0.3);
+    this.ring(x, y, 0.05, 0.4 + 1.1 * cal, '#ffe0b0', 0.22 + 0.1 * cal, 0.7);
+    this.dustRing(x, y, 0.1, 0.5 + 1.5 * cal, 0.4 + 0.35 * cal, 0.42);
+    this.dust(x, y, 0.2 + 0.35 * cal, 3 + Math.round(cal * 5), 0.8 + cal * 0.9);
+    this.sparks(x, y, 5 + cal * 9, '#ffd890', 4.5, undefined, Math.PI, 0.3, true);
+    this.debris(x, y, 1 + Math.round(cal * 4), '#4a4034', 2.6, 0.045, cal > 0.6 ? 1 : 0);
+    if (cal > 0.4) this.smoke(x, y, 0.15 + 0.2 * cal, 1.8, '#3a342e', this.wind.x * 0.5, 0, 0.4, 0.7, 0.2);
+    this.decal('scorch', x, y, 0.2 + 0.3 * cal);
   }
 
   /** Glowing droplets thrown off a melting surface (heat ray / plasma / welding). */
@@ -1074,10 +1095,10 @@ export class Fx {
         case 'sniper': {
           const w = b.width * flick * (0.6 + 0.4 * t);
           const hotc = mixHex(b.color, '#ffffff', 0.55);
-          stroke(g, p, b.color, Math.max(minW * 7, w * 10), 0.1 * fade);
-          stroke(g, p, b.color, Math.max(minW * 3.5, w * 4.5), 0.32 * fade);
-          stroke(g, p, hotc, Math.max(minW * 1.8, w * 2), 0.8 * fade);
-          stroke(g, p, '#ffffff', Math.max(minW, w * 0.85), fade);
+          stroke(g, p, b.color, Math.max(minW * 10, w * 14), 0.12 * fade);
+          stroke(g, p, b.color, Math.max(minW * 5, w * 6.5), 0.34 * fade);
+          stroke(g, p, hotc, Math.max(minW * 2.4, w * 2.6), 0.85 * fade);
+          stroke(g, p, '#ffffff', Math.max(minW * 1.3, w * 1.0), fade);
           // heat shimmer hint: two faint wavering lines hugging the beam
           if (len < 40) {
             const o = Math.max(0.03, w * 3.5);
@@ -1088,11 +1109,11 @@ export class Fx {
             }
           }
           // lens bloom at the emitter, glowing hot-spot where it bites, light pool on the ground
-          this.bloom(g, x1, y1, 0.12 + w * 5, '#ffffff', 0.9 * fade);
-          this.bloom(g, x1, y1, 0.3 + w * 9, b.color, 0.55 * fade);
-          this.bloom(g, x2, y2, 0.14 + w * 5.5, '#ffffff', 0.85 * fade * flick);
-          this.bloom(g, x2, y2, 0.4 + w * 11, b.color, 0.6 * fade);
-          this.bloom(g, x2, y2, 0.9 + w * 14, b.color, 0.2 * fade * LG);
+          this.bloom(g, x1, y1, 0.2 + w * 6, '#ffffff', 0.95 * fade);
+          this.bloom(g, x1, y1, 0.45 + w * 11, b.color, 0.6 * fade);
+          this.bloom(g, x2, y2, 0.24 + w * 7, '#ffffff', 0.9 * fade * flick);
+          this.bloom(g, x2, y2, 0.6 + w * 14, b.color, 0.7 * fade);
+          this.bloom(g, x2, y2, 1.3 + w * 18, b.color, 0.24 * fade * LG);
           break;
         }
         case 'plasma': {

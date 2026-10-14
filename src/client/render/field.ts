@@ -1074,16 +1074,7 @@ export class FieldView {
       const fx = this.fx, cal = modOf(t.moduleId)?.caliber ?? 0.5;
       if (t.kind === 'bullet') { fx.dirtKick(x, y, 0.8 + cal); continue; }
       if (t.kind === 'shell') {
-        // shell strike: bright pop, ring scaled by calibre, a heavier slower dust cloud for big guns, flung dirt, scorch
-        fx.glow(x, y, 0.3 + 0.6 * cal, '#ffd8a0', 0.07, 0.9);
-        fx.light(x, y, 1.2 + 2.4 * cal, '#ffb060', 0.25, 0.3);
-        fx.ring(x, y, 0.05, 0.4 + 1.1 * cal, '#ffe0b0', 0.22 + 0.1 * cal, 0.7);
-        fx.dustRing(x, y, 0.1, 0.5 + 1.5 * cal, 0.4 + 0.35 * cal, 0.42);
-        fx.dust(x, y, 0.2 + 0.35 * cal, 3 + Math.round(cal * 5), 0.8 + cal * 0.9);
-        fx.sparks(x, y, 5 + cal * 9, '#ffd890', 4.5, undefined, Math.PI, 0.3, true);
-        fx.debris(x, y, 1 + Math.round(cal * 4), '#4a4034', 2.6, 0.045, cal > 0.6 ? 1 : 0);
-        if (cal > 0.55) fx.smoke(x, y, 0.15 + 0.2 * cal, 1.8, '#3a342e', fx.wind.x * 0.5, 0, 0.4, 0.7, 0.2);
-        fx.decal('scorch', x, y, 0.2 + 0.3 * cal);
+        fx.shellImpact(x, y, cal);
         continue;
       }
       fx.dust(x, y, 0.15, 2, 0.6);
@@ -1494,7 +1485,7 @@ export class FieldView {
         switch (vis) {
           case 'gun': case 'gatling': case 'shotgun': case 'sniper': case 'flak': case 'cannon': case 'artillery': case 'gauss': {
             const heavy = vis === 'cannon' || vis === 'artillery' || vis === 'gauss';
-            const r = d * (0.5 + cal * 0.7) * (heavy ? 1.5 : 1) * (vis === 'shotgun' ? 1.4 : 1);
+            const r = Math.max(0.2, d * (0.5 + cal * 0.7)) * (heavy ? 1.5 : 1) * (vis === 'shotgun' ? 1.4 : 1);
             const col = vis === 'gauss' ? '#9fe8ff' : vis === 'sniper' ? '#ffe6c0' : mod?.category === 'autocannon' ? '#ffb858' : '#ffd890';
             fx.muzzle(mx, my, e.angle, r, col, heavy);
             if (vis === 'gun' || vis === 'gatling' || vis === 'shotgun') { if (Math.random() < 0.45) fx.casing(mx - cs * d * 0.6, my - sn * d * 0.6, e.angle); }
@@ -1729,6 +1720,7 @@ export class FieldView {
         if (vis === 'heatray') break;
         const col = mod?.category === 'energy' ? '#ffd8a0' : vis === 'tesla' || vis === 'emp' ? '#dfe8ff' : '#ffe0a0';
         fx.armorHit(e.x, e.y, e.damage, col);
+        if (mod && (mod.category === 'cannon' || mod.category === 'artillery') && e.damage >= 60 && !mod.splash) fx.shellImpact(e.x, e.y, (mod.caliber ?? 0.5) * 0.9);
         break;
       }
       case 'explode': {
