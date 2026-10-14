@@ -441,7 +441,10 @@ export class FieldView {
     const vy0 = Math.max(0, Math.min(a.y, b.y)), vy1 = Math.min(FIELD_H, Math.max(a.y, b.y));
     let d = this.detail;
     const covers = !!d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6;
-    const sharp = !!d && d.px >= px * 0.8 && d.px <= px * 1.6;
+    // the patch's resolution is capped (3800 device px a side): judge sharpness against what a rebuild could reach,
+    // or on big hi-dpi canvases every frame rebuilds a patch that can never get sharper (~400 ms a frame)
+    const reach = Math.min(px, 3800 / Math.max(1e-6, (vx1 - vx0) * 1.6), 3800 / Math.max(1e-6, (vy1 - vy0) * 1.6));
+    const sharp = !!d && d.px >= reach * 0.8 && d.px <= px * 1.6;
     if ((!d || !covers || !sharp) && this.cam.still > 0.12) {
       const mx = (vx1 - vx0) * 0.3, my = (vy1 - vy0) * 0.3;
       const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
@@ -1693,7 +1696,7 @@ export class FieldView {
               // warm-up: starts as a thin flickering lance and swells into a blinding river over ~1.5 s of fire
               const h = this.beamHeat;
               fx.beam('plasma', pts, '#e070ff', 0.08 + 0.34 * h * h, 0.24);
-              fx.glow(e.x1, e.y1, 0.6 + 1.4 * h, '#ff80f0', 0.12, 0.9);
+              fx.glow(sx, sy, 0.6 + 1.4 * h, '#ff80f0', 0.12, 0.9); // at the drawn barrel tip
               if (h > 0.6) { fx.sparks(e.x2, e.y2, 5, '#ffd0ff', 6, undefined, Math.PI, 0.35, true); if (Math.random() < 0.3) { fx.decal('scorch', gx, gy, 0.5); fx.hot(gx, gy, 0.8, 2); } }
               if (h > 0.85) fx.shake(0.04);
             } else {
@@ -1727,10 +1730,11 @@ export class FieldView {
             if (huge) {
               // spinal mass driver: blinding flash, ionised trail, the ground torn up along the line
               fx.flash(0.5, '#d8f6ff');
-              fx.glow(e.x1, e.y1, 3.2, '#ffffff', 0.18);
-              const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1), n = Math.min(14, Math.floor(len / 1.4));
+              fx.glow(sx, sy, 3.2, '#ffffff', 0.18);
+              // ground torn up along the line: ground-level ends (mount, unlifted impact point)
+              const len = Math.hypot(gx - e.x1, gy - e.y1), n = Math.min(14, Math.floor(len / 1.4));
               for (let i = 1; i <= n; i++) {
-                const f = i / (n + 1), qx = e.x1 + (e.x2 - e.x1) * f, qy = e.y1 + (e.y2 - e.y1) * f;
+                const f = i / (n + 1), qx = e.x1 + (gx - e.x1) * f, qy = e.y1 + (gy - e.y1) * f;
                 fx.schedule(i * 0.012, () => { fx.dust(qx, qy, 0.5, 2, 0.9); fx.glow(qx, qy, 0.7, '#9fe8ff', 0.25, 0.6); });
               }
               fx.boom(gx, gy, 1.0, 'plasma');
@@ -1740,7 +1744,7 @@ export class FieldView {
             fx.sparks(e.x2, e.y2, huge ? 24 : heavy ? 14 : 8, '#cff4ff', huge ? 8 : 6, back, 1.1, 0.3, true);
             fx.ring(gx, gy, 0.1, huge ? 2.0 : heavy ? 1.1 : 0.7, '#bff0ff', 0.25, 0.8);
             if (heavy || huge) { fx.dust(gx, gy, huge ? 0.7 : 0.35, huge ? 6 : 3, 0.8); fx.decal('scorch', gx, gy, huge ? 0.8 : 0.3); }
-            if (huge) { fx.shockwave(gx, gy, 1.6, '#9fe8ff', 0.5); fx.ring(e.x1, e.y1, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
+            if (huge) { fx.shockwave(gx, gy, 1.6, '#9fe8ff', 0.5); fx.ring(sx, sy, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
             if (huge) fx.shake(0.4); else if (heavy) fx.shake(0.18);
             impact = false;
             break;
