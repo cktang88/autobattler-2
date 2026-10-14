@@ -1988,8 +1988,9 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   // hit flash / status tints
   const hf = p.hitFlash ?? 0;
   if (hf > 0.02) {
-    g.globalAlpha = alpha * Math.min(0.5, hf * 0.55);
-    silAll('#ffffff');
+    // a faint warm tint: under sustained fire a strong white flash washed the whole hull out
+    g.globalAlpha = alpha * Math.min(0.14, hf * 0.16);
+    silAll('#ffe8c8');
     g.globalAlpha = alpha;
   }
   if ((p.stun ?? 0) > 0) {
@@ -1999,14 +2000,10 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     drawSparks(g, x, y, 0.4 * L.D, p.time, px);
   }
   if ((p.slow ?? 0) > 0) {
-    g.strokeStyle = `rgba(180,124,255,${0.35 + (p.slow ?? 0)})`;
-    g.lineWidth = Math.max(1.5 / px, 0.05);
-    g.setLineDash([0.12, 0.1]);
-    g.lineDashOffset = p.time * 0.4;
-    g.beginPath();
-    g.ellipse(x, y, 0.55 * L.X, 0.55 * L.Y, ang, 0, Math.PI * 2);
-    g.stroke();
-    g.setLineDash([]);
+    // slowed: a light violet tint on the hull instead of a dashed ring
+    g.globalAlpha = alpha * Math.min(0.22, 0.1 + (p.slow ?? 0) * 0.3);
+    silAll('#b47cff');
+    g.globalAlpha = alpha;
   }
   if ((p.burning ?? 0) > 0) {
     const prev = g.globalCompositeOperation;

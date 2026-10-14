@@ -231,6 +231,8 @@ export class Fx {
 
   /** Expanding ground ring with a hard leading edge; radius eases out (fast at first). */
   ring(x: number, y: number, r0: number, r1: number, color: string, life = 0.35, alpha = 0.8): void {
+    if (r1 < 3) return; // only big blasts get a visible shock ring; small ones looked like glassy discs
+    alpha *= 0.45;
     this.add(RING, x, y, { size: r0, r1, max: life, color, alpha });
   }
 
@@ -262,7 +264,8 @@ export class Fx {
   }
 
   hex(x: number, y: number, r: number, hx: number, hy: number): void {
-    this.add(HEX, x, y, { size: r, max: 0.5, color: '#7fd8ff', vx: hx, vy: hy, alpha: 1 });
+    // the hit direction rides in r1 (vx/vy are velocities: storing the hit point there sent the effect flying off)
+    this.add(HEX, x, y, { size: r, max: 0.45, color: '#7fd8ff', r1: Math.atan2(hy - y, hx - x), alpha: 1 });
   }
 
   bolt(x: number, y: number, r: number, color: string, life = 0.25): void {
@@ -279,11 +282,11 @@ export class Fx {
   /** Muzzle blast: sharp directional flash (1-2 frames) + lingering smoke; heavy guns kick up a ground dust ring. */
   muzzle(x: number, y: number, ang: number, size: number, color = '#ffd890', heavy = false): void {
     const cs = Math.cos(ang), sn = Math.sin(ang);
-    this.cone(x, y, ang, size * (heavy ? 3.4 : 2.6), size * (heavy ? 1.5 : 1.0), color, heavy ? 0.075 : 0.05);
-    this.glow(x, y, size * 1.1, '#ffe6b0', heavy ? 0.07 : 0.045, 0.9);
+    // short, hard directional blast; heavy guns add a brief orange ground light and a smoke puff (no starburst)
+    this.cone(x, y, ang, size * (heavy ? 1.3 : 1.2), size * (heavy ? 0.6 : 0.45), color, heavy ? 0.05 : 0.035);
+    this.glow(x, y, size * 0.7, '#ffe6b0', heavy ? 0.05 : 0.035, 0.8);
     if (heavy) {
-      this.star(x + cs * size * 0.5, y + sn * size * 0.5, size * 1.5, '#fff0d0', ang, 0.07);
-      this.light(x + cs * size, y + sn * size, size * 3.2, '#ffb060', 0.16, 0.35);
+      this.light(x + cs * size * 0.6, y + sn * size * 0.6, size * 1.8, '#ff9a40', 0.1, 0.22);
       for (let i = 0; i < 3; i++) this.smoke(x + cs * size * 0.4, y + sn * size * 0.4, size * 0.5, 1.4, '#6a665e', cs * rr(1, 2.6) + rr(-0.3, 0.3), sn * rr(1, 2.6) + rr(-0.3, 0.3), 0.45, 0.3);
     } else if (this.busy < 0.5) this.smoke(x + cs * size * 0.4, y + sn * size * 0.4, size * 0.35, 0.8, '#77736b', cs * 0.8, sn * 0.8, 0.28, 0.2);
   }
@@ -306,13 +309,11 @@ export class Fx {
   armorHit(x: number, y: number, damage: number, color = '#ffe0a0'): void {
     const n = clamp(Math.round(2 + Math.sqrt(damage) * 0.5), 2, 12);
     this.sparks(x, y, n, color, 4.5, undefined, Math.PI, 0.2, true);
-    this.glow(x, y, 0.2 + Math.min(0.5, damage / 400), '#fff0d0', 0.06, 1);
-    if (damage > 60) this.glow(x, y, 0.4 + Math.min(0.6, damage / 300), '#ffb060', 0.14, 0.8);
+    this.glow(x, y, 0.12 + Math.min(0.25, damage / 800), '#fff0d0', 0.05, 0.9);
+    if (damage > 60) this.glow(x, y, 0.25 + Math.min(0.35, damage / 600), '#ff9a40', 0.1, 0.6);
     if (damage >= 70 && this.busy < 0.7) {
       // heavy strike: hard ring, flung metal and a puff of smoke
       const k = Math.min(1, damage / 400);
-      this.star(x, y, 0.4 + 0.8 * k, '#fff0d0', rnd() * 6, 0.07);
-      this.ring(x, y, 0.05, 0.4 + 0.8 * k, '#ffe0b0', 0.2, 0.7);
       this.debris(x, y, 1 + Math.round(k * 3), '#4a4540', 2.4, 0.04);
       this.smoke(x, y, 0.1 + 0.14 * k, 1.2, '#46403a', this.wind.x * 0.4, 0, 0.4, 0.5, 0.25);
     }
@@ -320,9 +321,8 @@ export class Fx {
 
   /** A shell striking the ground / a hull with no explosion of its own: pop, ring scaled by calibre, dust cloud, chunks, scorch. */
   shellImpact(x: number, y: number, cal: number): void {
-    this.glow(x, y, 0.3 + 0.6 * cal, '#ffd8a0', 0.08, 0.9);
-    this.light(x, y, 1.2 + 2.4 * cal, '#ffb060', 0.25, 0.3);
-    this.ring(x, y, 0.05, 0.4 + 1.1 * cal, '#ffe0b0', 0.22 + 0.1 * cal, 0.7);
+    this.glow(x, y, 0.2 + 0.35 * cal, '#ffd8a0', 0.06, 0.85);
+    this.light(x, y, 0.6 + 1.2 * cal, '#ff9a40', 0.18, 0.22);
     this.dustRing(x, y, 0.1, 0.5 + 1.5 * cal, 0.4 + 0.35 * cal, 0.42);
     this.dust(x, y, 0.2 + 0.35 * cal, 3 + Math.round(cal * 5), 0.8 + cal * 0.9);
     this.sparks(x, y, 5 + cal * 9, '#ffd890', 4.5, undefined, Math.PI, 0.3, true);
@@ -363,22 +363,19 @@ export class Fx {
     r = Math.max(0.15, r);
     const q = this.q, L = this.lightGain;
     if (style === 'emp') {
-      this.glow(x, y, r * 1.2, '#ffffff', 0.06, 0.9);
-      this.glow(x, y, r * 2.2, '#9fd0ff', 0.3, 0.8);
-      this.light(x, y, r * 3.2, '#8ab8ff', 0.4, 0.4);
-      this.ring(x, y, r * 0.2, r * 1.5, '#a8d8ff', 0.4);
-      this.ring(x, y, r * 0.1, r * 0.9, '#ffffff', 0.22, 0.6);
+      // a hard electric crack, not a glowing ball: brief white core, arcs and sparks do the rest
+      this.glow(x, y, r * 0.5, '#ffffff', 0.05, 0.9);
+      this.glow(x, y, r * 1.0, '#9fd0ff', 0.18, 0.5);
+      this.light(x, y, r * 1.8, '#8ab8ff', 0.25, 0.22);
       const nb = r > 1 ? 4 : 3;
       for (let i = 0; i < nb; i++) this.bolt(x + rr(-r, r) * 0.5, y + rr(-r, r) * 0.5, r * rr(0.7, 1.1), '#bfe4ff', rr(0.25, 0.45));
       this.sparks(x, y, 14 * q, '#cfe9ff', 5 * r, undefined, Math.PI, 0.3, true);
       return;
     }
     if (style === 'plasma') {
-      this.glow(x, y, r * 1.1, '#ffffff', 0.08);
-      this.glow(x, y, r * 2.2, '#e070ff', 0.35, 0.9);
-      this.light(x, y, r * 3.6, '#c060ff', 0.7, 0.45);
-      this.ring(x, y, r * 0.2, r * 1.6, '#e070ff', 0.35);
-      this.ring(x, y, r * 0.1, r * 1.0, '#ffffff', 0.2, 0.7);
+      this.glow(x, y, r * 0.6, '#ffffff', 0.06);
+      this.glow(x, y, r * 1.2, '#e070ff', 0.25, 0.6);
+      this.light(x, y, r * 2.0, '#c060ff', 0.45, 0.25);
       this.star(x, y, r * 1.6, '#ffd0ff', rnd() * 6, 0.1);
       this.sparks(x, y, 16 * q, '#f0a0ff', 5 * r, undefined, Math.PI, 0.4, true);
       for (let i = 0; i < 3; i++) this.smoke(x, y, r * 0.5, 1.4, '#2a1830', 0, 0, 0.45, 0.5);
@@ -413,10 +410,9 @@ export class Fx {
     const rs = Math.sqrt(r);
     const life = (0.4 + 0.2 * rs) * (big ? 1.25 : 1);
     // (1) instant: white pop, light pool, hard ring
-    this.glow(x, y, r * 1.5, '#ffffff', 0.09, 1);
-    this.glow(x, y, r * 2.8, '#ffb060', 0.22 + 0.04 * r, 0.9);
-    this.light(x, y, r * (big ? 5 : 4), '#ffa850', 0.4 + 0.08 * rs, 0.5);
-    if (r >= 0.45) this.star(x, y, r * 2.0, '#fff2d0', rnd() * 6, 0.09);
+    this.glow(x, y, r * 0.8, '#ffffff', 0.07, 0.9);
+    this.glow(x, y, r * 1.5, '#ffb060', 0.18 + 0.03 * r, 0.55);
+    this.light(x, y, r * (big ? 1.9 : 1.6), '#ffa850', 0.25 + 0.05 * rs, 0.2);
     this.ring(x, y, r * 0.25, r * (big ? 2.7 : 2.0), '#ffe2b0', 0.26 + 0.06 * rs, 0.85);
     // (2) fireball: central white-hot ball + turbulent lobes thrown outward
     this.fball(x, y, r * 0.8, life * 0.75, 0, 0, 0.3);
@@ -808,8 +804,14 @@ export class Fx {
       if (k === DRING) {
         const u = 1 - t, s = p.size + (p.r1 - p.size) * easeOut(u);
         if (s * px < 2) continue;
-        g.globalAlpha = clamp(p.alpha * Math.pow(t, 1.2), 0, 1);
-        g.drawImage(ringTex(p.color, true), p.x - s, p.y - s, s * 2, s * 2);
+        // a billowing ring of dust: soft irregular puffs around the circumference (a solid ring texture read as a disc)
+        const n = 9, a0 = (p.seed ?? 0) * 7.1, img = glowTex(p.color);
+        for (let i = 0; i < n; i++) {
+          const h = hash1((p.seed ?? 0) * 13 + i);
+          const a = a0 + (i / n) * PI2 + h * 0.5, rr2 = s * (0.82 + 0.3 * h), bs = s * (0.28 + 0.2 * h);
+          g.globalAlpha = clamp(p.alpha * 0.55 * Math.pow(t, 1.2) * (0.6 + 0.4 * h), 0, 1);
+          g.drawImage(img, p.x + Math.cos(a) * rr2 - bs, p.y + Math.sin(a) * rr2 - bs, bs * 2, bs * 2);
+        }
       } else if (k === DEBRIS) {
         g.globalAlpha = Math.min(1, t * 3);
         const x = p.x + lx * p.z, y = p.y + ly * p.z;
@@ -863,12 +865,12 @@ export class Fx {
       switch (k) {
         case SPARK: {
           g.globalAlpha = Math.min(1, t * 2.2);
-          g.strokeStyle = t > 0.62 ? '#fff4d8' : p.color;
-          g.lineWidth = Math.max(minW, p.size);
+          g.strokeStyle = t > 0.7 ? '#ffe2a0' : p.color;
+          g.lineWidth = Math.max(minW * 0.8, p.size * 0.75);
           g.lineCap = 'round';
           g.beginPath();
           g.moveTo(x, y);
-          g.lineTo(x - (p.vx + lx * p.vz) * 0.05, y - (p.vy + ly * p.vz) * 0.05);
+          g.lineTo(x - (p.vx + lx * p.vz) * 0.03, y - (p.vy + ly * p.vz) * 0.03);
           g.stroke();
           break;
         }
@@ -985,31 +987,29 @@ export class Fx {
           break;
         }
         case HEX: {
-          g.globalAlpha = t * 0.9;
-          const img = tinted('hex', p.color);
-          const s = p.size;
-          const u = 1 - t;
+          // shield hit: the side of the shield facing the shot flashes (bright rim arc + a soft gradient fading inward)
+          const s = p.size, a = p.r1;
+          const hx = p.x + Math.cos(a) * s, hy = p.y + Math.sin(a) * s;
           g.save();
           g.beginPath();
           g.arc(p.x, p.y, s, 0, PI2);
           g.clip();
-          if (img) g.drawImage(img, p.x - s, p.y - s, s * 2, s * 2);
-          // bright flash at the hit point, then a ripple spreading over the bubble
-          g.globalAlpha = Math.min(1, t * 1.6);
-          g.drawImage(glowTex('#bfefff'), p.vx - s * (0.35 + 0.5 * u), p.vy - s * (0.35 + 0.5 * u), s * (0.7 + u), s * (0.7 + u));
-          g.globalAlpha = t * 0.9;
-          g.strokeStyle = '#e8fbff';
-          g.lineWidth = Math.max(minW, s * 0.035);
-          g.beginPath();
-          g.arc(p.vx, p.vy, s * (0.1 + 0.9 * easeOut(u)), 0, PI2);
-          g.stroke();
+          const gr = g.createRadialGradient(hx, hy, 0, hx, hy, s * 1.1);
+          gr.addColorStop(0, rgba('#9fe4ff', 0.42 * t));
+          gr.addColorStop(0.45, rgba('#7fd8ff', 0.14 * t));
+          gr.addColorStop(1, rgba('#7fd8ff', 0));
+          g.globalAlpha = 1;
+          g.fillStyle = gr;
+          g.fillRect(p.x - s, p.y - s, s * 2, s * 2);
           g.restore();
-          g.globalAlpha = t * 0.9;
-          g.strokeStyle = rgba('#9fe4ff', 0.7);
-          g.lineWidth = Math.max(minW, s * 0.04);
-          g.beginPath();
-          g.arc(p.x, p.y, s, 0, PI2);
-          g.stroke();
+          g.strokeStyle = '#d8f6ff';
+          g.lineCap = 'round';
+          for (let k = 0; k < 3; k++) {
+            const span = 0.3 + 0.32 * k;
+            g.globalAlpha = t * (0.75 - 0.22 * k);
+            g.lineWidth = Math.max(minW, s * (0.05 - 0.012 * k));
+            g.beginPath(); g.arc(p.x, p.y, s, a - span, a + span); g.stroke();
+          }
           break;
         }
         case BOLT: {
@@ -1093,51 +1093,35 @@ export class Fx {
       switch (b.kind) {
         case 'laser':
         case 'sniper': {
+          // a hard, thin line of light: narrow coloured sheath, white-hot core, small burn spot where it bites
           const w = b.width * flick * (0.6 + 0.4 * t);
-          const hotc = mixHex(b.color, '#ffffff', 0.55);
-          stroke(g, p, b.color, Math.max(minW * 10, w * 14), 0.12 * fade);
-          stroke(g, p, b.color, Math.max(minW * 5, w * 6.5), 0.34 * fade);
-          stroke(g, p, hotc, Math.max(minW * 2.4, w * 2.6), 0.85 * fade);
-          stroke(g, p, '#ffffff', Math.max(minW * 1.3, w * 1.0), fade);
-          // heat shimmer hint: two faint wavering lines hugging the beam
-          if (len < 40) {
-            const o = Math.max(0.03, w * 3.5);
-            for (const sgn of [-1, 1]) {
-              const sh = wavy(x1, y1, x2, y2, 12, 0.02 * sgn, time * 30 + b.seed * sgn);
-              for (let i = 0; i < sh.length; i += 2) { sh[i] += nx * o * sgn; sh[i + 1] += ny * o * sgn; }
-              stroke(g, sh, '#ffffff', Math.max(minW, w * 0.7), 0.07 * fade);
-            }
-          }
-          // lens bloom at the emitter, glowing hot-spot where it bites, light pool on the ground
-          this.bloom(g, x1, y1, 0.2 + w * 6, '#ffffff', 0.95 * fade);
-          this.bloom(g, x1, y1, 0.45 + w * 11, b.color, 0.6 * fade);
-          this.bloom(g, x2, y2, 0.24 + w * 7, '#ffffff', 0.9 * fade * flick);
-          this.bloom(g, x2, y2, 0.6 + w * 14, b.color, 0.7 * fade);
-          this.bloom(g, x2, y2, 1.3 + w * 18, b.color, 0.24 * fade * LG);
+          stroke(g, p, b.color, Math.max(minW * 3.2, w * 4.5), 0.16 * fade);
+          stroke(g, p, b.color, Math.max(minW * 1.8, w * 1.9), 0.7 * fade);
+          stroke(g, p, '#fff4ee', Math.max(minW * 0.9, w * 0.7), fade);
+          this.bloom(g, x1, y1, 0.08 + w * 2.5, '#ffffff', 0.7 * fade);
+          this.bloom(g, x1, y1, 0.15 + w * 4, b.color, 0.35 * fade);
+          this.bloom(g, x2, y2, 0.08 + w * 2.5, '#fff0d0', 0.85 * fade * flick);
+          this.bloom(g, x2, y2, 0.2 + w * 5, b.color, 0.45 * fade);
+          this.bloom(g, x2, y2, 0.45 + w * 8, b.color, 0.12 * fade * LG);
           break;
         }
         case 'plasma': {
+          // a dense rope of ionised gas: violet sheath, white core, a slow churn of brighter knots along it
           const w = b.width * (0.7 + 0.3 * t) * (0.9 + 0.2 * hash1(b.seed + ((time * 40) | 0)));
-          stroke(g, p, b.color, Math.max(minW * 5, w * 5), 0.22 * fade);
-          stroke(g, p, b.color, Math.max(minW * 2.5, w * 2.2), 0.65 * fade);
-          stroke(g, p, '#ffd0ff', Math.max(minW * 1.4, w * 1.0), 0.9 * fade);
-          stroke(g, p, '#ffffff', Math.max(minW, w * 0.45), fade);
-          // crawling plasma motes along the beam
+          stroke(g, p, b.color, Math.max(minW * 3, w * 3), 0.2 * fade);
+          stroke(g, p, b.color, Math.max(minW * 1.8, w * 1.5), 0.7 * fade);
+          stroke(g, p, '#fff0ff', Math.max(minW * 0.9, w * 0.55), fade);
           if (len < 40 && this.busy < 0.7) {
-            g.fillStyle = '#ffe0ff';
-            const nm = Math.min(8, Math.ceil(len * 1.2));
+            const nm = Math.min(6, Math.ceil(len * 0.8));
             for (let i = 0; i < nm; i++) {
-              const f = (i + hash1(b.seed + i + ((time * 20) | 0))) / nm, o = (hash1(b.seed * 3 + i + ((time * 30) | 0)) - 0.5) * w * 2.2;
-              g.globalAlpha = 0.6 * fade;
-              const s = Math.max(minW, w * 0.22);
-              g.fillRect(x1 + (x2 - x1) * f + nx * o - s, y1 + (y2 - y1) * f + ny * o - s, s * 2, s * 2);
+              const f = (i + ((time * 3 + hash1(b.seed + i)) % 1)) / nm;
+              this.bloom(g, x1 + (x2 - x1) * f, y1 + (y2 - y1) * f, w * 1.6, '#ffd8ff', 0.35 * fade);
             }
           }
-          this.bloom(g, x1, y1, 0.2 + w * 3, '#ffffff', 0.7 * fade);
-          this.bloom(g, x1, y1, 0.3 + w * 5, b.color, 0.5 * fade);
-          this.bloom(g, x2, y2, 0.3 + w * 4, '#ffffff', 0.7 * fade);
-          this.bloom(g, x2, y2, 0.7 + w * 7, b.color, 0.55 * fade);
-          this.bloom(g, x2, y2, 1.2 + w * 9, b.color, 0.2 * fade * LG);
+          this.bloom(g, x1, y1, 0.1 + w * 2, '#ffffff', 0.6 * fade);
+          this.bloom(g, x2, y2, 0.12 + w * 2.5, '#ffffff', 0.7 * fade);
+          this.bloom(g, x2, y2, 0.3 + w * 4.5, b.color, 0.4 * fade);
+          this.bloom(g, x2, y2, 0.6 + w * 6, b.color, 0.12 * fade * LG);
           break;
         }
         case 'heat': {
@@ -1205,20 +1189,19 @@ export class Fx {
           // instant, hard, bright: a white-blue line that collapses fast
           const f2 = t * t;
           const w = b.width * (0.25 + 0.75 * f2);
-          stroke(g, p, b.color, Math.max(minW * 6, w * 8), 0.22 * f2);
-          stroke(g, p, mixHex(b.color, '#ffffff', 0.5), Math.max(minW * 2.5, w * 2.6), 0.75 * f2);
-          stroke(g, p, '#ffffff', Math.max(minW * 1.2, w * 1.0), Math.min(1, f2 * 1.6));
-          this.bloom(g, x1, y1, 0.3 + b.width * 4, '#ffffff', 0.9 * f2);
-          this.bloom(g, x1, y1, 0.7 + b.width * 8, b.color, 0.6 * f2);
-          this.bloom(g, x2, y2, 0.3 + b.width * 4, '#ffffff', 0.9 * f2);
-          this.bloom(g, x2, y2, 0.8 + b.width * 8, b.color, 0.6 * f2);
-          this.bloom(g, x2, y2, 1.6 + b.width * 8, b.color, 0.22 * f2 * LG);
+          stroke(g, p, b.color, Math.max(minW * 3, w * 4), 0.2 * f2);
+          stroke(g, p, mixHex(b.color, '#ffffff', 0.5), Math.max(minW * 1.6, w * 1.6), 0.75 * f2);
+          stroke(g, p, '#ffffff', Math.max(minW * 0.9, w * 0.7), Math.min(1, f2 * 1.6));
+          this.bloom(g, x1, y1, 0.15 + b.width * 2.5, '#ffffff', 0.8 * f2);
+          this.bloom(g, x1, y1, 0.3 + b.width * 4, b.color, 0.4 * f2);
+          this.bloom(g, x2, y2, 0.15 + b.width * 2.5, '#ffffff', 0.8 * f2);
+          this.bloom(g, x2, y2, 0.35 + b.width * 4, b.color, 0.4 * f2);
           break;
         }
         case 'ion': {
           // fading ionised trail: soft glow, sparkling motes and thin rings of displaced air along the path
           const w = b.width;
-          stroke(g, p, b.color, Math.max(minW * 6, w * 6), 0.11 * t);
+          stroke(g, p, b.color, Math.max(minW * 3, w * 3), 0.1 * t);
           stroke(g, p, mixHex(b.color, '#ffffff', 0.4), Math.max(minW * 1.5, w * 1.2), 0.3 * t * t);
           const nm = Math.min(24, Math.ceil(len * 2.5));
           g.fillStyle = '#d8f6ff';
@@ -1229,16 +1212,6 @@ export class Fx {
             const s = Math.max(minW, 0.018);
             g.globalAlpha = 0.7 * t;
             g.fillRect(x1 + (x2 - x1) * f + nx * o - s, y1 + (y2 - y1) * f + ny * o - s, s * 2, s * 2);
-          }
-          const nr = Math.min(6, Math.floor(len / 2.2));
-          g.strokeStyle = b.color;
-          g.lineWidth = Math.max(minW * 1.4, 0.03);
-          for (let i = 1; i <= nr; i++) {
-            const f = i / (nr + 1), r = 0.08 + (1 - t) * (0.5 + 0.3 * i / nr);
-            g.globalAlpha = 0.28 * t * t;
-            g.beginPath();
-            g.arc(x1 + (x2 - x1) * f, y1 + (y2 - y1) * f, r, 0, PI2);
-            g.stroke();
           }
           break;
         }
