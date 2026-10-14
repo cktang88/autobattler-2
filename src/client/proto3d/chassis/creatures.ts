@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { aim, Bld, type MatLike, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
-import { beam, block, both, collar, dome, exhaust, glow, hazard, pod, sensor, vent } from './shapes.ts';
+import { beam, block, both, collar, dome, exhaust, glow, hazard, sensor, vent } from './shapes.ts';
 
 // ---- shared shape helpers ---------------------------------------------------------------------------------------------
 
@@ -385,4 +385,3 @@ registerChassis('crab', bunkerCrawler);
 registerChassis('scorpion', tailgunCrawler);
 registerChassis('saucer', saucerDisc);
 registerChassis('centipede', landtrain);
-void pod;

@@ -40811,6 +40811,104 @@ function citadel(c) {
 }
 registerChassis("citadel", citadel);
 
+// src/client/proto3d/chassis/titans-arachne.ts
+function arachne(c) {
+  const { b, kit, L, W, stance } = c;
+  const u = Math.min(L, W) / 10;
+  const spider = stance.legs === "spider";
+  const by = spider ? stance.hipY : stance.legs === "biped" ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1 * u;
+  if (!spider && stance.legs !== "biped") planLoft(b, kit.trim, ngon2(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1], [by, 0.85]], [-0.4 * u, 0]);
+  const cx = -0.4 * u, cp = ngon2(10, 2.3 * u, 2.45 * u, 0);
+  const cTop = by + 1.25 * u;
+  planLoft(b, kit.trim, cp, [[by - 0.75 * u, 0.62], [by - 0.2 * u, 0.94], [by + 0.1 * u, 1]], [cx, 0]);
+  planLoft(b, kit.hull, cp, [[by + 0.05 * u, 1.04], [by + 0.45 * u, 1.05], [by + 0.95 * u, 0.86], [cTop, 0.5]], [cx, 0]);
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2 + Math.PI / 10;
+    if (Math.cos(a) > 0.8) continue;
+    const rx = Math.cos(a), rz = Math.sin(a);
+    beam(b, kit.panel, [cx + rx * 1.1 * u, cTop - 0.15 * u, rz * 1.15 * u], [cx + rx * 2.3 * u, by + 0.45 * u, rz * 2.45 * u], 0.36 * u, 0.24 * u, [rx, 2, rz]);
+    const a2 = a + Math.PI / 10;
+    glow(b, kit, cx + Math.cos(a2) * 2.38 * u, by + 0.28 * u, Math.sin(a2) * 2.5 * u, 0.5 * u, 0.06 * u, 0.06 * u, [0, -a2 + Math.PI / 2, 0]);
+  }
+  const tY = cTop + 0.55 * u;
+  planLoft(b, kit.hull, ngon2(8, 1 * u, 1 * u), [[cTop - 0.2 * u, 1], [tY - 0.1 * u, 0.92], [tY, 0.86]], [cx, 0]);
+  both((s) => hazard(b, kit, cx + 0.75 * u, tY - 0.2 * u, s * 0.45 * u, 0.5 * u, 0.16 * u, 3, 0.5 * s));
+  const hx = 1.9 * u, hy = by + 0.15 * u;
+  planLoft(b, kit.hull, [[1.25 * u, 0], [0.7 * u, 0.95 * u], [-0.6 * u, 1.05 * u], [-0.8 * u, 0], [-0.6 * u, -1.05 * u], [0.7 * u, -0.95 * u]], [[hy - 0.6 * u, 0.7], [hy - 0.2 * u, 1], [hy + 0.5 * u, 0.95], [hy + 0.75 * u, 0.7]], [hx, 0]);
+  reactor(b, kit, [hx + 0.95 * u, hy + 0.12 * u, 0], 0.42 * u, "x", 2);
+  const eyes = [[0.75, 0.55, 0.42], [0.75, 0.55, -0.42], [0.95, -0.25, 0.55], [0.95, -0.25, -0.55], [0.55, 0.72, 0.15], [0.55, 0.72, -0.15]];
+  for (const [ex, ey, ez] of eyes) b.cyl(kit.glow, 0.13 * u, 0.11 * u, 0.16 * u, [hx + ex * u, hy + ey * u, ez * u], "x", 8);
+  block(b, kit.panel, hx + 0.1 * u, hy + 0.7 * u, 0, 1 * u, 1.1 * u, 0.18 * u, { top: [0.7, 0.7], shift: [0.15 * u, 0], ch: 0.3 * u, bev: 0.05 * u });
+  both((s) => {
+    beam(b, kit.metal, [hx + 0.8 * u, hy - 0.4 * u, s * 0.35 * u], [hx + 1.5 * u, hy - 0.9 * u, s * 0.45 * u], 0.26 * u, 0.3 * u);
+    beam(b, kit.steel, [hx + 1.5 * u, hy - 0.9 * u, s * 0.45 * u], [hx + 1.6 * u, hy - 1.5 * u, s * 0.25 * u], 0.18 * u, 0.2 * u);
+  });
+  const ax0 = -2.4 * u;
+  b.cylb(kit.metal, 0.6 * u, 0.6 * u, 0.06 * u, [ax0 + 0.1 * u, by + 0.3 * u, 0], "-x", 12);
+  for (let i = 0; i < 3; i++) {
+    const x = ax0 - 0.55 * u - i * 0.75 * u, f = 1 - i * 0.16;
+    pod(b, i % 2 ? kit.panel : kit.hull, [x, by + 0.55 * u - i * 0.12 * u, 0], 0.48 * u, 0.75 * u * f, 1.05 * u * f, 12, 5, 2.4, 0.3);
+    if (i < 2) both((s) => glow(b, kit, x - 0.35 * u, by + 0.55 * u - i * 0.12 * u, s * 0.95 * u * f, 0.06 * u, 0.4 * u * f, 0.06 * u));
+  }
+  const spx = ax0 - 2.75 * u, spy = by + 0.2 * u;
+  reactor(b, kit, [spx + 0.2 * u, spy, 0], 0.38 * u, "-x", 2);
+  mast(b, kit, cx - 1.4 * u, by + 0.6 * u, -1.2 * u, 2.6 * u, 0.06 * u);
+  mast(b, kit, cx - 1.6 * u, by + 0.55 * u, 1 * u, 1.8 * u, 0.05 * u);
+  banner(b, kit, cx - 1.1 * u, by + 0.75 * u, 1.55 * u, 2.4 * u, 0.8 * u, 1);
+  both((s) => vent(b, kit, cx - 0.9 * u, by + 0.95 * u, s * 0.9 * u, 0.6 * u, 0.4 * u, 3, "x"));
+  const palp = /* @__PURE__ */ new Map();
+  for (const m of c.mounts) {
+    if (!(m.x > 0.9 * u && Math.abs(m.z) > 0.6 * u)) continue;
+    const s = Math.sign(m.z), top = by + 0.75 * u;
+    beam(b, kit.trim, [hx - 0.5 * u, by - 0.2 * u, s * 0.8 * u], [m.x, by - 0.1 * u, m.z], 0.45 * u, 0.5 * u);
+    block(b, kit.trim, m.x, by - 0.25 * u, m.z, 1.5 * u, 0.9 * u, 0.4 * u, { ch: 0.2 * u });
+    block(b, kit.hull, m.x + 0.05 * u, by + 0.05 * u, m.z, 1.7 * u, m.r * 2.5, top - by - 0.05 * u, { top: [0.82, 0.82], shift: [-0.1 * u, 0], ch: 0.3 * u, bev: 0.08 * u, bot: 0.05 * u });
+    glow(b, kit, m.x + 0.1 * u, by + 0.35 * u, m.z + s * m.r * 1.26, 1 * u, 0.06 * u, 0.05 * u);
+    palp.set(m, top);
+  }
+  let hips;
+  if (spider) {
+    hips = [];
+    const rows = [[1, 1.85, 4, 3.6], [0.2, 2.25, 1.6, 4.65], [-1, 2.25, -1.3, 4.7], [-1.85, 1.75, -3.9, 3.7]];
+    rows.forEach(([hxr, hz, fx2, fz2], i) => {
+      for (const s of [-1, 1]) {
+        const p = [cx + hxr * u, by, s * hz * u];
+        hips.push({ p, side: s, t: stance.thick, foot: [fx2 * u, 0, s * fz2 * u], phase: i % 2 ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
+        block(b, kit.trim, p[0], by - 0.5 * u, s * (hz - 0.2) * u, 0.7 * u, 0.6 * u, 0.85 * u, { top: [0.8, 0.8], ch: 0.18 * u });
+      }
+    });
+  } else if (stance.legs === "biped") {
+    hips = [-1, 1].map((s) => ({ p: [cx, stance.hipY, s * 1.6 * u], side: s, t: stance.thick, foot: [cx, 0, s * 1.9 * u], phase: s > 0 ? Math.PI : 0 }));
+  }
+  const deck = (x, z) => inPoly(cp.map(([px2, pz2]) => [px2 * 0.5 + cx, pz2 * 0.5]), x, z) ? cTop : -1;
+  return {
+    deckAt: deck,
+    top: tY,
+    custom: true,
+    hips,
+    seat: (m) => {
+      const pt = palp.get(m);
+      if (pt !== void 0) {
+        collar(b, kit, m.x, pt, m.z, m.r, pt - 0.1 * u, 18);
+        return { y: pt, socket: true };
+      }
+      if (Math.hypot(m.x - cx, m.z) < 0.9 * u) {
+        collar(b, kit, m.x, tY, m.z, m.r, tY - 0.15 * u, 22);
+        return { y: tY, socket: true };
+      }
+      if (m.x < ax0) {
+        const y2 = by + 1.3 * u;
+        collar(b, kit, m.x, y2, m.z, m.r, y2 - 0.35 * u, 16);
+        return { y: y2, socket: true };
+      }
+      const d = deck(m.x, m.z), y = (d > 0 ? d : by + 0.9 * u) + 0.1 * u;
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.4 * u, 16);
+      return { y, socket: true };
+    }
+  };
+}
+registerChassis("arachne", arachne);
+
 // src/client/proto3d/air3d.ts
 function foil2(le, chordDir, thickDir, c, t) {
   const p = (a, b) => [le[0] + chordDir[0] * a * c + thickDir[0] * b * t, le[1] + chordDir[1] * a * c + thickDir[1] * b * t, le[2] + chordDir[2] * a * c + thickDir[2] * b * t];
