@@ -12,6 +12,7 @@ import { MAT, METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, po
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
 import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
+import { setDetailPx } from './titandetail.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
 import { CLASS_RANK, sizeKey, slotD, weaponD } from './weaponsize.ts';
@@ -1105,6 +1106,7 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   if (kY !== 1) { hp = new Path2D(); hp.addPath(hp0, new DOMMatrix().scale(1, kY)); }
   if (!L.air && L.mob.id !== 'anchor') drawSkirts(hull.g, L, tier, pal, o);
   paintHull(hull.g, hp, pal, L.S, o, L.hw * kY, L.X, L.Y);
+  setDetailPx(px);
   hullDetails(hull.g, L, pal, o);
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
