@@ -1,5 +1,6 @@
 // Main menu: title, animated background (looping AI-vs-AI skirmish, or idling units), navigation.
 
+import { loadSettings } from '../storage.ts';
 import { h, type App, type Screen } from '../app.ts';
 import { playMusic, sfx } from '../audio.ts';
 import { FieldView, type BoardUnit } from '../render/field.ts';
@@ -78,7 +79,7 @@ export function menuScreen(app: App): Screen {
   try { view = new FieldView(canvas, 0, { interactive: false }); } catch (e) { console.warn(e); }
 
   // keep the background skirmish silent
-  if (view) view.muted = true;
+  if (view) { view.muted = true; try { view.setTilt(loadSettings().tilt !== false); } catch { /* */ } }
   // a different battlefield each visit
   view?.setMap(MAPS[Math.floor(Math.random() * MAPS.length)]);
   const go = (fn: () => void) => () => {

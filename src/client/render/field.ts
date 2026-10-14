@@ -40,13 +40,14 @@ import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
 import { titanFeet } from './giantart.ts';
+import { TILT_COS, TILT_TAN, flyHeight, hullHeight } from './tilt.ts';
 
 const P2 = Math.PI * 2;
 /** cells of flight over which a round's drawn position slides from the barrel tip onto its simulated path */
 const MUZZLE_BLEND = 2.5;
 import {
   drawUnit, drawUnitShadow, layoutOf, mountPoints, muzzlePos, unitSprites, silhouette, wreckSprite, wreckHotspots,
-  type MountPose, type UnitPose, type ViewDirs,
+  type MountPose, type UnitLayout, type UnitPose, type ViewDirs,
 } from './unitart.ts';
 
 export { drawPartIcon, moduleCategoryColor, type PartKind, type PartIconOpts } from './icons.ts';
@@ -126,6 +127,10 @@ interface PTrack {
 const GROUND_PX = 24;
 const DECAL_PX = 32;
 
+/** height (cells) of the gun line above the ground: where bullets, beams and muzzle flashes leave a ground unit */
+const GUN_H = 0.55;
+/** hull side-wall colour per team (shaded paint, drawn as stacked cached silhouettes under the lifted hull) */
+const WALL: [string, string] = [shade(TEAM_PAL[0].dark, -0.32), shade(TEAM_PAL[1].dark, -0.32)];
 const forwardAngle = (side: Side) => (side === 0 ? -Math.PI / 2 : Math.PI / 2);
 
 /**
@@ -159,6 +164,22 @@ export class FieldView {
   private altHeld = false;
   private keyOff: (() => void) | null = null;
   private detail: { c: HTMLCanvasElement; x0: number; y0: number; x1: number; y1: number; px: number } | null = null;
+  /** camera tilt (2.5D look, see tilt.ts); default on */
+  private tiltOn = true;
+  /** vertical foreshortening of the ground plane: cos(tilt), 1 when the tilt is off */
+  get ay(): number { return this.tiltOn ? TILT_COS : 1; }
+  get tilted(): boolean { return this.tiltOn; }
+  setTilt(on: boolean): void {
+    if (on === this.tiltOn) return;
+    this.tiltOn = on;
+    this.cam.setAspect(this.ay);
+    this.detail = null;
+  }
+  /** world-space shift for a point `h` cells above the ground (along the viewer's screen-up) */
+  private liftVec(h: number): { x: number; y: number } {
+    const l = this.tiltOn ? h * TILT_TAN : 0;
+    return { x: this.dirs.ux * l, y: this.dirs.uy * l };
+  }
   /** terrain theme of the current map */
   private map: MapTheme = MAPS[0];
   /** switch the battlefield terrain (maps rotate per round) */
@@ -207,6 +228,7 @@ export class FieldView {
     }
     this.viewerSide = viewerSide;
     this.g = ctx2d(canvas);
+    this.cam.setAspect(this.ay);
     this.dirs = viewerSide === 0 ? { sx: 0.55, sy: 0.85, ux: 0, uy: -1 } : { sx: -0.55, sy: -0.85, ux: 0, uy: 1 };
     loadTextures();
     try { setPanFlip(viewerSide === 1); } catch { /* audio optional */ }
@@ -241,7 +263,7 @@ export class FieldView {
   }
 
   private get oy(): number {
-    return this.cssH / 2 - this.cam.cy * this.cam.k;
+    return this.cssH / 2 - this.cam.cy * this.cam.k * this.ay;
   }
 
   /** quantized device px per cell for sprite caches (avoids thrashing while zooming) */
@@ -266,10 +288,10 @@ export class FieldView {
     this.checkSize();
     const c = this.cam;
     const rows = DEPLOY_D + 6;
-    let k = Math.min(c.vw / FIELD_W, c.vh / rows);
+    let k = Math.min(c.vw / FIELD_W, c.vh / (rows * c.ay));
     if (c.vw < 640) k = Math.max(k, 11); // phones: bigger units, pan sideways
     k = Math.max(c.minK, k);
-    c.setTarget(FIELD_W / 2, FIELD_H - c.vh / (2 * k) + 0.4, k, instant);
+    c.setTarget(FIELD_W / 2, FIELD_H - c.vh / (2 * k * c.ay) + 0.4, k, instant);
   }
 
   /** center on world point (x, y); zoom is relative to fit (1 = whole field, omitted = keep current) */
@@ -308,13 +330,14 @@ export class FieldView {
   }
 
   worldToScreen(x: number, y: number): { x: number; y: number } {
-    if (this.viewerSide === 1) return { x: this.ox + (FIELD_W - x) * this.k, y: this.oy + (FIELD_H - y) * this.k };
-    return { x: this.ox + x * this.k, y: this.oy + y * this.k };
+    const ky = this.k * this.ay;
+    if (this.viewerSide === 1) return { x: this.ox + (FIELD_W - x) * this.k, y: this.oy + (FIELD_H - y) * ky };
+    return { x: this.ox + x * this.k, y: this.oy + y * ky };
   }
 
   /** canvas CSS px (e.g. from offsetX/offsetY) -> world cells */
   screenToWorld(px: number, py: number): { x: number; y: number } {
-    const wx = (px - this.ox) / this.k, wy = (py - this.oy) / this.k;
+    const wx = (px - this.ox) / this.k, wy = (py - this.oy) / (this.k * this.ay);
     if (this.viewerSide === 1) return { x: FIELD_W - wx, y: FIELD_H - wy };
     return { x: wx, y: wy };
   }
@@ -327,9 +350,9 @@ export class FieldView {
   }
 
   private setWorld(shakeX = 0, shakeY = 0): void {
-    const d = this.dpr, k = this.k;
-    if (this.viewerSide === 1) this.g.setTransform(-k * d, 0, 0, -k * d, (this.ox + FIELD_W * k + shakeX) * d, (this.oy + FIELD_H * k + shakeY) * d);
-    else this.g.setTransform(k * d, 0, 0, k * d, (this.ox + shakeX) * d, (this.oy + shakeY) * d);
+    const d = this.dpr, k = this.k, ky = k * this.ay;
+    if (this.viewerSide === 1) this.g.setTransform(-k * d, 0, 0, -ky * d, (this.ox + FIELD_W * k + shakeX) * d, (this.oy + FIELD_H * ky + shakeY) * d);
+    else this.g.setTransform(k * d, 0, 0, ky * d, (this.ox + shakeX) * d, (this.oy + shakeY) * d);
   }
 
   private setScreen(): void {
@@ -386,6 +409,15 @@ export class FieldView {
     g.strokeStyle = 'rgba(255,255,255,0.12)';
     g.lineWidth = lw * 1.5;
     g.strokeRect(0, 0, FIELD_W, FIELD_H);
+    if (this.tiltOn) {
+      // the board is a slab: its near edge shows a dark front face
+      const t = 0.7 * TILT_TAN, y0 = this.viewerSide === 0 ? FIELD_H : -t;
+      const gr = g.createLinearGradient(0, y0, 0, y0 + t);
+      gr.addColorStop(this.viewerSide === 0 ? 0 : 1, '#2a2f34');
+      gr.addColorStop(this.viewerSide === 0 ? 1 : 0, '#0a0c0e');
+      g.fillStyle = gr;
+      g.fillRect(0, y0, FIELD_W, t);
+    }
   }
 
   /** hi-res ground patch for the visible area when zoomed in; rebuilt once the camera settles */
@@ -455,6 +487,70 @@ export class FieldView {
     g.fillRect(0, 0, this.cssW, this.cssH);
   }
 
+  /* ------------------------------------------------------------------------------------- unit height */
+
+  private shDirs: ViewDirs = { sx: 0, sy: 0, ux: 0, uy: 0 };
+
+  /** height (cells) of a unit's hull top above the ground: hull body for ground units, altitude for flyers */
+  private heightOf(p: UnitPose, L: UnitLayout): number {
+    if (L.air || p.flying) return flyHeight(L.S) + Math.sin(p.time * 2.1 + (p.seed ?? 0)) * 0.05;
+    let h = hullHeight(L.S);
+    if (L.mob.id === 'spider' || L.mob.id === 'titanlegs' || CREATURE_SHAPES.has(L.shape)) h *= 0.8;
+    else if (L.mob.id === 'hover') h = h * 0.75 + 0.08;
+    return h + (p.leap ?? 0) * 1.8 * L.S;
+  }
+
+  /** ground shadow; with the tilt on, cast further along the light the taller the unit is (flyers keep their soft altitude shadow) */
+  private drawShadowOf(p: UnitPose, px: number): void {
+    if (!this.tiltOn) { drawUnitShadow(this.g, p, px, this.dirs); return; }
+    const L = layoutOf(p.design);
+    if (L.air || p.flying || (p.leap ?? 0) > 0.02) { drawUnitShadow(this.g, p, px, this.dirs); return; }
+    const m = clamp((0.6 * this.heightOf(p, L)) / Math.min(0.16, 0.05 * Math.min(L.S, 3)), 1, 9);
+    const d = this.shDirs, s = this.dirs;
+    d.sx = s.sx * m; d.sy = s.sy * m; d.ux = s.ux; d.uy = s.uy;
+    drawUnitShadow(this.g, p, px, d);
+  }
+
+  /** the unit, raised off the ground by its height with a dark side wall (stacked cached silhouettes) joining it to the ground */
+  private drawUnitOf(p: UnitPose, px: number): void {
+    const g = this.g;
+    if (!this.tiltOn) { drawUnit(g, p, px, this.dirs); return; }
+    const L = layoutOf(p.design);
+    const h = this.heightOf(p, L);
+    const lift = h * TILT_TAN, ux = this.dirs.ux, uy = this.dirs.uy;
+    const flying = L.air || !!p.flying;
+    if (!flying && (p.leap ?? 0) < 0.05 && px >= 12 && p.cloak !== 'enemy') {
+      const s = unitSprites(p.design, p.team, px);
+      const sil = silhouette(s, WALL[p.team]);
+      const ang = L.mob.id === 'anchor' && L.X === L.Y ? 0 : p.angle;
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      const steps = clamp(Math.ceil((lift * this.ay * this.px) / 1.6), 1, 12);
+      g.globalAlpha = (p.alpha ?? 1) * (p.cloak === 'own' ? 0.4 : 1);
+      const tr = g.getTransform();
+      for (let i = 0; i < steps; i++) {
+        const f = (lift * i) / steps;
+        g.setTransform(tr);
+        g.transform(cs, sn, -sn, cs, p.x + ux * f, p.y + uy * f);
+        g.drawImage(sil, -s.ext, -s.ext, s.ext * 2, s.ext * 2);
+      }
+      g.setTransform(tr);
+      g.globalAlpha = 1;
+    }
+    const x0 = p.x, y0 = p.y;
+    p.x = x0 + ux * lift;
+    p.y = y0 + uy * lift;
+    p.turretLift = lift * 0.45;
+    drawUnit(g, p, px, this.dirs);
+    p.x = x0;
+    p.y = y0;
+  }
+
+  /** painter's order: farther (smaller screen y) first */
+  private depthSort<T>(list: T[], pos: (t: T) => number): void {
+    const sgn = this.viewerSide === 1 ? -1 : 1;
+    list.sort((a, b) => sgn * (pos(a) - pos(b)));
+  }
+
   /* ------------------------------------------------------------------------------------------ board */
 
   /** Deploy phase: static units and overlay. Call every frame (animates idle details). */
@@ -499,10 +595,11 @@ export class FieldView {
       };
       poses.push({ u, p, air: layoutOf(u.design).air });
     }
+    this.depthSort(poses, (q) => q.p.y);
     for (const pass of [false, true]) {
+      for (const { air, p } of poses) if (air === pass) this.drawShadowOf(p, px);
       for (const { u, p, air } of poses) {
         if (air !== pass) continue;
-        drawUnitShadow(g, p, px, this.dirs);
         if (u.selected) {
           // footprint-shaped selection outline, rotated with the unit
           const LL = layoutOf(u.design);
@@ -516,13 +613,14 @@ export class FieldView {
           g.stroke();
           g.setTransform(tr);
         }
-        drawUnit(g, p, px, this.dirs);
+        this.drawUnitOf(p, px);
         if (u.invalid) {
           const s = unitSprites(u.design, p.team, px);
           g.globalAlpha = 0.55;
           const cs = Math.cos(p.angle), sn = Math.sin(p.angle);
           const tr = g.getTransform();
-          g.transform(cs, sn, -sn, cs, u.x, u.y);
+          const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)));
+          g.transform(cs, sn, -sn, cs, u.x + lv.x, u.y + lv.y);
           g.drawImage(silhouette(s, '#ff3030'), -s.ext, -s.ext, s.ext * 2, s.ext * 2);
           g.setTransform(tr);
           g.globalAlpha = 1;
@@ -541,7 +639,7 @@ export class FieldView {
   private drawPips(x: number, y: number, hy: number, level: number, alpha: number): void {
     const g = this.g;
     const p = this.worldToScreen(x, y);
-    const half = hy * this.k * 0.9;
+    const half = hy * this.k * this.ay * 0.9;
     const sz = Math.max(3, Math.min(6, this.k * 0.18));
     const by = p.y + half + sz * 0.3;
     g.globalAlpha = alpha;
@@ -605,7 +703,7 @@ export class FieldView {
         // projectiles spawn at their first observed position; start interpolation there
         // the sim spawns rounds at the hull edge; draw them leaving the barrel tip and blend onto the true path
         const tip = p.src !== undefined && p.mount !== undefined && p.z <= 0.5 ? this.muzzleOf(p.src, p.mount) : null;
-        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x : 0, oy: tip ? tip.y - p.y : 0 });
+        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x - this.liftVec(GUN_H).x : 0, oy: tip ? tip.y - p.y - this.liftVec(GUN_H).y : 0 });
       }
     }
   }
@@ -687,12 +785,14 @@ export class FieldView {
     }
     // arc markers on the ground
     this.drawArcMarkers(g, battle.projectiles);
-    for (const p of ground) drawUnitShadow(g, p, px, this.dirs);
-    for (const p of ground) drawUnit(g, p, px, this.dirs);
+    this.depthSort(ground, (q) => q.y);
+    this.depthSort(air, (q) => q.y);
+    for (const p of ground) this.drawShadowOf(p, px);
+    for (const p of ground) this.drawUnitOf(p, px);
     this.drawShields(g, bars.filter((b) => !b.u.flying));
     this.drawProjectiles(g, battle.projectiles, false, dt);
-    for (const p of air) drawUnitShadow(g, p, px, this.dirs);
-    for (const p of air) drawUnit(g, p, px, this.dirs);
+    for (const p of air) this.drawShadowOf(p, px);
+    for (const p of air) this.drawUnitOf(p, px);
     this.drawShields(g, bars.filter((b) => b.u.flying));
     this.drawProjectiles(g, battle.projectiles, true, dt);
     this.fx.draw(g, px, this.dirs.ux, this.dirs.uy);
@@ -787,7 +887,8 @@ export class FieldView {
       const a = 0.07 + 0.05 * frac + hit * 0.45;
       if (p.cloak === 'enemy') continue;
       const r = 0.58 * layoutOf(u.design).D;
-      const lx = p.x + this.dirs.ux * (u.flying ? 0.12 : 0), ly = p.y + this.dirs.uy * (u.flying ? 0.12 : 0);
+      const sl = this.liftVec(0.5 * this.heightOf(p, layoutOf(u.design)));
+      const lx = p.x + this.dirs.ux * (u.flying ? 0.12 : 0) + sl.x, ly = p.y + this.dirs.uy * (u.flying ? 0.12 : 0) + sl.y;
       g.globalAlpha = a;
       const hexT = tinted('hex', '#7fd8ff');
       if (hexT && hit > 0.05) {
@@ -829,11 +930,11 @@ export class FieldView {
     g.globalAlpha = vis;
     if (S >= 4) { this.drawBossBar(u, p, v, S, bh); g.globalAlpha = 1; return; }
     const s = this.worldToScreen(p.x, p.y);
-    const lift = u.flying ? 0.12 * this.k : 0;
+    const lift = this.barLift(u, p);
     const w = Math.max(14, bh.w * this.k * 0.78);
     const h = S >= 2 ? 4 : 3;
     const x = Math.round(s.x - w / 2);
-    const y = Math.round(s.y - bh.hy * this.k * 1.04 - h - 3 - lift);
+    const y = Math.round(s.y - bh.hy * this.k * this.ay * 1.04 - h - 3 - lift);
     g.fillStyle = 'rgba(0,0,0,0.88)';
     g.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
     const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
@@ -849,6 +950,12 @@ export class FieldView {
     g.globalAlpha = 1;
   }
 
+  /** screen px the unit's top is raised above its ground footprint (bars ride on top of it) */
+  private barLift(u: SimUnit, p: UnitPose): number {
+    if (!this.tiltOn) return u.flying ? 0.12 * this.k : 0;
+    return (this.heightOf(p, layoutOf(u.design)) + (u.flying ? 0.12 : 0)) * TILT_TAN * this.ay * this.k;
+  }
+
   /** Bar opacity: visible ~3 s after the last damage (giants ~5 s), ~1.2 s after a heal, then a 0.7 s fade. */
   private barAlpha(v: UVis, S: number): number {
     if (this.alwaysShowHealth || this.altHeld) return 1;
@@ -861,12 +968,12 @@ export class FieldView {
   private drawBossBar(u: SimUnit, p: UnitPose, v: UVis, S: number, bh: { hy: number; w: number }): void {
     const g = this.g;
     const s = this.worldToScreen(p.x, p.y);
-    const lift = u.flying ? 0.12 * this.k : 0;
+    const lift = this.barLift(u, p);
     const team = this.teamOf(u.side);
     const col = TEAM_PAL[team].bar;
     const w = Math.max(40, bh.w * this.k * 1.0), h = S >= 5 ? 9 : 7;
     const x = Math.round(s.x - w / 2);
-    const y = Math.round(s.y - bh.hy * this.k * 1.1 - h - 5 - lift);
+    const y = Math.round(s.y - bh.hy * this.k * this.ay * 1.1 - h - 5 - lift);
     g.fillStyle = 'rgba(0,0,0,0.9)';
     g.fillRect(x - 3, y - 3, w + 6, h + 6);
     g.strokeStyle = TEAM_PAL[team].rim;
@@ -987,7 +1094,9 @@ export class FieldView {
       const vis = mod?.visual;
       const cal = mod?.caliber ?? 0.5;
       const cs = Math.cos(pos.angle), sn = Math.sin(pos.angle);
-      const lift = kind === 'missile' ? Math.min(0.6, pos.z * 0.4) : kind === 'arc' ? pos.z * 0.45 : 0;
+      // height above the ground (cells): the gun line, plus the round's own altitude (shells and missiles arc up the screen)
+      const hz = this.tiltOn ? GUN_H + pos.z * (kind === 'arc' || kind === 'missile' ? 0.8 : 0.5) : 0;
+      const lift = this.tiltOn ? hz * TILT_TAN : kind === 'missile' ? Math.min(0.6, pos.z * 0.4) : kind === 'arc' ? pos.z * 0.45 : 0;
       const x = pos.x + this.dirs.ux * lift, y = pos.y + this.dirs.uy * lift;
       const glowC = mod ? moduleGlow(mod, TEAM_PAL[this.teamOf(p.side)]) : '#ffd27a';
       // dark soft backing (normal blend) so additive tracers/shells stay visible on any ground
@@ -1055,7 +1164,7 @@ export class FieldView {
           g.globalCompositeOperation = 'lighter';
           const fl = 0.1 + Math.random() * 0.05;
           g.drawImage(softDot(incend ? 'rgba(255,120,30,0.9)' : 'rgba(255,90,40,0.9)'), x - cs * 0.25 - fl, y - sn * 0.25 - fl, fl * 2, fl * 2);
-          this.trail(p.id, pos.x, pos.y, 0.12, '#3a342e', 0.06);
+          this.trail(p.id, x, y, 0.12, '#3a342e', 0.06);
           break;
         }
         case 'missile': {
@@ -1065,7 +1174,8 @@ export class FieldView {
           // ground shadow
           g.globalCompositeOperation = prevOp;
           g.globalAlpha = 0.3;
-          g.drawImage(softDot('rgba(0,0,0,0.9)', 0.3), pos.x + this.dirs.sx * lift - sz * 0.5, pos.y + this.dirs.sy * lift - sz * 0.5, sz, sz);
+          const so = this.tiltOn ? pos.z * 0.4 : lift;
+          g.drawImage(softDot('rgba(0,0,0,0.9)', 0.3), pos.x + this.dirs.sx * so - sz * 0.5, pos.y + this.dirs.sy * so - sz * 0.5, sz, sz);
           g.globalAlpha = 1;
           g.strokeStyle = '#eeeae0';
           g.lineWidth = Math.max(minW * 1.5, sz * 0.28);
@@ -1189,6 +1299,13 @@ export class FieldView {
     const m = muzzlePos(ur.u.design, mount, ur.x, ur.y, ur.angle, aim);
     let mx = m.x, my = m.y;
     if (ur.u.flying) { mx += this.dirs.ux * 0.12; my += this.dirs.uy * 0.12; }
+    if (this.tiltOn) {
+      // barrel sits on top of the raised hull; ground rounds are then drawn from the shared gun line (see drawProjectiles)
+      const L = layoutOf(ur.u.design);
+      const h = ur.u.flying || L.air ? flyHeight(L.S) : hullHeight(L.S) * (L.mob.id === 'spider' || L.mob.id === 'titanlegs' || CREATURE_SHAPES.has(L.shape) ? 0.8 : 1) * 1.45;
+      const lv = this.liftVec(h);
+      mx += lv.x; my += lv.y;
+    }
     return { x: mx, y: my, d: m.d, aim };
   }
 
@@ -1339,7 +1456,8 @@ export class FieldView {
         const sx = tip ? tip.x : e.x1, sy = tip ? tip.y : e.y1;
         // beams that end on a unit stop at its hull; the piercing lance (ends past the target) is left alone
         const end = this.clipToHull(sx, sy, e.x2, e.y2);
-        e = { ...e, x2: end.x, y2: end.y };
+        const gl = this.liftVec(GUN_H);
+        e = { ...e, x2: end.x + gl.x, y2: end.y + gl.y };
         const pts = [sx, sy, e.x2, e.y2];
         let impact = true;
         switch (vis) {
@@ -1408,11 +1526,12 @@ export class FieldView {
         const pts: number[] = [];
         for (const p of e.points) pts.push(p.x, p.y);
         const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
+        const gl = this.liftVec(GUN_H);
         if (tip && pts.length >= 2) { pts[0] = tip.x; pts[1] = tip.y; }
         // each arc jumps hull edge to hull edge: clip the end of a segment to its unit, start the next from there
         for (let i = 2; i + 1 < pts.length; i += 2) {
           const end = this.clipToHull(pts[i - 2], pts[i - 1], pts[i], pts[i + 1]);
-          pts[i] = end.x; pts[i + 1] = end.y;
+          pts[i] = end.x + gl.x; pts[i + 1] = end.y + gl.y;
         }
         if (pts.length >= 4) fx.beam('lightning', pts, col, heavy ? 0.05 : 0.035, heavy ? 0.24 : 0.18);
         for (let i = 2; i < pts.length; i += 2) {

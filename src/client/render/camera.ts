@@ -5,6 +5,8 @@
 //
 //   k  = CSS pixels per cell (current, eased)      tk = target
 //   cx, cy = visual cell shown at the viewport center  (target: tcx, tcy)
+//   ay = vertical foreshortening of the ground plane (cos of the camera tilt; 1 = straight down). One cell is k px
+//   wide and k * ay px tall on screen.
 
 export const MAX_K = 80; // a size-1 unit (1 cell) is ~80 CSS px at full zoom
 /** cells the camera may travel past the top/bottom (Y) and side (X) edges of the field */
@@ -24,6 +26,8 @@ export class Camera {
   vh = 400;
   minK = 1;
   maxK = MAX_K;
+  /** ground-plane vertical scale (cos of the tilt) */
+  ay = 1;
   /** exponential smoothing rate (1/s) */
   smooth = 13;
   /** seconds since the camera last moved (used to decide when to re-render hi-res ground) */
@@ -50,13 +54,22 @@ export class Camera {
     const wasFit = this.vw > 0 && this.tk <= this.minK * 1.001;
     this.vw = Math.max(1, w);
     this.vh = Math.max(1, h);
-    this.minK = Math.max(0.5, Math.min(this.vw / this.fw, this.vh / this.fh));
+    this.minK = Math.max(0.5, Math.min(this.vw / this.fw, this.vh / (this.fh * this.ay)));
     this.maxK = Math.max(MAX_K, this.minK * 1.5);
     if (wasFit) this.k = this.tk = this.minK;
     this.k = clampN(this.k, this.minK, this.maxK);
     this.tk = clampN(this.tk, this.minK, this.maxK);
     this.clampTarget();
     this.clampCurrent();
+  }
+
+  /** change the ground foreshortening (tilt on/off); keeps the fit view fitted */
+  setAspect(ay: number): void {
+    if (ay === this.ay) return;
+    const wasFit = this.tk <= this.minK * 1.001;
+    this.ay = ay;
+    this.setViewport(this.vw, this.vh);
+    if (wasFit) { this.k = this.tk = this.minK; this.cx = this.tcx = this.fw / 2; this.cy = this.tcy = this.fh / 2; }
   }
 
   get isFit(): boolean {
@@ -79,12 +92,12 @@ export class Camera {
 
   private clampTarget(): void {
     this.tcx = this.clampAxis(this.tcx, this.tk, this.vw, this.fw, EDGE_X);
-    this.tcy = this.clampAxis(this.tcy, this.tk, this.vh, this.fh, EDGE_Y);
+    this.tcy = this.clampAxis(this.tcy, this.tk * this.ay, this.vh, this.fh, EDGE_Y);
   }
 
   private clampCurrent(): boolean {
     const x = this.clampAxis(this.cx, this.k, this.vw, this.fw, EDGE_X);
-    const y = this.clampAxis(this.cy, this.k, this.vh, this.fh, EDGE_Y);
+    const y = this.clampAxis(this.cy, this.k * this.ay, this.vh, this.fh, EDGE_Y);
     const hit = x !== this.cx || y !== this.cy;
     this.cx = x;
     this.cy = y;
@@ -93,11 +106,11 @@ export class Camera {
 
   /** visual cells -> screen CSS px */
   toScreen(vx: number, vy: number): { x: number; y: number } {
-    return { x: this.vw / 2 + (vx - this.cx) * this.k, y: this.vh / 2 + (vy - this.cy) * this.k };
+    return { x: this.vw / 2 + (vx - this.cx) * this.k, y: this.vh / 2 + (vy - this.cy) * this.k * this.ay };
   }
 
   fromScreen(sx: number, sy: number): { x: number; y: number } {
-    return { x: this.cx + (sx - this.vw / 2) / this.k, y: this.cy + (sy - this.vh / 2) / this.k };
+    return { x: this.cx + (sx - this.vw / 2) / this.k, y: this.cy + (sy - this.vh / 2) / (this.k * this.ay) };
   }
 
   stopInertia(): void {
@@ -108,7 +121,7 @@ export class Camera {
   panByScreen(dx: number, dy: number): void {
     this.anchor = null;
     this.cx -= dx / this.k;
-    this.cy -= dy / this.k;
+    this.cy -= dy / (this.k * this.ay);
     this.clampCurrent();
     this.tcx = this.cx;
     this.tcy = this.cy;
@@ -123,7 +136,7 @@ export class Camera {
     const nk = clampN(this.k * f, this.minK, this.maxK);
     this.k = nk;
     this.cx = w.x - (sx - this.vw / 2) / nk;
-    this.cy = w.y - (sy - this.vh / 2) / nk;
+    this.cy = w.y - (sy - this.vh / 2) / (nk * this.ay);
     this.clampCurrent();
     this.tcx = this.cx;
     this.tcy = this.cy;
@@ -140,7 +153,7 @@ export class Camera {
     this.anchor = { sx, sy, vx: w.x, vy: w.y };
     this.tk = nk;
     this.tcx = w.x - (sx - this.vw / 2) / nk;
-    this.tcy = w.y - (sy - this.vh / 2) / nk;
+    this.tcy = w.y - (sy - this.vh / 2) / (nk * this.ay);
     this.clampTarget();
     this.stopInertia();
     this.still = 0;
@@ -169,7 +182,7 @@ export class Camera {
   /** Fling after a drag; velocity in screen px / s. */
   fling(vxPx: number, vyPx: number): void {
     this.velX = -vxPx / this.k;
-    this.velY = -vyPx / this.k;
+    this.velY = -vyPx / (this.k * this.ay);
   }
 
   /** Advance the animation. Returns true while the camera is moving. */
@@ -195,7 +208,7 @@ export class Camera {
       const sp = 560 / this.k;
       this.anchor = null;
       this.tcx += this.keyX * sp * dt;
-      this.tcy += this.keyY * sp * dt;
+      this.tcy += (this.keyY * sp * dt) / this.ay;
       this.clampTarget();
       moving = true;
     }
@@ -207,11 +220,11 @@ export class Camera {
     if (this.anchor) {
       const a = this.anchor;
       this.cx = a.vx - (a.sx - this.vw / 2) / this.k;
-      this.cy = a.vy - (a.sy - this.vh / 2) / this.k;
+      this.cy = a.vy - (a.sy - this.vh / 2) / (this.k * this.ay);
       if (this.k === this.tk) this.anchor = null;
     } else {
       const ex = this.tcx - this.cx, ey = this.tcy - this.cy;
-      if (Math.abs(ex) * this.k > 0.05 || Math.abs(ey) * this.k > 0.05) {
+      if (Math.abs(ex) * this.k > 0.05 || Math.abs(ey) * this.k * this.ay > 0.05) {
         this.cx += ex * f;
         this.cy += ey * f;
         moving = true;

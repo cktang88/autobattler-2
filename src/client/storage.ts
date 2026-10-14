@@ -32,17 +32,20 @@ export interface Settings {
   flashes: number;
   /** show unit health bars at all times instead of only after damage */
   alwaysHealth: boolean;
+  /** slight camera tilt (2.5D look) on the battlefield; off = classic straight-down view */
+  tilt: boolean;
 }
 /** replay speeds offered in battle and settings (slow-mo included) */
 export const BATTLE_SPEEDS = [0.25, 0.5, 1, 2, 4];
 export const speedLabel = (v: number) => (v === 0.25 ? '¼×' : v === 0.5 ? '½×' : `${v}×`);
-export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false };
+export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false, tilt: true };
 
 /** Apply the visual accessibility settings to a FieldView-like object. */
-export function applyViewSettings(view: { shakeScale?: number; flashScale?: number; alwaysShowHealth?: boolean }, s: Settings = loadSettings()): void {
+export function applyViewSettings(view: { shakeScale?: number; flashScale?: number; alwaysShowHealth?: boolean; setTilt?: (on: boolean) => void }, s: Settings = loadSettings()): void {
   view.shakeScale = s.shake;
   view.flashScale = s.flashes;
   view.alwaysShowHealth = s.alwaysHealth;
+  view.setTilt?.(s.tilt !== false);
 }
 export const loadSettings = (): Settings => ({ ...defaultSettings, ...read<Partial<Settings>>(KEY_SETTINGS, {}) });
 export const saveSettings = (s: Settings) => write(KEY_SETTINGS, s);
