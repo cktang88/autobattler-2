@@ -10,12 +10,19 @@
 // Hulls work on every mobility: lower hull is clamped inside the running gear (stance.wi) and the wide shoulders start at
 // the fender line (stance.yt); legged stances get a hip keel under the belly.
 
+import * as THREE from 'three';
 import type { P2, V3 } from '../geo.ts';
-import { ellRing, sec8 } from '../geo.ts';
+import { ellRing, mtx, sec8 } from '../geo.ts';
 import type { Bld } from '../geo.ts';
 import type { Kit, MatLike } from '../materials.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
-import { beam, block, both, collar, dome, glow, hazard, plate, pod, sensor, vent } from './shapes.ts';
+import { beam, block, both, collar, dome, hazard, plate, pod, sensor, vent } from './shapes.ts';
+
+/** cheap unbevelled box (12 tris) for small parts: lamps, strips, accents, brackets */
+export function cbox(b: Bld, mat: MatLike, w: number, h: number, d: number, x: number, y: number, z: number, _bev = 0, rot?: V3): void {
+  b.g(new THREE.BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
+}
+const glo = (b: Bld, kit: Kit, x: number, y: number, z: number, l: number, h: number, w: number, rot?: V3) => cbox(b, kit.glow, l, h, w, x, y, z, 0, rot);
 
 /** hull station: [x, yb, y1, y2, yt (heights above y0), wb, wm, wt (half widths)] */
 type St = [number, number, number, number, number, number, number, number];
@@ -73,7 +80,7 @@ function shield(b: Bld, mat: MatLike, pts: P2[], y: number, h: number | number[]
     for (const s of strips) {
       if (s.panels && !s.panels.includes(i)) continue;
       const q = at(s.f, th * 0.5 + s.d);
-      b.box(s.mat, th * 0.5, s.h, len * s.lf, q[0], q[1], q[2], Math.min(s.h, th) * 0.25, [0, yaw, lean]);
+      cbox(b, s.mat, th * 0.5, s.h, len * s.lf, q[0], q[1], q[2], 0, [0, yaw, lean]);
     }
   }
 }
@@ -106,7 +113,7 @@ function scout(c: ChassisCtx): ChassisOut {
   // rear haunches: fat fender blisters over the drive wheels (the wide end of the arrowhead)
   both((s) => {
     pod(b, kit.hull, [X(-0.3), Math.max(stance.yt, y0 + 0.08) + 0.02, s * Z(0.36)], X(0.2), 0.075, Z(0.1), 8, 5, 2.4, 0.5);
-    b.box(kit.glow, X(0.02), 0.03, Z(0.08), X(-0.49), y0 + 0.12, s * Z(0.3), 0.006);
+    cbox(b, kit.glow, X(0.02), 0.03, Z(0.08), X(-0.49), y0 + 0.12, s * Z(0.3), 0.006);
   });
   // gun hump: short armoured cowl under the single mount
   const m = c.mounts[0];
@@ -118,14 +125,14 @@ function scout(c: ChassisCtx): ChassisOut {
   dome(b, kit.trim, [cx, topY - 0.02, cz], 0.1, 0.03, 8, 1);
   dome(b, kit.glass, [cx, topY, cz], 0.085, 0.08, 8, 2);
   b.strut(kit.metal, [X(-0.36), topY - 0.02, Z(0.16)], [X(-0.44), topY + 0.36, Z(0.17)], 0.008, 0.004, 4);
-  b.box(kit.accent, 0.07, 0.04, 0.006, X(-0.41), topY + 0.3, Z(0.17), 0.003);
+  cbox(b, kit.accent, 0.07, 0.04, 0.006, X(-0.41), topY + 0.3, Z(0.17), 0.003);
   // rear spoiler wing on two posts, team accent
-  both((s) => b.box(kit.trim, 0.03, 0.08, 0.025, X(-0.43), topY + 0.02, s * Z(0.17), 0.006));
+  both((s) => cbox(b, kit.trim, 0.03, 0.08, 0.025, X(-0.43), topY + 0.02, s * Z(0.17), 0.006));
   b.box(kit.accent, X(0.1), 0.025, Z(0.52), X(-0.45), topY + 0.07, 0, 0.008, [0, 0, 0.18]);
   // twin exhausts and a nose lamp bar
   both((s) => b.cyl(kit.hot, 0.022, 0.022, 0.02, [X(-0.49), y0 + 0.08, s * Z(0.1)], 'x', 6));
-  both((s) => b.box(kit.lamp, 0.03, 0.025, 0.04, X(0.36), y0 + 0.095, s * Z(0.06), 0.006, [0, -s * 0.5, 0]));
-  glow(b, kit, X(0.18), y0 + 0.15, 0, X(0.24), 0.012, 0.03, [0, 0, -0.18]);
+  both((s) => cbox(b, kit.lamp, 0.03, 0.025, 0.04, X(0.36), y0 + 0.095, s * Z(0.06), 0.006, [0, -s * 0.5, 0]));
+  glo(b, kit, X(0.18), y0 + 0.15, 0, X(0.24), 0.012, 0.03, [0, 0, -0.18]);
   // trike: fork fairing over the single front wheel
   if (c.mob.id === 'wheels') {
     const wr = 0.11 + 0.06 * c.S;
@@ -155,17 +162,17 @@ function raider(c: ChassisCtx): ChassisOut {
     const z = m?.z ?? s * Z(0.24);
     tube(b, kit.hull, z, [[X(-0.48), ny - 0.01, 0.045, Z(0.06)], [X(-0.36), ny, 0.085, Z(0.1)], [X(0.12), ny + 0.005, 0.09, Z(0.105)], [X(0.36), ny - 0.01, 0.065, Z(0.075)], [X(0.56), ny - 0.025, 0.012, Z(0.015)]], 8, 2.6, 0.3);
     // panel cheek and accent tip
-    b.box(kit.panel, X(0.3), 0.04, 0.02, X(-0.12), ny + 0.01, z + s * Z(0.1), 0.008, [s * 0.25, 0, 0]);
-    b.box(kit.accent, X(0.08), 0.03, Z(0.06), X(0.42), ny + 0.035, z, 0.008, [0, 0, -0.25]);
+    cbox(b, kit.panel, X(0.3), 0.04, 0.02, X(-0.12), ny + 0.01, z + s * Z(0.1), 0.008, [s * 0.25, 0, 0]);
+    cbox(b, kit.accent, X(0.08), 0.03, Z(0.06), X(0.42), ny + 0.035, z, 0.008, [0, 0, -0.25]);
     b.cyl(kit.hot, 0.04, 0.04, 0.02, [X(-0.5), ny, z], 'x', 8);
-    b.box(kit.lamp, 0.02, 0.025, 0.035, X(0.45), ny - 0.01, z, 0.005);
+    cbox(b, kit.lamp, 0.02, 0.025, 0.035, X(0.45), ny - 0.01, z, 0.005);
     if (m) nacTop.set(m, ny + 0.085);
   });
   // bridge spar between the booms and a rear wing joining their tails
   block(b, kit.trim, X(-0.12), ny - 0.06, 0, X(0.26), Z(0.5), 0.06, { ch: 0.03, bev: 0.01 });
   b.box(kit.hull, X(0.14), 0.025, Z(0.62), X(-0.42), ny + 0.12, 0, 0.008, [0, 0, 0.2]);
-  both((s) => b.box(kit.trim, 0.04, 0.09, 0.025, X(-0.42), ny + 0.07, s * Z(0.22), 0.006));
-  glow(b, kit, X(-0.42), ny + 0.135, 0, X(0.03), 0.01, Z(0.36));
+  both((s) => cbox(b, kit.trim, 0.04, 0.09, 0.025, X(-0.42), ny + 0.07, s * Z(0.22), 0.006));
+  glo(b, kit, X(-0.42), ny + 0.135, 0, X(0.03), 0.01, Z(0.36));
   const top = ny + 0.09;
   return {
     deckAt: (x, z) => (Math.abs(x) < X(0.4) && Math.abs(Math.abs(z) - Z(0.24)) < Z(0.1) ? top : -1), top, custom: true,
@@ -194,14 +201,13 @@ function carriage(c: ChassisCtx): ChassisOut {
   both((s) => {
     beam(b, kit.hull, [X(-0.16), y0 + 0.06, s * Z(0.09)], [X(-0.6), ty + 0.04, s * Z(0.3)], 0.05, 0.06);
     block(b, kit.hazard, X(-0.62), ty, s * Z(0.31), 0.05, 0.1, 0.09, { top: [0.6, 1], shift: [-0.02, 0], ch: 0.012, bev: 0.008 });
-    b.box(kit.panel, 0.1, 0.05, 0.06, X(-0.38), y0 + 0.05 - (y0 + 0.02 - ty) * 0.5, s * Z(0.2), 0.01, [0, s * 0.45, 0]);
+    cbox(b, kit.panel, 0.1, 0.05, 0.06, X(-0.38), y0 + 0.05 - (y0 + 0.02 - ty) * 0.5, s * Z(0.2), 0.01, [0, s * 0.45, 0]);
   });
   // notched gun shield wrapped round the front: the carriage's whole silhouette
   const R = Math.max(mr * 1.7, Z(0.32));
   const pts: P2[] = [];
   for (let i = 0; i <= 5; i++) { const a = -1.15 + (i / 5) * 2.3; pts.push([mx + Math.cos(a) * R * 0.85, Math.sin(a) * R]); }
-  shield(b, kit.panel, pts, y0 + 0.04, [0.27, 0.3, 0.17, 0.3, 0.27], 0.035, 0.25);
-  both((s) => b.box(kit.accent, 0.04, 0.03, 0.06, mx + Math.cos(0.92) * R * 0.85 - 0.05, y0 + 0.31, s * Math.sin(0.92) * R, 0.006, [0, 0, 0.25]));
+  shield(b, kit.panel, pts, y0 + 0.02, [0.36, 0.4, 0.22, 0.4, 0.36], 0.045, 0.2, [{ f: 0.95, h: 0.035, mat: kit.accent, d: 0, lf: 0.9, panels: [0, 1, 3, 4] }]);
   sensor(b, kit, mx + R * 0.7, y0 + 0.27, -Z(0.2), 0.05, kit.lamp);
   // ammo crate on the left trail
   block(b, kit.canvas, X(-0.36), y0 + 0.02, -Z(0.13), 0.14, 0.1, 0.07, { ch: 0.02, bev: 0.01 });
@@ -231,14 +237,14 @@ function hunter(c: ChassisCtx): ChassisOut {
   // swept dorsal sensor fin between the guns: the hunter's signature
   const fx0 = (rear ? rear.x + rear.r * 1.3 : X(-0.4)), fx1 = (front ? front.x - front.r * 1.4 : X(-0.05));
   const fy = deck((fx0 + fx1) / 2, 0) - 0.02;
-  fin(b, kit.hull, [[fx0, fy], [fx1, fy], [fx0 + (fx1 - fx0) * 0.2, fy + 0.34], [fx0 - 0.02, fy + 0.34]], 0, 0.04);
-  b.box(kit.accent, 0.12, 0.05, 0.05, fx0 + 0.03, fy + 0.33, 0, 0.008);
-  glow(b, kit, (fx0 + fx1) / 2 - 0.02, fy + 0.12, 0, (fx1 - fx0) * 0.5, 0.015, 0.05, [0, 0, 0.9]);
+  fin(b, kit.hull, [[fx0 - 0.04, fy], [fx1 + 0.04, fy], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.05);
+  fin(b, kit.accent, [[fx0 - 0.12, fy + 0.38], [fx0 + (fx1 - fx0) * 0.08, fy + 0.4], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.06);
+  glo(b, kit, (fx0 + fx1) / 2 - 0.02, fy + 0.12, 0, (fx1 - fx0) * 0.5, 0.015, 0.05, [0, 0, 0.9]);
   // cheek intakes and a long glow line down each flank; lamp eyes in the needle nose
   both((s) => {
-    b.box(kit.trim, X(0.3), 0.06, 0.03, X(0.2), y0 + 0.12, s * Z(0.37), 0.01, [0, s * 0.12, 0]);
-    glow(b, kit, X(-0.2), y0 + 0.17, s * Z(0.355), X(0.9), 0.014, 0.014, [s * 0.5, 0, 0]);
-    b.box(kit.lamp, 0.03, 0.02, 0.04, X(0.86), y0 + 0.1, s * Z(0.07), 0.005, [0, -s * 0.5, 0]);
+    cbox(b, kit.trim, X(0.3), 0.06, 0.03, X(0.2), y0 + 0.12, s * Z(0.37), 0.01, [0, s * 0.12, 0]);
+    glo(b, kit, X(-0.2), y0 + 0.17, s * Z(0.355), X(0.9), 0.014, 0.014, [s * 0.5, 0, 0]);
+    cbox(b, kit.lamp, 0.03, 0.02, 0.04, X(0.86), y0 + 0.1, s * Z(0.07), 0.005, [0, -s * 0.5, 0]);
     b.cyl(kit.hot, 0.03, 0.03, 0.02, [X(-0.98), y0 + 0.17, s * Z(0.1)], 'x', 6);
   });
   vent(b, kit, X(-0.86), deck(X(-0.86), 0) - 0.005, 0, 0.1, Z(0.3), 2, 'x');
@@ -270,10 +276,11 @@ function riot(c: ChassisCtx): ChassisOut {
   const topY = deck(0, 0);
   // the plow: full-width curved riot shield leaning back, taller in the middle, a visor slit and hazard teeth
   const pts: P2[] = [];
-  const n = 6, half = Z(1.48);
-  for (let i = 0; i <= n; i++) { const z = -half + (2 * half * i) / n; pts.push([X(0.86) - X(0.22) * (z / half) ** 2, z]); }
-  const ph = [0.46, 0.56, 0.62, 0.62, 0.56, 0.46].map((h) => h * Math.max(1, W / 3) * 1.0);
-  shield(b, kit.panel, pts, y0 - 0.02, ph, 0.09, 0.42, [
+  const n = 6, half = Z(1.5);
+  for (let i = 0; i <= n; i++) { const z = -half + (2 * half * i) / n; pts.push([X(1.0) - X(0.42) * (z / half) ** 2, z]); }
+  const ph = [0.62, 0.74, 0.82, 0.82, 0.74, 0.62];
+  shield(b, kit.panel, pts, y0 - 0.04, ph, 0.12, 0.3, [
+    { f: 0.97, h: 0.05, mat: kit.accent, d: 0, lf: 0.9 },
     { f: 0.74, h: 0.08, mat: kit.trim, d: 0, lf: 0.98, panels: [1, 2, 3, 4] },
     { f: 0.74, h: 0.028, mat: kit.glow, d: 0.012, lf: 0.86, panels: [1, 2, 3, 4] },
     { f: 0.1, h: 0.07, mat: kit.hazard, d: 0, lf: 0.45 },
@@ -283,16 +290,16 @@ function riot(c: ChassisCtx): ChassisOut {
   const shY = topY + 0.1;
   for (const m of c.mounts) {
     b.lathe(kit.hull, [[0, -0.12], [m.r * 1.65, -0.12], [m.r * 1.65, -0.03], [m.r * 1.38, 0.0], [0, 0.0]], [m.x, shY, m.z], 'y', 8);
-    b.box(kit.accent, m.r * 0.9, 0.02, 0.05, m.x - m.r * 1.1, shY - 0.04, m.z + Math.sign(m.z) * m.r * 1.55, 0.006, [0, Math.sign(m.z) * 0.35, 0]);
+    cbox(b, kit.accent, m.r * 0.9, 0.02, 0.05, m.x - m.r * 1.1, shY - 0.04, m.z + Math.sign(m.z) * m.r * 1.55, 0.006, [0, Math.sign(m.z) * 0.35, 0]);
   }
   block(b, kit.trim, X(-0.86), topY - 0.04, 0, X(0.26), Z(0.9), 0.12, { top: [0.8, 0.9], ch: 0.06, bev: 0.02 });
   vent(b, kit, X(-0.86), topY + 0.08, 0, X(0.18), Z(0.66), 3, 'x');
   both((s) => {
     // side bumpers: fat rubber rams at the front corners
     b.cylb(kit.rubber, 0.09, X(0.3), 0.03, [X(0.42), y0 + 0.16, s * Z(1.36)], 'x', 8);
-    b.box(kit.lamp, 0.03, 0.05, 0.07, X(0.62), y0 + 0.28, s * Z(1.0), 0.01);
+    cbox(b, kit.lamp, 0.03, 0.05, 0.07, X(0.62), y0 + 0.28, s * Z(1.0), 0.01);
     b.cyl(kit.hot, 0.04, 0.04, 0.02, [X(-0.98), topY - 0.05, s * Z(0.3)], 'x', 8);
-    b.box(kit.glow, 0.02, 0.03, Z(0.3), X(-0.97), topY - 0.14, s * Z(0.8), 0.006);
+    cbox(b, kit.glow, 0.02, 0.03, Z(0.3), X(-0.97), topY - 0.14, s * Z(0.8), 0.006);
   });
   return {
     deckAt: deck, top: shY, custom: true,
@@ -326,7 +333,7 @@ function striker(c: ChassisCtx): ChassisOut {
     const z = m?.z ?? s * Z(0.66), mx = m?.x ?? 0;
     const ry = 0.13, rz = Z(0.17);
     tube(b, kit.hull, z, [[mx - X(0.62), sy, 0.06, rz * 0.5], [mx - X(0.48), sy + 0.01, ry, rz], [mx + X(0.3), sy + 0.01, ry, rz], [mx + X(0.55), sy - 0.01, ry * 0.6, rz * 0.6], [mx + X(0.68), sy - 0.02, 0.02, 0.02]], 8, 2.6, 0.35);
-    b.box(kit.panel, X(0.5), 0.03, rz * 0.6, mx - X(0.1), sy + ry * 0.4, z + s * rz * 0.75, 0.008, [s * 0.6, 0, 0]);
+    cbox(b, kit.panel, X(0.5), 0.03, rz * 0.6, mx - X(0.1), sy + ry * 0.4, z + s * rz * 0.75, 0.008, [s * 0.6, 0, 0]);
     b.cyl(kit.glow, 0.035, 0.035, 0.02, [mx + X(0.6), sy - 0.015, z], 'x', 8);
     b.cyl(kit.hot, 0.045, 0.045, 0.02, [mx - X(0.64), sy, z], '-x', 8);
     if (m) podTop.set(m, sy + ry + 0.005);
@@ -340,8 +347,8 @@ function striker(c: ChassisCtx): ChassisOut {
   both((s) => {
     b.cylb(kit.metal, 0.07, 0.1, 0.015, [X(-1.5), y0 + 0.2, s * Z(0.13)], '-x', 8);
     b.cyl(kit.hot, 0.05, 0.05, 0.01, [X(-1.6), y0 + 0.2, s * Z(0.13)], '-x', 8);
-    glow(b, kit, X(0.2), deck(X(0.2), 0) - 0.06, s * Z(0.36), X(0.9), 0.016, 0.016, [s * 0.5, 0, 0]);
-    b.box(kit.lamp, 0.02, 0.025, 0.05, X(1.36), y0 + 0.16, s * Z(0.11), 0.005, [0, -s * 0.5, 0]);
+    glo(b, kit, X(0.2), deck(X(0.2), 0) - 0.06, s * Z(0.36), X(0.9), 0.016, 0.016, [s * 0.5, 0, 0]);
+    cbox(b, kit.lamp, 0.02, 0.025, 0.05, X(1.36), y0 + 0.16, s * Z(0.11), 0.005, [0, -s * 0.5, 0]);
   });
   hazard(b, kit, X(1.15), deck(X(1.15), 0) + 0.005, 0, X(0.2), Z(0.12), 3);
   vent(b, kit, X(-1.15), deck(X(-1.15), 0) - 0.005, 0, X(0.24), Z(0.36), 3, 'x');
@@ -373,15 +380,15 @@ function aegis(c: ChassisCtx): ChassisOut {
   // glowing halo band around the shell (repair aura)
   b.lathe(kit.glow, [[0.79 * u, 0.13 * u], [0.81 * u, 0.13 * u], [0.75 * u, 0.2 * u], [0.73 * u, 0.2 * u]], [cx, dy, 0], 'y', 12);
   // sensor face on the front slope
-  b.box(kit.trim, 0.06 * u, 0.1 * u, 0.36 * u, cx + 0.74 * u, dy + 0.14 * u, 0, 0.015, [0, 0, -0.8]);
-  b.box(kit.glow, 0.03 * u, 0.03 * u, 0.28 * u, cx + 0.77 * u, dy + 0.15 * u, 0, 0.006, [0, 0, -0.8]);
-  both((s) => b.box(kit.lamp, 0.03, 0.04 * u, 0.07 * u, cx + 0.93 * u, y0 + lo + 0.07 * u, s * 0.42 * u, 0.006, [0, -s * 0.45, 0]));
+  cbox(b, kit.trim, 0.06 * u, 0.1 * u, 0.36 * u, cx + 0.74 * u, dy + 0.14 * u, 0, 0.015, [0, 0, -0.8]);
+  cbox(b, kit.glow, 0.03 * u, 0.03 * u, 0.28 * u, cx + 0.77 * u, dy + 0.15 * u, 0, 0.006, [0, 0, -0.8]);
+  both((s) => cbox(b, kit.lamp, 0.03, 0.04 * u, 0.07 * u, cx + 0.93 * u, y0 + lo + 0.07 * u, s * 0.42 * u, 0.006, [0, -s * 0.45, 0]));
   // medic cross plates on both flanks
   both((s) => {
     const px = cx - 0.05 * u, pz = s * 0.68 * u, py = dy + 0.2 * u;
-    b.box(kit.panel, 0.26 * u, 0.04, 0.26 * u, px, py, pz, 0.01, [s * 0.6, 0, 0]);
-    b.box(kit.accent, 0.18 * u, 0.05, 0.06 * u, px, py + 0.01, pz + s * 0.006, 0.004, [s * 0.6, 0, 0]);
-    b.box(kit.accent, 0.06 * u, 0.05, 0.18 * u, px, py + 0.01, pz + s * 0.006, 0.004, [s * 0.6, 0, 0]);
+    cbox(b, kit.panel, 0.26 * u, 0.04, 0.26 * u, px, py, pz, 0.01, [s * 0.6, 0, 0]);
+    cbox(b, kit.accent, 0.18 * u, 0.05, 0.06 * u, px, py + 0.01, pz + s * 0.006, 0.004, [s * 0.6, 0, 0]);
+    cbox(b, kit.accent, 0.06 * u, 0.05, 0.18 * u, px, py + 0.01, pz + s * 0.006, 0.004, [s * 0.6, 0, 0]);
   });
   // repair dish mast, offset right: the support silhouette
   const mx = cx - 0.3 * u, mz = 0.48 * u, my = dy + 0.28 * u;

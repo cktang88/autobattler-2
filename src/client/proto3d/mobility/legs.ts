@@ -124,6 +124,7 @@ function foot(b: Bld, kit: Kit, t: number, spider: boolean, lite = false) {
   for (const [dz, ry] of (lite ? [[0, 0]] : [[-0.8, -0.28], [0, 0], [0.8, 0.28]]) as [number, number][]) {
     block(b, kit.metal, t * 1.5 + Math.cos(ry) * t * 0.5, 0.0, dz * t, t * 1.4, lite ? t * 2.0 : t * 0.7, t * 0.5, { top: [0.55, 0.8], shift: [t * 0.3, 0], ch: t * 0.2, bev: t * 0.08 });
   }
+  if (lite) return;
   block(b, kit.metal, -t * 1.6, 0, 0, t * 0.9, t * 0.9, t * 0.42, { top: [0.6, 0.7], shift: [-t * 0.2, 0], ch: t * 0.25, bev: t * 0.06 });
   // ankle yoke
   for (const sz of [-1, 1]) b.box(kit.trim, t * 0.9, t * 0.9, t * 0.26, 0, t * 0.85, sz * t * 0.62, t * 0.1);
@@ -133,6 +134,8 @@ export interface LegOpts {
   kind: 'biped' | 'spider'; stride: number; lift: number;
   /** cheap LOD (fewer drums / rams / toes) for small or many-legged units */
   lite?: boolean;
+  /** bone length factor (x hip-to-foot distance); longer bones fold further at the knee */
+  reach?: number;
   /** biped knee direction: 'fwd' (human knee) or 'back' (reverse-jointed "chicken walker") */
   bend?: 'fwd' | 'back';
   /** extra geometry on the thigh / shin groups (same local frames as the segment builders) */
@@ -144,7 +147,8 @@ export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg 
   const t = hip.t;
   const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
-  const l1 = d0 * (spider ? 0.7 : 0.6), l2 = d0 * (spider ? 0.84 : 0.6);
+  const rk = o.reach ?? 1;
+  const l1 = d0 * (spider ? 0.7 : 0.6) * rk, l2 = d0 * (spider ? 0.84 : 0.6) * rk;
   const bendV = spider ? new THREE.Vector3(0, 1, hip.side * 0.3) : new THREE.Vector3(o.bend === 'back' ? -1 : 1, 0.12, 0);
   const lite = !!o.lite, ex = o.extra ?? {}, flip = o.bend === 'back';
   const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };

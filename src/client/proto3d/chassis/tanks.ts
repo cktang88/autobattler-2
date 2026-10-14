@@ -32,7 +32,7 @@ function warden(c: ChassisCtx): ChassisOut {
   // belly between the running gear
   frustum(b, kit.trim, sc(mirrorPlan([[0.9, wi * 0.45], [0.62, wi], [-0.84, wi], [-0.95, wi * 0.8]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.02 });
   // arrowhead-hex upper hull: a faceted pyramid frustum, every face sloped (reads as a hex from the top camera)
-  const up = sc(mirrorPlan([[1.0, 0.14], [0.36, 0.74], [-0.62, 0.74], [-0.98, 0.42]]), kx, kz);
+  const up = sc(mirrorPlan([[1.06, 0.14], [0.3, 0.9], [-0.5, 0.9], [-0.98, 0.5]]), kx, kz);
   const hU = 0.3 * k, uy = yt - 0.03 * k;
   frustum(b, kit.hull, up, uy, hU, { top: [0.76, 0.66], shift: [-0.1 * kx, 0], bot: 0.03 * k, bev: 0.035 * k, mid: [[0.42, 0.95, 0.94]] });
   const deckY = uy + hU;
@@ -44,8 +44,8 @@ function warden(c: ChassisCtx): ChassisOut {
   hazard(b, kit, 0.9 * kx, y0 + (yt - y0) * 0.92 + 0.02 * k, 0, 0.14 * kx, 0.12 * kz, 2, 0);
   both((s) => {
     // angled cheek armour on the flank facets, glow slit, lamps on the nose facets
-    block(b, kit.panel, -0.12 * kx, uy + 0.02 * k, s * 0.66 * kz, 0.76 * kx, 0.12 * kz, hU * 0.62, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
-    glow(b, kit, -0.12 * kx, uy + hU * 0.42, s * 0.7 * kz, 0.5 * kx, 0.025 * k, 0.025 * k);
+    block(b, kit.panel, -0.1 * kx, uy + 0.02 * k, s * 0.82 * kz, 0.7 * kx, 0.12 * kz, hU * 0.6, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
+    glow(b, kit, -0.1 * kx, uy + hU * 0.42, s * 0.86 * kz, 0.5 * kx, 0.025 * k, 0.025 * k);
     b.box(kit.lamp, 0.03 * k, 0.05 * k, 0.1 * k, 0.86 * kx, uy + hU * 0.3, s * 0.24 * kz, 0.01, [0, s * 0.9, 0]);
     exhaust(b, kit, -0.84 * kx, deckY - 0.1 * k, s * 0.38 * kz, 0.06 * k, 0.12 * k);
   });
@@ -268,11 +268,11 @@ function siegeplat(c: ChassisCtx): ChassisOut {
   const g = grounded(c);
   for (const fx of [1.3, -1.3]) both((s) => {
     const a: V3 = [fx * kx, dY - 0.02 * k, s * 0.42 * kz];
-    const e: V3 = g ? [(fx + Math.sign(fx) * 0.42) * kx, 0.05 * k, s * 1.12 * kz] : [(fx + Math.sign(fx) * 0.25) * kx, dY + 0.05 * k, s * 0.86 * kz];
+    const e: V3 = g ? [(fx + Math.sign(fx) * 0.5) * kx, 0.05 * k, s * 1.28 * kz] : [(fx + Math.sign(fx) * 0.25) * kx, dY + 0.05 * k, s * 0.86 * kz];
     beam(b, kit.hull, a, e, 0.1 * k, 0.08 * k);
     beam(b, kit.steel, [a[0], a[1] + 0.06 * k, a[2]], [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2 + 0.07 * k, (a[2] + e[2]) / 2], 0.04 * k, 0.04 * k);
     if (g) {
-      b.lathe(kit.metal, [[0, 0], [0.16 * k, 0], [0.15 * k, 0.04 * k], [0.06 * k, 0.07 * k], [0, 0.07 * k]], [e[0], 0, e[2]], 'y', 10);
+      b.lathe(kit.metal, [[0, 0], [0.21 * k, 0], [0.2 * k, 0.05 * k], [0.08 * k, 0.09 * k], [0, 0.09 * k]], [e[0], 0, e[2]], 'y', 10);
       b.box(kit.hazard, 0.04 * k, 0.05 * k, 0.12 * k, e[0], e[1] + 0.06 * k, e[2], 0.01, [0, Math.atan2(e[2] - a[2], e[0] - a[0]), 0]);
     }
     b.box(kit.trim, 0.2 * k, 0.12 * k, 0.16 * k, a[0], a[1], a[2], 0.02 * k);
@@ -301,12 +301,12 @@ function juggernaut(c: ChassisCtx): ChassisOut {
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
   frustum(b, kit.trim, sc(mirrorPlan([[1.3, 0.5], [1.0, Math.min(stance.wi, 1.5)], [-1.3, Math.min(stance.wi, 1.5)], [-1.45, 1.0]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.03 });
   // tier 1: chevron shield hull, wider than long
-  const t1 = sc(mirrorPlan([[1.42, 0.4], [0.92, 1.98], [-1.28, 1.98], [-1.48, 1.45]]), kx, kz);
+  const t1 = sc(mirrorPlan([[1.5, 0.36], [0.62, 1.98], [-1.2, 1.98], [-1.48, 1.4]]), kx, kz);
   const h1 = 0.4 * k, y1 = yt - 0.06 * k;
   frustum(b, kit.hull, t1, y1, h1, { top: [0.9, 0.93], shift: [-0.06 * kx, 0], bot: 0.05 * k, bev: 0.05 * k });
   const d1 = y1 + h1;
   // tier 2: stepped casemate, set back
-  const t2 = sc(mirrorPlan([[0.78, 0.34], [0.36, 1.4], [-1.12, 1.4], [-1.3, 1.0]]), kx, kz);
+  const t2 = sc(mirrorPlan([[0.74, 0.3], [0.18, 1.4], [-1.1, 1.4], [-1.3, 1.0]]), kx, kz);
   const h2 = 0.3 * k;
   frustum(b, kit.trim, scalePlan(t2, 1.04, 1.03), d1 - 0.03 * k, 0.07 * k, { top: [0.99, 0.99], bev: 0.015 * k });
   frustum(b, kit.hull, t2, d1 + 0.02 * k, h2 - 0.02 * k, { top: [0.86, 0.88], shift: [-0.06 * kx, 0], bev: 0.04 * k, mid: [[0.3, 0.98, 0.99]] });
@@ -326,8 +326,8 @@ function juggernaut(c: ChassisCtx): ChassisOut {
   both((s) => {
     hazard(b, kit, 1.3 * kx, yt + 0.11 * k, s * 0.55 * kz, 0.5 * kx, 0.1 * kz, 4, s * -1.26);
     // brow vision slit on the casemate front facets
-    glow(b, kit, 0.6 * kx, d1 + h2 * 0.5, s * 0.75 * kz, 0.03 * k, 0.04 * k, 0.7 * kz, [0, s * 1.2, -0.5]);
-    b.box(kit.lamp, 0.03 * k, 0.06 * k, 0.12 * k, 1.12 * kx, y1 + h1 * 0.5, s * 1.4 * kz, 0.012, [0, s * 1.26, 0]);
+    glow(b, kit, 0.5 * kx, d1 + h2 * 0.5, s * 0.75 * kz, 0.03 * k, 0.04 * k, 0.7 * kz, [0, s * 1.2, -0.5]);
+    b.box(kit.lamp, 0.03 * k, 0.06 * k, 0.12 * k, 0.98 * kx, y1 + h1 * 0.45, s * 1.25 * kz, 0.012, [0, s * 1.07, 0]);
     // armour bolsters on the tier-1 shoulders
     block(b, kit.hull, -0.3 * kx, d1 - 0.02 * k, s * 1.7 * kz, 1.2 * kx, 0.22 * kz, 0.12 * k, { top: [0.9, 0.6], shift: [0, -s * 0.04 * kz], ch: 0.05 * k, bev: 0.03 * k });
     exhaust(b, kit, -1.3 * kx, d1 - 0.04 * k, s * 0.5 * kz, 0.07 * k, 0.16 * k);

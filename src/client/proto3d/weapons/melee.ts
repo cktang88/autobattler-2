@@ -40,10 +40,10 @@ function saw(C: WCtx, A: number) {
   // guard over the back half of the disc
   cbox(rc, kit.hull, A + R * 0.2, R * 0.82, 0, R * 1.3, r * 0.08, t * 2 + r * 0.14, r * 0.03);
   C.spin('z', [A + R * 0.75, 0, 0]);
-  sp.lathe(kit.steel, [[0, -t], [R * 0.92, -t], [R, 0], [R * 0.92, t], [0, t]], [0, 0, 0], 'x', 14);
+  sp.lathe(kit.metal, [[0, -t], [R * 0.86, -t], [R, 0], [R * 0.86, t], [0, t]], [0, 0, 0], 'x', 14);
   sp.lathe(kit.hazard, [[0, -t * 1.6], [R * 0.3, -t * 1.6], [R * 0.3, t * 1.6], [0, t * 1.6]], [0, 0, 0], 'x', 8);
   const n = big ? 10 : 8;
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; bx(sp, kit.metal, 0, Math.sin(a) * R, Math.cos(a) * R, t * 2.4, R * 0.22, R * 0.14, [a, 0, 0]); }
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; bx(sp, kit.steel, 0, Math.sin(a) * R, Math.cos(a) * R, t * 2.4, R * 0.22, R * 0.14, [a, 0, 0]); }
 }
 
 function chainsaw(C: WCtx, A: number) {
@@ -98,7 +98,7 @@ function drill(C: WCtx, A: number) {
   const steps = 4;
   for (let i = 0; i < steps; i++) { const f0 = i / steps, f1 = (i + 1) / steps; prof.push([R * (1 - f0) * 1.0, L * f0 + L * 0.02], [R * (1 - f1) + R * 0.12, L * f1 - L * 0.03]); }
   prof.push([0, L]);
-  sp.lathe(kit.steel, prof, [0, 0, 0], 'x', 7);
+  sp.lathe(kit.metal, prof, [0, 0, 0], 'x', 7);
   for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; sp.strut(kit.metal, [L * 0.05, Math.sin(a) * R * 0.95, Math.cos(a) * R * 0.95], [L * 0.85, Math.sin(a + 1.6) * R * 0.18, Math.cos(a + 1.6) * R * 0.18], r * 0.05, r * 0.02, 4); }
 }
 

@@ -16,3 +16,5 @@ import '../mobility/hover.ts';
 import '../mobility/anchor.ts';
 import './creatures.ts';
 import '../mobility/jumpjets.ts';
+import '../mobility/titanlegs.ts';
+import './titans-citadel.ts';

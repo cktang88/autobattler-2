@@ -98,10 +98,10 @@ function uplink(C: WCtx) {
 function radar(C: WCtx) {
   const { b, p, kit, r, y0 } = C;
   base(C, 0.55);
-  b.cyl(kit.metal, r * 0.1, r * 0.08, r * 0.55, [0, y0 + r * 0.2, 0], 'y', 6);
-  C.t.pitch.position.set(0, y0 + r * 0.8, 0);
+  b.cyl(kit.metal, r * 0.1, r * 0.08, r * 0.75, [0, y0 + r * 0.2, 0], 'y', 6);
+  C.t.pitch.position.set(0, y0 + r * 1.0, 0);
   C.t.pitch.rotation.z = 0.5;
-  const dr = r * 0.62;
+  const dr = r * 0.85;
   p.lathe(kit.panel, [[0, 0], [r * 0.1, 0], [dr * 0.7, r * 0.1], [dr, r * 0.24], [dr * 0.94, r * 0.27], [dr * 0.6, r * 0.14], [0, r * 0.06]], [-r * 0.1, 0, 0], 'x', 12);
   p.strut(kit.steel, [0, 0, 0], [r * 0.38, 0, 0], r * 0.025, r * 0.02, 4);
   ball(p, kit.glow, r * 0.4, 0, 0, r * 0.06, 1, 6);
@@ -192,8 +192,9 @@ function reactive(C: WCtx) {
 function mirror(C: WCtx) {
   const { b, kit, r } = C;
   cbox(b, kit.trim, 0, r * 0.08, 0, r * 1.1, r * 0.16, r * 1.4, r * 0.04);
-  for (const s of [-1, 1]) cbox(b, kit.steel, 0, r * 0.25, s * r * 0.34, r * 0.95, r * 0.08, r * 0.62, r * 0.03, [s * 0.35, 0, 0]);
-  bx(b, kit.glow, 0, r * 0.2, 0, r * 0.9, r * 0.04, r * 0.05);
+  for (const s of [-1, 1]) for (const x of [-r * 0.26, r * 0.26]) cbox(b, kit.glass, x, r * 0.26, s * r * 0.34, r * 0.48, r * 0.08, r * 0.6, r * 0.03, [s * 0.4, 0, 0]);
+  bx(b, kit.glow, 0, r * 0.24, 0, r * 1.0, r * 0.05, r * 0.06);
+  bx(b, kit.panel, 0, r * 0.26, 0, r * 0.06, r * 0.1, r * 1.3);
 }
 
 /** EMP shielding: Faraday cage box with banded straps. */

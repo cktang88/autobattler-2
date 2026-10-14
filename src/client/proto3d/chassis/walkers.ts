@@ -6,6 +6,7 @@ import type { Kit } from '../materials.ts';
 import type { Bld } from '../geo.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { beam, block, both, collar, dome, exhaust, glow, hazard, pod, sensor, vent } from './shapes.ts';
+import { shell, tbeam, tbox, wristRing } from './creatures.ts';
 
 /** humanoid arm: shoulder drum, upper arm down to the elbow, forearm weapon pod (top face at podTop) */
 export function mechArm(b: Bld, kit: Kit, side: number, sh: V3, el: V3, pod0: V3, podL: number, podW: number, podH: number, t: number): number {
@@ -34,18 +35,22 @@ function strider(c: ChassisCtx): ChassisOut {
   const ty0 = pelvisY + 0.06 * u, th = 0.48 * u, ty1 = ty0 + th;
   // waist + torso: tapered chest block leaning forward, layered chest plate, back armour
   block(b, kit.metal, -0.04 * u, pelvisY + 0.04 * u, 0, 0.42 * u, 0.4 * u, 0.12 * u, { ch: 0.1 * u });
-  block(b, kit.hull, -0.05 * u, ty0, 0, 0.84 * u, 0.86 * u, th, { top: [0.86, 0.92], shift: [0.03 * u, 0], ch: 0.16 * u, bev: 0.07 * u, bot: 0.06 * u, mid: [[0.45, 1.06, 1.04]] });
-  block(b, kit.panel, 0.3 * u, ty0 + 0.08 * u, 0, 0.3 * u, 0.7 * u, th * 0.68, { top: [0.5, 0.86], shift: [0.07 * u, 0], ch: 0.12 * u, bev: 0.04 * u });
-  // cockpit head sunk between the shoulders: sloped visor block with a glowing visor slit
-  block(b, kit.hull, 0.36 * u, ty1 - 0.14 * u, 0, 0.34 * u, 0.42 * u, 0.24 * u, { top: [0.62, 0.8], shift: [-0.04 * u, 0], ch: 0.1 * u, bev: 0.04 * u });
+  // hexagonal "gem" chest with a forward prow (reads as a pointed shield from the top, not a box)
+  shell(b, kit.hull, -0.02 * u, 0, 0.56 * u, 0.42 * u, 0.48 * u, [[ty0, 0.8], [ty0 + th * 0.14, 0.94], [ty0 + th * 0.52, 1.04], [ty1 - 0.05 * u, 0.88], [ty1, 0.74]], 6, 2, true);
+  shell(b, kit.panel, 0.04 * u, 0, 0.56 * u, 0.3 * u, 0.4 * u, [[ty0 + th * 0.2, 0.9], [ty0 + th * 0.52, 1.0], [ty0 + th * 0.8, 0.86]], 6, 2, true);
+  // cockpit head sunk between the shoulders: sloped visor helm with a glowing slit and a crest fin
+  block(b, kit.hull, 0.3 * u, ty1 - 0.14 * u, 0, 0.36 * u, 0.36 * u, 0.26 * u, { top: [0.6, 0.76], shift: [-0.05 * u, 0], ch: 0.12 * u, bev: 0.04 * u });
+  b.slab(kit.accent, [[0.1 * u, 0], [-0.22 * u, 0], [-0.3 * u, 0.12 * u], [0.02 * u, 0.04 * u]], 0.03 * u, 0.008 * u, 0.36 * u, ty1 + 0.1 * u, 0.015 * u, [-Math.PI / 2, 0, 0]);
   glow(b, kit, 0.5 * u, ty1 - 0.02 * u, 0, 0.05 * u, 0.05 * u, 0.3 * u, [0, 0, -0.9]);
   b.box(kit.glass, 0.04 * u, 0.06 * u, 0.36 * u, 0.53 * u, ty1 - 0.06 * u, 0, 0.01, [0, 0, -0.75]);
-  // chest glow core + vents
-  glow(b, kit, 0.47 * u, ty0 + th * 0.36, 0, 0.04 * u, 0.12 * u, 0.12 * u);
-  for (const s of [-1, 1]) vent(b, kit, 0.45 * u, ty0 + th * 0.2, s * 0.22 * u, 0.04 * u, 0.16 * u, 2, 'z');
-  // backpack: power pack with twin exhausts
-  block(b, kit.trim, -0.56 * u, ty0 + 0.06 * u, 0, 0.24 * u, 0.6 * u, th * 0.8, { top: [0.8, 0.9], ch: 0.08 * u });
-  for (const s of [-1, 1]) { b.cylb(kit.metal, 0.07 * u, 0.2 * u, 0.02, [-0.66 * u, ty0 + th * 0.5, s * 0.17 * u], 'y', 10); b.cyl(kit.hot, 0.05 * u, 0.05 * u, 0.01, [-0.66 * u, ty0 + th * 0.5 + 0.2 * u, s * 0.17 * u], 'y', 10); }
+  // chest glow core
+  glow(b, kit, 0.6 * u, ty0 + th * 0.45, 0, 0.04 * u, 0.12 * u, 0.1 * u);
+  // backpack: twin upright power cells (round from above) with hot exhaust caps
+  for (const s of [-1, 1]) {
+    b.cylb(kit.trim, 0.15 * u, th * 0.95, 0.03 * u, [-0.46 * u, ty0 + 0.04 * u, s * 0.17 * u], 'y', 10);
+    b.cyl(kit.glow, 0.155 * u, 0.155 * u, 0.025 * u, [-0.46 * u, ty0 + th * 0.55, s * 0.17 * u], 'y', 10);
+    b.cyl(kit.hot, 0.08 * u, 0.08 * u, 0.01, [-0.46 * u, ty0 + th * 0.99, s * 0.17 * u], 'y', 8);
+  }
   // shoulders + arms: arm pods are anatomy under the arm mounts (mountOffsets: forearm guns at z ~ +-0.68)
   const armMounts = c.mounts.filter((m) => Math.abs(m.z) > 0.45 * u);
   const podTop = new Map<MountSpec, number>();
@@ -70,7 +75,7 @@ function strider(c: ChassisCtx): ChassisOut {
     deckAt: deck, top: ty1, hips, custom: true,
     seat: (m) => {
       const pt = podTop.get(m);
-      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.06 * u, 14); return { y: pt, socket: true }; }
+      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r), socket: true };
       // shoulder / back mount: on the torso top with a raised collar
       collar(b, kit, m.x, ty1 + 0.05 * u, m.z, m.r, ty1 - 0.04 * u, 16);
       return { y: ty1 + 0.05 * u, socket: true };
@@ -86,14 +91,15 @@ function orbwalker(c: ChassisCtx): ChassisOut {
   if (stance.legs === null) block(b, kit.trim, -0.15 * u, stance.y0 - 0.02, 0, 0.6 * u, 0.6 * u, by - stance.y0, { top: [0.8, 0.8], ch: 0.14 * u });
   // abdomen: armoured egg with a flat dorsal deck for the twin mounts
   const ax = -0.2 * u, ay = by + 0.12 * u;
-  pod(b, kit.trim, [ax, ay - 0.06 * u, 0], 0.52 * u, 0.26 * u, 0.44 * u, 10, 6, 2.4, 0.3);
-  pod(b, kit.hull, [ax + 0.02 * u, ay + 0.02 * u, 0], 0.56 * u, 0.24 * u, 0.5 * u, 12, 6, 2.6, 0.6);
+  // abdomen: teardrop hull tapering to the rear, flattish top carrying the twin mounts, dorsal keel between them
   const deckY = ay + 0.24 * u;
-  block(b, kit.hull, ax - 0.06 * u, ay + 0.08 * u, 0, 0.78 * u, 0.82 * u, deckY - ay - 0.08 * u, { top: [0.84, 0.88], ch: 0.22 * u, bev: 0.05 * u });
-  block(b, kit.panel, ax - 0.38 * u, ay + 0.02 * u, 0, 0.26 * u, 0.6 * u, deckY - ay - 0.02 * u, { top: [0.6, 0.86], shift: [-0.04 * u, 0], ch: 0.12 * u, bev: 0.04 * u });
-  // rear spinneret / power cell glow + tail lights
-  glow(b, kit, ax - 0.56 * u, ay + 0.06 * u, 0, 0.04 * u, 0.1 * u, 0.24 * u);
-  for (const s of [-1, 1]) glow(b, kit, ax, deckY - 0.03 * u, s * 0.42 * u, 0.4 * u, 0.04 * u, 0.04 * u, [0, s * 0.15, 0]);
+  shell(b, kit.trim, ax, 0, 0.4 * u, 0.62 * u, 0.44 * u, [[ay - 0.16 * u, 0.62], [ay - 0.02 * u, 0.96]], 10, 2.2);
+  shell(b, kit.hull, ax, 0, 0.4 * u, 0.66 * u, 0.48 * u, [[ay - 0.04 * u, 1.0], [ay + 0.1 * u, 1.04], [deckY - 0.03 * u, 0.9, -0.02 * u], [deckY, 0.74, -0.04 * u]], 10, 2.2);
+  block(b, kit.panel, ax - 0.12 * u, deckY - 0.03 * u, 0, 0.7 * u, 0.12 * u, 0.1 * u, { top: [0.7, 0.6], shift: [-0.06 * u, 0], ch: 0.04 * u, bev: 0.02 * u });
+  // rear power spike: swept up and back with a glowing tip; flank glow lines
+  b.strut(kit.hull, [ax - 0.5 * u, ay + 0.08 * u, 0], [ax - 0.98 * u, ay + 0.42 * u, 0], 0.08 * u, 0.02 * u, 6);
+  glow(b, kit, ax - 0.98 * u, ay + 0.42 * u, 0, 0.06 * u, 0.04 * u, 0.04 * u);
+  for (const s of [-1, 1]) glow(b, kit, ax - 0.08 * u, ay + 0.12 * u, s * 0.47 * u, 0.5 * u, 0.04 * u, 0.04 * u, [0, s * 0.2, 0]);
   // neck collar + orb cockpit
   const hx = 0.4 * u, hy = by + 0.16 * u, hr = 0.3 * u;
   b.cylb(kit.metal, 0.17 * u, 0.32 * u, 0.03 * u, [0.05 * u, hy, 0], 'x', 12);
@@ -133,20 +139,20 @@ function needle(c: ChassisCtx): ChassisOut {
   const biped = stance.legs === 'biped', spider = stance.legs === 'spider';
   const bp = biped ? stance.hipY : spider ? stance.hipY + 0.08 * k : stance.y0 + 0.12 * k;
   // pelvis drum between the hips + belly keel
-  b.cylb(kit.metal, 0.085 * k, 0.26 * k, 0.015 * k, [-0.1 * k, bp, -0.13 * k], 'z', 10);
+  b.cylb(kit.metal, 0.085 * k, 0.26 * k, 0.015 * k, [-0.1 * k, bp, -0.13 * k], 'z', 6);
   // spindle body: dark keel + armoured shell, nose up
-  pod(b, kit.trim, [-0.02 * k, bp + 0.12 * k, 0], 0.28 * k, 0.09 * k, 0.11 * k, 8, 5, 2.2);
-  pod(b, kit.hull, [0.02 * k, bp + 0.2 * k, 0], 0.32 * k, 0.1 * k, 0.13 * k, 10, 5, 2.4, 0.4);
-  b.box(kit.accent, 0.3 * k, 0.012 * k, 0.04 * k, -0.02 * k, bp + 0.3 * k, 0, 0.004);
+  pod(b, kit.trim, [-0.02 * k, bp + 0.12 * k, 0], 0.28 * k, 0.09 * k, 0.11 * k, 6, 4, 2.2);
+  pod(b, kit.hull, [0.02 * k, bp + 0.2 * k, 0], 0.32 * k, 0.1 * k, 0.13 * k, 8, 4, 2.4, 0.4);
+  tbox(b, kit.accent, 0.3 * k, 0.012 * k, 0.04 * k, -0.02 * k, bp + 0.3 * k, 0);
   // tail needle: tapering boom with vanes and a glowing tip
   b.strut(kit.hull, [-0.2 * k, bp + 0.22 * k, 0], [-0.98 * k, bp + 0.46 * k, 0], 0.055 * k, 0.012 * k, 6);
   b.strut(kit.trim, [-0.2 * k, bp + 0.17 * k, 0], [-0.62 * k, bp + 0.3 * k, 0], 0.04 * k, 0.02 * k, 6);
-  both((s) => b.box(kit.panel, 0.16 * k, 0.012 * k, 0.12 * k, -0.6 * k, bp + 0.36 * k, s * 0.07 * k, 0.004, [0, s * 0.35, 0.3]));
-  glow(b, kit, -0.98 * k, bp + 0.46 * k, 0, 0.05 * k, 0.03 * k, 0.03 * k);
+  both((s) => tbox(b, kit.panel, 0.16 * k, 0.012 * k, 0.12 * k, -0.6 * k, bp + 0.36 * k, s * 0.07 * k, [0, s * 0.35, 0.3]));
+  tbox(b, kit.glow, 0.05 * k, 0.03 * k, 0.03 * k, -0.98 * k, bp + 0.46 * k, 0);
   // neck + hammerhead: wide flat wedge, glowing slit across the front, swept-back antennae
-  beam(b, kit.trim, [0.22 * k, bp + 0.22 * k, 0], [0.44 * k, bp + 0.38 * k, 0], 0.06 * k, 0.06 * k);
+  tbeam(b, kit.trim, [0.22 * k, bp + 0.22 * k, 0], [0.44 * k, bp + 0.38 * k, 0], 0.06 * k, 0.06 * k);
   block(b, kit.hull, 0.46 * k, bp + 0.34 * k, 0, 0.24 * k, 0.32 * k, 0.1 * k, { top: [0.55, 0.7], shift: [-0.04 * k, 0], ch: 0.08 * k, bev: 0.02 * k });
-  glow(b, kit, 0.575 * k, bp + 0.38 * k, 0, 0.02 * k, 0.025 * k, 0.22 * k);
+  tbox(b, kit.glow, 0.02 * k, 0.025 * k, 0.22 * k, 0.575 * k, bp + 0.38 * k, 0);
   both((s) => b.strut(kit.metal, [0.4 * k, bp + 0.42 * k, s * 0.1 * k], [0.16 * k, bp + 0.58 * k, s * 0.17 * k], 0.01 * k, 0.006 * k, 4));
   // blade arms: shoulder drum, upper arm raised, forearm diving to the wrist gun, lance blade past the wrist
   const podTop = new Map<MountSpec, number>();
@@ -155,17 +161,16 @@ function needle(c: ChassisCtx): ChassisOut {
     const mx = m ? m.x : 0.54 * k, mz = m ? m.z : s * 0.3 * k;
     const sh: V3 = [0.14 * k, bp + 0.24 * k, s * 0.14 * k], el: V3 = [0.22 * k, bp + 0.5 * k, s * 0.26 * k];
     const wy = bp + 0.04 * k;
-    b.cylb(kit.metal, 0.05 * k, 0.07 * k, 0.01 * k, [sh[0], sh[1], sh[2]], s > 0 ? 'z' : '-z', 8);
+    tbox(b, kit.metal, 0.08 * k, 0.08 * k, 0.08 * k, sh[0], sh[1], sh[2]);
     beam(b, kit.hull, sh, el, 0.06 * k, 0.07 * k, [1, 0, 0]);
-    b.cylb(kit.metal, 0.04 * k, 0.07 * k, 0.01 * k, [el[0], el[1], el[2] - s * 0.035 * k], s > 0 ? 'z' : '-z', 8);
-    beam(b, kit.trim, el, [mx - 0.04 * k, wy + 0.06 * k, mz], 0.05 * k, 0.05 * k);
-    beam(b, kit.panel, [el[0] + 0.02 * k, el[1] + 0.03 * k, el[2]], [mx - 0.06 * k, wy + 0.1 * k, mz], 0.07 * k, 0.03 * k);
+    beam(b, kit.trim, el, [mx - 0.04 * k, wy + 0.06 * k, mz], 0.06 * k, 0.06 * k);
+    // elbow spike: swept back and up (the raised-blade read from the top and side)
+    tbeam(b, kit.accent, [el[0] - 0.02 * k, el[1] + 0.02 * k, el[2]], [el[0] - 0.16 * k, el[1] + 0.14 * k, el[2] + s * 0.03 * k], 0.03 * k, 0.05 * k);
     // wrist gun cradle
-    block(b, kit.hull, mx, wy, mz, 0.24 * k, 0.2 * k, 0.08 * k, { top: [0.8, 0.85], ch: 0.05 * k, bev: 0.015 * k });
-    // lance blade: from under the elbow down past the wrist, well ahead of the gun
+    block(b, kit.hull, mx - 0.02 * k, wy, mz, 0.26 * k, 0.2 * k, 0.08 * k, { top: [0.8, 0.85], ch: 0.05 * k, bev: 0.015 * k });
+    // lance blade: a straight bayonet from under the wrist reaching well ahead of the gun (longer with a melee tool)
     const melee = m && (m.mod.category === 'melee' || m.mod.projectile === 'melee');
-    const tip: V3 = [mx + (melee ? 0.5 : 0.36) * k, wy - 0.12 * k, mz + s * 0.02 * k];
-    beam(b, kit.steel, [el[0] + 0.06 * k, el[1] - 0.06 * k, el[2]], tip, 0.018 * k, 0.07 * k, [0, 0, s]);
+    tbeam(b, kit.steel, [mx + 0.06 * k, wy + 0.01 * k, mz], [mx + (melee ? 0.56 : 0.4) * k, wy - 0.07 * k, mz], 0.02 * k, 0.06 * k, [0, 0, s]);
     if (m) podTop.set(m, wy + 0.08 * k);
   });
   let hips: Hip[] | undefined;
@@ -182,8 +187,8 @@ function needle(c: ChassisCtx): ChassisOut {
     deckAt: (x, z) => (Math.abs(z) < 0.1 * k && Math.abs(x) < 0.25 * k ? top : -1), top: bp + 0.46 * k, hips, custom: true,
     seat: (m) => {
       const pt = podTop.get(m);
-      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.03 * k, 12); return { y: pt, socket: true }; }
-      collar(b, kit, m.x, top, m.z, m.r, top - 0.05 * k, 12);
+      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r, 10), socket: true };
+      collar(b, kit, m.x, top, m.z, m.r, top - 0.05 * k, 10);
       return { y: top, socket: true };
     },
   };
@@ -268,7 +273,7 @@ function warlord(c: ChassisCtx): ChassisOut {
     deckAt: deck, top: humpY, hips, custom: true,
     seat: (m) => {
       const pt = podTop.get(m);
-      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.08 * k, 14); return { y: pt, socket: true }; }
+      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r, 14), socket: true };
       if (m.x > 0.4 * k) { collar(b, kit, m.x, jawY, m.z, m.r, jawY - 0.08 * k, 14); return { y: jawY, socket: true }; }
       collar(b, kit, m.x, humpY, m.z, m.r, humpY - 0.2 * k, 16);
       return { y: humpY, socket: true };

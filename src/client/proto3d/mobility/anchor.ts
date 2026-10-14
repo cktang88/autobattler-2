@@ -3,6 +3,7 @@
 
 import { Bld } from '../geo.ts';
 import { registerMobility, type Stance, type StanceIn } from '../chassis/registry.ts';
+import { cbox } from '../chassis/light.ts';
 import { beam, block } from '../chassis/shapes.ts';
 
 export function anchorStance(s: StanceIn): Stance {
@@ -23,7 +24,7 @@ registerMobility('anchor', {
     // hazard chevrons on the front and rear faces
     for (const sx of [-1, 1]) for (let i = 0; i < 4; i++) {
       const z = (-0.3 + i * 0.2) * W;
-      b.box(i % 2 ? kit.trim : kit.hazard, 0.02, y0 * 0.25, W * 0.18, sx * L * 0.43, y0 * 0.36, z, 0.004);
+      cbox(b, i % 2 ? kit.trim : kit.hazard, 0.02, y0 * 0.25, W * 0.18, sx * L * 0.43, y0 * 0.36, z, 0.004);
     }
     // outriggers: splayed legs to foot pads, piston on each
     const t = 0.04 + 0.025 * S;

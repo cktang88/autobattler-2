@@ -147,7 +147,7 @@ function coilStack(B: Bld, mat: MatLike, x: number, y: number, z: number, R: num
 function teslaCoil(C: WCtx) {
   const { b, rc, kit, r, y0 } = C;
   b.lathe(kit.hull, [[0, 0], [r * 0.78, 0], [r * 0.78, r * 0.12], [r * 0.45, r * 0.32], [0, r * 0.32]], [0, y0, 0], 'y', 10);
-  coilStack(b, kit.steel, 0, y0 + r * 0.3, 0, r * 0.36, r * 0.75, 4);
+  coilStack(b, kit.metal, 0, y0 + r * 0.3, 0, r * 0.36, r * 0.75, 4);
   for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; b.strut(kit.trim, [Math.cos(a) * r * 0.62, y0 + r * 0.1, Math.sin(a) * r * 0.62], [Math.cos(a) * r * 0.2, y0 + r * 0.9, Math.sin(a) * r * 0.2], r * 0.04, r * 0.03, 4); }
   C.t.pitch.position.set(0, y0 + r * 1.22, 0);
   ball(rc, kit.rail, 0, 0, 0, r * 0.26, 1, 10);
@@ -165,7 +165,7 @@ function arcLance(C: WCtx) {
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.55, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
   const len = C.D * 1.0;
-  coilStack(rc, kit.steel, r * 0.1, 0, 0, r * 0.26, len, 5, 'x', 8);
+  coilStack(rc, kit.metal, r * 0.1, 0, 0, r * 0.26, len, 5, 'x', 8);
   ball(rc, kit.rail, r * 0.1 + len + r * 0.12, 0, 0, r * 0.19, 1, 8);
   C.muzzle(r * 0.1 + len + r * 0.2, 0, 0);
   accent(C, -r * 0.1, r * 0.3, 0, r * 0.2, r * 0.25, undefined, p);
@@ -176,7 +176,7 @@ function arcLance(C: WCtx) {
 function stormTower(C: WCtx) {
   const { b, rc, kit, r, y0 } = C;
   b.lathe(kit.hull, [[0, 0], [r * 0.85, 0], [r * 0.85, r * 0.15], [r * 0.5, r * 0.35], [0, r * 0.35]], [0, y0, 0], 'y', 12);
-  coilStack(b, kit.steel, 0, y0 + r * 0.3, 0, r * 0.32, r * 1.0, 5);
+  coilStack(b, kit.metal, 0, y0 + r * 0.3, 0, r * 0.32, r * 1.0, 5);
   for (const [f, k] of [[0.35, 0.55], [0.7, 0.45]]) b.lathe(kit.trim, [[0, 0], [r * k, r * 0.03], [r * k, r * 0.06], [0, r * 0.08]], [0, y0 + r * 0.3 + r * f, 0], 'y', 10);
   for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + 0.4; b.strut(kit.steel, [Math.cos(a) * r * 0.65, y0 + r * 0.2, Math.sin(a) * r * 0.65], [Math.cos(a) * r * 0.55, y0 + r * 0.95, Math.sin(a) * r * 0.55], r * 0.04, r * 0.02, 4); ball(b, kit.rail, Math.cos(a) * r * 0.55, y0 + r * 0.98, Math.sin(a) * r * 0.55, r * 0.07, 1, 6); }
   C.t.pitch.position.set(0, y0 + r * 1.55, 0);
@@ -194,7 +194,7 @@ function stormCore(C: WCtx) {
   const n = Math.max(3, C.nb);
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + Math.PI / 2, x = Math.cos(a) * r * 0.5, z = Math.sin(a) * r * 0.5;
-    coilStack(b, kit.steel, x, y0 + r * 0.3, z, r * 0.2, r * 0.7, 3, 'y', 8);
+    coilStack(b, kit.metal, x, y0 + r * 0.3, z, r * 0.2, r * 0.7, 3, 'y', 8);
     ball(b, kit.rail, x, y0 + r * 1.08, z, r * 0.12, 1, 8);
   }
   b.cyl(kit.trim, r * 0.2, r * 0.14, r * 0.7, [0, y0 + r * 0.3, 0], 'y', 8);
@@ -240,14 +240,18 @@ function empGun(C: WCtx) {
 function ringEmitter(C: WCtx, core: MatLike, heavy = false) {
   const { b, p, rc, kit, r, y0 } = C;
   eggHousing(C, 0.85, 0.72, 0.42, -0.25);
-  const R = r * (heavy ? 0.58 : 0.48), w = r * (heavy ? 0.18 : 0.14);
+  const R = r * (heavy ? 0.62 : 0.52), w = r * 0.1;
   C.t.pitch.position.set(r * 0.25, y0 + r * 0.42 + R * 0.55, 0);
   cbox(p, kit.trim, -r * 0.1, -R * 0.4, 0, r * 0.3, R * 0.5, r * 0.25);
-  rc.lathe(kit.panel, [[R * 0.72, 0], [R, 0], [R, w], [R * 0.72, w]], [r * 0.05, 0, 0], 'x', heavy ? 14 : 12);
-  rc.lathe(core, [[R * 0.72, w * 0.3], [R * 0.78, w * 0.3], [R * 0.78, w * 0.7], [R * 0.72, w * 0.7]], [r * 0.05, 0, 0], 'x', heavy ? 14 : 12);
-  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + Math.PI / 2; rc.strut(kit.metal, [r * 0.12, Math.sin(a) * R * 0.74, Math.cos(a) * R * 0.74], [r * 0.12, 0, 0], r * 0.03, r * 0.03, 4); }
-  ball(rc, core, r * 0.12, 0, 0, r * 0.13, 1, 8);
-  C.muzzle(r * 0.3, 0, 0);
+  // funnel of three stepped rings (reads as a target-ring cone from above)
+  for (let i = 0; i < 3; i++) {
+    const k = 1 - i * 0.28, x = r * 0.02 + i * r * 0.2;
+    rc.lathe(i === 2 ? core : kit.trim, [[R * k * 0.7, 0], [R * k, 0], [R * k, w], [R * k * 0.7, w]], [x, 0, 0], 'x', heavy ? 14 : 12);
+    if (i < 2) rc.lathe(core, [[R * k * 0.66, w * 0.25], [R * k * 0.71, w * 0.25], [R * k * 0.71, w * 0.75], [R * k * 0.66, w * 0.75]], [x, 0, 0], 'x', heavy ? 14 : 12);
+  }
+  rc.strut(kit.metal, [-r * 0.1, 0, 0], [r * 0.5, 0, 0], r * 0.06, r * 0.05, 5);
+  ball(rc, core, r * 0.55, 0, 0, r * 0.11, 1, 8);
+  C.muzzle(r * 0.62, 0, 0);
   accent(C, -r * 0.6, y0 + r * 0.4, 0, r * 0.3, r * 0.3);
   C.t.shot = 'beam';
   C.t.rate = 1.2;
@@ -275,7 +279,7 @@ function horn(C: WCtx) {
   b.lathe(kit.hull, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.15], [r * 0.5, r * 0.28], [0, r * 0.28]], [0, y0, 0], 'y', 10);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.1, y0 + r * 0.48, s * r * 0.62, r * 0.4, r * 0.5, r * 0.1);
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.62, 0);
-  const R = r * 0.56, L = r * 0.75;
+  const R = r * 0.7, L = r * 0.85;
   rc.lathe(kit.panel, [[0, -r * 0.3], [R * 0.6, -r * 0.3], [R * 0.6, 0], [R * 0.75, L * 0.5], [R, L], [R * 0.9, L], [R * 0.4, L * 0.55], [0, L * 0.5]], [0, 0, 0], 'x', 12);
   band(rc, kit.trim, L * 0.12, 0, 0, R * 0.68, r * 0.08, 12);
   rc.cyl(kit.lamp, R * 0.22, R * 0.22, r * 0.03, [L * 0.52, 0, 0], 'x', 8);

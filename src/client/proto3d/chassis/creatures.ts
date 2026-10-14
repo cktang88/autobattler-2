@@ -12,7 +12,7 @@
 // wrist housing carries a weapon; melee weapons get an open jaw so the tool reads as a claw at the end of an arm.
 
 import * as THREE from 'three';
-import { Bld, type MatLike, type V3 } from '../geo.ts';
+import { aim, Bld, type MatLike, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { beam, block, both, collar, dome, exhaust, glow, hazard, pod, sensor, vent } from './shapes.ts';
@@ -20,12 +20,12 @@ import { beam, block, both, collar, dome, exhaust, glow, hazard, pod, sensor, ve
 // ---- shared shape helpers ---------------------------------------------------------------------------------------------
 
 /** superellipse ring in the XZ plane at height y: front half-length rxF, rear half-length rxB, half-width rz */
-export function planRing(cx: number, y: number, cz: number, rxF: number, rxB: number, rz: number, n = 12, pw = 2.4): V3[] {
+export function planRing(cx: number, y: number, cz: number, rxF: number, rxB: number, rz: number, n = 12, pw = 2.4, prow = false): V3[] {
   const out: V3[] = [];
   const e = 2 / pw;
   for (let i = 0; i < n; i++) {
-    // half-step offset: a flat facet faces forward (reads as a plate, not a prow vertex)
-    const a = ((i + 0.5) / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    // half-step offset: a flat facet faces forward (reads as a plate); prow = a vertex points forward instead
+    const a = ((i + (prow ? 0 : 0.5)) / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     const x = Math.sign(c) * Math.pow(Math.abs(c), e) * (c > 0 ? rxF : rxB);
     out.push([cx + x, y, cz - Math.sign(s) * Math.pow(Math.abs(s), e) * rz]);
   }
@@ -33,8 +33,26 @@ export function planRing(cx: number, y: number, cz: number, rxF: number, rxB: nu
 }
 
 /** Shell: a loft of plan rings. levels = [y, scale, dx?]; scale shrinks the ring about its centre (dx shifts it). */
-export function shell(b: Bld, mat: MatLike, cx: number, cz: number, rxF: number, rxB: number, rz: number, levels: [number, number, number?][], n = 12, pw = 2.4): void {
-  b.loft(mat, levels.map(([y, k, dx]) => planRing(cx + (dx ?? 0), y, cz, rxF * k, rxB * k, rz * k, n, pw)));
+export function shell(b: Bld, mat: MatLike, cx: number, cz: number, rxF: number, rxB: number, rz: number, levels: [number, number, number?][], n = 12, pw = 2.4, prow = false): void {
+  b.loft(mat, levels.map(([y, k, dx]) => planRing(cx + (dx ?? 0), y, cz, rxF * k, rxB * k, rz * k, n, pw, prow)));
+}
+
+/** cheap unbevelled box (12 tris) for tiny parts: glow chips, fins, strips */
+export function tbox(b: Bld, mat: MatLike, w: number, h: number, d: number, x: number, y: number, z: number, rot?: V3): void {
+  const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(rot ?? [0, 0, 0])));
+  b.g(new THREE.BoxGeometry(w, h, d), mat, m.setPosition(x, y, z));
+}
+/** cheap unbevelled beam from a to c (w across, h along up) */
+export function tbeam(b: Bld, mat: MatLike, a: V3, c: V3, w: number, h: number, up: V3 = [0, 1, 0]): void {
+  const d: V3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const len = Math.hypot(d[0], d[1], d[2]);
+  b.g(new THREE.BoxGeometry(w, h, len).translate(0, 0, len / 2), mat, aim(a, d, up));
+}
+
+/** slim wrist ring a turret sits in on an arm / fist housing (a full collar reads as a plate stuck on the arm) */
+export function wristRing(b: Bld, kit: Kit, x: number, y: number, z: number, r: number, seg = 12): number {
+  b.lathe(kit.trim, [[0, -r * 0.14], [r * 1.02, -r * 0.14], [r * 1.06, -r * 0.06], [r * 1.06, r * 0.04], [0, r * 0.04]], [x, y, z], 'y', seg);
+  return y + r * 0.04;
 }
 
 export const isMelee = (m?: MountSpec) => !!m && (m.mod.category === 'melee' || m.mod.projectile === 'melee');
@@ -132,7 +150,7 @@ function bunkerCrawler(c: ChassisCtx): ChassisOut {
   let hips: Hip[] | undefined;
   if (legged) {
     hips = [];
-    for (const [hx, fx2, fz, ph] of [[-0.02, 0.18, 1.72, 0], [-0.55, -1.0, 1.55, Math.PI]] as [number, number, number, number][]) for (const s of [-1, 1] as const) {
+    for (const [hx, fx2, fz, ph] of [[-0.02, 0.25, 2.05, 0], [-0.55, -1.15, 1.9, Math.PI]] as [number, number, number, number][]) for (const s of [-1, 1] as const) {
       const p: V3 = [hx * u, by - 0.04 * u, s * 0.86 * u];
       hips.push({ p, side: s, t: stance.thick, foot: [fx2 * u, 0, s * fz * u], phase: ph + (s > 0 ? Math.PI : 0) });
     }
@@ -146,7 +164,7 @@ function bunkerCrawler(c: ChassisCtx): ChassisOut {
     deckAt: deck, top: topY, hips, custom: true,
     seat: (m) => {
       const pt = podTop.get(m);
-      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.06 * u, 14); return { y: pt, socket: true }; }
+      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r), socket: true };
       const y = Math.max(deck(m.x, m.z), by + 0.4 * u) + 0.06 * u;
       collar(b, kit, m.x, y, m.z, m.r, y - 0.2 * u, 16);
       return { y, socket: true };
@@ -161,15 +179,16 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
   const u = Math.min(W / 3, L / 5); // authored for 3 x 5 (art 3 x 4)
   const legged = stance.legs !== null;
   const by = legged ? stance.hipY + 0.04 * u : Math.max(stance.y0 + 0.22 * u, stance.yt);
-  // overlapping armour bands, front to back: [centre x, rxF, rxB, rz, height]
-  const bands: [number, number, number, number, number][] = [
-    [1.05, 0.6, 0.45, 0.66, 0.42], [0.3, 0.55, 0.5, 0.86, 0.6], [-0.48, 0.5, 0.48, 0.78, 0.54], [-1.2, 0.45, 0.42, 0.6, 0.44], [-1.75, 0.32, 0.3, 0.4, 0.3],
+  // overlapping armour bands, front to back, leaning back like shingles: [centre x, length, width, height]
+  const bands: [number, number, number, number][] = [
+    [1.02, 0.95, 1.2, 0.42], [0.3, 0.95, 1.62, 0.6], [-0.46, 0.9, 1.5, 0.54], [-1.16, 0.8, 1.16, 0.44], [-1.72, 0.55, 0.76, 0.3],
   ];
-  shell(b, kit.trim, -0.3 * u, 0, 1.6 * u, 1.75 * u, 0.62 * u, [[by - 0.22 * u, 0.86], [by + 0.02 * u, 1.0]], 8, 2);
-  bands.forEach(([x, f, r, z, h], i) => {
-    const mat = i % 2 ? kit.panel : kit.hull;
-    shell(b, mat, x * u, 0, f * u, r * u, z * u, [[by - 0.06 * u, 0.92], [by + 0.08 * u, 1.0], [by + h * 0.7 * u, 0.94, 0.04 * u], [by + h * u, 0.6, 0.02 * u]], 8, 2);
-    if (i > 0 && i < 4) glow(b, kit, (x - r * 0.75) * u, by + h * 0.65 * u, 0, 0.03 * u, 0.03 * u, z * 1.0 * u);
+  block(b, kit.trim, -0.3 * u, by - 0.24 * u, 0, 3.0 * u, 1.1 * u, 0.26 * u, { ch: 0.3 * u, bot: 0.06 * u });
+  bands.forEach(([x, l, w, h], i) => {
+    block(b, kit.hull, x * u, by - 0.06 * u, 0, l * u, w * u, (h + 0.06) * u, { top: [0.62, 0.7], shift: [-l * 0.16 * u, 0], ch: w * 0.28 * u, bev: 0.05 * u, bot: 0.04 * u, mid: [[0.5, 1.0, 1.02]] });
+    // ridge cap plate on every other band, glow seam at the rear lip
+    if (i % 2) block(b, kit.panel, (x - l * 0.1) * u, by + (h - 0.02) * u, 0, l * 0.5 * u, w * 0.32 * u, 0.06 * u, { top: [0.8, 0.8], ch: w * 0.1 * u, bev: 0.02 * u });
+    if (i > 0 && i < 4) tbox(b, kit.glow, 0.03 * u, 0.03 * u, w * 0.62 * u, (x - l * 0.45) * u, by + h * 0.62 * u, 0);
   });
   // prow: wedge ram with a glowing triple-eye band
   const px = 1.62 * u;
@@ -210,10 +229,10 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
   let hips: Hip[] | undefined;
   if (legged) {
     hips = [];
-    const rows: [number, number, number][] = [[0.55, 0.85, 0], [-0.2, -0.1, Math.PI], [-0.95, -1.5, 0]];
+    const rows: [number, number, number][] = [[0.55, 1.0, 0], [-0.2, -0.15, Math.PI], [-0.95, -1.7, 0]];
     for (const [hx, fx, ph] of rows) for (const s of [-1, 1] as const) {
       const p: V3 = [hx * u, by - 0.02 * u, s * 0.6 * u];
-      hips.push({ p, side: s, t: stance.thick, foot: [fx * u, 0, s * 1.45 * u], phase: ph + (s > 0 ? Math.PI : 0) });
+      hips.push({ p, side: s, t: stance.thick, foot: [fx * u, 0, s * 1.95 * u], phase: ph + (s > 0 ? Math.PI : 0) });
     }
   }
   const deckTop = by + 0.6 * u;
@@ -222,7 +241,7 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
     deckAt: deck, top: elbow[1], hips, custom: true,
     seat: (m) => {
       const pt = podTop.get(m);
-      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.06 * u, 14); return { y: pt, socket: true }; }
+      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r), socket: true };
       if (m === tail) { collar(b, kit, m.x, cradleY, m.z, m.r, cradleY - 0.08 * u, 16); return { y: cradleY, socket: true }; }
       collar(b, kit, m.x, deckTop, m.z, m.r, deckTop - 0.2 * u, 16);
       return { y: deckTop, socket: true };
@@ -237,7 +256,7 @@ function saucerDisc(c: ChassisCtx): ChassisOut {
   const R = (ch.art?.[0] ?? Math.min(L, W)) / 2; // 0.875
   const u = R / 0.875;
   const legged = stance.legs !== null;
-  const by = legged ? stance.hipY + 0.2 * u : stance.y0 + 0.2 * u;
+  const by = legged ? stance.hipY + 0.32 * u : stance.y0 + 0.2 * u;
   // disc: underside bowl, sharp rim, sloped upper skirt, flat turret plateau
   const deckY = by + 0.18 * u;
   b.lathe(kit.trim, [[0, by - 0.2 * u], [0.32 * u, by - 0.2 * u], [0.62 * u, by - 0.13 * u], [0.84 * u, by - 0.03 * u], [0.88 * u, by], [0, by]], [0, 0, 0], 'y', 24);
@@ -265,9 +284,9 @@ function saucerDisc(c: ChassisCtx): ChassisOut {
     // tripod: one leg forward, two swept back
     const t = stance.thick;
     hips = [
-      { p: [0.3 * u, by - 0.16 * u, 0.02], side: 1, t, foot: [1.0 * u, 0, 0.05 * u], phase: 0 },
-      { p: [-0.18 * u, by - 0.16 * u, -0.28 * u], side: -1, t, foot: [-0.6 * u, 0, -0.95 * u], phase: (Math.PI * 2) / 3 },
-      { p: [-0.18 * u, by - 0.16 * u, 0.28 * u], side: 1, t, foot: [-0.6 * u, 0, 0.95 * u], phase: (Math.PI * 4) / 3 },
+      { p: [0.3 * u, by - 0.16 * u, 0.02], side: 1, t, foot: [1.2 * u, 0, 0.05 * u], phase: 0 },
+      { p: [-0.18 * u, by - 0.16 * u, -0.28 * u], side: -1, t, foot: [-0.66 * u, 0, -1.12 * u], phase: (Math.PI * 2) / 3 },
+      { p: [-0.18 * u, by - 0.16 * u, 0.28 * u], side: 1, t, foot: [-0.66 * u, 0, 1.12 * u], phase: (Math.PI * 4) / 3 },
     ];
     for (const h of hips) b.cylb(kit.metal, t * 1.1, t * 0.9, t * 0.15, [h.p[0], by - 0.2 * u - t * 0.9, h.p[2]], 'y', 10);
   }
@@ -349,7 +368,7 @@ function landtrain(c: ChassisCtx): ChassisOut {
   if (legged) {
     hips = [];
     xs.forEach((x, i) => {
-      for (const s of [-1, 1] as const) hips!.push({ p: [x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [x + 0.05 * u, 0, s * 1.08 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
+      for (const s of [-1, 1] as const) hips!.push({ p: [x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [x + 0.05 * u, 0, s * 1.38 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
     });
   }
   const deck = (x: number, z: number) => (Math.abs(z) < carZ * 0.6 && xs.some((cx) => Math.abs(x - cx) < carX) ? topY : -1);

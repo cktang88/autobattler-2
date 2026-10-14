@@ -73,7 +73,7 @@ export function barrel(C: WCtx, B: Bld, o: {
   const tp = o.taper ?? 0.82;
   const at: V3 = [x0, y, z];
   const brake = o.brake ?? 'none';
-  const bl = brake === 'none' ? 0 : brake === 'flash' ? R * 3 : R * 3.6;
+  const bl = brake === 'none' ? 0 : brake === 'flash' ? R * 2.6 : R * 2.8;
   const tubeEnd = L - bl * 0.85;
   // tube: thick root (collar), taper to the muzzle
   B.lathe(o.mat ?? kit.metal, [[0, 0], [R * 1.25, 0], [R * 1.25, L * 0.1], [R, L * 0.14], [R * tp, tubeEnd], [0, tubeEnd]], at, 'x', seg);
@@ -82,13 +82,14 @@ export function barrel(C: WCtx, B: Bld, o: {
   const m0 = L - bl;
   if (brake === 'slot') {
     // chunky double-baffle brake: two fat drums with a dark gap
-    const bR = R * 1.75;
-    B.lathe(kit.steel, [[0, m0], [bR, m0], [bR, m0 + bl * 0.4], [R * 1.1, m0 + bl * 0.4], [R * 1.1, m0 + bl * 0.55], [bR, m0 + bl * 0.55], [bR, L], [R * 0.6, L], [0, L - bl * 0.1]], at, 'x', seg);
+    const bR = R * 1.48;
+    B.lathe(kit.metal, [[0, m0], [bR, m0], [bR, m0 + bl * 0.4], [R * 1.1, m0 + bl * 0.4], [R * 1.1, m0 + bl * 0.55], [bR, m0 + bl * 0.55], [bR, L], [R * 0.6, L], [0, L - bl * 0.1]], at, 'x', seg);
   } else if (brake === 'block') {
-    cbox(B, kit.steel, x0 + m0 + bl / 2, y, z, bl, R * 2.6, R * 3.2, R * 0.4);
+    cbox(B, kit.metal, x0 + m0 + bl / 2, y, z, bl, R * 2.2, R * 2.8, R * 0.4);
   } else if (brake === 'cone' || brake === 'flash') {
-    const bR = brake === 'cone' ? R * 1.9 : R * 1.45;
-    B.lathe(kit.metal, [[0, m0], [R * 1.05, m0], [bR, L], [R * 0.55, L], [0, L - bl * 0.3]], at, 'x', seg);
+    // 'cone' = chunky muzzle can, 'flash' = short flared hider
+    if (brake === 'cone') B.lathe(kit.metal, [[0, m0], [R * 1.4, m0], [R * 1.5, m0 + bl * 0.15], [R * 1.5, L - bl * 0.15], [R * 1.3, L], [R * 0.6, L], [0, L - bl * 0.2]], at, 'x', seg);
+    else B.lathe(kit.metal, [[0, m0], [R * 1.05, m0], [R * 1.4, L], [R * 0.55, L], [0, L - bl * 0.3]], at, 'x', seg);
   }
   if (!o.noMuzzle) C.muzzle(x0 + L + R * 0.3, y, z);
   return L;
@@ -122,6 +123,9 @@ export function deckRing(C: WCtx, k = 0.95): void {
 /** Team accent panel lying on a face (horizontal by default). */
 export function accent(C: WCtx, x: number, y: number, z: number, l: number, w: number, rot?: V3, B: Bld = C.b): void {
   C.acc = true;
+  // restrained team accent: a stripe, never a big painted panel
+  const lo = C.r * 0.11, hi = C.r * 0.5;
+  if (l >= w) { l = Math.min(l, hi); w = Math.min(w, lo); } else { w = Math.min(w, hi); l = Math.min(l, lo); }
   bx(B, C.kit.accent, x, y, z, l, Math.max(0.004, C.r * 0.02), w, rot);
 }
 

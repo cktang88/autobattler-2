@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Bld, type V3 } from '../geo.ts';
 import { registerMobility, type Stance, type StanceIn } from '../chassis/registry.ts';
+import { cbox } from '../chassis/light.ts';
 
 export function hoverStance(s: StanceIn): Stance {
   const y0 = 0.1 + 0.035 * s.S;
@@ -20,7 +21,7 @@ function planRing(y: number, a: number, c: number, pointy: boolean, n = 16): V3[
     const e = 2 / 3.2;
     let x = Math.sign(ct) * Math.abs(ct) ** e * a;
     let z = Math.sign(st) * Math.abs(st) ** e * c;
-    if (pointy && x > 0) { const f = x / a; z *= 1 - 0.55 * f * f; x *= 1.04; }
+    if (pointy && x > 0) { const f = x / a; z *= 1 - 0.75 * f * f; x *= 1.04; }
     out.push([x, y, z]);
   }
   return out;
@@ -45,12 +46,12 @@ registerMobility('hover', {
     for (const s of [-1, 1]) {
       const z = s * w * 0.48;
       b.lathe(c.kit.hull, [[fr * 0.86, 0], [fr * 1.12, 0], [fr * 1.16, fr * 0.6], [fr * 0.9, fr * 0.6]], [fx, fy, z], '-x', 10);
-      b.box(c.kit.trim, fr * 0.5, fy - y0, fr * 0.3, fx + fr * 0.3, (fy + y0) / 2, z, 0.01);
+      cbox(b, c.kit.trim, fr * 0.5, fy - y0, fr * 0.3, fx + fr * 0.3, (fy + y0) / 2, z, 0.01);
       const g = new THREE.Group();
       g.position.set(fx - fr * 0.3, fy, z);
       const rb = new Bld();
       rb.cyl(c.kit.metal, fr * 0.22, fr * 0.22, fr * 0.2, [0, 0, 0], 'x', 6);
-      for (let k = 0; k < 3; k++) rb.box(c.kit.metal, fr * 0.04, fr * 1.6, fr * 0.22, 0, 0, 0, 0.004, [(k / 3) * Math.PI, 0, 0]);
+      for (let k = 0; k < 3; k++) cbox(rb, c.kit.metal, fr * 0.04, fr * 1.6, fr * 0.22, 0, 0, 0, 0.004, [(k / 3) * Math.PI, 0, 0]);
       rb.mount(g);
       c.root.add(g);
       rotors.push(g);

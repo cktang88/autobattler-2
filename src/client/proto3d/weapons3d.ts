@@ -64,7 +64,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false):
     b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
     c: classPos(mod), tier: moduleTier(mod), nb: mod.barrels ?? 1,
     // chunky: barrel radius ~0.6 x the true bore width, never thinner than 9% of the housing radius
-    bore: Math.max(boreOf(calibreMm(mod)) * 0.6 * kS, r * 0.09),
+    bore: Math.max(boreOf(calibreMm(mod)) * 0.6 * kS, r * 0.11),
     y0: fixed ? 0 : r * 0.1, fixed, bv: Math.max(0.004, r * 0.05), t,
     muzzle: (x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); recoil.add(o); t.muzzles.push(o); },
     spin: (axis = 'x', at = [0, 0, 0]) => {

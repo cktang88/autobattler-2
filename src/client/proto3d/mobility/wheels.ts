@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { Bld, type P2 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerMobility, type MobilityCtx, type Stance, type StanceIn } from '../chassis/registry.ts';
+import { cbox } from '../chassis/light.ts';
 import { block } from '../chassis/shapes.ts';
 
 const BASE = { tracked: false, legs: null, thick: 0, hipY: 0 } as const;
@@ -57,7 +58,7 @@ export function buildAxles(c: MobilityCtx, list: Axle[], hb: Bld): (t: number, m
     groups.push(g);
     // static axle beam + suspension blocks
     if (a.zs.length > 1) hb.cyl(c.kit.metal, a.wr * 0.16, a.wr * 0.16, Math.abs(a.zs[1] - a.zs[0]), [a.x, a.wr, a.zs[0]], 'z', 6);
-    else hb.box(c.kit.metal, a.wr * 0.3, a.wr * 0.3, a.w * 1.5, a.x, a.wr, a.zs[0], 0.01);
+    else cbox(hb, c.kit.metal, a.wr * 0.3, a.wr * 0.3, a.w * 1.5, a.x, a.wr, a.zs[0], 0.01);
   }
   return (t, mv) => { for (const g of groups) g.rotation.z = -t * 6 * mv; };
 }
@@ -85,10 +86,10 @@ export function bogie(b: Bld, kit: Kit, xc: number, len: number, h: number, w: n
   const eg = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: false, curveSegments: 1 });
   b.g(eg, kit.rubber, new THREE.Matrix4().makeTranslation(0, 0, z - w / 2));
   // big cleats along the ground run and the top run
-  const n = Math.max(3, Math.round((xf - xr) / (h * 0.45)));
+  const n = Math.max(3, Math.round((xf - xr) / (h * 0.55)));
   for (let i = 0; i < n; i++) {
     const x = xr + ((xf - xr) * (i + 0.5)) / n;
-    b.box(kit.metal, h * 0.18, h * 0.08, w * 1.06, x, h * 0.02, z, h * 0.02);
+    cbox(b, kit.metal, h * 0.18, h * 0.08, w * 1.06, x, h * 0.02, z, h * 0.02);
   }
   // road wheels / sprocket on the outer face
   const zo = z + side * (w / 2 + 0.003), ax = side > 0 ? 'z' : '-z';
@@ -98,7 +99,7 @@ export function bogie(b: Bld, kit: Kit, xc: number, len: number, h: number, w: n
   disc((xr + xf) / 2, R * 0.72, R * 0.62);
   b.cyl(kit.accent, R * 0.2, R * 0.16, w * 0.06, [xr, R, zo + side * w * 0.13], ax, 6);
   // chunky fender over the run, sloped at the front
-  block(b, kit.hull, xc - len * 0.02, h * 0.96, z + side * w * 0.04, len * 0.92, w * 1.16, h * 0.12, { ch: h * 0.06, bev: h * 0.035 });
+  block(b, kit.hull, xc - len * 0.02, h * 0.96, z, len * 0.9, w * 1.04, h * 0.1, { ch: h * 0.06, bev: h * 0.035 });
 }
 
 registerMobility('wheels', {
@@ -121,7 +122,11 @@ registerMobility('halftrack', {
     const wr = h * 0.52;
     const upd = buildAxles(c, [{ x: c.L * 0.32, zs: [-zo, zo], wr, w: w * 0.92 }], b);
     // front mudguards
-    for (const s of [-1, 1]) block(b, c.kit.hull, c.L * 0.32, wr * 1.9, s * zo, wr * 2.3, w * 1.18, h * 0.1, { top: [0.8, 1], ch: h * 0.05, bev: h * 0.03 });
+    // front mudguards: three-facet arc over each front tyre
+    for (const s of [-1, 1]) for (const a of [0.45, Math.PI / 2, Math.PI - 0.45]) {
+      const r = wr * 1.14;
+      cbox(b, c.kit.hull, wr * 0.82, h * 0.07, w * 1.12, c.L * 0.32 + Math.cos(a) * r, wr + Math.sin(a) * r, s * zo, h * 0.025, [0, 0, a - Math.PI / 2]);
+    }
     b.mount(c.root);
     return upd;
   },

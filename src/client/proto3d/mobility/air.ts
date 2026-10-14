@@ -124,13 +124,13 @@ export function buildLift(root: THREE.Group, kit: Kit, lift: Lift[]): (t: number
         root.add(frame);
         const fb = new Bld();
         const h = r * 0.5, R1 = r * 1.28;
-        // thick ring: flared intake lip on top, straight inner wall, rounded outer skin
-        fb.lathe(kit.hull, [[r, -h * 0.5], [R1 * 0.96, -h * 0.5], [R1, -h * 0.1], [R1 * 0.98, h * 0.35], [r * 1.14, h * 0.55], [r * 1.02, h * 0.42]], [0, 0, 0], 'y', 18);
-        fb.lathe(kit.trim, [[r * 1.0, -h * 0.48], [r * 1.0, h * 0.42], [r * 0.99, h * 0.42], [r * 0.99, -h * 0.48]], [0, 0, 0], 'y', 18);
-        fb.lathe(kit.accent, [[R1 * 0.9, -h * 0.12], [R1 * 1.012, -h * 0.12], [R1 * 1.012, h * 0.06], [R1 * 0.9, h * 0.06]], [0, 0, 0], 'y', 18);
-        // stator spokes + hub cone
-        for (let i = 0; i < 3; i++) fb.box(kit.metal, r * 0.08, h * 0.12, r * 1.95, 0, -h * 0.32, 0, 0.004, [0, (i / 3) * Math.PI, 0]);
-        fb.lathe(kit.metal, [[0, -h * 0.75], [r * 0.2, -h * 0.4], [r * 0.24, h * 0.1], [0, h * 0.3]], [0, 0, 0], 'y', 10);
+        // thick ring (closed profile: inner wall, flat bottom, rounded outer skin, flared intake lip), accent band,
+        // stator spokes and hub cone
+        const sg = r < 0.16 ? 12 : 18;
+        fb.lathe(kit.hull, [[r * 1.02, h * 0.4], [r, h * 0.28], [r, -h * 0.5], [R1 * 0.96, -h * 0.5], [R1, -h * 0.1], [R1 * 0.98, h * 0.35], [r * 1.14, h * 0.55], [r * 1.02, h * 0.4]], [0, 0, 0], 'y', sg);
+        fb.lathe(kit.accent, [[R1 * 0.9, -h * 0.12], [R1 * 1.012, -h * 0.12], [R1 * 1.012, h * 0.06], [R1 * 0.9, h * 0.06]], [0, 0, 0], 'y', sg);
+        for (let i = 0; i < 3; i++) fb.g(new THREE.BoxGeometry(r * 0.08, h * 0.12, r * 1.95), kit.metal, mtx([0, -h * 0.32, 0], [0, (i / 3) * Math.PI, 0]));
+        fb.lathe(kit.metal, [[0, -h * 0.75], [r * 0.2, -h * 0.4], [r * 0.24, h * 0.1], [0, h * 0.3]], [0, 0, 0], 'y', 8);
         fb.mount(frame);
         const fan = new THREE.Group();
         const bb = new Bld();

@@ -156,7 +156,7 @@ function heavyheli(c: ChassisCtx): AirOut {
   pod(b, kit.glass, [1.7, cy + 0.02, 0], 0.26, 0.17, 0.3, 12, 6, 2.6);
   b.box(kit.trim, 0.03, 0.04, 0.5, 1.64, cy + 0.17, 0, 0.008);
   // dorsal spine between the rotor pylons
-  block(b, kit.trim, -0.15, cy + 0.32, 0, 2.2, 0.34, 0.1, { top: [0.95, 0.7], ch: 0.1, bev: 0.03 });
+  block(b, kit.panel, -0.15, cy + 0.32, 0, 2.2, 0.3, 0.08, { top: [0.95, 0.7], ch: 0.1, bev: 0.03 });
   // rear ramp hint + hazard band
   b.box(kit.trim, 0.04, 0.3, 0.5, -1.93, cy + 0.08, 0, 0.01, [0, 0, -0.5]);
   b.box(kit.hazard, 0.6, 0.03, 0.04, -0.4, cy - 0.06, 0.39, 0.006);
@@ -186,8 +186,14 @@ function heavyheli(c: ChassisCtx): AirOut {
     lift.push({ kind: 'rotor', p: [1.12, cy + 0.52, 0], r: 1.25, blades: n, dir: 1 });
     lift.push({ kind: 'rotor', p: [-1.6, cy + 0.98, 0], r: 1.25, blades: n, dir: -1 });
   } else {
-    // flat engine deck and outrigger grav pods
-    block(b, kit.hull, -0.3, cy + 0.26, 0, 1.8, 0.4, 0.1, { top: [0.9, 0.7], ch: 0.1, bev: 0.03 });
+    // reactor hump amidships with glowing vents, H-tail on the upswept rear, outrigger grav pods
+    block(b, kit.hull, -0.2, cy + 0.3, 0, 1.3, 0.62, 0.24, { top: [0.7, 0.6], ch: 0.18, bev: 0.04 });
+    for (const s of [-1, 1]) {
+      b.box(kit.glow, 0.7, 0.03, 0.03, -0.25, cy + 0.47, s * 0.13, 0.006);
+      wing(b, kit.hull, mirror([[-1.5, cy + 0.3, 0.0, 0.42, 0.04], [-1.6, cy + 0.32, 0.6, 0.3, 0.03]], s));
+      fin(b, kit.hull, [[-1.52, cy + 0.12, s * 0.6, 0.4, 0.035], [-1.72, cy + 0.6, s * 0.66, 0.24, 0.025]]);
+      b.box(kit.accent, 0.16, 0.1, 0.045, -1.66, cy + 0.48, s * 0.66, 0.008);
+    }
     const xs = load(c) > 0.7 ? [1.2, 0.5, -1.25] : [1.15, -1.25];
     for (const x of xs) for (const s of [-1, 1]) {
       block(b, kit.trim, x, cy - 0.14, s * 0.52, 0.22, 0.36, 0.1, { ch: 0.05, bev: 0.02 });
@@ -216,7 +222,7 @@ function bomberhull(c: ChassisCtx): AirOut {
   b.loft(kit.glass, [[1.86, 0.2, 0.05], [1.72, 0.4, 0.14], [1.5, 0.48, 0.2]].map(([x, w, h]) => [[x, cy + 0.04, -w * 0.9], [x, cy + 0.04, w * 0.9], [x, cy + 0.04 + h, w * 0.6], [x, cy + 0.04 + h, -w * 0.6]] as V3[]));
   block(b, kit.panel, 1.34, cy + 0.2, 0, 0.5, 0.82, 0.12, { top: [0.7, 0.8], shift: [0.1, 0], ch: 0.14, bev: 0.03 });
   // dorsal spine ridge + glow strip
-  block(b, kit.trim, -0.3, cy + 0.3, 0, 1.6, 0.4, 0.1, { top: [0.86, 0.6], ch: 0.1, bev: 0.03 });
+  block(b, kit.panel, -0.3, cy + 0.3, 0, 1.6, 0.4, 0.1, { top: [0.86, 0.6], ch: 0.1, bev: 0.03 });
   b.box(kit.glow, 1.0, 0.02, 0.03, -0.3, cy + 0.405, 0, 0.005);
   // bomb bay doors
   for (const s of [-1, 1]) b.box(kit.trim, 1.3, 0.02, 0.26, 0.1, cy - 0.325, s * 0.15, 0.006);
@@ -273,6 +279,12 @@ function carrier(c: ChassisCtx): AirOut {
     b.cylb(kit.trim, 0.16, 0.04, 0.01, [-0.04, cy + 0.04, s * 2.72], 'x', 12);
     b.cyl(kit.hot, 0.14, 0.12, 0.015, [-1.5, cy + 0.04, s * 2.72], '-x', 12);
     navLights(b, kit, -0.75, cy + 0.3, s * 2.72, 0.04);
+    // outboard tail fins on the nacelles, canted out
+    fin(b, kit.hull, [[-0.8, cy + 0.12, s * 2.72, 0.7, 0.05], [-1.2, cy + 0.62, s * 2.86, 0.32, 0.03]]);
+    b.box(kit.accent, 0.2, 0.14, 0.06, -1.1, cy + 0.48, s * 2.83, 0.01, [s * 0.28, 0, 0]);
+    // armoured shoulder ridge where the wing meets the keel, with a glow seam
+    block(b, kit.hull, -0.3, cy + 0.12, s * 0.72, 2.4, 0.36, 0.3, { top: [0.86, 0.5], shift: [0, -s * 0.06], ch: 0.12, bev: 0.04 });
+    b.box(kit.glow, 1.6, 0.02, 0.03, -0.3, cy + 0.36, s * 0.62, 0.005);
     // armour plates along the wing root, stripe
     block(b, kit.trim, 0.3, cy + 0.1, s * 1.0, 1.2, 0.28, 0.09, { top: [0.8, 0.7], ch: 0.08, bev: 0.02 });
     b.box(kit.accent, 0.5, 0.02, 0.12, -0.1, cy + 0.15, s * 2.25, 0.006, [0, s * 0.5, 0]);
@@ -340,14 +352,14 @@ function strikejet(c: ChassisCtx): AirOut {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.12;
   fuse(b, kit.hull, [
-    [1.4, cy - 0.02, 0.02, 0.02], [1.2, cy, 0.1, 0.1], [0.8, cy + 0.02, 0.18, 0.17], [0.2, cy + 0.03, 0.21, 0.2],
-    [-0.4, cy + 0.02, 0.17, 0.17], [-0.75, cy + 0.01, 0.08, 0.09], [-0.86, cy, 0.035, 0.04],
+    [1.4, cy - 0.02, 0.02, 0.02], [1.2, cy, 0.12, 0.11], [0.8, cy + 0.02, 0.21, 0.19], [0.2, cy + 0.03, 0.24, 0.22],
+    [-0.4, cy + 0.02, 0.19, 0.18], [-0.75, cy + 0.01, 0.08, 0.09], [-0.86, cy, 0.035, 0.04],
   ], 10, 2.4);
   pod(b, kit.glass, [0.72, cy + 0.16, 0], 0.32, 0.12, 0.12, 10, 6, 2.2);
   b.box(kit.trim, 0.03, 0.03, 0.18, 0.62, cy + 0.27, 0, 0.006);
   b.strut(kit.steel, [1.38, cy - 0.02, 0], [1.52, cy - 0.02, 0], 0.008, 0.004, 5);
   // straight tapered wing
-  const ws: Station[] = [[0.32, cy - 0.02, 0.15, 0.75, 0.07], [0.02, cy + 0.03, 1.0, 0.4, 0.03]];
+  const ws: Station[] = [[0.36, cy - 0.02, 0.15, 0.85, 0.08], [0.06, cy + 0.03, 1.0, 0.46, 0.035]];
   const bz = 0.45;
   for (const s of [-1, 1]) {
     wing(b, kit.hull, mirror(ws, s));

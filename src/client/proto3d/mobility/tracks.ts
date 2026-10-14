@@ -2,12 +2,12 @@
 // few oversized road wheels, dressed in one of several looks chosen from the hull shape so tanks do not all sit on the
 // same two long strips:
 //   skirt    armoured side skirts with a fender lip, nose-tapered (default for any hull)
-//   round    rounded teardrop track nacelles: only the bottom run shows (sleek line tanks: warden 'hex')
+//   round    short rounded teardrop track nacelles set back under the hull (line tanks: warden 'hex')
 //   pods     four short armoured track pods at the corners, hull bridging them (fortress tanks: bastion)
-//   exposed  bare narrow tracks, big spoked road wheels, no skirt (thin-skinned artillery: longarm, siegeplat)
+//   exposed  carriage: bare tracks under the rear only, big dished road wheels, castor pair under the nose (longarm)
 //   wall     tall slab skirts reaching the ground, slanted, studded (wall-of-armour hulls: juggernaut)
 //   bogies   four short bare track bogies at the corners, toed out, on swing arms (siege platforms: siegeplat)
-//   twin     two tracks per side with linked fenders (wide heavy hulls: colossus 'titan')
+//   twin     long inner tracks + short outer tracks in rounded nacelles (trimaran hulls: colossus 'titan')
 // treads / halftrack / megatracks. Exported trackStance / trackUnit / trackStyle are reused by other mobility files.
 
 import * as THREE from 'three';
@@ -217,9 +217,10 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
       block(b, k.trim, 0, h * 0.25, 0, c.L * 0.66, c.W * 0.56, h * 0.6, { ch: h * 0.2 });
     } else if (style === 'round') {
       for (const z of zs) {
-        const s = Math.sign(z), TL = c.L * 0.95;
-        trackUnit(b, k, TL, h, w, z, s, { skirt: false, noFender: true, cleatMaxY: h * 0.42 });
-        trackNacelle(b, k, TL, h, w, z, s);
+        // short nacelles set back: the hull's prow runs out ahead of them
+        const s = Math.sign(z), TL = c.L * 0.8, xb = new XBld(b, place(-c.L * 0.08, 0, 0));
+        trackUnit(xb, k, TL, h, w, z, s, { skirt: false, noFender: true, cleatMaxY: h * 0.42 });
+        trackNacelle(xb, k, TL, h, w, z, s);
       }
     } else if (style === 'pods') {
       const PL = c.L * 0.4;
@@ -230,12 +231,20 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
       // axle beams joining each pod pair under the hull
       for (const z of zs) b.box(k.trim, c.L * 0.2, h * 0.3, w * 0.6, 0, h * 0.5, z, h * 0.06);
     } else if (style === 'exposed') {
-      for (const z of zs) trackUnit(b, k, c.L * 0.96, h, w, z, Math.sign(z), { skirt: false, bigWheels: true, noFender: true });
-      // thin mudguard rails over the top run only, on stays
+      // carriage: tracks under the rear gun body only, a castor wheel pair under the long nose
+      const TL = c.L * 0.6, xo = -c.L * 0.19, xb = new XBld(b, place(xo, 0, 0));
+      for (const z of zs) trackUnit(xb, k, TL, h, w, z, Math.sign(z), { skirt: false, bigWheels: true, noFender: true });
       for (const z of zs) {
-        b.box(k.hull, c.L * 0.7, h * 0.05, w * 1.05, -c.L * 0.03, h * 1.06, z, h * 0.02);
-        for (const f of [-0.28, 0.2]) b.box(k.metal, h * 0.06, h * 0.12, h * 0.06, c.L * f, h * 0.98, z - Math.sign(z) * w * 0.4, h * 0.01);
+        b.box(k.hull, TL * 0.72, h * 0.05, w * 1.05, xo - TL * 0.03, h * 1.06, z, h * 0.02);
+        for (const f of [-0.28, 0.2]) b.box(k.metal, h * 0.06, h * 0.12, h * 0.06, xo + TL * f, h * 0.98, z - Math.sign(z) * w * 0.4, h * 0.01);
       }
+      const cx = c.L * 0.38, cr = h * 0.34, cz = Math.min(c.W * 0.2, 0.2);
+      for (const sd of [-1, 1]) {
+        b.lathe(k.rubber, [[0, -w * 0.3], [cr * 0.85, -w * 0.3], [cr, -w * 0.18], [cr, w * 0.18], [cr * 0.85, w * 0.3], [0, w * 0.3]], [cx, cr, sd * cz], 'z', 12);
+        b.lathe(k.panel, [[0, w * 0.28], [cr * 0.6, w * 0.28], [cr * 0.5, w * 0.36], [0, w * 0.36]], [cx, cr, sd * cz], sd > 0 ? 'z' : '-z', 10);
+        b.box(k.metal, h * 0.1, h * 0.5, h * 0.06, cx, cr + h * 0.25, sd * (cz - w * 0.42), h * 0.02);
+      }
+      b.cyl(k.steel, h * 0.05, h * 0.05, cz * 2, [cx, cr, -cz], 'z', 8);
     } else if (style === 'bogies') {
       const BL = c.L * 0.34;
       for (const z of zs) for (const f of [-1, 1]) {
@@ -249,14 +258,18 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
       }
       for (const f of [-1, 1]) b.cyl(k.metal, h * 0.09, h * 0.09, c.W * 0.86, [f * c.L * 0.32, h * 0.5, -c.W * 0.43], 'z', 8);
     } else if (style === 'wall') {
-      for (const z of zs) wallSkirt(b, k, c.L * 0.94, h, w, z, Math.sign(z));
+      // walls set back so the ram prow leads
+      for (const z of zs) wallSkirt(new XBld(b, place(-c.L * 0.08, 0, 0)), k, c.L * 0.8, h, w, z, Math.sign(z));
     } else if (style === 'twin') {
+      // long inner tracks under the spine (set back), short outer tracks in rounded nacelles under the sponsons
       for (const z of zs) {
-        const outer = Math.abs(z) > c.W * 0.3;
-        trackUnit(b, k, c.L * (outer ? 0.9 : 0.97), h, w, z, Math.sign(z), { skirt: outer, heavy: true });
+        const s = Math.sign(z);
+        if (Math.abs(z) > c.W * 0.3) {
+          const TL = c.L * 0.5;
+          trackUnit(b, k, TL, h, w, z, s, { skirt: false, noFender: true, heavy: true, cleatMaxY: h * 0.42 });
+          trackNacelle(b, k, TL, h, w, z, s);
+        } else trackUnit(new XBld(b, place(-c.L * 0.07, 0, 0)), k, c.L * 0.8, h, w, z, s, { skirt: false, heavy: true });
       }
-      // fender bridge across each side pair
-      for (const s of [-1, 1]) block(b, k.trim, -c.L * 0.04, h * 0.9, s * (Math.abs(zs[0]) + Math.abs(zs[1])) / 2, c.L * 0.7, Math.abs(zs[0] - zs[1]) - w * 0.6, h * 0.14, { ch: h * 0.05 });
     } else {
       for (const z of zs) trackUnit(b, k, c.L * 0.97, h, w, z, Math.sign(z), { skirt: c.S >= 2 });
     }

@@ -36,17 +36,18 @@ const pedestal = (C: WCtx, k = 0.6, h = 0.22) => {
 /** 2 / 4 chunky tubes strapped into a bundle on a side yoke. */
 function rocketBundle(C: WCtx) {
   const { b, p, rc, kit, r, y0, nb } = C;
-  const cols = 2, rows = nb >= 4 ? 2 : 1;
-  const tr = r * (rows > 1 ? 0.24 : 0.28), pl = r * 1.45, g = tr * 2.15;
+  const cols = Math.max(2, nb), rows = 1;
+  const tr = r * (cols > 2 ? 0.2 : 0.26), pl = r * 2.0, g = tr * 2.1;
   const ph = rows * g, pw = cols * g;
   pedestal(C);
-  for (const s of [-1, 1]) cbox(b, kit.trim, 0, y0 + r * 0.2 + ph * 0.35, s * (pw / 2 + r * 0.08), r * 0.4, ph * 0.7 + r * 0.2, r * 0.1, r * 0.03);
-  C.t.pitch.position.set(0, y0 + r * 0.3 + ph * 0.5, 0);
+  cbox(b, kit.trim, -r * 0.1, y0 + r * 0.3, 0, r * 0.45, r * 0.3, r * 0.4, r * 0.05);
+  C.t.pitch.position.set(-r * 0.1, y0 + r * 0.42 + ph * 0.5, 0);
+  cbox(p, kit.hull, 0, -ph * 0.5 - r * 0.02, 0, r * 0.6, r * 0.08, pw * 0.8, r * 0.02);
   C.t.pitch.rotation.z = 0.18;
   const tip = C.mod.id === 'incendiary' ? kit.hot : kit.hazard;
   const ox = -pl * 0.35;
   for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
-    const y = (i - (rows - 1) / 2) * g, z = (j - 0.5) * g;
+    const y = (i - (rows - 1) / 2) * g, z = (j - (cols - 1) / 2) * g;
     rc.lathe(kit.hull, [[0, 0], [tr * 0.9, 0], [tr, tr * 0.3], [tr, pl], [tr * 0.78, pl], [tr * 0.78, pl - tr * 0.5], [0, pl - tr * 0.5]], [ox, y, z], 'x', 8);
     rc.lathe(tip, [[0, 0], [tr * 0.62, 0], [0, tr * 0.7]], [ox + pl - tr * 0.5, y, z], 'x', 6);
     C.muzzle(ox + pl + 0.01, y, z);
@@ -243,17 +244,17 @@ function howitzer(C: WCtx) {
   const h = r * 0.42;
   const wid = Math.max(r * 0.75, n * gap / 2 + R * 3);
   shell(b, kit.hull, [[-r * 1.0, wid * 0.82, wid * 0.7, h * 0.9], [r * 0.4, wid, wid * 0.85, h], [r * 0.85, wid * 0.7, wid * 0.55, h * 0.6]], y0);
-  for (const s of [-1, 1]) shell(b, kit.trim, [[-r * 0.65, r * 0.06, r * 0.05, h * 1.1], [r * 0.2, r * 0.06, r * 0.05, h * 0.7]], y0 + h * 0.8, s * (wid * 0.75));
+  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.2, y0 + h + r * 0.12, s * (wid * 0.72), r * 0.75, r * 0.3, r * 0.1, r * 0.03, undefined, 0.75);
   cbox(b, kit.panel, -r * 0.8, y0 + h + r * 0.08, 0, r * 0.3, r * 0.16, wid * 0.9);
   accent(C, -r * 0.8, y0 + h + r * 0.165, 0, r * 0.22, wid * 0.6);
   C.t.pitch.position.set(-r * 0.05, y0 + h + r * 0.12, 0);
   C.t.pitch.rotation.z = n >= 3 ? 0.55 : 0.45;
   cbox(p, kit.trim, 0, 0, 0, r * 0.4, R * 3.2, n * gap + R * 2.5, r * 0.05);
-  cbox(p, kit.hull, r * 0.32, R * 0.6, 0, r * 0.1, R * 4.5 + r * 0.15, n * gap + R * 4, r * 0.03);
+  cbox(p, kit.hull, r * 0.3, R * 0.4, 0, r * 0.1, R * 3.4 + r * 0.06, n * gap + R * 3.5, r * 0.03, undefined, 0.85);
   const len = C.D * (n >= 3 ? 1.25 : xl ? 1.45 : 1.6);
   for (const z of Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap)) {
     barrel(C, rc, { len, rad: R, x0: r * 0.1, z, seg: xl ? 10 : 8, sleeve: n < 3, brake: 'slot' });
-    if (n < 3) rc.cyl(kit.steel, R * 0.42, R * 0.42, len * 0.4, [r * 0.1, R * 1.45, z], 'x', 6);
+    if (n < 3) rc.cyl(kit.metal, R * 0.42, R * 0.42, len * 0.4, [r * 0.1, R * 1.45, z], 'x', 6);
   }
   C.t.shot = 'shell';
   C.t.rate = xl ? 3 : 2.4;

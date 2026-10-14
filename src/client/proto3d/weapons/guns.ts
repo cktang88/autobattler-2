@@ -11,7 +11,7 @@ export function buildGun(C: WCtx): void {
   if (v === 'shotgun') return scatter(C);
   if (v === 'pointdef') return pointDefence(C);
   if (v === 'flak') return flak(C);
-  if (v === 'cannon') return C.tier >= 4 ? siegeCasemate(C) : C.nb >= 2 ? twinHex(C) : C.c < 0.6 ? castDome(C) : wedgeTank(C);
+  if (v === 'cannon') return C.tier >= 4 ? siegeCasemate(C) : C.nb >= 2 ? twinHex(C) : calibreMm(C.mod) < 100 ? castDome(C) : wedgeTank(C);
   if (v === 'gauss') return gauss(C);
   if (v === 'sniper') return sniper(C);
   if (v === 'rail') return rail(C);
@@ -252,8 +252,8 @@ function gauss(C: WCtx) {
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.7, R * 4.4, r * 0.05);
   const len = C.D * 1.3;
   cbox(rc, kit.metal, len / 2 + r * 0.05, 0, 0, len, R * 2.1, R * 2.1, R * 0.35);
-  for (let i = 1; i <= 4; i++) rc.lathe(i % 2 ? kit.rail : kit.steel, [[0, 0], [R * 1.75, 0], [R * 1.75, R * 0.7], [0, R * 0.7]], [len * (0.18 + i * 0.17), 0, 0], 'x', 4, [Math.PI / 4, 0, 0]);
-  cbox(rc, kit.steel, len + r * 0.08, 0, 0, R * 1.2, R * 2.8, R * 2.8, R * 0.3);
+  for (let i = 1; i <= 4; i++) rc.lathe(i % 2 ? kit.rail : kit.trim, [[0, 0], [R * 1.75, 0], [R * 1.75, R * 0.7], [0, R * 0.7]], [len * (0.18 + i * 0.17), 0, 0], 'x', 4, [Math.PI / 4, 0, 0]);
+  cbox(rc, kit.trim, len + r * 0.08, 0, 0, R * 1.2, R * 2.6, R * 2.6, R * 0.3);
   C.muzzle(len + r * 0.1 + R * 0.6, 0, 0);
   C.t.shot = 'shell';
   C.t.rate = 1.4;
@@ -288,10 +288,10 @@ function rail(C: WCtx) {
   C.t.pitch.position.set(r * 0.5, y0 + h * 0.55, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.75, R * 6);
   const len = C.D * (xl ? 1.6 : 1.3 + 0.2 * C.c);
-  for (const s of [-1, 1]) cbox(rc, kit.steel, len / 2 + r * 0.05, 0, s * R * 1.35, len, R * 2.4, R * 1.0, R * 0.3);
-  bx(rc, kit.rail, len / 2 + r * 0.1, 0, 0, len * 0.95, R * 1.2, R * 1.2);
+  for (const s of [-1, 1]) cbox(rc, kit.metal, len / 2 + r * 0.05, 0, s * R * 1.25, len, R * 2.4, R * 0.9, R * 0.3);
+  bx(rc, kit.rail, len / 2 + r * 0.1, 0, 0, len * 0.95, R * 1.6, R * 1.4);
   const nr = xl ? 5 : C.c > 0.6 ? 4 : 3;
-  for (let i = 0; i < nr; i++) rc.lathe(kit.trim, [[0, 0], [R * 2.6, 0], [R * 2.6, R * 0.9], [0, R * 0.9]], [len * (0.12 + (0.7 * i) / Math.max(1, nr - 1)), 0, 0], 'x', 6, [Math.PI / 6, 0, 0]);
+  for (let i = 0; i < nr; i++) rc.lathe(kit.trim, [[0, 0], [R * 2.1, 0], [R * 2.1, R * 0.8], [0, R * 0.8]], [len * (0.12 + (0.7 * i) / Math.max(1, nr - 1)), 0, 0], 'x', 6, [Math.PI / 6, 0, 0]);
   C.muzzle(len + r * 0.08, 0, 0);
   C.t.shot = 'beam';
   C.t.rate = 2.0;
