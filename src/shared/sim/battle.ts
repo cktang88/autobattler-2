@@ -1673,13 +1673,47 @@ export class Battle {
       const id = this.scratch[q];
       const o = this.units[id];
       if (!o.alive || o.side === p.side || o.flying !== p.air || id === p.ignore || (p.pierce && p.hits.includes(id))) continue;
-      const r = this.ints[id].radius;
+      const O = this.ints[id];
+      if (O.elong) {
+        // elongated hull: its capsule (the same shape separation uses), not the mean-radius circle -- a long hull
+        // seen end-on reaches ~hl toward the shooter, where range checks find it but a circle let flames fall short
+        const t = this.segCapsule(ox, oy, sx, sy, O);
+        if (t >= 0 && (t < bestT || (t === bestT && id < best))) { bestT = t; best = id; }
+        continue;
+      }
+      const r = O.radius;
       let t = len2 > 0 ? ((o.x - ox) * sx + (o.y - oy) * sy) / len2 : 0;
       t = clamp(t, 0, 1);
       const qx = ox + sx * t - o.x, qy = oy + sy * t - o.y;
       if (qx * qx + qy * qy <= r * r && (t < bestT || (t === bestT && id < best))) { bestT = t; best = id; }
     }
     return best;
+  }
+
+  /** Does the segment (ox, oy) + (sx, sy) * t, t in [0, 1], touch O's capsule? Returns t of its closest approach, or -1. */
+  private segCapsule(ox: number, oy: number, sx: number, sy: number, O: Internal): number {
+    const o = O.u;
+    const ar = O.capAcross ? o.angle + Math.PI / 2 : o.angle;
+    const vx = Math.cos(ar) * O.capS, vy = Math.sin(ar) * O.capS;
+    // closest points of P(t) = A + d1 t and Q(s) = B + d2 s, t, s in [0, 1] (core segment B = centre - v, d2 = 2v)
+    const d1x = sx, d1y = sy, d2x = 2 * vx, d2y = 2 * vy;
+    const rx = ox - (o.x - vx), ry = oy - (o.y - vy);
+    const a = d1x * d1x + d1y * d1y, e = d2x * d2x + d2y * d2y, f = d2x * rx + d2y * ry;
+    let t = 0, s = 0;
+    if (a <= 1e-12) s = e > 1e-12 ? clamp(f / e, 0, 1) : 0;
+    else {
+      const c = d1x * rx + d1y * ry;
+      if (e <= 1e-12) t = clamp(-c / a, 0, 1);
+      else {
+        const b = d1x * d2x + d1y * d2y, den = a * e - b * b;
+        t = den > 1e-12 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+        s = (b * t + f) / e;
+        if (s < 0) { s = 0; t = clamp(-c / a, 0, 1); }
+        else if (s > 1) { s = 1; t = clamp((b - c) / a, 0, 1); }
+      }
+    }
+    const qx = rx + d1x * t - d2x * s, qy = ry + d1y * t - d2y * s;
+    return qx * qx + qy * qy <= O.capR * O.capR ? t : -1;
   }
 
   // ---------------------------------------------------------------- movement

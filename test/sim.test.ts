@@ -1020,6 +1020,22 @@ test('railguns hit big hulls whose edge is in range (rail reach measured to the 
   }
 });
 
+test('flames reach a long hull seen end-on (projectiles hit the capsule, not the mean-radius circle)', () => {
+  // the flamer parks once the centipede's nose (box edge) is in range; its 1.4-radius circle sat beyond the flames,
+  // so 180 shots in a row missed and the duel never ended
+  const f = D('flameunit', 'warden', 'halftrack', ['flamer', null]);
+  const centi = D('centi', 'centipede', 'treads', ['flak', null, null, null]);
+  assert.deepEqual(validateDesign(centi), []);
+  const { b, k, e } = duel([f, centi], { designId: 'flameunit', kite: false }, { designId: 'centi', stance: 'holdPos' }, 30);
+  let fires = 0, hits = 0;
+  for (let i = 0; i < 500 && !b.done; i++) {
+    b.step();
+    for (const ev of b.events) { if (ev.t === 'fire' && ev.unit === k.id) fires++; if (ev.t === 'hit' && ev.unit === e.id) hits++; }
+  }
+  assert.ok(fires > 20, `fires ${fires}`);
+  assert.ok(hits > fires / 2, `${hits} hits of ${fires} flames`);
+});
+
 test('the biggest hull (10x10 weaver titan) is found by the spatial hash: splash at its edge hits it', () => {
   // MAX_RADIUS (gather margin) was 4.0 while the arachne's footprint reaches 4.5 from its centre
   const big = D('weaver', 'arachne', 'spider', ['massdriver', 'flak', 'stormtower', 'railgun']);
