@@ -312,8 +312,14 @@ if (mode === 'shard') {
     // is the hulls' business (SIZE_K, hull numbers); the fit only equalises weapons: the class-mean ref score is re-centred on 50%.
     const classMean: Record<string, number> = {};
     for (const z of ['S', 'M', 'L', 'XL']) { const xs = rows.filter((r) => r.size === z).map((r) => r.refM); classMean[z] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0.5; }
+    // Role groups differ structurally vs the common reference (artillery beats it, melee loses to it), so the ref score is
+    // re-centred on the weapon's own group mean (the peers decide inside the group); the group mean itself is only pulled
+    // 25% towards the class mean (keeps group levels from drifting apart). Anti-air groups fight an air army: raw ref score.
+    const groupMean = (r: WRow) => { const xs = rows.filter((q) => q.size === r.size && q.group === r.group).map((q) => q.refM); return xs.reduce((a, b) => a + b, 0) / xs.length; };
+    const airGroup = (r: WRow) => GROUPS.find((g) => g.size === r.size && g.name === r.group)?.air;
     for (const r of rows) {
-      const refC = r.refM - classMean[r.size] + 0.5;
+      const gm = groupMean(r);
+      const refC = airGroup(r) ? r.refM : r.refM - gm + 0.5 + 0.25 * (classMean[r.size] - gm);
       const sc = Number.isNaN(r.peersM) ? refC : 0.5 * refC + 0.5 * r.peersM;
       const c = Math.min(0.95, Math.max(0.05, sc));
       const step = Math.pow(c / (1 - c), gain);
