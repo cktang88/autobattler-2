@@ -956,7 +956,8 @@ export class FieldView {
     // footprint: bar width follows the unit's mean edge, and it sits just above the rotated footprint box
     const bh = boxHalf(u.design, p.angle);
     if (u.level > 1) this.drawPips(p.x, p.y, bh.hy, u.level, 0.9);
-    const vis = this.barAlpha(v, S);
+    // bars stay up while a unit carries paralysis, so stun build-up is always readable
+    const vis = Math.max(this.barAlpha(v, S), u.para > 0 ? 1 : 0);
     if (vis <= 0.01) return;
     const g = this.g;
     g.globalAlpha = vis;
@@ -979,7 +980,36 @@ export class FieldView {
       g.fillStyle = '#8fe0ff';
       g.fillRect(x, y - 2, w * clamp(u.shield / u.maxShield, 0, 1), 1.5);
     }
+    this.drawPara(u, x, y + h + 1.5, w);
     g.globalAlpha = 1;
+  }
+
+  /** Paralysis (Zero-K style) under the hp bar: a blue meter filling toward a stun; while stunned it pulses and shows the
+   *  seconds left next to a bolt. */
+  private drawPara(u: SimUnit, x: number, y: number, w: number): void {
+    if (u.para <= 0) return;
+    const g = this.g;
+    const f = clamp(u.para / u.maxHp, 0, 1);
+    const stunned = u.stun > 0;
+    g.fillStyle = 'rgba(0,0,0,0.88)';
+    g.fillRect(x - 1.5, y, w + 3, 4.5);
+    g.fillStyle = stunned ? (Math.sin(this.time * 14) > 0 ? '#e6f6ff' : '#7fd0ff') : '#4aa8ff';
+    g.fillRect(x, y + 1, w * f, 2.5);
+    if (!stunned) return;
+    const tx = x + w + 4, ty = y + 2;
+    g.fillStyle = '#9fe0ff';
+    g.beginPath(); // bolt glyph
+    g.moveTo(tx + 3, ty - 6); g.lineTo(tx - 1, ty + 1); g.lineTo(tx + 2, ty + 1); g.lineTo(tx, ty + 7); g.lineTo(tx + 5, ty - 1); g.lineTo(tx + 2, ty - 1); g.closePath();
+    g.fill();
+    g.font = '700 12px "Barlow Condensed", system-ui, sans-serif';
+    g.textBaseline = 'middle';
+    g.textAlign = 'left';
+    g.lineWidth = 3;
+    g.strokeStyle = 'rgba(0,0,0,0.85)';
+    const txt = `${u.stun.toFixed(1)}s`;
+    g.strokeText(txt, tx + 8, ty + 0.5);
+    g.fillStyle = '#dff4ff';
+    g.fillText(txt, tx + 8, ty + 0.5);
   }
 
   /** screen px the unit's top is raised above its ground footprint (bars ride on top of it) */
@@ -1028,7 +1058,7 @@ export class FieldView {
     // corner ticks
     g.fillStyle = TEAM_PAL[team].rim;
     g.fillRect(x - 5, y - 1, 3, h + 2);
-    g.fillRect(x + w + 2, y - 1, 3, h + 2);
+    g.fillRect(x + w + 2, y - 1, 3, h + 2);    this.drawPara(u, x, y + h + 3.5, w);
   }
 
   /* ------------------------------------------------------------------------------------ projectiles */

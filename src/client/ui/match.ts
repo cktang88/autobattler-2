@@ -348,6 +348,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     return h('div.sc-dmg.sc-live', null,
       h('span', null, u.alive ? 'Now' : 'Destroyed'),
       u.alive ? h('b', null, `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)} HP${u.shield > 0 ? ` · ${Math.ceil(u.shield)} shield` : ''}`) : null,
+      u.alive && u.para > 0 ? h('em', { style: { color: '#9fe0ff' } }, u.stun > 0 ? `stunned ${u.stun.toFixed(1)}s` : `paralysis ${Math.round((100 * u.para) / u.maxHp)}%`) : null,
       h('em', null, `dealt ${dealt.toLocaleString()} this battle`));
   }
   function showLiveTip(u: SimUnit, at: { x: number; y: number }) {

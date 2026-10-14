@@ -68,6 +68,8 @@ export interface SimUnit {
   hitFlash: number;
   /** seconds of paralysis remaining (can't move, turn or fire) */
   stun: number;
+  /** paralysis damage (Zero-K style): stun weapons pile it up; above maxHp the unit is stunned until it drains back */
+  para: number;
   /** current slow fraction 0..0.6 (reduces move speed and fire rate) */
   slow: number;
   /** seconds of burning remaining */

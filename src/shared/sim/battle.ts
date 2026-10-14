@@ -40,6 +40,11 @@ const CRUSH_DMG = 14; // per size of the crusher, per contact pulse
 const RANGE_KEEP = 1.08; // hysteresis: a held target stays valid out to range * this
 const STALL_CHECK_EVERY = 20; // ticks
 const MAX_STUN = 4;
+/** Paralysis (Zero-K style): a weapon's `stun` (s) deals stun * PARA_PER_STUN paralysis damage. A unit is stunned while
+ *  its paralysis exceeds its max hp, so tough hulls take many more hits; paralysis drains at maxHp * PARA_DECAY per
+ *  second, and is capped so one stun lasts at most MAX_STUN seconds. Hits while stunned extend the stun. */
+export const PARA_PER_STUN = 150;
+const PARA_DECAY = 1 / 20;
 const MAX_SLOW = 0.6;
 const SLOW_DECAY = 0.3; // per s (0.6 fully decays over 2s)
 const BURN_EVERY = 0.5; // s between burn damage pulses
@@ -561,7 +566,7 @@ export class Battle {
     const u: SimUnit = {
       id, side, uid, design, stats, level, x: c.x, y: c.y, angle: heading, hp: maxHp, maxHp,
       shield: stats.shield, maxShield: stats.shield, alive: true, flying: stats.flying, moving: false,
-      odometer: 0, leap: 0, mounts, hitFlash: 0, stun: 0, slow: 0, burning: 0, disarm: 0,
+      odometer: 0, leap: 0, mounts, hitFlash: 0, stun: 0, para: 0, slow: 0, burning: 0, disarm: 0,
       cloaked: cloak !== null, reactive, auraShield: 0, maxAuraShield: 0,
     };
     this.units.push(u);
@@ -612,7 +617,11 @@ export class Battle {
       if (I.regen > 0 && I.sinceDamage > REGEN_DELAY && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * I.regen * DT);
       if (I.leapCd > 0) I.leapCd -= DT;
       if (I.crushCd > 0) I.crushCd -= DT;
-      if (u.stun > 0) u.stun = Math.max(0, u.stun - DT);
+      if (u.para > 0) {
+        const rate = u.maxHp * PARA_DECAY;
+        u.para = Math.max(0, u.para - rate * DT);
+        u.stun = u.para > u.maxHp ? (u.para - u.maxHp) / rate : 0;
+      } else if (u.stun > 0) u.stun = 0;
       if (u.disarm > 0) u.disarm = Math.max(0, u.disarm - DT);
       if (u.slow > 0) u.slow = Math.max(0, u.slow - SLOW_DECAY * DT);
       if (u.burning > 0) {
@@ -1439,7 +1448,12 @@ export class Battle {
           T.kby += dy * m2;
         }
       }
-      if (fx.stun) t.stun = Math.min(MAX_STUN, t.stun + fx.stun);
+      // paralysis piles up against max hp (bigger hulls = more hits to stun); capped at MAX_STUN seconds of stun
+      if (fx.stun) {
+        const rate = t.maxHp * PARA_DECAY;
+        t.para = Math.min(t.maxHp + rate * MAX_STUN, t.para + fx.stun * PARA_PER_STUN * fxMult);
+        t.stun = t.para > t.maxHp ? (t.para - t.maxHp) / rate : 0;
+      }
       if (fx.slow) t.slow = Math.min(MAX_SLOW, t.slow + fx.slow);
       if (fx.burn) {
         const dps = fx.burn.dps * fxMult;

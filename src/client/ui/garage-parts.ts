@@ -1,5 +1,6 @@
 // Garage helpers: icons, labels, module stat summaries and a small modal dialog.
 
+import { PARA_PER_STUN } from '../../shared/sim/battle.ts';
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { accuracyRating, firingStyle, turretTurnRate, weaponDps } from '../../shared/stats.ts';
@@ -116,7 +117,7 @@ export function moduleEffects(mod: ModuleDef): string[] {
   const t: string[] = [];
   if (mod.chain) t.push(`chain ${mod.chain}`);
   if (mod.pierce) t.push('pierce');
-  if (mod.stun) t.push(`stun ${mod.stun}s`);
+  if (mod.stun) t.push(`paralyse ${Math.round(mod.stun * PARA_PER_STUN)}`);
   if (mod.slow) t.push(`slow ${Math.round(mod.slow * 100)}%`);
   if (mod.disarm) t.push(`Disarm ${n1(mod.disarm)}s`);
   if (mod.impulse) t.push(`${mod.impulse > 0 ? 'Knockback' : 'Pull'} ${fmtMeters(Math.abs(mod.impulse))}`);
