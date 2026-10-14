@@ -309,33 +309,23 @@ if (mode === 'shard') {
     // ln(cal) moves ~0.8 * logit; the gain decays so the fit settles instead of oscillating.
     const gain = 1.6 / (1 + 0.35 * it);
     const upd: Record<string, number> = {};
-    // The carriers are artificial (one weapon + plating), so the absolute strength of a whole size class vs the reference
-    // is the hulls' business (SIZE_K, hull numbers); the fit only equalises weapons: the class-mean ref score is re-centred on 50%.
-    const classMean: Record<string, number> = {};
-    for (const z of ['S', 'M', 'L', 'XL']) { const xs = rows.filter((r) => r.size === z).map((r) => r.refM); classMean[z] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0.5; }
-    // Role groups differ structurally vs the common reference (artillery beats it, melee loses to it), so the ref score is
-    // re-centred on the weapon's own group mean (the peers decide inside the group); the group mean itself is pushed
-    // 25% away from the class mean in the direction of its ref score (weak groups get cheaper, strong ones dearer). Anti-air groups fight an air army: raw ref score.
-    const groupMean = (r: WRow) => { const xs = rows.filter((q) => q.size === r.size && q.group === r.group).map((q) => q.refM); return xs.reduce((a, b) => a + b, 0) / xs.length; };
-    const airGroup = (r: WRow) => GROUPS.find((g) => g.size === r.size && g.name === r.group)?.air;
+    // Peers decide inside a group (the score is scale-free, so each group's geometric-mean cal is anchored at its
+    // starting level); single-weapon groups stay as they are. Group LEVELS vs the common reference army and vs other
+    // size classes are set by hand afterwards (`run` shows the ref scores; node scripts/size-check.ts for L/XL).
     for (const r of rows) {
-      const gm = groupMean(r);
-      const refC = airGroup(r) ? r.refM : r.refM - gm + 0.5 + 0.25 * (gm - classMean[r.size]);
-      const sc = Number.isNaN(r.peersM) ? refC : 0.5 * refC + 0.5 * r.peersM;
+      const sc = Number.isNaN(r.peersM) ? 0.5 : r.peersM;
       const c = Math.min(0.95, Math.max(0.05, sc));
       const step = Math.pow(c / (1 - c), gain);
-      const cal = Math.round(Math.min(15, Math.max(MIN_CAL, (MODULE_CAL[r.id] || MIN_CAL) * Math.min(1.7, Math.max(0.6, step)))) * 100) / 100;
-      upd[r.id] = cal;
+      upd[r.id] = (MODULE_CAL[r.id] || MIN_CAL) * Math.min(1.7, Math.max(0.6, step));
       (hist[r.id] ??= []).push(MODULE_CAL[r.id] ?? 1);
     }
-    // Level anchor: peers are scale-free, so keep each size class's geometric-mean cal at its starting level (S and M
-    // keep their class price level; L and XL are rescaled per class afterwards with size-check).
-    for (const z of ['S', 'M', 'L', 'XL']) {
-      const ids = rows.filter((r) => r.size === z).map((r) => r.id);
+    for (const g of GROUPS) {
+      const ids = g.ids.filter((id) => id in upd);
       if (!ids.length) continue;
       const geo = (f: (id: string) => number) => Math.exp(ids.reduce((a, id) => a + Math.log(f(id)), 0) / ids.length);
-      anchor[z] ??= geo((id) => MODULE_CAL[id] || MIN_CAL);
-      const k = anchor[z] / geo((id) => upd[id]);
+      const key = `${g.size} ${g.name}`;
+      anchor[key] ??= geo((id) => MODULE_CAL[id] || MIN_CAL);
+      const k = anchor[key] / geo((id) => upd[id]);
       for (const id of ids) upd[id] = Math.round(Math.min(15, Math.max(MIN_CAL, upd[id] * k)) * 100) / 100;
     }
     Object.assign(MODULE_CAL, upd);
