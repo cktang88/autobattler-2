@@ -19,6 +19,10 @@ export type Role =
 export type ChassisTrait = 'rangeBoost' | 'repairAura' | 'airOnly' | 'compact';
 /** distance (cells, edge to edge) at which a 'stealth' cloak is revealed */
 export const CLOAK_REVEAL = 2.5;
+/** [aura balance] Support radii are measured EDGE TO EDGE (carrier footprint to the other unit's footprint), so big
+ *  carriers project further and big allies are easy to cover. Auras never stack: each unit takes the single strongest
+ *  source of each effect. Radius (cells, edge to edge) of the chassis 'repairAura' trait. */
+export const REPAIR_AURA_RANGE = 6;
 export type MobilityTrait = 'fireOnMove' | 'evasive' | 'leap' | 'fortified' | 'stable' | 'strafe' | 'crush';
 
 export interface ChassisDef {
@@ -181,9 +185,9 @@ export interface ModuleDef {
   /** 'stealth': can't be targeted unless an enemy is within CLOAK_REVEAL cells or it fired in the last 1.5s.
    *  'phantom': can't be targeted except for 3s after each time it fires (proximity doesn't reveal it). */
   cloak?: 'stealth' | 'phantom';
-  /** reveals cloaked enemies within this many cells (for all allies) */
+  /** reveals cloaked enemies within this many cells, edge to edge (for all allies) */
   detect?: number;
-  /** projects an energy shield onto allies (not self) within radius; each ally gets up to `amount` shield, regenerating */
+  /** projects an energy shield onto allies (not self) within radius (edge to edge); each ally gets up to `amount` shield (capped at half its max hp), regenerating; domes don't stack (the strongest applies) */
   shieldAura?: { radius: number; amount: number };
   /** self-repair: fraction of max hp per second (only after 2s without damage) */
   regen?: number;
@@ -193,13 +197,13 @@ export interface ModuleDef {
   fireRateBonus?: number;
   /** -fraction reload time for clip weapons */
   reloadBonus?: number;
-  /** allies within radius get +bonus rate of fire (doesn't stack between uplinks) */
+  /** allies within radius (edge to edge) get +bonus rate of fire (doesn't stack between uplinks: the strongest applies) */
   fireRateAura?: { radius: number; bonus: number };
-  /** shoots down incoming enemy rockets/missiles/shells/arc/orb projectiles within range, one per cooldown */
+  /** shoots down incoming enemy rockets/missiles/shells/arc/orb projectiles within range of its hull edge, one per cooldown */
   pointDefense?: { range: number; cooldown: number };
-  /** enemy missiles aimed at allies within radius lose homing; enemy spread doubled vs them */
+  /** enemy missiles aimed at allies within radius (edge to edge) lose homing; enemy spread doubled vs them (doesn't stack) */
   jammer?: number;
-  /** when first dropping below 60% hp: smoke cloud of radius for duration; units inside can't be targeted from > 2.5 cells */
+  /** when first dropping below 60% hp: smoke cloud of radius (beyond the carrier's hull) for duration; units inside can't be targeted from > 2.5 cells */
   smoke?: { radius: number; duration: number };
   /** number of explosive hits (shell/rocket/missile/arc/orb) reduced by 75% */
   reactive?: number;
@@ -207,7 +211,7 @@ export interface ModuleDef {
   energyResist?: number;
   /** immune to stun, slow, disarm, burn and knockback */
   hardened?: boolean;
-  /** explodes on death */
+  /** explodes on death (radius beyond the carrier's hull) */
   deathBlast?: { damage: number; radius: number };
   /** grants fire-on-move to the whole unit */
   gyro?: boolean;

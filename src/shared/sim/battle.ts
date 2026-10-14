@@ -9,7 +9,7 @@ import { approxTurretD, mountOffsets } from '../mountgeo.ts';
 import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
-import { CLOAK_REVEAL, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
+import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
 import { DT, MAX_TICKS, TICK_RATE } from './types.ts';
 import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
@@ -29,9 +29,11 @@ const CHAIN_JUMP = 2.5; // cells
 const CHAIN_FALLOFF = 0.8;
 const LEAP_COOLDOWN = 6;
 const LEAP_TIME = 0.8;
-const AURA_RANGE = 3;
+const AURA_RANGE = REPAIR_AURA_RANGE; // [aura balance] edge to edge, see types.ts
 const AURA_RATE = 0.012; // fraction of maxHp per s
 const AURA_EVERY = 0.5;
+/** [aura balance] a dome projects at most this fraction of the ally's own max hp (light squads would otherwise gain ~70% ehp each) */
+const AURA_SHIELD_HP = 0.5;
 const HEAL_EVENT_EVERY = 0.3;
 const CRUSH_EVERY = 0.3;
 const BOMB_ALT = 1.5; // cells: height bombs start falling from
@@ -767,8 +769,9 @@ export class Battle {
         for (const D of this.detectors) {
           const o = D.u;
           if (!o.alive || o.side === u.side) continue;
-          const dx = o.x - u.x, dy = o.y - u.y, r = D.detect + I.radius;
-          if (dx * dx + dy * dy <= r * r) { visible = true; break; }
+          // [aura balance] sensor reach is measured edge to edge (sensor hull to cloaked hull)
+          const dx = o.x - u.x, dy = o.y - u.y, r = D.detect + I.bound + D.bound;
+          if (dx * dx + dy * dy <= r * r && this.gap(D, I) <= D.detect) { visible = true; break; }
         }
       }
       if (!visible && I.cloak === 'stealth') {
@@ -794,7 +797,8 @@ export class Battle {
     return true;
   }
 
-  /** Shield domes, command uplinks and jammers (refreshed every AURA_EVERY). */
+  /** Shield domes, command uplinks and jammers (refreshed every AURA_EVERY). [aura balance] Radii are measured edge to
+   *  edge (carrier footprint to ally footprint) and nothing stacks: each ally keeps the single strongest source. */
   private supportAuras(): void {
     const units = this.units, ints = this.ints;
     const first = this.tick === 0;
@@ -802,11 +806,13 @@ export class Battle {
     for (const D of this.domes) {
       const d = D.u;
       if (!d.alive) continue;
-      const cnt = this.gather(d.x, d.y, D.domeR + MAX_RADIUS);
+      const cnt = this.gather(d.x, d.y, D.domeR + D.bound + MAX_RADIUS);
       for (let q = 0; q < cnt; q++) {
-        const o = units[this.scratch[q]];
+        const j = this.scratch[q];
+        const o = units[j];
         if (!o.alive || o.side !== d.side || o === d) continue;
-        if (!hypotGt(o.x - d.x, o.y - d.y, D.domeR)) o.maxAuraShield = Math.max(o.maxAuraShield, D.domeAmt);
+        const amt = Math.min(D.domeAmt, o.maxHp * AURA_SHIELD_HP); // [aura balance] at most half the ally's hp
+        if (o.maxAuraShield < amt && this.gap(D, ints[j]) <= D.domeR) o.maxAuraShield = amt;
       }
     }
     if (this.domes.length) for (const I of ints) {
@@ -817,23 +823,23 @@ export class Battle {
     for (const L of this.uplinks) {
       const l = L.u;
       if (!l.alive) continue;
-      const cnt = this.gather(l.x, l.y, L.uplinkR + MAX_RADIUS);
+      const cnt = this.gather(l.x, l.y, L.uplinkR + L.bound + MAX_RADIUS);
       for (let q = 0; q < cnt; q++) {
         const j = this.scratch[q];
         const o = units[j];
-        if (!o.alive || o.side !== l.side || o === l) continue;
-        if (!hypotGt(o.x - l.x, o.y - l.y, L.uplinkR)) ints[j].rateAura = Math.max(ints[j].rateAura, L.uplinkBonus);
+        if (!o.alive || o.side !== l.side || o === l || ints[j].rateAura >= L.uplinkBonus) continue;
+        if (this.gap(L, ints[j]) <= L.uplinkR) ints[j].rateAura = L.uplinkBonus;
       }
     }
     for (const J of this.jammers) {
       const jm = J.u;
       if (!jm.alive) continue;
-      const cnt = this.gather(jm.x, jm.y, J.jammer + MAX_RADIUS);
+      const cnt = this.gather(jm.x, jm.y, J.jammer + J.bound + MAX_RADIUS);
       for (let q = 0; q < cnt; q++) {
         const j = this.scratch[q];
         const o = units[j];
-        if (!o.alive || o.side !== jm.side) continue;
-        if (!hypotGt(o.x - jm.x, o.y - jm.y, J.jammer)) ints[j].jammed = true;
+        if (!o.alive || o.side !== jm.side || ints[j].jammed) continue;
+        if (o === jm || this.gap(J, ints[j]) <= J.jammer) ints[j].jammed = true;
       }
     }
   }
@@ -845,12 +851,16 @@ export class Battle {
       if (!u.alive) continue;
       if (I.pdCd > 0) I.pdCd -= DT;
       if (I.pdCd > 0 || u.stun > 0 || u.disarm > 0) continue;
-      let best: Proj | null = null, bestD = I.pdRange * I.pdRange;
+      // [aura balance] reach is measured from the hull edge, so a titan's PD covers more than its own hull
+      let best: Proj | null = null, bestD = I.pdRange;
+      const lim = I.pdRange + I.bound, lim2 = lim * lim;
       for (const p of this.projs) {
         if (p.dead || p.side === u.side) continue;
         const k = p.kind;
         if (k !== 'rocket' && k !== 'missile' && k !== 'shell' && k !== 'arc' && k !== 'orb') continue;
-        const dx = p.x - u.x, dy = p.y - u.y, d = dx * dx + dy * dy;
+        const dx = p.x - u.x, dy = p.y - u.y;
+        if (dx * dx + dy * dy > lim2) continue;
+        const d = this.edgeC(I, p.x, p.y);
         if (d < bestD) { bestD = d; best = p; }
       }
       if (!best) continue;
@@ -867,7 +877,7 @@ export class Battle {
       const I = this.ints[pb[k]];
       const u = I.u;
       this.dmgSrc = u.id;
-      this.splash(u.x, u.y, I.blastR, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true);
+      this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true); // [aura balance] radius beyond the hull
       this.dmgSrc = -1;
     }
     pb.length = 0;
@@ -1116,7 +1126,7 @@ export class Battle {
   private findHealTarget(u: SimUnit, w: Wpn): number {
     const units = this.units;
     let best = -1, bestR = 0.999;
-    const r2 = w.range * w.range;
+    const lim = w.range + MAX_RADIUS, r2 = lim * lim; // [aura balance] heal reach is measured to the target's edge
     this.mountAt(this.ints[u.id], w); // [mount origins] heal range from the emitter's mount
     const mx = this.mpx, my = this.mpy;
     for (let j = 0; j < units.length; j++) {
@@ -1125,7 +1135,7 @@ export class Battle {
       const ratio = o.hp / o.maxHp;
       if (ratio >= bestR) continue;
       const dx = o.x - mx, dy = o.y - my;
-      if (dx * dx + dy * dy > r2) continue;
+      if (dx * dx + dy * dy > r2 || this.edgeC(this.ints[j], mx, my) > w.range) continue;
       bestR = ratio;
       best = j;
     }
@@ -1401,7 +1411,7 @@ export class Battle {
     w.retarget -= DT;
     let t = m.target >= 0 ? this.units[m.target] : null;
     this.mountAt(I, w); // [mount origins] heal range / aim from the emitter's mount
-    if (t && (!t.alive || t.hp >= t.maxHp || Math.hypot(t.x - this.mpx, t.y - this.mpy) > w.range * RANGE_KEEP)) { t = null; m.target = -1; }
+    if (t && (!t.alive || t.hp >= t.maxHp || this.edgeC(this.ints[t.id], this.mpx, this.mpy) > w.range * RANGE_KEEP)) { t = null; m.target = -1; } // [aura balance] to the target's edge
     if (w.retarget <= 0 || !t) {
       if (w.retarget <= 0) w.retarget = 0.5;
       const cand = this.findHealTarget(u, w);
@@ -1436,13 +1446,18 @@ export class Battle {
     void m;
   }
 
+  /** [aura balance] repair-aura pulse: edge to edge, and an ally is repaired by at most one aura per pulse (no stacking) */
+  private auraPulse: Int32Array | null = null;
   private applyAura(I: Internal): void {
     const u = I.u;
-    const cnt = this.gather(u.x, u.y, AURA_RANGE + MAX_RADIUS);
+    const mark = this.auraPulse ??= new Int32Array(this.units.length).fill(-1);
+    const cnt = this.gather(u.x, u.y, AURA_RANGE + I.bound + MAX_RADIUS);
     for (let q = 0; q < cnt; q++) {
-      const o = this.units[this.scratch[q]];
-      if (!o.alive || o.side !== u.side || o === u || o.hp >= o.maxHp) continue;
-      if (hypotGt(o.x - u.x, o.y - u.y, AURA_RANGE)) continue;
+      const j = this.scratch[q];
+      const o = this.units[j];
+      if (!o.alive || o.side !== u.side || o === u || o.hp >= o.maxHp || mark[j] === this.tick) continue;
+      if (this.gap(I, this.ints[j]) > AURA_RANGE) continue;
+      mark[j] = this.tick;
       const amt = Math.min(o.maxHp * AURA_RATE * AURA_EVERY, o.maxHp - o.hp);
       o.hp += amt;
       if (amt > 0.5) this.events.push({ t: 'heal', unit: o.id, amount: amt, from: u.id });
@@ -1546,8 +1561,9 @@ export class Battle {
       if (T.blastDmg > 0) this.pendingBlasts.push(t.id);
     } else if (T.smokeR > 0 && !T.smokeUsed && t.hp < t.maxHp * SMOKE_AT) {
       T.smokeUsed = true;
-      this.smokes.push({ x: t.x, y: t.y, r: T.smokeR, t: T.smokeDur });
-      this.events.push({ t: 'smoke', x: t.x, y: t.y, radius: T.smokeR, duration: T.smokeDur });
+      const sr = T.smokeR + T.radius; // [aura balance] the cloud reaches smokeR beyond the carrier's hull
+      this.smokes.push({ x: t.x, y: t.y, r: sr, t: T.smokeDur });
+      this.events.push({ t: 'smoke', x: t.x, y: t.y, radius: sr, duration: T.smokeDur });
     }
   }
 
