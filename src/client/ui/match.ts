@@ -21,6 +21,7 @@ import { mapForRound } from '../render/ground.ts';
 import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
+import { designInfo, type DesignInfo } from './deckstats.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 
@@ -211,12 +212,50 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const supplyVal = h('div.val');
   const supplyLbl = h('div.lbl', null, 'Supply', h('br'), 'remaining');
   const cardsEl = h('div.cards');
+  // shop filter: what the card can do (sorted cheapest first; 1-9 follow the visible order)
+  type CardFilter = 'all' | 'aa' | 'ground' | 'armor' | 'swarm' | 'long' | 'air';
+  const CARD_FILTERS: { value: CardFilter; label: string; title: string; test: (i: DesignInfo) => boolean }[] = [
+    { value: 'all', label: 'All', title: 'Every design in your deck', test: () => true },
+    { value: 'aa', label: 'Anti-air', title: 'Can shoot aircraft', test: (i) => i.caps.has('aa') },
+    { value: 'ground', label: 'Anti-ground', title: 'Can shoot ground units', test: (i) => i.gnd > 0 },
+    { value: 'armor', label: 'Anti-armor', title: 'Armor-piercing or heavy single hits', test: (i) => i.caps.has('armor') },
+    { value: 'swarm', label: 'Splash', title: 'Splash, flame, chain or spread: clears light squads', test: (i) => i.caps.has('swarm') },
+    { value: 'long', label: 'Long range', title: 'Reaches 80 m or more', test: (i) => i.caps.has('long') },
+    { value: 'air', label: 'Aircraft', title: 'Flying units', test: (i) => i.caps.has('air') },
+  ];
+  let cardFilter: CardFilter = 'all';
+  try { const v = localStorage.getItem('match.cardFilter'); if (CARD_FILTERS.some((f) => f.value === v)) cardFilter = v as CardFilter; } catch { /* ignore */ }
+  const infoCache = new Map<string, DesignInfo | null>();
+  const infoOf = (d: Design) => { if (!infoCache.has(d.id)) infoCache.set(d.id, designInfo(d)); return infoCache.get(d.id)!; };
+  /** deck indices in display order: cheapest first, unbuildable designs last */
+  const cardOrder = () => deck().map((_, i) => i).sort((a, b) => {
+    const da = deck()[a], db = deck()[b];
+    const ca = statsOf(da) ? costOf(da) : Infinity, cb = statsOf(db) ? costOf(db) : Infinity;
+    return ca - cb || da.name.localeCompare(db.name);
+  });
+  /** deck indices currently shown, in order (keys 1-9 pick from this) */
+  let visibleCards: number[] = [];
+  const filterEl = h('div.card-filter-wrap');
+  function renderFilter() {
+    filterEl.replaceChildren(kit.segmented<CardFilter>({
+      value: cardFilter, label: 'Filter cards', className: 'card-filter',
+      options: CARD_FILTERS.map((x) => {
+        const n = deck().filter((d) => { const i = infoOf(d); return !!i && x.test(i); }).length;
+        return { value: x.value, label: x.value === 'all' ? x.label : `${x.label} ${n}`, title: x.title, disabled: x.value !== 'all' && n === 0 };
+      }),
+      onChange: (v) => {
+        cardFilter = v; try { localStorage.setItem('match.cardFilter', v); } catch { /* ignore */ }
+        sfx('click'); renderFilter(); renderCards();
+      },
+    }));
+  }
   const undoBtn = h('button.small', { onclick: () => undo(), title: 'Undo (Backspace)' }, 'Undo');
   const clearBtn = h('button.small', { onclick: () => clearAll(), title: 'Clear all pending' }, 'Clear');
   const deployBtn = h('button.big.primary.deploy-btn', { onclick: () => submit() }, 'Deploy & Fight');
   const shopSpacingEl = h('div.shop-spacing.hidden');
   const sideEl = h('div.side', null,
     h('div.side-top', null, h('div.supply', null, supplyVal, supplyLbl, h('div.spacer'), h('span.kbd-hint.muted', { style: { fontSize: '0.75rem' } }, h('kbd', null, '1-9'), ' select'))),
+    filterEl,
     cardsEl,
     shopSpacingEl,
     h('div.side-actions', null, h('div.row', null, undoBtn, clearBtn), deployBtn),
@@ -272,7 +311,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       attachDeckTip(b, d);
       return b;
     });
-    cardsEl.replaceChildren(...cardEls);
+    cardsEl.replaceChildren(...cardOrder().map((i) => cardEls[i]));
+    infoCache.clear();
+    renderFilter();
     paintCards();
   }
   // ---------- stat tooltip (floating near the cursor / shop card; bottom sheet on touch) ----------
@@ -370,9 +411,20 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function renderCards() {
     const rem = remaining();
     const deploying = phase === 'deploy';
+    const flt = CARD_FILTERS.find((x) => x.value === cardFilter) ?? CARD_FILTERS[0];
+    visibleCards = [];
+    for (const i of cardOrder()) {
+      const inf = infoOf(deck()[i]);
+      // the selected card stays visible even if the filter would hide it
+      const show = i === selCard || (inf ? flt.test(inf) : cardFilter === 'all');
+      cardEls[i].hidden = !show;
+      if (show) visibleCards.push(i);
+    }
     cardEls.forEach((b, i) => {
       const d = deck()[i];
       const cost = costOf(d);
+      const k = visibleCards.indexOf(i);
+      (b.querySelector('.key') as HTMLElement).textContent = k >= 0 && k < 9 ? String(k + 1) : '';
       const n = place.filter((p) => p.designId === d.id).length;
       b.classList.toggle('sel', i === selCard);
       b.classList.toggle('poor', cost > rem);
@@ -1061,7 +1113,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     // kit dropdown open or focused: arrows / type-ahead / Space belong to it
     if (document.querySelector('.k-pop') || t?.getAttribute('role') === 'combobox') return;
     if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      selectCard(Number(e.key) - 1);
+      const i = visibleCards[Number(e.key) - 1];
+      if (i !== undefined) selectCard(i);
       e.preventDefault();
     } else if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (rotateBlock()) e.preventDefault();
