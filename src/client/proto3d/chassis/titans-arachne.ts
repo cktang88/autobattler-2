@@ -65,10 +65,10 @@ function arachne(c: ChassisCtx): ChassisOut {
   const palp = new Map<MountSpec, number>();
   for (const m of c.mounts) {
     if (!(m.x > 0.9 * u && Math.abs(m.z) > 0.6 * u)) continue;
-    const s = Math.sign(m.z), top = by + 0.85 * u;
+    const s = Math.sign(m.z), top = by + 1.3 * u;
     beam(b, kit.trim, [hx - 0.5 * u, by - 0.2 * u, s * 0.8 * u], [m.x, by - 0.1 * u, m.z], 0.45 * u, 0.5 * u);
     block(b, kit.trim, m.x, by - 0.25 * u, m.z, 1.5 * u, 0.9 * u, 0.4 * u, { ch: 0.2 * u });
-    block(b, kit.hull, m.x + 0.05 * u, by + 0.05 * u, m.z, 1.7 * u, m.r * 2.5, top - by - 0.05 * u, { top: [0.82, 0.82], shift: [-0.1 * u, 0], ch: 0.3 * u, bev: 0.08 * u, bot: 0.05 * u });
+    block(b, kit.hull, m.x + 0.45 * u, by + 0.05 * u, m.z, 2.2 * u, m.r * 2.5, top - by - 0.05 * u, { top: [0.82, 0.82], shift: [-0.1 * u, 0], ch: 0.3 * u, bev: 0.08 * u, bot: 0.05 * u });
     glow(b, kit, m.x + 0.1 * u, by + 0.35 * u, m.z + s * m.r * 1.26, 1.0 * u, 0.06 * u, 0.05 * u);
     palp.set(m, top);
   }
