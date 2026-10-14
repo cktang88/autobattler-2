@@ -607,6 +607,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const touch = e.pointerType !== 'mouse';
       const d = { src: s, pid: e.pointerId, x0: e.clientX, y0: e.clientY, started: false, ghost: null, hot: null, origin: node, timer: 0 };
       drag = d;
+      track(immediate);
       // capture only once a drag begins, so a plain click still reaches inner buttons (row select / unmount ✕)
       if (touch && !immediate) {
         d.timer = window.setTimeout(() => {
@@ -617,11 +618,27 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         }, 300);
       }
     });
-    node.addEventListener('pointermove', (e) => onDragMove(e, immediate));
-    node.addEventListener('pointerup', (e) => onDragEnd(e));
-    node.addEventListener('pointercancel', () => cancelDrag());
     node.addEventListener('dragstart', (e) => e.preventDefault());
     node.addEventListener('contextmenu', (e) => { if (drag) e.preventDefault(); });
+  }
+
+  /** Follow the pointer at window level until the gesture ends: a fast flick leaves the source node before the first
+   *  move (no capture yet), and a press that never reaches the node again must not leave a pending drag behind. */
+  let untrack: (() => void) | null = null;
+  function track(immediate: boolean) {
+    untrack?.();
+    const mv = (e: PointerEvent) => onDragMove(e, immediate);
+    const up = (e: PointerEvent) => onDragEnd(e);
+    const cc = (e: PointerEvent) => { if (drag && e.pointerId === drag.pid) cancelDrag(); };
+    window.addEventListener('pointermove', mv, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cc);
+    untrack = () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cc);
+      untrack = null;
+    };
   }
 
   function sockets(): { i: number; el: HTMLElement }[] {
@@ -677,7 +694,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const far = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
       if (e.pointerType !== 'mouse' && !immediate) {
         // finger moved before the hold timer: it's a scroll, not a drag
-        if (far > 8) { clearTimeout(drag.timer); drag = null; }
+        if (far > 8) { clearTimeout(drag.timer); drag = null; untrack?.(); }
         return;
       }
       if (far < 6) return;
@@ -709,6 +726,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   function cancelDrag() {
+    untrack?.();
     if (drag) clearTimeout(drag.timer);
     clearDragUi();
     drag = null;
@@ -718,6 +736,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (!drag || e.pointerId !== drag.pid) return;
     const d = drag;
     drag = null;
+    untrack?.();
     clearTimeout(d.timer);
     if (!d.started) return;
     suppressClick = true;
