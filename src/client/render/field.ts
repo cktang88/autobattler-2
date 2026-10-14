@@ -181,6 +181,8 @@ export class FieldView {
   private curP = new Map<number, PSnap>();
   private ptrack = new Map<number, PTrack>();
   private units = new Map<number, SimUnit>();
+  /** origin of the latest beam / arc at each unit this tick, so its 'hit' sparks land on the facing hull edge */
+  private shotFrom = new Map<number, { x: number; y: number }>();
   private vis = new Map<number, UVis>();
   private pending: BattleEvent[] = [];
   private usePush = false;
@@ -631,6 +633,7 @@ export class FieldView {
     const events = newTicks ?? this.pending;
     if (events.length) {
       for (const e of events) this.handleEvent(e);
+      this.shotFrom.clear();
       if (!this.muted) try { battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
     }
@@ -1198,6 +1201,46 @@ export class FieldView {
     return { x: mx, y: my, d: m.d, aim };
   }
 
+  /** Live unit whose centre sits at (x, y): the sim reports beam / chain / direct-hit endpoints at target centres. */
+  private unitNear(x: number, y: number): SimUnit | null {
+    let best: SimUnit | null = null, bd = 0.36;
+    for (const u of this.units.values()) {
+      if (!u.alive) continue;
+      const d = (u.x - x) ** 2 + (u.y - y) ** 2;
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+  }
+
+  /** Where a shot from (fx, fy) meets unit u's drawn hull (a rounded box), so beams and sparks land on armour instead of
+   *  the middle of the sprite. Render only: the sim still resolves the hit against the whole unit. */
+  private hullEdge(u: SimUnit, fx: number, fy: number): { x: number; y: number } {
+    const L = layoutOf(u.design);
+    const dx = fx - u.x, dy = fy - u.y;
+    const c = Math.cos(u.angle), sn = Math.sin(u.angle);
+    const lx = Math.abs(dx * c + dy * sn), ly = Math.abs(-dx * sn + dy * c);
+    const hx = L.X * 0.42, hy = L.Y * 0.42;
+    if (lx < 1e-6 && ly < 1e-6) return { x: u.x, y: u.y };
+    const box = Math.min(lx > 1e-6 ? hx / lx : Infinity, ly > 1e-6 ? hy / ly : Infinity);
+    const ell = 1 / Math.hypot(lx / hx, ly / hy);
+    const f = (box + ell) / 2;
+    if (f >= 1) return { x: u.x, y: u.y };
+    return { x: u.x + dx * f, y: u.y + dy * f };
+  }
+
+  /** Clip a segment ending on a unit's centre to that unit's hull edge; remembers the origin for the matching 'hit'. */
+  private clipToHull(x1: number, y1: number, x2: number, y2: number): { x: number; y: number } {
+    const t = this.unitNear(x2, y2);
+    if (!t) return { x: x2, y: y2 };
+    this.shotFrom.set(t.id, { x: x1, y: y1 });
+    if (t.shield > 0 || t.auraShield > 0) {
+      // shielded: stop on the bubble (same radius the shield hex flashes at)
+      const r = 0.58 * layoutOf(t.design).D * 0.9, d = Math.hypot(x1 - t.x, y1 - t.y);
+      if (d > r) return { x: t.x + ((x1 - t.x) / d) * r, y: t.y + ((y1 - t.y) / d) * r };
+    }
+    return this.hullEdge(t, x1, y1);
+  }
+
   private handleEvent(e: BattleEvent): void {
     const fx = this.fx;
     switch (e.t) {
@@ -1302,7 +1345,11 @@ export class FieldView {
         const vis = mod?.visual;
         const glowC = moduleGlow(mod, TEAM_PAL[this.teamOf(e.side)]);
         const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
-        const pts = tip ? [tip.x, tip.y, e.x2, e.y2] : [e.x1, e.y1, e.x2, e.y2];
+        const sx = tip ? tip.x : e.x1, sy = tip ? tip.y : e.y1;
+        // beams that end on a unit stop at its hull; the piercing lance (ends past the target) is left alone
+        const end = this.clipToHull(sx, sy, e.x2, e.y2);
+        e = { ...e, x2: end.x, y2: end.y };
+        const pts = [sx, sy, e.x2, e.y2];
         let impact = true;
         switch (vis) {
           case 'heatray': fx.beam('heat', pts, '#ff6a1a', 0.07, 0.14); break;
@@ -1371,6 +1418,11 @@ export class FieldView {
         for (const p of e.points) pts.push(p.x, p.y);
         const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
         if (tip && pts.length >= 2) { pts[0] = tip.x; pts[1] = tip.y; }
+        // each arc jumps hull edge to hull edge: clip the end of a segment to its unit, start the next from there
+        for (let i = 2; i + 1 < pts.length; i += 2) {
+          const end = this.clipToHull(pts[i - 2], pts[i - 1], pts[i], pts[i + 1]);
+          pts[i] = end.x; pts[i + 1] = end.y;
+        }
         if (pts.length >= 4) fx.beam('lightning', pts, col, heavy ? 0.05 : 0.035, heavy ? 0.24 : 0.18);
         for (let i = 2; i < pts.length; i += 2) {
           fx.glow(pts[i], pts[i + 1], heavy ? 0.5 : 0.35, col, 0.15);
@@ -1388,6 +1440,15 @@ export class FieldView {
           break;
         }
         if (e.damage > 0) this.visOf(ur).dmgT = this.time;
+        // direct hits (beams, rails, arcs, splash) are reported at the unit centre: move them to the edge facing the shooter
+        if ((e.x - ur.x) ** 2 + (e.y - ur.y) ** 2 < 0.01) {
+          const from = this.shotFrom.get(ur.id);
+          const a = from ? Math.atan2(from.y - ur.y, from.x - ur.x) : Math.random() * Math.PI * 2;
+          const far = { x: ur.x + Math.cos(a) * 50, y: ur.y + Math.sin(a) * 50 };
+          const r = 0.58 * layoutOf(ur.design).D * 0.9;
+          const p = e.shieldHit ? { x: ur.x + Math.cos(a) * r, y: ur.y + Math.sin(a) * r } : this.hullEdge(ur, far.x, far.y);
+          e = { ...e, x: p.x, y: p.y };
+        }
         if (e.shieldHit) {
           const v = this.visOf(ur);
           v.shieldT = this.time;
@@ -1397,6 +1458,7 @@ export class FieldView {
         }
         const vis = mod?.visual;
         if (vis === 'flamer' || vis === 'heatray' || vis === 'repair') break;
+
         const n = clamp(Math.round(2 + Math.sqrt(e.damage) * 0.5), 2, 12);
         fx.sparks(e.x, e.y, n, '#ffe0a0', 3.5, undefined, Math.PI, 0.22);
         if (e.damage > 60) fx.glow(e.x, e.y, 0.3 + Math.min(0.5, e.damage / 400), '#ffc070', 0.1);
