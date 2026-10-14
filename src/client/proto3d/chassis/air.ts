@@ -148,13 +148,15 @@ function heavyheli(c: ChassisCtx): AirOut {
   const Y = c.stance.y0, cy = Y + 0.32;
   const grav = c.mob.id === 'gravlift';
   const st: [number, number, number, number][] = [
-    [1.96, cy - 0.06, 0.12, 0.14], [1.82, cy - 0.02, 0.27, 0.3], [1.5, cy, 0.35, 0.37], [1.0, cy, 0.37, 0.39],
+    [1.98, cy - 0.16, 0.1, 0.14], [1.84, cy - 0.1, 0.24, 0.3], [1.55, cy - 0.03, 0.33, 0.37], [1.0, cy, 0.37, 0.39],
     [-1.15, cy + 0.02, 0.37, 0.39], [-1.6, cy + 0.07, 0.3, 0.33], [-1.9, cy + 0.13, 0.17, 0.24],
   ];
   fuse(b, kit.hull, st, 12, 3.4, 0, 0.3);
   // wraparound glazing on the nose, framed
-  pod(b, kit.glass, [1.66, cy + 0.1, 0], 0.26, 0.17, 0.3, 12, 6, 2.6);
-  b.box(kit.trim, 0.03, 0.04, 0.5, 1.62, cy + 0.25, 0, 0.008);
+  pod(b, kit.glass, [1.7, cy + 0.02, 0], 0.26, 0.17, 0.3, 12, 6, 2.6);
+  b.box(kit.trim, 0.03, 0.04, 0.5, 1.64, cy + 0.17, 0, 0.008);
+  // dorsal spine between the rotor pylons
+  block(b, kit.trim, -0.15, cy + 0.32, 0, 2.2, 0.34, 0.1, { top: [0.95, 0.7], ch: 0.1, bev: 0.03 });
   // rear ramp hint + hazard band
   b.box(kit.trim, 0.04, 0.3, 0.5, -1.93, cy + 0.08, 0, 0.01, [0, 0, -0.5]);
   b.box(kit.hazard, 0.6, 0.03, 0.04, -0.4, cy - 0.06, 0.39, 0.006);
@@ -173,8 +175,8 @@ function heavyheli(c: ChassisCtx): AirOut {
   if (!grav) {
     // forward rotor hump and tall aft rotor tower, twin engines beside the tower
     block(b, kit.hull, 1.12, cy + 0.26, 0, 0.6, 0.36, 0.18, { top: [0.6, 0.6], ch: 0.1, bev: 0.04 });
-    block(b, kit.hull, -1.45, cy + 0.24, 0, 0.8, 0.42, 0.5, { top: [0.62, 0.48], shift: [-0.12, 0], ch: 0.12, bev: 0.05 });
-    b.box(kit.glow, 0.32, 0.03, 0.03, -1.5, cy + 0.5, 0.15, 0.006, [0, 0, 0.35]);
+    block(b, kit.hull, -1.45, cy + 0.24, 0, 0.95, 0.46, 0.66, { top: [0.55, 0.42], shift: [-0.16, 0], ch: 0.13, bev: 0.05 });
+    for (const s of [-1, 1]) b.box(kit.glow, 0.3, 0.03, 0.02, -1.5, cy + 0.6, s * 0.15, 0.006, [0, 0, 0.5]);
     for (const s of [-1, 1]) {
       pod(b, kit.panel, [-1.0, cy + 0.42, s * 0.3], 0.42, 0.11, 0.11, 10, 6, 2.4);
       b.cyl(kit.trim, 0.07, 0.07, 0.02, [-0.6, cy + 0.42, s * 0.3], 'x', 10);
@@ -182,14 +184,14 @@ function heavyheli(c: ChassisCtx): AirOut {
     }
     const n = load(c) > 0.75 ? 4 : 3;
     lift.push({ kind: 'rotor', p: [1.12, cy + 0.52, 0], r: 1.25, blades: n, dir: 1 });
-    lift.push({ kind: 'rotor', p: [-1.52, cy + 0.82, 0], r: 1.25, blades: n, dir: -1 });
+    lift.push({ kind: 'rotor', p: [-1.6, cy + 0.98, 0], r: 1.25, blades: n, dir: -1 });
   } else {
     // flat engine deck and outrigger grav pods
     block(b, kit.hull, -0.3, cy + 0.26, 0, 1.8, 0.4, 0.1, { top: [0.9, 0.7], ch: 0.1, bev: 0.03 });
     const xs = load(c) > 0.7 ? [1.2, 0.5, -1.25] : [1.15, -1.25];
     for (const x of xs) for (const s of [-1, 1]) {
-      b.strut(kit.metal, [x, cy - 0.05, s * 0.32], [x, cy - 0.12, s * 0.62], 0.035, 0.03, 6);
-      lift.push({ kind: 'grav', p: [x, cy - 0.16, s * 0.66], r: 0.2, len: 0.16, dir: s as 1 | -1 });
+      block(b, kit.trim, x, cy - 0.14, s * 0.52, 0.22, 0.36, 0.1, { ch: 0.05, bev: 0.02 });
+      lift.push({ kind: 'grav', p: [x, cy - 0.12, s * 0.74], r: 0.27, len: 0.24, dir: s as 1 | -1 });
     }
   }
   b.decal(0.24, 0.24, 0.3, cy + 0.37, 0, atlasUV(3), 0);
@@ -201,20 +203,25 @@ function bomberhull(c: ChassisCtx): AirOut {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.3;
   const grav = c.mob.id === 'gravlift';
-  fuse(b, kit.hull, [
-    [1.96, cy - 0.03, 0.1, 0.18], [1.72, cy + 0.01, 0.25, 0.42], [1.2, cy + 0.04, 0.35, 0.6], [0.4, cy + 0.04, 0.39, 0.7],
-    [-0.6, cy + 0.06, 0.37, 0.66], [-1.3, cy + 0.12, 0.29, 0.5], [-1.75, cy + 0.2, 0.19, 0.33], [-1.96, cy + 0.24, 0.09, 0.2],
-  ], 12, 3, 0, 0.3);
+  // faceted chined lifting body (hex sections): narrow keel, wide chine, sloped shoulders, a flat ridge; the belly
+  // sweeps up into a blunt ramp tail
+  const body: [number, number, number, number][] = [ // [x, y bottom, height, half width]
+    [1.98, cy - 0.12, 0.16, 0.16], [1.7, cy - 0.24, 0.42, 0.5], [1.15, cy - 0.3, 0.6, 0.7], [0.2, cy - 0.32, 0.64, 0.78],
+    [-0.8, cy - 0.28, 0.6, 0.66], [-1.5, cy - 0.12, 0.5, 0.46], [-1.96, cy + 0.02, 0.4, 0.34],
+  ];
+  b.loft(kit.hull, body.map(([x, y, h, w]) => [[x, y, -w * 0.45], [x, y, w * 0.45], [x, y + h * 0.32, w], [x, y + h * 0.78, w * 0.74], [x, y + h, w * 0.32], [x, y + h, -w * 0.32], [x, y + h * 0.78, -w * 0.74], [x, y + h * 0.32, -w]] as V3[]));
+  // chine strakes in the lighter panel colour
+  for (const s of [-1, 1]) b.loft(kit.panel, [[1.5, 0.42], [0.2, 0.8], [-1.3, 0.52]].map(([x, w]) => [[x, cy - 0.12, s * (w - 0.02)], [x, cy - 0.1, s * (w + 0.06)], [x, cy - 0.06, s * (w - 0.02)]] as V3[]), true, true);
   // hooded cockpit: visor glass under an armoured brow
-  pod(b, kit.glass, [1.5, cy + 0.2, 0], 0.32, 0.12, 0.36, 12, 6, 2.6);
-  block(b, kit.panel, 1.28, cy + 0.28, 0, 0.55, 0.62, 0.1, { top: [0.8, 0.85], shift: [0.08, 0], ch: 0.14, bev: 0.03 });
+  b.loft(kit.glass, [[1.86, 0.2, 0.05], [1.72, 0.4, 0.14], [1.5, 0.48, 0.2]].map(([x, w, h]) => [[x, cy + 0.04, -w * 0.9], [x, cy + 0.04, w * 0.9], [x, cy + 0.04 + h, w * 0.6], [x, cy + 0.04 + h, -w * 0.6]] as V3[]));
+  block(b, kit.panel, 1.34, cy + 0.2, 0, 0.5, 0.82, 0.12, { top: [0.7, 0.8], shift: [0.1, 0], ch: 0.14, bev: 0.03 });
   // dorsal spine ridge + glow strip
-  block(b, kit.panel, -0.3, cy + 0.36, 0, 1.9, 0.34, 0.1, { top: [0.86, 0.6], ch: 0.1, bev: 0.03 });
-  b.box(kit.glow, 1.2, 0.02, 0.03, -0.3, cy + 0.465, 0, 0.005);
+  block(b, kit.trim, -0.3, cy + 0.3, 0, 1.6, 0.4, 0.1, { top: [0.86, 0.6], ch: 0.1, bev: 0.03 });
+  b.box(kit.glow, 1.0, 0.02, 0.03, -0.3, cy + 0.405, 0, 0.005);
   // bomb bay doors
-  for (const s of [-1, 1]) b.box(kit.trim, 1.3, 0.02, 0.28, 0.1, cy - 0.28, s * 0.16, 0.006);
+  for (const s of [-1, 1]) b.box(kit.trim, 1.3, 0.02, 0.26, 0.1, cy - 0.325, s * 0.15, 0.006);
   // main wings to the weapon pylons
-  const mw: Station[] = [[0.4, cy - 0.02, 0.55, 0.9, 0.1], [0.3, cy - 0.06, 1.04, 0.62, 0.06]];
+  const mw: Station[] = [[0.42, cy - 0.08, 0.55, 0.95, 0.1], [0.3, cy - 0.11, 1.04, 0.62, 0.06]];
   // twin canted tail fins on the upswept tail
   for (const s of [-1, 1]) {
     wing(b, kit.hull, mirror(mw, s));
@@ -239,7 +246,7 @@ function bomberhull(c: ChassisCtx): AirOut {
   }
   b.decal(0.3, 0.3, 0.2, cy - 0.0 + 0.06, 0.82, atlasUV(3), 0);
   b.decal(0.3, 0.3, 0.2, cy - 0.0 + 0.06, -0.82, atlasUV(3), 0);
-  return out(cy + 0.5, lift, (m) => (m.x > 1 ? hang(c, m, cy - 0.24, 0.6) : hang(c, m, cy - 0.1)));
+  return out(cy + 0.5, lift, (m) => (m.x > 1 ? hang(c, m, cy - 0.3, 0.6) : hang(c, m, cy - 0.14)));
 }
 
 // =====================================================================================================================

@@ -287,68 +287,77 @@ function landtrain(c: ChassisCtx): ChassisOut {
   const by = legged ? stance.hipY + 0.06 * u : Math.max(stance.y0 + 0.14 * u, stance.yt);
   // car centres from the spine mounts (fall back to the rest pose)
   const xs = [0.608, -0.0665, -0.741, -1.4155].map((x, i) => c.mounts.find((m) => m.i === i)?.x ?? x * u);
-  const carH = 0.5 * u, carZ = 0.6 * u, carX = 0.3 * u;
+  const carH = 0.46 * u, carZ = 0.62 * u, carX = 0.25 * u;
   const topY = by + carH;
   // spine: coupler beam under the whole train (static)
-  b.cylb(kit.metal, 0.09 * u, (xs[0] - xs[3]) + 1.1 * u, 0.02 * u, [xs[3] - 0.7 * u, by + 0.02 * u, 0], 'x', 8);
-  // locomotive head: rounded snout, cab glass band, headlamp eye, plough, twin stacks
-  const hx = xs[0] + 0.98 * u;
-  shell(b, kit.trim, hx, 0, 0.66 * u, 0.4 * u, 0.62 * u, [[by - 0.14 * u, 0.88], [by + 0.04 * u, 1.0]], 12, 2.2);
-  shell(b, kit.hull, hx, 0, 0.66 * u, 0.4 * u, 0.62 * u, [[by + 0.02 * u, 1.0], [by + 0.3 * u, 0.98, -0.04 * u], [by + 0.52 * u, 0.78, -0.12 * u], [by + 0.64 * u, 0.5, -0.18 * u], [by + 0.68 * u, 0.2, -0.2 * u]], 12, 2.2);
-  b.box(kit.glass, 0.06 * u, 0.08 * u, 0.6 * u, hx + 0.38 * u, by + 0.5 * u, 0, 0.015 * u, [0, 0, -0.7]);
-  b.cyl(kit.trim, 0.13 * u, 0.15 * u, 0.06 * u, [hx + 0.6 * u, by + 0.2 * u, 0], 'x', 12);
-  b.cyl(kit.lamp, 0.1 * u, 0.1 * u, 0.02 * u, [hx + 0.66 * u, by + 0.2 * u, 0], 'x', 12);
-  b.slab(kit.hazard, [[0.3 * u, 0], [0, -0.6 * u], [-0.1 * u, -0.6 * u], [-0.1 * u, 0.6 * u], [0, 0.6 * u]], 0.12 * u, 0.02 * u, hx + 0.48 * u, by - 0.2 * u, 0);
-  block(b, kit.trim, hx + 0.36 * u, by - 0.26 * u, 0, 0.36 * u, 1.0 * u, 0.12 * u, { top: [0.7, 0.95], shift: [0.08 * u, 0], ch: 0.1 * u });
-  both((s) => exhaust(b, kit, hx - 0.2 * u, by + 0.52 * u, s * 0.24 * u, 0.06 * u, 0.22 * u));
-  // tail cap: small rounded caboose with tail lamps
-  const tx = xs[3] - 0.66 * u;
-  shell(b, kit.hull, tx, 0, 0.22 * u, 0.3 * u, 0.48 * u, [[by - 0.1 * u, 0.9], [by + 0.06 * u, 1.0], [by + 0.3 * u, 0.82], [by + 0.38 * u, 0.5]], 10, 2.2);
-  both((s) => b.box(kit.glow, 0.04 * u, 0.06 * u, 0.12 * u, tx - 0.3 * u, by + 0.14 * u, s * 0.26 * u, 0.01 * u));
+  b.cylb(kit.metal, 0.08 * u, (xs[0] - xs[3]) + 1.0 * u, 0.02 * u, [xs[3] - 0.6 * u, by + 0.04 * u, 0], 'x', 8);
+  // locomotive: low armoured chassis, a long sloped hood to a blunt wedge nose, raised cab at the back with window slits
+  const hx = xs[0] + 0.95 * u;
+  block(b, kit.trim, hx, by - 0.16 * u, 0, 1.1 * u, 1.1 * u, 0.24 * u, { top: [1, 1], ch: 0.26 * u, bev: 0.04 * u });
+  block(b, kit.hull, hx + 0.02 * u, by + 0.06 * u, 0, 1.12 * u, 1.2 * u, 0.3 * u, { top: [0.86, 0.9], shift: [-0.04 * u, 0], ch: 0.3 * u, bev: 0.06 * u, bot: 0.03 * u });
+  block(b, kit.panel, hx + 0.22 * u, by + 0.34 * u, 0, 0.6 * u, 0.86 * u, 0.12 * u, { top: [0.7, 0.8], shift: [-0.04 * u, 0], ch: 0.2 * u, bev: 0.04 * u });
+  vent(b, kit, hx + 0.24 * u, by + 0.46 * u, 0, 0.3 * u, 0.4 * u, 3, 'z');
+  const cabX = hx - 0.32 * u;
+  block(b, kit.hull, cabX, by + 0.34 * u, 0, 0.42 * u, 0.94 * u, 0.36 * u, { top: [0.72, 0.84], shift: [-0.04 * u, 0], ch: 0.18 * u, bev: 0.05 * u });
+  b.box(kit.glass, 0.05 * u, 0.08 * u, 0.62 * u, cabX + 0.17 * u, by + 0.6 * u, 0, 0.012 * u, [0, 0, -0.8]);
+  both((s) => b.box(kit.glass, 0.24 * u, 0.07 * u, 0.04 * u, cabX, by + 0.58 * u, s * 0.4 * u, 0.012 * u));
+  both((s) => exhaust(b, kit, cabX - 0.12 * u, by + 0.66 * u, s * 0.26 * u, 0.05 * u, 0.2 * u));
+  // nose: twin headlamps in armoured housings + low plough wedge with hazard stripes
+  both((s) => {
+    b.box(kit.trim, 0.12 * u, 0.12 * u, 0.18 * u, hx + 0.55 * u, by + 0.18 * u, s * 0.36 * u, 0.03 * u);
+    b.cyl(kit.lamp, 0.045 * u, 0.045 * u, 0.02 * u, [hx + 0.61 * u, by + 0.18 * u, s * 0.36 * u], 'x', 8);
+  });
+  b.slab(kit.trim, [[0.34 * u, -0.16 * u], [0.34 * u, 0.16 * u], [0.06 * u, 0.62 * u], [-0.08 * u, 0.62 * u], [-0.08 * u, -0.62 * u], [0.06 * u, -0.62 * u]], 0.12 * u, 0.025 * u, hx + 0.52 * u, by - 0.24 * u, 0);
+  for (const s of [-1, 1]) hazard(b, kit, hx + 0.66 * u, by - 0.11 * u, s * 0.22 * u, 0.24 * u, 0.1 * u, 3, s * -0.95);
+  glow(b, kit, hx + 0.5 * u, by + 0.3 * u, 0, 0.03 * u, 0.03 * u, 0.5 * u);
+  // tail: small wedge caboose with tail lamps
+  const tx = xs[3] - 0.56 * u;
+  block(b, kit.hull, tx, by - 0.1 * u, 0, 0.36 * u, 0.9 * u, 0.42 * u, { top: [0.6, 0.8], shift: [0.06 * u, 0], ch: 0.16 * u, bev: 0.04 * u, bot: 0.04 * u });
+  both((s) => b.box(kit.glow, 0.04 * u, 0.06 * u, 0.14 * u, tx - 0.18 * u, by + 0.08 * u, s * 0.28 * u, 0.01 * u));
   // gun cars: each its own animated group (pivoting about its mount point, so turrets stay seated)
   const cars: THREE.Group[] = [];
   const seated = new Set<MountSpec>();
   xs.forEach((x, i) => {
     const cb = new Bld();
     const big = i % 2 === 0;
-    const z = carZ * (big ? 1 : 0.92), h = carH * (big ? 1 : 0.9);
-    shell(cb, kit.trim, 0, 0, carX, carX, z * 0.9, [[by - 0.14 * u, 0.86], [by + 0.04 * u, 1.0]], 12, 2.6);
-    shell(cb, i % 2 ? kit.panel : kit.hull, 0, 0, carX, carX, z, [[by + 0.02 * u, 1.0], [by + h * 0.55, 1.02], [by + h * 0.9, 0.84], [by + h, 0.6]], 12, 2.6);
-    // armour side skirts and a glow stripe per car
+    const z = carZ * (big ? 1 : 0.9), h = carH * (big ? 1 : 0.92);
+    // octagonal armoured drum car: dark chassis, faceted flanks, flat gun deck
+    shell(cb, kit.trim, 0, 0, carX * 1.1, carX * 1.1, z * 0.86, [[by - 0.16 * u, 0.86], [by + 0.04 * u, 1.0]], 8, 2);
+    shell(cb, big ? kit.hull : kit.panel, 0, 0, carX * 1.2, carX * 1.2, z, [[by + 0.02 * u, 0.92], [by + h * 0.45, 1.0], [by + h * 0.8, 0.96], [by + h, 0.7]], 8, 2);
+    // side armour skirts with a glow slit
     both((s) => {
-      cb.box(kit.trim, carX * 1.5, 0.16 * u, 0.06 * u, 0, by + 0.05 * u, s * z * 0.98, 0.02 * u);
-      glow(cb, kit, 0, by + h * 0.62, s * z * 0.99, carX * 0.9, 0.03 * u, 0.03 * u);
+      cb.box(kit.trim, carX * 2.0, 0.2 * u, 0.06 * u, 0, by + 0.04 * u, s * z * 0.97, 0.025 * u, [s * 0.18, 0, 0]);
+      glow(cb, kit, 0, by + h * 0.6, s * z * 0.985, carX * 1.2, 0.03 * u, 0.03 * u);
     });
-    cb.box(kit.accent, carX * 0.9, 0.012 * u, 0.12 * u, -carX * 0.55, by + h * 0.94, 0, 0.004);
-    // coupler drum to the next car back
-    cb.cylb(kit.metal, 0.14 * u, 0.12 * u, 0.02 * u, [-carX - 0.06 * u, by + 0.12 * u, 0], 'x', 10);
+    if (big) cb.box(kit.accent, 0.06 * u, 0.012 * u, z * 1.1, -carX * 0.9, by + h * 0.88, 0, 0.004);
+    // coupler housing to the next car back
+    cb.cylb(kit.metal, 0.12 * u, 0.22 * u, 0.02 * u, [-carX * 1.2 - 0.18 * u, by + 0.16 * u, 0], 'x', 8);
     // turret collar rides the car
     const m = c.mounts.find((q) => Math.abs(q.x - x) < 0.05);
-    if (m) { seated.add(m); collar(cb, kit, 0, topY - 0.02 * u, m.z, m.r, topY - 0.12 * u, 14); }
+    if (m) { seated.add(m); collar(cb, kit, 0, topY, m.z, m.r, topY - 0.1 * u, 14); }
     const g = new THREE.Group();
     g.position.set(x, 0, 0);
     cb.mount(g);
     c.body.add(g);
     cars.push(g);
   });
-  // sway: a travelling yaw wave down the train while moving
+  // sway: a travelling yaw wave down the train while moving (small, so turrets stay on their collars)
   c.updates.push((t, _dt, mv) => {
-    cars.forEach((g, i) => { g.rotation.y = Math.sin(t * 1.6 - i * 1.1) * 0.07 * mv; g.rotation.x = Math.sin(t * 3.2 - i * 1.1) * 0.025 * mv; });
+    cars.forEach((g, i) => { g.rotation.y = Math.sin(t * 1.6 - i * 1.1) * 0.07 * mv; g.rotation.x = Math.sin(t * 3.2 - i * 1.1) * 0.03 * mv; });
   });
   let hips: Hip[] | undefined;
   if (legged) {
     hips = [];
     xs.forEach((x, i) => {
-      for (const s of [-1, 1] as const) hips!.push({ p: [x, by - 0.02 * u, s * 0.4 * u], side: s, t: stance.thick, foot: [x + 0.05 * u, 0, s * 1.05 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
+      for (const s of [-1, 1] as const) hips!.push({ p: [x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [x + 0.05 * u, 0, s * 1.08 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
     });
   }
-  const deck = (x: number, z: number) => (Math.abs(z) < carZ * 0.6 && xs.some((cx) => Math.abs(x - cx) < carX * 0.6) ? topY : -1);
+  const deck = (x: number, z: number) => (Math.abs(z) < carZ * 0.6 && xs.some((cx) => Math.abs(x - cx) < carX) ? topY : -1);
   return {
-    deckAt: deck, top: by + 0.68 * u, hips, custom: true,
+    deckAt: deck, top: by + 0.7 * u, hips, custom: true,
     seat: (m) => {
-      const y = topY - 0.02 * u;
-      if (!seated.has(m)) collar(b, kit, m.x, y, m.z, m.r, y - 0.1 * u, 14);
-      return { y, socket: true };
+      if (!seated.has(m)) collar(b, kit, m.x, topY, m.z, m.r, topY - 0.1 * u, 14);
+      return { y: topY, socket: true };
     },
   };
 }

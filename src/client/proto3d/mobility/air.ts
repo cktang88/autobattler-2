@@ -45,7 +45,7 @@ export function airStance(s: StanceIn): Stance {
 // shared faint blur disc (one material for every rotor of every unit)
 let discMat: THREE.MeshBasicMaterial | null = null;
 function blurDisc(R: number): THREE.Mesh {
-  discMat ??= new THREE.MeshBasicMaterial({ color: '#cfd5d8', transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide });
+  discMat ??= new THREE.MeshBasicMaterial({ color: '#cfd5d8', transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide });
   const m = new THREE.Mesh(new THREE.CircleGeometry(R, 24).rotateX(-Math.PI / 2), discMat);
   m.renderOrder = 2;
   return m;
@@ -72,7 +72,7 @@ function rotorHead(kit: Kit, R: number, n: number, spinners: Spinner[], parent: 
   const g = new THREE.Group();
   g.position.set(...at);
   const b = new Bld();
-  const chord = R * (tail ? 0.24 : 0.13) + 0.015;
+  const chord = R * (tail ? 0.22 : 0.085) + 0.012;
   for (let i = 0; i < n; i++) blade(b, kit, R, chord, R * 0.1, mtx([0, 0, 0], [0, (i / n) * Math.PI * 2, 0]));
   b.lathe(kit.metal, [[0, -R * 0.05], [R * 0.11, -R * 0.05], [R * 0.13, 0], [R * 0.1, R * 0.05], [0, R * 0.07]], [0, 0, 0], 'y', 10);
   b.cyl(kit.accent, R * 0.045, R * 0.02, R * 0.06, [0, R * 0.06, 0], 'y', 8);
