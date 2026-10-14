@@ -1174,20 +1174,10 @@ export class FieldView {
     return { u, x: u.x, y: u.y, angle: u.angle };
   }
 
-  /** Barrel heading as drawn. The sim aims every mount from the hull centre; turrets sit off-centre, so while a mount
-   *  is tracking its target the drawn barrel swings onto it from its real pivot (the sim only fires once aligned). */
-  private barrelAim(u: SimUnit, i: number, x: number, y: number, hull: number, simAng: number): number {
-    const tid = u.mounts[i]?.target ?? -1;
-    if (tid < 0) return simAng;
-    const t = this.unitRender(tid);
-    const mp = layoutOf(u.design).mounts[i];
-    if (!t || !t.u.alive || !mp) return simAng;
-    const cs = Math.cos(hull), sn = Math.sin(hull);
-    const px = x + cs * mp.x - sn * mp.y, py = y + sn * mp.x + cs * mp.y;
-    const center = Math.atan2(t.y - y, t.x - x);
-    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
-    const k = clamp(1 - Math.abs(wrap(simAng - center)) / 0.5, 0, 1);
-    return simAng + wrap(Math.atan2(t.y - py, t.x - px) - center) * k;
+  /** Barrel heading as drawn: the sim aims each mount from its own pivot, so the drawn barrel just follows it. */
+  private barrelAim(u: SimUnit, i: number, _x: number, _y: number, _hull: number, simAng: number): number {
+    void u; void i;
+    return simAng;
   }
 
   /** World position of a mount's barrel tip right now (as drawn), and the barrel heading. */
