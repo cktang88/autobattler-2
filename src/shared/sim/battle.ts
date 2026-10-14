@@ -6,7 +6,7 @@
 
 import { CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, mountOffsets } from '../mountgeo.ts';
-import { computeStats, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -445,9 +445,11 @@ export class Battle {
         const prio: TargetPriority = p.target && TARGET_PRIORITIES.includes(p.target) ? p.target : 'closest';
         const stance: Stance = p.stance && STANCES.includes(p.stance) ? p.stance : 'advance';
         const delay = p.delay !== undefined && (START_DELAYS as readonly number[]).includes(p.delay) ? p.delay : 0;
+        // kite / focus left unset on the placement: the design's defaults (shared with client + AI)
+        const defs = defaultOrders(d);
         for (const c of cs) {
           this.blockUnits[block].push(this.units.length);
-          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: !!p.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: !!p.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
+          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: typeof p.kite === 'boolean' ? p.kite : defs.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: typeof p.focus === 'boolean' ? p.focus : defs.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
         }
       }
     }

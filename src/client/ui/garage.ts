@@ -15,7 +15,7 @@ import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, defaultOrders, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
@@ -1316,11 +1316,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function renderOrders(): HTMLElement {
     const sq = (statsOf(draft)?.squad ?? 1) > 1;
     const ko = kiteOptions(draft);
-    const o0 = ordersOf(draft.behavior);
+    const defs = defaultOrders(draft);
+    const o0 = ordersOf(draft.behavior, defs);
     // drop a kite weapon that no longer exists in the loadout
     const o = ko.some((k) => k.mount === o0.kiteMount) ? o0 : { ...o0, kiteMount: -1 };
     if (o.kiteMount !== o0.kiteMount) {
-      const b = orderFields({ ...o, hold: sq && o.hold });
+      const b = orderFields({ ...o, hold: sq && o.hold }, defs);
       const { behavior: _b, ...rest } = draft;
       draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
     }
@@ -1328,12 +1329,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('p.g-note', null, 'New blocks of this design start with these orders. You can still change them per block on the field.'),
       ordersControl({ ...o, hold: sq && o.hold }, sq, (patch) => {
         const next = { ...o, ...patch };
-        const b = orderFields({ ...next, hold: sq && next.hold });
+        const b = orderFields({ ...next, hold: sq && next.hold }, defs);
         const { behavior: _b, ...rest } = draft;
         draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
         sfx('click');
         update();
-      }, { custom: false, kiteOptions: ko }));
+      }, { custom: false, kiteOptions: ko, defaults: defs }));
   }
 
   function renderIntel(): HTMLElement[] {

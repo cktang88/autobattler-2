@@ -15,7 +15,7 @@
 //    an empty action, which is always legal while the side may deploy.
 
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from './parts.ts';
-import { computeStats, designModules, MAX_LEVEL, validateDesign } from './stats.ts';
+import { computeStats, defaultOrders, designModules, MAX_LEVEL, validateDesign, type DefaultOrders } from './stats.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap, squadSize } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
@@ -55,6 +55,8 @@ export interface Profile {
   isStatic: boolean;
   heal: number;
   role: Role;
+  /** the design's default kite / focus orders (shared with the sim and client) */
+  defaults: DefaultOrders;
 }
 
 export type Role = 'swarm' | 'frontline' | 'antiArmor' | 'antiAir' | 'artillery' | 'flyer' | 'support' | 'skirmisher';
@@ -86,7 +88,7 @@ export function profile(d: Design): Profile {
   const p: Profile = {
     stats: s, cost: s.cost, unitCost: s.unitCost, splashRadius, melee, size: s.size, aaDps, groundDps, ap: groundDps > 0 ? apSum / groundDps : 0,
     splashDps, minRange, range: s.range, toughPerCost: ehp / Math.max(1, s.unitCost), ehp,
-    flying: s.flying, isStatic: s.isStatic, heal: s.heal, role: 'skirmisher',
+    flying: s.flying, isStatic: s.isStatic, heal: s.heal, role: 'skirmisher', defaults: defaultOrders(d),
   };
   p.role = classify(p);
   profileCache.set(key, p);
@@ -409,8 +411,8 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
     default: target = 'closest';
   }
   const mobile = !p.isStatic && !p.flying;
-  const kitable = mobile && !p.melee && p.range >= 7 && (p.role === 'artillery' || p.role === 'antiArmor' || p.role === 'skirmisher');
-  let kite = kitable && rng() < 0.7;
+  // kite / focus follow the design defaults (the same rule the sim and the garage use)
+  let kite = p.defaults.kite;
   if (p.role === 'artillery' && mobile && !p.melee) {
     // artillery with a real standoff range either sits still or kites
     if (rng() < 0.5) { stance = 'holdPos'; kite = false; }
@@ -425,7 +427,7 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
   // back-line shooters wait a moment so the tanks lead
   if (mobile && stance === 'advance' && p.range >= 7 && (p.role === 'artillery' || p.role === 'skirmisher' || p.role === 'antiArmor')) delay = rng() < 0.5 ? 3 : 6;
   const hold = hasSpacing(p.size as Size) && spacing >= 2 && oppSplashShare > 0.2;
-  const focus = !p.isStatic && p.range >= 5 && p.role !== 'support' && rng() < 0.45;
+  const focus = p.defaults.focus;
   const retreat = mobile && ctx.hasRepair && p.unitCost >= 20 && p.role !== 'support' && p.role !== 'artillery' && rng() < 0.7;
   if (stance === 'flankLeft' || stance === 'flankRight') ctx.flankCount++;
   return { target, hold, kite: kite && stance !== 'holdPos', focus, stance, delay, retreat };
@@ -447,12 +449,13 @@ function withKiteMount(b: Behavior, d: Design): Behavior {
   return b;
 }
 
-function applyBehavior(pl: Placement | UnitConfig, b: Behavior): void {
+/** Writes b onto pl; kite / focus only when they differ from the design's defaults (unset = default). */
+function applyBehavior(pl: Placement | UnitConfig, b: Behavior, defs: DefaultOrders): void {
   if (b.kite && b.kiteMount !== undefined) pl.kiteMount = b.kiteMount;
   if (b.target !== 'closest') pl.target = b.target;
   if (b.hold) pl.hold = true;
-  if (b.kite) pl.kite = true;
-  if (b.focus) pl.focus = true;
+  if (b.kite !== defs.kite) pl.kite = b.kite;
+  if (b.focus !== defs.focus) pl.focus = b.focus;
   if (b.stance !== 'advance') pl.stance = b.stance;
   if (b.delay > 0) pl.delay = b.delay;
   if (b.retreat) pl.retreat = true;
@@ -634,7 +637,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     occ.push({ x: spot.x, y: spot.y, ...foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
     if (hasSpacing(p.size as Size)) pl.spacing = sp;
-    if (!easy) applyBehavior(pl, withKiteMount(chooseBehavior(p, sp, splashShare, o.rng, ctx), choice));
+    if (!easy) applyBehavior(pl, withKiteMount(chooseBehavior(p, sp, splashShare, o.rng, ctx), choice), p.defaults);
     action.place.push(pl);
     simUnits += squadSize(p.size as Size);
     roles.set(p.role, (roles.get(p.role) ?? 0) + 1);
@@ -652,7 +655,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       const pr = profile(byId.get(pl.designId)!);
       if (!isHealer(pr)) continue;
       const e = pickEscort(blocks, pl.uid);
-      if (e !== undefined) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kite; }
+      if (e !== undefined) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kiteMount; if (pr.defaults.kite) pl.kite = false; else delete pl.kite; }
     }
     if (m.round >= 2) {
       for (const u of me.board) {
@@ -666,10 +669,10 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
         } else {
           if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
           if (b.hold !== !!u.hold && hasSpacing(pr.size as Size)) cfg.hold = b.hold;
-          if (b.kite !== !!u.kite) cfg.kite = b.kite;
+          if (b.kite !== (u.kite ?? pr.defaults.kite)) cfg.kite = b.kite;
           if (b.kite && b.kiteMount !== undefined && b.kiteMount !== u.kiteMount) cfg.kiteMount = b.kiteMount;
           else if (!b.kite && u.kiteMount !== undefined) cfg.kiteMount = -1;
-          if (b.focus !== !!u.focus) cfg.focus = b.focus;
+          if (b.focus !== (u.focus ?? pr.defaults.focus)) cfg.focus = b.focus;
           if (b.stance !== (u.stance ?? 'advance')) cfg.stance = b.stance;
           if (b.delay !== (u.delay ?? 0)) cfg.delay = b.delay;
           if (b.retreat !== !!u.retreat) cfg.retreat = b.retreat;

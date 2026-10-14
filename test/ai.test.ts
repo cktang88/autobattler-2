@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { aiDeck, aiDeploy, profile, type AiDifficulty } from '../src/shared/ai.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateDeploy, applyDeploy, resolveRound, redactFor, DECK_SIZE } from '../src/shared/match.ts';
 import { DEPLOY_D, DEPLOY_W, blockDims, squadSize, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
-import { computeStats } from '../src/shared/stats.ts';
+import { computeStats, defaultOrders } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
 
 test('aiDeck is valid, deterministic and covers roles', () => {
@@ -116,14 +116,15 @@ test('AI uses the new battle settings sensibly and keeps them valid', () => {
         if (p.target) seen.target.add(p.target);
         if (p.delay) seen.delay++;
         if (p.retreat) seen.retreat++;
-        if (p.focus) seen.focus++;
+        const defs = defaultOrders(byId.get(p.designId));
+        if (p.focus ?? defs.focus) seen.focus++;
         if (p.escort !== undefined) {
           seen.escort++;
           assert.ok(uids.has(p.escort) && p.escort !== p.uid, 'escort references another own block');
           assert.ok(profile(byId.get(p.designId)!).heal > 0 || computeStats(byId.get(p.designId)!).traits.includes('repairAura'), 'only healers escort');
         }
         // artillery that holds position never also kites
-        if (p.stance === 'holdPos') assert.ok(!p.kite);
+        if (p.stance === 'holdPos') assert.ok(!(p.kite ?? defs.kite));
       }
     }
   }
