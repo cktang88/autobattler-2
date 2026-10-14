@@ -37913,8 +37913,10 @@ function makeLeg(g, kit, hip, foot, thick, bend, phase) {
   const stride = d0 * 0.32, lift = d0 * 0.22;
   const place = (a, b, m) => {
     m.position.copy(a);
-    m.lookAt(a.clone().add(b.clone().sub(a)));
-    m.scale.set(1, 1, a.distanceTo(b));
+    const dd = b.clone().sub(a);
+    const len = dd.length();
+    m.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dd.divideScalar(len || 1));
+    m.scale.set(1, 1, len);
   };
   return {
     step(t, moving) {
@@ -38137,15 +38139,15 @@ function buildUnit(design, team) {
     mountR.push(tu.r);
     let y = flying ? ch.domain === "jet" ? 0.06 : hullTop - 0.1 : deckAt(placed, o.x, o.y, baseY + hullTop);
     if (!flying) {
-      let lo = y, hi = -1;
+      let lo = y;
       for (let k = 0; k < 8; k++) {
         const a = k / 8 * Math.PI * 2, d = deckAt(placed, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85, -1);
-        if (d < 0) continue;
-        hi = Math.max(hi, d);
-        lo = Math.min(lo, d);
+        if (d >= 0) lo = Math.min(lo, d);
       }
-      y = Math.max(y, hi);
-      if (y - lo > 0.04) add(body, new CylinderGeometry(tu.r * 0.9, tu.r * 0.98, y - lo, 16), kit.dark, o.x, lo + (y - lo) / 2, o.y);
+      if (y - lo > 0.04) {
+        const ring = Array.from({ length: 10 }, (_, i2) => [Math.cos(i2 / 10 * Math.PI * 2), Math.sin(i2 / 10 * Math.PI * 2)]);
+        frustum(ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1.12, o.y + pz2 * tu.r * 1.12]), ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1, o.y + pz2 * tu.r * 1]), lo, y - lo, kit.camo, body);
+      }
     }
     tu.yaw.position.set(o.x, y, o.y);
     if (flying) body.add(tu.yaw);
