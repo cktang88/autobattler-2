@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Bld, ellRing, type V3 } from './geo.ts';
 import { atlasUV, type Kit } from './materials.ts';
 
-export interface Air { top: number; update: (t: number) => void; /** weapon origin height for a hardpoint at (x,z) */ hpY: (x: number, z: number) => number }
+export interface Air { top: number; update: (t: number) => void; hpX?: (x: number, z: number) => number; /** weapon origin height for a hardpoint at (x,z) */ hpY: (x: number, z: number) => number }
 
 /** aerofoil section ring at a span station: le = leading edge, chord runs along chordDir, thickness along thickDir */
 function foil(le: V3, chordDir: V3, thickDir: V3, c: number, t: number): V3[] {
@@ -65,7 +65,13 @@ export function buildJet(b: Bld, kit: Kit, L: number, W: number, S: number): Air
   b.decal(R * 2, R * 0.9, -hl * 0.1, R * 1.06, 0, atlasUV(2), Math.PI / 2 * 0);
   b.decal(R * 0.7, R * 0.7, -hl * 0.52, R * 0.92 + 0.004, 0, atlasUV(4 + (Math.floor(L * 7) % 10)), 0);
   void S;
-  return { top: R, update: () => {}, hpY: () => -R * 0.35 };
+  const lerpK = (f: number, k: [number, number][]) => { for (let i = 0; i < k.length - 1; i++) if (f <= k[i + 1][0]) { const t = (f - k[i][0]) / (k[i + 1][0] - k[i][0]); return k[i][1] + (k[i + 1][1] - k[i][1]) * t; } return k[k.length - 1][1]; };
+  const hpX = (x: number, z: number) => {
+    if (Math.abs(z) < 0.15) return x;
+    const f = Math.min(1, Math.abs(z) / (W * 0.5));
+    return lerpK(f, [[0.08, -hl * 0.02], [0.5, -hl * 0.4], [1, -hl * 0.78]]) - lerpK(f, [[0.08, L * 0.5], [0.5, L * 0.3], [1, L * 0.13]]) * 0.4;
+  };
+  return { top: R, update: () => {}, hpY: (_x, z) => (Math.abs(z) < 0.15 ? -R * 0.55 : wy - R * 0.2), hpX };
 }
 
 // ---- rotorcraft -------------------------------------------------------------------------------------

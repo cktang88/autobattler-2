@@ -10,9 +10,9 @@ export interface Hull { lofts: LoftInfo[]; top: number; L: number; W: number; yt
 
 /** [x (-1..1), half-width (frac of W/2), top width (frac of that), height (frac of deck height)] */
 const RECIPES: Record<string, [number, number, number, number][]> = {
-  wedge: [[-1, 0.8, 0.82, 0.7], [-0.9, 1, 0.86, 0.95], [0.1, 1, 0.8, 1], [0.62, 0.9, 0.6, 0.62], [1, 0.52, 0.5, 0.3]],
-  box: [[-1, 0.9, 0.9, 0.82], [-0.92, 1, 0.92, 1], [0.6, 1, 0.88, 1], [0.78, 0.95, 0.7, 0.7], [1, 0.78, 0.6, 0.45]],
-  hex: [[-1, 0.7, 0.8, 0.8], [-0.82, 0.96, 0.85, 1], [-0.2, 1, 0.82, 1], [0.45, 0.96, 0.7, 0.85], [1, 0.5, 0.5, 0.4]],
+  wedge: [[-1, 0.8, 0.82, 0.8], [-0.9, 1, 0.86, 1.05], [-0.1, 1, 0.8, 1.05], [0.15, 1, 0.78, 0.85], [0.62, 0.9, 0.6, 0.6], [1, 0.52, 0.5, 0.3]],
+  box: [[-1, 0.9, 0.9, 0.85], [-0.92, 1, 0.92, 1.08], [-0.1, 1, 0.9, 1.08], [0.15, 1, 0.88, 0.9], [0.6, 1, 0.86, 0.9], [0.78, 0.95, 0.7, 0.68], [1, 0.78, 0.6, 0.42]],
+  hex: [[-1, 0.7, 0.8, 0.85], [-0.82, 0.96, 0.85, 1.12], [-0.2, 1, 0.82, 1.12], [0.05, 1, 0.8, 0.92], [0.45, 0.96, 0.7, 0.82], [1, 0.5, 0.5, 0.38]],
   long: [[-1, 0.7, 0.8, 0.8], [-0.9, 0.95, 0.86, 0.95], [0.5, 0.98, 0.8, 1], [0.82, 0.85, 0.6, 0.75], [1, 0.55, 0.5, 0.4]],
   cross: [[-1, 0.74, 0.8, 0.8], [-0.8, 0.9, 0.8, 0.95], [-0.3, 1, 0.8, 1], [0.3, 1, 0.8, 1], [0.6, 0.8, 0.7, 0.8], [1, 0.46, 0.5, 0.45]],
   round: [[-1, 0.5, 0.7, 0.7], [-0.8, 0.9, 0.8, 0.95], [-0.4, 1, 0.8, 1], [0.4, 1, 0.8, 1], [0.8, 0.9, 0.7, 0.85], [1, 0.5, 0.6, 0.55]],
@@ -136,6 +136,19 @@ export function greeble(b: Bld, kit: Kit, hull: Hull, S: number, rnd: () => numb
       b.cyl(kit.lamp, u * 0.3, u * 0.3, u * 0.12, [x + u * 0.4, top + u * 0.25, z], 'x', 8);
     }
   }
+  // flank stowage along both shoulders: tool boxes, rolled tarps, jerry-can pairs
+  if (S >= 2) {
+    const wt = hull.lofts[0].pts[2].wt;
+    for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const x = L * (-0.3 + i * 0.2) + (rnd() - 0.5) * 0.1, z = sg * wt * 0.9;
+      const top = flat(x, z, u * 1.6);
+      if (top < 0 || !free(x, z, u * 1.6)) continue;
+      const k = (i + (sg > 0 ? 1 : 0)) % 3;
+      if (k === 0) { b.box(kit.panel, u * 3, u * 1.1, u * 1.5, x, top + u * 0.55, z, 0.008); b.box(kit.metal, u * 0.2, u * 1.15, u * 1.55, x, top + u * 0.56, z, 0.002); }
+      else if (k === 1) { b.cylb(kit.canvas, u * 0.65, u * 3.2, u * 0.12, [x - u * 1.6, top + u * 0.7, z], 'x', 10); b.strut(kit.metal, [x - u * 0.6, top, z - u * 0.7], [x - u * 0.6, top + u * 1.4, z + u * 0.7], u * 0.06, u * 0.06, 4); }
+      else { for (let q = 0; q < 2; q++) { b.box(kit.hull, u * 0.9, u * 1.3, u * 0.5, x, top + u * 0.65, z + (q - 0.5) * u * 0.8, 0.006); b.box(kit.metal, u * 0.5, u * 0.14, u * 0.3, x, top + u * 1.35, z + (q - 0.5) * u * 0.8, 0.002); } }
+    }
+  }
   // engine deck: louvred grille across the rear with a pair of exhaust stacks, on every hull
   const rx = -L * 0.5 + Math.max(0.1, L * 0.14);
   const top = deckAt(hull, rx, 0);
@@ -229,11 +242,11 @@ export function giantDetails(b: Bld, kit: Kit, hull: Hull, S: number, rnd: () =>
   if (best && bestD > u * 2.4) {
     const [x, z] = best;
     const top = deckAt(hull, x, z);
-    const rr = Math.min(u * 1.9, bestD * 0.85);
+    const rr = Math.min(u * 1.35, bestD * 0.8);
     b.cylb(kit.trim, rr * 1.15, rr * 0.18, rr * 0.05, [x, top, z], 'y', 16);
-    b.lathe(kit.hull, [[0, 0], [rr, 0], [rr, rr * 1.2], [rr * 0.86, rr * 1.45], [0, rr * 1.5]], [x, top + rr * 0.18, z], 'y', 16);
-    for (let k = 0; k < 3; k++) b.cylb(kit.steel, rr * 1.04, rr * 0.07, 0.003, [x, top + rr * (0.4 + k * 0.38), z], 'y', 16);
-    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; b.box(kit.hot, rr * 0.05, rr * 0.5, rr * 0.16, x + Math.cos(a) * rr * 0.98, top + rr * 0.9, z + Math.sin(a) * rr * 0.98, 0.002, [0, -a, 0]); }
+    b.lathe(kit.hull, [[0, 0], [rr, 0], [rr, rr * 0.8], [rr * 0.86, rr * 1.0], [0, rr * 1.05]], [x, top + rr * 0.18, z], 'y', 16);
+    for (let k = 0; k < 2; k++) b.cylb(kit.steel, rr * 1.04, rr * 0.07, 0.003, [x, top + rr * (0.35 + k * 0.4), z], 'y', 16);
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2 + 0.3; b.box(kit.hot, rr * 0.04, rr * 0.16, rr * 0.1, x + Math.cos(a) * rr * 0.99, top + rr * 0.55, z + Math.sin(a) * rr * 0.99, 0.002, [0, -a, 0]); }
     for (const sg of [-1, 1]) {
       b.cylb(kit.metal, rr * 0.22, rr * 1.7, rr * 0.03, [x - rr * 0.2, top + rr * 0.3, z + sg * rr * 0.62], 'y', 8);
       b.cylb(kit.steel, rr * 0.3, rr * 0.1, 0.004, [x - rr * 0.2, top + rr * 2.0, z + sg * rr * 0.62], 'y', 8);
