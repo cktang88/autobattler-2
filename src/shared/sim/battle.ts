@@ -68,6 +68,7 @@ const THREAT_MEMORY = 6 * TICK_RATE; // ticks a recorded attacker stays 'the thr
 const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
+const SAT_N = (HCOLS + 1) * (HROWS + 1);
 const MAX_RADIUS = 3.0; // bounding radius of the largest hull (long axis * 0.45 for non-square footprints)
 
 const TAU = Math.PI * 2;
@@ -96,6 +97,14 @@ function turnToward(a: number, b: number, max: number): number {
   return b;
 }
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+/** Exactly `Math.hypot(dx, dy) > r`, but only pays for the (slow) hypot call when the squared distance is within
+ *  rounding of r^2; anything clearly inside or outside is decided by the cheap comparison. */
+const hypotGt = (dx: number, dy: number, r: number): boolean => {
+  const d2 = dx * dx + dy * dy, r2 = r * r;
+  if (d2 > r2 * (1 + 1e-9) + 1e-300) return true;
+  if (d2 < r2 * (1 - 1e-9)) return false;
+  return Math.hypot(dx, dy) > r;
+};
 
 interface Wpn {
   def: ModuleDef;
@@ -331,6 +340,10 @@ export class Battle {
   private healers: Internal[] = [];
   private focusMark: Int32Array = new Int32Array(0);
   private focusStamp = 0;
+  /** pickTarget scratch: valid candidates (unit index, score, distance) in scan order */
+  private candJ: Int32Array = new Int32Array(0);
+  private candS: Float64Array = new Float64Array(0);
+  private candD: Float64Array = new Float64Array(0);
   private curSrc = -1;
   /** SimUnit.id credited with damage for the per-block tally (accounting only; never affects the fight) */
   private dmgSrc = -1;
@@ -342,10 +355,39 @@ export class Battle {
   private damageDealt: [number, number] = [0, 0];
   private auraTimer = 0;
   private head: Int32Array = new Int32Array(HCOLS * HROWS);
+  /** highest unit index in each hash cell (chains are ascending), lets separate() skip cells with no j > i */
+  private tail: Int32Array = new Int32Array(HCOLS * HROWS);
+  /** the same hash split by side (cells of side s start at s * HCOLS * HROWS): one-sided scans skip the other army */
+  private sideHead: Int32Array = new Int32Array(2 * HCOLS * HROWS);
+  private sideNext: Int32Array = new Int32Array(0);
+  /** does side s field any emplacement (the only enemies avoid() steers around)? */
+  private staticOn: [boolean, boolean] = [false, false];
   private next: Int32Array = new Int32Array(0);
   private scratch: Int32Array = new Int32Array(0);
   /** ascending unit indexes alive at the last hash rebuild, per side (cheap enemy scans) */
-  private liveIdx: number[][] = [[], []];
+  private liveIdx: [Int32Array, Int32Array] = [new Int32Array(0), new Int32Array(0)];
+  private liveN: [number, number] = [0, 0];
+  /** position + footprint-bound snapshot per unit index, valid while posSnapOk (positions are frozen during the
+   *  goals + weapons phase); used only as a conservative range pre-filter in pickTarget */
+  private snapX: Float64Array = new Float64Array(0);
+  private snapY: Float64Array = new Float64Array(0);
+  private snapB: Float64Array = new Float64Array(0);
+  private posSnapOk = false;
+  /** movement phase: snapX/snapY hold every unit's position except the one currently moving (synced after each move) */
+  private posMoveOk = false;
+  /** while posSnapOk / posMoveOk: an upper bound on how far (per axis) any unit has drifted from its hash position */
+  private drift = 0;
+  /** while posSnapOk: per side, summed-area table of live unit counts per hash cell (by snapshot position);
+   *  side s, cell-corner (cx, cy) at s * SAT_N + cy * (HCOLS + 1) + cx */
+  private sat: Int32Array = new Int32Array(2 * SAT_N);
+  /** per unit: max(footprint bound, radius) -- separate()'s conservative contact reach */
+  private sepQ: Float64Array = new Float64Array(0);
+  private maxSepQ = 0;
+  /** unit positions as of the last rebuildHash (what the hash cells were built from) */
+  private hashX: Float64Array = new Float64Array(0);
+  private hashY: Float64Array = new Float64Array(0);
+  /** per unit hull radius (constant), for avoid()'s geometric pre-check */
+  private radA: Float64Array = new Float64Array(0);
   private smokes: Smoke[] = [];
   private pendingBlasts: number[] = [];
   private hasCloak = false;
@@ -409,6 +451,7 @@ export class Battle {
       if (I.hasHeal || I.aura) this.healers.push(I);
     }
     this.focusMark = new Int32Array(n);
+    this.candJ = new Int32Array(n); this.candS = new Float64Array(n); this.candD = new Float64Array(n);
     for (const I of this.ints) {
       if (I.cloak) this.hasCloak = true;
       if (I.detect > 0) this.detectors.push(I);
@@ -418,7 +461,20 @@ export class Battle {
       if (I.pdRange > 0) this.pds.push(I);
     }
     this.next = new Int32Array(n);
+    this.sideNext = new Int32Array(n);
+    this.liveIdx = [new Int32Array(n), new Int32Array(n)];
+    for (const I of this.ints) if (I.isStatic) this.staticOn[I.u.side] = true;
     this.scratch = new Int32Array(Math.max(16, n));
+    this.snapX = new Float64Array(n); this.snapY = new Float64Array(n); this.snapB = new Float64Array(n);
+    this.sepQ = new Float64Array(n);
+    this.hashX = new Float64Array(n); this.hashY = new Float64Array(n);
+    this.radA = new Float64Array(n);
+    for (let i = 0; i < n; i++) this.radA[i] = this.ints[i].radius;
+    for (let i = 0; i < n; i++) {
+      this.snapB[i] = this.ints[i].bound;
+      this.sepQ[i] = Math.max(this.ints[i].bound, this.ints[i].radius);
+      this.maxSepQ = Math.max(this.maxSepQ, this.sepQ[i]);
+    }
     this.rebuildHash();
   }
 
@@ -560,7 +616,18 @@ export class Battle {
 
     this.updateVisibility();
 
-    // goals + weapons
+    // goals + weapons (no unit moves until the movement phase: snapshot positions for the target-scan pre-filter)
+    const snapX = this.snapX, snapY = this.snapY;
+    const hashX = this.hashX, hashY = this.hashY;
+    let drift = 0;
+    for (let i = 0; i < n; i++) {
+      const u = ints[i].u;
+      snapX[i] = u.x; snapY[i] = u.y;
+      drift = Math.max(drift, Math.abs(u.x - hashX[i]), Math.abs(u.y - hashY[i]));
+    }
+    this.drift = drift;
+    this.buildSat();
+    this.posSnapOk = true;
     for (let i = 0; i < n; i++) {
       const I = ints[i];
       if (!I.u.alive) continue;
@@ -576,13 +643,21 @@ export class Battle {
       }
       this.updateWeapons(I);
     }
+    this.posSnapOk = false;
 
     // movement
     if (this.anyHold) this.computeAnchors();
+    this.posMoveOk = true;
     for (let i = 0; i < n; i++) {
       const I = ints[i];
-      if (I.u.alive) this.move(I);
+      if (I.u.alive) {
+        this.move(I);
+        const u = I.u;
+        snapX[i] = u.x; snapY[i] = u.y;
+        this.drift = Math.max(this.drift, Math.abs(u.x - hashX[i]), Math.abs(u.y - hashY[i]));
+      }
     }
+    this.posMoveOk = false;
 
     this.rebuildHash();
     this.separate();
@@ -684,7 +759,7 @@ export class Battle {
       for (let q = 0; q < cnt; q++) {
         const o = units[this.scratch[q]];
         if (!o.alive || o.side !== d.side || o === d) continue;
-        if (Math.hypot(o.x - d.x, o.y - d.y) <= D.domeR) o.maxAuraShield = Math.max(o.maxAuraShield, D.domeAmt);
+        if (!hypotGt(o.x - d.x, o.y - d.y, D.domeR)) o.maxAuraShield = Math.max(o.maxAuraShield, D.domeAmt);
       }
     }
     if (this.domes.length) for (const I of ints) {
@@ -700,7 +775,7 @@ export class Battle {
         const j = this.scratch[q];
         const o = units[j];
         if (!o.alive || o.side !== l.side || o === l) continue;
-        if (Math.hypot(o.x - l.x, o.y - l.y) <= L.uplinkR) ints[j].rateAura = Math.max(ints[j].rateAura, L.uplinkBonus);
+        if (!hypotGt(o.x - l.x, o.y - l.y, L.uplinkR)) ints[j].rateAura = Math.max(ints[j].rateAura, L.uplinkBonus);
       }
     }
     for (const J of this.jammers) {
@@ -711,7 +786,7 @@ export class Battle {
         const j = this.scratch[q];
         const o = units[j];
         if (!o.alive || o.side !== jm.side) continue;
-        if (Math.hypot(o.x - jm.x, o.y - jm.y) <= J.jammer) ints[j].jammed = true;
+        if (!hypotGt(o.x - jm.x, o.y - jm.y, J.jammer)) ints[j].jammed = true;
       }
     }
   }
@@ -783,15 +858,17 @@ export class Battle {
       }
       return best;
     }
-    const foes = this.liveIdx[u.side === 0 ? 1 : 0];
-    for (let k = 0; k < foes.length; k++) {
+    const foes = this.liveIdx[u.side === 0 ? 1 : 0], nf = this.liveN[u.side === 0 ? 1 : 0];
+    const snap = this.posSnapOk, sx = this.snapX, sy = this.snapY;
+    for (let k = 0; k < nf; k++) {
       const j = foes[k];
+      // not nearer than the best so far: skip without touching the unit (snapshot = its current position)
+      if (snap) { const dx = sx[j] - u.x, dy = sy[j] - u.y; if (!(dx * dx + dy * dy < bestD)) continue; }
       const o = units[j];
       if (!o.alive) continue;
       if (o.flying ? !I.canHitA : !I.canHitG) continue;
-      if (!this.visible(u, o)) continue;
       const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = j; }
+      if (d < bestD && this.visible(u, o)) { bestD = d; best = j; }
     }
     return best;
   }
@@ -851,28 +928,32 @@ export class Battle {
         if (o.alive && o.side !== u.side && this.canHit(w, o) && this.inRange(u, w, o, mult) >= 0 && this.visible(u, o)) return a;
       }
     }
-    // focus: enemies that allies nearby (and we ourselves) are already shooting are preferred
-    let stamp = 0;
-    if (I.focus) {
-      stamp = ++this.focusStamp;
-      const cnt = this.gather(u.x, u.y, FOCUS_RADIUS + MAX_RADIUS);
-      for (let q = 0; q < cnt; q++) {
-        const a = units[this.scratch[q]];
-        if (!a.alive || a.side !== u.side) continue;
-        if (a !== u && Math.hypot(a.x - u.x, a.y - u.y) > FOCUS_RADIUS) continue;
-        for (const m of a.mounts) if (m.target >= 0) this.focusMark[m.target] = stamp;
-      }
-    }
     let best = -1, bestS = Infinity, bestD = Infinity;
-    let fBest = -1, fS = Infinity, fD = Infinity;
+    // valid candidates in scan order, kept for the focus pass (most scans find none, so focus is only worked out
+    // when there is something to choose between; nothing in the scan below depends on it)
+    const focus = I.focus, candJ = this.candJ, candS = this.candS, candD = this.candD;
+    let nc = 0;
     // short-range weapons only look at the spatial hash neighbourhood (hash is at most one step stale);
     // ties are broken by lowest index so the result does not depend on iteration order
-    let src: ArrayLike<number> = this.liveIdx[u.side === 0 ? 1 : 0];
-    let cnt = src.length;
+    let src = this.liveIdx[u.side === 0 ? 1 : 0];
+    let cnt = this.liveN[u.side === 0 ? 1 : 0];
     const reach = w.range * mult + MAX_RADIUS + (w.melee ? I.bound : 0) + 1.5;
-    if (reach <= 12) { cnt = this.gather(u.x, u.y, reach); src = this.scratch; }
+    // conservative pre-filter (a hair looser than inRange's own bound check, same positions): skips far units
+    // without touching their objects; everything that passes goes through the exact checks below
+    const snap = this.posSnapOk, sx = this.snapX, sy = this.snapY, sb = this.snapB;
+    const ux = u.x, uy = u.y, limBase = w.range * mult + (w.melee ? I.bound : 0) + 1e-6;
+    // most scans find nothing: no enemy anywhere in range's bounding box means no candidate (and no focus pass)
+    if (snap) {
+      const L = limBase + this.maxSepQ + 1e-6;
+      if (!this.anyIn(u.side === 0 ? 1 : 0, ux - L, ux + L, uy - L, uy + L)) return -1;
+    }
+    if (reach <= 12) { cnt = this.gatherSideNear(u.side === 0 ? 1 : 0, u.x, u.y, reach, limBase + this.maxSepQ); src = this.scratch; }
     for (let k = 0; k < cnt; k++) {
       const j = src[k];
+      if (snap) {
+        const dx = sx[j] - ux, dy = sy[j] - uy, lim = limBase + sb[j];
+        if (dx * dx + dy * dy > lim * lim) continue;
+      }
       const o = units[j];
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const d = this.inRange(u, w, o, mult);
@@ -894,7 +975,26 @@ export class Battle {
         default: sc = d;
       }
       if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && (d < bestD || (d === bestD && j < best)))) { bestS = sc; bestD = d; best = j; }
-      if (stamp && this.focusMark[j] === stamp && (sc < fS - 1e-9 || (Math.abs(sc - fS) <= 1e-9 && (d < fD || (d === fD && j < fBest))))) { fS = sc; fD = d; fBest = j; }
+      if (focus) { candJ[nc] = j; candS[nc] = sc; candD[nc] = d; nc++; }
+    }
+    if (nc === 0) return best;
+    // focus: enemies that allies nearby (and we ourselves) are already shooting are preferred
+    const stamp = ++this.focusStamp;
+    const fcnt = this.gatherSideNear(u.side, u.x, u.y, FOCUS_RADIUS + MAX_RADIUS, FOCUS_RADIUS);
+    const fr2 = FOCUS_RADIUS * FOCUS_RADIUS * (1 + 1e-9);
+    for (let q = 0; q < fcnt; q++) {
+      const ai = this.scratch[q];
+      // clearly outside the focus radius (exact hypot test below would reject it too): skip without touching it
+      if (snap) { const dx = sx[ai] - ux, dy = sy[ai] - uy; if (dx * dx + dy * dy > fr2) continue; }
+      const a = units[ai];
+      if (!a.alive || a.side !== u.side) continue;
+      if (a !== u && hypotGt(a.x - u.x, a.y - u.y, FOCUS_RADIUS)) continue;
+      for (const m of a.mounts) if (m.target >= 0) this.focusMark[m.target] = stamp;
+    }
+    let fBest = -1, fS = Infinity, fD = Infinity;
+    for (let c = 0; c < nc; c++) {
+      const j = candJ[c], sc = candS[c], d = candD[c];
+      if (this.focusMark[j] === stamp && (sc < fS - 1e-9 || (Math.abs(sc - fS) <= 1e-9 && (d < fD || (d === fD && j < fBest))))) { fS = sc; fD = d; fBest = j; }
     }
     return fBest >= 0 ? fBest : best;
   }
@@ -1231,7 +1331,7 @@ export class Battle {
     for (let q = 0; q < cnt; q++) {
       const o = this.units[this.scratch[q]];
       if (!o.alive || o.side !== u.side || o === u || o.hp >= o.maxHp) continue;
-      if (Math.hypot(o.x - u.x, o.y - u.y) > AURA_RANGE) continue;
+      if (hypotGt(o.x - u.x, o.y - u.y, AURA_RANGE)) continue;
       const amt = Math.min(o.maxHp * AURA_RATE * AURA_EVERY, o.maxHp - o.hp);
       o.hp += amt;
       if (amt > 0.5) this.events.push({ t: 'heal', unit: o.id, amount: amt, from: u.id });
@@ -1637,25 +1737,51 @@ export class Battle {
   private avoid(I: Internal, dirX: number, dirY: number, goalId: number): number {
     const u = I.u;
     const look = I.bound + MAX_RADIUS + 0.8;
-    const cnt = this.gather(u.x, u.y, look);
+    // enemies only matter when they field emplacements; otherwise scan just our own side (same order, fewer ids)
+    const foeSide = u.side === 0 ? 1 : 0;
+    // anything that can pass the along/perp window below (0 < along <= clear + 0.8, |perp| < clear) lies in the
+    // bounding box of that window at its widest clear
+    let cnt = 0;
+    if (this.staticOn[foeSide] || !this.posMoveOk) cnt = this.gather(u.x, u.y, look);
+    else {
+      // gatherSideBox(u.side, u.x, u.y, look, <window box>), written out here: this runs for every moving unit
+      // every tick and a call would box all its float arguments
+      const cMax = I.radius + this.maxSepQ + 0.1, aMax = cMax + 0.8, m = this.drift + 1e-6;
+      const bx0 = u.x + (Math.min(0, aMax * dirX) - cMax * Math.abs(dirY)) - m, bx1 = u.x + (Math.max(0, aMax * dirX) + cMax * Math.abs(dirY)) + m;
+      const by0 = u.y + (Math.min(0, aMax * dirY) - cMax * Math.abs(dirX)) - m, by1 = u.y + (Math.max(0, aMax * dirY) + cMax * Math.abs(dirX)) + m;
+      const x0 = clamp(Math.floor((u.x - look) / CELL), 0, HCOLS - 1), x1 = clamp(Math.floor((u.x + look) / CELL), 0, HCOLS - 1);
+      const y0 = clamp(Math.floor((u.y - look) / CELL), 0, HROWS - 1), y1 = clamp(Math.floor((u.y + look) / CELL), 0, HROWS - 1);
+      const sc = this.scratch, head = this.sideHead, next = this.sideNext, base = u.side * (HCOLS * HROWS);
+      for (let cy = y0; cy <= y1; cy++) {
+        if ((cy > 0 && cy * CELL > by1) || (cy < HROWS - 1 && (cy + 1) * CELL < by0)) continue;
+        for (let cx = x0; cx <= x1; cx++) {
+          if ((cx > 0 && cx * CELL > bx1) || (cx < HCOLS - 1 && (cx + 1) * CELL < bx0)) continue;
+          for (let i = head[base + cy * HCOLS + cx]; i >= 0; i = next[i]) sc[cnt++] = i;
+        }
+      }
+    }
     let best = Infinity, bestPerp = 0, bestClear = 1;
     const mySpeed = I.speed * 0.5;
+    const radA = this.radA, live = this.posMoveOk, sx = this.snapX, sy = this.snapY;
+    const ux = u.x, uy = u.y;
     for (let q = 0; q < cnt; q++) {
       const j = this.scratch[q];
       if (j === u.id || j === goalId) continue;
+      // geometry first (all filters here are independent tests, so their order doesn't change the result);
+      // other units' positions come from the flat mirror while it is valid
+      const rx = (live ? sx[j] : this.units[j].x) - ux, ry = (live ? sy[j] : this.units[j].y) - uy;
+      const along = rx * dirX + ry * dirY;
+      if (along <= 0) continue;
+      const clear = I.radius + radA[j] + 0.1;
+      if (along > clear + 0.8) continue;
+      const perp = rx * -dirY + ry * dirX; // >0: obstacle on our left (in +perp direction)
+      if (Math.abs(perp) >= clear) continue;
       const o = this.units[j];
       if (!o.alive || o.flying !== u.flying) continue;
       const O = this.ints[j];
       if (O.leapT >= 0) continue;
       // enemies are only obstacles when they can't be pushed (emplacements)
       if (o.side !== u.side && !O.isStatic) continue;
-      const rx = o.x - u.x, ry = o.y - u.y;
-      const along = rx * dirX + ry * dirY;
-      if (along <= 0) continue;
-      const clear = I.radius + O.radius + 0.1;
-      if (along > clear + 0.8) continue;
-      const perp = rx * -dirY + ry * dirX; // >0: obstacle on our left (in +perp direction)
-      if (Math.abs(perp) >= clear) continue;
       // allies moving our way at a decent clip aren't in the way
       if (O.vx * dirX + O.vy * dirY > mySpeed) continue;
       if (along < best) { best = along; bestPerp = perp; bestClear = clear; }
@@ -1720,18 +1846,25 @@ export class Battle {
   // ---------------------------------------------------------------- spatial hash + separation
 
   private rebuildHash(): void {
-    const head = this.head;
+    const head = this.head, sideHead = this.sideHead;
     head.fill(-1);
+    sideHead.fill(-1);
     const units = this.units;
     const l0 = this.liveIdx[0], l1 = this.liveIdx[1];
-    l0.length = 0; l1.length = 0;
-    for (let i = 0; i < units.length; i++) if (units[i].alive) (units[i].side === 0 ? l0 : l1).push(i);
+    let n0 = 0, n1 = 0;
+    for (let i = 0; i < units.length; i++) if (units[i].alive) { if (units[i].side === 0) l0[n0++] = i; else l1[n1++] = i; }
+    this.liveN[0] = n0; this.liveN[1] = n1;
     for (let i = units.length - 1; i >= 0; i--) {
       const u = units[i];
       if (!u.alive) continue;
       const c = this.cellOf(u.x, u.y);
+      this.hashX[i] = u.x; this.hashY[i] = u.y;
+      if (head[c] < 0) this.tail[c] = i;
       this.next[i] = head[c];
       head[c] = i;
+      const sc = u.side * (HCOLS * HROWS) + c;
+      this.sideNext[i] = sideHead[sc];
+      sideHead[sc] = i;
     }
   }
 
@@ -1751,6 +1884,72 @@ export class Battle {
       for (let cx = x0; cx <= x1; cx++)
         for (let i = this.head[cy * HCOLS + cx]; i >= 0; i = this.next[i]) sc[n++] = i;
     return n;
+  }
+
+  /** Fill this.sat from the snapshot positions of the units alive now. */
+  private buildSat(): void {
+    const sat = this.sat, units = this.units, W1 = HCOLS + 1;
+    sat.fill(0);
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      if (!u.alive) continue;
+      const cx = clamp(Math.floor(this.snapX[i] / CELL), 0, HCOLS - 1), cy = clamp(Math.floor(this.snapY[i] / CELL), 0, HROWS - 1);
+      sat[u.side * SAT_N + (cy + 1) * W1 + cx + 1]++;
+    }
+    for (let s = 0; s < 2; s++) {
+      const b = s * SAT_N;
+      for (let cy = 1; cy <= HROWS; cy++)
+        for (let cx = 1; cx <= HCOLS; cx++)
+          sat[b + cy * W1 + cx] += sat[b + (cy - 1) * W1 + cx] + sat[b + cy * W1 + cx - 1] - sat[b + (cy - 1) * W1 + cx - 1];
+    }
+  }
+
+  /** while posSnapOk: does `side` have any unit (alive at the snapshot) whose position is inside the box? (may say
+   *  yes for units just outside it, never no for one inside) */
+  private anyIn(side: Side, x0: number, x1: number, y0: number, y1: number): boolean {
+    const W1 = HCOLS + 1, b = side * SAT_N, sat = this.sat;
+    const cx0 = clamp(Math.floor(x0 / CELL), 0, HCOLS - 1), cx1 = clamp(Math.floor(x1 / CELL), 0, HCOLS - 1) + 1;
+    const cy0 = clamp(Math.floor(y0 / CELL), 0, HROWS - 1), cy1 = clamp(Math.floor(y1 / CELL), 0, HROWS - 1) + 1;
+    return sat[b + cy1 * W1 + cx1] - sat[b + cy0 * W1 + cx1] - sat[b + cy1 * W1 + cx0] + sat[b + cy0 * W1 + cx0] > 0;
+  }
+
+  /** gather() restricted to one side's units: the same ids in the same order as gather() minus the other side */
+  private gatherSide(side: Side, x: number, y: number, r: number): number {
+    const x0 = clamp(Math.floor((x - r) / CELL), 0, HCOLS - 1), x1 = clamp(Math.floor((x + r) / CELL), 0, HCOLS - 1);
+    const y0 = clamp(Math.floor((y - r) / CELL), 0, HROWS - 1), y1 = clamp(Math.floor((y + r) / CELL), 0, HROWS - 1);
+    let n = 0;
+    const sc = this.scratch, head = this.sideHead, next = this.sideNext, base = side * (HCOLS * HROWS);
+    for (let cy = y0; cy <= y1; cy++)
+      for (let cx = x0; cx <= x1; cx++)
+        for (let i = head[base + cy * HCOLS + cx]; i >= 0; i = next[i]) sc[n++] = i;
+    return n;
+  }
+
+  /** gatherSide(side, x, y, r) over the same cells in the same order, minus whole cells that cannot hold a unit whose
+   *  current position is inside the box [bx0, bx1] x [by0, by1]: a unit sits in the cell of its hash position and has
+   *  drifted at most this.drift (per axis) since. Only valid while posSnapOk / posMoveOk; otherwise exactly gatherSide(). */
+  private gatherSideBox(side: Side, x: number, y: number, r: number, bx0: number, bx1: number, by0: number, by1: number): number {
+    if (!this.posSnapOk && !this.posMoveOk) return this.gatherSide(side, x, y, r);
+    const x0 = clamp(Math.floor((x - r) / CELL), 0, HCOLS - 1), x1 = clamp(Math.floor((x + r) / CELL), 0, HCOLS - 1);
+    const y0 = clamp(Math.floor((y - r) / CELL), 0, HROWS - 1), y1 = clamp(Math.floor((y + r) / CELL), 0, HROWS - 1);
+    const m = this.drift + 1e-6;
+    bx0 -= m; bx1 += m; by0 -= m; by1 += m;
+    let n = 0;
+    const sc = this.scratch, head = this.sideHead, next = this.sideNext, base = side * (HCOLS * HROWS);
+    // edge rows/columns also hold anything filed from beyond the field, so they are unbounded outward
+    for (let cy = y0; cy <= y1; cy++) {
+      if ((cy > 0 && cy * CELL > by1) || (cy < HROWS - 1 && (cy + 1) * CELL < by0)) continue;
+      for (let cx = x0; cx <= x1; cx++) {
+        if ((cx > 0 && cx * CELL > bx1) || (cx < HCOLS - 1 && (cx + 1) * CELL < bx0)) continue;
+        for (let i = head[base + cy * HCOLS + cx]; i >= 0; i = next[i]) sc[n++] = i;
+      }
+    }
+    return n;
+  }
+
+  /** gatherSideBox() for the units within `need` of (x, y) */
+  private gatherSideNear(side: Side, x: number, y: number, r: number, need: number): number {
+    return this.gatherSideBox(side, x, y, r, x - need, x + need, y - need, y + need);
   }
 
   private capSeg = { d: 0, nx: 0, ny: 0 };
@@ -1784,7 +1983,19 @@ export class Battle {
   private separate(): void {
     const units = this.units;
     const ints = this.ints;
-    const head = this.head, next = this.next;
+    const head = this.head, next = this.next, tail = this.tail;
+    // positions mirrored into flat arrays (kept in sync with every push below) so distant pairs are rejected
+    // before touching either unit's objects; snapX/snapY are free outside the goals + weapons phase
+    const px = this.snapX, py = this.snapY, sq = this.sepQ, hx = this.hashX, hy = this.hashY;
+    // D: largest per-axis drift of any live unit from the position its hash cell was built from. A unit filed in
+    // cell (cx, cy) is within D of that cell's box, so whole cells farther than the contact reach + D from `a`
+    // hold only pairs the distance pre-filter would reject anyway, and are skipped without walking them.
+    let D = 0;
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      px[i] = u.x; py[i] = u.y;
+      if (u.alive) D = Math.max(D, Math.abs(u.x - hx[i]), Math.abs(u.y - hy[i]));
+    }
     for (let i = 0; i < units.length; i++) {
       const a = units[i];
       if (!a.alive) continue;
@@ -1792,10 +2003,26 @@ export class Battle {
       if (A.leapT >= 0) continue;
       const ccx = clamp(Math.floor(a.x / CELL), 0, HCOLS - 1), ccy = clamp(Math.floor(a.y / CELL), 0, HROWS - 1);
       const reach = Math.max(1, Math.ceil((A.bound + MAX_RADIUS) / CELL));
-      for (let cy = Math.max(0, ccy - reach); cy <= Math.min(HROWS - 1, ccy + reach); cy++) {
-        for (let cx = Math.max(0, ccx - reach); cx <= Math.min(HCOLS - 1, ccx + reach); cx++) {
-          for (let j = head[cy * HCOLS + cx]; j >= 0; j = next[j]) {
+      // (the cells the original neighbourhood scan visits, in this row-major order)
+      const rowLo = Math.max(0, ccy - reach), rowHi = Math.min(HROWS - 1, ccy + reach);
+      const colLo = Math.max(0, ccx - reach), colHi = Math.min(HCOLS - 1, ccx + reach);
+      // a pair is never pushed when its centres are this far apart: no branch below separates beyond both reaches
+      // (or A's hold-formation spacing). Units that could be that close now sit in hash cells within that reach + D
+      // of `a`, so only those cells are walked; the window is recomputed whenever `a` or D moves.
+      const qi = sq[i], holdCap = A.hold ? Math.min(2.9, A.sepMin) * 0.95 : 0;
+      const far0 = Math.max(qi + this.maxSepQ, holdCap) * (1 + 1e-9) + 1e-6;
+      let far = far0 + D;
+      let wy1 = Math.min(rowHi, clamp(Math.floor((py[i] + far) / CELL), 0, HROWS - 1));
+      let wx0 = Math.max(colLo, clamp(Math.floor((px[i] - far) / CELL), 0, HCOLS - 1));
+      let wx1 = Math.min(colHi, clamp(Math.floor((px[i] + far) / CELL), 0, HCOLS - 1));
+      for (let cy = Math.max(rowLo, clamp(Math.floor((py[i] - far) / CELL), 0, HROWS - 1)); cy <= wy1; cy++) {
+        for (let cx = wx0; cx <= wx1; cx++) {
+          const c = cy * HCOLS + cx;
+          if (head[c] < 0 || tail[c] <= i) continue;
+          for (let j = head[c]; j >= 0; j = next[j]) {
             if (j <= i) continue;
+            const qx = px[j] - px[i], qy = py[j] - py[i], ql = Math.max(qi + sq[j], holdCap) * (1 + 1e-9);
+            if (qx * qx + qy * qy >= ql * ql) continue;
             const b = units[j];
             if (!b.alive || b.flying !== a.flying) continue;
             const B = ints[j];
@@ -1827,6 +2054,12 @@ export class Battle {
             const ka = B.mass / tm, kb = A.mass / tm;
             a.x -= dx * overlap * ka; a.y -= dy * overlap * ka;
             b.x += dx * overlap * kb; b.y += dy * overlap * kb;
+            px[i] = a.x; py[i] = a.y; px[j] = b.x; py[j] = b.y;
+            D = Math.max(D, Math.abs(a.x - hx[i]), Math.abs(a.y - hy[i]), Math.abs(b.x - hx[j]), Math.abs(b.y - hy[j]));
+            far = far0 + D;
+            wy1 = Math.min(rowHi, clamp(Math.floor((py[i] + far) / CELL), 0, HROWS - 1));
+            wx0 = Math.max(colLo, clamp(Math.floor((px[i] - far) / CELL), 0, HCOLS - 1));
+            wx1 = Math.min(colHi, clamp(Math.floor((px[i] + far) / CELL), 0, HCOLS - 1));
             if (a.side !== b.side && !a.flying) {
               if (A.crush && A.crushCd <= 0 && b.stats.size < a.stats.size) {
                 A.crushCd = CRUSH_EVERY;
