@@ -720,20 +720,38 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       break;
     }
     case 'rocketPod': {
-      const cols = n >= 12 ? 4 : n >= 4 ? 2 : 1;
-      const rows = Math.ceil(n / cols);
-      const cell = r * (n >= 12 ? 0.48 : 0.62);
-      const w = cols * cell, h = rows * cell;
-      const x0 = -w / 2 + r * 0.25;
-      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, x0 - cell * 0.15, -h / 2 - cell * 0.15, w + cell * 0.3, h + cell * 0.3, cell * 0.2));
-      for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
-        const cx = x0 + (j + 0.5) * cell, cy = -h / 2 + (i + 0.5) * cell;
-        shape(g, METAL.deep, o * 0.4, () => g.arc(cx, cy, cell * 0.38, 0, Math.PI * 2));
-        shape(g, j === cols - 1 ? '#d8d2c0' : '#9a9384', 0, () => g.arc(cx + cell * 0.06, cy, cell * 0.2, 0, Math.PI * 2));
-        g.fillStyle = '#c0392b';
-        g.beginPath(); g.arc(cx + cell * 0.1, cy, cell * 0.1, 0, Math.PI * 2); g.fill();
+      // a launcher box elevated toward the front (not tubes staring straight up): long top plate, then the
+      // foreshortened front face where the tube mouths and rocket noses show, on a cradle with rear blast vents
+      const across = n >= 12 ? 4 : n >= 4 ? 2 : 1;
+      const layers = Math.max(1, Math.ceil(n / across));
+      const W = r * (n >= 12 ? 1.5 : n >= 4 ? 1.05 : 0.6);
+      const L = r * (n >= 12 ? 1.75 : 1.4);
+      const x0 = -r * 0.75, cw = W / across;
+      const fd = r * Math.min(0.42, 0.13 * layers + 0.08); // depth of the visible front face
+      // cradle and trunnion under the rear of the box
+      shape(g, METAL.dark, o, () => roundRect(g, -r * 0.65, -W * 0.32, r * 0.75, W * 0.64, r * 0.08));
+      // top plate
+      shape(g, teamGrad(g, pal, r), o, () => roundRect(g, x0, -W / 2, L, W, r * 0.08));
+      g.strokeStyle = 'rgba(0,0,0,0.35)'; lw(g, r * 0.04);
+      g.beginPath();
+      for (let j = 1; j < across; j++) { const y = -W / 2 + j * cw; g.moveTo(x0 + r * 0.08, y); g.lineTo(x0 + L - r * 0.04, y); }
+      g.moveTo(x0 + L * 0.35, -W / 2 + r * 0.04); g.lineTo(x0 + L * 0.35, W / 2 - r * 0.04);
+      g.stroke();
+      // rear blast vents
+      g.fillStyle = METAL.deep;
+      for (let j = 0; j < across; j++) g.fillRect(x0 + r * 0.04, -W / 2 + (j + 0.25) * cw, r * 0.1, cw * 0.5);
+      // front face with the tube mouths (seen at an angle: squashed along the facing)
+      const fx = x0 + L;
+      shape(g, METAL.deep, o * 0.6, () => roundRect(g, fx, -W / 2, fd, W, r * 0.04));
+      const lh = fd / layers;
+      for (let k = 0; k < layers; k++) for (let j = 0; j < across; j++) {
+        const cx = fx + lh * (k + 0.5), cy = -W / 2 + (j + 0.5) * cw;
+        g.fillStyle = '#1b1d1f';
+        g.beginPath(); g.ellipse(cx, cy, lh * 0.38, cw * 0.36, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = k === 0 ? '#c0392b' : '#8f2a20';
+        g.beginPath(); g.ellipse(cx + lh * 0.06, cy, lh * 0.2, cw * 0.18, 0, 0, Math.PI * 2); g.fill();
       }
-      shape(g, pal.accent, 0, () => g.rect(x0 - cell * 0.15, -h / 2 - cell * 0.15, cell * 0.12, h + cell * 0.3));
+      shape(g, pal.accent, 0, () => g.rect(x0 + L * 0.35 - r * 0.05, -W / 2, r * 0.1, W));
       break;
     }
     case 'missileRack': {
@@ -759,17 +777,21 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       break;
     }
     case 'cruise': {
-      const len = r * 3.0;
-      shape(g, METAL.dark, o, () => roundRect(g, -r * 1.2, -r * 0.55, r * 2.3, r * 1.1, r * 0.15));
-      shape(g, '#dedbd0', o, () => roundRect(g, -r * 1.35, -r * 0.3, len, r * 0.6, r * 0.3));
-      g.fillStyle = pal.accent;
-      g.fillRect(-r * 0.2, -r * 0.3, r * 0.15, r * 0.6);
-      g.fillStyle = '#b8352a';
-      g.beginPath(); g.moveTo(len - r * 1.35, 0); g.lineTo(len - r * 1.9, -r * 0.3); g.lineTo(len - r * 1.9, r * 0.3); g.closePath(); g.fill();
-      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(-r * 0.9, -r * 0.3); g.lineTo(-r * 1.35, -r * 0.75); g.lineTo(-r * 1.45, -r * 0.75); g.lineTo(-r * 1.3, -r * 0.3); g.closePath(); });
-      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(-r * 0.9, r * 0.3); g.lineTo(-r * 1.35, r * 0.75); g.lineTo(-r * 1.45, r * 0.75); g.lineTo(-r * 1.3, r * 0.3); g.closePath(); });
-      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(r * 0.5, -r * 0.3); g.lineTo(r * 0.25, -r * 0.55); g.lineTo(r * 0.1, -r * 0.55); g.lineTo(r * 0.15, -r * 0.3); g.closePath(); });
-      shape(g, '#a9a69c', o * 0.6, () => { g.moveTo(r * 0.5, r * 0.3); g.lineTo(r * 0.25, r * 0.55); g.lineTo(r * 0.1, r * 0.55); g.lineTo(r * 0.15, r * 0.3); g.closePath(); });
+      // transporter-erector: a long sealed launch canister on an erector rail (the missile itself stays inside)
+      const len = r * 2.9, cw = r * 0.62, x0 = -r * 1.3;
+      // erector rail + hinge block under the canister
+      shape(g, METAL.dark, o, () => roundRect(g, x0 - r * 0.1, -r * 0.22, len * 0.85, r * 0.44, r * 0.06));
+      shape(g, METAL.deep, o * 0.6, () => roundRect(g, x0 - r * 0.25, -r * 0.42, r * 0.45, r * 0.84, r * 0.08));
+      // the canister: dull metal with a faint team tint, ribbed clamp bands, a frangible front cap and a rear vent
+      shape(g, metalGrad(g, cw), o, () => roundRect(g, x0, -cw / 2, len, cw, r * 0.1));
+      g.globalAlpha = 0.35;
+      shape(g, teamGrad(g, pal, r), 0, () => roundRect(g, x0 + r * 0.05, -cw / 2 + r * 0.05, len - r * 0.1, cw - r * 0.1, r * 0.08));
+      g.globalAlpha = 1;
+      for (const f of [0.18, 0.5, 0.82]) shape(g, METAL.dark, o * 0.4, () => g.rect(x0 + len * f - r * 0.06, -cw / 2 - r * 0.04, r * 0.12, cw + r * 0.08));
+      shape(g, METAL.deep, o * 0.5, () => roundRect(g, x0 + len - r * 0.16, -cw / 2 + r * 0.04, r * 0.16, cw - r * 0.08, r * 0.05));
+      shape(g, '#2a2c2e', 0, () => roundRect(g, x0 - r * 0.02, -cw * 0.3, r * 0.1, cw * 0.6, r * 0.03));
+      // stencil stripe
+      shape(g, pal.accent, 0, () => g.rect(x0 + len * 0.62, -cw / 2 + r * 0.06, r * 0.08, cw - r * 0.12));
       break;
     }
     case 'mortar': {
