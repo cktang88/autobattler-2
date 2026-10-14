@@ -27,7 +27,7 @@ button.k-select {
 button.k-select:hover:not(:disabled) { background: var(--k-plate3); border-color: transparent; }
 button.k-select.open { box-shadow: inset 0 0 0 2px var(--k-ink), inset 0 0 0 3px var(--k-amber); }
 button.k-select:focus-visible { outline: 2px solid var(--k-amber); outline-offset: 2px; }
-.k-select-pre { color: var(--k-dim); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.k-select-pre { color: var(--k-dim); font-weight: 600; font-size: 0.91rem; letter-spacing: 0.14em; text-transform: uppercase; }
 .k-select-v { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-select-ico { display: inline-flex; color: var(--k-amber); }
 .k-chev { display: inline-flex; width: 16px; height: 16px; color: var(--k-dim); flex: none; transition: transform 0.12s; }
@@ -48,7 +48,7 @@ button.k-select:focus-visible { outline: 2px solid var(--k-amber); outline-offse
 .k-opt-ico { display: inline-flex; width: 18px; justify-content: center; color: var(--k-dim); }
 .k-opt-t { display: flex; flex-direction: column; min-width: 0; }
 .k-opt-l { font-family: var(--k-head); font-weight: 700; font-size: 1rem; letter-spacing: 0.03em; }
-.k-opt-h { font-size: 0.84rem; color: var(--k-dim); line-height: 1.25; }
+.k-opt-h { font-size: 0.92rem; color: var(--k-dim); line-height: 1.25; }
 
 /* ---------- segmented ---------- */
 .k-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--k-ink); max-width: 100%; }
@@ -101,6 +101,6 @@ input.k-input {
 }
 input.k-input:focus { outline: none; border: 0; }
 input.k-input::placeholder { color: var(--k-dim2); }
-button.k-field-x { min-height: 0; padding: 2px 4px; background: none; border: 0; clip-path: none; color: var(--k-dim); font-size: 0.9rem; }
+button.k-field-x { min-height: 0; padding: 2px 4px; background: none; border: 0; clip-path: none; color: var(--k-dim); font-size: 0.94rem; }
 button.k-field-x:hover:not(:disabled) { color: var(--k-txt); background: none; }
 button.k-field-x[hidden] { display: none; }

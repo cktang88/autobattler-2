@@ -15,6 +15,7 @@ import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, typ
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
 import { CLASS_RANK, sizeKey, slotD, weaponD } from './weaponsize.ts';
+import { PART_SHAPES, RANK, hardpointsOf, mountPerm, unitK } from '../../shared/mountgeo.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -74,45 +75,8 @@ const SHAPE_HW: Record<Shape, number> = {
   strikejet: 0.16, stratobomber: 0.2, heavyheli: 0.2,
 };
 
-/** Mount points per chassis, fractions of S. */
-const MOUNT_PTS: Record<string, [number, number][]> = {
-  scout: [[0.02, 0]],
-  drone: [[0.04, 0]],
-  raider: [[0.13, -0.2], [0.13, 0.2]],
-  warden: [[0.05, 0], [-0.25, 0.15]],
-  striker: [[-0.02, -0.25], [-0.02, 0.25], [0.22, 0]],
-  longarm: [[0.04, 0]],
-  aegis: [[0.06, 0], [-0.22, 0]],
-  gunship: [[-0.03, -0.28], [-0.03, 0.28]],
-  bastion: [[0.06, 0], [-0.24, -0.25], [-0.24, 0.25]],
-  colossus: [[0.0, -0.31], [0.0, 0.31], [0.18, 0], [-0.24, 0]],
-  // giants / titans: turrets sit ON the hull with clear deck between them (hull dominates the silhouette)
-  goliath: [[0.08, 0], [-0.07, -0.34], [-0.07, 0.34], [-0.31, 0]],
-  leviathan: [[0.27, 0], [-0.28, 0], [0.0, -0.205], [0.0, 0.205]],
-  carrier: [[0.33, 0], [-0.07, -0.31], [-0.37, -0.25], [-0.37, 0.25]],
-  // titan walker: T on the right forearm, G on the left forearm, heavies on the shoulder blades, M on the backpack
-  titan: [[0.15, 0.37], [0.15, -0.37], [-0.115, -0.165], [-0.115, 0.165], [-0.34, 0]],
-  citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
-  // odd shapes: turrets sit where the anatomy carries them (forelimbs, arms, claws, tail tip, spine segments)
-  mantis: [[0.31, -0.165], [0.31, 0.165]],
-  strider: [[0.32, 0.335], [0.32, -0.335], [-0.04, -0.3]],
-  arachnid: [[-0.16, -0.115], [-0.16, 0.115]],
-  crab: [[0.33, -0.39], [0.33, 0.39], [-0.04, 0]],
-  saucer: [[0.11, -0.19], [0.11, 0.19], [-0.215, 0]],
-  deltawing: [[0.02, 0], [-0.22, -0.25], [-0.22, 0.25]],
-  warlord: [[-0.04, -0.3], [0.32, 0.36], [0.32, -0.36], [-0.28, 0]],
-  scorpion: [[-0.42, -0.28], [0.5, -0.29], [0.5, 0.29]],
-  centipede: [[0.22, 0], [0.085, 0], [-0.055, 0], [-0.195, 0]],
-  broodmother: [[-0.19, 0], [0.26, 0], [-0.05, -0.25], [-0.05, 0.25], [-0.41, 0]],
-  arachne: [[-0.22, 0], [0.24, -0.15], [0.24, 0.15], [-0.43, 0]],
-  carriage: [[0.0, 0]],
-  hunter: [[0.08, 0], [-0.25, 0]],
-  riot: [[-0.13, -0.15], [-0.13, 0.15]],
-  interceptor: [[-0.05, -0.2], [-0.05, 0.2]],
-  siegeplat: [[0.02, -0.15], [0.02, 0.15]],
-  juggernaut: [[-0.04, 0], [-0.3, 0.2]],
-  bomberhull: [[0.24, 0], [-0.1, -0.3], [-0.1, 0.3]],
-};
+// hardpoint tables (MOUNT_PTS / footprint FOOT_MOUNTS), RANK, PART_SHAPES and the mount solver live in
+// shared/mountgeo.ts so the sim measures weapon ranges from the same mount points the art draws.
 
 /** Per-chassis turret scale so guns don't bury slender bodies. */
 const MOUNT_SCALE_I: Record<string, number[]> = { scorpion: [0.72, 0.8, 0.8] };
@@ -120,61 +84,6 @@ const MOUNT_SCALE: Record<string, number> = {
   mantis: 0.72, strider: 0.85, arachnid: 0.85, crab: 0.75, saucer: 0.9, deltawing: 0.85, warlord: 0.9, scorpion: 0.85, centipede: 0.72,
   broodmother: 0.92, arachne: 0.95, juggernaut: 0.9, interceptor: 0.8, hunter: 0.9, carriage: 1.0, siegeplat: 1.0, bomberhull: 0.85,
 };
-
-const RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
-/** frames whose mounts ride animated anatomy (limbs, claws, tails): hardpoints are fixed to the part */
-const PART_SHAPES = new Set(['mantis', 'mech', 'warlord', 'arachnid', 'broodmother', 'arachne', 'crab', 'saucer', 'scorpion', 'centipede']);
-
-/**
- * Hardpoint assignment by role and class: the heaviest weapon takes the most prominent hardpoint (big, centreline,
- * forward), identical weapons pair up on mirrored flank points, utilities (dishes, emitters, packs) go to the rear
- * deck. Returns perm[i] = hardpoint index of module i. Weapons must fit the hardpoint class.
- */
-function solveMounts(caps: MountClass[], pts: [number, number][], mods: (ModuleDef | null)[]): number[] {
-  const n = caps.length;
-  const id0 = caps.map((_, i) => i);
-  if (n <= 1) return id0;
-  // mirrored hardpoint pairs
-  const mate = caps.map((_, i) => pts.findIndex((q, j) => j !== i && Math.abs(q[0] - pts[i][0]) < 0.03 && Math.abs(q[1] + pts[i][1]) < 0.03 && Math.abs(q[1]) > 0.04));
-  const prom = (j: number) => RANK[caps[j]] * 1.0 + (1 - Math.min(1, Math.abs(pts[j][1]) / 0.3)) * 0.8 + pts[j][0] * 1.2;
-  const isW = (m: ModuleDef | null) => !!m && m.kind === 'weapon';
-  const isU = (m: ModuleDef | null) => !!m && m.kind === 'utility' && m.visual !== 'plate';
-  let best = id0, bestS = -Infinity;
-  const perm = new Array<number>(n), used = new Array<boolean>(n).fill(false);
-  const score = () => {
-    let sc = 0;
-    for (let i = 0; i < n; i++) {
-      const m = mods[i], j = perm[i];
-      if (j === i) sc += 0.05;
-      if (isW(m)) sc += (RANK[m!.mount] + 0.5 * (m!.caliber ?? 0.5) + 1) * prom(j);
-      else if (isU(m)) sc += -pts[j][0] * 2.2 + RANK[caps[j]] * 0.1;
-    }
-    // pairs: identical modules mirror each other
-    const at = new Array<ModuleDef | null>(n).fill(null);
-    for (let i = 0; i < n; i++) at[perm[i]] = mods[i];
-    for (let j = 0; j < n; j++) {
-      const k = mate[j];
-      if (k < 0 || k < j) continue;
-      const a = at[j], b = at[k];
-      if (a && b && a.id === b.id) sc += 3;
-      else if (a && b && a.visual === b.visual) sc += 1;
-      else if ((isW(a) && isU(b)) || (isU(a) && isW(b))) sc -= 0.6;
-      else if (!!a !== !!b) sc -= 0.3;
-    }
-    return sc;
-  };
-  const rec = (i: number) => {
-    if (i === n) { const s = score(); if (s > bestS + 1e-9) { bestS = s; best = perm.slice(); } return; }
-    const m = mods[i];
-    for (let j = 0; j < n; j++) {
-      if (used[j]) continue;
-      if (isW(m) && RANK[m!.mount] > RANK[caps[j]]) continue;
-      used[j] = true; perm[i] = j; rec(i + 1); used[j] = false;
-    }
-  };
-  rec(0);
-  return best;
-}
 
 /** Weapon presence: the centreline main gun of a big hull is its centrepiece; then clear any turret overlaps. */
 function scaleMounts(mounts: MountSlot[], S: number): number {
@@ -201,8 +110,6 @@ function scaleMounts(mounts: MountSlot[], S: number): number {
   return main;
 }
 
-/** Unit-size factor on turret diameters: a bigger hull carries a slightly bigger mount for the same weapon. */
-const unitK = (S: number) => (S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1));
 /** Per-chassis slender-body scale, compressed so it can never flip the weapon-class ordering across chassis
  *  (class bands are >= 11% apart; the compressed scale moves a turret by at most ~9%). */
 const chassisK = (ms: number) => 1 - (1 - ms) * 0.3;
@@ -246,10 +153,10 @@ export function layoutOf(d: Design): UnitLayout {
   // footprint: Y = width across, X = length along the facing (square chassis: S x S)
   const Y = chassis.footprint?.[0] ?? S, X = chassis.footprint?.[1] ?? S;
   const F = FOOT[shape];
-  const pts: [number, number][] = F?.mounts ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : (i % 2 ? 0.2 : -0.2)] as [number, number]);
+  const pts = hardpointsOf(chassis);
   const mods = chassis.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
   // layout solver: which hardpoint each module occupies (anatomical frames keep their fixed points)
-  const perm = PART_SHAPES.has(shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods);
+  const perm = mountPerm(chassis, pts, mods);
   const mounts: MountSlot[] = chassis.mounts.map((slot, i) => {
     const mod = mods[i];
     const j = perm[i];
