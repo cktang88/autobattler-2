@@ -17,8 +17,12 @@ export function partIcon(kind: PartKind, id: string, size: number, backdrop = fa
   const c = document.createElement('canvas');
   c.className = 'g-particon';
   c.style.width = c.style.height = `${size}px`;
+  // square backing store from the start: if the icon paints while detached (the garage re-renders often), the
+  // painter falls back to these dimensions instead of the canvas default 300x150, which used to squash icons
+  const dpr = window.devicePixelRatio || 1;
+  c.width = c.height = Math.round(size * dpr);
   c.setAttribute('aria-hidden', 'true');
-  const key = `${kind}:${id}:${size}:${window.devicePixelRatio || 1}:${backdrop}`;
+  const key = `${kind}:${id}:${size}:${dpr}:${backdrop}`;
   const cached = iconCache.get(key);
   const paint = () => {
     if (cached) {
@@ -27,6 +31,7 @@ export function partIcon(kind: PartKind, id: string, size: number, backdrop = fa
       return;
     }
     try { drawPartIcon(c, kind, id, { backdrop }); } catch { return; }
+    if (c.width !== c.height) return; // never cache a distorted paint
     const snap = document.createElement('canvas');
     snap.width = c.width; snap.height = c.height;
     snap.getContext('2d')?.drawImage(c, 0, 0);

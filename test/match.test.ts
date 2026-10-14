@@ -384,3 +384,23 @@ test('non-square footprints: validateDeploy zone + overlap use the real w x h', 
   assert.equal(v(at(1, 5, 0, 'lg'), at(2, 3, 3, 'wd')), null);
   assert.equal(v(at(1, 5, 0, 'lg'), at(2, 6, 0, 'wd')), null);
 });
+
+test('rotation: squads turn 90° (8x2 -> 2x8), validated, stored, and units laid out in the turned block', () => {
+  const m = fresh();
+  assert.deepEqual(blockDims(1, 0, undefined, true), { w: 2, h: 8 });
+  assert.deepEqual(blockDims(1, 1, undefined, true), { w: 3, h: 15 });
+  // a rotated packed squad is 8 deep: fits in the 12-deep zone at y=4, not at y=5
+  const r = (uid: number, x: number, y: number): Placement => ({ ...pl(uid, x, y), rot: true });
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 4)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 5)], upgrade: [] })!, /outside/);
+  // two rotated columns side by side don't overlap; a flat squad across them does
+  assert.equal(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 0), r(2, 2, 0)], upgrade: [] }), null);
+  assert.match(validateDeploy(m, 0, { round: 1, place: [r(1, 0, 0), pl(2, 0, 3)], upgrade: [] })!, /overlap/);
+  const c = placementUnitCenters(0, { x: 0, y: 0, rot: true }, 1);
+  assert.equal(c.length, 16);
+  assert.equal(new Set(c.map((p) => p.x)).size, 2, 'two columns');
+  assert.equal(new Set(c.map((p) => p.y)).size, 8, 'eight rows');
+  // stored on the board through applyDeploy
+  applyDeploy(m, 0, { round: 1, place: [r(1, 0, 0)], upgrade: [] });
+  assert.equal(m.players[0].board.find((u) => u.uid === 1)?.rot, true);
+});

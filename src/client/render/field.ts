@@ -34,13 +34,15 @@ import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types
 import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
-import { groundCanvas, groundRegion } from './ground.ts';
+import { MAPS, SURROUND, groundCanvas, groundRegion, surroundCanvas, type MapTheme } from './ground.ts';
 import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
 import { titanFeet } from './giantart.ts';
 
 const P2 = Math.PI * 2;
+/** cells of flight over which a round's drawn position slides from the barrel tip onto its simulated path */
+const MUZZLE_BLEND = 2.5;
 import {
   drawUnit, drawUnitShadow, layoutOf, mountPoints, muzzlePos, unitSprites, silhouette, wreckSprite,
   type MountPose, type UnitPose, type ViewDirs,
@@ -108,6 +110,9 @@ interface PSnap {
 interface PTrack {
   sx: number;
   sy: number;
+  /** barrel-tip offset at spawn, faded out over the first cells of flight */
+  ox?: number;
+  oy?: number;
   lx: number;
   ly: number;
   kind: string;
@@ -153,6 +158,15 @@ export class FieldView {
   private altHeld = false;
   private keyOff: (() => void) | null = null;
   private detail: { c: HTMLCanvasElement; x0: number; y0: number; x1: number; y1: number; px: number } | null = null;
+  /** terrain theme of the current map */
+  private map: MapTheme = MAPS[0];
+  /** switch the battlefield terrain (maps rotate per round) */
+  setMap(map: MapTheme): void {
+    if (map.id === this.map.id) return;
+    this.map = map;
+    this.detail = null;
+  }
+  get mapTheme(): MapTheme { return this.map; }
   readonly fx = new Fx();
   private dirs: ViewDirs;
   private vignette: CanvasGradient | null = null;
@@ -328,13 +342,14 @@ export class FieldView {
   private drawGround(showZone: boolean, sx: number, sy: number): void {
     const g = this.g;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#121416';
+    g.fillStyle = this.map.void;
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.setWorld(sx, sy);
-    // drop shadow frame around the field
-    g.fillStyle = 'rgba(0,0,0,0.5)';
-    g.fillRect(-0.25, -0.25, FIELD_W + 0.5, FIELD_H + 0.5);
-    g.drawImage(groundCanvas(GROUND_PX), 0, 0, FIELD_W, FIELD_H);
+    // the land around the board, darkened, then a soft shadow lip and the field itself
+    g.drawImage(surroundCanvas(this.map), -SURROUND, -SURROUND, FIELD_W + SURROUND * 2, FIELD_H + SURROUND * 2);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(-0.3, -0.3, FIELD_W + 0.6, FIELD_H + 0.6);
+    g.drawImage(groundCanvas(GROUND_PX, this.map), 0, 0, FIELD_W, FIELD_H);
     this.drawDetail();
     if (this.fx.decalCanvas) g.drawImage(this.fx.decalCanvas, 0, 0, FIELD_W, FIELD_H);
     // deploy zones
@@ -387,7 +402,7 @@ export class FieldView {
       const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
       const y0 = Math.max(0, vy0 - my), y1 = Math.min(FIELD_H, vy1 + my);
       const dpx = Math.min(px, 3800 / (x1 - x0), 3800 / (y1 - y0));
-      d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1), x0, y0, x1, y1, px: dpx };
+      d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1, this.map), x0, y0, x1, y1, px: dpx };
     }
     if (d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6) {
       g.drawImage(d.c, d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
@@ -574,7 +589,9 @@ export class FieldView {
       this.curP.set(p.id, { x: p.x, y: p.y, z: p.z, angle: p.angle, progress: p.progress });
       if (!this.ptrack.has(p.id)) {
         // projectiles spawn at their first observed position; start interpolation there
-        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time });
+        // the sim spawns rounds at the hull edge; draw them leaving the barrel tip and blend onto the true path
+        const tip = p.src !== undefined && p.mount !== undefined && p.z <= 0.5 ? this.muzzleOf(p.src, p.mount) : null;
+        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x : 0, oy: tip ? tip.y - p.y : 0 });
       }
     }
   }
@@ -728,10 +745,10 @@ export class FieldView {
       ang = lerpAngle(pr.angle, c.angle, a);
       odo = lerp(pr.odo, c.odo, a);
       mounts = u.mounts.map((m, i) => ({
-        angle: lerpAngle(pr.mounts[i] ?? m.angle, c.mounts[i] ?? m.angle, a),
+        angle: this.barrelAim(u, i, x, y, ang, lerpAngle(pr.mounts[i] ?? m.angle, c.mounts[i] ?? m.angle, a)),
         flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0,
       }));
-    } else mounts = u.mounts.map((m, i) => ({ angle: m.angle, flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0 }));
+    } else mounts = u.mounts.map((m, i) => ({ angle: this.barrelAim(u, i, x, y, ang, m.angle), flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0 }));
     const ext = u as SimUnit & { cloaked?: boolean };
     return {
       design: u.design, team: this.teamOf(u.side), x, y, angle: ang, time: this.time, odometer: odo, moving: u.moving,
@@ -943,8 +960,12 @@ export class FieldView {
       const kind = p.kind as string;
       const isHigh = kind === 'arc' || kind === 'missile';
       if (isHigh !== elevated) continue;
-      const pos = this.projPos(p);
+      let pos = this.projPos(p);
       const t = this.ptrack.get(p.id);
+      if (t && (t.ox || t.oy)) {
+        const f = Math.max(0, 1 - Math.hypot(pos.x - t.sx, pos.y - t.sy) / MUZZLE_BLEND);
+        if (f > 0) pos = { ...pos, x: pos.x + t.ox! * f, y: pos.y + t.oy! * f };
+      }
       const mod = modOf(p.moduleId);
       const vis = mod?.visual;
       const cal = mod?.caliber ?? 0.5;
@@ -1137,6 +1158,33 @@ export class FieldView {
     return { u, x: u.x, y: u.y, angle: u.angle };
   }
 
+  /** Barrel heading as drawn. The sim aims every mount from the hull centre; turrets sit off-centre, so while a mount
+   *  is tracking its target the drawn barrel swings onto it from its real pivot (the sim only fires once aligned). */
+  private barrelAim(u: SimUnit, i: number, x: number, y: number, hull: number, simAng: number): number {
+    const tid = u.mounts[i]?.target ?? -1;
+    if (tid < 0) return simAng;
+    const t = this.unitRender(tid);
+    const mp = layoutOf(u.design).mounts[i];
+    if (!t || !t.u.alive || !mp) return simAng;
+    const cs = Math.cos(hull), sn = Math.sin(hull);
+    const px = x + cs * mp.x - sn * mp.y, py = y + sn * mp.x + cs * mp.y;
+    const center = Math.atan2(t.y - y, t.x - x);
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    const k = clamp(1 - Math.abs(wrap(simAng - center)) / 0.5, 0, 1);
+    return simAng + wrap(Math.atan2(t.y - py, t.x - px) - center) * k;
+  }
+
+  /** World position of a mount's barrel tip right now (as drawn), and the barrel heading. */
+  private muzzleOf(unitId: number, mount: number): { x: number; y: number; d: number; aim: number } | null {
+    const ur = this.unitRender(unitId);
+    if (!ur || mount < 0 || !ur.u.mounts[mount]) return null;
+    const aim = this.barrelAim(ur.u, mount, ur.x, ur.y, ur.angle, ur.u.mounts[mount].angle);
+    const m = muzzlePos(ur.u.design, mount, ur.x, ur.y, ur.angle, aim);
+    let mx = m.x, my = m.y;
+    if (ur.u.flying) { mx += this.dirs.ux * 0.12; my += this.dirs.uy * 0.12; }
+    return { x: mx, y: my, d: m.d, aim };
+  }
+
   private handleEvent(e: BattleEvent): void {
     const fx = this.fx;
     switch (e.t) {
@@ -1145,10 +1193,10 @@ export class FieldView {
         const vis = mod?.visual;
         const ur = this.unitRender(e.unit);
         let mx = e.x, my = e.y, d = 0.3;
+        const tip = this.muzzleOf(e.unit, e.mount);
+        if (tip) e = { ...e, angle: tip.aim }; // flash / smoke follow the drawn barrel
         if (ur) {
-          const m = muzzlePos(ur.u.design, e.mount, ur.x, ur.y, ur.angle, e.angle);
-          mx = m.x; my = m.y; d = m.d;
-          if (ur.u.flying) { mx += this.dirs.ux * 0.12; my += this.dirs.uy * 0.12; }
+          if (tip) { mx = tip.x; my = tip.y; d = tip.d; }
           const v = this.visOf(ur.u);
           if (mod?.category === 'melee') v.swing[e.mount] = 1;
           if (mod?.id === 'annihilator') {
@@ -1240,7 +1288,8 @@ export class FieldView {
         const mod = modOf(e.moduleId);
         const vis = mod?.visual;
         const glowC = moduleGlow(mod, TEAM_PAL[this.teamOf(e.side)]);
-        const pts = [e.x1, e.y1, e.x2, e.y2];
+        const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
+        const pts = tip ? [tip.x, tip.y, e.x2, e.y2] : [e.x1, e.y1, e.x2, e.y2];
         let impact = true;
         switch (vis) {
           case 'heatray': fx.beam('heat', pts, '#ff6a1a', 0.07, 0.14); break;
@@ -1307,6 +1356,8 @@ export class FieldView {
         const col = mod?.visual === 'emp' ? '#cfeaff' : '#8fb8ff';
         const pts: number[] = [];
         for (const p of e.points) pts.push(p.x, p.y);
+        const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
+        if (tip && pts.length >= 2) { pts[0] = tip.x; pts[1] = tip.y; }
         if (pts.length >= 4) fx.beam('lightning', pts, col, heavy ? 0.05 : 0.035, heavy ? 0.24 : 0.18);
         for (let i = 2; i < pts.length; i += 2) {
           fx.glow(pts[i], pts[i + 1], heavy ? 0.5 : 0.35, col, 0.15);

@@ -348,6 +348,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
     const key = moduleRingKey(m, st);
     const icon = document.createElement('canvas');
     icon.className = 'sc-icon';
+    icon.width = icon.height = 64; // square fallback if it paints before layout (default 300x150 would squash it)
     icon.setAttribute('aria-hidden', 'true');
     requestAnimationFrame(() => { try { drawPartIcon(icon, 'module', m.id, { backdrop: true }); } catch { /* */ } });
     const tags: string[] = [];

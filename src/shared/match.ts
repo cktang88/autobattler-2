@@ -203,9 +203,9 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   // escort may reference any block already on the board or bought in this very action
   const knownUids = new Set<number>(seenUids);
   for (const pl of a.place) if (pl && typeof pl === 'object' && isInt(pl.uid)) knownUids.add(pl.uid);
-  const footprints: { x: number; y: number; spacing?: number; size: Size; foot: UnitFoot }[] = p.board.map((u) => {
+  const footprints: { x: number; y: number; spacing?: number; rot?: boolean; size: Size; foot: UnitFoot }[] = p.board.map((u) => {
     const dd = designs.get(u.designId);
-    return { x: u.x, y: u.y, spacing: u.spacing, size: sizeOf(dd), foot: footOf(dd) };
+    return { x: u.x, y: u.y, spacing: u.spacing, rot: u.rot, size: sizeOf(dd), foot: footOf(dd) };
   });
   let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
 
@@ -224,15 +224,17 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
       if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
       if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
     }
+    if (pl.rot !== undefined && typeof pl.rot !== 'boolean') return `Bad rotation for ${d.name}`;
+    if (pl.rot && !hasSpacing(size)) return `${d.name} can't be rotated`;
     const be = behaviorError(behaviorOf(pl));
     if (be) return `${d.name}: ${be}`;
     if (pl.kiteMount !== undefined && !validKiteMount(d, pl.kiteMount, false)) return `${d.name}: Bad kite weapon`;
     if (pl.escort !== undefined && (!isInt(pl.escort) || pl.escort === pl.uid || !knownUids.has(pl.escort))) return `${d.name}: Bad escort target`;
     simUnits += squadSize(size);
     if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
-    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing, foot)) return `${d.name} is outside the deploy zone`;
+    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing, foot, !!pl.rot)) return `${d.name} is outside the deploy zone`;
     for (const f of footprints) if (blocksOverlap(pl, size, f, f.size, foot, f.foot)) return `${d.name} overlaps another unit`;
-    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, size, foot });
+    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, rot: pl.rot, size, foot });
     cost += designCost(d);
   }
 
@@ -309,6 +311,7 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     const size = sizeOf(p.deck.find((d) => d.id === pl.designId));
     const b: Placement = { uid: pl.uid, designId: pl.designId, x: pl.x, y: pl.y, level: 1, round: m.round };
     if (hasSpacing(size)) b.spacing = normSpacing(size, pl.spacing);
+    if (pl.rot && hasSpacing(size)) b.rot = true;
     if (pl.target !== undefined) b.target = pl.target;
     if (pl.hold !== undefined) b.hold = pl.hold;
     if (pl.kite !== undefined) b.kite = pl.kite;
@@ -444,6 +447,7 @@ function sizeOf(d: Design | undefined): Size {
 function clonePlacement(p: Placement): Placement {
   const c: Placement = { uid: p.uid, designId: p.designId, x: p.x, y: p.y, level: p.level, round: p.round };
   if (p.spacing !== undefined) c.spacing = p.spacing;
+  if (p.rot) c.rot = true;
   if (p.target !== undefined) c.target = p.target;
   if (p.hold !== undefined) c.hold = p.hold;
   if (p.kite !== undefined) c.kite = p.kite;

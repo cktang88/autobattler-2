@@ -17,6 +17,8 @@ import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.
 import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
+import { mapForRound } from '../render/ground.ts';
+import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 
@@ -82,7 +84,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const opp = (1 - side) as Side;
   let m: MatchState = driver.state();
   const settings = loadSettings();
-  let speed = [1, 2, 4].includes(settings.battleSpeed) ? settings.battleSpeed : 1;
+  let speed = BATTLE_SPEEDS.includes(settings.battleSpeed) ? settings.battleSpeed : 1;
 
   // ---------- design lookup ----------
   const statCache = new Map<Design, UnitStats | null>();
@@ -105,7 +107,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let nextUid = 1;
   let selCard = -1;
   let sel: Sel = null;
-  let hover: { x: number; y: number; size: Size; spacing: number; w: number; h: number; valid: boolean; reason: string | null } | null = null;
+  let hover: { x: number; y: number; size: Size; spacing: number; rot?: boolean; w: number; h: number; valid: boolean; reason: string | null } | null = null;
+  /** next squad is placed turned 90° (R while a card is selected) */
+  let rotCard = false;
   const cfg = new Map<number, UnitConfig>(); // changed settings of units from earlier rounds
   let hoverUnit: Sel = null; // block under the mouse (nothing selected in the shop)
   let lastPtr: { px: number; py: number } | null = null;
@@ -239,7 +243,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     foeBtn.setAttribute('aria-pressed', String(showFoe));
   }
   const infoEl = h('div.panel.info.hidden');
-  const speedBtns = [1, 2, 4].map((v) => h('button.small', { onclick: () => { speed = v; renderSpeed(); } }, `${v}×`));
+  const speedBtns = BATTLE_SPEEDS.map((v) => h('button.small', { title: `${speedLabel(v)} speed`, onclick: () => { speed = v; renderSpeed(); } }, speedLabel(v)));
   const skipBtn = h('button.small', { onclick: () => skipBattle() }, 'Skip ▸▸');
   const speedbar = h('div.speedbar.hidden', null, ...speedBtns, skipBtn);
   const overlayEl = h('div');
@@ -402,7 +406,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const foeHp = Math.max(0, through === Infinity ? foe().hp : hpAt(opp, through));
     const max = Math.max(1, START_HP, myHp, foeHp);
     const tag = phase === 'battle' ? 'Battle' : phase === 'result' ? 'Result' : phase === 'over' ? 'Final' : phase === 'waiting' ? 'Waiting' : 'Deploy';
-    roundEl.replaceChildren(document.createTextNode(`Round ${shownRound}`), h('small', null, tag));
+    // maps rotate every round; the battle replay is fought on the map of the round it belongs to
+    const map = mapForRound(shownRound);
+    view.setMap?.(map);
+    roundEl.replaceChildren(document.createTextNode(`Round ${shownRound}`), h('small', { title: map.blurb }, `${tag} · ${map.name}`));
     const showReady = driver.mode === 'pvp' && (phase === 'deploy' || phase === 'waiting');
     hpMe.replaceChildren(
       h('div.who', null, h('span', null, me().name || 'You'), h('span', null, String(myHp))),
@@ -523,7 +530,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!hasSpacing(size)) return;
     const sp = normSpacing(size, v);
     if (sp === normSpacing(size, p.spacing)) return;
-    const bd = blockDims(size, sp, footOf(designOf(side, p.designId)));
+    const bd = blockDims(size, sp, footOf(designOf(side, p.designId)), p.rot);
     const next: Placement = { ...p, spacing: sp, x: Math.max(0, Math.min(DEPLOY_W - bd.w, p.x)), y: Math.max(0, Math.min(DEPLOY_D - bd.h, p.y)) };
     const cand = action();
     cand.place[i] = next;
@@ -533,6 +540,44 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     lastSpacing.set(p.designId, sp);
     sfx('click');
     renderAll();
+  }
+
+  /** R: turn the squad about to be placed, else the selected squad placed this round, by 90° (reverts if it won't fit) */
+  function rotateBlock(): boolean {
+    if (phase !== 'deploy') return false;
+    const d = deck()[selCard];
+    if (d) {
+      if (!hasSpacing(sizeOf(d))) { app.toast('Only squads can be rotated'); return true; }
+      rotCard = !rotCard;
+      if (lastPtr) hover = computeHover(lastPtr.px, lastPtr.py);
+      sfx('click');
+      renderAll();
+      return true;
+    }
+    if (!(sel?.pending && sel.side === side)) return false;
+    const i = place.findIndex((x) => x.uid === sel!.uid);
+    if (i < 0) return false;
+    const p = place[i];
+    const dd = designOf(side, p.designId);
+    const size = sizeOf(dd);
+    if (!hasSpacing(size)) { app.toast('Only squads can be rotated'); return true; }
+    const rot = !p.rot;
+    const bd = blockDims(size, p.spacing, footOf(dd), rot);
+    // turn about the block's centre, then nudge back inside the zone
+    const old = blockDims(size, p.spacing, footOf(dd), p.rot);
+    const cx = p.x + old.w / 2, cy = p.y + old.h / 2;
+    const x = Math.max(0, Math.min(DEPLOY_W - bd.w, Math.round(cx - bd.w / 2)));
+    const y = Math.max(0, Math.min(DEPLOY_D - bd.h, Math.round(cy - bd.h / 2)));
+    const next: Placement = { ...p, x, y, ...(rot ? { rot: true } : {}) };
+    if (!rot) delete next.rot;
+    const cand = action();
+    cand.place[i] = next;
+    const err = check(cand);
+    if (err) { sfx('invalid'); app.toast(err, 'error'); return true; }
+    place[i] = next;
+    sfx('click');
+    renderAll();
+    return true;
   }
 
   /** [ ] / Shift+wheel: step the spacing of the card being placed, else of the selected pending squad */
@@ -552,7 +597,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (phase === 'deploy' && escortPick) t = 'Click a friendly block to escort · Esc to cancel';
     else if (phase === 'deploy') {
       const d = deck()[selCard];
-      if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing' : ''} · Esc to cancel`;
+      if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else t = place.length ? 'Tap a new block to adjust or remove it · tap your units to upgrade' : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
@@ -564,7 +609,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   function renderSpeed() {
-    speedBtns.forEach((b, i) => b.classList.toggle('active', [1, 2, 4][i] === speed));
+    speedBtns.forEach((b, i) => b.classList.toggle('active', BATTLE_SPEEDS[i] === speed));
     speedbar.classList.toggle('hidden', phase !== 'battle');
     rangeBar.classList.toggle('hidden', phase !== 'deploy' && phase !== 'waiting');
   }
@@ -612,6 +657,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const actions: HTMLElement[] = [];
     if (mine && phase === 'deploy') {
       if (s.pending) {
+        if (hasSpacing(st.size)) actions.push(h('button.small', { title: 'Turn the formation 90° (R)', onclick: () => rotateBlock() }, '⟳ Rotate'));
         actions.push(h('button.small.danger', { onclick: () => removePending(p.uid) }, 'Remove (refund)'));
       } else {
         if (lv < MAX_LEVEL) {
@@ -716,7 +762,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!d) return null;
     const size = sizeOf(d);
     const spacing = spacingOfCard(d);
-    const { w: bw, h: bh } = blockDims(size, spacing, footOf(d));
+    const rot = rotCard && hasSpacing(size);
+    const { w: bw, h: bh } = blockDims(size, spacing, footOf(d), rot);
     let wp: { x: number; y: number };
     try { wp = view.screenToWorld(px, py); } catch { return null; }
     const col = Math.round(wp.x - bw / 2), row = Math.round(wp.y - bh / 2);
@@ -725,14 +772,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     x = Math.max(0, Math.min(DEPLOY_W - bw, x));
     y = Math.max(0, Math.min(DEPLOY_D - bh, y));
     let reason: string | null = null;
-    if (!blockInZone(x, y, size, spacing, footOf(d))) reason = 'Outside your deploy zone';
+    if (!blockInZone(x, y, size, spacing, footOf(d), rot)) reason = 'Outside your deploy zone';
     else if (costOf(d) > remaining()) reason = 'Not enough supply';
     else {
       const cand = action();
-      cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round, ...(hasSpacing(size) ? { spacing } : {}), ...newOrders(d.id, size) });
+      cand.place.push({ uid: nextUid, designId: d.id, x, y, level: 1, round: m.round, ...(hasSpacing(size) ? { spacing } : {}), ...(rot ? { rot: true } : {}), ...newOrders(d.id, size) });
       reason = check(cand);
     }
-    return { x, y, size, spacing, w: bw, h: bh, valid: !reason, reason };
+    return { x, y, size, spacing, rot, w: bw, h: bh, valid: !reason, reason };
   }
 
   function placeAt(px: number, py: number) {
@@ -745,7 +792,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return;
     }
     const uid = nextUid++;
-    place.push({ uid, designId: d.id, x: hover.x, y: hover.y, level: 1, round: m.round, ...(hasSpacing(hover.size) ? { spacing: hover.spacing } : {}), ...newOrders(d.id, hover.size) });
+    place.push({ uid, designId: d.id, x: hover.x, y: hover.y, level: 1, round: m.round, ...(hasSpacing(hover.size) ? { spacing: hover.spacing } : {}), ...(hover.rot ? { rot: true } : {}), ...newOrders(d.id, hover.size) });
     ops.push({ kind: 'place', uid });
     sfx('place');
     if (costOf(d) > remaining()) { selCard = -1; hover = null; }
@@ -854,10 +901,54 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let downAt: { x: number; y: number } | null = null;
   let lpTimer = 0;
   let lpDone = false;
+  /** dragging one of this round's blocks to a new spot (camera panning is off for the gesture) */
+  let moveDrag: { uid: number; offX: number; offY: number; ox: number; oy: number; started: boolean; reason: string | null } | null = null;
+
+  /** this round's (still refundable) block of ours under the pointer, if any */
+  function myPendingAt(px: number, rawY: number): Placement | null {
+    const hit = unitAt(px, rawY);
+    return hit && hit.pending && hit.side === side ? place.find((p) => p.uid === hit.uid) ?? null : null;
+  }
+
+  /** move the dragged block under the pointer (snapped to cells, clamped to the zone) and validate it */
+  function dragMoveTo(px: number, py: number) {
+    if (!moveDrag) return;
+    const p = place.find((q) => q.uid === moveDrag!.uid);
+    const d = p && designOf(side, p.designId);
+    if (!p || !d) return;
+    const size = sizeOf(d);
+    const { w: bw, h: bh } = blockDims(size, p.spacing, footOf(d), p.rot);
+    let wp: { x: number; y: number };
+    try { wp = view.screenToWorld(px, py); } catch { return; }
+    let { x, y } = worldToLocalRect(side, Math.round(wp.x - moveDrag.offX), Math.round(wp.y - moveDrag.offY), bw, bh);
+    x = Math.max(0, Math.min(DEPLOY_W - bw, x));
+    y = Math.max(0, Math.min(DEPLOY_D - bh, y));
+    if (x === p.x && y === p.y && moveDrag.started) return;
+    p.x = x; p.y = y;
+    moveDrag.reason = !blockInZone(x, y, size, p.spacing, footOf(d), p.rot) ? 'Outside your deploy zone' : check(action());
+    hover = { x, y, size, spacing: p.spacing ?? 0, rot: p.rot, w: bw, h: bh, valid: !moveDrag.reason, reason: moveDrag.reason };
+    renderHint();
+  }
+
   canvas.addEventListener('pointerdown', (e) => {
     downAt = { x: e.clientX, y: e.clientY };
     lpDone = false;
     clearTimeout(lpTimer);
+    moveDrag = null;
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0) {
+      const { px, rawY } = local(e);
+      const p = myPendingAt(px, rawY);
+      const d = p && designOf(side, p.designId);
+      if (p && d) {
+        let wp: { x: number; y: number } | null = null;
+        try { wp = view.screenToWorld(px, rawY); } catch { /* */ }
+        if (wp) {
+          const r = blockWorldRect(side, p, sizeOf(d), footOf(d));
+          moveDrag = { uid: p.uid, offX: wp.x - r.col, offY: wp.y - r.row, ox: p.x, oy: p.y, started: false, reason: null };
+          view.controls.enabled = false; // this gesture moves the block, not the camera
+        }
+      }
+    }
     if (e.pointerType === 'touch' && (phase === 'deploy' || phase === 'waiting') && selCard < 0) {
       const { px, rawY } = local(e);
       lpTimer = window.setTimeout(() => { // long-press a unit: peek at its stats without selecting it
@@ -876,6 +967,18 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const lp = local(e);
     lastPtr = { px: lp.px, py: lp.py };
     if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) clearTimeout(lpTimer);
+    if (moveDrag && downAt) {
+      if (!moveDrag.started && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) {
+        moveDrag.started = true;
+        hoverUnit = null;
+        if (tipKey) hideTip();
+        canvas.style.cursor = 'grabbing';
+      }
+      if (moveDrag.started) { dragMoveTo(lp.px, lp.rawY); return; }
+    }
+    if (phase === 'deploy' && selCard < 0 && e.pointerType === 'mouse' && !downAt) {
+      canvas.style.cursor = myPendingAt(lp.px, lp.rawY) ? 'grab' : '';
+    }
     if ((phase === 'deploy' || phase === 'waiting') && (selCard < 0 || phase !== 'deploy') && e.pointerType === 'mouse') {
       const hu = unitAt(lp.px, lp.rawY);
       hoverUnit = hu && !(sel && hu.side === sel.side && hu.uid === sel.uid && hu.pending === sel.pending) ? hu : null;
@@ -894,11 +997,31 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   canvas.addEventListener('pointerleave', (e) => {
     if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; if (tipKey) hideTip(); renderHint(); }
   });
-  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; clearTimeout(lpTimer); });
+  /** finish (or abandon) a block move: invalid spots snap back */
+  function endMove(commit: boolean) {
+    const md = moveDrag;
+    moveDrag = null;
+    view.controls.enabled = true;
+    canvas.style.cursor = '';
+    if (!md || !md.started) return false;
+    const p = place.find((q) => q.uid === md.uid);
+    if (p && (!commit || md.reason)) {
+      p.x = md.ox; p.y = md.oy;
+      if (commit && md.reason) { sfx('invalid'); app.toast(md.reason, 'error'); }
+    } else if (p) {
+      sfx('place');
+      sel = { side, uid: p.uid, pending: true };
+    }
+    hover = null;
+    renderAll();
+    return true;
+  }
+  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; clearTimeout(lpTimer); endMove(false); });
   canvas.addEventListener('pointerup', (e) => {
     const start = downAt;
     downAt = null;
     clearTimeout(lpTimer);
+    if (endMove(true)) return; // a drag-move, not a click
     if (lpDone) { lpDone = false; return; }
     if (!start || e.button > 0) return;
     if (view.wasDrag) { // end of a pan / pinch: not a click or tap
@@ -940,6 +1063,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       selectCard(Number(e.key) - 1);
       e.preventDefault();
+    } else if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (rotateBlock()) e.preventDefault();
     } else if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (stepSpacing(e.key === ']' ? 1 : -1)) e.preventDefault();
     } else if (e.key === 'Escape') {
@@ -1103,7 +1228,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       for (const p of place) add(side, p, { selected: !!sel?.pending && sel.uid === p.uid });
       const d = deck()[selCard];
       if (hover && d) {
-        for (const c of placementUnitCenters(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size, footOf(d))) {
+        for (const c of placementUnitCenters(side, { x: hover.x, y: hover.y, spacing: hover.spacing, rot: hover.rot }, hover.size, footOf(d))) {
           out.push({ side, design: d, x: c.x, y: c.y, level: 1, ghost: true, invalid: !hover.valid });
         }
       }
@@ -1145,7 +1270,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       out.push({ side: s, design: d, st, pos: p, size: st.size, strong, invalid });
     };
     const keyOf = (s: Side, uid: number) => `${s}:${uid}`;
-    if (phase === 'deploy' && hover && selCard >= 0) push(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, deck()[selCard], true, 'ghost', !hover.valid);
+    if (phase === 'deploy' && hover && selCard >= 0) push(side, { x: hover.x, y: hover.y, spacing: hover.spacing, rot: hover.rot }, deck()[selCard], true, 'ghost', !hover.valid);
     for (const t of [sel, hoverUnit]) {
       if (!t) continue;
       const p = blockSrc(t);
@@ -1287,7 +1412,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = p && designOf(sel.side, p.designId);
       if (p && d) cx = view.worldToScreen(...(Object.values(blockWorldRectCenter(sel.side, p, sizeOf(d), footOf(d))) as [number, number])).x;
     } else if (hover) {
-      const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size, footOf(deck()[selCard]));
+      const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing, rot: hover.rot }, hover.size, footOf(deck()[selCard]));
       cx = view.worldToScreen(r.col + r.w / 2, r.row + r.h / 2).x;
     }
     if (cx == null) return;
@@ -1325,7 +1450,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       } else {
         let hov: BoardOverlay['hover'] = null;
         if (hover && phase === 'deploy') {
-          const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing }, hover.size, footOf(deck()[selCard]));
+          const r = blockWorldRect(side, { x: hover.x, y: hover.y, spacing: hover.spacing, rot: hover.rot }, hover.size, footOf(deck()[selCard]));
           hov = { col: r.col, row: r.row, size: Math.max(r.w, r.h), w: r.w, h: r.h, valid: hover.valid };
         } else if (phase === 'deploy' || phase === 'waiting') hov = blockOutline();
         view.drawBoard(boardUnits(), { showZone: phase === 'deploy', hover: hov }, now / 1000);

@@ -542,7 +542,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
   const occ: Foot[] = me.board.map((u) => {
     const pd = byId.get(u.designId);
     const pp = pd ? profile(pd) : null;
-    return { x: u.x, y: u.y, ...blockDims(pp ? (pp.size as Size) : 2, u.spacing, pp?.stats) };
+    return { x: u.x, y: u.y, ...blockDims(pp ? (pp.size as Size) : 2, u.spacing, pp?.stats, !!u.rot) };
   });
   let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as Size) : 1), 0);
   const splashShare = opp.total > 0 ? opp.splashy / opp.total : 0;

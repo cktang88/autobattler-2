@@ -6,6 +6,7 @@
 
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
+import { MAPS, MAP_BY_ID } from './render/ground.ts';
 import { hullPath, layoutOf, silhouette, unitSprites } from './render/unitart.ts';
 import { calibreMm } from './render/weaponsize.ts';
 import { aiDeck } from '../shared/ai.ts';
@@ -221,6 +222,8 @@ function placeUnits(deck: Design[], seed: number, count: number): Placement[] {
 function fieldSection(): void {
   const canvas = $('#field') as HTMLCanvasElement;
   const view = new FieldView(canvas, side);
+  const mp = params.get('map');
+  if (mp) view.setMap(MAP_BY_ID.get(mp as 'basin') ?? MAPS[0]);
   let battle: Battle | null = null;
   let board: BoardUnit[] = [];
   let acc = 0;

@@ -7,6 +7,7 @@ import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { confirmModal } from './match-ui.ts';
 import * as kit from './kit.ts';
+import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 
 export function settingsScreen(app: App): Screen {
   playMusic('menu');
@@ -23,10 +24,10 @@ export function settingsScreen(app: App): Screen {
       onCommit: () => sfx('click'),
     }));
 
-  const speeds = [1, 2, 4] as const;
+  const speeds = BATTLE_SPEEDS;
   const speedHost = h('div');
   const renderSpeed = () => speedHost.replaceChildren(kit.segmented({
-    value: s.battleSpeed, label: 'Default battle speed', options: speeds.map((v) => ({ value: v, label: `${v}×` })),
+    value: s.battleSpeed, label: 'Default battle speed', options: speeds.map((v) => ({ value: v, label: speedLabel(v) })),
     onChange: (v) => { sfx('click'); s.battleSpeed = v; saveSettings(s); renderSpeed(); },
   }));
   renderSpeed();

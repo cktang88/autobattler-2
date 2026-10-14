@@ -7,6 +7,9 @@
 //   cx, cy = visual cell shown at the viewport center  (target: tcx, tcy)
 
 export const MAX_K = 80; // a size-1 unit (1 cell) is ~80 CSS px at full zoom
+/** cells the camera may travel past the top/bottom (Y) and side (X) edges of the field */
+const EDGE_Y = 5;
+const EDGE_X = 2.5;
 
 const clampN = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -60,23 +63,28 @@ export class Camera {
     return this.tk <= this.minK * 1.02;
   }
 
-  private clampAxis(c: number, k: number, view: number, field: number): number {
+  /** `edge` = extra cells the view may travel past the field edge, so the board's edges (and the land around it)
+   *  can be brought fully into view even when the whole field already fits on screen. */
+  private clampAxis(c: number, k: number, view: number, field: number, edge: number): number {
     const half = view / (2 * k);
-    if (half * 2 >= field) return field / 2;
-    const pad = half * 0.35;
+    if (half * 2 >= field) {
+      const slack = Math.max(0, edge - (half - field / 2));
+      return clampN(c, field / 2 - slack, field / 2 + slack);
+    }
+    const pad = half * 0.35 + edge;
     const lo = half - pad, hi = field - half + pad;
     if (lo >= hi) return field / 2;
     return clampN(c, lo, hi);
   }
 
   private clampTarget(): void {
-    this.tcx = this.clampAxis(this.tcx, this.tk, this.vw, this.fw);
-    this.tcy = this.clampAxis(this.tcy, this.tk, this.vh, this.fh);
+    this.tcx = this.clampAxis(this.tcx, this.tk, this.vw, this.fw, EDGE_X);
+    this.tcy = this.clampAxis(this.tcy, this.tk, this.vh, this.fh, EDGE_Y);
   }
 
   private clampCurrent(): boolean {
-    const x = this.clampAxis(this.cx, this.k, this.vw, this.fw);
-    const y = this.clampAxis(this.cy, this.k, this.vh, this.fh);
+    const x = this.clampAxis(this.cx, this.k, this.vw, this.fw, EDGE_X);
+    const y = this.clampAxis(this.cy, this.k, this.vh, this.fh, EDGE_Y);
     const hit = x !== this.cx || y !== this.cy;
     this.cx = x;
     this.cy = y;

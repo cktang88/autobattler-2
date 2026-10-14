@@ -283,6 +283,8 @@ export interface Placement {
   round: number;
   /** squads only: empty cells between neighbouring units in the block (0..MAX_SPACING = 2, default 0). See grid.ts */
   spacing?: number;
+  /** squads only: formation turned 90° (8 across x 2 deep becomes 2 across x 8 deep). Locked once the round resolves. */
+  rot?: boolean;
   /** targeting priority for every unit in the block (default 'closest'). Hidden from the opponent until the round resolves. */
   target?: TargetPriority;
   /** squads: keep the deployed spacing while moving/fighting (true) or close in freely (false/absent). Hidden like `target`. */
