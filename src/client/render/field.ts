@@ -1512,7 +1512,7 @@ export interface PreviewGeom {
 
 /** Draw a design centred in the canvas. `minExtent` (cells) keeps small units small so a backdrop grid reads at true scale;
  *  `still` stops the walk cycle so mount markers stay put. Returns the on-screen geometry. */
-export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?: { side?: Side; time?: number; angle?: number; minExtent?: number; still?: boolean }): PreviewGeom | null {
+export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?: { side?: Side; time?: number; angle?: number; minExtent?: number; still?: boolean; zoom?: number; pan?: { x: number; y: number } }): PreviewGeom | null {
   let g: Ctx;
   try { g = ctx2d(canvas); } catch { return null; }
   const dpr = Math.min(3, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
@@ -1530,8 +1530,11 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   const time = opts?.time ?? 0;
   const ext0 = L.D * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1);
   const ext = Math.max(opts?.minExtent ?? 0, L.D * (L.S >= 4 ? (L.air ? 1.5 : L.mob.id === 'spider' ? 1.62 : L.S >= 5 ? 1.55 : 1.38) : L.air ? 1.25 : L.mob.id === 'spider' || CREATURE_SHAPES.has(L.shape) ? 1.36 : 1.1));
-  const px = Math.min(W, H) / ext;
-  g.setTransform(px, 0, 0, px, W / 2, H / 2);
+  // zoom > 1 magnifies; pan (cells) moves the view centre off the unit
+  const px = (Math.min(W, H) / ext) * (opts?.zoom ?? 1);
+  const pnx = opts?.pan?.x ?? 0, pny = opts?.pan?.y ?? 0;
+  const ox = W / 2 - pnx * px, oy = H / 2 - pny * px;
+  g.setTransform(px, 0, 0, px, ox, oy);
   const team: Team = (opts?.side ?? 0) === 1 ? 1 : 0;
   const angle = opts?.angle ?? -Math.PI / 2;
   const pose: UnitPose = {
@@ -1550,9 +1553,9 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
   const ux = pose.x + dirs.ux * lift, uy = pose.y + dirs.uy * lift;
   const cs = Math.cos(angle), sn = Math.sin(angle);
   const mounts = mountPoints(design).map((m) => ({
-    x: (W / 2 + (ux + (cs * m.x - sn * m.y) * sc) * px) * k,
-    y: (H / 2 + (uy + (sn * m.x + cs * m.y) * sc) * px) * k,
+    x: (ox + (ux + (cs * m.x - sn * m.y) * sc) * px) * k,
+    y: (oy + (uy + (sn * m.x + cs * m.y) * sc) * px) * k,
     r: m.r * sc * px * k,
   }));
-  return { px: px * k, cx: (W / 2 + ux * px) * k, cy: (H / 2 + uy * px) * k, mounts, S: L.S, half: (ext0 / 2) * 0.92 * px * k };
+  return { px: px * k, cx: (ox + ux * px) * k, cy: (oy + uy * px) * k, mounts, S: L.S, half: (ext0 / 2) * 0.92 * px * k };
 }

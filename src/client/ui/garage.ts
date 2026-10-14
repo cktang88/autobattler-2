@@ -154,6 +154,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   /** range overlay: zooms the bench out to fit every weapon's reach */
   let rangesOn = false;
   let viewExt = MIN_VIEW_CELLS;
+  /** blueprint zoom (1 = fit) and pan offset of the view centre (cells); wheel / buttons / drag empty space */
+  let zoom = 1, zoomT = 1;
+  const pan = { x: 0, y: 0 };
+  const ZOOM_MIN = 0.5, ZOOM_MAX = 5;
   let destroyed = false;
   let geom: PreviewGeom | null = null;
 
@@ -193,12 +197,42 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     onclick: () => toggleRanges(),
   }, svgIcon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>'), 'Ranges');
   const classEl = h('div.g-classes', { role: 'radiogroup', 'aria-label': 'Unit class' });
+  const zoomLbl = h('span.g-zoomlbl', { 'aria-live': 'polite' }, '1×');
+  const zbtn = (label: string, title: string, fn: () => void) => h('button.g-zoombtn', { type: 'button', title, 'aria-label': title, onclick: fn }, label);
+  const zoomCtl = h('div.g-zoom', { role: 'group', 'aria-label': 'Blueprint zoom' },
+    zbtn('−', 'Zoom out (-)', () => setZoom(zoomT / 1.4)),
+    zbtn('Fit', 'Fit the unit (0 / double-click)', () => resetView()),
+    zbtn('+', 'Zoom in (+)', () => setZoom(zoomT * 1.4)),
+    zoomLbl);
   const stage = h('div.g-stage', null,
     gridCv, preview, socketsEl,
-    h('div.g-stage-hud', null, stageTags, h('span.spacer'), rangeBtn),
+    h('div.g-stage-hud', null, stageTags, h('span.spacer'), zoomCtl, rangeBtn),
     stageCost,
     stageHint,
   );
+
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    setZoom(zoomT * Math.exp(-e.deltaY * 0.0015), { x: e.clientX - r.left, y: e.clientY - r.top });
+  }, { passive: false });
+  // drag empty blueprint to pan (sockets and buttons keep their own handling)
+  let panDrag: { x: number; y: number; px: number; py: number; id: number } | null = null;
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button, .g-sock')) return;
+    panDrag = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, id: e.pointerId };
+    stage.setPointerCapture(e.pointerId);
+    stage.classList.add('panning');
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!panDrag || e.pointerId !== panDrag.id || !geom) return;
+    pan.x = panDrag.px - (e.clientX - panDrag.x) / geom.px;
+    pan.y = panDrag.py - (e.clientY - panDrag.y) / geom.px;
+  });
+  const endPan = () => { panDrag = null; stage.classList.remove('panning'); };
+  stage.addEventListener('pointerup', endPan);
+  stage.addEventListener('pointercancel', endPan);
+  stage.addEventListener('dblclick', (e) => { if (!(e.target as HTMLElement).closest('button, .g-sock')) resetView(); });
 
   const el = h('div.garage', null,
     h('header.g-top', null,
@@ -256,6 +290,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     draft = d ? clone(d) : blankDesign(designs.map((x) => x.name), dom);
     autoName = !d;
     activeSlot = null;
+    pan.x = pan.y = 0; // new design: recentre (zoom level is kept)
     nameInput.value = draft.name;
     update();
     listEl.querySelector('.g-item.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -498,6 +533,20 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     bayBody.scrollTop = 0;
     if (focus) (el.querySelector(`[data-fk="tab-${t}"]`) as HTMLElement | null)?.focus();
   }
+
+  function setZoom(z: number, about?: { x: number; y: number }) {
+    const nz = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+    // keep the point under the cursor fixed while zooming
+    if (about && geom) {
+      const wx = (about.x - geom.cx) / geom.px, wy = (about.y - geom.cy) / geom.px;
+      const f = 1 - zoomT / nz;
+      pan.x += wx * f; pan.y += wy * f;
+    }
+    zoomT = nz;
+    if (zoomT <= 1.001) { pan.x = 0; pan.y = 0; }
+    zoomLbl.textContent = `${Math.round(zoomT * 10) / 10}×`;
+  }
+  function resetView() { zoomT = 1; pan.x = pan.y = 0; zoomLbl.textContent = '1×'; }
 
   function toggleRanges() {
     rangesOn = !rangesOn;
@@ -1495,7 +1544,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       if (fit(preview)) {
         const want = rangesOn ? rangeExtent() : MIN_VIEW_CELLS;
         viewExt += (want - viewExt) * (Math.abs(want - viewExt) < 0.01 ? 1 : 0.18);
-        geom = drawUnitPreview(preview, draft, { side: 0, time: t, angle: -Math.PI / 2, minExtent: viewExt, still: true });
+        zoom += (zoomT - zoom) * (Math.abs(zoomT - zoom) < 0.002 ? 1 : 0.22);
+        geom = drawUnitPreview(preview, draft, { side: 0, time: t, angle: -Math.PI / 2, minExtent: viewExt, still: true, zoom, pan });
         if (geom) { drawGrid(geom); placeSockets(); }
       }
       if (frame++ % 2 === 0) {
@@ -1527,6 +1577,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     }
     if (typing() || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key.toLowerCase() === 'v') { toggleRanges(); return; }
+    if (e.key === '+' || e.key === '=') { setZoom(zoomT * 1.4); return; }
+    if (e.key === '-' || e.key === '_') { setZoom(zoomT / 1.4); return; }
+    if (e.key === '0') { resetView(); return; }
     const tk = TABS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
     if (tk) { setTab(tk.id); return; }
     const n = Number(e.key);
