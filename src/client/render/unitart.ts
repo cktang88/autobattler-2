@@ -12,6 +12,7 @@ import { MAT, METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, po
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
 import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
+import { setDetailPx } from './titandetail.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
 import { CLASS_RANK, sizeKey, slotD, weaponD } from './weaponsize.ts';
@@ -1105,6 +1106,7 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   if (kY !== 1) { hp = new Path2D(); hp.addPath(hp0, new DOMMatrix().scale(1, kY)); }
   if (!L.air && L.mob.id !== 'anchor') drawSkirts(hull.g, L, tier, pal, o);
   paintHull(hull.g, hp, pal, L.S, o, L.hw * kY, L.X, L.Y);
+  setDetailPx(px);
   hullDetails(hull.g, L, pal, o);
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
@@ -1650,6 +1652,8 @@ export interface UnitPose {
   cloak?: 'own' | 'enemy';
   /** stable per-unit seed for idle variation */
   seed?: number;
+  /** tilted views: extra world-space lift (along the view's up) of turrets above the hull, so they stand on top of it */
+  turretLift?: number;
 }
 
 /** Screen-space directions expressed in world units (they flip when the view is rotated 180°). */
@@ -1914,16 +1918,18 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     }
     const rp = pdefs.length ? mountOnPart(pdefs, prest, pxf, i, m.x, m.y) : null;
     const lx = rp ? rp.x : m.x, ly = rp ? rp.y : m.y;
-    const mx = x + (cs * lx - sn * ly) * sc - Math.cos(ta) * rec;
-    const my = y + (sn * lx + cs * ly) * sc - Math.sin(ta) * rec;
+    let mx = x + (cs * lx - sn * ly) * sc - Math.cos(ta) * rec;
+    let my = y + (sn * lx + cs * ly) * sc - Math.sin(ta) * rec;
+    const tl = p.turretLift ?? 0;
     const kit = turretKit(L, prof, i);
     const ts = turretSprite(m.mod, p.team, m.d, px, kit);
     // hard-edged cast shadow onto the hull so the turret reads as sitting on top (falls screen-down-right for either viewer)
     const tsh = turretShadow(m.mod, p.team, m.d, px, kit);
-    const so = m.d * 0.09 * sc;
+    const so = m.d * 0.09 * sc + tl * 0.6;
     g.globalAlpha = alpha * 0.38;
     blit(g, tsh, mx + dirs.sx * so, my + dirs.sy * so, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
     g.globalAlpha = alpha;
+    mx += dirs.ux * tl; my += dirs.uy * tl;
     const dis = (p.disarm ?? 0) > 0;
     if (dis) g.globalAlpha = alpha * (0.6 + 0.3 * Math.sin(p.time * 11 + i * 2));
     blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);

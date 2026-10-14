@@ -429,6 +429,18 @@ function animate(): void {
   void t0;
 }
 
+/** ?only=titans: the three size-5 chassis side by side. ?px=N canvas size, ?empty=1 bare hulls, ?mob=a,b,c overrides mobility. */
+function titansSection(): void {
+  const host = labSection('titans', 'Titan class (size 5)');
+  const px = Number(params.get('px') ?? '520') || 520;
+  const mobs = params.get('mob')?.split(',') ?? ['titanlegs', 'megatracks', 'spider'];
+  ['titan', 'citadel', 'arachne'].forEach((id, i) => {
+    const c = CHASSIS.find((x) => x.id === id)!;
+    const d: Design = { id: 'ti_' + id, name: id, chassis: id, mobility: mobs[i], mounts: params.get('empty') ? c.mounts.map(() => null) : fillMounts(id, i + 3) };
+    host.append(preview(d, px));
+  });
+}
+
 function main(): void {
   document.body.classList.toggle('enemy', side === 1);
   const show = (id: string) => !only || only === id;
@@ -441,6 +453,7 @@ function main(): void {
   if (only === 'sil') silSection();
   if (only === 'calibre') calibreSection();
   if (only === 'classes') classesSection();
+  if (only === 'titans') titansSection();
   animate();
   addEventListener('pointerdown', () => unlockAudio(), { once: true });
 }

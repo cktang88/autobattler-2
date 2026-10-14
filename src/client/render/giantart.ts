@@ -523,27 +523,36 @@ export function giantTopLayer(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): b
   const S = L.S;
   const E = emis(pal);
   for (const s of [-1, 1]) {
-    // pauldron: layered armour lames hanging outward from a heavy shoulder cap
-    const outer = new Path2D();
-    roundRect(outer, -0.27 * S, (s > 0 ? 0.24 : -0.52) * S, 0.35 * S, 0.28 * S, 0.1 * S);
-    ao(g, outer, S, 0.045, 0.85);
-    for (let k = 2; k >= 0; k--) {
-      const x0 = -0.265 + 0.025 * k, x1 = 0.075 - 0.03 * k;
-      const yc = s * (0.44 - 0.07 * k), h = 0.12 + 0.02 * k;
+    // pauldron: a shingled sode - overlapping lames stepping rearward under a domed shoulder cap, so the plates
+    // read as one articulated armour piece (each lame lies over the next, none stacked like steps)
+    const yIn = 0.25, yOut = 0.52, nL = 5;
+    const sh = new Path2D();
+    roundRect(sh, -0.29 * S, (s > 0 ? yIn - 0.01 : -yOut - 0.01) * S, 0.38 * S, (yOut - yIn + 0.02) * S, 0.09 * S);
+    ao(g, sh, S, 0.045, 0.85);
+    for (let k = nL - 1; k >= 0; k--) {
+      const x1 = 0.02 - k * 0.055, x0 = x1 - 0.12;
+      // lames shorten and narrow a little toward the rear, keeping a curved outer edge
+      const inner = yIn + 0.015 + k * 0.006, outer = yOut - 0.02 - k * 0.012 - (k % 2) * 0.008;
       const lp = new Path2D();
-      roundRect(lp, x0 * S, (yc - h / 2) * S, (x1 - x0) * S, h * S, h * 0.45 * S);
-      const c1 = shade(pal.dark, -0.1 + 0.08 * (2 - k));
-      bevel(g, lp, grad(g, S, k === 0 ? shade(pal.light, 0.1) : shade(pal.light, -0.1 - 0.08 * k), k === 0 ? pal.body : c1, x0, yc - h / 2, x1, yc + h / 2), o, 1.3);
-      if (k > 0) rivetRow(g, (x0 + 0.04) * S, (yc + s * h * 0.3) * S, (x1 - 0.04) * S, (yc + s * h * 0.3) * S, 5, 0.008 * S);
+      const ya = s > 0 ? inner : -outer, yb = s > 0 ? outer : -inner;
+      roundRect(lp, x0 * S, ya * S, (x1 - x0) * S, (yb - ya) * S, 0.035 * S);
+      const t = k / (nL - 1);
+      const gr = grad(g, S, shade(pal.light, 0.06 - t * 0.18), shade(pal.dark, -0.02 - t * 0.08), x0, ya, x1, yb);
+      bevel(g, lp, gr, o, 1.2);
+      // lame hinge line + rivets on the exposed trailing edge, a hard shadow under the front lame
+      seam(g, [x0 + 0.012, ya + 0.03, x0 + 0.012, yb - 0.03], S, o * 0.8, 'rgba(0,0,0,0.4)');
+      rivetRow(g, (x0 + 0.03) * S, (s > 0 ? ya + 0.035 : yb - 0.035) * S, (x0 + 0.03) * S, (s > 0 ? yb - 0.035 : ya + 0.035) * S, 3, 0.005 * S);
     }
-    // cap crest + emissive edge on the outermost lame
-    seam(g, [-0.2, s * 0.32, 0.03, s * 0.32], S, o * 1.2, 'rgba(0,0,0,0.55)');
-    seam(g, [-0.2, s * 0.315, 0.03, s * 0.315], S, o * 0.6, 'rgba(255,255,255,0.35)');
-    glowLine(g, [-0.24, s * 0.5, 0.05, s * 0.5], S, E, o * 1.2);
-    hazard(g, -0.24 * S, (s > 0 ? 0.35 : -0.39) * S, 0.03 * S, 0.04 * S, o, true);
+    // domed cap over the front lames: team trim bar, a vent and hazard, no glowing bar
+    const cap = new Path2D();
+    roundRect(cap, -0.09 * S, (s > 0 ? yIn + 0.02 : -yOut + 0.06) * S, 0.17 * S, (yOut - yIn - 0.08) * S, 0.06 * S);
+    raised(g, cap, grad(g, S, shade(pal.light, 0.14), shade(pal.dark, 0.02), -0.09, yIn, 0.08, yOut), o, S, 1.4, 0.03, 0.7);
+    seam(g, [-0.02, s * 0.3, -0.02, s * 0.47], S, o * 0.9, 'rgba(0,0,0,0.45)');
     g.fillStyle = rgba(pal.accent, 0.95);
-    g.beginPath(); roundRect(g, -0.08 * S, (s > 0 ? 0.345 : -0.385) * S, 0.07 * S, 0.04 * S, 0.01 * S); g.fill();
+    g.beginPath(); roundRect(g, -0.07 * S, (s > 0 ? 0.33 : -0.39) * S, 0.05 * S, 0.06 * S, 0.008 * S); g.fill();
     g.lineWidth = o * 0.5; g.strokeStyle = OUTLINE; g.stroke();
+    hazard(g, 0.0 * S, (s > 0 ? 0.43 : -0.47) * S, 0.05 * S, 0.035 * S, o, false);
+    glowLine(g, [-0.27, s * 0.505, -0.05, s * 0.505], S, E, o * 0.9, 0.5);
   }
   return true;
 }
@@ -919,8 +928,8 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       g.transform(cs * sc, sn * sc, -sn * sc, cs * sc, x, y);
       g.lineCap = 'round';
       g.strokeStyle = E;
-      g.globalAlpha = alpha * (0.25 + 0.3 * breathe);
-      g.lineWidth = Math.max(3 / px, 0.035 * S);
+      g.globalAlpha = alpha * (0.25 + 0.3 * breathe) * (S >= 5 ? 0.6 : 1);
+      g.lineWidth = Math.max(3 / px, (S >= 5 ? 0.022 : 0.035) * S);
       g.beginPath();
       for (let i = 0; i < st.length; i += 4) { g.moveTo(st[i] * sk, st[i + 1] * sk); g.lineTo(st[i + 2] * sk, st[i + 3] * sk); }
       g.stroke();
@@ -942,8 +951,8 @@ export function drawGiantFx(g: Ctx, L: UnitLayout, p: GiantPose, x: number, y: n
       if (l.k === 'core') {
         // reactor heart: slow heavy throb visible from fit zoom
         const beat = Math.pow(0.5 + 0.5 * Math.sin(t * 3.1 + seed), 3);
-        const r = Math.max(10 / px, l.r * sc * (3.2 + 1.2 * beat));
-        g.globalAlpha = alpha * (0.45 + 0.4 * beat);
+        const r = Math.max(10 / px, l.r * sc * (S >= 5 ? 2.3 + 0.8 * beat : 3.2 + 1.2 * beat));
+        g.globalAlpha = alpha * (S >= 5 ? 0.3 + 0.3 * beat : 0.45 + 0.4 * beat);
         g.drawImage(glow, wx - r, wy - r, r * 2, r * 2);
         g.globalAlpha = alpha * (0.7 + 0.3 * beat);
         const r2 = l.r * sc * 1.1;

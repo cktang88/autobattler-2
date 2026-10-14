@@ -939,6 +939,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   };
 
   function unitAt(px: number, py: number): Sel {
+    const hit = unitAtGround(px, py);
+    // tilted view: units stand off the ground, so a click on a hull's raised top also selects it
+    if (hit || !view.tilted) return hit;
+    return unitAtGround(px, py + 0.28 * view.cam.k);
+  }
+  function unitAtGround(px: number, py: number): Sel {
     let w: { x: number; y: number };
     try { w = view.screenToWorld(px, py); } catch { return null; }
     // anywhere inside the block's footprint (including the gaps between squad units) selects the block
@@ -1376,7 +1382,16 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const c of centers) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x); y1 = Math.max(y1, c.y); }
       const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
-      const path = (r: number) => { g.beginPath(); g.roundRect(x0 - r, y0 - r, x1 - x0 + 2 * r, y1 - y0 + 2 * r, r); };
+      // the ring lives on the ground plane: foreshortened vertically (rounded box around the squad, an ellipse for one unit)
+      const ay = view.ay;
+      const uh = (y1 - y0) / ay;
+      let cur = new Path2D();
+      const path = (r: number) => {
+        const base = new Path2D();
+        base.roundRect(x0 - r, y0 - r, x1 - x0 + 2 * r, uh + 2 * r, r);
+        cur = new Path2D();
+        cur.addPath(base, new DOMMatrix([1, 0, 0, ay, 0, y0 * (1 - ay)]));
+      };
       const angles = [-90, -62, -118, -34, -146, -10, -170].map((a) => (a * Math.PI) / 180);
       rings.forEach((rg, i) => {
         const R = rg.range * k;
@@ -1390,12 +1405,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           path(R);
           g.globalAlpha = (hi ? 0.2 : sup ? 0.04 : 0.07) * dim;
           g.fillStyle = rg.color;
-          g.fill();
+          g.fill(cur);
           if (rg.minRange > 0) { // dead zone: darken
             path(rg.minRange * k);
             g.globalAlpha = 0.22 * dim;
             g.fillStyle = '#000';
-            g.fill();
+            g.fill(cur);
           }
           // dark under-stroke for contrast against any terrain
           path(R);
@@ -1403,18 +1418,18 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           g.strokeStyle = '#06090c';
           g.lineWidth = (hi ? 6 : 4.5);
           g.setLineDash(sup ? [1, 7] : []);
-          g.stroke();
+          g.stroke(cur);
           g.globalAlpha = (t.invalid ? 0.6 : 1) * dim;
           g.strokeStyle = rg.color;
           g.lineWidth = hi ? 3.5 : 2.4;
-          g.stroke();
+          g.stroke(cur);
           if (rg.minRange > 0) {
             path(rg.minRange * k);
             g.setLineDash([7, 6]);
             g.lineWidth = 2;
             g.globalAlpha = 0.95 * dim;
             g.strokeStyle = rg.color;
-            g.stroke();
+            g.stroke(cur);
           }
         } else {
           g.globalAlpha = (t.side === side ? 0.62 : 0.55);
@@ -1422,8 +1437,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           g.lineWidth = 1.2;
           g.setLineDash(sup ? [1, 5] : t.side === side ? [] : [6, 4]);
           path(R);
-          g.stroke();
-          if (rg.minRange > 0) { path(rg.minRange * k); g.setLineDash([3, 4]); g.stroke(); }
+          g.stroke(cur);
+          if (rg.minRange > 0) { path(rg.minRange * k); g.setLineDash([3, 4]); g.stroke(cur); }
         }
         g.restore();
         if (!t.strong && !hi) return;
@@ -1432,7 +1447,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         const tw = g.measureText(rg.label).width + 14, th = 20;
         for (let a = 0; a < angles.length * 2; a++) {
           const ang = angles[(i + a) % angles.length] + (a >= angles.length ? 0.12 : 0);
-          const pt = envelopePoint(x0, y0, x1, y1, R, ang);
+          const pu = envelopePoint(x0, y0, x1, y0 + uh, R, ang);
+          const pt = { x: pu.x, y: y0 + (pu.y - y0) * ay };
           const lx = pt.x - tw / 2, ly = pt.y - th / 2;
           if (lx < 6 || ly < 6 || lx + tw > cw - 6 || ly + th > ch - 6) continue;
           if (taken.some((q) => lx < q.x + q.w + 3 && q.x < lx + tw + 3 && ly < q.y + q.h + 3 && q.y < ly + th + 3)) continue;

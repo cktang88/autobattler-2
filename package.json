@@ -6,11 +6,16 @@
     "build": "esbuild src/client/main.ts --bundle --format=esm --outfile=public/game.js --sourcemap && esbuild src/client/artlab.ts --bundle --format=esm --outfile=public/artlab.js",
     "start": "npm run build && node src/server/main.ts",
     "test": "node --test 'test/**/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:proto3d": "esbuild src/client/proto3d/main.ts --bundle --format=esm --outfile=public/proto3d.js --sourcemap"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@types/three": "^0.186.0",
+    "three": "^0.186.1"
   }
 }

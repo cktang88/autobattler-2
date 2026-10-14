@@ -13,6 +13,7 @@ import {
   beam, buildParts, cables, canister, creatureHooks, fillOut, joint as cjoint, lens, piston, profilePath, sleekShell, seamGlow, floatGap, visor,
   type AnimIn, type CLight, type LegRig, type PartDef,
 } from './creatures.ts';
+import { TITAN_SHAPES, titanDetail } from './titandetail.ts';
 import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
@@ -483,6 +484,7 @@ export function footDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): boo
   const fn = DETAILS[L.shape];
   if (!fn || !SPECS[L.shape]) return false;
   fn(new K(g, L, pal, o));
+  if (TITAN_SHAPES.has(L.shape)) { const hp = footHullPath(L.shape); if (hp) titanDetail(g, L, pal, o, hp); }
   return true;
 }
 

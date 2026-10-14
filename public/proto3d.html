@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ironclad Assembly - 3D prototype</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #1c1d19; overflow: hidden; font: 13px/1.35 system-ui, sans-serif; color: #dfe3e0; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #hud { position: fixed; left: 14px; top: 12px; pointer-events: none; text-shadow: 0 1px 3px #000; }
+  #hud h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; }
+  #hud p { margin: 0; opacity: .75; }
+  #stats { position: fixed; right: 14px; top: 12px; opacity: .7; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px #000; }
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .lab { position: absolute; left: 0; top: 0; display: none; padding: 2px 7px; background: rgba(14,16,14,.62); border-left: 2px solid #8fa; white-space: nowrap; border-radius: 2px; }
+  .lab b { display: block; font-size: 12px; }
+  .lab span { font-size: 10px; opacity: .7; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="hud"><h1>Ironclad Assembly / 3D prototype</h1><p>Right-drag orbit, left-drag pan, wheel zoom. Units built procedurally from starter designs. ?post=0 &amp; ?ao=0 &amp; ?bloom=0 toggle post, ?labels=0</p></div>
+<div id="stats"></div>
+<script type="module" src="proto3d.js"></script>
+</body>
+</html>

@@ -61,6 +61,16 @@ export function settingsScreen(app: App): Screen {
           h('div.setting.check', null, (() => {
             const host = h('span');
             const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Tilted battlefield camera', on: s.tilt !== false,
+              title: 'A slight 3D tilt of the field; off = straight top-down view',
+              onChange: (v) => { s.tilt = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'A slight 3D tilt of the battlefield; turn off for a flat top-down view')),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
               label: 'Always show health bars', on: !!s.alwaysHealth,
               title: 'Otherwise bars show briefly after damage; hold Alt in battle',
               onChange: (v) => { s.alwaysHealth = v; saveSettings(s); sfx('click'); draw(); },
