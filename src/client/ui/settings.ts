@@ -7,6 +7,7 @@ import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { confirmModal } from './match-ui.ts';
 import * as kit from './kit.ts';
+import { preload3d, webglAvailable } from '../render/viewfactory.ts';
 import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 
 export function settingsScreen(app: App): Screen {
@@ -31,6 +32,13 @@ export function settingsScreen(app: App): Screen {
     onChange: (v) => { sfx('click'); s.battleSpeed = v; saveSettings(s); renderSpeed(); },
   }));
   renderSpeed();
+
+  const rendererHost = h('div');
+  const renderRenderer = () => rendererHost.replaceChildren(kit.segmented({
+    value: s.renderer, label: 'Battlefield art', options: [{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }],
+    onChange: (v) => { sfx('click'); s.renderer = v; saveSettings(s); if (v === '3d') void preload3d(); renderRenderer(); },
+  }));
+  renderRenderer();
 
   const reset = async () => {
     sfx('click');
@@ -78,6 +86,14 @@ export function settingsScreen(app: App): Screen {
             draw();
             return host;
           })(), h('span.muted', null, 'Otherwise shown briefly after damage; hold Alt in battle')),
+        ),
+        h('div.panel', null,
+          h('div.panel-title', null, 'Graphics'),
+          h('div.row', { style: { justifyContent: 'space-between', flexWrap: 'wrap' } },
+            h('span', null, 'Battlefield art'),
+            rendererHost,
+          ),
+          h('p.muted', null, webglAvailable() ? '2D is the classic hand-drawn look; 3D renders the units as 3D models (experimental). Applies to the next match or menu visit.' : '3D needs WebGL, which is unavailable here.'),
         ),
         h('div.panel', null,
           h('div.panel-title', null, 'Gameplay'),

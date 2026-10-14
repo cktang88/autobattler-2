@@ -34,11 +34,13 @@ export interface Settings {
   alwaysHealth: boolean;
   /** slight camera tilt (2.5D look) on the battlefield; off = classic straight-down view */
   tilt: boolean;
+  /** battlefield renderer: classic 2D canvas art or the three.js 3D view */
+  renderer: '2d' | '3d';
 }
 /** replay speeds offered in battle and settings (slow-mo included) */
 export const BATTLE_SPEEDS = [0.25, 0.5, 1, 2, 4];
 export const speedLabel = (v: number) => (v === 0.25 ? '¼×' : v === 0.5 ? '½×' : `${v}×`);
-export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false, tilt: true };
+export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false, tilt: true, renderer: '2d' };
 
 /** Apply the visual accessibility settings to a FieldView-like object. */
 export function applyViewSettings(view: { shakeScale?: number; flashScale?: number; alwaysShowHealth?: boolean; setTilt?: (on: boolean) => void }, s: Settings = loadSettings()): void {

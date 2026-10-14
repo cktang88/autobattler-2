@@ -3,7 +3,9 @@
 import { loadSettings } from '../storage.ts';
 import { h, type App, type Screen } from '../app.ts';
 import { playMusic, sfx } from '../audio.ts';
-import { FieldView, type BoardUnit } from '../render/field.ts';
+import type { BoardUnit } from '../render/field.ts';
+import type { BattleView } from '../render/view.ts';
+import { makeView } from '../render/viewfactory.ts';
 import { MAPS } from '../render/ground.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
@@ -75,8 +77,8 @@ export function howToPlay(): HTMLElement {
 export function menuScreen(app: App): Screen {
   playMusic('menu');
   const canvas = h('canvas.menu-bg');
-  let view: FieldView | null = null;
-  try { view = new FieldView(canvas, 0, { interactive: false }); } catch (e) { console.warn(e); }
+  let view: BattleView | null = null;
+  try { view = makeView(canvas, 0, { interactive: false }); } catch (e) { console.warn(e); }
 
   // keep the background skirmish silent
   if (view) { view.muted = true; try { view.setTilt(loadSettings().tilt !== false); } catch { /* */ } }
@@ -159,7 +161,7 @@ export function menuScreen(app: App): Screen {
         while (acc >= 1 && !battle.done && n++ < 8) {
           battle.step();
           acc -= 1;
-          (view as FieldView & { pushEvents?: (e: unknown[]) => void }).pushEvents?.(battle.events);
+          view.pushEvents(battle.events);
         }
         view.drawBattle(battle, dt);
         if (battle.done) {

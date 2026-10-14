@@ -36,6 +36,8 @@ interface Particle {
   r1: number;
   /** debris: 1 = smoke trail, 2 = glowing hot chunk */
   flag: number;
+  /** just spawned: skips its first update so even a 1-frame flash is drawn at full intensity once */
+  fresh: boolean;
 }
 
 type BeamKind = 'laser' | 'plasma' | 'repair' | 'rail' | 'heat' | 'slow' | 'scramble' | 'gravity' | 'lightning' | 'sniper' | 'ion';
@@ -138,7 +140,7 @@ export class Fx {
       k, x, y, z: o.z ?? 0, vx: o.vx ?? 0, vy: o.vy ?? 0, vz: o.vz ?? 0,
       life: o.max ?? 0.5, max: o.max ?? 0.5, size: o.size ?? 0.2, grow: o.grow ?? 0,
       color: o.color ?? '#ffffff', rot: o.rot ?? rnd() * 6.28, vr: o.vr ?? 0, drag: o.drag ?? 0, alpha: o.alpha ?? 1,
-      grav: o.grav ?? 0, seed: o.seed ?? ((rnd() * 4) | 0), r1: o.r1 ?? 0, flag: o.flag ?? 0,
+      grav: o.grav ?? 0, seed: o.seed ?? ((rnd() * 4) | 0), r1: o.r1 ?? 0, flag: o.flag ?? 0, fresh: true,
     });
   }
 
@@ -271,7 +273,9 @@ export class Fx {
 
   beam(kind: BeamKind, pts: number[], color: string, width: number, life: number): void {
     if (this.beams.length > 300) this.beams.shift();
-    this.beams.push({ kind, pts, life, max: life, color, width, seed: (rnd() * 1e6) | 0 });
+    // thin gameplay widths read as hairlines under the tilt: give every beam body a believable thickness
+    const k = kind === 'laser' || kind === 'sniper' ? 2.1 : kind === 'heat' ? 1.9 : kind === 'plasma' ? 1.5 : kind === 'lightning' || kind === 'scramble' ? 2.2 : kind === 'rail' || kind === 'ion' ? 1.3 : 1.5;
+    this.beams.push({ kind, pts, life, max: life, color, width: width * k, seed: (rnd() * 1e6) | 0 });
   }
 
   /* ----------------------------------------------------------------------------------- shot / hit helpers */
@@ -419,7 +423,7 @@ export class Fx {
     if (r >= 0.45) this.star(x, y, r * 2.0, '#fff2d0', rnd() * 6, 0.09);
     this.ring(x, y, r * 0.25, r * (big ? 2.7 : 2.0), '#ffe2b0', 0.26 + 0.06 * rs, 0.85);
     // (2) fireball: central white-hot ball + turbulent lobes thrown outward
-    this.fball(x, y, r * 0.8, life * 0.75, 0, 0, 0.3);
+    this.fball(x, y, r * 0.8, life * 0.6, 0, 0, 0.3);
     const nf = Math.min(18, Math.round((4 + r * 5) * q));
     for (let i = 0; i < nf; i++) {
       const a = (i / nf) * PI2 + rr(-0.4, 0.4), d = r * rr(0.15, 0.55), v = rr(1.0, 2.8) * r;
@@ -467,8 +471,11 @@ export class Fx {
       if (ground) this.patch(x, y, r * 0.8, 3.5);
     }
     if (ground) {
-      this.decal(r > 0.7 ? 'crater' : 'scorch', x, y, r * 0.75);
-      if (style === 'napalm') this.decal('burn', x, y, r * 0.9);
+      // the scorch appears as the fireball clears, not under the first white flash
+      this.schedule(0.12, () => {
+        this.decal(r > 0.7 ? 'crater' : 'scorch', x, y, r * 0.75);
+        if (style === 'napalm') this.decal('burn', x, y, r * 0.9);
+      });
       if (r >= 0.4) this.hot(x, y, r * 0.8, 2 + r);
     }
     if (huge) {
@@ -745,6 +752,7 @@ export class Fx {
     const calm = this.busy > 0.6;
     for (let i = P.length - 1; i >= 0; i--) {
       const p = P[i];
+      if (p.fresh) { p.fresh = false; continue; }
       p.life -= dt;
       if (p.life <= 0) {
         P[i] = P[P.length - 1];
@@ -903,9 +911,9 @@ export class Fx {
           const ao = (1 - u / 0.75) * fade;
           if (ao > 0.03) { g.globalAlpha = Math.min(0.9, ao); g.drawImage(fireTex(2, p.seed + 1), -s, -s, s * 2, s * 2); }
           const ay = (1 - u / 0.42) * fade;
-          if (ay > 0.03) { g.globalAlpha = Math.min(0.9, ay); g.drawImage(fireTex(1, p.seed + 2), -s * 0.74, -s * 0.74, s * 1.48, s * 1.48); }
+          if (ay > 0.03) { g.globalAlpha = Math.min(0.75, ay); g.drawImage(fireTex(1, p.seed + 2), -s * 0.62, -s * 0.62, s * 1.24, s * 1.24); }
           const aw = (1 - u / 0.18);
-          if (aw > 0.03) { g.globalAlpha = Math.min(1, aw); g.drawImage(fireTex(0, p.seed + 3), -s * 0.5, -s * 0.5, s, s); }
+          if (aw > 0.03) { g.globalAlpha = Math.min(1, aw); g.drawImage(fireTex(0, p.seed + 3), -s * 0.4, -s * 0.4, s * 0.8, s * 0.8); }
           g.setTransform(tr);
           break;
         }

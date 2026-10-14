@@ -2,6 +2,7 @@
 
 import { App } from './app.ts';
 import { setVolumes, unlockAudio } from './audio.ts';
+import { preload3d } from './render/viewfactory.ts';
 import { loadSettings } from './storage.ts';
 import { menuScreen } from './ui/menu.ts';
 import { vsaiScreen } from './ui/vsai.ts';
@@ -31,6 +32,7 @@ const unlock = () => {
 window.addEventListener('pointerdown', unlock, true);
 window.addEventListener('keydown', unlock, true);
 
+if (s.renderer === '3d') await preload3d().catch(() => {});
 app.go({ name: 'menu' });
 
 // handy for debugging in the console
