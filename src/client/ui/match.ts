@@ -766,7 +766,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
             h('span', null, 'Unit damage dealt'), h('b.good', null, sideDamage(side).toLocaleString()),
             h('span', null, 'Unit damage taken'), h('b.bad', null, sideDamage(opp).toLocaleString()),
           ] : []),
-          h('span', { title: 'Commander HP the enemy lost / you lost this round' }, 'Commander HP: enemy / you'), h('b', null, h('span.good', null, r.damage[opp] ? `−${r.damage[opp]}` : '0'), ' / ', h('span.bad', null, r.damage[side] ? `−${r.damage[side]}` : '0')),
+          // commander HP lost this round, with what's left after it
+          h('span', null, 'Enemy commander'), h('b', null, h(r.damage[opp] ? 'span.good' : 'span', null, r.damage[opp] ? `−${r.damage[opp]} HP` : 'unhurt'), h('small.muted', null, ` · ${Math.max(0, hpAt(opp, replay.round))} left`)),
+          h('span', null, 'Your commander'), h('b', null, h(r.damage[side] ? 'span.bad' : 'span', null, r.damage[side] ? `−${r.damage[side]} HP` : 'unhurt'), h('small.muted', null, ` · ${Math.max(0, hpAt(side, replay.round))} left`)),
           h('span', null, 'Your survivors'), h('b', null, `${r.survivors[side].length} / ${replay.boards[side].length}`),
           h('span', null, 'Enemy survivors'), h('b', null, `${r.survivors[opp].length} / ${replay.boards[opp].length}`),
         ),
