@@ -4,3 +4,6 @@ public/game.js
 public/game.js.map
 public/artlab.js
 public/artlab.js.map
+
+# agent worktrees (local only)
+.claude/worktrees/
