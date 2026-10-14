@@ -786,8 +786,11 @@ test('stances + priorities: 120v120 stays fast and deterministic', () => {
   const army = (): Placement[] => {
     const out: Placement[] = [];
     const ds = ['buggy', 'gunner', 'ironclad', 'medic', 'lancer'];
-    for (let i = 0; i < 40; i++) {
+    // light designs now spawn 16-unit squads: stop at ~120 sim units per side so this stays a 120v120 test
+    let units = 0;
+    for (let i = 0; i < 40 && units < 120; i++) {
       const id = ds[i % ds.length];
+      units += computeStats(DESIGNS.find((d) => d.id === id)!).squad;
       const big = id === 'ironclad';
       out.push({ ...P(id, (i % 8) * 3, Math.floor(i / 8) * (big ? 3 : 2)), stance: stances[i % 5], target: prios[i % 8], focus: i % 3 === 0, retreat: i % 4 === 0, delay: [0, 3, 6, 10][i % 4] });
     }
