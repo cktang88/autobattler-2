@@ -4,13 +4,15 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
-import { CHASSIS_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULES } from '../../shared/parts.ts';
+import type { Design } from '../../shared/types.ts';
 import { buildUnit, type Unit3D } from './units3d.ts';
 import { buildTerrain } from './terrain3d.ts';
 import { createRenderer, setupStage, setupPost, type Post } from './stage3d.ts';
 import { aimTurret, recoilKick, recoilRelax, type Turret } from './weapons3d.ts';
 
 const params = new URLSearchParams(location.search);
+const lab = params.get('lab');
 const has = (k: string, d = false) => (params.has(k) ? params.get(k) !== '0' : d);
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -39,12 +41,33 @@ setView(Number(params.get('x') ?? -3), Number(params.get('z') ?? 0), Number(para
 
 // ---- terrain -----------------------------------------------------------------------------------
 const FX = 60, FZ = 38; // field slice, cells
-scene.add(buildTerrain(FX, FZ, { grid: has('grid', true), keepOut: (x, z) => Math.abs(z) < 13 && Math.abs(x) < 24 }).group);
+scene.add(buildTerrain(FX, FZ, { grid: has('grid', true), props: !lab, keepOut: (x, z) => Math.abs(z) < 13 && Math.abs(x) < 24 }).group);
 
 // ---- units -------------------------------------------------------------------------------------
-const byId = new Map(STARTER_DESIGNS.map((d) => [d.id, d]));
+const byId = new Map<string, Design>(STARTER_DESIGNS.map((d) => [d.id, d]));
 interface Placement { id: string; x: number; z: number; team: 0 | 1; patrol?: number; alt?: number; orbit?: [number, number, number] }
-const SCENE: Placement[] = [
+// ?lab=strider:legs,arachnid:spider,...  -> a lineup of chassis:mobility[:seed] designs (mounts auto-filled), for review
+const LAB: Placement[] = [];
+if (lab) {
+  let z = 0;
+  const items = lab.split(',');
+  items.forEach((it, k) => {
+    const [cid, mid, seed] = it.split(':');
+    const c = CHASSIS_BY_ID.get(cid);
+    if (!c) return;
+    const sd = Number(seed ?? k) || 0;
+    const mounts = params.get('empty') ? c.mounts.map(() => null) : c.mounts.map((slot, i) => { const fit = MODULES.filter((m) => m.kind === 'weapon' && m.mount === slot); return fit[(sd * 7 + i * 13) % fit.length]?.id ?? null; });
+    const d: Design = { id: `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid ?? 'treads', mounts };
+    byId.set(d.id, d);
+    const w = c.footprint?.[0] ?? c.size;
+    z += (k ? w / 2 : 0);
+    LAB.push({ id: d.id, x: 0, z, team: params.get('team') === '1' ? 1 : 0 });
+    z += w / 2 + 1.2 + c.size * 0.4;
+  });
+  const mid = z / 2;
+  for (const p of LAB) p.z -= mid - 0.6;
+}
+const SCENE: Placement[] = lab ? LAB : [
   // blue (team 0) faces +X
   { id: 'starter-buzzsaw', x: -22, z: -8, team: 0 }, { id: 'starter-buzzsaw', x: -22, z: -6.2, team: 0 }, { id: 'starter-buzzsaw', x: -22, z: -4.4, team: 0 },
   { id: 'starter-torchbug', x: -22, z: 3.4, team: 0 }, { id: 'starter-torchbug', x: -22, z: 5.2, team: 0 }, { id: 'starter-torchbug', x: -22, z: 7, team: 0 },
@@ -75,7 +98,7 @@ for (const p of SCENE) {
   u.root.rotation.y = -baseAngle;
   scene.add(u.root);
   let label: HTMLElement | undefined;
-  if (!named.has(p.id) && p.team === 0 || (p.team === 1 && p.id === 'starter-juggernaut')) {
+  if (!lab && (!named.has(p.id) && p.team === 0 || (p.team === 1 && p.id === 'starter-juggernaut'))) {
     named.add(p.id);
     label = document.createElement('div');
     label.className = 'lab';

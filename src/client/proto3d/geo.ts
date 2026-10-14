@@ -199,6 +199,9 @@ export class Bld {
   private mids = new Map<THREE.Material, number>();
   private decals: THREE.BufferGeometry[] = [];
   tris = 0;
+  /** multiplies radial segment counts of cyl/cylb/lathe/strut (min 5): a cheap LOD knob for dense parts (turrets) */
+  segK = 1;
+  private sg(n: number): number { return this.segK === 1 ? n : Math.max(5, Math.round(n * this.segK)); }
   g(geo: THREE.BufferGeometry, matl: MatLike, m?: THREE.Matrix4): this {
     const n = prep(geo);
     if (m) n.applyMatrix4(m);
@@ -221,20 +224,20 @@ export class Bld {
     return this.g(slabGeo(poly, h, b), mat, mtx([x, y, z], rot));
   }
   cyl(mat: MatLike, r0: number, r1: number, len: number, at: V3, axis: Axis = 'y', seg = 14): this {
-    return this.g(orient(cylG(r0, r1, len, seg), axis), mat, mtx(at));
+    return this.g(orient(cylG(r0, r1, len, this.sg(seg)), axis), mat, mtx(at));
   }
   cylb(mat: MatLike, r: number, len: number, b: number, at: V3, axis: Axis = 'y', seg = 16): this {
-    return this.g(orient(cylB(r, len, b, seg), axis), mat, mtx(at));
+    return this.g(orient(cylB(r, len, b, this.sg(seg)), axis), mat, mtx(at));
   }
   lathe(mat: MatLike, profile: P2[], at: V3, axis: Axis = 'y', seg = 16, rot?: V3): this {
-    const g = orient(lathe(profile, seg), axis);
+    const g = orient(lathe(profile, this.sg(seg)), axis);
     return this.g(g, mat, mtx(at, rot));
   }
   loft(mat: MatLike, rings: V3[][], cap0 = true, cap1 = true, m?: THREE.Matrix4): this {
     return this.g(loft(rings, cap0, cap1), mat, m);
   }
   strut(mat: MatLike, a: V3, b: V3, r0: number, r1 = r0, seg = 8): this {
-    return this.g(strutGeo(a, b, r0, r1, seg), mat);
+    return this.g(strutGeo(a, b, r0, r1, this.sg(seg)), mat);
   }
   /** textured decal quad lying on +Y at (x,y,z); uv rect in atlas (u0,v0,u1,v1). Rotated about Y by ry. */
   decal(w: number, d: number, x: number, y: number, z: number, uv: [number, number, number, number], ry = 0): this {

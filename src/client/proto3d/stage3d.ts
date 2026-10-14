@@ -62,18 +62,22 @@ export function setupStage(renderer: THREE.WebGLRenderer, scene: THREE.Scene, o:
   if (o.fog !== false) scene.fog = new THREE.Fog(fogCol, 110, 300);
   const sunPos = new THREE.Vector3(-30, 40, 20);
   scene.environment = skyEnvironment(renderer, sunPos);
-  scene.environmentIntensity = 0.5;
-  const sun = new THREE.DirectionalLight('#ffe0b0', 3.8);
+  scene.environmentIntensity = 0.42;
+  // stylized key + soft sky fill + cool back light: flattering, clean shadows (units use a cel ramp, materials.ts)
+  const sun = new THREE.DirectionalLight('#fff0d8', 2.8);
   sun.position.copy(sunPos);
   sun.castShadow = true;
   const res = o.shadowRes ?? 4096;
   sun.shadow.mapSize.set(res, res);
   sun.shadow.bias = -0.0003;
   sun.shadow.normalBias = 0.025;
-  sun.shadow.radius = 2.5;
+  sun.shadow.radius = 3;
   scene.add(sun, sun.target);
-  const hemi = new THREE.HemisphereLight('#9fb8d4', '#54493a', 0.3);
+  const hemi = new THREE.HemisphereLight('#dfe4ea', '#6e624e', 0.95);
   scene.add(hemi);
+  const back = new THREE.DirectionalLight('#9ab8ff', 0.55);
+  back.position.set(30, 18, -25);
+  scene.add(back);
   const dir = sunPos.clone();
   const fitShadow = (cx: number, cz: number, radius: number) => {
     const c = sun.shadow.camera;
@@ -96,7 +100,7 @@ export interface Post {
 }
 
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null as THREE.Texture | null }, vig: { value: 0.3 }, time: { value: 0 } },
+  uniforms: { tDiffuse: { value: null as THREE.Texture | null }, vig: { value: 0.14 }, time: { value: 0 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float vig; varying vec2 vUv;
@@ -105,12 +109,12 @@ const GradeShader = {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       // gentle S-curve + split tone (cool shadows, warm highlights) + slight desaturation for a muted military palette
-      c = mix(c, c * c * (3.0 - 2.0 * c), 0.28);
-      c = mix(vec3(l), c, 0.94);
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.12);
+      c = mix(vec3(l), c, 1.06);
       c += vec3(-0.006, 0.0, 0.01) * (1.0 - l) + vec3(0.012, 0.006, -0.004) * l;
       vec2 d = (vUv - 0.5) * vec2(1.0, 0.85);
       c *= 1.0 - vig * smoothstep(0.25, 0.85, length(d));
-      c += (hash(vUv * 1024.0) - 0.5) * 0.012;
+      
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
@@ -123,8 +127,8 @@ export function setupPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, cam
   if (o.ao !== false) {
     gtao = new GTAOPass(scene, camera, w, h);
     gtao.output = GTAOPass.OUTPUT.Default;
-    gtao.blendIntensity = 0.85;
-    gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.6, scale: 1.1, samples: 12 });
+    gtao.blendIntensity = 0.5;
+    gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.6, thickness: 1.2, scale: 1.0, samples: 12 });
     composer.addPass(gtao);
   }
   if (o.bloom !== false) {

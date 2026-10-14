@@ -67,13 +67,14 @@ function makeMaps(w: number, h: number, pad: number, o: Required<Pick<TerrainOpt
       c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.5);
       const gv = sm(0.54, 0.68, fbm(cx * 0.35 + 200, cy * 0.35 + 200, 4));
       const grain = noise(x * 0.9, y * 0.9) * 0.6 + noise(x * 2.3 + 11, y * 2.3 + 5) * 0.4;
-      c = mixc(c, gravel, gv * (0.45 + 0.4 * grain));
+      c = mixc(c, gravel, gv * 0.5);
       const sc = sm(0.6, 0.72, fbm(cx * 0.2 + 300, cy * 0.2 + 300, 4));
-      c = mixc(c, scrub, sc * (0.25 + 0.35 * noise(x * 0.5, y * 0.5)));
-      const m = 0.78 + 0.44 * (n3 * 0.5 + grain * 0.5) + (gv > 0.2 ? (grain - 0.5) * 0.35 * gv : 0);
+      c = mixc(c, scrub, sc * 0.4);
+      // stylized: broad painted patches, very little per-pixel grain
+      const m = 0.9 + 0.2 * (n3 * 0.7 + grain * 0.3) + (gv > 0.2 ? (grain - 0.5) * 0.1 * gv : 0);
       const i = (y * W + x) * 4;
       ia.data[i] = c[0] * m; ia.data[i + 1] = c[1] * m; ia.data[i + 2] = c[2] * m; ia.data[i + 3] = 255;
-      const hv = 128 + (n1 - 0.5) * 70 + (n2 - 0.5) * 60 + (grain - 0.5) * (40 + gv * 90) - sc * 12;
+      const hv = 128 + (n1 - 0.5) * 70 + (n2 - 0.5) * 50 + (grain - 0.5) * 12 - sc * 12;
       ih.data[i] = ih.data[i + 1] = ih.data[i + 2] = hv; ih.data[i + 3] = 255;
     }
   }
@@ -95,18 +96,18 @@ function makeMaps(w: number, h: number, pad: number, o: Required<Pick<TerrainOpt
       gh.strokeStyle = 'rgba(40,40,40,0.55)'; gh.lineWidth = wd; gh.stroke();
     }
   };
-  for (let i = 0; i < 6; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1.0), PPC * (0.07 + r() * 0.06), 0.05 + r() * 0.06);
-  for (let i = 0; i < 2; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.1, 0.07);
+  for (let i = 0; i < 4; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1.0), PPC * (0.07 + r() * 0.06), 0.03 + r() * 0.03);
+  for (let i = 0; i < 1; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.1, 0.04);
 
   // blast craters with scorched rims, scorch blotches
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 12; i++) {
     const x = r() * W, y = r() * H, rad = PPC * (0.25 + r() * r() * 1.5);
     const sc = ga.createRadialGradient(x, y, rad * 0.1, x, y, rad * 1.7);
     sc.addColorStop(0, 'rgba(18,14,10,0.55)'); sc.addColorStop(0.5, 'rgba(28,22,15,0.28)'); sc.addColorStop(1, 'rgba(0,0,0,0)');
     ga.fillStyle = sc; ga.beginPath(); ga.arc(x, y, rad * 1.7, 0, 7); ga.fill();
     // radial blast streaks
-    ga.strokeStyle = 'rgba(15,12,9,0.18)'; ga.lineWidth = 1.5;
-    for (let s = 0; s < 18; s++) { const a = r() * 7, l = rad * (1.2 + r() * 1.2); ga.beginPath(); ga.moveTo(x + Math.cos(a) * rad * 0.8, y + Math.sin(a) * rad * 0.8); ga.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ga.stroke(); }
+    ga.strokeStyle = 'rgba(15,12,9,0.08)'; ga.lineWidth = 2;
+    for (let s = 0; s < 8; s++) { const a = r() * 7, l = rad * (1.2 + r() * 1.2); ga.beginPath(); ga.moveTo(x + Math.cos(a) * rad * 0.8, y + Math.sin(a) * rad * 0.8); ga.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ga.stroke(); }
     if (rad > PPC * 0.45) {
       const hg = gh.createRadialGradient(x, y, 0, x, y, rad * 1.15);
       hg.addColorStop(0, 'rgba(25,25,25,0.85)'); hg.addColorStop(0.72, 'rgba(70,70,70,0.7)'); hg.addColorStop(0.88, 'rgba(210,210,210,0.8)'); hg.addColorStop(1, 'rgba(128,128,128,0)');
@@ -114,7 +115,7 @@ function makeMaps(w: number, h: number, pad: number, o: Required<Pick<TerrainOpt
     }
   }
   // dark scorch ellipses and scattered debris flecks
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 14; i++) {
     const x = r() * W, y = r() * H, rad = PPC * (0.15 + r() * 0.4);
     const g2 = ga.createRadialGradient(x, y, 0, x, y, rad);
     g2.addColorStop(0, 'rgba(14,12,9,0.42)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
@@ -177,7 +178,7 @@ function makeDetail(): THREE.CanvasTexture {
 
 function groundMaterial(map: THREE.Texture, bump: THREE.Texture): THREE.MeshStandardMaterial {
   const detail = makeDetail();
-  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 2.2, roughness: 0.97, metalness: 0, envMapIntensity: 0.6 });
+  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.6, roughness: 1, metalness: 0, envMapIntensity: 0.5 });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.detailMap = { value: detail };
     sh.vertexShader = sh.vertexShader
@@ -188,14 +189,14 @@ function groundMaterial(map: THREE.Texture, bump: THREE.Texture): THREE.MeshStan
       .replace('#include <map_fragment>', `#include <map_fragment>
         vec4 dt1 = texture2D(detailMap, vGP * 0.9); vec4 dt2 = texture2D(detailMap, vGP * 0.23 + 0.37);
         float dtl = dt1.r * 0.65 + dt2.r * 0.35;
-        diffuseColor.rgb *= 0.72 + 0.56 * dtl;
+        diffuseColor.rgb *= 0.93 + 0.14 * dtl;
         float dH = dt1.g * 0.7 + dt2.g * 0.3;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
           vec3 sx = normalize(dFdx(-vViewPosition)), sy = normalize(dFdy(-vViewPosition));
           vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
           float det = dot(sx, r1) * faceDirection;
-          vec2 dh = vec2(dFdx(dH), dFdy(dH)) * 5.0;
+          vec2 dh = vec2(dFdx(dH), dFdy(dH)) * 1.2;
           normal = normalize(abs(det) * normal - sign(det) * (dh.x * r1 + dh.y * r2));
         }`);
   };

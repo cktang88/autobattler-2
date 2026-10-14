@@ -100,6 +100,9 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false):
     muzzle: (x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); recoil.add(o); t.muzzles.push(o); },
   };
   const { b, p, rc, sp } = C;
+  // stylized LOD: fewer radial segments on the dense turret parts (squads are instanced, keep tris in budget)
+  const segK = S >= 4 ? 0.8 : 0.62;
+  b.segK = p.segK = rc.segK = sp.segK = segK;
   const v = mod.visual;
   const ringR = r * 0.95;
   const y0 = fixed ? 0 : r * 0.1;
