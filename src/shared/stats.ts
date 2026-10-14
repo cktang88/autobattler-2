@@ -87,6 +87,10 @@ export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
+/** Range (cells) rated 1.0. Weapon ranges were stretched ~1.3x for the 96 x 92 field (direct fire 6 -> 7.5 cells);
+ *  the reference moved with them so a gun's price is unchanged by the stretch. Repair beams kept their range, so
+ *  their MODULE_CAL was scaled by 6.5 / 5 to keep their price; weapon MODULE_CAL re-fitted with fit_cal.py. */
+const RANGE_REF = 6.5;
 const RANGE_CAP = 2.8;
 
 /** Fraction of raw damage that gets through the reference armor mix (sim damage formula). */
@@ -115,26 +119,26 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 2.54, ac20: 2.90, ac40: 3.46, aegisT: 1.15, annihilator: 3.80, arclance: 2.14, atgm: 5.09,
-  autocannon: 3.09, autoloader: 2.27, avenger: 4.34, barrage: 7.18, bombs: 3.94, bulwarkshield: 2.05,
-  buzzsaw: 0.62, cannon: 4.64, cannon75: 4.10, chainsaw: 2.48, claw: 2.19, clusterbombs: 4.69, cruise: 5.67,
-  disarm: 0.24, dome: 0.16, domeG: 1.95, doomsday: 6.54, drill: 2.49, empcannon: 1.89, flak: 1.87,
-  flamer: 0.84, gauss: 3.48, gravity: 1.60, grinder: 5.95, guidedrocket: 2.39, gyro: 0.16, hammer: 2.37,
-  hardened: 0.19, heatray: 0.45, heavyflak: 3.45, hmg: 2.30, howitzer: 5.84, incendiary: 2.15, inferno: 2.71,
-  jammer: 0.14, laser: 3.14, lightrail: 5.98, massdriver: 2.16, mg: 1.84, minigun: 1.85, mirror: 0.41,
-  missilebattery: 2.42, mlrs: 5.16, mortar: 2.19, nanite: 0.33, napalm: 1.21, overclock: 0.23, phantom: 0.60,
-  plasma: 3.27, plasmablade: 2.51, plasmaorb: 2.83, pointdef: 2.05, quad20: 5.28, railgun: 6.04, ram: 0.47,
-  reactive: 0.94, repair: 3.32, repairM: 3.03, rocketL: 3.06, rockets: 3.57, sam: 2.40, selfdestruct: 0.33,
-  sensor: 0.30, shield: 1.03, shieldH: 1.03, shieldL: 0.80, shockprod: 1.51, shotgun: 2.83, siege240: 1.20,
-  siegeplasma: 4.82, skyfortress: 7.31, slowbeam: 3.87, smoke: 4.00, sniper: 10.72, sonic: 0.00, stealth: 0.62,
-  stormcore: 2.26, stormtower: 4.21, stungun: 1.47, swarm: 3.27, tactnuke: 2.84, targeting: 1.56, tesla: 1.55,
-  titanfist: 7.93, turbo: 0.28, twin120: 4.66, twin30: 3.24, twinlaser: 2.76, twinmg: 2.35, uplink: 0.29,
+  aamissile: 2.67, ac20: 3.40, ac40: 3.24, aegisT: 1.25, annihilator: 5.47, arclance: 1.93, atgm: 6.95,
+  autocannon: 2.31, autoloader: 2.35, avenger: 3.93, barrage: 6.83, bombs: 2.32, bulwarkshield: 1.53, buzzsaw: 0.67,
+  cannon: 1.35, cannon75: 3.51, chainsaw: 1.54, claw: 1.97, clusterbombs: 3.84, cruise: 6.89, disarm: 0.05,
+  dome: 0.10, domeG: 1.04, doomsday: 9.90, drill: 1.08, empcannon: 0.59, flak: 1.48, flamer: 0.95, gauss: 3.44,
+  gravity: 1.81, grinder: 4.33, guidedrocket: 3.31, gyro: 0.10, hammer: 1.22, hardened: 0.13, heatray: 0.33,
+  heavyflak: 2.56, hmg: 2.46, howitzer: 4.99, incendiary: 0.78, inferno: 2.20, jammer: 0.10, laser: 3.65,
+  lightrail: 9.06, massdriver: 3.67, mg: 2.11, minigun: 1.52, mirror: 0.31, missilebattery: 2.93, mlrs: 5.79,
+  mortar: 3.23, nanite: 0.10, napalm: 0.95, overclock: 0.22, phantom: 0.14, plasma: 3.03, plasmablade: 1.34,
+  plasmaorb: 2.61, pointdef: 2.63, quad20: 2.90, railgun: 5.38, ram: 0.37, reactive: 0.88, repair: 5.20,
+  repairM: 4.17, rocketL: 2.26, rockets: 1.78, sam: 1.92, selfdestruct: 0.22, sensor: 0.11, shield: 1.04,
+  shieldH: 1.11, shieldL: 0.84, shockprod: 1.85, shotgun: 2.97, siege240: 2.12, siegeplasma: 3.32, skyfortress: 4.42,
+  slowbeam: 3.16, smoke: 4.00, sniper: 18.50, sonic: 0.00, stealth: 0.20, stormcore: 2.55, stormtower: 3.05,
+  stungun: 1.29, swarm: 3.39, tactnuke: 5.72, targeting: 3.45, tesla: 1.22, titanfist: 3.39, turbo: 0.10,
+  twin120: 2.87, twin30: 1.83, twinlaser: 2.76, twinmg: 2.53, uplink: 0.17,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
-  const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / 5, RANGE_EXP))); // reach decides most fights
+  const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / RANGE_REF, RANGE_EXP))); // reach decides most fights
   if (w.heal) return w.heal * 1.6 * rangeF * cal(w.id);
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
