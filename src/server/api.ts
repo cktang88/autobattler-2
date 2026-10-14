@@ -76,7 +76,10 @@ export class Api {
     try {
       const method = req.method ?? 'GET';
       const auth = bearer(req);
-      if (!this.limiter.take(auth ? `t:${hashToken(auth).slice(0, 16)}` : `ip:${ip}`)) {
+      const th = auth ? hashToken(auth) : null;
+      // only KNOWN tokens get their own bucket: random well-formed tokens would otherwise each get a fresh one
+      // (unlimited requests, unbounded bucket map)
+      if (!this.limiter.take(th && this.store.playersByToken.has(th) ? `t:${th.slice(0, 16)}` : `ip:${ip}`)) {
         throw new HttpError(429, 'Too many requests — slow down');
       }
       let body: unknown = undefined;

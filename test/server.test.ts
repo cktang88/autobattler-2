@@ -357,3 +357,21 @@ test('TRUST_PROXY: rate limits key on the proxy-appended (last) X-Forwarded-For 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('random (unknown) bearer tokens share the IP rate-limit bucket', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ab2-rl-'));
+  const s2 = await startServer({ port: 0, host: '127.0.0.1', dataDir: dir, publicDir, saveDebounceMs: 10, rateLimit: 40 });
+  try {
+    const statuses: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const tok = (i.toString(16).padStart(2, '0')).repeat(32);
+      const r = await fetch(`http://127.0.0.1:${s2.port}/api/me`, { headers: { Authorization: `Bearer ${tok}` } });
+      await r.text();
+      statuses.push(r.status);
+    }
+    assert.ok(statuses.includes(429), `fresh fake tokens must not each get a new bucket: ${statuses}`);
+  } finally {
+    await s2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
