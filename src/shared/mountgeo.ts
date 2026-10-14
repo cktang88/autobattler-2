@@ -110,9 +110,36 @@ export function hardpointsOf(chassis: ChassisDef): Pt[] {
   return FOOT_MOUNTS[chassis.shape] ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : (i % 2 ? 0.2 : -0.2)] as Pt);
 }
 
+/** A hardpoint is "edge" (melee-capable) when it sits on the front rim (x >= MELEE_EDGE) or a side rim
+ *  (|y| >= MELEE_EDGE, not behind MELEE_SIDE_MIN), i.e. within ~24% of the half-extent of the hull boundary.
+ *  Rear and centre-deck points never qualify: a blade there can't reach anything. */
+export const MELEE_EDGE = 0.38;
+export const MELEE_SIDE_MIN = -0.2;
+
+const meleeCache = new Map<string, boolean[]>();
+/** meleeSlots(chassis)[i] = true when mount slot i (design.mounts order) is near the hull edge and can fit a melee
+ *  weapon. Anatomy-riding mounts (arms, claws, forelimbs) count when they are not on the rear/tail. Ground hulls
+ *  only: flyers return all false. */
+export function meleeSlots(chassis: ChassisDef): boolean[] {
+  let out = meleeCache.get(chassis.id);
+  if (out) return out;
+  const pts = hardpointsOf(chassis);
+  const Y = chassis.footprint?.[0] ?? chassis.size, X = chassis.footprint?.[1] ?? chassis.size;
+  const rest = FOOT_MOUNTS[chassis.shape] && PART_SHAPES.has(chassis.shape) && chassis.shape !== 'centipede' ? PART_REST[chassis.id] : undefined;
+  out = chassis.mounts.map((_, i) => {
+    if ((chassis.domain ?? 'ground') !== 'ground') return false;
+    const r = rest?.[i];
+    if (r) return r[0] / X > MELEE_SIDE_MIN;
+    const p = pts[i] ?? [0, 0];
+    return p[0] >= MELEE_EDGE || (Math.abs(p[1]) >= MELEE_EDGE && p[0] > MELEE_SIDE_MIN);
+  });
+  meleeCache.set(chassis.id, out);
+  return out;
+}
+
 /** perm[i] = hardpoint index module i occupies (anatomical frames keep their fixed points). */
 export function mountPerm(chassis: ChassisDef, pts: Pt[], mods: (ModuleDef | null)[]): number[] {
-  return PART_SHAPES.has(chassis.shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods);
+  return PART_SHAPES.has(chassis.shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods, meleeSlots(chassis));
 }
 
 /**
@@ -120,7 +147,7 @@ export function mountPerm(chassis: ChassisDef, pts: Pt[], mods: (ModuleDef | nul
  * forward), identical weapons pair up on mirrored flank points, utilities (dishes, emitters, packs) go to the rear
  * deck. Returns perm[i] = hardpoint index of module i. Weapons must fit the hardpoint class.
  */
-export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (ModuleDef | null)[]): number[] {
+export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (ModuleDef | null)[], meleeOk?: boolean[]): number[] {
   const n = caps.length;
   const id0 = caps.map((_, i) => i);
   if (n <= 1) return id0;
@@ -159,6 +186,7 @@ export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (
     for (let j = 0; j < n; j++) {
       if (used[j]) continue;
       if (isW(m) && RANK[m!.mount] > RANK[caps[j]]) continue;
+      if (meleeOk && m?.category === 'melee' && !meleeOk[j]) continue;
       used[j] = true; perm[i] = j; rec(i + 1); used[j] = false;
     }
   };
