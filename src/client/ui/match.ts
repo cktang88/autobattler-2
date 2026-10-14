@@ -254,7 +254,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const deployBtn = h('button.big.primary.deploy-btn', { onclick: () => submit() }, 'Deploy & Fight');
   const shopSpacingEl = h('div.shop-spacing.hidden');
   const sideEl = h('div.side', null,
-    h('div.side-top', null, h('div.supply', null, supplyVal, supplyLbl, h('div.spacer'), h('span.kbd-hint.muted', { style: { fontSize: '0.75rem' } }, h('kbd', null, '1-9'), ' select'))),
+    h('div.side-top', null, h('div.supply', null, supplyVal, supplyLbl, h('div.spacer'), h('span.kbd-hint.muted', { style: { fontSize: '0.92rem' } }, h('kbd', null, '1-9'), ' select'))),
     filterEl,
     cardsEl,
     shopSpacingEl,

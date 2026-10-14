@@ -423,7 +423,7 @@ export class FieldView {
     const x = 12, y = this.cssH - 12;
     g.save();
     g.lineCap = 'butt';
-    g.font = '600 11px system-ui, sans-serif';
+    g.font = '600 13px system-ui, sans-serif';
     g.textBaseline = 'bottom';
     g.fillStyle = 'rgba(255,255,255,0.85)';
     g.strokeStyle = 'rgba(0,0,0,0.6)';

@@ -1444,7 +1444,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     x.setLineDash([]);
     // dimension lines (top + left)
     const label = `${S * METERS_PER_CELL} m`;
-    x.font = '600 12px "Barlow Condensed", system-ui, sans-serif';
+    x.font = '600 14px "Barlow Condensed", system-ui, sans-serif';
     x.fillStyle = 'rgba(255, 196, 64, 0.95)';
     x.strokeStyle = 'rgba(255, 196, 64, 0.7)';
     x.lineWidth = 1;
@@ -1504,7 +1504,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     x.font = '700 13px "Barlow Condensed", system-ui, sans-serif';
     x.textBaseline = 'alphabetic';
     x.fillText(`${METERS_PER_CELL} m`, bx + P + 8, by + 1);
-    x.font = '600 10px "Barlow Condensed", system-ui, sans-serif';
+    x.font = '600 13px "Barlow Condensed", system-ui, sans-serif';
     x.fillStyle = 'rgba(232, 226, 208, 0.6)';
     x.fillText('1 CELL', bx, by - 9);
   }

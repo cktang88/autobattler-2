@@ -74,7 +74,7 @@
 .garage .g-btn.danger { background: #6d1f1a; }
 .garage .g-btn.danger:hover:not(:disabled) { background: #8f2a22; }
 .garage .g-btn.ghost { background: transparent; box-shadow: inset 0 0 0 2px var(--plate4); }
-.garage .g-btn.small { min-height: 30px; padding: 0 10px; font-size: 0.82rem; }
+.garage .g-btn.small { min-height: 30px; padding: 0 10px; font-size: 0.91rem; }
 .garage .g-btn[hidden] { display: none; }
 .garage .g-iconbtn {
   display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none;
@@ -95,7 +95,7 @@
 .garage .g-back { min-height: 34px; }
 .garage .g-title { margin: 0; display: flex; align-items: baseline; gap: 12px; min-width: 0; line-height: 1; }
 .garage .g-title-k { font-size: 1.75rem; letter-spacing: 0.14em; }
-.garage .g-title-s { font-size: 0.82rem; letter-spacing: 0.3em; color: var(--dim); font-weight: 600; }
+.garage .g-title-s { font-size: 0.91rem; letter-spacing: 0.3em; color: var(--dim); font-weight: 600; }
 .garage .g-hazard { flex: 1; height: 8px; min-width: 20px; max-width: 220px; margin-left: auto; background: var(--hazard); opacity: 0.55; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
 .garage .g-deckchip {
   display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px;
@@ -142,31 +142,31 @@
 .garage .g-item-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .garage .g-item-name { font-family: var(--head); font-weight: 700; font-size: 1.04rem; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
 .garage .g-dot { width: 7px; height: 7px; background: var(--amber); flex: none; transform: rotate(45deg); }
-.garage .g-item-meta { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--dim); }
+.garage .g-item-meta { display: flex; align-items: center; gap: 6px; font-size: 0.91rem; color: var(--dim); }
 .garage .g-item-cost { display: inline-flex; align-items: center; gap: 3px; color: var(--txt); font-family: var(--head); font-weight: 700; font-size: 0.95rem; }
 .garage .g-item-cost .g-ico, .garage .g-costv .g-ico, .garage .g-tile-cost .g-ico { color: var(--gold); }
 .garage .g-decktog {
   flex: none; width: 44px; display: flex !important; flex-direction: column; align-items: center; justify-content: center !important; gap: 2px !important;
-  color: var(--dim2); cursor: pointer; font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.66rem !important; letter-spacing: 0.12em !important; text-transform: uppercase !important;
+  color: var(--dim2); cursor: pointer; font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.91rem !important; letter-spacing: 0.12em !important; text-transform: uppercase !important;
   box-shadow: inset 2px 0 0 var(--ink); background: rgba(0, 0, 0, 0.25) !important;
 }
 .garage .g-decktog .g-ico { width: 16px; height: 16px; }
 .garage .g-decktog:hover { color: var(--txt); }
 .garage .g-decktog.in { color: var(--teal); }
-.garage .g-decktog.na { cursor: default; color: var(--amber); font-size: 0.72rem; font-family: var(--head); text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; justify-content: center; }
+.garage .g-decktog.na { cursor: default; color: var(--amber); font-size: 0.92rem; font-family: var(--head); text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; justify-content: center; }
 
 /* ---------- small badges ---------- */
 .garage .g-size {
   display: inline-flex; align-items: center; justify-content: center; height: 17px; padding: 0 5px;
-  font-family: var(--head); font-weight: 700; font-size: 0.76rem; letter-spacing: 0.04em; color: var(--txt);
+  font-family: var(--head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.04em; color: var(--txt);
   background: var(--plate4); box-shadow: inset 0 0 0 1px var(--ink);
 }
-.garage .g-tag { font-family: var(--head); font-weight: 700; font-size: 0.68rem; letter-spacing: 0.12em; padding: 0 5px; line-height: 17px; box-shadow: inset 0 0 0 1px currentColor; }
+.garage .g-tag { font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.12em; padding: 0 5px; line-height: 17px; box-shadow: inset 0 0 0 1px currentColor; }
 .garage .g-tag.air { color: var(--cyan); }
 .garage .g-tag.static { color: var(--cG); }
 .garage .g-plate {
   display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
-  font-family: var(--head); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+  font-family: var(--head); font-weight: 600; font-size: 0.91rem; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
   color: var(--txt); background: rgba(5, 7, 9, 0.72); box-shadow: inset 0 0 0 1px var(--plate4);
 }
 .garage .g-plate b { font-weight: 700; color: var(--amber); }
@@ -178,7 +178,7 @@
 .garage .g-plate.cat { color: var(--cat, var(--txt)); box-shadow: inset 0 0 0 1px currentColor; }
 .garage .g-chip {
   display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: none;
-  font-family: var(--head); font-weight: 700; font-size: 0.82rem; line-height: 1;
+  font-family: var(--head); font-weight: 700; font-size: 0.91rem; line-height: 1;
   color: var(--ink); background: currentColor; box-shadow: inset 0 0 0 1px var(--ink);
   clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
 }
@@ -189,11 +189,11 @@
 .garage .g-chip.cH { color: var(--cH); }
 .garage .g-chip.cG { color: var(--cG); }
 .garage .g-chip.cT { color: var(--cT); }
-.garage .g-chip.mini { width: 16px; height: 16px; font-size: 0.7rem; }
+.garage .g-chip.mini { width: 16px; height: 16px; font-size: 0.91rem; }
 .garage .g-chips { display: inline-flex; gap: 3px; flex-wrap: wrap; }
 .garage .g-sockno {
   display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 20px; flex: none;
-  font-family: var(--head); font-weight: 700; font-size: 0.86rem; color: var(--dim); background: var(--ink);
+  font-family: var(--head); font-weight: 700; font-size: 0.92rem; color: var(--dim); background: var(--ink);
 }
 .garage .g-particon { flex: none; display: block; }
 
@@ -233,13 +233,13 @@
   position: absolute; right: 42px; bottom: 14px; z-index: 2; pointer-events: none;
   display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-family: var(--head);
 }
-.garage .g-prev-cost-l { font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.garage .g-prev-cost-l { font-size: 0.92rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
 .garage .g-prev-cost-v { display: flex; align-items: center; gap: 6px; }
 .garage .g-prev-cost-v .g-ico { color: var(--gold); width: 22px; height: 22px; }
 .garage .g-prev-cost-v b { font-size: 2.3rem; line-height: 0.95; font-weight: 700; text-shadow: 0 2px 0 var(--ink), 0 0 18px rgba(0, 0, 0, 0.9); }
 .garage .g-stage-hint {
   position: absolute; left: 50%; transform: translateX(-50%); top: 12px; z-index: 2; pointer-events: none; white-space: nowrap;
-  font-family: var(--head); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(236, 230, 216, 0.6);
+  font-family: var(--head); font-size: 0.9rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(236, 230, 216, 0.6);
   display: none;
 }
 .garage .g-stage-hint i { font-style: normal; margin: 0 8px; opacity: 0.5; }
@@ -271,7 +271,7 @@
 .garage .g-sock-plus { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--head); font-weight: 700; font-size: calc(var(--r) * 0.9); color: var(--c); text-shadow: 0 1px 0 var(--ink); pointer-events: none; }
 .garage .g-sock-tag {
   position: absolute; left: 72%; top: -6px; display: inline-flex; align-items: center; gap: 3px; height: 17px; padding: 0 5px 0 0;
-  font-family: var(--head); font-weight: 700; font-size: 0.74rem; color: var(--ink); background: var(--c); white-space: nowrap;
+  font-family: var(--head); font-weight: 700; font-size: 0.92rem; color: var(--ink); background: var(--c); white-space: nowrap;
   box-shadow: 0 0 0 2px var(--ink); pointer-events: none;
 }
 .garage .g-sock-tag b { display: inline-flex; align-items: center; justify-content: center; height: 100%; padding: 0 4px; background: var(--ink); color: var(--txt); }
@@ -303,10 +303,10 @@
   background: #1d2329; box-shadow: inset 0 0 0 2px #050709, inset 4px 0 0 var(--cat), 0 10px 26px rgba(0, 0, 0, 0.6);
   opacity: 0.95;
 }
-.g-ghost .g-chip { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 0.75rem; -webkit-text-fill-color: #050709; background: #ffb21e; }
+.g-ghost .g-chip { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 0.92rem; -webkit-text-fill-color: #050709; background: #ffb21e; }
 .g-ghost.bad { box-shadow: inset 0 0 0 2px #050709, inset 0 0 0 4px #ff5a4a, 0 10px 26px rgba(0, 0, 0, 0.6); }
 .g-ghost.del { box-shadow: inset 0 0 0 2px #050709, inset 0 0 0 4px #ff5a4a, 0 10px 26px rgba(0, 0, 0, 0.6); }
-.g-ghost.del::after { content: 'Remove'; margin-left: 4px; color: #ff5a4a; font-size: 0.8rem; letter-spacing: 0.14em; }
+.g-ghost.del::after { content: 'Remove'; margin-left: 4px; color: #ff5a4a; font-size: 0.91rem; letter-spacing: 0.14em; }
 
 /* ---------- loadout strip ---------- */
 .garage .g-loadout { display: flex; gap: 6px; flex-wrap: wrap; flex: none; }
@@ -344,13 +344,13 @@
 }
 .garage .g-gauge { padding: 6px 10px 7px; display: flex; flex-direction: column; gap: 0; min-width: 0; position: relative; }
 .garage .g-gauge + .g-gauge::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: var(--ink); }
-.garage .g-gauge-l { font-family: var(--head); font-weight: 600; font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+.garage .g-gauge-l { font-family: var(--head); font-weight: 600; font-size: 0.91rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
 .garage .g-gauge-v { font-family: var(--head); font-weight: 700; font-size: 1.45rem; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.garage .g-gauge-v small { font-size: 0.7rem; color: var(--dim); margin-left: 2px; letter-spacing: 0.06em; }
+.garage .g-gauge-v small { font-size: 0.91rem; color: var(--dim); margin-left: 2px; letter-spacing: 0.06em; }
 .garage .g-gauge.hl .g-gauge-v { color: var(--amber); }
 .garage .g-gauge.nil .g-gauge-v { color: var(--dim2); }
 .garage .g-gauge .g-delta { position: absolute; right: 6px; top: 6px; }
-.garage .g-delta { font-family: var(--head); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; padding: 0 4px; line-height: 1.35; }
+.garage .g-delta { font-family: var(--head); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.02em; padding: 0 4px; line-height: 1.35; }
 .garage .g-delta.up { color: var(--green); background: rgba(123, 220, 90, 0.12); }
 .garage .g-delta.down { color: var(--red); background: rgba(255, 90, 74, 0.12); }
 .garage .g-delta.same { color: var(--dim2); }
@@ -359,7 +359,7 @@
 .garage .g-load {
   display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; flex: none;
   padding: 7px 10px; background: var(--plate); box-shadow: inset 0 0 0 2px var(--ink), inset 0 2px 0 var(--edge);
-  font-family: var(--head); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.85rem; color: var(--dim);
+  font-family: var(--head); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.92rem; color: var(--dim);
 }
 .garage .g-load-k { display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.18em; }
 .garage .g-load-num { color: var(--txt); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
@@ -389,7 +389,7 @@
 .garage .g-tab {
   position: relative; display: flex !important; flex-direction: column; align-items: center; justify-content: center !important; gap: 2px !important;
   height: 50px; padding: 4px 2px 6px !important; cursor: pointer;
-  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.8rem !important; letter-spacing: 0.12em !important; text-transform: uppercase !important;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.91rem !important; letter-spacing: 0.12em !important; text-transform: uppercase !important;
   color: var(--dim) !important; background: var(--plate2) !important;
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 100%, 0 100%);
 }
@@ -398,7 +398,7 @@
 .garage .g-tab.on { color: var(--amber-ink) !important; background: linear-gradient(180deg, var(--amber2), var(--amber)) !important; }
 .garage .g-tab small {
   position: absolute; top: 4px; right: 12px; min-width: 15px; height: 15px; padding: 0 3px; display: flex; align-items: center; justify-content: center;
-  font-size: 0.7rem; letter-spacing: 0; color: var(--txt); background: var(--ink);
+  font-size: 0.91rem; letter-spacing: 0; color: var(--txt); background: var(--ink);
 }
 .garage .g-tab.on small { color: var(--amber); }
 .garage .g-tab:focus-visible { outline-offset: -4px; outline-color: var(--txt); }
@@ -407,7 +407,7 @@
 .garage .g-baybody { flex: 1 1 auto; min-height: 190px; overflow-y: auto; overscroll-behavior: contain; padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .garage .g-baytools { display: flex; align-items: center; gap: 8px; }
 .garage .g-baytitle { font-family: var(--head); font-weight: 700; font-size: 1rem; letter-spacing: 0.16em; text-transform: uppercase; display: inline-flex; align-items: baseline; gap: 8px; }
-.garage .g-baytitle em { font-style: normal; color: var(--dim); font-size: 0.82rem; letter-spacing: 0.08em; font-weight: 600; }
+.garage .g-baytitle em { font-style: normal; color: var(--dim); font-size: 0.91rem; letter-spacing: 0.08em; font-weight: 600; }
 .garage .g-ftog b { color: var(--amber); margin-left: 2px; }
 .garage .g-ftog.on { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--amber); }
 .garage .g-searchwrap {
@@ -423,7 +423,7 @@
 .garage .g-cat {
   --cat: var(--dim);
   display: inline-flex !important; align-items: center; gap: 6px !important; height: 26px; padding: 0 9px 0 7px !important; cursor: pointer;
-  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.8rem !important; letter-spacing: 0.08em !important; text-transform: uppercase !important;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.91rem !important; letter-spacing: 0.08em !important; text-transform: uppercase !important;
   color: var(--dim) !important; background: var(--plate2) !important; box-shadow: inset 0 0 0 1px var(--ink);
 }
 .garage .g-cat::before { content: ''; width: 6px; height: 12px; background: var(--cat); flex: none; }
@@ -431,13 +431,13 @@
 .garage .g-cat.on { color: var(--txt) !important; background: color-mix(in srgb, var(--cat) 26%, var(--plate2)) !important; box-shadow: inset 0 0 0 1px var(--ink), inset 0 -3px 0 var(--cat); }
 .garage .g-slotnote {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
-  padding: 6px 8px; font-size: 0.85rem; color: var(--dim); background: rgba(255, 178, 30, 0.07); box-shadow: inset 3px 0 0 var(--amber);
+  padding: 6px 8px; font-size: 0.92rem; color: var(--dim); background: rgba(255, 178, 30, 0.07); box-shadow: inset 3px 0 0 var(--amber);
 }
 .garage .g-slotnote b { color: var(--txt); }
-.garage .g-slotnote .g-chip { width: 17px; height: 17px; font-size: 0.72rem; vertical-align: -3px; }
+.garage .g-slotnote .g-chip { width: 17px; height: 17px; font-size: 0.92rem; vertical-align: -3px; }
 .garage .g-rclear {
   display: inline-flex !important; align-items: center; gap: 4px !important; height: 24px; padding: 0 8px !important; cursor: pointer; flex: none;
-  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.76rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.9rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important;
   color: var(--amber) !important; box-shadow: inset 0 0 0 1px var(--amber);
 }
 .garage .g-rclear:hover { background: var(--amber) !important; color: var(--amber-ink) !important; }
@@ -462,27 +462,27 @@
 .garage .g-tile-well .g-chip.mini { position: absolute; right: -3px; bottom: -3px; }
 .garage .g-tile-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .garage .g-tile-name { font-family: var(--head); font-weight: 700; font-size: 0.98rem; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px; line-height: 1.15; }
-.garage .g-tile-sub { font-size: 0.78rem; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.garage .g-tile-sub { font-size: 0.9rem; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .garage .g-tiles.g-wide { grid-template-columns: 1fr; }
 .garage .g-wide .g-tile { align-items: flex-start; padding: 6px 10px 7px 5px !important; }
 .garage .g-wide .g-tile-well { width: 56px; height: 56px; }
 .garage .g-tile-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 1px; }
-.garage .g-tile-desc { font-size: 0.8rem; color: #a9a497; line-height: 1.25; }
+.garage .g-tile-desc { font-size: 0.91rem; color: #a9a497; line-height: 1.25; }
 .garage .g-tile-sub b { color: var(--txt); font-family: var(--head); font-size: 0.92rem; }
 .garage .g-tile-sub.err { color: var(--amber); white-space: normal; line-height: 1.2; }
-.garage .g-tile-sub .g-chips .g-chip { width: 16px; height: 16px; font-size: 0.68rem; }
+.garage .g-tile-sub .g-chips .g-chip { width: 16px; height: 16px; font-size: 0.91rem; }
 .garage .g-tstat { display: inline-flex; gap: 8px; flex-wrap: wrap; }
-.garage .g-tile-cost { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 3px; font-family: var(--head); font-weight: 700; font-size: 0.88rem; color: var(--txt); margin-top: 2px; }
-.garage .g-tile-n { position: absolute; top: 3px; right: 4px; font-family: var(--head); font-weight: 700; font-size: 0.74rem; padding: 0 4px; color: var(--ink); background: var(--teal); }
+.garage .g-tile-cost { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 3px; font-family: var(--head); font-weight: 700; font-size: 0.93rem; color: var(--txt); margin-top: 2px; }
+.garage .g-tile-n { position: absolute; top: 3px; right: 4px; font-family: var(--head); font-weight: 700; font-size: 0.92rem; padding: 0 4px; color: var(--ink); background: var(--teal); }
 .garage .g-tile.sel { background: #1f2c2b !important; box-shadow: inset 0 0 0 2px var(--ink), inset 5px 0 0 var(--teal), inset 0 0 0 3px rgba(53, 214, 191, 0.55); }
-.garage .g-tile.sel::after { content: 'Fitted'; position: absolute; right: 4px; bottom: 3px; font-family: var(--head); font-weight: 700; font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--teal); }
+.garage .g-tile.sel::after { content: 'Fitted'; position: absolute; right: 4px; bottom: 3px; font-family: var(--head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--teal); }
 .garage .g-tile.pin { box-shadow: inset 0 0 0 2px var(--ink), inset 5px 0 0 var(--cat), inset 0 0 0 4px var(--amber) !important; }
 .garage .g-tile.sel.pin { box-shadow: inset 0 0 0 2px var(--ink), inset 5px 0 0 var(--teal), inset 0 0 0 4px var(--amber) !important; }
 .garage .g-tile.mounted { background: #1f2a2a !important; }
 .garage .g-tile.fitsel { background: #262618 !important; }
 .garage .g-tile.nofit { opacity: 0.42; background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.025) 0 5px, transparent 5px 10px), var(--plate) !important; }
 .garage .g-tile.dis { opacity: 0.5; cursor: not-allowed; background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.025) 0 5px, transparent 5px 10px), var(--plate) !important; }
-.garage .g-nomatch { grid-column: 1 / -1; margin: 4px 0; padding: 10px; text-align: center; color: var(--dim); font-size: 0.88rem; box-shadow: inset 0 0 0 1px var(--plate4); }
+.garage .g-nomatch { grid-column: 1 / -1; margin: 4px 0; padding: 10px; text-align: center; color: var(--dim); font-size: 0.93rem; box-shadow: inset 0 0 0 1px var(--plate4); }
 .garage .k-air { color: var(--cyan); }
 .garage .k-static { color: var(--cG); }
 .garage .k-ground { color: #b8c6a0; }
@@ -499,7 +499,7 @@
 }
 .garage .g-inspector[hidden] { display: none; }
 .garage .g-inspector::before { content: ''; display: block; height: 6px; margin: 0 -12px 2px; background: var(--hazard); opacity: 0.7; flex: none; }
-.garage .g-insp-empty { display: flex; flex-direction: column; gap: 4px; padding: 12px 2px; color: var(--dim); font-size: 0.9rem; }
+.garage .g-insp-empty { display: flex; flex-direction: column; gap: 4px; padding: 12px 2px; color: var(--dim); font-size: 0.94rem; }
 .garage .g-insp-empty b { font-family: var(--head); font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--txt); }
 .garage .g-insp-h { --cat: var(--amber); display: flex; gap: 12px; align-items: center; }
 .garage .g-insp-well {
@@ -510,18 +510,18 @@
 .garage .g-insp-t { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .garage .g-insp-t h3 { margin: 0; font-size: 1.45rem; line-height: 1; letter-spacing: 0.06em; }
 .garage .g-insp-sub { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.garage .g-insp-desc { margin: 0; color: #c3beb2; font-size: 0.9rem; line-height: 1.35; }
+.garage .g-insp-desc { margin: 0; color: #c3beb2; font-size: 0.94rem; line-height: 1.35; }
 .garage .g-insp-err { margin: 0; color: var(--amber); font-weight: 600; }
 .garage .g-specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; }
 .garage .g-spec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); min-width: 0; }
 .garage .g-insp-sec > .g-spec, .garage .g-inspector > .g-spec { grid-column: 1 / -1; }
-.garage .g-spec-k { font-family: var(--head); font-weight: 600; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+.garage .g-spec-k { font-family: var(--head); font-weight: 600; font-size: 0.92rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
 .garage .g-spec-v { font-family: var(--head); font-weight: 700; font-size: 0.98rem; text-align: right; display: inline-flex; align-items: center; gap: 5px; justify-content: flex-end; flex-wrap: wrap; min-width: 0; }
 .garage .g-spec-v .g-big { font-size: 1.25rem; color: var(--amber); }
 .garage .g-costv { display: inline-flex; align-items: center; gap: 3px; }
-.garage .g-warnlbl { color: var(--amber); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.garage .g-warnlbl { color: var(--amber); font-size: 0.9rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .garage .g-tgts { display: inline-flex; gap: 6px; }
-.garage .g-tgts span { display: inline-flex; align-items: center; gap: 3px; font-size: 0.82rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.garage .g-tgts span { display: inline-flex; align-items: center; gap: 3px; font-size: 0.91rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .garage .g-tgts .on { color: var(--green); }
 .garage .g-tgts .off { color: var(--dim2); text-decoration: line-through; }
 .garage .g-accm { display: inline-flex; align-items: center; gap: 6px; }
@@ -532,23 +532,23 @@
 .garage .g-accm.lo .g-accm-t span { background: var(--red); }
 .garage .g-fxs { display: flex; flex-wrap: wrap; gap: 4px; }
 .garage .g-fx {
-  font-family: var(--head); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 7px;
+  font-family: var(--head); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 7px;
   color: var(--amber2); background: rgba(255, 178, 30, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 178, 30, 0.35);
 }
 .garage .g-insp-sec { display: flex; flex-direction: column; gap: 5px; }
-.garage .g-sec-l { font-family: var(--head); font-weight: 700; font-size: 0.74rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 8px; }
+.garage .g-sec-l { font-family: var(--head); font-weight: 700; font-size: 0.92rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 8px; }
 .garage .g-sec-l::after { content: ''; flex: 1; height: 2px; background: var(--ink); }
 .garage .g-cmp { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #0f1316; box-shadow: inset 0 0 0 2px var(--ink); }
 .garage .g-cmp-c { display: flex; flex-direction: column; align-items: flex-start; padding: 5px 7px; gap: 0; min-width: 0; }
 .garage .g-cmp-c + .g-cmp-c { box-shadow: inset 2px 0 0 var(--ink); }
-.garage .g-cmp-c > span:first-child { font-family: var(--head); font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+.garage .g-cmp-c > span:first-child { font-family: var(--head); font-size: 0.91rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
 .garage .g-cmp-c b { font-family: var(--head); font-size: 1.05rem; }
 .garage .g-insp-act { display: flex; gap: 8px; align-items: center; }
 .garage .g-current { display: inline-flex; align-items: center; gap: 6px; font-family: var(--head); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); }
 .garage .g-sockbtns { display: flex; flex-wrap: wrap; gap: 4px; }
 .garage .g-sockbtn {
   display: inline-flex !important; align-items: center; gap: 5px !important; height: 30px; padding: 0 9px 0 0 !important; max-width: 100%; cursor: pointer;
-  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.84rem !important; letter-spacing: 0.04em !important; text-transform: uppercase !important;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.92rem !important; letter-spacing: 0.04em !important; text-transform: uppercase !important;
   color: var(--txt) !important; background: var(--plate3) !important; box-shadow: inset 0 0 0 2px var(--ink);
 }
 .garage .g-sockbtn .g-sockno { height: 100%; width: 22px; color: var(--txt); }
@@ -562,25 +562,25 @@
 /* role chips (shared helper) */
 .garage .g-rbar { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 6px; background: #0f1316; box-shadow: inset 0 0 0 2px var(--ink); }
 .garage .g-rchips { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; min-width: 0; }
-.garage .g-rlabel { font-family: var(--head); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); min-width: 36px; flex: none; }
+.garage .g-rlabel { font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); min-width: 36px; flex: none; }
 .garage .g-rchip {
   --rc: var(--amber);
   display: inline-flex !important; align-items: center; gap: 4px !important; height: 24px; padding: 0 7px !important; cursor: pointer; flex: none;
-  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.76rem !important; letter-spacing: 0.06em !important; text-transform: uppercase !important;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.9rem !important; letter-spacing: 0.06em !important; text-transform: uppercase !important;
   color: var(--dim) !important; background: var(--plate2) !important; box-shadow: inset 0 0 0 1px var(--ink);
 }
 .garage .g-rchip .g-ico { color: var(--rc); }
 .garage .g-rchip .g-ico svg { width: 12px; height: 12px; }
 .garage .g-rchip:hover { color: var(--txt) !important; }
 .garage .g-rchip.on { color: var(--txt) !important; background: color-mix(in srgb, var(--rc) 28%, var(--plate2)) !important; box-shadow: inset 0 0 0 1px var(--ink), inset 0 -2px 0 var(--rc); }
-.garage .g-ractive { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.8rem; color: var(--dim); }
+.garage .g-ractive { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.91rem; color: var(--dim); }
 .garage .g-ractive b { color: var(--txt); }
 .garage .g-ractive em { font-style: normal; opacity: 0.8; }
 .garage .g-rtags { display: inline-flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
 .garage .g-rtag {
   --rc: var(--dim);
   display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 6px 0 4px; white-space: nowrap;
-  font-family: var(--head); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--rc); background: rgba(5, 7, 9, 0.6); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rc) 50%, transparent);
 }
 .garage .g-rtag.hit { background: color-mix(in srgb, var(--rc) 25%, transparent); color: var(--txt); }
@@ -589,30 +589,30 @@
 /* ---------- orders / intel tabs ---------- */
 .garage .g-orders { display: flex; flex-direction: column; gap: 8px; }
 .garage .g-orders .sp-head { display: none; }
-.garage .g-note { margin: 0; color: var(--dim); font-size: 0.86rem; line-height: 1.35; }
+.garage .g-note { margin: 0; color: var(--dim); font-size: 0.92rem; line-height: 1.35; }
 .garage .g-orders .orders { padding: 8px 10px 10px; background: var(--plate); box-shadow: inset 0 0 0 2px var(--ink); }
-.garage .g-orders .ord-title { font-family: var(--head); font-weight: 700; font-size: 0.76rem; letter-spacing: 0.2em; color: var(--dim); margin: 6px 0 5px; }
+.garage .g-orders .ord-title { font-family: var(--head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.2em; color: var(--dim); margin: 6px 0 5px; }
 .garage .g-orders .ord-sel { min-height: 32px; border-radius: 0; background: #0a0d10; border: 0; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--plate3); font-family: var(--head); font-weight: 600; font-size: 0.95rem; letter-spacing: 0.04em; padding: 0 8px; }
 .garage .g-orders .chip, .garage .g-orders .seg {
   display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 12px; cursor: pointer;
-  font-family: var(--head); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase;
+  font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--dim); background: var(--plate2); box-shadow: inset 0 0 0 2px var(--ink);
 }
 .garage .g-orders .chip:hover, .garage .g-orders .seg:hover { color: var(--txt); background: var(--plate3); }
 .garage .g-orders .chip.on, .garage .g-orders .seg.on { color: var(--amber-ink); background: var(--amber); }
 .garage .g-orders .sp-segs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; border: 0; border-radius: 0; }
-.garage .g-orders .hold-row { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; font-family: var(--head); font-weight: 700; font-size: 0.76rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+.garage .g-orders .hold-row { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; font-family: var(--head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
 .garage .g-costhead { display: flex; align-items: center; gap: 8px; font-family: var(--head); }
 .garage .g-costhead .g-ico { color: var(--gold); width: 22px; height: 22px; }
 .garage .g-costhead b { font-size: 2rem; line-height: 1; }
-.garage .g-costhead span { color: var(--dim); letter-spacing: 0.14em; text-transform: uppercase; font-size: 0.8rem; font-weight: 600; }
+.garage .g-costhead span { color: var(--dim); letter-spacing: 0.14em; text-transform: uppercase; font-size: 0.91rem; font-weight: 600; }
 .garage .g-cost-bar { display: flex; height: 10px; background: #07090b; box-shadow: inset 0 0 0 1px var(--ink); padding: 2px; gap: 2px; }
 .garage .g-cost-bar .parts { background: #8193a5; }
 .garage .g-cost-bar .power { background: var(--gold); }
 .garage .g-hp-table { display: flex; flex-direction: column; gap: 3px; }
 .garage .g-hp-row { --cat: var(--plate4); display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; background: var(--plate2); box-shadow: inset 0 0 0 2px var(--ink), inset -4px 0 0 var(--cat); }
 .garage .g-hp-n { flex: 1; min-width: 0; font-family: var(--head); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.garage .g-hp-s { color: var(--dim); font-size: 0.82rem; white-space: nowrap; }
+.garage .g-hp-s { color: var(--dim); font-size: 0.91rem; white-space: nowrap; }
 .garage .t-intel .g-insp-sec, .garage .t-orders > * { padding: 2px 0; }
 
 /* ---------- modal ---------- */
@@ -656,7 +656,7 @@
   .garage .g-baybody { overflow: visible; }
   .garage .g-inspector { position: sticky; bottom: 0; z-index: 3; max-height: 46vh; box-shadow: 0 -2px 0 var(--ink), 0 -12px 30px rgba(0, 0, 0, 0.6); }
   .garage .g-tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); position: sticky; top: 0; z-index: 3; }
-  .garage .g-tab-l { font-size: 0.68rem; letter-spacing: 0.04em; }
+  .garage .g-tab-l { font-size: 0.91rem; letter-spacing: 0.04em; }
   .garage .g-tab small { right: 4px; }
   .garage .g-tiles { grid-template-columns: 1fr; }
   .garage .g-namebar { flex-wrap: wrap; }
@@ -680,17 +680,17 @@
 }
 
 /* ================= v2: progressive disclosure, grouped bay, range view ================= */
-.garage { font-size: 15px; }
-.garage .g-gauge-l, .garage .g-spec-k, .garage .g-sec-l, .garage .g-kstat-l { font-size: 0.8rem; letter-spacing: 0.14em; color: var(--dim); }
+.garage { font-size: 16px; }
+.garage .g-gauge-l, .garage .g-spec-k, .garage .g-sec-l, .garage .g-kstat-l { font-size: 0.91rem; letter-spacing: 0.14em; color: var(--dim); }
 .garage .g-gauge { padding: 8px 12px 9px; gap: 1px; }
 .garage .g-gauge-v { font-size: 1.7rem; }
-.garage .g-gauge-v small { font-size: 0.85rem; color: var(--dim); }
-.garage .g-gauge-s { font-size: 0.86rem; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.garage .g-gauge-v small { font-size: 0.92rem; color: var(--dim); }
+.garage .g-gauge-s { font-size: 0.92rem; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .garage .g-readout { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .garage .g-load { font-size: 0.92rem; }
 .garage .g-lslot-name { font-size: 1rem; }
-.garage .g-item-meta { font-size: 0.86rem; }
-.garage .g-tab { font-size: 0.86rem !important; height: 54px; }
+.garage .g-item-meta { font-size: 0.92rem; }
+.garage .g-tab { font-size: 0.92rem !important; height: 54px; }
 .garage .g-tab .g-ico { width: 20px; height: 20px; }
 
 /* stage toolbar */
@@ -706,7 +706,7 @@
 .garage .g-stagebtn.on .g-ico { color: var(--amber-ink); }
 .garage .g-stage.ranges .g-sockets, .garage .g-stage.ranges .g-sock { opacity: 0; pointer-events: none; }
 .garage .g-sockets { transition: opacity 0.2s; }
-.garage .g-stage .g-stage-hint { font-size: 0.9rem; letter-spacing: 0.08em; color: rgba(241, 236, 224, 0.75); }
+.garage .g-stage .g-stage-hint { font-size: 0.94rem; letter-spacing: 0.08em; color: rgba(241, 236, 224, 0.75); }
 .garage .g-stage.ranges .g-stage-hint { display: none; }
 
 /* bay toolbar */
@@ -716,15 +716,15 @@
 .garage .k-seg.g-subtabs { flex: none; align-self: stretch; }
 /* only grow sideways when it shares the toolbar row (hull / drive); in the column it keeps its own height */
 .garage .g-baytools .k-seg.g-subtabs { flex: 1 1 auto; align-self: center; }
-.garage .k-seg.g-subtabs .k-seg-b { padding: 0 8px; font-size: 0.88rem; letter-spacing: 0.06em; min-height: 36px; }
+.garage .k-seg.g-subtabs .k-seg-b { padding: 0 8px; font-size: 0.93rem; letter-spacing: 0.06em; min-height: 36px; }
 .garage .g-gdot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; vertical-align: 2px; background: var(--teal); transform: rotate(45deg); }
 .garage .k-seg-b.on .g-gdot { background: var(--amber-ink); }
-.garage .g-secnote { margin: 0; font-size: 0.88rem; color: var(--dim); }
+.garage .g-secnote { margin: 0; font-size: 0.93rem; color: var(--dim); }
 
 /* category section header */
 .garage .g-sec { --cat: var(--dim); display: flex; flex-direction: column; gap: 1px; margin-top: 6px; padding-left: 10px; box-shadow: inset 4px 0 0 var(--cat); }
 .garage .g-sec-name { font-family: var(--head); font-weight: 700; font-size: 1.08rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--txt); }
-.garage .g-sec-desc { font-size: 0.88rem; color: var(--dim); line-height: 1.3; }
+.garage .g-sec-desc { font-size: 0.93rem; color: var(--dim); line-height: 1.3; }
 
 /* icon-first part tiles */
 .garage .g-ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 5px; }
@@ -740,23 +740,23 @@
   position: relative; width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; flex: none;
   background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.06), transparent 70%), #0b0f13; box-shadow: inset 0 0 0 1px var(--ink), inset 0 3px 8px rgba(0, 0, 0, 0.7);
 }
-.garage .g-ptile-well .g-chip.mini { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; font-size: 0.76rem; }
+.garage .g-ptile-well .g-chip.mini { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; font-size: 0.9rem; }
 .garage .g-ptile-name { font-family: var(--head); font-weight: 700; font-size: 1rem; letter-spacing: 0.03em; line-height: 1.1; color: var(--txt); text-transform: uppercase;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.garage .g-ptile-sub { font-size: 0.84rem; color: var(--dim); margin-top: auto; }
+.garage .g-ptile-sub { font-size: 0.92rem; color: var(--dim); margin-top: auto; }
 .garage .g-ptile.sel { background: #1d2d2b !important; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--teal); }
-.garage .g-ptile.sel::after { content: 'Fitted'; position: absolute; left: 6px; top: 5px; font-family: var(--head); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); }
+.garage .g-ptile.sel::after { content: 'Fitted'; position: absolute; left: 6px; top: 5px; font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); }
 .garage .g-ptile.pin { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--amber), inset 0 -4px 0 var(--cat) !important; }
 .garage .g-ptile.mounted { background: #1d2a29 !important; }
 .garage .g-ptile.fitsel .g-ptile-well { box-shadow: inset 0 0 0 1px var(--ink), 0 0 0 2px rgba(255, 178, 30, 0.6); }
 .garage .g-ptile.nofit { opacity: 0.55; }
 .garage .g-ptile:not(.nofit)[data-fk^="mod-"] { cursor: grab; }
-.garage .g-ptile .g-tile-n { top: 5px; right: 5px; font-size: 0.8rem; }
+.garage .g-ptile .g-tile-n { top: 5px; right: 5px; font-size: 0.91rem; }
 
 /* collapsible tails / disclosure */
 .garage .g-more {
   display: inline-flex !important; align-items: center; gap: 8px !important; align-self: flex-start; padding: 4px 6px !important; cursor: pointer;
-  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.9rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: var(--dim) !important;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.94rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: var(--dim) !important;
 }
 .garage .g-more:hover { color: var(--txt) !important; }
 .garage .g-more-c { color: var(--amber); width: 10px; }
@@ -770,7 +770,7 @@
 .garage .g-kstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 2px; background: var(--ink); padding: 2px; }
 .garage .g-kstat { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; background: #12171b; min-width: 0; }
 .garage .g-kstat-v { font-family: var(--head); font-weight: 700; font-size: 1.5rem; line-height: 1.05; white-space: nowrap; display: flex; align-items: baseline; gap: 3px; }
-.garage .g-kstat-v small { font-size: 0.85rem; color: var(--dim); }
+.garage .g-kstat-v small { font-size: 0.92rem; color: var(--dim); }
 .garage .g-kstat.hl .g-kstat-v { color: var(--amber); }
 .garage .g-kstat.txt .g-kstat-v { font-size: 1.05rem; white-space: normal; text-transform: uppercase; }
 .garage .g-kstat .g-tgts { gap: 8px; }
@@ -779,14 +779,14 @@
 .garage .g-tgts .off { color: var(--dim2); }
 .garage .g-spec-v { font-size: 1.02rem; }
 .garage .g-cmp { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); }
-.garage .g-cmp-c > span:first-child { font-size: 0.74rem; color: var(--dim); }
+.garage .g-cmp-c > span:first-child { font-size: 0.92rem; color: var(--dim); }
 .garage .g-cmp-c b { font-size: 1.15rem; }
-.garage .g-sockbtn { height: 34px; font-size: 0.9rem !important; }
+.garage .g-sockbtn { height: 34px; font-size: 0.94rem !important; }
 .garage .g-sockbtn-l { max-width: 170px; }
 .garage .g-insp-empty { font-size: 0.98rem; }
-.garage .g-fx { font-size: 0.84rem; }
-.garage .g-plate { font-size: 0.86rem; }
-.garage .g-rtag { font-size: 0.76rem; }
+.garage .g-fx { font-size: 0.92rem; }
+.garage .g-plate { font-size: 0.92rem; }
+.garage .g-rtag { font-size: 0.9rem; }
 .garage .g-slotnote { font-size: 0.92rem; }
 .garage .g-errors li { font-size: 1rem; }
 .garage .g-note { font-size: 0.94rem; }
@@ -818,8 +818,8 @@
 
 /* ---- unit class step ---- */
 .garage .g-classes { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px; align-items: stretch; flex: none; }
-.garage .g-classes-k { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 6px; font-family: var(--head); font-weight: 700; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.garage .g-classes-k b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-size: 0.82rem; letter-spacing: 0; }
+.garage .g-classes-k { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 6px; font-family: var(--head); font-weight: 700; font-size: 0.92rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.garage .g-classes-k b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-size: 0.91rem; letter-spacing: 0; }
 .garage .g-class { --dc: var(--amber); display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; text-align: left; background: var(--plate3, rgba(255, 255, 255, 0.04)); color: var(--txt); border: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
 .garage .g-class.d-jet { --dc: var(--cyan); }
 .garage .g-class.d-heli { --dc: #7ee08a; }
@@ -829,7 +829,7 @@
 .garage .g-class-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .garage .g-class-txt b { font-family: var(--head); font-size: 1rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .garage .g-class.on .g-class-txt b { color: var(--dc); }
-.garage .g-class-txt small { font-size: 0.74rem; line-height: 1.25; color: var(--dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.garage .g-class-txt small { font-size: 0.92rem; line-height: 1.25; color: var(--dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .garage .g-tag.dom { color: var(--amber); }
 .garage .g-tag.dom.d-jet { color: var(--cyan); }
 .garage .g-tag.dom.d-heli { color: #7ee08a; }
@@ -848,6 +848,6 @@
   color: var(--txt) !important; background: var(--plate2) !important;
 }
 .garage .g-zoombtn:hover { background: var(--plate3) !important; color: var(--amber) !important; }
-.garage .g-zoomlbl { min-width: 38px; text-align: center; font-family: var(--head); font-weight: 700; font-size: 0.9rem; color: var(--dim); }
+.garage .g-zoomlbl { min-width: 38px; text-align: center; font-family: var(--head); font-weight: 700; font-size: 0.94rem; color: var(--dim); }
 .garage .g-stage { cursor: grab; }
 .garage .g-stage.panning { cursor: grabbing; }
