@@ -323,3 +323,46 @@ export function validateDesign(d: Design): string[] {
 }
 
 export const isValidDesign = (d: Design) => validateDesign(d).length === 0;
+
+/** Effective range (cells, after range bonuses) a kiting-by-default design's main guns must reach: clearly past the
+ *  typical frontline guns (autocannons 7.5, cannons 9) so kiting actually keeps it out of their reach. */
+export const DEFAULT_KITE_RANGE = 10;
+/** Shortest effective range at which focus fire is on by default (shotguns / flamers / sonic stay off). */
+export const DEFAULT_FOCUS_RANGE = 5;
+
+export interface DefaultOrders { kite: boolean; focus: boolean }
+const defaultOrdersCache = new Map<string, DefaultOrders>();
+
+/** Battle orders a design gets when its placement (and Design.behavior) leave them unset. Shared by the sim, client
+ *  and AI so all agree; an explicit true/false on a placement always wins.
+ *  - kite: mobile ground units (not static, not flying, not giant/titan hulls, which are the front line), no melee
+ *    weapons, whose long guns (effective range >= DEFAULT_KITE_RANGE) carry at least half the design's weapon dps:
+ *    artillery, snipers, missile carriers, long-range skirmishers. Not brawlers, flamers, or tanks whose main guns
+ *    are frontline-range.
+ *  - focus: any design with a ranged weapon of effective range >= DEFAULT_FOCUS_RANGE. */
+export function defaultOrders(d: Design | undefined): DefaultOrders {
+  if (!d || !Array.isArray(d.mounts)) return { kite: false, focus: false };
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.join(',')}`;
+  const hit = defaultOrdersCache.get(key);
+  if (hit) return hit;
+  let out: DefaultOrders = { kite: false, focus: false };
+  try {
+    const s = computeStats(d);
+    let melee = false, total = 0, longDps = 0, longest = 0;
+    for (const m of designModules(d)) {
+      if (m.kind !== 'weapon') continue;
+      const dps = weaponDps(m);
+      total += dps;
+      if (m.projectile === 'melee') { melee = true; continue; }
+      const r = (m.range ?? 0) * s.rangeMult;
+      longest = Math.max(longest, r);
+      if (r >= DEFAULT_KITE_RANGE) longDps += dps;
+    }
+    out = {
+      kite: !s.isStatic && !s.flying && s.size < 4 && !melee && longDps > 0 && longDps >= 0.5 * total,
+      focus: longest >= DEFAULT_FOCUS_RANGE,
+    };
+  } catch { /* unknown parts: no defaults */ }
+  defaultOrdersCache.set(key, out);
+  return out;
+}

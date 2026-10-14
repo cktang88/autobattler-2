@@ -6,7 +6,7 @@
 
 import { CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, mountOffsets } from '../mountgeo.ts';
-import { computeStats, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -246,8 +246,8 @@ interface Internal {
   prio: TargetPriority;
   hold: boolean;
   kite: boolean;
-  /** weapon range the kiting distances are measured from */
-  kiteRange: number;
+  /** mount index of the weapon the kiting distances are measured from (-1: none) */
+  kiteMi: number;
   focus: boolean;
   stance: Stance;
   /** movement is gated until this tick */
@@ -293,10 +293,15 @@ interface Smoke {
   t: number;
 }
 
-/** Range a kiting unit keeps to: the chosen mount's (non-melee, armed) weapon, else the longest range. */
-function kiteRangeOf(wpns: (Wpn | null)[], mount: number, fallback: number): number {
-  const w = Number.isInteger(mount) && mount >= 0 ? wpns[mount] : null;
-  return w && w.heal <= 0 && !w.melee && w.range > 0 ? w.range : fallback;
+/** A ranged (non-melee, armed) weapon a kiting unit can measure its distance from. */
+const kiteable = (w: Wpn | null): w is Wpn => !!w && w.heal <= 0 && !w.melee && w.range > 0 && (w.hitG || w.hitA);
+
+/** Mount a kiting unit keeps its distance from: the chosen mount's ranged weapon, else the longest-ranged one. */
+function kiteMountOf(wpns: (Wpn | null)[], mount: number): number {
+  if (Number.isInteger(mount) && mount >= 0 && kiteable(wpns[mount] ?? null)) return mount;
+  let best = -1;
+  for (let i = 0; i < wpns.length; i++) if (kiteable(wpns[i]) && (best < 0 || wpns[i]!.range > wpns[best]!.range)) best = i;
+  return best;
 }
 
 /** Damage class of a weapon for reactive armor / energy resist. */
@@ -452,9 +457,11 @@ export class Battle {
         const prio: TargetPriority = p.target && TARGET_PRIORITIES.includes(p.target) ? p.target : 'closest';
         const stance: Stance = p.stance && STANCES.includes(p.stance) ? p.stance : 'advance';
         const delay = p.delay !== undefined && (START_DELAYS as readonly number[]).includes(p.delay) ? p.delay : 0;
+        // kite / focus left unset on the placement: the design's defaults (shared with client + AI)
+        const defs = defaultOrders(d);
         for (const c of cs) {
           this.blockUnits[block].push(this.units.length);
-          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: !!p.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: !!p.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
+          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: typeof p.kite === 'boolean' ? p.kite : defs.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: typeof p.focus === 'boolean' ? p.focus : defs.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
         }
       }
     }
@@ -593,7 +600,7 @@ export class Battle {
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
       blastDmg: blastDmg * lm, blastR, blastModule, blocker: !hasWeapon && !hasHeal,
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
-      prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteRange: kiteRangeOf(wpns, cfg.kiteMount, maxRange), focus: cfg.focus, stance: cfg.stance,
+      prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
       escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
@@ -1722,6 +1729,18 @@ export class Battle {
     if (goal) {
       const dx = goal.x - u.x, dy = goal.y - u.y;
       const d = Math.sqrt(dx * dx + dy * dy);
+      // kiting: how far the kite gun's muzzle reaches into its own range of the goal (1 = right at the edge).
+      // [mount origins] measured from the kite mount as it sits with the hull facing the goal (the pose the unit
+      // advances and parks in), so it doesn't depend on which way the hull happens to point right now. Only our own
+      // weapon's range counts: an enemy that outranges us is closed on until we can shoot it, never run from.
+      let kiteR = Infinity, kiteMi = -1;
+      if (kiteOn && !I.meleeOnly) {
+        kiteMi = this.kiteMount(I, goal);
+        if (kiteMi >= 0) {
+          const w = I.wpns[kiteMi]!, c = dx / Math.max(d, 1e-6), s = dy / Math.max(d, 1e-6);
+          kiteR = this.edgeC(this.ints[goal.id], u.x + c * w.ox - s * w.oy, u.y + s * w.ox + c * w.oy) / w.range;
+        }
+      }
       if (I.blocker) {
         // wall: march into the nearest enemy and body-block it (straight-ish advance while far)
         const lw = clamp(1 - (d - 4) / 8, 0.3, 1);
@@ -1736,7 +1755,7 @@ export class Battle {
         stopDist = 0.6;
         // close enough to the ally already: don't shove it around
         if (this.gap(I, this.ints[goal.id]) <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
-      } else if (kiteOn && !I.meleeOnly && this.edgeC(this.ints[goal.id], u.x, u.y) < 0.7 * I.kiteRange) {
+      } else if (kiteR < 0.7) {
         // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
         if (!I.fireOnMove && I.wpns.some((w, wi) => w && w.heal <= 0 && u.mounts[wi].cooldown <= 0.15 && u.mounts[wi].target >= 0)) return;
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
@@ -1786,7 +1805,13 @@ export class Battle {
         gy = u.y + hy;
         stopDist = 0;
         if (charge) wantMove = I.meleeOnly || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
-        else if (kiteOn && !I.meleeOnly && this.edgeC(this.ints[goal.id], u.x, u.y) <= 0.9 * I.kiteRange) wantMove = false;
+        else if (kiteR <= 0.9) {
+          // kiting: parked at our range edge. If the kite gun still has nothing to shoot (the hull came to rest
+          // turned away, e.g. after backing off, leaving the mount out of reach) swing the hull back to face the goal.
+          if (u.mounts[kiteMi].target < 0 && u.stun <= 0) u.angle = turnToward(u.angle, Math.atan2(dy, dx), I.turn * DT);
+          else this.faceTarget(I);
+          return;
+        }
         else if (engaged && !I.meleeOnly) wantMove = false; // includes fire-on-move units: hold at range, don't bum-rush
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
         else if (I.fireOnMove && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
@@ -1807,6 +1832,20 @@ export class Battle {
     }
 
     this.steer(I, gx, gy, stopDist, goal ? goal.id : -1);
+  }
+
+  /** Kite mount for this goal: the unit's kite mount if it can hit the goal, else its longest-ranged weapon that can
+   *  (-1: nothing ranged can hit it, so no kiting against this goal). */
+  private kiteMount(I: Internal, goal: SimUnit): number {
+    const k = I.kiteMi;
+    if (k < 0) return -1;
+    if (this.canHit(I.wpns[k]!, goal)) return k;
+    let best = -1;
+    for (let i = 0; i < I.wpns.length; i++) {
+      const w = I.wpns[i];
+      if (kiteable(w) && this.canHit(w, goal) && (best < 0 || w.range > I.wpns[best]!.range)) best = i;
+    }
+    return best;
   }
 
   /** While parked, the turrets do the aiming and the hull stays put. The exception is a gun whose traverse is slower

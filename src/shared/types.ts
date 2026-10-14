@@ -289,11 +289,12 @@ export interface Placement {
   target?: TargetPriority;
   /** squads: keep the deployed spacing while moving/fighting (true) or close in freely (false/absent). Hidden like `target`. */
   hold?: boolean;
-  /** stay at max weapon range, backing away from enemies that close in. Hidden like `target`. */
+  /** keep to the edge of own weapon range: close in until in range, back away from enemies that come closer.
+   *  Unset = the design's default (defaultOrders in stats.ts). Hidden like `target`. */
   kite?: boolean;
   /** mount index (into design.mounts) whose range kiting keeps to; absent/invalid = the longest-range weapon */
   kiteMount?: number;
-  /** prefer the target nearby allies are already shooting (combined with `target`) */
+  /** prefer the target nearby allies are already shooting (combined with `target`). Unset = the design's default. */
   focus?: boolean;
   stance?: Stance;
   /** seconds to wait before moving (one of START_DELAYS); weapons still fire at anything in range */
