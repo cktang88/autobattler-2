@@ -1001,6 +1001,21 @@ test('kite: a disarmed kiter keeps backing off instead of waiting to fire a gun 
   assert.ok(Math.hypot(k.x - e.x, k.y - e.y) > 8, `disarmed kiter stayed at ${Math.hypot(k.x - e.x, k.y - e.y).toFixed(2)}`);
 });
 
+test('hold: outer squad members whose formation slot lies beyond their range still close in and fire', () => {
+  // a spaced-out (22 cells wide) mg squad on hold vs one emplacement: the outer half parked at their slots around the
+  // target, 6-9 cells out with 5.5-cell guns, and never fired
+  const fort = D('flakfort', 'bastion', 'anchor', ['flak', 'plateH', 'plateM']); // air-only gun: can't shoot back
+  assert.deepEqual(validateDesign(fort), []);
+  const designs = [DESIGNS.find((d) => d.id === 'buggy')!, fort];
+  const b = new SimBattle({ seed: 2, sides: [
+    { designs, units: [{ uid: 1, designId: 'buggy', x: 37, y: 0, level: 1, round: 1, spacing: 2, hold: true, kite: false }] },
+    { designs, units: [{ uid: 1, designId: 'flakfort', x: 46, y: 0, level: 3, round: 1 }] },
+  ] });
+  const fired = new Set<number>();
+  for (let i = 0; i < 20 * 45 && !b.done; i++) { b.step(); for (const e of b.events) if (e.t === 'fire' && b.units[e.unit].side === 0) fired.add(e.unit); }
+  assert.equal(fired.size, 16, `${fired.size}/16 squad members ever fired`);
+});
+
 test('fire-on-move units close to the range of the guns that can hit the goal, not an air-only long gun', () => {
   // titan legs fire on the move; the 18-cell flak fortress is air-only. It used to park ~12 cells from a ground target,
   // out of reach of every gun that could hit it, for the rest of the battle.

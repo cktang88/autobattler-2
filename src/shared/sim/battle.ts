@@ -1857,9 +1857,12 @@ export class Battle {
         const lw = clamp(1 - (d - engageR - 2) / 8, 0.3, 1);
         let hx = dx, hy = dy;
         if (I.hold && this.anchorN[I.block] > 0) {
-          // formation: aim at our slot around the goal, pulled toward our slot around the squad's anchor
-          hx += I.offx + 0.6 * (this.anchorX[I.block] + I.offx - u.x);
-          hy += I.offy + 0.6 * (this.anchorY[I.block] + I.offy - u.y);
+          // formation: aim at our slot around the goal, pulled toward our slot around the squad's anchor. The pull
+          // fades out as we close to our own weapon range: an outer member's slot can lie farther from the goal than
+          // its guns reach, and it used to park there for good (squadmate spacing is still kept by separation).
+          const kf = clamp((d - engageR) / (Math.hypot(I.offx, I.offy) + 1), 0, 1);
+          hx += kf * (I.offx + 0.6 * (this.anchorX[I.block] + I.offx - u.x));
+          hy += kf * (I.offy + 0.6 * (this.anchorY[I.block] + I.offy - u.y));
         }
         gx = u.x + hx * lw;
         gy = u.y + hy;
