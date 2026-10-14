@@ -14,6 +14,7 @@ import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, d
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
 import { FOOT, footDetails, footHullPath, footMobility, footUnderlay } from './footart.ts';
 import { drawSuperstructure, drawTurretSeats, type SuperIn } from './superstructure.ts';
+import { CLASS_RANK, sizeKey, slotD, weaponD } from './weaponsize.ts';
 import { GIANT_SHAPES, emis, drawBarbette, drawGiantFx, drawGravlift, drawMegatracks, drawTitanLegs, giantHullDetails, giantHullPath, giantTopLayer } from './giantart.ts';
 
 type Shape = ChassisDef['shape'];
@@ -24,8 +25,10 @@ export interface MountSlot {
   y: number;
   slot: MountClass;
   mod: ModuleDef | null;
-  /** turret base diameter, cells */
+  /** turret base diameter, cells: sized to the module mounted (weapon class + calibre), not the slot */
   d: number;
+  /** armoured socket diameter of the hardpoint itself (slot class), cells */
+  sd: number;
   /** turret sprite drawn (false for armor plates / empty) */
   turret: boolean;
 }
@@ -185,7 +188,7 @@ function scaleMounts(mounts: MountSlot[], S: number): number {
       if (!m.turret || m.mod?.kind !== 'weapon' || Math.abs(m.y) > 0.08 * S || RANK[m.mod.mount] < top) continue;
       if (main < 0 || m.d > mounts[main].d) main = i;
     }
-    if (main >= 0) mounts[main].d *= S >= 3 ? 1.25 : 1.1;
+    if (main >= 0) mounts[main].d *= S >= 3 ? 1.1 : 1.06;
   }
   for (let i = 0; i < mounts.length; i++) for (let j = i + 1; j < mounts.length; j++) {
     const a = mounts[i], b = mounts[j];
@@ -198,9 +201,26 @@ function scaleMounts(mounts: MountSlot[], S: number): number {
   return main;
 }
 
-const CLASS_D: Record<MountClass, number> = { L: 0.36, M: 0.5, H: 0.64, G: 0.95, T: 1.1 };
-/** Turret base diameters (cells) on giant/titan hulls: big guns, but sized like real turrets on a huge hull. */
-const GIANT_D: Record<MountClass, number> = { L: 0.4, M: 0.52, H: 0.68, G: 0.86, T: 1.14 };
+/** Unit-size factor on turret diameters: a bigger hull carries a slightly bigger mount for the same weapon. */
+const unitK = (S: number) => (S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1));
+/** Per-chassis slender-body scale, compressed so it can never flip the weapon-class ordering across chassis
+ *  (class bands are >= 11% apart; the compressed scale moves a turret by at most ~9%). */
+const chassisK = (ms: number) => 1 - (1 - ms) * 0.3;
+
+/** Strict visual ordering on one unit: a weapon of a higher class (or higher calibre in the same class) is always
+ *  drawn larger than a lower one, whatever per-hardpoint scaling, main-gun emphasis or overlap clearing did. */
+function enforceOrder(mounts: MountSlot[]): void {
+  const ts = mounts.filter((m) => m.turret && m.mod).map((m) => ({ m, k: sizeKey(m.mod!, CLASS_RANK[m.mod!.mount] > CLASS_RANK[m.slot] && m.mod!.kind !== 'weapon' ? m.slot : m.mod!.mount) }));
+  ts.sort((a, b) => b.k - a.k);
+  for (let i = 1; i < ts.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const hi = ts[j], lo = ts[i];
+      if (hi.k - lo.k < 1e-6) { if (hi.m.mod === lo.m.mod) hi.m.d = lo.m.d = Math.min(hi.m.d, lo.m.d); continue; }
+      const step = Math.floor(hi.k) > Math.floor(lo.k) ? 1.1 : 1.03;
+      if (lo.m.d * step > hi.m.d) lo.m.d = hi.m.d / step;
+    }
+  }
+}
 
 const layoutCache = new Map<string, UnitLayout>();
 export const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
@@ -237,13 +257,14 @@ export function layoutOf(d: Design): UnitLayout {
     // utilities are sized to the hardpoint they were moved to; weapons always fit theirs
     let cls = mod?.mount ?? slot;
     if (mod && mod.kind !== 'weapon' && RANK[cls] > RANK[cap]) cls = cap;
-    const cal = mod?.caliber ?? 0.5;
     const p = pts[j] ?? [0, 0];
-    const dd = S >= 4 ? GIANT_D[cls] * (0.88 + 0.12 * cal) * (S >= 5 ? 1.06 : 1) : CLASS_D[cls] * (0.8 + 0.4 * cal) * (1 + 0.12 * (S - 1));
-    const ms = F?.scale ? (F.scale[j] ?? F.scale[0]) : MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1;
-    return { x: p[0] * X, y: p[1] * Y, slot, mod, d: dd * ms, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
+    const ms = chassisK(F?.scale ? (F.scale[j] ?? F.scale[0]) : MOUNT_SCALE_I[chassis.id]?.[j] ?? MOUNT_SCALE[chassis.id] ?? 1);
+    const k = unitK(S) * ms;
+    const dd = (mod ? weaponD(mod, cls) : slotD(cap)) * k;
+    return { x: p[0] * X, y: p[1] * Y, slot: cap, mod, d: dd, sd: slotD(cap) * k, turret: !!mod && mod.kind !== 'armor' && mod.visual !== 'plate' };
   });
   const main = PART_SHAPES.has(shape) ? -1 : scaleMounts(mounts, S);
+  enforceOrder(mounts);
   const air = mob.kind === 'air';
   // running gear is sized to what it carries: heavier / overloaded builds get more rotors, engines, axles
   let load = 0.7;
@@ -1077,8 +1098,11 @@ export interface UnitSprites {
   hull: HTMLCanvasElement;
   mob: (HTMLCanvasElement | undefined)[];
   rest: HTMLCanvasElement;
+  /** crisp, hard-edged black silhouette (ground drop shadow) */
   shadow: HTMLCanvasElement;
-  /** dark outline + team rim + soft glow, drawn under the unit */
+  /** blurred version of the shadow, built on first use (flyers and airborne leapers only) */
+  soft?: HTMLCanvasElement;
+  /** dark outline + crisp team rim line, drawn under the unit (no glow) */
   halo: HTMLCanvasElement;
   haloExt: number;
   sil: Map<string, HTMLCanvasElement>;
@@ -1106,8 +1130,9 @@ function beginSprite(px: number, ext: number): { c: HTMLCanvasElement; g: Ctx } 
   return { c, g };
 }
 
-/** Outline width in cells: thick enough to read at small sizes. */
-const outlineW = (px: number, S: number) => Math.max(1.3 / px, 0.03 * Math.min(S, 2));
+/** Outline width in cells: a thin proportional line at close zoom, never below ~1.1 device px so it stays legible
+ *  when the whole field is visible (sprite px ~ screen px). */
+const outlineW = (px: number, S: number) => Math.max(1.1 / px, 0.0055 * Math.min(S, 2.5));
 
 export function unitSprites(design: Design, team: Team, px: number): UnitSprites {
   px = Math.max(4, Math.round(px));
@@ -1154,12 +1179,15 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   }
   // turret rings let into the hull under every turret (they read as seated, not stuck on)
   if (L.S < 4) for (const [mi, m] of L.mounts.entries()) if (m.turret && !riding.has(mi)) {
+    // a smaller weapon in a bigger hardpoint: the slot's armoured socket shows around an adapter plate
+    if (m.sd > m.d * 1.08) adapterPlate(hull.g, m.x, m.y, m.sd * 0.5, m.d * 0.5, pal, o);
     dotAt(hull.g, m.x, m.y, m.d * 0.5, 'rgba(0,0,0,0.5)');
     hull.g.strokeStyle = METAL.light; hull.g.lineWidth = o * 0.7;
     hull.g.beginPath(); hull.g.arc(m.x, m.y, m.d * 0.47, Math.PI * 0.8, Math.PI * 1.75); hull.g.stroke();
   }
   // empty mount sockets
   if (L.S >= 4) {
+    for (const m of L.mounts) if (m.turret && m.sd > m.d * 1.08) adapterPlate(hull.g, m.x, m.y, m.sd * 0.5, m.d * 0.6, pal, o);
     for (const m of L.mounts) if (m.turret || !m.mod) drawBarbette(hull.g, m.x, m.y, m.d * (m.turret ? 0.6 : 0.42), pal, o, !m.mod);
   } else for (const [mi, m] of L.mounts.entries()) if (!m.mod && !riding.has(mi)) armoredCap(hull.g, m.x, m.y, m.d * 0.34, pal, o);
   let top: HTMLCanvasElement | undefined;
@@ -1175,10 +1203,9 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
     drawAnchorPlate(a.g, L, pal, o);
     anchor = a.c;
   }
-  // shadow: union of mobility + hull silhouettes, darkened & blurred
+  // shadow: union of mobility + hull silhouettes, flat black with a hard edge (flyers blur it on demand: softShadow)
   const sh = beginSprite(px, ext);
   sh.g.setTransform(1, 0, 0, 1, 0, 0);
-  sh.g.filter = `blur(${Math.max(1, px * 0.04 * L.S)}px)`;
   // parts (sprite + sockets for empty mounts riding them)
   const parts: UnitSprites['parts'] = pdefs.map((d, j) => {
     const sp = beginSprite(px, d.ext);
@@ -1203,7 +1230,6 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   sh.g.drawImage(hull.c, 0, 0);
   if (top) sh.g.drawImage(top, 0, 0);
   for (let j = 0; j < parts.length; j++) stampPart(sh.g, parts[j].c, parts[j].ext, restX[j], px, sh.c.width);
-  sh.g.filter = 'none';
   sh.g.globalCompositeOperation = 'source-in';
   sh.g.fillStyle = '#000';
   sh.g.fillRect(0, 0, sh.c.width, sh.c.height);
@@ -1214,6 +1240,29 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   s.haloExt = hl.ext;
   spriteCache.set(key, s);
   return s;
+}
+
+/** Slot-class armoured socket (octagon, R) with a recessed adapter plate stepping down to a smaller weapon ring (r). */
+function adapterPlate(g: Ctx, x: number, y: number, R: number, r: number, pal: TeamPal, o: number): void {
+  const oct = (rad: number) => {
+    const p = new Path2D();
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; p.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad); }
+    p.closePath();
+    return p;
+  };
+  const p = oct(R);
+  g.fillStyle = METAL.dark; g.fill(p);
+  g.lineWidth = o; g.strokeStyle = OUTLINE; g.stroke(p);
+  // hard-edged inner bevel: lit upper-left lip, shadowed lower-right lip
+  g.save(); g.clip(p);
+  g.fillStyle = 'rgba(0,0,0,0.35)'; g.fill(oct(R * 0.86));
+  g.restore();
+  const q = oct((R + r) / 2);
+  g.fillStyle = METAL.base; g.fill(q);
+  g.lineWidth = o * 0.7; g.strokeStyle = OUTLINE; g.stroke(q);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; dotAt(g, x + Math.cos(a) * (R + r) * 0.47, y + Math.sin(a) * (R + r) * 0.47, Math.max(o * 0.6, (R - r) * 0.08), 'rgba(0,0,0,0.6)'); }
+  g.strokeStyle = rgba(pal.accent, 0.55); g.lineWidth = o * 0.6;
+  g.beginPath(); g.arc(x, y, R * 0.93, Math.PI * 0.9, Math.PI * 1.6); g.stroke();
 }
 
 /** Armoured blanking cap over an empty mount: octagonal plate, bolts, team-trim ring. */
@@ -1232,8 +1281,9 @@ function armoredCap(g: Ctx, x: number, y: number, r: number, pal: TeamPal, o: nu
   dotAt(g, x, y, r * 0.22, METAL.dark);
 }
 
-/** Dark outline + bright team rim + soft underglow around the whole unit silhouette. Widths are in device px
- *  (sprite px is ~screen px) so they stay legible when the whole field is visible. */
+/** Dark outline + a crisp team-coloured rim line just outside it, around the whole unit silhouette. No blur: team
+ *  identity is a thin hard edge (plus the small team markers at far zoom), never a glow. Widths are in device px (sprite
+ *  px ~ screen px), so the lines keep a minimum on-screen width at fit zoom and stay thin at close zoom. */
 function buildHalo(src: HTMLCanvasElement, sext: number, px: number, pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
   const tint = new Map<string, HTMLCanvasElement>();
   const solid = (col: string) => {
@@ -1248,12 +1298,9 @@ function buildHalo(src: HTMLCanvasElement, sext: number, px: number, pal: TeamPa
     tint.set(col, t);
     return t;
   };
-  // close zoom: the detail carries the unit, so the team rim thins and the underglow fades (fit zoom keeps it strong)
-  const kz = clamp((px - 16) / 28, 0, 1);
-  const ow = clamp(px * 0.035, 1, 2.4); // dark outline
-  const rw = clamp(px * 0.07, 1.5, 3.4) * (1 - 0.35 * kz); // team rim
-  const gw = clamp(px * 0.18, 3, 9) * (1 - 0.3 * kz); // glow reach
-  const pad = ow + rw + gw + 2;
+  const ow = clamp(px * 0.012, 1, 1.6); // dark outline
+  const rw = clamp(px * 0.03, 1.5, 2.4); // team rim
+  const pad = ow + rw + 2;
   const ext = sext + pad / px;
   const size = Math.ceil(2 * ext * px);
   const c = makeCanvas(size, size);
@@ -1266,20 +1313,29 @@ function buildHalo(src: HTMLCanvasElement, sext: number, px: number, pal: TeamPa
       g.drawImage(sil, off + Math.cos(a) * r, off + Math.sin(a) * r);
     }
   };
-  // soft glow
-  g.filter = `blur(${gw * 0.45}px)`;
-  g.globalAlpha = 0.4 - 0.22 * kz;
-  stamp(pal.rim, ow + rw, 12);
-  g.filter = 'none';
-  g.globalAlpha = 1 - 0.3 * kz;
-  // rim ring
-  stamp(pal.rim, ow + rw, 20);
+  // rim ring (filled band from the outline out to ow + rw)
+  stamp(pal.rim, ow + rw, 24);
   stamp(pal.rim, ow + rw * 0.5, 16);
-  g.globalAlpha = 1;
   // dark outline directly around the unit
   stamp(OUTLINE, ow, 16);
   g.drawImage(solid(OUTLINE), off, off);
+  // harden the antialiased fringe: anything faint is dropped, the rest made opaque (keeps the rim a crisp line)
+  const id = g.getImageData(0, 0, size, size), d = id.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] < 70 ? 0 : 255;
+  g.putImageData(id, 0, 0);
   return { c, ext };
+}
+
+/** Blurred shadow for flyers / airborne leapers: the only blurred shadow in the game (cached per sprite set). */
+function softShadow(s: UnitSprites, S: number): HTMLCanvasElement {
+  if (s.soft) return s.soft;
+  const c = makeCanvas(s.shadow.width, s.shadow.height);
+  const g = ctx2d(c);
+  g.filter = `blur(${Math.max(1, s.px * 0.05 * Math.min(S, 3))}px)`;
+  g.drawImage(s.shadow, 0, 0);
+  g.filter = 'none';
+  s.soft = c;
+  return c;
 }
 
 /** Draw a part sprite into a pixel-space canvas of the unit sprite (size x size, centred) at transform xf. */
@@ -1392,8 +1448,8 @@ export function turretSprite(m: ModuleDef, team: Team, d: number, px: number, ki
   if (turretCache.size > 1200) turretCache.clear();
   const ext = TURRET_EXT * dq;
   const sp = beginSprite(px, ext);
-  const o = Math.max(1.25 / px, dq * 0.08);
-  // soft contact shadow under the turret
+  const o = Math.max(1 / px, dq * 0.045);
+  // hard-edged contact shadow under the turret
   sp.g.fillStyle = 'rgba(0,0,0,0.35)';
   sp.g.beginPath();
   sp.g.arc(dq * 0.06, dq * 0.08, dq * 0.5, 0, Math.PI * 2);
@@ -1406,7 +1462,7 @@ export function turretSprite(m: ModuleDef, team: Team, d: number, px: number, ki
 }
 
 const shadowCache = new Map<string, HTMLCanvasElement>();
-/** Blurred black silhouette of a turret sprite (cast shadow). */
+/** Crisp black silhouette of a turret sprite (hard-edged cast shadow onto the hull). */
 export function turretShadow(m: ModuleDef, team: Team, d: number, px: number, kit = 0): HTMLCanvasElement {
   const src = turretSprite(m, team, d, px, kit);
   const key = `${m.id}|${team}|${Math.round(d * 100)}|${Math.max(4, Math.round(px))}|${kit}`;
@@ -1415,9 +1471,7 @@ export function turretShadow(m: ModuleDef, team: Team, d: number, px: number, ki
   if (shadowCache.size > 1200) shadowCache.clear();
   c = makeCanvas(src.width, src.height);
   const g = ctx2d(c);
-  g.filter = `blur(${Math.max(1, Math.round(px * d * 0.05))}px)`;
   g.drawImage(src, 0, 0);
-  g.filter = 'none';
   g.globalCompositeOperation = 'source-in';
   g.fillStyle = '#000';
   g.fillRect(0, 0, c.width, c.height);
@@ -1527,18 +1581,31 @@ export function altitudeOf(p: UnitPose, L: UnitLayout): number {
   return 0;
 }
 
+/** One shadow language: ground units (incl. hover, walkers, emplacements) cast a single crisp, hard-edged drop
+ *  shadow offset a little down-right along the world light; flyers (and leapers while airborne) cast a soft, faint,
+ *  light shadow pushed out by altitude - the only blurred shadow anywhere. */
 export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAULT_DIRS): void {
   const L = layoutOf(p.design);
   const s = unitSprites(p.design, p.team, px);
   const alt = altitudeOf(p, L);
+  const ang = L.mob.id === 'anchor' && L.X === L.Y ? 0 : p.angle;
+  const flying = L.air || !!p.flying;
+  const leap = p.leap ?? 0;
+  if (flying || leap > 0.02) {
+    const off = 0.06 * L.S + alt * 0.75;
+    const a = flying ? (L.S >= 4 ? 0.3 : L.S >= 3 ? 0.26 : 0.22) : 0.3 - leap * 0.1;
+    g.globalAlpha = (p.alpha ?? 1) * a;
+    const sc = flying ? (L.S >= 4 ? 0.97 : 0.88) : 1 - leap * 0.15;
+    blit(g, softShadow(s, L.S), p.x + dirs.sx * off, p.y + dirs.sy * off, ang, s.ext, sc);
+    g.globalAlpha = 1;
+    return;
+  }
   // load: overloaded designs squat low on strained suspension (tight shadow), light ones ride high
   const lp = profileOf(p.design, L).load;
   const liftK = lp > 1 ? Math.max(0.55, 1 - (lp - 1) * 1.2) : lp < 0.6 ? 1.3 : 1;
-  const off = 0.09 * L.S * liftK + alt * 0.75;
-  const a = (p.alpha ?? 1) * (L.air || p.flying ? (L.S >= 4 ? 0.62 : L.S >= 3 ? 0.5 : 0.38) : p.leap ? 0.55 - p.leap * 0.15 : L.S >= 4 ? 0.72 : 0.62);
-  g.globalAlpha = a;
-  const sc = L.air || p.flying ? (L.S >= 4 ? 0.97 : 0.85) : 1 - (p.leap ?? 0) * 0.15;
-  blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, L.mob.id === 'anchor' && L.X === L.Y ? 0 : p.angle, s.ext, sc);
+  const off = Math.min(0.16, 0.05 * Math.min(L.S, 3) * liftK) + alt * 0.75;
+  g.globalAlpha = (p.alpha ?? 1) * (L.S >= 4 ? 0.42 : 0.36);
+  blit(g, s.shadow, p.x + dirs.sx * off, p.y + dirs.sy * off, ang, s.ext, 1);
   g.globalAlpha = 1;
 }
 
@@ -1630,23 +1697,13 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   else if (p.cloak === 'enemy') alpha *= 0.06 + 0.05 * Math.max(0, Math.sin(p.time * 3.3 + (p.seed ?? 0)));
   g.globalAlpha = alpha;
 
-  // hover glow beneath
+  // hover fan wash: an actual light source (lift-fan exhaust), kept small and faint
   if (L.mob.id === 'hover') {
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = alpha * (0.45 + 0.1 * Math.sin(p.time * 9 + (p.seed ?? 0)));
-    const r = 0.5 * L.D;
+    g.globalAlpha = alpha * (0.22 + 0.06 * Math.sin(p.time * 9 + (p.seed ?? 0)));
+    const r = 0.42 * L.D;
     g.drawImage(softDot(pal.glow), p.x - r, p.y - r, r * 2, r * 2);
-    g.globalCompositeOperation = prev;
-    g.globalAlpha = alpha;
-  }
-  // giants: a pulsing pool of team light on the ground beneath them, so the eye goes to them first
-  if (L.S >= 4 && p.cloak !== 'enemy') {
-    const prev = g.globalCompositeOperation;
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = alpha * (0.16 + 0.06 * Math.sin(p.time * 2.2 + (p.seed ?? 0)));
-    const r = 0.8 * L.D;
-    g.drawImage(softDot(emis(pal)), p.x - r, p.y - r, r * 2, r * 2);
     g.globalCompositeOperation = prev;
     g.globalAlpha = alpha;
   }
@@ -1739,10 +1796,10 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const my = y + (sn * lx + cs * ly) * sc - Math.sin(ta) * rec;
     const kit = turretKit(L, prof, i);
     const ts = turretSprite(m.mod, p.team, m.d, px, kit);
-    // soft cast shadow onto the hull so the turret reads as sitting on top (falls screen-down-right for either viewer)
+    // hard-edged cast shadow onto the hull so the turret reads as sitting on top (falls screen-down-right for either viewer)
     const tsh = turretShadow(m.mod, p.team, m.d, px, kit);
-    const so = m.d * 0.11 * sc;
-    g.globalAlpha = alpha * 0.55;
+    const so = m.d * 0.09 * sc;
+    g.globalAlpha = alpha * 0.38;
     blit(g, tsh, mx + dirs.sx * so, my + dirs.sy * so, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
     g.globalAlpha = alpha;
     const dis = (p.disarm ?? 0) > 0;

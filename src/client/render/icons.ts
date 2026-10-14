@@ -11,6 +11,7 @@ import type { Design } from '../../shared/types.ts';
 import { TEAM_PAL, ctx2d, makeCanvas, shade, type Ctx, type TeamPal } from './palette.ts';
 import { CATEGORY_COLOR, drawTurret, drawTurretDynamic } from './turrets.ts';
 import { GIANT_SHAPES, drawGiantFx } from './giantart.ts';
+import { weaponD } from './weaponsize.ts';
 import {
   drawAnchorPlate, drawMobility, drawPartsStatic, drawPlates, hullDetails, hullPathL, hullUnderlay, layoutOf, paintHull, rotorBlur, type UnitLayout,
 } from './unitart.ts';
@@ -90,11 +91,12 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
   const g = ctx2d(c);
   g.translate(c.width / 2, c.height / 2);
   g.scale(PX, PX);
-  const o = 1.6 / PX;
+  const o = 1.2 / PX;
   if (kind === 'module') {
     const m = MODULE_BY_ID.get(id);
     if (!m) return null;
-    const d = ({ L: 0.62, M: 0.78, H: 0.95, G: 1, T: 1 } as Record<string, number>)[m.mount] * (0.85 + 0.3 * (m.caliber ?? 0.5));
+    // same physical sizing as on the field (icons are fitted to the canvas, so only proportions matter)
+    const d = weaponD(m) * 1.6;
     if (m.kind === 'armor' || m.visual === 'plate') {
       // plating sample on a hull block
       const L = { S: 1, hw: 0.3, shape: 'box', mounts: [{ x: 0, y: 0, d: d * 0.9, mod: m, slot: m.mount, turret: false }] } as unknown as UnitLayout;
@@ -108,7 +110,7 @@ function renderPart(kind: PartKind, id: string, pal: TeamPal): HTMLCanvasElement
       drawPlates(g, L, pal, o);
     } else {
       g.rotate(-Math.PI / 4);
-      drawTurret(g, m, pal, d, Math.max(o, d * 0.06));
+      drawTurret(g, m, pal, d, Math.max(o, d * 0.035));
       if (m.mount === 'G' || m.mount === 'T') drawTurretDynamic(g, m, pal, d, 0, 0, 0, 1, 0.35, 0, 0, PX, 1);
     }
     return cropAlpha(c);

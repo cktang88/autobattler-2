@@ -6,7 +6,8 @@
 
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
-import { hullPath, silhouette, unitSprites } from './render/unitart.ts';
+import { hullPath, layoutOf, silhouette, unitSprites } from './render/unitart.ts';
+import { calibreMm } from './render/weaponsize.ts';
 import { aiDeck } from '../shared/ai.ts';
 import { DEPLOY_D, DEPLOY_W, blockDims, blockInZone, blocksOverlap, hasSpacing, placementUnitCenters } from '../shared/grid.ts';
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from '../shared/parts.ts';
@@ -352,6 +353,64 @@ function silSection(): void {
   }
 }
 
+function labSection(id: string, title: string): HTMLElement {
+  const sec = el('section');
+  sec.id = 'sec-' + id;
+  sec.append(el('h2', '', title));
+  const host = el('div');
+  host.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;align-items:flex-end';
+  sec.append(host);
+  document.body.append(sec);
+  return host;
+}
+
+const modById = (id: string) => MODULES.find((m) => m.id === id)!;
+const dOf = (d: Design, slot: number) => layoutOf(d).mounts[slot]?.d ?? 0;
+
+/** ?only=calibre: every gun-family weapon on the same chassis, sorted by calibre (size must grow monotonically). */
+function calibreSection(): void {
+  const host = labSection('calibre', 'Gun family by calibre (same chassis: Bastion Hull, heavy slot)');
+  const GUNV = new Set(['gun', 'cannon', 'artillery', 'flak', 'gatling', 'sniper', 'rail', 'gauss']);
+  const RK: Record<string, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+  const guns = MODULES.filter((m) => m.kind === 'weapon' && GUNV.has(m.visual) && RK[m.mount] <= 3)
+    .sort((a, b) => RK[a.mount] - RK[b.mount] || calibreMm(a) - calibreMm(b));
+  for (const m of guns) {
+    const d: Design = { id: 'cal_' + m.id, name: m.name, chassis: 'bastion', mobility: 'treads', mounts: [m.id, null, null] };
+    host.append(preview(d, 150, `${m.name}`, `${m.mount} · ${calibreMm(m).toFixed(1)}mm · d ${dOf(d, 0).toFixed(3)}`));
+  }
+  const host2 = labSection('calibre-robots', 'Robots vs tanks: 40mm Bofors vs 75mm gun (same size class)');
+  for (const [ch, mob] of [['strider', 'legs'], ['warden', 'treads'], ['saucer', 'hover']] as const) {
+    for (const w of ['autocannon', 'ac40', 'cannon75']) {
+      const c = CHASSIS.find((x) => x.id === ch)!;
+      const mounts: (string | null)[] = c.mounts.map(() => null);
+      mounts[0] = w;
+      const d: Design = { id: `rb_${ch}_${w}`, name: w, chassis: ch, mobility: mob, mounts };
+      host2.append(preview(d, 150, `${ch} · ${modById(w).name}`, `d ${dOf(d, 0).toFixed(3)}`));
+    }
+  }
+}
+
+/** ?only=classes: one chassis, each weapon class in each slot class, plus empty slots (weapon size follows the weapon). */
+function classesSection(): void {
+  const host = labSection('classes', 'Weapon class x slot class (Monarch Frame: H H M L) - ring sized to the weapon, socket to the slot');
+  const W: Record<string, string> = { L: 'hmg', M: 'cannon75', H: 'cannon' };
+  const slots: [number, string][] = [[0, 'H'], [2, 'M'], [3, 'L']];
+  const RK: Record<string, number> = { L: 1, M: 2, H: 3 };
+  for (const [si, sc] of slots) {
+    for (const wc of ['L', 'M', 'H', '-']) {
+      if (wc !== '-' && RK[wc] > RK[sc]) continue;
+      const mounts: (string | null)[] = [null, null, null, null];
+      if (wc !== '-') mounts[si] = W[wc];
+      const d: Design = { id: `cl_${si}_${wc}`, name: 'x', chassis: 'colossus', mobility: 'treads', mounts };
+      host.append(preview(d, 170, wc === '-' ? `${sc} slot · empty` : `${modById(W[wc]).name} (${wc}) in ${layoutOf(d).mounts[si].slot} hardpoint`, wc === '-' ? '' : `d ${dOf(d, si).toFixed(3)}`));
+    }
+  }
+  for (const mounts of [['cannon', 'hmg', 'cannon75', 'mg'], ['mg', 'mg', 'mg', 'mg'], ['cannon', 'cannon', 'ac40', 'ac20'], ['twin120', null, 'twin30', null]] as (string | null)[][]) {
+    const d: Design = { id: `clm_${mounts.join('_')}`, name: 'x', chassis: 'colossus', mobility: 'treads', mounts };
+    host.append(preview(d, 170, mounts.map((m) => m ?? '-').join(' / '), layoutOf(d).mounts.map((m) => m.d.toFixed(2)).join(' ')));
+  }
+}
+
 function animate(): void {
   let t0 = performance.now();
   const loop = (now: number) => {
@@ -377,6 +436,8 @@ function main(): void {
   if (show('icons')) iconsSection();
   if (show('small')) smallSection();
   if (only === 'sil') silSection();
+  if (only === 'calibre') calibreSection();
+  if (only === 'classes') classesSection();
   animate();
   addEventListener('pointerdown', () => unlockAudio(), { once: true });
 }
