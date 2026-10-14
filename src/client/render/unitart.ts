@@ -8,7 +8,7 @@
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { computeStats } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
-import { MAT, METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
+import { MAT, METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, strHash, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
 import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
@@ -1202,7 +1202,7 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
   drawProfile(hull.g, prof, hp, L.S, Math.min(L.hw, 0.42), pal, o, emis(pal), { creature, air: L.air, legged, rearX: rearX(L, hp0), X: L.X, Y: L.Y });
-  teamMarkings(hull.g, L, hp, pal, o, px, prof.serial, creature);
+  teamMarkings(hull.g, L, hp, pal, o, px, creature);
   const sin: SuperIn = {
     S: L.S, X: L.X, Y: L.Y, shape: `${L.shape}|${kY}|${L.X}|${L.Y}`, mob: L.mob.id, air: L.air, mounts: L.mounts, riding, hull: hp, P: prof, pal, o, E: emis(pal), px,
     muzzle: L.mounts.map((m) => (m.mod ? muzzleLen(m.mod) : 0)),
@@ -1325,10 +1325,10 @@ function edgeY(p: Path2D, x: number, maxY: number): number {
 
 /**
  * Team identity as small painted / lit details only (Zero-K / Mechabellum style): a pair of team-colour bands on each
- * flank, team-colour running lights at the rear corners, and a small team decal + stencil number on the rear deck.
+ * flank, team-colour running lights at the rear corners, and a small team decal on the rear deck (role stencils / serials come from the build profile).
  * Sizes have a device-pixel floor so the bands and lights still read at fit zoom.
  */
-function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, o: number, px: number, serial: number, creature: boolean): void {
+function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, _o: number, px: number, creature: boolean): void {
   const S = L.S, maxX = Math.max(L.X, L.Y, S) * 0.62;
   let fx = 0, rx = 0;
   for (let x = maxX; x > 0; x -= maxX / 90) if (inHull(hp, x, 0)) { fx = x; break; }
@@ -1336,7 +1336,7 @@ function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, o: number
   const len = fx - rx;
   if (len <= 0.1) return;
   const maxY = Math.max(L.X, L.Y, S) * 0.62;
-  const u = Math.max(0.04 * Math.min(S, 2.2), 1.8 / px);
+  const u = Math.max(0.026 * Math.min(S, 2.2), 1.8 / px);
   // flank bands (two parallel stripes across each side panel, clipped to the hull)
   if (!creature) {
     const sx = fx - len * 0.3, ey = edgeY(hp, sx, maxY);
@@ -1344,7 +1344,7 @@ function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, o: number
       g.save();
       g.clip(hp);
       for (const sd of [-1, 1]) for (const k of [0, 1]) {
-        const x0 = sx - k * u * 1.9, y0 = sd > 0 ? ey * 0.56 : -ey * 1.2;
+        const x0 = sx - k * u * 1.9, y0 = sd > 0 ? ey * 0.66 : -ey * 1.3;
         g.fillStyle = pal.accent;
         g.fillRect(x0 - u / 2, y0, u, ey * 0.64);
         // worn paint: a few chips and a darker lower edge
@@ -1368,7 +1368,7 @@ function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, o: number
     dotAt(g, vx, 0, lr * 1.3, 'rgba(8,10,12,0.7)');
     dotAt(g, vx, 0, lr * 0.75, pal.glow);
   }
-  // team decal + stencil serial on the rear-left deck
+  // team decal on the rear-left deck
   const dx = rx + len * 0.27, dyE = edgeY(hp, dx, maxY), dy = -dyE * 0.58, dr = Math.max(0.035 * Math.min(S, 2.5), 2 / px);
   if (dyE > dr * 2.6 && !creature) {
     g.save();
@@ -1379,16 +1379,6 @@ function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, o: number
     g.fillStyle = 'rgba(14,16,18,0.7)'; g.fill();
     g.lineWidth = dr * 0.42; g.strokeStyle = pal.accent; g.stroke();
     g.restore();
-    if (dr * px > 3 && dyE * 0.9 > dr * 3) {
-      g.save();
-      g.translate(dx, -dy);
-      g.rotate(Math.PI / 2);
-      g.font = `bold ${dr * 1.5}px monospace`;
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillStyle = rgba(MAT.decal, 0.55);
-      g.fillText(String(serial % 100).padStart(2, '0'), 0, 0);
-      g.restore();
-    }
   }
 }
 
@@ -1606,33 +1596,108 @@ export function turretShadow(m: ModuleDef, team: Team, d: number, px: number, ki
 }
 
 /** Wreck sprite: hull silhouette charred, used for persistent battlefield decals. */
+/** Hot-crack points (cells, hull-local) of the last wreck sprite built per design key: where embers glow. */
+const wreckHot = new Map<string, number[]>();
+export function wreckHotspots(design: Design): number[] { return wreckHot.get(layoutOf(design).key) ?? []; }
+
+/**
+ * Charred hulk of the unit's own silhouette: blackened metal (detail still faintly showing through), torn-off edge
+ * chunks, burnt-through deck holes exposing the frame, dull heat cracks, and the main turret knocked askew. Hard-edged
+ * throughout (no blotchy texture). Embers, smoke and fire are animated on top by Fx (see Fx.wreck).
+ */
 export function wreckSprite(design: Design, team: Team, px: number): HTMLCanvasElement {
   const s = unitSprites(design, team, px);
   let c = s.sil.get('#wreck');
   if (c) return c;
-  c = makeCanvas(s.hull.width, s.hull.height);
-  const g = ctx2d(c);
-  g.drawImage(s.rest, 0, 0);
-  g.drawImage(s.hull, 0, 0);
-  if (s.top) g.drawImage(s.top, 0, 0);
-  const pd = s.parts.length ? partsOf(layoutOf(design)) : [], rx = partXfs(pd, null);
-  for (let j = 0; j < s.parts.length; j++) stampPart(g, s.parts[j].c, s.parts[j].ext, rx[j], s.px, c.width);
-  g.globalCompositeOperation = 'source-atop';
-  // desaturate + near-black so a wreck never reads as a live unit
-  g.fillStyle = 'rgba(20,21,22,0.93)';
-  g.fillRect(0, 0, c.width, c.height);
-  // burn streaks
-  g.globalCompositeOperation = 'source-atop';
-  for (let i = 0; i < 6; i++) {
-    const x = Math.random() * c.width, y = Math.random() * c.height, r = c.width * (0.06 + Math.random() * 0.1);
-    const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, 'rgba(0,0,0,0.7)');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
+  const L = layoutOf(design);
+  let seed = (strHash(L.key) % 2147483646) + 1;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const w = beginSprite(s.px, s.ext);
+  const g = w.g;
+  const body = makeCanvas(w.c.width, w.c.height);
+  const bg = ctx2d(body);
+  bg.drawImage(s.rest, 0, 0);
+  bg.drawImage(s.hull, 0, 0);
+  if (s.top) bg.drawImage(s.top, 0, 0);
+  const pd = s.parts.length ? partsOf(L) : [], rx = partXfs(pd, null);
+  for (let j = 0; j < s.parts.length; j++) stampPart(bg, s.parts[j].c, s.parts[j].ext, rx[j], s.px, body.width);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(body, 0, 0); g.restore();
+  // main turret blown off its ring and lying askew on the deck
+  const mt = L.mounts[L.main];
+  if (mt && mt.turret && mt.mod && L.S < 4) {
+    const ts = turretSprite(mt.mod, team, mt.d, s.px);
+    const e = TURRET_EXT * Math.round(mt.d * 100) / 100;
+    g.save();
+    g.translate(mt.x + (rnd() - 0.5) * mt.d * 0.6, mt.y + (rnd() - 0.5) * mt.d * 0.6);
+    g.rotate(rnd() * Math.PI * 2);
+    g.drawImage(ts, -e, -e, e * 2, e * 2);
+    g.restore();
   }
-  s.sil.set('#wreck', c);
-  return c;
+  const S = L.S, X = L.X, Y = L.Y, D = L.D;
+  // blackened: soot over everything, a little detail still reading through
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = 'rgba(26,24,22,0.8)';
+  g.fillRect(-s.ext, -s.ext, s.ext * 2, s.ext * 2);
+  // heat-blued / rust-brown streaks on the scorched plates (hard-edged bands)
+  for (let i = 0; i < 3 + S; i++) {
+    g.save();
+    g.translate((rnd() - 0.5) * X * 0.7, (rnd() - 0.5) * Y * 0.7);
+    g.rotate(rnd() * Math.PI);
+    g.fillStyle = rnd() < 0.5 ? 'rgba(92,66,46,0.32)' : 'rgba(60,66,84,0.28)';
+    g.fillRect(-0.12 * S, -0.02 * S, 0.24 * S, 0.04 * S);
+    g.restore();
+  }
+  const jag = (path: Path2D, cx: number, cy: number, r: number) => {
+    const n = 7 + Math.floor(rnd() * 4), a0 = rnd() * 6.28;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * Math.PI * 2, rr = r * (0.45 + rnd() * 0.7);
+      path.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    path.closePath();
+  };
+  // torn-off chunks along the edge (the silhouette is broken)
+  g.globalCompositeOperation = 'destination-out';
+  const bites = new Path2D();
+  for (let i = 0; i < 2 + Math.min(S, 4); i++) {
+    const a = rnd() * Math.PI * 2;
+    jag(bites, Math.cos(a) * X * 0.48, Math.sin(a) * Y * 0.42, (0.07 + rnd() * 0.07) * Math.min(S, 3));
+  }
+  g.fill(bites);
+  // burnt-through deck holes: dark interior with the frame ribs showing
+  g.globalCompositeOperation = 'source-atop';
+  const holes = new Path2D();
+  for (let i = 0; i < 1 + Math.min(S, 3); i++) jag(holes, (rnd() - 0.5) * X * 0.5, (rnd() - 0.5) * Y * 0.45, (0.06 + rnd() * 0.05) * Math.min(S, 3));
+  g.fillStyle = '#0b0a09';
+  g.fill(holes);
+  g.save();
+  g.clip(holes);
+  g.strokeStyle = '#5a534c';
+  g.lineWidth = Math.max(1 / s.px, 0.014 * S);
+  g.beginPath();
+  for (let k = -6; k <= 6; k++) { g.moveTo(k * 0.06 * S, -Y); g.lineTo(k * 0.06 * S, Y); }
+  g.moveTo(-X, 0); g.lineTo(X, 0);
+  g.stroke();
+  g.restore();
+  g.strokeStyle = 'rgba(150,140,128,0.35)';
+  g.lineWidth = Math.max(0.8 / s.px, 0.006 * S);
+  g.stroke(holes);
+  // heat cracks (dull; Fx adds the ember glow at their ends while the wreck cools)
+  const hot: number[] = [];
+  g.strokeStyle = 'rgba(110,52,26,0.75)';
+  g.lineWidth = Math.max(1 / s.px, 0.01 * S);
+  g.lineCap = 'round';
+  for (let i = 0; i < 3 + Math.min(S, 4) * 2; i++) {
+    let x = (rnd() - 0.5) * X * 0.62, y = (rnd() - 0.5) * Y * 0.55;
+    g.beginPath(); g.moveTo(x, y);
+    const a0 = rnd() * Math.PI * 2;
+    for (let k = 0; k < 3; k++) { const a = a0 + (rnd() - 0.5) * 1.4; x += Math.cos(a) * 0.05 * D; y += Math.sin(a) * 0.05 * D; g.lineTo(x, y); }
+    g.stroke();
+    hot.push(x, y);
+  }
+  g.globalCompositeOperation = 'source-over';
+  wreckHot.set(L.key, hot);
+  s.sil.set('#wreck', w.c);
+  return w.c;
 }
 
 /* ------------------------------------------------------------------------------------------ drawing */
@@ -1654,6 +1719,8 @@ export interface MountPose {
 
 export interface UnitPose {
   design: Design;
+  /** field views: draw the fit-zoom team ground ring under the unit (not in previews / icons) */
+  groundRing?: boolean;
   team: Team;
   x: number;
   y: number;
@@ -1720,12 +1787,12 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   // fit-zoom team cue: a thin team-colour ring on the ground under the unit, fading out as the camera closes in
   // (close up, the painted stripes and running lights carry the team; very far out, the markers take over)
   const rk = clamp((50 - px) / 16, 0, 1) * (p.alpha ?? 1);
-  if (rk > 0.02 && p.cloak !== 'enemy' && (p.alpha ?? 1) > 0.6) {
+  if (p.groundRing && rk > 0.02 && p.cloak !== 'enemy' && (p.alpha ?? 1) > 0.6) {
     const pal = TEAM_PAL[p.team];
     g.save();
     g.translate(p.x, p.y);
     g.rotate(ang);
-    g.globalAlpha = 0.6 * rk;
+    g.globalAlpha = (L.S <= 1 ? 0.32 : 0.5) * rk;
     g.strokeStyle = pal.rim;
     g.lineWidth = 1.6 / px;
     g.beginPath();

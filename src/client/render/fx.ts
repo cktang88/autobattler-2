@@ -41,7 +41,20 @@ interface Decal {
   ext?: number;
 }
 
+/** A burnt-out hulk: drawn live (crisp at any zoom), smouldering while it cools. Lives until the battle ends. */
+interface Wreck {
+  x: number; y: number; a: number; sc: number; S: number;
+  t0: number; life: number;
+  ext: number;
+  get: (px: number) => HTMLCanvasElement;
+  hot: number[];
+  scorch: number[];
+  smokeT: number;
+}
+
 const MAX_P = 2600;
+/** global cap on wreck smoke: puffs per second across all wrecks (token bucket) */
+const WRECK_SMOKE_RATE = 22;
 const rnd = Math.random;
 const rr = (a: number, b: number) => a + (b - a) * rnd();
 
@@ -56,6 +69,10 @@ export class Fx {
   flashC = '#ffffff';
   // decals
   decals: Decal[] = [];
+  wrecks: Wreck[] = [];
+  /** screen-up direction in world space (smoke rises this way); set by the owner each frame */
+  up = { x: 0, y: -1 };
+  private smokeTokens = 0;
   decalCanvas: HTMLCanvasElement | null = null;
   private decalPx = 0;
   private fieldW = 0;
@@ -66,6 +83,7 @@ export class Fx {
     this.beams.length = 0;
     this.later.length = 0;
     this.decals.length = 0;
+    this.wrecks.length = 0;
     this.trauma = 0;
     this.flashA = 0;
     this.lastFlashT = -9;
@@ -307,6 +325,91 @@ export class Fx {
     this.decal('burn', x, y, R * 3.6);
   }
 
+  /* ------------------------------------------------------------------------------------------ wrecks */
+
+  /** Register a wreck: `get(px)` returns its charred sprite at a device-px-per-cell scale, `hot` the ember points
+   *  (hull-local cells). Bigger hulks smoulder longer and heavier. */
+  wreck(x: number, y: number, a: number, S: number, ext: number, get: (px: number) => HTMLCanvasElement, hot: number[], sc = 1): void {
+    const scorch: number[] = [];
+    const n = 11, R = (0.42 + 0.08 * Math.min(S, 3)) * S * sc + 0.15;
+    for (let i = 0; i < n; i++) {
+      const t = (i / n) * Math.PI * 2, r = R * rr(0.7, 1.15);
+      scorch.push(Math.cos(t) * r, Math.sin(t) * r * rr(0.8, 1));
+    }
+    this.wrecks.push({ x, y, a, sc, S, t0: this.time, life: S >= 4 ? 48 : 14 + 5 * S, ext, get, hot, scorch, smokeT: rr(0.2, 0.8) });
+    if (this.wrecks.length > 260) this.wrecks.shift();
+  }
+
+  private updateWrecks(dt: number): void {
+    this.smokeTokens = Math.min(6, this.smokeTokens + dt * WRECK_SMOKE_RATE);
+    for (const w of this.wrecks) {
+      const age = this.time - w.t0, k = 1 - age / w.life;
+      if (k <= 0) continue;
+      const rS = Math.sqrt(w.S);
+      // early fire: small flickering flames licking out of the cracks for the first seconds
+      if (age < 2.5 + w.S && rnd() < dt * (2 + w.S) && this.busy < 0.7 && w.hot.length) {
+        const i = Math.floor(rnd() * (w.hot.length / 2)) * 2, p = this.toWorld(w, w.hot[i], w.hot[i + 1]);
+        this.fire(p.x, p.y, 0.07 * rS, 0.35, this.up.x * 0.3, this.up.y * 0.3);
+      }
+      w.smokeT -= dt;
+      if (w.smokeT > 0) continue;
+      w.smokeT = rr(0.6, 1.2) / ((0.5 + 0.45 * w.S) * (0.25 + 0.75 * k));
+      if (this.smokeTokens < 1 || this.busy > 0.6) continue;
+      this.smokeTokens -= 1;
+      // thin light-grey plume: rises (screen up), drifts with a light wind, thins as the wreck cools
+      const p = w.hot.length ? this.toWorld(w, w.hot[0], w.hot[1]) : { x: w.x, y: w.y };
+      const life = (2.2 + 0.5 * Math.min(w.S, 5)) * rr(0.85, 1.15);
+      this.add(SMOKE, p.x + rr(-0.1, 0.1) * rS, p.y + rr(-0.1, 0.1) * rS, {
+        size: 0.09 * rS, grow: 0.22 * rS, max: life, color: '#8f8c87', alpha: 0.12 + 0.2 * k,
+        vx: this.up.x * 0.38 + 0.14 + rr(-0.05, 0.05), vy: this.up.y * 0.38 + rr(-0.05, 0.05), drag: 0.15, vr: rr(-0.4, 0.4),
+      });
+    }
+  }
+
+  private toWorld(w: Wreck, lx: number, ly: number): { x: number; y: number } {
+    const c = Math.cos(w.a), s = Math.sin(w.a);
+    return { x: w.x + (c * lx - s * ly) * w.sc, y: w.y + (s * lx + c * ly) * w.sc };
+  }
+
+  /** Ground pass (under live units): crisp scorch, the hulk, then ember glow in its cracks while it is hot. */
+  drawWrecks(g: Ctx, px: number): void {
+    if (!this.wrecks.length) return;
+    for (const w of this.wrecks) {
+      const tr = g.getTransform();
+      g.translate(w.x, w.y);
+      g.rotate(w.a);
+      g.fillStyle = 'rgba(16,13,10,0.42)';
+      g.beginPath();
+      for (let i = 0; i < w.scorch.length; i += 2) g.lineTo(w.scorch[i], w.scorch[i + 1]);
+      g.closePath();
+      g.fill();
+      g.fillStyle = 'rgba(10,8,6,0.3)';
+      g.save(); g.scale(0.62, 0.62); g.fill(); g.restore();
+      const e = w.ext * w.sc;
+      g.drawImage(w.get(px * w.sc), -e, -e, e * 2, e * 2);
+      g.setTransform(tr);
+    }
+    const prev = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'lighter';
+    const hotA = softDot('rgba(255,110,30,1)'), hotB = softDot('rgba(255,214,140,1)');
+    for (const w of this.wrecks) {
+      const k = 1 - (this.time - w.t0) / w.life;
+      if (k <= 0) continue;
+      const rS = Math.sqrt(Math.min(w.S, 4));
+      for (let i = 0; i < w.hot.length; i += 2) {
+        const f = 0.6 + 0.4 * Math.sin(this.time * (5 + i) + i * 2.3) * Math.sin(this.time * 2.1 + i);
+        const p = this.toWorld(w, w.hot[i], w.hot[i + 1]);
+        const r = (0.05 + 0.03 * f) * rS;
+        g.globalAlpha = clamp(Math.pow(k, 1.4) * f * 0.85, 0, 1);
+        g.drawImage(hotA, p.x - r, p.y - r, r * 2, r * 2);
+        g.globalAlpha = clamp(Math.pow(k, 2) * f, 0, 1);
+        g.drawImage(hotB, p.x - r * 0.35, p.y - r * 0.35, r * 0.7, r * 0.7);
+      }
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = prev;
+  }
+
   /* ------------------------------------------------------------------------------------------ decals */
 
   setDecalSpace(fieldW: number, fieldH: number, px: number): void {
@@ -347,21 +450,23 @@ export class Fx {
       return;
     }
     const r = d.r;
+    // crisp, irregular scorch: a hard-edged outer char ring and a darker core (no blotchy texture)
+    const jag = (rad: number) => {
+      g.beginPath();
+      const n = 12;
+      for (let i = 0; i < n; i++) { const a = d.a + (i / n) * Math.PI * 2, rr2 = rad * (0.78 + 0.32 * Math.abs(Math.sin(i * 2.7 + d.a * 3))); g.lineTo(d.x + Math.cos(a) * rr2, d.y + Math.sin(a) * rr2); }
+      g.closePath();
+      g.fill();
+    };
     if (d.kind === 'burn') {
-      const t = tinted('burn', '#3a1a08');
-      g.globalAlpha = 0.5;
-      if (t) g.drawImage(t, d.x - r, d.y - r, r * 2, r * 2);
-      g.globalAlpha = 1;
+      g.fillStyle = 'rgba(20,14,10,0.3)'; jag(r);
+      g.fillStyle = 'rgba(12,9,7,0.25)'; jag(r * 0.6);
       return;
     }
-    const gr = g.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 1.3);
-    gr.addColorStop(0, d.kind === 'crater' ? 'rgba(8,7,6,0.6)' : 'rgba(10,9,8,0.45)');
-    gr.addColorStop(0.5, 'rgba(14,12,10,0.3)');
-    gr.addColorStop(1, 'rgba(14,12,10,0)');
-    g.fillStyle = gr;
-    g.beginPath();
-    g.arc(d.x, d.y, r * 1.3, 0, Math.PI * 2);
-    g.fill();
+    g.fillStyle = d.kind === 'crater' ? 'rgba(14,12,10,0.38)' : 'rgba(16,13,10,0.3)';
+    jag(r * 1.15);
+    g.fillStyle = d.kind === 'crater' ? 'rgba(8,7,6,0.35)' : 'rgba(10,9,8,0.25)';
+    jag(r * 0.62);
     if (d.kind === 'crater') {
       g.strokeStyle = 'rgba(150,130,100,0.18)';
       g.lineWidth = r * 0.12;
@@ -396,6 +501,7 @@ export class Fx {
         for (const l of due) l.fn();
       }
     }
+    this.updateWrecks(dt);
     this.trauma = Math.max(0, this.trauma - dt * 2.4);
     this.flashA = Math.max(0, this.flashA - dt * 4);
     const P = this.parts;
