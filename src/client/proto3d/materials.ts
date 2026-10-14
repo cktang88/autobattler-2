@@ -224,71 +224,81 @@ export function paint(color: string, o: PaintOpts = {}): THREE.MeshStandardMater
 }
 
 // ---- uber material: every static part of a unit shares one program/material; the part type is a per-vertex id ----
-interface Row { color: string; rough: number; metal: number; camo?: boolean; wear?: number; dirt?: number; scale?: number; bump?: number; em?: string; emI?: number }
+// Stylized, not photoreal: flat part colours, a soft three-band cel ramp (MeshToonMaterial), a painted top-light
+// gradient, bevel highlights on chamfer faces (geometry is flat-shaded, so every chamfer reads as an edge highlight),
+// a gentle ground-contact darkening and a faint cool rim. No grime, camo or photographic texture.
+interface Row { color: string; bev?: number; rim?: number; ao?: number; em?: string; emI?: number }
 
 const N_ROWS = 16;
-function makeUber(rows: Row[], camo: [string, string, string]): THREE.MeshStandardMaterial {
-  panelTex ??= makePanelTexture();
-  const tex = panelTex;
-  const A: THREE.Vector4[] = [], B: THREE.Vector4[] = [], Cq: THREE.Vector4[] = [], E: THREE.Vector4[] = [];
+let rampTex: THREE.DataTexture | null = null;
+/** soft cel ramp: deep shade / mid / lit bands with narrow smooth transitions */
+function celRamp(): THREE.DataTexture {
+  if (rampTex) return rampTex;
+  const N = 64, d = new Uint8Array(N * 4);
+  const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let i = 0; i < N; i++) {
+    const x = i / (N - 1);
+    const v = 0.5 + 0.22 * sm(0.4, 0.47, x) + 0.28 * sm(0.6, 0.68, x);
+    d.set([v * 255, v * 255, v * 255, 255], i * 4);
+  }
+  rampTex = new THREE.DataTexture(d, N, 1, THREE.RGBAFormat);
+  rampTex.minFilter = rampTex.magFilter = THREE.LinearFilter;
+  rampTex.generateMipmaps = false; rampTex.needsUpdate = true;
+  return rampTex;
+}
+
+function makeUber(rows: Row[]): THREE.MeshToonMaterial {
+  const A: THREE.Vector4[] = [], B: THREE.Vector4[] = [], E: THREE.Vector4[] = [];
   for (let i = 0; i < N_ROWS; i++) {
     const r = rows[i] ?? rows[0];
     const c = new THREE.Color(r.color);
-    A.push(new THREE.Vector4(c.r, c.g, c.b, r.rough));
-    B.push(new THREE.Vector4(r.metal, r.camo ? 1 : 0, r.wear ?? 0.6, r.dirt ?? 1));
-    Cq.push(new THREE.Vector4(r.scale ?? 0.9, (r.bump ?? 2.2) * 0.7, 0, 0));
+    A.push(new THREE.Vector4(c.r, c.g, c.b, 0));
+    B.push(new THREE.Vector4(r.bev ?? 1, r.rim ?? 1, 0, r.ao ?? 1));
     const e = new THREE.Color(r.em ?? '#000');
     E.push(new THREE.Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), 0));
   }
-  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, metalness: 0, envMapIntensity: 1 });
+  const m = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: celRamp() });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.triMap = { value: tex };
-    sh.uniforms.uA = { value: A }; sh.uniforms.uB = { value: B }; sh.uniforms.uC = { value: Cq }; sh.uniforms.uE = { value: E };
-    sh.uniforms.camoA = { value: new THREE.Color(camo[0]) }; sh.uniforms.camoB = { value: new THREE.Color(camo[1]) }; sh.uniforms.camoC = { value: new THREE.Color(camo[2]) };
+    sh.uniforms.uA = { value: A }; sh.uniforms.uB = { value: B }; sh.uniforms.uE = { value: E };
+    sh.uniforms.rimCol = { value: new THREE.Color('#a9c8ff') };
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float mid; varying float vMid; varying vec3 vTP; varying vec3 vTN; varying float vWY;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMid = mid; vTP = position; vTN = normal; vWY = (modelMatrix * vec4(position, 1.0)).y;');
+      .replace('#include <common>', '#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vMid = mid;
+        vec4 wpS = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          wpS = instanceMatrix * wpS;
+        #endif
+        vWY = (modelMatrix * wpS).y;`)
+      .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvWN = inverseTransformDirection(transformedNormal, viewMatrix);');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-varying float vMid; varying vec3 vTP; varying vec3 vTN; varying float vWY;
-uniform sampler2D triMap; uniform vec3 camoA; uniform vec3 camoB; uniform vec3 camoC;
-uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uC[${N_ROWS}]; uniform vec4 uE[${N_ROWS}];
-${GLSL_FNS}`)
+varying float vMid; varying vec3 vWN; varying float vWY;
+uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec3 rimCol;`)
       .replace('#include <map_fragment>', /* glsl */ `
         int mi = int(floor(vMid + 0.5));
-        vec4 rA = uA[mi], rB = uB[mi], rC = uC[mi];
-        vec3 tb = pow(abs(normalize(vTN)), vec3(8.0)); tb /= (tb.x + tb.y + tb.z);
-        vec3 tp = vTP * rC.x;
-        vec3 tc = texture2D(triMap, tp.zy).rgb * tb.x + texture2D(triMap, tp.xz + vec2(.37, .11)).rgb * tb.y + texture2D(triMap, tp.xy + vec2(.71, .53)).rgb * tb.z;
-        if (rC.x < 0.001) tc = vec3(0.82, 0.5, 0.0);
-        float tH = tc.g; float tWear = tc.b;
-        diffuseColor.rgb = rA.rgb;
-        if (rB.y > 0.5) {
-          vec3 cp = vTP * 0.85;
-          float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
-          float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
-          vec3 cc = camoA;
-          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
-          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
-          diffuseColor.rgb = cc;
-        }
-        diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
-        diffuseColor.rgb *= 0.86 + 0.14 * vn(vTP * 1.7);
-        float dirt = smoothstep(0.5, 0.0, vWY) * (0.3 + 0.7 * vn(vTP * 7.0)) * rB.w;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.17, 0.12) * (0.6 + 0.8 * tc.r), dirt * 0.62);
-        float wearM = tWear * rB.z * smoothstep(0.25, 0.7, vn(vTP * 8.0 + 5.0));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.43, 0.43, 0.42), wearM * 0.8);`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(rA.w * (1.12 - wearM * 0.55) + dirt * 0.18, 0.05, 1.0);')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(rB.x, 0.85, clamp(wearM * 1.4, 0.0, 1.0));')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = uE[mi].rgb;')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = triBump(-vViewPosition, normal, vec2(dFdx(tH), dFdy(tH)) * rC.y, faceDirection);');
+        vec4 rA = uA[mi], rB = uB[mi];
+        vec3 wn = normalize(vWN);
+        vec3 base = rA.rgb;
+        // painted top-light: up-facing planes lighter, undersides darker
+        base *= mix(0.78, 1.06, smoothstep(-0.7, 0.85, wn.y));
+        // bevel highlight on chamfers (normals between side and up)
+        float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
+        base = mix(base, base * 1.2 + vec3(0.02), bev * rB.x);
+        // soft ground-contact darkening
+        base *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
+        diffuseColor.rgb = base;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance = uE[mi].rgb;
+        float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+        totalEmissiveRadiance += rimCol * fres * 0.16 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => 'uber1';
+  m.customProgramCacheKey = () => 'uberToon1';
   return m;
 }
 
 export interface Kit {
-  /** primary camouflaged hull paint */
+  /** primary hull paint */
   hull: MatLike;
   /** darker solid paint (turret rings, lower hull, hatches) */
   trim: MatLike;
@@ -303,40 +313,41 @@ export interface Kit {
   pal: (typeof TEAM_PAL)[0];
 }
 
-const TEAM_CAMO: [[string, string, string], [string, string, string]] = [
-  ['#5a646a', '#3a4349', '#76828a'], // viewer: cool slate-grey three-tone
-  ['#6a664a', '#3d4026', '#a09166'], // enemy: khaki / olive / sand
+/** stylized team paint: cool slate gunmetal (viewer) / warm olive-khaki (enemy), matching the 2D unit art */
+const TEAM_PAINT: [string, string, string, string][] = [
+  // hull, trim, panel, canvas
+  ['#5c6a76', '#2f373f', '#7e8c97', '#55605a'],
+  ['#77734f', '#3f3d2b', '#99946f', '#625e43'],
 ];
 const kits: (Kit | null)[] = [null, null];
 
-/** Muted military paint; the team colour appears only in `accent` (decals/stripes) and the small lamps. */
 export function makeKit(team: 0 | 1): Kit {
   const hit = kits[team];
   if (hit) return hit;
   const p = TEAM_PAL[team];
-  const camo = TEAM_CAMO[team];
   const names = ['hull', 'trim', 'panel', 'metal', 'steel', 'rubber', 'glass', 'canvas', 'hazard', 'accent', 'glow', 'lamp', 'hot', 'plasma', 'rail'] as const;
+  const tp = TEAM_PAINT[team];
   const rows: Row[] = [
-    { color: camo[0], rough: 0.74, metal: 0.12, camo: true, scale: 0.5, bump: 1.3 },
-    { color: team === 0 ? '#2c3237' : '#35342a', rough: 0.8, metal: 0.2, scale: 1.0 },
-    { color: team === 0 ? '#6c777c' : '#8b8160', rough: 0.78, metal: 0.1, scale: 0.9 },
-    { color: '#3a3d3f', rough: 0.46, metal: 0.85, scale: 1.7, wear: 0.9, dirt: 0.6 },
-    { color: '#8a8f93', rough: 0.34, metal: 0.92, scale: 2.2, wear: 0.3, dirt: 0.4, bump: 1.2 },
-    { color: '#1a1b1c', rough: 0.93, metal: 0.02, scale: 2.4, wear: 0, bump: 0.8 },
-    { color: '#14222a', rough: 0.1, metal: 0.65, scale: 0, wear: 0, dirt: 0, bump: 0 },
-    { color: team === 0 ? '#4f5a52' : '#6a6544', rough: 0.96, metal: 0, scale: 1.4, wear: 0, bump: 1.4 },
-    { color: '#9c7d20', rough: 0.6, metal: 0.1, scale: 1.0 },
-    { color: p.accent, rough: 0.55, metal: 0.05, wear: 0.4, scale: 1.2 },
-    { color: '#000000', rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: p.glow, emI: 1.6 },
-    { color: '#000000', rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: '#fff0d0', emI: 1.8 },
-    { color: '#000000', rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: '#ff7a2a', emI: 2.4 },
-    { color: '#000000', rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: '#79f0d6', emI: 1.8 },
-    { color: '#000000', rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: '#86adff', emI: 2.2 },
+    { color: tp[0] },
+    { color: tp[1], bev: 0.6 },
+    { color: tp[2] },
+    { color: '#4b535b', bev: 0.8 },
+    { color: '#b3bcc3', bev: 0.6 },
+    { color: '#2b2d30', bev: 0.3, rim: 0.4 },
+    { color: '#1b3440', bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12 },
+    { color: tp[3] },
+    { color: '#e2b13a' },
+    { color: p.accent, bev: 0.6 },
+    { color: '#000000', bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.15 },
+    { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#fff0d0', emI: 1.8 },
+    { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#ff7a2a', emI: 2.4 },
+    { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#79f0d6', emI: 1.8 },
+    { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#86adff', emI: 2.2 },
   ];
-  const uber = makeUber(rows, camo);
+  const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
   const kit: Record<string, unknown> = {
-    decal: new THREE.MeshStandardMaterial({ map: decalTex, transparent: false, alphaTest: 0.35, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    decal: new THREE.MeshToonMaterial({ map: decalTex, gradientMap: celRamp(), transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     uber, pal: p,
   };
   names.forEach((n, i) => { kit[n] = { uid: i, base: uber } as UMat; });
