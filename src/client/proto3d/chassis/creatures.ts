@@ -24,7 +24,8 @@ export function planRing(cx: number, y: number, cz: number, rxF: number, rxB: nu
   const out: V3[] = [];
   const e = 2 / pw;
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    // half-step offset: a flat facet faces forward (reads as a plate, not a prow vertex)
+    const a = ((i + 0.5) / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     const x = Math.sign(c) * Math.pow(Math.abs(c), e) * (c > 0 ? rxF : rxB);
     out.push([cx + x, y, cz - Math.sign(s) * Math.pow(Math.abs(s), e) * rz]);
   }
@@ -98,16 +99,17 @@ function bunkerCrawler(c: ChassisCtx): ChassisOut {
   const cx = -0.08 * u;
   const rxF = 0.78 * u, rxB = 0.92 * u, rz = 1.18 * u;
   // belly + armoured skirt band
-  shell(b, kit.trim, cx, 0, rxF, rxB, rz, [[by - 0.24 * u, 0.7], [by - 0.08 * u, 0.94], [by + 0.02 * u, 0.96]], 14, 2.6);
-  // carapace: low, wide dome with a hard rim
-  shell(b, kit.hull, cx, 0, rxF, rxB, rz, [[by - 0.02 * u, 1.0], [by + 0.12 * u, 1.04], [by + 0.18 * u, 1.0], [by + 0.36 * u, 0.86, -0.04 * u], [by + 0.5 * u, 0.62, -0.08 * u], [by + 0.56 * u, 0.36, -0.1 * u]], 14, 2.6);
+  shell(b, kit.trim, cx, 0, rxF, rxB, rz, [[by - 0.24 * u, 0.72], [by - 0.06 * u, 0.95], [by + 0.02 * u, 0.97]], 8, 2);
+  // pillbox carapace: faceted octagonal wall band, sloped roof, flat top
+  shell(b, kit.hull, cx, 0, rxF, rxB, rz, [[by, 1.0], [by + 0.2 * u, 1.03], [by + 0.25 * u, 0.98], [by + 0.44 * u, 0.7, -0.04 * u], [by + 0.5 * u, 0.56, -0.06 * u]], 8, 2);
   const topY = by + 0.56 * u;
-  // dorsal armour saddle (panel) running front-to-back: breaks the dome into readable plates
-  shell(b, kit.panel, cx - 0.1 * u, 0, 0.62 * u, 0.62 * u, 0.36 * u, [[by + 0.4 * u, 1.0], [by + 0.6 * u, 0.86], [by + 0.64 * u, 0.6]], 10, 2.2);
+  // roof hatch plate (panel) + accent ring
+  shell(b, kit.panel, cx - 0.1 * u, 0, 0.42 * u, 0.42 * u, 0.6 * u, [[by + 0.46 * u, 1.0], [by + 0.53 * u, 0.98], [by + 0.56 * u, 0.86]], 8, 2);
+  both((s) => glow(b, kit, cx + 0.1 * u, by + 0.22 * u, s * 1.2 * u, 0.5 * u, 0.04 * u, 0.04 * u, [0, -s * 0.38, 0]));
   // brow: heavy armour lip over the visor, hazard band on top
   const fx = cx + rxF;
-  block(b, kit.hull, fx - 0.14 * u, by + 0.1 * u, 0, 0.36 * u, 1.3 * u, 0.24 * u, { top: [0.6, 0.9], shift: [0.08 * u, 0], ch: 0.14 * u, bev: 0.05 * u });
-  hazard(b, kit, fx - 0.1 * u, by + 0.35 * u, 0, 0.18 * u, 0.9 * u, 5, Math.PI / 2);
+  block(b, kit.hull, fx - 0.12 * u, by + 0.12 * u, 0, 0.4 * u, 1.2 * u, 0.26 * u, { top: [0.6, 0.9], shift: [0.1 * u, 0], ch: 0.16 * u, bev: 0.05 * u });
+  hazard(b, kit, fx - 0.06 * u, by + 0.38 * u, 0, 0.16 * u, 0.8 * u, 5, Math.PI / 2);
   // visor slit: dark recess + glowing eye band + twin lamps
   b.box(kit.trim, 0.08 * u, 0.1 * u, 1.0 * u, fx + 0.02 * u, by + 0.02 * u, 0, 0.02 * u);
   glow(b, kit, fx + 0.06 * u, by + 0.03 * u, 0, 0.03 * u, 0.04 * u, 0.8 * u);
@@ -124,7 +126,7 @@ function bunkerCrawler(c: ChassisCtx): ChassisOut {
     const podL = Math.max(0.62 * u, r * 2.3), podW = Math.max(0.4 * u, r * 1.6), podH = 0.28 * u;
     const px = jaw ? mx - podL * 0.25 : mx;
     const wy = by - 0.12 * u;
-    const top = reachArm(b, kit, s, [cx + 0.25 * u, by + 0.05 * u, s * 0.86 * u], [cx + 0.2 * u, by + 0.42 * u, s * 1.32 * u], [px, wy, mz], { t: 0.1 * u, podL, podW, podH, jaw });
+    const top = reachArm(b, kit, s, [cx + 0.3 * u, by + 0.3 * u, s * 0.8 * u], [cx + 0.12 * u, by + 0.78 * u, s * 1.36 * u], [px, wy, mz], { t: 0.11 * u, podL, podW, podH, jaw });
     if (m) podTop.set(m, top);
   });
   let hips: Hip[] | undefined;
@@ -163,10 +165,10 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
   const bands: [number, number, number, number, number][] = [
     [1.05, 0.6, 0.45, 0.66, 0.42], [0.3, 0.55, 0.5, 0.86, 0.6], [-0.48, 0.5, 0.48, 0.78, 0.54], [-1.2, 0.45, 0.42, 0.6, 0.44], [-1.75, 0.32, 0.3, 0.4, 0.3],
   ];
-  shell(b, kit.trim, -0.3 * u, 0, 1.6 * u, 1.75 * u, 0.62 * u, [[by - 0.22 * u, 0.86], [by + 0.02 * u, 1.0]], 12, 2.4);
+  shell(b, kit.trim, -0.3 * u, 0, 1.6 * u, 1.75 * u, 0.62 * u, [[by - 0.22 * u, 0.86], [by + 0.02 * u, 1.0]], 8, 2);
   bands.forEach(([x, f, r, z, h], i) => {
     const mat = i % 2 ? kit.panel : kit.hull;
-    shell(b, mat, x * u, 0, f * u, r * u, z * u, [[by - 0.06 * u, 0.92], [by + 0.06 * u, 1.0], [by + h * 0.6 * u, 0.9, -0.04 * u], [by + h * u, 0.62, -0.08 * u], [by + h * 1.06 * u, 0.32, -0.1 * u]], 12, 2.6);
+    shell(b, mat, x * u, 0, f * u, r * u, z * u, [[by - 0.06 * u, 0.92], [by + 0.08 * u, 1.0], [by + h * 0.7 * u, 0.94, 0.04 * u], [by + h * u, 0.6, 0.02 * u]], 8, 2);
     if (i > 0 && i < 4) glow(b, kit, (x - r * 0.75) * u, by + h * 0.65 * u, 0, 0.03 * u, 0.03 * u, z * 1.0 * u);
   });
   // prow: wedge ram with a glowing triple-eye band
@@ -179,7 +181,7 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
   const tail = c.mounts.find((m) => m.x < -0.8 * u);
   const tx = tail ? tail.x : -1.54 * u, tz = tail ? tail.z : -0.8 * u, tr = tail?.r ?? 0.39 * u;
   const baseP: V3 = [-0.35 * u, by + 0.66 * u, -0.28 * u];
-  const elbow: V3 = [-0.9 * u, by + 1.75 * u, (-0.28 - 0.3) * u];
+  const elbow: V3 = [-0.75 * u, by + 2.05 * u, (-0.28 - 0.3) * u];
   const cradleY = by + 1.25 * u;
   const tipP: V3 = [tx + 0.12 * u, cradleY - 0.05 * u, tz];
   b.cylb(kit.trim, 0.3 * u, 0.12 * u, 0.04 * u, [baseP[0], by + 0.5 * u, baseP[2]], 'y', 14);
