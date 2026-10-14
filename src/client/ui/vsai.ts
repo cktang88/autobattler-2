@@ -149,7 +149,8 @@ export function vsaiScreen(app: App): Screen {
     h('div.db-name', { title: i.d.name }, i.d.name),
     h('div.db-meta', null,
       h('b.db-cost', null, String(i.cost)),
-      h('span', null, st.squad > 1 ? `×${st.squad}` : `${st.size}×${st.size}`),
+      // footprint width × length in cells (same as the garage badge), not the size class squared
+      h('span', { title: st.squad > 1 ? `Squad of ${st.squad}` : 'Footprint in cells (width × length)' }, st.squad > 1 ? `×${st.squad}` : `${st.fw}×${st.fh}`),
       h('span', { title: 'Longest reach' }, `${Math.round(i.rangeM)} m`)),
     capBadges(i),
     where === 'coll' && inDeck ? h('span.db-tick', { 'aria-hidden': 'true' }, '✓') : null,
