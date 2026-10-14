@@ -292,7 +292,7 @@ test('melee: charges into contact and strikes edge-to-edge', () => {
   assert.ok(firstHitGap <= 0.6 * 1.08 + 0.05, `gap ${firstHitGap}`);
 });
 
-test('arc shells land where the target was: fast movers dodge, parked targets do not', () => {
+test('arc shells lead their target: a fast mover on a steady course is hit about as well as a parked one', () => {
   // one mortar truck vs one target, several seeds and lateral offsets
   const perShot = (enemy: string) => {
     let dmg = 0, shots = 0;
@@ -312,7 +312,8 @@ test('arc shells land where the target was: fast movers dodge, parked targets do
   const fast = perShot('runner');
   assert.ok(fast.shots > 0 && parked.shots > 0);
   assert.ok(parked.per > 20, `parked ${parked.per}`);
-  assert.ok(fast.per < parked.per * 0.4, `fast ${fast.per} vs parked ${parked.per}`);
+  // artillery solves for the intercept point, so running in a straight line no longer dodges it
+  assert.ok(fast.per > parked.per * 0.6, `fast ${fast.per} vs parked ${parked.per}`);
 });
 
 test('stealth: untargetable until it fires; detectors reveal it', () => {
