@@ -85,7 +85,9 @@ class Particles {
   private aCol: THREE.InstancedBufferAttribute; private aTex: THREE.InstancedBufferAttribute;
   private geo: THREE.InstancedBufferGeometry;
 
-  constructor(readonly cap: number, atlas: THREE.Texture, additive: boolean) {
+  readonly cap: number;
+  constructor(cap: number, atlas: THREE.Texture, additive: boolean) {
+    this.cap = cap;
     const f = (k: number) => new Float32Array(cap * k);
     this.px = f(1); this.py = f(1); this.pz = f(1); this.vx = f(1); this.vy = f(1); this.vz = f(1);
     this.age = f(1); this.life = f(1); this.s0 = f(1); this.s1 = f(1); this.rot = f(1); this.spin = f(1);
@@ -196,7 +198,9 @@ class Flats {
   readonly mesh: THREE.InstancedMesh;
   n = 0;
   private d: { x: number; z: number; y: number; s0: number; s1: number; rot: number; age: number; life: number; r: number; g: number; b: number }[] = [];
-  constructor(readonly cap: number, geo: THREE.BufferGeometry, mat: THREE.Material, order: number) {
+  readonly cap: number;
+  constructor(cap: number, geo: THREE.BufferGeometry, mat: THREE.Material, order: number) {
+    this.cap = cap;
     this.mesh = new THREE.InstancedMesh(geo, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
@@ -309,7 +313,9 @@ const _bm = new THREE.Matrix4();
 class Segments {
   readonly mesh: THREE.InstancedMesh;
   n = 0;
-  constructor(readonly cap: number, additive: boolean, order: number) {
+  readonly cap: number;
+  constructor(cap: number, additive: boolean, order: number) {
+    this.cap = cap;
     this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
       color: '#ffffff', toneMapped: false, transparent: true, depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,

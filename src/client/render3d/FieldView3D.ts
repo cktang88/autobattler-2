@@ -2,9 +2,11 @@
 // Orthographic camera tilted ~58 degrees so the 2D ground mapping (Camera/CameraControls from render/camera.ts) stays
 // exact: worldToScreen/screenToWorld and match.ts's 2D overlays (range rings, labels) line up with the 3D ground.
 // Scene axes: three x = field x (cells), three z = field y, three y = up (cells).
+//
+// Layers: terrain (proto3d buildTerrain, restyled per map) -> instanced units (units-adapter) -> effects (fx3d) -> post
+// (AO / bloom / grade) -> screen-space overlay (health bars, paralysis meters, level pips; ui3d).
 
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { battleSfx, setPanFlip } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
@@ -13,47 +15,66 @@ import { DT, type BattleEvent, type SimProjectile, type SimUnit } from '../../sh
 import type { Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
-import { MAPS, groundCanvas, surroundCanvas, SURROUND, type MapTheme } from '../render/ground.ts';
+import { MAPS, type MapTheme } from '../render/ground.ts';
 import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
-import { instantiate, templateKey, type UnitInst } from './units-adapter.ts';
+import { buildTerrain, createRenderer, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
+import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts';
+import { Fx3D, RAMPS } from './fx3d.ts';
+import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 
 const ELEV = (58 * Math.PI) / 180;
 const GUN_H = 0.55;
+const SHAKE_CAP = 3;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
 interface Snap { x: number; y: number; angle: number; mounts: number[] }
-interface UView { inst: UnitInst; key: string }
-interface Fx { obj: THREE.Object3D; life: number; max: number; s0: number; s1: number; vel?: THREE.Vector3; kind: 'sprite' | 'beam' | 'ring'; a0: number }
-
-function glowTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d')!;
-  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
+interface PSnap { x: number; y: number; z: number; angle: number }
+/** per-unit presentation state */
+interface UView {
+  rig: Rig;
+  lx: number; ly: number; seen: boolean;
+  dmgT: number; healT: number; hpLast: number; shLast: number; hpShown: number;
+  shT: number; hx: number; hy: number; hz: number;
+  hits: number;
 }
+interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
+interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean }
 
-/** beam / tracer colour by module visual */
-function beamStyle(moduleId: string): { color: string; w: number } {
+/** beams / bolts: colour + width + life by module visual */
+function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
   const v = MODULE_BY_ID.get(moduleId)?.visual;
   switch (v) {
-    case 'laser': return { color: '#ff5a4a', w: 0.07 };
-    case 'heatray': return { color: '#ff8a2a', w: 0.14 };
-    case 'plasma': return { color: '#e070ff', w: 0.16 };
-    case 'tesla': case 'emp': return { color: '#9fc8ff', w: 0.07 };
-    case 'slowbeam': case 'sonic': case 'gravity': return { color: '#5ec8ff', w: 0.1 };
-    case 'rail': case 'gauss': return { color: '#9fb8ff', w: 0.09 };
-    case 'repair': return { color: '#7dff9a', w: 0.07 };
-    default: return { color: '#ffd890', w: 0.07 };
+    case 'laser': return { color: '#ff4a3a', w: 0.05, life: 0.1, wob: 0 };
+    case 'heatray': return { color: '#ff8a2a', w: 0.13, life: 0.12, wob: 0.25 };
+    case 'plasma': return { color: '#e070ff', w: 0.15, life: 0.12, wob: 0.2 };
+    case 'tesla': case 'emp': return { color: '#9fc8ff', w: 0.05, life: 0.2, wob: 0 };
+    case 'slowbeam': case 'sonic': case 'gravity': return { color: '#5ec8ff', w: 0.09, life: 0.12, wob: 0.35 };
+    case 'rail': case 'gauss': return { color: '#9fb8ff', w: 0.07, life: 0.24, wob: 0 };
+    case 'repair': case 'nanite': return { color: '#7dff9a', w: 0.06, life: 0.12, wob: 0.2 };
+    default: return { color: '#ffd890', w: 0.05, life: 0.1, wob: 0 };
   }
 }
+const BEAM_VIS = new Set(['laser', 'heatray', 'plasma', 'tesla', 'emp', 'slowbeam', 'sonic', 'gravity', 'repair', 'nanite', 'rail', 'gauss']);
+
+/** tracer colour for a bullet of this module */
+function tracerColor(moduleId: string): [number, number, number] {
+  const v = MODULE_BY_ID.get(moduleId)?.visual;
+  switch (v) {
+    case 'rail': case 'gauss': case 'sniper': return [0.5, 0.65, 1.0];
+    case 'laser': return [1, 0.25, 0.2];
+    case 'plasma': return [0.9, 0.4, 1];
+    case 'flak': return [1, 0.6, 0.25];
+    default: return [1, 0.72, 0.3];
+  }
+}
+
+const _v3 = new THREE.Vector3();
+const _col = new THREE.Color();
 
 export class FieldView3D implements BattleView {
   readonly canvas: HTMLCanvasElement;
@@ -67,28 +88,30 @@ export class FieldView3D implements BattleView {
   private tiltOn = true;
   private cssW = 300;
   private cssH = 400;
-  private dpr = 1;
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000);
-  private sun = new THREE.DirectionalLight('#fff0d8', 3.1);
+  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 100, 800);
+  private stage: Stage;
+  private sun: THREE.DirectionalLight;
+  private post: Post;
   private map: MapTheme = MAPS[0];
-  private groundMesh: THREE.Mesh;
-  private surroundMesh: THREE.Mesh;
-  private groundTex: THREE.CanvasTexture | null = null;
-  private surroundTex: THREE.CanvasTexture | null = null;
+  private terrain: { group: THREE.Group; ground: THREE.Mesh } | null = null;
+  private rocks: THREE.Object3D[] = [];
   private myZone: THREE.Mesh;
   private foeZone: THREE.Mesh;
   private grid: THREE.LineSegments;
   private hoverFill: THREE.Mesh;
   private hoverLine: THREE.LineLoop;
   private selLines: THREE.LineLoop[] = [];
-  private glow = glowTexture();
-  // unit pool + live instances
-  private free = new Map<string, UnitInst[]>();
-  private deployUsed: UnitInst[] = [];
+  private layer = new UnitLayer();
+  private fx = new Fx3D();
+  private shields = new ShieldPool();
+  private ui = new Overlay();
+  private fxRoot = new THREE.Group();
+  // live instances
+  private deployUsed: Rig[] = [];
   private bu = new Map<number, UView>();
-  private wrecks: UnitInst[] = [];
+  private wrecks: Wreck[] = [];
   // battle state
   private battle: Battle | null = null;
   private lastTick = -1;
@@ -97,39 +120,53 @@ export class FieldView3D implements BattleView {
   private alpha = 1;
   private prevU = new Map<number, Snap>();
   private curU = new Map<number, Snap>();
-  private prevP = new Map<number, { x: number; y: number; z: number; angle: number }>();
-  private curP = new Map<number, { x: number; y: number; z: number; angle: number }>();
+  private prevP = new Map<number, PSnap>();
+  private curP = new Map<number, PSnap>();
+  private projRec = new Map<number, ProjRec>();
   private pending: BattleEvent[] = [];
   private usePush = false;
-  private projMeshes = new Map<number, THREE.Object3D>();
-  private fx: Fx[] = [];
   private time = 0;
-  private flashA = 0;
-  private shadowOn = true;
-  private lastDraw = 0;
+  private altHeld = false;
+  private hitBudget = 0;
+  // quality
+  /** 'auto' scales AO / bloom / shadows / resolution from frame time; a number pins the level (0 best) */
+  quality: 'auto' | 0 | 1 | 2 | 3 = 'auto';
+  private level = 0;
+  private ema = 16;
+  private lastRender = 0;
+  private slowT = 0;
+  private fastT = 0;
+  private dprNow = 1;
+  private lastUnits = 0;
+  private lastShadowKey = '';
+  private onKey: ((e: KeyboardEvent) => void) | null = null;
+  private onBlur: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, viewerSide: Side, opts?: { interactive?: boolean }) {
     this.canvas = canvas;
     this.viewerSide = viewerSide;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('r3dq');
+    if (q === 'high') this.quality = 0; else if (q === 'low') this.quality = 3; else if (q && /^[0-3]$/.test(q)) this.quality = Number(q) as 0 | 1 | 2 | 3;
+    this.renderer = createRenderer(canvas);
+    this.renderer.info.autoReset = false;
+    this.dprNow = this.dprFor(0);
+    this.renderer.setPixelRatio(this.dprNow);
     this.controls = new CameraControls(this.cam, canvas, opts?.interactive !== false);
     this.cam.setAspect(this.ay);
     try { setPanFlip(viewerSide === 1); } catch { /* audio optional */ }
 
-    const pm = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.32;
-    pm.dispose();
-    this.scene.add(new THREE.HemisphereLight('#a8bccb', '#4a4332', 0.55));
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.03;
-    this.scene.add(this.sun, this.sun.target);
+    this.stage = setupStage(this.renderer, this.scene, { fog: false, shadowRes: 2048 });
+    this.sun = this.stage.sun;
+    this.post = setupPost(this.renderer, this.scene, this.camera, 512, 512, { ao: true, bloom: true, grade: true });
+    // AO must not treat billboards / beams / bubbles as geometry: hide the fx root during its normal pass
+    const g = this.post.gtao as unknown as { _overrideVisibility?: () => void; _visibilityCache?: THREE.Object3D[] } | null;
+    if (g && typeof g._overrideVisibility === 'function' && Array.isArray(g._visibilityCache)) {
+      const orig = g._overrideVisibility.bind(g);
+      g._overrideVisibility = () => {
+        orig();
+        if (this.fxRoot.visible) { this.fxRoot.visible = false; g._visibilityCache!.push(this.fxRoot); }
+      };
+    }
 
     const flat = (w: number, h: number, color: string, opacity: number) => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h).rotateX(-Math.PI / 2),
@@ -137,26 +174,16 @@ export class FieldView3D implements BattleView {
       m.renderOrder = 2;
       return m;
     };
-    this.groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_H).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 }));
-    this.groundMesh.position.set(FIELD_W / 2, 0, FIELD_H / 2);
-    this.groundMesh.receiveShadow = true;
-    const SW = FIELD_W + SURROUND * 2, SH = FIELD_H + SURROUND * 2;
-    this.surroundMesh = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 }));
-    this.surroundMesh.position.set(FIELD_W / 2, -0.04, FIELD_H / 2);
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(FIELD_W + 0.6, 1.2, FIELD_H + 0.6), new THREE.MeshStandardMaterial({ color: '#1b1f23', roughness: 0.9 }));
-    slab.position.set(FIELD_W / 2, -0.62, FIELD_H / 2);
-    this.scene.add(this.surroundMesh, slab, this.groundMesh);
-
     const myTop = viewerSide === 0 ? FIELD_H - DEPLOY_D : 0;
     const enTop = viewerSide === 0 ? 0 : FIELD_H - DEPLOY_D;
-    this.myZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[0].rim, 0.05);
+    this.myZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[0].rim, 0.04);
     this.myZone.position.set(FIELD_W / 2, 0.03, myTop + DEPLOY_D / 2);
-    this.foeZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[1].rim, 0.05);
+    this.foeZone = flat(FIELD_W, DEPLOY_D, TEAM_PAL[1].rim, 0.04);
     this.foeZone.position.set(FIELD_W / 2, 0.03, enTop + DEPLOY_D / 2);
     this.scene.add(this.myZone, this.foeZone);
     // zone front lines
     const line = (z: number, color: string) => {
-      const l = flat(FIELD_W, 0.14, color, 0.7);
+      const l = flat(FIELD_W, 0.12, color, 0.6);
       l.position.set(FIELD_W / 2, 0.04, z);
       this.scene.add(l);
     };
@@ -168,7 +195,7 @@ export class FieldView3D implements BattleView {
     for (let y = 0; y <= DEPLOY_D; y++) pts.push(0, 0.05, myTop + y, FIELD_W, 0.05, myTop + y);
     const gg = new THREE.BufferGeometry();
     gg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    this.grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: TEAM_PAL[0].accent, transparent: true, opacity: 0.16, depthWrite: false }));
+    this.grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: TEAM_PAL[0].accent, transparent: true, opacity: 0.2, depthWrite: false }));
     this.grid.visible = false;
     this.scene.add(this.grid);
     this.hoverFill = flat(1, 1, '#46e88a', 0.3);
@@ -177,8 +204,20 @@ export class FieldView3D implements BattleView {
     this.hoverLine.visible = false;
     this.scene.add(this.hoverFill, this.hoverLine);
 
+    this.fxRoot.add(this.fx.group, this.shields.group);
+    this.scene.add(this.layer.group, this.fxRoot);
+
     this.setMapNow(this.map);
     this.resize();
+
+    // Alt shows every health bar (same as the 2D view)
+    if (typeof window !== 'undefined') {
+      this.onKey = (e) => { if (e.key === 'Alt') { this.altHeld = e.type === 'keydown' && this.controls.enabled; if (e.type === 'keydown') e.preventDefault(); } };
+      this.onBlur = () => { this.altHeld = false; };
+      window.addEventListener('keydown', this.onKey);
+      window.addEventListener('keyup', this.onKey);
+      window.addEventListener('blur', this.onBlur);
+    }
   }
 
   /* ------------------------------------------------------------------------------------------ settings */
@@ -194,33 +233,100 @@ export class FieldView3D implements BattleView {
   setMap(map: MapTheme): void {
     if (map.id !== this.map.id) this.setMapNow(map);
   }
+
+  /** Terrain from proto3d, restyled per map: seed + a colour tint from the 2D theme ramp, map void as the background. */
   private setMapNow(map: MapTheme): void {
     this.map = map;
-    this.groundTex?.dispose();
-    this.surroundTex?.dispose();
-    const mk = (c: HTMLCanvasElement) => {
-      const t = new THREE.CanvasTexture(c);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.anisotropy = 8;
-      return t;
-    };
-    this.groundTex = mk(groundCanvas(24, map));
-    this.surroundTex = mk(surroundCanvas(map));
-    (this.groundMesh.material as THREE.MeshStandardMaterial).map = this.groundTex;
-    (this.groundMesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
-    (this.surroundMesh.material as THREE.MeshStandardMaterial).map = this.surroundTex;
-    (this.surroundMesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+    if (this.terrain) {
+      this.scene.remove(this.terrain.group);
+      this.terrain.group.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+        const mat = m.material as THREE.MeshStandardMaterial | undefined;
+        if (mat) { mat.map?.dispose(); mat.bumpMap?.dispose(); mat.dispose(); }
+      });
+    }
+    for (const r of this.rocks) { this.scene.remove(r); (r as THREE.InstancedMesh).geometry.dispose(); }
+    this.rocks = [];
+    const t = buildTerrain(FIELD_H, FIELD_W, { seed: map.seed * 13 + 5, ppc: 16, grid: true, zoneFrac: DEPLOY_D / FIELD_H, props: false });
+    // terrain is authored with deployment zones at its local +-x ends; our zones run along field y, so turn it a quarter
+    // and put team 0 (the viewer's colour) at the viewer's end.
+    t.group.rotation.y = this.viewerSide === 0 ? Math.PI / 2 : -Math.PI / 2;
+    t.group.position.set(FIELD_W / 2, 0, FIELD_H / 2);
+    const c1 = new THREE.Color().setRGB(map.ramp[1][0] / 255, map.ramp[1][1] / 255, map.ramp[1][2] / 255, THREE.SRGBColorSpace);
+    const ref = new THREE.Color().setRGB(120 / 255, 108 / 255, 84 / 255, THREE.SRGBColorSpace);
+    const tint = new THREE.Color(clamp(c1.r / ref.r, 0.35, 2), clamp(c1.g / ref.g, 0.35, 2), clamp(c1.b / ref.b, 0.35, 2));
+    t.group.children.forEach((o, i) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (m?.color) m.color.copy(tint).multiplyScalar(i === 0 ? 1 : 0.8);
+    });
+    this.scene.add(t.group);
+    this.terrain = t;
+    this.scatterRocks(map, tint);
     this.scene.background = new THREE.Color(map.void);
+    this.fx.setGround([clamp(map.ramp[1][0] / 255 * 0.9, 0, 1), clamp(map.ramp[1][1] / 255 * 0.9, 0, 1), clamp(map.ramp[1][2] / 255 * 0.9, 0, 1)]);
+  }
+
+  /** boulders around the field edge and pebbles on it (cheap instanced noise-icosahedra; tinted from the map) */
+  private scatterRocks(map: MapTheme, tint: THREE.Color): void {
+    const geo = new THREE.IcosahedronGeometry(1, 1);
+    const pos = geo.getAttribute('position');
+    const seen = new Map<string, number>();
+    for (let i = 0; i < pos.count; i++) {
+      const k = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+      let j = seen.get(k);
+      if (j === undefined) { j = 0.78 + Math.random() * 0.4; seen.set(k, j); }
+      pos.setXYZ(i, pos.getX(i) * j, pos.getY(i) * j * 0.7, pos.getZ(i) * j);
+    }
+    geo.computeVertexNormals();
+    let s = map.seed * 7919 + 3;
+    const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, metalness: 0, envMapIntensity: 0.7 });
+    const base = new THREE.Color().setRGB(map.ramp[2][0] / 255, map.ramp[2][1] / 255, map.ramp[2][2] / 255, THREE.SRGBColorSpace).multiplyScalar(0.55);
+    void tint;
+    const mk = (n: number, place: (m: THREE.Matrix4) => boolean, cast: boolean): THREE.InstancedMesh => {
+      const im = new THREE.InstancedMesh(geo, mat, n);
+      const m = new THREE.Matrix4(), col = new THREE.Color();
+      let k = 0;
+      for (let i = 0; i < n; i++) if (place(m)) { im.setMatrixAt(k, m); im.setColorAt(k, col.copy(base).multiplyScalar(0.7 + rnd() * 0.6)); k++; }
+      im.count = k; im.castShadow = cast; im.receiveShadow = true;
+      this.scene.add(im);
+      this.rocks.push(im);
+      return im;
+    };
+    const q = new THREE.Quaternion(), e = new THREE.Euler();
+    mk(70, (m) => {
+      // ring just outside the field
+      const side = rnd();
+      let x: number, z: number;
+      if (side < 0.5) { x = rnd() < 0.5 ? -1 - rnd() * 14 : FIELD_W + 1 + rnd() * 14; z = rnd() * FIELD_H; }
+      else { x = rnd() * FIELD_W; z = rnd() < 0.5 ? -1 - rnd() * 14 : FIELD_H + 1 + rnd() * 14; }
+      const sc = 0.25 + rnd() * rnd() * 1.6;
+      e.set(rnd() * 0.4, rnd() * 7, rnd() * 0.4); q.setFromEuler(e);
+      m.compose(new THREE.Vector3(x, sc * 0.2, z), q, new THREE.Vector3(sc * (1 + rnd() * 0.6), sc * (0.8 + rnd() * 0.5), sc * (1 + rnd() * 0.6)));
+      return true;
+    }, true);
+    mk(380, (m) => {
+      const x = rnd() * FIELD_W, z = rnd() * FIELD_H, sc = 0.03 + rnd() * 0.07;
+      e.set(0, rnd() * 7, 0); q.setFromEuler(e);
+      m.compose(new THREE.Vector3(x, sc * 0.15, z), q, new THREE.Vector3(sc * (1 + rnd()), sc, sc * (1 + rnd())));
+      return true;
+    }, false);
   }
 
   /* ---------------------------------------------------------------------------------------------- camera */
 
+  private dprFor(level: number): number {
+    const d = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    return Math.min(level >= 2 ? 1 : 1.5, d);
+  }
+
   resize(): void {
-    const dpr = Math.min(1.5, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
     const cw = this.canvas.clientWidth || 300, ch = this.canvas.clientHeight || 400;
-    this.dpr = dpr; this.cssW = cw; this.cssH = ch;
-    this.renderer.setPixelRatio(dpr);
+    this.cssW = cw; this.cssH = ch;
+    this.renderer.setPixelRatio(this.dprNow);
     this.renderer.setSize(cw, ch, false);
+    this.post.setSize(cw, ch);
     this.cam.setViewport(cw, ch);
   }
   private checkSize(): void {
@@ -257,65 +363,130 @@ export class FieldView3D implements BattleView {
     return this.viewerSide === 1 ? { x: FIELD_W - wx, y: FIELD_H - wy } : { x: wx, y: wy };
   }
 
-  /** place the three camera + shadow frustum from the Camera state */
+  /** photosensitivity-safe shake: nothing at the fit view, ramps in when zoomed close, hard-capped (CSS px) */
+  private shakeOffset(): { sx: number; sy: number } {
+    const tr = this.fx.trauma * this.fx.trauma;
+    if (tr <= 0.001 || this.shakeScale <= 0) return { sx: 0, sy: 0 };
+    const zf = clamp((this.cam.k / this.cam.minK - 1.6) / 2.4, 0, 1);
+    const amp = SHAKE_CAP * Math.min(1, tr) * zf * clamp(this.shakeScale, 0, 1);
+    if (amp <= 0.01) return { sx: 0, sy: 0 };
+    const t = this.time;
+    return {
+      sx: (Math.sin(t * 19.5) * 0.6 + Math.sin(t * 29.5 + 1.3) * 0.4) * amp,
+      sy: (Math.sin(t * 16.3 + 0.7) * 0.6 + Math.sin(t * 27 + 2.1) * 0.4) * amp,
+    };
+  }
+
+  /** place the three camera + sun shadow frustum from the Camera state */
   private syncCamera(): void {
     const c = this.cam, k = c.k;
     const t = this.toVisual(c.cx, c.cy); // symmetric: visual centre -> world centre
     const e = this.tiltOn ? ELEV : Math.PI / 2;
     const s = this.viewerSide === 1 ? -1 : 1;
     const D = 400;
+    const sh = this.shakeOffset();
     this.camera.position.set(t.x, D * Math.sin(e), t.y + s * D * Math.cos(e));
     this.camera.up.set(0, 0, -s);
     this.camera.lookAt(t.x, 0, t.y);
     this.camera.left = -this.cssW / (2 * k); this.camera.right = this.cssW / (2 * k);
     this.camera.top = this.cssH / (2 * k); this.camera.bottom = -this.cssH / (2 * k);
     this.camera.updateProjectionMatrix();
-    // sun follows the view so shadows stay sharp; mirrored for the flipped view
-    const half = clamp(Math.max(this.cssW, this.cssH) / (2 * k) * 1.15, 14, 70);
-    this.sun.position.set(t.x - s * 34, 46, t.y + s * 22);
-    this.sun.target.position.set(t.x, 0, t.y);
-    const sc = this.sun.shadow.camera;
-    sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 5; sc.far = 140;
-    sc.updateProjectionMatrix();
+    this.camera.updateMatrixWorld();
+    if (sh.sx || sh.sy) {
+      const me = this.camera.matrixWorld.elements;
+      this.camera.position.x += (me[0] * sh.sx + me[4] * sh.sy) / k;
+      this.camera.position.y += (me[1] * sh.sx + me[5] * sh.sy) / k;
+      this.camera.position.z += (me[2] * sh.sx + me[6] * sh.sy) / k;
+      this.camera.updateMatrixWorld();
+    }
+    // shadow frustum follows the visible ground (snapped so shadows don't shimmer as the camera glides)
+    const hw = this.cssW / (2 * k), hh = this.cssH / (2 * k * this.ay);
+    const radius = clamp(Math.ceil(Math.hypot(hw, hh) * 1.08 / 4) * 4, 16, 72);
+    const cx = Math.round(t.x * 2) / 2, cz = Math.round(t.y * 2) / 2;
+    const key = `${cx},${cz},${radius},${s}`;
+    if (key !== this.lastShadowKey) {
+      this.lastShadowKey = key;
+      this.stage.fitShadow(cx, cz, radius);
+      // keep the light up-left on screen whichever way the camera faces
+      this.sun.position.set(cx - s * 30, 40, cz + s * 20);
+      this.sun.target.updateMatrixWorld();
+    }
+  }
+
+  /* ------------------------------------------------------------------------------------------ quality / render */
+
+  /** Frame-time driven level: 0 = AO + bloom + shadows, 1 = no AO, 2 = no bloom + 1x pixels, 3 = no shadows + direct render. */
+  private updateQuality(units: number): { ao: boolean; bloom: boolean; shadow: boolean; direct: boolean } {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const dtMs = this.lastRender ? now - this.lastRender : 16;
+    this.lastRender = now;
+    if (dtMs < 120) this.ema += (dtMs - this.ema) * 0.08;
+    if (this.quality === 'auto') {
+      if (this.ema > 26) { this.slowT += dtMs; this.fastT = 0; } else if (this.ema < 15) { this.fastT += dtMs; this.slowT = 0; } else { this.slowT = this.fastT = 0; }
+      if (this.slowT > 1500 && this.level < 3) { this.level++; this.slowT = 0; this.ema = 16; }
+      else if (this.fastT > 9000 && this.level > 0) { this.level--; this.fastT = 0; }
+    } else this.level = this.quality;
+    const L = this.level;
+    const dpr = this.dprFor(L);
+    if (dpr !== this.dprNow) { this.dprNow = dpr; this.resize(); }
+    // AO only pays off when zoomed in and the scene is light
+    const aoZoom = this.cam.k >= 9;
+    const ao = L === 0 && aoZoom && units <= 120;
+    this.fx.lod = L >= 2 ? 0.5 : units > 160 ? 0.6 : 1;
+    return { ao, bloom: L <= 1, shadow: L <= 2, direct: L >= 3 };
   }
 
   private render(units: number): void {
-    this.sun.castShadow = units <= 140;
+    this.lastUnits = units;
+    this.layer.flush();
+    const q = this.updateQuality(units);
     this.syncCamera();
-    this.renderer.toneMappingExposure = 1.05 + this.flashA * 0.5 * clamp(this.flashScale, 0, 1);
-    this.renderer.render(this.scene, this.camera);
+    this.sun.castShadow = q.shadow;
+    this.renderer.shadowMap.enabled = q.shadow;
+    const hdr = lerp(0.35, 1, clamp(this.flashScale, 0, 1));
+    this.fx.hdr = hdr;
+    this.renderer.toneMappingExposure = 1 + this.fx.flashA * 0.5 * clamp(this.flashScale, 0, 1);
+    this.renderer.info.reset();
+    if (q.direct) this.renderer.render(this.scene, this.camera);
+    else {
+      if (this.post.gtao) this.post.gtao.enabled = q.ao;
+      if (this.post.bloom) { this.post.bloom.enabled = q.bloom; this.post.bloom.strength = 0.2 + 0.14 * clamp(this.flashScale, 0, 1); }
+      this.post.render();
+    }
+    // overlay on top of the finished frame (exact colours, no tone mapping)
+    const r = this.renderer, ac = r.autoClear;
+    r.autoClear = false;
+    r.clearDepth();
+    r.render(this.ui.scene, this.camera);
+    r.autoClear = ac;
   }
 
-  /* ------------------------------------------------------------------------------------------ unit pool */
+  /** diagnostics for the last frame (all passes: shadow, AO normals, main, bloom, output, overlay) */
+  get stats() {
+    const i = this.renderer.info;
+    return {
+      calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures,
+      units: this.lastUnits, particles: this.fx.particleCount, level: this.level, frameMs: this.ema, templates: this.layer.stats.templates,
+      instancedMeshes: this.layer.liveMeshes, overlayQuads: this.ui.quads,
+    };
+  }
 
-  private take(design: BoardUnit['design'], team: 0 | 1): UnitInst {
-    const key = templateKey(design, team);
-    const inst = this.free.get(key)?.pop() ?? instantiate(design, team);
-    inst.setLook('normal');
-    inst.root.visible = true;
-    inst.root.position.set(0, 0, 0);
-    inst.root.rotation.set(0, 0, 0);
-    if (!inst.root.parent) this.scene.add(inst.root);
-    return inst;
-  }
-  private give(inst: UnitInst): void {
-    inst.root.visible = false;
-    let l = this.free.get(inst.key);
-    if (!l) this.free.set(inst.key, (l = []));
-    l.push(inst);
-  }
+  /* ------------------------------------------------------------------------------------------- unit pool */
+
   private teamOf(side: Side): 0 | 1 { return side === this.viewerSide ? 0 : 1; }
   private clearBattle(): void {
-    for (const v of this.bu.values()) this.give(v.inst);
+    for (const v of this.bu.values()) this.layer.release(v.rig);
     this.bu.clear();
-    for (const w of this.wrecks) this.scene.remove(w.root);
+    for (const w of this.wrecks) this.layer.release(w.rig);
     this.wrecks = [];
-    for (const m of this.projMeshes.values()) this.scene.remove(m);
-    this.projMeshes.clear();
-    for (const f of this.fx) this.scene.remove(f.obj);
-    this.fx = [];
+    this.fx.clear();
+    this.projRec.clear();
     this.prevU.clear(); this.curU.clear(); this.prevP.clear(); this.curP.clear();
     this.pending = [];
+  }
+  private releaseBoard(): void {
+    for (const r of this.deployUsed) this.layer.release(r);
+    this.deployUsed = [];
   }
 
   /* ---------------------------------------------------------------------------------------------- board */
@@ -326,8 +497,10 @@ export class FieldView3D implements BattleView {
     this.time = time;
     if (this.battle) { this.battle = null; this.lastTick = -1; this.clearBattle(); }
     this.cam.update(dt);
-    this.updateFx(dt);
-    (this.myZone.material as THREE.MeshBasicMaterial).opacity = overlay.showZone ? 0.14 : 0.05;
+    this.fx.update(dt);
+    this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
+    this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
+    (this.myZone.material as THREE.MeshBasicMaterial).opacity = overlay.showZone ? 0.14 : 0.04;
     this.grid.visible = !!overlay.showZone;
     const hv = overlay.hover;
     this.hoverFill.visible = this.hoverLine.visible = !!hv;
@@ -342,35 +515,44 @@ export class FieldView3D implements BattleView {
       this.hoverLine.scale.set(w, 1, h);
       this.hoverLine.position.set(hv.col, 0, hv.row);
     }
-    for (const i of this.deployUsed) this.give(i);
-    this.deployUsed = [];
+    this.releaseBoard();
+    this.syncCamera();
+    this.ui.begin(this.camera, this.cam.k);
+    this.shields.begin();
     let nSel = 0;
     for (const u of units) {
       const team = this.teamOf(u.side);
-      const inst = this.take(u.design, team);
-      this.deployUsed.push(inst);
+      const rig = this.layer.acquire(u.design, team);
+      this.deployUsed.push(rig);
       const ang = u.side === 0 ? -Math.PI / 2 : Math.PI / 2;
-      inst.root.position.set(u.x, inst.flying ? flyHeight(inst.S) + 0.4 : 0, u.y);
-      inst.root.rotation.y = -ang;
-      inst.setLook(u.invalid ? 'invalid' : u.ghost ? 'ghost' : u.dim ? 'cloak' : 'normal');
-      if (u.selected) this.selectionRing(nSel++, u.x, u.y, inst, ang, time);
+      rig.root.position.set(u.x, rig.flying ? flyHeight(rig.S) + 0.4 : 0, u.y);
+      rig.root.rotation.y = -ang;
+      if (rig.flying && !u.ghost) rig.locomote(0, false, time + u.x * 0.37, dt);
+      rig.update(dt);
+      const look: Look = u.invalid ? 'invalid' : u.ghost ? 'ghost' : u.dim ? 'cloak' : 'normal';
+      rig.look = look;
+      this.layer.submit(rig, look);
+      if (u.selected) this.selectionRing(nSel++, u.x, u.y, rig, ang, time);
+      if (u.level > 1 && !u.ghost) this.drawPips(u.x, u.y, rig, ang, u.level, 1);
     }
+    this.shields.end();
+    this.ui.end();
     this.hideSelRings(nSel);
-    for (const w of this.wrecks) w.root.visible = false;
+    this.syncProjectiles([]);
     this.render(units.length);
   }
 
-  private selectionRing(i: number, x: number, y: number, inst: UnitInst, ang: number, time: number): void {
+  private selectionRing(i: number, x: number, y: number, rig: Rig, ang: number, time: number): void {
     let l = this.selLines[i];
     if (!l) {
-      l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a, 0.07, b))), new THREE.LineBasicMaterial({ color: TEAM_PAL[0].accent }));
+      l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a, 0.07, b))), new THREE.LineBasicMaterial({ color: TEAM_PAL[0].accent, transparent: true }));
       this.selLines[i] = l;
       this.scene.add(l);
     }
     l.visible = true;
     l.position.set(x, 0, y);
     l.rotation.y = -ang;
-    l.scale.set(inst.L * 0.5 + 0.12, 1, inst.W * 0.5 + 0.12);
+    l.scale.set(rig.L * 0.5 + 0.12, 1, rig.W * 0.5 + 0.12);
     (l.material as THREE.LineBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(time * 5);
   }
   private hideSelRings(from: number): void { for (let i = from; i < this.selLines.length; i++) this.selLines[i].visible = false; }
@@ -391,13 +573,13 @@ export class FieldView3D implements BattleView {
     this.grid.visible = false;
     this.hoverFill.visible = this.hoverLine.visible = false;
     this.hideSelRings(0);
-    for (const i of this.deployUsed) this.give(i);
-    this.deployUsed = [];
+    this.releaseBoard();
   }
 
   drawBattle(battle: Battle, frameDt: number): void {
     this.checkSize();
     const dt = clamp(frameDt, 0, 0.1);
+    this._lastFrameDt = dt || 1 / 60;
     this.time += dt;
     if (battle !== this.battle || battle.tick < this.lastTick) this.reset(battle);
     let newTicks: BattleEvent[] | null = null;
@@ -419,6 +601,11 @@ export class FieldView3D implements BattleView {
 
     const byId = new Map<number, SimUnit>();
     for (const u of battle.units) byId.set(u.id, u);
+    for (const u of battle.units) {
+      if (!u.alive) continue;
+      if (!this.bu.has(u.id)) this.bu.set(u.id, { rig: this.layer.acquire(u.design, this.teamOf(u.side)), lx: u.x, ly: u.y, seen: false, dmgT: -99, healT: -99, hpLast: u.hp, shLast: u.shield, hpShown: u.hp, shT: -99, hx: 0, hy: 0, hz: 0, hits: 0 });
+    }
+    this.hitBudget = 60;
     const events = newTicks ?? this.pending;
     if (events.length) {
       for (const e of events) this.handleEvent(e, byId);
@@ -426,30 +613,40 @@ export class FieldView3D implements BattleView {
       if (!newTicks) this.pending = [];
     }
     this.cam.update(dt);
-    this.updateFx(dt);
+    this.syncCamera();
+    this.ui.begin(this.camera, this.cam.k);
+    this.shields.begin();
 
     // units
     let alive = 0;
     for (const u of battle.units) {
       if (!u.alive) {
         const v = this.bu.get(u.id);
-        if (v) { this.give(v.inst); this.bu.delete(u.id); }
+        if (v) { this.layer.release(v.rig); this.bu.delete(u.id); }
         continue;
       }
       alive++;
-      let v = this.bu.get(u.id);
-      if (!v) {
-        v = { inst: this.take(u.design, this.teamOf(u.side)), key: '' };
-        this.bu.set(u.id, v);
-      }
-      this.poseUnit(u, v.inst);
+      const v = this.bu.get(u.id)!;
+      this.poseUnit(u, v, dt);
     }
-    this.syncProjectiles(battle.projectiles);
-    this.flashA = Math.max(0, this.flashA - dt * 3);
+    this.syncWrecks(dt);
+    this.syncProjectiles(battle.projectiles, byId);
+    this.shields.end();
+    this.ui.end();
+    this.fx.update(dt);
+    this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
+    this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
     this.render(alive);
   }
 
-  private poseUnit(u: SimUnit, inst: UnitInst): void {
+  /** true if a ground point is far enough outside the viewport that nothing of a unit there can be seen */
+  private offscreen(x: number, y: number, margin: number): boolean {
+    const p = this.worldToScreen(x, y), m = margin * this.cam.k;
+    return p.x < -m || p.x > this.cssW + m || p.y < -m * this.ay - 60 || p.y > this.cssH + m * this.ay + 60;
+  }
+
+  private poseUnit(u: SimUnit, v: UView, dt: number): void {
+    const rig = v.rig;
     const a = this.alpha;
     const c = this.curU.get(u.id), pr = this.prevU.get(u.id) ?? c;
     let x = u.x, y = u.y, ang = u.angle;
@@ -462,30 +659,126 @@ export class FieldView3D implements BattleView {
     }
     const ext = u as SimUnit & { cloaked?: boolean };
     const enemyCloak = !!ext.cloaked && u.side !== this.viewerSide;
-    inst.root.visible = !enemyCloak;
-    inst.setLook(ext.cloaked ? 'cloak' : 'normal');
-    const h = u.flying ? flyHeight(inst.S) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * inst.S;
-    inst.root.position.set(x, h, y);
-    inst.root.rotation.y = -ang;
-    u.mounts.forEach((_, i) => {
-      const t = inst.turrets[i];
-      if (!t) return;
-      if (!t.fixed) t.yaw.rotation.y = -normAng(mounts[i] - ang);
-      t.recoil.position.x *= 0.88;
-    });
+    const dist = v.seen ? Math.min(2, Math.hypot(x - v.lx, y - v.ly)) : 0;
+    v.lx = x; v.ly = y; v.seen = true;
+    this.trackVis(u, v);
+    if (enemyCloak || this.offscreen(x, y, rig.radius + 5)) return;
+    const h = u.flying ? flyHeight(rig.S) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * rig.S;
+    rig.root.position.set(x, h, y);
+    rig.root.rotation.y = -ang;
+    rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt);
+    for (let i = 0; i < u.mounts.length; i++) rig.aim(i, normAng(mounts[i] - ang), dt);
+
+    // status tint: hit flash, burning flicker, stun crackle
+    let tr = 1, tg = 1, tb = 1;
+    if (u.hitFlash > 0.02) { const f = u.hitFlash; tr += f * 1.7; tg += f * 1.3; tb += f * 0.9; }
+    if (u.burning > 0) { const f = 0.12 + 0.1 * Math.sin(this.time * 17 + u.id); tr += f * 2; tg += f * 0.6; }
+    if (u.stun > 0) { const f = 0.5 + 0.5 * Math.sin(this.time * 43 + u.id * 2.1); tr += f * 0.3; tg += f * 0.9; tb += f * 1.8; }
+    rig.tr = tr; rig.tg = tg; rig.tb = tb;
+    rig.update(dt);
+    this.layer.submit(rig, ext.cloaked ? 'cloak' : 'normal');
+
+    // status effects
+    const S = rig.S;
+    if (u.burning > 0 && Math.random() < dt * (6 + 3 * S) * this.fx.lod) this.fx.burning(x + (Math.random() - 0.5) * rig.L * 0.5, h + rig.height * 0.6, y + (Math.random() - 0.5) * rig.W * 0.5, S);
+    if (u.stun > 0 && Math.random() < dt * 5) this.fx.arcs(x, h + rig.height * 0.55, y, rig.L * 0.42, rig.W * 0.42);
+
+    this.drawShield(u, v, x, h, y);
+    this.drawBars(u, v, x, h, y, ang, dt);
   }
 
-  private muzzleWorld(unit: number, mount: number, byId: Map<number, SimUnit>): THREE.Vector3 | null {
-    const su = byId.get(unit), v = this.bu.get(unit);
-    if (!su || !v) return null;
-    const t = v.inst.turrets[mount];
-    const m = t?.muzzles[0];
-    if (!t || !m) return null;
-    v.inst.root.updateMatrixWorld(true);
-    return m.getWorldPosition(new THREE.Vector3());
+  /** hp / shield change detection (burn, splash, auras) on top of 'hit' events, for the bar visibility timers */
+  private trackVis(u: SimUnit, v: UView): void {
+    if (u.hp < v.hpLast - 0.01 || u.shield < v.shLast - 0.01) v.dmgT = this.time;
+    else if (u.hp > v.hpLast + 0.5) v.healT = this.time;
+    v.hpLast = u.hp; v.shLast = u.shield;
   }
 
-  /* ---------------------------------------------------------------------------------- projectiles / fx */
+  private drawShield(u: SimUnit, v: UView, x: number, h: number, y: number): void {
+    if (u.shield <= 0) return;
+    const rig = v.rig;
+    const R = Math.max(rig.L, rig.W) * 0.58 + 0.18, Hh = Math.max(0.45, rig.height * 0.85 + 0.12);
+    const b = this.shields.next();
+    b.mesh.position.set(x, h + Hh * 0.42, y);
+    b.mesh.scale.set(R, Hh, R);
+    const since = this.time - v.shT;
+    const hit = since < 0.55 ? 1 - since / 0.55 : 0;
+    const frac = u.maxShield > 0 ? u.shield / u.maxShield : 0.5;
+    const un = b.mat.uniforms;
+    un.uBase.value = (0.05 + 0.07 * frac) * clamp(0.6 + 0.4 * this.flashScale, 0, 1) + hit * 0.1;
+    un.uHit.value = hit;
+    un.uAge.value = since < 0.55 ? since / 0.55 : 1;
+    un.uTime.value = this.time;
+    (un.uHitDir.value as THREE.Vector3).set((v.hx - x) / R, (v.hy - (h + Hh * 0.42)) / Hh, (v.hz - y) / R).normalize();
+  }
+
+  /* ----------------------------------------------------------------------------------- bars / meters / pips */
+
+  private barAlpha(v: UView, S: number): number {
+    if (this.alwaysShowHealth || this.altHeld) return 1;
+    const hold = S >= 4 ? 5 : 3, fade = 0.7;
+    const f = (since: number, hd: number) => (since < hd ? 1 : since < hd + fade ? 1 - (since - hd) / fade : 0);
+    return Math.max(f(this.time - v.dmgT, hold), f(this.time - v.healT, 1.2));
+  }
+
+  /** half height (cells) of the unit's rotated footprint on screen */
+  private halfY(rig: Rig, ang: number): number { return (Math.abs(Math.sin(ang)) * rig.L + Math.abs(Math.cos(ang)) * rig.W) / 2; }
+
+  private drawBars(u: SimUnit, v: UView, x: number, h: number, y: number, ang: number, dt: number): void {
+    const rig = v.rig, ui = this.ui, k = this.cam.k;
+    const S = rig.S;
+    v.hpShown = v.hpShown > u.hp ? Math.max(u.hp, v.hpShown - (u.maxHp * 0.6 + (v.hpShown - u.hp) * 3) * dt) : u.hp;
+    const hy = this.halfY(rig, ang);
+    if (u.level > 1) this.drawPips(x, y, rig, ang, u.level, 0.9, h);
+    const vis = Math.max(this.barAlpha(v, S), u.para > 0 ? 1 : 0);
+    if (vis <= 0.01) return;
+    const top = h + rig.height + 0.05;
+    const boss = S >= 4;
+    const team = this.teamOf(u.side);
+    const w = boss ? Math.max(40, ((rig.L + rig.W) / 2) * k * 1.0) : Math.max(14, ((rig.L + rig.W) / 2) * k * 0.78);
+    const bh = boss ? (S >= 5 ? 9 : 7) : S >= 2 ? 4 : 3;
+    const x0 = -w / 2;
+    const y0 = hy * k * this.ay * (boss ? 1.1 : 1.04) + 4;
+    const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
+    const pad = boss ? 3 : 1.5;
+    ui.rect(x, top, y, x0 - pad, y0 - pad, w + pad * 2, bh + pad * 2, boss ? BAR_COL[team] : BLACK, boss ? 0.95 * vis : 0.88 * vis);
+    if (boss) ui.rect(x, top, y, x0 - pad + 1.2, y0 - pad + 1.2, w + pad * 2 - 2.4, bh + pad * 2 - 2.4, BLACK, 0.92 * vis);
+    ui.rect(x, top, y, x0, y0, w * fs, bh, WHITE, 0.85 * vis);
+    ui.rect(x, top, y, x0, y0, w * f, bh, f < 0.3 ? (team === 0 ? YELLOW : RED) : BAR_COL[team], vis);
+    if (boss) for (let i = 1; i < 10; i++) ui.rect(x, top, y, x0 + (w * i) / 10 - 0.5, y0, 1, bh, BLACK, 0.6 * vis);
+    if (u.maxShield > 0 && u.shield > 0) ui.rect(x, top, y, x0, y0 + bh + 0.5, w * clamp(u.shield / u.maxShield, 0, 1), 1.6, SHIELD_COL, vis);
+    // paralysis (Zero-K style): blue meter under the hp bar, pulsing + bolt glyph while stunned
+    if (u.para > 0) {
+      const pf = clamp(u.para / u.maxHp, 0, 1), stunned = u.stun > 0;
+      const py = y0 - bh - 3.5;
+      ui.rect(x, top, y, x0 - 1.5, py - 1, w + 3, 4.5, BLACK, 0.88);
+      ui.rect(x, top, y, x0, py, w * pf, 2.5, stunned ? (Math.sin(this.time * 14) > 0 ? ICE_HI : ICE_LO) : PARA_COL, 1);
+      if (stunned) { // bolt glyph beside the meter
+        const bx = x0 + w + 6, by = py + 1.2;
+        ui.tri(x, top, y, bx + 2, by + 6, bx - 2, by - 1, bx + 1, by - 1, ICE_HI, 1);
+        ui.tri(x, top, y, bx + 1, by - 1, bx - 1, by - 7, bx + 4, by + 1, ICE_HI, 1);
+      }
+    }
+  }
+
+  /** level pips under the unit's footprint */
+  private drawPips(x: number, y: number, rig: Rig, ang: number, level: number, alpha: number, baseY = 0): void {
+    const ui = this.ui, k = this.cam.k;
+    const sz = clamp(k * 0.18, 3, 6);
+    const hy = this.halfY(rig, ang) * k * this.ay * 0.9;
+    const by = -hy - sz * 0.9;
+    for (let i = 0; i < level - 1; i++) {
+      const cx = (i - (level - 2) / 2) * sz * 1.5;
+      const wing = (m: number, pad: number, c: RGB, a: number) => {
+        const s = sz + pad;
+        ui.quad(x, baseY, y, [cx, by - 0.15 * s, cx + m * 0.6 * s, by + 0.4 * s, cx + m * 0.6 * s, by, cx, by - 0.55 * s], c, a);
+      };
+      wing(-1, 1.2, BLACK, 0.75 * alpha); wing(1, 1.2, BLACK, 0.75 * alpha);
+      wing(-1, 0, GOLD, alpha); wing(1, 0, GOLD, alpha);
+    }
+  }
+
+  /* ------------------------------------------------------------------------------------------ projectiles */
 
   private projPos(p: SimProjectile) {
     const c = this.curP.get(p.id), pr = this.prevP.get(p.id);
@@ -495,165 +788,219 @@ export class FieldView3D implements BattleView {
     return { x: lerp(pr.x, c.x, a), y: lerp(pr.y, c.y, a), z: lerp(pr.z, c.z, a), angle: lerpAngle(pr.angle, c.angle, a) };
   }
 
-  private projMesh(p: SimProjectile): THREE.Object3D {
-    const hot = p.kind === 'orb' ? '#7dffe6' : p.kind === 'flame' ? '#ff8a2a' : p.kind === 'shell' || p.kind === 'arc' ? '#ffb058' : p.kind === 'rocket' || p.kind === 'missile' ? '#ffd0a0' : '#ffe08a';
-    const col = new THREE.Color(hot).multiplyScalar(2.5);
-    const mat = new THREE.MeshBasicMaterial({ color: col, toneMapped: false });
-    const cal = MODULE_BY_ID.get(p.moduleId)?.caliber ?? 0.5;
-    let g: THREE.BufferGeometry;
-    switch (p.kind) {
-      case 'orb': g = new THREE.SphereGeometry(0.2 + 0.2 * cal, 10, 8); break;
-      case 'flame': g = new THREE.SphereGeometry(0.25 + 0.2 * cal, 8, 6); break;
-      case 'shell': case 'arc': g = new THREE.SphereGeometry(0.14 + 0.16 * cal, 10, 8); break;
-      case 'rocket': case 'missile': g = new THREE.BoxGeometry(0.7, 0.12, 0.12); break;
-      default: g = new THREE.BoxGeometry(0.8, 0.05 + 0.05 * cal, 0.05 + 0.05 * cal);
-    }
-    const m = new THREE.Mesh(g, mat);
-    m.renderOrder = 5;
-    return m;
-  }
-
-  private syncProjectiles(list: SimProjectile[]): void {
-    const seen = new Set<number>();
+  private syncProjectiles(list: SimProjectile[], byId?: Map<number, SimUnit>): void {
+    const proj = this.fx.proj;
+    proj.begin();
+    const seen = this.projRec;
+    const alive = new Set<number>();
+    const dt = 1 / 60;
     for (const p of list) {
-      seen.add(p.id);
-      let m = this.projMeshes.get(p.id);
-      if (!m) { m = this.projMesh(p); this.projMeshes.set(p.id, m); this.scene.add(m); }
+      alive.add(p.id);
+      let rec = seen.get(p.id);
       const pos = this.projPos(p);
-      m.position.set(pos.x, pos.z > 0.05 ? pos.z : GUN_H, pos.y);
-      m.rotation.y = -pos.angle;
+      if (!rec) {
+        // launch height: the barrel tip that fired it
+        let y0 = GUN_H;
+        if (p.src !== undefined && p.mount !== undefined) {
+          const rig = this.bu.get(p.src)?.rig;
+          if (rig && rig.muzzleWorld(p.mount, _v3)) y0 = _v3.y;
+        }
+        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0 };
+        seen.set(p.id, rec);
+      }
+      if (this.offscreen(pos.x, pos.y, 4)) { rec.px = pos.x; rec.py = pos.y; continue; }
+      const arcs = p.z > 0.05;
+      const H = arcs ? p.z + 0.12 : lerp(rec.y0, 0.42, clamp(p.progress, 0, 1));
+      const ang = pos.angle;
+      const dx = Math.cos(ang), dz = Math.sin(ang);
+      const dh = H - rec.lastH;
+      const cal = MODULE_BY_ID.get(p.moduleId)?.caliber ?? 0.5;
+      const pitch = arcs ? clamp(dh / Math.max(0.02, Math.hypot(pos.x - rec.px, pos.y - rec.py) || 0.1), -2, 2) : 0;
+      const emit = Math.random() < Math.min(1, this.frameDt() * 60);
+      switch (p.kind) {
+        case 'bullet': {
+          const [r, g, b] = tracerColor(p.moduleId);
+          const len = rec.bright ? 1.0 + cal * 0.8 : 0.45 + cal * 0.4;
+          proj.streak(pos.x - dx * len, H, pos.y - dz * len, pos.x, H, pos.y, 0.05 + cal * 0.06, r, g, b);
+          break;
+        }
+        case 'shell': case 'arc': {
+          const l = 0.34 + 0.4 * cal, d = 0.08 + 0.1 * cal;
+          proj.body(pos.x, H, pos.y, dx, pitch, dz, l, d, 0.75, 0.72, 0.68);
+          proj.streak(pos.x - dx * 0.35, H - pitch * 0.1, pos.y - dz * 0.35, pos.x + dx * l * 0.4, H, pos.y + dz * l * 0.4, 0.06 + cal * 0.05, 1, 0.55, 0.2);
+          if (emit) this.fx.trail(pos.x, H, pos.y, 'shell', 0.6 + cal);
+          break;
+        }
+        case 'rocket': case 'missile': {
+          proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.5 + 0.2 * cal, 0.09 + 0.06 * cal, 0.9, 0.9, 0.86);
+          proj.streak(pos.x - dx * 0.8, H, pos.y - dz * 0.8, pos.x - dx * 0.22, H, pos.y - dz * 0.22, 0.07, 1, 0.55, 0.15);
+          if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, 'rocket', 0.8 + cal * 0.6);
+          break;
+        }
+        case 'flame':
+          if (emit) this.fx.trail(pos.x, H, pos.y, 'flame', 0.8 + cal * 0.6);
+          break;
+        case 'orb': {
+          const v = MODULE_BY_ID.get(p.moduleId)?.visual;
+          const ramp = v === 'emp' || v === 'tesla' ? RAMPS.emp : v === 'plasma' ? RAMPS.plasma : [2.2, 3.0, 2.6, 1, 0.6, 1.8, 1.6, 0.8, 0.1, 0.4, 0.4, 0] as const;
+          this.fx.glow(pos.x, H, pos.y, 0.5 + cal * 0.6, dt * 2.2, ramp);
+          if (emit) this.fx.trail(pos.x, H, pos.y, 'orb', 0.6 + cal * 0.5, ramp);
+          break;
+        }
+        default: break;
+      }
+      rec.lastH = H; rec.px = pos.x; rec.py = pos.y;
     }
-    for (const [id, m] of this.projMeshes) {
-      if (seen.has(id)) continue;
-      this.scene.remove(m);
-      const mesh = m as THREE.Mesh;
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-      this.projMeshes.delete(id);
+    proj.end();
+    for (const id of seen.keys()) if (!alive.has(id)) seen.delete(id);
+    void byId;
+  }
+
+  private _lastFrameDt = 1 / 60;
+  private frameDt(): number { return this._lastFrameDt; }
+
+  /* ---------------------------------------------------------------------------------------------- wrecks */
+
+  private syncWrecks(dt: number): void {
+    for (const w of this.wrecks) {
+      if (this.offscreen(w.x, w.z, w.rig.radius + 3)) continue;
+      this.layer.submit(w.rig, 'wreck');
+      if (w.smoke > 0) {
+        w.smoke -= dt;
+        if (Math.random() < dt * (2.5 + w.S) * this.fx.lod) this.fx.wreckSmoke(w.x, w.z, w.S);
+      }
     }
   }
 
-  private sprite(p: THREE.Vector3, size: number, color: string, life: number, grow = 1, vel?: THREE.Vector3, opacity = 1, additive = true): void {
-    const mat = new THREE.SpriteMaterial({ map: this.glow, color, transparent: true, opacity, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
-    const s = new THREE.Sprite(mat);
-    s.position.copy(p);
-    s.scale.setScalar(size);
-    s.renderOrder = 6;
-    this.scene.add(s);
-    this.fx.push({ obj: s, life, max: life, s0: size, s1: size * grow, vel, kind: 'sprite', a0: opacity });
-  }
+  /* ------------------------------------------------------------------------------------------------ events */
 
-  private beam(a: THREE.Vector3, b: THREE.Vector3, color: string, w: number, life = 0.12): void {
-    const len = a.distanceTo(b);
-    if (len < 0.01) return;
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(3), toneMapped: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
-    m.position.copy(a).lerp(b, 0.5);
-    m.scale.set(len, w, w);
-    m.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
-    m.rotation.z = Math.asin(clamp((b.y - a.y) / len, -1, 1));
-    m.rotation.order = 'YZX';
-    m.renderOrder = 6;
-    this.scene.add(m);
-    this.fx.push({ obj: m, life, max: life, s0: w, s1: w, kind: 'beam', a0: 1 });
-  }
-
-  private explosion(x: number, y: number, r: number): void {
-    const p = new THREE.Vector3(x, 0.5 + r * 0.25, y);
-    this.sprite(p, r * 3.2, '#fff2c0', 0.12, 1.3);
-    this.sprite(p, r * 3.0, '#ff8a2a', 0.45, 1.5);
-    for (let i = 0; i < 4 + Math.round(r * 2); i++) {
-      const a = Math.random() * Math.PI * 2, d = Math.random() * r * 0.7;
-      this.sprite(new THREE.Vector3(x + Math.cos(a) * d, 0.4 + Math.random() * r * 0.4, y + Math.sin(a) * d), r * (1 + Math.random()), '#ff5a1a', 0.35 + Math.random() * 0.3, 1.5);
-      this.sprite(new THREE.Vector3(x + Math.cos(a) * d, 0.6, y + Math.sin(a) * d), r * (1.4 + Math.random()), '#2a2724', 1.2 + Math.random() * 0.8, 2, new THREE.Vector3(0, 0.8, 0), 0.6, false);
-    }
-    // ground shockwave
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd8a0', transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
-    ring.position.set(x, 0.08, y);
-    this.scene.add(ring);
-    this.fx.push({ obj: ring, life: 0.5, max: 0.5, s0: r * 0.3, s1: r * 1.6, kind: 'ring', a0: 0.6 });
-    this.flashA = Math.min(1, this.flashA + Math.min(0.5, r * 0.08));
+  private unitHeight(unit: number, byId: Map<number, SimUnit>, fallback = 0.45): number {
+    const v = this.bu.get(unit), su = byId.get(unit);
+    if (!v || !su) return fallback;
+    return su.flying ? flyHeight(v.rig.S) + 0.4 : Math.min(v.rig.height * 0.6, 0.7);
   }
 
   private handleEvent(e: BattleEvent, byId: Map<number, SimUnit>): void {
+    const fx = this.fx;
     switch (e.t) {
       case 'fire': {
-        const m = this.muzzleWorld(e.unit, e.mount, byId) ?? new THREE.Vector3(e.x, GUN_H, e.y);
+        const v = this.bu.get(e.unit);
+        if (!v || this.offscreen(e.x, e.y, 3)) break;
+        v.rig.kick(e.mount);
+        const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
+        if (vis && BEAM_VIS.has(vis)) break; // beams draw their own flare
         const cal = MODULE_BY_ID.get(e.moduleId)?.caliber ?? 0.5;
-        this.sprite(m, 0.4 + cal * 0.9, '#ffd890', 0.08);
-        const t = this.bu.get(e.unit)?.inst.turrets[e.mount];
-        if (t) t.recoil.position.x = -t.r * 0.18;
+        const m = v.rig.muzzleWorld(e.mount, _v3);
+        if (m) fx.muzzle(m.x, m.y, m.z, Math.cos(e.angle), Math.sin(e.angle), cal);
+        else fx.muzzle(e.x, GUN_H, e.y, Math.cos(e.angle), Math.sin(e.angle), cal);
         break;
       }
       case 'beam': {
-        const a = (e.unit !== undefined && e.mount !== undefined ? this.muzzleWorld(e.unit, e.mount, byId) : null) ?? new THREE.Vector3(e.x1, GUN_H, e.y1);
         const st = beamStyle(e.moduleId);
-        this.beam(a, new THREE.Vector3(e.x2, GUN_H, e.y2), st.color, st.w);
-        this.sprite(new THREE.Vector3(e.x2, GUN_H, e.y2), 0.5, st.color, 0.12);
+        const rig = e.unit !== undefined ? this.bu.get(e.unit)?.rig : undefined;
+        const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
+        if (!m && this.offscreen(e.x1, e.y1, 3) && this.offscreen(e.x2, e.y2, 3)) break;
+        const ay = m ? m.y : GUN_H;
+        fx.beam(m ? m.x : e.x1, ay, m ? m.z : e.y1, e.x2, GUN_H, e.y2, _col.set(st.color).clone(), st.w, st.life, st.wob);
         break;
       }
       case 'chain': {
         const st = beamStyle(e.moduleId);
+        const col = new THREE.Color(st.color);
+        const rig = e.unit !== undefined ? this.bu.get(e.unit)?.rig : undefined;
+        const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
         for (let i = 1; i < e.points.length; i++) {
           const p0 = e.points[i - 1], p1 = e.points[i];
-          this.beam(new THREE.Vector3(p0.x, GUN_H, p0.y), new THREE.Vector3(p1.x, GUN_H + (Math.random() - 0.5) * 0.3, p1.y), st.color, st.w);
+          const sx = i === 1 && m ? m.x : p0.x, sy = i === 1 && m ? m.y : GUN_H, sz = i === 1 && m ? m.z : p0.y;
+          fx.lightning(sx, sy, sz, p1.x, GUN_H, p1.y, col, 0.06, 0.2);
         }
         break;
       }
-      case 'hit':
-        this.sprite(new THREE.Vector3(e.x, 0.5, e.y), e.shieldHit ? 0.9 : 0.5, e.shieldHit ? '#7fd8ff' : '#ffc070', 0.15);
+      case 'hit': {
+        const v = this.bu.get(e.unit);
+        const yh = this.unitHeight(e.unit, byId);
+        if (v) {
+          v.dmgT = this.time;
+          if (e.shieldHit) { v.shT = this.time; v.hx = e.x; v.hy = yh; v.hz = e.y; }
+        }
+        if (this.hitBudget-- <= 0 || this.offscreen(e.x, e.y, 2)) break;
+        if (e.shieldHit) fx.shieldHit(e.x, yh, e.y);
+        else {
+          const cal = MODULE_BY_ID.get(e.moduleId)?.caliber ?? 0.4;
+          fx.impact(e.x, yh, e.y, 0.15 + cal * 0.55, true);
+        }
         break;
-      case 'explode':
-        this.explosion(e.x, e.y, Math.max(0.5, e.radius));
+      }
+      case 'explode': {
+        const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
+        const style = vis === 'plasma' ? 'plasma' : vis === 'emp' || vis === 'tesla' ? 'emp' : 'fire';
+        if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
+        fx.explosion(e.x, e.y, Math.max(0.5, e.radius), style);
         break;
+      }
       case 'death': {
         const v = this.bu.get(e.unit);
-        this.explosion(e.x, e.y, 0.8 + e.size * 0.7);
+        const vis = !this.offscreen(e.x, e.y, 6);
+        if (vis) {
+          if (e.flying) fx.bigExplosion(e.x, e.y, Math.max(1, e.size * 0.8), v ? flyHeight(v.rig.S) + 0.2 : 1);
+          else fx.bigExplosion(e.x, e.y, e.size);
+        }
         if (v && !e.flying) {
           // the hull stays as a charred wreck for the rest of the battle
           this.bu.delete(e.unit);
-          v.inst.setLook('wreck');
-          v.inst.root.position.y = -0.05;
-          this.wrecks.push(v.inst);
-        } else if (v) { this.give(v.inst); this.bu.delete(e.unit); }
-        void byId;
+          const rig = v.rig;
+          rig.look = 'wreck';
+          rig.tr = rig.tg = rig.tb = 1;
+          rig.root.position.set(e.x, -0.03, e.y);
+          rig.root.rotation.y = -(byId.get(e.unit)?.angle ?? 0);
+          rig.root.rotation.z = (Math.random() - 0.5) * 0.06; rig.root.rotation.x = (Math.random() - 0.5) * 0.06;
+          for (const tu of rig.all) { if (!tu.fixed) tu.yaw.rotation.y += (Math.random() - 0.5) * 1.2; tu.yaw.updateMatrix(); tu.recoil.position.x = 0; tu.recoil.updateMatrix(); }
+          rig.update(0);
+          rig.frozen = true;
+          this.wrecks.push({ rig, x: rig.root.position.x, z: rig.root.position.z, smoke: 10 + e.size * 4, S: rig.S });
+        } else if (v) { this.layer.release(v.rig); this.bu.delete(e.unit); }
         break;
       }
+      case 'heal': {
+        const v = this.bu.get(e.unit);
+        if (v) { v.healT = this.time; if (Math.random() < 0.5) fx.heal(v.rig.root.position.x, v.rig.root.position.y + v.rig.height * 0.5, v.rig.root.position.z); }
+        break;
+      }
+      case 'leap': {
+        const v = this.bu.get(e.unit);
+        if (v) fx.dustPuff(v.rig.root.position.x, v.rig.root.position.z, 0.5 + v.rig.S * 0.2);
+        break;
+      }
+      case 'smoke':
+        fx.smokeScreen(e.x, e.y, e.radius, e.duration);
+        break;
       default:
-    }
-  }
-
-  private updateFx(dt: number): void {
-    for (let i = this.fx.length - 1; i >= 0; i--) {
-      const f = this.fx[i];
-      f.life -= dt;
-      const k = clamp(1 - f.life / f.max, 0, 1);
-      if (f.kind === 'sprite') {
-        const sp = f.obj as THREE.Sprite;
-        sp.scale.setScalar(lerp(f.s0, f.s1, k));
-        sp.material.opacity = f.a0 * (1 - k) * (1 - k * 0.3);
-        if (f.vel) sp.position.addScaledVector(f.vel, dt);
-      } else if (f.kind === 'beam') {
-        ((f.obj as THREE.Mesh).material as THREE.Material).opacity = 1 - k;
-      } else {
-        f.obj.scale.setScalar(lerp(f.s0, f.s1, k));
-        ((f.obj as THREE.Mesh).material as THREE.Material).opacity = f.a0 * (1 - k);
-      }
-      if (f.life <= 0) {
-        this.scene.remove(f.obj);
-        const o = f.obj as THREE.Mesh;
-        if (f.kind !== 'sprite') o.geometry.dispose();
-        (o.material as THREE.Material).dispose();
-        this.fx.splice(i, 1);
-      }
     }
   }
 
   destroy(): void {
     this.controls.destroy();
-    this.groundTex?.dispose();
-    this.surroundTex?.dispose();
+    if (typeof window !== 'undefined') {
+      if (this.onKey) { window.removeEventListener('keydown', this.onKey); window.removeEventListener('keyup', this.onKey); }
+      if (this.onBlur) window.removeEventListener('blur', this.onBlur);
+    }
+    this.layer.dispose();
+    this.fx.dispose();
+    this.shields.dispose();
     this.renderer.dispose();
     try { this.renderer.forceContextLoss(); } catch { /* */ }
   }
 }
+
+const BLACK = [0, 0, 0] as const;
+const WHITE = [1, 1, 1] as const;
+const RED = rgb('#ff3a2a');
+const YELLOW = rgb('#ffd24a');
+const GOLD = rgb('#ffd24a');
+const SHIELD_COL = rgb('#8fe0ff');
+const PARA_COL = rgb('#4aa8ff');
+const ICE_HI = rgb('#e6f6ff');
+const ICE_LO = rgb('#7fd0ff');
+const BAR_COL = [rgb(TEAM_PAL[0].bar), rgb(TEAM_PAL[1].bar)] as const;
+type RGB = readonly [number, number, number];
+void templateKey;

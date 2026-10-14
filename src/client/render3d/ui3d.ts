@@ -17,7 +17,9 @@ export class Overlay {
   private inv = 1;
   readonly mesh: THREE.Mesh;
 
-  constructor(private cap = 6000) {
+  private cap: number;
+  constructor(cap = 6000) {
+    this.cap = cap;
     this.pos = new Float32Array(cap * 12);
     this.col = new Float32Array(cap * 16);
     const idx = new Uint32Array(cap * 6);
@@ -64,6 +66,11 @@ export class Overlay {
     if (this.n >= this.cap || a <= 0.005) return;
     this.v(0, ax, ay, az, x0, y0); this.v(1, ax, ay, az, x1, y1); this.v(2, ax, ay, az, x2, y2); this.v(3, ax, ay, az, x2, y2);
     for (let i = 0; i < 4; i++) this.c(i, c, a);
+    this.n++;
+  }
+  quad(ax: number, ay: number, az: number, p: readonly number[], c: RGB, a = 1): void {
+    if (this.n >= this.cap || a <= 0.005) return;
+    for (let i = 0; i < 4; i++) { this.v(i, ax, ay, az, p[i * 2], p[i * 2 + 1]); this.c(i, c, a); }
     this.n++;
   }
   end(): void {

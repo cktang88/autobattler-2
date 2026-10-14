@@ -189,7 +189,8 @@ class Pool {
   cap = 0;
   rigs: Rig[] = [];
   shown = false;
-  constructor(readonly tpl: Template, readonly look: Look, readonly group: THREE.Group) {}
+  readonly tpl: Template; readonly look: Look; readonly group: THREE.Group;
+  constructor(tpl: Template, look: Look, group: THREE.Group) { this.tpl = tpl; this.look = look; this.group = group; }
 
   private build(cap: number): void {
     for (const m of this.meshes) { this.group.remove(m); m.dispose(); }
