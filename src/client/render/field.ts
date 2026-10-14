@@ -44,7 +44,7 @@ const P2 = Math.PI * 2;
 /** cells of flight over which a round's drawn position slides from the barrel tip onto its simulated path */
 const MUZZLE_BLEND = 2.5;
 import {
-  drawUnit, drawUnitShadow, layoutOf, mountPoints, muzzlePos, unitSprites, silhouette, wreckSprite,
+  drawUnit, drawUnitShadow, layoutOf, mountPoints, muzzlePos, unitSprites, silhouette, wreckSprite, wreckHotspots,
   type MountPose, type UnitPose, type ViewDirs,
 } from './unitart.ts';
 
@@ -123,7 +123,7 @@ interface PTrack {
 
 /** fixed resolution (device px per cell) of the cached base ground and the decal layer */
 const GROUND_PX = 24;
-const DECAL_PX = 20;
+const DECAL_PX = 32;
 
 const forwardAngle = (side: Side) => (side === 0 ? -Math.PI / 2 : Math.PI / 2);
 
@@ -460,6 +460,8 @@ export class FieldView {
     const g = this.g;
     const dt = this.time ? clamp(time - this.time, 0, 0.1) : 0;
     this.time = time;
+    // back to deploy: last round's wrecks, scorch marks, craters and smoke never carry over
+    if (this.battle) { this.battle = null; this.lastTick = -1; this.fx.clear(); }
     this.fx.update(dt);
     this.stepCamera(dt);
     this.drawGround(!!overlay.showZone, 0, 0);
@@ -489,7 +491,7 @@ export class FieldView {
       }
       const seed = hash01(i * 7919 + Math.round(u.x * 13 + u.y * 101)) * 10;
       const p: UnitPose = {
-        design: u.design, team: this.teamOf(u.side), x: u.x, y: u.y, angle: forwardAngle(u.side), time, seed,
+        design: u.design, team: this.teamOf(u.side), x: u.x, y: u.y, angle: forwardAngle(u.side), time, seed, groundRing: true,
         alpha: u.ghost ? 0.5 : u.dim ? 0.45 : 1, moving: false, odometer: 0,
       };
       poses.push({ u, p, air: layoutOf(u.design).air });
@@ -561,6 +563,15 @@ export class FieldView {
 
   /* ----------------------------------------------------------------------------------------- battle */
 
+  /** A destroyed unit leaves a smouldering hulk for the rest of this battle (cleared with the battle's fx). */
+  private addWreck(u: { design: Design }, team: Team, x: number, y: number, angle: number, k: number): void {
+    const d = u.design;
+    const S = layoutOf(d).S;
+    const ext = unitSprites(d, team, DECAL_PX).ext;
+    wreckSprite(d, team, DECAL_PX);
+    this.fx.wreck(x, y, angle, S, ext, (px) => wreckSprite(d, team, px), wreckHotspots(d), k);
+  }
+
   private reset(b: Battle): void {
     this.battle = b;
     this.lastTick = -1;
@@ -623,6 +634,7 @@ export class FieldView {
       if (!this.muted) try { battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
     }
+    this.fx.up = { x: this.dirs.ux, y: this.dirs.uy };
     this.fx.update(dt);
     this.stepCamera(dt);
     for (const v of this.vis.values()) {
@@ -634,6 +646,7 @@ export class FieldView {
     const { sx, sy } = this.shakeOffset();
     this.drawGround(false, sx, sy);
     const px = this.spritePx;
+    this.fx.drawWrecks(g, px);
 
     // poses
     const ground: UnitPose[] = [], air: UnitPose[] = [];
@@ -751,7 +764,7 @@ export class FieldView {
     } else mounts = u.mounts.map((m, i) => ({ angle: this.barrelAim(u, i, x, y, ang, m.angle), flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0 }));
     const ext = u as SimUnit & { cloaked?: boolean };
     return {
-      design: u.design, team: this.teamOf(u.side), x, y, angle: ang, time: this.time, odometer: odo, moving: u.moving,
+      design: u.design, team: this.teamOf(u.side), x, y, angle: ang, time: this.time, odometer: odo, moving: u.moving, groundRing: true,
       leap: u.leap, flying: u.flying, hitFlash: u.hitFlash, mounts, seed: (u.id * 0.618) % 10,
       stun: u.stun, slow: u.slow, burning: u.burning, disarm: u.disarm,
       cloak: ext.cloaked ? (u.side === this.viewerSide ? 'own' : 'enemy') : undefined,
@@ -1425,23 +1438,23 @@ export class FieldView {
         const pal = TEAM_PAL[team];
         if (e.flying && S >= 4) {
           fx.megaDeath(x, y, S, pal.dark);
-          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext * 0.9, u.angle + 0.6);
+          if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.9);
         } else if (e.flying) {
           fx.boom(x + this.dirs.ux * 0.3, y + this.dirs.uy * 0.3, 0.5 * S, 'fire', false);
           fx.debris(x, y, 6 * S, pal.dark, 2.5, 0.07 * S);
           fx.schedule(0.35, () => {
             fx.boom(x, y, 0.6 * S, 'fire');
-            if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext * 0.8, u.angle + 0.6);
+            if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.8);
           });
         } else if (S >= 4) {
           fx.megaDeath(x, y, S, pal.dark);
-          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext, u.angle);
+          if (u) this.addWreck(u, team, x, y, u.angle, 1);
         } else {
           fx.boom(x, y, 0.55 + 0.45 * S, S >= 3 ? 'big' : 'fire');
           fx.debris(x, y, 5 + 5 * S, pal.dark, 3 + S, 0.06 * S);
           fx.debris(x, y, 3 + 2 * S, '#2a2622', 3, 0.05 * S);
           fx.embers(x, y, 6 * S, S * 0.6);
-          if (u) fx.decal('wreck', x, y, 0, wreckSprite(u.design, team, DECAL_PX), unitSprites(u.design, team, DECAL_PX).ext, u.angle);
+          if (u) this.addWreck(u, team, x, y, u.angle, 1);
           for (let i = 0; i < S; i++) fx.schedule(0.15 + i * 0.2, () => fx.boom(x + (Math.random() - 0.5) * S * 0.6, y + (Math.random() - 0.5) * S * 0.6, 0.3 + 0.2 * S, 'fire'));
           // lingering smoke column
           for (let i = 0; i < 4; i++) fx.schedule(0.4 + i * 0.5, () => fx.smoke(x, y, 0.3 * S, 2.5, '#1e1c1a', 0.2, -0.3, 0.45));
