@@ -30,6 +30,9 @@ mobcal = json.load(open(mbf)) if os.path.exists(mbf) else {}
 iters = int(sys.argv[1])
 seeds = sys.argv[2] if len(sys.argv) > 2 else '3'
 fixed = set(sys.argv[3].split(',')) if len(sys.argv) > 3 and sys.argv[3] else set()
+# [aura balance] aura calibrations are hand-set (see MODULE_CAL in stats.ts): the army test here fields armies where
+# every unit carries the aura, and auras don't stack, so it would drive them toward zero.
+fixed |= {'uplink', 'dome', 'domeG', 'jammer', 'sensor'}
 fit_size = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
 # mixed AA/ground starters whose result mostly reflects the rock-paper-scissors of the field, not module value
 IGNORE = {'starter-skyguard'}
