@@ -61,7 +61,7 @@ const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will 
 const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
-const ENGAGE_SHARE = 0.34; // fraction of relevant dps that must be in range before a ground unit halts
+const ENGAGE_SHARE = 0.999; // halt once ALL weapons that can hit the goal are in range (no reason to close further unless melee/charge)
 
 // spatial hash
 const THREAT_MEMORY = 6 * TICK_RATE; // ticks a recorded attacker stays 'the threat'
@@ -1506,8 +1506,9 @@ export class Battle {
     }
     const kiteOn = I.kite && !charge && !escorting;
 
-    // Engaged = weapons holding targets make up a meaningful share of the firepower that could hit our goal
-    // (so a long-range gun alone doesn't park a brawler out of reach of its main armament).
+    // Engaged = every weapon that could hit our goal is holding a target, i.e. the whole armament is in range.
+    // Until then keep closing (so a long-range gun alone doesn't park a brawler out of reach of its main guns);
+    // after that, stop — there's no reason to close further unless melee or Charge.
     let engagedDps = 0, relevantDps = 0;
     let targetAngle = NaN;
     for (let mi = 0; mi < I.wpns.length; mi++) {
@@ -1592,7 +1593,7 @@ export class Battle {
         stopDist = 0;
         if (charge) wantMove = I.meleeOnly || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
         else if (kiteOn && !I.meleeOnly && this.edgeC(this.ints[goal.id], u.x, u.y) <= 0.9 * I.kiteRange) wantMove = false;
-        else if (engaged && (!I.fireOnMove || I.meleeOnly)) wantMove = false;
+        else if (engaged && !I.meleeOnly) wantMove = false; // includes fire-on-move units: hold at range, don't bum-rush
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
         else if (I.fireOnMove && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
         else wantMove = true;
