@@ -855,6 +855,29 @@ test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar',
   assert.ok(Math.abs(dflt - onMortar) < 0.5, 'default = longest-range weapon');
 });
 
+test('kite: an outranged kiter closes in to its own firing range (from its mount) and never backs off while out of range', () => {
+  // flamerear: a rear-mounted short-range gun (the old hull-centre distance parked it just out of reach for good)
+  const rear = D('flamerear', 'longarm', 'treads', ['flamer']);
+  assert.deepEqual(validateDesign(rear), []);
+  const designs = [...DESIGNS, rear];
+  for (const kd of ['flamerear', 'mgtank']) {
+    const b = new Battle({ seed: 3, sides: [{ designs, units: [{ ...P(kd, 10, 0), kite: true }] }, { designs, units: mirrorShift([{ ...P('sniperw', 10, 0), stance: 'holdPos' }]) }] });
+    const k = b.units[0], e = b.units[1];
+    e.x = k.x; e.y = k.y - 20;
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    const hp0 = e.hp;
+    let prev = Infinity, hitAt = -1;
+    for (let i = 0; i < 500 && !b.done && hitAt < 0; i++) {
+      b.step();
+      const d = Math.hypot(k.x - e.x, k.y - e.y);
+      if (e.hp < hp0) hitAt = i;
+      else assert.ok(d <= prev + 1e-9, `${kd} backed off while out of range at tick ${i}: ${d} > ${prev}`);
+      prev = d;
+    }
+    assert.ok(hitAt >= 0 && e.hp < hp0, `${kd} never damaged the longer-ranged enemy`);
+  }
+});
+
 test('non-square footprints: long units spawn on their footprint centre and contact uses the long axis', () => {
   const long = D('longone', 'longarm', 'halftrack', ['cannon']); // 1 wide x 3 long
   const designs = [...DESIGNS, long];
