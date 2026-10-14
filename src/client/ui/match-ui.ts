@@ -204,6 +204,10 @@ export interface RingSpec {
   color: string;
   /** "Howitzer 80 m" */
   label: string;
+  /** mount indices this ring is measured from (ranges originate at each weapon's own mount) */
+  mounts: number[];
+  /** melee: reach from the hull, not from a mount point */
+  melee?: boolean;
 }
 
 const mName = (m: ModuleDef) => m.name.replace(/^[\d.]+mm\s+/, '');
@@ -212,19 +216,21 @@ export const ringKey = (range: number, min: number, kind: RingKind) => `${kind}|
 /** One ring per distinct weapon range (melee shows as a tiny ring) plus support radii. Ranges include the unit's range multiplier. */
 export function ringsOf(d: Design, st: UnitStats): RingSpec[] {
   const groups = new Map<string, RingSpec & { names: string[] }>();
-  const add = (kind: RingKind, range: number, min: number, name: string) => {
+  let mi = -1;
+  const add = (kind: RingKind, range: number, min: number, name: string, melee = false) => {
     if (!(range > 0)) return;
     const key = ringKey(range, min, kind);
     const g = groups.get(key);
-    if (g) { if (!g.names.includes(name)) g.names.push(name); return; }
-    groups.set(key, { key, kind, range, minRange: min, color: RING_COLOR[kind], label: '', names: [name] });
+    if (g) { if (!g.names.includes(name)) g.names.push(name); if (!g.mounts.includes(mi)) g.mounts.push(mi); return; }
+    groups.set(key, { key, kind, range, minRange: min, color: RING_COLOR[kind], label: '', names: [name], mounts: [mi], melee });
   };
   for (const id of d.mounts) {
+    mi++;
     const m = id ? MODULE_BY_ID.get(id) : undefined;
     if (!m) continue;
     if (m.kind === 'weapon' && m.range && !m.heal) { // melee reach is not scaled by range bonuses
       const g = !!m.targetsGround, a = !!m.targetsAir;
-      add(g && a ? 'both' : a ? 'air' : 'ground', m.range * (m.projectile === 'melee' ? 1 : st.rangeMult), m.minRange ?? 0, mName(m));
+      add(g && a ? 'both' : a ? 'air' : 'ground', m.range * (m.projectile === 'melee' ? 1 : st.rangeMult), m.minRange ?? 0, mName(m), m.projectile === 'melee');
     }
     if (m.heal && m.range) add('support', m.range * st.rangeMult, 0, mName(m));
     if (m.shieldAura) add('support', m.shieldAura.radius, 0, mName(m));

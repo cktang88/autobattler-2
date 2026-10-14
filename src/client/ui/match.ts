@@ -13,7 +13,8 @@ import { applyViewSettings, loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
 import type { UnitFoot } from '../../shared/grid.ts';
-import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
+import { mountOffsets } from '../../shared/mountgeo.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, levelMult } from '../../shared/stats.ts';
@@ -1380,13 +1381,27 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const taken: { x: number; y: number; w: number; h: number }[] = [];
     // weak (all-units) rings first so the focused block's rings sit on top
     for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
-      const centers = placementUnitCenters(t.side, t.pos, t.size, t.st).map((c) => view.worldToScreen(c.x, c.y));
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const c of centers) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x); y1 = Math.max(y1, c.y); }
+      const worldCenters = placementUnitCenters(t.side, t.pos, t.size, t.st);
+      // units deploy facing the enemy; ranges are measured from each weapon's own mount (same offsets as the sim)
+      const offs = mountOffsets(t.design);
+      const head = forwardY(t.side) < 0 ? -Math.PI / 2 : Math.PI / 2, hc = Math.cos(head), hs = Math.sin(head);
+      let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+      const frame = (mounts: number[] | null) => {
+        x0 = Infinity; y0 = Infinity; x1 = -Infinity; y1 = -Infinity;
+        for (const c of worldCenters) {
+          for (const m of mounts ?? [-1]) {
+            const o = m >= 0 ? offs[m] : undefined;
+            const wx = c.x + (o ? hc * o.x - hs * o.y : 0), wy = c.y + (o ? hs * o.x + hc * o.y : 0);
+            const sp = view.worldToScreen(wx, wy);
+            x0 = Math.min(x0, sp.x); y0 = Math.min(y0, sp.y); x1 = Math.max(x1, sp.x); y1 = Math.max(y1, sp.y);
+          }
+        }
+      };
       const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
-      // the ring lives on the ground plane: foreshortened vertically (rounded box around the squad, an ellipse for one unit)
+      // the ring lives on the ground plane (foreshortened by the camera tilt): a circle around the mount for one unit,
+      // the rounded outline of all its circles for a squad
       const ay = view.ay;
-      const uh = (y1 - y0) / ay;
+      let uh = 0;
       let cur = new Path2D();
       const path = (r: number) => {
         const base = new Path2D();
@@ -1396,6 +1411,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       };
       const angles = [-90, -62, -118, -34, -146, -10, -170].map((a) => (a * Math.PI) / 180);
       rings.forEach((rg, i) => {
+        frame(rg.melee ? null : rg.mounts);
+        uh = (y1 - y0) / ay;
         const R = rg.range * k;
         const hi = ringHi != null && rg.key === ringHi;
         const dim = ringHi != null && !hi ? 0.3 : 1;
