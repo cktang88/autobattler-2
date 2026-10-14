@@ -66,20 +66,20 @@ scene.add(new THREE.HemisphereLight('#a8bccb', '#4a4332', 0.55));
 // ---- ground ------------------------------------------------------------------------------------
 const FX = 60, FZ = 38; // field slice, cells
 function makeGround(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
-  const PPC = 32;
+  const PPC = 56;
   const w = FX * PPC, h = FZ * PPC;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const b = document.createElement('canvas'); b.width = w; b.height = h;
   const g = c.getContext('2d')!, gb = b.getContext('2d')!;
   const r = rng(99);
-  g.fillStyle = '#6f6a53'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#625e49'; g.fillRect(0, 0, w, h);
   gb.fillStyle = '#808080'; gb.fillRect(0, 0, w, h);
   // large soft terrain variation
   for (let i = 0; i < 260; i++) {
     const x = r() * w, y = r() * h, rad = 60 + r() * 260;
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
     const t = r();
-    gr.addColorStop(0, t < 0.4 ? 'rgba(108,96,66,0.35)' : t < 0.75 ? 'rgba(78,84,58,0.30)' : 'rgba(128,118,92,0.28)');
+    gr.addColorStop(0, t < 0.4 ? 'rgba(108,96,66,0.22)' : t < 0.75 ? 'rgba(78,84,58,0.18)' : 'rgba(128,118,92,0.2)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     const gg = gb.createRadialGradient(x, y, 0, x, y, rad);
@@ -87,9 +87,9 @@ function makeGround(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
     gb.fillStyle = gg; gb.fillRect(x - rad, y - rad, rad * 2, rad * 2);
   }
   // gravel speckle
-  for (let i = 0; i < 160000; i++) {
+  for (let i = 0; i < 350000; i++) {
     const v = r();
-    const x = r() * w, y = r() * h, s = 1 + r() * 2.5;
+    const x = r() * w, y = r() * h, s = 0.8 + r() * r() * 2.2;
     g.fillStyle = v < 0.5 ? `rgba(30,28,20,${0.08 + r() * 0.12})` : `rgba(200,190,160,${0.05 + r() * 0.1})`;
     g.fillRect(x, y, s, s);
     gb.fillStyle = v < 0.5 ? 'rgba(60,60,60,0.35)' : 'rgba(210,210,210,0.3)';
@@ -121,7 +121,7 @@ function makeGround(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
 }
 {
   const { map, bump } = makeGround();
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(FX, FZ).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 1.6, roughness: 0.96, metalness: 0 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(FX, FZ).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.9, roughness: 0.96, metalness: 0 }));
   ground.receiveShadow = true;
   scene.add(ground);
   // surrounding dark apron so the slice does not float
@@ -291,7 +291,7 @@ addEventListener('resize', resize);
 resize();
 
 // ---- loop --------------------------------------------------------------------------------------
-const clock = new THREE.Clock();
+const clock = new THREE.Timer();
 let tAbs = 0;
 const tmp = new THREE.Vector3(), tgt = new THREE.Vector3();
 const nextShot = new WeakMap<Turret, number>();
@@ -299,6 +299,7 @@ const frozen = has('freeze');
 const statsEl = document.getElementById('stats')!;
 let frames = 0, fpsT = 0;
 function frame() {
+  clock.update();
   const dt = Math.min(clock.getDelta(), 0.05);
   if (!frozen) tAbs += dt;
   const t = tAbs + (frozen ? Number(params.get('t') ?? 3) : 0);

@@ -57,6 +57,31 @@ function prism(poly: Pt[], y0: number, h: number, m: THREE.Material, parent: THR
   return add(parent, g, m, 0, y0, 0);
 }
 
+/** sloped armour block: bottom outline -> smaller top outline, flat-shaded (reads as welded plate, not a rounded blob) */
+function frustum(bot: Pt[], top: Pt[], y0: number, h: number, m: THREE.Material, parent: THREE.Object3D): THREE.Mesh {
+  const pos: number[] = [];
+  const n = bot.length;
+  const v = (p: Pt, y: number) => pos.push(p[0], y, p[1]);
+  // winding: outline is given x fwd / y right; build with outward normals via sign of area
+  let area = 0;
+  for (let i = 0; i < n; i++) { const a = bot[i], b = bot[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const a = bot[i], b = bot[j], c = top[j], d = top[i];
+    if (area > 0) { v(a, y0); v(c, y0 + h); v(b, y0); v(a, y0); v(d, y0 + h); v(c, y0 + h); }
+    else { v(a, y0); v(b, y0); v(c, y0 + h); v(a, y0); v(c, y0 + h); v(d, y0 + h); }
+  }
+  const tri = THREE.ShapeUtils.triangulateShape(top.map((p) => new THREE.Vector2(p[0], p[1])), []);
+  for (const t of tri) {
+    const tt = area > 0 ? [t[0], t[2], t[1]] : [t[0], t[1], t[2]];
+    for (const k of tt) v(top[k], y0 + h);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return add(parent, g, m);
+}
+
 // ---- hull outlines (unit square, x fwd -1..1, y right -1..1) ----------------------------------
 const P: Record<string, Pt[]> = {
   wedge: [[1, 0], [0.45, 0.8], [-0.85, 1], [-1, 0.6], [-1, -0.6], [-0.85, -1], [0.45, -0.8]],
@@ -68,7 +93,7 @@ const P: Record<string, Pt[]> = {
   armored: [[1, 0.5], [0.8, 0.78], [0.55, 1], [-0.7, 1], [-0.9, 0.86], [-1, 0.6], [-1, -0.6], [-0.9, -0.86], [-0.7, -1], [0.55, -1], [0.8, -0.78], [1, -0.5]],
   giant: [[1, 0.36], [0.74, 0.7], [0.5, 1], [-0.6, 1], [-0.86, 0.84], [-1, 0.52], [-1, -0.52], [-0.86, -0.84], [-0.6, -1], [0.5, -1], [0.74, -0.7], [1, -0.36]],
 };
-interface TierSpec { p: string; k: number; dx?: number; h: number; m: 'body' | 'light' | 'dark' | 'camo' }
+interface TierSpec { p: string; k: number; dx?: number; slope?: number; h: number; m: 'body' | 'light' | 'dark' | 'camo' }
 const TIERS: Record<string, TierSpec[]> = {
   wedge: [{ p: 'wedge', k: 1, h: 0.2, m: 'body' }, { p: 'wedge', k: 0.5, dx: -0.1, h: 0.12, m: 'light' }],
   box: [{ p: 'box', k: 1, h: 0.2, m: 'body' }, { p: 'box', k: 0.62, dx: -0.12, h: 0.14, m: 'camo' }],
@@ -79,7 +104,7 @@ const TIERS: Record<string, TierSpec[]> = {
   fortress: [{ p: 'oct', k: 1, h: 0.17, m: 'body' }, { p: 'oct', k: 0.82, h: 0.13, m: 'camo' }, { p: 'oct', k: 0.56, h: 0.1, m: 'light' }],
   titan: [{ p: 'armored', k: 1, h: 0.17, m: 'body' }, { p: 'armored', k: 0.84, dx: -0.04, h: 0.12, m: 'camo' }, { p: 'oct', k: 0.5, dx: -0.1, h: 0.1, m: 'light' }],
   goliath: [{ p: 'giant', k: 1, h: 0.2, m: 'body' }, { p: 'giant', k: 0.84, dx: -0.05, h: 0.14, m: 'camo' }, { p: 'giant', k: 0.55, dx: -0.12, h: 0.11, m: 'light' }],
-  colossal: [{ p: 'giant', k: 1, h: 0.16, m: 'body' }, { p: 'giant', k: 0.84, dx: -0.04, h: 0.13, m: 'camo' }, { p: 'giant', k: 0.58, dx: -0.1, h: 0.12, m: 'light' }, { p: 'oct', k: 0.3, dx: -0.12, h: 0.1, m: 'body' }],
+  colossal: [{ p: 'giant', k: 1, h: 0.2, m: 'body' }, { p: 'giant', k: 0.84, dx: -0.04, h: 0.18, m: 'camo' }, { p: 'giant', k: 0.58, dx: -0.1, h: 0.17, m: 'light' }, { p: 'oct', k: 0.3, dx: -0.12, h: 0.1, m: 'body' }],
 };
 
 interface Placed { poly: Pt[]; top: number }
@@ -176,14 +201,14 @@ function buildGear(g: THREE.Group, mobId: string, L: number, W: number, S: numbe
       const spider = mobId === 'spider';
       const hy = (spider ? 0.38 : 0.55) * hf + 0.18 * S;
       const nLegs = spider ? 6 : 2;
-      const thick = (spider ? 0.05 : 0.09) * Math.min(S, 3) + 0.03;
+      const thick = (spider ? 0.035 : 0.07) * Math.min(S, 3) + 0.025;
       for (let i = 0; i < nLegs; i++) {
         const sg = i % 2 ? 1 : -1;
         const row = spider ? Math.floor(i / 2) - 1 : 0;
         const hipX = spider ? row * L * 0.3 : -0.04 * L;
         const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
         const footX = hipX + (spider ? row * L * 0.2 : 0);
-        const footZ = sg * (spider ? W * 0.62 + Math.abs(row) * 0.05 * W : W * 0.3);
+        const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
         legs.push(makeLeg(g, kit, new THREE.Vector3(hipX, hy, hipZ), new THREE.Vector3(footX, 0, footZ), thick, spider ? new THREE.Vector3(0, 1, sg * 0.35) : new THREE.Vector3(1, 0.1, 0), spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : (i % 2) * Math.PI));
       }
       return {
@@ -212,13 +237,13 @@ function buildGear(g: THREE.Group, mobId: string, L: number, W: number, S: numbe
 interface Leg { step(t: number, moving: number): void }
 function makeLeg(g: THREE.Object3D, kit: Kit, hip: THREE.Vector3, foot: THREE.Vector3, thick: number, bend: THREE.Vector3, phase: number): Leg {
   const d0 = hip.distanceTo(foot);
-  const l1 = d0 * 0.62, l2 = d0 * 0.62;
+  const l1 = d0 * 0.74, l2 = d0 * 0.74;
   const segGeo = (r0: number, r1: number) => new THREE.CylinderGeometry(r1, r0, 1, 10).translate(0, 0.5, 0).rotateX(Math.PI / 2);
   const upper = add(g, segGeo(thick * 1.1, thick), kit.dark);
   const lower = add(g, segGeo(thick, thick * 0.7), kit.body);
-  const knee = add(g, new THREE.SphereGeometry(thick * 1.25, 12, 10), kit.metal);
-  const hipJ = add(g, new THREE.SphereGeometry(thick * 1.4, 12, 10), kit.metal, hip.x, hip.y, hip.z);
-  const pad = add(g, new THREE.CylinderGeometry(thick * 1.6, thick * 2.0, thick * 0.9, 10), kit.deep);
+  const knee = add(g, new THREE.SphereGeometry(thick * 1.1, 12, 10), kit.dark);
+  const hipJ = add(g, new THREE.SphereGeometry(thick * 1.15, 12, 10), kit.dark, hip.x, hip.y, hip.z);
+  const pad = add(g, new THREE.CylinderGeometry(thick * 1.2, thick * 1.5, thick * 0.8, 10), kit.deep);
   void hipJ;
   const f = new THREE.Vector3(), k = new THREE.Vector3(), dir = new THREE.Vector3(), perp = new THREE.Vector3();
   const stride = d0 * 0.32, lift = d0 * 0.22;
@@ -250,7 +275,8 @@ function makeLeg(g: THREE.Object3D, kit: Kit, hip: THREE.Vector3, foot: THREE.Ve
 }
 
 // ---- hull -------------------------------------------------------------------------------------
-function buildHull(g: THREE.Group, shape: string, L: number, W: number, y0: number, kit: Kit): { placed: Placed[]; top: number } {
+function buildHull(g: THREE.Group, shape: string, L: number, W0: number, y0: number, kit: Kit, wk = 1): { placed: Placed[]; top: number } {
+  const W = W0 * wk;
   const hf = Math.pow(Math.min(L, W), 0.85);
   const recipe = TIERS[shape] ?? TIERS.box;
   const placed: Placed[] = [];
@@ -260,7 +286,11 @@ function buildHull(g: THREE.Group, shape: string, L: number, W: number, y0: numb
     const poly = base.map(([x, yy]) => [(x * t.k + (t.dx ?? 0)) * L * 0.5, yy * t.k * W * 0.5] as Pt);
     const h = Math.max(0.06, t.h * hf);
     const m = kit[t.m];
-    prism(poly, y, h, m, g, Math.min(0.06, 0.02 + 0.012 * hf));
+    const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cz = poly.reduce((a, p) => a + p[1], 0) / poly.length;
+    const sl = 1 - (t.slope ?? 0.07) * Math.min(1, h / 0.6 + 0.3);
+    const topPoly = poly.map(([px, pz]) => [cx + (px - cx) * (1 - (1 - sl) * (0.6 + 0.4 * Math.abs(px - cx) / (L * 0.5 + 1e-6)) * 0.9) , cz + (pz - cz) * (1 - (1 - sl) * 1.6 * Math.min(1, 0.4 + Math.abs(pz - cz) / (W * 0.5 + 1e-6)))] as Pt);
+    frustum(poly, topPoly, y, h, m, g);
+    // top deck plate seam: thin lighter inset line is provided by the triplanar texture
     y += h;
     placed.push({ poly, top: y });
   }
@@ -284,7 +314,7 @@ function greeble(g: THREE.Group, placed: Placed[], L: number, W: number, S: numb
     const kind = rnd();
     const u = 0.05 + 0.025 * S;
     if (kind < 0.35) { // hatch
-      add(g, new THREE.CylinderGeometry(u * 1.3, u * 1.4, u * 0.45, 12), kit.deep, x, top + u * 0.2, z);
+      add(g, new THREE.CylinderGeometry(u * 0.9, u * 1.05, u * 0.4, 12), kit.dark, x, top + u * 0.2, z);
     } else if (kind < 0.7) { // vent grille
       const w = u * 3, d = u * 2;
       box(g, kit.deep, w, u * 0.3, d, x, top, z);
@@ -410,7 +440,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const gear = buildGear(root, mob.id, L, W, S, kit, rnd);
     baseY = gear.y0;
     if (gear.update) updates.push((t, _dt, mv) => gear.update!(t, mv));
-    const hull = buildHull(body, ch.shape, L, W, baseY, kit);
+    const hull = buildHull(body, ch.shape, L, W, baseY, kit, mob.id === 'megatracks' ? 0.9 : 1);
     placed = hull.placed; hullTop = hull.top;
     // rear engine deck: exhausts + radiator grille
     const ex = [-1, 1].map((s) => add(body, new THREE.CylinderGeometry(0.035 * S ** 0.7, 0.04 * S ** 0.7, 0.2 * Math.min(S, 3), 8), kit.metal, -L * 0.42, baseY + hull.top * 0.5 + 0.1, s * W * 0.2));
@@ -433,15 +463,23 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     if (!mod || !o) { mountR.push(0.1); return; }
     const tu = buildTurret(mod, S, kit, flying && ch.domain === 'jet');
     mountR.push(tu.r);
-    const y = flying ? (ch.domain === 'jet' ? 0.06 : hullTop - 0.1) : deckAt(placed, o.x, o.y, baseY + hullTop);
+    let y = flying ? (ch.domain === 'jet' ? 0.06 : hullTop - 0.1) : deckAt(placed, o.x, o.y, baseY + hullTop);
+    if (!flying) {
+      // the turret rests on the highest deck under its ring; a pedestal bridges any lower tier beneath it
+      let lo = y, hi = -1;
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2, d = deckAt(placed, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85, -1);
+        if (d < 0) continue; // overhangs the hull edge: ignore
+        hi = Math.max(hi, d); lo = Math.min(lo, d);
+      }
+      y = Math.max(y, hi);
+      if (y - lo > 0.04) add(body, new THREE.CylinderGeometry(tu.r * 0.9, tu.r * 0.98, y - lo, 16), kit.dark, o.x, lo + (y - lo) / 2, o.y);
+    }
     tu.yaw.position.set(o.x, y, o.y);
     // pylon under aircraft weapons
     if (flying) body.add(tu.yaw);
     else {
       body.add(tu.yaw);
-      // seat: skirt block under big turrets so they don't float over lower tiers
-      const under = y - (baseY + 0.02);
-      if (under > 0.05) add(body, new THREE.CylinderGeometry(tu.r * 0.96, tu.r * 1.0, under, 18), kit.dark, o.x, baseY + 0.02 + under / 2, o.y);
     }
     turrets.push(tu);
   });

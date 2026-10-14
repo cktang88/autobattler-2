@@ -12444,8 +12444,8 @@ var Sprite = class extends Object3D {
    * @param {Frustum|FrustumArray} frustum - The frustum to test.
    * @return {boolean} Whether this sprite intersects the given frustum or not.
    */
-  intersectsFrustum(frustum) {
-    return frustum.intersectsSprite(this);
+  intersectsFrustum(frustum2) {
+    return frustum2.intersectsSprite(this);
   }
   /**
    * Computes intersection points between a casted ray and this sprite.
@@ -13125,8 +13125,8 @@ var Mesh = class extends Object3D {
    * @param {Frustum|FrustumArray} frustum - The frustum to test.
    * @return {boolean} Whether this mesh intersects the given frustum or not.
    */
-  intersectsFrustum(frustum) {
-    return frustum.intersectsObject(this);
+  intersectsFrustum(frustum2) {
+    return frustum2.intersectsObject(this);
   }
   /**
    * Computes intersection points between a casted ray and this line.
@@ -13591,10 +13591,10 @@ var Frustum = class {
    * @param {Frustum} frustum - The frustum to copy.
    * @return {Frustum} A reference to this frustum.
    */
-  copy(frustum) {
+  copy(frustum2) {
     const planes = this.planes;
     for (let i = 0; i < 6; i++) {
-      planes[i].copy(frustum.planes[i]);
+      planes[i].copy(frustum2.planes[i]);
     }
     return this;
   }
@@ -18802,9 +18802,9 @@ var LightShadow = class {
    * @param {Frustum} frustum - The target frustum.
    * @param {Vector4} [viewport] - The viewport within the shadow atlas.
    */
-  _updateMatrix(shadowCamera, shadowMatrix, frustum, viewport) {
+  _updateMatrix(shadowCamera, shadowMatrix, frustum2, viewport) {
     _projScreenMatrix.multiplyMatrices(shadowCamera.projectionMatrix, shadowCamera.matrixWorldInverse);
-    frustum.setFromProjectionMatrix(_projScreenMatrix, shadowCamera.coordinateSystem, shadowCamera.reversedDepth);
+    frustum2.setFromProjectionMatrix(_projScreenMatrix, shadowCamera.coordinateSystem, shadowCamera.reversedDepth);
     const frameExtents = this._frameExtents;
     const scaleX = viewport ? viewport.z / frameExtents.x : 1;
     const scaleY = viewport ? viewport.w / frameExtents.y : 1;
@@ -20119,69 +20119,6 @@ PropertyBinding.prototype.SetterByBindingTypeAndVersioning = [
   ]
 ];
 var _controlInterpolantsResultBuffer = new Float32Array(1);
-var Clock = class {
-  /**
-   * Constructs a new clock.
-   *
-   * @deprecated since 183.
-   * @param {boolean} [autoStart=true] - Whether to automatically start the clock when
-   * `getDelta()` is called for the first time.
-   */
-  constructor(autoStart = true) {
-    this.autoStart = autoStart;
-    this.startTime = 0;
-    this.oldTime = 0;
-    this.elapsedTime = 0;
-    this.running = false;
-    warn("Clock: This module has been deprecated. Please use THREE.Timer instead.");
-  }
-  /**
-   * Starts the clock. When `autoStart` is set to `true`, the method is automatically
-   * called by the class.
-   */
-  start() {
-    this.startTime = performance.now();
-    this.oldTime = this.startTime;
-    this.elapsedTime = 0;
-    this.running = true;
-  }
-  /**
-   * Stops the clock.
-   */
-  stop() {
-    this.getElapsedTime();
-    this.running = false;
-    this.autoStart = false;
-  }
-  /**
-   * Returns the elapsed time in seconds.
-   *
-   * @return {number} The elapsed time.
-   */
-  getElapsedTime() {
-    this.getDelta();
-    return this.elapsedTime;
-  }
-  /**
-   * Returns the delta time in seconds.
-   *
-   * @return {number} The delta time.
-   */
-  getDelta() {
-    let diff = 0;
-    if (this.autoStart && !this.running) {
-      this.start();
-      return 0;
-    }
-    if (this.running) {
-      const newTime = performance.now();
-      diff = (newTime - this.oldTime) / 1e3;
-      this.oldTime = newTime;
-      this.elapsedTime += diff;
-    }
-    return diff;
-  }
-};
 var Spherical = class {
   /**
    * Constructs a new spherical.
@@ -37773,6 +37710,44 @@ function prism(poly, y0, h, m, parent, bevel = 0.04) {
   g.translate(0, b, 0);
   return add(parent, g, m, 0, y0, 0);
 }
+function frustum(bot, top, y0, h, m, parent) {
+  const pos = [];
+  const n = bot.length;
+  const v = (p, y) => pos.push(p[0], y, p[1]);
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const a = bot[i], b = bot[(i + 1) % n];
+    area2 += a[0] * b[1] - b[0] * a[1];
+  }
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const a = bot[i], b = bot[j], c = top[j], d = top[i];
+    if (area2 > 0) {
+      v(a, y0);
+      v(c, y0 + h);
+      v(b, y0);
+      v(a, y0);
+      v(d, y0 + h);
+      v(c, y0 + h);
+    } else {
+      v(a, y0);
+      v(b, y0);
+      v(c, y0 + h);
+      v(a, y0);
+      v(c, y0 + h);
+      v(d, y0 + h);
+    }
+  }
+  const tri = ShapeUtils.triangulateShape(top.map((p) => new Vector2(p[0], p[1])), []);
+  for (const t of tri) {
+    const tt = area2 > 0 ? [t[0], t[2], t[1]] : [t[0], t[1], t[2]];
+    for (const k of tt) v(top[k], y0 + h);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return add(parent, g, m);
+}
 var P = {
   wedge: [[1, 0], [0.45, 0.8], [-0.85, 1], [-1, 0.6], [-1, -0.6], [-0.85, -1], [0.45, -0.8]],
   box: [[1, 0.55], [0.72, 1], [-0.8, 1], [-1, 0.78], [-1, -0.78], [-0.8, -1], [0.72, -1], [1, -0.55]],
@@ -37793,7 +37768,7 @@ var TIERS = {
   fortress: [{ p: "oct", k: 1, h: 0.17, m: "body" }, { p: "oct", k: 0.82, h: 0.13, m: "camo" }, { p: "oct", k: 0.56, h: 0.1, m: "light" }],
   titan: [{ p: "armored", k: 1, h: 0.17, m: "body" }, { p: "armored", k: 0.84, dx: -0.04, h: 0.12, m: "camo" }, { p: "oct", k: 0.5, dx: -0.1, h: 0.1, m: "light" }],
   goliath: [{ p: "giant", k: 1, h: 0.2, m: "body" }, { p: "giant", k: 0.84, dx: -0.05, h: 0.14, m: "camo" }, { p: "giant", k: 0.55, dx: -0.12, h: 0.11, m: "light" }],
-  colossal: [{ p: "giant", k: 1, h: 0.16, m: "body" }, { p: "giant", k: 0.84, dx: -0.04, h: 0.13, m: "camo" }, { p: "giant", k: 0.58, dx: -0.1, h: 0.12, m: "light" }, { p: "oct", k: 0.3, dx: -0.12, h: 0.1, m: "body" }]
+  colossal: [{ p: "giant", k: 1, h: 0.2, m: "body" }, { p: "giant", k: 0.84, dx: -0.04, h: 0.18, m: "camo" }, { p: "giant", k: 0.58, dx: -0.1, h: 0.17, m: "light" }, { p: "oct", k: 0.3, dx: -0.12, h: 0.1, m: "body" }]
 };
 function track(g, kit, L, h, w, z, y, skirt) {
   const r = Math.min(h * 0.48, L * 0.2);
@@ -37891,14 +37866,14 @@ function buildGear(g, mobId, L, W, S, kit, rnd) {
       const spider = mobId === "spider";
       const hy = (spider ? 0.38 : 0.55) * hf + 0.18 * S;
       const nLegs = spider ? 6 : 2;
-      const thick = (spider ? 0.05 : 0.09) * Math.min(S, 3) + 0.03;
+      const thick = (spider ? 0.035 : 0.07) * Math.min(S, 3) + 0.025;
       for (let i = 0; i < nLegs; i++) {
         const sg = i % 2 ? 1 : -1;
         const row = spider ? Math.floor(i / 2) - 1 : 0;
         const hipX = spider ? row * L * 0.3 : -0.04 * L;
         const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
         const footX = hipX + (spider ? row * L * 0.2 : 0);
-        const footZ = sg * (spider ? W * 0.62 + Math.abs(row) * 0.05 * W : W * 0.3);
+        const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
         legs.push(makeLeg(g, kit, new Vector3(hipX, hy, hipZ), new Vector3(footX, 0, footZ), thick, spider ? new Vector3(0, 1, sg * 0.35) : new Vector3(1, 0.1, 0), spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : i % 2 * Math.PI));
       }
       return {
@@ -37926,13 +37901,13 @@ function buildGear(g, mobId, L, W, S, kit, rnd) {
 }
 function makeLeg(g, kit, hip, foot, thick, bend, phase) {
   const d0 = hip.distanceTo(foot);
-  const l1 = d0 * 0.62, l2 = d0 * 0.62;
+  const l1 = d0 * 0.74, l2 = d0 * 0.74;
   const segGeo = (r0, r1) => new CylinderGeometry(r1, r0, 1, 10).translate(0, 0.5, 0).rotateX(Math.PI / 2);
   const upper = add(g, segGeo(thick * 1.1, thick), kit.dark);
   const lower = add(g, segGeo(thick, thick * 0.7), kit.body);
-  const knee = add(g, new SphereGeometry(thick * 1.25, 12, 10), kit.metal);
-  const hipJ = add(g, new SphereGeometry(thick * 1.4, 12, 10), kit.metal, hip.x, hip.y, hip.z);
-  const pad = add(g, new CylinderGeometry(thick * 1.6, thick * 2, thick * 0.9, 10), kit.deep);
+  const knee = add(g, new SphereGeometry(thick * 1.1, 12, 10), kit.dark);
+  const hipJ = add(g, new SphereGeometry(thick * 1.15, 12, 10), kit.dark, hip.x, hip.y, hip.z);
+  const pad = add(g, new CylinderGeometry(thick * 1.2, thick * 1.5, thick * 0.8, 10), kit.deep);
   void hipJ;
   const f = new Vector3(), k = new Vector3(), dir = new Vector3(), perp = new Vector3();
   const stride = d0 * 0.32, lift = d0 * 0.22;
@@ -37962,7 +37937,8 @@ function makeLeg(g, kit, hip, foot, thick, bend, phase) {
     }
   };
 }
-function buildHull(g, shape, L, W, y0, kit) {
+function buildHull(g, shape, L, W0, y0, kit, wk = 1) {
+  const W = W0 * wk;
   const hf = Math.pow(Math.min(L, W), 0.85);
   const recipe = TIERS[shape] ?? TIERS.box;
   const placed = [];
@@ -37972,7 +37948,10 @@ function buildHull(g, shape, L, W, y0, kit) {
     const poly = base.map(([x, yy]) => [(x * t.k + (t.dx ?? 0)) * L * 0.5, yy * t.k * W * 0.5]);
     const h = Math.max(0.06, t.h * hf);
     const m = kit[t.m];
-    prism(poly, y, h, m, g, Math.min(0.06, 0.02 + 0.012 * hf));
+    const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cz = poly.reduce((a, p) => a + p[1], 0) / poly.length;
+    const sl = 1 - (t.slope ?? 0.07) * Math.min(1, h / 0.6 + 0.3);
+    const topPoly = poly.map(([px2, pz2]) => [cx + (px2 - cx) * (1 - (1 - sl) * (0.6 + 0.4 * Math.abs(px2 - cx) / (L * 0.5 + 1e-6)) * 0.9), cz + (pz2 - cz) * (1 - (1 - sl) * 1.6 * Math.min(1, 0.4 + Math.abs(pz2 - cz) / (W * 0.5 + 1e-6)))]);
+    frustum(poly, topPoly, y, h, m, g);
     y += h;
     placed.push({ poly, top: y });
   }
@@ -37993,7 +37972,7 @@ function greeble(g, placed, L, W, S, kit, rnd, mounts, mountR, skipTop) {
     const kind = rnd();
     const u = 0.05 + 0.025 * S;
     if (kind < 0.35) {
-      add(g, new CylinderGeometry(u * 1.3, u * 1.4, u * 0.45, 12), kit.deep, x, top + u * 0.2, z);
+      add(g, new CylinderGeometry(u * 0.9, u * 1.05, u * 0.4, 12), kit.dark, x, top + u * 0.2, z);
     } else if (kind < 0.7) {
       const w = u * 3, d = u * 2;
       box(g, kit.deep, w, u * 0.3, d, x, top, z);
@@ -38133,7 +38112,7 @@ function buildUnit(design, team) {
     const gear = buildGear(root, mob.id, L, W, S, kit, rnd);
     baseY = gear.y0;
     if (gear.update) updates.push((t, _dt, mv) => gear.update(t, mv));
-    const hull = buildHull(body, ch.shape, L, W, baseY, kit);
+    const hull = buildHull(body, ch.shape, L, W, baseY, kit, mob.id === "megatracks" ? 0.9 : 1);
     placed = hull.placed;
     hullTop = hull.top;
     const ex = [-1, 1].map((s) => add(body, new CylinderGeometry(0.035 * S ** 0.7, 0.04 * S ** 0.7, 0.2 * Math.min(S, 3), 8), kit.metal, -L * 0.42, baseY + hull.top * 0.5 + 0.1, s * W * 0.2));
@@ -38156,13 +38135,22 @@ function buildUnit(design, team) {
     }
     const tu = buildTurret(mod, S, kit, flying && ch.domain === "jet");
     mountR.push(tu.r);
-    const y = flying ? ch.domain === "jet" ? 0.06 : hullTop - 0.1 : deckAt(placed, o.x, o.y, baseY + hullTop);
+    let y = flying ? ch.domain === "jet" ? 0.06 : hullTop - 0.1 : deckAt(placed, o.x, o.y, baseY + hullTop);
+    if (!flying) {
+      let lo = y, hi = -1;
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * Math.PI * 2, d = deckAt(placed, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85, -1);
+        if (d < 0) continue;
+        hi = Math.max(hi, d);
+        lo = Math.min(lo, d);
+      }
+      y = Math.max(y, hi);
+      if (y - lo > 0.04) add(body, new CylinderGeometry(tu.r * 0.9, tu.r * 0.98, y - lo, 16), kit.dark, o.x, lo + (y - lo) / 2, o.y);
+    }
     tu.yaw.position.set(o.x, y, o.y);
     if (flying) body.add(tu.yaw);
     else {
       body.add(tu.yaw);
-      const under = y - (baseY + 0.02);
-      if (under > 0.05) add(body, new CylinderGeometry(tu.r * 0.96, tu.r * 1, under, 18), kit.dark, o.x, baseY + 0.02 + under / 2, o.y);
     }
     turrets.push(tu);
   });
@@ -38239,7 +38227,7 @@ scene.add(new HemisphereLight("#a8bccb", "#4a4332", 0.55));
 var FX = 60;
 var FZ = 38;
 function makeGround() {
-  const PPC = 32;
+  const PPC = 56;
   const w = FX * PPC, h = FZ * PPC;
   const c = document.createElement("canvas");
   c.width = w;
@@ -38249,7 +38237,7 @@ function makeGround() {
   b.height = h;
   const g = c.getContext("2d"), gb = b.getContext("2d");
   const r = rng(99);
-  g.fillStyle = "#6f6a53";
+  g.fillStyle = "#625e49";
   g.fillRect(0, 0, w, h);
   gb.fillStyle = "#808080";
   gb.fillRect(0, 0, w, h);
@@ -38257,7 +38245,7 @@ function makeGround() {
     const x = r() * w, y = r() * h, rad = 60 + r() * 260;
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
     const t = r();
-    gr.addColorStop(0, t < 0.4 ? "rgba(108,96,66,0.35)" : t < 0.75 ? "rgba(78,84,58,0.30)" : "rgba(128,118,92,0.28)");
+    gr.addColorStop(0, t < 0.4 ? "rgba(108,96,66,0.22)" : t < 0.75 ? "rgba(78,84,58,0.18)" : "rgba(128,118,92,0.2)");
     gr.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = gr;
     g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
@@ -38267,9 +38255,9 @@ function makeGround() {
     gb.fillStyle = gg;
     gb.fillRect(x - rad, y - rad, rad * 2, rad * 2);
   }
-  for (let i = 0; i < 16e4; i++) {
+  for (let i = 0; i < 35e4; i++) {
     const v = r();
-    const x = r() * w, y = r() * h, s = 1 + r() * 2.5;
+    const x = r() * w, y = r() * h, s = 0.8 + r() * r() * 2.2;
     g.fillStyle = v < 0.5 ? `rgba(30,28,20,${0.08 + r() * 0.12})` : `rgba(200,190,160,${0.05 + r() * 0.1})`;
     g.fillRect(x, y, s, s);
     gb.fillStyle = v < 0.5 ? "rgba(60,60,60,0.35)" : "rgba(210,210,210,0.3)";
@@ -38338,7 +38326,7 @@ function makeGround() {
 }
 {
   const { map, bump } = makeGround();
-  const ground = new Mesh(new PlaneGeometry(FX, FZ).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 1.6, roughness: 0.96, metalness: 0 }));
+  const ground = new Mesh(new PlaneGeometry(FX, FZ).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.9, roughness: 0.96, metalness: 0 }));
   ground.receiveShadow = true;
   scene.add(ground);
   const apron = new Mesh(new PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: "#3a382d", roughness: 1 }));
@@ -38531,7 +38519,7 @@ function resize() {
 }
 addEventListener("resize", resize);
 resize();
-var clock = new Clock();
+var clock = new Timer();
 var tAbs = 0;
 var tmp3 = new Vector3();
 var tgt = new Vector3();
@@ -38541,6 +38529,7 @@ var statsEl = document.getElementById("stats");
 var frames = 0;
 var fpsT = 0;
 function frame() {
+  clock.update();
   const dt = Math.min(clock.getDelta(), 0.05);
   if (!frozen) tAbs += dt;
   const t = tAbs + (frozen ? Number(params.get("t") ?? 3) : 0);
