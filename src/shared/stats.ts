@@ -92,8 +92,8 @@ const RANGE_EXP = 1.0;
  *  their MODULE_CAL was scaled by 6.5 / 5 to keep their price; weapon MODULE_CAL re-fitted with fit_cal.py. */
 const RANGE_REF = 6.5;
 /** Effective-hp floor for long-reach units (see computeStats): ramps in from SHELTER_FROM cells of reach to full
- *  at SHELTER_FROM + SHELTER_SPAN. Fitted with `node scripts/duels.ts groups` (cheap mortar carts vs tanks). */
-export const SHELTER_EHP = Number(process.env.SHELTER_EHP ?? 400);
+ *  at SHELTER_FROM + SHELTER_SPAN.  Fitted with `node scripts/duels.ts groups` (cheap mortar carts vs tanks). */
+export const SHELTER_EHP = 400;
 const SHELTER_FROM = 10;
 const SHELTER_SPAN = 10;
 const RANGE_CAP = 2.8;
