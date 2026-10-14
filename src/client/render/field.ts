@@ -1802,6 +1802,7 @@ export class FieldView {
         }
         // aircraft are drawn at altitude: their hits flash on the drawn body, not on the ground below it
         const al = this.airLift(ur);
+        const hx0 = e.x, hy0 = e.y; // hit point on the ground plane (knockback direction)
         if (al.x || al.y) e = { ...e, x: e.x + al.x, y: e.y + al.y };
         if (e.shieldHit) {
           const v = this.visOf(ur);
@@ -1813,7 +1814,7 @@ export class FieldView {
         const vis = mod?.visual;
         // heavy hits shove the drawn sprite away from the shooter (render only; heavier hulls barely move)
         if (e.damage > 25) {
-          const from = this.shotFrom.get(ur.id) ?? ((e.x - ur.x) ** 2 + (e.y - ur.y) ** 2 > 0.04 ? { x: e.x, y: e.y } : undefined);
+          const from = this.shotFrom.get(ur.id) ?? ((hx0 - ur.x) ** 2 + (hy0 - ur.y) ** 2 > 0.04 ? { x: hx0, y: hy0 } : undefined);
           if (from) {
             const a = Math.atan2(ur.y - from.y, ur.x - from.x), v = this.visOf(ur), S = layoutOf(ur.design).S;
             const k = clamp(Math.sqrt(e.damage) * 0.0045, 0, 0.07) / Math.max(1, S * 0.9);
