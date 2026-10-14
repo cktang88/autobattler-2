@@ -36935,9 +36935,10 @@ var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mor
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
-function buildTurret(mod, S, kit, fixed = false) {
+function buildTurret(mod, S, kit, fixed = false, cls) {
   const kS = unitScale(S);
-  const D = weaponD(mod) * kS;
+  const ov = cls && cls !== mod.mount ? cls : void 0;
+  const D = weaponD(mod, ov) * kS;
   const r = D / 2;
   const yaw = new Group(), pitch = new Group(), recoil = new Group();
   yaw.add(pitch);
@@ -36953,8 +36954,8 @@ function buildTurret(mod, S, kit, fixed = false) {
     mod,
     r,
     D,
-    c: classPos(mod),
-    tier: moduleTier(mod),
+    c: classPos(mod, ov),
+    tier: ov ? CLASS_RANK[ov] : moduleTier(mod),
     nb: mod.barrels ?? 1,
     // chunky: barrel radius ~0.6 x the true bore width, never thinner than 9% of the housing radius
     bore: Math.max(boreOf(calibreMm(mod)) * 0.6 * kS, r * 0.11),
@@ -39114,9 +39115,11 @@ function defaultHips(st, L, W) {
   const t = st.thick;
   if (st.legs === "spider") {
     const out2 = [];
-    for (let row = -1; row <= 1; row++) for (const side of [-1, 1]) {
-      const x = row * L * 0.3, z = side * W * 0.36;
-      out2.push({ p: [x, st.hipY, z], side, t, foot: [x + row * L * 0.16, 0, side * (W * 0.5 + st.hipY * 1.15)], phase: (row + 1) % 2 === (side > 0 ? 1 : 0) ? 0 : Math.PI });
+    const quad = L <= 1.01 && W <= 1.01;
+    for (const row of quad ? [-1, 1] : [-1, 0, 1]) for (const side of [-1, 1]) {
+      const x = row * L * (quad ? 0.26 : 0.3), z = side * W * 0.36;
+      const phase = quad ? row === side ? 0 : Math.PI : (row + 1) % 2 === (side > 0 ? 1 : 0) ? 0 : Math.PI;
+      out2.push({ p: [x, st.hipY, z], side, t, foot: [x + row * L * (quad ? 0.24 : 0.16), 0, side * (W * 0.5 + st.hipY * 1.15)], phase });
     }
     return out2;
   }
@@ -39216,6 +39219,7 @@ function makeLeg(g, kit, hip, o) {
   const mk = (fn) => {
     const grp = new Group();
     const b = new Bld();
+    if (lite) b.segK = 0.7;
     fn(b);
     b.mount(grp);
     grp.matrixAutoUpdate = false;
@@ -41119,7 +41123,30 @@ function buildUnit(design, team) {
   let air = null;
   let out2 = null;
   const mods = design.mounts.map((mid) => mid ? MODULE_BY_ID.get(mid) ?? null : null);
-  const tur = mods.map((mod) => mod ? buildTurret(mod, S, kit, flying) : null);
+  const slotCls = (mod, i) => {
+    const sl = ch.mounts[i];
+    return sl && mod.kind !== "weapon" && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : void 0;
+  };
+  const tur = mods.map((mod, i) => mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i)) : null);
+  if (!flying) {
+    const sc2 = tur.map(() => 1);
+    for (let i = 0; i < tur.length; i++) for (let j = i + 1; j < tur.length; j++) {
+      const a = tur[i], b = tur[j], pa = offs[i], pb = offs[j];
+      if (!a || !b || !pa || !pb) continue;
+      const d = Math.hypot(pa.x - pb.x, pa.y - pb.y), want = 0.95 * (a.r + b.r);
+      if (d < want) {
+        const k = Math.max(0.72, d / want);
+        sc2[i] = Math.min(sc2[i], k);
+        sc2[j] = Math.min(sc2[j], k);
+      }
+    }
+    tur.forEach((tu, i) => {
+      if (tu && sc2[i] < 1) {
+        tu.yaw.scale.setScalar(sc2[i]);
+        tu.r *= sc2[i];
+      }
+    });
+  }
   const specs = [];
   tur.forEach((tu, i) => {
     if (tu && offs[i]) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? "S", mod: mods[i] });

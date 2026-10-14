@@ -55,6 +55,8 @@ interface Template {
   isBlob: boolean[];
   mountTurret: number[];
   height: number;
+  /** centre height of the model's bounding box above the unit root (aircraft hang their airframe above the root) */
+  midY: number;
   /** a turret node -> template turret index */
   turretNodes: Map<number, number>;
   /** how far (cells of body travel) one unit of animate()-time is, per mobility, so feet/wheels don't skate */
@@ -79,6 +81,7 @@ export class Rig {
   readonly L: number; readonly W: number; readonly S: number;
   readonly flying: boolean;
   readonly height: number;
+  readonly midY: number;
   readonly radius: number;
   /** locomotion state */
   mv = 0;
@@ -92,7 +95,7 @@ export class Rig {
   constructor(tpl: Template) {
     this.tpl = tpl;
     const u = tpl.unit;
-    this.L = u.L; this.W = u.W; this.S = u.S; this.flying = u.flying; this.height = tpl.height; this.radius = u.radius;
+    this.L = u.L; this.W = u.W; this.S = u.S; this.flying = u.flying; this.height = tpl.height; this.midY = tpl.midY; this.radius = u.radius;
     this.objs = tpl.nodes.map((n) => {
       if (!n.dyn) return null;
       const o = new THREE.Group();
@@ -321,7 +324,7 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
   const isBlob = meshes.map((m) => (m.material as THREE.Material & { isMeshBasicMaterial?: boolean }).isMeshBasicMaterial === true);
   const tpl: Template = {
     key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, mountTurret,
-    height: Math.max(0.4, box.max.y), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [],
+    height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [],
   };
   return tpl;
 }

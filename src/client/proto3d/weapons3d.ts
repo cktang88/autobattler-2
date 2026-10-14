@@ -11,8 +11,8 @@
 import * as THREE from 'three';
 import { unitK } from '../../shared/mountgeo.ts';
 import { moduleTier } from '../../shared/parts.ts';
-import type { ModuleDef } from '../../shared/types.ts';
-import { boreOf, calibreMm, classPos, weaponD } from '../render/weaponsize.ts';
+import type { ModuleDef, MountClass } from '../../shared/types.ts';
+import { CLASS_RANK, boreOf, calibreMm, classPos, weaponD } from '../render/weaponsize.ts';
 import type { Kit } from './materials.ts';
 import { Bld, loft, type P2 } from './geo.ts';
 import { accent, deckRing, type WCtx } from './weapons/wkit.ts';
@@ -52,9 +52,11 @@ const MELEE = new Set(['saw', 'chainsaw', 'hammer', 'claw', 'blade', 'drill', 'p
 /** Unit-size scale applied to reference weapon sizes (bigger hulls carry proportionally bigger hardware). */
 export const unitScale = (S: number) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 
-export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false): Turret {
+/** `cls` overrides the size class (a utility shrunk to a smaller hardpoint, same rule as the 2D art's weaponsize). */
+export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, cls?: MountClass): Turret {
   const kS = unitScale(S);
-  const D = weaponD(mod) * kS;
+  const ov = cls && cls !== mod.mount ? cls : undefined;
+  const D = weaponD(mod, ov) * kS;
   const r = D / 2;
   const yaw = new THREE.Group(), pitch = new THREE.Group(), recoil = new THREE.Group();
   yaw.add(pitch); pitch.add(recoil);
@@ -62,7 +64,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false):
   let spinG: THREE.Group | null = null;
   const C: WCtx = {
     b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
-    c: classPos(mod), tier: moduleTier(mod), nb: mod.barrels ?? 1,
+    c: classPos(mod, ov), tier: (ov ? CLASS_RANK[ov] : moduleTier(mod)) as WCtx['tier'], nb: mod.barrels ?? 1,
     // chunky: barrel radius ~0.6 x the true bore width, never thinner than 9% of the housing radius
     bore: Math.max(boreOf(calibreMm(mod)) * 0.6 * kS, r * 0.11),
     y0: fixed ? 0 : r * 0.1, fixed, bv: Math.max(0.004, r * 0.05), t,

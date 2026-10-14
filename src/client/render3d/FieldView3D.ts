@@ -43,7 +43,7 @@ interface UView {
   hits: number;
 }
 interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
-interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean }
+interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number }
 
 /** beams / bolts: colour + width + life by module visual */
 function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
@@ -826,12 +826,14 @@ export class FieldView3D implements BattleView {
           const rig = this.bu.get(p.src)?.rig;
           if (rig && rig.muzzleWorld(p.mount, _v3)) y0 = _v3.y;
         }
-        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0 };
+        // straight rounds end at the body height of the first enemy along their path (aircraft fly well above the ground)
+        const hEnd = p.z > 0.05 || !byId ? 0.42 : this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, 0.42, p.moduleId);
+        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd };
         seen.set(p.id, rec);
       }
       if (this.offscreen(pos.x, pos.y, 4)) { rec.px = pos.x; rec.py = pos.y; continue; }
       const arcs = p.z > 0.05;
-      const H = arcs ? p.z + 0.12 : lerp(rec.y0, 0.42, clamp(p.progress, 0, 1));
+      const H = arcs ? p.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(p.progress, 0, 1));
       const ang = pos.angle;
       const dx = Math.cos(ang), dz = Math.sin(ang);
       const dh = H - rec.lastH;
@@ -874,7 +876,6 @@ export class FieldView3D implements BattleView {
     }
     proj.end();
     for (const id of seen.keys()) if (!alive.has(id)) seen.delete(id);
-    void byId;
   }
 
   private _lastFrameDt = 1 / 60;
@@ -898,7 +899,35 @@ export class FieldView3D implements BattleView {
   private unitHeight(unit: number, byId: Map<number, SimUnit>, fallback = 0.45): number {
     const v = this.bu.get(unit), su = byId.get(unit);
     if (!v || !su) return fallback;
-    return su.flying ? flyHeight(v.rig.S) + 0.4 : Math.min(v.rig.height * 0.6, 0.7);
+    return su.flying ? flyHeight(v.rig.S) + 0.4 + v.rig.midY : Math.min(v.rig.height * 0.6, Math.max(0.7, v.rig.height * 0.35));
+  }
+
+  /** body height of the first enemy (of a shooter on `side`) whose hull lies across a ray from (x, y) at `ang` */
+  private aimHeightAlong(x: number, y: number, ang: number, byId: Map<number, SimUnit>, side: Side, fallback: number, moduleId: string): number {
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    const mod = MODULE_BY_ID.get(moduleId);
+    const air = mod?.targetsAir !== false, ground = mod?.targetsGround !== false;
+    let best = Infinity, id = -1;
+    for (const u of byId.values()) {
+      if (!u.alive || u.side === side || (u.flying ? !air : !ground)) continue;
+      const rx = u.x - x, ry = u.y - y, t = rx * dx + ry * dy;
+      if (t <= 0 || t >= best) continue;
+      const v = this.bu.get(u.id);
+      if (Math.abs(rx * dy - ry * dx) < 0.5 + (v ? v.rig.radius : 0.5)) { best = t; id = u.id; }
+    }
+    return id >= 0 ? this.unitHeight(id, byId, fallback) : fallback;
+  }
+
+  /** body height of the enemy (of a shooter on `side`) unit nearest to a ground point, for beam / bolt end points */
+  private aimHeightAt(x: number, y: number, byId: Map<number, SimUnit>, side: Side | undefined, fallback = GUN_H): number {
+    let best = Infinity, id = -1;
+    for (const u of byId.values()) {
+      if (!u.alive || u.side === side) continue;
+      const d = Math.hypot(u.x - x, u.y - y);
+      const v = this.bu.get(u.id);
+      if (d < best && d < 1 + (v ? v.rig.radius : 1)) { best = d; id = u.id; }
+    }
+    return id >= 0 ? this.unitHeight(id, byId, fallback) : fallback;
   }
 
   private handleEvent(e: BattleEvent, byId: Map<number, SimUnit>): void {
@@ -922,7 +951,7 @@ export class FieldView3D implements BattleView {
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
         if (!m && this.offscreen(e.x1, e.y1, 3) && this.offscreen(e.x2, e.y2, 3)) break;
         const ay = m ? m.y : GUN_H;
-        fx.beam(m ? m.x : e.x1, ay, m ? m.z : e.y1, e.x2, GUN_H, e.y2, _col.set(st.color).clone(), st.w, st.life, st.wob);
+        fx.beam(m ? m.x : e.x1, ay, m ? m.z : e.y1, e.x2, this.aimHeightAt(e.x2, e.y2, byId, e.side), e.y2, _col.set(st.color).clone(), st.w, st.life, st.wob);
         break;
       }
       case 'chain': {
@@ -930,10 +959,13 @@ export class FieldView3D implements BattleView {
         const col = new THREE.Color(st.color);
         const rig = e.unit !== undefined ? this.bu.get(e.unit)?.rig : undefined;
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
+        let hPrev = GUN_H;
         for (let i = 1; i < e.points.length; i++) {
           const p0 = e.points[i - 1], p1 = e.points[i];
-          const sx = i === 1 && m ? m.x : p0.x, sy = i === 1 && m ? m.y : GUN_H, sz = i === 1 && m ? m.z : p0.y;
-          fx.lightning(sx, sy, sz, p1.x, GUN_H, p1.y, col, 0.06, 0.2);
+          const h1 = this.aimHeightAt(p1.x, p1.y, byId, e.side);
+          const sx = i === 1 && m ? m.x : p0.x, sy = i === 1 && m ? m.y : hPrev, sz = i === 1 && m ? m.z : p0.y;
+          fx.lightning(sx, sy, sz, p1.x, h1, p1.y, col, 0.06, 0.2);
+          hPrev = h1;
         }
         break;
       }
@@ -963,7 +995,7 @@ export class FieldView3D implements BattleView {
         const v = this.bu.get(e.unit);
         const vis = !this.offscreen(e.x, e.y, 6);
         if (vis) {
-          if (e.flying) fx.bigExplosion(e.x, e.y, Math.max(1, e.size * 0.8), v ? flyHeight(v.rig.S) + 0.2 : 1);
+          if (e.flying) fx.bigExplosion(e.x, e.y, Math.max(1, e.size * 0.8), v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1);
           else fx.bigExplosion(e.x, e.y, e.size);
         }
         if (v && !e.flying) {

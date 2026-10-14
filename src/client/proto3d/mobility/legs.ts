@@ -34,9 +34,12 @@ export function defaultHips(st: Stance, L: number, W: number): Hip[] {
   const t = st.thick;
   if (st.legs === 'spider') {
     const out: Hip[] = [];
-    for (let row = -1; row <= 1; row++) for (const side of [-1, 1] as const) {
-      const x = row * L * 0.3, z = side * W * 0.36;
-      out.push({ p: [x, st.hipY, z], side, t, foot: [x + row * L * 0.16, 0, side * (W * 0.5 + st.hipY * 1.15)], phase: ((row + 1) % 2 === (side > 0 ? 1 : 0) ? 0 : Math.PI) });
+    // 1x1 hulls (size-1 squads of 16) walk on four legs (diagonal trot) to stay inside the S1 triangle budget
+    const quad = L <= 1.01 && W <= 1.01;
+    for (const row of quad ? [-1, 1] : [-1, 0, 1]) for (const side of [-1, 1] as const) {
+      const x = row * L * (quad ? 0.26 : 0.3), z = side * W * 0.36;
+      const phase = quad ? (row === side ? 0 : Math.PI) : ((row + 1) % 2 === (side > 0 ? 1 : 0) ? 0 : Math.PI);
+      out.push({ p: [x, st.hipY, z], side, t, foot: [x + row * L * (quad ? 0.24 : 0.16), 0, side * (W * 0.5 + st.hipY * 1.15)], phase });
     }
     return out;
   }
@@ -151,7 +154,7 @@ export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg 
   const l1 = d0 * (spider ? 0.7 : 0.6) * rk, l2 = d0 * (spider ? 0.84 : 0.6) * rk;
   const bendV = spider ? new THREE.Vector3(0, 1, hip.side * 0.3) : new THREE.Vector3(o.bend === 'back' ? -1 : 1, 0.12, 0);
   const lite = !!o.lite, ex = o.extra ?? {}, flip = o.bend === 'back';
-  const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };
+  const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); if (lite) b.segK = 0.7; fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };
   const upper = mk((b) => { thigh(b, kit, l1, t, spider, lite); ex.thigh?.(b, l1, t); });
   const lower = mk((b) => { shin(b, kit, l2, t * (spider ? 0.95 : 0.92), spider, lite); ex.shin?.(b, l2, t * 0.92); });
   const footG = mk((b) => { foot(b, kit, t * (spider ? 0.9 : 1), spider, lite); ex.foot?.(b, t); });

@@ -9,6 +9,7 @@ import { mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { buildTurret, type Turret } from './weapons3d.ts';
+import { CLASS_RANK } from '../render/weaponsize.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
 import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
@@ -67,7 +68,21 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   let out: ChassisOut | null = null;
 
   const mods = design.mounts.map((mid) => (mid ? MODULE_BY_ID.get(mid) ?? null : null));
-  const tur = mods.map((mod) => (mod ? buildTurret(mod, S, kit, flying) : null));
+  // a utility in a smaller hardpoint than its class is drawn at the slot's size (as the 2D art does)
+  const slotCls = (mod: NonNullable<(typeof mods)[number]>, i: number) => { const sl = ch.mounts[i]; return sl && mod.kind !== 'weapon' && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : undefined; };
+  const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i)) : null));
+  // calibre-true housings can outgrow tightly packed hardpoints (four M guns down a land-train spine, twin dorsal
+  // mounts on a small pod): shrink both housings of an overlapping ground pair until their rings just clear (>= 72%)
+  if (!flying) {
+    const sc = tur.map(() => 1);
+    for (let i = 0; i < tur.length; i++) for (let j = i + 1; j < tur.length; j++) {
+      const a = tur[i], b = tur[j], pa = offs[i], pb = offs[j];
+      if (!a || !b || !pa || !pb) continue;
+      const d = Math.hypot(pa.x - pb.x, pa.y - pb.y), want = 0.95 * (a.r + b.r);
+      if (d < want) { const k = Math.max(0.72, d / want); sc[i] = Math.min(sc[i], k); sc[j] = Math.min(sc[j], k); }
+    }
+    tur.forEach((tu, i) => { if (tu && sc[i] < 1) { tu.yaw.scale.setScalar(sc[i]); tu.r *= sc[i]; } });
+  }
   const specs: MountSpec[] = [];
   tur.forEach((tu, i) => { if (tu && offs[i]) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
 
