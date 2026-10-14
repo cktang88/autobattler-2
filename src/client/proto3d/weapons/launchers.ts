@@ -250,7 +250,7 @@ function howitzer(C: WCtx) {
   C.t.pitch.position.set(-r * 0.05, y0 + h + r * 0.12, 0);
   C.t.pitch.rotation.z = n >= 3 ? 0.55 : 0.45;
   cbox(p, kit.trim, 0, 0, 0, r * 0.4, R * 3.2, n * gap + R * 2.5, r * 0.05);
-  cbox(p, kit.hull, r * 0.3, R * 0.4, 0, r * 0.1, R * 3.4 + r * 0.06, n * gap + R * 3.5, r * 0.03, undefined, 0.85);
+  bx(p, kit.hull, r * 0.3, R * 0.4, 0, r * 0.08, Math.min(R * 3.4, r * 0.5), n * gap + R * 3);
   const len = C.D * (n >= 3 ? 1.25 : xl ? 1.45 : 1.6);
   for (const z of Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap)) {
     barrel(C, rc, { len, rad: R, x0: r * 0.1, z, seg: xl ? 10 : 8, sleeve: n < 3, brake: 'slot' });

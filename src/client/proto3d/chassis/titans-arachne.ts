@@ -13,28 +13,28 @@ function arachne(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   const u = Math.min(L, W) / 10;
   const spider = stance.legs === 'spider';
-  const by = spider ? stance.hipY : stance.legs === 'biped' ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1.0 * u;
+  const by = spider ? stance.hipY * 1.3 : stance.legs === 'biped' ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1.0 * u;
   if (!spider && stance.legs !== 'biped') planLoft(b, kit.trim, ngon(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1.0], [by, 0.85]], [-0.4 * u, 0]);
   // carapace: ten-sided dome, dark belly below
-  const cx = -0.4 * u, cp = ngon(10, 2.3 * u, 2.45 * u, 0);
-  const cTop = by + 1.25 * u;
+  const cx = -0.4 * u, cp = ngon(10, 2.65 * u, 2.85 * u, 0);
+  const cTop = by + 1.6 * u;
   planLoft(b, kit.trim, cp, [[by - 0.75 * u, 0.62], [by - 0.2 * u, 0.94], [by + 0.1 * u, 1.0]], [cx, 0]);
-  planLoft(b, kit.hull, cp, [[by + 0.05 * u, 1.04], [by + 0.45 * u, 1.05], [by + 0.95 * u, 0.86], [cTop, 0.5]], [cx, 0]);
+  planLoft(b, kit.hull, cp, [[by + 0.05 * u, 1.04], [by + 0.5 * u, 1.05], [by + 1.15 * u, 0.84], [cTop, 0.48]], [cx, 0]);
   // radial armour ribs with glow seams between them
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2 + Math.PI / 10;
     if (Math.cos(a) > 0.8) continue; // the head sits there
     const rx = Math.cos(a), rz = Math.sin(a);
-    beam(b, kit.panel, [cx + rx * 1.1 * u, cTop - 0.15 * u, rz * 1.15 * u], [cx + rx * 2.3 * u, by + 0.45 * u, rz * 2.45 * u], 0.36 * u, 0.24 * u, [rx, 2, rz]);
+    beam(b, kit.panel, [cx + rx * 1.25 * u, cTop - 0.15 * u, rz * 1.35 * u], [cx + rx * 2.68 * u, by + 0.5 * u, rz * 2.88 * u], 0.36 * u, 0.24 * u, [rx, 2, rz]);
     const a2 = a + Math.PI / 10;
-    glow(b, kit, cx + Math.cos(a2) * 2.38 * u, by + 0.28 * u, Math.sin(a2) * 2.5 * u, 0.5 * u, 0.06 * u, 0.06 * u, [0, -a2 + Math.PI / 2, 0]);
+    glow(b, kit, cx + Math.cos(a2) * 2.75 * u, by + 0.3 * u, Math.sin(a2) * 2.93 * u, 0.5 * u, 0.06 * u, 0.06 * u, [0, -a2 + Math.PI / 2, 0]);
   }
   // turret tower for the titan gun on top of the dome
-  const tY = cTop + 0.55 * u;
+  const tY = cTop + 0.75 * u;
   planLoft(b, kit.hull, ngon(8, 1.0 * u, 1.0 * u), [[cTop - 0.2 * u, 1.0], [tY - 0.1 * u, 0.92], [tY, 0.86]], [cx, 0]);
   both((s) => hazard(b, kit, cx + 0.75 * u, tY - 0.2 * u, s * 0.45 * u, 0.5 * u, 0.16 * u, 3, 0.5 * s));
   // head: armoured prow with a cyclops lens and an eye ring
-  const hx = 1.9 * u, hy = by + 0.15 * u;
+  const hx = 2.3 * u, hy = by + 0.15 * u;
   planLoft(b, kit.hull, [[1.25 * u, 0], [0.7 * u, 0.95 * u], [-0.6 * u, 1.05 * u], [-0.8 * u, 0], [-0.6 * u, -1.05 * u], [0.7 * u, -0.95 * u]] as P2[], [[hy - 0.6 * u, 0.7], [hy - 0.2 * u, 1.0], [hy + 0.5 * u, 0.95], [hy + 0.75 * u, 0.7]], [hx, 0]);
   reactor(b, kit, [hx + 0.95 * u, hy + 0.12 * u, 0], 0.42 * u, 'x', 2);
   const eyes: [number, number, number][] = [[0.75, 0.55, 0.42], [0.75, 0.55, -0.42], [0.95, -0.25, 0.55], [0.95, -0.25, -0.55], [0.55, 0.72, 0.15], [0.55, 0.72, -0.15]];
@@ -46,15 +46,16 @@ function arachne(c: ChassisCtx): ChassisOut {
     beam(b, kit.steel, [hx + 1.5 * u, hy - 0.9 * u, s * 0.45 * u], [hx + 1.6 * u, hy - 1.5 * u, s * 0.25 * u], 0.18 * u, 0.2 * u);
   });
   // abdomen: segmented, tapering back, glowing spinneret reactor at the tail
-  const ax0 = -2.4 * u;
+  const ax0 = -2.7 * u;
   b.cylb(kit.metal, 0.6 * u, 0.6 * u, 0.06 * u, [ax0 + 0.1 * u, by + 0.3 * u, 0], '-x', 12);
   for (let i = 0; i < 3; i++) {
     const x = ax0 - 0.55 * u - i * 0.75 * u, f = 1 - i * 0.16;
-    pod(b, i % 2 ? kit.panel : kit.hull, [x, by + 0.55 * u - i * 0.12 * u, 0], 0.48 * u, 0.75 * u * f, 1.05 * u * f, 12, 5, 2.4, 0.3);
-    if (i < 2) both((s) => glow(b, kit, x - 0.35 * u, by + 0.55 * u - i * 0.12 * u, s * 0.95 * u * f, 0.06 * u, 0.4 * u * f, 0.06 * u));
+    pod(b, i % 2 ? kit.panel : kit.hull, [x, by + 0.65 * u - i * 0.14 * u, 0], 0.5 * u, 0.95 * u * f, 1.3 * u * f, 12, 5, 2.4, 0.3);
+    if (i < 2) both((s) => glow(b, kit, x - 0.37 * u, by + 0.65 * u - i * 0.14 * u, s * 1.18 * u * f, 0.06 * u, 0.5 * u * f, 0.06 * u));
   }
-  const spx = ax0 - 2.75 * u, spy = by + 0.2 * u;
-  reactor(b, kit, [spx + 0.2 * u, spy, 0], 0.38 * u, '-x', 2);
+  const spx = ax0 - 2.75 * u, spy = by + 0.35 * u;
+  b.cylb(kit.trim, 0.5 * u, 0.3 * u, 0.05 * u, [spx + 0.25 * u, spy, 0], '-x', 12);
+  b.cyl(kit.hot, 0.32 * u, 0.2 * u, 0.12 * u, [spx - 0.04 * u, spy, 0], '-x', 10);
   // masts and banner on the rear of the carapace
   mast(b, kit, cx - 1.4 * u, by + 0.6 * u, -1.2 * u, 2.6 * u, 0.06 * u);
   mast(b, kit, cx - 1.6 * u, by + 0.55 * u, 1.0 * u, 1.8 * u, 0.05 * u);
@@ -64,7 +65,7 @@ function arachne(c: ChassisCtx): ChassisOut {
   const palp = new Map<MountSpec, number>();
   for (const m of c.mounts) {
     if (!(m.x > 0.9 * u && Math.abs(m.z) > 0.6 * u)) continue;
-    const s = Math.sign(m.z), top = by + 0.75 * u;
+    const s = Math.sign(m.z), top = by + 0.85 * u;
     beam(b, kit.trim, [hx - 0.5 * u, by - 0.2 * u, s * 0.8 * u], [m.x, by - 0.1 * u, m.z], 0.45 * u, 0.5 * u);
     block(b, kit.trim, m.x, by - 0.25 * u, m.z, 1.5 * u, 0.9 * u, 0.4 * u, { ch: 0.2 * u });
     block(b, kit.hull, m.x + 0.05 * u, by + 0.05 * u, m.z, 1.7 * u, m.r * 2.5, top - by - 0.05 * u, { top: [0.82, 0.82], shift: [-0.1 * u, 0], ch: 0.3 * u, bev: 0.08 * u, bot: 0.05 * u });
@@ -75,11 +76,11 @@ function arachne(c: ChassisCtx): ChassisOut {
   let hips: Hip[] | undefined;
   if (spider) {
     hips = [];
-    const rows: [number, number, number, number][] = [[1.0, 1.85, 4.0, 3.6], [0.2, 2.25, 1.6, 4.65], [-1.0, 2.25, -1.3, 4.7], [-1.85, 1.75, -3.9, 3.7]];
+    const rows: [number, number, number, number][] = [[1.2, 2.2, 4.1, 3.7], [0.25, 2.7, 1.5, 4.8], [-1.05, 2.7, -1.5, 4.8], [-2.05, 2.1, -4.0, 3.8]];
     rows.forEach(([hxr, hz, fx, fz], i) => {
       for (const s of [-1, 1] as const) {
         const p: V3 = [cx + hxr * u, by, s * hz * u];
-        hips!.push({ p, side: s, t: stance.thick, foot: [fx * u, 0, s * fz * u], phase: ((i % 2) ^ (s > 0 ? 1 : 0)) ? Math.PI : 0 });
+        hips!.push({ p, side: s, t: stance.thick * 1.15, foot: [fx * u, 0, s * fz * u], phase: ((i % 2) ^ (s > 0 ? 1 : 0)) ? Math.PI : 0 });
         block(b, kit.trim, p[0], by - 0.5 * u, s * (hz - 0.2) * u, 0.7 * u, 0.6 * u, 0.85 * u, { top: [0.8, 0.8], ch: 0.18 * u });
       }
     });
@@ -93,9 +94,9 @@ function arachne(c: ChassisCtx): ChassisOut {
       const pt = palp.get(m);
       if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.1 * u, 18); return { y: pt, socket: true }; }
       if (Math.hypot(m.x - cx, m.z) < 0.9 * u) { collar(b, kit, m.x, tY, m.z, m.r, tY - 0.15 * u, 22); return { y: tY, socket: true }; }
-      if (m.x < ax0) {
+      if (m.x < ax0 + 0.3 * u) {
         // tail gun on the first abdomen segment
-        const y = by + 1.3 * u;
+        const y = by + 1.55 * u;
         collar(b, kit, m.x, y, m.z, m.r, y - 0.35 * u, 16);
         return { y, socket: true };
       }

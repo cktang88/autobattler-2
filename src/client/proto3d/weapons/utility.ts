@@ -173,10 +173,10 @@ function armour(C: WCtx) {
   const w = r * 1.8, layers = C.tier >= 3 ? 2 : 1;
   for (let i = 0; i < layers; i++) {
     const k = 1 - i * 0.18;
-    cbox(b, i ? kit.panel : kit.hull, -i * r * 0.18, r * 0.32 * k + i * r * 0.04, 0, r * 0.95 * k, r * 0.62 * k, w * k, r * 0.08, [0, 0, 0], 0.72);
+    cbox(b, i ? kit.panel : kit.hull, -i * r * 0.15, r * 0.2 * k + i * r * 0.2, 0, r * 1.1 * k, r * 0.4 * k, w * k, r * 0.08, [0, 0, 0], 0.7);
   }
-  for (const z of [-w * 0.32, w * 0.32]) bx(b, kit.trim, r * 0.05, r * 0.66, z, r * 0.5, r * 0.04, r * 0.08);
-  accent(C, -r * 0.05, r * (layers > 1 ? 0.66 : 0.64), 0, r * 0.3, w * 0.35);
+  for (const z of [-w * 0.3, w * 0.3]) bx(b, kit.trim, r * 0.42, r * 0.22, z, r * 0.06, r * 0.2, r * 0.1);
+  accent(C, -r * 0.1, r * (layers > 1 ? 0.6 : 0.4) + 0.002, 0, r * 0.3, w * 0.35);
 }
 
 /** Reactive armour: a grid of chunky explosive tiles on a backing slab. */
