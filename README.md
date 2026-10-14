@@ -4,6 +4,16 @@ A browser autobattler in the spirit of **Mechabellum**, where you **design your 
 (like *Echoes of the Architect*). Play against the AI, or play **async multiplayer** against other
 players: each of you deploys whenever you like, and the server resolves the round once both have.
 
+![Battle in progress](docs/screenshots/battle.jpg)
+
+## Screenshots
+
+| Unit designer | Weapon ranges in the designer |
+|---|---|
+| ![Unit designer: drag weapons and modules onto the sockets on the hull, on a true-scale 5 m grid](docs/screenshots/designer.jpg) | ![Range view: every weapon's reach drawn from its own mount](docs/screenshots/designer-ranges.jpg) |
+| **Deck builder (vs AI)** | **Deploying, with ranges shown** |
+| ![Deck builder: drag designs into a 9-card deck and see what it covers](docs/screenshots/deck-builder.jpg) | ![Deployment: place blocks in your zone, each weapon's range drawn from its mount](docs/screenshots/deploy.jpg) |
+
 ## Run
 
 ```bash
