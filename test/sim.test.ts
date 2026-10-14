@@ -508,10 +508,11 @@ test('target priority: closest / farthest / lowestHp / highestHp', () => {
   assert.equal(r.got, r.near);
   r = pickedTarget('farthest', 'bulwark', 'bulwark');
   assert.equal(r.got, r.far);
-  // lowestHp picks a damaged unit over a closer healthy one
-  r = pickedTarget('lowestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 100; });
+  // lowestHp picks a damaged unit over a closer healthy one (damaged to 300 hp so the 14-cell sniper, which now
+  // fires before the near unit is in range, can't one-shot it before the check)
+  r = pickedTarget('lowestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 300; });
   assert.equal(r.got, r.far);
-  r = pickedTarget('highestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 100; });
+  r = pickedTarget('highestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 300; });
   assert.equal(r.got, r.near);
 });
 
