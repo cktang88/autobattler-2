@@ -1044,13 +1044,42 @@ export class Battle {
   }
 
   private aimScratch = { x: 0, y: 0 };
-  /** Where a weapon aims: the target's current position. Unguided shots are not led, so movers dodge slow rounds. */
+  /** Where a weapon aims. Projectile weapons lead their target: solve for the point where a round at the weapon's
+   *  projectile speed meets a target moving at its current velocity (artillery and rockets need this most; fast
+   *  rounds get a small lead so they reliably connect). Homing missiles, beams, rails, lightning and melee aim at
+   *  the target itself. A target that changes course after the shot can still slip a slow shell. */
   private aimPoint(I: Internal, w: Wpn, t: SimUnit): { x: number; y: number } {
     const p = this.aimScratch;
     p.x = t.x; p.y = t.y;
-    void I; void w;
+    const kind = w.def.projectile ?? 'bullet';
+    if (kind === 'missile' || kind === 'beam' || kind === 'rail' || kind === 'lightning' || kind === 'melee' || kind === 'flame' || kind === 'none') return p;
+    const T = this.ints[t.id];
+    const vx = T.vx, vy = T.vy;
+    if (vx * vx + vy * vy < 1e-4) return p;
+    const u = I.u;
+    let tof: number;
+    if (kind === 'arc' && u.flying) tof = BOMB_FALL; // bombs fall a fixed time
+    else {
+      // |d + v t| = s t  ->  (v.v - s^2) t^2 + 2 (d.v) t + d.d = 0
+      const s = w.def.projectileSpeed ?? 15;
+      const dx = t.x - u.x, dy = t.y - u.y;
+      const a = vx * vx + vy * vy - s * s, b = 2 * (dx * vx + dy * vy), c = dx * dx + dy * dy;
+      if (Math.abs(a) < 1e-6) tof = b < 0 ? -c / b : Math.sqrt(c) / s;
+      else {
+        const disc = b * b - 4 * a * c;
+        if (disc < 0) return p; // can't catch it: aim at it
+        const r = Math.sqrt(disc);
+        const t1 = (-b - r) / (2 * a), t2 = (-b + r) / (2 * a);
+        tof = t1 > 0 && t2 > 0 ? Math.min(t1, t2) : Math.max(t1, t2);
+        if (!(tof > 0)) return p;
+      }
+    }
+    tof = Math.min(tof, 8);
+    p.x = clamp(t.x + vx * tof, 0, FIELD_W);
+    p.y = clamp(t.y + vy * tof, 0, FIELD_H);
     return p;
   }
+
 
   // ---------------------------------------------------------------- firing
 

@@ -32,8 +32,9 @@ and a demo battle.
      A slot accepts its own class or smaller, and you can fill slots with utilities only.
    - **Weight vs capacity** sets speed (up to +25% when light, crawling when overloaded, illegal past 150%).
    - Weapons differ in firing pattern (sustained, clip + reload, salvo, single shot) and accuracy:
-     beams/rails never miss, missiles home, everything else flies to where the target *was* — artillery
-     shells take seconds to land, so fast units dodge them unless they clump.
+     beams/rails never miss, missiles home, and every other projectile leads its target (aims where a target on
+     its current course will be when the round arrives). Slow artillery shells and rockets can still be slipped
+     by a target that changes course mid-flight; turrets only fire once aligned.
 2. **Deck** — bring up to 9 designs into a match.
 3. **Rounds** — each round you get supply (300, +50/round, unspent carries over), buy units from your deck
    and place them on your half of the grid, or upgrade units you already own (up to level 3). Placements
