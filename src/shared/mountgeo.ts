@@ -98,7 +98,7 @@ export const PART_REST: Record<string, (Pt | null)[]> = {
   crab: [[0.76, -1.24], [0.76, 1.24], null],
   warlord: [null, [0.10500000000000001, -1.3399999999999999], [0.10500000000000001, 1.3399999999999999], null],
   scorpion: [[-1.54, -0.798], [1.83, -0.99], [1.83, 0.99]],
-  centipede: [[0.6399999999999997, 0], [-0.07000000000000006, 0], [-0.7800000000000001, 0], [-1.4900000000000002, 0]],
+  centipede: [[0.6079999999999998, 0], [-0.06650000000000006, 0], [-0.7410000000000001, 0], [-1.4155000000000002, 0]],
 };
 
 export const RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
@@ -209,6 +209,10 @@ const CLASS_D_MID: Record<MountClass, number> = { S: 0.32, M: 0.52, L: 0.85, XL:
  *  depends on calibre / overlap clearing (render-only); the sim uses half of this as a weapon's muzzle reach. */
 export const approxTurretD = (cls: MountClass, S: number) => CLASS_D_MID[cls] * unitK(S);
 
+/** Box [w across, l along] in cells the chassis art (and its hardpoints) is laid out in: ChassisDef.art, else the
+ *  footprint, else size x size. The footprint itself (collisions, deploy blocks) stays ChassisDef.footprint. */
+export const artBox = (c: ChassisDef): [number, number] => c.art ?? c.footprint ?? [c.size, c.size];
+
 const offCache = new Map<string, { x: number; y: number }[]>();
 
 /**
@@ -221,8 +225,7 @@ export function mountOffsets(d: Design): { x: number; y: number }[] {
   let out = offCache.get(key);
   if (out) return out;
   const chassis = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get('scout')!;
-  const S = chassis.size;
-  const Y = chassis.footprint?.[0] ?? S, X = chassis.footprint?.[1] ?? S;
+  const [Y, X] = artBox(chassis);
   const pts = hardpointsOf(chassis);
   const mods = chassis.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
   const perm = mountPerm(chassis, pts, mods);

@@ -11,6 +11,7 @@ import { hullPath, layoutOf, silhouette, unitSprites } from './render/unitart.ts
 import { calibreMm } from './render/weaponsize.ts';
 import { aiDeck } from '../shared/ai.ts';
 import { DEPLOY_D, DEPLOY_W, blockDims, blockInZone, blocksOverlap, hasSpacing, placementUnitCenters } from '../shared/grid.ts';
+import { artBox } from '../shared/mountgeo.ts';
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from '../shared/parts.ts';
 import { Battle } from '../shared/sim/battle.ts';
 import { TICK_RATE } from '../shared/sim/types.ts';
@@ -356,7 +357,7 @@ function silSection(): void {
       g.setLineDash([]);
       if (!full) {
         g.rotate(-Math.PI / 2);
-        g.fillStyle = '#000'; g.fill(hullPath(c.shape, c.size, fh, fw));
+        g.fillStyle = '#000'; { const [aw, al] = artBox(c); g.fill(hullPath(c.shape, c.size, al, aw)); }
       } else {
         const mob = params.get('mob') && !pairingError(c.id, params.get('mob')!) ? params.get('mob')! : MOBILITY.find((m) => !pairingError(c.id, m.id) && m.id !== 'anchor')?.id ?? 'anchor';
         const d: Design = { id: 'sil_' + c.id, name: c.id, chassis: c.id, mobility: mob, mounts: c.mounts.map(() => null) };

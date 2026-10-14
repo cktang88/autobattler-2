@@ -365,7 +365,7 @@ test('kiteMount: validated against weapon mounts, configure/clear, redacted', ()
 
 test('non-square footprints: validateDeploy zone + overlap use the real w x h', () => {
   const long: Design = { id: 'lg', name: 'Long', chassis: 'longarm', mobility: 'halftrack', mounts: ['cannon'] }; // 1 wide x 3 long
-  const wide: Design = { id: 'wd', name: 'Wide', chassis: 'crab', mobility: 'treads', mounts: ['mg', 'mg', null] }; // 3 wide x 2 long
+  const wide: Design = { id: 'wd', name: 'Wide', chassis: 'riot', mobility: 'treads', mounts: ['mg', 'mg'] }; // 3 wide x 2 long
   const st = computeStats(long), sw = computeStats(wide);
   assert.deepEqual([st.fw, st.fh, sw.fw, sw.fh], [1, 3, 3, 2]);
   assert.deepEqual(blockDims(st.size, 0, st), { w: 1, h: 3 });
