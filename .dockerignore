@@ -1,5 +1,15 @@
 node_modules
 data
 .git
+.claude
+docs
+test
 public/game.js
 public/game.js.map
+public/artlab.js
+public/artlab.js.map
+public/proto3d.js
+public/proto3d.js.map
+fly.toml
+*.md
+!CREDITS.md

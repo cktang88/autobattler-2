@@ -1,0 +1,45 @@
+# Fly.io config for Ironclad Assembly. First deploy: see "Deploy (Fly.io)" in README.md.
+# Change `app` to a name that's free on Fly (it becomes <app>.fly.dev).
+app = "ironclad-assembly"
+primary_region = "iad"
+kill_signal = "SIGTERM"   # the server flushes its JSON store on SIGTERM / SIGINT
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  DATA_DIR = "/data"
+  TRUST_PROXY = "1"       # rate limits key on the client IP from Fly's proxy (X-Forwarded-For)
+
+# Players and async PvP matches live in JSON files on this volume. Keep the app on ONE machine:
+# a second machine would have its own volume and its own copy of the data.
+[[mounts]]
+  source = "ironclad_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"   # sleeps when idle; state is on the volume, so matches survive
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"   # server-side battle sims are CPU-bound, not memory-bound
