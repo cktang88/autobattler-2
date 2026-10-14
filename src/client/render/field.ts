@@ -1270,6 +1270,7 @@ export class FieldView {
             g.drawImage(fireTex(0, p.id + 1), -r * 0.5, -r * 0.5, r, r);
           }
           g.setTransform(tr);
+          if (Math.random() < dt * 45 && this.fx.busy < 0.6) this.fx.fire(pos.x, pos.y, r * 0.55, 0.38, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0.5 + Math.random(), hz);
           if (Math.random() < dt * 9 && this.fx.busy < 0.5) this.fx.smoke(pos.x, pos.y, r * 0.55, 1.3, '#26221e', this.fx.wind.x * 0.4, 0, 0.32, 0.8, hz);
           if (prog > 0.3 && Math.random() < dt * 5 && this.fx.busy < 0.5) this.fx.sparks(pos.x, pos.y, 1, '#ffb050', 1.5, undefined, Math.PI, 0.5, true);
           break;
