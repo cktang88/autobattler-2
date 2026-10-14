@@ -88,9 +88,10 @@ export const TRAIT_LABEL: Record<string, string> = {
 
 export const KIND_LABEL: Record<MoveKind, string> = { ground: 'Ground', air: 'Air', static: 'Static' };
 
-export const sizeLabel = (s: number) => `${s}×${s}`;
-/** size badge text for a design: "1×1 ×16" for squads, "2×2" for single units */
-export const designSizeLabel = (st: { size: number; squad: number }) => (st.squad > 1 ? `${sizeLabel(st.size)} ×${st.squad}` : sizeLabel(st.size));
+/** footprint in cells, width × length ("2×3"); square by default */
+export const sizeLabel = (s: number, w = s, l = s) => `${w}×${l}`;
+/** size badge text for a design: "1×1 ×16" for squads, "2×3" for single units (footprint width × length) */
+export const designSizeLabel = (st: { size: number; squad: number; fw?: number; fh?: number }) => (st.squad > 1 ? `${sizeLabel(st.size, st.fw, st.fh)} ×${st.squad}` : sizeLabel(st.size, st.fw, st.fh));
 /** Physical footprint of a size-N unit, e.g. 2 -> "10 m". */
 export const footprintLabel = (s: number) => fmtMeters(s);
 

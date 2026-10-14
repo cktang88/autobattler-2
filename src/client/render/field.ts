@@ -611,7 +611,7 @@ export class FieldView {
           g.lineWidth = 2 / this.k;
           const tr = g.getTransform();
           g.translate(u.x, u.y); g.rotate(p.angle);
-          const hx = LL.X * 0.5 + 0.12, hy = LL.Y * 0.5 + 0.12;
+          const hx = LL.FX * 0.5 + 0.12, hy = LL.FY * 0.5 + 0.12;
           g.beginPath();
           roundRect(g, -hx, -hy, hx * 2, hy * 2, Math.min(hx, hy) * 0.45);
           g.stroke();
@@ -1868,7 +1868,7 @@ function shieldR(L: { X: number; Y: number }): number {
 function boxHalf(d: Design, ang: number): { hx: number; hy: number; w: number } {
   const L = layoutOf(d);
   const c = Math.abs(Math.cos(ang)), sn = Math.abs(Math.sin(ang));
-  return { hx: (c * L.X + sn * L.Y) / 2, hy: (sn * L.X + c * L.Y) / 2, w: (L.X + L.Y) / 2 };
+  return { hx: (c * L.FX + sn * L.FY) / 2, hy: (sn * L.FX + c * L.FY) / 2, w: (L.FX + L.FY) / 2 };
 }
 
 /** Render a single design centered in a canvas (garage preview, cards). `time` animates rotors/legs. */
@@ -1882,6 +1882,9 @@ export interface PreviewGeom {
   mounts: { x: number; y: number; r: number }[];
   /** chassis size in cells */
   S: number;
+  /** footprint in cells: fw across (screen x when the nose points up), fl along the facing */
+  fw: number;
+  fl: number;
   /** rough half-extent of the drawn sprite (CSS px) */
   half: number;
 }
@@ -1933,5 +1936,5 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
     y: (oy + (uy + (sn * m.x + cs * m.y) * sc) * px) * k,
     r: m.r * sc * px * k,
   }));
-  return { px: px * k, cx: (ox + ux * px) * k, cy: (oy + uy * px) * k, mounts, S: L.S, half: (ext0 / 2) * 0.92 * px * k };
+  return { px: px * k, cx: (ox + ux * px) * k, cy: (oy + uy * px) * k, mounts, S: L.S, fw: L.FY, fl: L.FX, half: (ext0 / 2) * 0.92 * px * k };
 }
