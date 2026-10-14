@@ -84,7 +84,9 @@ export class Camera {
       const slack = Math.max(0, edge - (half - field / 2));
       return clampN(c, field / 2 - slack, field / 2 + slack);
     }
-    const pad = Math.min(half * 0.35, half * 0.08 + edge);
+    // the extra zoomed-in travel fades out as the view approaches the whole field, so the range meets the
+    // fitted case's `edge` slack continuously (a step there snapped the view by several cells when zooming out)
+    const pad = Math.min(half * 0.35, half * 0.08 * clampN((field / 2 - half) / (field * 0.1), 0, 1) + edge);
     const lo = half - pad, hi = field - half + pad;
     if (lo >= hi) return field / 2;
     return clampN(c, lo, hi);

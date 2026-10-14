@@ -200,7 +200,13 @@ export class FieldView {
   private battle: Battle | null = null;
   private lastTick = -1;
   private sinceTick = 0;
-  private tickInterval = DT;
+  /** render clock (fractional sim ticks): advances smoothly at the observed tick rate, about one tick behind the newest
+   *  snapshot, and is clamped between the two snapshots it interpolates (prevTick..curTick) */
+  private rt = 0;
+  private tickRate = 1 / DT;
+  private prevTick = 0;
+  private curTick = 0;
+  private rateWin = { n: 0, t: 0 };
   private prevU = new Map<number, USnap>();
   private curU = new Map<number, USnap>();
   private prevP = new Map<number, PSnap>();
@@ -435,7 +441,10 @@ export class FieldView {
     const vy0 = Math.max(0, Math.min(a.y, b.y)), vy1 = Math.min(FIELD_H, Math.max(a.y, b.y));
     let d = this.detail;
     const covers = !!d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6;
-    const sharp = !!d && d.px >= px * 0.8 && d.px <= px * 1.6;
+    // the patch's resolution is capped (3800 device px a side): judge sharpness against what a rebuild could reach,
+    // or on big hi-dpi canvases every frame rebuilds a patch that can never get sharper (~400 ms a frame)
+    const reach = Math.min(px, 3800 / Math.max(1e-6, (vx1 - vx0) * 1.6), 3800 / Math.max(1e-6, (vy1 - vy0) * 1.6));
+    const sharp = !!d && d.px >= reach * 0.8 && d.px <= px * 1.6;
     if ((!d || !covers || !sharp) && this.cam.still > 0.12) {
       const mx = (vx1 - vx0) * 0.3, my = (vy1 - vy0) * 0.3;
       const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
@@ -688,6 +697,7 @@ export class FieldView {
     this.vis.clear();
     this.fx.clear();
     this.sinceTick = 0;
+    this.rt = this.prevTick = this.curTick = 0;
   }
 
   private snapshot(b: Battle): void {
@@ -719,19 +729,59 @@ export class FieldView {
     this.time += dt;
     if (battle !== this.battle || battle.tick < this.lastTick) this.reset(battle);
     let newTicks: BattleEvent[] | null = null;
-    if (battle.tick !== this.lastTick) {
-      if (this.lastTick >= 0) {
-        const interval = this.sinceTick / Math.max(1, battle.tick - this.lastTick);
-        this.tickInterval = clamp(lerp(this.tickInterval, Math.max(interval, 1 / 240) * Math.max(1, battle.tick - this.lastTick), 0.3), 1 / 120, 0.25);
+    const newTick = battle.tick !== this.lastTick;
+    if (newTick) {
+      const n = battle.tick - this.lastTick;
+      // a jump (first frame, skip, catch-up after a stall) is shown as-is instead of being slid across
+      const jump = this.lastTick < 0 || n > 40;
+      // ticks per second as observed by this view (speed setting x frame pacing); the time since the previous snapshot
+      // includes this frame. Long gaps (pause, background tab) say nothing about the rate and are ignored.
+      // Measured over windows of >= 0.2 s so uneven tick counts per frame (1,1,2 at 4x) don't make it wobble.
+      const span = this.sinceTick + dt;
+      if (jump || span >= 0.4) this.rateWin.n = this.rateWin.t = 0;
+      else if (span >= 0.05 && (n / span > this.tickRate * 1.7 || n / span < this.tickRate * 0.6)) {
+        // a speed change shows up as a big jump: adopt it at once instead of easing over a second of judder
+        this.tickRate = clamp(n / span, 1, 600);
+        this.rateWin.n = this.rateWin.t = 0;
+      } else {
+        this.rateWin.n += n;
+        this.rateWin.t += span;
+        const r = this.rateWin.n / this.rateWin.t;
+        const changed = this.rateWin.t >= 0.05 && (r > this.tickRate * 1.7 || r < this.tickRate * 0.6);
+        if (this.rateWin.t >= 0.2 || changed) {
+          this.tickRate = clamp(changed ? r : lerp(this.tickRate, r, 0.6), 1, 600);
+          this.rateWin.n = this.rateWin.t = 0;
+        }
       }
-      this.snapshot(battle);
-      if (this.lastTick < 0) this.prevU = new Map(this.curU);
-      this.handleVanished(battle);
-      this.lastTick = battle.tick;
+      this.prevTick = jump ? battle.tick : this.curTick;
+      this.curTick = battle.tick;
+      if (jump) this.rt = battle.tick;
       this.sinceTick = 0;
-      if (!this.usePush) newTicks = battle.events;
     } else this.sinceTick += dt;
-    this.alpha = clamp(this.sinceTick / this.tickInterval, 0, 1);
+    // advance the render clock and ease it toward one tick behind the estimated sim time, then keep it inside the
+    // snapshot pair; fixed-rate ticks then move units by the same amount every frame at any speed (no judder)
+    const target = this.curTick + this.sinceTick * this.tickRate - 1;
+    this.rt += dt * this.tickRate;
+    this.rt += (target - this.rt) * 0.05;
+    this.rt = clamp(this.rt, this.prevTick, this.curTick);
+    this.alpha = this.curTick > this.prevTick ? (this.rt - this.prevTick) / (this.curTick - this.prevTick) : 1;
+    if (newTick) {
+      const before = this.curU;
+      this.snapshot(battle);
+      if (this.prevTick === this.curTick) {
+        // jumped (skip): units that died unseen still leave their hulks; nothing to interpolate from; forget rounds
+        // that came and went unseen (no impact puffs for them)
+        for (const id of before.keys()) {
+          const u = this.units.get(id);
+          if (u && !u.alive) this.addWreck(u, this.teamOf(u.side), u.x, u.y, u.angle + (u.flying ? 0.6 : 0), u.flying ? 0.8 : 1);
+        }
+        this.prevU = new Map(this.curU);
+        this.prevP = new Map(this.curP);
+        for (const id of this.ptrack.keys()) if (!this.curP.has(id)) this.ptrack.delete(id);
+      } else this.handleVanished(battle);
+      this.lastTick = battle.tick;
+      if (!this.usePush) newTicks = battle.events;
+    }
 
     const events = newTicks ?? this.pending;
     if (events.length) {
@@ -931,8 +981,9 @@ export class FieldView {
       const frac = u.maxShield > 0 ? u.shield / u.maxShield : 0.5;
       const L = layoutOf(u.design);
       const r = shieldR(L);
-      // drawn at ground level, the same place shield-hit flashes are drawn
-      const lx = p.x + this.dirs.ux * (u.flying ? 0.12 : 0), ly = p.y + this.dirs.uy * (u.flying ? 0.12 : 0);
+      // drawn at ground level (aircraft: around the drawn body), the same place shield-hit flashes are drawn
+      const al = this.airLift(u);
+      const lx = p.x + al.x, ly = p.y + al.y;
       g.globalAlpha = 0.05 + 0.06 * frac + hit * 0.35;
       g.lineWidth = Math.max(1 / this.k, 0.025 + 0.03 * hit);
       g.beginPath();
@@ -1420,11 +1471,12 @@ export class FieldView {
     return { x: mx, y: my, d: m.d, aim };
   }
 
-  /** Live unit whose centre sits at (x, y): the sim reports beam / chain / direct-hit endpoints at target centres. */
+  /** Unit whose centre sits at (x, y): the sim reports beam / chain / direct-hit endpoints at target centres. Units that
+   *  died since the last snapshot count too (the killing shot's beam still ends on the hull it destroyed). */
   private unitNear(x: number, y: number): SimUnit | null {
     let best: SimUnit | null = null, bd = 0.36;
     for (const u of this.units.values()) {
-      if (!u.alive) continue;
+      if (!u.alive && !this.prevU.has(u.id)) continue;
       const d = (u.x - x) ** 2 + (u.y - y) ** 2;
       if (d < bd) { bd = d; best = u; }
     }
@@ -1447,9 +1499,25 @@ export class FieldView {
     return { x: u.x + dx * f, y: u.y + dy * f };
   }
 
-  /** Clip a segment ending on a unit's centre to that unit's hull edge; remembers the origin for the matching 'hit'. */
-  private clipToHull(x1: number, y1: number, x2: number, y2: number): { x: number; y: number } {
+  /** World offset from an aircraft's ground position to its drawn body (altitude under the tilt, plus the small
+   *  airborne lift drawUnit adds); zero for ground units. Hits, bursts and shields on flyers are drawn there. */
+  private airLift(u: SimUnit): { x: number; y: number } {
+    if (!u.flying && !layoutOf(u.design).air) return { x: 0, y: 0 };
+    const h = 0.12 + (this.tiltOn ? flyHeight(layoutOf(u.design).S) * TILT_TAN : 0);
+    return { x: this.dirs.ux * h, y: this.dirs.uy * h };
+  }
+
+  /** Where a shot ending at (x2, y2) is drawn to end: the hull edge (or shield) of the unit there, raised to the gun
+   *  line (ground units) or to the aircraft's body (flyers). Remembers the origin for the matching 'hit'. */
+  private shotEnd(x1: number, y1: number, x2: number, y2: number): { x: number; y: number } {
     const t = this.unitNear(x2, y2);
+    const end = this.clipToHull(x1, y1, x2, y2, t);
+    const l = t && (t.flying || layoutOf(t.design).air) ? this.airLift(t) : this.liftVec(GUN_H);
+    return { x: end.x + l.x, y: end.y + l.y };
+  }
+
+  /** Clip a segment ending on a unit's centre to that unit's hull edge; remembers the origin for the matching 'hit'. */
+  private clipToHull(x1: number, y1: number, x2: number, y2: number, t = this.unitNear(x2, y2)): { x: number; y: number } {
     if (!t) return { x: x2, y: y2 };
     this.shotFrom.set(t.id, { x: x1, y: y1 });
     if (t.shield > 0 || t.auraShield > 0) {
@@ -1602,8 +1670,9 @@ export class FieldView {
         const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
         const sx = tip ? tip.x : e.x1, sy = tip ? tip.y : e.y1;
         // beams that end on a unit stop at its hull; the piercing lance (ends past the target) is left alone
-        const end = this.clipToHull(sx, sy, e.x2, e.y2);
-        const gl = this.liftVec(GUN_H);
+        const tgt = this.unitNear(e.x2, e.y2);
+        const end = this.clipToHull(sx, sy, e.x2, e.y2, tgt);
+        const gl = tgt && (tgt.flying || layoutOf(tgt.design).air) ? this.airLift(tgt) : this.liftVec(GUN_H);
         const gx = end.x, gy = end.y; // where it touches the ground / hull edge (unlifted)
         e = { ...e, x2: end.x + gl.x, y2: end.y + gl.y };
         const pts = [sx, sy, e.x2, e.y2];
@@ -1627,7 +1696,7 @@ export class FieldView {
               // warm-up: starts as a thin flickering lance and swells into a blinding river over ~1.5 s of fire
               const h = this.beamHeat;
               fx.beam('plasma', pts, '#e070ff', 0.08 + 0.34 * h * h, 0.24);
-              fx.glow(e.x1, e.y1, 0.6 + 1.4 * h, '#ff80f0', 0.12, 0.9);
+              fx.glow(sx, sy, 0.6 + 1.4 * h, '#ff80f0', 0.12, 0.9); // at the drawn barrel tip
               if (h > 0.6) { fx.sparks(e.x2, e.y2, 5, '#ffd0ff', 6, undefined, Math.PI, 0.35, true); if (Math.random() < 0.3) { fx.decal('scorch', gx, gy, 0.5); fx.hot(gx, gy, 0.8, 2); } }
               if (h > 0.85) fx.shake(0.04);
             } else {
@@ -1661,10 +1730,11 @@ export class FieldView {
             if (huge) {
               // spinal mass driver: blinding flash, ionised trail, the ground torn up along the line
               fx.flash(0.5, '#d8f6ff');
-              fx.glow(e.x1, e.y1, 3.2, '#ffffff', 0.18);
-              const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1), n = Math.min(14, Math.floor(len / 1.4));
+              fx.glow(sx, sy, 3.2, '#ffffff', 0.18);
+              // ground torn up along the line: ground-level ends (mount, unlifted impact point)
+              const len = Math.hypot(gx - e.x1, gy - e.y1), n = Math.min(14, Math.floor(len / 1.4));
               for (let i = 1; i <= n; i++) {
-                const f = i / (n + 1), qx = e.x1 + (e.x2 - e.x1) * f, qy = e.y1 + (e.y2 - e.y1) * f;
+                const f = i / (n + 1), qx = e.x1 + (gx - e.x1) * f, qy = e.y1 + (gy - e.y1) * f;
                 fx.schedule(i * 0.012, () => { fx.dust(qx, qy, 0.5, 2, 0.9); fx.glow(qx, qy, 0.7, '#9fe8ff', 0.25, 0.6); });
               }
               fx.boom(gx, gy, 1.0, 'plasma');
@@ -1674,7 +1744,7 @@ export class FieldView {
             fx.sparks(e.x2, e.y2, huge ? 24 : heavy ? 14 : 8, '#cff4ff', huge ? 8 : 6, back, 1.1, 0.3, true);
             fx.ring(gx, gy, 0.1, huge ? 2.0 : heavy ? 1.1 : 0.7, '#bff0ff', 0.25, 0.8);
             if (heavy || huge) { fx.dust(gx, gy, huge ? 0.7 : 0.35, huge ? 6 : 3, 0.8); fx.decal('scorch', gx, gy, huge ? 0.8 : 0.3); }
-            if (huge) { fx.shockwave(gx, gy, 1.6, '#9fe8ff', 0.5); fx.ring(e.x1, e.y1, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
+            if (huge) { fx.shockwave(gx, gy, 1.6, '#9fe8ff', 0.5); fx.ring(sx, sy, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
             if (huge) fx.shake(0.4); else if (heavy) fx.shake(0.18);
             impact = false;
             break;
@@ -1698,12 +1768,11 @@ export class FieldView {
         const pts: number[] = [];
         for (const p of e.points) pts.push(p.x, p.y);
         const tip = e.unit !== undefined && e.mount !== undefined ? this.muzzleOf(e.unit, e.mount) : null;
-        const gl = this.liftVec(GUN_H);
         if (tip && pts.length >= 2) { pts[0] = tip.x; pts[1] = tip.y; }
         // each arc jumps hull edge to hull edge: clip the end of a segment to its unit, start the next from there
         for (let i = 2; i + 1 < pts.length; i += 2) {
-          const end = this.clipToHull(pts[i - 2], pts[i - 1], pts[i], pts[i + 1]);
-          pts[i] = end.x + gl.x; pts[i + 1] = end.y + gl.y;
+          const end = this.shotEnd(pts[i - 2], pts[i - 1], pts[i], pts[i + 1]);
+          pts[i] = end.x; pts[i + 1] = end.y;
         }
         if (pts.length >= 4) fx.beam('lightning', pts, col, heavy ? 0.05 : 0.035, heavy ? 0.26 : 0.2);
         // strikes: a few hot sparks off each struck hull and a flash of ionised air
@@ -1731,17 +1800,21 @@ export class FieldView {
           const p = e.shieldHit ? { x: ur.x + Math.cos(a) * r, y: ur.y + Math.sin(a) * r } : this.hullEdge(ur, far.x, far.y);
           e = { ...e, x: p.x, y: p.y };
         }
+        // aircraft are drawn at altitude: their hits flash on the drawn body, not on the ground below it
+        const al = this.airLift(ur);
+        const hx0 = e.x, hy0 = e.y; // hit point on the ground plane (knockback direction)
+        if (al.x || al.y) e = { ...e, x: e.x + al.x, y: e.y + al.y };
         if (e.shieldHit) {
           const v = this.visOf(ur);
           v.shieldT = this.time;
-          if (fx.busy < 0.7) fx.hex(ur.x, ur.y, shieldR(layoutOf(ur.design)), e.x, e.y);
+          if (fx.busy < 0.7) fx.hex(ur.x + al.x, ur.y + al.y, shieldR(layoutOf(ur.design)), e.x, e.y);
           fx.sparks(e.x, e.y, 3, '#bfefff', 2.5, undefined, Math.PI, 0.2);
           break;
         }
         const vis = mod?.visual;
         // heavy hits shove the drawn sprite away from the shooter (render only; heavier hulls barely move)
         if (e.damage > 25) {
-          const from = this.shotFrom.get(ur.id) ?? ((e.x - ur.x) ** 2 + (e.y - ur.y) ** 2 > 0.04 ? { x: e.x, y: e.y } : undefined);
+          const from = this.shotFrom.get(ur.id) ?? ((hx0 - ur.x) ** 2 + (hy0 - ur.y) ** 2 > 0.04 ? { x: hx0, y: hy0 } : undefined);
           if (from) {
             const a = Math.atan2(ur.y - from.y, ur.x - from.x), v = this.visOf(ur), S = layoutOf(ur.design).S;
             const k = clamp(Math.sqrt(e.damage) * 0.0045, 0, 0.07) / Math.max(1, S * 0.9);
@@ -1762,6 +1835,16 @@ export class FieldView {
         const vis = mod?.visual;
         const r = e.radius;
         const air = mod ? !mod.targetsGround && !!mod.targetsAir : false;
+        if (mod?.targetsAir) {
+          // air bursts and missiles striking an aircraft go off at its drawn altitude, not on the ground below
+          let best: SimUnit | null = null, bd = 1.2 * 1.2;
+          for (const u of this.units.values()) {
+            if (!u.flying || (!u.alive && !this.prevU.has(u.id))) continue;
+            const d = (u.x - e.x) ** 2 + (u.y - e.y) ** 2;
+            if (d < bd) { bd = d; best = u; }
+          }
+          if (best) { const al = this.airLift(best); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
+        }
         if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
         else if (mod?.id === 'doomsday') { fx.boom(e.x, e.y, r * 0.8, 'big'); fx.shake(0.45); }
         else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.6, r * 0.9), 'flak', false);
@@ -1798,8 +1881,10 @@ export class FieldView {
           fx.megaDeath(x, y, S, pal.dark);
           if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.9);
         } else if (e.flying) {
-          fx.boom(x + this.dirs.ux * 0.3, y + this.dirs.uy * 0.3, 0.5 * S, 'fire', false);
-          fx.debris(x, y, 6 * S, pal.dark, 2.5, 0.07 * S);
+          // blows up in the air where it is drawn, then the hulk hits the ground
+          const al = u ? this.airLift(u) : { x: this.dirs.ux * 0.3, y: this.dirs.uy * 0.3 };
+          fx.boom(x + al.x, y + al.y, 0.5 * S, 'fire', false);
+          fx.debris(x + al.x, y + al.y, 6 * S, pal.dark, 2.5, 0.07 * S);
           fx.schedule(0.35, () => {
             fx.boom(x, y, 0.6 * S, 'fire');
             if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.8);
