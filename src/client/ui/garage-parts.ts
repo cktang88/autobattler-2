@@ -3,7 +3,7 @@
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { accuracyRating, firingStyle, turretTurnRate, weaponDps } from '../../shared/stats.ts';
-import { ROLES } from '../../shared/parts.ts';
+import { MOUNT_LETTER, ROLES } from '../../shared/parts.ts';
 import type { ModuleDef, MoveKind, Role } from '../../shared/types.ts';
 import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
 import { CATEGORY_COLOR } from '../render/turrets.ts';
@@ -211,7 +211,7 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
 
 /** Plain-text tooltip for a module. */
 export function moduleTooltip(mod: ModuleDef): string {
-  const lines = [`${mod.name} (${mod.family}, ${mod.mount}) — ${mod.desc}`];
+  const lines = [`${mod.name} (${mod.family}, size ${MOUNT_LETTER[mod.mount]}) — ${mod.desc}`];
   if (mod.kind === 'weapon') {
     const tg = [mod.targetsGround ? 'ground' : '', mod.targetsAir ? 'air' : ''].filter(Boolean).join(' + ');
     lines.push(`DPS ${fmt(weaponDps(mod), 0)} · Range ${mod.minRange ? Math.round(mod.minRange * METERS_PER_CELL) + '–' : ''}${fmtMeters(mod.range ?? 0)} · Targets ${tg}`);

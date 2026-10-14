@@ -489,3 +489,76 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 /* keep the range controls above the canvas scale bar (bottom-left) */
 .rangebar { bottom: calc(34px + var(--safe-b)); }
 .mbar .round small { white-space: nowrap; }
+
+/* ---------- vs-AI deck builder ---------- */
+.dbscreen .topbar { gap: 10px; }
+.dbscreen .topbar .big { min-height: 42px; padding: 8px 22px; font-size: 1.1rem; }
+.db-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 12px; padding: 12px; }
+.db-left { display: flex; flex-direction: column; min-height: 0; padding: 12px; }
+.db-right { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.db-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.db-coll { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; align-content: start; padding: 2px; border-radius: 6px; transition: box-shadow 0.12s; }
+.db-card {
+  position: relative; display: flex; flex-direction: column; gap: 3px; padding: 8px; cursor: grab; user-select: none;
+  background: linear-gradient(180deg, #18212c, #121920); border: 1px solid var(--line); border-radius: 6px;
+}
+.db-card:hover { border-color: var(--line2); background: linear-gradient(180deg, #1d2834, #141c25); }
+.db-card:focus-visible { outline: 2px solid #ffb21e; outline-offset: 1px; }
+.db-card.in { opacity: 0.55; }
+.db-card.in .db-tick { position: absolute; top: 6px; right: 8px; color: #35d6bf; font-weight: 700; }
+.db-prev { width: 100%; height: 76px; display: block; pointer-events: none; }
+.db-name { font-family: var(--font-head); font-weight: 700; font-size: 1.02rem; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-meta { display: flex; gap: 8px; align-items: baseline; font-size: 0.85rem; color: #b4b9bd; }
+.db-cost { color: var(--gold); font-family: var(--font-head); font-size: 1.05rem; }
+.db-caps { display: flex; gap: 3px; flex-wrap: wrap; min-height: 20px; }
+.db-cap { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; font-size: 0.78rem; border-radius: 4px; background: rgba(255, 255, 255, 0.06); color: #d8d3c7; }
+.db-cap.cap-aa { color: #7cc8ff; } .db-cap.cap-armor { color: #ff8a3d; } .db-cap.cap-swarm { color: #ffcf5c; }
+.db-cap.cap-long { color: #c58cff; } .db-cap.cap-front { color: #9fb6c8; } .db-cap.cap-support { color: #7bdc5a; }
+.db-cap.cap-detect { color: #35d6bf; } .db-cap.cap-air { color: #8fa8ff; } .db-cap.cap-fast { color: #ff9bd0; }
+.db-x { position: absolute; top: 4px; right: 4px; min-height: 0; width: 24px; height: 24px; padding: 0; font-size: 0.8rem; clip-path: none; border-radius: 4px; opacity: 0.6; }
+.db-card:hover .db-x { opacity: 1; }
+.db-deck-h { display: flex; justify-content: space-between; align-items: baseline; }
+.db-deck-h .panel-title { margin-bottom: 6px; }
+.db-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.db-slots .db-card .db-prev { height: 56px; }
+.db-slots .db-card .db-name { font-size: 0.92rem; }
+.db-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 150px; border: 1px dashed var(--line2); border-radius: 6px; color: #868e95; font-family: var(--font-head); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.82rem; }
+.db-slot small { text-transform: none; letter-spacing: 0; font-family: var(--font-body); }
+/* drag feedback */
+body.db-dragging .db-slot { border-color: #35d6bf; color: #35d6bf; background: rgba(53, 214, 191, 0.05); }
+body.db-dragging .db-slots .db-card { box-shadow: inset 0 0 0 1px rgba(53, 214, 191, 0.4); }
+body.db-from-deck .db-coll { box-shadow: inset 0 0 0 2px rgba(255, 90, 74, 0.5); }
+.db-over { box-shadow: inset 0 0 0 2px #ffb21e !important; background: rgba(255, 178, 30, 0.08) !important; }
+/* analysis */
+.db-warn { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.db-w { padding: 6px 10px; border-left: 3px solid; border-radius: 3px; font-size: 0.92rem; }
+.db-w.bad { border-color: var(--bad); background: rgba(239, 77, 77, 0.1); color: #ffd7d0; }
+.db-w.warn { border-color: #ffb21e; background: rgba(255, 178, 30, 0.08); color: #f3e2c0; }
+.db-w.good { border-color: var(--good); background: rgba(92, 214, 107, 0.08); color: #d6f5d9; }
+.db-sec { margin-top: 10px; }
+.db-sec h4 { margin: 0 0 6px; font-size: 0.8rem; letter-spacing: 0.16em; color: #b4b9bd; }
+.db-capgrid { display: flex; flex-direction: column; gap: 3px; }
+.db-caprow { display: grid; grid-template-columns: 22px 92px 1fr 18px; align-items: center; gap: 8px; font-size: 0.9rem; }
+.db-caprow.zero .db-caplbl, .db-caprow.zero b { color: var(--bad); }
+.db-capbar { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; }
+.db-capbar i { height: 8px; background: #0b0f13; border-radius: 1px; }
+.db-capbar i.on { background: linear-gradient(180deg, #ffcb5c, #ffb21e); }
+.db-caprow b { text-align: right; font-family: var(--font-head); }
+.db-hist { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; align-items: end; }
+.db-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.db-bar { width: 100%; height: 64px; display: flex; align-items: flex-end; background: #0b0f13; border-radius: 3px; overflow: hidden; }
+.db-bar i { width: 100%; background: linear-gradient(180deg, #f6cf55, #c89b24); }
+.db-col b { font-family: var(--font-head); }
+.db-col span { font-size: 0.75rem; color: #b4b9bd; white-space: nowrap; }
+.db-statgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.db-stat { display: flex; flex-direction: column; padding: 6px 8px; background: #0f151c; border: 1px solid var(--line); border-radius: 4px; }
+.db-stat span { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b4b9bd; }
+.db-stat b { font-family: var(--font-head); font-size: 1.15rem; }
+.db-diffdesc { margin: 6px 0 0; font-size: 0.9rem; }
+.db-note { margin: 0; font-size: 0.85rem; }
+@media (max-width: 1100px) { .db-body { grid-template-columns: 1fr; overflow-y: auto; } .db-left { min-height: 60vh; } }
+.db-diffhost { display: flex; align-items: center; gap: 8px; }
+.db-difflbl { font-family: var(--font-head); font-weight: 700; letter-spacing: 0.14em; color: #b4b9bd; }
+.db-slots .db-card { padding: 6px; }
+.db-slots .db-card .db-prev { height: 44px; }
+.db-slots .db-slot { min-height: 118px; }
