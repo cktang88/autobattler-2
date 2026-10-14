@@ -4,7 +4,7 @@
 // Each tick: weapons (targeting, turrets, firing) -> movement -> spatial hash -> separation/crush ->
 // auras -> projectiles -> bookkeeping -> end check.
 
-import { CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
+import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, mountOffsets } from '../mountgeo.ts';
 import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
@@ -83,7 +83,8 @@ const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
 const SAT_N = (HCOLS + 1) * (HROWS + 1);
-const MAX_RADIUS = 4.0; // bounding radius of the largest hull (titans up to 8x8: ~0.45 * 8 = 3.6)
+/** bounding radius of the largest hull (0.45 * longest footprint side; the 10x10 weaver titan reaches 4.5), at least 4 */
+const MAX_RADIUS = CHASSIS.reduce((m, c) => Math.max(m, 0.45 * Math.max(c.footprint?.[0] ?? c.size, c.footprint?.[1] ?? c.size)), 4.0);
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
