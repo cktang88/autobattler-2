@@ -49,7 +49,7 @@ function setView(tx: number, tz: number, dist: number, tiltDeg = 58, yawDeg = 0)
   controls.update();
 }
 (window as unknown as Record<string, unknown>).setView = setView;
-setView(Number(params.get('x') ?? 0), Number(params.get('z') ?? 0), Number(params.get('d') ?? 78), Number(params.get('tilt') ?? 58), Number(params.get('yaw') ?? 0));
+setView(Number(params.get('x') ?? -3), Number(params.get('z') ?? 0), Number(params.get('d') ?? 62), Number(params.get('tilt') ?? 58), Number(params.get('yaw') ?? 0));
 
 // ---- sun ---------------------------------------------------------------------------------------
 const sun = new THREE.DirectionalLight('#fff0d8', 3.1);

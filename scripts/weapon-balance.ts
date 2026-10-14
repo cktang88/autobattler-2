@@ -300,6 +300,7 @@ if (mode === 'shard') {
 } else if (mode === 'fit') {
   const iters = Number(process.argv[3] ?? 4); const seeds = Number(process.argv[4] ?? 4); const filter = process.argv[5] ?? '';
   const hist: Record<string, number[]> = {};
+  const anchor: Record<string, number> = {};
   for (let it = 0; it < iters; it++) {
     const rows = summarize(await runAll(filter, seeds));
     console.log(`\n##### iteration ${it} #####`);
@@ -326,6 +327,16 @@ if (mode === 'shard') {
       const cal = Math.round(Math.min(15, Math.max(MIN_CAL, (MODULE_CAL[r.id] || MIN_CAL) * Math.min(1.7, Math.max(0.6, step)))) * 100) / 100;
       upd[r.id] = cal;
       (hist[r.id] ??= []).push(MODULE_CAL[r.id] ?? 1);
+    }
+    // Level anchor: peers are scale-free, so keep each size class's geometric-mean cal at its starting level (S and M
+    // keep their class price level; L and XL are rescaled per class afterwards with size-check).
+    for (const z of ['S', 'M', 'L', 'XL']) {
+      const ids = rows.filter((r) => r.size === z).map((r) => r.id);
+      if (!ids.length) continue;
+      const geo = (f: (id: string) => number) => Math.exp(ids.reduce((a, id) => a + Math.log(f(id)), 0) / ids.length);
+      anchor[z] ??= geo((id) => MODULE_CAL[id] || MIN_CAL);
+      const k = anchor[z] / geo((id) => upd[id]);
+      for (const id of ids) upd[id] = Math.round(Math.min(15, Math.max(MIN_CAL, upd[id] * k)) * 100) / 100;
     }
     Object.assign(MODULE_CAL, upd);
     process.env.BAL_CAL = JSON.stringify({ ...JSON.parse(process.env.BAL_CAL ?? '{}'), ...upd });

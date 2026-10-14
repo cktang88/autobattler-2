@@ -64,7 +64,7 @@ function housing(parent: THREE.Object3D, m: THREE.Material, len: number, wid: nu
 }
 
 export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false): Turret {
-  const D = approxTurretD(mod.mount, S);
+  const D = approxTurretD(mod.mount, S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1); // big hulls carry visibly bigger mounts
   const r = D / 2;
   const c = mod.caliber ?? 0.5;
   const nb = mod.barrels ?? 1;
@@ -210,7 +210,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false):
       for (let i = 0; i < Math.max(1, Math.min(2, nb)); i++) {
         const z = nb > 1 ? (i - 0.5) * r * 0.55 : 0;
         barrel(recoil, kit.steel, 0, bl, r * 0.13, 0, z);
-        for (let k = 1; k <= 3; k++) mesh(new THREE.TorusGeometry(r * 0.2, r * 0.045, 8, 16).rotateY(Math.PI / 2), kit.plasma, recoil, (bl * k) / 3.4, 0, z);
+        for (let k = 1; k <= 3; k++) mesh(new THREE.TorusGeometry(r * 0.2, r * 0.03, 8, 16).rotateY(Math.PI / 2), kit.plasma, recoil, (bl * k) / 3.4, 0, z);
         mesh(new THREE.SphereGeometry(r * 0.17, 12, 10), kit.plasma, recoil, bl + r * 0.05, 0, z);
         addMuzzle(bl + r * 0.15, 0, z);
       }

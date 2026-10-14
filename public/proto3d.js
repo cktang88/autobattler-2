@@ -36023,9 +36023,9 @@ var MODULES = [
     mount: "M",
     weight: 3.2,
     cost: 34,
-    damage: 26,
+    damage: 32,
     burst: 4,
-    cooldown: 4.5,
+    cooldown: 4,
     range: 10,
     ...G,
     projectile: "rocket",
@@ -36311,7 +36311,7 @@ var MODULES = [
     mount: "M",
     weight: 3.5,
     cost: 32,
-    damage: 32,
+    damage: 36,
     cooldown: 0.2,
     range: 5.5,
     ...GA,
@@ -36452,8 +36452,8 @@ var MODULES = [
     mount: "M",
     weight: 3.5,
     cost: 38,
-    damage: 20,
-    cooldown: 3.5,
+    damage: 40,
+    cooldown: 3,
     range: 9,
     ...G,
     projectile: "orb",
@@ -36532,7 +36532,7 @@ var MODULES = [
     mount: "M",
     weight: 3.5,
     cost: 30,
-    damage: 40,
+    damage: 50,
     cooldown: 1.4,
     range: 4,
     ...G,
@@ -37332,7 +37332,7 @@ function makePanelTexture() {
     const x = r() * N, y = r() * N, rad = 20 + r() * 90;
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
     const dark = r() < 0.7;
-    gr.addColorStop(0, dark ? "rgba(60,55,45,0.13)" : "rgba(255,255,255,0.12)");
+    gr.addColorStop(0, dark ? "rgba(60,55,45,0.09)" : "rgba(255,255,255,0.12)");
     gr.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = gr;
     g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
@@ -37434,7 +37434,7 @@ function makeKit(team) {
     lamp: paint("#000", { flat: true, emissive: "#fff4d6", emissiveIntensity: 2.4 }),
     glass: paint("#10161b", { flat: true, rough: 0.08, metal: 0.9 }),
     hot: paint("#000", { flat: true, emissive: "#ff7a2a", emissiveIntensity: 3.2 }),
-    plasma: paint("#000", { flat: true, emissive: "#7dffe6", emissiveIntensity: 3.6 }),
+    plasma: paint("#000", { flat: true, emissive: "#7dffe6", emissiveIntensity: 2.3 }),
     rail: paint("#000", { flat: true, emissive: "#7aa8ff", emissiveIntensity: 3.4 }),
     pal: p
   };
@@ -37479,7 +37479,7 @@ function housing(parent, m, len, wid, hgt, x = 0, y = 0) {
   return mesh(g, m, parent, x, y, 0);
 }
 function buildTurret(mod, S, kit, fixed = false) {
-  const D = approxTurretD(mod.mount, S);
+  const D = approxTurretD(mod.mount, S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
   const r = D / 2;
   const c = mod.caliber ?? 0.5;
   const nb = mod.barrels ?? 1;
@@ -37637,7 +37637,7 @@ function buildTurret(mod, S, kit, fixed = false) {
       for (let i = 0; i < Math.max(1, Math.min(2, nb)); i++) {
         const z = nb > 1 ? (i - 0.5) * r * 0.55 : 0;
         barrel(recoil, kit.steel, 0, bl, r * 0.13, 0, z);
-        for (let k = 1; k <= 3; k++) mesh(new TorusGeometry(r * 0.2, r * 0.045, 8, 16).rotateY(Math.PI / 2), kit.plasma, recoil, bl * k / 3.4, 0, z);
+        for (let k = 1; k <= 3; k++) mesh(new TorusGeometry(r * 0.2, r * 0.03, 8, 16).rotateY(Math.PI / 2), kit.plasma, recoil, bl * k / 3.4, 0, z);
         mesh(new SphereGeometry(r * 0.17, 12, 10), kit.plasma, recoil, bl + r * 0.05, 0, z);
         addMuzzle(bl + r * 0.15, 0, z);
       }
@@ -37948,7 +37948,7 @@ function buildHull(g, shape, L, W0, y0, kit, wk = 1) {
   for (const t of recipe) {
     const base = P[t.p] ?? P.box;
     const poly = base.map(([x, yy]) => [(x * t.k + (t.dx ?? 0)) * L * 0.5, yy * t.k * W * 0.5]);
-    const h = Math.max(0.06, t.h * hf);
+    const h = Math.max(0.06, t.h * hf * 0.66);
     const m = kit[t.m];
     const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cz = poly.reduce((a, p) => a + p[1], 0) / poly.length;
     const sl = 1 - (t.slope ?? 0.07) * Math.min(1, h / 0.6 + 0.3);
@@ -37960,9 +37960,9 @@ function buildHull(g, shape, L, W0, y0, kit, wk = 1) {
   return { placed, top: y };
 }
 function deckAt(placed, x, z, fallback) {
-  let top = fallback;
+  let top = -Infinity;
   for (const p of placed) if (inPoly([x, z], p.poly)) top = Math.max(top, p.top);
-  return top;
+  return top === -Infinity ? fallback : top;
 }
 function greeble(g, placed, L, W, S, kit, rnd, mounts, mountR, skipTop) {
   const free = (x, z, rad) => mounts.every((m, i) => Math.hypot(m[0] - x, m[1] - z) > mountR[i] + rad);
@@ -38144,9 +38144,10 @@ function buildUnit(design, team) {
         const a = k / 8 * Math.PI * 2, d = deckAt(placed, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85, -1);
         if (d >= 0) lo = Math.min(lo, d);
       }
+      if (new URLSearchParams(location.search).has("dbg")) console.log("mount", design.id, i, o.x.toFixed(2), o.y.toFixed(2), "y", y.toFixed(2), "lo", lo.toFixed(2), "base", baseY.toFixed(2));
       if (y - lo > 0.04) {
         const ring = Array.from({ length: 10 }, (_, i2) => [Math.cos(i2 / 10 * Math.PI * 2), Math.sin(i2 / 10 * Math.PI * 2)]);
-        frustum(ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1.12, o.y + pz2 * tu.r * 1.12]), ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1, o.y + pz2 * tu.r * 1]), lo, y - lo, kit.camo, body);
+        frustum(ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1.32, o.y + pz2 * tu.r * 1.32]), ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1.02, o.y + pz2 * tu.r * 1.02]), lo, y - lo, kit.body, body);
       }
     }
     tu.yaw.position.set(o.x, y, o.y);
@@ -38157,6 +38158,15 @@ function buildUnit(design, team) {
     turrets.push(tu);
   });
   if (!flying) greeble(body, placed, L, W, S, kit, rnd, mountPts, mountR, false);
+  if (!flying && S >= 4 && placed.length) {
+    const tp = placed[placed.length - 1], cx = tp.poly.reduce((a, p) => a + p[0], 0) / tp.poly.length, cz = 0;
+    const u = 0.1 * S;
+    add(body, new CylinderGeometry(u * 1.7, u * 2, u * 1.2, 10), kit.camo, cx, tp.top + u * 0.6, cz);
+    add(body, new SphereGeometry(u * 1.2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), kit.light, cx, tp.top + u * 1.2, cz);
+    box(body, kit.glass, u * 0.5, u * 0.3, u * 2.2, cx + u * 1.8, tp.top + u * 0.5, cz);
+    for (const s2 of [-1, 1]) add(body, new CylinderGeometry(0.01, 0.02, u * 4, 6), kit.steel, cx - u * 0.8, tp.top + u * 2, s2 * u * 1.1);
+    add(body, new SphereGeometry(u * 0.22, 8, 6), kit.glow, cx - u * 0.8, tp.top + u * 4.05, u * 1.1);
+  }
   if (!flying && S >= 3) {
     const mx = -L * 0.3, mz = W * 0.3, top = deckAt(placed, mx, mz, hullTop + baseY);
     add(body, new CylinderGeometry(0.012, 0.02, 0.5 + 0.1 * S, 6), kit.steel, mx, top + 0.25 + 0.05 * S, mz);
@@ -38210,7 +38220,7 @@ function setView(tx, tz, dist, tiltDeg = 58, yawDeg = 0) {
   controls.update();
 }
 window.setView = setView;
-setView(Number(params.get("x") ?? 0), Number(params.get("z") ?? 0), Number(params.get("d") ?? 78), Number(params.get("tilt") ?? 58), Number(params.get("yaw") ?? 0));
+setView(Number(params.get("x") ?? -3), Number(params.get("z") ?? 0), Number(params.get("d") ?? 62), Number(params.get("tilt") ?? 58), Number(params.get("yaw") ?? 0));
 var sun = new DirectionalLight("#fff0d8", 3.1);
 sun.position.set(-34, 46, -22);
 sun.castShadow = true;

@@ -29,7 +29,7 @@ function makePanelTexture(): THREE.CanvasTexture {
     const x = r() * N, y = r() * N, rad = 20 + r() * 90;
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
     const dark = r() < 0.7;
-    gr.addColorStop(0, dark ? 'rgba(60,55,45,0.13)' : 'rgba(255,255,255,0.12)');
+    gr.addColorStop(0, dark ? 'rgba(60,55,45,0.09)' : 'rgba(255,255,255,0.12)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
@@ -133,7 +133,7 @@ export function makeKit(team: 0 | 1): Kit {
     lamp: paint('#000', { flat: true, emissive: '#fff4d6', emissiveIntensity: 2.4 }),
     glass: paint('#10161b', { flat: true, rough: 0.08, metal: 0.9 }),
     hot: paint('#000', { flat: true, emissive: '#ff7a2a', emissiveIntensity: 3.2 }),
-    plasma: paint('#000', { flat: true, emissive: '#7dffe6', emissiveIntensity: 3.6 }),
+    plasma: paint('#000', { flat: true, emissive: '#7dffe6', emissiveIntensity: 2.3 }),
     rail: paint('#000', { flat: true, emissive: '#7aa8ff', emissiveIntensity: 3.4 }),
     pal: p,
   };

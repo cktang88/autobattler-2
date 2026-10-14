@@ -35,6 +35,7 @@ import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types
 import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
+import { fireTex, glowTex, hash1, mixHex } from './vfx.ts';
 import { MAPS, SURROUND, groundCanvas, groundRegion, surroundCanvas, type MapTheme } from './ground.ts';
 import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
@@ -99,6 +100,9 @@ interface UVis {
   lastPh?: number;
   /** per-mount sustained-fire heat (annihilator warm-up) */
   heat?: number[];
+  /** visual-only knockback / recoil offset of the drawn sprite (cells), decays quickly */
+  kx?: number;
+  ky?: number;
 }
 
 interface PSnap {
@@ -737,9 +741,17 @@ export class FieldView {
       if (!newTicks) this.pending = [];
     }
     this.fx.up = { x: this.dirs.ux, y: this.dirs.uy };
+    this.fx.liftK = this.tiltOn ? TILT_TAN : 0.45;
+    this.fx.flashK = Math.max(0, Math.min(1, this.flashScale));
+    {
+      const va = this.screenToWorld(0, 0), vb = this.screenToWorld(this.cssW, this.cssH);
+      this.fx.view = { x0: Math.min(va.x, vb.x) - 2, x1: Math.max(va.x, vb.x) + 2, y0: Math.min(va.y, vb.y) - 3, y1: Math.max(va.y, vb.y) + 3 };
+    }
     this.fx.update(dt);
     this.stepCamera(dt);
+    const kd = Math.exp(-dt * 10);
     for (const v of this.vis.values()) {
+      if (v.kx !== undefined) { v.kx *= kd; v.ky = (v.ky ?? 0) * kd; if (Math.abs(v.kx) + Math.abs(v.ky) < 0.001) { v.kx = undefined; v.ky = undefined; } }
       for (let i = 0; i < v.swing.length; i++) v.swing[i] = Math.max(0, v.swing[i] - dt * 3.5);
       if (v.heat) for (let i = 0; i < v.heat.length; i++) v.heat[i] = Math.max(0, v.heat[i] - dt * 0.9);
     }
@@ -796,6 +808,7 @@ export class FieldView {
     this.drawShields(g, bars.filter((b) => b.u.flying));
     this.drawProjectiles(g, battle.projectiles, true, dt);
     this.fx.draw(g, px, this.dirs.ux, this.dirs.uy);
+    this.drawStatusFx(g, bars, dt);
     // overlays
     this.setScreen();
     for (const { u, p } of bars) this.drawBar(u, p, dt);
@@ -866,6 +879,7 @@ export class FieldView {
         flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0,
       }));
     } else mounts = u.mounts.map((m, i) => ({ angle: this.barrelAim(u, i, x, y, ang, m.angle), flash: m.flash, swing: v.swing[i] ?? 0, reloading: m.reloading, cd: m.cooldown, armed: m.target >= 0, heat: v.heat?.[i] ?? 0 }));
+    if (v.kx !== undefined) { x += v.kx; y += v.ky ?? 0; }
     const ext = u as SimUnit & { cloaked?: boolean };
     return {
       design: u.design, team: this.teamOf(u.side), x, y, angle: ang, time: this.time, odometer: odo, moving: u.moving, groundRing: true,
@@ -873,6 +887,35 @@ export class FieldView {
       stun: u.stun, slow: u.slow, burning: u.burning, disarm: u.disarm,
       cloak: ext.cloaked ? (u.side === this.viewerSide ? 'own' : 'enemy') : undefined,
     };
+  }
+
+  /** Status looks: stunned units crackle with arcs crawling over the hull, burning units throw flames and smoke. */
+  private drawStatusFx(g: Ctx, list: { u: SimUnit; p: UnitPose }[], dt: number): void {
+    const px = this.px;
+    if (px < 5) return;
+    let shock = false;
+    for (const { u, p } of list) {
+      if (p.cloak === 'enemy') continue;
+      if (u.burning > 0) {
+        const S = layoutOf(u.design).S;
+        const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)) * 0.5);
+        if (Math.random() < dt * (6 + 3 * S)) this.fx.burning(p.x + lv.x, p.y + lv.y, S);
+      }
+      if (u.stun > 0) shock = true;
+    }
+    if (!shock) return;
+    const prev = g.globalCompositeOperation;
+    g.globalCompositeOperation = 'lighter';
+    const minW = 1 / px;
+    for (const { u, p } of list) {
+      if (u.stun <= 0 || p.cloak === 'enemy') continue;
+      const L = layoutOf(u.design);
+      const lv = this.liftVec(this.heightOf(p, L) * 0.55);
+      this.fx.drawShock(g, p.x + lv.x, p.y + lv.y, 0.46 * L.X, 0.46 * L.Y, p.angle, u.id, minW);
+      if (Math.random() < dt * 5) this.fx.sparks(p.x + lv.x + (Math.random() - 0.5) * L.X * 0.6, p.y + lv.y + (Math.random() - 0.5) * L.Y * 0.6, 2, '#cfe0ff', 2.2, undefined, Math.PI, 0.15, true);
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = prev;
   }
 
   private drawShields(g: Ctx, list: { u: SimUnit; p: UnitPose }[]): void {
@@ -1028,9 +1071,24 @@ export class FieldView {
       }
       if (near) continue;
       if (x < 0 || y < 0 || x > FIELD_W || y > FIELD_H) continue;
-      this.fx.dust(x, y, t.kind === 'shell' ? 0.3 : 0.15, t.kind === 'shell' ? 4 : 2, 0.6);
-      this.fx.sparks(x, y, 3, '#ffd890', 2.5, undefined, Math.PI, 0.18);
-      if (t.kind !== 'bullet') this.fx.decal('scorch', x, y, 0.2);
+      const fx = this.fx, cal = modOf(t.moduleId)?.caliber ?? 0.5;
+      if (t.kind === 'bullet') { fx.dirtKick(x, y, 0.8 + cal); continue; }
+      if (t.kind === 'shell') {
+        // shell strike: bright pop, ring scaled by calibre, a heavier slower dust cloud for big guns, flung dirt, scorch
+        fx.glow(x, y, 0.3 + 0.6 * cal, '#ffd8a0', 0.07, 0.9);
+        fx.light(x, y, 1.2 + 2.4 * cal, '#ffb060', 0.25, 0.3);
+        fx.ring(x, y, 0.05, 0.4 + 1.1 * cal, '#ffe0b0', 0.22 + 0.1 * cal, 0.7);
+        fx.dustRing(x, y, 0.1, 0.5 + 1.5 * cal, 0.4 + 0.35 * cal, 0.42);
+        fx.dust(x, y, 0.2 + 0.35 * cal, 3 + Math.round(cal * 5), 0.8 + cal * 0.9);
+        fx.sparks(x, y, 5 + cal * 9, '#ffd890', 4.5, undefined, Math.PI, 0.3, true);
+        fx.debris(x, y, 1 + Math.round(cal * 4), '#4a4034', 2.6, 0.045, cal > 0.6 ? 1 : 0);
+        if (cal > 0.55) fx.smoke(x, y, 0.15 + 0.2 * cal, 1.8, '#3a342e', fx.wind.x * 0.5, 0, 0.4, 0.7, 0.2);
+        fx.decal('scorch', x, y, 0.2 + 0.3 * cal);
+        continue;
+      }
+      fx.dust(x, y, 0.15, 2, 0.6);
+      fx.sparks(x, y, 3, '#ffd890', 2.5, undefined, Math.PI, 0.18, true);
+      fx.decal('scorch', x, y, 0.2);
     }
   }
 
@@ -1118,15 +1176,19 @@ export class FieldView {
           const len = sniper ? 0.9 : 0.22 + 0.2 * big;
           const w = sniper ? 0.05 : 0.025 + 0.022 * big;
           const col = sniper ? '#ff5050' : mod?.category === 'autocannon' ? '#ffb050' : '#ffe27a';
+          // every 4th round is a bright tracer with a hot head; the rest are short dim streaks
+          const tracer = sniper || (p.id & 3) === 0;
+          const L2 = tracer ? len * 1.7 : len * 0.75;
           g.strokeStyle = col;
-          g.globalAlpha = 0.5;
-          g.lineWidth = Math.max(minW * 2, w * 2.2);
+          g.globalAlpha = tracer ? 0.6 : 0.32;
+          g.lineWidth = Math.max(minW * 2, w * (tracer ? 2.8 : 1.8));
           g.lineCap = 'round';
-          g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * len, y - sn * len); g.stroke();
-          g.globalAlpha = 1;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * L2, y - sn * L2); g.stroke();
+          g.globalAlpha = tracer ? 1 : 0.6;
           g.strokeStyle = '#fff8e0';
           g.lineWidth = Math.max(minW, w * 0.8);
-          g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * len * 0.6, y - sn * len * 0.6); g.stroke();
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * L2 * 0.55, y - sn * L2 * 0.55); g.stroke();
+          if (tracer) { const hr = 0.07 + w * 2; g.globalAlpha = 0.8; g.drawImage(glowTex(col), x - hr, y - hr, hr * 2, hr * 2); }
           break;
         }
         case 'shell': {
@@ -1146,11 +1208,18 @@ export class FieldView {
             g.drawImage(softDot('#ffd080', 0.3), x - 0.12, y - 0.12, 0.24, 0.24);
           } else {
             const r = 0.07 + 0.08 * cal * (mod && moduleTier(mod) === 3 ? 1.3 : 1);
-            g.drawImage(softDot('rgba(255,170,80,0.8)'), x - r * 3, y - r * 3, r * 6, r * 6);
-            g.strokeStyle = '#ffe8c0';
-            g.lineWidth = Math.max(minW, r * 1.1);
+            // glowing tracer round: hot tail, bright head, soft heat bloom
+            g.globalAlpha = 0.4;
+            g.strokeStyle = '#ff9a40';
             g.lineCap = 'round';
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 3, y - sn * r * 3); g.stroke();
+            g.lineWidth = Math.max(minW * 2, r * 1.8);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 7, y - sn * r * 7); g.stroke();
+            g.globalAlpha = 1;
+            g.drawImage(glowTex('#ffa050'), x - r * 3.4, y - r * 3.4, r * 6.8, r * 6.8);
+            g.strokeStyle = '#fff0d0';
+            g.lineWidth = Math.max(minW, r * 1.1);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 3.2, y - sn * r * 3.2); g.stroke();
+            if (cal > 0.65) this.trail(p.id, x, y, 0.07 * cal, '#7a746c', 0.14, false, 0.8, 0.25);
           }
           break;
         }
@@ -1162,9 +1231,11 @@ export class FieldView {
           g.lineCap = 'round';
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.22, y - sn * 0.22); g.stroke();
           g.globalCompositeOperation = 'lighter';
-          const fl = 0.1 + Math.random() * 0.05;
-          g.drawImage(softDot(incend ? 'rgba(255,120,30,0.9)' : 'rgba(255,90,40,0.9)'), x - cs * 0.25 - fl, y - sn * 0.25 - fl, fl * 2, fl * 2);
-          this.trail(p.id, x, y, 0.12, '#3a342e', 0.06);
+          const fl = 0.12 + Math.random() * 0.06;
+          g.drawImage(glowTex(incend ? '#ff7820' : '#ff9a40'), x - cs * 0.27 - fl * 1.6, y - sn * 0.27 - fl * 1.6, fl * 3.2, fl * 3.2);
+          g.drawImage(glowTex('#fff2c8'), x - cs * 0.24 - fl * 0.6, y - sn * 0.24 - fl * 0.6, fl * 1.2, fl * 1.2);
+          // smoke trail that persists and drifts with the wind
+          this.trail(p.id, x - cs * 0.25, y - sn * 0.25, 0.09, '#a29d94', 0.07, false, 2.2, 0.38, 0.12);
           break;
         }
         case 'missile': {
@@ -1187,25 +1258,29 @@ export class FieldView {
           g.globalCompositeOperation = 'lighter';
           const fr = sz * (0.4 + Math.random() * 0.2);
           const col = mod?.targetsAir && !mod.targetsGround ? 'rgba(120,170,255,0.9)' : 'rgba(255,220,120,0.9)';
-          g.drawImage(softDot(col), x - cs * sz * 1.1 - fr, y - sn * sz * 1.1 - fr, fr * 2, fr * 2);
+          g.drawImage(glowTex(mod?.targetsAir && !mod.targetsGround ? '#78aaff' : '#ffc060'), x - cs * sz * 1.1 - fr * 1.8, y - sn * sz * 1.1 - fr * 1.8, fr * 3.6, fr * 3.6);
+          g.drawImage(glowTex('#fff4d0'), x - cs * sz * 1.0 - fr * 0.6, y - sn * sz * 1.0 - fr * 0.6, fr * 1.2, fr * 1.2);
           if (nuke) { g.drawImage(softDot('rgba(255,120,40,0.9)'), x - cs * sz * 1.3 - fr * 1.6, y - sn * sz * 1.3 - fr * 1.6, fr * 3.2, fr * 3.2); g.drawImage(softDot('rgba(150,255,90,0.6)'), x - cs * sz * 0.5 - sz * 0.5, y - sn * sz * 0.5 - sz * 0.5, sz, sz); }
-          this.trail(p.id, x - cs * sz, y - sn * sz, nuke ? 0.6 : cruise ? 0.3 : 0.14, nuke ? '#aaa49a' : '#8a8680', nuke ? 0.07 : cruise ? 0.04 : 0.05);
+          this.trail(p.id, x - cs * sz, y - sn * sz, nuke ? 0.6 : cruise ? 0.3 : 0.14, nuke ? '#aaa49a' : '#b0aba2', nuke ? 0.12 : cruise ? 0.08 : 0.07, false, nuke ? 5 : cruise ? 3.8 : 2.8, nuke ? 0.55 : 0.4, 0.1);
           break;
         }
         case 'flame': {
+          // rolling flame: white-yellow at the nozzle cooling to orange then red, with dark smoke curling off the top
           const napalm = mod?.id === 'napalm';
           const prog = clamp(pos.progress, 0, 1);
-          const r = (0.15 + prog * 0.45) * (napalm ? 1.3 : 1);
-          g.globalAlpha = 0.85 * (1 - prog * 0.5);
-          const img = tex('fireball') ?? softDot('rgba(255,130,40,0.9)');
-          const rot = p.id * 1.7 + this.time * 3;
+          const r = (0.16 + prog * 0.5) * (napalm ? 1.3 : 1) * (0.7 + 0.5 * cal);
+          const rot = p.id * 1.7 + this.time * 4;
           const tr = g.getTransform();
           g.transform(Math.cos(rot), Math.sin(rot), -Math.sin(rot), Math.cos(rot), x, y);
-          g.drawImage(img, -r, -r, r * 2, r * 2);
+          g.globalAlpha = 0.9 * (1 - prog * 0.55);
+          g.drawImage(fireTex(prog < 0.3 ? 1 : prog < 0.7 ? 2 : 3, p.id), -r, -r, r * 2, r * 2);
+          if (prog < 0.55) {
+            g.globalAlpha = 0.85 * (1 - prog * 1.7);
+            g.drawImage(fireTex(0, p.id + 1), -r * 0.5, -r * 0.5, r, r);
+          }
           g.setTransform(tr);
-          g.globalAlpha = 0.6 * (1 - prog);
-          g.drawImage(softDot('rgba(255,240,180,1)'), x - r * 0.4, y - r * 0.4, r * 0.8, r * 0.8);
-          if (Math.random() < dt * 8 && this.fx.busy < 0.5) this.fx.smoke(x, y, r * 0.5, 0.8, '#2a2420', 0, 0, 0.3);
+          if (Math.random() < dt * 9 && this.fx.busy < 0.5) this.fx.smoke(pos.x, pos.y, r * 0.55, 1.3, '#26221e', this.fx.wind.x * 0.4, 0, 0.32, 0.8, hz);
+          if (prog > 0.3 && Math.random() < dt * 5 && this.fx.busy < 0.5) this.fx.sparks(pos.x, pos.y, 1, '#ffb050', 1.5, undefined, Math.PI, 0.5, true);
           break;
         }
         case 'arc': {
@@ -1218,8 +1293,8 @@ export class FieldView {
           g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.4, 0, Math.PI * 2); g.fill();
           g.globalCompositeOperation = 'lighter';
           g.globalAlpha = 0.6;
-          g.drawImage(softDot('rgba(255,180,90,0.7)'), x - r * 2, y - r * 2, r * 4, r * 4);
-          this.trail(p.id, x, y, 0.08 * sc, '#5a554e', 0.08);
+          g.drawImage(glowTex('#ffb060'), x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
+          this.trail(p.id, x, y, 0.08 * sc, '#6a655d', 0.09, false, 1.6, 0.3, 0.05);
           break;
         }
         case 'orb': {
@@ -1242,9 +1317,21 @@ export class FieldView {
             if (Math.random() < dt * 20) this.fx.sparks(x, y, 1, '#cfe9ff', 2, undefined, Math.PI, 0.12);
           } else {
             const r = (0.18 + 0.12 * cal) * (mod && moduleTier(mod) === 4 ? 2.1 : 1);
-            g.drawImage(softDot(rgba(glowC.length === 7 ? glowC : '#e070ff', 0.6)), x - r * 2.5, y - r * 2.5, r * 5, r * 5);
-            g.drawImage(softDot('#ffffff', 0.4), x - r * 0.6, y - r * 0.6, r * 1.2, r * 1.2);
-            this.trail(p.id, x, y, r * 0.8, '#e070ff', 0.05, true);
+            const pc = glowC.length === 7 ? glowC : '#e070ff';
+            const pulse = 0.9 + 0.2 * Math.sin(this.time * 24 + p.id);
+            // comet tail: tapered gradient streak behind the head
+            const tl = r * 7;
+            const gr = g.createLinearGradient(x, y, x - cs * tl, y - sn * tl);
+            gr.addColorStop(0, rgba(pc, 0.7));
+            gr.addColorStop(1, rgba(pc, 0));
+            g.globalAlpha = 1;
+            g.strokeStyle = gr;
+            g.lineCap = 'round';
+            g.lineWidth = r * 1.5;
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * tl, y - sn * tl); g.stroke();
+            g.drawImage(glowTex(pc), x - r * 3 * pulse, y - r * 3 * pulse, r * 6 * pulse, r * 6 * pulse);
+            g.drawImage(glowTex('#ffffff'), x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
+            this.trail(p.id, x, y, r * 0.8, pc, 0.06, true);
           }
           break;
         }
@@ -1258,7 +1345,7 @@ export class FieldView {
   }
 
   /** Emit trail particles along a projectile's path since it was last drawn. */
-  private trail(id: number, x: number, y: number, r: number, color: string, spacing: number, glow = false): void {
+  private trail(id: number, x: number, y: number, r: number, color: string, spacing: number, glow = false, life = 0.9, alpha = 0.35, rise = 0): void {
     const t = this.ptrack.get(id);
     if (!t) return;
     const dx = x - t.lx, dy = y - t.ly;
@@ -1270,7 +1357,7 @@ export class FieldView {
       const f = (i * sp) / d;
       const px = t.lx + dx * f, py = t.ly + dy * f;
       if (glow) this.fx.glow(px, py, r, color, 0.25, 0.5);
-      else this.fx.smoke(px, py, r, 0.9, color, 0, 0, 0.35);
+      else this.fx.smoke(px, py, r, life, color, this.fx.wind.x * 0.5, this.fx.wind.y * 0.5, alpha, rise);
     }
     if (n > 0) { t.lx += (dx * n * sp) / d; t.ly += (dy * n * sp) / d; }
   }
@@ -1402,47 +1489,83 @@ export class FieldView {
             else if (T) fx.shake(0.25);
           }
         }
+        const S0 = ur ? layoutOf(ur.u.design).S : 1;
+        const gunKick = (k: number) => { if (!ur) return; const v = this.visOf(ur.u); v.kx = (v.kx ?? 0) - cs * k / Math.max(1, S0 * 0.8); v.ky = (v.ky ?? 0) - sn * k / Math.max(1, S0 * 0.8); };
         switch (vis) {
           case 'gun': case 'gatling': case 'shotgun': case 'sniper': case 'flak': case 'cannon': case 'artillery': case 'gauss': {
             const heavy = vis === 'cannon' || vis === 'artillery' || vis === 'gauss';
-            const r = d * (0.6 + cal * 0.8) * (heavy ? 1.5 : 1) * (vis === 'shotgun' ? 1.4 : 1);
-            fx.star(mx + cs * r * 0.3, my + sn * r * 0.3, r, vis === 'gauss' ? '#9fe8ff' : '#ffd890', e.angle, heavy ? 0.1 : 0.06);
-            fx.glow(mx, my, r * 1.3, vis === 'gauss' ? '#9fe8ff' : '#ffb060', heavy ? 0.14 : 0.07, 0.8);
-            if (heavy || vis === 'shotgun') {
-              fx.sparks(mx, my, heavy ? 6 : 4, '#ffd890', 5, e.angle, 0.35, 0.18);
-              for (let i = 0; i < (heavy ? 3 : 1); i++) fx.smoke(mx + cs * 0.15, my + sn * 0.15, r * 0.5, 1.0, '#4a4640', cs * 1.2, sn * 1.2, 0.45);
-              if (heavy && mod && moduleTier(mod) === 3) fx.shake(0.12);
-              if (heavy) fx.dust(mx - cs * d, my - sn * d, d * 0.8, 2, 0.5);
-            } else if (fx.busy < 0.4 && Math.random() < 0.25) fx.debris(mx - cs * d, my - sn * d, 1, '#d8b040', 1.5, 0.02);
+            const r = d * (0.5 + cal * 0.7) * (heavy ? 1.5 : 1) * (vis === 'shotgun' ? 1.4 : 1);
+            const col = vis === 'gauss' ? '#9fe8ff' : vis === 'sniper' ? '#ffe6c0' : mod?.category === 'autocannon' ? '#ffb858' : '#ffd890';
+            fx.muzzle(mx, my, e.angle, r, col, heavy);
+            if (vis === 'gun' || vis === 'gatling' || vis === 'shotgun') { if (Math.random() < 0.45) fx.casing(mx - cs * d * 0.6, my - sn * d * 0.6, e.angle); }
+            if (heavy || vis === 'shotgun' || vis === 'sniper') {
+              fx.sparks(mx, my, heavy ? 8 : 4, vis === 'gauss' ? '#bff0ff' : '#ffd890', 6, e.angle, 0.3, 0.2);
+              if (mod && moduleTier(mod) === 3) fx.shake(0.12);
+            }
+            if (heavy && ur) {
+              // the blast kicks a ring of dust off the ground below the barrel; the whole hull rocks back
+              const big = cal >= 0.8;
+              fx.dustRing(ur.x + cs * d * 0.7, ur.y + sn * d * 0.7, 0.1, 0.5 + cal * (big ? 1.6 : 0.9), 0.4, 0.38);
+              fx.dust(ur.x + cs * d * 0.5, ur.y + sn * d * 0.5, 0.2 + 0.25 * cal, big ? 4 : 2, 0.7);
+              gunKick(0.03 + 0.05 * cal);
+              if (vis === 'gauss') { fx.ring(mx, my, 0.1, 0.9, '#9fe8ff', 0.25, 0.8); }
+            }
             break;
           }
           case 'rocketPod': case 'missileRack': case 'cruise': {
             const big = vis === 'cruise';
-            fx.glow(mx, my, big ? 0.8 : 0.35, '#ffa050', 0.12);
-            for (let i = 0; i < (big ? 6 : 2); i++) fx.smoke(mx - cs * d * 0.8, my - sn * d * 0.8, big ? 0.35 : 0.18, big ? 1.8 : 1, '#6a6660', -cs * 1.5 + (Math.random() - 0.5), -sn * 1.5 + (Math.random() - 0.5), 0.5);
-            if (big) { fx.dust(mx, my, 0.8, 5); fx.shake(0.1); }
+            // launch: bright back-flame, smoke puffs that hang, a hint of ground blast
+            fx.cone(mx, my, e.angle + Math.PI, big ? 1.8 : 0.7, big ? 0.7 : 0.3, '#ffb060', 0.09);
+            fx.glow(mx, my, big ? 0.9 : 0.4, '#ffd8a0', 0.08, 0.9);
+            fx.light(mx, my, big ? 3 : 1.4, '#ffa050', 0.25, 0.4);
+            for (let i = 0; i < (big ? 6 : 2); i++) fx.smoke(mx - cs * d * 0.8, my - sn * d * 0.8, big ? 0.35 : 0.16, big ? 2.4 : 1.4, '#8a867e', -cs * 1.5 + (Math.random() - 0.5), -sn * 1.5 + (Math.random() - 0.5), 0.5, 0.3, 0.2);
+            if (big) { fx.dust(mx, my, 0.8, 5); fx.dustRing(mx, my, 0.2, 1.8, 0.5, 0.4); fx.shake(0.1); }
             break;
           }
           case 'mortar': {
-            fx.glow(mx, my, 0.35, '#ffb060', 0.1);
-            fx.ring(mx, my, 0.05, 0.5, '#ffe0b0', 0.2, 0.5);
-            for (let i = 0; i < 3; i++) fx.smoke(mx, my, 0.18, 1.2, '#6a6660', 0, 0, 0.5);
+            fx.muzzle(mx, my, e.angle, 0.28, '#ffc070', true);
+            fx.ring(mx, my, 0.05, 0.6, '#ffe0b0', 0.2, 0.5);
+            fx.smoke(mx, my, 0.18, 1.6, '#77736b', 0, 0, 0.5, 0.7, 0.3);
             break;
           }
           case 'sonic':
-            fx.ring(mx + cs * 0.2, my + sn * 0.2, 0.1, 0.9, '#5ec8ff', 0.25, 0.9);
+            fx.ring(mx + cs * 0.2, my + sn * 0.2, 0.1, 1.0, '#5ec8ff', 0.25, 0.9);
+            fx.ring(mx + cs * 0.1, my + sn * 0.1, 0.05, 0.6, '#ffffff', 0.16, 0.6);
             break;
-          case 'flamer':
-            fx.glow(mx, my, 0.18, '#ff9030', 0.08, 0.7);
+          case 'flamer': {
+            // ignition: bright orange cone and a puff of black smoke at the nozzle
+            const big = cal >= 0.8;
+            fx.cone(mx, my, e.angle, 0.7 + cal * 1.2, 0.35 + cal * 0.5, '#ff9a30', 0.1);
+            fx.glow(mx, my, 0.25 + cal * 0.4, '#ffb050', 0.1, 0.8);
+            if (Math.random() < 0.3) fx.smoke(mx + cs * 0.2, my + sn * 0.2, 0.12 + cal * 0.1, 1.0, '#2a2622', cs * 0.8, sn * 0.8, 0.35, 0.5, 0.3);
+            if (big && Math.random() < 0.3) fx.fire(mx + cs * 0.4, my + sn * 0.4, 0.3, 0.4, cs * 4, sn * 4, 0.3);
             break;
+          }
           case 'repair': case 'pointdef':
-            fx.glow(mx, my, 0.12, glowC, 0.08, 0.7);
+            fx.glow(mx, my, 0.14, glowC, 0.08, 0.8);
             break;
-          case 'saw': case 'chainsaw': case 'hammer': case 'claw': case 'blade': case 'drill': case 'prod': case 'ram':
-            fx.sparks(mx, my, vis === 'hammer' ? 10 : 6, vis === 'blade' ? glowC : vis === 'prod' ? '#bfe4ff' : '#ffd890', 4, e.angle, 1.1, 0.25);
-            if (vis === 'hammer' || vis === 'ram') { fx.dust(mx, my, 0.4, 3); fx.shake(vis === 'hammer' ? 0.15 : 0.05); }
-            if (vis === 'prod') fx.bolt(mx, my, 0.3, '#bfe4ff', 0.15);
+          case 'saw': case 'chainsaw': case 'hammer': case 'claw': case 'blade': case 'drill': case 'prod': case 'ram': {
+            const titan = !!mod && (mod.mount === 'XL' || moduleTier(mod) >= 4);
+            const col = vis === 'blade' ? glowC : vis === 'prod' ? '#bfe4ff' : vis === 'drill' ? '#fff0c8' : '#ffc060';
+            // grinding / striking: a hot shower of bouncing sparks and a bright contact flash
+            fx.sparks(mx, my, (vis === 'hammer' ? 14 : vis === 'saw' || vis === 'chainsaw' || vis === 'drill' ? 12 : 8) * (titan ? 2 : 1), col, 5, e.angle, 1.2, 0.3, true);
+            fx.glow(mx, my, 0.22 + cal * 0.3, col, 0.07, 0.9);
+            if (vis === 'hammer' || vis === 'ram') {
+              fx.dust(mx, my, 0.4 + (titan ? 0.5 : 0), 3 + (titan ? 6 : 0));
+              fx.shake(vis === 'hammer' ? 0.15 : 0.05);
+              fx.ring(mx, my, 0.1, titan ? 2.8 : 1.0, '#e8d4a8', titan ? 0.5 : 0.28, 0.7);
+              fx.dustRing(mx, my, 0.1, titan ? 3.2 : 1.2, titan ? 0.8 : 0.4, 0.45);
+              if (titan) {
+                fx.light(mx, my, 3.4, '#ffb060', 0.3, 0.35);
+                fx.debris(mx, my, 8, '#3a3630', 4, 0.07, 1);
+                fx.decal('crater', mx, my, 0.8);
+                fx.star(mx, my, 1.4, '#fff0d0', Math.random() * 6, 0.08);
+              }
+            }
+            if (vis === 'prod') { fx.bolt(mx, my, 0.3, '#bfe4ff', 0.18); fx.glow(mx, my, 0.4, '#8fb8ff', 0.15, 0.8); }
+            if (vis === 'saw' || vis === 'chainsaw' || vis === 'drill') fx.glow(mx, my, 0.3 + cal * 0.4, '#ff9a40', 0.12, 0.6);
             break;
+          }
           default:
             fx.glow(mx, my, 0.2 + d * 0.3, glowC, 0.1, 0.8);
         }
@@ -1457,26 +1580,42 @@ export class FieldView {
         // beams that end on a unit stop at its hull; the piercing lance (ends past the target) is left alone
         const end = this.clipToHull(sx, sy, e.x2, e.y2);
         const gl = this.liftVec(GUN_H);
+        const gx = end.x, gy = end.y; // where it touches the ground / hull edge (unlifted)
         e = { ...e, x2: end.x + gl.x, y2: end.y + gl.y };
         const pts = [sx, sy, e.x2, e.y2];
+        const dirA = Math.atan2(e.y2 - sy, e.x2 - sx);
+        const back = dirA + Math.PI;
         let impact = true;
+        const q = fx.busy < 0.7;
         switch (vis) {
-          case 'heatray': fx.beam('heat', pts, '#ff6a1a', 0.07, 0.14); break;
+          case 'heatray': {
+            fx.beam('heat', pts, '#ff6a1a', 0.07, 0.14);
+            if (q) {
+              // molten droplets, rising smoke, a scorch that glows and lingers
+              if (Math.random() < 0.7) fx.molten(e.x2, e.y2, 2, '#ffb040');
+              if (Math.random() < 0.25) fx.smoke(gx, gy, 0.12, 1.4, '#3a342e', 0, 0, 0.3, 0.8, 0.3);
+              if (Math.random() < 0.12) { fx.hot(gx, gy, 0.5, 1.6); fx.decal('scorch', gx, gy, 0.22); }
+            }
+            break;
+          }
           case 'plasma': {
             if (mod?.id === 'annihilator') {
               // warm-up: starts as a thin flickering lance and swells into a blinding river over ~1.5 s of fire
               const h = this.beamHeat;
               fx.beam('plasma', pts, '#e070ff', 0.08 + 0.34 * h * h, 0.24);
               fx.glow(e.x1, e.y1, 0.6 + 1.4 * h, '#ff80f0', 0.12, 0.9);
-              fx.glow(e.x2, e.y2, 0.5 + 1.3 * h, '#ff90ff', 0.14, 0.9);
-              if (h > 0.6) { fx.sparks(e.x2, e.y2, 5, '#ffd0ff', 6, undefined, Math.PI, 0.3); if (Math.random() < 0.3) fx.decal('scorch', e.x2, e.y2, 0.5); }
+              if (h > 0.6) { fx.sparks(e.x2, e.y2, 5, '#ffd0ff', 6, undefined, Math.PI, 0.35, true); if (Math.random() < 0.3) { fx.decal('scorch', gx, gy, 0.5); fx.hot(gx, gy, 0.8, 2); } }
               if (h > 0.85) fx.shake(0.04);
-            } else fx.beam('plasma', pts, '#e070ff', 0.09, 0.17);
+            } else {
+              fx.beam('plasma', pts, '#e070ff', 0.09, 0.17);
+              if (q && Math.random() < 0.5) fx.molten(e.x2, e.y2, 2, '#f0a0ff');
+              if (q && Math.random() < 0.1) { fx.decal('scorch', gx, gy, 0.3); fx.hot(gx, gy, 0.5, 1.4); }
+            }
             break;
           }
           case 'slowbeam': fx.beam('slow', pts, '#b47cff', 0.05, 0.22); break;
           case 'repair': fx.beam('repair', pts, '#6dff9a', 0.05, 0.25); impact = false; if (Math.random() < 0.3) fx.heal(e.x2, e.y2); break;
-          case 'emp': fx.beam('scramble', pts, glowC, 0.05, 0.22); break;
+          case 'emp': fx.beam('scramble', pts, glowC, 0.05, 0.28); break;
           case 'gravity': {
             fx.beam('gravity', pts, '#b070ff', 0.07, 0.3);
             const dx = e.x1 - e.x2, dy = e.y1 - e.y2;
@@ -1491,7 +1630,10 @@ export class FieldView {
           case 'rail': {
             const heavy = (mod?.caliber ?? 0.5) > 0.7;
             const huge = !!mod && moduleTier(mod) === 5;
-            fx.beam('rail', pts, '#9fe8ff', huge ? 0.5 : heavy ? 0.1 : 0.06, huge ? 0.9 : heavy ? 0.5 : 0.35);
+            const w = huge ? 0.5 : heavy ? 0.1 : 0.06;
+            fx.beam('rail', pts, '#9fe8ff', w, huge ? 0.9 : heavy ? 0.5 : 0.35);
+            // the hot line leaves a fading ion trail and rings of displaced air along its path
+            fx.beam('ion', pts, '#8fdcff', w, huge ? 1.4 : heavy ? 0.9 : 0.6);
             if (huge) {
               // spinal mass driver: blinding flash, ionised trail, the ground torn up along the line
               fx.flash(0.5, '#d8f6ff');
@@ -1501,22 +1643,27 @@ export class FieldView {
                 const f = i / (n + 1), qx = e.x1 + (e.x2 - e.x1) * f, qy = e.y1 + (e.y2 - e.y1) * f;
                 fx.schedule(i * 0.012, () => { fx.dust(qx, qy, 0.5, 2, 0.9); fx.glow(qx, qy, 0.7, '#9fe8ff', 0.25, 0.6); });
               }
-              fx.boom(e.x2, e.y2, 1.0, 'plasma');
+              fx.boom(gx, gy, 1.0, 'plasma');
             }
-            fx.glow(e.x1, e.y1, huge ? 1.6 : heavy ? 0.7 : 0.45, '#9fe8ff', huge ? 0.35 : 0.2);
-            fx.sparks(e.x2, e.y2, huge ? 24 : 10, '#cff4ff', huge ? 8 : 5, undefined, Math.PI, 0.3);
-            if (huge) { fx.shockwave(e.x2, e.y2, 1.6, '#9fe8ff', 0.5); fx.ring(e.x1, e.y1, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
+            fx.muzzle(sx, sy, dirA, huge ? 1.2 : heavy ? 0.5 : 0.3, '#bff0ff', heavy);
+            // heavy impact punch
+            fx.sparks(e.x2, e.y2, huge ? 24 : heavy ? 14 : 8, '#cff4ff', huge ? 8 : 6, back, 1.1, 0.3, true);
+            fx.ring(gx, gy, 0.1, huge ? 2.0 : heavy ? 1.1 : 0.7, '#bff0ff', 0.25, 0.8);
+            if (heavy || huge) { fx.dust(gx, gy, huge ? 0.7 : 0.35, huge ? 6 : 3, 0.8); fx.decal('scorch', gx, gy, huge ? 0.8 : 0.3); }
+            if (huge) { fx.shockwave(gx, gy, 1.6, '#9fe8ff', 0.5); fx.ring(e.x1, e.y1, 0.2, 1.8, '#cff4ff', 0.35, 0.9); }
             if (huge) fx.shake(0.4); else if (heavy) fx.shake(0.18);
+            impact = false;
             break;
           }
           case 'pointdef': fx.beam('laser', pts, '#ff6060', 0.025, 0.08); impact = false; break;
           case 'sniper': fx.beam('sniper', pts, '#ff5050', 0.04, 0.2); break;
-          default: fx.beam('laser', pts, glowC, 0.035, 0.12);
+          default: {
+            fx.beam('laser', pts, glowC, 0.035, 0.12);
+            if (q && Math.random() < 0.35) fx.molten(e.x2, e.y2, 1, '#ffd090');
+            if (q && Math.random() < 0.06) fx.hot(gx, gy, 0.3, 1.0);
+          }
         }
-        if (impact && fx.busy < 0.7) {
-          fx.glow(e.x2, e.y2, 0.25, glowC, 0.1, 0.8);
-          if (Math.random() < 0.6) fx.sparks(e.x2, e.y2, 3, glowC, 3, undefined, Math.PI, 0.2);
-        }
+        if (impact && q && Math.random() < 0.6) fx.sparks(e.x2, e.y2, 3, glowC, 3.5, back, 1.3, 0.2, true);
         break;
       }
       case 'chain': {
@@ -1533,20 +1680,20 @@ export class FieldView {
           const end = this.clipToHull(pts[i - 2], pts[i - 1], pts[i], pts[i + 1]);
           pts[i] = end.x + gl.x; pts[i + 1] = end.y + gl.y;
         }
-        if (pts.length >= 4) fx.beam('lightning', pts, col, heavy ? 0.05 : 0.035, heavy ? 0.24 : 0.18);
+        if (pts.length >= 4) fx.beam('lightning', pts, col, heavy ? 0.05 : 0.035, heavy ? 0.26 : 0.2);
+        // strikes: a few hot sparks off each struck hull and a flash of ionised air
         for (let i = 2; i < pts.length; i += 2) {
-          fx.glow(pts[i], pts[i + 1], heavy ? 0.5 : 0.35, col, 0.15);
-          fx.sparks(pts[i], pts[i + 1], 4, '#e0f0ff', 3, undefined, Math.PI, 0.2);
+          fx.sparks(pts[i], pts[i + 1], 3, '#e0f0ff', 3.5, undefined, Math.PI, 0.2, true);
+          fx.star(pts[i], pts[i + 1], heavy ? 0.7 : 0.5, '#cfe0ff', Math.random() * 6, 0.06);
         }
-        if (pts.length >= 2) fx.glow(pts[0], pts[1], 0.3, col, 0.12);
+        if (pts.length >= 2) { fx.glow(pts[0], pts[1], heavy ? 0.7 : 0.4, '#dfe8ff', 0.08, 0.8); fx.ring(pts[0], pts[1], 0.05, 0.6, col, 0.18, 0.5); }
         break;
       }
       case 'hit': {
         const ur = this.units.get(e.unit);
         const mod = modOf(e.moduleId);
         if (!ur) {
-          fx.dust(e.x, e.y, 0.2, 2, 0.6);
-          fx.sparks(e.x, e.y, 3, '#ffd890', 2.5, undefined, Math.PI, 0.18);
+          fx.dirtKick(e.x, e.y, 1);
           break;
         }
         if (e.damage > 0) this.visOf(ur).dmgT = this.time;
@@ -1567,11 +1714,21 @@ export class FieldView {
           break;
         }
         const vis = mod?.visual;
-        if (vis === 'flamer' || vis === 'heatray' || vis === 'repair') break;
-
-        const n = clamp(Math.round(2 + Math.sqrt(e.damage) * 0.5), 2, 12);
-        fx.sparks(e.x, e.y, n, '#ffe0a0', 3.5, undefined, Math.PI, 0.22);
-        if (e.damage > 60) fx.glow(e.x, e.y, 0.3 + Math.min(0.5, e.damage / 400), '#ffc070', 0.1);
+        // heavy hits shove the drawn sprite away from the shooter (render only; heavier hulls barely move)
+        if (e.damage > 25) {
+          const from = this.shotFrom.get(ur.id) ?? ((e.x - ur.x) ** 2 + (e.y - ur.y) ** 2 > 0.04 ? { x: e.x, y: e.y } : undefined);
+          if (from) {
+            const a = Math.atan2(ur.y - from.y, ur.x - from.x), v = this.visOf(ur), S = layoutOf(ur.design).S;
+            const k = clamp(Math.sqrt(e.damage) * 0.0045, 0, 0.07) / Math.max(1, S * 0.9);
+            v.kx = (v.kx ?? 0) + Math.cos(a) * k;
+            v.ky = (v.ky ?? 0) + Math.sin(a) * k;
+          }
+        }
+        if (vis === 'repair') break;
+        if (vis === 'flamer') { fx.flameHit(e.x, e.y, 0.6 + (mod?.caliber ?? 0.3)); break; }
+        if (vis === 'heatray') break;
+        const col = mod?.category === 'energy' ? '#ffd8a0' : vis === 'tesla' || vis === 'emp' ? '#dfe8ff' : '#ffe0a0';
+        fx.armorHit(e.x, e.y, e.damage, col);
         break;
       }
       case 'explode': {

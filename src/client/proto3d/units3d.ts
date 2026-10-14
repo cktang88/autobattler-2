@@ -286,7 +286,7 @@ function buildHull(g: THREE.Group, shape: string, L: number, W0: number, y0: num
   for (const t of recipe) {
     const base = P[t.p] ?? P.box;
     const poly = base.map(([x, yy]) => [(x * t.k + (t.dx ?? 0)) * L * 0.5, yy * t.k * W * 0.5] as Pt);
-    const h = Math.max(0.06, t.h * hf);
+    const h = Math.max(0.06, t.h * hf * 0.66);
     const m = kit[t.m];
     const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cz = poly.reduce((a, p) => a + p[1], 0) / poly.length;
     const sl = 1 - (t.slope ?? 0.07) * Math.min(1, h / 0.6 + 0.3);
@@ -300,9 +300,9 @@ function buildHull(g: THREE.Group, shape: string, L: number, W0: number, y0: num
 }
 
 function deckAt(placed: Placed[], x: number, z: number, fallback: number): number {
-  let top = fallback;
+  let top = -Infinity;
   for (const p of placed) if (inPoly([x, z], p.poly)) top = Math.max(top, p.top);
-  return top;
+  return top === -Infinity ? fallback : top;
 }
 
 // ---- greebles ---------------------------------------------------------------------------------
@@ -474,9 +474,10 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
         const a = (k / 8) * Math.PI * 2, d = deckAt(placed, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85, -1);
         if (d >= 0) lo = Math.min(lo, d);
       }
+      if (new URLSearchParams(location.search).has("dbg")) console.log("mount", design.id, i, o.x.toFixed(2), o.y.toFixed(2), "y", y.toFixed(2), "lo", lo.toFixed(2), "base", baseY.toFixed(2));
       if (y - lo > 0.04) {
         const ring = Array.from({ length: 10 }, (_, i) => [Math.cos((i / 10) * Math.PI * 2), Math.sin((i / 10) * Math.PI * 2)] as Pt);
-        frustum(ring.map(([px, pz]) => [o.x + px * tu.r * 1.12, o.y + pz * tu.r * 1.12] as Pt), ring.map(([px, pz]) => [o.x + px * tu.r * 1.0, o.y + pz * tu.r * 1.0] as Pt), lo, y - lo, kit.camo, body);
+        frustum(ring.map(([px, pz]) => [o.x + px * tu.r * 1.32, o.y + pz * tu.r * 1.32] as Pt), ring.map(([px, pz]) => [o.x + px * tu.r * 1.02, o.y + pz * tu.r * 1.02] as Pt), lo, y - lo, kit.body, body);
       }
     }
     tu.yaw.position.set(o.x, y, o.y);
@@ -489,6 +490,16 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   });
   if (!flying) greeble(body, placed, L, W, S, kit, rnd, mountPts, mountR, false);
 
+  // command tower on giant/titan hulls: sensor drum, dome and mast cluster on the topmost tier
+  if (!flying && S >= 4 && placed.length) {
+    const tp = placed[placed.length - 1], cx = tp.poly.reduce((a, p) => a + p[0], 0) / tp.poly.length, cz = 0;
+    const u = 0.1 * S;
+    add(body, new THREE.CylinderGeometry(u * 1.7, u * 2.0, u * 1.2, 10), kit.camo, cx, tp.top + u * 0.6, cz);
+    add(body, new THREE.SphereGeometry(u * 1.2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), kit.light, cx, tp.top + u * 1.2, cz);
+    box(body, kit.glass, u * 0.5, u * 0.3, u * 2.2, cx + u * 1.8, tp.top + u * 0.5, cz); // visor slit
+    for (const s2 of [-1, 1]) add(body, new THREE.CylinderGeometry(0.01, 0.02, u * 4, 6), kit.steel, cx - u * 0.8, tp.top + u * 2, s2 * u * 1.1);
+    add(body, new THREE.SphereGeometry(u * 0.22, 8, 6), kit.glow, cx - u * 0.8, tp.top + u * 4.05, u * 1.1);
+  }
   // mast + team pennant on big hulls
   if (!flying && S >= 3) {
     const mx = -L * 0.3, mz = W * 0.3, top = deckAt(placed, mx, mz, hullTop + baseY);
