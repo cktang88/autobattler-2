@@ -13,7 +13,7 @@ function arachne(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   const u = Math.min(L, W) / 10;
   const spider = stance.legs === 'spider';
-  const by = spider ? stance.hipY * 1.3 : stance.legs === 'biped' ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1.0 * u;
+  const by = spider ? stance.hipY * 1.75 : stance.legs === 'biped' ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1.0 * u;
   if (!spider && stance.legs !== 'biped') planLoft(b, kit.trim, ngon(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1.0], [by, 0.85]], [-0.4 * u, 0]);
   // carapace: ten-sided dome, dark belly below
   const cx = -0.4 * u, cp = ngon(10, 2.65 * u, 2.85 * u, 0);
