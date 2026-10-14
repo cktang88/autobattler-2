@@ -179,7 +179,9 @@ export function menuScreen(app: App): Screen {
 
   const ro = new ResizeObserver(() => view?.resize());
   ro.observe(canvas);
-  requestAnimationFrame(() => {
+  let gone = false;
+  raf = requestAnimationFrame(() => {
+    if (gone) return;
     view?.resize();
     newScene();
     raf = requestAnimationFrame(frame);
@@ -188,6 +190,7 @@ export function menuScreen(app: App): Screen {
   return {
     el,
     destroy() {
+      gone = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
       view?.destroy();

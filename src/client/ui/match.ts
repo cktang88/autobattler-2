@@ -25,6 +25,7 @@ import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 import { designInfo, type DesignInfo } from './deckstats.ts';
+import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 
@@ -134,7 +135,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   /** no replay watched this session (match resumed): quietly re-run the last round, the sim is deterministic */
   function ensureLastDamage() {
     const rec = m.history[m.history.length - 1];
-    if (!rec || lastDmg?.round === rec.round) return;
+    if (destroyed || !rec || lastDmg?.round === rec.round) return; // (also runs off a timer: skip once the screen is gone)
     try {
       const b = new Battle(battleInputFor(m, rec));
       let n = 0;
@@ -160,6 +161,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   };
   let acc = 0;
   let endTimer = 0;
+  /** last round replayed on this screen */
+  let watchedHere = 0;
   let destroyed = false;
 
   const me = () => m.players[side];
@@ -300,6 +303,15 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
 
   const el = h('div.screen.match', null, topbar, h('div.mbody', null, fieldwrap, sideEl));
+  // a button clicked with the mouse must not keep keyboard focus: Space / Enter would then re-press it (deselecting
+  // the shop card, re-picking a speed) instead of deploying / pausing. Keyboard (Tab) focus keeps working as before.
+  el.addEventListener('mousedown', (e) => {
+    const b = (e.target as HTMLElement | null)?.closest('button');
+    if (!b || b.getAttribute('role') === 'combobox') return;
+    e.preventDefault();
+    const a = document.activeElement;
+    if (a instanceof HTMLElement && a !== b && el.contains(a) && a.tagName === 'BUTTON') a.blur();
+  });
 
   // ---------- card shop ----------
   let cardEls: HTMLButtonElement[] = [];
@@ -498,11 +510,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   // ---------- top bar ----------
-  function hpAt(s: Side, throughRound: number): number {
-    let hp = m.players[s].hp;
-    for (const r of m.history) if (r.round > throughRound) hp += r.result.damage[s];
-    return hp;
-  }
+  const hpAt = (s: Side, throughRound: number) => hpAfterRound(m, s, throughRound);
   function renderTop() {
     const shownRound = replay && (phase === 'battle' || phase === 'result') ? replay.round : m.round;
     const through = replay && phase === 'battle' ? replay.round - 1 : replay && phase === 'result' ? replay.round : Infinity;
@@ -530,8 +538,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function renderSide() {
     const rem = remaining();
-    // during a replay/result the state already holds next round's supply; don't show it until deploy
-    const replaying = phase === 'battle' || phase === 'result';
+    // during a replay/result the state already holds next round's supply; don't show it until deploy (or ever, once over)
+    const replaying = phase === 'battle' || phase === 'result' || phase === 'over';
     supplyVal.textContent = replaying ? '—' : String(rem);
     supplyVal.classList.toggle('low', !replaying && rem < 0);
     const deploying = phase === 'deploy';
@@ -837,8 +845,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     } else if (phase === 'over') {
       const won = m.winner === side, lost = m.winner === opp;
       const roundsWon = m.history.filter((r) => r.result.winner === side).length;
-      const dealt = m.history.reduce((s, r) => s + r.result.damage[opp], 0);
-      const taken = m.history.reduce((s, r) => s + r.result.damage[side], 0);
+      const dealt = totalDamageTaken(m, opp);
+      const taken = totalDamageTaken(m, side);
       const buttons: HTMLElement[] = [];
       if (driver instanceof LocalDriver) buttons.push(h('button.primary', { onclick: () => rematch() }, 'Rematch'));
       if (driver.mode === 'pvp') buttons.push(h('button.primary', { onclick: () => app.go({ name: 'lobby' }) }, 'Back to lobby'));
@@ -1114,7 +1122,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (prev?.x !== hover?.x || prev?.y !== hover?.y || prev?.valid !== hover?.valid) renderHint();
   });
   canvas.addEventListener('pointerleave', (e) => {
-    if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; if (tipKey) hideTip(); renderHint(); }
+    // a unit pinned mid-battle stays up when the pointer heads for the speed bar or the tip itself
+    if (e.pointerType === 'mouse') { hover = null; hoverUnit = null; lastPtr = null; if (tipKey && !liveTip) hideTip(); renderHint(); }
   });
   /** finish (or abandon) a block move: invalid spots snap back */
   function endMove(commit: boolean) {
@@ -1198,7 +1207,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       e.preventDefault();
       togglePause();
     } else if (e.key === 'Escape') {
-      if (tipEl?.classList.contains('sheet')) { hideTip(); return; }
+      if (tipEl?.classList.contains('sheet') || liveTip) { hideTip(); return; }
       if (escortPick) escortPick = null;
       else if (selCard >= 0) { selCard = -1; hover = null; }
       else sel = null;
@@ -1242,7 +1251,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function setPhase(p: Phase) {
     const prev = phase;
     phase = p;
-    if (liveTip && p === 'deploy') hideTip();
+    // a shop-card / block tooltip belongs to the phase it was opened in (disabled cards never get pointerleave);
+    // a unit pinned mid-battle may stay up through the result
+    if (p !== prev && (!liveTip || p === 'deploy' || p === 'waiting')) hideTip();
     if (p === 'waiting' && prev !== 'waiting' && m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     if (p === 'deploy' && prev !== 'deploy') {
       playMusic('deploy');
@@ -1257,7 +1268,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function evaluate() {
     if (phase === 'battle' || phase === 'result') return;
-    const lw = lastWatched(m.id);
+    // also remember it here: with storage blocked lastWatched() stays 0 and the round would replay forever
+    const lw = Math.max(lastWatched(m.id), watchedHere);
     const rec = m.history.find((r) => r.round > lw);
     if (rec) { startReplay(rec); return; }
     if (m.status === 'done') { showOver(); return; }
@@ -1317,6 +1329,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (phase !== 'result' || !replay) return;
     sfx('click');
     setLastWatched(m.id, replay.round);
+    watchedHere = Math.max(watchedHere, replay.round);
     replay = null;
     phase = 'waiting'; // neutral non-deploy phase; evaluate() picks the next one (and starts deploy music)
     evaluate();
@@ -1632,7 +1645,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   buildCards();
   phase = 'waiting'; // forces setPhase('deploy') to start deploy music on first evaluate
   evaluate();
-  requestAnimationFrame(() => {
+  raf = requestAnimationFrame(() => {
+    if (destroyed) return;
     try { view.resize(); if (phase === 'deploy') view.frameDeploy(true); else if (phase === 'battle') view.fit(true); } catch { /* */ }
     raf = requestAnimationFrame(frame);
   });

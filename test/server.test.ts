@@ -336,3 +336,42 @@ test('static files: index, MIME types, traversal blocked', async () => {
   assert.equal(resolveStatic('/srv/pub', '/%2e%2e/etc/passwd'), null);
   assert.equal(resolveStatic('/srv/pub', '/a/b.js'), path.resolve('/srv/pub/a/b.js'));
 });
+
+test('TRUST_PROXY: rate limits key on the proxy-appended (last) X-Forwarded-For entry, not a spoofable first one', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ab2-xff-'));
+  const s2 = await startServer({ port: 0, host: '127.0.0.1', dataDir: dir, publicDir, saveDebounceMs: 10, trustProxy: true, loginRateLimit: 6 });
+  try {
+    const statuses: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const r = await fetch(`http://127.0.0.1:${s2.port}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${i}, 203.0.113.7` },
+        body: JSON.stringify({ name: `spoof${i}` }),
+      });
+      await r.text();
+      statuses.push(r.status);
+    }
+    assert.ok(statuses.includes(429), `spoofed first XFF entry must not reset the login limit: ${statuses}`);
+  } finally {
+    await s2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('random (unknown) bearer tokens share the IP rate-limit bucket', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ab2-rl-'));
+  const s2 = await startServer({ port: 0, host: '127.0.0.1', dataDir: dir, publicDir, saveDebounceMs: 10, rateLimit: 40 });
+  try {
+    const statuses: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const tok = (i.toString(16).padStart(2, '0')).repeat(32);
+      const r = await fetch(`http://127.0.0.1:${s2.port}/api/me`, { headers: { Authorization: `Bearer ${tok}` } });
+      await r.text();
+      statuses.push(r.status);
+    }
+    assert.ok(statuses.includes(429), `fresh fake tokens must not each get a new bucket: ${statuses}`);
+  } finally {
+    await s2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

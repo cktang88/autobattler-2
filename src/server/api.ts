@@ -76,7 +76,10 @@ export class Api {
     try {
       const method = req.method ?? 'GET';
       const auth = bearer(req);
-      if (!this.limiter.take(auth ? `t:${hashToken(auth).slice(0, 16)}` : `ip:${ip}`)) {
+      const th = auth ? hashToken(auth) : null;
+      // only KNOWN tokens get their own bucket: random well-formed tokens would otherwise each get a fresh one
+      // (unlimited requests, unbounded bucket map)
+      if (!this.limiter.take(th && this.store.playersByToken.has(th) ? `t:${th.slice(0, 16)}` : `ip:${ip}`)) {
         throw new HttpError(429, 'Too many requests — slow down');
       }
       let body: unknown = undefined;
@@ -376,9 +379,11 @@ export class Api {
 
   private clientIp(req: IncomingMessage): string {
     if (this.trustProxy) {
+      // The trusted proxy (one hop, e.g. Fly's edge) APPENDS the address it saw, so only the LAST entry is
+      // trustworthy; anything to its left is whatever the client sent and would let it dodge the rate limits.
       const xff = req.headers['x-forwarded-for'];
-      const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
-      if (first) return first;
+      const last = (Array.isArray(xff) ? xff.join(',') : xff)?.split(',').map((s) => s.trim()).filter(Boolean).pop();
+      if (last) return last;
     }
     return req.socket.remoteAddress ?? 'unknown';
   }
