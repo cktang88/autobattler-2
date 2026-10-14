@@ -3,6 +3,7 @@
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
 import { meleeSlots } from './mountgeo.ts';
 import { squadSize } from './grid.ts';
+import { REPAIR_AURA_RANGE } from './types.ts';
 import type { ChassisDef, Design, ModuleDef, UnitStats } from './types.ts';
 
 /** Above this load (weight / capacity) a design is illegal. */
@@ -130,19 +131,45 @@ export const MODULE_CAL: Record<string, number> = {
   aamissile: 2.67, ac20: 3.112, ac40: 2.955, aegisT: 1.25, annihilator: 5.47, arclance: 1.93, atgm: 6.95,
   autocannon: 2.096, autoloader: 2.35, avenger: 3.625, barrage: 5.701, bombs: 2.263, bulwarkshield: 1.53, buzzsaw: 0.67,
   cannon: 1.205, cannon75: 3.152, chainsaw: 1.54, claw: 1.97, clusterbombs: 3.747, cruise: 6.89, disarm: 0.05,
-  dome: 0.10, domeG: 1.04, doomsday: 8.613, drill: 1.08, empcannon: 0.496, flak: 1.34, flamer: 0.874, gauss: 3.021,
+  dome: 1.0, domeG: 1.0, doomsday: 8.613, drill: 1.08, empcannon: 0.496, flak: 1.34, flamer: 0.874, gauss: 3.021,
   gravity: 1.81, grinder: 4.33, guidedrocket: 3.31, gyro: 0.10, hammer: 1.22, hardened: 0.13, heatray: 0.33,
-  heavyflak: 2.318, hmg: 2.268, howitzer: 4.149, incendiary: 0.699, inferno: 2.032, jammer: 0.10, laser: 3.65,
+  heavyflak: 2.318, hmg: 2.268, howitzer: 4.149, incendiary: 0.699, inferno: 2.032, jammer: 0.25, laser: 3.65,
   lightrail: 9.06, massdriver: 3.67, mg: 1.964, minigun: 1.438, mirror: 0.31, missilebattery: 2.93, mlrs: 4.942,
   mortar: 2.51, nanite: 0.10, napalm: 0.864, overclock: 0.22, phantom: 0.14, plasma: 3.03, plasmablade: 1.34,
-  plasmaorb: 2.186, pointdef: 2.63, quad20: 2.639, railgun: 5.38, ram: 0.37, reactive: 0.88, repair: 5.20,
-  repairM: 4.17, rocketL: 2.012, rockets: 1.595, sam: 1.92, selfdestruct: 0.22, sensor: 0.11, shield: 1.04,
+  plasmaorb: 2.186, pointdef: 3.3, quad20: 2.639, railgun: 5.38, ram: 0.37, reactive: 0.88, repair: 4.2,
+  repairM: 4.17, rocketL: 2.012, rockets: 1.595, sam: 1.92, selfdestruct: 0.22, sensor: 1.0, shield: 1.04,
   shieldH: 1.11, shieldL: 0.84, shockprod: 1.85, shotgun: 2.873, siege240: 1.88, siegeplasma: 2.885, skyfortress: 4.001,
   slowbeam: 3.16, smoke: 4.00, sniper: 16.717, sonic: 0, stealth: 0.20, stormcore: 2.55, stormtower: 3.05,
   stungun: 1.29, swarm: 2.717, tactnuke: 5.72, targeting: 3.45, tesla: 1.22, titanfist: 3.39, turbo: 0.10,
-  twin120: 2.574, twin30: 1.666, twinlaser: 2.76, twinmg: 2.369, uplink: 0.17,
+  twin120: 2.574, twin30: 1.666, twinlaser: 2.76, twinmg: 2.369, uplink: 0.3,
+  // [aura balance] aura strengths (uplink, dome, domeG, jammer, sensor above and these two) were set by hand after the
+  // radius rework: `node scripts/balance.ts army 3 <id>` (every unit carries the aura -> heavy overlap) lands at a
+  // delta of -7..+2, i.e. a little overpriced when massed, and `node scripts/auras.ts field` (ONE carrier escorting a
+  // block, no overlap) at roughly even vs the same supply of guns. fit_cal.py holds them fixed (non-stacking makes
+  // its all-carrier gradient drift them toward zero). aegisTAura prices the Aegis Field's projected shield only.
+  aegisTAura: 1.5, repairAura: 1.5,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
+
+// [aura balance] Support auras (uplink, domes, jammer, sensor, repair-aura hulls) are priced by what they project onto
+// OTHER units, so their value is added to the unit cost directly instead of riding on the carrier's own power term
+// (in sqrt(offense * ehp) an aura on a titan cost next to nothing, on a tanky gunless hull a lot).
+/** Raw cost (x PRICE_DIV = supply) per analytic aura point at reach 1 (MODULE_CAL then scales each module). */
+export const SUPPORT_K = 1;
+/** Aura radius (cells, edge to edge) from a size-2 hull (radius 0.9) rated reach 1. */
+const AURA_REF_R = 8 + 0.9;
+/** Reach is capped: past ~60 m an aura already covers everything near its carrier that matters. */
+const AURA_REACH_CAP = 2.5;
+/** Expected coverage of an aura of `radius` cells (edge to edge) on a hull of bounding radius `hullR`: covered area
+ *  grows with (radius + hullR)^2, relative to the reference, capped. */
+export function auraReach(radius: number, hullR: number): number {
+  return Math.min(AURA_REACH_CAP, ((radius + hullR) / AURA_REF_R) ** 2);
+}
+/** Auras don't stack, so the 16 carriers of one squad mostly cover the same allies: per unit, a squad's aura is
+ *  worth this share of a lone carrier's (the squad's union covers ~2 lone carriers' worth of ground). */
+/** Raw cost per point-defense module at cooldown 0.6 s (x MODULE_CAL.pointdef): ~+12 supply on a medium hull, as before. */
+const PD_PTS = 23;
+export const auraSquadShare = (squad: number) => (squad > 1 ? Math.min(1, 2 / squad) : 1);
 
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
@@ -221,23 +248,27 @@ export function computeStats(d: Design): UnitStats {
   // ---- cost model ----
   let offense = 0;
   for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1);
-  if (traits.includes('repairAura')) offense += 25;
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
   offense *= fireRate;
   let reactiveHp = 0;
   const shieldCal = mods.reduce((a, m) => a + (m.shield ?? 0) * cal(m.id), 0) / Math.max(1, shield);
   let ehpMult = 1;
+  // [aura balance] support auras: analytic points x coverage x calibration, added to the unit cost below
+  const hullR = 0.45 * Math.sqrt((c.footprint?.[0] ?? size) * (c.footprint?.[1] ?? size));
+  let interceptors = 0; // not shared within a squad: every PD shoots down its own projectiles
+  let support = traits.includes('repairAura') ? 25 * auraReach(REPAIR_AURA_RANGE, hullR) * cal('repairAura') : 0;
   for (const mod of mods) {
     const u = cal(mod.id); // empirical strength of the utility's effect (1 = analytic value)
     const eh = (mult: number) => 1 + (mult - 1) * u;
     if (mod.reloadBonus) offense *= 1 + 0.25 * u * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
-    if (mod.shieldAura) offense += mod.shieldAura.amount * 0.3 * u;
-    if (mod.fireRateAura) offense += mod.fireRateAura.bonus * 300 * u;
-    if (mod.detect) offense += 12 * u;
-    if (mod.jammer) { offense += 15 * u; ehpMult *= eh(1.1); }
+    if (mod.shieldAura) support += mod.shieldAura.amount * 0.3 * auraReach(mod.shieldAura.radius, hullR) * (MODULE_CAL[mod.id + 'Aura'] ?? u);
+    if (mod.fireRateAura) support += mod.fireRateAura.bonus * 300 * auraReach(mod.fireRateAura.radius, hullR) * u;
+    if (mod.detect) support += 12 * auraReach(mod.detect, hullR) * u;
+    if (mod.jammer) support += 15 * auraReach(mod.jammer, hullR) * u; // covers its carrier too (counted in the reach)
     if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06 * u;
     if (mod.regen) ehpMult *= eh(1 + mod.regen * 12);
-    if (mod.pointDefense) ehpMult *= eh(1.2);
+    // [aura balance] point defense: worth its intercept rate, whatever the hull (as an ehp multiplier a titan's PD cost ~300 supply)
+    if (mod.pointDefense) interceptors += PD_PTS * (0.6 / mod.pointDefense.cooldown) * u;
     if (mod.smoke) ehpMult *= eh(1.12);
     if (mod.reactive) reactiveHp += mod.reactive * 60 * u;
     if (mod.energyResist) ehpMult *= eh(1 + mod.energyResist * 0.4);
@@ -254,8 +285,9 @@ export function computeStats(d: Design): UnitStats {
   ehp = Math.max(ehp, SHELTER_EHP * Math.min(1, Math.max(0, (range - SHELTER_FROM) / SHELTER_SPAN)));
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const unitCost = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1));
+  let unitCost = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1));
   const squad = squadSize(size);
+  unitCost += SUPPORT_K * (support * auraSquadShare(squad) + interceptors);
   const cost = roundCost(unitCost * squad);
 
   return {

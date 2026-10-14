@@ -50,6 +50,8 @@ const DESIGNS: Design[] = [
   D('era', 'warden', 'halftrack', ['reactive', 'mg']),
   D('mirror', 'warden', 'halftrack', ['autocannon', 'mirror']),
   D('mgtank', 'warden', 'halftrack', ['mg', null]),
+  D('uplinker', 'warden', 'halftrack', ['uplink', 'mg']),
+  D('titanW', 'titan', 'megatracks', [null, null, 'cannon', 'cannon', 'cannon']),
 ];
 
 test('test designs are legal', () => {
@@ -330,14 +332,14 @@ test('stealth: untargetable until it fires; detectors reveal it', () => {
   assert.ok(ghostFired);
   assert.equal(enemyFiredFirst, false);
 
-  // a sensor reveals a cloaked unit whenever it is within detection range (7 cells), fired or not
+  // a sensor reveals a cloaked unit whenever it is within detection range (12 cells edge to edge), fired or not
   const d = new Battle(input(1, [P('ghost', 10, 0)], [P('spire', 10, 0), P('spotter', 12, 0)]));
   let inRangeTicks = 0, hiddenInRange = 0;
   while (!d.done) {
     d.step();
     const g = d.units[0], sp = d.units.find((u) => u.design.id === 'spotter')!;
     if (!g.alive || !sp.alive) continue;
-    if (Math.hypot(g.x - sp.x, g.y - sp.y) < 6.5) { inRangeTicks++; if (g.cloaked) hiddenInRange++; }
+    if (Math.hypot(g.x - sp.x, g.y - sp.y) < 12) { inRangeTicks++; if (g.cloaked) hiddenInRange++; }
   }
   assert.ok(inRangeTicks > 0, 'the ghost came within sensor range');
   assert.equal(hiddenInRange, 0, 'never cloaked while inside sensor range');
@@ -394,6 +396,35 @@ test('unarmed blockers advance; self-destruct blasts on death', () => {
   assert.ok(b.units[0].odometer > 3, `advanced ${b.units[0].odometer}`);
   assert.ok(blast);
   assert.ok(b.summary().damageDealt[0] > 0);
+});
+
+test('[aura balance] auras never stack and are measured edge to edge', () => {
+  const rate = (b: Battle, id: number) => (b as unknown as { ints: { rateAura: number }[] }).ints[id].rateAura;
+  const unitOf = (b: Battle, design: string, nth = 0) => b.units.filter((u) => u.side === 0 && u.design.id === design)[nth];
+  // one uplink vs two uplinks next to the same tank: the same +15%, not +30%
+  const one = new Battle(input(1, [P('uplinker', 4, 6), P('bulwark', 8, 6)], [P('buggy', 10, 0)]));
+  const two = new Battle(input(1, [P('uplinker', 4, 6), P('uplinker', 12, 6), P('bulwark', 8, 6)], [P('buggy', 10, 0)]));
+  one.step();
+  two.step();
+  assert.equal(rate(one, unitOf(one, 'bulwark').id), 0.15);
+  assert.equal(rate(two, unitOf(two, 'bulwark').id), rate(one, unitOf(one, 'bulwark').id), 'two uplinks give the same bonus as one');
+  assert.equal(rate(two, unitOf(two, 'uplinker', 0).id), 0.15, 'uplinks boost each other once');
+  assert.equal(rate(one, unitOf(one, 'uplinker').id), 0, 'an uplink does not boost its own carrier');
+  // edge to edge: a titan whose centre is well beyond the radius is still covered by a carrier next to its hull
+  const t = new Battle(input(1, [P('uplinker', 0, 10), P('titanW', 8, 8)], [P('buggy', 10, 0)]));
+  t.step();
+  const ti = unitOf(t, 'titanW'), up = unitOf(t, 'uplinker');
+  assert.ok(Math.hypot(ti.x - up.x, ti.y - up.y) > 8, 'centres farther apart than the radius');
+  assert.equal(rate(t, ti.id), 0.15);
+  // domes: two domes over the same squad give one dome's shield (capped at half the ally's hp)
+  const d1 = new Battle(input(1, [P('domer', 10, 0), P('buggy', 9, 4)], [P('buggy', 10, 0)]));
+  const d2 = new Battle(input(1, [P('domer', 10, 0), P('domer', 4, 0), P('buggy', 9, 4)], [P('buggy', 10, 0)]));
+  d1.step();
+  d2.step();
+  const b1 = unitOf(d1, 'buggy'), b2 = unitOf(d2, 'buggy');
+  assert.ok(b1.maxAuraShield > 0);
+  assert.equal(b1.maxAuraShield, Math.min(150, b1.maxHp * 0.5));
+  assert.equal(b2.maxAuraShield, b1.maxAuraShield, 'two domes give the same shield as one');
 });
 
 test('defensive systems: hardened, shield dome, reactive armor, mirror coating', () => {

@@ -237,11 +237,9 @@ export function ringsOf(d: Design, st: UnitStats): RingSpec[] {
       add(g && a ? 'both' : a ? 'air' : 'ground', m.range * (m.projectile === 'melee' ? 1 : st.rangeMult), m.minRange ?? 0, mName(m), m.projectile === 'melee');
     }
     if (m.heal && m.range) add('support', m.range * st.rangeMult, 0, mName(m));
-    if (m.shieldAura) add('support', m.shieldAura.radius, 0, mName(m));
-    if (m.fireRateAura) add('support', m.fireRateAura.radius, 0, mName(m));
-    if (m.detect) add('support', m.detect, 0, mName(m));
-    if (m.jammer) add('support', m.jammer, 0, mName(m));
-    if (m.pointDefense) add('support', m.pointDefense.range, 0, mName(m));
+    // [aura balance] auras reach from the hull edge: drawn from the hull centre at radius + hull radius
+    const ar = auraRadius(m);
+    if (ar) add('support', ar + hullRadius(st), 0, mName(m), true);
   }
   return [...groups.values()].map(({ names, ...r }) => ({ ...r, label: `${names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' + ')} ${fmtMeters(r.range)}` }));
 }
@@ -253,9 +251,13 @@ export function moduleRingKey(m: ModuleDef, st: UnitStats): string | null {
     return ringKey(m.range * (m.projectile === 'melee' ? 1 : st.rangeMult), m.minRange ?? 0, g && a ? 'both' : a ? 'air' : 'ground');
   }
   if (m.heal && m.range) return ringKey(m.range * st.rangeMult, 0, 'support');
-  const r = m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.detect ?? m.jammer ?? m.pointDefense?.range;
-  return r ? ringKey(r, 0, 'support') : null;
+  const r = auraRadius(m);
+  return r ? ringKey(r + hullRadius(st), 0, 'support') : null;
 }
+/** [aura balance] a support module's radius (cells), measured from its carrier's hull edge */
+const auraRadius = (m: ModuleDef): number | undefined => m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.detect ?? m.jammer ?? m.pointDefense?.range;
+/** hull radius the sim uses for edge-to-edge distances (0.45 * sqrt(fw * fh)) */
+const hullRadius = (st: UnitStats) => 0.45 * Math.sqrt(st.fw * st.fh);
 
 /** Effective sustained dps of the whole unit against ground and air targets (0 = cannot hit). */
 export function dpsSplit(d: Design, st: UnitStats, level = 1): { ground: number; air: number; weapons: number } {
