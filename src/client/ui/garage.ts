@@ -13,7 +13,7 @@ import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, moduleRoles } from '../../shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
@@ -23,6 +23,8 @@ import {
 } from './garage-parts.ts';
 
 const RANK: Record<MountClass, number> = MOUNT_RANK;
+const ML = MOUNT_LETTER;
+const sizeTip = (c: MountClass) => `Size ${ML[c]} (${MOUNT_NAME[c].toLowerCase()}). Sockets run A (smallest) to E (biggest) and take parts of their size or smaller.`;
 const NAME_MAX = 24;
 /** Weight bar spans 0..BAR_MAX load. */
 const BAR_MAX = 1.8;
@@ -465,7 +467,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function slotBlock(mod: ModuleDef, i: number): string | null {
     const cls = chassis().mounts[i];
     if (!cls) return 'No such socket';
-    if (!fitsMount(cls, mod.mount)) return `Needs a ${mod.mount} socket (this is ${cls})`;
+    if (!fitsMount(cls, mod.mount)) return `Needs a size ${ML[mod.mount]} socket (this is ${ML[cls]})`;
     return reqReason(mod);
   }
 
@@ -495,7 +497,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const slot = autoSlot(mod);
     if (slot === null) {
       sfx('invalid');
-      app.toast(reqReason(mod) ?? `No ${mod.mount}-class socket on the ${chassis().name}`, 'error');
+      app.toast(reqReason(mod) ?? `No size ${ML[mod.mount]} socket on the ${chassis().name}`, 'error');
       return;
     }
     equip(slot, id);
@@ -624,7 +626,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     try { if (!drag.origin.hasPointerCapture(drag.pid)) drag.origin.setPointerCapture(drag.pid); } catch { /* ignore */ }
     const mod = MODULE_BY_ID.get(drag.src.mod)!;
     drag.ghost = h('div.g-ghost', { style: { '--cat': moduleCategoryColor(mod.id) } },
-      partIcon('module', mod.id, 52, true), h('span', null, mod.name), h('span.g-chip', { class: `c${mod.mount}` }, mod.mount));
+      partIcon('module', mod.id, 52, true), h('span', null, mod.name), h('span.g-chip', { class: `c${mod.mount}` }, ML[mod.mount]));
     document.body.append(drag.ghost);
     el.classList.add('dragging');
     if (drag.src.from !== null) el.classList.add('drag-out');
@@ -870,11 +872,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       },
       h('button.g-lslot-main', {
         type: 'button', 'data-fk': `slot-${i}`, 'aria-pressed': String(activeSlot === i),
-        title: cur ? `${cur.name} — drag to another socket to swap, or off the robot to remove` : `Empty ${cls} socket — drag a part here or click to choose`,
+        title: cur ? `${cur.name} — drag to another socket to swap, or off the robot to remove` : `Empty size ${ML[cls]} socket — drag a part here or click to choose`,
         onclick: () => { if (!suppressClick) focusSlot(i); },
       },
       h('span.g-sockno', null, String(i + 1)),
-      h('span.g-chip', { class: `c${cls}` }, cls),
+      h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]),
       cur ? partIcon('module', cur.id, 30, true) : h('span.g-lslot-empty', null, icon('plus')),
       h('span.g-lslot-name', null, cur ? cur.name : 'Empty'),
       ),
@@ -894,12 +896,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         type: 'button', 'data-sock': String(i), tabindex: '-1',
         class: [cur ? 'full' : 'empty', `c${cls}`, activeSlot === i ? 'active' : ''].join(' '),
         style: cur ? { '--cat': moduleCategoryColor(cur.id) } : null,
-        title: cur ? `Socket ${i + 1} (${cls}): ${cur.name}` : `Socket ${i + 1}: empty ${cls} mount`,
-        'aria-label': cur ? `Socket ${i + 1}, ${cur.name}` : `Socket ${i + 1}, empty ${cls}`,
+        title: cur ? `Socket ${i + 1} (size ${ML[cls]}): ${cur.name}` : `Socket ${i + 1}: empty size ${ML[cls]} socket`,
+        'aria-label': cur ? `Socket ${i + 1}, ${cur.name}` : `Socket ${i + 1}, empty size ${ML[cls]}`,
         onclick: () => { if (!suppressClick) focusSlot(i); },
       },
       h('span.g-sock-ring'),
-      h('span.g-sock-tag', null, h('b', null, String(i + 1)), cls),
+      h('span.g-sock-tag', null, h('b', null, String(i + 1)), ML[cls]),
       cur ? null : h('span.g-sock-plus', null, '+'),
       );
       if (cur) armDrag(b, () => (draft.mounts[i] ? { mod: draft.mounts[i]!, from: i } : null), true);
@@ -990,7 +992,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       type: 'button', class: o.cls, 'data-fk': o.fk, title: o.title ?? null, style: o.cat ? { '--cat': o.cat } : null,
       onclick: () => { if (!suppressClick) o.onclick(); }, ondblclick: o.ondblclick ?? null, onkeydown: o.onkeydown ?? null,
     },
-    h('span.g-ptile-well', null, partIcon(o.kind, o.id, 50, o.kind === 'module'), o.chip ? h('span.g-chip.mini', { class: `c${o.chip}` }, o.chip) : null),
+    h('span.g-ptile-well', null, partIcon(o.kind, o.id, 50, o.kind === 'module'), o.chip ? h('span.g-chip.mini', { class: `c${o.chip}`, title: sizeTip(o.chip) }, ML[o.chip]) : null),
     h('span.g-ptile-name', null, o.name),
     h('span.g-ptile-sub', null, o.sub),
     o.count ? h('span.g-tile-n', { title: `Mounted ${o.count}×` }, `×${o.count}`) : null,
@@ -1006,7 +1008,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const shown = pool.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
       .sort((a, b) => a.size - b.size || a.weight - b.weight);
     const tiles = shown.map((c) => partTile({
-      kind: 'chassis', id: c.id, name: c.name, sub: `${footprintLabel(c.size)} · ${c.mounts.length} socket${c.mounts.length > 1 ? 's' : ''}`,
+      kind: 'chassis', id: c.id, name: c.name, sub: `${footprintLabel(c.size)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')}`,
       cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `ch-${c.id}`,
       onclick: () => pickChassis(c.id),
     }));
@@ -1075,7 +1077,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const t = partTile({
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
         cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
-        fk: `mod-${m.id}`, title: fh ? undefined : reqReason(m) ?? `Needs a ${m.mount} socket`,
+        fk: `mod-${m.id}`, title: fh ? undefined : reqReason(m) ?? `Needs a size ${ML[m.mount]} socket`,
         onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
@@ -1120,7 +1122,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         onChange: (v) => { groupSel[which] = v; sfx('click'); update(); bayBody.scrollTop = 0; },
       }),
       activeSlot !== null ? h('div.g-slotnote', null,
-        h('span', null, 'Fitting socket ', h('b', null, String(activeSlot + 1)), ' ', h('span.g-chip', { class: `c${slotCls}` }, slotCls!), ' · double-click a part to mount it'),
+        h('span', null, 'Fitting socket ', h('b', null, String(activeSlot + 1)), ' ', h('span.g-chip', { class: `c${slotCls}` }, ML[slotCls!]), ' · double-click a part to mount it'),
         h('button.g-rclear', { type: 'button', onclick: () => { activeSlot = null; sfx('click'); update(); } }, icon('x'), 'Done')) : null,
       ...(sections.length ? sections : [h('p.g-nomatch', null, `No ${which} match.`)]),
     ].filter(Boolean) as HTMLElement[];
@@ -1207,7 +1209,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('div.g-kstats', null,
         kstat('Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),
-        kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}` }, m))))),
+        kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}`, title: sizeTip(m) }, ML[m]))))),
       h('p.g-insp-desc', null, c.desc),
       next ? compare(next, 'If you switch') : null,
       h('div.g-insp-act', null, cur
@@ -1289,15 +1291,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         title: why ?? (here ? 'Already mounted here' : occ ? `Replace ${occ.name}` : 'Mount in this empty socket'),
         'data-fk': `mount-${m.id}-${i}`,
         onclick: () => equip(i, m.id),
-      }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}` }, cls), h('span.g-sockbtn-l', null, here ? 'Mounted' : occ ? `Replace ${occ.name}` : 'Empty'));
+      }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]), h('span.g-sockbtn-l', null, here ? 'Mounted' : occ ? `Replace ${occ.name}` : 'Empty'));
     });
     return [
-      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: `${m.mount}-class mount` }, m.mount), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
+      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
       next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
-        h('span.g-sec-l', null, lock ?? (c.mounts.some((_, i) => !slotBlock(m, i)) ? 'Mount in' : `Needs a ${m.mount} socket`)),
+        h('span.g-sec-l', null, lock ?? (c.mounts.some((_, i) => !slotBlock(m, i)) ? 'Mount in' : `Needs a size ${ML[m.mount]} socket`)),
         h('div.g-sockbtns', null, ...socketBtns)),
       ...details(specs, [fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null]),
     ].filter(Boolean) as HTMLElement[];
@@ -1363,7 +1365,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, 'Hardpoints'),
         h('div.g-hp-table', null, ...weapons.map(({ cls, i, m }) => h('div.g-hp-row', { style: m ? { '--cat': moduleCategoryColor(m.id) } : null },
-          h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}` }, cls),
+          h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]),
           h('span.g-hp-n', null, m?.name ?? '—'),
           h('span.g-hp-s', null, m?.kind === 'weapon' ? `${fmt(weaponDps(m), 0)} dps · ${fmtMeters(m.range ?? 0)}` : m ? (moduleEffects(m)[0] ?? m.family) : 'empty')))),
       ),

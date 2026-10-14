@@ -492,7 +492,8 @@
 
 /* ---------- inspector ---------- */
 .garage .g-inspector {
-  flex: none; max-height: 50%; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  /* fixed height: a content-sized panel resized on every hover, shoved the part list under the cursor and flickered */
+  flex: none; height: 46%; max-height: none; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   padding: 0 12px 12px; background: #171c21; box-shadow: 0 -2px 0 var(--ink), inset 0 2px 0 var(--edge);
   display: flex; flex-direction: column; gap: 8px; position: relative;
 }
@@ -673,7 +674,7 @@
   .garage *, .garage *::after { transition: none !important; animation: none !important; }
 }
 @media (max-height: 820px) and (min-width: 761px) {
-  .garage .g-inspector { max-height: 42%; }
+  .garage .g-inspector { height: 42%; }
   .garage .g-insp-well { width: 60px; height: 60px; }
   .garage .g-insp-t h3 { font-size: 1.25rem; }
 }

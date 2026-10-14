@@ -302,6 +302,9 @@ export const chassisDomain = (c: ChassisDef): Domain => c.domain ?? 'ground';
 export const mobilityDomain = (m: MobilityDef): Domain => m.domain ?? 'ground';
 
 export const MOUNT_RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+/** Player-facing socket sizes, smallest to biggest: A (light) · B (medium) · C (heavy) · D (giant) · E (titan). */
+export const MOUNT_LETTER: Record<MountClass, string> = { L: 'A', M: 'B', H: 'C', G: 'D', T: 'E' };
+export const MOUNT_NAME: Record<MountClass, string> = { L: 'Light', M: 'Medium', H: 'Heavy', G: 'Giant', T: 'Titan' };
 const RANK = MOUNT_RANK;
 
 export const ROLES: { id: Role; name: string; desc: string }[] = [
