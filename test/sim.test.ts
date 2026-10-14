@@ -867,3 +867,25 @@ test('non-square footprints: long units spawn on their footprint centre and cont
   assert.deepEqual(runBattle(inp()), runBattle(inp()));
 });
 
+
+test('ranged units stop advancing once all weapons are in range (no bum-rush), even fire-on-move walkers', () => {
+  const walker = D('rangewalker', 'strider', 'legs', ['autocannon', null, null]);
+  const wall = D('rangewall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back at the walker
+  assert.deepEqual(validateDesign(walker), []);
+  const designs = [walker, wall];
+  const b = new Battle({ seed: 9, sides: [
+    { designs, units: [{ uid: 1, designId: 'rangewalker', x: 23, y: 0, level: 1, round: 1 }] },
+    { designs, units: [{ uid: 1, designId: 'rangewall', x: 22, y: 0, level: 1, round: 1 }] },
+  ] });
+  const w = b.units[0], t = b.units[1];
+  const range = 6 * w.stats.rangeMult;
+  let firstShotTick = -1;
+  for (let i = 0; i < 20 * 70 && !b.done; i++) {
+    b.step();
+    if (firstShotTick < 0 && b.events.some((e) => e.t === 'fire' && e.unit === w.id)) firstShotTick = b.tick;
+  }
+  assert.ok(firstShotTick > 0, 'walker should start shooting');
+  // edge-to-edge gap to the wall stays a decent fraction of the weapon range instead of closing to contact
+  const gap = Math.hypot(t.x - w.x, t.y - w.y) - 1.5 - 1;
+  assert.ok(gap > range * 0.6, `walker closed to ${gap.toFixed(2)} cells (range ${range})`);
+});
