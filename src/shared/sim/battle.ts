@@ -73,6 +73,8 @@ const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will 
 const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
+/** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
+const KITE_PAUSE = 0.15;
 const ENGAGE_SHARE = 0.999; // halt once ALL weapons that can hit the goal are in range (no reason to close further unless melee/charge)
 
 // spatial hash
@@ -1391,7 +1393,9 @@ export class Battle {
 
   private rail(u: SimUnit, w: Wpn, aim: number, raw: number, ap: number, airBonus: number, mx: number, my: number, fx: ModuleDef | null, lm: number, mi = -1): void {
     const c = Math.cos(aim), s = Math.sin(aim);
-    const len = w.range;
+    // reaches as far as a held target may be (range * RANGE_KEEP, to the target's footprint, like inRange): measured to
+    // the centre, a big hull whose edge is in range sat beyond the slug and every shot missed
+    const len = w.range * RANGE_KEEP;
     const ex = mx + c * len, ey = my + s * len;
     const units = this.units;
     for (let j = 0; j < units.length; j++) {
@@ -1399,9 +1403,10 @@ export class Battle {
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const dx = o.x - mx, dy = o.y - my;
       const along = dx * c + dy * s;
-      if (along < -0.3 || along > len + 0.3) continue;
+      const ob = this.ints[j].bound;
+      if (along < -0.3 || along > len + ob) continue;
       const perp = Math.abs(-dx * s + dy * c);
-      if (perp <= this.ints[j].bound + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
+      if (perp <= ob + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
     }
     this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side, unit: u.id, mount: mi });
   }
@@ -1730,12 +1735,12 @@ export class Battle {
     // Engaged = every weapon that could hit our goal is holding a target, i.e. the whole armament is in range.
     // Until then keep closing (so a long-range gun alone doesn't park a brawler out of reach of its main guns);
     // after that, stop — there's no reason to close further unless melee or Charge.
-    let engagedDps = 0, relevantDps = 0;
+    let engagedDps = 0, relevantDps = 0, relevantR = 0;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
       if (!w || w.heal > 0) continue;
       const tg = u.mounts[mi].target;
-      if (!goal || this.canHit(w, goal)) relevantDps += w.dps;
+      if (!goal || this.canHit(w, goal)) { relevantDps += w.dps; relevantR = Math.max(relevantR, w.range); }
       if (tg >= 0) engagedDps += w.dps;
     }
     const engaged = engagedDps > 0 && engagedDps >= ENGAGE_SHARE * relevantDps;
@@ -1773,7 +1778,10 @@ export class Battle {
         if (this.gap(I, this.ints[goal.id]) <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
       } else if (kiteR < 0.7) {
         // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
-        if (!I.fireOnMove && I.wpns.some((w, wi) => w && w.heal <= 0 && u.mounts[wi].cooldown <= 0.15 && u.mounts[wi].target >= 0)) return;
+        // Only the kite gun counts, and only one with a real reload cycle: a rapid-fire gun (mg: 0.15 s) is "about to
+        // fire" every tick and would pin the kiter in place for good while the enemy closes.
+        const kw = I.wpns[kiteMi]!, km = u.mounts[kiteMi];
+        if (!I.fireOnMove && (kw.def.cooldown ?? 1) > 2 * KITE_PAUSE && km.cooldown <= KITE_PAUSE && km.target >= 0) return;
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
         gy = clamp(u.y - (dy / Math.max(d, 1e-6)) * 3, I.radius, FIELD_H - I.radius);
         stopDist = 0;
@@ -1809,7 +1817,8 @@ export class Battle {
           }
         }
         // far away: advance mostly straight ahead so formations hold their shape
-        const engageR = I.maxRange;
+        // only the guns that can hit this goal count (an AA-only long gun must not park us out of reach of a ground goal)
+        const engageR = relevantR > 0 ? relevantR : I.maxRange;
         const lw = clamp(1 - (d - engageR - 2) / 8, 0.3, 1);
         let hx = dx, hy = dy;
         if (I.hold && this.anchorN[I.block] > 0) {

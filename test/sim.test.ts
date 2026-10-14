@@ -966,3 +966,56 @@ test('ranged units stop advancing once all weapons are in range (no bum-rush), e
   const gap = Math.hypot(t.x - w.x, t.y - w.y) - 1.5 - 1;
   assert.ok(gap > range * 0.6, `walker closed to ${gap.toFixed(2)} cells (range ${range})`);
 });
+
+// ---------------------------------------------------------------- regressions (sim bug hunt)
+
+/** one unit per side, side 1's unit parked `dist` cells straight ahead of side 0's (hash rebuilt) */
+function duel(designs: Design[], a: Partial<Placement> & { designId: string }, b: Partial<Placement> & { designId: string }, dist: number, seed = 1) {
+  const pl = (p: Partial<Placement> & { designId: string }): Placement => ({ uid: 1, x: 40, y: 0, level: 1, round: 1, ...p });
+  const bt = new SimBattle({ seed, sides: [{ designs, units: [pl(a)] }, { designs, units: [pl(b)] }] });
+  const k = bt.units[0], e = bt.units[1];
+  e.x = k.x; e.y = k.y - dist; e.angle = Math.PI / 2;
+  (bt as unknown as { rebuildHash(): void }).rebuildHash();
+  return { b: bt, k, e };
+}
+
+test('kite: a rapid-fire secondary gun does not pin a backing-off kiter in place', () => {
+  // the mg (0.15 s cooldown) was always "about to fire", so the mortar carrier never backed away and died in place
+  const designs = [D('mortmg', 'warden', 'halftrack', ['mortar', 'mg']), D('mortonly', 'warden', 'halftrack', ['mortar', null]), DESIGNS.find((d) => d.id === 'bulwark')!];
+  const run = (id: string) => {
+    const { b, k, e } = duel(designs, { designId: id, kite: true }, { designId: 'bulwark', kite: false }, 5);
+    for (let i = 0; i < 120 && !b.done; i++) b.step();
+    return Math.hypot(k.x - e.x, k.y - e.y);
+  };
+  const withMg = run('mortmg'), without = run('mortonly');
+  assert.ok(withMg > 8, `mortar + mg kiter stayed at ${withMg.toFixed(2)} cells`);
+  assert.ok(Math.abs(withMg - without) < 1.5, `mg ${withMg.toFixed(2)} vs mortar-only ${without.toFixed(2)}`);
+});
+
+test('fire-on-move units close to the range of the guns that can hit the goal, not an air-only long gun', () => {
+  // titan legs fire on the move; the 18-cell flak fortress is air-only. It used to park ~12 cells from a ground target,
+  // out of reach of every gun that could hit it, for the rest of the battle.
+  const t = D('aatitan', 'titan', 'titanlegs', ['skyfortress', 'stormtower', null, null, null]);
+  const tgt = D('anchoredflak', 'warden', 'anchor', ['flak', null]); // can't shoot back at ground
+  assert.deepEqual(validateDesign(t), []);
+  assert.deepEqual(validateDesign(tgt), []);
+  const { b, e } = duel([t, tgt], { designId: 'aatitan', kite: false }, { designId: 'anchoredflak' }, 25);
+  const hp0 = e.hp;
+  for (let i = 0; i < 20 * 30 && !b.done; i++) b.step();
+  assert.ok(e.hp < hp0, 'the titan never got its storm tower in range');
+});
+
+test('railguns hit big hulls whose edge is in range (rail reach measured to the footprint)', () => {
+  const r = D('railer', 'warden', 'halftrack', ['lightrail', null]);
+  const designs = [r, DESIGNS.find((d) => d.id === 'bulwark')!, DESIGNS.find((d) => d.id === 'titanW')!];
+  for (const target of ['bulwark', 'titanW']) {
+    const { b, k, e } = duel(designs, { designId: 'railer', kite: false }, { designId: target, stance: 'holdPos' }, 30);
+    let fires = 0, hits = 0;
+    for (let i = 0; i < 400 && !b.done; i++) {
+      b.step();
+      for (const ev of b.events) { if (ev.t === 'fire' && ev.unit === k.id) fires++; if (ev.t === 'hit' && ev.unit === e.id) hits++; }
+    }
+    assert.ok(fires > 0, `${target}: railer never fired`);
+    assert.equal(hits, fires, `${target}: ${hits} of ${fires} rail shots hit`);
+  }
+});
