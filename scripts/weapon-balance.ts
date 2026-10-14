@@ -14,7 +14,7 @@ import { writeFileSync } from 'node:fs';
 import { aiDeploy } from '../src/shared/ai.ts';
 import { newMatch, newPlayer } from '../src/shared/match.ts';
 import { MODULE_BY_ID } from '../src/shared/parts.ts';
-import { MODULE_CAL, computeStats, validateDesign } from '../src/shared/stats.ts';
+import { MODULE_CAL, PRICE_DIV, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
@@ -57,14 +57,17 @@ export function carrier(size: Size, w: string): Design {
   const id = `w-${w}`;
   const bomb = MODULE_BY_ID.get(w)?.requires === 'air';
   const D = (chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id.slice(0, 24), chassis, mobility, mounts });
-  if (size === 'S') return D('raider', 'halftrack', [w, w]);
-  if (size === 'M') return bomb ? D('gunship', 'rotor', [w, null]) : D('warden', 'treads', [w, 'plateL']);
+  // Melee weapons only fit mounts near the hull edge (meleeSlots): use the edge-mount hulls (needle frame / bunker crawler;
+  // no giant hull has an edge mount, so L melee (grinder) cannot be tested on a giant carrier and is skipped by the harness).
+  const melee = MODULE_BY_ID.get(w)?.projectile === 'melee';
+  if (size === 'S') return melee ? D('mantis', 'legs', [w, w]) : D('raider', 'halftrack', [w, w]);
+  if (size === 'M') return bomb ? D('gunship', 'rotor', [w, null]) : melee ? D('crab', 'treads', [w, 'plateM', 'plateL']) : D('warden', 'treads', [w, 'plateL']);
   if (size === 'L') return D('goliath', 'megatracks', [w, 'plateH', 'plateH', 'plateH']);
   return D('titan', 'titanlegs', [w, 'plateG', 'plateH', 'plateH', 'plateH']);
 }
 
 /** Per-size equal-supply budget (raw supply). */
-const BUDGET: Record<Size, number> = { S: 10000, M: 10000, L: 20000, XL: 36000 };
+const BUDGET: Record<Size, number> = { S: 10000 / PRICE_DIV, M: 10000 / PRICE_DIV, L: 20000 / PRICE_DIV, XL: 36000 / PRICE_DIV };
 const UNIT_CAP = 220;
 
 const stats = new Map<string, ReturnType<typeof computeStats>>();
@@ -98,7 +101,7 @@ function plan(d: Design, T: number, share: number): { specs: Spec[]; spend: numb
   const specs: Spec[] = [{ d, n }];
   let spend = n * raw;
   const rest = T - spend;
-  if (rest > 250) for (const f of ESCORT) {
+  if (rest > 250 / PRICE_DIV) for (const f of ESCORT) {
     const k = Math.round(rest / ESCORT.length / rawCost(f));
     if (k > 0) { specs.push({ d: f, n: k }); spend += k * rawCost(f); }
   }
@@ -108,7 +111,7 @@ function plan(d: Design, T: number, share: number): { specs: Spec[]; spend: numb
 function poolArmy(pool: Design[], T: number, seed: number): Spec[] {
   const specs = new Map<string, Spec>();
   let left = T, i = seed * 5;
-  for (let g = 0; g < 600 && left > 120; g++) {
+  for (let g = 0; g < 600 && left > 120 / PRICE_DIV; g++) {
     const d = pool[i++ % pool.length];
     const raw = rawCost(d);
     if (raw > left) continue;
@@ -326,7 +329,7 @@ if (mode === 'shard') {
       const key = `${g.size} ${g.name}`;
       anchor[key] ??= geo((id) => MODULE_CAL[id] || MIN_CAL);
       const k = anchor[key] / geo((id) => upd[id]);
-      for (const id of ids) upd[id] = Math.round(Math.min(15, Math.max(MIN_CAL, upd[id] * k)) * 100) / 100;
+      for (const id of ids) upd[id] = Math.round(Math.min(30, Math.max(MIN_CAL, upd[id] * k)) * 100) / 100;
     }
     Object.assign(MODULE_CAL, upd);
     process.env.BAL_CAL = JSON.stringify({ ...JSON.parse(process.env.BAL_CAL ?? '{}'), ...upd });
