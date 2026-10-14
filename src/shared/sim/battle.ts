@@ -1816,7 +1816,7 @@ export class Battle {
         // Only the kite gun counts, and only one with a real reload cycle: a rapid-fire gun (mg: 0.15 s) is "about to
         // fire" every tick and would pin the kiter in place for good while the enemy closes.
         const kw = I.wpns[kiteMi]!, km = u.mounts[kiteMi];
-        if (!I.fireOnMove && (kw.def.cooldown ?? 1) > 2 * KITE_PAUSE && km.cooldown <= KITE_PAUSE && km.target >= 0) return;
+        if (!I.fireOnMove && (kw.def.cooldown ?? 1) > 2 * KITE_PAUSE && km.cooldown <= KITE_PAUSE && km.target >= 0 && u.disarm <= 0) return; // (a disarmed gun will not fire: keep running)
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
         gy = clamp(u.y - (dy / Math.max(d, 1e-6)) * 3, I.radius, FIELD_H - I.radius);
         stopDist = 0;

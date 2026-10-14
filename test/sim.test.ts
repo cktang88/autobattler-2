@@ -992,6 +992,15 @@ test('kite: a rapid-fire secondary gun does not pin a backing-off kiter in place
   assert.ok(Math.abs(withMg - without) < 1.5, `mg ${withMg.toFixed(2)} vs mortar-only ${without.toFixed(2)}`);
 });
 
+test('kite: a disarmed kiter keeps backing off instead of waiting to fire a gun that cannot fire', () => {
+  const designs = [D('mortonly', 'warden', 'halftrack', ['mortar', null]), DESIGNS.find((d) => d.id === 'bulwark')!];
+  const { b, k, e } = duel(designs, { designId: 'mortonly', kite: true }, { designId: 'bulwark', kite: false }, 5);
+  const K = (b as unknown as { ints: { disarmDmg: number }[] }).ints[0];
+  for (let i = 0; i < 100 && !b.done; i++) { K.disarmDmg = k.maxHp * 1.1; b.step(); }
+  assert.ok(k.disarm > 0);
+  assert.ok(Math.hypot(k.x - e.x, k.y - e.y) > 8, `disarmed kiter stayed at ${Math.hypot(k.x - e.x, k.y - e.y).toFixed(2)}`);
+});
+
 test('fire-on-move units close to the range of the guns that can hit the goal, not an air-only long gun', () => {
   // titan legs fire on the move; the 18-cell flak fortress is air-only. It used to park ~12 cells from a ground target,
   // out of reach of every gun that could hit it, for the rest of the battle.
