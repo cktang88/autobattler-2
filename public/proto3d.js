@@ -36881,7 +36881,7 @@ function trackAssembly(b, kit, L, h, w, z, y, opts) {
     }
   }
 }
-function buildGear(parent, mobId, L, W, S, kit, legsOut) {
+function buildGear(parent, mobId, L, W, S, kit, _legsOut = []) {
   const b = new Bld();
   const hf = Math.min(L, W);
   let gear;
@@ -36939,28 +36939,6 @@ function buildGear(parent, mobId, L, W, S, kit, legsOut) {
       gear = { y0: wr * 1.15, yt: wr * 2, wi: W / 2 - w * 0.8, tracked: false, update: (t, mv) => wheelGroups.forEach((g) => g.rotation.z = -t * 6 * mv) };
       break;
     }
-    case "legs":
-    case "spider":
-    case "titanlegs":
-    case "jumpjets": {
-      const spider = mobId === "spider";
-      const hy = (spider ? 0.4 : 0.85) * hf + 0.2 * S;
-      const nLegs = spider ? 6 : 2;
-      const thick = (spider ? 0.046 : 0.05) * Math.min(S, 3.4) + 0.03;
-      for (let i = 0; i < nLegs; i++) {
-        const sg = i % 2 ? 1 : -1;
-        const row = spider ? Math.floor(i / 2) - 1 : 0;
-        const hipX = spider ? row * L * 0.3 : -0.04 * L;
-        const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
-        const footX = hipX + (spider ? row * L * 0.2 : 0);
-        const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
-        b.box(kit.trim, thick * 3.2, thick * 3, thick * 3.2, hipX, hy, hipZ - sg * thick * 0.4, thick * 0.3);
-        b.box(kit.hull, thick * 2.4, thick * 0.5, thick * 2.6, hipX, hy + thick * 1.6, hipZ - sg * thick * 0.4, thick * 0.12);
-        legsOut.push(makeLeg(parent, kit, [hipX, hy, hipZ], [footX, 0, footZ], thick, spider ? [0, 0.75, sg * 0.7] : [1, 0.12, 0], spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : i % 2 * Math.PI, spider));
-      }
-      gear = { y0: hy - 0.05, yt: hy + 0.05, wi: W * 0.34, tracked: false, update: (t, mv) => legsOut.forEach((lg) => lg.step(t, mv)) };
-      break;
-    }
     case "anchor": {
       b.box(kit.trim, L * 0.95, 0.1, W * 0.95, 0, 0.05, 0, 0.03);
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
@@ -36997,96 +36975,6 @@ function buildGear(parent, mobId, L, W, S, kit, legsOut) {
   void loft;
   b.mount(parent, void 0);
   return gear;
-}
-var ring8 = (z, wx, wy, yo = 0) => [
-  [-wx * 0.6, yo - wy, z],
-  [wx * 0.6, yo - wy, z],
-  [wx, yo - wy * 0.6, z],
-  [wx, yo + wy * 0.6, z],
-  [wx * 0.6, yo + wy, z],
-  [-wx * 0.6, yo + wy, z],
-  [-wx, yo + wy * 0.6, z],
-  [-wx, yo - wy * 0.6, z]
-];
-function makeLeg(g, kit, hip, foot2, thick, bend, phase, spider) {
-  const hipV = new Vector3(...hip), footV = new Vector3(...foot2);
-  const d0 = hipV.distanceTo(footV);
-  const l1 = d0 * 0.72, l2 = d0 * 0.76;
-  const mkUpper = () => {
-    const grp = new Group();
-    const b = new Bld();
-    b.loft(kit.trim, [ring8(0, thick * 1.2, thick * 1.15), ring8(l1 * 0.5, thick * 1, thick * 0.95), ring8(l1, thick * 0.9, thick * 0.85)]);
-    b.box(kit.hull, thick * 1.9, thick * 0.5, l1 * 0.74, 0, thick * 0.95, l1 * 0.46, Math.min(0.02, thick * 0.2), [-0.05, 0, 0]);
-    b.box(kit.hull, thick * 1.5, thick * 0.4, l1 * 0.34, 0, -thick * 1, l1 * 0.3, Math.min(0.015, thick * 0.2));
-    b.strut(kit.metal, [thick * 0.9, -thick * 0.2, l1 * 0.12], [thick * 0.7, thick * 0.3, l1 * 0.72], thick * 0.28, thick * 0.28, 8);
-    b.strut(kit.steel, [thick * 0.7, thick * 0.3, l1 * 0.6], [thick * 0.62, thick * 0.55, l1 * 0.9], thick * 0.13, thick * 0.13, 6);
-    b.cylb(kit.metal, thick * 1.5, thick * 2.5, thick * 0.2, [-thick * 1.25, 0, 0], "x", 14);
-    b.cylb(kit.trim, thick * 1.1, thick * 2.4, thick * 0.15, [-thick * 1.2, 0, l1], "x", 12);
-    b.cylb(kit.steel, thick * 0.5, thick * 2.7, thick * 0.1, [-thick * 1.35, 0, l1], "x", 8);
-    b.mount(grp);
-    g.add(grp);
-    return grp;
-  };
-  const mkLower = () => {
-    const grp = new Group();
-    const b = new Bld();
-    b.loft(kit.trim, [ring8(0, thick * 0.88, thick * 0.82), ring8(l2 * 0.4, thick * 0.78, thick * 0.74), ring8(l2, thick * 0.5, thick * 0.5)]);
-    b.box(kit.hull, thick * 1.55, thick * 0.4, l2 * 0.62, 0, thick * 0.8, l2 * 0.4, Math.min(0.02, thick * 0.2), [0.06, 0, 0]);
-    b.strut(kit.metal, [-thick * 0.7, -thick * 0.1, l2 * 0.1], [-thick * 0.5, thick * 0.1, l2 * 0.8], thick * 0.16, thick * 0.16, 6);
-    b.cylb(kit.metal, thick * 0.62, thick * 1.5, thick * 0.1, [-thick * 0.75, 0, l2], "x", 10);
-    b.mount(grp);
-    g.add(grp);
-    return grp;
-  };
-  const mkFoot = () => {
-    const grp = new Group();
-    const b = new Bld();
-    if (spider) {
-      b.cylb(kit.metal, thick * 1.35, thick * 0.55, thick * 0.12, [0, 0, 0], "y", 10);
-      b.cyl(kit.steel, thick * 0.65, thick * 0.35, thick * 0.9, [0, thick * 0.5, 0], "y", 8);
-      b.cylb(kit.hull, thick * 1, thick * 0.3, thick * 0.08, [0, thick * 0.95, 0], "y", 8);
-    } else {
-      b.box(kit.trim, thick * 2, thick * 0.9, thick * 2, -thick * 0.4, thick * 0.55, 0, thick * 0.12);
-      for (const [dz, rz] of [[-thick * 0.95, -0.28], [0, 0], [thick * 0.95, 0.28]])
-        b.box(kit.metal, thick * 2, thick * 0.55, thick * 0.8, thick * 1.2, thick * 0.28, dz, thick * 0.1, [0, rz, 0]);
-      b.box(kit.rubber, thick * 1.1, thick * 0.35, thick * 2.4, -thick * 1.3, thick * 0.2, 0, thick * 0.08);
-    }
-    b.mount(grp);
-    g.add(grp);
-    return grp;
-  };
-  const upper = mkUpper(), lower = mkLower(), foot_ = mkFoot();
-  const f = new Vector3(), k = new Vector3(), dir = new Vector3(), perp = new Vector3(), tmp4 = new Vector3();
-  const stride = d0 * 0.32, lift = d0 * 0.22;
-  const place = (a, bb, m) => {
-    tmp4.copy(bb).sub(a).normalize();
-    const z = tmp4, y = perp.clone().addScaledVector(z, -perp.dot(z)).normalize();
-    const x = new Vector3().crossVectors(y, z);
-    m.matrix.makeBasis(x, y, z).setPosition(a);
-    m.matrixAutoUpdate = false;
-    m.matrixWorldNeedsUpdate = true;
-  };
-  const step = (t, moving) => {
-    const ph = t * 3.2 + phase;
-    f.copy(footV);
-    f.x += -Math.sin(ph) * stride * moving;
-    f.y += Math.max(0, Math.cos(ph)) * lift * moving;
-    dir.copy(f).sub(hipV);
-    let d = dir.length();
-    d = Math.min(d, l1 + l2 - 1e-3);
-    dir.normalize();
-    const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
-    const hgt = Math.sqrt(Math.max(0, l1 * l1 - a * a));
-    perp.set(...bend).addScaledVector(dir, -new Vector3(...bend).dot(dir)).normalize();
-    k.copy(hipV).addScaledVector(dir, a).addScaledVector(perp, hgt);
-    place(hipV, k, upper);
-    place(k, f, lower);
-    foot_.position.copy(f);
-    foot_.position.y += 0;
-    foot_.updateMatrix();
-  };
-  step(0, 0);
-  return { step };
 }
 
 // src/client/proto3d/mobility/generic.ts
@@ -37309,7 +37197,7 @@ function foot(b, kit, t, spider) {
   block(b, kit.metal, -t * 1.6, 0, 0, t * 0.9, t * 0.9, t * 0.42, { top: [0.6, 0.7], shift: [-t * 0.2, 0], ch: t * 0.25, bev: t * 0.06 });
   for (const sz of [-1, 1]) b.box(kit.trim, t * 0.9, t * 0.9, t * 0.26, 0, t * 0.85, sz * t * 0.62, t * 0.1);
 }
-function makeLeg2(g, kit, hip, o) {
+function makeLeg(g, kit, hip, o) {
   const spider = o.kind === "spider";
   const t = hip.t;
   const hipV = new Vector3(...hip.p), footV = new Vector3(...hip.foot);
@@ -37372,7 +37260,7 @@ registerMobility(["legs", "jumpjets", "titanlegs", "spider"], {
     const hips = c.hips && c.hips.length ? c.hips : defaultHips(st, c.L, c.W);
     const kind = st.legs ?? "biped";
     const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * (kind === "spider" ? 0.7 : 0.55));
-    const legs = hips.map((h) => makeLeg2(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === "spider" ? 0.32 : 0.26) }));
+    const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === "spider" ? 0.32 : 0.26) }));
     if (c.mobId === "jumpjets") {
       const b = new Bld();
       for (const h of hips) {
