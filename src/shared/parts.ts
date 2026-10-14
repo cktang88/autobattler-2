@@ -222,9 +222,9 @@ export const MODULES: ModuleDef[] = [
   // ---------------- Support (allies) ----------------
   util({ id: 'repair', name: 'Repair Beam', family: 'Light repair', desc: 'Heals the most damaged ally in range.', category: 'support', visual: 'repair', caliber: 0.3, mount: 'L', weight: 1, cost: 17, heal: 22, range: 4 }),
   util({ id: 'repairM', name: 'Repair Array', family: 'Heavy repair', desc: 'Industrial nano-repair array with longer reach.', category: 'support', visual: 'repair', caliber: 0.6, mount: 'M', weight: 2.5, cost: 40, heal: 55, range: 5 }),
-  util({ id: 'dome', name: 'Shield Dome', family: 'Area shield', desc: 'Projects a 150-point shield onto every ally within 3 cells.', category: 'support', visual: 'dome', caliber: 0.8, mount: 'H', weight: 6, cost: 60, shieldAura: { radius: 3, amount: 150 } }),
-  util({ id: 'uplink', name: 'Command Uplink', family: 'Command', desc: 'Allies within 4 cells fire 15% faster.', category: 'support', visual: 'uplink', caliber: 0.5, mount: 'M', weight: 2, cost: 15, fireRateAura: { radius: 4, bonus: 0.15 } }),
-  util({ id: 'sensor', name: 'Sensor Mast', family: 'Detection', desc: 'Reveals cloaked enemies within 7 cells for your whole army.', category: 'stealth', visual: 'sensor', caliber: 0.4, mount: 'L', weight: 1, cost: 7, detect: 7 }),
+  util({ id: 'dome', name: 'Shield Dome', family: 'Area shield', desc: 'Projects a 150-point shield onto every ally within 3 cells.', category: 'support', visual: 'dome', caliber: 0.8, mount: 'H', weight: 6, cost: 20, shieldAura: { radius: 3, amount: 150 } }),
+  util({ id: 'uplink', name: 'Command Uplink', family: 'Command', desc: 'Allies within 4 cells fire 15% faster.', category: 'support', visual: 'uplink', caliber: 0.5, mount: 'M', weight: 2, cost: 6, fireRateAura: { radius: 4, bonus: 0.15 } }),
+  util({ id: 'sensor', name: 'Sensor Mast', family: 'Detection', desc: 'Reveals cloaked enemies within 7 cells for your whole army.', category: 'stealth', visual: 'sensor', caliber: 0.4, mount: 'L', weight: 1, cost: 3, detect: 7 }),
   // ---------------- Defense ----------------
   util({ id: 'shield', name: 'Shield Projector', family: 'Energy shield', desc: 'Personal energy shield that absorbs 260 damage and regenerates.', category: 'defense', visual: 'shield', caliber: 0.5, mount: 'M', weight: 2.5, cost: 32, shield: 260 }),
   util({ id: 'shieldL', name: 'Shield Emitter', family: 'Light shield', desc: 'Small personal shield: absorbs 100 damage, regenerates.', category: 'defense', visual: 'shield', caliber: 0.25, mount: 'L', weight: 1, cost: 14, shield: 100 }),
@@ -232,20 +232,20 @@ export const MODULES: ModuleDef[] = [
   util({ id: 'pointdef', name: 'Point Defense Laser', family: 'APS', desc: 'Zaps incoming rockets, missiles and shells within 2.5 cells.', category: 'defense', visual: 'pointdef', caliber: 0.4, mount: 'L', weight: 1.2, cost: 24, pointDefense: { range: 2.5, cooldown: 0.6 } }),
   util({ id: 'smoke', name: 'Smoke Launchers', family: 'Obscurant', desc: 'Below 60% hp, pops a smoke screen: nothing outside 2.5 cells can target units inside for 5s.', category: 'defense', visual: 'smoke', caliber: 0.3, mount: 'L', weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
   util({ id: 'reactive', name: 'Reactive Armor', family: 'ERA', desc: 'Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.', category: 'defense', visual: 'plate', caliber: 0.5, mount: 'M', weight: 3, cost: 22, reactive: 6, armor: 1 }),
-  util({ id: 'mirror', name: 'Mirror Coating', family: 'Reflective', desc: 'Takes 45% less damage from beams, lightning, rails, plasma and flame.', category: 'defense', visual: 'plate', caliber: 0.4, mount: 'L', weight: 1, cost: 14, energyResist: 0.45 }),
-  util({ id: 'hardened', name: 'Hardened Systems', family: 'EMP shielding', desc: 'Immune to stun, slow, disarm, burning and knockback.', category: 'defense', visual: 'coolant', caliber: 0.4, mount: 'L', weight: 1.2, cost: 8, hardened: true }),
-  util({ id: 'nanite', name: 'Nanite Hull', family: 'Self-repair', desc: 'Regenerates 2.5% max hp per second when out of combat for 2s.', category: 'defense', visual: 'nanite', caliber: 0.4, mount: 'L', weight: 1, cost: 8, regen: 0.025 }),
+  util({ id: 'mirror', name: 'Mirror Coating', family: 'Reflective', desc: 'Takes 45% less damage from beams, lightning, rails, plasma and flame.', category: 'defense', visual: 'plate', caliber: 0.4, mount: 'L', weight: 1, cost: 8, energyResist: 0.45 }),
+  util({ id: 'hardened', name: 'Hardened Systems', family: 'EMP shielding', desc: 'Immune to stun, slow, disarm, burning and knockback.', category: 'defense', visual: 'coolant', caliber: 0.4, mount: 'L', weight: 1.2, cost: 3, hardened: true }),
+  util({ id: 'nanite', name: 'Nanite Hull', family: 'Self-repair', desc: 'Regenerates 2.5% max hp per second when out of combat for 2s.', category: 'defense', visual: 'nanite', caliber: 0.4, mount: 'L', weight: 1, cost: 3, regen: 0.025 }),
   // ---------------- Stealth & ECM ----------------
-  util({ id: 'stealth', name: 'Stealth Cloak', family: 'Optical cloak', desc: 'Untargetable unless an enemy comes within 2.5 cells or it has just fired.', category: 'stealth', visual: 'cloak', caliber: 0.5, mount: 'M', weight: 2, cost: 40, cloak: 'stealth' }),
-  util({ id: 'phantom', name: 'Phase Veil', family: 'Phase cloak', desc: 'Untargetable at any range, except for 3s after each shot it fires.', category: 'stealth', visual: 'cloak', caliber: 0.8, mount: 'H', weight: 4, cost: 55, cloak: 'phantom' }),
-  util({ id: 'jammer', name: 'ECM Jammer', family: 'Jammer', desc: 'Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.', category: 'stealth', visual: 'jammer', caliber: 0.5, mount: 'M', weight: 2, cost: 14, jammer: 3 }),
+  util({ id: 'stealth', name: 'Stealth Cloak', family: 'Optical cloak', desc: 'Untargetable unless an enemy comes within 2.5 cells or it has just fired.', category: 'stealth', visual: 'cloak', caliber: 0.5, mount: 'M', weight: 2, cost: 15, cloak: 'stealth' }),
+  util({ id: 'phantom', name: 'Phase Veil', family: 'Phase cloak', desc: 'Untargetable at any range, except for 3s after each shot it fires.', category: 'stealth', visual: 'cloak', caliber: 0.8, mount: 'H', weight: 4, cost: 20, cloak: 'phantom' }),
+  util({ id: 'jammer', name: 'ECM Jammer', family: 'Jammer', desc: 'Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.', category: 'stealth', visual: 'jammer', caliber: 0.5, mount: 'M', weight: 2, cost: 5, jammer: 3 }),
   // ---------------- Systems ----------------
   util({ id: 'targeting', name: 'Targeting Computer', family: 'Fire control', desc: '+15% range for all weapons and tighter spread.', category: 'systems', visual: 'sensor', caliber: 0.3, mount: 'L', weight: 0.8, cost: 8, rangeBonus: 0.15, spreadMult: 0.6 }),
-  util({ id: 'turbo', name: 'Turbo Engine', family: 'Engine', desc: '+20% move speed.', category: 'systems', visual: 'engine', caliber: 0.4, mount: 'L', weight: 1.2, cost: 7, speedBonus: 0.2 }),
-  util({ id: 'gyro', name: 'Gyro Stabilizer', family: 'Stabilizer', desc: 'All weapons can fire on the move, with tighter spread.', category: 'systems', visual: 'gyro', caliber: 0.3, mount: 'L', weight: 1, cost: 8, gyro: true, spreadMult: 0.85 }),
+  util({ id: 'turbo', name: 'Turbo Engine', family: 'Engine', desc: '+20% move speed.', category: 'systems', visual: 'engine', caliber: 0.4, mount: 'L', weight: 1.2, cost: 3, speedBonus: 0.2 }),
+  util({ id: 'gyro', name: 'Gyro Stabilizer', family: 'Stabilizer', desc: 'All weapons can fire on the move, with tighter spread.', category: 'systems', visual: 'gyro', caliber: 0.3, mount: 'L', weight: 1, cost: 3, gyro: true, spreadMult: 0.85 }),
   util({ id: 'autoloader', name: 'Autoloader', family: 'Ammo feed', desc: 'Clip weapons reload 40% faster.', category: 'systems', visual: 'coolant', caliber: 0.3, mount: 'L', weight: 1, cost: 14, reloadBonus: 0.4 }),
-  util({ id: 'overclock', name: 'Overclocked Core', family: 'Overclock', desc: 'All weapons fire 20% faster.', category: 'systems', visual: 'coolant', caliber: 0.5, mount: 'M', weight: 2, cost: 14, fireRateBonus: 0.2 }),
-  util({ id: 'selfdestruct', name: 'Self-Destruct Charge', family: 'Demolition', desc: 'Detonates on death for 300 damage in a 2-cell radius.', category: 'systems', visual: 'charge', caliber: 0.4, mount: 'L', weight: 1.5, cost: 6, deathBlast: { damage: 300, radius: 2 } }),
+  util({ id: 'overclock', name: 'Overclocked Core', family: 'Overclock', desc: 'All weapons fire 20% faster.', category: 'systems', visual: 'coolant', caliber: 0.5, mount: 'M', weight: 2, cost: 5, fireRateBonus: 0.2 }),
+  util({ id: 'selfdestruct', name: 'Self-Destruct Charge', family: 'Demolition', desc: 'Detonates on death for 300 damage in a 2-cell radius.', category: 'systems', visual: 'charge', caliber: 0.4, mount: 'L', weight: 1.5, cost: 3, deathBlast: { damage: 300, radius: 2 } }),
   // ---------------- Giant class (G mounts, size-4 chassis) ----------------
   wpn({ id: 'siege240', name: '240mm Siege Cannon', family: '240mm', desc: 'Giant-class gun. Shells that crack fortresses.', category: 'cannon', visual: 'cannon', caliber: 1, mount: 'G', weight: 18, cost: 110,
     damage: 520, cooldown: 3, range: 9, ...G, projectile: 'shell', projectileSpeed: 18, splash: 0.8, ap: 0.85, spread: 0.2 }),
@@ -265,7 +265,7 @@ export const MODULES: ModuleDef[] = [
     damage: 120, cooldown: 0.3, range: 1, ...MELEE, splash: 1.2, ap: 0.6 }),
   util({ id: 'bulwarkshield', name: 'Bastion Shield Generator', family: 'Giant shield', desc: 'Personal barrier that absorbs 1800 damage.', category: 'defense', visual: 'shield', caliber: 1, mount: 'G', weight: 12, cost: 90, shield: 1800 }),
   util({ id: 'domeG', name: 'Fortress Dome', family: 'Giant dome', desc: 'Projects a 400-point shield onto every ally within 5 cells.', category: 'support', visual: 'dome', caliber: 1, mount: 'G', weight: 14, cost: 110, shieldAura: { radius: 5, amount: 400 } }),
-  { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'G', kind: 'armor', weight: 26, cost: 70, armor: 16, hp: 1200 },
+  { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'G', kind: 'armor', weight: 26, cost: 130, armor: 16, hp: 1200 },
   // ---------------- Titan class (T mounts, size-5 chassis) ----------------
   wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.', category: 'precision', visual: 'rail', turretTurn: 0.5, barrels: 2, caliber: 1, mount: 'T', weight: 38, cost: 220,
     damage: 1400, cooldown: 6, range: 20, ...GA, projectile: 'rail', ap: 1, pierce: true }),
@@ -283,8 +283,8 @@ export const MODULES: ModuleDef[] = [
   { id: 'plateT', name: 'Titan Plating', family: 'Titan plate', desc: '+24 armor, +3000 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'T', kind: 'armor', weight: 50, cost: 120, armor: 24, hp: 3000 },
   // ---------------- Armor ----------------
   { id: 'plateL', name: 'Armor Plate', family: 'Light plate', desc: '+3 armor, +60 hp.', category: 'armor', visual: 'plate', caliber: 0.3, mount: 'L', kind: 'armor', weight: 2, cost: 8, armor: 3, hp: 60 },
-  { id: 'plateM', name: 'Composite Armor', family: 'Composite', desc: '+6 armor, +150 hp.', category: 'armor', visual: 'plate', caliber: 0.6, mount: 'M', kind: 'armor', weight: 5, cost: 20, armor: 6, hp: 150 },
-  { id: 'plateH', name: 'Heavy Armor', family: 'Heavy plate', desc: '+10 armor, +400 hp.', category: 'armor', visual: 'plate', caliber: 0.9, mount: 'H', kind: 'armor', weight: 12, cost: 35, armor: 10, hp: 400 },
+  { id: 'plateM', name: 'Composite Armor', family: 'Composite', desc: '+6 armor, +150 hp.', category: 'armor', visual: 'plate', caliber: 0.6, mount: 'M', kind: 'armor', weight: 5, cost: 12, armor: 6, hp: 150 },
+  { id: 'plateH', name: 'Heavy Armor', family: 'Heavy plate', desc: '+10 armor, +400 hp.', category: 'armor', visual: 'plate', caliber: 0.9, mount: 'H', kind: 'armor', weight: 12, cost: 15, armor: 10, hp: 400 },
 ];
 
 const byId = <T extends { id: string }>(list: T[]) => new Map(list.map((p) => [p.id, p] as const));
