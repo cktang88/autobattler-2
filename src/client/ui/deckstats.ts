@@ -80,7 +80,7 @@ export interface DeckReport {
 }
 
 export const COST_BUCKETS: [string, number, number][] = [
-  ['< 400', 0, 400], ['400–799', 400, 800], ['800–1499', 800, 1500], ['1500–2999', 1500, 3000], ['3000+', 3000, Infinity],
+  ['< 80', 0, 80], ['80–159', 80, 160], ['160–299', 160, 300], ['300–599', 300, 600], ['600+', 600, Infinity],
 ];
 
 export function analyzeDeck(deck: Design[]): DeckReport {
@@ -113,7 +113,7 @@ export function analyzeDeck(deck: Design[]): DeckReport {
   if (!capCount.detect) w.push({ level: 'warn', text: 'No sensors: cloaked units stay hidden until they fire.' });
   if (r.minCost > START_SUPPLY) w.push({ level: 'bad', text: `Nothing fits round 1's ${START_SUPPLY} supply: you can't deploy at all in round 1.` });
   else if (r.minCost > START_SUPPLY / 2) w.push({ level: 'warn', text: `Cheapest design is ${r.minCost}: hard to spend supply efficiently early on.` });
-  if (r.buckets[0].n + r.buckets[1].n === 0) w.push({ level: 'warn', text: 'No cheap units (under 800): nothing to fill leftover supply or screen with.' });
+  if (r.buckets[0].n + r.buckets[1].n === 0) w.push({ level: 'warn', text: 'No cheap units (under 160): nothing to fill leftover supply or screen with.' });
   if (infos.length < 6) w.push({ level: 'warn', text: `Only ${infos.length} designs: you have room for more answers.` });
   if (!w.some((x) => x.level !== 'good')) w.push({ level: 'good', text: 'Well rounded: every role is covered.' });
   return r;

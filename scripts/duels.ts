@@ -209,7 +209,7 @@ function duels() {
 }
 
 // ---------------------------------------------------------------------------------------------
-const BUDGET = 1500;
+const BUDGET = 300;
 /** n blocks of a design spread across the field centre, rows of up to 4, `y0` local depth of the first row. */
 function groupBlocks(id: string, n: number, y0: number, stance?: Stance): Block[] {
   const s = ST.get(id)!;

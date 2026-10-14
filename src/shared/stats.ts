@@ -259,7 +259,7 @@ export function computeStats(d: Design): UnitStats {
 
   return {
     size, fw: c.footprint?.[0] ?? size, fh: c.footprint?.[1] ?? size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
-    speed: Math.round(speed * 100) / 100, turn, cost, unitCost: Math.round(unitCost), squad,
+    speed: Math.round(speed * 100) / 100, turn, cost, unitCost: Math.round(unitCost / PRICE_DIV), squad,
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
@@ -280,8 +280,15 @@ export function turretTurnRate(mod: ModuleDef): number {
 }
 
 /** Round a supply cost to a friendly number: nearest 50 (min 50). */
+/** Player-facing prices are the model's raw cost / PRICE_DIV (raw numbers ran past 10 000; now the biggest titans are ~2000). */
+export const PRICE_DIV = 5;
+/** Round a raw model cost to a supply price. */
 export function roundCost(raw: number): number {
-  return Math.max(50, Math.round(raw / 50) * 50);
+  return roundPrice(raw / PRICE_DIV);
+}
+/** Round an already-scaled supply amount: nearest 10 below 1000, nearest 50 above. */
+export function roundPrice(v: number): number {
+  return v < 1000 ? Math.max(10, Math.round(v / 10) * 10) : Math.round(v / 50) * 50;
 }
 
 /** Level multiplier for hp and damage. */
