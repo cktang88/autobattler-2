@@ -7,3 +7,4 @@ public/artlab.js.map
 
 # agent worktrees (local only)
 .claude/worktrees/
+public/chunks/

@@ -1367,17 +1367,17 @@ var Quaternion = class {
     let x0 = src0[srcOffset0 + 0], y0 = src0[srcOffset0 + 1], z0 = src0[srcOffset0 + 2], w0 = src0[srcOffset0 + 3];
     let x1 = src1[srcOffset1 + 0], y1 = src1[srcOffset1 + 1], z1 = src1[srcOffset1 + 2], w1 = src1[srcOffset1 + 3];
     if (w0 !== w1 || x0 !== x1 || y0 !== y1 || z0 !== z1) {
-      let dot = x0 * x1 + y0 * y1 + z0 * z1 + w0 * w1;
-      if (dot < 0) {
+      let dot2 = x0 * x1 + y0 * y1 + z0 * z1 + w0 * w1;
+      if (dot2 < 0) {
         x1 = -x1;
         y1 = -y1;
         z1 = -z1;
         w1 = -w1;
-        dot = -dot;
+        dot2 = -dot2;
       }
       let s = 1 - t;
-      if (dot < 0.9995) {
-        const theta = Math.acos(dot);
+      if (dot2 < 0.9995) {
+        const theta = Math.acos(dot2);
         const sin = Math.sin(theta);
         s = Math.sin(s * theta) / sin;
         t = Math.sin(t * theta) / sin;
@@ -1817,17 +1817,17 @@ var Quaternion = class {
    */
   slerp(qb, t) {
     let x = qb._x, y = qb._y, z = qb._z, w = qb._w;
-    let dot = this.dot(qb);
-    if (dot < 0) {
+    let dot2 = this.dot(qb);
+    if (dot2 < 0) {
       x = -x;
       y = -y;
       z = -z;
       w = -w;
-      dot = -dot;
+      dot2 = -dot2;
     }
     let s = 1 - t;
-    if (dot < 0.9995) {
-      const theta = Math.acos(dot);
+    if (dot2 < 0.9995) {
+      const theta = Math.acos(dot2);
       const sin = Math.sin(theta);
       s = Math.sin(s * theta) / sin;
       t = Math.sin(t * theta) / sin;
@@ -7309,12 +7309,12 @@ var Object3D = class _Object3D extends EventDispatcher {
       object.sortObjects = this.sortObjects;
       object.drawRanges = this._drawRanges;
       object.reservedRanges = this._reservedRanges;
-      object.geometryInfo = this._geometryInfo.map((info) => ({
-        ...info,
-        boundingBox: info.boundingBox ? info.boundingBox.toJSON() : void 0,
-        boundingSphere: info.boundingSphere ? info.boundingSphere.toJSON() : void 0
+      object.geometryInfo = this._geometryInfo.map((info2) => ({
+        ...info2,
+        boundingBox: info2.boundingBox ? info2.boundingBox.toJSON() : void 0,
+        boundingSphere: info2.boundingSphere ? info2.boundingSphere.toJSON() : void 0
       }));
-      object.instanceInfo = this._instanceInfo.map((info) => ({ ...info }));
+      object.instanceInfo = this._instanceInfo.map((info2) => ({ ...info2 }));
       object.availableInstanceIds = this._availableInstanceIds.slice();
       object.availableGeometryIds = this._availableGeometryIds.slice();
       object.nextIndexStart = this._nextIndexStart;
@@ -7972,11 +7972,11 @@ var Color = class {
    * @param {string} [colorSpace=SRGBColorSpace] - The color space.
    * @return {Color} A reference to this color.
    */
-  setHex(hex, colorSpace = SRGBColorSpace) {
-    hex = Math.floor(hex);
-    this.r = (hex >> 16 & 255) / 255;
-    this.g = (hex >> 8 & 255) / 255;
-    this.b = (hex & 255) / 255;
+  setHex(hex2, colorSpace = SRGBColorSpace) {
+    hex2 = Math.floor(hex2);
+    this.r = (hex2 >> 16 & 255) / 255;
+    this.g = (hex2 >> 8 & 255) / 255;
+    this.b = (hex2 & 255) / 255;
     ColorManagement.colorSpaceToWorking(this, colorSpace);
     return this;
   }
@@ -8081,17 +8081,17 @@ var Color = class {
           warn("Color: Unknown color model " + style);
       }
     } else if (m = /^\#([A-Fa-f\d]+)$/.exec(style)) {
-      const hex = m[1];
-      const size = hex.length;
+      const hex2 = m[1];
+      const size = hex2.length;
       if (size === 3) {
         return this.setRGB(
-          parseInt(hex.charAt(0), 16) / 15,
-          parseInt(hex.charAt(1), 16) / 15,
-          parseInt(hex.charAt(2), 16) / 15,
+          parseInt(hex2.charAt(0), 16) / 15,
+          parseInt(hex2.charAt(1), 16) / 15,
+          parseInt(hex2.charAt(2), 16) / 15,
           colorSpace
         );
       } else if (size === 6) {
-        return this.setHex(parseInt(hex, 16), colorSpace);
+        return this.setHex(parseInt(hex2, 16), colorSpace);
       } else {
         warn("Color: Invalid hex color " + style);
       }
@@ -8114,9 +8114,9 @@ var Color = class {
    * @return {Color} A reference to this color.
    */
   setColorName(style, colorSpace = SRGBColorSpace) {
-    const hex = _colorKeywords[style.toLowerCase()];
-    if (hex !== void 0) {
-      this.setHex(hex, colorSpace);
+    const hex2 = _colorKeywords[style.toLowerCase()];
+    if (hex2 !== void 0) {
+      this.setHex(hex2, colorSpace);
     } else {
       warn("Color: Unknown color " + style);
     }
@@ -8897,8 +8897,8 @@ var Triangle = class _Triangle {
    * @param {Box3} box - The box to intersect.
    * @return {boolean} Whether this triangle intersects with the given box or not.
    */
-  intersectsBox(box2) {
-    return box2.intersectsTriangle(this);
+  intersectsBox(box) {
+    return box.intersectsTriangle(this);
   }
   /**
    * Returns the closest point on the triangle to the given point.
@@ -9075,9 +9075,9 @@ var Box3 = class {
    * @param {Box3} box - The box to copy.
    * @return {Box3} A reference to this bounding box.
    */
-  copy(box2) {
-    this.min.copy(box2.min);
-    this.max.copy(box2.max);
+  copy(box) {
+    this.min.copy(box.min);
+    this.max.copy(box.max);
     return this;
   }
   /**
@@ -9220,8 +9220,8 @@ var Box3 = class {
    * @param {Box3} box - The bounding box to test.
    * @return {boolean} Whether the bounding box contains the given bounding box or not.
    */
-  containsBox(box2) {
-    return this.min.x <= box2.min.x && box2.max.x <= this.max.x && this.min.y <= box2.min.y && box2.max.y <= this.max.y && this.min.z <= box2.min.z && box2.max.z <= this.max.z;
+  containsBox(box) {
+    return this.min.x <= box.min.x && box.max.x <= this.max.x && this.min.y <= box.min.y && box.max.y <= this.max.y && this.min.z <= box.min.z && box.max.z <= this.max.z;
   }
   /**
    * Returns a point as a proportion of this box's width, height and depth.
@@ -9243,8 +9243,8 @@ var Box3 = class {
    * @param {Box3} box - The bounding box to test.
    * @return {boolean} Whether the given bounding box intersects with this bounding box.
    */
-  intersectsBox(box2) {
-    return box2.max.x >= this.min.x && box2.min.x <= this.max.x && box2.max.y >= this.min.y && box2.min.y <= this.max.y && box2.max.z >= this.min.z && box2.min.z <= this.max.z;
+  intersectsBox(box) {
+    return box.max.x >= this.min.x && box.min.x <= this.max.x && box.max.y >= this.min.y && box.min.y <= this.max.y && box.max.z >= this.min.z && box.min.z <= this.max.z;
   }
   /**
    * Returns `true` if the given bounding sphere intersects with this bounding box.
@@ -9389,9 +9389,9 @@ var Box3 = class {
    * @param {Box3} box - The bounding box to intersect with.
    * @return {Box3} A reference to this bounding box.
    */
-  intersect(box2) {
-    this.min.max(box2.min);
-    this.max.min(box2.max);
+  intersect(box) {
+    this.min.max(box.min);
+    this.max.min(box.max);
     if (this.isEmpty()) this.makeEmpty();
     return this;
   }
@@ -9403,9 +9403,9 @@ var Box3 = class {
    * @param {Box3} box - The bounding box that will be unioned with this instance.
    * @return {Box3} A reference to this bounding box.
    */
-  union(box2) {
-    this.min.min(box2.min);
-    this.max.max(box2.max);
+  union(box) {
+    this.min.min(box.min);
+    this.max.max(box.max);
     return this;
   }
   /**
@@ -9445,8 +9445,8 @@ var Box3 = class {
    * @param {Box3} box - The box to test for equality.
    * @return {boolean} Whether this bounding box is equal with the given one.
    */
-  equals(box2) {
-    return box2.min.equals(this.min) && box2.max.equals(this.max);
+  equals(box) {
+    return box.min.equals(this.min) && box.max.equals(this.max);
   }
   /**
    * Returns a serialized structure of the bounding box.
@@ -10079,8 +10079,8 @@ var Sphere = class {
    * @param {Box3} box - The box to test.
    * @return {boolean} Whether this sphere intersects with the given box or not.
    */
-  intersectsBox(box2) {
-    return box2.intersectsSphere(this);
+  intersectsBox(box) {
+    return box.intersectsSphere(this);
   }
   /**
    * Returns `true` if this sphere intersects with the given plane.
@@ -11679,8 +11679,8 @@ var Plane = class {
    * @param {Box3} box - The bounding box to test.
    * @return {boolean} Whether the given bounding box intersects with the plane or not.
    */
-  intersectsBox(box2) {
-    return box2.intersectsPlane(this);
+  intersectsBox(box) {
+    return box.intersectsPlane(this);
   }
   /**
    * Returns `true` if the given bounding sphere intersects with the plane.
@@ -12444,8 +12444,8 @@ var Sprite = class extends Object3D {
    * @param {Frustum|FrustumArray} frustum - The frustum to test.
    * @return {boolean} Whether this sprite intersects the given frustum or not.
    */
-  intersectsFrustum(frustum2) {
-    return frustum2.intersectsSprite(this);
+  intersectsFrustum(frustum) {
+    return frustum.intersectsSprite(this);
   }
   /**
    * Computes intersection points between a casted ray and this sprite.
@@ -12781,33 +12781,33 @@ var Ray = class {
    * @param {Vector3} target - The target vector that is used to store the method's result.
    * @return {?Vector3} The intersection point.
    */
-  intersectBox(box2, target) {
+  intersectBox(box, target) {
     let tmin, tmax, tymin, tymax, tzmin, tzmax;
     const invdirx = 1 / this.direction.x, invdiry = 1 / this.direction.y, invdirz = 1 / this.direction.z;
     const origin = this.origin;
     if (invdirx >= 0) {
-      tmin = (box2.min.x - origin.x) * invdirx;
-      tmax = (box2.max.x - origin.x) * invdirx;
+      tmin = (box.min.x - origin.x) * invdirx;
+      tmax = (box.max.x - origin.x) * invdirx;
     } else {
-      tmin = (box2.max.x - origin.x) * invdirx;
-      tmax = (box2.min.x - origin.x) * invdirx;
+      tmin = (box.max.x - origin.x) * invdirx;
+      tmax = (box.min.x - origin.x) * invdirx;
     }
     if (invdiry >= 0) {
-      tymin = (box2.min.y - origin.y) * invdiry;
-      tymax = (box2.max.y - origin.y) * invdiry;
+      tymin = (box.min.y - origin.y) * invdiry;
+      tymax = (box.max.y - origin.y) * invdiry;
     } else {
-      tymin = (box2.max.y - origin.y) * invdiry;
-      tymax = (box2.min.y - origin.y) * invdiry;
+      tymin = (box.max.y - origin.y) * invdiry;
+      tymax = (box.min.y - origin.y) * invdiry;
     }
     if (tmin > tymax || tymin > tmax) return null;
     if (tymin > tmin || isNaN(tmin)) tmin = tymin;
     if (tymax < tmax || isNaN(tmax)) tmax = tymax;
     if (invdirz >= 0) {
-      tzmin = (box2.min.z - origin.z) * invdirz;
-      tzmax = (box2.max.z - origin.z) * invdirz;
+      tzmin = (box.min.z - origin.z) * invdirz;
+      tzmax = (box.max.z - origin.z) * invdirz;
     } else {
-      tzmin = (box2.max.z - origin.z) * invdirz;
-      tzmax = (box2.min.z - origin.z) * invdirz;
+      tzmin = (box.max.z - origin.z) * invdirz;
+      tzmax = (box.min.z - origin.z) * invdirz;
     }
     if (tmin > tzmax || tzmin > tmax) return null;
     if (tzmin > tmin || tmin !== tmin) tmin = tzmin;
@@ -12821,8 +12821,8 @@ var Ray = class {
    * @param {Box3} box - The box to intersect.
    * @return {boolean} Whether this ray intersects with the given box or not.
    */
-  intersectsBox(box2) {
-    return this.intersectBox(box2, _vector$7) !== null;
+  intersectsBox(box) {
+    return this.intersectBox(box, _vector$7) !== null;
   }
   /**
    * Intersects this ray with the given triangle, returning the intersection
@@ -12842,7 +12842,7 @@ var Ray = class {
     const dy = direction.y;
     const dz = direction.z;
     const aox = a.x - origin.x, aoy = a.y - origin.y, aoz = a.z - origin.z;
-    const box2 = b.x - origin.x, boy = b.y - origin.y, boz = b.z - origin.z;
+    const box = b.x - origin.x, boy = b.y - origin.y, boz = b.z - origin.z;
     const cox = c.x - origin.x, coy = c.y - origin.y, coz = c.z - origin.z;
     const adx = Math.abs(dx), ady = Math.abs(dy), adz = Math.abs(dz);
     let dkx, dky, dkz;
@@ -12850,7 +12850,7 @@ var Ray = class {
     if (adx >= ady && adx >= adz) {
       dkz = dx;
       akz = aox;
-      bkz = box2;
+      bkz = box;
       ckz = cox;
       if (dx >= 0) {
         dkx = dy;
@@ -12882,7 +12882,7 @@ var Ray = class {
         akx = aoz;
         aky = aox;
         bkx = boz;
-        bky = box2;
+        bky = box;
         ckx = coz;
         cky = cox;
       } else {
@@ -12890,7 +12890,7 @@ var Ray = class {
         dky = dz;
         akx = aox;
         aky = aoz;
-        bkx = box2;
+        bkx = box;
         bky = boz;
         ckx = cox;
         cky = coz;
@@ -12905,7 +12905,7 @@ var Ray = class {
         dky = dy;
         akx = aox;
         aky = aoy;
-        bkx = box2;
+        bkx = box;
         bky = boy;
         ckx = cox;
         cky = coy;
@@ -12915,7 +12915,7 @@ var Ray = class {
         akx = aoy;
         aky = aox;
         bkx = boy;
-        bky = box2;
+        bky = box;
         ckx = coy;
         cky = cox;
       }
@@ -13125,8 +13125,8 @@ var Mesh = class extends Object3D {
    * @param {Frustum|FrustumArray} frustum - The frustum to test.
    * @return {boolean} Whether this mesh intersects the given frustum or not.
    */
-  intersectsFrustum(frustum2) {
-    return frustum2.intersectsObject(this);
+  intersectsFrustum(frustum) {
+    return frustum.intersectsObject(this);
   }
   /**
    * Computes intersection points between a casted ray and this line.
@@ -13591,10 +13591,10 @@ var Frustum = class {
    * @param {Frustum} frustum - The frustum to copy.
    * @return {Frustum} A reference to this frustum.
    */
-  copy(frustum2) {
+  copy(frustum) {
     const planes = this.planes;
     for (let i = 0; i < 6; i++) {
-      planes[i].copy(frustum2.planes[i]);
+      planes[i].copy(frustum.planes[i]);
     }
     return this;
   }
@@ -13697,13 +13697,13 @@ var Frustum = class {
    * @param {Box3} box - The bounding box to test.
    * @return {boolean} Whether the bounding box is intersecting this frustum or not.
    */
-  intersectsBox(box2) {
+  intersectsBox(box) {
     const planes = this.planes;
     for (let i = 0; i < 6; i++) {
       const plane = planes[i];
-      _vector$6.x = plane.normal.x > 0 ? box2.max.x : box2.min.x;
-      _vector$6.y = plane.normal.y > 0 ? box2.max.y : box2.min.y;
-      _vector$6.z = plane.normal.z > 0 ? box2.max.z : box2.min.z;
+      _vector$6.x = plane.normal.x > 0 ? box.max.x : box.min.x;
+      _vector$6.y = plane.normal.y > 0 ? box.max.y : box.min.y;
+      _vector$6.z = plane.normal.z > 0 ? box.max.z : box.min.z;
       if (plane.distanceToPoint(_vector$6) < 0) {
         return false;
       }
@@ -17040,86 +17040,6 @@ var SphereGeometry = class _SphereGeometry extends BufferGeometry {
     return new _SphereGeometry(data.radius, data.widthSegments, data.heightSegments, data.phiStart, data.phiLength, data.thetaStart, data.thetaLength);
   }
 };
-var TorusGeometry = class _TorusGeometry extends BufferGeometry {
-  /**
-   * Constructs a new torus geometry.
-   *
-   * @param {number} [radius=1] - Radius of the torus, from the center of the torus to the center of the tube.
-   * @param {number} [tube=0.4] - Radius of the tube. Must be smaller than `radius`.
-   * @param {number} [radialSegments=12] - The number of radial segments.
-   * @param {number} [tubularSegments=48] - The number of tubular segments.
-   * @param {number} [arc=Math.PI*2] - Central angle in radians.
-   * @param {number} [thetaStart=0] - Start of the tubular sweep in radians.
-   * @param {number} [thetaLength=Math.PI*2] - Length of the tubular sweep in radians.
-   */
-  constructor(radius = 1, tube = 0.4, radialSegments = 12, tubularSegments = 48, arc = Math.PI * 2, thetaStart = 0, thetaLength = Math.PI * 2) {
-    super();
-    this.type = "TorusGeometry";
-    this.parameters = {
-      radius,
-      tube,
-      radialSegments,
-      tubularSegments,
-      arc,
-      thetaStart,
-      thetaLength
-    };
-    radialSegments = Math.floor(radialSegments);
-    tubularSegments = Math.floor(tubularSegments);
-    const indices = [];
-    const vertices = [];
-    const normals = [];
-    const uvs = [];
-    const center = new Vector3();
-    const vertex2 = new Vector3();
-    const normal = new Vector3();
-    for (let j = 0; j <= radialSegments; j++) {
-      const v = thetaStart + j / radialSegments * thetaLength;
-      for (let i = 0; i <= tubularSegments; i++) {
-        const u = i / tubularSegments * arc;
-        vertex2.x = (radius + tube * Math.cos(v)) * Math.cos(u);
-        vertex2.y = (radius + tube * Math.cos(v)) * Math.sin(u);
-        vertex2.z = tube * Math.sin(v);
-        vertices.push(vertex2.x, vertex2.y, vertex2.z);
-        center.x = radius * Math.cos(u);
-        center.y = radius * Math.sin(u);
-        normal.subVectors(vertex2, center).normalize();
-        normals.push(normal.x, normal.y, normal.z);
-        uvs.push(i / tubularSegments);
-        uvs.push(j / radialSegments);
-      }
-    }
-    for (let j = 1; j <= radialSegments; j++) {
-      for (let i = 1; i <= tubularSegments; i++) {
-        const a = (tubularSegments + 1) * j + i - 1;
-        const b = (tubularSegments + 1) * (j - 1) + i - 1;
-        const c = (tubularSegments + 1) * (j - 1) + i;
-        const d = (tubularSegments + 1) * j + i;
-        indices.push(a, b, d);
-        indices.push(b, c, d);
-      }
-    }
-    this.setIndex(indices);
-    this.setAttribute("position", new Float32BufferAttribute(vertices, 3));
-    this.setAttribute("normal", new Float32BufferAttribute(normals, 3));
-    this.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
-  }
-  copy(source) {
-    super.copy(source);
-    this.parameters = Object.assign({}, source.parameters);
-    return this;
-  }
-  /**
-   * Factory method for creating an instance of this class from the given
-   * JSON object.
-   *
-   * @param {Object} data - A JSON object representing the serialized geometry.
-   * @return {TorusGeometry} A new instance.
-   */
-  static fromJSON(data) {
-    return new _TorusGeometry(data.radius, data.tube, data.radialSegments, data.tubularSegments, data.arc, data.thetaStart, data.thetaLength);
-  }
-};
 function cloneUniforms(src) {
   const dst = {};
   for (const u in src) {
@@ -17501,89 +17421,6 @@ var MeshNormalMaterial = class extends Material {
     this.wireframe = source.wireframe;
     this.wireframeLinewidth = source.wireframeLinewidth;
     this.flatShading = source.flatShading;
-    return this;
-  }
-};
-var MeshLambertMaterial = class extends Material {
-  /**
-   * Constructs a new mesh lambert material.
-   *
-   * @param {Object} [parameters] - An object with one or more properties
-   * defining the material's appearance. Any property of the material
-   * (including any property from inherited materials) can be passed
-   * in here. Color values can be passed any type of value accepted
-   * by {@link Color#set}.
-   */
-  constructor(parameters) {
-    super();
-    this.isMeshLambertMaterial = true;
-    this.type = "MeshLambertMaterial";
-    this.color = new Color(16777215);
-    this.map = null;
-    this.lightMap = null;
-    this.lightMapIntensity = 1;
-    this.aoMap = null;
-    this.aoMapIntensity = 1;
-    this.emissive = new Color(0);
-    this.emissiveIntensity = 1;
-    this.emissiveMap = null;
-    this.bumpMap = null;
-    this.bumpScale = 1;
-    this.normalMap = null;
-    this.normalMapType = TangentSpaceNormalMap;
-    this.normalScale = new Vector2(1, 1);
-    this.displacementMap = null;
-    this.displacementScale = 1;
-    this.displacementBias = 0;
-    this.specularMap = null;
-    this.alphaMap = null;
-    this.envMap = null;
-    this.envMapRotation = new Euler();
-    this.combine = MultiplyOperation;
-    this.reflectivity = 1;
-    this.envMapIntensity = 1;
-    this.refractionRatio = 0.98;
-    this.wireframe = false;
-    this.wireframeLinewidth = 1;
-    this.wireframeLinecap = "round";
-    this.wireframeLinejoin = "round";
-    this.flatShading = false;
-    this.fog = true;
-    this.setValues(parameters);
-  }
-  copy(source) {
-    super.copy(source);
-    this.color.copy(source.color);
-    this.map = source.map;
-    this.lightMap = source.lightMap;
-    this.lightMapIntensity = source.lightMapIntensity;
-    this.aoMap = source.aoMap;
-    this.aoMapIntensity = source.aoMapIntensity;
-    this.emissive.copy(source.emissive);
-    this.emissiveMap = source.emissiveMap;
-    this.emissiveIntensity = source.emissiveIntensity;
-    this.bumpMap = source.bumpMap;
-    this.bumpScale = source.bumpScale;
-    this.normalMap = source.normalMap;
-    this.normalMapType = source.normalMapType;
-    this.normalScale.copy(source.normalScale);
-    this.displacementMap = source.displacementMap;
-    this.displacementScale = source.displacementScale;
-    this.displacementBias = source.displacementBias;
-    this.specularMap = source.specularMap;
-    this.alphaMap = source.alphaMap;
-    this.envMap = source.envMap;
-    this.envMapRotation.copy(source.envMapRotation);
-    this.combine = source.combine;
-    this.reflectivity = source.reflectivity;
-    this.envMapIntensity = source.envMapIntensity;
-    this.refractionRatio = source.refractionRatio;
-    this.wireframe = source.wireframe;
-    this.wireframeLinewidth = source.wireframeLinewidth;
-    this.wireframeLinecap = source.wireframeLinecap;
-    this.wireframeLinejoin = source.wireframeLinejoin;
-    this.flatShading = source.flatShading;
-    this.fog = source.fog;
     return this;
   }
 };
@@ -17991,29 +17828,29 @@ var KeyframeTrack = class {
    * @param {KeyframeTrack} track - The keyframe track to serialize.
    * @return {Object} The serialized keyframe track as JSON.
    */
-  static toJSON(track2) {
-    const trackType = track2.constructor;
+  static toJSON(track) {
+    const trackType = track.constructor;
     let json;
     if (trackType.toJSON !== this.toJSON) {
-      json = trackType.toJSON(track2);
+      json = trackType.toJSON(track);
     } else {
       json = {
-        "name": track2.name,
-        "times": convertArray(track2.times, Array),
-        "values": convertArray(track2.values, Array)
+        "name": track.name,
+        "times": convertArray(track.times, Array),
+        "values": convertArray(track.values, Array)
       };
-      const interpolation = track2.getInterpolation();
-      if (interpolation !== track2.DefaultInterpolation) {
+      const interpolation = track.getInterpolation();
+      if (interpolation !== track.DefaultInterpolation) {
         json.interpolation = interpolation;
       }
-      if (hasTangents(track2.settings)) {
+      if (hasTangents(track.settings)) {
         json.settings = {
-          inTangents: convertArray(track2.settings.inTangents, Array),
-          outTangents: convertArray(track2.settings.outTangents, Array)
+          inTangents: convertArray(track.settings.inTangents, Array),
+          outTangents: convertArray(track.settings.outTangents, Array)
         };
       }
     }
-    json.type = track2.ValueTypeName;
+    json.type = track.ValueTypeName;
     return json;
   }
   /**
@@ -18303,15 +18140,15 @@ var KeyframeTrack = class {
     const times = this.times.slice();
     const values = this.values.slice();
     const TypedKeyframeTrack = this.constructor;
-    const track2 = new TypedKeyframeTrack(this.name, times, values);
-    track2.createInterpolant = this.createInterpolant;
+    const track = new TypedKeyframeTrack(this.name, times, values);
+    track.createInterpolant = this.createInterpolant;
     if (hasTangents(this.settings)) {
-      track2.settings = {
+      track.settings = {
         inTangents: this.settings.inTangents.slice(),
         outTangents: this.settings.outTangents.slice()
       };
     }
-    return track2;
+    return track;
   }
 };
 function scaleTangentTimes(tangents, timeScale) {
@@ -18802,9 +18639,9 @@ var LightShadow = class {
    * @param {Frustum} frustum - The target frustum.
    * @param {Vector4} [viewport] - The viewport within the shadow atlas.
    */
-  _updateMatrix(shadowCamera, shadowMatrix, frustum2, viewport) {
+  _updateMatrix(shadowCamera, shadowMatrix, frustum, viewport) {
     _projScreenMatrix.multiplyMatrices(shadowCamera.projectionMatrix, shadowCamera.matrixWorldInverse);
-    frustum2.setFromProjectionMatrix(_projScreenMatrix, shadowCamera.coordinateSystem, shadowCamera.reversedDepth);
+    frustum.setFromProjectionMatrix(_projScreenMatrix, shadowCamera.coordinateSystem, shadowCamera.reversedDepth);
     const frameExtents = this._frameExtents;
     const scaleX = viewport ? viewport.z / frameExtents.x : 1;
     const scaleY = viewport ? viewport.w / frameExtents.y : 1;
@@ -19219,63 +19056,6 @@ var PerspectiveCamera = class extends Camera {
     if (this.view !== null) data.object.view = Object.assign({}, this.view);
     data.object.filmGauge = this.filmGauge;
     data.object.filmOffset = this.filmOffset;
-    return data;
-  }
-};
-var PointLightShadow = class extends LightShadow {
-  /**
-   * Constructs a new point light shadow.
-   */
-  constructor() {
-    super(new PerspectiveCamera(90, 1, 0.5, 500));
-    this.isPointLightShadow = true;
-  }
-};
-var PointLight = class extends Light {
-  /**
-   * Constructs a new point light.
-   *
-   * @param {(number|Color|string)} [color=0xffffff] - The light's color.
-   * @param {number} [intensity=1] - The light's strength/intensity measured in candela (cd).
-   * @param {number} [distance=0] - Maximum range of the light. `0` means no limit.
-   * @param {number} [decay=2] - The amount the light dims along the distance of the light.
-   */
-  constructor(color, intensity, distance = 0, decay = 2) {
-    super(color, intensity);
-    this.isPointLight = true;
-    this.type = "PointLight";
-    this.distance = distance;
-    this.decay = decay;
-    this.shadow = new PointLightShadow();
-  }
-  /**
-   * The light's power. Power is the luminous power of the light measured in lumens (lm).
-   * Changing the power will also change the light's intensity.
-   *
-   * @type {number}
-   */
-  get power() {
-    return this.intensity * 4 * Math.PI;
-  }
-  set power(power) {
-    this.intensity = power / (4 * Math.PI);
-  }
-  dispose() {
-    super.dispose();
-    this.shadow.dispose();
-  }
-  copy(source, recursive) {
-    super.copy(source, recursive);
-    this.distance = source.distance;
-    this.decay = source.decay;
-    this.shadow = source.shadow.clone();
-    return this;
-  }
-  toJSON(meta) {
-    const data = super.toJSON(meta);
-    data.object.distance = this.distance;
-    data.object.decay = this.decay;
-    data.object.shadow = this.shadow.toJSON();
     return data;
   }
 };
@@ -21876,19 +21656,19 @@ function WebGLBindingStates(gl, attributes) {
     disableUnusedAttributes
   };
 }
-function WebGLBufferRenderer(gl, extensions, info) {
+function WebGLBufferRenderer(gl, extensions, info2) {
   let mode;
   function setMode(value) {
     mode = value;
   }
   function render(start, count) {
     gl.drawArrays(mode, start, count);
-    info.update(count, mode, 1);
+    info2.update(count, mode, 1);
   }
   function renderInstances(start, count, primcount) {
     if (primcount === 0) return;
     gl.drawArraysInstanced(mode, start, count, primcount);
-    info.update(count, mode, primcount);
+    info2.update(count, mode, primcount);
   }
   function renderMultiDraw(starts, counts, drawCount) {
     if (drawCount === 0) return;
@@ -21898,7 +21678,7 @@ function WebGLBufferRenderer(gl, extensions, info) {
     for (let i = 0; i < drawCount; i++) {
       elementCount += counts[i];
     }
-    info.update(elementCount, mode, 1);
+    info2.update(elementCount, mode, 1);
   }
   this.setMode = setMode;
   this.render = render;
@@ -22256,8 +22036,8 @@ var PMREMGenerator = class {
     return cubeUVRenderTarget;
   }
   _compileMaterial(material) {
-    const mesh2 = new Mesh(new BufferGeometry(), material);
-    this._renderer.compile(mesh2, _flatCamera);
+    const mesh = new Mesh(new BufferGeometry(), material);
+    this._renderer.compile(mesh, _flatCamera);
   }
   _sceneToCubeUV(scene2, near, far, cubeUVRenderTarget, position) {
     const fov2 = 90;
@@ -22343,14 +22123,14 @@ var PMREMGenerator = class {
       }
     }
     const material = isCubeTexture ? this._cubemapMaterial : this._equirectMaterial;
-    const mesh2 = this._lodMeshes[0];
-    mesh2.material = material;
+    const mesh = this._lodMeshes[0];
+    mesh.material = material;
     const uniforms = material.uniforms;
     uniforms["envMap"].value = texture;
     const size = this._cubeSize;
     _setViewport(cubeUVRenderTarget, 0, 0, 3 * size, 2 * size);
     renderer2.setRenderTarget(cubeUVRenderTarget);
-    renderer2.render(mesh2, _flatCamera);
+    renderer2.render(mesh, _flatCamera);
   }
   _applyPMREM(cubeUVRenderTarget) {
     const renderer2 = this._renderer;
@@ -22909,14 +22689,14 @@ var WebGLCubeRenderTarget = class extends WebGLRenderTarget {
       blending: NoBlending
     });
     material.uniforms.tEquirect.value = texture;
-    const mesh2 = new Mesh(geometry, material);
+    const mesh = new Mesh(geometry, material);
     const currentMinFilter = texture.minFilter;
     if (texture.minFilter === LinearMipmapLinearFilter) texture.minFilter = LinearFilter;
     const camera2 = new CubeCamera(1, 10, this);
-    camera2.update(renderer2, mesh2);
+    camera2.update(renderer2, mesh);
     texture.minFilter = currentMinFilter;
-    mesh2.geometry.dispose();
-    mesh2.material.dispose();
+    mesh.geometry.dispose();
+    mesh.material.dispose();
     return this;
   }
   /**
@@ -23083,7 +22863,7 @@ function WebGLExtensions(gl) {
     }
   };
 }
-function WebGLGeometries(gl, attributes, info, bindingStates) {
+function WebGLGeometries(gl, attributes, info2, bindingStates) {
   const geometries = {};
   const wireframeAttributes = /* @__PURE__ */ new WeakMap();
   function onGeometryDispose(event) {
@@ -23105,13 +22885,13 @@ function WebGLGeometries(gl, attributes, info, bindingStates) {
     if (geometry.isInstancedBufferGeometry === true) {
       delete geometry._maxInstanceCount;
     }
-    info.memory.geometries--;
+    info2.memory.geometries--;
   }
   function get(object, geometry) {
     if (geometries[geometry.id] === true) return geometry;
     geometry.addEventListener("dispose", onGeometryDispose);
     geometries[geometry.id] = true;
-    info.memory.geometries++;
+    info2.memory.geometries++;
     return geometry;
   }
   function update(geometry) {
@@ -23173,7 +22953,7 @@ function WebGLGeometries(gl, attributes, info, bindingStates) {
     getWireframeAttribute
   };
 }
-function WebGLIndexedBufferRenderer(gl, extensions, info) {
+function WebGLIndexedBufferRenderer(gl, extensions, info2) {
   let mode;
   function setMode(value) {
     mode = value;
@@ -23185,12 +22965,12 @@ function WebGLIndexedBufferRenderer(gl, extensions, info) {
   }
   function render(start, count) {
     gl.drawElements(mode, count, type, start * bytesPerElement);
-    info.update(count, mode, 1);
+    info2.update(count, mode, 1);
   }
   function renderInstances(start, count, primcount) {
     if (primcount === 0) return;
     gl.drawElementsInstanced(mode, count, type, start * bytesPerElement, primcount);
-    info.update(count, mode, primcount);
+    info2.update(count, mode, primcount);
   }
   function renderMultiDraw(starts, counts, drawCount) {
     if (drawCount === 0) return;
@@ -23200,7 +22980,7 @@ function WebGLIndexedBufferRenderer(gl, extensions, info) {
     for (let i = 0; i < drawCount; i++) {
       elementCount += counts[i];
     }
-    info.update(elementCount, mode, 1);
+    info2.update(elementCount, mode, 1);
   }
   this.setMode = setMode;
   this.setIndex = setIndex;
@@ -23350,10 +23130,10 @@ function WebGLMorphtargets(gl, capabilities, textures) {
     update
   };
 }
-function WebGLObjects(gl, geometries, attributes, bindingStates, info) {
+function WebGLObjects(gl, geometries, attributes, bindingStates, info2) {
   let updateMap = /* @__PURE__ */ new WeakMap();
   function update(object) {
-    const frame2 = info.render.frame;
+    const frame2 = info2.render.frame;
     const geometry = object.geometry;
     const buffergeometry = geometries.get(object, geometry);
     if (updateMap.get(buffergeometry) !== frame2) {
@@ -23482,7 +23262,7 @@ function WebGLOutput(type, width, height, antialias, depth, stencil) {
     depthTest: false,
     depthWrite: false
   });
-  const mesh2 = new Mesh(geometry, material);
+  const mesh = new Mesh(geometry, material);
   const camera2 = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
   let _outputColorSpace = null;
   let _outputToneMapping = null;
@@ -23560,7 +23340,7 @@ function WebGLOutput(type, width, height, antialias, depth, stencil) {
     }
     material.uniforms.tDiffuse.value = readBuffer.texture;
     renderer2.setRenderTarget(_savedRenderTarget);
-    renderer2.render(mesh2, camera2);
+    renderer2.render(mesh, camera2);
     _savedRenderTarget = null;
     _isCompositing = false;
   };
@@ -24212,8 +23992,8 @@ var WebGLUniforms = class {
     this.map = {};
     const n = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
     for (let i = 0; i < n; ++i) {
-      const info = gl.getActiveUniform(program, i), addr = gl.getUniformLocation(program, info.name);
-      parseUniform(info, addr, this);
+      const info2 = gl.getActiveUniform(program, i), addr = gl.getUniformLocation(program, info2.name);
+      parseUniform(info2, addr, this);
     }
     const shadowSamplers = [];
     const otherUniforms = [];
@@ -24357,14 +24137,14 @@ function fetchAttributeLocations(gl, program) {
   const attributes = {};
   const n = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
   for (let i = 0; i < n; i++) {
-    const info = gl.getActiveAttrib(program, i);
-    const name = info.name;
+    const info2 = gl.getActiveAttrib(program, i);
+    const name = info2.name;
     let locationSize = 1;
-    if (info.type === gl.FLOAT_MAT2) locationSize = 2;
-    if (info.type === gl.FLOAT_MAT3) locationSize = 3;
-    if (info.type === gl.FLOAT_MAT4) locationSize = 4;
+    if (info2.type === gl.FLOAT_MAT2) locationSize = 2;
+    if (info2.type === gl.FLOAT_MAT3) locationSize = 3;
+    if (info2.type === gl.FLOAT_MAT4) locationSize = 4;
     attributes[name] = {
-      type: info.type,
+      type: info2.type,
       location: gl.getAttribLocation(program, name),
       locationSize
     };
@@ -24905,12 +24685,12 @@ var WebGLShaderCache = class {
   }
   _getShaderStage(code) {
     const cache2 = this.shaderCache;
-    let stage = cache2.get(code);
-    if (stage === void 0) {
-      stage = new WebGLShaderStage(code);
-      cache2.set(code, stage);
+    let stage2 = cache2.get(code);
+    if (stage2 === void 0) {
+      stage2 = new WebGLShaderStage(code);
+      cache2.set(code, stage2);
     }
-    return stage;
+    return stage2;
   }
 };
 var WebGLShaderStage = class {
@@ -27191,7 +26971,7 @@ function WebGLState(gl, extensions) {
     reset
   };
 }
-function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, info) {
+function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, info2) {
   const multisampledRTTExt = extensions.has("WEBGL_multisampled_render_to_texture") ? extensions.get("WEBGL_multisampled_render_to_texture") : null;
   const supportsInvalidateFramebuffer = typeof navigator === "undefined" ? false : /OculusBrowser/g.test(navigator.userAgent);
   const _imageDimensions = new Vector2();
@@ -27398,7 +27178,7 @@ function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, 
     const source = texture.source;
     const webglTextures = _sources.get(source);
     delete webglTextures[textureProperties.__cacheKey];
-    info.memory.textures--;
+    info2.memory.textures--;
   }
   function deallocateRenderTarget(renderTarget) {
     const renderTargetProperties = properties.get(renderTarget);
@@ -27435,7 +27215,7 @@ function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, 
       const attachmentProperties = properties.get(textures[i]);
       if (attachmentProperties.__webglTexture) {
         _gl.deleteTexture(attachmentProperties.__webglTexture);
-        info.memory.textures--;
+        info2.memory.textures--;
       }
       properties.remove(textures[i]);
     }
@@ -27589,7 +27369,7 @@ function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, 
           texture: _gl.createTexture(),
           usedTimes: 0
         };
-        info.memory.textures++;
+        info2.memory.textures++;
         forceUpload = true;
       }
       webglTextures[textureCacheKey].usedTimes++;
@@ -28236,7 +28016,7 @@ function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, 
         textureProperties.__webglTexture = _gl.createTexture();
       }
       textureProperties.__version = texture.version;
-      info.memory.textures++;
+      info2.memory.textures++;
     }
     if (isCube) {
       renderTargetProperties.__webglFramebuffer = [];
@@ -28264,7 +28044,7 @@ function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, 
           const attachmentProperties = properties.get(textures[i]);
           if (attachmentProperties.__webglTexture === void 0) {
             attachmentProperties.__webglTexture = _gl.createTexture();
-            info.memory.textures++;
+            info2.memory.textures++;
           }
         }
       }
@@ -28437,7 +28217,7 @@ function WebGLTextures(_gl, extensions, state, properties, capabilities, utils, 
     return renderTarget.samples > 0 && extensions.has("WEBGL_multisampled_render_to_texture") === true && renderTargetProperties.__useRenderToTexture !== false;
   }
   function updateVideoTexture(texture) {
-    const frame2 = info.render.frame;
+    const frame2 = info2.render.frame;
     if (_videoTextures.get(texture) !== frame2) {
       _videoTextures.set(texture, frame2);
       texture.update();
@@ -29528,7 +29308,7 @@ function WebGLMaterials(renderer2, properties) {
     refreshMaterialUniforms
   };
 }
-function WebGLUniformsGroups(gl, info, capabilities, state) {
+function WebGLUniformsGroups(gl, info2, capabilities, state) {
   let buffers = {};
   let updateList = {};
   let allocatedBindingPoints = [];
@@ -29547,7 +29327,7 @@ function WebGLUniformsGroups(gl, info, capabilities, state) {
     }
     const webglProgram = program.program;
     state.updateUBOMapping(uniformsGroup, webglProgram);
-    const frame2 = info.render.frame;
+    const frame2 = info2.render.frame;
     if (updateList[uniformsGroup.id] !== frame2) {
       updateBufferData(uniformsGroup);
       updateList[uniformsGroup.id] = frame2;
@@ -29600,10 +29380,10 @@ function WebGLUniformsGroups(gl, info, capabilities, state) {
         let arrayOffset = 0;
         for (let k = 0; k < value.length; k++) {
           const val = value[k];
-          const info2 = getUniformSize(val);
+          const info3 = getUniformSize(val);
           writeUniformValue(val, uniform.__data, arrayOffset);
           if (typeof val !== "number" && typeof val !== "boolean" && !val.isMatrix3 && !ArrayBuffer.isView(val)) {
-            arrayOffset += info2.storage / Float32Array.BYTES_PER_ELEMENT;
+            arrayOffset += info3.storage / Float32Array.BYTES_PER_ELEMENT;
           }
         }
       } else {
@@ -29675,17 +29455,17 @@ function WebGLUniformsGroups(gl, info, capabilities, state) {
         const values = Array.isArray(uniform.value) ? uniform.value : [uniform.value];
         for (let k = 0, kl = values.length; k < kl; k++) {
           const value = values[k];
-          const info2 = getUniformSize(value);
+          const info3 = getUniformSize(value);
           const chunkOffset2 = offset % chunkSize;
-          const chunkPadding = chunkOffset2 % info2.boundary;
+          const chunkPadding = chunkOffset2 % info3.boundary;
           const chunkStart = chunkOffset2 + chunkPadding;
           offset += chunkPadding;
-          if (chunkStart !== 0 && chunkSize - chunkStart < info2.storage) {
+          if (chunkStart !== 0 && chunkSize - chunkStart < info3.storage) {
             offset += chunkSize - chunkStart;
           }
-          uniform.__data = new Float32Array(info2.storage / Float32Array.BYTES_PER_ELEMENT);
+          uniform.__data = new Float32Array(info3.storage / Float32Array.BYTES_PER_ELEMENT);
           uniform.__offset = offset;
-          offset += info2.storage;
+          offset += info3.storage;
         }
       }
     }
@@ -29696,39 +29476,39 @@ function WebGLUniformsGroups(gl, info, capabilities, state) {
     return this;
   }
   function getUniformSize(value) {
-    const info2 = {
+    const info3 = {
       boundary: 0,
       // bytes
       storage: 0
       // bytes
     };
     if (typeof value === "number" || typeof value === "boolean") {
-      info2.boundary = 4;
-      info2.storage = 4;
+      info3.boundary = 4;
+      info3.storage = 4;
     } else if (value.isVector2) {
-      info2.boundary = 8;
-      info2.storage = 8;
+      info3.boundary = 8;
+      info3.storage = 8;
     } else if (value.isVector3 || value.isColor) {
-      info2.boundary = 16;
-      info2.storage = 12;
+      info3.boundary = 16;
+      info3.storage = 12;
     } else if (value.isVector4) {
-      info2.boundary = 16;
-      info2.storage = 16;
+      info3.boundary = 16;
+      info3.storage = 16;
     } else if (value.isMatrix3) {
-      info2.boundary = 48;
-      info2.storage = 48;
+      info3.boundary = 48;
+      info3.storage = 48;
     } else if (value.isMatrix4) {
-      info2.boundary = 64;
-      info2.storage = 64;
+      info3.boundary = 64;
+      info3.storage = 64;
     } else if (value.isTexture) {
       warn("WebGLRenderer: Texture samplers can not be part of an uniforms group.");
     } else if (ArrayBuffer.isView(value)) {
-      info2.boundary = 16;
-      info2.storage = value.byteLength;
+      info3.boundary = 16;
+      info3.storage = value.byteLength;
     } else {
       warn("WebGLRenderer: Unsupported uniform value type.", value);
     }
-    return info2;
+    return info3;
   }
   function onUniformsGroupsDispose(event) {
     const uniformsGroup = event.target;
@@ -30405,7 +30185,7 @@ var WebGLRenderer = class {
     function getContext(contextName, contextAttributes) {
       return canvas2.getContext(contextName, contextAttributes);
     }
-    let extensions, capabilities, state, info;
+    let extensions, capabilities, state, info2;
     let properties, textures, environments, attributes, geometries, objects;
     let programCache, materials, renderLists, renderStates, clipping, shadowMap;
     let background, morphtargets, bufferRenderer, indexedBufferRenderer;
@@ -30456,14 +30236,14 @@ var WebGLRenderer = class {
       _scratchFramebuffer = _gl.createFramebuffer();
       _srcFramebuffer = _gl.createFramebuffer();
       _dstFramebuffer = _gl.createFramebuffer();
-      info = new WebGLInfo(_gl);
+      info2 = new WebGLInfo(_gl);
       properties = new WebGLProperties();
-      textures = new WebGLTextures(_gl, extensions, state, properties, capabilities, utils, info);
+      textures = new WebGLTextures(_gl, extensions, state, properties, capabilities, utils, info2);
       environments = new WebGLEnvironments(_this);
       attributes = new WebGLAttributes(_gl);
       bindingStates = new WebGLBindingStates(_gl, attributes);
-      geometries = new WebGLGeometries(_gl, attributes, info, bindingStates);
-      objects = new WebGLObjects(_gl, geometries, attributes, bindingStates, info);
+      geometries = new WebGLGeometries(_gl, attributes, info2, bindingStates);
+      objects = new WebGLObjects(_gl, geometries, attributes, bindingStates, info2);
       morphtargets = new WebGLMorphtargets(_gl, capabilities, textures);
       clipping = new WebGLClipping(properties);
       programCache = new WebGLPrograms(_this, environments, extensions, capabilities, bindingStates, clipping);
@@ -30472,17 +30252,17 @@ var WebGLRenderer = class {
       renderStates = new WebGLRenderStates(extensions);
       background = new WebGLBackground(_this, environments, state, objects, _alpha, premultipliedAlpha);
       shadowMap = new WebGLShadowMap(_this, objects, capabilities);
-      uniformsGroups = new WebGLUniformsGroups(_gl, info, capabilities, state);
-      bufferRenderer = new WebGLBufferRenderer(_gl, extensions, info);
-      indexedBufferRenderer = new WebGLIndexedBufferRenderer(_gl, extensions, info);
-      info.programs = programCache.programs;
+      uniformsGroups = new WebGLUniformsGroups(_gl, info2, capabilities, state);
+      bufferRenderer = new WebGLBufferRenderer(_gl, extensions, info2);
+      indexedBufferRenderer = new WebGLIndexedBufferRenderer(_gl, extensions, info2);
+      info2.programs = programCache.programs;
       _this.capabilities = capabilities;
       _this.extensions = extensions;
       _this.properties = properties;
       _this.renderLists = renderLists;
       _this.shadowMap = shadowMap;
       _this.state = state;
-      _this.info = info;
+      _this.info = info2;
     }
     if (_outputBufferType !== UnsignedByteType) {
       output = new WebGLOutput(_outputBufferType, canvas2.width, canvas2.height, antialias, depth, stencil);
@@ -30691,13 +30471,13 @@ var WebGLRenderer = class {
     function onContextRestore() {
       log("WebGLRenderer: Context Restored.");
       _isContextLost = false;
-      const infoAutoReset = info.autoReset;
+      const infoAutoReset = info2.autoReset;
       const shadowMapEnabled = shadowMap.enabled;
       const shadowMapAutoUpdate = shadowMap.autoUpdate;
       const shadowMapNeedsUpdate = shadowMap.needsUpdate;
       const shadowMapType = shadowMap.type;
       initGLContext();
-      info.autoReset = infoAutoReset;
+      info2.autoReset = infoAutoReset;
       shadowMap.enabled = shadowMapEnabled;
       shadowMap.autoUpdate = shadowMapAutoUpdate;
       shadowMap.needsUpdate = shadowMapNeedsUpdate;
@@ -32407,8 +32187,8 @@ var OrbitControls = class extends Controls {
     this._mouse.y = -(dy / h) * 2 + 1;
     this._dollyDirection.set(this._mouse.x, this._mouse.y, 1).unproject(this.object).sub(this.object.position).normalize();
   }
-  _clampDistance(dist) {
-    return Math.max(this.minDistance, Math.min(this.maxDistance, dist));
+  _clampDistance(dist2) {
+    return Math.max(this.minDistance, Math.min(this.maxDistance, dist2));
   }
   //
   // event callbacks - update the object state
@@ -32862,6 +32642,4265 @@ function interceptControlUp(event) {
     const document2 = this.domElement.getRootNode();
     document2.removeEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
   }
+}
+
+// src/shared/starters.ts
+var STARTER_DESIGNS = [
+  // ---- cheap swarm ----
+  { id: "starter-buzzsaw", name: "Buzzsaw", chassis: "scout", mobility: "wheels", mounts: ["mg"] },
+  { id: "starter-torchbug", name: "Torchbug", chassis: "scout", mobility: "halftrack", mounts: ["flamer"] },
+  // ---- skirmisher ----
+  { id: "starter-lancer", name: "Lancer", chassis: "raider", mobility: "halftrack", mounts: ["laser", "laser"] },
+  { id: "starter-hunter", name: "Tank Hunter", chassis: "raider", mobility: "legs", mounts: ["atgm", "atgm"] },
+  // ---- frontline tank ----
+  { id: "starter-bulwark", name: "Bulwark", chassis: "warden", mobility: "treads", mounts: ["autocannon", "plateL"] },
+  // ---- anti-tank ----
+  { id: "starter-tankbuster", name: "Tankbuster", chassis: "longarm", mobility: "spider", mounts: ["cannon"] },
+  // ---- anti-air ----
+  { id: "starter-skyguard", name: "Skyguard", chassis: "warden", mobility: "halftrack", mounts: ["ac40", "ac20"] },
+  // ---- artillery ----
+  { id: "starter-thunderhead", name: "Thunderhead", chassis: "longarm", mobility: "spider", mounts: ["howitzer"] },
+  { id: "starter-firestorm", name: "Firestorm", chassis: "striker", mobility: "spider", mounts: ["mortar", "mortar", null] },
+  // ---- flyers ----
+  { id: "starter-hornet", name: "Hornet", chassis: "drone", mobility: "rotor", mounts: ["twinmg"] },
+  { id: "starter-strafer", name: "Strafer", chassis: "strikejet", mobility: "jet", mounts: ["rockets", "guidedrocket", "hmg"] },
+  // ---- support ----
+  { id: "starter-medic", name: "Field Medic", chassis: "aegis", mobility: "halftrack", mounts: ["autocannon", "repair"] },
+  // ---- brawler ----
+  { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "shotgun"] },
+  // ---- size-3 heavies ----
+  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "twin30", "hmg"] },
+  { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["cannon", "plateM", "autocannon"] },
+  // ---- emplacement ----
+  { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "anchor", mounts: ["guidedrocket", "hmg"] },
+  // ---- melee: fast hover brawler that dives into the line ----
+  { id: "starter-ripper", name: "Gnasher", chassis: "raider", mobility: "legs", mounts: ["buzzsaw", "shockprod"] },
+  // ---- stealth: cloaked sniper platform ----
+  { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
+  // ---- shield wall: barrier-heavy anchor of the line ----
+  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "cannon75", "shield"] },
+  // ---- support aura: command vehicle that speeds up and repairs its escorts ----
+  { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "twin30", "hmg"] },
+  // ---- giant (size 4): all-round assault walker ----
+  { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "autocannon"] },
+  // ---- titan (size 5): beam-armed war machine ----
+  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "autocannon"] }
+];
+
+// src/shared/parts.ts
+var CHASSIS = [
+  { id: "scout", name: "Scout Frame", desc: "Tiny, cheap and quick. One light mount.", size: 1, hp: 140, armor: 0, weight: 3, cost: 10, mounts: ["S"], agility: 1.3, roles: ["scout", "raider"], traits: [], shape: "wedge" },
+  { id: "drone", name: "Drone Core", desc: "Featherweight quad-rotor drone core.", size: 1, hp: 140, armor: 0, weight: 1.5, cost: 10, domain: "heli", mounts: ["S"], agility: 1.4, roles: ["scout", "flyer"], traits: ["compact"], shape: "pod" },
+  { id: "raider", name: "Raider Frame", desc: "Light skirmisher with twin light mounts.", size: 1, hp: 210, armor: 2, weight: 5, cost: 75, mounts: ["S", "S"], agility: 1.15, roles: ["raider"], traits: [], shape: "box" },
+  { id: "warden", name: "Warden Hull", desc: "Sturdy medium hull built to hold a line.", size: 2, hp: 560, armor: 6, weight: 14, cost: 115, mounts: ["M", "S"], agility: 0.95, roles: ["assault", "tank"], traits: [], shape: "hex" },
+  { id: "striker", name: "Striker Frame", desc: "Aggressive medium frame with three mounts.", size: 2, hp: 430, armor: 4, weight: 12, cost: 160, footprint: [2, 3], mounts: ["M", "M", "S"], agility: 1, roles: ["skirmisher", "assault"], traits: [], shape: "cross" },
+  { id: "longarm", name: "Longarm Platform", desc: "Stabilized platform: one heavy mount, +20% weapon range.", size: 2, hp: 360, armor: 3, weight: 12, cost: 250, footprint: [1, 3], mounts: ["M"], agility: 0.85, roles: ["artillery", "siege"], traits: ["rangeBoost"], shape: "long" },
+  { id: "aegis", name: "Aegis Frame", desc: "Support frame. Field-repairs nearby allies.", size: 2, hp: 610, armor: 4, weight: 13, cost: 60, mounts: ["M", "S"], agility: 0.95, roles: ["support"], traits: ["repairAura"], shape: "round" },
+  { id: "gunship", name: "Gunship", desc: "Attack helicopter airframe with stub-wing mounts.", size: 2, hp: 420, armor: 3, weight: 8, cost: 60, footprint: [2, 3], domain: "heli", mounts: ["M", "M"], agility: 1.1, roles: ["flyer"], traits: ["airOnly"], shape: "airframe" },
+  { id: "bastion", name: "Bastion Hull", desc: "Massive armored hull. Slow, nearly unbreakable.", size: 3, hp: 1500, armor: 14, weight: 38, cost: 400, mounts: ["M", "M", "M"], agility: 0.8, roles: ["tank", "assault"], traits: [], shape: "fortress" },
+  { id: "colossus", name: "Monarch Frame", desc: "Walking arsenal with four mounts.", size: 3, hp: 1250, armor: 10, weight: 34, cost: 405, footprint: [3, 4], mounts: ["M", "M", "M", "S"], agility: 0.85, roles: ["assault", "siege"], traits: [], shape: "titan" },
+  // ---- Odd-shaped frames ----
+  { id: "mantis", name: "Needle Frame", desc: "Lanky light strider with twin blade-arm mounts.", size: 1, hp: 185, armor: 1, weight: 4, cost: 35, footprint: [1, 2], mounts: ["S", "S"], agility: 1.35, mobility: ["legs", "jumpjets", "spider", "hover"], roles: ["raider", "melee"], traits: [], shape: "mantis" },
+  { id: "strider", name: "Strider Mech", desc: "Humanoid mech: arm guns and a shoulder mount. Needs legs.", size: 2, hp: 480, armor: 5, weight: 12, cost: 140, mounts: ["M", "S", "S"], agility: 1.05, mobility: ["legs", "jumpjets", "spider", "anchor"], roles: ["skirmisher"], traits: [], shape: "mech" },
+  { id: "arachnid", name: "Orbwalker Core", desc: "Orb-bodied walker pod with twin dorsal mounts. Walks on multi-legs or jump legs.", size: 2, hp: 420, armor: 4, weight: 11, cost: 190, mounts: ["M", "M"], agility: 1.1, mobility: ["spider", "jumpjets", "anchor"], roles: ["skirmisher", "raider"], traits: [], shape: "arachnid" },
+  { id: "crab", name: "Bunker Crawler", desc: "Wide, low, heavily plated mobile bunker with arm mounts.", size: 2, hp: 600, armor: 8, weight: 15, cost: 240, footprint: [3, 2], mounts: ["M", "M", "S"], agility: 0.85, mobility: ["spider", "halftrack", "treads", "hover", "anchor"], roles: ["riot", "tank"], traits: [], shape: "crab" },
+  { id: "saucer", name: "Saucer Disc", desc: "Round disc hull with an all-round turret ring. Hovers or walks.", size: 2, hp: 400, armor: 4, weight: 10, cost: 210, mounts: ["M", "M", "S"], agility: 1.2, mobility: ["hover", "anchor", "spider"], roles: ["skirmisher", "antiair"], traits: [], shape: "saucer" },
+  { id: "deltawing", name: "Delta Wing", desc: "Triangular strike aircraft. Must fly.", size: 2, hp: 340, armor: 3, weight: 8, cost: 75, footprint: [2, 3], domain: "jet", mounts: ["M", "S", "S"], agility: 1.15, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "delta" },
+  { id: "warlord", name: "Warlord Mech", desc: "Heavy humanoid mech with a shoulder cannon and arm weapons.", size: 3, hp: 1350, armor: 11, weight: 34, cost: 430, footprint: [4, 3], mounts: ["M", "M", "M", "S"], agility: 0.9, mobility: ["titanlegs", "spider", "anchor"], roles: ["assault"], traits: [], shape: "warlord" },
+  { id: "scorpion", name: "Tailgun Crawler", desc: "Armored crawler with a crane-boom heavy weapon over its back and twin arm mounts.", size: 3, hp: 1200, armor: 12, weight: 32, cost: 260, footprint: [3, 4], mounts: ["M", "M", "M"], agility: 0.95, mobility: ["spider", "treads", "anchor"], roles: ["assault", "siege"], traits: [], shape: "scorpion" },
+  { id: "centipede", name: "Landtrain Hull", desc: "Articulated multi-car land-train with four medium mounts down its spine.", size: 3, hp: 1300, armor: 9, weight: 33, cost: 525, footprint: [2, 5], mounts: ["M", "M", "M", "M"], agility: 0.8, mobility: ["spider", "halftrack", "treads"], roles: ["riot", "assault"], traits: [], shape: "centipede" },
+  // ---- Role-specialist frames ----
+  { id: "carriage", name: "Gun Carriage", desc: "Light, thin-skinned carriage that holds a medium weapon. Cheap artillery or tank-hunter.", size: 1, hp: 110, armor: 0, weight: 3, cost: 40, mounts: ["M"], agility: 0.9, roles: ["artillery", "skirmisher"], traits: [], shape: "carriage" },
+  { id: "hunter", name: "Hunter Frame", desc: "Fast, lightly armored skirmisher frame. Strikes from range and keeps moving.", size: 2, hp: 360, armor: 2, weight: 9, cost: 80, footprint: [1, 2], mounts: ["M", "S"], agility: 1.25, roles: ["skirmisher", "raider"], traits: [], shape: "hunter" },
+  { id: "riot", name: "Riot Frame", desc: "Sloped front armor and twin medium mounts. Built to wade into swarms.", size: 2, hp: 650, armor: 9, weight: 15, cost: 230, footprint: [3, 2], mounts: ["M", "M"], agility: 0.9, roles: ["riot", "tank"], traits: [], shape: "riot" },
+  { id: "interceptor", name: "Interceptor", desc: "Light fighter airframe. Must fly.", size: 1, hp: 120, armor: 1, weight: 1.2, cost: 15, footprint: [1, 2], domain: "jet", mounts: ["S", "S"], agility: 1.3, roles: ["antiair", "flyer", "raider"], traits: ["airOnly"], shape: "interceptor" },
+  { id: "siegeplat", name: "Siege Platform", desc: "Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.", size: 3, hp: 800, armor: 3, weight: 22, cost: 265, footprint: [2, 4], mounts: ["M", "M"], agility: 0.7, roles: ["artillery", "siege"], traits: [], shape: "siegeplat" },
+  { id: "juggernaut", name: "Monolith Hull", desc: "A wall of armor with token weapons. Soaks fire for the army behind it.", size: 3, hp: 2100, armor: 18, weight: 40, cost: 250, footprint: [4, 3], mounts: ["M", "S"], agility: 0.75, roles: ["tank"], traits: [], shape: "juggernaut" },
+  { id: "bomberhull", name: "Heavy Bomber", desc: "Big flying bomb truck with three medium bays. Grav lifters or nothing.", size: 3, hp: 1170, armor: 5, weight: 24, cost: 200, footprint: [3, 4], domain: "heli", mounts: ["M", "M", "M"], agility: 0.7, roles: ["bomber", "flyer"], traits: ["airOnly"], shape: "bomber" },
+  // ---- Aircraft ----
+  { id: "strikejet", name: "Strike Jet", desc: "Multirole fighter-bomber with a centreline and two wing hardpoints.", size: 2, hp: 330, armor: 2, weight: 7, cost: 80, footprint: [2, 3], mounts: ["M", "S", "S"], agility: 1.2, domain: "jet", roles: ["flyer", "raider", "antiair"], traits: [], shape: "strikejet" },
+  { id: "stratobomber", name: "Strato Bomber", desc: "Long-range jet bomber with three bomb bays and a tail gun.", size: 3, hp: 900, armor: 4, weight: 18, cost: 300, footprint: [4, 4], mounts: ["M", "M", "M", "S"], agility: 0.8, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "stratobomber" },
+  { id: "heavyheli", name: "Heavy Helicopter", desc: "Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.", size: 3, hp: 1e3, armor: 6, weight: 20, cost: 280, footprint: [2, 4], mounts: ["M", "M", "S"], agility: 0.85, domain: "heli", roles: ["flyer", "assault"], traits: [], shape: "heavyheli" },
+  // ---- Giant class (size 4, 20 m) ----
+  { id: "goliath", name: "Warhulk Frame", desc: "Giant assault frame: a giant-class mount backed by two heavies.", size: 4, hp: 4160, armor: 16, weight: 70, cost: 190, footprint: [4, 5], mounts: ["L", "M", "M", "M"], agility: 0.75, roles: ["assault"], traits: [], shape: "goliath" },
+  { id: "leviathan", name: "Leviathan Hull", desc: "Giant battle hull with twin giant-class mounts.", size: 4, hp: 3800, armor: 20, weight: 82, cost: 725, footprint: [3, 6], mounts: ["L", "L", "M", "M"], agility: 0.65, roles: ["siege", "assault"], traits: [], shape: "leviathan" },
+  { id: "carrier", name: "Sky Carrier", desc: "Giant flying hull. Must fly on grav lifters.", size: 4, hp: 2100, armor: 10, weight: 50, cost: 1100, footprint: [6, 3], domain: "heli", mounts: ["L", "M", "M", "M"], agility: 0.8, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "carrier" },
+  { id: "broodmother", name: "Matriarch", desc: "Giant multi-legged walking fortress with a giant-class dorsal weapon and four more mounts.", size: 4, hp: 3e3, armor: 14, weight: 66, cost: 650, footprint: [5, 4], mounts: ["L", "M", "M", "M", "S"], agility: 0.85, mobility: ["spider", "anchor"], roles: ["riot", "assault"], traits: [], shape: "broodmother" },
+  // ---- Titan class (size 5, 25 m) ----
+  { id: "titan", name: "Titan Walker", desc: "Titan-class war machine with a titan mount and a giant mount.", size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [7, 7], mounts: ["XL", "L", "M", "M", "M"], agility: 0.7, roles: ["assault", "siege"], traits: [], shape: "colossal" },
+  { id: "citadel", name: "Citadel Fortress", desc: "Mobile fortress with twin titan mounts. The biggest thing on the field.", size: 5, hp: 8e3, armor: 28, weight: 140, cost: 1915, footprint: [8, 7], mounts: ["XL", "XL", "L", "M", "M", "S"], agility: 0.55, roles: ["siege", "tank"], traits: [], shape: "citadel" },
+  { id: "arachne", name: "Weaver Titan", desc: "Titan-class walking fortress: a titan mount and twin giant mounts on many legs.", size: 5, hp: 7630, armor: 20, weight: 115, cost: 340, footprint: [8, 8], mounts: ["XL", "L", "L", "M"], agility: 0.75, mobility: ["spider", "anchor"], roles: ["assault"], traits: [], shape: "arachne" }
+];
+var MOBILITY = [
+  { id: "wheels", name: "Wheels", desc: "Fast and cheap, but fragile and light-duty.", kind: "ground", sizes: [1, 2], speed: 3.2, turn: 4, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [], roles: ["raider", "scout"] },
+  { id: "halftrack", name: "Half-Track", desc: "Wheels up front, treads behind. Balanced all-rounder.", kind: "ground", sizes: [1, 2, 3], speed: 2.3, turn: 2.6, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [], roles: ["skirmisher", "assault"] },
+  { id: "treads", name: "Tank Treads", desc: "Heavy-duty treads. Slow, tough, carries anything.", kind: "ground", sizes: [2, 3, 4], speed: 1.6, turn: 1.8, capacity: [0, 32, 66, 125, 0], weight: 4, hp: 60, armor: 3, cost: 22, traits: ["crush"], roles: ["tank", "assault"] },
+  { id: "legs", name: "Bipedal Legs", desc: "Nimble walker. Fires while moving.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ["fireOnMove"], roles: ["skirmisher", "raider"] },
+  { id: "spider", name: "Spider Legs", desc: "Six-legged stable walker. Better accuracy, carries heavy loads.", kind: "ground", sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ["stable"], roles: ["artillery", "riot", "skirmisher"] },
+  { id: "jumpjets", name: "Jump Legs", desc: "Leaps over obstacles straight into the fight.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ["leap"], roles: ["raider", "melee"] },
+  { id: "hover", name: "Hover Skirt", desc: "Skims the ground. Very fast, hard to hit.", kind: "ground", sizes: [1, 2], speed: 3.6, turn: 2.2, capacity: [6, 17, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive"], roles: ["raider", "scout"] },
+  { id: "rotor", name: "Rotor", desc: "Helicopter rotors. Flies over ground units; only anti-air can hit it.", kind: "air", sizes: [1, 2, 3], speed: 2.8, turn: 3, capacity: [5, 17, 36, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "support"] },
+  { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3], speed: 4.6, turn: 1.6, capacity: [4, 14, 30, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["fireOnMove", "strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
+  { id: "megatracks", name: "Colossal Tracks", desc: "Quad track assemblies for giant and titan hulls. Crushes anything underfoot.", kind: "ground", sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ["crush"], roles: ["tank", "assault"] },
+  { id: "titanlegs", name: "Titan Legs", desc: "Towering walker legs. Fires on the move and stomps smaller units.", kind: "ground", sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ["fireOnMove", "crush"], roles: ["assault"] },
+  { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy and giant hulls fly.", kind: "air", sizes: [3, 4], speed: 1.6, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "bomber"] },
+  { id: "anchor", name: "Anchor Mount", desc: "Immobile emplacement. Extra hp, armor and +15% range.", kind: "static", sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ["fortified"], roles: ["siege", "artillery", "antiair"] }
+];
+var G = { targetsGround: true, targetsAir: false };
+var A = { targetsGround: false, targetsAir: true };
+var GA = { targetsGround: true, targetsAir: true };
+var MELEE = { targetsGround: true, targetsAir: false, projectile: "melee" };
+var util = (m) => ({ kind: "utility", ...m });
+var wpn = (m) => ({ kind: "weapon", ...m });
+var MODULES = [
+  // ---------------- Machine guns ----------------
+  wpn({
+    id: "mg",
+    name: "7.62mm Machine Gun",
+    family: "7.62mm",
+    desc: "Rapid fire. Shreds light units and aircraft; weak vs armor.",
+    category: "machinegun",
+    visual: "gun",
+    caliber: 0.2,
+    mount: "S",
+    weight: 1,
+    cost: 6,
+    damage: 9,
+    cooldown: 0.15,
+    range: 5.5,
+    ...GA,
+    projectile: "bullet",
+    projectileSpeed: 22,
+    ap: 0,
+    spread: 0.35
+  }),
+  wpn({
+    id: "twinmg",
+    name: "Twin 7.62mm MG",
+    family: "Twin 7.62mm",
+    desc: "Two coaxial machine guns on one mount. Double the lead.",
+    category: "machinegun",
+    visual: "gun",
+    barrels: 2,
+    caliber: 0.2,
+    mount: "S",
+    weight: 1.8,
+    cost: 11,
+    damage: 9,
+    cooldown: 0.075,
+    range: 5.5,
+    ...GA,
+    projectile: "bullet",
+    projectileSpeed: 22,
+    ap: 0,
+    spread: 0.45
+  }),
+  wpn({
+    id: "hmg",
+    name: "12.7mm Heavy MG",
+    family: "12.7mm",
+    desc: "Heavier rounds with a little armor pierce and reach.",
+    category: "machinegun",
+    visual: "gun",
+    caliber: 0.4,
+    mount: "S",
+    weight: 1.6,
+    cost: 10,
+    damage: 16,
+    cooldown: 0.22,
+    range: 6.5,
+    ...GA,
+    magazine: 25,
+    reload: 2.5,
+    projectile: "bullet",
+    projectileSpeed: 24,
+    ap: 0.15,
+    spread: 0.3
+  }),
+  wpn({
+    id: "minigun",
+    name: "Rotary Minigun",
+    family: "Rotary",
+    desc: "Six spinning barrels. A wall of bullets at close range.",
+    category: "machinegun",
+    visual: "gatling",
+    barrels: 6,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 22,
+    damage: 8,
+    cooldown: 0.04,
+    range: 6,
+    ...GA,
+    projectile: "bullet",
+    projectileSpeed: 24,
+    ap: 0,
+    spread: 0.65
+  }),
+  wpn({
+    id: "shotgun",
+    name: "Scattergun",
+    family: "Scatter",
+    desc: "Six-pellet blasts. Brutal up close, useless far away.",
+    category: "machinegun",
+    visual: "shotgun",
+    caliber: 0.5,
+    mount: "S",
+    weight: 1.4,
+    cost: 9,
+    damage: 12,
+    pellets: 6,
+    cooldown: 1,
+    range: 3.5,
+    ...GA,
+    projectile: "bullet",
+    projectileSpeed: 20,
+    ap: 0.1,
+    spread: 0.9
+  }),
+  // ---------------- Autocannons ----------------
+  wpn({
+    id: "ac20",
+    name: "20mm Autocannon",
+    family: "20mm",
+    desc: "Light autocannon. Small explosive rounds.",
+    category: "autocannon",
+    visual: "gun",
+    caliber: 0.55,
+    mount: "S",
+    weight: 1.8,
+    cost: 14,
+    damage: 18,
+    cooldown: 0.2,
+    range: 7,
+    ...GA,
+    magazine: 10,
+    reload: 2,
+    projectile: "bullet",
+    projectileSpeed: 20,
+    splash: 0.2,
+    ap: 0.2,
+    spread: 0.3
+  }),
+  wpn({
+    id: "autocannon",
+    name: "30mm Autocannon",
+    family: "30mm",
+    desc: "Versatile mid-caliber gun. Hits ground and air.",
+    category: "autocannon",
+    visual: "gun",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 22,
+    damage: 32,
+    cooldown: 0.3,
+    range: 7.5,
+    ...GA,
+    magazine: 6,
+    reload: 2,
+    projectile: "bullet",
+    projectileSpeed: 18,
+    splash: 0.3,
+    ap: 0.3,
+    spread: 0.3
+  }),
+  wpn({
+    id: "twin30",
+    name: "Twin 30mm Autocannon",
+    family: "Twin 30mm",
+    desc: "Two 30mm guns on one mount: double firepower, heavier and pricier.",
+    category: "autocannon",
+    visual: "gun",
+    barrels: 2,
+    caliber: 0.5,
+    mount: "M",
+    weight: 5,
+    cost: 38,
+    damage: 32,
+    cooldown: 0.15,
+    range: 7.5,
+    ...GA,
+    magazine: 12,
+    reload: 2.4,
+    projectile: "bullet",
+    projectileSpeed: 18,
+    splash: 0.3,
+    ap: 0.3,
+    spread: 0.35
+  }),
+  wpn({
+    id: "ac40",
+    name: "40mm Bofors",
+    family: "40mm",
+    desc: "Long-reach autocannon with proximity rounds, deadly to aircraft.",
+    category: "autocannon",
+    visual: "gun",
+    caliber: 0.8,
+    mount: "M",
+    weight: 4,
+    cost: 28,
+    damage: 55,
+    cooldown: 0.5,
+    range: 9,
+    ...GA,
+    magazine: 4,
+    reload: 2.5,
+    projectile: "bullet",
+    projectileSpeed: 20,
+    splash: 0.5,
+    ap: 0.3,
+    spread: 0.3,
+    airBonus: 1.3
+  }),
+  wpn({
+    id: "quad20",
+    name: "Quad 20mm AA",
+    family: "Quad 20mm",
+    desc: "Four 20mm barrels slaved to an AA director. Air only.",
+    category: "autocannon",
+    visual: "gun",
+    barrels: 4,
+    caliber: 0.45,
+    mount: "M",
+    weight: 4,
+    cost: 26,
+    damage: 18,
+    cooldown: 0.05,
+    range: 9,
+    ...A,
+    magazine: 24,
+    reload: 3,
+    projectile: "bullet",
+    projectileSpeed: 24,
+    splash: 0.2,
+    ap: 0.2,
+    spread: 0.3,
+    airBonus: 1.4
+  }),
+  // ---------------- Cannons ----------------
+  wpn({
+    id: "cannon75",
+    name: "75mm Gun",
+    family: "75mm",
+    desc: "Medium tank gun. Solid armor pierce on a medium mount.",
+    category: "cannon",
+    visual: "cannon",
+    caliber: 0.5,
+    mount: "M",
+    weight: 5,
+    cost: 32,
+    damage: 95,
+    cooldown: 0.7,
+    range: 8.5,
+    ...G,
+    magazine: 3,
+    reload: 4,
+    projectile: "shell",
+    projectileSpeed: 20,
+    splash: 0.3,
+    ap: 0.55,
+    spread: 0.2
+  }),
+  wpn({
+    id: "cannon",
+    name: "120mm Heavy Cannon",
+    family: "120mm",
+    desc: "Armor-piercing shells. The tank killer.",
+    category: "cannon",
+    visual: "cannon",
+    caliber: 0.8,
+    mount: "M",
+    weight: 8,
+    cost: 50,
+    damage: 190,
+    cooldown: 2.2,
+    range: 9,
+    ...G,
+    projectile: "shell",
+    projectileSpeed: 20,
+    splash: 0.3,
+    ap: 0.7,
+    spread: 0.2
+  }),
+  wpn({
+    id: "twin120",
+    name: "Twin 120mm Cannon",
+    family: "Twin 120mm",
+    desc: "Two heavy cannons in one turret. Twice the punch, huge weight.",
+    category: "cannon",
+    visual: "cannon",
+    barrels: 2,
+    caliber: 0.8,
+    mount: "M",
+    weight: 13,
+    cost: 85,
+    damage: 190,
+    cooldown: 1.1,
+    range: 9,
+    ...G,
+    projectile: "shell",
+    projectileSpeed: 20,
+    splash: 0.3,
+    ap: 0.7,
+    spread: 0.25
+  }),
+  wpn({
+    id: "gauss",
+    name: "Gauss Cannon",
+    family: "Gauss",
+    desc: "Magnetic slug that punches through every unit in its path.",
+    category: "cannon",
+    visual: "gauss",
+    caliber: 0.8,
+    mount: "M",
+    weight: 10,
+    cost: 75,
+    damage: 240,
+    cooldown: 2.6,
+    range: 12,
+    ...GA,
+    projectile: "shell",
+    projectileSpeed: 34,
+    pierce: true,
+    ap: 0.8,
+    spread: 0.1
+  }),
+  // ---------------- Sniper & rail ----------------
+  wpn({
+    id: "sniper",
+    name: "Sniper Rifle",
+    family: "Sniper",
+    desc: "Long-barrel precision rifle. Picks off units from far away.",
+    category: "precision",
+    visual: "sniper",
+    caliber: 0.4,
+    mount: "S",
+    weight: 1.5,
+    cost: 20,
+    damage: 140,
+    cooldown: 3.5,
+    range: 14,
+    ...G,
+    projectile: "bullet",
+    projectileSpeed: 60,
+    ap: 0.6,
+    spread: 0
+  }),
+  wpn({
+    id: "lightrail",
+    name: "Rail Rifle",
+    family: "Light rail",
+    desc: "Compact railgun. Pierces a line of enemies.",
+    category: "precision",
+    visual: "rail",
+    caliber: 0.5,
+    mount: "M",
+    weight: 4,
+    cost: 40,
+    damage: 150,
+    cooldown: 3,
+    range: 14,
+    ...GA,
+    projectile: "rail",
+    ap: 0.9,
+    pierce: true
+  }),
+  wpn({
+    id: "railgun",
+    name: "Railgun",
+    family: "Heavy rail",
+    desc: "Pierces everything in a line. Extreme range.",
+    category: "precision",
+    visual: "rail",
+    caliber: 0.9,
+    mount: "M",
+    weight: 9,
+    cost: 75,
+    damage: 320,
+    cooldown: 4.5,
+    range: 17,
+    ...GA,
+    projectile: "rail",
+    ap: 1,
+    pierce: true
+  }),
+  // ---------------- Rockets ----------------
+  wpn({
+    id: "rocketL",
+    name: "Light Rocket Rack",
+    family: "2-tube",
+    desc: "Pair of unguided rockets.",
+    category: "rocket",
+    visual: "rocketPod",
+    barrels: 2,
+    caliber: 0.3,
+    mount: "S",
+    weight: 1.5,
+    cost: 12,
+    damage: 32,
+    burst: 2,
+    cooldown: 3,
+    range: 9,
+    ...G,
+    projectile: "rocket",
+    projectileSpeed: 11,
+    splash: 0.7,
+    ap: 0.2,
+    spread: 0.7
+  }),
+  wpn({
+    id: "rockets",
+    name: "Rocket Pod",
+    family: "4-tube",
+    desc: "Salvo of 4 unguided rockets with splash.",
+    category: "rocket",
+    visual: "rocketPod",
+    barrels: 4,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 30,
+    damage: 42,
+    burst: 4,
+    cooldown: 4,
+    range: 10,
+    ...G,
+    projectile: "rocket",
+    projectileSpeed: 11,
+    splash: 1,
+    ap: 0.2,
+    spread: 0.8
+  }),
+  wpn({
+    id: "incendiary",
+    name: "Incendiary Rockets",
+    family: "Napalm 4-tube",
+    desc: "Rockets that leave targets burning.",
+    category: "rocket",
+    visual: "rocketPod",
+    barrels: 4,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.2,
+    cost: 34,
+    damage: 32,
+    burst: 4,
+    cooldown: 4,
+    range: 10,
+    ...G,
+    projectile: "rocket",
+    projectileSpeed: 11,
+    splash: 1,
+    ap: 0.2,
+    spread: 0.8,
+    burn: { dps: 12, duration: 4 }
+  }),
+  wpn({
+    id: "mlrs",
+    name: "MLRS Battery",
+    family: "12-tube",
+    desc: "Ripple-fires 12 rockets across a huge area. Minimum range 30 m.",
+    category: "rocket",
+    visual: "rocketPod",
+    barrels: 12,
+    caliber: 0.9,
+    mount: "M",
+    weight: 10,
+    cost: 70,
+    damage: 30,
+    burst: 12,
+    cooldown: 9,
+    range: 22,
+    minRange: 6,
+    ...G,
+    projectile: "rocket",
+    projectileSpeed: 12,
+    splash: 1,
+    ap: 0.2,
+    spread: 1.6
+  }),
+  // ---------------- Missiles ----------------
+  wpn({
+    id: "atgm",
+    name: "ATGM Launcher",
+    family: "Anti-tank",
+    desc: "Wire-guided anti-tank missile on a light mount.",
+    category: "missile",
+    visual: "missileRack",
+    barrels: 1,
+    caliber: 0.3,
+    mount: "S",
+    weight: 1.6,
+    cost: 18,
+    damage: 110,
+    cooldown: 4,
+    range: 12,
+    ...G,
+    projectile: "missile",
+    projectileSpeed: 9,
+    splash: 0.2,
+    ap: 0.8
+  }),
+  wpn({
+    id: "guidedrocket",
+    name: "Guided Rocket Launcher",
+    family: "Dual-role",
+    desc: "Shoulder-sized guided rocket. Hits ground and air.",
+    category: "missile",
+    visual: "missileRack",
+    barrels: 1,
+    caliber: 0.25,
+    mount: "S",
+    weight: 1.3,
+    cost: 16,
+    damage: 55,
+    cooldown: 3,
+    range: 10,
+    ...GA,
+    projectile: "missile",
+    projectileSpeed: 10,
+    splash: 0.3,
+    ap: 0.5
+  }),
+  wpn({
+    id: "aamissile",
+    name: "AA Missile Pod",
+    family: "Anti-air",
+    desc: "Twin heat-seekers. Air only.",
+    category: "missile",
+    visual: "missileRack",
+    barrels: 2,
+    caliber: 0.3,
+    mount: "S",
+    weight: 1.4,
+    cost: 16,
+    damage: 60,
+    burst: 2,
+    cooldown: 3.5,
+    range: 13,
+    ...A,
+    projectile: "missile",
+    projectileSpeed: 11,
+    splash: 0.3,
+    ap: 0.4,
+    airBonus: 1.5
+  }),
+  wpn({
+    id: "sam",
+    name: "Missile Rack",
+    family: "Multi-role",
+    desc: "Homing missiles. Long range, bonus vs aircraft.",
+    category: "missile",
+    visual: "missileRack",
+    barrels: 4,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 34,
+    damage: 85,
+    cooldown: 3,
+    range: 13,
+    ...GA,
+    projectile: "missile",
+    projectileSpeed: 9,
+    splash: 0.4,
+    ap: 0.5,
+    airBonus: 1.6
+  }),
+  wpn({
+    id: "swarm",
+    name: "Swarm Missiles",
+    family: "Swarm",
+    desc: "Eight micro-missiles that spread across targets.",
+    category: "missile",
+    visual: "missileRack",
+    barrels: 8,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 40,
+    damage: 28,
+    burst: 8,
+    cooldown: 6,
+    range: 12,
+    ...GA,
+    projectile: "missile",
+    projectileSpeed: 10,
+    splash: 0.4,
+    ap: 0.3,
+    spread: 0.4
+  }),
+  wpn({
+    id: "cruise",
+    name: "Cruise Missile",
+    family: "Strategic",
+    desc: "One enormous long-range warhead. Slow to reload.",
+    category: "missile",
+    visual: "cruise",
+    caliber: 0.9,
+    mount: "M",
+    weight: 9,
+    cost: 80,
+    damage: 300,
+    cooldown: 10,
+    range: 28,
+    minRange: 8,
+    ...G,
+    projectile: "missile",
+    projectileSpeed: 10,
+    splash: 2.2,
+    ap: 0.6
+  }),
+  // ---------------- Artillery ----------------
+  wpn({
+    id: "mortar",
+    name: "Mortar",
+    family: "81mm",
+    desc: "Lobbed shells over the front line. Minimum range 25 m.",
+    category: "artillery",
+    visual: "mortar",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 30,
+    damage: 60,
+    cooldown: 3,
+    range: 20,
+    minRange: 5,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 8,
+    splash: 1.2,
+    ap: 0.2,
+    spread: 0.8
+  }),
+  wpn({
+    id: "howitzer",
+    name: "Howitzer",
+    family: "155mm",
+    desc: "Long-range artillery with huge splash. Minimum range 40 m.",
+    category: "artillery",
+    visual: "artillery",
+    caliber: 0.9,
+    mount: "M",
+    weight: 10,
+    cost: 75,
+    damage: 80,
+    cooldown: 5,
+    range: 30,
+    minRange: 8,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 12,
+    splash: 2,
+    ap: 0.3,
+    spread: 1.2
+  }),
+  wpn({
+    id: "barrage",
+    name: "Barrage Cannon",
+    family: "Scatter artillery",
+    desc: "Fires six shells at once that blanket an area. Minimum range 30 m.",
+    category: "artillery",
+    visual: "artillery",
+    barrels: 3,
+    caliber: 0.8,
+    mount: "M",
+    weight: 11,
+    cost: 80,
+    damage: 28,
+    pellets: 6,
+    cooldown: 3.5,
+    range: 24,
+    minRange: 6,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 10,
+    splash: 1,
+    ap: 0.1,
+    spread: 2
+  }),
+  // ---------------- Energy ----------------
+  wpn({
+    id: "laser",
+    name: "Pulse Laser",
+    family: "Pulse",
+    desc: "Accurate hitscan pulses with some armor pierce.",
+    category: "energy",
+    visual: "laser",
+    caliber: 0.3,
+    mount: "S",
+    weight: 1.2,
+    cost: 18,
+    damage: 24,
+    cooldown: 0.6,
+    range: 7,
+    ...GA,
+    projectile: "beam",
+    ap: 0.3
+  }),
+  wpn({
+    id: "twinlaser",
+    name: "Twin Pulse Laser",
+    family: "Twin pulse",
+    desc: "Two linked pulse emitters on a medium mount.",
+    category: "energy",
+    visual: "laser",
+    barrels: 2,
+    caliber: 0.4,
+    mount: "M",
+    weight: 2.6,
+    cost: 34,
+    damage: 24,
+    cooldown: 0.15,
+    range: 7,
+    ...GA,
+    magazine: 6,
+    reload: 1.5,
+    projectile: "beam",
+    ap: 0.3
+  }),
+  wpn({
+    id: "heatray",
+    name: "Heat Ray",
+    family: "Thermal",
+    desc: "Continuous ray: melts anything close, fades with distance.",
+    category: "energy",
+    visual: "heatray",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 32,
+    damage: 36,
+    cooldown: 0.2,
+    range: 5.5,
+    ...GA,
+    projectile: "beam",
+    ap: 0.5,
+    falloff: 0.25
+  }),
+  wpn({
+    id: "plasmaorb",
+    name: "Plasma Cannon",
+    family: "Plasma orb",
+    desc: "Slow-moving plasma ball that bursts on impact.",
+    category: "energy",
+    visual: "plasma",
+    caliber: 0.5,
+    mount: "M",
+    weight: 4,
+    cost: 36,
+    damage: 85,
+    cooldown: 2,
+    range: 8,
+    ...G,
+    projectile: "orb",
+    projectileSpeed: 6,
+    splash: 1.1,
+    ap: 0.5,
+    spread: 0.4
+  }),
+  wpn({
+    id: "plasma",
+    name: "Plasma Lance",
+    family: "Plasma beam",
+    desc: "Searing short-range beam with heavy armor pierce.",
+    category: "energy",
+    visual: "plasma",
+    caliber: 0.9,
+    mount: "M",
+    weight: 8,
+    cost: 65,
+    damage: 48,
+    cooldown: 0.25,
+    range: 6.5,
+    ...GA,
+    projectile: "beam",
+    ap: 0.6
+  }),
+  // ---------------- Flame ----------------
+  wpn({
+    id: "flamer",
+    name: "Flamethrower",
+    family: "Light flame",
+    desc: "Short-range cone that ignores most armor.",
+    category: "flame",
+    visual: "flamer",
+    caliber: 0.3,
+    mount: "S",
+    weight: 1.5,
+    cost: 14,
+    damage: 10,
+    cooldown: 0.1,
+    range: 3.5,
+    ...G,
+    projectile: "flame",
+    projectileSpeed: 9,
+    splash: 0.8,
+    ap: 0.8,
+    burn: { dps: 6, duration: 2 }
+  }),
+  wpn({
+    id: "napalm",
+    name: "Napalm Projector",
+    family: "Napalm",
+    desc: "Sticky burning gel. Wide cone, long burn.",
+    category: "flame",
+    visual: "flamer",
+    caliber: 0.6,
+    mount: "M",
+    weight: 3.2,
+    cost: 30,
+    damage: 14,
+    cooldown: 0.15,
+    range: 4.5,
+    ...G,
+    projectile: "flame",
+    projectileSpeed: 8,
+    splash: 1.2,
+    ap: 0.8,
+    burn: { dps: 15, duration: 3 }
+  }),
+  // ---------------- Stun & disruption ----------------
+  wpn({
+    id: "tesla",
+    name: "Tesla Coil",
+    family: "Chain lightning",
+    desc: "Lightning arcs that jump between up to 4 enemies.",
+    category: "disruption",
+    visual: "tesla",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 32,
+    damage: 48,
+    cooldown: 1.2,
+    range: 4.5,
+    ...GA,
+    projectile: "lightning",
+    chain: 3,
+    ap: 0.4
+  }),
+  wpn({
+    id: "stungun",
+    name: "Stun Gun",
+    family: "Paralyzer",
+    desc: "Electric bolt that paralyzes its target for 1.2s.",
+    category: "disruption",
+    visual: "emp",
+    caliber: 0.3,
+    mount: "S",
+    weight: 1.2,
+    cost: 18,
+    damage: 8,
+    cooldown: 1.5,
+    range: 6,
+    ...GA,
+    projectile: "lightning",
+    chain: 0,
+    ap: 1,
+    stun: 1.2
+  }),
+  wpn({
+    id: "empcannon",
+    name: "EMP Cannon",
+    family: "EMP burst",
+    desc: "Electromagnetic orb that stuns everything in the blast.",
+    category: "disruption",
+    visual: "emp",
+    caliber: 0.6,
+    mount: "M",
+    weight: 3.5,
+    cost: 38,
+    damage: 40,
+    cooldown: 3,
+    range: 9,
+    ...G,
+    projectile: "orb",
+    projectileSpeed: 7,
+    splash: 1.2,
+    ap: 1,
+    stun: 1.5,
+    spread: 0.3
+  }),
+  wpn({
+    id: "slowbeam",
+    name: "Slow Beam",
+    family: "Disruptor",
+    desc: "Beam that cuts target speed and rate of fire by up to 60%.",
+    category: "disruption",
+    visual: "slowbeam",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 28,
+    damage: 12,
+    cooldown: 0.2,
+    range: 7.5,
+    ...GA,
+    projectile: "beam",
+    ap: 1,
+    slow: 0.15
+  }),
+  wpn({
+    id: "arclance",
+    name: "Arc Lance",
+    family: "Storm",
+    desc: "Heavy lightning that chains through 6 enemies and jolts them.",
+    category: "disruption",
+    visual: "tesla",
+    caliber: 0.9,
+    mount: "M",
+    weight: 9,
+    cost: 75,
+    damage: 105,
+    cooldown: 1.6,
+    range: 6.5,
+    ...GA,
+    projectile: "lightning",
+    chain: 5,
+    ap: 0.5,
+    stun: 0.3
+  }),
+  wpn({
+    id: "disarm",
+    name: "Disarm Ray",
+    family: "Disarmer",
+    desc: "Scrambles weapon systems: target can move but not fire for 2s.",
+    category: "disruption",
+    visual: "emp",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 34,
+    damage: 15,
+    cooldown: 2.5,
+    range: 8,
+    ...GA,
+    projectile: "beam",
+    ap: 1,
+    disarm: 2
+  }),
+  wpn({
+    id: "sonic",
+    name: "Sonic Pulser",
+    family: "Riot",
+    desc: "Concussive blast that hurls light units backwards.",
+    category: "disruption",
+    visual: "sonic",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 30,
+    damage: 50,
+    cooldown: 1.4,
+    range: 4,
+    ...G,
+    projectile: "orb",
+    projectileSpeed: 14,
+    splash: 1,
+    ap: 0.3,
+    impulse: 1.6
+  }),
+  wpn({
+    id: "gravity",
+    name: "Gravity Gun",
+    family: "Graviton",
+    desc: "Yanks enemies toward you, dragging them out of formation.",
+    category: "disruption",
+    visual: "gravity",
+    caliber: 0.8,
+    mount: "M",
+    weight: 8,
+    cost: 60,
+    damage: 30,
+    cooldown: 0.8,
+    range: 8.5,
+    ...GA,
+    projectile: "beam",
+    ap: 1,
+    impulse: -0.9
+  }),
+  // ---------------- Bombs (flyers only) ----------------
+  wpn({
+    id: "bombs",
+    name: "Bomb Bay",
+    family: "Iron bombs",
+    desc: "Drops bombs on ground units directly below. Flying designs only.",
+    category: "artillery",
+    visual: "charge",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 28,
+    requires: "air",
+    damage: 110,
+    burst: 2,
+    cooldown: 3,
+    range: 1,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 6,
+    splash: 1.2,
+    ap: 0.3,
+    spread: 0.3
+  }),
+  wpn({
+    id: "clusterbombs",
+    name: "Cluster Dispenser",
+    family: "Cluster",
+    desc: "Scatters 8 bomblets over a wide area below. Flying designs only.",
+    category: "artillery",
+    visual: "charge",
+    barrels: 2,
+    caliber: 0.8,
+    mount: "M",
+    weight: 5,
+    cost: 45,
+    requires: "air",
+    damage: 55,
+    pellets: 8,
+    cooldown: 4,
+    range: 1.5,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 6,
+    splash: 0.9,
+    ap: 0.2,
+    spread: 1.6
+  }),
+  // ---------------- Flak ----------------
+  wpn({
+    id: "flak",
+    name: "Flak Cannon",
+    family: "Light flak",
+    desc: "Anti-air only. Bursting shells wreck aircraft groups.",
+    category: "antiair",
+    visual: "flak",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 24,
+    damage: 45,
+    cooldown: 0.45,
+    range: 10,
+    ...A,
+    magazine: 5,
+    reload: 2.5,
+    projectile: "shell",
+    projectileSpeed: 16,
+    splash: 1.3,
+    ap: 0.2,
+    airBonus: 1.5
+  }),
+  wpn({
+    id: "heavyflak",
+    name: "Heavy Flak Battery",
+    family: "Heavy flak",
+    desc: "Three-gun flak battery. Clears the sky at long range.",
+    category: "antiair",
+    visual: "flak",
+    barrels: 3,
+    caliber: 0.9,
+    mount: "M",
+    weight: 9,
+    cost: 60,
+    damage: 70,
+    burst: 3,
+    cooldown: 2.2,
+    range: 14,
+    ...A,
+    projectile: "shell",
+    projectileSpeed: 18,
+    splash: 1.8,
+    ap: 0.2,
+    airBonus: 1.5
+  }),
+  // ---------------- Melee ----------------
+  wpn({
+    id: "buzzsaw",
+    name: "Buzzsaw",
+    family: "Circular saw",
+    desc: "Spinning blade. Chews through light armor at contact range.",
+    category: "melee",
+    visual: "saw",
+    caliber: 0.4,
+    mount: "S",
+    weight: 1.4,
+    cost: 10,
+    damage: 30,
+    cooldown: 0.25,
+    range: 0.6,
+    ...MELEE,
+    ap: 0.3
+  }),
+  wpn({
+    id: "shockprod",
+    name: "Shock Prod",
+    family: "Stun prod",
+    desc: "Electrified spike that stuns on contact.",
+    category: "melee",
+    visual: "prod",
+    caliber: 0.3,
+    mount: "S",
+    weight: 1,
+    cost: 12,
+    damage: 36,
+    cooldown: 1,
+    range: 0.7,
+    ...MELEE,
+    ap: 0.5,
+    stun: 0.8
+  }),
+  wpn({
+    id: "ram",
+    name: "Spike Ram",
+    family: "Ram",
+    desc: "Armored ram that batters targets backwards.",
+    category: "melee",
+    visual: "ram",
+    caliber: 0.5,
+    mount: "S",
+    weight: 2,
+    cost: 10,
+    damage: 130,
+    cooldown: 1.5,
+    range: 0.4,
+    ...MELEE,
+    ap: 0.5,
+    impulse: 1.2
+  }),
+  wpn({
+    id: "chainsaw",
+    name: "Chainsaw Arm",
+    family: "Chainsaw",
+    desc: "Relentless ripping teeth. Constant damage while locked on.",
+    category: "melee",
+    visual: "chainsaw",
+    caliber: 0.6,
+    mount: "M",
+    weight: 3,
+    cost: 22,
+    damage: 30,
+    cooldown: 0.2,
+    range: 0.7,
+    ...MELEE,
+    ap: 0.4
+  }),
+  wpn({
+    id: "claw",
+    name: "Power Claw",
+    family: "Hydraulic claw",
+    desc: "Crushing hydraulic pincer with heavy armor pierce.",
+    category: "melee",
+    visual: "claw",
+    caliber: 0.6,
+    mount: "M",
+    weight: 3.5,
+    cost: 26,
+    damage: 95,
+    cooldown: 1,
+    range: 0.8,
+    ...MELEE,
+    ap: 0.7
+  }),
+  wpn({
+    id: "plasmablade",
+    name: "Plasma Blade",
+    family: "Energy blade",
+    desc: "Superheated blade that sweeps through adjacent enemies.",
+    category: "melee",
+    visual: "blade",
+    caliber: 0.6,
+    mount: "M",
+    weight: 2.5,
+    cost: 30,
+    damage: 55,
+    cooldown: 0.5,
+    range: 0.9,
+    ...MELEE,
+    splash: 0.8,
+    ap: 0.8
+  }),
+  wpn({
+    id: "hammer",
+    name: "Siege Hammer",
+    family: "Ground pound",
+    desc: "Colossal hammer. Shockwave damages and knocks back everything nearby.",
+    category: "melee",
+    visual: "hammer",
+    caliber: 0.9,
+    mount: "M",
+    weight: 9,
+    cost: 55,
+    damage: 260,
+    cooldown: 2,
+    range: 0.9,
+    ...MELEE,
+    splash: 1.3,
+    ap: 0.6,
+    impulse: 1
+  }),
+  wpn({
+    id: "drill",
+    name: "Drill Lance",
+    family: "Bore drill",
+    desc: "Armor-boring drill. Ignores all armor.",
+    category: "melee",
+    visual: "drill",
+    caliber: 0.9,
+    mount: "M",
+    weight: 8,
+    cost: 50,
+    damage: 48,
+    cooldown: 0.15,
+    range: 0.8,
+    ...MELEE,
+    ap: 1
+  }),
+  // ---------------- Support (allies) ----------------
+  util({ id: "repair", name: "Repair Beam", family: "Light repair", desc: "Heals the most damaged ally in range.", category: "support", visual: "repair", caliber: 0.3, mount: "S", weight: 1, cost: 17, heal: 22, range: 4 }),
+  util({ id: "repairM", name: "Repair Array", family: "Heavy repair", desc: "Industrial nano-repair array with longer reach.", category: "support", visual: "repair", caliber: 0.6, mount: "M", weight: 2.5, cost: 40, heal: 55, range: 5 }),
+  util({ id: "dome", name: "Shield Dome", family: "Area shield", desc: "Projects a 150-point shield onto every ally within 3 cells.", category: "support", visual: "dome", caliber: 0.8, mount: "M", weight: 6, cost: 20, shieldAura: { radius: 3, amount: 150 } }),
+  util({ id: "uplink", name: "Command Uplink", family: "Command", desc: "Allies within 4 cells fire 15% faster.", category: "support", visual: "uplink", caliber: 0.5, mount: "M", weight: 2, cost: 6, fireRateAura: { radius: 4, bonus: 0.15 } }),
+  util({ id: "sensor", name: "Sensor Mast", family: "Detection", desc: "Reveals cloaked enemies within 7 cells for your whole army.", category: "stealth", visual: "sensor", caliber: 0.4, mount: "S", weight: 1, cost: 3, detect: 7 }),
+  // ---------------- Defense ----------------
+  util({ id: "shield", name: "Shield Projector", family: "Energy shield", desc: "Personal energy shield that absorbs 260 damage and regenerates.", category: "defense", visual: "shield", caliber: 0.5, mount: "M", weight: 2.5, cost: 32, shield: 260 }),
+  util({ id: "shieldL", name: "Shield Emitter", family: "Light shield", desc: "Small personal shield: absorbs 100 damage, regenerates.", category: "defense", visual: "shield", caliber: 0.25, mount: "S", weight: 1, cost: 14, shield: 100 }),
+  util({ id: "shieldH", name: "Aegis Barrier", family: "Heavy shield", desc: "Massive personal barrier: absorbs 700 damage.", category: "defense", visual: "shield", caliber: 0.9, mount: "M", weight: 6, cost: 60, shield: 700 }),
+  util({ id: "pointdef", name: "Point Defense Laser", family: "APS", desc: "Zaps incoming rockets, missiles and shells within 2.5 cells.", category: "defense", visual: "pointdef", caliber: 0.4, mount: "S", weight: 1.2, cost: 24, pointDefense: { range: 2.5, cooldown: 0.6 } }),
+  util({ id: "smoke", name: "Smoke Launchers", family: "Obscurant", desc: "Below 60% hp, pops a smoke screen: nothing outside 2.5 cells can target units inside for 5s.", category: "defense", visual: "smoke", caliber: 0.3, mount: "S", weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
+  util({ id: "reactive", name: "Reactive Armor", family: "ERA", desc: "Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.", category: "defense", visual: "plate", caliber: 0.5, mount: "M", weight: 3, cost: 22, reactive: 6, armor: 1 }),
+  util({ id: "mirror", name: "Mirror Coating", family: "Reflective", desc: "Takes 45% less damage from beams, lightning, rails, plasma and flame.", category: "defense", visual: "plate", caliber: 0.4, mount: "S", weight: 1, cost: 8, energyResist: 0.45 }),
+  util({ id: "hardened", name: "Hardened Systems", family: "EMP shielding", desc: "Immune to stun, slow, disarm, burning and knockback.", category: "defense", visual: "coolant", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, hardened: true }),
+  util({ id: "nanite", name: "Nanite Hull", family: "Self-repair", desc: "Regenerates 2.5% max hp per second when out of combat for 2s.", category: "defense", visual: "nanite", caliber: 0.4, mount: "S", weight: 1, cost: 3, regen: 0.025 }),
+  // ---------------- Stealth & ECM ----------------
+  util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Untargetable unless an enemy comes within 2.5 cells or it has just fired.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 2, cost: 15, cloak: "stealth" }),
+  util({ id: "phantom", name: "Phase Veil", family: "Phase cloak", desc: "Untargetable at any range, except for 3s after each shot it fires.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "M", weight: 4, cost: 20, cloak: "phantom" }),
+  util({ id: "jammer", name: "ECM Jammer", family: "Jammer", desc: "Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.", category: "stealth", visual: "jammer", caliber: 0.5, mount: "M", weight: 2, cost: 5, jammer: 3 }),
+  // ---------------- Systems ----------------
+  util({ id: "targeting", name: "Targeting Computer", family: "Fire control", desc: "+15% range for all weapons and tighter spread.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.8, cost: 8, rangeBonus: 0.15, spreadMult: 0.6 }),
+  util({ id: "turbo", name: "Turbo Engine", family: "Engine", desc: "+20% move speed.", category: "systems", visual: "engine", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, speedBonus: 0.2 }),
+  util({ id: "gyro", name: "Gyro Stabilizer", family: "Stabilizer", desc: "All weapons can fire on the move, with tighter spread.", category: "systems", visual: "gyro", caliber: 0.3, mount: "S", weight: 1, cost: 3, gyro: true, spreadMult: 0.85 }),
+  util({ id: "autoloader", name: "Autoloader", family: "Ammo feed", desc: "Clip weapons reload 40% faster.", category: "systems", visual: "coolant", caliber: 0.3, mount: "S", weight: 1, cost: 14, reloadBonus: 0.4 }),
+  util({ id: "overclock", name: "Overclocked Core", family: "Overclock", desc: "All weapons fire 20% faster.", category: "systems", visual: "coolant", caliber: 0.5, mount: "M", weight: 2, cost: 5, fireRateBonus: 0.2 }),
+  util({ id: "selfdestruct", name: "Self-Destruct Charge", family: "Demolition", desc: "Detonates on death for 300 damage in a 2-cell radius.", category: "systems", visual: "charge", caliber: 0.4, mount: "S", weight: 1.5, cost: 3, deathBlast: { damage: 300, radius: 2 } }),
+  // ---------------- Giant class (G mounts, size-4 chassis) ----------------
+  wpn({
+    id: "siege240",
+    name: "240mm Siege Cannon",
+    family: "240mm",
+    desc: "Giant-class gun. Shells that crack fortresses.",
+    category: "cannon",
+    visual: "cannon",
+    caliber: 1,
+    mount: "L",
+    weight: 18,
+    cost: 110,
+    damage: 520,
+    cooldown: 3,
+    range: 12,
+    ...G,
+    projectile: "shell",
+    projectileSpeed: 18,
+    splash: 0.8,
+    ap: 0.85,
+    spread: 0.2
+  }),
+  wpn({
+    id: "avenger",
+    name: "Hellstorm Rotary Cannon",
+    family: "Giant rotary",
+    desc: "Seven-barrel 30mm rotary cannon. Shreds air and ground alike.",
+    category: "autocannon",
+    visual: "gatling",
+    barrels: 7,
+    caliber: 1,
+    mount: "L",
+    weight: 16,
+    cost: 110,
+    damage: 30,
+    cooldown: 0.035,
+    range: 9,
+    ...GA,
+    projectile: "bullet",
+    projectileSpeed: 24,
+    splash: 0.2,
+    ap: 0.45,
+    spread: 0.5
+  }),
+  wpn({
+    id: "missilebattery",
+    name: "Missile Battery",
+    family: "16-cell",
+    desc: "Sixteen-cell launcher that saturates an area with homing missiles.",
+    category: "missile",
+    visual: "missileRack",
+    barrels: 16,
+    caliber: 1,
+    mount: "L",
+    weight: 17,
+    cost: 120,
+    damage: 70,
+    burst: 16,
+    cooldown: 9,
+    range: 18,
+    ...GA,
+    projectile: "missile",
+    projectileSpeed: 10,
+    splash: 0.5,
+    ap: 0.5
+  }),
+  wpn({
+    id: "siegeplasma",
+    name: "Plasma Siege Projector",
+    family: "Siege plasma",
+    desc: "Lobs a sun-hot plasma mass that melts everything nearby.",
+    category: "energy",
+    visual: "plasma",
+    caliber: 1,
+    mount: "L",
+    weight: 18,
+    cost: 115,
+    damage: 380,
+    cooldown: 3.5,
+    range: 10,
+    ...G,
+    projectile: "orb",
+    projectileSpeed: 7,
+    splash: 2,
+    ap: 0.7,
+    spread: 0.4
+  }),
+  wpn({
+    id: "skyfortress",
+    name: "Flak Fortress",
+    family: "Giant flak",
+    desc: "Quad heavy flak turret. A no-fly zone on legs.",
+    category: "antiair",
+    visual: "flak",
+    barrels: 4,
+    caliber: 1,
+    mount: "L",
+    weight: 15,
+    cost: 95,
+    damage: 90,
+    burst: 4,
+    cooldown: 2,
+    range: 18,
+    ...A,
+    projectile: "shell",
+    projectileSpeed: 20,
+    splash: 2.2,
+    ap: 0.3,
+    airBonus: 1.5
+  }),
+  wpn({
+    id: "stormtower",
+    name: "Storm Tower",
+    family: "Giant tesla",
+    desc: "Lightning that chains through 8 enemies and jolts them.",
+    category: "disruption",
+    visual: "tesla",
+    caliber: 1,
+    mount: "L",
+    weight: 16,
+    cost: 110,
+    damage: 160,
+    cooldown: 1.5,
+    range: 7.5,
+    ...GA,
+    projectile: "lightning",
+    chain: 7,
+    ap: 0.5,
+    stun: 0.3
+  }),
+  wpn({
+    id: "inferno",
+    name: "Inferno Projector",
+    family: "Giant flame",
+    desc: "A river of fire. Wide cone, ferocious burn.",
+    category: "flame",
+    visual: "flamer",
+    caliber: 1,
+    mount: "L",
+    weight: 15,
+    cost: 95,
+    damage: 22,
+    cooldown: 0.1,
+    range: 5.5,
+    ...G,
+    projectile: "flame",
+    projectileSpeed: 9,
+    splash: 1.8,
+    ap: 0.9,
+    burn: { dps: 30, duration: 3 }
+  }),
+  wpn({
+    id: "grinder",
+    name: "Grinder Wheel",
+    family: "Giant saw",
+    desc: "Colossal spinning grinder. Sweeps through everything it touches.",
+    category: "melee",
+    visual: "saw",
+    caliber: 1,
+    mount: "L",
+    weight: 15,
+    cost: 85,
+    damage: 120,
+    cooldown: 0.3,
+    range: 1,
+    ...MELEE,
+    splash: 1.2,
+    ap: 0.6
+  }),
+  util({ id: "bulwarkshield", name: "Bastion Shield Generator", family: "Giant shield", desc: "Personal barrier that absorbs 1800 damage.", category: "defense", visual: "shield", caliber: 1, mount: "L", weight: 12, cost: 90, shield: 1800 }),
+  util({ id: "domeG", name: "Fortress Dome", family: "Giant dome", desc: "Projects a 400-point shield onto every ally within 5 cells.", category: "support", visual: "dome", caliber: 1, mount: "L", weight: 14, cost: 110, shieldAura: { radius: 5, amount: 400 } }),
+  { id: "plateG", name: "Giant Armor", family: "Giant plate", desc: "+16 armor, +1200 hp.", category: "armor", visual: "plate", caliber: 1, mount: "L", kind: "armor", weight: 26, cost: 130, armor: 16, hp: 1200 },
+  // ---------------- Titan class (T mounts, size-5 chassis) ----------------
+  wpn({
+    id: "massdriver",
+    name: "Spinal Mass Driver",
+    family: "Titan rail",
+    desc: "Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.",
+    category: "precision",
+    visual: "rail",
+    turretTurn: 0.5,
+    barrels: 2,
+    caliber: 1,
+    mount: "XL",
+    weight: 38,
+    cost: 220,
+    damage: 1400,
+    cooldown: 6,
+    range: 28,
+    ...GA,
+    projectile: "rail",
+    ap: 1,
+    pierce: true
+  }),
+  wpn({
+    id: "doomsday",
+    name: "Doomsday Howitzer",
+    family: "Titan artillery",
+    desc: "Twin super-heavy howitzer. Craters half a company per salvo. Minimum range 50 m.",
+    category: "artillery",
+    visual: "artillery",
+    barrels: 2,
+    caliber: 1,
+    mount: "XL",
+    weight: 40,
+    cost: 230,
+    damage: 700,
+    cooldown: 8,
+    range: 40,
+    minRange: 10,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 14,
+    splash: 4,
+    ap: 0.5,
+    spread: 1.5
+  }),
+  wpn({
+    id: "annihilator",
+    name: "Annihilator Beam",
+    family: "Titan beam",
+    desc: "Continuous plasma beam that cuts through anything.",
+    category: "energy",
+    visual: "plasma",
+    barrels: 2,
+    caliber: 1,
+    mount: "XL",
+    weight: 36,
+    cost: 220,
+    damage: 140,
+    cooldown: 0.2,
+    range: 11,
+    ...GA,
+    projectile: "beam",
+    ap: 0.8
+  }),
+  wpn({
+    id: "tactnuke",
+    name: "Tactical Nuke Launcher",
+    family: "Titan strategic",
+    desc: "One slow missile, one enormous blast. Minimum range 50 m.",
+    category: "missile",
+    visual: "cruise",
+    caliber: 1,
+    mount: "XL",
+    weight: 34,
+    cost: 240,
+    damage: 2200,
+    cooldown: 20,
+    range: 40,
+    minRange: 10,
+    ...G,
+    projectile: "missile",
+    projectileSpeed: 7,
+    splash: 5,
+    ap: 0.6
+  }),
+  wpn({
+    id: "titanfist",
+    name: "Titan Fist",
+    family: "Titan melee",
+    desc: "A wrecking fist the size of a tank. Shockwave hurls units away.",
+    category: "melee",
+    visual: "hammer",
+    caliber: 1,
+    mount: "XL",
+    weight: 30,
+    cost: 170,
+    damage: 1100,
+    cooldown: 2.2,
+    range: 1.2,
+    ...MELEE,
+    splash: 2,
+    ap: 0.8,
+    impulse: 2
+  }),
+  wpn({
+    id: "stormcore",
+    name: "Tempest Core",
+    family: "Titan tesla",
+    desc: "Storm reactor: lightning chains through 11 enemies and stuns them.",
+    category: "disruption",
+    visual: "tesla",
+    barrels: 3,
+    caliber: 1,
+    mount: "XL",
+    weight: 36,
+    cost: 220,
+    damage: 260,
+    cooldown: 1.2,
+    range: 9.5,
+    ...GA,
+    projectile: "lightning",
+    chain: 10,
+    ap: 0.6,
+    stun: 0.5
+  }),
+  util({ id: "aegisT", name: "Titan Aegis Field", family: "Titan shield", desc: "3000-point personal barrier plus a 700-point shield on allies within 8 cells.", category: "support", visual: "dome", caliber: 1, mount: "XL", weight: 30, cost: 200, shield: 3e3, shieldAura: { radius: 8, amount: 700 } }),
+  { id: "plateT", name: "Titan Plating", family: "Titan plate", desc: "+24 armor, +3000 hp.", category: "armor", visual: "plate", caliber: 1, mount: "XL", kind: "armor", weight: 50, cost: 120, armor: 24, hp: 3e3 },
+  // ---------------- Armor ----------------
+  { id: "plateL", name: "Armor Plate", family: "Light plate", desc: "+3 armor, +60 hp.", category: "armor", visual: "plate", caliber: 0.3, mount: "S", kind: "armor", weight: 2, cost: 8, armor: 3, hp: 60 },
+  { id: "plateM", name: "Composite Armor", family: "Composite", desc: "+6 armor, +150 hp.", category: "armor", visual: "plate", caliber: 0.6, mount: "M", kind: "armor", weight: 5, cost: 12, armor: 6, hp: 150 },
+  { id: "plateH", name: "Heavy Armor", family: "Heavy plate", desc: "+10 armor, +400 hp.", category: "armor", visual: "plate", caliber: 0.9, mount: "M", kind: "armor", weight: 12, cost: 15, armor: 10, hp: 400 }
+];
+var byId = (list) => new Map(list.map((p) => [p.id, p]));
+var CHASSIS_BY_ID = byId(CHASSIS);
+var MOBILITY_BY_ID = byId(MOBILITY);
+var MODULE_BY_ID = byId(MODULES);
+
+// src/shared/mountgeo.ts
+var MOUNT_PTS = {
+  scout: [[0.02, 0]],
+  drone: [[0.04, 0]],
+  raider: [[0.13, -0.2], [0.13, 0.2]],
+  warden: [[0.05, 0], [-0.25, 0.15]],
+  striker: [[-0.02, -0.25], [-0.02, 0.25], [0.22, 0]],
+  longarm: [[0.04, 0]],
+  aegis: [[0.06, 0], [-0.22, 0]],
+  gunship: [[-0.03, -0.28], [-0.03, 0.28]],
+  bastion: [[0.06, 0], [-0.24, -0.25], [-0.24, 0.25]],
+  colossus: [[0, -0.31], [0, 0.31], [0.18, 0], [-0.24, 0]],
+  // giants / titans: turrets sit ON the hull with clear deck between them (hull dominates the silhouette)
+  goliath: [[0.08, 0], [-0.07, -0.34], [-0.07, 0.34], [-0.31, 0]],
+  leviathan: [[0.27, 0], [-0.28, 0], [0, -0.205], [0, 0.205]],
+  carrier: [[0.33, 0], [-0.07, -0.31], [-0.37, -0.25], [-0.37, 0.25]],
+  // titan walker: T on the right forearm, G on the left forearm, heavies on the shoulder blades, M on the backpack
+  titan: [[0.15, 0.37], [0.15, -0.37], [-0.115, -0.165], [-0.115, 0.165], [-0.34, 0]],
+  citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  // odd shapes: turrets sit where the anatomy carries them (forelimbs, arms, claws, tail tip, spine segments)
+  mantis: [[0.31, -0.165], [0.31, 0.165]],
+  strider: [[0.32, 0.335], [0.32, -0.335], [-0.04, -0.3]],
+  arachnid: [[-0.16, -0.115], [-0.16, 0.115]],
+  crab: [[0.33, -0.39], [0.33, 0.39], [-0.04, 0]],
+  saucer: [[0.11, -0.19], [0.11, 0.19], [-0.215, 0]],
+  deltawing: [[0.02, 0], [-0.22, -0.25], [-0.22, 0.25]],
+  warlord: [[-0.04, -0.3], [0.32, 0.36], [0.32, -0.36], [-0.28, 0]],
+  scorpion: [[-0.42, -0.28], [0.5, -0.29], [0.5, 0.29]],
+  centipede: [[0.22, 0], [0.085, 0], [-0.055, 0], [-0.195, 0]],
+  broodmother: [[-0.19, 0], [0.26, 0], [-0.05, -0.25], [-0.05, 0.25], [-0.41, 0]],
+  arachne: [[-0.22, 0], [0.24, -0.15], [0.24, 0.15], [-0.43, 0]],
+  carriage: [[0, 0]],
+  hunter: [[0.08, 0], [-0.25, 0]],
+  riot: [[-0.13, -0.15], [-0.13, 0.15]],
+  interceptor: [[-0.05, -0.2], [-0.05, 0.2]],
+  siegeplat: [[0.02, -0.15], [0.02, 0.15]],
+  juggernaut: [[-0.04, 0], [-0.3, 0.2]],
+  bomberhull: [[0.24, 0], [-0.1, -0.3], [-0.1, 0.3]]
+};
+var FOOT_MOUNTS = {
+  long: [[-0.17, 0]],
+  cross: [[0, -0.33], [0, 0.33], [0.3, 0]],
+  airframe: [[0.04, -0.37], [0.04, 0.37]],
+  delta: [[0.12, 0], [-0.22, -0.28], [-0.22, 0.28]],
+  interceptor: [[-0.06, -0.3], [-0.06, 0.3]],
+  strikejet: [[0.06, 0], [-0.1, -0.33], [-0.1, 0.33]],
+  stratobomber: [[0.28, 0], [0.08, 0], [-0.22, 0], [-0.46, 0]],
+  heavyheli: [[0.42, 0], [-0.02, 0.36], [-0.02, -0.36]],
+  bomber: [[0.33, 0], [0, -0.3], [0, 0.3]],
+  carrier: [[0.24, 0], [-0.2, 0], [-0.1, -0.33], [-0.1, 0.33]],
+  leviathan: [[0.29, 0], [-0.3, 0], [0, -0.3], [0, 0.3]],
+  goliath: [[0.15, 0], [-0.1, -0.31], [-0.1, 0.31], [-0.34, 0]],
+  titan: [[0.02, -0.3], [0.02, 0.3], [0.38, 0], [-0.34, 0]],
+  mantis: [[0.3, -0.27], [0.3, 0.27]],
+  crab: [[0.3, -0.4], [0.3, 0.4], [-0.08, 0]],
+  warlord: [[-0.04, 0], [0.06, -0.39], [0.06, 0.39], [0.2, 0]],
+  mech: [[-0.04, 0], [0.04, -0.37], [0.04, 0.37]],
+  scorpion: [[-0.33, -0.27], [0.47, -0.3], [0.47, 0.3]],
+  centipede: [[0.2, 0], [0.04, 0], [-0.12, 0], [-0.28, 0]],
+  broodmother: [[-0.06, 0], [0.34, 0], [-0.08, -0.24], [-0.08, 0.24], [-0.38, 0]],
+  arachne: [[-0.06, 0], [0.22, -0.16], [0.22, 0.16], [-0.38, 0]],
+  riot: [[-0.12, -0.2], [-0.12, 0.2]],
+  juggernaut: [[-0.14, 0], [-0.3, 0.2]],
+  siegeplat: [[0.2, 0], [-0.16, 0]],
+  hunter: [[0.12, 0], [-0.3, 0]],
+  colossal: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
+  citadel: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  pod: [[-0.04, 0]],
+  box: [[0.06, -0.24], [0.06, 0.24]],
+  hex: [[0.04, 0], [-0.24, 0]],
+  round: [[-0.02, 0], [-0.39, 0]]
+};
+var PART_REST = {
+  mantis: [[0.54, -0.29500000000000004], [0.54, 0.29500000000000004]],
+  strider: [null, [0.060000000000000005, -0.6799999999999999], [0.060000000000000005, 0.6799999999999999]],
+  crab: [[0.76, -1.24], [0.76, 1.24], null],
+  warlord: [null, [0.10500000000000001, -1.3399999999999999], [0.10500000000000001, 1.3399999999999999], null],
+  scorpion: [[-1.54, -0.798], [1.83, -0.99], [1.83, 0.99]],
+  centipede: [[0.6399999999999997, 0], [-0.07000000000000006, 0], [-0.7800000000000001, 0], [-1.4900000000000002, 0]]
+};
+var RANK = { S: 1, M: 2, L: 3, XL: 4 };
+var PART_SHAPES = /* @__PURE__ */ new Set(["mantis", "mech", "warlord", "arachnid", "broodmother", "arachne", "crab", "saucer", "scorpion", "centipede"]);
+function hardpointsOf(chassis) {
+  return FOOT_MOUNTS[chassis.shape] ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : i % 2 ? 0.2 : -0.2]);
+}
+function mountPerm(chassis, pts, mods) {
+  return PART_SHAPES.has(chassis.shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods);
+}
+function solveMounts(caps, pts, mods) {
+  const n = caps.length;
+  const id0 = caps.map((_, i) => i);
+  if (n <= 1) return id0;
+  const mate = caps.map((_, i) => pts.findIndex((q, j) => j !== i && Math.abs(q[0] - pts[i][0]) < 0.03 && Math.abs(q[1] + pts[i][1]) < 0.03 && Math.abs(q[1]) > 0.04));
+  const prom = (j) => RANK[caps[j]] * 1 + (1 - Math.min(1, Math.abs(pts[j][1]) / 0.3)) * 0.8 + pts[j][0] * 1.2;
+  const isW = (m) => !!m && m.kind === "weapon";
+  const isU = (m) => !!m && m.kind === "utility" && m.visual !== "plate";
+  let best = id0, bestS = -Infinity;
+  const perm = new Array(n), used = new Array(n).fill(false);
+  const score = () => {
+    let sc = 0;
+    for (let i = 0; i < n; i++) {
+      const m = mods[i], j = perm[i];
+      if (j === i) sc += 0.05;
+      if (isW(m)) sc += (RANK[m.mount] + 0.5 * (m.caliber ?? 0.5) + 1) * prom(j);
+      else if (isU(m)) sc += -pts[j][0] * 2.2 + RANK[caps[j]] * 0.1;
+    }
+    const at = new Array(n).fill(null);
+    for (let i = 0; i < n; i++) at[perm[i]] = mods[i];
+    for (let j = 0; j < n; j++) {
+      const k = mate[j];
+      if (k < 0 || k < j) continue;
+      const a = at[j], b = at[k];
+      if (a && b && a.id === b.id) sc += 3;
+      else if (a && b && a.visual === b.visual) sc += 1;
+      else if (isW(a) && isU(b) || isU(a) && isW(b)) sc -= 0.6;
+      else if (!!a !== !!b) sc -= 0.3;
+    }
+    return sc;
+  };
+  const rec = (i) => {
+    if (i === n) {
+      const s = score();
+      if (s > bestS + 1e-9) {
+        bestS = s;
+        best = perm.slice();
+      }
+      return;
+    }
+    const m = mods[i];
+    for (let j = 0; j < n; j++) {
+      if (used[j]) continue;
+      if (isW(m) && RANK[m.mount] > RANK[caps[j]]) continue;
+      used[j] = true;
+      perm[i] = j;
+      rec(i + 1);
+      used[j] = false;
+    }
+  };
+  rec(0);
+  return best;
+}
+var unitK = (S) => S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1);
+var CLASS_D_MID = { S: 0.32, M: 0.52, L: 0.85, XL: 1.06 };
+var approxTurretD = (cls, S) => CLASS_D_MID[cls] * unitK(S);
+var offCache = /* @__PURE__ */ new Map();
+function mountOffsets(d) {
+  const key = `${d.chassis}|${d.mounts.map((m) => m ?? "-").join(",")}`;
+  let out = offCache.get(key);
+  if (out) return out;
+  const chassis = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get("scout");
+  const S = chassis.size;
+  const Y = chassis.footprint?.[0] ?? S, X = chassis.footprint?.[1] ?? S;
+  const pts = hardpointsOf(chassis);
+  const mods = chassis.mounts.map((_, i) => {
+    const id = d.mounts[i] ?? null;
+    return id ? MODULE_BY_ID.get(id) ?? null : null;
+  });
+  const perm = mountPerm(chassis, pts, mods);
+  const rest = FOOT_MOUNTS[chassis.shape] && PART_SHAPES.has(chassis.shape) ? PART_REST[chassis.id] : void 0;
+  out = chassis.mounts.map((_, i) => {
+    const r = rest?.[i];
+    if (r) return { x: r[0], y: r[1] };
+    const p = pts[perm[i]] ?? [0, 0];
+    return { x: p[0] * X, y: p[1] * Y };
+  });
+  offCache.set(key, out);
+  return out;
+}
+
+// src/client/render/palette.ts
+var TEAM_PAL = [
+  { body: "#5b6670", light: "#8a959e", dark: "#3a434b", deep: "#1f252a", accent: "#3fd2ff", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#4b555d" },
+  { body: "#6a6a4e", light: "#99977a", dark: "#444530", deep: "#25261a", accent: "#ff5a26", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#7d7458" }
+];
+
+// src/client/proto3d/materials.ts
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function makePanelTexture() {
+  const N = 1024;
+  const mk = () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = N;
+    return c;
+  };
+  const cr = mk(), cg = mk(), cb = mk();
+  const gr = cr.getContext("2d"), gg = cg.getContext("2d"), gb = cb.getContext("2d");
+  const r = rng(4242);
+  gr.fillStyle = "rgb(206,206,206)";
+  gr.fillRect(0, 0, N, N);
+  gg.fillStyle = "rgb(150,150,150)";
+  gg.fillRect(0, 0, N, N);
+  gb.fillStyle = "#000";
+  gb.fillRect(0, 0, N, N);
+  const panels = [];
+  const split = (x, y, w, h, d) => {
+    const minS = 150;
+    if (w < minS * 1.6 && h < minS * 1.6 || d > 4 || d > 1 && r() < 0.18) {
+      panels.push([x, y, w, h]);
+      return;
+    }
+    const vert = w > h ? true : h > w ? false : r() < 0.5;
+    const cut = 0.38 + r() * 0.24;
+    if (vert && w > minS * 1.3) {
+      split(x, y, w * cut, h, d + 1);
+      split(x + w * cut, y, w * (1 - cut), h, d + 1);
+    } else if (!vert && h > minS * 1.3) {
+      split(x, y, w, h * cut, d + 1);
+      split(x, y + h * cut, w, h * (1 - cut), d + 1);
+    } else panels.push([x, y, w, h]);
+  };
+  split(0, 0, N, N, 0);
+  for (const [x, y, w, h] of panels) {
+    const tint = 190 + r() * 38;
+    gr.fillStyle = `rgb(${tint},${tint},${tint})`;
+    gr.fillRect(x, y, w, h);
+    const lg = gr.createLinearGradient(x, y, x + w * (r() < 0.5 ? 1 : 0.2), y + h * (r() < 0.5 ? 1 : 0.2));
+    lg.addColorStop(0, "rgba(255,255,255,0.05)");
+    lg.addColorStop(1, "rgba(0,0,0,0.07)");
+    gr.fillStyle = lg;
+    gr.fillRect(x, y, w, h);
+    gg.strokeStyle = "rgb(40,40,40)";
+    gg.lineWidth = 4;
+    gg.strokeRect(x + 2, y + 2, w - 4, h - 4);
+    gg.strokeStyle = "rgb(190,190,190)";
+    gg.lineWidth = 2;
+    gg.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
+    gr.strokeStyle = "rgba(20,20,20,0.7)";
+    gr.lineWidth = 2.5;
+    gr.strokeRect(x + 2, y + 2, w - 4, h - 4);
+    for (let px2 = x + 14; px2 < x + w - 10; px2 += 20) for (const py2 of [y + 14, y + h - 14]) {
+      gg.fillStyle = "rgb(235,235,235)";
+      gg.beginPath();
+      gg.arc(px2, py2, 2.6, 0, 7);
+      gg.fill();
+    }
+    for (let py2 = y + 14; py2 < y + h - 10; py2 += 20) for (const px2 of [x + 14, x + w - 14]) {
+      gg.fillStyle = "rgb(235,235,235)";
+      gg.beginPath();
+      gg.arc(px2, py2, 2.6, 0, 7);
+      gg.fill();
+    }
+    for (let i = 0; i < w / 6; i++) {
+      const o = r() < 0.5;
+      const px2 = x + r() * w, py2 = o ? y + 5 + r() * 6 : y + h - 11 + r() * 6;
+      gb.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.5})`;
+      gb.fillRect(px2, py2, 2 + r() * 9, 1 + r() * 3);
+    }
+    for (let i = 0; i < h / 6; i++) {
+      const o = r() < 0.5;
+      const px2 = o ? x + 5 + r() * 6 : x + w - 11 + r() * 6, py2 = y + r() * h;
+      gb.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.5})`;
+      gb.fillRect(px2, py2, 1 + r() * 3, 2 + r() * 9);
+    }
+    const f = r();
+    if (f < 0.3 && w > 90 && h > 90) {
+      const hw = w * (0.35 + r() * 0.25), hh = h * (0.3 + r() * 0.25), hx = x + (w - hw) / 2, hy = y + (h - hh) / 2;
+      gg.fillStyle = "rgb(176,176,176)";
+      gg.fillRect(hx, hy, hw, hh);
+      gg.strokeStyle = "rgb(50,50,50)";
+      gg.lineWidth = 3;
+      gg.strokeRect(hx, hy, hw, hh);
+      gg.fillStyle = "rgb(60,60,60)";
+      gg.fillRect(hx + hw * 0.4, hy + hh * 0.45, hw * 0.2, 7);
+    } else if (f < 0.5 && w > 90 && h > 90) {
+      const sx = x + w * 0.2, sw = w * 0.6;
+      for (let k = 0; k < 6; k++) {
+        gg.fillStyle = "rgb(24,24,24)";
+        gg.fillRect(sx, y + h * 0.25 + k * (h * 0.5 / 6), sw, 5);
+        gr.fillStyle = "rgba(10,10,10,0.6)";
+        gr.fillRect(sx, y + h * 0.25 + k * (h * 0.5 / 6), sw, 5);
+      }
+    } else if (f < 0.62) {
+      gr.fillStyle = "rgba(255,255,255,0.06)";
+      gr.fillRect(x + 12, y + 12, w - 24, h - 24);
+    }
+  }
+  for (let i = 0; i < 90; i++) {
+    const x = r() * N, y = r() * N, l = 40 + r() * 200;
+    const g2 = gr.createLinearGradient(x, y, x, y + l);
+    g2.addColorStop(0, "rgba(30,24,16,0.0)");
+    g2.addColorStop(0.2, `rgba(30,24,16,${0.08 + r() * 0.1})`);
+    g2.addColorStop(1, "rgba(30,24,16,0)");
+    gr.fillStyle = g2;
+    gr.fillRect(x, y, 2 + r() * 5, l);
+  }
+  for (let i = 0; i < 160; i++) {
+    const x = r() * N, y = r() * N, rad = 12 + r() * 60;
+    const g2 = gr.createRadialGradient(x, y, 0, x, y, rad);
+    const dark = r() < 0.7;
+    g2.addColorStop(0, dark ? "rgba(25,20,14,0.10)" : "rgba(255,255,255,0.07)");
+    g2.addColorStop(1, "rgba(0,0,0,0)");
+    gr.fillStyle = g2;
+    gr.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  gb.strokeStyle = "rgba(255,255,255,0.55)";
+  gb.lineWidth = 1;
+  for (let i = 0; i < 160; i++) {
+    const x = r() * N, y = r() * N;
+    gb.beginPath();
+    gb.moveTo(x, y);
+    gb.lineTo(x + (r() - 0.5) * 60, y + (r() - 0.5) * 24);
+    gb.stroke();
+  }
+  const out = new Uint8Array(N * N * 4);
+  const dr = gr.getImageData(0, 0, N, N).data, dg = gg.getImageData(0, 0, N, N).data, db = gb.getImageData(0, 0, N, N).data;
+  for (let i = 0; i < N * N; i++) {
+    out[i * 4] = dr[i * 4];
+    out[i * 4 + 1] = dg[i * 4];
+    out[i * 4 + 2] = db[i * 4];
+    out[i * 4 + 3] = 255;
+  }
+  const t = new DataTexture(out, N, N, RGBAFormat);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.minFilter = LinearMipmapLinearFilter;
+  t.magFilter = LinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = 8;
+  t.needsUpdate = true;
+  return t;
+}
+function makeDecalAtlas(accent) {
+  const S = 512, T = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  const tile = (i) => [i % 4 * T, Math.floor(i / 4) * T];
+  {
+    const [x, y] = tile(0);
+    g.save();
+    g.beginPath();
+    g.rect(x + 2, y + 2, T - 4, T - 4);
+    g.clip();
+    g.fillStyle = "#d3a92e";
+    g.fillRect(x, y, T, T);
+    g.fillStyle = "#17181a";
+    for (let k = -T; k < T * 2; k += 32) {
+      g.beginPath();
+      g.moveTo(x + k, y + T);
+      g.lineTo(x + k + 16, y + T);
+      g.lineTo(x + k + 16 + T, y);
+      g.lineTo(x + k + T, y);
+      g.fill();
+    }
+    g.restore();
+  }
+  {
+    const [x, y] = tile(1);
+    g.fillStyle = accent;
+    g.beginPath();
+    g.moveTo(x + 14, y + 20);
+    g.lineTo(x + 70, y + 20);
+    g.lineTo(x + 114, y + 64);
+    g.lineTo(x + 70, y + 108);
+    g.lineTo(x + 14, y + 108);
+    g.lineTo(x + 58, y + 64);
+    g.fill();
+  }
+  {
+    const [x, y] = tile(2);
+    g.fillStyle = accent;
+    g.fillRect(x + 6, y + 14, T - 12, 28);
+    g.fillRect(x + 6, y + 56, T - 12, 14);
+    g.fillRect(x + 6, y + 84, T - 12, 14);
+  }
+  {
+    const [x, y] = tile(3);
+    g.strokeStyle = accent;
+    g.lineWidth = 10;
+    g.beginPath();
+    g.arc(x + 64, y + 64, 44, 0, 7);
+    g.stroke();
+    g.fillStyle = accent;
+    g.beginPath();
+    g.arc(x + 64, y + 64, 20, 0, 7);
+    g.fill();
+  }
+  g.fillStyle = "#dcdfd6";
+  g.font = "700 104px Arial Narrow, Arial, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  for (let d = 0; d < 10; d++) {
+    const [x, y] = tile(4 + d);
+    g.fillText(String(d), x + 64, y + 70);
+  }
+  {
+    const [x, y] = tile(14);
+    g.fillStyle = "#dcdfd6";
+    g.fillRect(x + 8, y + 52, T - 16, 22);
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+var atlasUV = (i) => {
+  const x = i % 4 / 4, y = 1 - (Math.floor(i / 4) + 1) / 4;
+  return [x + 4e-3, y + 4e-3, x + 0.25 - 4e-3, y + 0.25 - 4e-3];
+};
+var panelTex = null;
+var cache = /* @__PURE__ */ new Map();
+var GLSL_FNS = (
+  /* glsl */
+  `
+float h31(vec3 p){ p=fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
+  return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x), mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y), f.z); }
+vec3 triBump(vec3 sp, vec3 sn, vec2 dH, float fd){
+  vec3 sx = normalize(dFdx(sp)), sy = normalize(dFdy(sp));
+  vec3 r1 = cross(sy, sn), r2 = cross(sn, sx);
+  float det = dot(sx, r1) * fd;
+  vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
+  return normalize(abs(det) * sn - grad);
+}`
+);
+function paint(color, o = {}) {
+  const key = JSON.stringify([color, o]);
+  let m = cache.get(key);
+  if (m) return m;
+  panelTex ??= makePanelTexture();
+  const tex = panelTex;
+  m = new MeshStandardMaterial({ color, roughness: o.rough ?? 0.7, metalness: o.metal ?? 0.2, envMapIntensity: 1 });
+  const col = (s) => new Color(s);
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.triMap = { value: tex };
+    sh.uniforms.triScale = { value: o.scale ?? 0.8 };
+    sh.uniforms.camoA = { value: col(o.camo?.[0] ?? "#000") };
+    sh.uniforms.camoB = { value: col(o.camo?.[1] ?? "#000") };
+    sh.uniforms.camoC = { value: col(o.camo?.[2] ?? "#000") };
+    sh.uniforms.camoOn = { value: o.camo ? 1 : 0 };
+    sh.uniforms.camoScale = { value: o.camoScale ?? 1.1 };
+    sh.uniforms.wearAmt = { value: o.wear ?? 0.7 };
+    sh.uniforms.bumpK = { value: o.bump ?? 2.2 };
+    sh.uniforms.dirtAmt = { value: o.dirt ?? 1 };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vTP; varying vec3 vTN; varying float vWY;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvTP = position; vTN = normal; vWY = (modelMatrix * vec4(position, 1.0)).y;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vTP; varying vec3 vTN; varying float vWY; uniform sampler2D triMap; uniform float triScale; uniform vec3 camoA; uniform vec3 camoB; uniform vec3 camoC; uniform float camoOn; uniform float camoScale; uniform float wearAmt; uniform float bumpK; uniform float dirtAmt;\n" + GLSL_FNS).replace(
+      "#include <map_fragment>",
+      /* glsl */
+      `
+        vec3 tb = pow(abs(normalize(vTN)), vec3(8.0)); tb /= (tb.x + tb.y + tb.z);
+        vec3 tp = vTP * triScale;
+        vec3 tc = texture2D(triMap, tp.zy).rgb * tb.x + texture2D(triMap, tp.xz + vec2(.37, .11)).rgb * tb.y + texture2D(triMap, tp.xy + vec2(.71, .53)).rgb * tb.z;
+        float tH = tc.g; float tWear = tc.b;
+        if (camoOn > 0.5) {
+          vec3 cp = vTP * camoScale;
+          float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
+          float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
+          vec3 cc = camoA;
+          cc = mix(cc, camoB, smoothstep(0.50, 0.53, n1));
+          cc = mix(cc, camoC, smoothstep(0.58, 0.61, n2) * (1.0 - smoothstep(0.50, 0.53, n1) * 0.4));
+          diffuseColor.rgb = cc;
+        }
+        diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
+        diffuseColor.rgb *= 0.86 + 0.14 * vn(vTP * 1.7);
+        float dirt = smoothstep(0.5, 0.0, vWY) * (0.3 + 0.7 * vn(vTP * 7.0)) * dirtAmt;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.17, 0.12) * (0.6 + 0.8 * tc.r), dirt * 0.62);
+        float wearM = tWear * wearAmt * smoothstep(0.25, 0.7, vn(vTP * 8.0 + 5.0));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.43, 0.43, 0.42), wearM * 0.8);`
+    ).replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor * (1.12 - wearM * 0.55) + dirt * 0.18, 0.05, 1.0);").replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.85, clamp(wearM * 1.4, 0.0, 1.0));").replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = triBump(-vViewPosition, normal, vec2(dFdx(tH), dFdy(tH)) * bumpK, faceDirection);");
+  };
+  m.customProgramCacheKey = () => "tri2";
+  cache.set(key, m);
+  return m;
+}
+var N_ROWS = 16;
+function makeUber(rows, camo) {
+  panelTex ??= makePanelTexture();
+  const tex = panelTex;
+  const A2 = [], B = [], Cq = [], E = [];
+  for (let i = 0; i < N_ROWS; i++) {
+    const r = rows[i] ?? rows[0];
+    const c = new Color(r.color);
+    A2.push(new Vector4(c.r, c.g, c.b, r.rough));
+    B.push(new Vector4(r.metal, r.camo ? 1 : 0, r.wear ?? 0.6, r.dirt ?? 1));
+    Cq.push(new Vector4(r.scale ?? 0.9, r.bump ?? 2.2, 0, 0));
+    const e = new Color(r.em ?? "#000");
+    E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), 0));
+  }
+  const m = new MeshStandardMaterial({ color: "#ffffff", roughness: 1, metalness: 0, envMapIntensity: 1 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.triMap = { value: tex };
+    sh.uniforms.uA = { value: A2 };
+    sh.uniforms.uB = { value: B };
+    sh.uniforms.uC = { value: Cq };
+    sh.uniforms.uE = { value: E };
+    sh.uniforms.camoA = { value: new Color(camo[0]) };
+    sh.uniforms.camoB = { value: new Color(camo[1]) };
+    sh.uniforms.camoC = { value: new Color(camo[2]) };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float mid; varying float vMid; varying vec3 vTP; varying vec3 vTN; varying float vWY;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvMid = mid; vTP = position; vTN = normal; vWY = (modelMatrix * vec4(position, 1.0)).y;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
+varying float vMid; varying vec3 vTP; varying vec3 vTN; varying float vWY;
+uniform sampler2D triMap; uniform vec3 camoA; uniform vec3 camoB; uniform vec3 camoC;
+uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uC[${N_ROWS}]; uniform vec4 uE[${N_ROWS}];
+${GLSL_FNS}`).replace(
+      "#include <map_fragment>",
+      /* glsl */
+      `
+        int mi = int(floor(vMid + 0.5));
+        vec4 rA = uA[mi], rB = uB[mi], rC = uC[mi];
+        vec3 tb = pow(abs(normalize(vTN)), vec3(8.0)); tb /= (tb.x + tb.y + tb.z);
+        vec3 tp = vTP * rC.x;
+        vec3 tc = texture2D(triMap, tp.zy).rgb * tb.x + texture2D(triMap, tp.xz + vec2(.37, .11)).rgb * tb.y + texture2D(triMap, tp.xy + vec2(.71, .53)).rgb * tb.z;
+        if (rC.x < 0.001) tc = vec3(0.82, 0.5, 0.0);
+        float tH = tc.g; float tWear = tc.b;
+        diffuseColor.rgb = rA.rgb;
+        if (rB.y > 0.5) {
+          vec3 cp = vTP * 1.25;
+          float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
+          float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
+          vec3 cc = camoA;
+          cc = mix(cc, camoB, smoothstep(0.50, 0.53, n1));
+          cc = mix(cc, camoC, smoothstep(0.58, 0.61, n2) * (1.0 - smoothstep(0.50, 0.53, n1) * 0.4));
+          diffuseColor.rgb = cc;
+        }
+        diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
+        diffuseColor.rgb *= 0.86 + 0.14 * vn(vTP * 1.7);
+        float dirt = smoothstep(0.5, 0.0, vWY) * (0.3 + 0.7 * vn(vTP * 7.0)) * rB.w;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.17, 0.12) * (0.6 + 0.8 * tc.r), dirt * 0.62);
+        float wearM = tWear * rB.z * smoothstep(0.25, 0.7, vn(vTP * 8.0 + 5.0));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.43, 0.43, 0.42), wearM * 0.8);`
+    ).replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(rA.w * (1.12 - wearM * 0.55) + dirt * 0.18, 0.05, 1.0);").replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = mix(rB.x, 0.85, clamp(wearM * 1.4, 0.0, 1.0));").replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance = uE[mi].rgb;").replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = triBump(-vViewPosition, normal, vec2(dFdx(tH), dFdy(tH)) * rC.y, faceDirection);");
+  };
+  m.customProgramCacheKey = () => "uber1";
+  return m;
+}
+var TEAM_CAMO = [
+  ["#5a646a", "#3b444a", "#7f8a8c"],
+  // viewer: cool slate-grey three-tone
+  ["#7b704f", "#4c4f36", "#a39064"]
+  // enemy: khaki / olive / sand
+];
+var kits = [null, null];
+function makeKit(team) {
+  const hit = kits[team];
+  if (hit) return hit;
+  const p = TEAM_PAL[team];
+  const camo = TEAM_CAMO[team];
+  const names = ["hull", "trim", "panel", "metal", "steel", "rubber", "glass", "canvas", "hazard", "accent", "glow", "lamp", "hot", "plasma", "rail"];
+  const rows = [
+    { color: camo[0], rough: 0.74, metal: 0.12, camo: true, scale: 0.8 },
+    { color: team === 0 ? "#2c3237" : "#35342a", rough: 0.8, metal: 0.2, scale: 1 },
+    { color: team === 0 ? "#6c777c" : "#8b8160", rough: 0.78, metal: 0.1, scale: 0.9 },
+    { color: "#3a3d3f", rough: 0.46, metal: 0.85, scale: 1.7, wear: 0.9, dirt: 0.6 },
+    { color: "#8a8f93", rough: 0.34, metal: 0.92, scale: 2.2, wear: 0.3, dirt: 0.4, bump: 1.2 },
+    { color: "#1a1b1c", rough: 0.93, metal: 0.02, scale: 2.4, wear: 0, bump: 0.8 },
+    { color: "#14222a", rough: 0.1, metal: 0.65, scale: 0, wear: 0, dirt: 0, bump: 0 },
+    { color: team === 0 ? "#4f5a52" : "#6a6544", rough: 0.96, metal: 0, scale: 1.4, wear: 0, bump: 1.4 },
+    { color: "#9c7d20", rough: 0.6, metal: 0.1, scale: 1 },
+    { color: p.accent, rough: 0.55, metal: 0.05, wear: 0.4, scale: 1.2 },
+    { color: "#000000", rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: p.glow, emI: 1.6 },
+    { color: "#000000", rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: "#fff0d0", emI: 1.8 },
+    { color: "#000000", rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: "#ff7a2a", emI: 2.4 },
+    { color: "#000000", rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: "#79f0d6", emI: 1.8 },
+    { color: "#000000", rough: 0.5, metal: 0, scale: 0, wear: 0, dirt: 0, bump: 0, em: "#86adff", emI: 2.2 }
+  ];
+  const uber = makeUber(rows, camo);
+  const decalTex = makeDecalAtlas(p.accent);
+  const kit = {
+    decal: new MeshStandardMaterial({ map: decalTex, transparent: false, alphaTest: 0.35, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    uber,
+    pal: p
+  };
+  names.forEach((n, i) => {
+    kit[n] = { uid: i, base: uber };
+  });
+  kits[team] = kit;
+  return kits[team];
+}
+
+// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+function mergeGeometries(geometries, useGroups = false) {
+  const isIndexed = geometries[0].index !== null;
+  const attributesUsed = new Set(Object.keys(geometries[0].attributes));
+  const morphAttributesUsed = new Set(Object.keys(geometries[0].morphAttributes));
+  const attributes = {};
+  const morphAttributes = {};
+  const morphTargetsRelative = geometries[0].morphTargetsRelative;
+  const mergedGeometry = new BufferGeometry();
+  let offset = 0;
+  for (let i = 0; i < geometries.length; ++i) {
+    const geometry = geometries[i];
+    let attributesCount = 0;
+    if (isIndexed !== (geometry.index !== null)) {
+      console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + i + ". All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.");
+      return null;
+    }
+    for (const name in geometry.attributes) {
+      if (!attributesUsed.has(name)) {
+        console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + i + '. All geometries must have compatible attributes; make sure "' + name + '" attribute exists among all geometries, or in none of them.');
+        return null;
+      }
+      if (attributes[name] === void 0) attributes[name] = [];
+      attributes[name].push(geometry.attributes[name]);
+      attributesCount++;
+    }
+    if (attributesCount !== attributesUsed.size) {
+      console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + i + ". Make sure all geometries have the same number of attributes.");
+      return null;
+    }
+    if (morphTargetsRelative !== geometry.morphTargetsRelative) {
+      console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + i + ". .morphTargetsRelative must be consistent throughout all geometries.");
+      return null;
+    }
+    for (const name in geometry.morphAttributes) {
+      if (!morphAttributesUsed.has(name)) {
+        console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + i + ".  .morphAttributes must be consistent throughout all geometries.");
+        return null;
+      }
+      if (morphAttributes[name] === void 0) morphAttributes[name] = [];
+      morphAttributes[name].push(geometry.morphAttributes[name]);
+    }
+    if (useGroups) {
+      let count;
+      if (isIndexed) {
+        count = geometry.index.count;
+      } else if (geometry.attributes.position !== void 0) {
+        count = geometry.attributes.position.count;
+      } else {
+        console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + i + ". The geometry must have either an index or a position attribute");
+        return null;
+      }
+      mergedGeometry.addGroup(offset, count, i);
+      offset += count;
+    }
+  }
+  if (isIndexed) {
+    let indexOffset = 0;
+    const mergedIndex = [];
+    for (let i = 0; i < geometries.length; ++i) {
+      const index = geometries[i].index;
+      for (let j = 0; j < index.count; ++j) {
+        mergedIndex.push(index.getX(j) + indexOffset);
+      }
+      indexOffset += geometries[i].attributes.position.count;
+    }
+    mergedGeometry.setIndex(mergedIndex);
+  }
+  for (const name in attributes) {
+    const mergedAttribute = mergeAttributes(attributes[name]);
+    if (!mergedAttribute) {
+      console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed while trying to merge the " + name + " attribute.");
+      return null;
+    }
+    mergedGeometry.setAttribute(name, mergedAttribute);
+  }
+  for (const name in morphAttributes) {
+    const numMorphTargets = morphAttributes[name][0].length;
+    if (numMorphTargets === 0) continue;
+    mergedGeometry.morphAttributes = mergedGeometry.morphAttributes || {};
+    mergedGeometry.morphAttributes[name] = [];
+    for (let i = 0; i < numMorphTargets; ++i) {
+      const morphAttributesToMerge = [];
+      for (let j = 0; j < morphAttributes[name].length; ++j) {
+        morphAttributesToMerge.push(morphAttributes[name][j][i]);
+      }
+      const mergedMorphAttribute = mergeAttributes(morphAttributesToMerge);
+      if (!mergedMorphAttribute) {
+        console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed while trying to merge the " + name + " morphAttribute.");
+        return null;
+      }
+      mergedGeometry.morphAttributes[name].push(mergedMorphAttribute);
+    }
+  }
+  return mergedGeometry;
+}
+function mergeAttributes(attributes) {
+  let TypedArray;
+  let itemSize;
+  let normalized;
+  let gpuType = -1;
+  let arrayLength = 0;
+  for (let i = 0; i < attributes.length; ++i) {
+    const attribute = attributes[i];
+    if (TypedArray === void 0) TypedArray = attribute.array.constructor;
+    if (TypedArray !== attribute.array.constructor) {
+      console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.array must be of consistent array types across matching attributes.");
+      return null;
+    }
+    if (itemSize === void 0) itemSize = attribute.itemSize;
+    if (itemSize !== attribute.itemSize) {
+      console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.itemSize must be consistent across matching attributes.");
+      return null;
+    }
+    if (normalized === void 0) normalized = attribute.normalized;
+    if (normalized !== attribute.normalized) {
+      console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.normalized must be consistent across matching attributes.");
+      return null;
+    }
+    if (gpuType === -1) gpuType = attribute.gpuType;
+    if (gpuType !== attribute.gpuType) {
+      console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.gpuType must be consistent across matching attributes.");
+      return null;
+    }
+    arrayLength += attribute.count * itemSize;
+  }
+  const array = new TypedArray(arrayLength);
+  const result = new BufferAttribute(array, itemSize, normalized);
+  let offset = 0;
+  for (let i = 0; i < attributes.length; ++i) {
+    const attribute = attributes[i];
+    if (attribute.isInterleavedBufferAttribute) {
+      const tupleOffset = offset / itemSize;
+      for (let j = 0, l = attribute.count; j < l; j++) {
+        for (let c = 0; c < itemSize; c++) {
+          const value = attribute.getComponent(j, c);
+          result.setComponent(j + tupleOffset, c, value);
+        }
+      }
+    } else {
+      array.set(attribute.array, offset);
+    }
+    offset += attribute.count * itemSize;
+  }
+  if (gpuType !== void 0) {
+    result.gpuType = gpuType;
+  }
+  return result;
+}
+
+// src/client/proto3d/geo.ts
+var _q = new Quaternion();
+var _e = new Euler();
+function mtx(p = [0, 0, 0], r = [0, 0, 0], s = 1) {
+  const sc = typeof s === "number" ? new Vector3(s, s, s) : new Vector3(...s);
+  _q.setFromEuler(_e.set(r[0], r[1], r[2], "XYZ"));
+  return new Matrix4().compose(new Vector3(...p), _q, sc);
+}
+function prep(g, keepUv = false) {
+  const n = g.index ? g.toNonIndexed() : g.clone();
+  for (const k of Object.keys(n.attributes)) if (k !== "position" && k !== "normal" && !(keepUv && k === "uv")) n.deleteAttribute(k);
+  n.clearGroups();
+  if (!n.attributes.normal) n.computeVertexNormals();
+  return n;
+}
+function slabGeo(poly, h, b = 0.02) {
+  const shape = new Shape(poly.map(([x, z]) => new Vector2(x, -z)));
+  b = Math.max(0, Math.min(b, h * 0.45));
+  const g = new ExtrudeGeometry(shape, {
+    depth: Math.max(1e-4, h - 2 * b),
+    bevelEnabled: b > 5e-4,
+    bevelThickness: b,
+    bevelSize: b,
+    bevelOffset: -b,
+    bevelSegments: 1,
+    curveSegments: 6
+  });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, b > 5e-4 ? b : 0, 0);
+  return g;
+}
+function chamRect(w, d, c) {
+  const x = w / 2, z = d / 2;
+  c = Math.max(0, Math.min(c, x * 0.9, z * 0.9));
+  if (c < 5e-4) return [[-x, -z], [x, -z], [x, z], [-x, z]];
+  return [[-x + c, -z], [x - c, -z], [x, -z + c], [x, z - c], [x - c, z], [-x + c, z], [-x, z - c], [-x, -z + c]];
+}
+function bevBox(w, h, d, b = 0.02) {
+  const g = slabGeo(chamRect(w, d, b), h, b);
+  g.translate(0, -h / 2, 0);
+  return g;
+}
+var sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+var cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+var dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var cen = (r) => {
+  const c = [0, 0, 0];
+  for (const p of r) {
+    c[0] += p[0];
+    c[1] += p[1];
+    c[2] += p[2];
+  }
+  return [c[0] / r.length, c[1] / r.length, c[2] / r.length];
+};
+function loft(rings, cap0 = true, cap1 = true) {
+  const pos = [];
+  const n = rings[0].length;
+  const cs = rings.map(cen);
+  const tri = (a, b, c, out) => {
+    const nr = cross(sub(b, a), sub(c, a));
+    if (dot(nr, nr) < 1e-14) return;
+    if (dot(nr, out) < 0) {
+      const t = b;
+      b = c;
+      c = t;
+    }
+    pos.push(...a, ...b, ...c);
+  };
+  for (let i = 0; i < rings.length - 1; i++) {
+    const ci = [(cs[i][0] + cs[i + 1][0]) / 2, (cs[i][1] + cs[i + 1][1]) / 2, (cs[i][2] + cs[i + 1][2]) / 2];
+    for (let j = 0; j < n; j++) {
+      const k = (j + 1) % n;
+      const a = rings[i][j], b = rings[i][k], c = rings[i + 1][k], d = rings[i + 1][j];
+      const mid = [(a[0] + b[0] + c[0] + d[0]) / 4, (a[1] + b[1] + c[1] + d[1]) / 4, (a[2] + b[2] + c[2] + d[2]) / 4];
+      const out = sub(mid, ci);
+      tri(a, b, c, out);
+      tri(a, c, d, out);
+    }
+  }
+  const cap = (ri, other) => {
+    const out = sub(cs[ri], cs[other]);
+    for (let j = 0; j < n; j++) tri(cs[ri], rings[ri][j], rings[ri][(j + 1) % n], out);
+  };
+  if (cap0) cap(0, 1);
+  if (cap1) cap(rings.length - 1, rings.length - 2);
+  const g = new BufferGeometry();
+  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+function sec8(x, wb, wm, wt, y0, y1, y2, y3) {
+  return [[x, y0, -wb], [x, y0, wb], [x, y1, wm], [x, y2, wm], [x, y3, wt], [x, y3, -wt], [x, y2, -wm], [x, y1, -wm]];
+}
+function ellRing(x, cy, cz, ry, rz, n = 12, pw = 2.4, flatBottom = 0) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    const ex = 2 / pw;
+    let y = Math.sign(s) * Math.pow(Math.abs(s), ex) * ry;
+    if (y < 0) y *= 1 - flatBottom;
+    out.push([x, cy + y, cz + Math.sign(c) * Math.pow(Math.abs(c), ex) * rz]);
+  }
+  return out;
+}
+function lathe(profile, seg = 16, smoothDeg = 38) {
+  const m = profile.length - 1;
+  const sn = [];
+  for (let i = 0; i < m; i++) {
+    const dr = profile[i + 1][0] - profile[i][0], dy = profile[i + 1][1] - profile[i][1];
+    const l = Math.hypot(dr, dy) || 1;
+    sn.push([dy / l, -dr / l]);
+  }
+  const cosT = Math.cos(smoothDeg * Math.PI / 180);
+  const endN = (i, atEnd) => {
+    const j = atEnd ? i + 1 : i - 1;
+    if (j < 0 || j >= m) return sn[i];
+    const a = sn[i], b = sn[j];
+    if (a[0] * b[0] + a[1] * b[1] > cosT) {
+      const x = a[0] + b[0], y = a[1] + b[1], l = Math.hypot(x, y) || 1;
+      return [x / l, y / l];
+    }
+    return a;
+  };
+  const pos = [], nor = [];
+  const push = (r, y, a, nr, ny) => {
+    pos.push(r * Math.cos(a), y, r * Math.sin(a));
+    nor.push(nr * Math.cos(a), ny, nr * Math.sin(a));
+  };
+  for (let i = 0; i < m; i++) {
+    const [r0, y0] = profile[i], [r1, y1] = profile[i + 1];
+    const n0 = endN(i, false), n1 = endN(i, true);
+    for (let k = 0; k < seg; k++) {
+      const a0 = k / seg * Math.PI * 2, a1 = (k + 1) / seg * Math.PI * 2;
+      const am = (a0 + a1) / 2;
+      const p = (r, y, a) => [r * Math.cos(a), y, r * Math.sin(a)];
+      const A2 = p(r0, y0, a0), B = p(r0, y0, a1), C = p(r1, y1, a1), D = p(r1, y1, a0);
+      const out = [sn[i][0] * Math.cos(am), sn[i][1], sn[i][0] * Math.sin(am)];
+      const emit = (v) => {
+        const g2 = cross(sub(p(v[1][0], v[1][1], v[1][2]), p(v[0][0], v[0][1], v[0][2])), sub(p(v[2][0], v[2][1], v[2][2]), p(v[0][0], v[0][1], v[0][2])));
+        if (dot(g2, g2) < 1e-16) return;
+        if (dot(g2, out) < 0) {
+          const t = v[1];
+          v[1] = v[2];
+          v[2] = t;
+        }
+        for (const q of v) push(q[0], q[1], q[2], q[3], q[4]);
+      };
+      emit([[r0, y0, a0, n0[0], n0[1]], [r0, y0, a1, n0[0], n0[1]], [r1, y1, a1, n1[0], n1[1]]]);
+      emit([[r0, y0, a0, n0[0], n0[1]], [r1, y1, a1, n1[0], n1[1]], [r1, y1, a0, n1[0], n1[1]]]);
+      void A2;
+      void B;
+      void C;
+      void D;
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new Float32BufferAttribute(nor, 3));
+  return g;
+}
+var cylG = (r0, r1, len, seg = 14) => lathe([[0, 0], [r0, 0], [r1, len], [0, len]], seg);
+var cylB = (r, len, b, seg = 16) => {
+  b = Math.min(b, r * 0.45, len * 0.45);
+  return lathe([[0, 0], [r - b, 0], [r, b], [r, len - b], [r - b, len], [0, len]], seg);
+};
+function orient(g, axis) {
+  if (axis === "x") g.rotateZ(-Math.PI / 2);
+  else if (axis === "z") g.rotateX(Math.PI / 2);
+  else if (axis === "-x") g.rotateZ(Math.PI / 2);
+  else if (axis === "-z") g.rotateX(-Math.PI / 2);
+  return g;
+}
+function strutGeo(a, b, r0, r1 = r0, seg = 8) {
+  const d = new Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const len = d.length();
+  const g = cylG(r0, r1, len, seg);
+  const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), d.normalize());
+  g.applyMatrix4(new Matrix4().compose(new Vector3(...a), q, new Vector3(1, 1, 1)));
+  return g;
+}
+var Bld = class {
+  m = /* @__PURE__ */ new Map();
+  mids = /* @__PURE__ */ new Map();
+  decals = [];
+  tris = 0;
+  g(geo, matl, m) {
+    const n = prep(geo);
+    if (m) n.applyMatrix4(m);
+    const u = matl.uid !== void 0 ? matl : null;
+    const mat = u ? u.base : matl;
+    if (u) n.setAttribute("mid", new Float32BufferAttribute(new Float32Array(n.attributes.position.count).fill(u.uid), 1));
+    let l = this.m.get(mat);
+    if (!l) this.m.set(mat, l = []);
+    l.push(n);
+    return this;
+  }
+  box(mat, w, h, d, x = 0, y = 0, z = 0, b = 0.02, rot) {
+    return this.g(bevBox(w, h, d, b), mat, mtx([x, y, z], rot));
+  }
+  /** box sitting on y (bottom at y) */
+  boxB(mat, w, h, d, x, y, z, b = 0.02, rot) {
+    return this.box(mat, w, h, d, x, y + h / 2, z, b, rot);
+  }
+  slab(mat, poly, h, b, x = 0, y = 0, z = 0, rot) {
+    return this.g(slabGeo(poly, h, b), mat, mtx([x, y, z], rot));
+  }
+  cyl(mat, r0, r1, len, at, axis = "y", seg = 14) {
+    return this.g(orient(cylG(r0, r1, len, seg), axis), mat, mtx(at));
+  }
+  cylb(mat, r, len, b, at, axis = "y", seg = 16) {
+    return this.g(orient(cylB(r, len, b, seg), axis), mat, mtx(at));
+  }
+  lathe(mat, profile, at, axis = "y", seg = 16, rot) {
+    const g = orient(lathe(profile, seg), axis);
+    return this.g(g, mat, mtx(at, rot));
+  }
+  loft(mat, rings, cap0 = true, cap1 = true, m) {
+    return this.g(loft(rings, cap0, cap1), mat, m);
+  }
+  strut(mat, a, b, r0, r1 = r0, seg = 8) {
+    return this.g(strutGeo(a, b, r0, r1, seg), mat);
+  }
+  /** textured decal quad lying on +Y at (x,y,z); uv rect in atlas (u0,v0,u1,v1). Rotated about Y by ry. */
+  decal(w, d, x, y, z, uv, ry = 0) {
+    const g = new PlaneGeometry(w, d).rotateX(-Math.PI / 2);
+    const uvs = g.attributes.uv;
+    for (let i = 0; i < uvs.count; i++) uvs.setXY(i, uv[0] + uvs.getX(i) * (uv[2] - uv[0]), uv[1] + uvs.getY(i) * (uv[3] - uv[1]));
+    g.applyMatrix4(mtx([x, y, z], [0, ry, 0]));
+    const n = prep(g, true);
+    this.decals.push(n);
+    return this;
+  }
+  /** Merge per material and add meshes to parent. */
+  mount(parent, decalMat, opts = {}) {
+    const out = [];
+    for (const [mat, list] of this.m) {
+      const g = mergeGeometries(list, false);
+      if (!g) continue;
+      const mesh = new Mesh(g, mat);
+      mesh.castShadow = opts.shadow !== false;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      out.push(mesh);
+      this.tris += g.attributes.position.count / 3;
+    }
+    if (decalMat && this.decals.length) {
+      const g = mergeGeometries(this.decals, false);
+      if (g) {
+        const mesh = new Mesh(g, decalMat);
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 1;
+        parent.add(mesh);
+        out.push(mesh);
+      }
+    }
+    return out;
+  }
+};
+
+// src/client/proto3d/weapons3d.ts
+function barrel(C, B, len, br, y, z, o = {}) {
+  const { kit } = C;
+  const at = [0, y, z];
+  const bl = o.breech ?? 1.35;
+  const brakeLen = o.brake && o.brake !== "none" ? Math.max(br * 4, len * 0.07) : 0;
+  const coreEnd = len - brakeLen * 0.4;
+  B.lathe(kit.metal, [[0, 0], [br * bl, 0], [br * bl, len * 0.08], [br * 1.1, len * 0.13], [br, len * 0.17], [br, coreEnd], [0, coreEnd]], at, "x", 12);
+  if (o.sleeve) {
+    const a = len * 0.2, e = len * 0.62, sr = br * 1.38, s = br * 0.14;
+    B.lathe(kit.trim, [[0, a], [sr - s, a], [sr, a + s], [sr, e - s], [sr - s, e], [0, e]], at, "x", 14);
+    for (const f of [0.3, 0.5, 0.7]) B.lathe(kit.steel, [[0, a + (e - a) * f - br * 0.12], [sr * 1.06, a + (e - a) * f - br * 0.12], [sr * 1.06, a + (e - a) * f + br * 0.12], [0, a + (e - a) * f + br * 0.12]], at, "x", 14);
+  }
+  if (o.extractor) {
+    const a = len * 0.7, e = len * 0.8, er = br * 1.55;
+    B.lathe(kit.metal, [[0, a], [br * 1.1, a], [er, a + (e - a) * 0.3], [er, e - (e - a) * 0.3], [br * 1.1, e], [0, e]], at, "x", 12);
+  }
+  if (brakeLen > 0) {
+    const m = len - brakeLen, bR = br * 1.65;
+    if (o.brake === "slot") {
+      const L = brakeLen;
+      B.lathe(kit.steel, [[0, m], [bR, m], [bR, m + L * 0.22], [br * 1.25, m + L * 0.22], [br * 1.25, m + L * 0.34], [bR, m + L * 0.34], [bR, m + L * 0.56], [br * 1.25, m + L * 0.56], [br * 1.25, m + L * 0.68], [bR, m + L * 0.68], [bR, m + L], [br * 0.8, m + L], [0, m + L * 0.9]], at, "x", 12);
+    } else {
+      B.lathe(kit.metal, [[0, m], [br * 1.1, m], [bR * 1.1, m + brakeLen * 0.6], [bR, m + brakeLen], [br * 0.7, m + brakeLen], [0, m + brakeLen * 0.8]], at, "x", 12);
+    }
+  }
+  C.muzzle(len + br * 0.2, y, z);
+}
+function turretShell(C, o = {}) {
+  const { r, b, kit } = C;
+  const L = (o.len ?? 1.9) * r / 2, W = (o.wid ?? 1) * r, h = (o.hgt ?? 0.5) * r, fr = o.front ?? 0.4;
+  const x = o.x ?? 0, y = o.y ?? r * 0.08;
+  const st = (px2, w, hh, lift) => sec8(x + px2 * L, w * W * 0.8, w * W * 0.9, w * W * 0.6, y + lift * h, y + (lift + 0.15) * h, y + hh * h * 0.72, y + hh * h);
+  const rings = [st(-1, 0.62, 0.92, 0), st(-0.9, 0.8, 1, 0), st(-0.2, 1, 1, 0), st(0.35, 0.92, 0.9, 0), st(0.9, fr + 0.15, 0.72, 0.08), st(1, fr, 0.64, 0.1)];
+  b.loft(o.mat ?? kit.hull, rings);
+  return { L, W, h, y };
+}
+function cupola(C, x, y, z, s) {
+  const { b, kit } = C;
+  b.cylb(kit.trim, s, s * 0.7, s * 0.12, [x, y, z], "y", 12);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    b.box(kit.glass, s * 0.22, s * 0.16, s * 0.22, x + Math.cos(a) * s * 0.95, y + s * 0.5, z + Math.sin(a) * s * 0.95, 4e-3, [0, -a, 0]);
+  }
+  b.cylb(kit.metal, s * 0.72, s * 0.14, s * 0.04, [x, y + s * 0.7, z], "y", 10);
+}
+function smokeLaunchers(C, x, y, z, n, s) {
+  for (let i = 0; i < n; i++) C.b.cyl(C.kit.metal, s, s, s * 3, [x + i * s * 2.3, y, z], "y", 6);
+}
+function roofMarks(C, x, y, z, w, tile = 1) {
+  void C;
+  void x;
+  void y;
+  void z;
+  void w;
+  void tile;
+  void atlasUV;
+}
+function buildTurret(mod, S, kit, fixed = false) {
+  const D = approxTurretD(mod.mount, S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
+  const r = D / 2;
+  const c = mod.caliber ?? 0.5;
+  const nb = mod.barrels ?? 1;
+  const yaw = new Group(), pitch = new Group(), recoil = new Group(), spinG = new Group();
+  yaw.add(pitch);
+  pitch.add(recoil);
+  const t = { yaw, pitch, recoil, muzzles: [], fixed, shot: "tracer", rate: 0.5, r, tris: 0 };
+  const C = {
+    b: new Bld(),
+    p: new Bld(),
+    rc: new Bld(),
+    sp: new Bld(),
+    kit,
+    r,
+    c,
+    nb,
+    D,
+    bv: Math.max(6e-3, r * 0.04),
+    t,
+    muzzle: (x, y, z) => {
+      const o = new Object3D();
+      o.position.set(x, y, z);
+      recoil.add(o);
+      t.muzzles.push(o);
+    }
+  };
+  const { b, p, rc, sp } = C;
+  const v = mod.visual;
+  const ringR = r * 0.95;
+  const y0 = fixed ? 0 : r * 0.1;
+  if (!fixed && v !== "plate") {
+    b.cylb(kit.trim, ringR, r * 0.1, r * 0.03, [0, 0, 0], "y", 24);
+    b.lathe(kit.metal, [[0, r * 0], [ringR * 1.02, r * 0], [ringR * 1.02, r * 0.02], [0, r * 0.02]], [0, r * 0.09, 0], "y", 24);
+  }
+  const bv = C.bv;
+  switch (v) {
+    case "gun":
+    case "shotgun":
+    case "flak":
+    case "pointdef": {
+      const heavy = c > 0.45 || v === "flak";
+      const sh = turretShell(C, { len: heavy ? 1.7 : 1.45, wid: heavy ? 0.95 : 0.8, hgt: heavy ? 0.52 : 0.42, front: 0.55 });
+      const py2 = y0 + sh.h * 0.5;
+      pitch.position.set(r * 0.62, py2, 0);
+      const bl = D * (0.55 + 0.7 * c), br = D * (0.03 + 0.045 * c);
+      const sp2 = nb > 1 ? br * 3.4 : 0;
+      p.box(kit.trim, r * 0.3, sh.h * 0.62, nb > 1 ? sp2 * nb + br * 3 : br * 5, 0.02, 0, 0, bv);
+      for (let i = 0; i < nb; i++) {
+        const z = nb > 1 ? (i - (nb - 1) / 2) * sp2 : 0;
+        barrel(C, rc, bl, br, 0, z, { sleeve: bl > D * 0.9, brake: c > 0.3 ? "flash" : "none", breech: 1.7 });
+      }
+      b.box(kit.panel, r * 0.5, sh.h * 0.5, r * 0.28, -r * 0.2, y0 + sh.h * 0.85, r * 0.55, bv);
+      b.box(kit.trim, r * 0.25, sh.h * 0.18, r * 0.18, r * 0.2, y0 + sh.h * 0.75, r * 0.42, bv * 0.6);
+      cupola(C, -r * 0.5, y0 + sh.h * 0.95, -r * 0.22, r * 0.14);
+      smokeLaunchers(C, r * 0.15, y0 + sh.h * 0.8, -r * 0.5, 3, r * 0.025);
+      roofMarks(C, -r * 0.05, y0 + sh.h * 1.002, 0, r * 0.45, 1);
+      t.rate = 0.18 + (1 - c) * 0.1;
+      if (v === "flak") {
+        for (const z of [-r * 0.5, r * 0.5]) b.cyl(kit.metal, r * 0.05, r * 0.05, r * 0.5, [-r * 0.3, y0 + sh.h, z], "y", 6);
+      }
+      break;
+    }
+    case "gatling": {
+      const sh = turretShell(C, { len: 1.5, wid: 1, hgt: 0.55, front: 0.6 });
+      const py2 = y0 + sh.h * 0.5;
+      pitch.position.set(r * 0.62, py2, 0);
+      const bl = D * 0.9, cr = r * 0.2, n = Math.max(4, nb);
+      p.box(kit.trim, r * 0.35, sh.h * 0.8, r * 0.75, 0, 0, 0, bv);
+      p.cylb(kit.metal, cr * 1.9, r * 0.45, cr * 0.2, [0, 0, 0], "x", 16);
+      rc.cylb(kit.trim, cr * 1.6, bl * 0.2, cr * 0.15, [r * 0.1, 0, 0], "x", 16);
+      recoil.add(spinG);
+      t.spin = spinG;
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2;
+        sp.cyl(kit.metal, r * 0.04, r * 0.04, bl, [0, Math.sin(a) * cr, Math.cos(a) * cr], "x", 8);
+      }
+      for (const f of [0.28, 0.65, 1]) sp.cylb(kit.steel, cr + r * 0.07, r * 0.07, r * 0.015, [bl * f - r * 0.07, 0, 0], "x", 16);
+      sp.cyl(kit.trim, cr * 0.5, cr * 0.5, bl, [0, 0, 0], "x", 8);
+      C.muzzle(bl, 0, 0);
+      b.cylb(kit.panel, r * 0.32, r * 0.5, r * 0.05, [-r * 0.15, y0 + sh.h * 0.55, r * 0.72], "y", 14);
+      b.box(kit.trim, r * 0.12, r * 0.12, r * 0.5, r * 0.1, y0 + sh.h * 0.55, r * 0.5, bv * 0.5);
+      cupola(C, -r * 0.55, y0 + sh.h * 0.98, -r * 0.3, r * 0.13);
+      t.rate = 0.07;
+      break;
+    }
+    case "cannon":
+    case "gauss":
+    case "sniper": {
+      const big = mod.mount === "XL" || mod.mount === "L";
+      const sh = turretShell(C, { len: 1.9, wid: 1.05, hgt: big ? 0.5 : 0.56, front: 0.42 });
+      const py2 = y0 + sh.h * 0.5;
+      pitch.position.set(r * 0.9, py2, 0);
+      const bl = D * (0.95 + 0.7 * c), br = D * (0.045 + 0.04 * c);
+      p.box(kit.trim, r * 0.28, sh.h * 0.78, r * 0.62, 0.03 * r, 0, 0, bv * 1.2);
+      p.box(kit.hull, r * 0.12, sh.h * 0.5, r * 0.42, 0.14 * r, sh.h * 0.05, 0, bv);
+      barrel(C, rc, bl, br, 0, 0, { sleeve: true, extractor: v !== "sniper", brake: v === "gauss" ? "none" : "slot" });
+      rc.cyl(kit.metal, br * 0.3, br * 0.3, r * 0.55, [r * 0, -br * 0.1, br * 2.6], "x", 6);
+      p.box(kit.metal, r * 0.12, r * 0.1, r * 0.12, 0, sh.h * 0.45, -br * 3.2, 6e-3);
+      cupola(C, -r * 0.55, y0 + sh.h * 0.97, -r * 0.34, r * 0.2);
+      b.cylb(kit.trim, r * 0.18, r * 0.05, r * 0.012, [-r * 0.5, y0 + sh.h, r * 0.3], "y", 12);
+      smokeLaunchers(C, r * 0.18, y0 + sh.h * 0.72, r * 0.62 + r * 0.14, 4, r * 0.03);
+      b.g(new BoxGeometry(1, 1, 1), kit.canvas, mtx([-sh.L - r * 0.12, y0 + sh.h * 0.4, 0], [0, 0, 0], [r * 0.5, sh.h * 0.55, r * 1]));
+      for (const z of [-0.4, -0.15, 0.15, 0.4]) b.strut(kit.metal, [-sh.L - r * 0.4, y0 + sh.h * 0.15, z * r], [-sh.L - r * 0.4, y0 + sh.h * 0.65, z * r], r * 0.012, r * 0.012, 4);
+      for (const z of [-0.2, 0.2]) b.cylb(kit.hot, r * 0.012, r * 0.01, 0, [r * 0.8, y0 + sh.h * 0.55, z * r + r * 0.4], "x", 5);
+      roofMarks(C, -r * 0.2, y0 + sh.h * 1.002, 0, r * 0.5, 14);
+      t.shot = "shell";
+      t.rate = 1.2;
+      break;
+    }
+    case "artillery":
+    case "mortar": {
+      const art = v === "artillery";
+      const bl = D * (art ? 1.55 : 0.62), br = D * (art ? 0.055 : 0.1);
+      const hgt = r * (art ? 0.5 : 0.38);
+      b.slab(kit.hull, [[-r * 0.85, -r * 0.7], [r * 0.2, -r * 0.8], [r * 0.5, -r * 0.5], [r * 0.5, r * 0.5], [r * 0.2, r * 0.8], [-r * 0.85, r * 0.7]], hgt, bv * 1.2, 0, y0, 0);
+      pitch.position.set(-r * 0.05, y0 + hgt * (art ? 0.85 : 0.9), 0);
+      pitch.rotation.z = art ? 0.42 : 1.05;
+      for (const z of [-r * 0.4, r * 0.4]) b.box(kit.trim, r * 0.5, r * (art ? 0.55 : 0.4), r * 0.12, -r * 0.05, y0 + hgt + r * 0.1, z, bv);
+      barrel(C, rc, bl, br, 0, 0, { sleeve: art, extractor: false, brake: art ? "slot" : "none", breech: 1.8 });
+      if (art) {
+        for (const z of [-br * 2.6, br * 2.6]) p.cyl(kit.steel, br * 0.5, br * 0.5, bl * 0.4, [bl * 0.05, br * 0.4, z], "x", 8);
+        p.box(kit.hull, r * 0.12, r * 0.55, r * 0.9, r * 0.25, 0, 0, bv);
+        b.box(kit.panel, r * 0.5, r * 0.18, r * 0.42, -r * 0.55, y0 + hgt + r * 0.09, r * 0.4, bv);
+      } else {
+        b.cylb(kit.metal, r * 0.55, r * 0.05, bv * 0.5, [-r * 0.05, y0 + hgt, 0], "y", 16);
+      }
+      cupola(C, -r * 0.6, y0 + hgt, -r * 0.4, r * 0.14);
+      t.shot = "shell";
+      t.rate = art ? 2.4 : 1.4;
+      break;
+    }
+    case "rail": {
+      const sh = turretShell(C, { len: 1.55, wid: 0.95, hgt: 0.5, front: 0.5, mat: kit.hull });
+      const py2 = y0 + sh.h * 0.55;
+      pitch.position.set(r * 0.6, py2, 0);
+      const bl = D * 1.35;
+      for (const z of [-r * 0.17, r * 0.17]) rc.box(kit.steel, bl, r * 0.2, r * 0.12, bl / 2, 0, z, bv * 0.8);
+      rc.box(kit.rail, bl * 0.92, r * 0.025, r * 0.2, bl * 0.5, 0, 0, 2e-3);
+      for (let i = 1; i < 6; i++) rc.cylb(kit.trim, r * 0.24, r * 0.09, r * 0.02, [bl * i / 6.4, 0, 0], "x", 12);
+      for (const z of [-r * 0.35, r * 0.35]) {
+        b.cylb(kit.panel, r * 0.2, r * 0.5, r * 0.04, [-r * 0.5, y0 + sh.h, z], "y", 12);
+        b.cylb(kit.metal, r * 0.14, r * 0.04, 3e-3, [-r * 0.5, y0 + sh.h + r * 0.5, z], "y", 10);
+      }
+      p.box(kit.trim, r * 0.3, sh.h * 0.7, r * 0.7, 0, 0, 0, bv);
+      C.muzzle(bl, 0, 0);
+      cupola(C, -r * 0.2, y0 + sh.h * 0.98, r * 0.3, r * 0.1);
+      t.shot = "beam";
+      t.rate = 2;
+      break;
+    }
+    case "rocketPod":
+    case "missileRack":
+    case "cruise": {
+      const tubes = Math.max(1, nb);
+      const big = v === "cruise";
+      const cols = big ? 1 : tubes >= 4 ? 2 : tubes >= 2 ? 2 : 1, rows = Math.max(1, Math.ceil(tubes / cols));
+      const tubeR = Math.min(r * (big ? 0.3 : 0.17), r * 0.9 / (cols * 2.3));
+      const pw = cols * tubeR * 2.5 + r * 0.14, ph = rows * tubeR * 2.5 + r * 0.14, pl = r * (big ? 2.1 : 1.35);
+      b.box(kit.trim, r * 0.9, r * 0.2, r * 0.85, -r * 0.1, y0 + r * 0.1, 0, bv);
+      for (const z of [-pw / 2 - r * 0.04, pw / 2 + r * 0.04]) b.box(kit.hull, r * 0.12, ph * 0.9, r * 0.1, 0, y0 + r * 0.2 + ph * 0.5, z, bv);
+      pitch.position.set(0, y0 + r * 0.2 + ph * 0.5, 0);
+      pitch.rotation.z = v === "missileRack" ? 0.2 : 0.14;
+      const ox = pl * 0.3;
+      rc.box(kit.hull, pl, ph, pw, ox, 0, 0, bv * 1.4);
+      rc.box(kit.trim, pl * 0.2, ph * 0.9, pw * 1.06, ox - pl * 0.34, 0, 0, bv);
+      let k = 0;
+      for (let i = 0; i < rows; i++) for (let j = 0; j < cols && k < tubes; j++, k++) {
+        const z = cols > 1 ? (j - (cols - 1) / 2) * tubeR * 2.5 : 0, y = rows > 1 ? (i - (rows - 1) / 2) * tubeR * 2.5 : 0;
+        rc.lathe(kit.steel, [[tubeR * 1.12, 0], [tubeR * 1.12, 0.012], [tubeR * 0.9, 0.012], [tubeR * 0.9, 0]], [ox + pl / 2 - 8e-3, y, z], "x", 12);
+        rc.lathe(kit.metal, [[0, 0], [tubeR * 0.9, 0], [tubeR * 0.9, -pl * 0.18], [0, -pl * 0.18]], [ox + pl / 2 - 4e-3, y, z], "x", 12);
+        if (v !== "rocketPod") rc.cyl(kit.steel, tubeR * 0.55, tubeR * 0.1, tubeR * 1.4, [ox + pl / 2 - tubeR * 1.5, y, z], "x", 8);
+        else rc.cyl(kit.hot, tubeR * 0.55, tubeR * 0.55, 4e-3, [ox + pl / 2 - 0.02, y, z], "x", 8);
+        C.muzzle(ox + pl / 2 + 0.01, y, z);
+      }
+      for (let i = 0; i < 4; i++) rc.box(kit.metal, pl * 0.04, ph * 0.5, pw * 0.7, ox - pl * 0.5 - 4e-3, 0, 0, 2e-3, [0, 0, 0]);
+      t.shot = "rocket";
+      t.rate = 0.9;
+      break;
+    }
+    case "laser":
+    case "heatray":
+    case "slowbeam":
+    case "sonic":
+    case "emp":
+    case "gravity":
+    case "tesla": {
+      const tesla = v === "tesla";
+      const sh = turretShell(C, { len: 1.35, wid: 0.9, hgt: 0.46, front: 0.55, mat: kit.hull });
+      const py2 = y0 + sh.h * 0.55;
+      if (tesla) {
+        for (let i = 0; i < 4; i++) b.cylb(i % 2 ? kit.steel : kit.trim, r * (0.3 - i * 0.04), r * 0.2, r * 0.02, [0, y0 + sh.h + i * r * 0.17, 0], "y", 14);
+        b.lathe(kit.metal, [[0, 0], [r * 0.16, 0], [r * 0.2, r * 0.1], [0, r * 0.18]], [0, y0 + sh.h + r * 0.7, 0], "y", 14);
+        b.cyl(kit.rail, r * 0.04, r * 0.04, r * 0.3, [0, y0 + sh.h + r * 0.85, 0], "y", 8);
+        pitch.position.set(r * 0.45, py2, 0);
+        for (const z of [-r * 0.12, r * 0.12]) rc.cyl(kit.steel, r * 0.04, r * 0.03, D * 0.7, [0, 0, z], "x", 6);
+        C.muzzle(D * 0.7, 0, 0);
+      } else if (v === "heatray" || v === "emp" || v === "sonic" || v === "gravity") {
+        pitch.position.set(r * 0.5, py2, 0);
+        rc.lathe(kit.metal, [[0, 0], [r * 0.12, 0], [r * 0.12, r * 0.4], [0, r * 0.4]], [0, 0, 0], "x", 10);
+        const dr = r * 0.5;
+        rc.lathe(kit.hull, [[0, r * 0.4], [r * 0.14, r * 0.4], [dr * 0.8, r * 0.55], [dr, r * 0.7], [dr * 0.9, r * 0.72], [r * 0.12, r * 0.52], [0, r * 0.5]], [0, 0, 0], "x", 18);
+        rc.cyl(kit.plasma, r * 0.08, r * 0.08, r * 0.04, [r * 0.5, 0, 0], "x", 10);
+        C.muzzle(r * 0.78, 0, 0);
+      } else {
+        pitch.position.set(r * 0.5, py2, 0);
+        const bl = D * 0.8;
+        p.box(kit.trim, r * 0.3, sh.h * 0.7, r * 0.6, 0, 0, 0, bv);
+        for (let i = 0; i < Math.max(1, nb); i++) {
+          const z = nb > 1 ? (i - (nb - 1) / 2) * r * 0.34 : 0;
+          rc.cyl(kit.steel, r * 0.07, r * 0.07, bl, [0, 0, z], "x", 10);
+          rc.cylb(kit.hull, r * 0.12, bl * 0.35, r * 0.02, [0, 0, z], "x", 12);
+          for (const f of [0.55, 0.75, 0.92]) rc.cylb(kit.trim, r * 0.115, r * 0.045, r * 0.01, [bl * f, 0, z], "x", 12);
+          rc.cyl(kit.rail, r * 0.045, r * 0.045, r * 0.03, [bl + r * 0.01, 0, z], "x", 8);
+          C.muzzle(bl + r * 0.08, 0, z);
+        }
+      }
+      cupola(C, -r * 0.45, y0 + sh.h * 0.97, -r * 0.3, r * 0.1);
+      t.shot = "beam";
+      t.rate = 0.7;
+      break;
+    }
+    case "plasma": {
+      const sh = turretShell(C, { len: 1.7, wid: 1.05, hgt: 0.55, front: 0.5, mat: kit.hull });
+      const py2 = y0 + sh.h * 0.55;
+      pitch.position.set(r * 0.55, py2, 0);
+      const bl = D * 1;
+      p.box(kit.trim, r * 0.3, sh.h * 0.8, r * 0.7, 0.02, 0, 0, bv);
+      for (let i = 0; i < Math.max(1, Math.min(2, nb)); i++) {
+        const z = nb > 1 ? (i - 0.5) * r * 0.6 : 0;
+        rc.lathe(kit.steel, [[0, 0], [r * 0.15, 0], [r * 0.13, bl * 0.9], [r * 0.2, bl * 0.9], [r * 0.2, bl], [0, bl]], [0, 0, z], "x", 14);
+        for (let k = 1; k <= 4; k++) rc.cylb(kit.trim, r * 0.19, r * 0.035, r * 8e-3, [bl * k / 5.2, 0, z], "x", 14);
+        rc.cyl(kit.plasma, r * 0.1, r * 0.1, r * 0.03, [bl + r * 5e-3, 0, z], "x", 10);
+        C.muzzle(bl + r * 0.12, 0, z);
+      }
+      for (const z of [-r * 0.5, r * 0.5]) b.cylb(kit.panel, r * 0.17, r * 0.7, r * 0.03, [-r * 0.5, y0 + sh.h * 0.5, z], "x", 12);
+      cupola(C, -r * 0.4, y0 + sh.h * 0.97, 0, r * 0.12);
+      t.shot = "orb";
+      t.rate = 1.6;
+      break;
+    }
+    case "flamer": {
+      b.box(kit.trim, r * 1, r * 0.3, r * 0.8, -r * 0.1, y0 + r * 0.15, 0, bv);
+      pitch.position.set(r * 0.3, y0 + r * 0.4, 0);
+      rc.cyl(kit.metal, r * 0.07, r * 0.07, D * 0.7, [0, 0, 0], "x", 8);
+      rc.lathe(kit.steel, [[0, 0], [r * 0.1, 0], [r * 0.16, r * 0.14], [r * 0.12, r * 0.18], [0, r * 0.18]], [D * 0.68, 0, 0], "x", 10);
+      rc.cyl(kit.hot, r * 0.03, r * 0.03, 0.01, [D * 0.86, 0, 0], "x", 6);
+      for (const z of [-r * 0.36, r * 0.36]) {
+        b.cylb(kit.hull, r * 0.17, r * 0.9, r * 0.04, [-r * 0.85, y0 + r * 0.5, z], "x", 12);
+        for (const f of [0.25, 0.7]) b.cylb(kit.steel, r * 0.18, r * 0.05, 4e-3, [-r * 0.85 + r * 0.9 * f, y0 + r * 0.5, z], "x", 12);
+      }
+      C.muzzle(D * 0.82, 0, 0);
+      t.shot = "flame";
+      t.rate = 0.12;
+      break;
+    }
+    case "plate": {
+      const w = r * 1.8;
+      b.slab(kit.hull, [[-r * 0.1, -w / 2], [r * 0.55, -w / 2 + r * 0.1], [r * 0.55, w / 2 - r * 0.1], [-r * 0.1, w / 2]], r * 0.95, bv * 1.4, 0, 0, 0);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 6; j++) {
+        b.box(kit.trim, r * 0.07, r * 0.2, r * 0.22, r * 0.58, r * 0.2 + i * r * 0.26, (j - 2.5) * r * 0.27, 6e-3);
+      }
+      b.box(kit.trim, r * 0.1, r * 0.08, w, 0, r * 0.95, 0, bv);
+      t.shot = "none";
+      t.rate = 99;
+      break;
+    }
+    case "saw":
+    case "chainsaw":
+    case "hammer":
+    case "claw":
+    case "drill":
+    case "blade":
+    case "prod":
+    case "ram": {
+      b.box(kit.trim, r * 0.9, r * 0.3, r * 0.8, -r * 0.1, y0 + r * 0.15, 0, bv);
+      b.cylb(kit.metal, r * 0.2, r * 0.5, r * 0.04, [-r * 0.2, y0 + r * 0.3, 0], "y", 12);
+      pitch.position.set(-r * 0.2, y0 + r * 0.7, 0);
+      p.box(kit.hull, r * 0.9, r * 0.16, r * 0.2, r * 0.4, 0, 0, bv);
+      p.strut(kit.steel, [0, r * 0.12, r * 0.2], [r * 0.7, r * 0.06, r * 0.2], r * 0.035, r * 0.035, 6);
+      if (v === "saw" || v === "chainsaw") {
+        rc.lathe(kit.steel, [[0, -r * 0.02], [r * 0.6, -r * 0.02], [r * 0.6, r * 0.02], [0, r * 0.02]], [r * 0.9, 0, 0], "z", 20);
+        for (let i = 0; i < 16; i++) {
+          const a = i / 16 * Math.PI * 2;
+          rc.box(kit.metal, r * 0.08, r * 0.06, r * 0.04, r * 0.9 + Math.cos(a) * r * 0.6, 0, Math.sin(a) * r * 0.6, 3e-3, [0, -a, 0]);
+        }
+      } else if (v === "hammer") {
+        rc.box(kit.metal, r * 0.5, r * 0.5, r * 0.8, r * 1, 0, 0, bv * 2);
+        rc.box(kit.steel, r * 0.1, r * 0.44, r * 0.74, r * 1.28, 0, 0, bv);
+      } else if (v === "drill") rc.lathe(kit.steel, [[0, 0], [r * 0.25, 0], [r * 0.2, r * 0.5], [0, r * 0.95]], [r * 0.7, 0, 0], "x", 12);
+      else if (v === "claw") for (const z of [-r * 0.2, r * 0.2]) rc.slab(kit.steel, [[0, -r * 0.05], [r * 0.7, -r * 0.01], [r * 0.9, r * 0.05], [0, r * 0.08]], r * 0.1, 4e-3, r * 0.7, -r * 0.05, z);
+      else rc.lathe(kit.steel, [[0, 0], [r * 0.06, 0], [r * 0.03, r * 0.7], [0, r * 0.75]], [r * 0.7, 0, 0], "x", 8);
+      t.shot = "none";
+      t.rate = 99;
+      break;
+    }
+    case "charge": {
+      for (let i = 0; i < 3; i++) {
+        const z = (i - 1) * r * 0.5;
+        b.lathe(kit.canvas, [[0, 0], [r * 0.14, r * 0.05], [r * 0.2, r * 0.3], [r * 0.2, r * 0.6], [r * 0.1, r * 0.95], [0, r * 1]], [-r * 0.5, 0, z], "x", 12);
+        b.box(kit.trim, r * 0.15, r * 0.02, r * 0.4, -r * 0.5 + r * 0.05, 0, z, 2e-3);
+      }
+      b.box(kit.trim, r * 1.3, r * 0.1, r * 1.3, 0, r * 0.2, 0, bv);
+      t.shot = "none";
+      t.rate = 99;
+      break;
+    }
+    default: {
+      b.cylb(kit.hull, r * 0.55, r * 0.3, r * 0.05, [0, y0, 0], "y", 16);
+      if (v === "dome" || v === "shield") {
+        b.lathe(kit.steel, [[r * 0.5, 0], [r * 0.5, r * 0.05], [r * 0.38, r * 0.3], [r * 0.2, r * 0.5], [0, r * 0.55]], [0, y0 + r * 0.3, 0], "y", 16);
+        for (let i = 0; i < 6; i++) {
+          const a = i / 6 * Math.PI * 2;
+          b.strut(kit.metal, [Math.cos(a) * r * 0.45, y0 + r * 0.32, Math.sin(a) * r * 0.45], [0, y0 + r * 0.9, 0], r * 0.012, r * 0.012, 4);
+        }
+        b.cyl(kit.glow, r * 0.07, r * 0.07, r * 0.05, [0, y0 + r * 0.9, 0], "y", 8);
+      } else if (v === "repair") {
+        b.cyl(kit.metal, r * 0.06, r * 0.06, r * 0.8, [0, y0 + r * 0.3, 0], "y", 8);
+        pitch.position.set(0, y0 + r * 1.05, 0);
+        p.strut(kit.steel, [0, 0, 0], [r * 0.55, r * 0.15, 0], r * 0.05, r * 0.04, 8);
+        p.cylb(kit.hazard, r * 0.09, r * 0.3, r * 0.02, [r * 0.5, r * 0.1, 0], "x", 10);
+        p.cyl(kit.glow, r * 0.05, r * 0.05, 0.01, [r * 0.8, r * 0.15, 0], "x", 8);
+      } else {
+        b.cyl(kit.metal, r * 0.06, r * 0.08, r * 0.8, [0, y0 + r * 0.3, 0], "y", 8);
+        pitch.position.set(0, y0 + r * 1.05, 0);
+        p.lathe(kit.panel, [[0, 0], [r * 0.12, 2e-3], [r * 0.3, r * 0.03], [r * 0.5, r * 0.12], [r * 0.5, r * 0.14], [r * 0.3, r * 0.05], [r * 0.12, r * 0.02], [0, 0]], [0, 0, 0], "x", 18, [0, 0, 0]);
+        p.strut(kit.steel, [0, 0, 0], [r * 0.4, 0, 0], r * 0.012, r * 0.012, 4);
+        p.cyl(kit.glow, r * 0.05, r * 0.05, r * 0.06, [r * 0.38, 0, 0], "x", 8);
+      }
+      t.shot = "none";
+      t.rate = 99;
+    }
+  }
+  if (v !== "plate" && !fixed && t.shot !== "none") b.box(kit.accent, r * 0.35, r * 0.012, r * 0.06, -r * 0.35, y0 + r * 0.5, r * 0.3, 2e-3);
+  const tris0 = b.tris;
+  b.mount(yaw);
+  p.mount(pitch);
+  rc.mount(recoil);
+  sp.mount(spinG);
+  t.tris = b.tris - tris0 + p.tris + rc.tris + sp.tris;
+  return t;
+}
+
+// src/client/proto3d/running3d.ts
+var rr = (k) => k;
+function trackAssembly(b, kit, L, h, w, z, y, opts) {
+  const R = h / 2;
+  const hl = L / 2;
+  const xr = -hl + R, xf = hl - R * 0.9;
+  const t = Math.max(0.018, R * 0.2);
+  const outline = (rad) => {
+    const pts = [];
+    const seg2 = 9;
+    for (let i = 0; i <= seg2; i++) {
+      const a = -Math.PI / 2 + i / seg2 * Math.PI;
+      pts.push([xf + Math.cos(a) * rad, R + Math.sin(a) * rad]);
+    }
+    for (let i = 0; i <= seg2; i++) {
+      const a = Math.PI / 2 + i / seg2 * Math.PI;
+      pts.push([xr + Math.cos(a) * rad, R + Math.sin(a) * rad]);
+    }
+    return pts;
+  };
+  const outer = outline(R), inner = outline(R - t);
+  const shape = new Shape(outer.map(([x, yy]) => new Vector2(x, yy)));
+  shape.holes.push(new Path(inner.map(([x, yy]) => new Vector2(x, yy)).reverse()));
+  const bw = Math.min(0.012, w * 0.08);
+  const eg = new ExtrudeGeometry(shape, { depth: w - 2 * bw, bevelEnabled: true, bevelThickness: bw, bevelSize: bw, bevelOffset: -bw, bevelSegments: 1, curveSegments: 1 });
+  b.g(eg, kit.rubber, mtx([0, y, z - (w - 2 * bw) / 2]));
+  const ring = outline(R - t * 0.3);
+  ring.push(ring[0]);
+  const lens = [0];
+  for (let i = 1; i < ring.length; i++) lens.push(lens[i - 1] + Math.hypot(ring[i][0] - ring[i - 1][0], ring[i][1] - ring[i - 1][1]));
+  const total = lens[lens.length - 1];
+  const pitch = Math.max(0.05, R * (opts.heavy ? 0.34 : 0.3));
+  const n = Math.round(total / pitch);
+  let seg = 0;
+  for (let i = 0; i < n; i++) {
+    const s = (i + 0.5) / n * total;
+    while (seg < lens.length - 2 && lens[seg + 1] < s) seg++;
+    const f = (s - lens[seg]) / (lens[seg + 1] - lens[seg] || 1);
+    const px2 = ring[seg][0] + (ring[seg + 1][0] - ring[seg][0]) * f, py2 = ring[seg][1] + (ring[seg + 1][1] - ring[seg][1]) * f;
+    const ang = Math.atan2(ring[seg + 1][1] - ring[seg][1], ring[seg + 1][0] - ring[seg][0]);
+    b.g(new BoxGeometry(pitch * 0.82, t * 1.5, w * 1.01), kit.metal, mtx([px2, y + py2, z], [0, 0, ang]));
+    if (i % 2 === 0) b.g(new BoxGeometry(pitch * 0.18, t * 1, w * 1), kit.metal, mtx([px2, y + py2 - Math.cos(ang) * t * 0.9, z], [0, 0, ang]));
+  }
+  const side = opts.outerSide;
+  const nW = Math.max(3, Math.round((xf - xr) / (R * 1.5)) + 1);
+  const wr = R * 0.78;
+  const wheel = (x, yy, rad, big) => {
+    for (const dz of [-0.24, 0.24]) {
+      const zz = z + dz * w;
+      b.lathe(kit.rubber, [[0, -w * 0.2], [rad - 4e-3, -w * 0.2], [rad, -w * 0.16], [rad, w * 0.16], [rad - 4e-3, w * 0.2], [0, w * 0.2]], [x, y + yy, zz], "z", 16);
+      b.lathe(kit.steel, [[0, 0], [rad * 0.62, 0], [rad * 0.62, w * 0.2], [rad * 0.3, w * 0.24], [0, w * 0.26]], [x, y + yy, zz], "z", 12);
+    }
+    b.cylb(kit.metal, rad * 0.46, w * 0.95, 4e-3, [x, y + yy, z - w * 0.475], "z", 10);
+    void big;
+  };
+  for (let i = 0; i < nW; i++) wheel(xr + (xf - xr) * i / (nW - 1), R, wr * (i === 0 || i === nW - 1 ? 0.92 : 1), false);
+  const sx = xr;
+  b.lathe(kit.steel, [[0, 0], [R * 0.74, 0], [R * 0.74, w * 0.05], [0, w * 0.05]], [sx, y + R, z + side * (w * 0.5 + 2e-3)], "z", 14);
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2;
+    b.box(kit.steel, R * 0.2, R * 0.12, w * 0.32, sx + Math.cos(a) * R * 0.86, y + R + Math.sin(a) * R * 0.86, z, 4e-3, [0, 0, a]);
+  }
+  for (const f of [0.35, 0.62]) b.lathe(kit.metal, [[0, 0], [R * 0.2, 0], [R * 0.2, w * 0.8], [0, w * 0.8]], [xr + (xf - xr) * f, y + h - R * 0.28, z - w * 0.4], "z", 8);
+  if (opts.fender !== false) {
+    const fw = w * 1.18;
+    b.box(kit.hull, L * 0.78, h * 0.06, fw, -L * 0.04, y + h + h * 0.06, z, Math.min(0.012, h * 0.04));
+    b.box(kit.hull, R * 1.1, h * 0.05, fw, hl - R * 0.5, y + h + h * 0.06 - R * 0.28, z, 0.01, [0, 0, -0.5]);
+  }
+  if (opts.skirt) {
+    const ns = Math.max(3, Math.round(L / (R * 2.2)));
+    const sl = L * 0.86 / ns;
+    for (let i = 0; i < ns; i++) {
+      const sxc = -L * 0.43 + sl * (i + 0.5);
+      b.box(i === 0 ? kit.hull : kit.trim, sl * 0.94, h * 0.62, w * 0.1, sxc, y + h * 0.66, z + side * (w * 0.5 + w * 0.12), Math.min(0.012, w * 0.05), [side * 0.06, 0, 0]);
+    }
+  }
+}
+function buildGear(parent, mobId, L, W, S, kit, legsOut) {
+  const b = new Bld();
+  const hf = Math.min(L, W);
+  let gear;
+  switch (mobId) {
+    case "treads":
+    case "halftrack":
+    case "megatracks": {
+      const mega = mobId === "megatracks";
+      const h = mega ? 0.34 + 0.2 * S : 0.2 + 0.11 * S;
+      const w = mega ? W * 0.14 : Math.max(0.15, W * 0.2);
+      const zs = mega ? [-0.43, -0.235, 0.235, 0.43].map((k) => k * W) : [-1, 1].map((s) => s * (W / 2 - w / 2 - 0.015));
+      if (mobId === "halftrack") {
+        for (const z of zs) {
+          trackAssembly(b, kit, L * 0.52, h, w, z, 0, { skirt: false, outerSide: Math.sign(z), fender: false });
+        }
+        const wr = h * 0.52;
+        for (const z of zs) {
+          const x = L * 0.3, zz = z;
+          b.lathe(kit.rubber, [[0, -w * 0.42], [wr - 0.01, -w * 0.42], [wr, -w * 0.3], [wr, w * 0.3], [wr - 0.01, w * 0.42], [0, w * 0.42]], [x, wr, zz], "z", 18);
+          b.lathe(kit.steel, [[0, 0], [wr * 0.6, 0], [wr * 0.6, w * 0.44], [wr * 0.25, w * 0.5], [0, w * 0.5]], [x, wr, zz + Math.sign(z) * 0], "z", 12);
+          for (let k = 0; k < 6; k++) {
+            const a = k / 6 * Math.PI * 2;
+            b.cyl(kit.metal, 0.012, 0.012, 0.02, [x + Math.cos(a) * wr * 0.36, wr + Math.sin(a) * wr * 0.36, zz + Math.sign(z) * (w * 0.5)], "z", 5);
+          }
+          b.box(kit.hull, wr * 2.3, h * 0.07, w * 1.2, x, h * 1.12, zz, 0.01);
+        }
+        b.cyl(kit.metal, 0.03, 0.03, W * 0.7, [L * 0.3, h * 0.5, -W * 0.35], "z", 8);
+      } else {
+        for (const z of zs) trackAssembly(b, kit, L * (mega ? 0.95 : 0.97), h, w, z, 0, { skirt: S >= 2 && !mega || mega && Math.abs(z) > W * 0.3, outerSide: Math.sign(z), heavy: mega });
+        if (mega) b.box(kit.trim, L * 0.6, h * 0.35, W * 0.7, 0, h * 0.6, 0, 0.03);
+      }
+      gear = { y0: h * (mega ? 0.62 : 0.5), yt: h * (mega ? 1 : 1), wi: Math.max(0.2, W / 2 - w - 0.01), tracked: true };
+      break;
+    }
+    case "wheels": {
+      const wr = 0.1 + 0.08 * S, w = wr * 0.8;
+      const xs = S >= 2 ? [0.32, -0.32] : [0.3, -0.3];
+      const wheelGroups = [];
+      for (const xf of xs) for (const sg of [-1, 1]) {
+        const grp = new Group();
+        grp.position.set(xf * L, wr, sg * (W / 2 - w / 2 + 0.01));
+        const wb = new Bld();
+        wb.lathe(kit.rubber, [[0, -w / 2], [wr * 0.82, -w / 2], [wr * 0.94, -w * 0.36], [wr, -w * 0.2], [wr, w * 0.2], [wr * 0.94, w * 0.36], [wr * 0.82, w / 2], [0, w / 2]], [0, 0, 0], "z", 20);
+        wb.lathe(kit.steel, [[0, 0], [wr * 0.56, 0], [wr * 0.56, w * 0.52 * 0.9], [wr * 0.4, w * 0.56], [0, w * 0.56]], [0, 0, sg * w * 0], "z", 14);
+        for (let k = 0; k < 6; k++) {
+          const a = k / 6 * Math.PI * 2;
+          wb.cyl(kit.metal, wr * 0.03, wr * 0.03, w * 0.6, [Math.cos(a) * wr * 0.38, Math.sin(a) * wr * 0.38, 0], "z", 5);
+        }
+        wb.mount(grp);
+        parent.add(grp);
+        wheelGroups.push(grp);
+      }
+      for (const xf of xs) b.cyl(kit.metal, 0.03, 0.03, W - w, [xf * L, wr, -(W - w) / 2], "z", 8);
+      for (const xf of xs) for (const sg of [-1, 1]) b.box(kit.hull, wr * 2.5, 0.025, w * 1.25, xf * L, wr * 2 + 0.01, sg * (W / 2 - w / 2 + 0.01), 0.01);
+      gear = { y0: wr * 1.15, yt: wr * 2, wi: W / 2 - w * 0.8, tracked: false, update: (t, mv) => wheelGroups.forEach((g) => g.rotation.z = -t * 6 * mv) };
+      break;
+    }
+    case "legs":
+    case "spider":
+    case "titanlegs":
+    case "jumpjets": {
+      const spider = mobId === "spider";
+      const hy = (spider ? 0.4 : 0.58) * hf + 0.2 * S;
+      const nLegs = spider ? 6 : 2;
+      const thick = (spider ? 0.034 : 0.06) * Math.min(S, 3.4) + 0.03;
+      for (let i = 0; i < nLegs; i++) {
+        const sg = i % 2 ? 1 : -1;
+        const row = spider ? Math.floor(i / 2) - 1 : 0;
+        const hipX = spider ? row * L * 0.3 : -0.04 * L;
+        const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
+        const footX = hipX + (spider ? row * L * 0.2 : 0);
+        const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
+        legsOut.push(makeLeg(parent, kit, [hipX, hy, hipZ], [footX, 0, footZ], thick, spider ? [0, 1, sg * 0.35] : [1, 0.12, 0], spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : i % 2 * Math.PI, spider));
+      }
+      gear = { y0: hy - 0.05, yt: hy + 0.05, wi: W * 0.34, tracked: false, update: (t, mv) => legsOut.forEach((lg) => lg.step(t, mv)) };
+      break;
+    }
+    case "anchor": {
+      b.box(kit.trim, L * 0.95, 0.1, W * 0.95, 0, 0.05, 0, 0.03);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        b.cylb(kit.metal, 0.14, 0.22, 0.03, [sx * L * 0.42, 0.1, sz * W * 0.42], "y", 10);
+        b.box(kit.hazard, 0.28, 0.02, 0.1, sx * L * 0.42, 0.33, sz * W * 0.42 + sz * 0.1, 4e-3);
+      }
+      gear = { y0: 0.14, yt: 0.2, wi: W * 0.4, tracked: false };
+      break;
+    }
+    case "rotor":
+    case "gravlift":
+    case "jet": {
+      gear = { y0: 0, yt: 0.1, wi: W * 0.4, tracked: false };
+      break;
+    }
+    default: {
+      const hgt = 0.12 + 0.05 * S;
+      const rings = [];
+      for (const [x, wd, y] of [[-0.5, 0.78, 0], [-0.45, 0.94, 0.04], [0.42, 0.94, 0.04], [0.5, 0.7, 0]]) {
+        const r = [];
+        for (const [yy, ww] of [[y, wd * 0.9], [y + hgt, wd]]) {
+          r.push([x * L, yy, -ww * W / 2]);
+        }
+        for (const [yy, ww] of [[y + hgt, wd], [y, wd * 0.9]]) {
+          r.push([x * L, yy, ww * W / 2]);
+        }
+        rings.push(r);
+      }
+      b.loft(kit.rubber, rings);
+      gear = { y0: hgt * 0.9, yt: hgt * 1.4, wi: W * 0.4, tracked: false };
+    }
+  }
+  void rr;
+  void loft;
+  b.mount(parent, void 0);
+  return gear;
+}
+var ring8 = (z, wx, wy, yo = 0) => [
+  [-wx * 0.6, yo - wy, z],
+  [wx * 0.6, yo - wy, z],
+  [wx, yo - wy * 0.6, z],
+  [wx, yo + wy * 0.6, z],
+  [wx * 0.6, yo + wy, z],
+  [-wx * 0.6, yo + wy, z],
+  [-wx, yo + wy * 0.6, z],
+  [-wx, yo - wy * 0.6, z]
+];
+function makeLeg(g, kit, hip, foot, thick, bend, phase, spider) {
+  const hipV = new Vector3(...hip), footV = new Vector3(...foot);
+  const d0 = hipV.distanceTo(footV);
+  const l1 = d0 * 0.72, l2 = d0 * 0.76;
+  const mkUpper = () => {
+    const grp = new Group();
+    const b = new Bld();
+    b.loft(kit.trim, [ring8(0, thick * 1.2, thick * 1.15), ring8(l1 * 0.5, thick * 1, thick * 0.95), ring8(l1, thick * 0.9, thick * 0.85)]);
+    b.box(kit.hull, thick * 1.9, thick * 0.5, l1 * 0.74, 0, thick * 0.95, l1 * 0.46, Math.min(0.02, thick * 0.2), [-0.05, 0, 0]);
+    b.box(kit.hull, thick * 1.5, thick * 0.4, l1 * 0.34, 0, -thick * 1, l1 * 0.3, Math.min(0.015, thick * 0.2));
+    b.strut(kit.metal, [thick * 0.9, -thick * 0.2, l1 * 0.12], [thick * 0.7, thick * 0.3, l1 * 0.72], thick * 0.28, thick * 0.28, 8);
+    b.strut(kit.steel, [thick * 0.7, thick * 0.3, l1 * 0.6], [thick * 0.62, thick * 0.55, l1 * 0.9], thick * 0.13, thick * 0.13, 6);
+    b.cylb(kit.metal, thick * 1.5, thick * 2.5, thick * 0.2, [-thick * 1.25, 0, 0], "x", 14);
+    b.cylb(kit.trim, thick * 1.1, thick * 2.4, thick * 0.15, [-thick * 1.2, 0, l1], "x", 12);
+    b.cylb(kit.steel, thick * 0.5, thick * 2.7, thick * 0.1, [-thick * 1.35, 0, l1], "x", 8);
+    b.mount(grp);
+    g.add(grp);
+    return grp;
+  };
+  const mkLower = () => {
+    const grp = new Group();
+    const b = new Bld();
+    b.loft(kit.trim, [ring8(0, thick * 0.88, thick * 0.82), ring8(l2 * 0.4, thick * 0.78, thick * 0.74), ring8(l2, thick * 0.5, thick * 0.5)]);
+    b.box(kit.hull, thick * 1.55, thick * 0.4, l2 * 0.62, 0, thick * 0.8, l2 * 0.4, Math.min(0.02, thick * 0.2), [0.06, 0, 0]);
+    b.strut(kit.metal, [-thick * 0.7, -thick * 0.1, l2 * 0.1], [-thick * 0.5, thick * 0.1, l2 * 0.8], thick * 0.16, thick * 0.16, 6);
+    b.cylb(kit.metal, thick * 0.62, thick * 1.5, thick * 0.1, [-thick * 0.75, 0, l2], "x", 10);
+    b.mount(grp);
+    g.add(grp);
+    return grp;
+  };
+  const mkFoot = () => {
+    const grp = new Group();
+    const b = new Bld();
+    if (spider) {
+      b.cylb(kit.metal, thick * 1.35, thick * 0.55, thick * 0.12, [0, 0, 0], "y", 10);
+      b.cyl(kit.steel, thick * 0.65, thick * 0.35, thick * 0.9, [0, thick * 0.5, 0], "y", 8);
+      b.cylb(kit.hull, thick * 1, thick * 0.3, thick * 0.08, [0, thick * 0.95, 0], "y", 8);
+    } else {
+      b.box(kit.trim, thick * 2, thick * 0.9, thick * 2, -thick * 0.4, thick * 0.55, 0, thick * 0.12);
+      for (const [dz, rz] of [[-thick * 0.95, -0.28], [0, 0], [thick * 0.95, 0.28]])
+        b.box(kit.metal, thick * 2, thick * 0.55, thick * 0.8, thick * 1.2, thick * 0.28, dz, thick * 0.1, [0, rz, 0]);
+      b.box(kit.rubber, thick * 1.1, thick * 0.35, thick * 2.4, -thick * 1.3, thick * 0.2, 0, thick * 0.08);
+    }
+    b.mount(grp);
+    g.add(grp);
+    return grp;
+  };
+  const upper = mkUpper(), lower = mkLower(), foot_ = mkFoot();
+  const f = new Vector3(), k = new Vector3(), dir = new Vector3(), perp = new Vector3(), tmp4 = new Vector3();
+  const stride = d0 * 0.32, lift = d0 * 0.22;
+  const place = (a, bb, m) => {
+    tmp4.copy(bb).sub(a).normalize();
+    const z = tmp4, y = perp.clone().addScaledVector(z, -perp.dot(z)).normalize();
+    const x = new Vector3().crossVectors(y, z);
+    m.matrix.makeBasis(x, y, z).setPosition(a);
+    m.matrixAutoUpdate = false;
+    m.matrixWorldNeedsUpdate = true;
+  };
+  const step = (t, moving) => {
+    const ph = t * 3.2 + phase;
+    f.copy(footV);
+    f.x += -Math.sin(ph) * stride * moving;
+    f.y += Math.max(0, Math.cos(ph)) * lift * moving;
+    dir.copy(f).sub(hipV);
+    let d = dir.length();
+    d = Math.min(d, l1 + l2 - 1e-3);
+    dir.normalize();
+    const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+    const hgt = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    perp.set(...bend).addScaledVector(dir, -new Vector3(...bend).dot(dir)).normalize();
+    k.copy(hipV).addScaledVector(dir, a).addScaledVector(perp, hgt);
+    place(hipV, k, upper);
+    place(k, f, lower);
+    foot_.position.copy(f);
+    foot_.position.y += 0;
+    foot_.updateMatrix();
+  };
+  step(0, 0);
+  return { step };
+}
+
+// src/client/proto3d/hulls3d.ts
+var RECIPES = {
+  wedge: [[-1, 0.8, 0.82, 0.7], [-0.9, 1, 0.86, 0.95], [0.1, 1, 0.8, 1], [0.62, 0.9, 0.6, 0.62], [1, 0.52, 0.5, 0.3]],
+  box: [[-1, 0.9, 0.9, 0.82], [-0.92, 1, 0.92, 1], [0.6, 1, 0.88, 1], [0.78, 0.95, 0.7, 0.7], [1, 0.78, 0.6, 0.45]],
+  hex: [[-1, 0.7, 0.8, 0.8], [-0.82, 0.96, 0.85, 1], [-0.2, 1, 0.82, 1], [0.45, 0.96, 0.7, 0.85], [1, 0.5, 0.5, 0.4]],
+  long: [[-1, 0.7, 0.8, 0.8], [-0.9, 0.95, 0.86, 0.95], [0.5, 0.98, 0.8, 1], [0.82, 0.85, 0.6, 0.75], [1, 0.55, 0.5, 0.4]],
+  cross: [[-1, 0.74, 0.8, 0.8], [-0.8, 0.9, 0.8, 0.95], [-0.3, 1, 0.8, 1], [0.3, 1, 0.8, 1], [0.6, 0.8, 0.7, 0.8], [1, 0.46, 0.5, 0.45]],
+  round: [[-1, 0.5, 0.7, 0.7], [-0.8, 0.9, 0.8, 0.95], [-0.4, 1, 0.8, 1], [0.4, 1, 0.8, 1], [0.8, 0.9, 0.7, 0.85], [1, 0.5, 0.6, 0.55]],
+  fortress: [[-1, 0.86, 0.9, 0.8], [-0.9, 1, 0.92, 1], [0.55, 1, 0.86, 1], [0.8, 0.94, 0.7, 0.75], [1, 0.74, 0.6, 0.5]],
+  titan: [[-1, 0.84, 0.88, 0.78], [-0.9, 1, 0.9, 1], [0.4, 1, 0.84, 1], [0.78, 0.92, 0.66, 0.72], [1, 0.62, 0.58, 0.42]],
+  goliath: [[-1, 0.88, 0.9, 0.85], [-0.9, 1, 0.92, 1], [0.45, 1, 0.86, 1], [0.8, 0.94, 0.66, 0.78], [1, 0.66, 0.6, 0.46]],
+  colossal: [[-1, 0.88, 0.9, 0.82], [-0.9, 1, 0.92, 1], [0.5, 1, 0.86, 1], [0.82, 0.94, 0.66, 0.76], [1, 0.68, 0.6, 0.44]]
+};
+var ALIAS = {
+  scout: "wedge",
+  mantis: "wedge",
+  hunter: "wedge",
+  interceptor: "wedge",
+  pod: "round",
+  carriage: "box",
+  riot: "fortress",
+  juggernaut: "fortress",
+  crab: "fortress",
+  saucer: "round",
+  mech: "hex",
+  arachnid: "round",
+  warlord: "titan",
+  scorpion: "goliath",
+  centipede: "long",
+  siegeplat: "long",
+  leviathan: "goliath",
+  broodmother: "goliath",
+  arachne: "colossal",
+  citadel: "colossal",
+  colossus: "titan"
+};
+function addLoft(b, mat, rows) {
+  b.loft(mat, rows.map((r) => sec8(r.x, r.wb, r.wm, r.wt, r.y0, r.y1, r.y2, r.y3)));
+  return { pts: rows.map((r) => ({ x: r.x, wm: r.wm, wt: r.wt, y2: r.y2, y3: r.y3 })) };
+}
+function topAt(l, x, z) {
+  const p = l.pts;
+  if (x < p[0].x || x > p[p.length - 1].x) return -1;
+  let i = 0;
+  while (i < p.length - 2 && p[i + 1].x < x) i++;
+  const f = (x - p[i].x) / (p[i + 1].x - p[i].x || 1);
+  const lerp2 = (a, c) => a + (c - a) * f;
+  const wm = lerp2(p[i].wm, p[i + 1].wm), wt = lerp2(p[i].wt, p[i + 1].wt), y2 = lerp2(p[i].y2, p[i + 1].y2), y3 = lerp2(p[i].y3, p[i + 1].y3);
+  const az = Math.abs(z);
+  if (az <= wt) return y3;
+  if (az <= wm) return y3 - (y3 - y2) * (az - wt) / (wm - wt || 1);
+  return -1;
+}
+var deckAt = (h, x, z) => {
+  let t = -1;
+  for (const l of h.lofts) t = Math.max(t, topAt(l, x, z));
+  return t;
+};
+function buildHull(b, kit, shape, L, W, yb, yt, Hd, wi, tracked) {
+  const rec = RECIPES[shape] ?? RECIPES[ALIAS[shape] ?? "box"] ?? RECIPES.box;
+  const rows = rec.map(([x, wmF, wtF, hF]) => {
+    const wm = W / 2 * 0.985 * wmF;
+    const y3 = yt + hF * Hd;
+    return {
+      x: x * L / 2,
+      wm,
+      wt: wm * wtF,
+      wb: tracked ? Math.min(wm * 0.92, wi) : wm * 0.7,
+      y0: yb,
+      y1: yt,
+      y2: yt + (y3 - yt) * 0.38,
+      y3
+    };
+  });
+  const info2 = addLoft(b, kit.hull, rows);
+  b.box(kit.trim, L * 0.8, Math.max(0.03, (yt - yb) * 0.5), rows[2].wb * 2 * 0.98, 0, yb + Math.max(0.03, (yt - yb) * 0.5) / 2, 0, 0.01);
+  const rr2 = rows[0];
+  b.box(kit.trim, 0.04, (rr2.y3 - yb) * 0.55, rr2.wm * 2 * 0.9, rr2.x - 0.012, yb + (rr2.y3 - yb) * 0.4, 0, 0.01);
+  return { lofts: [info2], top: Math.max(...rows.map((r) => r.y3)), L, W, yt, Hd };
+}
+function addCasemate(b, kit, hull, cx, hl, hw, hh) {
+  const base = deckAt(hull, cx, 0);
+  if (base < 0) return;
+  const y0 = base - 0.01;
+  const rows = [
+    { x: cx - hl, wb: hw * 0.98, wm: hw, wt: hw * 0.78, y0, y1: y0 + hh * 0.05, y2: y0 + hh * 0.55, y3: y0 + hh * 0.82 },
+    { x: cx - hl * 0.82, wb: hw * 0.98, wm: hw, wt: hw * 0.7, y0, y1: y0 + hh * 0.05, y2: y0 + hh * 0.6, y3: y0 + hh },
+    { x: cx + hl * 0.55, wb: hw * 0.98, wm: hw, wt: hw * 0.7, y0, y1: y0 + hh * 0.05, y2: y0 + hh * 0.6, y3: y0 + hh },
+    { x: cx + hl, wb: hw * 0.8, wm: hw * 0.82, wt: hw * 0.5, y0, y1: y0 + hh * 0.05, y2: y0 + hh * 0.38, y3: y0 + hh * 0.56 }
+  ];
+  hull.lofts.push(addLoft(b, kit.hull, rows));
+  hull.top = Math.max(hull.top, y0 + hh);
+}
+var dist = (a, c) => Math.hypot(a[0] - c[0], a[1] - c[1]);
+function greeble(b, kit, hull, S, rnd, mounts) {
+  const { L, W } = hull;
+  const free = (x, z, rad) => mounts.every((m) => dist([m.x, m.z], [x, z]) > m.r + rad);
+  const flat = (x, z, rad) => {
+    const t = deckAt(hull, x, z);
+    return t >= 0 && [[rad, 0], [-rad, 0], [0, rad], [0, -rad]].every(([dx, dz]) => Math.abs(deckAt(hull, x + dx, z + dz) - t) < 0.012) ? t : -1;
+  };
+  const u = 0.05 + 0.028 * S;
+  const n = Math.round(5 + 7 * S);
+  const kinds = ["hatch", "vent", "box", "drum", "ant", "hatch", "vent", "light"];
+  let drums = 0;
+  for (let i = 0; i < n * 3 && n > 0; i++) {
+    const x = (rnd() - 0.5) * L * 0.84, z = (rnd() - 0.5) * W * 0.78;
+    const rad = u * 2.4;
+    const top2 = flat(x, z, rad);
+    if (top2 < 0 || !free(x, z, rad)) continue;
+    const kind = kinds[Math.floor(rnd() * kinds.length)];
+    if (kind === "hatch") {
+      b.cylb(kit.trim, u * 1, u * 0.45, u * 0.1, [x, top2, z], "y", 12);
+      b.box(kit.metal, u * 0.9, u * 0.1, u * 0.14, x, top2 + u * 0.5, z, 3e-3);
+      if (S >= 2) for (let k = 0; k < 4; k++) {
+        const a = k / 4 * Math.PI * 2 + 0.4;
+        b.box(kit.glass, u * 0.22, u * 0.14, u * 0.22, x + Math.cos(a) * u * 1.15, top2 + u * 0.28, z + Math.sin(a) * u * 1.15, 3e-3, [0, -a, 0]);
+      }
+    } else if (kind === "vent") {
+      const w = u * 3.4, d = u * 2.2;
+      b.box(kit.trim, w, u * 0.3, d, x, top2 + u * 0.15, z, 8e-3);
+      for (let k = 0; k < 5; k++) b.box(kit.metal, w * 0.86, u * 0.14, u * 0.14, x, top2 + u * 0.36, z - d * 0.36 + k * d * 0.72 / 4, 2e-3, [0.5, 0, 0]);
+    } else if (kind === "box") {
+      const bw = u * (2.4 + rnd() * 1.6), bd = u * (1.6 + rnd() * 1.2), bh = u * (1.1 + rnd() * 0.8);
+      const m = rnd() < 0.5 ? kit.panel : kit.trim;
+      b.box(m, bw, bh, bd, x, top2 + bh / 2, z, 8e-3);
+      b.box(kit.metal, bw * 0.08, bh * 1.04, bd * 1.03, x - bw * 0.3, top2 + bh / 2, z, 2e-3);
+      b.box(kit.metal, bw * 0.08, bh * 1.04, bd * 1.03, x + bw * 0.3, top2 + bh / 2, z, 2e-3);
+      if (rnd() < 0.5) b.cylb(kit.canvas, u * 0.5, bw * 0.9, u * 0.1, [x - bw * 0.45, top2 + bh + u * 0.5, z], "x", 8);
+    } else if (kind === "drum" && drums < 4 && S >= 2) {
+      drums++;
+      for (let k = 0; k < 2; k++) {
+        b.cylb(rnd() < 0.5 ? kit.hull : kit.trim, u * 0.8, u * 2, u * 0.1, [x, top2, z + (k - 0.5) * u * 1.8], "y", 10);
+        b.cylb(kit.steel, u * 0.82, u * 0.14, 3e-3, [x, top2 + u * 1.2, z + (k - 0.5) * u * 1.8], "y", 10);
+      }
+    } else if (kind === "ant") {
+      b.cylb(kit.trim, u * 0.4, u * 0.3, 4e-3, [x, top2, z], "y", 8);
+      b.strut(kit.steel, [x, top2 + u * 0.3, z], [x - u * 0.2, top2 + u * (3 + rnd() * 3), z], u * 0.08, u * 0.04, 4);
+    } else if (kind === "light") {
+      b.box(kit.trim, u * 0.8, u * 0.5, u * 0.8, x, top2 + u * 0.25, z, 5e-3);
+      b.cyl(kit.lamp, u * 0.3, u * 0.3, u * 0.12, [x + u * 0.4, top2 + u * 0.25, z], "x", 8);
+    }
+  }
+  const rx = -L * 0.5 + Math.max(0.1, L * 0.14);
+  const top = deckAt(hull, rx, 0);
+  if (top > 0) {
+    const gw = Math.min(W * 0.42, hull.lofts[0].pts[1].wt * 1.5), gl = Math.max(0.12, L * 0.12);
+    if (free(rx, 0, gw * 0.4)) {
+      b.box(kit.trim, gl, u * 0.2, gw, rx, top + u * 0.1, 0, 6e-3);
+      const ns = Math.max(4, Math.round(gl / (u * 0.6)));
+      for (let k = 0; k < ns; k++) b.box(kit.metal, u * 0.2, u * 0.22, gw * 0.88, rx - gl * 0.42 + k * gl * 0.84 / (ns - 1), top + u * 0.28, 0, 2e-3, [0, 0, 0.55]);
+    }
+  }
+  const rear = hull.lofts[0].pts[0];
+  for (const sg of [-1, 1]) {
+    const x = rear.x + 0.03, z = sg * rear.wm * 0.45, y = rear.y3 - 0.02 - u * 0.2;
+    b.cylb(kit.metal, u * 0.55, u * 2, u * 0.1, [x, y, z], "y", 10);
+    b.cyl(kit.rubber, u * 0.4, u * 0.4, 0.01, [x, y + u * 2, z], "y", 8);
+    b.box(kit.steel, u * 1.2, u * 1.2, u * 0.12, x - u * 0.6, y + u * 0.9, z, 2e-3);
+  }
+}
+function addBridge(b, kit, hull, cx, S) {
+  const base = deckAt(hull, cx, 0);
+  if (base < 0) return;
+  const u = 0.1 * S;
+  const y0 = base;
+  b.loft(kit.hull, [
+    sec8(cx - u * 1.5, u * 1.4, u * 1.5, u * 1, y0, y0 + u * 0.05, y0 + u * 0.7, y0 + u * 1),
+    sec8(cx - u * 0.3, u * 1.6, u * 1.7, u * 1.2, y0, y0 + u * 0.05, y0 + u * 0.8, y0 + u * 1.2),
+    sec8(cx + u * 1, u * 1.5, u * 1.6, u * 1, y0, y0 + u * 0.05, y0 + u * 0.7, y0 + u * 1),
+    sec8(cx + u * 1.7, u * 1.1, u * 1.2, u * 0.7, y0, y0 + u * 0.05, y0 + u * 0.5, y0 + u * 0.7)
+  ]);
+  b.box(kit.glass, u * 0.12, u * 0.2, u * 1.8, cx + u * 1.62, y0 + u * 0.52, 0, 4e-3, [0, 0, -0.5]);
+  for (const sg of [-1, 1]) b.box(kit.glass, u * 1.1, u * 0.16, u * 0.06, cx + u * 0.4, y0 + u * 0.72, sg * u * 1.63, 3e-3);
+  const ty = y0 + u * 1.2;
+  b.cylb(kit.trim, u * 0.5, u * 0.25, u * 0.05, [cx - u * 0.6, ty, 0], "y", 12);
+  b.cyl(kit.metal, u * 0.08, u * 0.08, u * 0.9, [cx - u * 0.6, ty + u * 0.25, 0], "y", 6);
+  b.lathe(kit.panel, [[0, 0], [u * 0.2, 2e-3], [u * 0.8, u * 0.12], [u * 0.8, u * 0.15], [u * 0.2, u * 0.05], [0, 0]], [cx - u * 0.6, ty + u * 1.2, 0], "y", 16, [0, 0, 0.35]);
+  for (const sg of [-1, 1]) {
+    b.cyl(kit.steel, u * 0.03, u * 0.015, u * 3, [cx + u * 0.4, ty, sg * u * 1.1], "y", 4);
+    b.cyl(kit.lamp, u * 0.07, u * 0.07, u * 0.07, [cx + u * 0.4, ty + u * 3, sg * u * 1.1], "y", 6);
+  }
+  for (const sg of [-1, 1]) {
+    b.box(kit.trim, u * 0.5, u * 0.3, u * 0.4, cx + u * 1, ty - u * 0.2, sg * u * 0.9, 6e-3);
+    b.cyl(kit.lamp, u * 0.12, u * 0.12, u * 0.05, [cx + u * 1.27, ty - u * 0.05, sg * u * 0.9], "x", 8);
+  }
+  b.decal(u * 1.4, u * 1.4, cx - u * 0.1, y0 + u * 1.205, 0, atlasUV(3), 0);
+}
+function giantDetails(b, kit, hull, S, rnd, mounts) {
+  const { L, W } = hull;
+  const p = hull.lofts[0].pts;
+  const u = 0.1 * S;
+  const free = (x, z, rad) => mounts.every((m) => dist([m.x, m.z], [x, z]) > m.r + rad);
+  for (let seg = p.length - 3; seg < p.length - 1; seg++) {
+    const a = p[seg], c = p[seg + 1];
+    const ang = Math.atan2(a.y3 - c.y3, c.x - a.x);
+    const cols = Math.max(4, Math.round((a.wt + c.wt) * 0.5 / (u * 0.65)));
+    const rows = Math.max(1, Math.round((c.x - a.x) / (u * 1.7)));
+    for (let ri = 0; ri < rows; ri++) {
+      const f = (ri + 0.5) / rows;
+      const x = a.x + (c.x - a.x) * f, y = a.y3 + (c.y3 - a.y3) * f, wt = a.wt + (c.wt - a.wt) * f;
+      for (let k = 0; k < cols; k++) {
+        const z = ((k + 0.5) / cols - 0.5) * 2 * (wt * 0.94);
+        if (!free(x, z, u * 0.4)) continue;
+        b.box(k % 2 ? kit.trim : kit.hull, u * 1.25, u * 0.32, wt * 1.88 / cols * 0.84, x, y + u * 0.16, z, 8e-3, [0, 0, -ang]);
+      }
+    }
+  }
+  const r0 = p[0];
+  b.decal(r0.wt * 1.7, u * 1.6, r0.x + u * 1, r0.y3 + 4e-3, 0, atlasUV(0), Math.PI / 2);
+  const bow = p[p.length - 2];
+  for (const sg of [-1, 1]) {
+    const x0 = bow.x - u * 0.4, z = sg * bow.wt * 0.8;
+    b.strut(kit.metal, [x0, bow.y3 + u * 0.18, z], [x0 - u * 3.5, p[p.length - 3].y3 + u * 0.2, z], u * 0.06, u * 0.06, 5);
+    b.cylb(kit.steel, u * 0.2, u * 0.25, 4e-3, [x0, bow.y3 + u * 0.05, z], "y", 8);
+  }
+  let best = null, bestD = 0;
+  for (let i = 0; i < 40; i++) {
+    const x = -L * (0.12 + rnd() * 0.3), z = (rnd() - 0.5) * W * 0.6;
+    const top = deckAt(hull, x, z);
+    if (top < 0) continue;
+    const d = Math.min(...mounts.map((m) => dist([m.x, m.z], [x, z]) - m.r), 9);
+    if (d > bestD) {
+      bestD = d;
+      best = [x, z];
+    }
+  }
+  if (best && bestD > u * 2.4) {
+    const [x, z] = best;
+    const top = deckAt(hull, x, z);
+    const rr2 = Math.min(u * 1.9, bestD * 0.85);
+    b.cylb(kit.trim, rr2 * 1.15, rr2 * 0.18, rr2 * 0.05, [x, top, z], "y", 16);
+    b.lathe(kit.hull, [[0, 0], [rr2, 0], [rr2, rr2 * 1.2], [rr2 * 0.86, rr2 * 1.45], [0, rr2 * 1.5]], [x, top + rr2 * 0.18, z], "y", 16);
+    for (let k = 0; k < 3; k++) b.cylb(kit.steel, rr2 * 1.04, rr2 * 0.07, 3e-3, [x, top + rr2 * (0.4 + k * 0.38), z], "y", 16);
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2;
+      b.box(kit.hot, rr2 * 0.05, rr2 * 0.5, rr2 * 0.16, x + Math.cos(a) * rr2 * 0.98, top + rr2 * 0.9, z + Math.sin(a) * rr2 * 0.98, 2e-3, [0, -a, 0]);
+    }
+    for (const sg of [-1, 1]) {
+      b.cylb(kit.metal, rr2 * 0.22, rr2 * 1.7, rr2 * 0.03, [x - rr2 * 0.2, top + rr2 * 0.3, z + sg * rr2 * 0.62], "y", 8);
+      b.cylb(kit.steel, rr2 * 0.3, rr2 * 0.1, 4e-3, [x - rr2 * 0.2, top + rr2 * 2, z + sg * rr2 * 0.62], "y", 8);
+    }
+  }
+  const mid = p[2];
+  for (const sg of [-1, 1]) for (const fx2 of [-0.6, 0.1]) {
+    const x = L * fx2 * 0.5, z = sg * mid.wt * 0.97;
+    if (!free(x, z, u * 1)) continue;
+    const yy = deckAt(hull, x, sg * mid.wt * 0.9);
+    if (yy < 0) continue;
+    b.box(kit.panel, u * 3, u * 0.5, u * 0.7, x, yy + u * 0.15, z, 0.01);
+    for (let k = 0; k < 6; k++) b.box(kit.metal, u * 0.18, u * 0.3, u * 0.5, x - u * 1.2 + k * u * 0.48, yy + u * 0.35, z, 2e-3);
+  }
+  void mtx;
+}
+
+// src/client/proto3d/air3d.ts
+function foil(le, chordDir, thickDir, c, t) {
+  const p = (a, b) => [le[0] + chordDir[0] * a * c + thickDir[0] * b * t, le[1] + chordDir[1] * a * c + thickDir[1] * b * t, le[2] + chordDir[2] * a * c + thickDir[2] * b * t];
+  return [p(0, 0), p(0.12, 0.62), p(0.45, 1), p(0.85, 0.5), p(1, 0), p(0.85, -0.4), p(0.45, -0.75), p(0.12, -0.5)];
+}
+function buildJet(b, kit, L, W, S) {
+  const hl = L / 2;
+  const R = L * 0.062;
+  const st = [
+    // [x, ry, rz, cy]
+    [hl, 0.04, 0.04, -0.01],
+    [hl * 0.86, 0.34, 0.3, -0.01],
+    [hl * 0.62, 0.72, 0.68, 0.02],
+    [hl * 0.3, 0.98, 0.95, 0.04],
+    [-hl * 0.1, 1, 1, 0.04],
+    [-hl * 0.55, 0.92, 0.98, 0.02],
+    [-hl * 0.92, 0.7, 0.9, 0],
+    [-hl, 0.66, 0.84, 0]
+  ];
+  b.loft(kit.hull, st.map(([x, ry, rz, cy]) => ellRing(x, cy * L, 0, ry * R, rz * R * 1.05, 12, 2.6, 0.3)));
+  b.loft(kit.trim, [[-hl * 0.15, 0.7], [-hl * 0.45, 0.8], [-hl * 0.8, 0.6]].map(([x, k]) => ellRing(x, R * 0.9, 0, R * 0.32 * k, R * 0.5 * k, 8, 2.4)));
+  b.loft(kit.glass, [[0.62, 0.15], [0.5, 0.42], [0.32, 0.5], [0.1, 0.4], [-0.02, 0.1]].map(([f, k]) => ellRing(hl * f, R * 0.85 + R * 0.08 * k, 0, R * 0.5 * k, R * 0.5 * k * 1.05, 10, 2.2)));
+  b.box(kit.trim, 0.025, R * 0.08, R * 0.7, hl * 0.4, R * 1.28, 0, 4e-3);
+  b.strut(kit.steel, [hl * 0.97, -0.01 * L, 0], [hl + L * 0.07, -0.01 * L, 0], 6e-3, 3e-3, 5);
+  const wy = -R * 0.12;
+  for (const sg of [-1, 1]) {
+    const rings = [];
+    const span = W * 0.5;
+    for (const [f, lex, ch, th] of [[0.08, -hl * 0.02, L * 0.5, R * 0.34], [0.5, -hl * 0.4, L * 0.3, R * 0.2], [1, -hl * 0.78, L * 0.13, R * 0.1]]) {
+      rings.push(foil([lex, wy + (1 - f) * 0 + f * R * 0.1, sg * span * f], [-1, 0, 0], [0, 1, 0], ch, th));
+    }
+    b.loft(kit.hull, rings);
+    b.box(kit.trim, L * 0.14, R * 0.12, 0.02, -hl * 0.78 - L * 0.06, wy + R * 0.1, sg * span, 4e-3);
+    b.cyl(sg < 0 ? kit.accent : kit.glow, 0.012, 0.012, 0.02, [-hl * 0.78 - L * 0.06, wy + R * 0.1, sg * (span + 0.012)], "z", 6);
+    b.decal(R * 1.1, R * 1.1, -hl * 0.38, wy + R * 0.3 + 4e-3, sg * span * 0.58, atlasUV(3), 0);
+    b.box(kit.hull, L * 0.22, R * 0.6, R * 0.5, hl * 0.18, -R * 0.1, sg * R * 1, 0.012);
+    b.box(kit.metal, 0.02, R * 0.46, R * 0.38, hl * 0.18 + L * 0.11 - 6e-3, -R * 0.1, sg * R * 1, 4e-3);
+    const fin = [];
+    for (const [f, lex, ch] of [[0, -hl * 0.7, L * 0.28], [1, -hl * 0.92, L * 0.12]]) {
+      const base = [lex, R * 0.5 + f * R * 3.6, sg * (R * 0.9 + f * R * 0.9)];
+      fin.push(foil(base, [-1, 0, 0], [0, 0, 1], ch, R * 0.14 * (1 - f * 0.4)));
+    }
+    b.loft(kit.hull, fin);
+    const tp = [];
+    for (const [f, lex, ch] of [[0, -hl * 0.82, L * 0.22], [1, -hl * 1, L * 0.1]])
+      tp.push(foil([lex, R * 0.1, sg * (R * 0.7 + f * R * 3)], [-1, 0, 0], [0, 1, 0], ch, R * 0.1));
+    b.loft(kit.hull, tp);
+    const nz = -hl - 0, nzz = sg * R * 0.6;
+    b.lathe(kit.metal, [[R * 0.52, 0], [R * 0.52, L * 0.04], [R * 0.4, L * 0.08], [R * 0.4, L * 0.12], [R * 0.34, L * 0.12], [R * 0.36, L * 0.04]], [nz + L * 0.03, 0, nzz], "-x", 14);
+    b.cyl(kit.hot, R * 0.3, R * 0.3, 6e-3, [nz - L * 0.085, 0, nzz], "x", 10);
+    b.cylb(kit.steel, R * 0.55, L * 0.04, 4e-3, [nz + L * 0.06, 0, nzz], "-x", 12);
+  }
+  b.decal(R * 2, R * 0.9, -hl * 0.1, R * 1.06, 0, atlasUV(2), Math.PI / 2 * 0);
+  b.decal(R * 0.7, R * 0.7, -hl * 0.52, R * 0.92 + 4e-3, 0, atlasUV(4 + Math.floor(L * 7) % 10), 0);
+  void S;
+  return { top: R, update: () => {
+  }, hpY: () => -R * 0.35 };
+}
+function blade(b, kit, R, chord, twist = 0.35) {
+  const rings = [];
+  for (const f of [0.08, 0.3, 0.6, 1]) {
+    const th = twist * (1 - f);
+    const cd = [Math.cos(th), 0, Math.sin(th) * 0];
+    void cd;
+    rings.push(foil([-chord * 0.25 * (1 - f * 0.3), Math.sin(th) * chord * 0.2, f * R], [1, 0, 0], [0, 1, 0], chord * (1 - f * 0.45), chord * 0.1 * (1 - 0.4 * f)).map((p) => [p[0], p[1], p[2]]));
+  }
+  b.loft(kit.trim, rings);
+}
+function buildRotor(b, kit, parent, chassisId, L, W, S) {
+  const rotors = [];
+  const mkRotor = (x, y, z, R, nBlades, dir = 1, spd = 70, tail = false) => {
+    const g = new Group();
+    g.position.set(x, y, z);
+    const rb = new Bld();
+    for (let i = 0; i < nBlades; i++) {
+      const sub2 = new Bld();
+      blade(sub2, kit, R, R * (tail ? 0.2 : 0.11), tail ? 0.2 : 0.3);
+      const bg = new Group();
+      bg.rotation.y = i / nBlades * Math.PI * 2;
+      sub2.mount(bg);
+      g.add(bg);
+    }
+    rb.cylb(kit.metal, R * 0.07, R * 0.06, R * 0.012, [0, -R * 0.02, 0], "y", 10);
+    rb.cylb(kit.steel, R * 0.035, R * 0.05, 3e-3, [0, R * 0.03, 0], "y", 8);
+    rb.mount(g);
+    const disc = new Mesh(new CircleGeometry(R, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: "#c9ced1", transparent: true, opacity: 0.07, depthWrite: false }));
+    disc.position.y = R * 0.01;
+    g.add(disc);
+    parent.add(g);
+    rotors.push({ g, dir, spd });
+  };
+  if (chassisId === "drone") {
+    const R = L * 0.2;
+    b.loft(kit.hull, [[-1, 0.5], [-0.5, 0.9], [0.4, 1], [1, 0.6]].map(([x, k2]) => ellRing(x * L * 0.17, 0.22, 0, 0.07 * k2, 0.1 * k2, 10, 2.5, 0.3)));
+    b.loft(kit.glass, [[0.4, 0.5], [0.8, 0.9], [1.2, 0.5]].map(([x, k2]) => ellRing(x * L * 0.13, 0.25, 0, 0.04 * k2, 0.05 * k2, 8, 2.2)));
+    b.box(kit.trim, L * 0.34, 0.025, L * 0.12, 0, 0.3, 0, 6e-3);
+    b.lathe(kit.metal, [[0, 0], [0.04, 0.01], [0.05, 0.04], [0.03, 0.07], [0, 0.07]], [L * 0.12, 0.15, 0], "y", 10, [0, 0, Math.PI]);
+    b.cyl(kit.glass, 0.02, 0.02, 0.02, [L * 0.15, 0.135, 0], "x", 8);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const ex = sx * L * 0.4, ez = sz * L * 0.4;
+      b.strut(kit.trim, [sx * L * 0.06, 0.24, sz * L * 0.06], [ex, 0.26, ez], 0.022, 0.016, 6);
+      b.cylb(kit.hull, 0.055, 0.075, 0.012, [ex, 0.22, ez], "y", 10);
+      b.cyl(sx > 0 && sz > 0 ? kit.accent : kit.glow, 0.012, 0.012, 0.012, [ex + sx * 0.045, 0.27, ez], "x", 6);
+      mkRotor(ex, 0.31, ez, R, 2, sx * sz, 90);
+      b.strut(kit.steel, [sx * L * 0.1, 0.2, sz * L * 0.08], [sx * L * 0.14, 0.04, sz * L * 0.11], 0.01, 0.01, 4);
+    }
+    for (const sz of [-1, 1]) b.strut(kit.metal, [-L * 0.2, 0.035, sz * L * 0.1], [L * 0.2, 0.035, sz * L * 0.1], 0.012, 0.012, 5);
+    b.decal(0.12, 0.12, -L * 0.04, 0.3 + 0.013, 0, atlasUV(3), 0);
+    return { top: 0.3, update: (t) => rotors.forEach((r, i) => r.g.rotation.y = t * r.spd * r.dir + i), hpY: () => 0.08 };
+  }
+  const heavy = S >= 3, k = Math.sqrt(S);
+  const fh = 0.2 * k, fw = W * 0.2;
+  const stn = [[0.5, 0.35, 0.4], [0.36, 0.78, 0.8], [0.1, 1, 1], [-0.25, 0.95, 0.9], [-0.5, 0.6, 0.62]];
+  b.loft(kit.hull, stn.map(([x, ry, rz]) => ellRing(x * L * 0.6, 0.4, 0, fh * ry, fw * rz, 12, 2.4, 0.2)));
+  b.loft(kit.glass, [[0.5, 0.35, 0.4], [0.42, 0.7, 0.7], [0.3, 0.9, 0.88], [0.2, 0.7, 0.7]].map(([x, ry, rz]) => ellRing(x * L * 0.6 + 0.01, 0.42 + fh * 0.12, 0, fh * ry * 0.7, fw * rz * 0.96, 10, 2.2)));
+  b.loft(kit.hull, [[-0.4, 0.5], [-0.9, 0.3], [-1.4, 0.18]].map(([x, s]) => ellRing(x * L * 0.5, 0.45 + (heavy ? 0.04 : 0.02), 0, fh * s * 0.7, fw * s * 0.7, 8, 2.4)));
+  const tx = -L * 0.66;
+  const fin = [];
+  for (const [f, lex, ch] of [[0, tx, L * 0.16], [1, tx - L * 0.08, L * 0.07]]) fin.push(foil([lex, 0.46 + f * fh * 1.6, 0], [-1, 0, 0], [0, 0, 1], ch, 0.02));
+  b.loft(kit.hull, fin);
+  b.loft(kit.hull, [0, 1].map((f) => foil([tx - L * 0.04, 0.5, (f ? 1 : -1) * fw * 0.9], [-1, 0, 0], [0, 1, 0], L * 0.11, 0.02)));
+  mkRotor(tx - L * 0.02, 0.5 + fh * 0.5, fw * 0.12, fh * 0.9, 4, 1, 120, true);
+  rotors[rotors.length - 1].g.rotation.x = Math.PI / 2;
+  b.loft(kit.trim, [[-0.2, 0.5], [0.05, 0.8], [0.22, 0.6]].map(([x, s]) => ellRing(x * L * 0.6, 0.4 + fh * 0.95, 0, fh * 0.3 * s, fw * 0.6 * s, 8, 2.4)));
+  b.cylb(kit.metal, 0.03 * k, 0.07 * k, 8e-3, [L * 0, 0.4 + fh * 1.05, 0], "y", 8);
+  for (const sg of [-1, 1]) b.cyl(kit.metal, 0.025 * k, 0.03 * k, 0.1 * k, [-L * 0.2, 0.4 + fh * 1, sg * fw * 0.35], "-x", 8);
+  for (const sg of [-1, 1]) {
+    b.loft(kit.hull, [0, 1].map((f) => foil([L * 0.02 - f * 0.05, 0.35 + f * 0.02, sg * (fw * 0.85 + f * W * 0.3)], [-1, 0, 0], [0, 1, 0], L * 0.2 * (1 - f * 0.3), 0.03)));
+    b.box(kit.trim, 0.05, 0.1, 0.03, 0, 0.3, sg * (fw + W * 0.2), 5e-3);
+  }
+  for (const sg of [-1, 1]) {
+    b.strut(kit.metal, [-L * 0.22, 0.08, sg * fw * 0.8], [L * 0.28, 0.08, sg * fw * 0.8], 0.014 * k, 0.014 * k, 6);
+    for (const x of [-0.12, 0.14]) b.strut(kit.metal, [L * x, 0.08, sg * fw * 0.8], [L * x, 0.3, sg * fw * 0.55], 0.014 * k, 0.014 * k, 5);
+  }
+  mkRotor(L * 0, 0.4 + fh * 1.1 + 0.02, 0, L * 0.55, 4, 1, 55);
+  b.decal(0.3 * k, 0.3 * k, L * 0.02, 0.4 + fh + 4e-3, 0, atlasUV(2), 0);
+  return { top: 0.4 + fh, update: (t) => rotors.forEach((r) => {
+    if (r.g.rotation.x === 0) r.g.rotation.y = t * r.spd;
+    else r.g.rotation.y = t * r.spd;
+  }), hpY: () => 0.3 };
+}
+
+// src/client/proto3d/units3d.ts
+var blobTex = null;
+var blobMat = null;
+function contactShadow(L, W) {
+  if (!blobMat) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const g = c.getContext("2d");
+    const gr = g.createRadialGradient(64, 64, 14, 64, 64, 64);
+    gr.addColorStop(0, "rgba(0,0,0,0.5)");
+    gr.addColorStop(0.55, "rgba(0,0,0,0.22)");
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 128, 128);
+    blobTex = new CanvasTexture(c);
+    blobMat = new MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  }
+  const m = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobMat);
+  m.scale.set(L * 1.2, 1, W * 1.2);
+  m.position.y = 0.012;
+  m.renderOrder = 0;
+  return m;
+}
+var DECK_H = [0, 0.14, 0.2, 0.28, 0.42, 0.55];
+function buildUnit(design, team) {
+  const ch = CHASSIS_BY_ID.get(design.chassis);
+  const mob = MOBILITY_BY_ID.get(design.mobility);
+  const kit = makeKit(team);
+  const S = ch.size;
+  const W = ch.footprint?.[0] ?? S, L = ch.footprint?.[1] ?? S;
+  const rnd = rng([...design.id].reduce((a, c) => a * 31 + c.charCodeAt(0) >>> 0, 7));
+  const root = new Group();
+  const body = new Group();
+  root.add(body);
+  const flying = (ch.domain ?? "ground") !== "ground" || mob.kind === "air";
+  const turrets = [];
+  const updates = [];
+  const offs = mountOffsets(design);
+  const hb = new Bld();
+  let tris = 0;
+  let air = null;
+  let hull = null;
+  let baseY = 0;
+  const legs = [];
+  const mods = design.mounts.map((mid) => mid ? MODULE_BY_ID.get(mid) ?? null : null);
+  const tur = mods.map((mod) => mod ? buildTurret(mod, S, kit, flying) : null);
+  const mounts = offs.map((o, i) => ({ x: o.x, z: o.y, r: tur[i]?.r ?? 0.1 }));
+  if (flying) {
+    if (ch.domain === "jet" || mob.id === "jet") air = buildJet(hb, kit, L, W, S);
+    else air = buildRotor(hb, kit, body, ch.id, L, W, S);
+    updates.push((t) => air.update(t));
+  } else {
+    const gear = buildGear(root, mob.id, L, W, S, kit, legs);
+    baseY = gear.y0;
+    if (gear.update) updates.push((t, _dt, mv) => gear.update(t, mv));
+    const Hd = DECK_H[Math.min(5, S)] * (S >= 4 ? 1 : 1);
+    hull = buildHull(hb, kit, ch.shape, L, W, gear.y0, gear.yt, Hd, gear.wi, gear.tracked);
+    if (S >= 3 || ch.shape === "long") {
+      const rcase = Math.min(0.12 * L, 0.5), hw = Math.min(W * 0.2, 0.22 * S);
+      let best = 0, bx = 0;
+      for (let k = 0; k < 24; k++) {
+        const cx = -L * 0.42 + k * L * 0.026;
+        const clear = Math.min(...mounts.map((m) => Math.max(Math.abs(m.x - cx) - rcase, Math.abs(m.z) - hw) - m.r * 0.95), 5);
+        if (clear > best && deckAt(hull, cx - rcase, 0) > 0 && deckAt(hull, cx + rcase, 0) > 0) {
+          best = clear;
+          bx = cx;
+        }
+      }
+      if (best > 0.02 && S >= 3) {
+        addCasemate(hb, kit, hull, bx, rcase, hw, Hd * 0.75);
+        mounts.push({ x: bx, z: 0, r: Math.max(rcase, hw) * 1.1 });
+        if (S >= 4) addBridge(hb, kit, hull, bx - rcase * 0.1, S * 0.55);
+      }
+    }
+  }
+  const hullTop = hull?.top ?? 0.1;
+  tur.forEach((tu, i) => {
+    if (!tu) return;
+    const o = offs[i];
+    let y;
+    if (flying) {
+      y = air.hpY(o.x, o.y);
+      if (ch.domain === "jet" || mob.id === "jet") hb.box(kit.trim, 0.2 * tu.r + 0.1, Math.abs(y) + 0.05, 0.05, o.x, y / 2 + 0.02, o.y, 8e-3);
+    } else {
+      y = deckAt(hull, o.x, o.y);
+      if (y < 0) y = hullTop;
+      let lo = y, hi = y;
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * Math.PI * 2, d = deckAt(hull, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85);
+        if (d >= 0) {
+          lo = Math.min(lo, d);
+          hi = Math.max(hi, d);
+        }
+      }
+      y = hi;
+      if (y - lo > 0.02 || true) {
+        const r = tu.r;
+        hb.lathe(kit.hull, [[0, lo - 0.01], [r * 1.22, lo - 0.01], [r * 1.22, y - 0.012], [r * 1.05, y + 5e-3], [0, y + 5e-3]], [o.x, 0, o.y], "y", 20);
+        if (S >= 3) hb.cylb(kit.trim, r * 1.1, 0.02, 4e-3, [o.x, y, o.y], "y", 20);
+      }
+    }
+    tu.yaw.position.set(o.x, y, o.y);
+    body.add(tu.yaw);
+    turrets.push(tu);
+    tris += tu.tris;
+  });
+  if (!flying && hull) {
+    greeble(hb, kit, hull, S, rnd, mounts);
+    if (S >= 4) giantDetails(hb, kit, hull, S, rnd, mounts);
+    const p = hull.lofts[0].pts;
+    const nose = p[p.length - 2], rear = p[0];
+    for (const sg of [-1, 1]) {
+      hb.box(kit.lamp, 0.03, 0.025 + 0.01 * S, 0.04 + 0.012 * S, nose.x + 0.02, nose.y3 - 0.01, sg * nose.wt * 0.7, 4e-3);
+      hb.box(kit.glow, 0.02, 0.02, 0.04 + 0.01 * S, rear.x - 0.012, rear.y3 * 0.78 + baseY * 0.2, sg * rear.wm * 0.8, 3e-3);
+    }
+    const num = Math.floor(rnd() * 90) + 10;
+    const dk = deckAt(hull, -L * 0.3, W * 0.2);
+    const ds = 0.1 + 0.05 * S;
+    if (dk > 0 && mounts.every((m) => Math.hypot(m.x + L * 0.3, m.z - W * 0.2) > m.r + ds * 0.8)) {
+      hb.decal(ds * 0.7, ds * 0.9, -L * 0.3 - ds * 0.4, dk + 3e-3, W * 0.2, atlasUV(4 + Math.floor(num / 10)), 0);
+      hb.decal(ds * 0.7, ds * 0.9, -L * 0.3 + ds * 0.4, dk + 3e-3, W * 0.2, atlasUV(4 + num % 10), 0);
+    }
+    const dk2 = deckAt(hull, L * 0.12, -W * 0.2);
+    if (dk2 > 0 && S <= 3 && mounts.every((m) => Math.hypot(m.x - L * 0.12, m.z + W * 0.2) > m.r + ds * 0.7)) hb.decal(ds * 1.1, ds * 1.1, L * 0.12, dk2 + 3e-3, -W * 0.2, atlasUV(1), 0);
+    if (S >= 3) {
+      const mx = -L * 0.38, mz = -W * 0.3, top = deckAt(hull, mx, mz);
+      if (top > 0 && mounts.every((m) => Math.hypot(m.x - mx, m.z - mz) > m.r + 0.1)) {
+        hb.strut(kit.steel, [mx, top, mz], [mx, top + 0.45 + 0.1 * S, mz], 0.012, 8e-3, 5);
+        hb.box(kit.accent, 0.01, 0.1 + 0.02 * S, 0.2 + 0.03 * S, mx - 0.02, top + 0.4 + 0.1 * S, mz + 0.1 + 0.015 * S, 2e-3);
+      }
+    }
+  }
+  hb.mount(body, kit.decal);
+  tris += hb.tris;
+  const root3 = root;
+  if (!flying) root3.add(contactShadow(L, W));
+  return {
+    root,
+    design,
+    team,
+    turrets,
+    L,
+    W,
+    S,
+    flying,
+    radius: Math.max(L, W) / 2,
+    tris,
+    animate(t, dt, moving) {
+      for (const u of updates) u(t, dt, moving);
+      if (!flying) body.position.y = Math.sin(t * 38 + L) * 35e-4 * (0.6 + moving) * Math.min(S, 3);
+    }
+  };
+}
+
+// src/client/proto3d/terrain3d.ts
+function makeNoise(seed) {
+  const N = 256;
+  const r = rng(seed);
+  const lat = new Float32Array(N * N);
+  for (let i = 0; i < lat.length; i++) lat[i] = r();
+  const at = (x, y) => lat[(y & 255) << 8 | x & 255];
+  const noise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    let fx2 = x - xi, fy = y - yi;
+    fx2 = fx2 * fx2 * (3 - 2 * fx2);
+    fy = fy * fy * (3 - 2 * fy);
+    const a = at(xi, yi), b = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+    return a + (b - a) * fx2 + (c - a) * fy + (a - b - c + d) * fx2 * fy;
+  };
+  const fbm = (x, y, oct = 5) => {
+    let s = 0, amp = 0.5, f = 1, n = 0;
+    for (let i = 0; i < oct; i++) {
+      s += amp * noise(x * f, y * f);
+      n += amp;
+      amp *= 0.5;
+      f *= 2.03;
+    }
+    return s / n;
+  };
+  return { noise, fbm };
+}
+var sm = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+var hex = (s) => {
+  const n = parseInt(s.slice(1), 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+};
+var mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+function makeMaps(w, h, o) {
+  const PPC = o.ppc;
+  const W = Math.round(w * PPC), H = Math.round(h * PPC);
+  const { fbm, noise } = makeNoise(o.seed);
+  const r = rng(o.seed + 5);
+  const albedo = document.createElement("canvas");
+  albedo.width = W;
+  albedo.height = H;
+  const height = document.createElement("canvas");
+  height.width = W;
+  height.height = H;
+  const ga = albedo.getContext("2d"), gh = height.getContext("2d");
+  const ia = ga.createImageData(W, H), ih = gh.createImageData(W, H);
+  const soil = hex("#7b6b4b"), sand = hex("#a4925f"), dirt = hex("#4d4130"), gravel = hex("#706a5c"), scrub = hex("#585f3c"), dry = hex("#8d7f56");
+  const k = 1 / PPC;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const cx = x * k, cy = y * k;
+      const n1 = fbm(cx * 0.09, cy * 0.09, 4), n2 = fbm(cx * 0.24 + 40, cy * 0.24 + 40, 4), n3 = fbm(cx * 0.55 + 90, cy * 0.55 + 90, 3);
+      let c = mixc(soil, sand, sm(0.42, 0.62, n1));
+      c = mixc(c, dry, sm(0.5, 0.72, fbm(cx * 0.15 + 7, cy * 0.15 + 7, 3)) * 0.5);
+      c = mixc(c, dirt, sm(0.56, 0.72, n2) * 0.8);
+      const gv = sm(0.54, 0.68, fbm(cx * 0.35 + 200, cy * 0.35 + 200, 4));
+      const grain = noise(x * 0.9, y * 0.9) * 0.6 + noise(x * 2.3 + 11, y * 2.3 + 5) * 0.4;
+      c = mixc(c, gravel, gv * (0.45 + 0.4 * grain));
+      const sc = sm(0.6, 0.72, fbm(cx * 0.2 + 300, cy * 0.2 + 300, 4));
+      c = mixc(c, scrub, sc * (0.35 + 0.5 * noise(x * 0.5, y * 0.5)));
+      const m = 0.78 + 0.44 * (n3 * 0.5 + grain * 0.5) + (gv > 0.2 ? (grain - 0.5) * 0.35 * gv : 0);
+      const i = (y * W + x) * 4;
+      ia.data[i] = c[0] * m;
+      ia.data[i + 1] = c[1] * m;
+      ia.data[i + 2] = c[2] * m;
+      ia.data[i + 3] = 255;
+      const hv = 128 + (n1 - 0.5) * 70 + (n2 - 0.5) * 60 + (grain - 0.5) * (40 + gv * 90) - sc * 12;
+      ih.data[i] = ih.data[i + 1] = ih.data[i + 2] = hv;
+      ih.data[i + 3] = 255;
+    }
+  }
+  ga.putImageData(ia, 0, 0);
+  gh.putImageData(ih, 0, 0);
+  const track = (x0, y0, x1, y1, gap, wd, a) => {
+    const steps = 120, ph = r() * 6, amp = 20 + r() * 40;
+    for (const sg of [-1, 1]) {
+      ga.beginPath();
+      gh.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const wob = Math.sin(t * 5 + ph) * amp + Math.sin(t * 13 + ph * 2) * amp * 0.25;
+        const px2 = x0 + (x1 - x0) * t, py2 = y0 + (y1 - y0) * t + wob + sg * gap * 0.5;
+        if (i === 0) {
+          ga.moveTo(px2, py2);
+          gh.moveTo(px2, py2);
+        } else {
+          ga.lineTo(px2, py2);
+          gh.lineTo(px2, py2);
+        }
+      }
+      ga.strokeStyle = `rgba(30,24,16,${a})`;
+      ga.lineWidth = wd;
+      ga.lineCap = "round";
+      ga.stroke();
+      ga.strokeStyle = `rgba(30,24,16,${a * 0.5})`;
+      ga.lineWidth = wd * 0.4;
+      ga.setLineDash([3, 5]);
+      ga.stroke();
+      ga.setLineDash([]);
+      gh.strokeStyle = "rgba(40,40,40,0.55)";
+      gh.lineWidth = wd;
+      gh.stroke();
+    }
+  };
+  for (let i = 0; i < 9; i++) track(-50, r() * H, W + 50, r() * H, PPC * (0.7 + r() * 1.2), PPC * (0.14 + r() * 0.12), 0.1 + r() * 0.12);
+  for (let i = 0; i < 4; i++) track(r() * W * 0.3, -40, W * (0.4 + r() * 0.5), H + 40, PPC * 1.4, PPC * 0.22, 0.12);
+  for (let i = 0; i < 26; i++) {
+    const x = r() * W, y = r() * H, rad = PPC * (0.25 + r() * r() * 1.5);
+    const sc = ga.createRadialGradient(x, y, rad * 0.1, x, y, rad * 1.7);
+    sc.addColorStop(0, "rgba(18,14,10,0.7)");
+    sc.addColorStop(0.5, "rgba(28,22,15,0.4)");
+    sc.addColorStop(1, "rgba(0,0,0,0)");
+    ga.fillStyle = sc;
+    ga.beginPath();
+    ga.arc(x, y, rad * 1.7, 0, 7);
+    ga.fill();
+    ga.strokeStyle = "rgba(15,12,9,0.18)";
+    ga.lineWidth = 1.5;
+    for (let s = 0; s < 18; s++) {
+      const a = r() * 7, l = rad * (1.2 + r() * 1.2);
+      ga.beginPath();
+      ga.moveTo(x + Math.cos(a) * rad * 0.8, y + Math.sin(a) * rad * 0.8);
+      ga.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      ga.stroke();
+    }
+    if (rad > PPC * 0.45) {
+      const hg = gh.createRadialGradient(x, y, 0, x, y, rad * 1.15);
+      hg.addColorStop(0, "rgba(25,25,25,0.85)");
+      hg.addColorStop(0.72, "rgba(70,70,70,0.7)");
+      hg.addColorStop(0.88, "rgba(210,210,210,0.8)");
+      hg.addColorStop(1, "rgba(128,128,128,0)");
+      gh.fillStyle = hg;
+      gh.beginPath();
+      gh.arc(x, y, rad * 1.15, 0, 7);
+      gh.fill();
+    }
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = r() * W, y = r() * H, rad = PPC * (0.15 + r() * 0.4);
+    const g2 = ga.createRadialGradient(x, y, 0, x, y, rad);
+    g2.addColorStop(0, "rgba(14,12,9,0.42)");
+    g2.addColorStop(1, "rgba(0,0,0,0)");
+    ga.fillStyle = g2;
+    ga.beginPath();
+    ga.ellipse(x, y, rad, rad * (0.5 + r() * 0.5), r() * 3, 0, 7);
+    ga.fill();
+  }
+  const zw = W * o.zoneFrac;
+  if (o.zoneFrac > 0) {
+    ga.fillStyle = "rgba(70,150,190,0.05)";
+    ga.fillRect(0, 0, zw, H);
+    ga.fillStyle = "rgba(210,100,50,0.05)";
+    ga.fillRect(W - zw, 0, zw, H);
+    ga.setLineDash([PPC * 0.3, PPC * 0.2]);
+    ga.lineWidth = 3;
+    ga.strokeStyle = "rgba(130,215,240,0.4)";
+    ga.beginPath();
+    ga.moveTo(zw, 0);
+    ga.lineTo(zw, H);
+    ga.stroke();
+    ga.strokeStyle = "rgba(255,150,100,0.4)";
+    ga.beginPath();
+    ga.moveTo(W - zw, 0);
+    ga.lineTo(W - zw, H);
+    ga.stroke();
+    ga.setLineDash([]);
+  }
+  if (o.grid) {
+    for (let i = 0; i <= w; i++) {
+      ga.strokeStyle = i % 5 === 0 ? "rgba(235,232,210,0.11)" : "rgba(235,232,210,0.045)";
+      ga.lineWidth = i % 5 === 0 ? 2 : 1;
+      ga.beginPath();
+      ga.moveTo(i * PPC, 0);
+      ga.lineTo(i * PPC, H);
+      ga.stroke();
+    }
+    for (let j = 0; j <= h; j++) {
+      ga.strokeStyle = j % 5 === 0 ? "rgba(235,232,210,0.11)" : "rgba(235,232,210,0.045)";
+      ga.lineWidth = j % 5 === 0 ? 2 : 1;
+      ga.beginPath();
+      ga.moveTo(0, j * PPC);
+      ga.lineTo(W, j * PPC);
+      ga.stroke();
+    }
+  }
+  const map = new CanvasTexture(albedo);
+  map.colorSpace = SRGBColorSpace;
+  map.anisotropy = 16;
+  const bump = new CanvasTexture(height);
+  bump.anisotropy = 8;
+  return { map, bump };
+}
+function makeDetail() {
+  const N = 512;
+  const { noise } = makeNoise(31);
+  const r = rng(77);
+  const c = document.createElement("canvas");
+  c.width = c.height = N;
+  const g = c.getContext("2d");
+  const im = g.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, v = y / N;
+    const n = (f, o2) => noise(u * f % 1 * 256 * 0 + u * f * 256 % 256, v * f * 256 % 256) + o2 * 0;
+    const a = n(1, 0) * 0.5 + n(2, 0) * 0.3 + n(4, 0) * 0.2;
+    const i = (y * N + x) * 4;
+    im.data[i] = 90 + a * 130;
+    im.data[i + 1] = 90 + a * 130;
+    im.data[i + 2] = 128;
+    im.data[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  for (let i = 0; i < 700; i++) {
+    const x = r() * N, y = r() * N, rad = 1.2 + r() * r() * 5;
+    for (const [ox, oy] of [[0, 0], [N, 0], [-N, 0], [0, N], [0, -N]]) {
+      const gr = g.createRadialGradient(x + ox - rad * 0.3, y + oy - rad * 0.3, 0, x + ox, y + oy, rad);
+      gr.addColorStop(0, "rgba(255,240,220,0.5)");
+      gr.addColorStop(0.7, "rgba(150,140,125,0.25)");
+      gr.addColorStop(1, "rgba(0,0,0,0.0)");
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(x + ox, y + oy, rad, 0, 7);
+      g.fill();
+    }
+  }
+  const t = new CanvasTexture(c);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+function groundMaterial(map, bump) {
+  const detail = makeDetail();
+  const m = new MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 2.2, roughness: 0.97, metalness: 0, envMapIntensity: 0.6 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.detailMap = { value: detail };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vGP;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGP = position.xz;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vGP; uniform sampler2D detailMap;").replace("#include <map_fragment>", `#include <map_fragment>
+        vec4 dt1 = texture2D(detailMap, vGP * 0.9); vec4 dt2 = texture2D(detailMap, vGP * 0.23 + 0.37);
+        float dtl = dt1.r * 0.65 + dt2.r * 0.35;
+        diffuseColor.rgb *= 0.55 + 0.9 * dtl;
+        float dH = dt1.g * 0.7 + dt2.g * 0.3;`).replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+        {
+          vec3 sx = normalize(dFdx(-vViewPosition)), sy = normalize(dFdy(-vViewPosition));
+          vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+          float det = dot(sx, r1) * faceDirection;
+          vec2 dh = vec2(dFdx(dH), dFdy(dH)) * 5.0;
+          normal = normalize(abs(det) * normal - sign(det) * (dh.x * r1 + dh.y * r2));
+        }`);
+  };
+  m.customProgramCacheKey = () => "ground2";
+  return m;
+}
+function rockGeometry(seed, flat) {
+  const { fbm } = makeNoise(seed);
+  const g = new IcosahedronGeometry(1, 2);
+  const pos = g.attributes.position;
+  const v = new Vector3();
+  const r = rng(seed);
+  const ax = 0.8 + r() * 0.5, az = 0.8 + r() * 0.5;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const n = fbm(v.x * 1.7 + 5, v.z * 1.7 + v.y * 1.3 + 9, 3);
+    const d = 0.7 + n * 0.75;
+    pos.setXYZ(i, v.x * d * ax, Math.max(-0.2, v.y * d * flat), v.z * d * az);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function buildTerrain(w, h, opts = {}) {
+  const seed = opts.seed ?? 99;
+  const group = new Group();
+  group.name = "terrain";
+  const { map, bump } = makeMaps(w, h, { seed, ppc: opts.ppc ?? 36, grid: opts.grid ?? true, zoneFrac: opts.zoneFrac ?? 0.22 });
+  const ground = new Mesh(new PlaneGeometry(w, h).rotateX(-Math.PI / 2), groundMaterial(map, bump));
+  ground.receiveShadow = true;
+  group.add(ground);
+  {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const g = c.getContext("2d");
+    const { fbm } = makeNoise(seed + 3);
+    const im = g.createImageData(256, 256);
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+      const n = fbm(x % 256 / 256 * 8, y % 256 / 256 * 8, 4);
+      const i = (y * 256 + x) * 4;
+      im.data[i] = 70 + n * 50;
+      im.data[i + 1] = 62 + n * 44;
+      im.data[i + 2] = 46 + n * 32;
+      im.data[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+    const t = new CanvasTexture(c);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.repeat.set(70, 70);
+    t.colorSpace = SRGBColorSpace;
+    const apron = new Mesh(new PlaneGeometry(700, 700).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map: t, roughness: 1 }));
+    apron.position.y = -0.02;
+    apron.receiveShadow = true;
+    group.add(apron);
+  }
+  if (opts.props === false) return { group, ground };
+  const r = rng(seed + 11);
+  const keep = opts.keepOut ?? (() => false);
+  const mk = (geo, mat, n, place, cast = true) => {
+    const im = new InstancedMesh(geo, mat, n);
+    const m = new Matrix4(), col = new Color();
+    let k = 0;
+    for (let i = 0; i < n; i++) if (place(i, m, col)) {
+      im.setMatrixAt(k, m);
+      im.setColorAt(k, col);
+      k++;
+    }
+    im.count = k;
+    im.castShadow = cast;
+    im.receiveShadow = true;
+    group.add(im);
+    return im;
+  };
+  const q = new Quaternion(), e = new Euler(), vv = new Vector3(), sc = new Vector3();
+  const rockMat = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.93, metalness: 0, flatShading: false, envMapIntensity: 0.7 });
+  const tones = ["#857d6b", "#6f6a5e", "#968a6e", "#5f5c52", "#7a7058"].map((s) => new Color(s));
+  for (let v = 0; v < 3; v++) {
+    const geo = rockGeometry(40 + v * 13, 0.55 + v * 0.1);
+    mk(geo, rockMat, 22, (_i, m, col) => {
+      let x = (r() - 0.5) * w * 0.99, z = (r() - 0.5) * h * 0.99;
+      if (Math.abs(z) < h * 0.3 && Math.abs(x) < w * 0.42 && r() < 0.85) z = (z < 0 ? -1 : 1) * (h * 0.3 + r() * h * 0.2);
+      const s = 0.14 + r() * r() * 0.7;
+      if (keep(x, z) && s > 0.2) return false;
+      e.set((r() - 0.5) * 0.3, r() * 7, (r() - 0.5) * 0.3);
+      q.setFromEuler(e);
+      m.compose(vv.set(x, s * 0.12, z), q, sc.set(s * (1 + r() * 0.5), s * (0.8 + r() * 0.5), s * (1 + r() * 0.5)));
+      col.copy(tones[Math.floor(r() * tones.length)]).multiplyScalar(0.85 + r() * 0.3);
+      return true;
+    });
+  }
+  mk(rockGeometry(7, 0.6), rockMat, 420, (_i, m, col) => {
+    const x = (r() - 0.5) * w, z = (r() - 0.5) * h, s = 0.03 + r() * 0.07;
+    e.set(0, r() * 7, 0);
+    q.setFromEuler(e);
+    m.compose(vv.set(x, s * 0.1, z), q, sc.set(s * (1 + r()), s, s * (1 + r())));
+    col.copy(tones[Math.floor(r() * tones.length)]).multiplyScalar(0.8 + r() * 0.3);
+    return true;
+  }, false);
+  const scrubGeo = (() => {
+    const g = new IcosahedronGeometry(1, 1);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setY(i, Math.max(0, p.getY(i)) * 0.55 + (p.getY(i) < 0 ? 0 : 0));
+    g.computeVertexNormals();
+    return g;
+  })();
+  const scrubMat = new MeshStandardMaterial({ color: "#ffffff", roughness: 1, flatShading: true });
+  const sTones = ["#4b5233", "#5d5b36", "#6b6840", "#3f4a2f"].map((s) => new Color(s));
+  mk(scrubGeo, scrubMat, 150, (_i, m, col) => {
+    const x = (r() - 0.5) * w, z = (r() - 0.5) * h;
+    for (let k = 0; k < 1; k++) {
+      const s = 0.12 + r() * 0.22;
+      e.set(0, r() * 7, 0);
+      q.setFromEuler(e);
+      m.compose(vv.set(x, 0, z), q, sc.set(s * (1 + r() * 0.8), s * (0.5 + r() * 0.6), s * (1 + r() * 0.8)));
+      col.copy(sTones[Math.floor(r() * sTones.length)]).multiplyScalar(0.8 + r() * 0.4);
+    }
+    return !keep(x, z) || r() < 0.2;
+  });
+  const b = new Bld();
+  const conc = paint("#8e8b80", { rough: 0.9, metal: 0, scale: 0.7, wear: 0.2, bump: 1.6 });
+  const rust = paint("#5b4a3a", { rough: 0.85, metal: 0.4, scale: 1.5, wear: 0.8 });
+  const lines = [[-8, -15, 5, 0.1], [11, 15.5, 4, -0.08], [-1, 16, 3, 0.05], [3, -16, 4, 0]];
+  for (const [lx, lz, n, a] of lines) for (let i = 0; i < n; i++) {
+    const x = lx + i * 1.05 * Math.cos(a), z = lz + i * 1.05 * Math.sin(a);
+    b.slab(conc, [[-0.5, -0.2], [0.5, -0.2], [0.5, 0.2], [-0.5, 0.2]], 0.34, 0.03, x, 0, z, [0, -a + (r() - 0.5) * 0.06, 0]);
+    b.slab(conc, [[-0.5, -0.12], [0.5, -0.12], [0.5, 0.12], [-0.5, 0.12]], 0.12, 0.02, x, 0.34, z, [0, -a, 0]);
+  }
+  for (const [hx, hz] of [[-12, 17], [6, -17], [14, 17.5], [-17, -17], [20, -15]]) {
+    for (let k = 0; k < 3; k++) {
+      const rot = [k === 0 ? Math.PI / 4 : 0, k * 1, k === 1 ? Math.PI / 4 : k === 2 ? -Math.PI / 4 : 0];
+      b.box(rust, 0.09, 0.09, 0.9, hx, 0.3, hz, 0.01, rot);
+    }
+  }
+  b.mount(group, void 0);
+  return { group, ground };
 }
 
 // node_modules/three/examples/jsm/shaders/CopyShader.js
@@ -34997,12 +39036,12 @@ var GTAOPass = class _GTAOPass extends Pass {
    * @param {?Box3} box - The AABB enclosing the scene that should receive AO. When passing
    * `null`, to clip box is used.
    */
-  setSceneClipBox(box2) {
-    if (box2) {
+  setSceneClipBox(box) {
+    if (box) {
       this.gtaoMaterial.needsUpdate = this.gtaoMaterial.defines.SCENE_CLIP_BOX !== 1;
       this.gtaoMaterial.defines.SCENE_CLIP_BOX = 1;
-      this.gtaoMaterial.uniforms.sceneBoxMin.value.copy(box2.min);
-      this.gtaoMaterial.uniforms.sceneBoxMax.value.copy(box2.max);
+      this.gtaoMaterial.uniforms.sceneBoxMin.value.copy(box.min);
+      this.gtaoMaterial.uniforms.sceneBoxMax.value.copy(box.max);
     } else {
       this.gtaoMaterial.needsUpdate = this.gtaoMaterial.defines.SCENE_CLIP_BOX === 0;
       this.gtaoMaterial.defines.SCENE_CLIP_BOX = 0;
@@ -35381,2997 +39420,161 @@ var OutputPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/environments/RoomEnvironment.js
-var RoomEnvironment = class extends Scene {
-  constructor() {
-    super();
-    this.name = "RoomEnvironment";
-    this.position.y = -3.5;
-    const geometry = new BoxGeometry();
-    geometry.deleteAttribute("uv");
-    const roomMaterial = new MeshStandardMaterial({ side: BackSide });
-    const boxMaterial = new MeshStandardMaterial();
-    const mainLight = new PointLight(16777215, 900, 28, 2);
-    mainLight.position.set(0.418, 16.199, 0.3);
-    this.add(mainLight);
-    const room = new Mesh(geometry, roomMaterial);
-    room.position.set(-0.757, 13.219, 0.717);
-    room.scale.set(31.713, 28.305, 28.591);
-    this.add(room);
-    const boxes = new InstancedMesh(geometry, boxMaterial, 6);
-    const transform = new Object3D();
-    transform.position.set(-10.906, 2.009, 1.846);
-    transform.rotation.set(0, -0.195, 0);
-    transform.scale.set(2.328, 7.905, 4.651);
-    transform.updateMatrix();
-    boxes.setMatrixAt(0, transform.matrix);
-    transform.position.set(-5.607, -0.754, -0.758);
-    transform.rotation.set(0, 0.994, 0);
-    transform.scale.set(1.97, 1.534, 3.955);
-    transform.updateMatrix();
-    boxes.setMatrixAt(1, transform.matrix);
-    transform.position.set(6.167, 0.857, 7.803);
-    transform.rotation.set(0, 0.561, 0);
-    transform.scale.set(3.927, 6.285, 3.687);
-    transform.updateMatrix();
-    boxes.setMatrixAt(2, transform.matrix);
-    transform.position.set(-2.017, 0.018, 6.124);
-    transform.rotation.set(0, 0.333, 0);
-    transform.scale.set(2.002, 4.566, 2.064);
-    transform.updateMatrix();
-    boxes.setMatrixAt(3, transform.matrix);
-    transform.position.set(2.291, -0.756, -2.621);
-    transform.rotation.set(0, -0.286, 0);
-    transform.scale.set(1.546, 1.552, 1.496);
-    transform.updateMatrix();
-    boxes.setMatrixAt(4, transform.matrix);
-    transform.position.set(-2.193, -0.369, -5.547);
-    transform.rotation.set(0, 0.516, 0);
-    transform.scale.set(3.875, 3.487, 2.986);
-    transform.updateMatrix();
-    boxes.setMatrixAt(5, transform.matrix);
-    this.add(boxes);
-    const light1 = new Mesh(geometry, createAreaLightMaterial(50));
-    light1.position.set(-16.116, 14.37, 8.208);
-    light1.scale.set(0.1, 2.428, 2.739);
-    this.add(light1);
-    const light2 = new Mesh(geometry, createAreaLightMaterial(50));
-    light2.position.set(-16.109, 18.021, -8.207);
-    light2.scale.set(0.1, 2.425, 2.751);
-    this.add(light2);
-    const light3 = new Mesh(geometry, createAreaLightMaterial(17));
-    light3.position.set(14.904, 12.198, -1.832);
-    light3.scale.set(0.15, 4.265, 6.331);
-    this.add(light3);
-    const light4 = new Mesh(geometry, createAreaLightMaterial(43));
-    light4.position.set(-0.462, 8.89, 14.52);
-    light4.scale.set(4.38, 5.441, 0.088);
-    this.add(light4);
-    const light5 = new Mesh(geometry, createAreaLightMaterial(20));
-    light5.position.set(3.235, 11.486, -12.541);
-    light5.scale.set(2.5, 2, 0.1);
-    this.add(light5);
-    const light6 = new Mesh(geometry, createAreaLightMaterial(100));
-    light6.position.set(0, 20, 0);
-    light6.scale.set(1, 0.1, 1);
-    this.add(light6);
-  }
-  /**
-   * Frees internal resources. This method should be called
-   * when the environment is no longer required.
-   */
-  dispose() {
-    const resources = /* @__PURE__ */ new Set();
-    this.traverse((object) => {
-      if (object.isMesh) {
-        resources.add(object.geometry);
-        resources.add(object.material);
-      }
-    });
-    for (const resource of resources) {
-      resource.dispose();
-    }
-  }
-};
-function createAreaLightMaterial(intensity) {
-  const material = new MeshLambertMaterial({
-    color: 0,
-    emissive: 16777215,
-    emissiveIntensity: intensity
+// src/client/proto3d/stage3d.ts
+function createRenderer(canvas2) {
+  const renderer2 = new WebGLRenderer({ canvas: canvas2, antialias: true, powerPreference: "high-performance" });
+  renderer2.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer2.shadowMap.enabled = true;
+  renderer2.shadowMap.type = PCFShadowMap;
+  renderer2.toneMapping = ACESFilmicToneMapping;
+  renderer2.toneMappingExposure = 1;
+  return renderer2;
+}
+function skyEnvironment(renderer2, sunDir) {
+  const s = new Scene();
+  const mat = new ShaderMaterial({
+    side: BackSide,
+    uniforms: { sunDir: { value: sunDir.clone().normalize() } },
+    vertexShader: "varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: (
+      /* glsl */
+      `
+      varying vec3 vD; uniform vec3 sunDir;
+      void main(){
+        vec3 d = normalize(vD);
+        float h = d.y;
+        vec3 zenith = vec3(0.20, 0.36, 0.62), mid = vec3(0.52, 0.66, 0.80), hor = vec3(0.95, 0.80, 0.62), gnd = vec3(0.20, 0.17, 0.13);
+        vec3 c = mix(hor, mid, smoothstep(0.0, 0.22, h));
+        c = mix(c, zenith, smoothstep(0.2, 0.9, h));
+        c = mix(c, gnd, smoothstep(0.0, -0.18, h));
+        float sd = max(dot(d, normalize(sunDir)), 0.0);
+        c += vec3(1.0, 0.82, 0.55) * (pow(sd, 6.0) * 0.35 + pow(sd, 400.0) * 40.0);
+        // soft cloud-ish streaks so reflections on metal are not a perfect gradient
+        c *= 0.92 + 0.12 * sin(d.x * 9.0 + sin(d.z * 7.0) * 2.0) * smoothstep(0.0, 0.5, h);
+        gl_FragColor = vec4(c, 1.0);
+      }`
+    )
   });
-  return material;
+  s.add(new Mesh(new SphereGeometry(50, 48, 24), mat));
+  const pm = new PMREMGenerator(renderer2);
+  const tex = pm.fromScene(s, 0.02, 0.1, 100).texture;
+  pm.dispose();
+  return tex;
 }
-
-// src/shared/starters.ts
-var STARTER_DESIGNS = [
-  // ---- cheap swarm ----
-  { id: "starter-buzzsaw", name: "Buzzsaw", chassis: "scout", mobility: "wheels", mounts: ["mg"] },
-  { id: "starter-torchbug", name: "Torchbug", chassis: "scout", mobility: "halftrack", mounts: ["flamer"] },
-  // ---- skirmisher ----
-  { id: "starter-lancer", name: "Lancer", chassis: "raider", mobility: "halftrack", mounts: ["laser", "laser"] },
-  { id: "starter-hunter", name: "Tank Hunter", chassis: "raider", mobility: "legs", mounts: ["atgm", "atgm"] },
-  // ---- frontline tank ----
-  { id: "starter-bulwark", name: "Bulwark", chassis: "warden", mobility: "treads", mounts: ["autocannon", "plateL"] },
-  // ---- anti-tank ----
-  { id: "starter-tankbuster", name: "Tankbuster", chassis: "longarm", mobility: "spider", mounts: ["cannon"] },
-  // ---- anti-air ----
-  { id: "starter-skyguard", name: "Skyguard", chassis: "warden", mobility: "halftrack", mounts: ["ac40", "ac20"] },
-  // ---- artillery ----
-  { id: "starter-thunderhead", name: "Thunderhead", chassis: "longarm", mobility: "spider", mounts: ["howitzer"] },
-  { id: "starter-firestorm", name: "Firestorm", chassis: "striker", mobility: "spider", mounts: ["mortar", "mortar", null] },
-  // ---- flyers ----
-  { id: "starter-hornet", name: "Hornet", chassis: "drone", mobility: "rotor", mounts: ["twinmg"] },
-  { id: "starter-strafer", name: "Strafer", chassis: "strikejet", mobility: "jet", mounts: ["rockets", "guidedrocket", "hmg"] },
-  // ---- support ----
-  { id: "starter-medic", name: "Field Medic", chassis: "aegis", mobility: "halftrack", mounts: ["autocannon", "repair"] },
-  // ---- brawler ----
-  { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "shotgun"] },
-  // ---- size-3 heavies ----
-  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "twin30", "hmg"] },
-  { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["cannon", "plateM", "autocannon"] },
-  // ---- emplacement ----
-  { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "anchor", mounts: ["guidedrocket", "hmg"] },
-  // ---- melee: fast hover brawler that dives into the line ----
-  { id: "starter-ripper", name: "Gnasher", chassis: "raider", mobility: "legs", mounts: ["buzzsaw", "shockprod"] },
-  // ---- stealth: cloaked sniper platform ----
-  { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
-  // ---- shield wall: barrier-heavy anchor of the line ----
-  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "cannon75", "shield"] },
-  // ---- support aura: command vehicle that speeds up and repairs its escorts ----
-  { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "twin30", "hmg"] },
-  // ---- giant (size 4): all-round assault walker ----
-  { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "autocannon"] },
-  // ---- titan (size 5): beam-armed war machine ----
-  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "autocannon"] }
-];
-
-// src/shared/parts.ts
-var CHASSIS = [
-  { id: "scout", name: "Scout Frame", desc: "Tiny, cheap and quick. One light mount.", size: 1, hp: 140, armor: 0, weight: 3, cost: 10, mounts: ["S"], agility: 1.3, roles: ["scout", "raider"], traits: [], shape: "wedge" },
-  { id: "drone", name: "Drone Core", desc: "Featherweight quad-rotor drone core.", size: 1, hp: 140, armor: 0, weight: 1.5, cost: 10, domain: "heli", mounts: ["S"], agility: 1.4, roles: ["scout", "flyer"], traits: ["compact"], shape: "pod" },
-  { id: "raider", name: "Raider Frame", desc: "Light skirmisher with twin light mounts.", size: 1, hp: 210, armor: 2, weight: 5, cost: 75, mounts: ["S", "S"], agility: 1.15, roles: ["raider"], traits: [], shape: "box" },
-  { id: "warden", name: "Warden Hull", desc: "Sturdy medium hull built to hold a line.", size: 2, hp: 560, armor: 6, weight: 14, cost: 115, mounts: ["M", "S"], agility: 0.95, roles: ["assault", "tank"], traits: [], shape: "hex" },
-  { id: "striker", name: "Striker Frame", desc: "Aggressive medium frame with three mounts.", size: 2, hp: 430, armor: 4, weight: 12, cost: 160, footprint: [2, 3], mounts: ["M", "M", "S"], agility: 1, roles: ["skirmisher", "assault"], traits: [], shape: "cross" },
-  { id: "longarm", name: "Longarm Platform", desc: "Stabilized platform: one heavy mount, +20% weapon range.", size: 2, hp: 360, armor: 3, weight: 12, cost: 250, footprint: [1, 3], mounts: ["M"], agility: 0.85, roles: ["artillery", "siege"], traits: ["rangeBoost"], shape: "long" },
-  { id: "aegis", name: "Aegis Frame", desc: "Support frame. Field-repairs nearby allies.", size: 2, hp: 610, armor: 4, weight: 13, cost: 60, mounts: ["M", "S"], agility: 0.95, roles: ["support"], traits: ["repairAura"], shape: "round" },
-  { id: "gunship", name: "Gunship", desc: "Attack helicopter airframe with stub-wing mounts.", size: 2, hp: 420, armor: 3, weight: 8, cost: 60, footprint: [2, 3], domain: "heli", mounts: ["M", "M"], agility: 1.1, roles: ["flyer"], traits: ["airOnly"], shape: "airframe" },
-  { id: "bastion", name: "Bastion Hull", desc: "Massive armored hull. Slow, nearly unbreakable.", size: 3, hp: 1500, armor: 14, weight: 38, cost: 400, mounts: ["M", "M", "M"], agility: 0.8, roles: ["tank", "assault"], traits: [], shape: "fortress" },
-  { id: "colossus", name: "Monarch Frame", desc: "Walking arsenal with four mounts.", size: 3, hp: 1250, armor: 10, weight: 34, cost: 405, footprint: [3, 4], mounts: ["M", "M", "M", "S"], agility: 0.85, roles: ["assault", "siege"], traits: [], shape: "titan" },
-  // ---- Odd-shaped frames ----
-  { id: "mantis", name: "Needle Frame", desc: "Lanky light strider with twin blade-arm mounts.", size: 1, hp: 185, armor: 1, weight: 4, cost: 35, footprint: [1, 2], mounts: ["S", "S"], agility: 1.35, mobility: ["legs", "jumpjets", "spider", "hover"], roles: ["raider", "melee"], traits: [], shape: "mantis" },
-  { id: "strider", name: "Strider Mech", desc: "Humanoid mech: arm guns and a shoulder mount. Needs legs.", size: 2, hp: 480, armor: 5, weight: 12, cost: 140, mounts: ["M", "S", "S"], agility: 1.05, mobility: ["legs", "jumpjets", "spider", "anchor"], roles: ["skirmisher"], traits: [], shape: "mech" },
-  { id: "arachnid", name: "Orbwalker Core", desc: "Orb-bodied walker pod with twin dorsal mounts. Walks on multi-legs or jump legs.", size: 2, hp: 420, armor: 4, weight: 11, cost: 190, mounts: ["M", "M"], agility: 1.1, mobility: ["spider", "jumpjets", "anchor"], roles: ["skirmisher", "raider"], traits: [], shape: "arachnid" },
-  { id: "crab", name: "Bunker Crawler", desc: "Wide, low, heavily plated mobile bunker with arm mounts.", size: 2, hp: 600, armor: 8, weight: 15, cost: 240, footprint: [3, 2], mounts: ["M", "M", "S"], agility: 0.85, mobility: ["spider", "halftrack", "treads", "hover", "anchor"], roles: ["riot", "tank"], traits: [], shape: "crab" },
-  { id: "saucer", name: "Saucer Disc", desc: "Round disc hull with an all-round turret ring. Hovers or walks.", size: 2, hp: 400, armor: 4, weight: 10, cost: 210, mounts: ["M", "M", "S"], agility: 1.2, mobility: ["hover", "anchor", "spider"], roles: ["skirmisher", "antiair"], traits: [], shape: "saucer" },
-  { id: "deltawing", name: "Delta Wing", desc: "Triangular strike aircraft. Must fly.", size: 2, hp: 340, armor: 3, weight: 8, cost: 75, footprint: [2, 3], domain: "jet", mounts: ["M", "S", "S"], agility: 1.15, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "delta" },
-  { id: "warlord", name: "Warlord Mech", desc: "Heavy humanoid mech with a shoulder cannon and arm weapons.", size: 3, hp: 1350, armor: 11, weight: 34, cost: 430, footprint: [4, 3], mounts: ["M", "M", "M", "S"], agility: 0.9, mobility: ["titanlegs", "spider", "anchor"], roles: ["assault"], traits: [], shape: "warlord" },
-  { id: "scorpion", name: "Tailgun Crawler", desc: "Armored crawler with a crane-boom heavy weapon over its back and twin arm mounts.", size: 3, hp: 1200, armor: 12, weight: 32, cost: 260, footprint: [3, 4], mounts: ["M", "M", "M"], agility: 0.95, mobility: ["spider", "treads", "anchor"], roles: ["assault", "siege"], traits: [], shape: "scorpion" },
-  { id: "centipede", name: "Landtrain Hull", desc: "Articulated multi-car land-train with four medium mounts down its spine.", size: 3, hp: 1300, armor: 9, weight: 33, cost: 525, footprint: [2, 5], mounts: ["M", "M", "M", "M"], agility: 0.8, mobility: ["spider", "halftrack", "treads"], roles: ["riot", "assault"], traits: [], shape: "centipede" },
-  // ---- Role-specialist frames ----
-  { id: "carriage", name: "Gun Carriage", desc: "Light, thin-skinned carriage that holds a medium weapon. Cheap artillery or tank-hunter.", size: 1, hp: 110, armor: 0, weight: 3, cost: 40, mounts: ["M"], agility: 0.9, roles: ["artillery", "skirmisher"], traits: [], shape: "carriage" },
-  { id: "hunter", name: "Hunter Frame", desc: "Fast, lightly armored skirmisher frame. Strikes from range and keeps moving.", size: 2, hp: 360, armor: 2, weight: 9, cost: 80, footprint: [1, 2], mounts: ["M", "S"], agility: 1.25, roles: ["skirmisher", "raider"], traits: [], shape: "hunter" },
-  { id: "riot", name: "Riot Frame", desc: "Sloped front armor and twin medium mounts. Built to wade into swarms.", size: 2, hp: 650, armor: 9, weight: 15, cost: 230, footprint: [3, 2], mounts: ["M", "M"], agility: 0.9, roles: ["riot", "tank"], traits: [], shape: "riot" },
-  { id: "interceptor", name: "Interceptor", desc: "Light fighter airframe. Must fly.", size: 1, hp: 120, armor: 1, weight: 1.2, cost: 15, footprint: [1, 2], domain: "jet", mounts: ["S", "S"], agility: 1.3, roles: ["antiair", "flyer", "raider"], traits: ["airOnly"], shape: "interceptor" },
-  { id: "siegeplat", name: "Siege Platform", desc: "Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.", size: 3, hp: 800, armor: 3, weight: 22, cost: 265, footprint: [2, 4], mounts: ["M", "M"], agility: 0.7, roles: ["artillery", "siege"], traits: [], shape: "siegeplat" },
-  { id: "juggernaut", name: "Monolith Hull", desc: "A wall of armor with token weapons. Soaks fire for the army behind it.", size: 3, hp: 2100, armor: 18, weight: 40, cost: 250, footprint: [4, 3], mounts: ["M", "S"], agility: 0.75, roles: ["tank"], traits: [], shape: "juggernaut" },
-  { id: "bomberhull", name: "Heavy Bomber", desc: "Big flying bomb truck with three medium bays. Grav lifters or nothing.", size: 3, hp: 1170, armor: 5, weight: 24, cost: 200, footprint: [3, 4], domain: "heli", mounts: ["M", "M", "M"], agility: 0.7, roles: ["bomber", "flyer"], traits: ["airOnly"], shape: "bomber" },
-  // ---- Aircraft ----
-  { id: "strikejet", name: "Strike Jet", desc: "Multirole fighter-bomber with a centreline and two wing hardpoints.", size: 2, hp: 330, armor: 2, weight: 7, cost: 80, footprint: [2, 3], mounts: ["M", "S", "S"], agility: 1.2, domain: "jet", roles: ["flyer", "raider", "antiair"], traits: [], shape: "strikejet" },
-  { id: "stratobomber", name: "Strato Bomber", desc: "Long-range jet bomber with three bomb bays and a tail gun.", size: 3, hp: 900, armor: 4, weight: 18, cost: 300, footprint: [4, 4], mounts: ["M", "M", "M", "S"], agility: 0.8, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "stratobomber" },
-  { id: "heavyheli", name: "Heavy Helicopter", desc: "Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.", size: 3, hp: 1e3, armor: 6, weight: 20, cost: 280, footprint: [2, 4], mounts: ["M", "M", "S"], agility: 0.85, domain: "heli", roles: ["flyer", "assault"], traits: [], shape: "heavyheli" },
-  // ---- Giant class (size 4, 20 m) ----
-  { id: "goliath", name: "Warhulk Frame", desc: "Giant assault frame: a giant-class mount backed by two heavies.", size: 4, hp: 4160, armor: 16, weight: 70, cost: 190, footprint: [4, 5], mounts: ["L", "M", "M", "M"], agility: 0.75, roles: ["assault"], traits: [], shape: "goliath" },
-  { id: "leviathan", name: "Leviathan Hull", desc: "Giant battle hull with twin giant-class mounts.", size: 4, hp: 3800, armor: 20, weight: 82, cost: 725, footprint: [3, 6], mounts: ["L", "L", "M", "M"], agility: 0.65, roles: ["siege", "assault"], traits: [], shape: "leviathan" },
-  { id: "carrier", name: "Sky Carrier", desc: "Giant flying hull. Must fly on grav lifters.", size: 4, hp: 2100, armor: 10, weight: 50, cost: 1100, footprint: [6, 3], domain: "heli", mounts: ["L", "M", "M", "M"], agility: 0.8, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "carrier" },
-  { id: "broodmother", name: "Matriarch", desc: "Giant multi-legged walking fortress with a giant-class dorsal weapon and four more mounts.", size: 4, hp: 3e3, armor: 14, weight: 66, cost: 650, footprint: [5, 4], mounts: ["L", "M", "M", "M", "S"], agility: 0.85, mobility: ["spider", "anchor"], roles: ["riot", "assault"], traits: [], shape: "broodmother" },
-  // ---- Titan class (size 5, 25 m) ----
-  { id: "titan", name: "Titan Walker", desc: "Titan-class war machine with a titan mount and a giant mount.", size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [7, 7], mounts: ["XL", "L", "M", "M", "M"], agility: 0.7, roles: ["assault", "siege"], traits: [], shape: "colossal" },
-  { id: "citadel", name: "Citadel Fortress", desc: "Mobile fortress with twin titan mounts. The biggest thing on the field.", size: 5, hp: 8e3, armor: 28, weight: 140, cost: 1915, footprint: [8, 7], mounts: ["XL", "XL", "L", "M", "M", "S"], agility: 0.55, roles: ["siege", "tank"], traits: [], shape: "citadel" },
-  { id: "arachne", name: "Weaver Titan", desc: "Titan-class walking fortress: a titan mount and twin giant mounts on many legs.", size: 5, hp: 7630, armor: 20, weight: 115, cost: 340, footprint: [8, 8], mounts: ["XL", "L", "L", "M"], agility: 0.75, mobility: ["spider", "anchor"], roles: ["assault"], traits: [], shape: "arachne" }
-];
-var MOBILITY = [
-  { id: "wheels", name: "Wheels", desc: "Fast and cheap, but fragile and light-duty.", kind: "ground", sizes: [1, 2], speed: 3.2, turn: 4, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [], roles: ["raider", "scout"] },
-  { id: "halftrack", name: "Half-Track", desc: "Wheels up front, treads behind. Balanced all-rounder.", kind: "ground", sizes: [1, 2, 3], speed: 2.3, turn: 2.6, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [], roles: ["skirmisher", "assault"] },
-  { id: "treads", name: "Tank Treads", desc: "Heavy-duty treads. Slow, tough, carries anything.", kind: "ground", sizes: [2, 3, 4], speed: 1.6, turn: 1.8, capacity: [0, 32, 66, 125, 0], weight: 4, hp: 60, armor: 3, cost: 22, traits: ["crush"], roles: ["tank", "assault"] },
-  { id: "legs", name: "Bipedal Legs", desc: "Nimble walker. Fires while moving.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ["fireOnMove"], roles: ["skirmisher", "raider"] },
-  { id: "spider", name: "Spider Legs", desc: "Six-legged stable walker. Better accuracy, carries heavy loads.", kind: "ground", sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ["stable"], roles: ["artillery", "riot", "skirmisher"] },
-  { id: "jumpjets", name: "Jump Legs", desc: "Leaps over obstacles straight into the fight.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ["leap"], roles: ["raider", "melee"] },
-  { id: "hover", name: "Hover Skirt", desc: "Skims the ground. Very fast, hard to hit.", kind: "ground", sizes: [1, 2], speed: 3.6, turn: 2.2, capacity: [6, 17, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive"], roles: ["raider", "scout"] },
-  { id: "rotor", name: "Rotor", desc: "Helicopter rotors. Flies over ground units; only anti-air can hit it.", kind: "air", sizes: [1, 2, 3], speed: 2.8, turn: 3, capacity: [5, 17, 36, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "support"] },
-  { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3], speed: 4.6, turn: 1.6, capacity: [4, 14, 30, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["fireOnMove", "strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
-  { id: "megatracks", name: "Colossal Tracks", desc: "Quad track assemblies for giant and titan hulls. Crushes anything underfoot.", kind: "ground", sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ["crush"], roles: ["tank", "assault"] },
-  { id: "titanlegs", name: "Titan Legs", desc: "Towering walker legs. Fires on the move and stomps smaller units.", kind: "ground", sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ["fireOnMove", "crush"], roles: ["assault"] },
-  { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy and giant hulls fly.", kind: "air", sizes: [3, 4], speed: 1.6, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "bomber"] },
-  { id: "anchor", name: "Anchor Mount", desc: "Immobile emplacement. Extra hp, armor and +15% range.", kind: "static", sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ["fortified"], roles: ["siege", "artillery", "antiair"] }
-];
-var G = { targetsGround: true, targetsAir: false };
-var A = { targetsGround: false, targetsAir: true };
-var GA = { targetsGround: true, targetsAir: true };
-var MELEE = { targetsGround: true, targetsAir: false, projectile: "melee" };
-var util = (m) => ({ kind: "utility", ...m });
-var wpn = (m) => ({ kind: "weapon", ...m });
-var MODULES = [
-  // ---------------- Machine guns ----------------
-  wpn({
-    id: "mg",
-    name: "7.62mm Machine Gun",
-    family: "7.62mm",
-    desc: "Rapid fire. Shreds light units and aircraft; weak vs armor.",
-    category: "machinegun",
-    visual: "gun",
-    caliber: 0.2,
-    mount: "S",
-    weight: 1,
-    cost: 6,
-    damage: 9,
-    cooldown: 0.15,
-    range: 5.5,
-    ...GA,
-    projectile: "bullet",
-    projectileSpeed: 22,
-    ap: 0,
-    spread: 0.35
-  }),
-  wpn({
-    id: "twinmg",
-    name: "Twin 7.62mm MG",
-    family: "Twin 7.62mm",
-    desc: "Two coaxial machine guns on one mount. Double the lead.",
-    category: "machinegun",
-    visual: "gun",
-    barrels: 2,
-    caliber: 0.2,
-    mount: "S",
-    weight: 1.8,
-    cost: 11,
-    damage: 9,
-    cooldown: 0.075,
-    range: 5.5,
-    ...GA,
-    projectile: "bullet",
-    projectileSpeed: 22,
-    ap: 0,
-    spread: 0.45
-  }),
-  wpn({
-    id: "hmg",
-    name: "12.7mm Heavy MG",
-    family: "12.7mm",
-    desc: "Heavier rounds with a little armor pierce and reach.",
-    category: "machinegun",
-    visual: "gun",
-    caliber: 0.4,
-    mount: "S",
-    weight: 1.6,
-    cost: 10,
-    damage: 16,
-    cooldown: 0.22,
-    range: 6.5,
-    ...GA,
-    magazine: 25,
-    reload: 2.5,
-    projectile: "bullet",
-    projectileSpeed: 24,
-    ap: 0.15,
-    spread: 0.3
-  }),
-  wpn({
-    id: "minigun",
-    name: "Rotary Minigun",
-    family: "Rotary",
-    desc: "Six spinning barrels. A wall of bullets at close range.",
-    category: "machinegun",
-    visual: "gatling",
-    barrels: 6,
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 22,
-    damage: 8,
-    cooldown: 0.04,
-    range: 6,
-    ...GA,
-    projectile: "bullet",
-    projectileSpeed: 24,
-    ap: 0,
-    spread: 0.65
-  }),
-  wpn({
-    id: "shotgun",
-    name: "Scattergun",
-    family: "Scatter",
-    desc: "Six-pellet blasts. Brutal up close, useless far away.",
-    category: "machinegun",
-    visual: "shotgun",
-    caliber: 0.5,
-    mount: "S",
-    weight: 1.4,
-    cost: 9,
-    damage: 12,
-    pellets: 6,
-    cooldown: 1,
-    range: 3.5,
-    ...GA,
-    projectile: "bullet",
-    projectileSpeed: 20,
-    ap: 0.1,
-    spread: 0.9
-  }),
-  // ---------------- Autocannons ----------------
-  wpn({
-    id: "ac20",
-    name: "20mm Autocannon",
-    family: "20mm",
-    desc: "Light autocannon. Small explosive rounds.",
-    category: "autocannon",
-    visual: "gun",
-    caliber: 0.55,
-    mount: "S",
-    weight: 1.8,
-    cost: 14,
-    damage: 18,
-    cooldown: 0.2,
-    range: 7,
-    ...GA,
-    magazine: 10,
-    reload: 2,
-    projectile: "bullet",
-    projectileSpeed: 20,
-    splash: 0.2,
-    ap: 0.2,
-    spread: 0.3
-  }),
-  wpn({
-    id: "autocannon",
-    name: "30mm Autocannon",
-    family: "30mm",
-    desc: "Versatile mid-caliber gun. Hits ground and air.",
-    category: "autocannon",
-    visual: "gun",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 22,
-    damage: 32,
-    cooldown: 0.3,
-    range: 7.5,
-    ...GA,
-    magazine: 6,
-    reload: 2,
-    projectile: "bullet",
-    projectileSpeed: 18,
-    splash: 0.3,
-    ap: 0.3,
-    spread: 0.3
-  }),
-  wpn({
-    id: "twin30",
-    name: "Twin 30mm Autocannon",
-    family: "Twin 30mm",
-    desc: "Two 30mm guns on one mount: double firepower, heavier and pricier.",
-    category: "autocannon",
-    visual: "gun",
-    barrels: 2,
-    caliber: 0.5,
-    mount: "M",
-    weight: 5,
-    cost: 38,
-    damage: 32,
-    cooldown: 0.15,
-    range: 7.5,
-    ...GA,
-    magazine: 12,
-    reload: 2.4,
-    projectile: "bullet",
-    projectileSpeed: 18,
-    splash: 0.3,
-    ap: 0.3,
-    spread: 0.35
-  }),
-  wpn({
-    id: "ac40",
-    name: "40mm Bofors",
-    family: "40mm",
-    desc: "Long-reach autocannon with proximity rounds, deadly to aircraft.",
-    category: "autocannon",
-    visual: "gun",
-    caliber: 0.8,
-    mount: "M",
-    weight: 4,
-    cost: 28,
-    damage: 55,
-    cooldown: 0.5,
-    range: 9,
-    ...GA,
-    magazine: 4,
-    reload: 2.5,
-    projectile: "bullet",
-    projectileSpeed: 20,
-    splash: 0.5,
-    ap: 0.3,
-    spread: 0.3,
-    airBonus: 1.3
-  }),
-  wpn({
-    id: "quad20",
-    name: "Quad 20mm AA",
-    family: "Quad 20mm",
-    desc: "Four 20mm barrels slaved to an AA director. Air only.",
-    category: "autocannon",
-    visual: "gun",
-    barrels: 4,
-    caliber: 0.45,
-    mount: "M",
-    weight: 4,
-    cost: 26,
-    damage: 18,
-    cooldown: 0.05,
-    range: 9,
-    ...A,
-    magazine: 24,
-    reload: 3,
-    projectile: "bullet",
-    projectileSpeed: 24,
-    splash: 0.2,
-    ap: 0.2,
-    spread: 0.3,
-    airBonus: 1.4
-  }),
-  // ---------------- Cannons ----------------
-  wpn({
-    id: "cannon75",
-    name: "75mm Gun",
-    family: "75mm",
-    desc: "Medium tank gun. Solid armor pierce on a medium mount.",
-    category: "cannon",
-    visual: "cannon",
-    caliber: 0.5,
-    mount: "M",
-    weight: 5,
-    cost: 32,
-    damage: 95,
-    cooldown: 0.7,
-    range: 8.5,
-    ...G,
-    magazine: 3,
-    reload: 4,
-    projectile: "shell",
-    projectileSpeed: 20,
-    splash: 0.3,
-    ap: 0.55,
-    spread: 0.2
-  }),
-  wpn({
-    id: "cannon",
-    name: "120mm Heavy Cannon",
-    family: "120mm",
-    desc: "Armor-piercing shells. The tank killer.",
-    category: "cannon",
-    visual: "cannon",
-    caliber: 0.8,
-    mount: "M",
-    weight: 8,
-    cost: 50,
-    damage: 190,
-    cooldown: 2.2,
-    range: 9,
-    ...G,
-    projectile: "shell",
-    projectileSpeed: 20,
-    splash: 0.3,
-    ap: 0.7,
-    spread: 0.2
-  }),
-  wpn({
-    id: "twin120",
-    name: "Twin 120mm Cannon",
-    family: "Twin 120mm",
-    desc: "Two heavy cannons in one turret. Twice the punch, huge weight.",
-    category: "cannon",
-    visual: "cannon",
-    barrels: 2,
-    caliber: 0.8,
-    mount: "M",
-    weight: 13,
-    cost: 85,
-    damage: 190,
-    cooldown: 1.1,
-    range: 9,
-    ...G,
-    projectile: "shell",
-    projectileSpeed: 20,
-    splash: 0.3,
-    ap: 0.7,
-    spread: 0.25
-  }),
-  wpn({
-    id: "gauss",
-    name: "Gauss Cannon",
-    family: "Gauss",
-    desc: "Magnetic slug that punches through every unit in its path.",
-    category: "cannon",
-    visual: "gauss",
-    caliber: 0.8,
-    mount: "M",
-    weight: 10,
-    cost: 75,
-    damage: 240,
-    cooldown: 2.6,
-    range: 12,
-    ...GA,
-    projectile: "shell",
-    projectileSpeed: 34,
-    pierce: true,
-    ap: 0.8,
-    spread: 0.1
-  }),
-  // ---------------- Sniper & rail ----------------
-  wpn({
-    id: "sniper",
-    name: "Sniper Rifle",
-    family: "Sniper",
-    desc: "Long-barrel precision rifle. Picks off units from far away.",
-    category: "precision",
-    visual: "sniper",
-    caliber: 0.4,
-    mount: "S",
-    weight: 1.5,
-    cost: 20,
-    damage: 140,
-    cooldown: 3.5,
-    range: 14,
-    ...G,
-    projectile: "bullet",
-    projectileSpeed: 60,
-    ap: 0.6,
-    spread: 0
-  }),
-  wpn({
-    id: "lightrail",
-    name: "Rail Rifle",
-    family: "Light rail",
-    desc: "Compact railgun. Pierces a line of enemies.",
-    category: "precision",
-    visual: "rail",
-    caliber: 0.5,
-    mount: "M",
-    weight: 4,
-    cost: 40,
-    damage: 150,
-    cooldown: 3,
-    range: 14,
-    ...GA,
-    projectile: "rail",
-    ap: 0.9,
-    pierce: true
-  }),
-  wpn({
-    id: "railgun",
-    name: "Railgun",
-    family: "Heavy rail",
-    desc: "Pierces everything in a line. Extreme range.",
-    category: "precision",
-    visual: "rail",
-    caliber: 0.9,
-    mount: "M",
-    weight: 9,
-    cost: 75,
-    damage: 320,
-    cooldown: 4.5,
-    range: 17,
-    ...GA,
-    projectile: "rail",
-    ap: 1,
-    pierce: true
-  }),
-  // ---------------- Rockets ----------------
-  wpn({
-    id: "rocketL",
-    name: "Light Rocket Rack",
-    family: "2-tube",
-    desc: "Pair of unguided rockets.",
-    category: "rocket",
-    visual: "rocketPod",
-    barrels: 2,
-    caliber: 0.3,
-    mount: "S",
-    weight: 1.5,
-    cost: 12,
-    damage: 32,
-    burst: 2,
-    cooldown: 3,
-    range: 9,
-    ...G,
-    projectile: "rocket",
-    projectileSpeed: 11,
-    splash: 0.7,
-    ap: 0.2,
-    spread: 0.7
-  }),
-  wpn({
-    id: "rockets",
-    name: "Rocket Pod",
-    family: "4-tube",
-    desc: "Salvo of 4 unguided rockets with splash.",
-    category: "rocket",
-    visual: "rocketPod",
-    barrels: 4,
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 30,
-    damage: 42,
-    burst: 4,
-    cooldown: 4,
-    range: 10,
-    ...G,
-    projectile: "rocket",
-    projectileSpeed: 11,
-    splash: 1,
-    ap: 0.2,
-    spread: 0.8
-  }),
-  wpn({
-    id: "incendiary",
-    name: "Incendiary Rockets",
-    family: "Napalm 4-tube",
-    desc: "Rockets that leave targets burning.",
-    category: "rocket",
-    visual: "rocketPod",
-    barrels: 4,
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.2,
-    cost: 34,
-    damage: 32,
-    burst: 4,
-    cooldown: 4,
-    range: 10,
-    ...G,
-    projectile: "rocket",
-    projectileSpeed: 11,
-    splash: 1,
-    ap: 0.2,
-    spread: 0.8,
-    burn: { dps: 12, duration: 4 }
-  }),
-  wpn({
-    id: "mlrs",
-    name: "MLRS Battery",
-    family: "12-tube",
-    desc: "Ripple-fires 12 rockets across a huge area. Minimum range 30 m.",
-    category: "rocket",
-    visual: "rocketPod",
-    barrels: 12,
-    caliber: 0.9,
-    mount: "M",
-    weight: 10,
-    cost: 70,
-    damage: 30,
-    burst: 12,
-    cooldown: 9,
-    range: 22,
-    minRange: 6,
-    ...G,
-    projectile: "rocket",
-    projectileSpeed: 12,
-    splash: 1,
-    ap: 0.2,
-    spread: 1.6
-  }),
-  // ---------------- Missiles ----------------
-  wpn({
-    id: "atgm",
-    name: "ATGM Launcher",
-    family: "Anti-tank",
-    desc: "Wire-guided anti-tank missile on a light mount.",
-    category: "missile",
-    visual: "missileRack",
-    barrels: 1,
-    caliber: 0.3,
-    mount: "S",
-    weight: 1.6,
-    cost: 18,
-    damage: 110,
-    cooldown: 4,
-    range: 12,
-    ...G,
-    projectile: "missile",
-    projectileSpeed: 9,
-    splash: 0.2,
-    ap: 0.8
-  }),
-  wpn({
-    id: "guidedrocket",
-    name: "Guided Rocket Launcher",
-    family: "Dual-role",
-    desc: "Shoulder-sized guided rocket. Hits ground and air.",
-    category: "missile",
-    visual: "missileRack",
-    barrels: 1,
-    caliber: 0.25,
-    mount: "S",
-    weight: 1.3,
-    cost: 16,
-    damage: 55,
-    cooldown: 3,
-    range: 10,
-    ...GA,
-    projectile: "missile",
-    projectileSpeed: 10,
-    splash: 0.3,
-    ap: 0.5
-  }),
-  wpn({
-    id: "aamissile",
-    name: "AA Missile Pod",
-    family: "Anti-air",
-    desc: "Twin heat-seekers. Air only.",
-    category: "missile",
-    visual: "missileRack",
-    barrels: 2,
-    caliber: 0.3,
-    mount: "S",
-    weight: 1.4,
-    cost: 16,
-    damage: 60,
-    burst: 2,
-    cooldown: 3.5,
-    range: 13,
-    ...A,
-    projectile: "missile",
-    projectileSpeed: 11,
-    splash: 0.3,
-    ap: 0.4,
-    airBonus: 1.5
-  }),
-  wpn({
-    id: "sam",
-    name: "Missile Rack",
-    family: "Multi-role",
-    desc: "Homing missiles. Long range, bonus vs aircraft.",
-    category: "missile",
-    visual: "missileRack",
-    barrels: 4,
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 34,
-    damage: 85,
-    cooldown: 3,
-    range: 13,
-    ...GA,
-    projectile: "missile",
-    projectileSpeed: 9,
-    splash: 0.4,
-    ap: 0.5,
-    airBonus: 1.6
-  }),
-  wpn({
-    id: "swarm",
-    name: "Swarm Missiles",
-    family: "Swarm",
-    desc: "Eight micro-missiles that spread across targets.",
-    category: "missile",
-    visual: "missileRack",
-    barrels: 8,
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.5,
-    cost: 40,
-    damage: 28,
-    burst: 8,
-    cooldown: 6,
-    range: 12,
-    ...GA,
-    projectile: "missile",
-    projectileSpeed: 10,
-    splash: 0.4,
-    ap: 0.3,
-    spread: 0.4
-  }),
-  wpn({
-    id: "cruise",
-    name: "Cruise Missile",
-    family: "Strategic",
-    desc: "One enormous long-range warhead. Slow to reload.",
-    category: "missile",
-    visual: "cruise",
-    caliber: 0.9,
-    mount: "M",
-    weight: 9,
-    cost: 80,
-    damage: 300,
-    cooldown: 10,
-    range: 28,
-    minRange: 8,
-    ...G,
-    projectile: "missile",
-    projectileSpeed: 10,
-    splash: 2.2,
-    ap: 0.6
-  }),
-  // ---------------- Artillery ----------------
-  wpn({
-    id: "mortar",
-    name: "Mortar",
-    family: "81mm",
-    desc: "Lobbed shells over the front line. Minimum range 25 m.",
-    category: "artillery",
-    visual: "mortar",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.5,
-    cost: 30,
-    damage: 60,
-    cooldown: 3,
-    range: 20,
-    minRange: 5,
-    ...G,
-    projectile: "arc",
-    projectileSpeed: 8,
-    splash: 1.2,
-    ap: 0.2,
-    spread: 0.8
-  }),
-  wpn({
-    id: "howitzer",
-    name: "Howitzer",
-    family: "155mm",
-    desc: "Long-range artillery with huge splash. Minimum range 40 m.",
-    category: "artillery",
-    visual: "artillery",
-    caliber: 0.9,
-    mount: "M",
-    weight: 10,
-    cost: 75,
-    damage: 80,
-    cooldown: 5,
-    range: 30,
-    minRange: 8,
-    ...G,
-    projectile: "arc",
-    projectileSpeed: 12,
-    splash: 2,
-    ap: 0.3,
-    spread: 1.2
-  }),
-  wpn({
-    id: "barrage",
-    name: "Barrage Cannon",
-    family: "Scatter artillery",
-    desc: "Fires six shells at once that blanket an area. Minimum range 30 m.",
-    category: "artillery",
-    visual: "artillery",
-    barrels: 3,
-    caliber: 0.8,
-    mount: "M",
-    weight: 11,
-    cost: 80,
-    damage: 28,
-    pellets: 6,
-    cooldown: 3.5,
-    range: 24,
-    minRange: 6,
-    ...G,
-    projectile: "arc",
-    projectileSpeed: 10,
-    splash: 1,
-    ap: 0.1,
-    spread: 2
-  }),
-  // ---------------- Energy ----------------
-  wpn({
-    id: "laser",
-    name: "Pulse Laser",
-    family: "Pulse",
-    desc: "Accurate hitscan pulses with some armor pierce.",
-    category: "energy",
-    visual: "laser",
-    caliber: 0.3,
-    mount: "S",
-    weight: 1.2,
-    cost: 18,
-    damage: 24,
-    cooldown: 0.6,
-    range: 7,
-    ...GA,
-    projectile: "beam",
-    ap: 0.3
-  }),
-  wpn({
-    id: "twinlaser",
-    name: "Twin Pulse Laser",
-    family: "Twin pulse",
-    desc: "Two linked pulse emitters on a medium mount.",
-    category: "energy",
-    visual: "laser",
-    barrels: 2,
-    caliber: 0.4,
-    mount: "M",
-    weight: 2.6,
-    cost: 34,
-    damage: 24,
-    cooldown: 0.15,
-    range: 7,
-    ...GA,
-    magazine: 6,
-    reload: 1.5,
-    projectile: "beam",
-    ap: 0.3
-  }),
-  wpn({
-    id: "heatray",
-    name: "Heat Ray",
-    family: "Thermal",
-    desc: "Continuous ray: melts anything close, fades with distance.",
-    category: "energy",
-    visual: "heatray",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.5,
-    cost: 32,
-    damage: 36,
-    cooldown: 0.2,
-    range: 5.5,
-    ...GA,
-    projectile: "beam",
-    ap: 0.5,
-    falloff: 0.25
-  }),
-  wpn({
-    id: "plasmaorb",
-    name: "Plasma Cannon",
-    family: "Plasma orb",
-    desc: "Slow-moving plasma ball that bursts on impact.",
-    category: "energy",
-    visual: "plasma",
-    caliber: 0.5,
-    mount: "M",
-    weight: 4,
-    cost: 36,
-    damage: 85,
-    cooldown: 2,
-    range: 8,
-    ...G,
-    projectile: "orb",
-    projectileSpeed: 6,
-    splash: 1.1,
-    ap: 0.5,
-    spread: 0.4
-  }),
-  wpn({
-    id: "plasma",
-    name: "Plasma Lance",
-    family: "Plasma beam",
-    desc: "Searing short-range beam with heavy armor pierce.",
-    category: "energy",
-    visual: "plasma",
-    caliber: 0.9,
-    mount: "M",
-    weight: 8,
-    cost: 65,
-    damage: 48,
-    cooldown: 0.25,
-    range: 6.5,
-    ...GA,
-    projectile: "beam",
-    ap: 0.6
-  }),
-  // ---------------- Flame ----------------
-  wpn({
-    id: "flamer",
-    name: "Flamethrower",
-    family: "Light flame",
-    desc: "Short-range cone that ignores most armor.",
-    category: "flame",
-    visual: "flamer",
-    caliber: 0.3,
-    mount: "S",
-    weight: 1.5,
-    cost: 14,
-    damage: 10,
-    cooldown: 0.1,
-    range: 3.5,
-    ...G,
-    projectile: "flame",
-    projectileSpeed: 9,
-    splash: 0.8,
-    ap: 0.8,
-    burn: { dps: 6, duration: 2 }
-  }),
-  wpn({
-    id: "napalm",
-    name: "Napalm Projector",
-    family: "Napalm",
-    desc: "Sticky burning gel. Wide cone, long burn.",
-    category: "flame",
-    visual: "flamer",
-    caliber: 0.6,
-    mount: "M",
-    weight: 3.2,
-    cost: 30,
-    damage: 14,
-    cooldown: 0.15,
-    range: 4.5,
-    ...G,
-    projectile: "flame",
-    projectileSpeed: 8,
-    splash: 1.2,
-    ap: 0.8,
-    burn: { dps: 15, duration: 3 }
-  }),
-  // ---------------- Stun & disruption ----------------
-  wpn({
-    id: "tesla",
-    name: "Tesla Coil",
-    family: "Chain lightning",
-    desc: "Lightning arcs that jump between up to 4 enemies.",
-    category: "disruption",
-    visual: "tesla",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.5,
-    cost: 32,
-    damage: 48,
-    cooldown: 1.2,
-    range: 4.5,
-    ...GA,
-    projectile: "lightning",
-    chain: 3,
-    ap: 0.4
-  }),
-  wpn({
-    id: "stungun",
-    name: "Stun Gun",
-    family: "Paralyzer",
-    desc: "Electric bolt that paralyzes its target for 1.2s.",
-    category: "disruption",
-    visual: "emp",
-    caliber: 0.3,
-    mount: "S",
-    weight: 1.2,
-    cost: 18,
-    damage: 8,
-    cooldown: 1.5,
-    range: 6,
-    ...GA,
-    projectile: "lightning",
-    chain: 0,
-    ap: 1,
-    stun: 1.2
-  }),
-  wpn({
-    id: "empcannon",
-    name: "EMP Cannon",
-    family: "EMP burst",
-    desc: "Electromagnetic orb that stuns everything in the blast.",
-    category: "disruption",
-    visual: "emp",
-    caliber: 0.6,
-    mount: "M",
-    weight: 3.5,
-    cost: 38,
-    damage: 40,
-    cooldown: 3,
-    range: 9,
-    ...G,
-    projectile: "orb",
-    projectileSpeed: 7,
-    splash: 1.2,
-    ap: 1,
-    stun: 1.5,
-    spread: 0.3
-  }),
-  wpn({
-    id: "slowbeam",
-    name: "Slow Beam",
-    family: "Disruptor",
-    desc: "Beam that cuts target speed and rate of fire by up to 60%.",
-    category: "disruption",
-    visual: "slowbeam",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 28,
-    damage: 12,
-    cooldown: 0.2,
-    range: 7.5,
-    ...GA,
-    projectile: "beam",
-    ap: 1,
-    slow: 0.15
-  }),
-  wpn({
-    id: "arclance",
-    name: "Arc Lance",
-    family: "Storm",
-    desc: "Heavy lightning that chains through 6 enemies and jolts them.",
-    category: "disruption",
-    visual: "tesla",
-    caliber: 0.9,
-    mount: "M",
-    weight: 9,
-    cost: 75,
-    damage: 105,
-    cooldown: 1.6,
-    range: 6.5,
-    ...GA,
-    projectile: "lightning",
-    chain: 5,
-    ap: 0.5,
-    stun: 0.3
-  }),
-  wpn({
-    id: "disarm",
-    name: "Disarm Ray",
-    family: "Disarmer",
-    desc: "Scrambles weapon systems: target can move but not fire for 2s.",
-    category: "disruption",
-    visual: "emp",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 34,
-    damage: 15,
-    cooldown: 2.5,
-    range: 8,
-    ...GA,
-    projectile: "beam",
-    ap: 1,
-    disarm: 2
-  }),
-  wpn({
-    id: "sonic",
-    name: "Sonic Pulser",
-    family: "Riot",
-    desc: "Concussive blast that hurls light units backwards.",
-    category: "disruption",
-    visual: "sonic",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.5,
-    cost: 30,
-    damage: 50,
-    cooldown: 1.4,
-    range: 4,
-    ...G,
-    projectile: "orb",
-    projectileSpeed: 14,
-    splash: 1,
-    ap: 0.3,
-    impulse: 1.6
-  }),
-  wpn({
-    id: "gravity",
-    name: "Gravity Gun",
-    family: "Graviton",
-    desc: "Yanks enemies toward you, dragging them out of formation.",
-    category: "disruption",
-    visual: "gravity",
-    caliber: 0.8,
-    mount: "M",
-    weight: 8,
-    cost: 60,
-    damage: 30,
-    cooldown: 0.8,
-    range: 8.5,
-    ...GA,
-    projectile: "beam",
-    ap: 1,
-    impulse: -0.9
-  }),
-  // ---------------- Bombs (flyers only) ----------------
-  wpn({
-    id: "bombs",
-    name: "Bomb Bay",
-    family: "Iron bombs",
-    desc: "Drops bombs on ground units directly below. Flying designs only.",
-    category: "artillery",
-    visual: "charge",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3.5,
-    cost: 28,
-    requires: "air",
-    damage: 110,
-    burst: 2,
-    cooldown: 3,
-    range: 1,
-    ...G,
-    projectile: "arc",
-    projectileSpeed: 6,
-    splash: 1.2,
-    ap: 0.3,
-    spread: 0.3
-  }),
-  wpn({
-    id: "clusterbombs",
-    name: "Cluster Dispenser",
-    family: "Cluster",
-    desc: "Scatters 8 bomblets over a wide area below. Flying designs only.",
-    category: "artillery",
-    visual: "charge",
-    barrels: 2,
-    caliber: 0.8,
-    mount: "M",
-    weight: 5,
-    cost: 45,
-    requires: "air",
-    damage: 55,
-    pellets: 8,
-    cooldown: 4,
-    range: 1.5,
-    ...G,
-    projectile: "arc",
-    projectileSpeed: 6,
-    splash: 0.9,
-    ap: 0.2,
-    spread: 1.6
-  }),
-  // ---------------- Flak ----------------
-  wpn({
-    id: "flak",
-    name: "Flak Cannon",
-    family: "Light flak",
-    desc: "Anti-air only. Bursting shells wreck aircraft groups.",
-    category: "antiair",
-    visual: "flak",
-    caliber: 0.5,
-    mount: "M",
-    weight: 3,
-    cost: 24,
-    damage: 45,
-    cooldown: 0.45,
-    range: 10,
-    ...A,
-    magazine: 5,
-    reload: 2.5,
-    projectile: "shell",
-    projectileSpeed: 16,
-    splash: 1.3,
-    ap: 0.2,
-    airBonus: 1.5
-  }),
-  wpn({
-    id: "heavyflak",
-    name: "Heavy Flak Battery",
-    family: "Heavy flak",
-    desc: "Three-gun flak battery. Clears the sky at long range.",
-    category: "antiair",
-    visual: "flak",
-    barrels: 3,
-    caliber: 0.9,
-    mount: "M",
-    weight: 9,
-    cost: 60,
-    damage: 70,
-    burst: 3,
-    cooldown: 2.2,
-    range: 14,
-    ...A,
-    projectile: "shell",
-    projectileSpeed: 18,
-    splash: 1.8,
-    ap: 0.2,
-    airBonus: 1.5
-  }),
-  // ---------------- Melee ----------------
-  wpn({
-    id: "buzzsaw",
-    name: "Buzzsaw",
-    family: "Circular saw",
-    desc: "Spinning blade. Chews through light armor at contact range.",
-    category: "melee",
-    visual: "saw",
-    caliber: 0.4,
-    mount: "S",
-    weight: 1.4,
-    cost: 10,
-    damage: 30,
-    cooldown: 0.25,
-    range: 0.6,
-    ...MELEE,
-    ap: 0.3
-  }),
-  wpn({
-    id: "shockprod",
-    name: "Shock Prod",
-    family: "Stun prod",
-    desc: "Electrified spike that stuns on contact.",
-    category: "melee",
-    visual: "prod",
-    caliber: 0.3,
-    mount: "S",
-    weight: 1,
-    cost: 12,
-    damage: 36,
-    cooldown: 1,
-    range: 0.7,
-    ...MELEE,
-    ap: 0.5,
-    stun: 0.8
-  }),
-  wpn({
-    id: "ram",
-    name: "Spike Ram",
-    family: "Ram",
-    desc: "Armored ram that batters targets backwards.",
-    category: "melee",
-    visual: "ram",
-    caliber: 0.5,
-    mount: "S",
-    weight: 2,
-    cost: 10,
-    damage: 130,
-    cooldown: 1.5,
-    range: 0.4,
-    ...MELEE,
-    ap: 0.5,
-    impulse: 1.2
-  }),
-  wpn({
-    id: "chainsaw",
-    name: "Chainsaw Arm",
-    family: "Chainsaw",
-    desc: "Relentless ripping teeth. Constant damage while locked on.",
-    category: "melee",
-    visual: "chainsaw",
-    caliber: 0.6,
-    mount: "M",
-    weight: 3,
-    cost: 22,
-    damage: 30,
-    cooldown: 0.2,
-    range: 0.7,
-    ...MELEE,
-    ap: 0.4
-  }),
-  wpn({
-    id: "claw",
-    name: "Power Claw",
-    family: "Hydraulic claw",
-    desc: "Crushing hydraulic pincer with heavy armor pierce.",
-    category: "melee",
-    visual: "claw",
-    caliber: 0.6,
-    mount: "M",
-    weight: 3.5,
-    cost: 26,
-    damage: 95,
-    cooldown: 1,
-    range: 0.8,
-    ...MELEE,
-    ap: 0.7
-  }),
-  wpn({
-    id: "plasmablade",
-    name: "Plasma Blade",
-    family: "Energy blade",
-    desc: "Superheated blade that sweeps through adjacent enemies.",
-    category: "melee",
-    visual: "blade",
-    caliber: 0.6,
-    mount: "M",
-    weight: 2.5,
-    cost: 30,
-    damage: 55,
-    cooldown: 0.5,
-    range: 0.9,
-    ...MELEE,
-    splash: 0.8,
-    ap: 0.8
-  }),
-  wpn({
-    id: "hammer",
-    name: "Siege Hammer",
-    family: "Ground pound",
-    desc: "Colossal hammer. Shockwave damages and knocks back everything nearby.",
-    category: "melee",
-    visual: "hammer",
-    caliber: 0.9,
-    mount: "M",
-    weight: 9,
-    cost: 55,
-    damage: 260,
-    cooldown: 2,
-    range: 0.9,
-    ...MELEE,
-    splash: 1.3,
-    ap: 0.6,
-    impulse: 1
-  }),
-  wpn({
-    id: "drill",
-    name: "Drill Lance",
-    family: "Bore drill",
-    desc: "Armor-boring drill. Ignores all armor.",
-    category: "melee",
-    visual: "drill",
-    caliber: 0.9,
-    mount: "M",
-    weight: 8,
-    cost: 50,
-    damage: 48,
-    cooldown: 0.15,
-    range: 0.8,
-    ...MELEE,
-    ap: 1
-  }),
-  // ---------------- Support (allies) ----------------
-  util({ id: "repair", name: "Repair Beam", family: "Light repair", desc: "Heals the most damaged ally in range.", category: "support", visual: "repair", caliber: 0.3, mount: "S", weight: 1, cost: 17, heal: 22, range: 4 }),
-  util({ id: "repairM", name: "Repair Array", family: "Heavy repair", desc: "Industrial nano-repair array with longer reach.", category: "support", visual: "repair", caliber: 0.6, mount: "M", weight: 2.5, cost: 40, heal: 55, range: 5 }),
-  util({ id: "dome", name: "Shield Dome", family: "Area shield", desc: "Projects a 150-point shield onto every ally within 3 cells.", category: "support", visual: "dome", caliber: 0.8, mount: "M", weight: 6, cost: 20, shieldAura: { radius: 3, amount: 150 } }),
-  util({ id: "uplink", name: "Command Uplink", family: "Command", desc: "Allies within 4 cells fire 15% faster.", category: "support", visual: "uplink", caliber: 0.5, mount: "M", weight: 2, cost: 6, fireRateAura: { radius: 4, bonus: 0.15 } }),
-  util({ id: "sensor", name: "Sensor Mast", family: "Detection", desc: "Reveals cloaked enemies within 7 cells for your whole army.", category: "stealth", visual: "sensor", caliber: 0.4, mount: "S", weight: 1, cost: 3, detect: 7 }),
-  // ---------------- Defense ----------------
-  util({ id: "shield", name: "Shield Projector", family: "Energy shield", desc: "Personal energy shield that absorbs 260 damage and regenerates.", category: "defense", visual: "shield", caliber: 0.5, mount: "M", weight: 2.5, cost: 32, shield: 260 }),
-  util({ id: "shieldL", name: "Shield Emitter", family: "Light shield", desc: "Small personal shield: absorbs 100 damage, regenerates.", category: "defense", visual: "shield", caliber: 0.25, mount: "S", weight: 1, cost: 14, shield: 100 }),
-  util({ id: "shieldH", name: "Aegis Barrier", family: "Heavy shield", desc: "Massive personal barrier: absorbs 700 damage.", category: "defense", visual: "shield", caliber: 0.9, mount: "M", weight: 6, cost: 60, shield: 700 }),
-  util({ id: "pointdef", name: "Point Defense Laser", family: "APS", desc: "Zaps incoming rockets, missiles and shells within 2.5 cells.", category: "defense", visual: "pointdef", caliber: 0.4, mount: "S", weight: 1.2, cost: 24, pointDefense: { range: 2.5, cooldown: 0.6 } }),
-  util({ id: "smoke", name: "Smoke Launchers", family: "Obscurant", desc: "Below 60% hp, pops a smoke screen: nothing outside 2.5 cells can target units inside for 5s.", category: "defense", visual: "smoke", caliber: 0.3, mount: "S", weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
-  util({ id: "reactive", name: "Reactive Armor", family: "ERA", desc: "Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.", category: "defense", visual: "plate", caliber: 0.5, mount: "M", weight: 3, cost: 22, reactive: 6, armor: 1 }),
-  util({ id: "mirror", name: "Mirror Coating", family: "Reflective", desc: "Takes 45% less damage from beams, lightning, rails, plasma and flame.", category: "defense", visual: "plate", caliber: 0.4, mount: "S", weight: 1, cost: 8, energyResist: 0.45 }),
-  util({ id: "hardened", name: "Hardened Systems", family: "EMP shielding", desc: "Immune to stun, slow, disarm, burning and knockback.", category: "defense", visual: "coolant", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, hardened: true }),
-  util({ id: "nanite", name: "Nanite Hull", family: "Self-repair", desc: "Regenerates 2.5% max hp per second when out of combat for 2s.", category: "defense", visual: "nanite", caliber: 0.4, mount: "S", weight: 1, cost: 3, regen: 0.025 }),
-  // ---------------- Stealth & ECM ----------------
-  util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Untargetable unless an enemy comes within 2.5 cells or it has just fired.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 2, cost: 15, cloak: "stealth" }),
-  util({ id: "phantom", name: "Phase Veil", family: "Phase cloak", desc: "Untargetable at any range, except for 3s after each shot it fires.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "M", weight: 4, cost: 20, cloak: "phantom" }),
-  util({ id: "jammer", name: "ECM Jammer", family: "Jammer", desc: "Enemy missiles lose lock on allies within 3 cells; enemy guns are half as accurate against them.", category: "stealth", visual: "jammer", caliber: 0.5, mount: "M", weight: 2, cost: 5, jammer: 3 }),
-  // ---------------- Systems ----------------
-  util({ id: "targeting", name: "Targeting Computer", family: "Fire control", desc: "+15% range for all weapons and tighter spread.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.8, cost: 8, rangeBonus: 0.15, spreadMult: 0.6 }),
-  util({ id: "turbo", name: "Turbo Engine", family: "Engine", desc: "+20% move speed.", category: "systems", visual: "engine", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, speedBonus: 0.2 }),
-  util({ id: "gyro", name: "Gyro Stabilizer", family: "Stabilizer", desc: "All weapons can fire on the move, with tighter spread.", category: "systems", visual: "gyro", caliber: 0.3, mount: "S", weight: 1, cost: 3, gyro: true, spreadMult: 0.85 }),
-  util({ id: "autoloader", name: "Autoloader", family: "Ammo feed", desc: "Clip weapons reload 40% faster.", category: "systems", visual: "coolant", caliber: 0.3, mount: "S", weight: 1, cost: 14, reloadBonus: 0.4 }),
-  util({ id: "overclock", name: "Overclocked Core", family: "Overclock", desc: "All weapons fire 20% faster.", category: "systems", visual: "coolant", caliber: 0.5, mount: "M", weight: 2, cost: 5, fireRateBonus: 0.2 }),
-  util({ id: "selfdestruct", name: "Self-Destruct Charge", family: "Demolition", desc: "Detonates on death for 300 damage in a 2-cell radius.", category: "systems", visual: "charge", caliber: 0.4, mount: "S", weight: 1.5, cost: 3, deathBlast: { damage: 300, radius: 2 } }),
-  // ---------------- Giant class (G mounts, size-4 chassis) ----------------
-  wpn({
-    id: "siege240",
-    name: "240mm Siege Cannon",
-    family: "240mm",
-    desc: "Giant-class gun. Shells that crack fortresses.",
-    category: "cannon",
-    visual: "cannon",
-    caliber: 1,
-    mount: "L",
-    weight: 18,
-    cost: 110,
-    damage: 520,
-    cooldown: 3,
-    range: 12,
-    ...G,
-    projectile: "shell",
-    projectileSpeed: 18,
-    splash: 0.8,
-    ap: 0.85,
-    spread: 0.2
-  }),
-  wpn({
-    id: "avenger",
-    name: "Hellstorm Rotary Cannon",
-    family: "Giant rotary",
-    desc: "Seven-barrel 30mm rotary cannon. Shreds air and ground alike.",
-    category: "autocannon",
-    visual: "gatling",
-    barrels: 7,
-    caliber: 1,
-    mount: "L",
-    weight: 16,
-    cost: 110,
-    damage: 30,
-    cooldown: 0.035,
-    range: 9,
-    ...GA,
-    projectile: "bullet",
-    projectileSpeed: 24,
-    splash: 0.2,
-    ap: 0.45,
-    spread: 0.5
-  }),
-  wpn({
-    id: "missilebattery",
-    name: "Missile Battery",
-    family: "16-cell",
-    desc: "Sixteen-cell launcher that saturates an area with homing missiles.",
-    category: "missile",
-    visual: "missileRack",
-    barrels: 16,
-    caliber: 1,
-    mount: "L",
-    weight: 17,
-    cost: 120,
-    damage: 70,
-    burst: 16,
-    cooldown: 9,
-    range: 18,
-    ...GA,
-    projectile: "missile",
-    projectileSpeed: 10,
-    splash: 0.5,
-    ap: 0.5
-  }),
-  wpn({
-    id: "siegeplasma",
-    name: "Plasma Siege Projector",
-    family: "Siege plasma",
-    desc: "Lobs a sun-hot plasma mass that melts everything nearby.",
-    category: "energy",
-    visual: "plasma",
-    caliber: 1,
-    mount: "L",
-    weight: 18,
-    cost: 115,
-    damage: 380,
-    cooldown: 3.5,
-    range: 10,
-    ...G,
-    projectile: "orb",
-    projectileSpeed: 7,
-    splash: 2,
-    ap: 0.7,
-    spread: 0.4
-  }),
-  wpn({
-    id: "skyfortress",
-    name: "Flak Fortress",
-    family: "Giant flak",
-    desc: "Quad heavy flak turret. A no-fly zone on legs.",
-    category: "antiair",
-    visual: "flak",
-    barrels: 4,
-    caliber: 1,
-    mount: "L",
-    weight: 15,
-    cost: 95,
-    damage: 90,
-    burst: 4,
-    cooldown: 2,
-    range: 18,
-    ...A,
-    projectile: "shell",
-    projectileSpeed: 20,
-    splash: 2.2,
-    ap: 0.3,
-    airBonus: 1.5
-  }),
-  wpn({
-    id: "stormtower",
-    name: "Storm Tower",
-    family: "Giant tesla",
-    desc: "Lightning that chains through 8 enemies and jolts them.",
-    category: "disruption",
-    visual: "tesla",
-    caliber: 1,
-    mount: "L",
-    weight: 16,
-    cost: 110,
-    damage: 160,
-    cooldown: 1.5,
-    range: 7.5,
-    ...GA,
-    projectile: "lightning",
-    chain: 7,
-    ap: 0.5,
-    stun: 0.3
-  }),
-  wpn({
-    id: "inferno",
-    name: "Inferno Projector",
-    family: "Giant flame",
-    desc: "A river of fire. Wide cone, ferocious burn.",
-    category: "flame",
-    visual: "flamer",
-    caliber: 1,
-    mount: "L",
-    weight: 15,
-    cost: 95,
-    damage: 22,
-    cooldown: 0.1,
-    range: 5.5,
-    ...G,
-    projectile: "flame",
-    projectileSpeed: 9,
-    splash: 1.8,
-    ap: 0.9,
-    burn: { dps: 30, duration: 3 }
-  }),
-  wpn({
-    id: "grinder",
-    name: "Grinder Wheel",
-    family: "Giant saw",
-    desc: "Colossal spinning grinder. Sweeps through everything it touches.",
-    category: "melee",
-    visual: "saw",
-    caliber: 1,
-    mount: "L",
-    weight: 15,
-    cost: 85,
-    damage: 120,
-    cooldown: 0.3,
-    range: 1,
-    ...MELEE,
-    splash: 1.2,
-    ap: 0.6
-  }),
-  util({ id: "bulwarkshield", name: "Bastion Shield Generator", family: "Giant shield", desc: "Personal barrier that absorbs 1800 damage.", category: "defense", visual: "shield", caliber: 1, mount: "L", weight: 12, cost: 90, shield: 1800 }),
-  util({ id: "domeG", name: "Fortress Dome", family: "Giant dome", desc: "Projects a 400-point shield onto every ally within 5 cells.", category: "support", visual: "dome", caliber: 1, mount: "L", weight: 14, cost: 110, shieldAura: { radius: 5, amount: 400 } }),
-  { id: "plateG", name: "Giant Armor", family: "Giant plate", desc: "+16 armor, +1200 hp.", category: "armor", visual: "plate", caliber: 1, mount: "L", kind: "armor", weight: 26, cost: 130, armor: 16, hp: 1200 },
-  // ---------------- Titan class (T mounts, size-5 chassis) ----------------
-  wpn({
-    id: "massdriver",
-    name: "Spinal Mass Driver",
-    family: "Titan rail",
-    desc: "Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.",
-    category: "precision",
-    visual: "rail",
-    turretTurn: 0.5,
-    barrels: 2,
-    caliber: 1,
-    mount: "XL",
-    weight: 38,
-    cost: 220,
-    damage: 1400,
-    cooldown: 6,
-    range: 28,
-    ...GA,
-    projectile: "rail",
-    ap: 1,
-    pierce: true
-  }),
-  wpn({
-    id: "doomsday",
-    name: "Doomsday Howitzer",
-    family: "Titan artillery",
-    desc: "Twin super-heavy howitzer. Craters half a company per salvo. Minimum range 50 m.",
-    category: "artillery",
-    visual: "artillery",
-    barrels: 2,
-    caliber: 1,
-    mount: "XL",
-    weight: 40,
-    cost: 230,
-    damage: 700,
-    cooldown: 8,
-    range: 40,
-    minRange: 10,
-    ...G,
-    projectile: "arc",
-    projectileSpeed: 14,
-    splash: 4,
-    ap: 0.5,
-    spread: 1.5
-  }),
-  wpn({
-    id: "annihilator",
-    name: "Annihilator Beam",
-    family: "Titan beam",
-    desc: "Continuous plasma beam that cuts through anything.",
-    category: "energy",
-    visual: "plasma",
-    barrels: 2,
-    caliber: 1,
-    mount: "XL",
-    weight: 36,
-    cost: 220,
-    damage: 140,
-    cooldown: 0.2,
-    range: 11,
-    ...GA,
-    projectile: "beam",
-    ap: 0.8
-  }),
-  wpn({
-    id: "tactnuke",
-    name: "Tactical Nuke Launcher",
-    family: "Titan strategic",
-    desc: "One slow missile, one enormous blast. Minimum range 50 m.",
-    category: "missile",
-    visual: "cruise",
-    caliber: 1,
-    mount: "XL",
-    weight: 34,
-    cost: 240,
-    damage: 2200,
-    cooldown: 20,
-    range: 40,
-    minRange: 10,
-    ...G,
-    projectile: "missile",
-    projectileSpeed: 7,
-    splash: 5,
-    ap: 0.6
-  }),
-  wpn({
-    id: "titanfist",
-    name: "Titan Fist",
-    family: "Titan melee",
-    desc: "A wrecking fist the size of a tank. Shockwave hurls units away.",
-    category: "melee",
-    visual: "hammer",
-    caliber: 1,
-    mount: "XL",
-    weight: 30,
-    cost: 170,
-    damage: 1100,
-    cooldown: 2.2,
-    range: 1.2,
-    ...MELEE,
-    splash: 2,
-    ap: 0.8,
-    impulse: 2
-  }),
-  wpn({
-    id: "stormcore",
-    name: "Tempest Core",
-    family: "Titan tesla",
-    desc: "Storm reactor: lightning chains through 11 enemies and stuns them.",
-    category: "disruption",
-    visual: "tesla",
-    barrels: 3,
-    caliber: 1,
-    mount: "XL",
-    weight: 36,
-    cost: 220,
-    damage: 260,
-    cooldown: 1.2,
-    range: 9.5,
-    ...GA,
-    projectile: "lightning",
-    chain: 10,
-    ap: 0.6,
-    stun: 0.5
-  }),
-  util({ id: "aegisT", name: "Titan Aegis Field", family: "Titan shield", desc: "3000-point personal barrier plus a 700-point shield on allies within 8 cells.", category: "support", visual: "dome", caliber: 1, mount: "XL", weight: 30, cost: 200, shield: 3e3, shieldAura: { radius: 8, amount: 700 } }),
-  { id: "plateT", name: "Titan Plating", family: "Titan plate", desc: "+24 armor, +3000 hp.", category: "armor", visual: "plate", caliber: 1, mount: "XL", kind: "armor", weight: 50, cost: 120, armor: 24, hp: 3e3 },
-  // ---------------- Armor ----------------
-  { id: "plateL", name: "Armor Plate", family: "Light plate", desc: "+3 armor, +60 hp.", category: "armor", visual: "plate", caliber: 0.3, mount: "S", kind: "armor", weight: 2, cost: 8, armor: 3, hp: 60 },
-  { id: "plateM", name: "Composite Armor", family: "Composite", desc: "+6 armor, +150 hp.", category: "armor", visual: "plate", caliber: 0.6, mount: "M", kind: "armor", weight: 5, cost: 12, armor: 6, hp: 150 },
-  { id: "plateH", name: "Heavy Armor", family: "Heavy plate", desc: "+10 armor, +400 hp.", category: "armor", visual: "plate", caliber: 0.9, mount: "M", kind: "armor", weight: 12, cost: 15, armor: 10, hp: 400 }
-];
-var byId = (list) => new Map(list.map((p) => [p.id, p]));
-var CHASSIS_BY_ID = byId(CHASSIS);
-var MOBILITY_BY_ID = byId(MOBILITY);
-var MODULE_BY_ID = byId(MODULES);
-
-// src/client/render/palette.ts
-var TEAM_PAL = [
-  { body: "#5b6670", light: "#8a959e", dark: "#3a434b", deep: "#1f252a", accent: "#3fd2ff", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#4b555d" },
-  { body: "#6a6a4e", light: "#99977a", dark: "#444530", deep: "#25261a", accent: "#ff5a26", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#7d7458" }
-];
-
-// src/shared/mountgeo.ts
-var MOUNT_PTS = {
-  scout: [[0.02, 0]],
-  drone: [[0.04, 0]],
-  raider: [[0.13, -0.2], [0.13, 0.2]],
-  warden: [[0.05, 0], [-0.25, 0.15]],
-  striker: [[-0.02, -0.25], [-0.02, 0.25], [0.22, 0]],
-  longarm: [[0.04, 0]],
-  aegis: [[0.06, 0], [-0.22, 0]],
-  gunship: [[-0.03, -0.28], [-0.03, 0.28]],
-  bastion: [[0.06, 0], [-0.24, -0.25], [-0.24, 0.25]],
-  colossus: [[0, -0.31], [0, 0.31], [0.18, 0], [-0.24, 0]],
-  // giants / titans: turrets sit ON the hull with clear deck between them (hull dominates the silhouette)
-  goliath: [[0.08, 0], [-0.07, -0.34], [-0.07, 0.34], [-0.31, 0]],
-  leviathan: [[0.27, 0], [-0.28, 0], [0, -0.205], [0, 0.205]],
-  carrier: [[0.33, 0], [-0.07, -0.31], [-0.37, -0.25], [-0.37, 0.25]],
-  // titan walker: T on the right forearm, G on the left forearm, heavies on the shoulder blades, M on the backpack
-  titan: [[0.15, 0.37], [0.15, -0.37], [-0.115, -0.165], [-0.115, 0.165], [-0.34, 0]],
-  citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
-  // odd shapes: turrets sit where the anatomy carries them (forelimbs, arms, claws, tail tip, spine segments)
-  mantis: [[0.31, -0.165], [0.31, 0.165]],
-  strider: [[0.32, 0.335], [0.32, -0.335], [-0.04, -0.3]],
-  arachnid: [[-0.16, -0.115], [-0.16, 0.115]],
-  crab: [[0.33, -0.39], [0.33, 0.39], [-0.04, 0]],
-  saucer: [[0.11, -0.19], [0.11, 0.19], [-0.215, 0]],
-  deltawing: [[0.02, 0], [-0.22, -0.25], [-0.22, 0.25]],
-  warlord: [[-0.04, -0.3], [0.32, 0.36], [0.32, -0.36], [-0.28, 0]],
-  scorpion: [[-0.42, -0.28], [0.5, -0.29], [0.5, 0.29]],
-  centipede: [[0.22, 0], [0.085, 0], [-0.055, 0], [-0.195, 0]],
-  broodmother: [[-0.19, 0], [0.26, 0], [-0.05, -0.25], [-0.05, 0.25], [-0.41, 0]],
-  arachne: [[-0.22, 0], [0.24, -0.15], [0.24, 0.15], [-0.43, 0]],
-  carriage: [[0, 0]],
-  hunter: [[0.08, 0], [-0.25, 0]],
-  riot: [[-0.13, -0.15], [-0.13, 0.15]],
-  interceptor: [[-0.05, -0.2], [-0.05, 0.2]],
-  siegeplat: [[0.02, -0.15], [0.02, 0.15]],
-  juggernaut: [[-0.04, 0], [-0.3, 0.2]],
-  bomberhull: [[0.24, 0], [-0.1, -0.3], [-0.1, 0.3]]
-};
-var FOOT_MOUNTS = {
-  long: [[-0.17, 0]],
-  cross: [[0, -0.33], [0, 0.33], [0.3, 0]],
-  airframe: [[0.04, -0.37], [0.04, 0.37]],
-  delta: [[0.12, 0], [-0.22, -0.28], [-0.22, 0.28]],
-  interceptor: [[-0.06, -0.3], [-0.06, 0.3]],
-  strikejet: [[0.06, 0], [-0.1, -0.33], [-0.1, 0.33]],
-  stratobomber: [[0.28, 0], [0.08, 0], [-0.22, 0], [-0.46, 0]],
-  heavyheli: [[0.42, 0], [-0.02, 0.36], [-0.02, -0.36]],
-  bomber: [[0.33, 0], [0, -0.3], [0, 0.3]],
-  carrier: [[0.24, 0], [-0.2, 0], [-0.1, -0.33], [-0.1, 0.33]],
-  leviathan: [[0.29, 0], [-0.3, 0], [0, -0.3], [0, 0.3]],
-  goliath: [[0.15, 0], [-0.1, -0.31], [-0.1, 0.31], [-0.34, 0]],
-  titan: [[0.02, -0.3], [0.02, 0.3], [0.38, 0], [-0.34, 0]],
-  mantis: [[0.3, -0.27], [0.3, 0.27]],
-  crab: [[0.3, -0.4], [0.3, 0.4], [-0.08, 0]],
-  warlord: [[-0.04, 0], [0.06, -0.39], [0.06, 0.39], [0.2, 0]],
-  mech: [[-0.04, 0], [0.04, -0.37], [0.04, 0.37]],
-  scorpion: [[-0.33, -0.27], [0.47, -0.3], [0.47, 0.3]],
-  centipede: [[0.2, 0], [0.04, 0], [-0.12, 0], [-0.28, 0]],
-  broodmother: [[-0.06, 0], [0.34, 0], [-0.08, -0.24], [-0.08, 0.24], [-0.38, 0]],
-  arachne: [[-0.06, 0], [0.22, -0.16], [0.22, 0.16], [-0.38, 0]],
-  riot: [[-0.12, -0.2], [-0.12, 0.2]],
-  juggernaut: [[-0.14, 0], [-0.3, 0.2]],
-  siegeplat: [[0.2, 0], [-0.16, 0]],
-  hunter: [[0.12, 0], [-0.3, 0]],
-  colossal: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
-  citadel: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
-  pod: [[-0.04, 0]],
-  box: [[0.06, -0.24], [0.06, 0.24]],
-  hex: [[0.04, 0], [-0.24, 0]],
-  round: [[-0.02, 0], [-0.39, 0]]
-};
-var PART_REST = {
-  mantis: [[0.54, -0.29500000000000004], [0.54, 0.29500000000000004]],
-  strider: [null, [0.060000000000000005, -0.6799999999999999], [0.060000000000000005, 0.6799999999999999]],
-  crab: [[0.76, -1.24], [0.76, 1.24], null],
-  warlord: [null, [0.10500000000000001, -1.3399999999999999], [0.10500000000000001, 1.3399999999999999], null],
-  scorpion: [[-1.54, -0.798], [1.83, -0.99], [1.83, 0.99]],
-  centipede: [[0.6399999999999997, 0], [-0.07000000000000006, 0], [-0.7800000000000001, 0], [-1.4900000000000002, 0]]
-};
-var RANK = { S: 1, M: 2, L: 3, XL: 4 };
-var PART_SHAPES = /* @__PURE__ */ new Set(["mantis", "mech", "warlord", "arachnid", "broodmother", "arachne", "crab", "saucer", "scorpion", "centipede"]);
-function hardpointsOf(chassis) {
-  return FOOT_MOUNTS[chassis.shape] ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : i % 2 ? 0.2 : -0.2]);
-}
-function mountPerm(chassis, pts, mods) {
-  return PART_SHAPES.has(chassis.shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods);
-}
-function solveMounts(caps, pts, mods) {
-  const n = caps.length;
-  const id0 = caps.map((_, i) => i);
-  if (n <= 1) return id0;
-  const mate = caps.map((_, i) => pts.findIndex((q, j) => j !== i && Math.abs(q[0] - pts[i][0]) < 0.03 && Math.abs(q[1] + pts[i][1]) < 0.03 && Math.abs(q[1]) > 0.04));
-  const prom = (j) => RANK[caps[j]] * 1 + (1 - Math.min(1, Math.abs(pts[j][1]) / 0.3)) * 0.8 + pts[j][0] * 1.2;
-  const isW = (m) => !!m && m.kind === "weapon";
-  const isU = (m) => !!m && m.kind === "utility" && m.visual !== "plate";
-  let best = id0, bestS = -Infinity;
-  const perm = new Array(n), used = new Array(n).fill(false);
-  const score = () => {
-    let sc2 = 0;
-    for (let i = 0; i < n; i++) {
-      const m = mods[i], j = perm[i];
-      if (j === i) sc2 += 0.05;
-      if (isW(m)) sc2 += (RANK[m.mount] + 0.5 * (m.caliber ?? 0.5) + 1) * prom(j);
-      else if (isU(m)) sc2 += -pts[j][0] * 2.2 + RANK[caps[j]] * 0.1;
-    }
-    const at = new Array(n).fill(null);
-    for (let i = 0; i < n; i++) at[perm[i]] = mods[i];
-    for (let j = 0; j < n; j++) {
-      const k = mate[j];
-      if (k < 0 || k < j) continue;
-      const a = at[j], b = at[k];
-      if (a && b && a.id === b.id) sc2 += 3;
-      else if (a && b && a.visual === b.visual) sc2 += 1;
-      else if (isW(a) && isU(b) || isU(a) && isW(b)) sc2 -= 0.6;
-      else if (!!a !== !!b) sc2 -= 0.3;
-    }
-    return sc2;
+function setupStage(renderer2, scene2, o = {}) {
+  const fogCol = new Color("#6f6a58");
+  scene2.background = fogCol;
+  if (o.fog !== false) scene2.fog = new Fog(fogCol, 110, 300);
+  const sunPos = new Vector3(-30, 40, 20);
+  scene2.environment = skyEnvironment(renderer2, sunPos);
+  scene2.environmentIntensity = 0.62;
+  const sun = new DirectionalLight("#ffe2b8", 3.3);
+  sun.position.copy(sunPos);
+  sun.castShadow = true;
+  const res = o.shadowRes ?? 4096;
+  sun.shadow.mapSize.set(res, res);
+  sun.shadow.bias = -3e-4;
+  sun.shadow.normalBias = 0.025;
+  sun.shadow.radius = 2.5;
+  scene2.add(sun, sun.target);
+  const hemi = new HemisphereLight("#9fb8d4", "#54493a", 0.42);
+  scene2.add(hemi);
+  const dir = sunPos.clone();
+  const fitShadow = (cx, cz, radius) => {
+    const c = sun.shadow.camera;
+    c.left = -radius;
+    c.right = radius;
+    c.top = radius;
+    c.bottom = -radius;
+    c.near = 1;
+    c.far = 160;
+    c.updateProjectionMatrix();
+    sun.target.position.set(cx, 0, cz);
+    sun.position.set(cx + dir.x, dir.y, cz + dir.z);
+    sun.target.updateMatrixWorld();
   };
-  const rec = (i) => {
-    if (i === n) {
-      const s = score();
-      if (s > bestS + 1e-9) {
-        bestS = s;
-        best = perm.slice();
-      }
-      return;
-    }
-    const m = mods[i];
-    for (let j = 0; j < n; j++) {
-      if (used[j]) continue;
-      if (isW(m) && RANK[m.mount] > RANK[caps[j]]) continue;
-      used[j] = true;
-      perm[i] = j;
-      rec(i + 1);
-      used[j] = false;
-    }
-  };
-  rec(0);
-  return best;
+  fitShadow(-3, 0, 46);
+  return { sun, hemi, fitShadow };
 }
-var unitK = (S) => S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1);
-var CLASS_D_MID = { S: 0.32, M: 0.52, L: 0.85, XL: 1.06 };
-var approxTurretD = (cls, S) => CLASS_D_MID[cls] * unitK(S);
-var offCache = /* @__PURE__ */ new Map();
-function mountOffsets(d) {
-  const key = `${d.chassis}|${d.mounts.map((m) => m ?? "-").join(",")}`;
-  let out = offCache.get(key);
-  if (out) return out;
-  const chassis = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get("scout");
-  const S = chassis.size;
-  const Y = chassis.footprint?.[0] ?? S, X = chassis.footprint?.[1] ?? S;
-  const pts = hardpointsOf(chassis);
-  const mods = chassis.mounts.map((_, i) => {
-    const id = d.mounts[i] ?? null;
-    return id ? MODULE_BY_ID.get(id) ?? null : null;
-  });
-  const perm = mountPerm(chassis, pts, mods);
-  const rest = FOOT_MOUNTS[chassis.shape] && PART_SHAPES.has(chassis.shape) ? PART_REST[chassis.id] : void 0;
-  out = chassis.mounts.map((_, i) => {
-    const r = rest?.[i];
-    if (r) return { x: r[0], y: r[1] };
-    const p = pts[perm[i]] ?? [0, 0];
-    return { x: p[0] * X, y: p[1] * Y };
-  });
-  offCache.set(key, out);
-  return out;
-}
-
-// src/client/proto3d/materials.ts
-function rng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = a + 1831565813 >>> 0;
-    let t = a;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function makePanelTexture() {
-  const N = 512;
-  const c = document.createElement("canvas");
-  c.width = c.height = N;
-  const g = c.getContext("2d");
-  const r = rng(1234);
-  g.fillStyle = "#e9e9e9";
-  g.fillRect(0, 0, N, N);
-  for (let i = 0; i < 90; i++) {
-    const x = r() * N, y = r() * N, rad = 20 + r() * 90;
-    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
-    const dark = r() < 0.7;
-    gr.addColorStop(0, dark ? "rgba(60,55,45,0.09)" : "rgba(255,255,255,0.12)");
-    gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = gr;
-    g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+var GradeShader = {
+  uniforms: { tDiffuse: { value: null }, vig: { value: 0.3 }, time: { value: 0 } },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+  fragmentShader: (
+    /* glsl */
+    `
+    uniform sampler2D tDiffuse; uniform float vig; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      // gentle S-curve + split tone (cool shadows, warm highlights) + slight desaturation for a muted military palette
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.28);
+      c = mix(vec3(l), c, 0.94);
+      c += vec3(-0.006, 0.0, 0.01) * (1.0 - l) + vec3(0.012, 0.006, -0.004) * l;
+      vec2 d = (vUv - 0.5) * vec2(1.0, 0.85);
+      c *= 1.0 - vig * smoothstep(0.25, 0.85, length(d));
+      c += (hash(vUv * 1024.0) - 0.5) * 0.012;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+  )
+};
+function setupPost(renderer2, scene2, camera2, w, h, o = {}) {
+  const rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, samples: 4 });
+  const composer = new EffectComposer(renderer2, rt);
+  composer.addPass(new RenderPass(scene2, camera2));
+  let gtao = null, bloom = null;
+  if (o.ao !== false) {
+    gtao = new GTAOPass(scene2, camera2, w, h);
+    gtao.output = GTAOPass.OUTPUT.Default;
+    gtao.blendIntensity = 0.85;
+    gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.6, scale: 1.1, samples: 12 });
+    composer.addPass(gtao);
   }
-  g.strokeStyle = "rgba(25,25,25,0.55)";
-  g.lineWidth = 2;
-  const cuts = [0, 128, 256, 384, 512];
-  for (const x of cuts) {
-    g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, N);
-    g.stroke();
+  if (o.bloom !== false) {
+    bloom = new UnrealBloomPass(new Vector2(w, h), 0.28, 0.45, 1.25);
+    composer.addPass(bloom);
   }
-  for (let row = 0; row < 4; row++) {
-    const y0 = row * 128;
-    g.beginPath();
-    g.moveTo(0, y0);
-    g.lineTo(N, y0);
-    g.stroke();
-    const off = row % 2 * 64 + (r() < 0.5 ? 0 : 32);
-    for (let x = off; x < N + 64; x += 128) {
-      g.beginPath();
-      g.moveTo(x, y0);
-      g.lineTo(x, y0 + 128);
-      g.stroke();
-    }
-  }
-  g.fillStyle = "rgba(30,30,30,0.5)";
-  for (let x = 0; x < N; x += 16) for (const y of [4, 124, 132, 252, 260, 380, 388, 508]) {
-    g.beginPath();
-    g.arc(x + 8, y, 1.4, 0, 7);
-    g.fill();
-  }
-  for (let i = 0; i < 9e3; i++) {
-    const v = r() < 0.5 ? 20 : 255;
-    g.fillStyle = `rgba(${v},${v},${v},${0.05 + r() * 0.08})`;
-    g.fillRect(r() * N, r() * N, 1 + r() * 2, 1 + r() * 2);
-  }
-  g.strokeStyle = "rgba(30,30,30,0.28)";
-  g.lineWidth = 1;
-  for (let i = 0; i < 70; i++) {
-    const x = r() * N, y = r() * N;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + (r() - 0.5) * 34, y + (r() - 0.5) * 34);
-    g.stroke();
-  }
-  const t = new CanvasTexture(c);
-  t.wrapS = t.wrapT = RepeatWrapping;
-  t.colorSpace = SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
-}
-var panel = null;
-var cache = /* @__PURE__ */ new Map();
-function paint(color, o = {}) {
-  const key = `${color}|${o.rough ?? 0.62}|${o.metal ?? 0.35}|${o.scale ?? 0.9}|${o.emissive ?? ""}|${o.emissiveIntensity ?? 0}|${o.flat ? 1 : 0}`;
-  let m = cache.get(key);
-  if (m) return m;
-  panel ??= makePanelTexture();
-  const tex = panel;
-  m = new MeshStandardMaterial({
-    color,
-    roughness: o.rough ?? 0.62,
-    metalness: o.metal ?? 0.35,
-    emissive: o.emissive ?? "#000000",
-    emissiveIntensity: o.emissiveIntensity ?? 0
-  });
-  if (!o.flat) {
-    const scale = o.scale ?? 0.9;
-    m.onBeforeCompile = (sh) => {
-      sh.uniforms.triMap = { value: tex };
-      sh.uniforms.triScale = { value: scale };
-      sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vTriPos; varying vec3 vTriN;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvTriPos = position; vTriN = normal;");
-      sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vTriPos; varying vec3 vTriN; uniform sampler2D triMap; uniform float triScale;").replace("#include <map_fragment>", `
-          vec3 tbn = pow(abs(normalize(vTriN)), vec3(6.0)); tbn /= (tbn.x + tbn.y + tbn.z);
-          vec3 tp = vTriPos * triScale;
-          vec4 tcol = texture2D(triMap, tp.zy) * tbn.x + texture2D(triMap, tp.xz) * tbn.y + texture2D(triMap, tp.xy) * tbn.z;
-          diffuseColor.rgb *= tcol.rgb;`).replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor * (1.25 - tcol.r * 0.35), 0.05, 1.0);");
-    };
-    m.customProgramCacheKey = () => "tri";
-  }
-  cache.set(key, m);
-  return m;
-}
-function makeKit(team) {
-  const p = TEAM_PAL[team];
+  composer.addPass(new OutputPass());
+  if (o.grade !== false) composer.addPass(new ShaderPass(GradeShader));
   return {
-    body: paint(p.body, { rough: 0.7, metal: 0.18 }),
-    light: paint(p.light, { rough: 0.66, metal: 0.18 }),
-    dark: paint(p.dark, { rough: 0.72, metal: 0.2 }),
-    deep: paint(p.deep, { rough: 0.8, metal: 0.25 }),
-    camo: paint(p.camo, { rough: 0.74, metal: 0.15 }),
-    metal: paint("#3a3d40", { rough: 0.42, metal: 0.8, scale: 1.6 }),
-    steel: paint("#6a6e72", { rough: 0.35, metal: 0.9, scale: 2 }),
-    rubber: paint("#1b1c1d", { rough: 0.92, metal: 0.05, scale: 2.4 }),
-    accent: paint(p.accent, { rough: 0.5, metal: 0.1, flat: true }),
-    glow: paint("#000", { flat: true, emissive: p.glow, emissiveIntensity: 2.2 }),
-    lamp: paint("#000", { flat: true, emissive: "#fff4d6", emissiveIntensity: 2.4 }),
-    glass: paint("#10161b", { flat: true, rough: 0.08, metal: 0.9 }),
-    hot: paint("#000", { flat: true, emissive: "#ff7a2a", emissiveIntensity: 3.2 }),
-    plasma: paint("#000", { flat: true, emissive: "#7dffe6", emissiveIntensity: 2.3 }),
-    rail: paint("#000", { flat: true, emissive: "#7aa8ff", emissiveIntensity: 3.4 }),
-    pal: p
-  };
-}
-
-// src/client/proto3d/weapons3d.ts
-var cyl = (rt, rb, h, seg = 14) => new CylinderGeometry(rt, rb, h, seg);
-function mesh(g, m, parent, x = 0, y = 0, z = 0) {
-  const o = new Mesh(g, m);
-  o.position.set(x, y, z);
-  o.castShadow = o.receiveShadow = true;
-  parent.add(o);
-  return o;
-}
-function barrel(parent, m, x0, x1, rad, y, z, tip) {
-  const g = cyl(rad, rad, x1 - x0, 12);
-  g.rotateZ(-Math.PI / 2);
-  const o = mesh(g, m, parent, (x0 + x1) / 2, y, z);
-  if (tip) {
-    const t = cyl(rad * 1.35, rad * 1.35, tip, 12);
-    t.rotateZ(-Math.PI / 2);
-    mesh(t, m, parent, x1 - tip / 2, y, z);
-  }
-  return o;
-}
-function housing(parent, m, len, wid, hgt, x = 0, y = 0) {
-  const hw = wid / 2, hl = len / 2, c = Math.min(hw, hl) * 0.45;
-  const s = new Shape();
-  s.moveTo(-hl, -hw + c * 0.6);
-  s.lineTo(-hl + c * 0.6, -hw);
-  s.lineTo(hl - c, -hw * 0.9);
-  s.lineTo(hl, -hw * 0.55);
-  s.lineTo(hl, hw * 0.55);
-  s.lineTo(hl - c, hw * 0.9);
-  s.lineTo(-hl + c * 0.6, hw);
-  s.lineTo(-hl, hw - c * 0.6);
-  s.closePath();
-  const bev = Math.min(hgt * 0.22, 0.03 + len * 0.025);
-  const g = new ExtrudeGeometry(s, { depth: hgt - bev * 2, bevelEnabled: true, bevelThickness: bev, bevelSize: bev * 0.8, bevelSegments: 2, curveSegments: 4 });
-  g.rotateX(-Math.PI / 2);
-  g.translate(0, bev, 0);
-  return mesh(g, m, parent, x, y, 0);
-}
-function buildTurret(mod, S, kit, fixed = false) {
-  const D = approxTurretD(mod.mount, S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
-  const r = D / 2;
-  const c = mod.caliber ?? 0.5;
-  const nb = mod.barrels ?? 1;
-  const yaw = new Group();
-  const pitch = new Group();
-  const recoil = new Group();
-  yaw.add(pitch);
-  pitch.add(recoil);
-  const t = { yaw, pitch, recoil, muzzles: [], fixed, shot: "tracer", rate: 0.5, r };
-  const v = mod.visual;
-  const addMuzzle = (x, y, z) => {
-    const o = new Object3D();
-    o.position.set(x, y, z);
-    recoil.add(o);
-    t.muzzles.push(o);
-  };
-  const hh = r * 0.52;
-  const ringR = fixed ? 0 : r * 0.95;
-  if (!fixed && v !== "plate") {
-    mesh(cyl(ringR, ringR * 1.04, r * 0.1, 20), kit.deep, yaw, 0, r * 0.05, 0);
-  }
-  const y0 = fixed ? 0 : r * 0.1;
-  switch (v) {
-    case "gun":
-    case "shotgun":
-    case "flak":
-    case "pointdef": {
-      const bl = D * (0.62 + 0.8 * c), br = D * (0.035 + 0.05 * c);
-      housing(yaw, kit.body, r * 1.35, r * (1 + c * 0.2), hh * (0.7 + c * 0.3), -r * 0.12, y0);
-      pitch.position.set(r * 0.45, y0 + hh * 0.5, 0);
-      const sp = nb > 1 ? br * 2.7 : 0;
-      for (let i = 0; i < nb; i++) {
-        const z = nb > 1 ? (i - (nb - 1) / 2) * sp : 0;
-        barrel(recoil, kit.metal, 0, bl, br, 0, z, br * 1.5);
-        mesh(cyl(br * 1.7, br * 1.7, bl * 0.28, 12).rotateZ(-Math.PI / 2), kit.dark, recoil, bl * 0.2, 0, z);
-        addMuzzle(bl + 0.01, 0, z);
-      }
-      t.rate = 0.18 + (1 - c) * 0.1;
-      break;
-    }
-    case "gatling": {
-      const bl = D * 0.95, cr = r * 0.28;
-      housing(yaw, kit.body, r * 1.5, r * 1.25, hh * 0.9, -r * 0.1, y0);
-      pitch.position.set(r * 0.5, y0 + hh * 0.5, 0);
-      const spin = new Group();
-      recoil.add(spin);
-      t.spin = spin;
-      const n = Math.max(3, nb);
-      for (let i = 0; i < n; i++) {
-        const a = i / n * Math.PI * 2;
-        barrel(spin, kit.metal, 0, bl, r * 0.045, Math.sin(a) * cr, Math.cos(a) * cr);
-      }
-      for (const x of [bl * 0.35, bl * 0.7, bl]) {
-        const ring = cyl(cr + r * 0.07, cr + r * 0.07, r * 0.07, 16);
-        ring.rotateZ(-Math.PI / 2);
-        mesh(ring, kit.steel, spin, x, 0, 0);
-      }
-      mesh(cyl(cr * 0.5, cr * 0.5, bl, 10).rotateZ(-Math.PI / 2), kit.dark, spin, bl / 2, 0, 0);
-      addMuzzle(bl, 0, 0);
-      t.rate = 0.07;
-      break;
-    }
-    case "cannon":
-    case "gauss":
-    case "sniper": {
-      const bl = D * (1 + 0.75 * c), br = D * (0.05 + 0.045 * c);
-      housing(yaw, kit.body, r * 1.7, r * 1.55, hh * 1, -r * 0.1, y0);
-      pitch.position.set(r * 0.62, y0 + hh * 0.55, 0);
-      mesh(new BoxGeometry(r * 0.3, hh * 0.8, r * 1.1), kit.dark, recoil, 0.02, 0, 0);
-      barrel(recoil, kit.metal, 0, bl, br, 0, 0);
-      mesh(cyl(br * 1.6, br * 1.6, bl * 0.2, 14).rotateZ(-Math.PI / 2), kit.dark, recoil, bl * 0.5, 0, 0);
-      mesh(new BoxGeometry(br * 5, br * 3.4, br * 3.2), kit.metal, recoil, bl - br * 2, 0, 0);
-      addMuzzle(bl + br * 0.4, 0, 0);
-      mesh(cyl(r * 0.16, r * 0.18, r * 0.12, 12), kit.deep, yaw, -r * 0.45, y0 + hh + r * 0.06, -r * 0.3);
-      t.shot = "shell";
-      t.rate = 1.2;
-      break;
-    }
-    case "artillery":
-    case "mortar": {
-      const art = v === "artillery";
-      const bl = D * (art ? 1.7 : 0.7), br = D * (art ? 0.07 : 0.1);
-      housing(yaw, kit.body, r * 1.6, r * 1.5, hh * 0.8, -r * 0.2, y0);
-      pitch.position.set(-r * 0.05, y0 + hh * 0.75, 0);
-      pitch.rotation.z = art ? 0.45 : 1.05;
-      barrel(recoil, kit.metal, 0, bl, br, 0, 0, br * 0.8);
-      mesh(cyl(br * 1.5, br * 1.5, bl * 0.35, 14).rotateZ(-Math.PI / 2), kit.dark, recoil, bl * 0.28, 0, 0);
-      if (art) mesh(new BoxGeometry(bl * 0.2, br * 3, br * 7), kit.dark, yaw, r * 0.1, y0 + hh * 0.5, 0);
-      addMuzzle(bl, 0, 0);
-      t.shot = "shell";
-      t.rate = art ? 2.4 : 1.4;
-      break;
-    }
-    case "rail": {
-      const bl = D * 1.35;
-      housing(yaw, kit.body, r * 1.5, r * 1.3, hh * 0.8, -r * 0.2, y0);
-      pitch.position.set(r * 0.3, y0 + hh * 0.62, 0);
-      for (const z of [-r * 0.17, r * 0.17]) mesh(new BoxGeometry(bl, r * 0.2, r * 0.13), kit.steel, recoil, bl / 2, 0, z);
-      mesh(new BoxGeometry(bl * 0.96, r * 0.06, r * 0.2), kit.rail, recoil, bl / 2, 0, 0);
-      for (let i = 1; i < 5; i++) mesh(new BoxGeometry(r * 0.1, r * 0.34, r * 0.52), kit.dark, recoil, bl * i / 5, 0, 0);
-      mesh(new BoxGeometry(r * 0.6, r * 0.34, r * 0.9), kit.dark, yaw, -r * 0.55, y0 + hh * 0.9, 0);
-      addMuzzle(bl, 0, 0);
-      t.shot = "beam";
-      t.rate = 2;
-      break;
-    }
-    case "rocketPod":
-    case "missileRack":
-    case "cruise": {
-      const tubes = Math.max(1, nb);
-      const cols = tubes >= 4 ? 2 : 1, rows = Math.ceil(tubes / cols);
-      const pw = r * (0.55 + 0.35 * cols), ph = r * (0.4 + 0.25 * rows), pl = r * 1.4;
-      housing(yaw, kit.dark, r * 1.2, r * 1.2, hh * 0.45, -r * 0.1, y0);
-      pitch.position.set(0, y0 + hh * 0.45 + ph / 2, 0);
-      pitch.rotation.z = 0.18;
-      mesh(new BoxGeometry(pl, ph, pw), kit.body, recoil, pl * 0.35, 0, 0);
-      let k = 0;
-      for (let i = 0; i < rows; i++) for (let j = 0; j < cols && k < tubes; j++, k++) {
-        const z = cols > 1 ? (j - 0.5) * pw * 0.5 : 0, y = rows > 1 ? (i - (rows - 1) / 2) * ph * 0.5 : 0;
-        const tubeR = Math.min(pw / (cols * 2.5), ph / (rows * 2.5), r * 0.16);
-        const tg = cyl(tubeR, tubeR, 0.04).rotateZ(-Math.PI / 2);
-        mesh(tg, kit.deep, recoil, pl * 0.35 + pl / 2 + 5e-3, y, z);
-        mesh(new CircleGeometry(tubeR * 0.8, 10).rotateY(Math.PI / 2), kit.hot, recoil, pl * 0.35 + pl / 2 + 0.03, y, z);
-        addMuzzle(pl * 0.85, y, z);
-      }
-      t.shot = "rocket";
-      t.rate = 0.9;
-      break;
-    }
-    case "laser":
-    case "heatray":
-    case "slowbeam":
-    case "sonic":
-    case "emp":
-    case "gravity":
-    case "tesla": {
-      housing(yaw, kit.light, r * 1.3, r * 1.1, hh * 0.8, -r * 0.1, y0);
-      pitch.position.set(r * 0.4, y0 + hh * 0.5, 0);
-      const bl = D * 0.8;
-      for (let i = 0; i < Math.max(1, nb); i++) {
-        const z = nb > 1 ? (i - (nb - 1) / 2) * r * 0.32 : 0;
-        barrel(recoil, kit.steel, 0, bl, r * 0.1, 0, z);
-        mesh(cyl(r * 0.16, r * 0.1, r * 0.3, 14).rotateZ(-Math.PI / 2), kit.dark, recoil, bl, 0, z);
-        mesh(new SphereGeometry(r * 0.1, 10, 8), kit.glow, recoil, bl + r * 0.14, 0, z);
-        addMuzzle(bl + r * 0.2, 0, z);
-      }
-      t.shot = "beam";
-      t.rate = 0.7;
-      break;
-    }
-    case "plasma": {
-      housing(yaw, kit.body, r * 1.6, r * 1.4, hh * 0.85, -r * 0.2, y0);
-      pitch.position.set(r * 0.35, y0 + hh * 0.6, 0);
-      const bl = D * 1;
-      for (let i = 0; i < Math.max(1, Math.min(2, nb)); i++) {
-        const z = nb > 1 ? (i - 0.5) * r * 0.55 : 0;
-        barrel(recoil, kit.steel, 0, bl, r * 0.13, 0, z);
-        for (let k = 1; k <= 3; k++) mesh(new TorusGeometry(r * 0.2, r * 0.03, 8, 16).rotateY(Math.PI / 2), kit.plasma, recoil, bl * k / 3.4, 0, z);
-        mesh(new SphereGeometry(r * 0.17, 12, 10), kit.plasma, recoil, bl + r * 0.05, 0, z);
-        addMuzzle(bl + r * 0.15, 0, z);
-      }
-      t.shot = "orb";
-      t.rate = 1.6;
-      break;
-    }
-    case "flamer": {
-      housing(yaw, kit.dark, r * 1.2, r * 1.1, hh * 0.6, -r * 0.1, y0);
-      pitch.position.set(r * 0.3, y0 + hh * 0.4, 0);
-      barrel(recoil, kit.metal, 0, D * 0.7, r * 0.08, 0, 0);
-      mesh(cyl(r * 0.14, r * 0.1, r * 0.2, 10).rotateZ(-Math.PI / 2), kit.hot, recoil, D * 0.7, 0, 0);
-      for (const z of [-r * 0.32, r * 0.32]) mesh(cyl(r * 0.16, r * 0.16, r * 0.9, 12).rotateZ(-Math.PI / 2), kit.camo, yaw, -r * 0.45, y0 + hh * 0.62, z);
-      addMuzzle(D * 0.8, 0, 0);
-      t.shot = "flame";
-      t.rate = 0.12;
-      break;
-    }
-    case "plate": {
-      const w = r * 1.8;
-      mesh(new BoxGeometry(r * 0.45, r * 0.9, w), kit.light, yaw, r * 0.6, r * 0.45, 0);
-      mesh(new BoxGeometry(r * 0.2, r * 0.7, w * 0.8), kit.dark, yaw, r * 0.38, r * 0.45, 0);
-      t.shot = "none";
-      t.rate = 99;
-      break;
-    }
-    default: {
-      mesh(cyl(r * 0.5, r * 0.6, r * 0.28, 16), kit.body, yaw, 0, y0 + r * 0.14, 0);
-      mesh(cyl(r * 0.07, r * 0.09, r * 0.8, 8), kit.steel, yaw, 0, y0 + r * 0.6, 0);
-      const dish = new SphereGeometry(r * 0.55, 18, 6, 0, Math.PI * 2, 0, Math.PI / 2.4);
-      dish.rotateZ(-Math.PI / 2.6);
-      mesh(dish, kit.light, pitch, 0, 0, 0);
-      pitch.position.set(0, y0 + r * 1, 0);
-      mesh(new SphereGeometry(r * 0.1, 10, 8), kit.glow, pitch, r * 0.16, 0, 0);
-      t.shot = "none";
-      t.rate = 99;
-    }
-  }
-  if (v !== "plate" && !fixed) mesh(new BoxGeometry(r * 0.55, 0.012, r * 0.09), kit.accent, yaw, -r * 0.25, y0 + hh * 0.96 + 0.01, r * 0.28);
-  return t;
-}
-
-// src/client/proto3d/units3d.ts
-var shadowed = (m) => {
-  m.castShadow = m.receiveShadow = true;
-  return m;
-};
-function add(parent, g, m, x = 0, y = 0, z = 0) {
-  const o = shadowed(new Mesh(g, m));
-  o.position.set(x, y, z);
-  parent.add(o);
-  return o;
-}
-var box = (parent, m, w, h, d, x, y, z) => add(parent, new BoxGeometry(w, h, d), m, x, y + h / 2, z);
-var cylX = (rt, rb, len) => new CylinderGeometry(rt, rb, len, 16).rotateZ(Math.PI / 2);
-var cylZ = (r, len, seg = 18) => new CylinderGeometry(r, r, len, seg).rotateX(Math.PI / 2);
-function inPoly(p, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i], [xj, yj] = poly[j];
-    if (yi > p[1] !== yj > p[1] && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-function prism(poly, y0, h, m, parent, bevel = 0.04) {
-  const s = new Shape(poly.map(([x, y]) => new Vector2(x, -y)));
-  const b = Math.min(bevel, h * 0.3);
-  const g = new ExtrudeGeometry(s, { depth: Math.max(0.01, h - 2 * b), bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2, curveSegments: 4 });
-  g.rotateX(-Math.PI / 2);
-  g.translate(0, b, 0);
-  return add(parent, g, m, 0, y0, 0);
-}
-function frustum(bot, top, y0, h, m, parent) {
-  const pos = [];
-  const n = bot.length;
-  const v = (p, y) => pos.push(p[0], y, p[1]);
-  let area2 = 0;
-  for (let i = 0; i < n; i++) {
-    const a = bot[i], b = bot[(i + 1) % n];
-    area2 += a[0] * b[1] - b[0] * a[1];
-  }
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const a = bot[i], b = bot[j], c = top[j], d = top[i];
-    if (area2 > 0) {
-      v(a, y0);
-      v(c, y0 + h);
-      v(b, y0);
-      v(a, y0);
-      v(d, y0 + h);
-      v(c, y0 + h);
-    } else {
-      v(a, y0);
-      v(b, y0);
-      v(c, y0 + h);
-      v(a, y0);
-      v(c, y0 + h);
-      v(d, y0 + h);
-    }
-  }
-  const tri = ShapeUtils.triangulateShape(top.map((p) => new Vector2(p[0], p[1])), []);
-  for (const t of tri) {
-    const tt = area2 > 0 ? [t[0], t[2], t[1]] : [t[0], t[1], t[2]];
-    for (const k of tt) v(top[k], y0 + h);
-  }
-  const g = new BufferGeometry();
-  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return add(parent, g, m);
-}
-var P = {
-  wedge: [[1, 0], [0.45, 0.8], [-0.85, 1], [-1, 0.6], [-1, -0.6], [-0.85, -1], [0.45, -0.8]],
-  box: [[1, 0.55], [0.72, 1], [-0.8, 1], [-1, 0.78], [-1, -0.78], [-0.8, -1], [0.72, -1], [1, -0.55]],
-  oct: [[1, 0.42], [0.62, 1], [-0.62, 1], [-1, 0.55], [-1, -0.55], [-0.62, -1], [0.62, -1], [1, -0.42]],
-  long: [[1, 0.35], [0.8, 0.9], [-0.9, 1], [-1, 0.7], [-1, -0.7], [-0.9, -1], [0.8, -0.9], [1, -0.35]],
-  cross: [[1, 0.32], [0.62, 0.5], [0.34, 1], [-0.42, 1], [-0.62, 0.58], [-1, 0.5], [-1, -0.5], [-0.62, -0.58], [-0.42, -1], [0.34, -1], [0.62, -0.5], [1, -0.32]],
-  circ: Array.from({ length: 16 }, (_, i) => [Math.cos(i / 16 * Math.PI * 2), Math.sin(i / 16 * Math.PI * 2)]),
-  armored: [[1, 0.5], [0.8, 0.78], [0.55, 1], [-0.7, 1], [-0.9, 0.86], [-1, 0.6], [-1, -0.6], [-0.9, -0.86], [-0.7, -1], [0.55, -1], [0.8, -0.78], [1, -0.5]],
-  giant: [[1, 0.36], [0.74, 0.7], [0.5, 1], [-0.6, 1], [-0.86, 0.84], [-1, 0.52], [-1, -0.52], [-0.86, -0.84], [-0.6, -1], [0.5, -1], [0.74, -0.7], [1, -0.36]]
-};
-var TIERS = {
-  wedge: [{ p: "wedge", k: 1, h: 0.2, m: "body" }, { p: "wedge", k: 0.5, dx: -0.1, h: 0.12, m: "light" }],
-  box: [{ p: "box", k: 1, h: 0.2, m: "body" }, { p: "box", k: 0.62, dx: -0.12, h: 0.14, m: "camo" }],
-  hex: [{ p: "oct", k: 1, h: 0.2, m: "body" }, { p: "oct", k: 0.74, dx: -0.04, h: 0.1, m: "camo" }],
-  long: [{ p: "long", k: 1, h: 0.2, m: "body" }, { p: "box", k: 0.42, dx: -0.48, h: 0.16, m: "camo" }],
-  cross: [{ p: "cross", k: 1, h: 0.2, m: "body" }, { p: "oct", k: 0.55, dx: -0.1, h: 0.1, m: "camo" }],
-  round: [{ p: "circ", k: 1, h: 0.22, m: "body" }, { p: "circ", k: 0.56, h: 0.14, m: "light" }],
-  fortress: [{ p: "oct", k: 1, h: 0.17, m: "body" }, { p: "oct", k: 0.82, h: 0.13, m: "camo" }, { p: "oct", k: 0.56, h: 0.1, m: "light" }],
-  titan: [{ p: "armored", k: 1, h: 0.17, m: "body" }, { p: "armored", k: 0.84, dx: -0.04, h: 0.12, m: "camo" }, { p: "oct", k: 0.5, dx: -0.1, h: 0.1, m: "light" }],
-  goliath: [{ p: "giant", k: 1, h: 0.2, m: "body" }, { p: "giant", k: 0.84, dx: -0.05, h: 0.14, m: "camo" }, { p: "giant", k: 0.55, dx: -0.12, h: 0.11, m: "light" }],
-  colossal: [{ p: "giant", k: 1, h: 0.2, m: "body" }, { p: "giant", k: 0.84, dx: -0.04, h: 0.18, m: "camo" }, { p: "giant", k: 0.58, dx: -0.1, h: 0.17, m: "light" }, { p: "oct", k: 0.3, dx: -0.12, h: 0.1, m: "body" }]
-};
-function track(g, kit, L, h, w, z, y, skirt) {
-  const r = Math.min(h * 0.48, L * 0.2);
-  const s = new Shape();
-  const hl = L / 2;
-  s.moveTo(-hl + r, 0);
-  s.lineTo(hl - r, 0);
-  s.absarc(hl - r, r, r, -Math.PI / 2, 0.2, false);
-  s.lineTo(hl - r * 0.4, h - r * 0.35);
-  s.lineTo(hl - r * 1.3, h);
-  s.lineTo(-hl + r * 1.3, h);
-  s.lineTo(-hl + r * 0.4, h - r * 0.35);
-  s.absarc(-hl + r, r, r, Math.PI - 0.2, 1.5 * Math.PI, false);
-  const b = Math.min(0.03, w * 0.2);
-  const geo = new ExtrudeGeometry(s, { depth: w - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 0.8, bevelSegments: 1, curveSegments: 8 });
-  geo.translate(0, 0, -(w - 2 * b) / 2);
-  add(g, geo, kit.rubber, 0, y, z);
-  const nC = Math.max(6, Math.floor(L / (h * 0.28)));
-  const cl = new InstancedMesh(new BoxGeometry(h * 0.1, h * 0.05, w * 1.02), kit.metal, nC * 2);
-  const mtx = new Matrix4();
-  for (let i = 0; i < nC; i++) {
-    const x = -hl + r * 1.3 + (L - r * 2.6) * (i + 0.5) / nC;
-    mtx.makeTranslation(x, y + h + 4e-3, z);
-    cl.setMatrixAt(i, mtx);
-    mtx.makeTranslation(x, y - 4e-3, z);
-    cl.setMatrixAt(nC + i, mtx);
-  }
-  cl.castShadow = true;
-  g.add(cl);
-  const nW = Math.max(3, Math.round(L / (h * 0.9)));
-  const side = z >= 0 ? 1 : -1;
-  for (let i = 0; i < nW; i++) {
-    const x = -hl + r + (L - 2 * r) * i / (nW - 1);
-    const wr = i === 0 || i === nW - 1 ? r * 0.92 : h * 0.34;
-    add(g, cylZ(wr, 0.04), kit.metal, x, y + (i === 0 || i === nW - 1 ? r : h * 0.36), z + side * (w / 2 + 2e-3));
-    add(g, cylZ(wr * 0.42, 0.06), kit.steel, x, y + (i === 0 || i === nW - 1 ? r : h * 0.36), z + side * (w / 2 + 0.012));
-  }
-  if (skirt) box(g, kit.dark, L * 0.78, h * 0.34, 0.03, 0, y + h * 0.56, z + side * (w / 2 + 0.03));
-}
-function buildGear(g, mobId, L, W, S, kit, rnd) {
-  const hf = Math.min(L, W);
-  switch (mobId) {
-    case "treads":
-    case "halftrack": {
-      const h = 0.2 + 0.11 * S, w = Math.max(0.16, W * 0.2);
-      const z = W / 2 - w / 2 - 0.02;
-      if (mobId === "treads") {
-        for (const sg of [-1, 1]) track(g, kit, L * 0.97, h, w, sg * z, 0, S >= 2);
-      } else {
-        for (const sg of [-1, 1]) {
-          track(g, kit, L * 0.5, h, w, sg * z, 0, false);
-          const wr = h * 0.5;
-          for (const dx of [0.2]) {
-            add(g, cylZ(wr, w * 0.9), kit.rubber, L * 0.3 + dx * L * 0.1, wr, sg * z);
-            add(g, cylZ(wr * 0.5, w * 0.95), kit.steel, L * 0.3 + dx * L * 0.1, wr, sg * z);
-          }
-        }
-        add(g, new CylinderGeometry(0.02, 0.02, W * 0.7, 8).rotateX(Math.PI / 2), kit.metal, L * 0.3, h * 0.5, 0);
-      }
-      return { y0: h * 0.55 };
-    }
-    case "wheels": {
-      const wr = 0.1 + 0.08 * S, w = wr * 0.7;
-      const xs = S >= 2 ? [0.3, -0.3] : [0.28, -0.28];
-      const wheels = [];
-      for (const xf of xs) for (const sg of [-1, 1]) {
-        const grp = new Group();
-        grp.position.set(xf * L, wr, sg * (W / 2 - w / 2 + 0.01));
-        add(grp, cylZ(wr, w, 20), kit.rubber);
-        add(grp, cylZ(wr * 0.55, w * 1.05, 14), kit.steel);
-        for (let k = 0; k < 5; k++) {
-          const a = k / 5 * Math.PI * 2;
-          add(grp, new CylinderGeometry(0.012, 0.012, w * 1.15, 6).rotateX(Math.PI / 2), kit.deep, Math.cos(a) * wr * 0.3, Math.sin(a) * wr * 0.3, 0);
-        }
-        g.add(grp);
-        wheels.push(grp);
-      }
-      for (const xf of xs) add(g, new CylinderGeometry(0.025, 0.025, W - w, 8).rotateX(Math.PI / 2), kit.metal, xf * L, wr, 0);
-      return { y0: wr * 1.05, update: (t, mv) => wheels.forEach((w2) => {
-        w2.children.forEach((c) => c.rotation.z = -t * 6 * mv);
-      }) };
-    }
-    case "megatracks": {
-      const h = 0.38 + 0.2 * S, w = W * 0.15;
-      const zs = [-0.405, -0.215, 0.215, 0.405];
-      for (const zf of zs) track(g, kit, L * 0.94, h, w, zf * W, 0, true);
-      box(g, kit.dark, L * 0.5, h * 0.35, W * 0.7, 0, h * 0.6, 0);
-      return { y0: h * 0.72 };
-    }
-    case "legs":
-    case "spider":
-    case "titanlegs":
-    case "jumpjets": {
-      const legs = [];
-      const spider = mobId === "spider";
-      const hy = (spider ? 0.38 : 0.55) * hf + 0.18 * S;
-      const nLegs = spider ? 6 : 2;
-      const thick = (spider ? 0.035 : 0.07) * Math.min(S, 3) + 0.025;
-      for (let i = 0; i < nLegs; i++) {
-        const sg = i % 2 ? 1 : -1;
-        const row = spider ? Math.floor(i / 2) - 1 : 0;
-        const hipX = spider ? row * L * 0.3 : -0.04 * L;
-        const hipZ = sg * (spider ? W * 0.3 : W * 0.28);
-        const footX = hipX + (spider ? row * L * 0.2 : 0);
-        const footZ = sg * (spider ? W * 0.5 + hy * 0.95 : W * 0.3);
-        legs.push(makeLeg(g, kit, new Vector3(hipX, hy, hipZ), new Vector3(footX, 0, footZ), thick, spider ? new Vector3(0, 1, sg * 0.35) : new Vector3(1, 0.1, 0), spider ? (i % 2 ? 0 : Math.PI) + row * 2.1 : i % 2 * Math.PI));
-      }
-      return {
-        y0: hy - 0.04,
-        legs,
-        update: (t, mv) => legs.forEach((lg) => lg.step(t, mv))
-      };
-    }
-    case "anchor": {
-      box(g, kit.dark, L * 0.95, 0.12, W * 0.95, 0, 0, 0);
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(g, new CylinderGeometry(0.1, 0.14, 0.16, 8), kit.metal, sx * L * 0.42, 0.08, sz * W * 0.42);
-      return { y0: 0.12 };
-    }
-    case "rotor":
-    case "gravlift":
-    case "jet": {
-      return { y0: 0, flying: true };
-    }
-    default: {
-      const hgt = 0.12 + 0.05 * S;
-      prism(P.oct.map(([x, y]) => [x * L * 0.5, y * W * 0.5]), 0, hgt, kit.rubber, g, 0.03);
-      return { y0: hgt * 0.8 };
-    }
-  }
-}
-function makeLeg(g, kit, hip, foot, thick, bend, phase) {
-  const d0 = hip.distanceTo(foot);
-  const l1 = d0 * 0.74, l2 = d0 * 0.74;
-  const segGeo = (r0, r1) => new CylinderGeometry(r1, r0, 1, 10).translate(0, 0.5, 0).rotateX(Math.PI / 2);
-  const upper = add(g, segGeo(thick * 1.1, thick), kit.dark);
-  const lower = add(g, segGeo(thick, thick * 0.7), kit.body);
-  const knee = add(g, new SphereGeometry(thick * 1.1, 12, 10), kit.dark);
-  const hipJ = add(g, new SphereGeometry(thick * 1.15, 12, 10), kit.dark, hip.x, hip.y, hip.z);
-  const pad = add(g, new CylinderGeometry(thick * 1.2, thick * 1.5, thick * 0.8, 10), kit.deep);
-  void hipJ;
-  const f = new Vector3(), k = new Vector3(), dir = new Vector3(), perp = new Vector3();
-  const stride = d0 * 0.32, lift = d0 * 0.22;
-  const place = (a, b, m) => {
-    m.position.copy(a);
-    const dd = b.clone().sub(a);
-    const len = dd.length();
-    m.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dd.divideScalar(len || 1));
-    m.scale.set(1, 1, len);
-  };
-  return {
-    step(t, moving) {
-      const ph = t * 3.2 + phase;
-      f.copy(foot);
-      f.x += -Math.sin(ph) * stride * moving;
-      f.y += Math.max(0, Math.cos(ph)) * lift * moving;
-      dir.copy(f).sub(hip);
-      let d = dir.length();
-      d = Math.min(d, l1 + l2 - 1e-3);
-      dir.normalize();
-      const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
-      const hgt = Math.sqrt(Math.max(0, l1 * l1 - a * a));
-      perp.copy(bend).addScaledVector(dir, -bend.dot(dir)).normalize();
-      k.copy(hip).addScaledVector(dir, a).addScaledVector(perp, hgt);
-      place(hip, k, upper);
-      place(k, f, lower);
-      knee.position.copy(k);
-      pad.position.copy(f).y += thick * 0.4;
+    composer,
+    gtao,
+    bloom,
+    setSize(nw, nh) {
+      composer.setSize(nw, nh);
+    },
+    render() {
+      composer.render();
     }
   };
-}
-function buildHull(g, shape, L, W0, y0, kit, wk = 1) {
-  const W = W0 * wk;
-  const hf = Math.pow(Math.min(L, W), 0.85);
-  const recipe = TIERS[shape] ?? TIERS.box;
-  const placed = [];
-  let y = y0;
-  for (const t of recipe) {
-    const base = P[t.p] ?? P.box;
-    const poly = base.map(([x, yy]) => [(x * t.k + (t.dx ?? 0)) * L * 0.5, yy * t.k * W * 0.5]);
-    const h = Math.max(0.06, t.h * hf * 0.66);
-    const m = kit[t.m];
-    const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cz = poly.reduce((a, p) => a + p[1], 0) / poly.length;
-    const sl = 1 - (t.slope ?? 0.07) * Math.min(1, h / 0.6 + 0.3);
-    const topPoly = poly.map(([px2, pz2]) => [cx + (px2 - cx) * (1 - (1 - sl) * (0.6 + 0.4 * Math.abs(px2 - cx) / (L * 0.5 + 1e-6)) * 0.9), cz + (pz2 - cz) * (1 - (1 - sl) * 1.6 * Math.min(1, 0.4 + Math.abs(pz2 - cz) / (W * 0.5 + 1e-6)))]);
-    frustum(poly, topPoly, y, h, m, g);
-    y += h;
-    placed.push({ poly, top: y });
-  }
-  return { placed, top: y };
-}
-function deckAt(placed, x, z, fallback) {
-  let top = -Infinity;
-  for (const p of placed) if (inPoly([x, z], p.poly)) top = Math.max(top, p.top);
-  return top === -Infinity ? fallback : top;
-}
-function greeble(g, placed, L, W, S, kit, rnd, mounts, mountR, skipTop) {
-  const free = (x, z, rad) => mounts.every((m, i) => Math.hypot(m[0] - x, m[1] - z) > mountR[i] + rad);
-  const n = Math.round(4 + 6 * S);
-  for (let i = 0; i < n; i++) {
-    const x = (rnd() - 0.5) * L * 0.8, z = (rnd() - 0.5) * W * 0.8;
-    const top = deckAt(placed, x, z, -1);
-    if (top < 0 || !free(x, z, 0.12)) continue;
-    const kind = rnd();
-    const u = 0.05 + 0.025 * S;
-    if (kind < 0.35) {
-      add(g, new CylinderGeometry(u * 0.9, u * 1.05, u * 0.4, 12), kit.dark, x, top + u * 0.2, z);
-    } else if (kind < 0.7) {
-      const w = u * 3, d = u * 2;
-      box(g, kit.deep, w, u * 0.3, d, x, top, z);
-      for (let k = 0; k < 4; k++) box(g, kit.metal, w * 0.9, u * 0.35, u * 0.12, x, top + 5e-3, z - d * 0.38 + k * d * 0.76 / 3);
-    } else if (kind < 0.88) {
-      box(g, rnd() < 0.5 ? kit.camo : kit.dark, u * 2.4, u * 1.4, u * 1.8, x, top, z);
-    } else {
-      add(g, new CylinderGeometry(6e-3, 0.012, u * 5, 6), kit.steel, x, top + u * 2.5, z);
-    }
-  }
-  void skipTop;
-}
-function buildJet(g, L, W, kit) {
-  const hl = L / 2;
-  const fus = new Shape();
-  fus.moveTo(hl, 0);
-  fus.lineTo(hl * 0.55, W * 0.07);
-  fus.lineTo(-hl * 0.2, W * 0.12);
-  fus.lineTo(-hl * 0.95, W * 0.1);
-  fus.lineTo(-hl, W * 0.06);
-  fus.lineTo(-hl, -W * 0.06);
-  fus.lineTo(-hl * 0.95, -W * 0.1);
-  fus.lineTo(-hl * 0.2, -W * 0.12);
-  fus.lineTo(hl * 0.55, -W * 0.07);
-  fus.closePath();
-  const fg = new ExtrudeGeometry(fus, { depth: 0.2, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.05, bevelSegments: 3 });
-  fg.rotateX(-Math.PI / 2);
-  add(g, fg, kit.body, 0, 0, 0);
-  const sp = new Shape();
-  sp.moveTo(hl * 0.45, 0);
-  sp.lineTo(-hl * 0.1, W * 0.06);
-  sp.lineTo(-hl * 0.85, W * 0.05);
-  sp.lineTo(-hl * 0.85, -W * 0.05);
-  sp.lineTo(-hl * 0.1, -W * 0.06);
-  sp.closePath();
-  const sg = new ExtrudeGeometry(sp, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.03, bevelSegments: 2 });
-  sg.rotateX(-Math.PI / 2);
-  add(g, sg, kit.camo, 0, 0.3, 0);
-  const wing = new Shape();
-  wing.moveTo(hl * 0.1, 0);
-  wing.lineTo(-hl * 0.55, W * 0.5);
-  wing.lineTo(-hl * 0.85, W * 0.5);
-  wing.lineTo(-hl * 0.8, 0.1);
-  wing.lineTo(-hl * 0.8, -0.1);
-  wing.lineTo(-hl * 0.85, -W * 0.5);
-  wing.lineTo(-hl * 0.55, -W * 0.5);
-  wing.closePath();
-  const wg = new ExtrudeGeometry(wing, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.012, bevelSegments: 1 });
-  wg.rotateX(-Math.PI / 2);
-  add(g, wg, kit.light, 0, 0.12, 0);
-  for (const sg2 of [-1, 1]) {
-    const tail = new Shape();
-    tail.moveTo(0, 0);
-    tail.lineTo(-0.5, 0);
-    tail.lineTo(-0.28, 0.5);
-    tail.lineTo(-0.12, 0.5);
-    tail.closePath();
-    const tg = new ExtrudeGeometry(tail, { depth: 0.015, bevelEnabled: false });
-    const m = add(g, tg, kit.dark, -hl * 0.72, 0.28, sg2 * W * 0.12);
-    m.rotation.x = sg2 * 0.28;
-    m.position.z = sg2 * W * 0.13;
-  }
-  add(g, new SphereGeometry(1, 16, 10).scale(L * 0.15, 0.1, W * 0.06), kit.glass, hl * 0.18, 0.3, 0);
-  for (const sg2 of [-1, 1]) {
-    add(g, cylX(0.07, 0.09, 0.3), kit.steel, -hl - 0.05, 0.2, sg2 * 0.1);
-    add(g, new CircleGeometry(0.06, 12).rotateY(-Math.PI / 2), kit.hot, -hl - 0.2, 0.2, sg2 * 0.1);
-  }
-  const placed = [{ poly: [[hl * 0.5, 0.2], [-hl * 0.5, 0.4], [-hl * 0.5, -0.4], [hl * 0.5, -0.2]], top: 0.1 }];
-  return { placed, top: 0.1, update: () => {
-  } };
-}
-function buildRotor(g, chassisId, L, W, S, kit) {
-  const blades = [];
-  const discs = [];
-  const mkRotor = (x, y, z, R) => {
-    const grp = new Group();
-    grp.position.set(x, y, z);
-    for (let i = 0; i < 2; i++) {
-      const b = add(grp, new BoxGeometry(R * 2, 0.012, R * 0.12), kit.deep);
-      b.rotation.y = i * Math.PI / 2;
-    }
-    add(grp, new CylinderGeometry(R * 0.07, R * 0.07, 0.05, 10), kit.steel);
-    const disc = new Mesh(new CircleGeometry(R, 24).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: "#cfd5da", transparent: true, opacity: 0.1, depthWrite: false }));
-    grp.add(disc);
-    discs.push(disc);
-    g.add(grp);
-    blades.push(grp);
-  };
-  if (chassisId === "drone") {
-    add(g, new SphereGeometry(1, 16, 12).scale(L * 0.2, 0.09, L * 0.2), kit.body, 0, 0.22, 0);
-    add(g, new SphereGeometry(1, 12, 8).scale(L * 0.09, 0.05, L * 0.11), kit.glass, L * 0.14, 0.27, 0);
-    add(g, cylX(0.015, 0.015, L * 0.36), kit.metal, 0, 0.2, 0);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const arm = add(g, new BoxGeometry(L * 0.5, 0.025, 0.04), kit.metal, sx * L * 0.2, 0.22, sz * L * 0.2);
-      arm.rotation.y = -sx * sz * Math.PI / 4;
-      add(g, cylX(0.04, 0.04, 0.09).rotateZ(Math.PI / 2), kit.dark, sx * L * 0.4, 0.24, sz * L * 0.4);
-      mkRotor(sx * L * 0.4, 0.32, sz * L * 0.4, L * 0.22);
-    }
-    return { top: 0.2, update: (t) => blades.forEach((b, i) => b.rotation.y = t * 90 * (i % 2 ? 1 : -1)) };
-  }
-  add(g, new SphereGeometry(1, 20, 14).scale(L * 0.3, 0.28 * Math.sqrt(S), W * 0.24), kit.body, L * 0.05, 0.4, 0);
-  add(g, new SphereGeometry(1, 14, 10).scale(L * 0.12, 0.18 * Math.sqrt(S), W * 0.16), kit.glass, L * 0.22, 0.44, 0);
-  add(g, cylX(0.05, 0.03, L * 0.5), kit.body, -L * 0.38, 0.45, 0);
-  mkRotor(L * 0.05, 0.4 + 0.28 * Math.sqrt(S) + 0.05, 0, L * 0.5);
-  return { top: 0.4 + 0.2 * Math.sqrt(S), update: (t) => {
-    blades[0].rotation.y = t * 70;
-  } };
-}
-function buildUnit(design, team) {
-  const ch = CHASSIS_BY_ID.get(design.chassis);
-  const mob = MOBILITY_BY_ID.get(design.mobility);
-  const kit = makeKit(team);
-  const S = ch.size;
-  const W = ch.footprint?.[0] ?? S, L = ch.footprint?.[1] ?? S;
-  const rnd = rng([...design.id].reduce((a, c) => a * 31 + c.charCodeAt(0) >>> 0, 7));
-  const root = new Group();
-  const body = new Group();
-  root.add(body);
-  const flying = (ch.domain ?? "ground") !== "ground" || mob.kind === "air";
-  const turrets = [];
-  const updates = [];
-  const offs = mountOffsets(design);
-  let placed = [];
-  let hullTop = 0;
-  let baseY = 0;
-  if (flying) {
-    if (ch.domain === "jet" || mob.id === "jet") {
-      const j = buildJet(body, L, W, kit);
-      placed = j.placed;
-      hullTop = j.top;
-    } else {
-      const r = buildRotor(body, ch.id, L, W, S, kit);
-      hullTop = r.top;
-      updates.push((t) => r.update(t));
-    }
-  } else {
-    const gear = buildGear(root, mob.id, L, W, S, kit, rnd);
-    baseY = gear.y0;
-    if (gear.update) updates.push((t, _dt, mv) => gear.update(t, mv));
-    const hull = buildHull(body, ch.shape, L, W, baseY, kit, mob.id === "megatracks" ? 0.9 : 1);
-    placed = hull.placed;
-    hullTop = hull.top;
-    const ex = [-1, 1].map((s) => add(body, new CylinderGeometry(0.035 * S ** 0.7, 0.04 * S ** 0.7, 0.2 * Math.min(S, 3), 8), kit.metal, -L * 0.42, baseY + hull.top * 0.5 + 0.1, s * W * 0.2));
-    void ex;
-    for (const s of [-1, 1]) {
-      box(body, kit.lamp, 0.03, 0.03, 0.06 + 0.01 * S, L * 0.49, baseY + 0.12 * Math.sqrt(S), s * W * 0.2);
-      box(body, kit.glow, 0.025, 0.03, 0.05, -L * 0.5, baseY + 0.14 * Math.sqrt(S), s * W * 0.3);
-    }
-    const top1 = placed[0].top;
-    box(body, kit.accent, L * 0.05, 0.012, W * 0.5, -L * 0.34, top1, 0);
-  }
-  const mountPts = offs.map((o) => [o.x, o.y]);
-  const mountR = [];
-  design.mounts.forEach((mid, i) => {
-    const mod = mid ? MODULE_BY_ID.get(mid) : null;
-    const o = offs[i];
-    if (!mod || !o) {
-      mountR.push(0.1);
-      return;
-    }
-    const tu = buildTurret(mod, S, kit, flying && ch.domain === "jet");
-    mountR.push(tu.r);
-    let y = flying ? ch.domain === "jet" ? 0.06 : hullTop - 0.1 : deckAt(placed, o.x, o.y, baseY + hullTop);
-    if (!flying) {
-      let lo = y;
-      for (let k = 0; k < 8; k++) {
-        const a = k / 8 * Math.PI * 2, d = deckAt(placed, o.x + Math.cos(a) * tu.r * 0.85, o.y + Math.sin(a) * tu.r * 0.85, -1);
-        if (d >= 0) lo = Math.min(lo, d);
-      }
-      if (new URLSearchParams(location.search).has("dbg")) console.log("mount", design.id, i, o.x.toFixed(2), o.y.toFixed(2), "y", y.toFixed(2), "lo", lo.toFixed(2), "base", baseY.toFixed(2));
-      if (y - lo > 0.04) {
-        const ring = Array.from({ length: 10 }, (_, i2) => [Math.cos(i2 / 10 * Math.PI * 2), Math.sin(i2 / 10 * Math.PI * 2)]);
-        frustum(ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1.32, o.y + pz2 * tu.r * 1.32]), ring.map(([px2, pz2]) => [o.x + px2 * tu.r * 1.02, o.y + pz2 * tu.r * 1.02]), lo, y - lo, kit.body, body);
-      }
-    }
-    tu.yaw.position.set(o.x, y, o.y);
-    if (flying) body.add(tu.yaw);
-    else {
-      body.add(tu.yaw);
-    }
-    turrets.push(tu);
-  });
-  if (!flying) greeble(body, placed, L, W, S, kit, rnd, mountPts, mountR, false);
-  if (!flying && S >= 4 && placed.length) {
-    const tp = placed[placed.length - 1], cx = tp.poly.reduce((a, p) => a + p[0], 0) / tp.poly.length, cz = 0;
-    const u = 0.1 * S;
-    add(body, new CylinderGeometry(u * 1.7, u * 2, u * 1.2, 10), kit.camo, cx, tp.top + u * 0.6, cz);
-    add(body, new SphereGeometry(u * 1.2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), kit.light, cx, tp.top + u * 1.2, cz);
-    box(body, kit.glass, u * 0.5, u * 0.3, u * 2.2, cx + u * 1.8, tp.top + u * 0.5, cz);
-    for (const s2 of [-1, 1]) add(body, new CylinderGeometry(0.01, 0.02, u * 4, 6), kit.steel, cx - u * 0.8, tp.top + u * 2, s2 * u * 1.1);
-    add(body, new SphereGeometry(u * 0.22, 8, 6), kit.glow, cx - u * 0.8, tp.top + u * 4.05, u * 1.1);
-  }
-  if (!flying && S >= 3) {
-    const mx = -L * 0.3, mz = W * 0.3, top = deckAt(placed, mx, mz, hullTop + baseY);
-    add(body, new CylinderGeometry(0.012, 0.02, 0.5 + 0.1 * S, 6), kit.steel, mx, top + 0.25 + 0.05 * S, mz);
-    box(body, kit.accent, 0.012, 0.1, 0.2, mx, top + 0.5 + 0.1 * S - 0.1, mz + 0.1);
-  }
-  const unit = {
-    root,
-    design,
-    team,
-    turrets,
-    L,
-    W,
-    S,
-    flying,
-    radius: Math.max(L, W) / 2,
-    animate(t, dt, moving) {
-      for (const u of updates) u(t, dt, moving);
-      if (!flying) body.position.y = Math.sin(t * 38 + L) * 35e-4 * (0.6 + moving) * Math.min(S, 3);
-    }
-  };
-  return unit;
 }
 
 // src/client/proto3d/main.ts
 var params = new URLSearchParams(location.search);
 var has = (k, d = false) => params.has(k) ? params.get(k) !== "0" : d;
 var canvas = document.getElementById("c");
-var renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = PCFShadowMap;
-renderer.toneMapping = ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+var renderer = createRenderer(canvas);
 var scene = new Scene();
-scene.background = new Color("#2a2c27");
-scene.fog = new Fog("#2a2c27", 90, 220);
-var pm = new PMREMGenerator(renderer);
-scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.32;
-var camera = new PerspectiveCamera(Number(params.get("fov") ?? 24), 1, 1, 400);
+renderer.info.autoReset = false;
+var stage = setupStage(renderer, scene);
+var camera = new PerspectiveCamera(Number(params.get("fov") ?? 24), 1, 1, 500);
 var controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.maxPolarAngle = MathUtils.degToRad(82);
-controls.minDistance = 6;
+controls.minDistance = 4;
 controls.maxDistance = 160;
 controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
-function setView(tx, tz, dist, tiltDeg = 58, yawDeg = 0) {
+function setView(tx, tz, dist2, tiltDeg = 58, yawDeg = 0) {
   const tilt = MathUtils.degToRad(tiltDeg), yaw = MathUtils.degToRad(yawDeg);
   controls.target.set(tx, 0, tz);
-  camera.position.set(tx + Math.sin(yaw) * Math.cos(tilt) * dist, Math.sin(tilt) * dist, tz + Math.cos(yaw) * Math.cos(tilt) * dist);
+  camera.position.set(tx + Math.sin(yaw) * Math.cos(tilt) * dist2, Math.sin(tilt) * dist2, tz + Math.cos(yaw) * Math.cos(tilt) * dist2);
   controls.update();
 }
 window.setView = setView;
 setView(Number(params.get("x") ?? -3), Number(params.get("z") ?? 0), Number(params.get("d") ?? 62), Number(params.get("tilt") ?? 58), Number(params.get("yaw") ?? 0));
-var sun = new DirectionalLight("#fff0d8", 3.1);
-sun.position.set(-34, 46, -22);
-sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
-var sc = sun.shadow.camera;
-sc.left = -44;
-sc.right = 44;
-sc.top = 44;
-sc.bottom = -44;
-sc.near = 10;
-sc.far = 130;
-sun.shadow.bias = -4e-4;
-sun.shadow.normalBias = 0.03;
-scene.add(sun);
-scene.add(new HemisphereLight("#a8bccb", "#4a4332", 0.55));
 var FX = 60;
 var FZ = 38;
-function makeGround() {
-  const PPC = 56;
-  const w = FX * PPC, h = FZ * PPC;
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const b = document.createElement("canvas");
-  b.width = w;
-  b.height = h;
-  const g = c.getContext("2d"), gb = b.getContext("2d");
-  const r = rng(99);
-  g.fillStyle = "#625e49";
-  g.fillRect(0, 0, w, h);
-  gb.fillStyle = "#808080";
-  gb.fillRect(0, 0, w, h);
-  for (let i = 0; i < 260; i++) {
-    const x = r() * w, y = r() * h, rad = 60 + r() * 260;
-    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
-    const t = r();
-    gr.addColorStop(0, t < 0.4 ? "rgba(108,96,66,0.22)" : t < 0.75 ? "rgba(78,84,58,0.18)" : "rgba(128,118,92,0.2)");
-    gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = gr;
-    g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-    const gg = gb.createRadialGradient(x, y, 0, x, y, rad);
-    gg.addColorStop(0, `rgba(${r() < 0.5 ? 255 : 0},${r() < 0.5 ? 255 : 0},128,0.08)`);
-    gg.addColorStop(1, "rgba(128,128,128,0)");
-    gb.fillStyle = gg;
-    gb.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-  }
-  for (let i = 0; i < 35e4; i++) {
-    const v = r();
-    const x = r() * w, y = r() * h, s = 0.8 + r() * r() * 2.2;
-    g.fillStyle = v < 0.5 ? `rgba(30,28,20,${0.08 + r() * 0.12})` : `rgba(200,190,160,${0.05 + r() * 0.1})`;
-    g.fillRect(x, y, s, s);
-    gb.fillStyle = v < 0.5 ? "rgba(60,60,60,0.35)" : "rgba(210,210,210,0.3)";
-    gb.fillRect(x, y, s, s);
-  }
-  for (let i = 0; i < 14; i++) {
-    const x = r() * w, y = r() * h, rad = 30 + r() * 70;
-    const gr = g.createRadialGradient(x, y, rad * 0.2, x, y, rad);
-    gr.addColorStop(0, "rgba(30,26,18,0.55)");
-    gr.addColorStop(0.7, "rgba(40,34,24,0.35)");
-    gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = gr;
-    g.beginPath();
-    g.arc(x, y, rad, 0, 7);
-    g.fill();
-    const gg = gb.createRadialGradient(x, y, 0, x, y, rad * 1.1);
-    gg.addColorStop(0, "rgba(20,20,20,0.7)");
-    gg.addColorStop(0.8, "rgba(60,60,60,0.5)");
-    gg.addColorStop(0.92, "rgba(235,235,235,0.6)");
-    gg.addColorStop(1, "rgba(128,128,128,0)");
-    gb.fillStyle = gg;
-    gb.beginPath();
-    gb.arc(x, y, rad * 1.1, 0, 7);
-    gb.fill();
-  }
-  const zw = FX * PPC * 0.22;
-  g.fillStyle = "rgba(70,160,200,0.10)";
-  g.fillRect(0, 0, zw, h);
-  g.fillStyle = "rgba(220,100,50,0.10)";
-  g.fillRect(w - zw, 0, zw, h);
-  g.setLineDash([14, 10]);
-  g.lineWidth = 3;
-  g.strokeStyle = "rgba(120,220,255,0.55)";
-  g.beginPath();
-  g.moveTo(zw, 0);
-  g.lineTo(zw, h);
-  g.stroke();
-  g.strokeStyle = "rgba(255,140,90,0.55)";
-  g.beginPath();
-  g.moveTo(w - zw, 0);
-  g.lineTo(w - zw, h);
-  g.stroke();
-  g.setLineDash([]);
-  for (let i = 0; i <= FX; i++) {
-    g.strokeStyle = i % 5 === 0 ? "rgba(235,235,215,0.16)" : "rgba(235,235,215,0.07)";
-    g.lineWidth = i % 5 === 0 ? 2 : 1;
-    g.beginPath();
-    g.moveTo(i * PPC, 0);
-    g.lineTo(i * PPC, h);
-    g.stroke();
-  }
-  for (let j = 0; j <= FZ; j++) {
-    g.strokeStyle = j % 5 === 0 ? "rgba(235,235,215,0.16)" : "rgba(235,235,215,0.07)";
-    g.lineWidth = j % 5 === 0 ? 2 : 1;
-    g.beginPath();
-    g.moveTo(0, j * PPC);
-    g.lineTo(w, j * PPC);
-    g.stroke();
-  }
-  const map = new CanvasTexture(c);
-  map.colorSpace = SRGBColorSpace;
-  map.anisotropy = 16;
-  const bump = new CanvasTexture(b);
-  bump.anisotropy = 8;
-  return { map, bump };
-}
-{
-  const { map, bump } = makeGround();
-  const ground = new Mesh(new PlaneGeometry(FX, FZ).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.9, roughness: 0.96, metalness: 0 }));
-  ground.receiveShadow = true;
-  scene.add(ground);
-  const apron = new Mesh(new PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: "#3a382d", roughness: 1 }));
-  apron.position.y = -0.02;
-  apron.receiveShadow = true;
-  scene.add(apron);
-}
-{
-  const r = rng(7);
-  const geo = new IcosahedronGeometry(1, 1);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const k = 0.8 + 0.4 * Math.sin(pos.getX(i) * 3.1 + pos.getZ(i) * 2.3);
-    pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k * 0.7, pos.getZ(i) * k);
-  }
-  geo.computeVertexNormals();
-  const N = 70;
-  const im = new InstancedMesh(geo, new MeshStandardMaterial({ color: "#7d7765", roughness: 0.95, flatShading: true }), N);
-  const m = new Matrix4(), q = new Quaternion(), e = new Euler();
-  for (let i = 0; i < N; i++) {
-    let x = (r() - 0.5) * FX * 0.98, z = (r() - 0.5) * FZ * 0.98;
-    if (Math.abs(z) < 12 && Math.abs(x) < 24) {
-      z = (z < 0 ? -1 : 1) * (14 + r() * 4);
-    }
-    const s = 0.12 + r() * r() * 0.6;
-    e.set(0, r() * 7, 0);
-    q.setFromEuler(e);
-    m.compose(new Vector3(x, s * 0.2, z), q, new Vector3(s * (1 + r()), s, s * (1 + r())));
-    im.setMatrixAt(i, m);
-  }
-  im.castShadow = im.receiveShadow = true;
-  scene.add(im);
-}
+scene.add(buildTerrain(FX, FZ, { grid: has("grid", true), keepOut: (x, z) => Math.abs(z) < 13 && Math.abs(x) < 24 }).group);
 var byId2 = new Map(STARTER_DESIGNS.map((d) => [d.id, d]));
 var SCENE = [
   // blue (team 0) faces +X
@@ -38411,12 +39614,6 @@ for (const p of SCENE) {
   const baseAngle = p.team === 0 ? 0 : Math.PI;
   u.root.rotation.y = -baseAngle;
   scene.add(u.root);
-  if (!u.flying) {
-    const blob = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobMat());
-    blob.scale.set(u.L * 1.25, 1, u.W * 1.25);
-    blob.position.y = 0.015;
-    u.root.add(blob);
-  }
   let label;
   if (!named.has(p.id) && p.team === 0 || p.team === 1 && p.id === "starter-juggernaut") {
     named.add(p.id);
@@ -38428,23 +39625,6 @@ for (const p of SCENE) {
   }
   units.push({ u, p, baseAngle, label });
 }
-function blobMat() {
-  blobMat.m ??= (() => {
-    const c = document.createElement("canvas");
-    c.width = c.height = 128;
-    const g = c.getContext("2d");
-    const gr = g.createRadialGradient(64, 64, 20, 64, 64, 64);
-    gr.addColorStop(0, "rgba(0,0,0,0.55)");
-    gr.addColorStop(0.6, "rgba(0,0,0,0.25)");
-    gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 128, 128);
-    const t = new CanvasTexture(c);
-    return new MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-  })();
-  return blobMat.m;
-}
-blobMat.m = null;
 var glowTex = (() => {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
@@ -38478,12 +39658,12 @@ function fire(tu, target) {
   const from = new Vector3();
   m.getWorldPosition(from);
   const dir = target.clone().sub(from);
-  const dist = dir.length();
+  const dist2 = dir.length();
   dir.normalize();
   spawnFlash(from, 0.5 + tu.r * 0.9);
   tu.recoil.position.x = -tu.r * 0.18;
   if (tu.shot === "beam") {
-    const len = Math.min(dist, 18);
+    const len = Math.min(dist2, 18);
     const b = new Mesh(new CylinderGeometry(0.035, 0.035, len, 6).rotateX(Math.PI / 2).translate(0, 0, len / 2), mats.beam.clone());
     b.position.copy(from);
     b.lookAt(from.clone().add(dir));
@@ -38498,36 +39678,16 @@ function fire(tu, target) {
   o.rotateY(-Math.PI / 2);
   scene.add(o);
   const speed = tu.shot === "orb" ? 22 : tu.shot === "rocket" ? 26 : 60;
-  fx.push({ obj: o, life: Math.min(dist, 30) / speed, max: 1, vel: dir.multiplyScalar(speed), kind: "shot" });
+  fx.push({ obj: o, life: Math.min(dist2, 30) / speed, max: 1, vel: dir.multiplyScalar(speed), kind: "shot" });
 }
-var composer = null;
-var gtao = null;
-var bloom = null;
-function setupPost() {
-  const w = innerWidth, h = innerHeight;
-  const rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, samples: 4 });
-  composer = new EffectComposer(renderer, rt);
-  composer.addPass(new RenderPass(scene, camera));
-  if (has("ao", true)) {
-    gtao = new GTAOPass(scene, camera, w, h);
-    gtao.output = GTAOPass.OUTPUT.Default;
-    gtao.blendIntensity = 0.9;
-    gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.5, thickness: 2, scale: 1.2, samples: 12 });
-    composer.addPass(gtao);
-  }
-  if (has("bloom", true)) {
-    bloom = new UnrealBloomPass(new Vector2(w, h), 0.42, 0.5, 1.15);
-    composer.addPass(bloom);
-  }
-  composer.addPass(new OutputPass());
-}
-if (has("post", true)) setupPost();
+var post = null;
+if (has("post", true)) post = setupPost(renderer, scene, camera, innerWidth, innerHeight, { ao: has("ao", true), bloom: has("bloom", true), grade: has("grade", true) });
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  composer?.setSize(w, h);
+  post?.setSize(w, h);
 }
 addEventListener("resize", resize);
 resize();
@@ -38540,6 +39700,9 @@ var frozen = has("freeze");
 var statsEl = document.getElementById("stats");
 var frames = 0;
 var fpsT = 0;
+var info = "";
+var fz = 0;
+window.stats = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, info });
 function frame() {
   clock.update();
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -38610,7 +39773,8 @@ function frame() {
     }
   }
   controls.update();
-  if (composer) composer.render();
+  renderer.info.reset();
+  if (post) post.render();
   else renderer.render(scene, camera);
   const w = innerWidth, h = innerHeight;
   for (const e of units) if (e.label) {
@@ -38623,15 +39787,29 @@ function frame() {
   }
   frames++;
   fpsT += dt;
+  info = `${renderer.info.render.calls} draw calls | ${(renderer.info.render.triangles / 1e3).toFixed(0)}k tris`;
   if (fpsT > 1) {
     statsEl.textContent = `${Math.round(frames / fpsT)} fps | ${renderer.info.render.calls} draw calls | ${(renderer.info.render.triangles / 1e3).toFixed(0)}k tris | ${units.length} units`;
     frames = 0;
     fpsT = 0;
   }
-  requestAnimationFrame(frame);
+  if (!frozen || ++fz < 3) requestAnimationFrame(frame);
+  else window.done = true;
 }
+window.renderOnce = () => {
+  fz = 0;
+  window.done = false;
+  requestAnimationFrame(frame);
+};
 requestAnimationFrame(frame);
 window.ready = true;
+window.unitStats = () => units.map((e) => {
+  let meshes = 0;
+  e.u.root.traverse((o) => {
+    if (o.isMesh) meshes++;
+  });
+  return `${e.p.id}/${e.p.team}: meshes ${meshes} tris ${Math.round(e.u.tris)}`;
+});
 /*! Bundled license information:
 
 three/build/three.core.js:

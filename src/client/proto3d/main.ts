@@ -3,43 +3,28 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
-import { TEAM_PAL } from '../render/palette.ts';
 import { buildUnit, type Unit3D } from './units3d.ts';
-import { rng } from './materials.ts';
+import { buildTerrain } from './terrain3d.ts';
+import { createRenderer, setupStage, setupPost, type Post } from './stage3d.ts';
 import type { Turret } from './weapons3d.ts';
 
 const params = new URLSearchParams(location.search);
 const has = (k: string, d = false) => (params.has(k) ? params.get(k) !== '0' : d);
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap; // hard-edged sun shadows
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
-
+const renderer = createRenderer(canvas);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#2a2c27');
-scene.fog = new THREE.Fog('#2a2c27', 90, 220);
-const pm = new THREE.PMREMGenerator(renderer);
-scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.32;
+renderer.info.autoReset = false;
+const stage = setupStage(renderer, scene);
 
 // ---- camera: low-FOV perspective at a Mechabellum-like tilt ------------------------------------
-const camera = new THREE.PerspectiveCamera(Number(params.get('fov') ?? 24), 1, 1, 400);
+const camera = new THREE.PerspectiveCamera(Number(params.get('fov') ?? 24), 1, 1, 500);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
-controls.minDistance = 6;
+controls.minDistance = 4;
 controls.maxDistance = 160;
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 function setView(tx: number, tz: number, dist: number, tiltDeg = 58, yawDeg = 0) {
@@ -51,106 +36,9 @@ function setView(tx: number, tz: number, dist: number, tiltDeg = 58, yawDeg = 0)
 (window as unknown as Record<string, unknown>).setView = setView;
 setView(Number(params.get('x') ?? -3), Number(params.get('z') ?? 0), Number(params.get('d') ?? 62), Number(params.get('tilt') ?? 58), Number(params.get('yaw') ?? 0));
 
-// ---- sun ---------------------------------------------------------------------------------------
-const sun = new THREE.DirectionalLight('#fff0d8', 3.1);
-sun.position.set(-34, 46, -22);
-sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
-const sc = sun.shadow.camera;
-sc.left = -44; sc.right = 44; sc.top = 44; sc.bottom = -44; sc.near = 10; sc.far = 130;
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.03;
-scene.add(sun);
-scene.add(new THREE.HemisphereLight('#a8bccb', '#4a4332', 0.55));
-
-// ---- ground ------------------------------------------------------------------------------------
+// ---- terrain -----------------------------------------------------------------------------------
 const FX = 60, FZ = 38; // field slice, cells
-function makeGround(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
-  const PPC = 56;
-  const w = FX * PPC, h = FZ * PPC;
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const b = document.createElement('canvas'); b.width = w; b.height = h;
-  const g = c.getContext('2d')!, gb = b.getContext('2d')!;
-  const r = rng(99);
-  g.fillStyle = '#625e49'; g.fillRect(0, 0, w, h);
-  gb.fillStyle = '#808080'; gb.fillRect(0, 0, w, h);
-  // large soft terrain variation
-  for (let i = 0; i < 260; i++) {
-    const x = r() * w, y = r() * h, rad = 60 + r() * 260;
-    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
-    const t = r();
-    gr.addColorStop(0, t < 0.4 ? 'rgba(108,96,66,0.22)' : t < 0.75 ? 'rgba(78,84,58,0.18)' : 'rgba(128,118,92,0.2)');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-    const gg = gb.createRadialGradient(x, y, 0, x, y, rad);
-    gg.addColorStop(0, `rgba(${r() < 0.5 ? 255 : 0},${r() < 0.5 ? 255 : 0},128,0.08)`); gg.addColorStop(1, 'rgba(128,128,128,0)');
-    gb.fillStyle = gg; gb.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-  }
-  // gravel speckle
-  for (let i = 0; i < 350000; i++) {
-    const v = r();
-    const x = r() * w, y = r() * h, s = 0.8 + r() * r() * 2.2;
-    g.fillStyle = v < 0.5 ? `rgba(30,28,20,${0.08 + r() * 0.12})` : `rgba(200,190,160,${0.05 + r() * 0.1})`;
-    g.fillRect(x, y, s, s);
-    gb.fillStyle = v < 0.5 ? 'rgba(60,60,60,0.35)' : 'rgba(210,210,210,0.3)';
-    gb.fillRect(x, y, s, s);
-  }
-  // craters
-  for (let i = 0; i < 14; i++) {
-    const x = r() * w, y = r() * h, rad = 30 + r() * 70;
-    const gr = g.createRadialGradient(x, y, rad * 0.2, x, y, rad);
-    gr.addColorStop(0, 'rgba(30,26,18,0.55)'); gr.addColorStop(0.7, 'rgba(40,34,24,0.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
-    const gg = gb.createRadialGradient(x, y, 0, x, y, rad * 1.1);
-    gg.addColorStop(0, 'rgba(20,20,20,0.7)'); gg.addColorStop(0.8, 'rgba(60,60,60,0.5)'); gg.addColorStop(0.92, 'rgba(235,235,235,0.6)'); gg.addColorStop(1, 'rgba(128,128,128,0)');
-    gb.fillStyle = gg; gb.beginPath(); gb.arc(x, y, rad * 1.1, 0, 7); gb.fill();
-  }
-  // deployment zones (tinted), then the cell grid
-  const zw = FX * PPC * 0.22;
-  g.fillStyle = 'rgba(70,160,200,0.10)'; g.fillRect(0, 0, zw, h);
-  g.fillStyle = 'rgba(220,100,50,0.10)'; g.fillRect(w - zw, 0, zw, h);
-  g.setLineDash([14, 10]); g.lineWidth = 3;
-  g.strokeStyle = 'rgba(120,220,255,0.55)'; g.beginPath(); g.moveTo(zw, 0); g.lineTo(zw, h); g.stroke();
-  g.strokeStyle = 'rgba(255,140,90,0.55)'; g.beginPath(); g.moveTo(w - zw, 0); g.lineTo(w - zw, h); g.stroke();
-  g.setLineDash([]);
-  for (let i = 0; i <= FX; i++) { g.strokeStyle = i % 5 === 0 ? 'rgba(235,235,215,0.16)' : 'rgba(235,235,215,0.07)'; g.lineWidth = i % 5 === 0 ? 2 : 1; g.beginPath(); g.moveTo(i * PPC, 0); g.lineTo(i * PPC, h); g.stroke(); }
-  for (let j = 0; j <= FZ; j++) { g.strokeStyle = j % 5 === 0 ? 'rgba(235,235,215,0.16)' : 'rgba(235,235,215,0.07)'; g.lineWidth = j % 5 === 0 ? 2 : 1; g.beginPath(); g.moveTo(0, j * PPC); g.lineTo(w, j * PPC); g.stroke(); }
-  const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 16;
-  const bump = new THREE.CanvasTexture(b); bump.anisotropy = 8;
-  return { map, bump };
-}
-{
-  const { map, bump } = makeGround();
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(FX, FZ).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.9, roughness: 0.96, metalness: 0 }));
-  ground.receiveShadow = true;
-  scene.add(ground);
-  // surrounding dark apron so the slice does not float
-  const apron = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#3a382d', roughness: 1 }));
-  apron.position.y = -0.02; apron.receiveShadow = true;
-  scene.add(apron);
-}
-
-// rocks (instanced) and a couple of concrete barriers
-{
-  const r = rng(7);
-  const geo = new THREE.IcosahedronGeometry(1, 1);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) { const k = 0.8 + 0.4 * Math.sin(pos.getX(i) * 3.1 + pos.getZ(i) * 2.3); pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k * 0.7, pos.getZ(i) * k); }
-  geo.computeVertexNormals();
-  const N = 70;
-  const im = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: '#7d7765', roughness: 0.95, flatShading: true }), N);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-  for (let i = 0; i < N; i++) {
-    let x = (r() - 0.5) * FX * 0.98, z = (r() - 0.5) * FZ * 0.98;
-    if (Math.abs(z) < 12 && Math.abs(x) < 24) { z = (z < 0 ? -1 : 1) * (14 + r() * 4); }
-    const s = 0.12 + r() * r() * 0.6;
-    e.set(0, r() * 7, 0); q.setFromEuler(e);
-    m.compose(new THREE.Vector3(x, s * 0.2, z), q, new THREE.Vector3(s * (1 + r()), s, s * (1 + r())));
-    im.setMatrixAt(i, m);
-  }
-  im.castShadow = im.receiveShadow = true;
-  scene.add(im);
-}
+scene.add(buildTerrain(FX, FZ, { grid: has('grid', true), keepOut: (x, z) => Math.abs(z) < 13 && Math.abs(x) < 24 }).group);
 
 // ---- units -------------------------------------------------------------------------------------
 const byId = new Map(STARTER_DESIGNS.map((d) => [d.id, d]));
@@ -185,13 +73,6 @@ for (const p of SCENE) {
   const baseAngle = p.team === 0 ? 0 : Math.PI;
   u.root.rotation.y = -baseAngle;
   scene.add(u.root);
-  // soft contact shadow under ground vehicles (cheap ambient occlusion stand-in)
-  if (!u.flying) {
-    const blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobMat());
-    blob.scale.set(u.L * 1.25, 1, u.W * 1.25);
-    blob.position.y = 0.015;
-    u.root.add(blob);
-  }
   let label: HTMLElement | undefined;
   if (!named.has(p.id) && p.team === 0 || (p.team === 1 && p.id === 'starter-juggernaut')) {
     named.add(p.id);
@@ -203,20 +84,6 @@ for (const p of SCENE) {
   }
   units.push({ u, p, baseAngle, label });
 }
-function blobMat(): THREE.Material {
-  blobMat.m ??= (() => {
-    const c = document.createElement('canvas'); c.width = c.height = 128;
-    const g = c.getContext('2d')!;
-    const gr = g.createRadialGradient(64, 64, 20, 64, 64, 64);
-    gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    const t = new THREE.CanvasTexture(c);
-    return new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-  })();
-  return blobMat.m;
-}
-blobMat.m = null as THREE.Material | null;
-
 // ---- effects: tracers, beams, orbs, muzzle flash ---------------------------------------------
 const glowTex = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -267,25 +134,14 @@ function fire(tu: Turret, target: THREE.Vector3) {
 }
 
 // ---- post --------------------------------------------------------------------------------------
-let composer: EffectComposer | null = null;
-let gtao: GTAOPass | null = null;
-let bloom: UnrealBloomPass | null = null;
-function setupPost() {
-  const w = innerWidth, h = innerHeight;
-  const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4 });
-  composer = new EffectComposer(renderer, rt);
-  composer.addPass(new RenderPass(scene, camera));
-  if (has('ao', true)) { gtao = new GTAOPass(scene, camera, w, h); gtao.output = GTAOPass.OUTPUT.Default; gtao.blendIntensity = 0.9; gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.5, thickness: 2, scale: 1.2, samples: 12 }); composer.addPass(gtao); }
-  if (has('bloom', true)) { bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.5, 1.15); composer.addPass(bloom); }
-  composer.addPass(new OutputPass());
-}
-if (has('post', true)) setupPost();
+let post: Post | null = null;
+if (has('post', true)) post = setupPost(renderer, scene, camera, innerWidth, innerHeight, { ao: has('ao', true), bloom: has('bloom', true), grade: has('grade', true) });
 
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
-  composer?.setSize(w, h);
+  post?.setSize(w, h);
 }
 addEventListener('resize', resize);
 resize();
@@ -297,7 +153,8 @@ const tmp = new THREE.Vector3(), tgt = new THREE.Vector3();
 const nextShot = new WeakMap<Turret, number>();
 const frozen = has('freeze');
 const statsEl = document.getElementById('stats')!;
-let frames = 0, fpsT = 0;
+let frames = 0, fpsT = 0, info = '', fz = 0;
+(window as unknown as Record<string, unknown>).stats = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, info });
 function frame() {
   clock.update();
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -362,7 +219,8 @@ function frame() {
     if (f.life <= 0) { scene.remove(f.obj); fx.splice(i, 1); }
   }
   controls.update();
-  if (composer) composer.render(); else renderer.render(scene, camera);
+  renderer.info.reset();
+  if (post) post.render(); else renderer.render(scene, camera);
   // labels
   const w = innerWidth, h = innerHeight;
   for (const e of units) if (e.label) {
@@ -372,9 +230,13 @@ function frame() {
     e.label.style.display = tmp.z < 1 && has('labels', true) ? 'block' : 'none';
   }
   frames++; fpsT += dt;
+  info = `${renderer.info.render.calls} draw calls | ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris`;
   if (fpsT > 1) { statsEl.textContent = `${Math.round(frames / fpsT)} fps | ${renderer.info.render.calls} draw calls | ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris | ${units.length} units`; frames = 0; fpsT = 0; }
-  requestAnimationFrame(frame);
+  if (!frozen || ++fz < 3) requestAnimationFrame(frame);
+  else (window as unknown as Record<string, unknown>).done = true;
 }
-void TEAM_PAL;
+(window as unknown as Record<string, unknown>).renderOnce = () => { fz = 0; (window as unknown as Record<string, unknown>).done = false; requestAnimationFrame(frame); };
 requestAnimationFrame(frame);
 (window as unknown as Record<string, unknown>).ready = true;
+
+(window as unknown as Record<string, unknown>).unitStats = () => units.map((e) => { let meshes = 0; e.u.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; }); return `${e.p.id}/${e.p.team}: meshes ${meshes} tris ${Math.round(e.u.tris)}`; });

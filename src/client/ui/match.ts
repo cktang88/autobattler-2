@@ -6,7 +6,9 @@ import { playMusic, sfx } from '../audio.ts';
 import { activeDeck } from '../collection.ts';
 import type { MatchDriver } from '../driver.ts';
 import { LocalDriver, lastWatched, setLastWatched } from '../localdriver.ts';
-import { drawPartIcon, FieldView, type PartKind, type BoardOverlay, type BoardUnit } from '../render/field.ts';
+import { drawPartIcon, type PartKind, type BoardOverlay, type BoardUnit } from '../render/field.ts';
+import type { BattleView } from '../render/view.ts';
+import { makeView } from '../render/viewfactory.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent } from '../../shared/sim/types.ts';
@@ -75,7 +77,7 @@ function spacingControl(value: number, onPick: ((v: number) => void) | null, foo
 
 type Op = { kind: 'place' | 'upgrade'; uid: number };
 type Sel = { side: Side; uid: number; pending: boolean } | null;
-type FieldWithEvents = FieldView & { pushEvents?: (events: BattleEvent[]) => void };
+type FieldWithEvents = BattleView;
 
 const stars = (lv: number) => '★'.repeat(lv) + '☆'.repeat(Math.max(0, MAX_LEVEL - lv));
 
@@ -200,7 +202,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const canvas = h('canvas');
   const ringCv = h('canvas.rings', { 'aria-hidden': 'true' });
   const fieldwrap = h('div.fieldwrap', null, canvas, ringCv);
-  const view: FieldWithEvents = new FieldView(canvas, side);
+  const view: FieldWithEvents = makeView(canvas, side);
   applyViewSettings(view);
 
   const roundEl = h('div.round');

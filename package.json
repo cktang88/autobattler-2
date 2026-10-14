@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/client/main.ts --bundle --format=esm --outfile=public/game.js --sourcemap && esbuild src/client/artlab.ts --bundle --format=esm --outfile=public/artlab.js",
+    "build": "rm -rf public/chunks && esbuild src/client/main.ts --bundle --format=esm --splitting --outdir=public --entry-names=game --chunk-names=chunks/[name]-[hash] --sourcemap && esbuild src/client/artlab.ts --bundle --format=esm --outfile=public/artlab.js",
     "start": "npm run build && node src/server/main.ts",
     "test": "node --test 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit",

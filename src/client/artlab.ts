@@ -257,6 +257,22 @@ function fieldSection(): void {
   ($('#reset') as HTMLButtonElement).onclick = () => { battle = null; seed++; input = setup(); playMusic('deploy'); unlockAudio(); };
   ($('#speed') as HTMLSelectElement).onchange = (e) => { speed = Number((e.target as HTMLSelectElement).value); };
   if (params.get('battle') === '1') battle = new Battle(input);
+  // ?fx=<moduleId>: a live duel for one weapon (shooter vs three sturdy targets) to look at its effects; ?zoom=N frames it
+  const fxId = params.get('fx');
+  if (fxId) {
+    const m = MODULES.find((q) => q.id === fxId);
+    if (m) {
+      const big = m.mount === 'XL' || m.mount === 'L';
+      const sc = { S: ['warden', 'treads', [null, m.id]], M: ['bastion', 'treads', [m.id, null, null]], L: ['goliath', 'megatracks', [m.id, null, null, null]], XL: ['titan', 'titanlegs', [m.id, null, null, null, null]] }[m.mount] as [string, string, (string | null)[]];
+      const air = m.targetsAir && !m.targetsGround;
+      const sh: Design = { id: 'fx_sh', name: 'sh', chassis: sc[0], mobility: sc[1], mounts: sc[2] };
+      const tg: Design = air ? { id: 'fx_tg', name: 'tg', chassis: 'deltawing', mobility: 'jet', mounts: [m.id === 'mg' ? 'ac20' : 'mg', null, null] } : { id: 'fx_tg', name: 'tg', chassis: 'bastion', mobility: 'treads', mounts: [m.id === 'mg' ? 'ac20' : 'mg', null, null] };
+      const pl = (uid: number, d: string, x: number, y: number): Placement => ({ uid, designId: d, x, y, level: 1, round: 1 });
+      battle = new Battle({ seed, sides: [{ designs: [sh], units: [pl(1, 'fx_sh', big ? 6 : 24, big ? 0 : 27)] }, { designs: [tg], units: [pl(1, 'fx_tg', 24, 14), pl(2, 'fx_tg', 20, 14), pl(3, 'fx_tg', 28, 14)] }] });
+      view.fit(true);
+      speed = Number(params.get('speed') ?? '1') || 1;
+    }
+  }
   const manual = !!params.get('manual');
   if (manual) {
     // scripted capture hook (Playwright): start a custom battle, step ticks, draw frames deterministically
