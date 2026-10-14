@@ -101,7 +101,7 @@ export const PART_REST: Record<string, (Pt | null)[]> = {
   centipede: [[0.6399999999999997, 0], [-0.07000000000000006, 0], [-0.7800000000000001, 0], [-1.4900000000000002, 0]],
 };
 
-export const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+export const RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
 /** frames whose mounts ride animated anatomy (limbs, claws, tails): hardpoints are fixed to the part */
 export const PART_SHAPES = new Set(['mantis', 'mech', 'warlord', 'arachnid', 'broodmother', 'arachne', 'crab', 'saucer', 'scorpion', 'centipede']);
 
@@ -170,7 +170,7 @@ export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (
 export const unitK = (S: number) => (S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1));
 
 /** Middle of each class's turret housing band (reference cells; render weaponsize.ts BAND_D). */
-const CLASS_D_MID: Record<MountClass, number> = { L: 0.32, M: 0.47, H: 0.63, G: 0.85, T: 1.06 };
+const CLASS_D_MID: Record<MountClass, number> = { S: 0.32, M: 0.52, L: 0.85, XL: 1.06 };
 /** Approximate turret housing diameter (cells) of a module class on a hull of size S. The exact drawn size also
  *  depends on calibre / overlap clearing (render-only); the sim uses half of this as a weapon's muzzle reach. */
 export const approxTurretD = (cls: MountClass, S: number) => CLASS_D_MID[cls] * unitK(S);

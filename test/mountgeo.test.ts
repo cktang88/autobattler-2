@@ -7,7 +7,7 @@ import type { Design, MountClass } from '../src/shared/types.ts';
 // the unit art module has no DOM side effects at import (canvases are made lazily), so it runs under node
 import { layoutOf } from '../src/client/render/unitart.ts';
 
-const RANK: Record<MountClass, number> = { L: 1, M: 2, H: 3, G: 4, T: 5 };
+const RANK: Record<MountClass, number> = { S: 1, M: 2, L: 3, XL: 4 };
 
 function designs(): Design[] {
   const out: Design[] = [...STARTER_DESIGNS];
@@ -25,7 +25,7 @@ function designs(): Design[] {
         });
       }
       // identical weapons on every slot (mirrored pairs)
-      const top = MODULES.find((m) => m.kind === 'weapon' && m.mount === 'L');
+      const top = MODULES.find((m) => m.kind === 'weapon' && m.mount === 'S');
       if (top) out.push({ id: `${c.id}-pair`, name: '', chassis: c.id, mobility: mob, mounts: c.mounts.map(() => top.id) });
     }
   }
