@@ -40707,7 +40707,7 @@ function citadel(c) {
   const deckY = yt + 1.15 * k;
   const wi = Math.min(stance.wi, 2.2 * kz);
   planLoft(b, kit.trim, [[3.1 * kx, -wi * 0.6], [3.1 * kx, wi * 0.6], [2.4 * kx, wi], [-2.4 * kx, wi], [-3.1 * kx, wi * 0.6], [-3.1 * kx, -wi * 0.6], [-2.4 * kx, -wi], [2.4 * kx, -wi]], [[y0, 0.94], [yt + 0.1, 1]]);
-  const oct2 = [[3.8 * kx, 0], [3.05 * kx, 1.85 * kz], [1.7 * kx, 3.3 * kz], [-1.7 * kx, 3.3 * kz], [-3.35 * kx, 1.7 * kz], [-3.35 * kx, -1.7 * kz], [-1.7 * kx, -3.3 * kz], [1.7 * kx, -3.3 * kz], [3.05 * kx, -1.85 * kz]];
+  const oct2 = [[3.95 * kx, 0], [2.9 * kx, 1.6 * kz], [1.7 * kx, 3.3 * kz], [-1.7 * kx, 3.3 * kz], [-3 * kx, 2 * kz], [-3.55 * kx, 0], [-3 * kx, -2 * kz], [-1.7 * kx, -3.3 * kz], [1.7 * kx, -3.3 * kz], [2.9 * kx, -1.6 * kz]];
   planLoft(b, kit.hull, oct2, [[yt - 0.05, 0.9], [yt + 0.35 * k, 1], [deckY - 0.12 * k, 0.97], [deckY, 0.94]]);
   planLoft(b, kit.trim, oct2, [[yt + 0.3 * k, 1.005], [yt + 0.42 * k, 1.005]]);
   both((s) => {
@@ -40729,13 +40729,14 @@ function citadel(c) {
     block(b, kit.metal, 3.15 * kx, 0.15, 0, 0.5 * kx, 2.6 * kz, yt - 0.1, { top: [0.4, 0.95], shift: [0.15 * kx, 0], ch: 0.15 * k, bev: 0.05 });
     hazard(b, kit, 3.42 * kx, yt * 0.55, 0, 2.2 * kz, 0.3 * kx, 7, Math.PI / 2);
   }
-  const pa = Math.atan2(1.85 * kz, 0.75 * kx);
+  const pa = Math.atan2(1.6 * kz, 1.05 * kx);
   both((s) => {
-    const fx2 = 3.42 * kx, fz2 = s * 0.92 * kz;
+    const fx2 = 3.45 * kx, fz2 = s * 0.78 * kz;
     for (let i = 0; i < 3; i++) glow(b, kit, fx2, yt + (0.45 + i * 0.22) * k, fz2, 0.06, 0.08 * k, 1.3 * kz, [0, s * (Math.PI / 2 - pa), 0]);
     b.box(kit.lamp, 0.1, 0.16 * k, 0.3 * kz, fx2 + 0.12 * kx, yt + 0.15 * k, fz2 * 0.6, 0.02, [0, s * (Math.PI / 2 - pa), 0]);
   });
-  block(b, kit.panel, 2.9 * kx, deckY - 0.02, 0, 1.2 * kx, 1.6 * kz, 0.18 * k, { top: [0.6, 0.6], shift: [0.2 * kx, 0], ch: 0.5 * k, bev: 0.06 });
+  block(b, kit.panel, 3 * kx, deckY - 0.02, 0, 1.5 * kx, 1.7 * kz, 0.2 * k, { top: [0.5, 0.5], shift: [0.3 * kx, 0], ch: 0.6 * k, bev: 0.06 });
+  hazard(b, kit, 3.1 * kx, deckY + 0.19 * k, 0, 0.9 * kz, 0.22 * kx, 4, Math.PI / 2);
   const tR = 0.9 * k, tTop = deckY + 1.5 * k;
   const towers = [];
   for (const sx of [1, -1]) for (const sz of [-1, 1]) {
