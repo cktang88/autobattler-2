@@ -60,11 +60,11 @@ function matches() {
   }
 }
 
-// Economy: 3000 starting supply, +600/round -> a mid-game army is ~6000 supply (a 16-squad block costs 450+, a
-// single medium 100-300, a giant ~1500, a titan ~2500).
-const ARMY_SUPPLY = Number(process.env.BAL_SUPPLY ?? 6000);
+// Economy: 600 starting supply, +120/round -> a mid-game army is ~1200 supply (a 16-squad block costs 90+, a
+// single medium 20-60, a giant ~300, a titan ~500).
+const ARMY_SUPPLY = Number(process.env.BAL_SUPPLY ?? 1200);
 /** Budget when a giant/titan is involved on either side. */
-const BIG_SUPPLY = Number(process.env.BAL_BIG_SUPPLY ?? 8000);
+const BIG_SUPPLY = Number(process.env.BAL_BIG_SUPPLY ?? 1600);
 /** Keep armies under the sim-unit cap (match.ts MAX_SIM_UNITS = 240) so supply is never silently dropped. */
 const UNIT_CAP = 220;
 const SHARDS = 4;
@@ -84,7 +84,7 @@ const st = (d: Design) => {
 /** Rounding-free block cost: the model's unit cost times the squad size. Armies are sized with this so the
  *  50-supply price rounding (a separate, per-design matter, see the starter table) does not pollute the
  *  per-module calibration; the supply actually granted is blocks * the real block price. */
-const rawCost = (d: Design) => st(d).unitCost * st(d).squad;
+const rawCost = (d: Design) => st(d).unitCost * st(d).squad; // player-scale (raw / PRICE_DIV)
 
 interface Spec { d: Design; n: number }
 /** Army of ~`S` raw supply: pure blocks of one design; giants/titans (size >= 4) are bought as ~55% of the budget

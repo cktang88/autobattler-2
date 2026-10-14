@@ -3,7 +3,7 @@
 // is baked into the cached hull sprite (or one cached shell sprite), so it costs nothing per frame.
 // Local frame: nose +x, +y right, units = cells, S = chassis size.
 
-import { computeStats } from '../../shared/stats.ts';
+import { PRICE_DIV, computeStats } from '../../shared/stats.ts';
 import type { Design, ModuleDef } from '../../shared/types.ts';
 import { METAL, OUTLINE, makeCanvas, ctx2d, rgba, roundRect, shade, type Ctx, type TeamPal } from './palette.ts';
 
@@ -45,7 +45,7 @@ export function buildProfile(d: Design, key: string, size: number, chassisRoles:
   const hit = cache.get(key);
   if (hit) return hit;
   let armor = 0, hp = 0, load = 0.7, cost = 100;
-  try { const st = computeStats(d); armor = st.armor; hp = st.hp; load = st.load; cost = st.unitCost; } catch { /* invalid design: defaults */ }
+  try { const st = computeStats(d); armor = st.armor; hp = st.hp; load = st.load; cost = st.unitCost * PRICE_DIV; } catch { /* invalid design: defaults */ }
   const S = size;
   const ap = armor / (6 * S);
   const heavy = Math.max(0, Math.min(1, (ap - 0.35) / 1.2));

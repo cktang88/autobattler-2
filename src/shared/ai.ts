@@ -104,8 +104,8 @@ function classify(p: Profile): Role {
   if (p.range >= 9 && (p.minRange > 0 || p.groundDps === 0 || p.aaDps < p.groundDps * 0.5)) return 'artillery';
   if (p.aaDps > 0 && (p.groundDps === 0 || p.aaDps >= p.groundDps * 1.4)) return 'antiAir';
   if (p.ap >= 0.55 && p.groundDps > 0) return 'antiArmor';
-  if (p.unitCost <= 75) return 'swarm';
-  if (p.size >= 2 && p.toughPerCost >= 3.5) return 'frontline';
+  if (p.unitCost <= 15) return 'swarm';
+  if (p.size >= 2 && p.toughPerCost >= 17.5) return 'frontline';
   return 'skirmisher';
 }
 
@@ -224,7 +224,7 @@ function acceptable(d: Design, role: Role): boolean {
   if (p.groundDps + p.aaDps + p.heal <= 0) return false;
   if (role === 'flyer') return p.flying && p.groundDps > 0;
   if (role === 'antiAir') return p.aaDps > 0;
-  return p.role === role || (role === 'frontline' && p.toughPerCost >= 3) || (role === 'skirmisher' && !p.flying);
+  return p.role === role || (role === 'frontline' && p.toughPerCost >= 15) || (role === 'skirmisher' && !p.flying);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -297,7 +297,7 @@ function analyze(board: Placement[], deck: Design[]): Threat {
     t.total += v;
     if (p.flying) t.air += v; else t.ground += v;
     if (!p.flying && p.stats.armor >= 9) t.heavy += v;
-    if (p.unitCost <= 75) t.swarm += v;
+    if (p.unitCost <= 15) t.swarm += v;
     if (p.splashRadius > 0 || p.role === 'artillery') t.splashy += v;
     if (p.role === 'artillery') t.artillery += v;
     if (p.aaDps > 0) t.aa += v * Math.min(1, p.aaDps / Math.max(1, p.aaDps + p.groundDps) * 1.5);
@@ -313,7 +313,7 @@ function designScore(d: Design, opp: Threat, mine: Threat, mineRoles: Map<Role, 
   const aaShare = opp.aa / T;
   // Base efficiency: power per cost.
   const dpsPerCost = (p.groundDps + p.aaDps * 0.5) / p.unitCost;
-  let s = 1 + dpsPerCost * 2.5 + p.toughPerCost * 0.12;
+  let s = 1 + dpsPerCost * 0.5 + p.toughPerCost * 0.024; // per-price ratios: prices are raw / PRICE_DIV
   if (opp.total > 0) {
     if (p.aaDps > 0) s += airShare * 4 * Math.min(1.5, p.aaDps / Math.max(20, p.groundDps + p.aaDps) * 2);
     if (airShare > 0.3 && p.aaDps === 0) s *= 0.75;
@@ -426,7 +426,7 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
   if (mobile && stance === 'advance' && p.range >= 7 && (p.role === 'artillery' || p.role === 'skirmisher' || p.role === 'antiArmor')) delay = rng() < 0.5 ? 3 : 6;
   const hold = hasSpacing(p.size as Size) && spacing >= 2 && oppSplashShare > 0.2;
   const focus = !p.isStatic && p.range >= 5 && p.role !== 'support' && rng() < 0.45;
-  const retreat = mobile && ctx.hasRepair && p.unitCost >= 100 && p.role !== 'support' && p.role !== 'artillery' && rng() < 0.7;
+  const retreat = mobile && ctx.hasRepair && p.unitCost >= 20 && p.role !== 'support' && p.role !== 'artillery' && rng() < 0.7;
   if (stance === 'flankLeft' || stance === 'flankRight') ctx.flankCount++;
   return { target, hold, kite: kite && stance !== 'holdPos', focus, stance, delay, retreat };
 }
@@ -563,7 +563,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       .map((u) => {
         const d = byId.get(u.designId);
         if (!d) return null;
-        const sc = designScore(d, opp, mine, roles, m.round) * (surv.has(u.uid) ? 1.4 : 1) * (profile(d).cost >= 400 ? 1.2 : 0.8);
+        const sc = designScore(d, opp, mine, roles, m.round) * (surv.has(u.uid) ? 1.4 : 1) * (profile(d).cost >= 80 ? 1.2 : 0.8);
         return { u, d, sc };
       })
       .filter((x): x is { u: Placement; d: Design; sc: number } => !!x)

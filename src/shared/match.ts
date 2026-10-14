@@ -13,7 +13,7 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { computeStats, levelMult, MAX_LEVEL, roundCost, validateDesign } from './stats.ts';
+import { computeStats, levelMult, MAX_LEVEL, roundPrice, validateDesign } from './stats.ts';
 import type { UnitFoot } from './grid.ts';
 import { MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadSize } from './grid.ts';
 import { mixSeed } from './rng.ts';
@@ -26,7 +26,7 @@ import type { Size, DeployAction, Design, MatchMode, MatchState, Placement, Play
 export const DECK_SIZE = 9;
 export const START_HP = 100;
 /** Supply granted in round 1 and added each further round. Unspent supply carries over. */
-export const START_SUPPLY = 3000;
+export const START_SUPPLY = 600;
 /** After this round resolves the match ends regardless; higher hp wins. */
 export const MAX_ROUNDS = 15;
 /** Hard cap on blocks (placements) per side. */
@@ -37,7 +37,7 @@ export const MAX_SIM_UNITS = 240;
 export const MAX_PLAYER_NAME = 24;
 
 const ROUND_SUPPLY_BASE = START_SUPPLY;
-const ROUND_SUPPLY_GROWTH = 600;
+const ROUND_SUPPLY_GROWTH = 120;
 
 /** Supply granted at the start of `round` (1-based). Unspent supply carries over. */
 export function supplyForRound(round: number): number {
@@ -59,7 +59,7 @@ export function designCost(design: Design): number {
 
 /** Cost to raise a unit from `level` to `level + 1`: 50% of design cost for L1->2, 60% for L2->3. */
 export function upgradeCost(design: Design, level: number): number {
-  return roundCost(designCost(design) * (0.4 + 0.1 * level));
+  return roundPrice(designCost(design) * (0.4 + 0.1 * level));
 }
 
 /** Total supply invested in a placement (design + upgrades up to its level). */
@@ -75,7 +75,7 @@ export function baseDamage(round: number): number {
 }
 
 /** Survivor divisor: block value (supply) per point of damage. */
-const SURVIVOR_DIV = 450;
+const SURVIVOR_DIV = 90; // prices are raw / PRICE_DIV (5)
 
 /** Damage contributed by one surviving enemy block; `fraction` = share of its squad still alive (0..1]. */
 export function survivorDamage(design: Design, level: number, fraction = 1): number {

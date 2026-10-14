@@ -209,7 +209,7 @@ function duels() {
 }
 
 // ---------------------------------------------------------------------------------------------
-const BUDGET = 1500;
+const BUDGET = 300;
 /** n blocks of a design spread across the field centre, rows of up to 4, `y0` local depth of the first row. */
 function groupBlocks(id: string, n: number, y0: number, stance?: Stance): Block[] {
   const s = ST.get(id)!;
@@ -226,14 +226,16 @@ function groupBlocks(id: string, n: number, y0: number, stance?: Stance): Block[
 
 const GROUPS: [string, string][] = [
   ['howitzer', 'bulwark'], ['howitzer', 'buzzsaw'], ['howitzer', 'assaulthalf'], ['mortar2', 'bulwark'], ['mortar2', 'ripper'],
-  ['mlrs', 'buzzsaw'], ['snipers', 'bulwark'], ['railgun', 'bulwark'], ['atgm', 'bulwark'], ['swarm', 'hoverraid'], ['tankbuster', 'bulwark'],
+  ['mlrs', 'buzzsaw'], ['mortarcart', 'bulwark'], ['mortarcart', 'buzzsaw'], ['mortarcart', 'assaulthalf'], ['mortarcart', 'ironclad'], ['mortarcart', 'hoverraid'], ['mortar2', 'buzzsaw'], ['snipers', 'bulwark'], ['snipers', 'buzzsaw'], ['atgm', 'buzzsaw'], ['railgun', 'bulwark'], ['atgm', 'bulwark'], ['swarm', 'hoverraid'], ['tankbuster', 'bulwark'],
 ];
 
 function groups() {
   header(`Cost-equal groups (~${BUDGET} supply each; blocks shown as n x)`);
   for (const [a, b] of GROUPS) {
     if (FILTER && !a.includes(FILTER) && !b.includes(FILTER)) continue;
-    const na = Math.max(1, Math.round(BUDGET / ST.get(a)!.cost)), nb = Math.max(1, Math.round(BUDGET / ST.get(b)!.cost));
+    // budget grows to fit an expensive block so both sides really spend about the same
+    const bud = Math.max(BUDGET, ST.get(a)!.cost, ST.get(b)!.cost);
+    const na = Math.max(1, Math.round(bud / ST.get(a)!.cost)), nb = Math.max(1, Math.round(bud / ST.get(b)!.cost));
     for (const md of ['adv', 'hold'] as const) {
       const rs: Res[] = [];
       for (let s = 1; s <= SEEDS; s++) for (const off of OFFSETS) {

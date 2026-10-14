@@ -15,6 +15,21 @@ npm start          # builds the client and serves it + the API on http://localho
 suite, `npm run typecheck` checks types. `public/artlab.html` (after `npm run build`) shows every part
 and a demo battle.
 
+## Deploy (Fly.io)
+
+`fly.toml` and the `Dockerfile` are ready. One-time setup, from the repo root:
+
+```bash
+fly launch --no-deploy --copy-config     # pick a free app name (edit `app` in fly.toml) and a region
+fly volumes create ironclad_data --size 1 --region iad   # same region as primary_region in fly.toml
+fly deploy
+```
+
+After that, `fly deploy` ships each update. Players and async PvP matches are JSON files on the
+`ironclad_data` volume, so run exactly one machine (`fly scale count 1`); a second machine would get its own
+volume and its own copy of the data. The machine sleeps when idle and wakes on the next request; the server
+saves its data on shutdown, so nothing is lost. Health check: `GET /api/health`.
+
 ## How it plays
 
 1. **Garage** — build designs from parts on a blueprint bench drawn on the true 5 m grid: drag weapons and modules
