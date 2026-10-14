@@ -115,20 +115,20 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 2.54, ac20: 2.90, ac40: 3.46, aegisT: 1.15, annihilator: 3.80, arclance: 2.14, atgm: 5.09,
-  autocannon: 3.09, autoloader: 2.27, avenger: 4.34, barrage: 7.18, bombs: 3.94, bulwarkshield: 2.05,
-  buzzsaw: 0.62, cannon: 4.64, cannon75: 4.10, chainsaw: 2.48, claw: 2.19, clusterbombs: 4.69, cruise: 5.67,
-  disarm: 0.24, dome: 0.16, domeG: 1.95, doomsday: 6.54, drill: 2.49, empcannon: 1.89, flak: 1.87,
-  flamer: 0.84, gauss: 3.48, gravity: 1.60, grinder: 5.95, guidedrocket: 2.39, gyro: 0.16, hammer: 2.37,
-  hardened: 0.19, heatray: 0.45, heavyflak: 3.45, hmg: 2.30, howitzer: 5.84, incendiary: 2.15, inferno: 2.71,
-  jammer: 0.14, laser: 3.14, lightrail: 5.98, massdriver: 2.16, mg: 1.84, minigun: 1.85, mirror: 0.41,
-  missilebattery: 2.42, mlrs: 5.16, mortar: 2.19, nanite: 0.33, napalm: 1.21, overclock: 0.23, phantom: 0.60,
-  plasma: 3.27, plasmablade: 2.51, plasmaorb: 2.83, pointdef: 2.05, quad20: 5.28, railgun: 6.04, ram: 0.47,
-  reactive: 0.94, repair: 3.32, repairM: 3.03, rocketL: 3.06, rockets: 3.57, sam: 2.40, selfdestruct: 0.33,
-  sensor: 0.30, shield: 1.03, shieldH: 1.03, shieldL: 0.80, shockprod: 1.51, shotgun: 2.83, siege240: 1.20,
-  siegeplasma: 4.82, skyfortress: 7.31, slowbeam: 3.87, smoke: 4.00, sniper: 10.72, sonic: 0.00, stealth: 0.62,
-  stormcore: 2.26, stormtower: 4.21, stungun: 1.47, swarm: 3.27, tactnuke: 2.84, targeting: 1.56, tesla: 1.55,
-  titanfist: 7.93, turbo: 0.28, twin120: 4.66, twin30: 3.24, twinlaser: 2.76, twinmg: 2.35, uplink: 0.29,
+  aamissile: 5.08, ac20: 8.15, ac40: 3.55, aegisT: 1.15, annihilator: 5.6, arclance: 4.22, atgm: 4.62,
+  autocannon: 3.6, autoloader: 2.27, avenger: 2.13, barrage: 4.09, bombs: 0.41, bulwarkshield: 2.05, buzzsaw: 0.15,
+  cannon: 5.65, cannon75: 5.26, chainsaw: 1.65, claw: 1.93, clusterbombs: 6.02, cruise: 9.26, disarm: 1.86,
+  dome: 0.16, domeG: 1.95, doomsday: 10.92, drill: 1.92, empcannon: 1.07, flak: 3.74, flamer: 0.6, gauss: 3.53,
+  gravity: 1.99, grinder: 8.7, guidedrocket: 2.62, gyro: 0.16, hammer: 2, hardened: 0.19, heatray: 2.45,
+  heavyflak: 6.9, hmg: 6.48, howitzer: 4.29, incendiary: 3.54, inferno: 3.77, jammer: 0.14, laser: 8.65,
+  lightrail: 2.85, massdriver: 1.01, mg: 3, minigun: 1.4, mirror: 0.41, missilebattery: 2.13, mlrs: 5.01,
+  mortar: 1.28, nanite: 0.33, napalm: 1.78, overclock: 0.23, phantom: 0.6, plasma: 4.55, plasmablade: 1.3,
+  plasmaorb: 3.58, pointdef: 2.05, quad20: 10.56, railgun: 5.32, ram: 0.34, reactive: 0.94, repair: 3.32,
+  repairM: 3.03, rocketL: 7.42, rockets: 4.81, sam: 1.27, selfdestruct: 0.33, sensor: 0.3, shield: 1.03,
+  shieldH: 1.03, shieldL: 0.8, shockprod: 0.48, shotgun: 2.19, siege240: 1.6, siegeplasma: 4.43, skyfortress: 14.62,
+  slowbeam: 4.28, smoke: 4, sniper: 15, sonic: 1.51, stealth: 0.62, stormcore: 1.88, stormtower: 3.9, stungun: 1.04,
+  swarm: 2.23, tactnuke: 4.89, targeting: 1.56, tesla: 1.95, titanfist: 4.83, turbo: 0.28, twin120: 4.61,
+  twin30: 5.06, twinlaser: 4.3, twinmg: 4.71, uplink: 0.29,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 

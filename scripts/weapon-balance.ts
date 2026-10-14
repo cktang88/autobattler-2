@@ -304,13 +304,18 @@ if (mode === 'shard') {
     printRows(rows);
     // Smooth (margin) scores -> multiplicative cal step. Cost ~ cal^0.5 and score logit ~ -2.5 * ln(cost), so
     // ln(cal) moves ~0.8 * logit; the gain decays so the fit settles instead of oscillating.
-    const gain = 0.8 / (1 + 0.2 * it);
+    const gain = 1.6 / (1 + 0.35 * it);
     const upd: Record<string, number> = {};
+    // The carriers are artificial (one weapon + plating), so the absolute strength of a whole size class vs the reference
+    // is the hulls' business (SIZE_K, hull numbers); the fit only equalises weapons: the class-mean ref score is re-centred on 50%.
+    const classMean: Record<string, number> = {};
+    for (const z of ['S', 'M', 'L', 'XL']) { const xs = rows.filter((r) => r.size === z).map((r) => r.refM); classMean[z] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0.5; }
     for (const r of rows) {
-      const sc = Number.isNaN(r.peersM) ? r.refM : 0.5 * r.refM + 0.5 * r.peersM;
+      const refC = r.refM - classMean[r.size] + 0.5;
+      const sc = Number.isNaN(r.peersM) ? refC : 0.5 * refC + 0.5 * r.peersM;
       const c = Math.min(0.95, Math.max(0.05, sc));
       const step = Math.pow(c / (1 - c), gain);
-      const cal = Math.round((MODULE_CAL[r.id] ?? 1) * Math.min(1.7, Math.max(0.6, step)) * 100) / 100;
+      const cal = Math.round(Math.min(15, Math.max(0.1, (MODULE_CAL[r.id] || 0.1) * Math.min(1.7, Math.max(0.6, step)))) * 100) / 100;
       upd[r.id] = cal;
       (hist[r.id] ??= []).push(MODULE_CAL[r.id] ?? 1);
     }
