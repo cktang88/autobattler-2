@@ -376,9 +376,11 @@ export class Api {
 
   private clientIp(req: IncomingMessage): string {
     if (this.trustProxy) {
+      // The trusted proxy (one hop, e.g. Fly's edge) APPENDS the address it saw, so only the LAST entry is
+      // trustworthy; anything to its left is whatever the client sent and would let it dodge the rate limits.
       const xff = req.headers['x-forwarded-for'];
-      const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
-      if (first) return first;
+      const last = (Array.isArray(xff) ? xff.join(',') : xff)?.split(',').map((s) => s.trim()).filter(Boolean).pop();
+      if (last) return last;
     }
     return req.socket.remoteAddress ?? 'unknown';
   }
