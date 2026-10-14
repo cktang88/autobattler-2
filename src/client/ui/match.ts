@@ -25,6 +25,7 @@ import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
 import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
 import { playerName } from './vsai.ts';
 import { designInfo, type DesignInfo } from './deckstats.ts';
+import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 
@@ -509,11 +510,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   // ---------- top bar ----------
-  function hpAt(s: Side, throughRound: number): number {
-    let hp = m.players[s].hp;
-    for (const r of m.history) if (r.round > throughRound) hp += r.result.damage[s];
-    return hp;
-  }
+  const hpAt = (s: Side, throughRound: number) => hpAfterRound(m, s, throughRound);
   function renderTop() {
     const shownRound = replay && (phase === 'battle' || phase === 'result') ? replay.round : m.round;
     const through = replay && phase === 'battle' ? replay.round - 1 : replay && phase === 'result' ? replay.round : Infinity;
@@ -848,8 +845,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     } else if (phase === 'over') {
       const won = m.winner === side, lost = m.winner === opp;
       const roundsWon = m.history.filter((r) => r.result.winner === side).length;
-      const dealt = m.history.reduce((s, r) => s + r.result.damage[opp], 0);
-      const taken = m.history.reduce((s, r) => s + r.result.damage[side], 0);
+      const dealt = totalDamageTaken(m, opp);
+      const taken = totalDamageTaken(m, side);
       const buttons: HTMLElement[] = [];
       if (driver instanceof LocalDriver) buttons.push(h('button.primary', { onclick: () => rematch() }, 'Rematch'));
       if (driver.mode === 'pvp') buttons.push(h('button.primary', { onclick: () => app.go({ name: 'lobby' }) }, 'Back to lobby'));
