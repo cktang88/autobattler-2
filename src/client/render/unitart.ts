@@ -8,7 +8,7 @@
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { computeStats } from '../../shared/stats.ts';
 import type { ChassisDef, Design, MobilityDef, ModuleDef, MountClass } from '../../shared/types.ts';
-import { METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
+import { MAT, METAL, OUTLINE, TEAM_PAL, clamp, ctx2d, makeCanvas, mirrorPoly, poly, rgba, roundRect, shade, softDot, type Ctx, type Team, type TeamPal } from './palette.ts';
 import { TURRET_EXT, drawTurret, drawTurretDynamic, muzzleLen } from './turrets.ts';
 import { CREATURE_SHAPES, creatureDetails, creatureHullPath, creatureUnderlay, drawCreatureFx, drawSpiderLegs, mountOnPart, partMounts, partXfs, partsOf, type AnimIn, type Xf } from './creatures.ts';
 import { armourTier, buildProfile, drawOutriggers, drawProfile, shieldShell, type BuildProfile } from './profile.ts';
@@ -371,55 +371,86 @@ function rawHullPath(shape: Shape, S: number): Path2D {
 }
 
 export function paintHull(g: Ctx, path: Path2D, pal: TeamPal, S: number, o: number, hw: number, X = S, Y = S): void {
-  // base + shading
-  const gr = g.createLinearGradient(-0.3 * S, -hw * S * 1.2, 0.3 * S, hw * S * 1.2);
-  // mid-tone team armour (turrets are the light layer, running gear the dark one)
-  gr.addColorStop(0, shade(pal.light, -0.2));
-  gr.addColorStop(0.45, shade(pal.body, -0.06));
-  gr.addColorStop(1, shade(pal.dark, -0.12));
+  // base paint: flat military finish, then light / camo / weathering passes clipped to the hull
+  const gr = g.createLinearGradient(-0.3 * X, -hw * S * 1.2, 0.3 * X, hw * S * 1.2);
+  gr.addColorStop(0, shade(pal.body, 0.1));
+  gr.addColorStop(0.5, pal.body);
+  gr.addColorStop(1, shade(pal.body, -0.14));
   g.fillStyle = gr;
   g.fill(path);
   g.save();
   g.clip(path);
-  // top light
-  const rg = g.createRadialGradient(-0.05 * S, -0.08 * S, 0, 0, 0, 0.55 * S);
-  rg.addColorStop(0, 'rgba(255,255,255,0.18)');
-  rg.addColorStop(1, 'rgba(255,255,255,0)');
+  let seed = 17 + Math.round(S * 31 + X * 7 + Y * 3);
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  paintCamo(g, pal, X, Y, rnd);
+  // key light from above: the crown of the hull catches it, the flanks roll off into shade
+  const rg = g.createRadialGradient(-0.06 * X, -0.06 * Y, 0, 0, 0, 0.62 * Math.max(X, Y));
+  rg.addColorStop(0, 'rgba(255,255,255,0.13)');
+  rg.addColorStop(0.55, 'rgba(255,255,255,0.03)');
+  rg.addColorStop(1, 'rgba(0,0,0,0.16)');
   g.fillStyle = rg;
   g.fillRect(-X, -Y, 2 * X, 2 * Y);
-  // weathering speckle (deterministic)
-  let seed = 17 + S * 31;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 40 * Math.sqrt(X * Y); i++) {
-    g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.07)';
-    const x = (rnd() - 0.5) * X, y = (rnd() - 0.5) * Y, r = (0.004 + rnd() * 0.014) * S;
+  // fine surface texture: tiny paint/metal flecks (very low contrast)
+  for (let i = 0; i < 46 * Math.sqrt(X * Y); i++) {
+    g.fillStyle = rnd() < 0.55 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
+    const x = (rnd() - 0.5) * X, y = (rnd() - 0.5) * Y, r = (0.004 + rnd() * 0.012) * S;
     g.fillRect(x, y, r, r);
   }
-  // inner bevel: thick dark stroke clipped = rim shadow
-  g.strokeStyle = 'rgba(0,0,0,0.35)';
-  g.lineWidth = 0.06 * S;
+  // dust kicked up by the running gear: settles on the flanks and the rear (subtle, warm)
+  g.strokeStyle = rgba(MAT.dust, 0.2);
+  g.lineWidth = 0.09 * S;
   g.stroke(path);
-  // edge wear: bare-metal scuffs chipped along the lit rim
+  const dg = g.createLinearGradient(-0.5 * X, 0, -0.1 * X, 0);
+  dg.addColorStop(0, rgba(MAT.dust, 0.2));
+  dg.addColorStop(1, rgba(MAT.dust, 0));
+  g.fillStyle = dg;
+  g.fillRect(-X, -Y, X, 2 * Y);
+  // ambient occlusion along the hull edge (the plates curve away from the light)
+  g.strokeStyle = 'rgba(0,0,0,0.26)';
+  g.lineWidth = 0.045 * S;
+  g.stroke(path);
+  // bevel: lit upper-left lip, shaded lower-right lip (hard-edged)
   g.save();
-  g.translate(-o * 0.6, -o * 0.6);
-  g.setLineDash([0.012 * S, 0.05 * S, 0.03 * S, 0.08 * S]);
-  g.strokeStyle = 'rgba(220,228,235,0.35)';
-  g.lineWidth = o * 0.9;
+  g.translate(o * 0.9, o * 0.9);
+  g.strokeStyle = 'rgba(255,255,255,0.2)';
+  g.lineWidth = o * 1.2;
+  g.stroke(path);
+  g.restore();
+  // edge wear: bare-metal chips along the rim
+  g.save();
+  g.translate(-o * 0.5, -o * 0.5);
+  g.setLineDash([0.008 * S, 0.06 * S, 0.02 * S, 0.1 * S]);
+  g.strokeStyle = rgba(MAT.steel, 0.4);
+  g.lineWidth = o * 0.8;
   g.stroke(path);
   g.setLineDash([]);
   g.restore();
   g.restore();
-  // inner highlight
-  g.save();
-  g.scale(0.84, 0.84);
-  g.strokeStyle = 'rgba(255,255,255,0.16)';
-  g.lineWidth = o * 0.6;
-  g.stroke(path);
-  g.restore();
-  g.strokeStyle = OUTLINE;
-  g.lineWidth = o;
+  // faint separation edge only (no comic outline)
+  g.strokeStyle = 'rgba(12,14,16,0.45)';
+  g.lineWidth = o * 0.8;
   g.lineJoin = 'round';
   g.stroke(path);
+}
+
+/** Disruptive camouflage: hard-edged irregular blotches in a second paint tone (cheap: drawn once per sprite). The
+ *  viewer's slate scheme uses large soft-contrast blocks, the enemy's olive scheme adds a darker third tone. */
+export function paintCamo(g: Ctx, pal: TeamPal, X: number, Y: number, rnd: () => number): void {
+  const n = Math.round(5 + 5 * Math.sqrt(X * Y));
+  const blob = (col: string, k: number) => {
+    const cx = (rnd() - 0.5) * X, cy = (rnd() - 0.5) * Y, r = (0.1 + rnd() * 0.12) * Math.sqrt(X * Y) * k;
+    const pts = 6 + Math.floor(rnd() * 3), a0 = rnd() * 6.28;
+    g.beginPath();
+    for (let i = 0; i < pts; i++) {
+      const a = a0 + (i / pts) * Math.PI * 2, rr = r * (0.55 + rnd() * 0.6);
+      g.lineTo(cx + Math.cos(a) * rr * 1.4, cy + Math.sin(a) * rr);
+    }
+    g.closePath();
+    g.fillStyle = col;
+    g.fill();
+  };
+  for (let i = 0; i < n; i++) blob(rgba(pal.camo, 0.7), 1);
+  if (pal.camo === TEAM_PAL[1].camo) for (let i = 0; i < n * 0.6; i++) blob(rgba(pal.deep, 0.22), 0.7);
 }
 
 function line(g: Ctx, pts: number[], S: number, color: string, w: number): void {
@@ -1113,6 +1144,8 @@ export interface UnitSprites {
   shell?: HTMLCanvasElement;
   /** animated parts (limbs, claws, tail/body segments): sprite + its own halo, centred on the part pivot */
   parts: { c: HTMLCanvasElement; ext: number; halo: HTMLCanvasElement; haloExt: number; sil: Map<string, HTMLCanvasElement> }[];
+  /** screen-space key-light rim overlays per local light-direction bucket (built on demand, see litOverlay) */
+  lit?: (HTMLCanvasElement | undefined)[];
 }
 
 const spriteCache = new Map<string, UnitSprites>();
@@ -1169,6 +1202,7 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   if (bake) drawPartsStatic(hull.g, L, pal, o, 'over');
   drawPlates(hull.g, L, pal, o);
   drawProfile(hull.g, prof, hp, L.S, Math.min(L.hw, 0.42), pal, o, emis(pal), { creature, air: L.air, legged, rearX: rearX(L, hp0), X: L.X, Y: L.Y });
+  teamMarkings(hull.g, L, hp, pal, o, px, prof.serial, creature);
   const sin: SuperIn = {
     S: L.S, X: L.X, Y: L.Y, shape: `${L.shape}|${kY}|${L.X}|${L.Y}`, mob: L.mob.id, air: L.air, mounts: L.mounts, riding, hull: hp, P: prof, pal, o, E: emis(pal), px,
     muzzle: L.mounts.map((m) => (m.mod ? muzzleLen(m.mod) : 0)),
@@ -1281,47 +1315,139 @@ function armoredCap(g: Ctx, x: number, y: number, r: number, pal: TeamPal, o: nu
   dotAt(g, x, y, r * 0.22, METAL.dark);
 }
 
-/** Dark outline + a crisp team-coloured rim line just outside it, around the whole unit silhouette. No blur: team
- *  identity is a thin hard edge (plus the small team markers at far zoom), never a glow. Widths are in device px (sprite
- *  px ~ screen px), so the lines keep a minimum on-screen width at fit zoom and stay thin at close zoom. */
-function buildHalo(src: HTMLCanvasElement, sext: number, px: number, pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
-  const tint = new Map<string, HTMLCanvasElement>();
-  const solid = (col: string) => {
-    let t = tint.get(col);
-    if (t) return t;
-    t = makeCanvas(src.width, src.height);
-    const tg = ctx2d(t);
-    tg.drawImage(src, 0, 0);
-    tg.globalCompositeOperation = 'source-in';
-    tg.fillStyle = col;
-    tg.fillRect(0, 0, t.width, t.height);
-    tint.set(col, t);
-    return t;
+let scratchG: Ctx | null = null;
+const inHull = (p: Path2D, x: number, y: number) => (scratchG ??= ctx2d(makeCanvas(2, 2))).isPointInPath(p, x, y);
+/** Half-width of the hull path at station x (largest |y| inside on both sides), scanning inward from maxY. */
+function edgeY(p: Path2D, x: number, maxY: number): number {
+  for (let y = maxY; y > 0; y -= maxY / 48) if (inHull(p, x, y) && inHull(p, x, -y)) return y;
+  return 0;
+}
+
+/**
+ * Team identity as small painted / lit details only (Zero-K / Mechabellum style): a pair of team-colour bands on each
+ * flank, team-colour running lights at the rear corners, and a small team decal + stencil number on the rear deck.
+ * Sizes have a device-pixel floor so the bands and lights still read at fit zoom.
+ */
+function teamMarkings(g: Ctx, L: UnitLayout, hp: Path2D, pal: TeamPal, o: number, px: number, serial: number, creature: boolean): void {
+  const S = L.S, maxX = Math.max(L.X, L.Y, S) * 0.62;
+  let fx = 0, rx = 0;
+  for (let x = maxX; x > 0; x -= maxX / 90) if (inHull(hp, x, 0)) { fx = x; break; }
+  for (let x = -maxX; x < 0; x += maxX / 90) if (inHull(hp, x, 0)) { rx = x; break; }
+  const len = fx - rx;
+  if (len <= 0.1) return;
+  const maxY = Math.max(L.X, L.Y, S) * 0.62;
+  const u = Math.max(0.04 * Math.min(S, 2.2), 1.8 / px);
+  // flank bands (two parallel stripes across each side panel, clipped to the hull)
+  if (!creature) {
+    const sx = fx - len * 0.3, ey = edgeY(hp, sx, maxY);
+    if (ey > u * 3) {
+      g.save();
+      g.clip(hp);
+      for (const sd of [-1, 1]) for (const k of [0, 1]) {
+        const x0 = sx - k * u * 1.9, y0 = sd > 0 ? ey * 0.56 : -ey * 1.2;
+        g.fillStyle = pal.accent;
+        g.fillRect(x0 - u / 2, y0, u, ey * 0.64);
+        // worn paint: a few chips and a darker lower edge
+        g.fillStyle = 'rgba(0,0,0,0.22)';
+        g.fillRect(x0 + u * 0.25, y0, u * 0.25, ey * 0.64);
+      }
+      g.restore();
+    }
+  }
+  // rear running lights (team glow): dark housing, coloured lens, hot core
+  const lx = rx + len * 0.09, ly = edgeY(hp, lx, maxY) * 0.7;
+  const lr = Math.max(0.02 * Math.min(S, 2.5), 1.2 / px);
+  if (ly > lr * 2) for (const sd of [-1, 1]) {
+    dotAt(g, lx, sd * ly, lr * 1.6, 'rgba(8,10,12,0.75)');
+    dotAt(g, lx, sd * ly, lr, pal.glow);
+    dotAt(g, lx - lr * 0.2, sd * ly - lr * 0.2, lr * 0.45, '#ffffff');
+  }
+  // forward sensor / visor light on the crown
+  const vx = fx - len * 0.12;
+  if (inHull(hp, vx, 0)) {
+    dotAt(g, vx, 0, lr * 1.3, 'rgba(8,10,12,0.7)');
+    dotAt(g, vx, 0, lr * 0.75, pal.glow);
+  }
+  // team decal + stencil serial on the rear-left deck
+  const dx = rx + len * 0.27, dyE = edgeY(hp, dx, maxY), dy = -dyE * 0.58, dr = Math.max(0.035 * Math.min(S, 2.5), 2 / px);
+  if (dyE > dr * 2.6 && !creature) {
+    g.save();
+    g.translate(dx, dy);
+    g.beginPath();
+    if (pal.camo === TEAM_PAL[1].camo) { g.moveTo(0, -dr * 1.2); g.lineTo(dr * 1.2, 0); g.lineTo(0, dr * 1.2); g.lineTo(-dr * 1.2, 0); g.closePath(); }
+    else g.arc(0, 0, dr, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(14,16,18,0.7)'; g.fill();
+    g.lineWidth = dr * 0.42; g.strokeStyle = pal.accent; g.stroke();
+    g.restore();
+    if (dr * px > 3 && dyE * 0.9 > dr * 3) {
+      g.save();
+      g.translate(dx, -dy);
+      g.rotate(Math.PI / 2);
+      g.font = `bold ${dr * 1.5}px monospace`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = rgba(MAT.decal, 0.55);
+      g.fillText(String(serial % 100).padStart(2, '0'), 0, 0);
+      g.restore();
+    }
+  }
+}
+
+/** Screen-space key light: lit rim on the hull edges facing the light, shaded rim on the far edges. The hull sprite
+ *  turns with the unit, so this overlay is built per local light-direction bucket and blitted on top; that keeps the
+ *  light coming from the same screen direction for every unit, whichever way it faces. */
+const LIT_N = 12;
+let litPixels = 0;
+const litOwners = new Set<UnitSprites>();
+function litOverlay(s: UnitSprites, b: number): HTMLCanvasElement {
+  s.lit ??= new Array(LIT_N);
+  let c = s.lit[b];
+  if (c) return c;
+  const w = s.hull.width, h = s.hull.height;
+  if (litPixels > 6e7) { for (const o of litOwners) o.lit = new Array(LIT_N); litOwners.clear(); litPixels = 0; s.lit = new Array(LIT_N); }
+  const a = (b / LIT_N) * Math.PI * 2, d = Math.max(1.2, s.px * 0.022);
+  const lx = Math.cos(a) * d, ly = Math.sin(a) * d;
+  const rim = (sx: number, sy: number, fill: string) => {
+    const r = makeCanvas(w, h), rg = ctx2d(r);
+    rg.drawImage(s.hull, 0, 0);
+    rg.globalCompositeOperation = 'destination-out';
+    rg.drawImage(s.hull, sx, sy);
+    rg.globalCompositeOperation = 'source-in';
+    rg.fillStyle = fill;
+    rg.fillRect(0, 0, w, h);
+    return r;
   };
-  const ow = clamp(px * 0.012, 1, 1.6); // dark outline
-  const rw = clamp(px * 0.03, 1.5, 2.4); // team rim
-  const pad = ow + rw + 2;
+  c = rim(-lx, -ly, 'rgba(255,250,240,0.3)');
+  ctx2d(c).drawImage(rim(lx * 1.4, ly * 1.4, 'rgba(0,0,0,0.3)'), 0, 0);
+  s.lit[b] = c;
+  litPixels += w * h;
+  litOwners.add(s);
+  return c;
+}
+
+/** Contact edge under the unit: a faint 1 device-px dark line just outside the silhouette so the machine separates from
+ *  bright ground at any zoom. No team colour and no heavy outline: team identity lives in the small painted / lit
+ *  details, the ground ring at fit zoom and the far-zoom markers. */
+function buildHalo(src: HTMLCanvasElement, sext: number, px: number, _pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
+  const t = makeCanvas(src.width, src.height);
+  const tg = ctx2d(t);
+  tg.drawImage(src, 0, 0);
+  tg.globalCompositeOperation = 'source-in';
+  tg.fillStyle = 'rgb(14,15,16)';
+  tg.fillRect(0, 0, t.width, t.height);
+  const ow = 1;
+  const pad = ow + 1;
   const ext = sext + pad / px;
   const size = Math.ceil(2 * ext * px);
   const c = makeCanvas(size, size);
   const g = ctx2d(c);
   const off = (size - src.width) / 2;
-  const stamp = (col: string, r: number, n: number) => {
-    const sil = solid(col);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      g.drawImage(sil, off + Math.cos(a) * r, off + Math.sin(a) * r);
-    }
-  };
-  // rim ring (filled band from the outline out to ow + rw)
-  stamp(pal.rim, ow + rw, 24);
-  stamp(pal.rim, ow + rw * 0.5, 16);
-  // dark outline directly around the unit
-  stamp(OUTLINE, ow, 16);
-  g.drawImage(solid(OUTLINE), off, off);
-  // harden the antialiased fringe: anything faint is dropped, the rest made opaque (keeps the rim a crisp line)
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    g.drawImage(t, off + Math.cos(a) * ow, off + Math.sin(a) * ow);
+  }
+  // keep it a hard, faint line: faint fringe dropped, the rest at a fixed low alpha
   const id = g.getImageData(0, 0, size, size), d = id.data;
-  for (let i = 3; i < d.length; i += 4) d[i] = d[i] < 70 ? 0 : 255;
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] < 70 ? 0 : 92;
   g.putImageData(id, 0, 0);
   return { c, ext };
 }
@@ -1591,6 +1717,23 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   const ang = L.mob.id === 'anchor' && L.X === L.Y ? 0 : p.angle;
   const flying = L.air || !!p.flying;
   const leap = p.leap ?? 0;
+  // fit-zoom team cue: a thin team-colour ring on the ground under the unit, fading out as the camera closes in
+  // (close up, the painted stripes and running lights carry the team; very far out, the markers take over)
+  const rk = clamp((50 - px) / 16, 0, 1) * (p.alpha ?? 1);
+  if (rk > 0.02 && p.cloak !== 'enemy' && (p.alpha ?? 1) > 0.6) {
+    const pal = TEAM_PAL[p.team];
+    g.save();
+    g.translate(p.x, p.y);
+    g.rotate(ang);
+    g.globalAlpha = 0.6 * rk;
+    g.strokeStyle = pal.rim;
+    g.lineWidth = 1.6 / px;
+    g.beginPath();
+    g.ellipse(0, 0, L.X * 0.5 + 2.5 / px, L.Y * 0.5 + 2.5 / px, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+    g.globalAlpha = 1;
+  }
   if (flying || leap > 0.02) {
     const off = 0.06 * L.S + alt * 0.75;
     const a = flying ? (L.S >= 4 ? 0.3 : L.S >= 3 ? 0.26 : 0.22) : 0.3 - leap * 0.1;
@@ -1758,6 +1901,11 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   // hull
   drawParts('under');
   blit(g, s.hull, x, y, ang, s.ext, sc);
+  if (px >= 12 && p.cloak !== 'enemy') {
+    const la = Math.atan2(-dirs.sy, -dirs.sx) - ang;
+    const b = ((Math.round((la / (Math.PI * 2)) * LIT_N) % LIT_N) + LIT_N) % LIT_N;
+    blit(g, litOverlay(s, b), x, y, ang, s.ext, sc);
+  }
   drawParts('over');
   if (s.shell && p.cloak !== 'enemy') {
     // shield envelope: slow breathing shimmer, always on

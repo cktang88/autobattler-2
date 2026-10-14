@@ -1,31 +1,51 @@
 // Shared colours and small canvas helpers for the renderer.
 
-/** Render team: 0 = the viewer's units (cool blue/teal), 1 = enemy (warm red/orange). */
+/** Render team: 0 = the viewer's units, 1 = enemy. */
 export type Team = 0 | 1;
 
+/**
+ * Per-team paint scheme. Both armies are built from the same hardware: the hull finish is a desaturated military
+ * paint (body/light/dark/deep), and team identity lives only in small details: stripes/chevrons and trim (accent),
+ * emissive running lights, visors and sensors (glow), and the small far-zoom markers / ground rings (rim).
+ */
 export interface TeamPal {
+  /** hull paint, mid tone */
   body: string;
+  /** hull paint, lit tone (upper faces, raised plates) */
   light: string;
+  /** hull paint, shaded tone (lower faces, recesses) */
   dark: string;
+  /** deep recess / underside tone */
   deep: string;
+  /** team stripe / chevron / trim paint: small details only */
   accent: string;
+  /** emissive team light (running lights, visors, sensors) */
   glow: string;
   /** rgb triple of glow for rgba() strings */
   glowRgb: string;
   bar: string;
-  /** bright outer rim / underglow colour (unit silhouette halo, markers) */
+  /** team colour for markers and ground rings (never a silhouette halo) */
   rim: string;
+  /** secondary camo tone (subtle disruptive pattern over the base paint) */
+  camo: string;
 }
 
-// Friendly = bright cyan-blue (high luminance), enemy = saturated red-orange (lower luminance, warm hue): they differ
-// in hue AND lightness, and the unit overlay adds a shape cue (circle vs diamond marker) for colour-blind viewers.
+// Viewer = slate blue-grey with cyan lights/stripes; enemy = olive drab with red-orange lights/stripes. The paints are
+// both low-saturation real-world finishes; hue AND luminance differ in the accents (cyan bright, red-orange warmer and
+// darker), and the far-zoom marker adds a shape cue (circle vs diamond) for colour-blind viewers.
 export const TEAM_PAL: [TeamPal, TeamPal] = [
-  { body: '#3f8fc4', light: '#9fdcf8', dark: '#255a82', deep: '#122c42', accent: '#55f2ff', glow: '#9af6ff', glowRgb: '154,246,255', bar: '#4fe3d0', rim: '#46dcff' },
-  { body: '#c2452b', light: '#f58a5a', dark: '#6a2216', deep: '#34100a', accent: '#ffb23e', glow: '#ffb27a', glowRgb: '255,170,110', bar: '#ff5a3a', rim: '#ff4a22' },
+  { body: '#5b6670', light: '#8a959e', dark: '#3a434b', deep: '#1f252a', accent: '#3fd2ff', glow: '#8cf4ff', glowRgb: '140,244,255', bar: '#4fe3d0', rim: '#46dcff', camo: '#4b555d' },
+  { body: '#6a6a4e', light: '#99977a', dark: '#444530', deep: '#25261a', accent: '#ff5a26', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#7d7458' },
 ];
 
-export const METAL = { base: '#545b62', light: '#8c959e', dark: '#2b3035', deep: '#16191c', rubber: '#1d1f21', rubberHi: '#3a3e42' };
-export const OUTLINE = '#0b0d0f';
+/** Shared hardware materials: gunmetal running gear, rubber, bare steel, hazard paint, glass, soot and dust. */
+export const METAL = { base: '#4c5257', light: '#80878d', dark: '#2a2e32', deep: '#151719', rubber: '#1c1d1e', rubberHi: '#36393b' };
+export const MAT = {
+  steel: '#9aa3aa', hazard: '#c8a23a', glass: '#1a2a33', glassHi: '#7fa6b8', vent: '#121416', primer: '#6e4c3c',
+  composite: '#75766c', dust: '#8c7c62', soot: '#191714', decal: '#d9dcd6',
+};
+/** Separation edge: a faint dark line (never a black comic outline); shapes separate mainly by lighting. */
+export const OUTLINE = 'rgba(10,12,14,0.38)';
 
 export type Ctx = CanvasRenderingContext2D;
 
