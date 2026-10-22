@@ -2,7 +2,8 @@
 // The in-progress match is persisted in localStorage so a refresh can resume it.
 
 import { aiDeck, aiDeploy, type AiDifficulty } from '../shared/ai.ts';
-import { applyDeploy, newMatch, newPlayer, redactFor, resolveRound, validateDeploy } from '../shared/match.ts';
+import { applyDeploy, migrateMatch, newMatch, newPlayer, redactFor, resolveRound, validateDeploy } from '../shared/match.ts';
+import { isValidDesign } from '../shared/stats.ts';
 import type { DeployAction, Design, MatchMode, MatchState, Side } from '../shared/types.ts';
 import type { MatchDriver } from './driver.ts';
 
@@ -67,6 +68,14 @@ export class LocalDriver implements MatchDriver {
       if (!raw) return null;
       const s = JSON.parse(raw) as SavedLocal;
       if (s?.v !== 1 || !s.match?.players) return null;
+      // saves from before the price / 5 rescale carry 5x supply: rescale them (and stamp the rules version) once
+      if (migrateMatch(s.match)) {
+        // a design the current parts rules reject is skipped by the sim: the player would pay for blocks that never
+        // fight. Such a stale save can't be played fairly; drop it so a fresh match starts instead.
+        const broken = s.match.status !== 'done' && s.match.players.some((p) => p.deck.some((d) => { try { return !isValidDesign(d); } catch { return true; } }));
+        if (broken) { localStorage.removeItem(KEY_LOCAL); localStorage.removeItem(WATCH_PREFIX + s.match.id); return null; }
+        localStorage.setItem(KEY_LOCAL, JSON.stringify(s));
+      }
       return s;
     } catch {
       return null;
