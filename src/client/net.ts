@@ -59,14 +59,14 @@ export class NetError extends Error {
   }
 }
 
-async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = {};
   const s = currentSession();
   if (s) headers.Authorization = `Bearer ${s.token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res: Response;
   try {
-    res = await fetch(API + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    res = await fetch(API + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, cache: 'no-store', signal });
   } catch {
     throw new NetError('Cannot reach the server — check your connection', 0);
   }
@@ -134,8 +134,12 @@ export async function openMatch(id: string): Promise<MatchDriver> {
   return new NetDriver(r.match.id, r.side, r.match);
 }
 
-const POLL_VISIBLE_MS = 3000;
-const POLL_HIDDEN_MS = 30000;
+/** how long the server may hold each poll open waiting for a change (it caps this at 20 s) */
+const LONG_POLL_MS = 20000;
+/** pause between polls when the server answered without holding (e.g. an older server) */
+const POLL_GAP_MS = 1000;
+const POLL_FAIL_MS = 3000;
+const POLL_DONE_MS = 60000;
 const POLL_MAX_BACKOFF_MS = 60000;
 
 export class NetDriver implements MatchDriver {
@@ -148,9 +152,10 @@ export class NetDriver implements MatchDriver {
   private active = false;
   private inflight = false;
   private failures = 0;
+  private abort: AbortController | null = null;
   private readonly onVisibility = () => {
-    if (!this.active) return;
-    if (document.visibilityState === 'visible') { this.failures = 0; void this.refresh(); } else this.schedule();
+    if (!this.active || document.visibilityState !== 'visible') return;
+    if (this.failures) { this.failures = 0; void this.refresh(); }
   };
 
   constructor(id: string, side: Side, m: MatchState) {
@@ -186,7 +191,7 @@ export class NetDriver implements MatchDriver {
     if (this.active) return;
     this.active = true;
     document.addEventListener('visibilitychange', this.onVisibility);
-    this.schedule();
+    void this.refresh();
   }
 
   stop(): void {
@@ -194,16 +199,26 @@ export class NetDriver implements MatchDriver {
     document.removeEventListener('visibilitychange', this.onVisibility);
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.abort?.abort();
+    this.abort = null;
   }
 
-  /** Fetch now (if changed since our copy) and notify subscribers. */
+  /** Long-poll: the server holds the request until the match changes (or ~20 s pass), so the opponent's
+   *  deployment / the resolved round shows up immediately — also in a background window. */
   async refresh(): Promise<void> {
     if (this.inflight) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
     this.inflight = true;
+    const t0 = Date.now();
+    let held = false;
     try {
+      const wait = this.m.status === 'done' ? 0 : LONG_POLL_MS;
+      this.abort = new AbortController();
       const r = await call<Partial<MatchResponse> & { unchanged?: boolean }>(
-        'GET', `/matches/${encodeURIComponent(this.id)}?since=${this.m.updatedAt}`);
+        'GET', `/matches/${encodeURIComponent(this.id)}?since=${this.m.updatedAt}&wait=${wait}`, undefined, this.abort.signal);
       this.failures = 0;
+      held = wait > 0 && (!!r.match || Date.now() - t0 > LONG_POLL_MS / 2);
       if (r.match) this.update(r.match);
     } catch (e) {
       this.failures++;
@@ -211,7 +226,10 @@ export class NetDriver implements MatchDriver {
       if (e instanceof NetError && (e.status === 401 || e.status === 403 || e.status === 404)) this.stop();
     } finally {
       this.inflight = false;
-      this.schedule();
+      this.abort = null;
+      // re-poll straight away after a held poll (no timer: background tabs throttle timers to ~1/min)
+      if (this.active && !this.failures && held && this.m.status !== 'done') void this.refresh();
+      else this.schedule();
     }
   }
 
@@ -219,11 +237,8 @@ export class NetDriver implements MatchDriver {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     if (!this.active) return;
-    const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    let delay = hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS;
-    // finished matches never change; poll rarely just in case
-    if (this.m.status === 'done') delay = Math.max(delay, POLL_MAX_BACKOFF_MS);
-    if (this.failures) delay = Math.min(POLL_MAX_BACKOFF_MS, delay * 2 ** Math.min(this.failures, 5));
+    let delay = this.m.status === 'done' ? POLL_DONE_MS : POLL_GAP_MS;
+    if (this.failures) delay = Math.min(POLL_MAX_BACKOFF_MS, POLL_FAIL_MS * 2 ** Math.min(this.failures - 1, 5));
     this.timer = setTimeout(() => void this.refresh(), delay);
   }
 

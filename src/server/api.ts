@@ -17,6 +17,8 @@ const DAY = 24 * 3600 * 1000;
 export const STALE_TURN_MS = 7 * DAY;
 export const STALE_WAITING_MS = 14 * DAY;
 const RESOLVE_RETRY_MS = 60 * 1000;
+/** cap on a long-poll GET (?since=…&wait=ms); kept under the server's 30 s requestTimeout */
+export const MAX_WAIT_MS = 20_000;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** Mirrors MatchSummary in src/client/net.ts. */
@@ -61,6 +63,8 @@ export class Api {
   private readonly limiter: RateLimiter;
   private readonly loginLimiter: RateLimiter;
   private readonly trustProxy: boolean;
+  /** long-poll waiters per match id, woken whenever that match changes */
+  private readonly waiters = new Map<string, Set<() => void>>();
 
   constructor(store: Store, opts: ApiOptions = {}) {
     this.store = store;
@@ -86,8 +90,8 @@ export class Api {
       if (method === 'POST') body = await readJson(req);
       else if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
       const ctx: Ctx = { req, method, parts: url.pathname.split('/').filter(Boolean).slice(1), query: url.searchParams, ip, body };
-      const out = this.route(ctx);
-      send(res, 200, out);
+      const out = await this.route(ctx);
+      if (!res.destroyed) send(res, 200, out);
     } catch (e) {
       if (e instanceof HttpError) {
         send(res, e.status, { error: e.message }, e.status === 429 ? { 'Retry-After': '5' } : undefined);
@@ -98,7 +102,7 @@ export class Api {
     }
   }
 
-  private route(c: Ctx): unknown {
+  private route(c: Ctx): unknown | Promise<unknown> {
     const [a, b, d] = c.parts;
     const M = c.method === 'HEAD' ? 'GET' : c.method;
     if (a === 'health' && !b && M === 'GET') return { ok: true };
@@ -220,7 +224,7 @@ export class Api {
 
   // ---------------------------------------------------------------- match
 
-  private get(c: Ctx, idOrCode: string) {
+  private get(c: Ctx, idOrCode: string, noWait = false): unknown {
     const p = this.auth(c);
     const r = this.findMatch(idOrCode);
     if (!r) throw new HttpError(404, 'No such match');
@@ -232,8 +236,36 @@ export class Api {
     }
     this.maybeRetryResolve(r);
     const since = Number(c.query.get('since'));
-    if (c.query.has('since') && Number.isFinite(since) && r.match.updatedAt <= since) return { unchanged: true };
+    if (c.query.has('since') && Number.isFinite(since) && r.match.updatedAt <= since) {
+      // long poll: hold the request until the match changes (opponent joined/ready, round resolved) or the wait ends
+      const wait = noWait ? 0 : Math.min(MAX_WAIT_MS, Math.max(0, Number(c.query.get('wait')) || 0));
+      if (wait > 0) return this.waitForChange(c, r.match.id, wait).then(() => this.get(c, idOrCode, true));
+      return { unchanged: true };
+    }
     return { side, match: redactFor(r.match, side), summary: summarize(r, side) };
+  }
+
+  private waitForChange(c: Ctx, id: string, ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      let set = this.waiters.get(id);
+      if (!set) this.waiters.set(id, (set = new Set()));
+      const done = () => {
+        clearTimeout(timer);
+        c.req.off('close', done);
+        set!.delete(done);
+        if (!set!.size && this.waiters.get(id) === set) this.waiters.delete(id);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      c.req.once('close', done);
+      set.add(done);
+    });
+  }
+
+  /** Wake every long poll waiting on this match. */
+  private wake(id: string): void {
+    const set = this.waiters.get(id);
+    if (set) for (const fn of [...set]) fn();
   }
 
   private deploy(c: Ctx, id: string) {
@@ -262,6 +294,7 @@ export class Api {
     touch(m);
     if (m.players[0].ready && m.players[1].ready) this.tryResolve(r);
     this.store.save();
+    this.wake(r.match.id);
     return { side, match: redactFor(r.match, side), summary: summarize(r, side) };
   }
 
@@ -273,10 +306,12 @@ export class Api {
     if (r.match.status === 'done') throw new HttpError(409, 'Match is already over');
     if (r.match.status === 'waiting') {
       this.store.removeMatch(r);
+      this.wake(r.match.id);
       return { ok: true, cancelled: true };
     }
     forfeitSide(r, side);
     this.store.save();
+    this.wake(r.match.id);
     return { ok: true, side, match: redactFor(r.match, side), summary: summarize(r, side) };
   }
 
@@ -315,6 +350,7 @@ export class Api {
     // a private match's code is spent once it's full
     if (r.code) this.store.matchesByCode.delete(r.code);
     this.store.save();
+    this.wake(r.match.id);
   }
 
   /** Resolve the round; on a sim exception roll back and retry later instead of crashing. */
@@ -330,6 +366,7 @@ export class Api {
       r.resolveErrorAt = Date.now();
     }
     this.store.save();
+    this.wake(r.match.id);
   }
 
   private maybeRetryResolve(r: MatchRecord): void {
@@ -364,12 +401,14 @@ export class Api {
       const m = r.match;
       if (m.status === 'waiting' && now - m.updatedAt > STALE_WAITING_MS) {
         this.store.removeMatch(r);
+        this.wake(r.match.id);
         changed++;
       } else if (m.status === 'deploy' && now - m.updatedAt > STALE_TURN_MS) {
         const r0 = m.players[0].ready, r1 = m.players[1].ready;
         if (r0 && r1) { this.tryResolve(r); continue; }
         if (r0 !== r1) forfeitSide(r, r0 ? 1 : 0);
         else { m.status = 'done'; m.winner = -1; touch(m); }
+        this.wake(m.id);
         changed++;
       }
     }
