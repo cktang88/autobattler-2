@@ -41,6 +41,10 @@ const BOMB_FALL = 0.5; // seconds a bomb takes to land
 const CRUSH_DMG = 14; // per size of the crusher, per contact pulse
 const RANGE_KEEP = 1.08; // hysteresis: a held target stays valid out to range * this
 const STALL_CHECK_EVERY = 20; // ticks
+/** A battle where nothing at all happens for this long (no unit moves, no shot, hit or heal, no projectile or smoke
+ *  in the air, no hp change, every start delay over) can never change again: it ends then, decided exactly as the
+ *  time cap would decide it (e.g. two cloaked armies parked out of reveal range used to idle out the full 180 s). */
+const QUIET_END = 10 * TICK_RATE; // ticks
 const MAX_STUN = 4;
 /** Paralysis (Zero-K style): a weapon's `stun` (s) deals stun * PARA_PER_STUN paralysis damage. A unit is stunned while
  *  its paralysis exceeds its max hp, so tough hulls take many more hits; paralysis drains at maxHp * PARA_DECAY per
@@ -83,8 +87,11 @@ const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
 const SAT_N = (HCOLS + 1) * (HROWS + 1);
-/** bounding radius of the largest hull (0.45 * longest footprint side; the 10x10 weaver titan reaches 4.5), at least 4 */
-const MAX_RADIUS = CHASSIS.reduce((m, c) => Math.max(m, 0.45 * Math.max(c.footprint?.[0] ?? c.size, c.footprint?.[1] ?? c.size)), 4.0);
+/** Centre-to-farthest-point radius of a hull's shape: the circle of radius 0.45 * side for square footprints, else the
+ *  oriented 0.45 * fw x 0.45 * fh box that range / edge checks measure to, whose corners reach past 0.45 * longest side. */
+const boundOf = (fw: number, fh: number) => (fw === fh ? 0.45 * fw : 0.45 * Math.hypot(fw, fh));
+/** bounding radius of the largest hull (the 8x7 citadel's box corners reach 4.78, the 10x10 weaver titan 4.5), at least 4 */
+const MAX_RADIUS = CHASSIS.reduce((m, c) => Math.max(m, boundOf(c.footprint?.[0] ?? c.size, c.footprint?.[1] ?? c.size)), 4.0);
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
@@ -168,7 +175,8 @@ interface Internal {
   capR: number;
   capS: number;
   capAcross: boolean;
-  /** bounding radius (centre to farthest point) */
+  /** bounding radius (centre to farthest point of the footprint box; see boundOf) -- every centre-distance pre-filter
+   *  in front of an edge / box check relies on it */
   bound: number;
   mass: number;
   dmgMult: number;
@@ -388,6 +396,10 @@ export class Battle {
   private nextProjId = 1;
   private damageDealt: [number, number] = [0, 0];
   private auraTimer = 0;
+  /** last tick anything happened (see QUIET_END), the alive-hp total then, and the last tick a start delay runs to */
+  private activeTick = 0;
+  private hpSum = NaN;
+  private maxDelay = 0;
   private head: Int32Array = new Int32Array(HCOLS * HROWS);
   /** highest unit index in each hash cell (chains are ascending), lets separate() skip cells with no j > i */
   private tail: Int32Array = new Int32Array(HCOLS * HROWS);
@@ -592,7 +604,7 @@ export class Battle {
     this.ints.push({
       u, wpns, radius: 0.45 * Math.sqrt(stats.fw * stats.fh), elong: stats.fw !== stats.fh,
       hl: 0.45 * stats.fh, hw: 0.45 * stats.fw, capR: 0.45 * Math.min(stats.fw, stats.fh), capS: 0.45 * Math.abs(stats.fh - stats.fw),
-      capAcross: stats.fw > stats.fh, bound: 0.45 * Math.max(stats.fw, stats.fh), mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
+      capAcross: stats.fw > stats.fh, bound: boundOf(stats.fw, stats.fh), mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
       speed: stats.speed, turn: stats.turn,
       fireOnMove: traits.includes('fireOnMove'), strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
@@ -612,6 +624,7 @@ export class Battle {
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
     if (cfg.hold) this.anyHold = true;
+    this.maxDelay = Math.max(this.maxDelay, Math.round(cfg.delay * TICK_RATE));
   }
 
   /** Advance one tick (DT seconds). No-op once done. */
@@ -728,6 +741,8 @@ export class Battle {
     this.flushBlasts();
 
     // bookkeeping
+    let active = this.events.length > 0 || this.projs.length > 0 || this.smokes.length > 0 || this.tick <= this.maxDelay;
+    let hpSum = 0;
     for (let i = 0; i < n; i++) {
       const I = ints[i];
       const u = I.u;
@@ -738,7 +753,11 @@ export class Battle {
       I.vy = dy / DT;
       u.moving = d > 0.002;
       u.odometer += d;
+      if (u.moving) active = true;
+      hpSum += u.hp;
     }
+    if (hpSum !== this.hpSum) { this.hpSum = hpSum; active = true; }
+    if (active) this.activeTick = this.tick;
 
     this.tick++;
     this.checkEnd();
@@ -1404,7 +1423,8 @@ export class Battle {
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const dx = o.x - mx, dy = o.y - my;
       const along = dx * c + dy * s;
-      const ob = this.ints[j].bound;
+      const O = this.ints[j];
+      const ob = O.elong ? O.capS + O.capR : O.bound; // hull reach of 0.45 * longest side (box corners not counted)
       if (along < -0.3 || along > len + ob) continue;
       const perp = Math.abs(-dx * s + dy * c);
       if (perp <= ob + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
@@ -1883,6 +1903,17 @@ export class Battle {
           // holding: turrets do the aiming; only a gun that traverses slower than the hull turns swings the hull toward the fight
           this.faceTarget(I);
           return;
+        }
+        // [mount origins] pressed against the goal's hull with no gun in reach (e.g. a rear-mounted flamer on a long
+        // hull nosed into a big emplacement): pushing on gets nowhere and it sat there for good, so pivot in place to
+        // swing the longest-ranged gun's mount toward the goal instead
+        if (!u.flying && !goal.flying && !I.meleeOnly && engagedDps <= 0 && this.gap(I, this.ints[goal.id]) <= 0.25) {
+          let bw: Wpn | null = null;
+          for (const w of I.wpns) if (w && w.heal <= 0 && !w.melee && this.canHit(w, goal) && (!bw || w.range > bw.range)) bw = w;
+          if (bw && bw.ox * bw.ox + bw.oy * bw.oy > 0.09) {
+            u.angle = turnToward(u.angle, Math.atan2(dy, dx) - Math.atan2(bw.oy, bw.ox), I.turn * DT);
+            return;
+          }
         }
       }
     } else if (I.hasWeapon && this.anyEnemyAlive(u.side)) {
@@ -2365,7 +2396,7 @@ export class Battle {
       return;
     }
     const stalled = this.tick % STALL_CHECK_EVERY === 0 && this.projs.length === 0 && !this.sideCanHit(0) && !this.sideCanHit(1);
-    if (this.tick >= MAX_TICKS || stalled) {
+    if (this.tick >= MAX_TICKS || stalled || this.tick - this.activeTick > QUIET_END) {
       const v0 = this.sideValue(0), v1 = this.sideValue(1);
       this.finish(v0 > v1 * 1.1 ? 0 : v1 > v0 * 1.1 ? 1 : -1);
     }

@@ -429,4 +429,6 @@ export interface MatchState {
   winner?: Side | -1;
   createdAt: number;
   updatedAt: number;
+  /** rules / price scale the match was created under (match.ts RULES_VERSION); absent on saves from before the marker */
+  rules?: number;
 }

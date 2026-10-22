@@ -36,6 +36,13 @@ export const MAX_BLOCKS = MAX_UNITS;
 export const MAX_SIM_UNITS = 240;
 export const MAX_PLAYER_NAME = 24;
 
+/** Rules / price-scale version stamped on every new match (MatchState.rules).
+ *  2: prices are raw cost / PRICE_DIV (5) -- supply 600 + 120 per round instead of 3000 + 600. */
+export const RULES_VERSION = 2;
+/** When the price / 5 rescale shipped (commit 4a9c201). An unmarked match created before it ran on 5x supply. */
+export const PRICE_RESCALE_AT = Date.UTC(2026, 9, 14, 2, 48, 53);
+const OLD_PRICE_DIV = 5;
+
 const ROUND_SUPPLY_BASE = START_SUPPLY;
 const ROUND_SUPPLY_GROWTH = 120;
 
@@ -82,6 +89,25 @@ export function survivorDamage(design: Design, level: number, fraction = 1): num
   return (designCost(design) * levelMult(level) * fraction) / SURVIVOR_DIV;
 }
 
+/** Was this saved match created under the old 5x price scale? Only unmarked saves can be: those created before the
+ *  rescale shipped, or holding more supply than the current rules ever grant (an older client or server made it). */
+export function isPreRescaleMatch(m: MatchState): boolean {
+  if (m.rules !== undefined) return m.rules < RULES_VERSION;
+  if (m.createdAt > 0 && m.createdAt < PRICE_RESCALE_AT) return true;
+  const granted = totalSupplyThrough(m.round);
+  return m.players.some((p) => p.supply > granted);
+}
+
+/** Bring a saved match up to RULES_VERSION in place; returns true when it changed (the caller should persist it).
+ *  Pre-rescale matches had every supply amount at 5x: unspent supply is divided by 5, so it buys what it bought
+ *  before (boards, levels, hp and history need no change; their prices are computed from the designs). */
+export function migrateMatch(m: MatchState): boolean {
+  if (m.rules !== undefined && m.rules >= RULES_VERSION) return false;
+  if (isPreRescaleMatch(m)) for (const p of m.players) p.supply = Math.floor(p.supply / OLD_PRICE_DIV);
+  m.rules = RULES_VERSION;
+  return true;
+}
+
 // ---------------------------------------------------------------------------------------------
 
 export function newPlayer(name: string, deck: Design[], isAI?: boolean): PlayerState {
@@ -116,6 +142,7 @@ export function newMatch(id: string, mode: MatchMode, seed: number, p0: PlayerSt
     history: [],
     createdAt: t,
     updatedAt: t,
+    rules: RULES_VERSION,
   };
   if (p1) startRound(m, 1);
   return m;

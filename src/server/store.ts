@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { migrateMatch } from '../shared/match.ts';
 import type { MatchState } from '../shared/types.ts';
 
 export interface PlayerRecord {
@@ -57,10 +58,14 @@ export class Store {
       this.playersByToken.set(p.tokenHash, p);
     }
     const matches = readJson<{ matches?: MatchRecord[] }>(path.join(this.dir, 'matches.json'));
+    let migrated = 0;
     for (const r of matches?.matches ?? []) {
       if (!r || !r.match || typeof r.match.id !== 'string') continue;
+      // matches saved before the rules marker: rescale pre-price-/5 supply, stamp the version (see migrateMatch)
+      try { if (migrateMatch(r.match)) migrated++; } catch (e) { console.error(`[store] could not migrate match ${r.match.id}`, e); }
       this.indexMatch(r);
     }
+    if (migrated) { console.log(`[store] migrated ${migrated} match(es) to the current rules version`); this.save(); }
   }
 
   indexMatch(r: MatchRecord): void {
