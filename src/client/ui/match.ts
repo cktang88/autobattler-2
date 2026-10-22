@@ -1400,6 +1400,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!ringCtx || !ringsShown) return;
     ringCtx.setTransform(1, 0, 0, 1, 0, 0);
     ringCtx.clearRect(0, 0, ringCv.width, ringCv.height);
+    ringCv.style.visibility = 'hidden';
     ringsShown = false;
     legendEl.classList.add('hidden');
   }
@@ -1455,6 +1456,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const targets = rangeTargets();
     ringsShown = targets.length > 0;
     legendEl.classList.toggle('hidden', !targets.length);
+    // hide the layer too: a lone full-canvas clearRect with nothing drawn after it was sometimes never presented
+    // (Chrome under GPU load, mostly with the 3D renderer), leaving the last rings on screen through the battle
+    ringCv.style.visibility = ringsShown ? '' : 'hidden';
     if (!targets.length) return;
     const o = view.worldToScreen(0, 0), o1 = view.worldToScreen(1, 0);
     const k = Math.hypot(o1.x - o.x, o1.y - o.y);

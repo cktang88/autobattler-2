@@ -41,6 +41,8 @@ interface UView {
   dmgT: number; healT: number; hpLast: number; shLast: number; hpShown: number;
   shT: number; hx: number; hy: number; hz: number;
   hits: number;
+  /** rig transforms are current (posed last frame); culled / hidden rigs keep stale muzzle positions */
+  posed: boolean;
 }
 interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
 interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number }
@@ -231,7 +233,9 @@ export class FieldView3D implements BattleView {
     this.scene.add(this.grid);
     this.hoverFill = flat(1, 1, '#46e88a', 0.3);
     this.hoverFill.visible = false;
-    this.hoverLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, z]) => new THREE.Vector3(x, 0.06, z))), new THREE.LineBasicMaterial({ color: '#46e88a' }));
+    this.hoverLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, z]) => new THREE.Vector3(x, 0.06, z))), new THREE.LineBasicMaterial({ color: '#46e88a', depthTest: false, transparent: true }));
+    // a block's footprint is about the size of its hull: draw the outline over the models or it hides under them
+    this.hoverLine.renderOrder = 3;
     this.hoverLine.visible = false;
     this.scene.add(this.hoverFill, this.hoverLine);
 
@@ -438,7 +442,9 @@ export class FieldView3D implements BattleView {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const dtMs = this.lastRender ? now - this.lastRender : 16;
     this.lastRender = now;
-    if (dtMs < 120) this.ema += (dtMs - this.ema) * 0.08;
+    // gaps over a second are stalls / background tabs; anything shorter is a real (maybe very slow) frame and must count,
+    // or a GPU that only manages a few fps would never step the quality down
+    if (dtMs < 1000) this.ema += (Math.min(dtMs, 150) - this.ema) * 0.08;
     if (this.quality === 'auto') {
       if (this.ema > 26) { this.slowT += dtMs; this.fastT = 0; } else if (this.ema < 15) { this.fastT += dtMs; this.slowT = 0; } else { this.slowT = this.fastT = 0; }
       if (this.slowT > 1500 && this.level < 3) { this.level++; this.slowT = 0; this.ema = 16; }
@@ -586,7 +592,10 @@ export class FieldView3D implements BattleView {
   }
 
   private reset(b: Battle): void {
+    // events pushed for this battle before its first draw (match.ts steps, pushes, then draws) belong to it
+    const pending = this.pending;
     this.clearBattle();
+    this.pending = pending;
     this.battle = b;
     this.lastTick = -1;
     this.sinceTick = 0;
@@ -604,7 +613,10 @@ export class FieldView3D implements BattleView {
     this.time += dt;
     if (battle !== this.battle || battle.tick < this.lastTick) this.reset(battle);
     let newTicks: BattleEvent[] | null = null;
+    // a big jump (SKIP to the end) is shown as-is: units that died unseen leave their hulks like the 2D view
+    let jump = false;
     if (battle.tick !== this.lastTick) {
+      jump = this.lastTick >= 0 && battle.tick - this.lastTick > 40;
       if (this.lastTick >= 0) {
         const n = Math.max(1, battle.tick - this.lastTick);
         this.tickInterval = clamp(lerp(this.tickInterval, Math.max(this.sinceTick / n, 1 / 240) * n, 0.3), 1 / 120, 0.25);
@@ -624,7 +636,7 @@ export class FieldView3D implements BattleView {
     for (const u of battle.units) byId.set(u.id, u);
     for (const u of battle.units) {
       if (!u.alive) continue;
-      if (!this.bu.has(u.id)) this.bu.set(u.id, { rig: this.layer.acquire(u.design, this.teamOf(u.side)), lx: u.x, ly: u.y, seen: false, dmgT: -99, healT: -99, hpLast: u.hp, shLast: u.shield, hpShown: u.hp, shT: -99, hx: 0, hy: 0, hz: 0, hits: 0 });
+      if (!this.bu.has(u.id)) this.bu.set(u.id, { rig: this.layer.acquire(u.design, this.teamOf(u.side)), lx: u.x, ly: u.y, seen: false, dmgT: -99, healT: -99, hpLast: u.hp, shLast: u.shield, hpShown: u.hp, shT: -99, hx: 0, hy: 0, hz: 0, hits: 0, posed: false });
     }
     this.hitBudget = 60;
     const events = newTicks ?? this.pending;
@@ -643,7 +655,8 @@ export class FieldView3D implements BattleView {
     for (const u of battle.units) {
       if (!u.alive) {
         const v = this.bu.get(u.id);
-        if (v) { this.layer.release(v.rig); this.bu.delete(u.id); }
+        if (v && jump && !u.flying) this.toWreck(u.id, v, u.x, u.y, u.angle, 0);
+        else if (v) { this.layer.release(v.rig); this.bu.delete(u.id); }
         continue;
       }
       alive++;
@@ -683,6 +696,7 @@ export class FieldView3D implements BattleView {
     const dist = v.seen ? Math.min(2, Math.hypot(x - v.lx, y - v.ly)) : 0;
     v.lx = x; v.ly = y; v.seen = true;
     this.trackVis(u, v);
+    v.posed = false;
     if (enemyCloak || this.offscreen(x, y, rig.radius + 5)) return;
     const h = u.flying ? flyHeight(rig.S) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * rig.S;
     rig.root.position.set(x, h, y);
@@ -697,6 +711,7 @@ export class FieldView3D implements BattleView {
     if (u.stun > 0) { const f = 0.5 + 0.5 * Math.sin(this.time * 43 + u.id * 2.1); tr += f * 0.3; tg += f * 0.9; tb += f * 1.8; }
     rig.tr = tr; rig.tg = tg; rig.tb = tb;
     rig.update(dt);
+    v.posed = true;
     this.layer.submit(rig, ext.cloaked ? 'cloak' : 'normal');
 
     // status effects
@@ -823,7 +838,7 @@ export class FieldView3D implements BattleView {
         // launch height: the barrel tip that fired it
         let y0 = GUN_H;
         if (p.src !== undefined && p.mount !== undefined) {
-          const rig = this.bu.get(p.src)?.rig;
+          const rig = this.posedRig(p.src);
           if (rig && rig.muzzleWorld(p.mount, _v3)) y0 = _v3.y;
         }
         // straight rounds end at the body height of the first enemy along their path (aircraft fly well above the ground)
@@ -930,6 +945,12 @@ export class FieldView3D implements BattleView {
     return id >= 0 ? this.unitHeight(id, byId, fallback) : fallback;
   }
 
+  /** a unit's rig, only if its transforms are current (muzzle positions of culled rigs are stale or at the origin) */
+  private posedRig(id: number | undefined): Rig | undefined {
+    const v = id === undefined ? undefined : this.bu.get(id);
+    return v?.posed ? v.rig : undefined;
+  }
+
   private handleEvent(e: BattleEvent, byId: Map<number, SimUnit>): void {
     const fx = this.fx;
     switch (e.t) {
@@ -940,14 +961,14 @@ export class FieldView3D implements BattleView {
         const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
         if (vis && BEAM_VIS.has(vis)) break; // beams draw their own flare
         const cal = MODULE_BY_ID.get(e.moduleId)?.caliber ?? 0.5;
-        const m = v.rig.muzzleWorld(e.mount, _v3);
+        const m = v.posed ? v.rig.muzzleWorld(e.mount, _v3) : null;
         if (m) fx.muzzle(m.x, m.y, m.z, Math.cos(e.angle), Math.sin(e.angle), cal);
         else fx.muzzle(e.x, GUN_H, e.y, Math.cos(e.angle), Math.sin(e.angle), cal);
         break;
       }
       case 'beam': {
         const st = beamStyle(e.moduleId);
-        const rig = e.unit !== undefined ? this.bu.get(e.unit)?.rig : undefined;
+        const rig = this.posedRig(e.unit);
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
         if (!m && this.offscreen(e.x1, e.y1, 3) && this.offscreen(e.x2, e.y2, 3)) break;
         const ay = m ? m.y : GUN_H;
@@ -957,7 +978,7 @@ export class FieldView3D implements BattleView {
       case 'chain': {
         const st = beamStyle(e.moduleId);
         const col = new THREE.Color(st.color);
-        const rig = e.unit !== undefined ? this.bu.get(e.unit)?.rig : undefined;
+        const rig = this.posedRig(e.unit);
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
         let hPrev = GUN_H;
         for (let i = 1; i < e.points.length; i++) {
@@ -998,20 +1019,8 @@ export class FieldView3D implements BattleView {
           if (e.flying) fx.bigExplosion(e.x, e.y, Math.max(1, e.size * 0.8), v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1);
           else fx.bigExplosion(e.x, e.y, e.size);
         }
-        if (v && !e.flying) {
-          // the hull stays as a charred wreck for the rest of the battle
-          this.bu.delete(e.unit);
-          const rig = v.rig;
-          rig.look = 'wreck';
-          rig.tr = rig.tg = rig.tb = 1;
-          rig.root.position.set(e.x, -0.03, e.y);
-          rig.root.rotation.y = -(byId.get(e.unit)?.angle ?? 0);
-          rig.root.rotation.z = (Math.random() - 0.5) * 0.06; rig.root.rotation.x = (Math.random() - 0.5) * 0.06;
-          for (const tu of rig.all) { if (!tu.fixed) tu.yaw.rotation.y += (Math.random() - 0.5) * 1.2; tu.yaw.updateMatrix(); tu.recoil.position.x = 0; tu.recoil.updateMatrix(); }
-          rig.update(0);
-          rig.frozen = true;
-          this.wrecks.push({ rig, x: rig.root.position.x, z: rig.root.position.z, smoke: 10 + e.size * 4, S: rig.S });
-        } else if (v) { this.layer.release(v.rig); this.bu.delete(e.unit); }
+        if (v && !e.flying) this.toWreck(e.unit, v, e.x, e.y, byId.get(e.unit)?.angle ?? 0, 10 + e.size * 4);
+        else if (v) { this.layer.release(v.rig); this.bu.delete(e.unit); }
         break;
       }
       case 'heal': {
@@ -1031,12 +1040,52 @@ export class FieldView3D implements BattleView {
     }
   }
 
+  /** the hull stays as a charred wreck for the rest of the battle */
+  private toWreck(id: number, v: UView, x: number, y: number, angle: number, smoke: number): void {
+    this.bu.delete(id);
+    const rig = v.rig;
+    rig.look = 'wreck';
+    rig.tr = rig.tg = rig.tb = 1;
+    rig.root.position.set(x, -0.03, y);
+    rig.root.rotation.y = -angle;
+    rig.root.rotation.z = (Math.random() - 0.5) * 0.06; rig.root.rotation.x = (Math.random() - 0.5) * 0.06;
+    for (const tu of rig.all) { if (!tu.fixed) tu.yaw.rotation.y += (Math.random() - 0.5) * 1.2; tu.yaw.updateMatrix(); tu.recoil.position.x = 0; tu.recoil.updateMatrix(); }
+    rig.update(0);
+    rig.frozen = true;
+    this.wrecks.push({ rig, x, z: y, smoke, S: rig.S });
+  }
+
   destroy(): void {
     this.controls.destroy();
     if (typeof window !== 'undefined') {
       if (this.onKey) { window.removeEventListener('keydown', this.onKey); window.removeEventListener('keyup', this.onKey); }
       if (this.onBlur) window.removeEventListener('blur', this.onBlur);
     }
+    // Free this renderer's GPU copies of everything it drew. Many of these resources are module-level caches shared by
+    // every view (terrain builds, unit materials / geometry, look materials); the renderer registers 'dispose' listeners
+    // on them that would otherwise keep each destroyed renderer + its WebGL context alive for the rest of the session.
+    // Only one view lives at a time (screens are destroyed before the next is built) and the next one has its own context,
+    // so this costs nothing: the CPU-side data stays and is uploaded again on first use.
+    const done = new Set<object>();
+    const free = (o: { dispose(): void } | null | undefined) => { if (o && !done.has(o)) { done.add(o); o.dispose(); } };
+    const visit = (obj: THREE.Object3D) => obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      free(m.geometry);
+      const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+      for (const mat of mats) {
+        for (const v of Object.values(mat)) if ((v as THREE.Texture)?.isTexture) free(v as THREE.Texture);
+        // own uniforms (ShaderMaterial) and the renderer's per-material ones (e.g. three's global DFG LUT)
+        const ru = (this.renderer.properties.get(mat) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
+        for (const un of [(mat as THREE.ShaderMaterial).uniforms, ru]) {
+          if (un) for (const u of Object.values(un)) if ((u?.value as THREE.Texture)?.isTexture) free(u.value as THREE.Texture);
+        }
+        free(mat);
+      }
+    });
+    try {
+      visit(this.scene); visit(this.ui.scene);
+      if (this.scene.environment) free(this.scene.environment);
+    } catch { /* best effort */ }
     this.layer.dispose();
     this.fx.dispose();
     this.shields.dispose();
