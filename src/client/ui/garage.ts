@@ -165,6 +165,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   let viewExt = MIN_VIEW_CELLS;
   /** blueprint zoom (1 = fit) and pan offset of the view centre (cells); wheel / buttons / drag empty space */
   let zoom = 1, zoomT = 1;
+  /** zoom the hull sprites are baked at: follows zoomT only once a zoom gesture and its ease have settled, so wheeling
+   *  in on a titan re-bakes its sprites once instead of every frame (see drawUnitPreview's detailZoom) */
+  let detailZoom = 1, lastZoomAt = 0;
+  /** last user input touching the bench (zoom, pan, edits): the preview runs at full rate around it, throttled when idle */
+  let lastPoke = 0;
+  const poke = () => { lastPoke = performance.now(); };
   const pan = { x: 0, y: 0 };
   const ZOOM_MIN = 0.5, ZOOM_MAX = 5;
   let destroyed = false;
@@ -237,6 +243,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (!panDrag || e.pointerId !== panDrag.id || !geom) return;
     pan.x = panDrag.px - (e.clientX - panDrag.x) / geom.px;
     pan.y = panDrag.py - (e.clientY - panDrag.y) / geom.px;
+    poke();
   });
   const endPan = () => { panDrag = null; stage.classList.remove('panning'); };
   stage.addEventListener('pointerup', endPan);
@@ -564,10 +571,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       pan.x += wx * f; pan.y += wy * f;
     }
     zoomT = nz;
+    lastZoomAt = performance.now();
+    poke();
     if (zoomT <= 1.001) { pan.x = 0; pan.y = 0; }
     zoomLbl.textContent = `${Math.round(zoomT * 10) / 10}×`;
   }
-  function resetView() { zoomT = 1; pan.x = pan.y = 0; zoomLbl.textContent = '1×'; }
+  function resetView() { zoomT = 1; pan.x = pan.y = 0; zoomLbl.textContent = '1×'; lastZoomAt = performance.now(); poke(); }
 
   function toggleRanges() {
     rangesOn = !rangesOn;
@@ -757,6 +766,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   // ---------------- rendering ----------------
   function update() {
+    poke();
     const fk = (document.activeElement as HTMLElement | null)?.dataset?.fk;
     if (activeSlot !== null && activeSlot >= chassis().mounts.length) activeSlot = null;
     renderHeader();
@@ -1468,10 +1478,16 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const key = `${r.width}x${r.height}@${dpr}|${g.half.toFixed(1)}|${g.px.toFixed(2)}|${g.cx.toFixed(1)}|${g.cy.toFixed(1)}|${g.S}|${g.fw}x${g.fl}|${rings.map((o) => o.r + o.label + o.mounts.join(":")).join(",")}|${g.mounts.map((q) => `${q.x.toFixed(0)},${q.y.toFixed(0)}`).join(";")}`;
     if (key === gridKey) return;
     gridKey = key;
-    gridCv.width = Math.round(r.width * dpr);
-    gridCv.height = Math.round(r.height * dpr);
+    // resizing the backing store reallocates it: only when the stage size changes, not on every zoom/pan frame
+    const bw = Math.round(r.width * dpr), bh = Math.round(r.height * dpr);
+    if (gridCv.width !== bw) gridCv.width = bw;
+    if (gridCv.height !== bh) gridCv.height = bh;
     const x = gridCv.getContext('2d');
     if (!x) return;
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.clearRect(0, 0, bw, bh);
+    // the context keeps its state across redraws now: restore the defaults the drawing below relies on
+    x.globalAlpha = 1; x.lineWidth = 1; x.setLineDash([]); x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     x.setTransform(dpr, 0, 0, dpr, 0, 0);
     const W = r.width, H = r.height, P = g.px, FW = g.fw, FL = g.fl;
     // footprint is centred on the hull's ground point
@@ -1614,16 +1630,50 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
   let frame = 0;
   let raf = 0;
+  /** the preview canvas's last real render: its geometry, design and size (a gesture CSS-scales it from there) */
+  let drawn: { g: PreviewGeom; d: Design; w: number; h: number } | null = null;
+  let lastPreview = 0, lastNow = 0, drewLast = false;
+  /** frame time (ms) of frames that follow a full preview render: the real cost incl. raster, which JS timing misses */
+  let drawCost = 16;
   const tick = (now: number) => {
     if (destroyed) return;
     const t = now / 1000;
+    const dt = lastNow ? Math.min(250, now - lastNow) : 16;
+    lastNow = now;
+    if (drewLast) drawCost = drawCost * 0.7 + dt * 0.3;
+    drewLast = false;
     try {
       if (fit(preview)) {
         const want = rangesOn ? rangeExtent() : MIN_VIEW_CELLS;
+        const extMoving = Math.abs(want - viewExt) > 1e-6;
         viewExt += (want - viewExt) * (Math.abs(want - viewExt) < 0.01 ? 1 : 0.18);
+        const zooming = zoom !== zoomT;
         zoom += (zoomT - zoom) * (Math.abs(zoomT - zoom) < 0.002 ? 1 : 0.22);
-        geom = drawUnitPreview(preview, draft, { side: 0, time: t, angle: -Math.PI / 2, minExtent: viewExt, still: true, zoom, pan });
-        if (geom) { drawGrid(geom); placeSockets(); }
+        if (zoom === zoomT && now - lastZoomAt > 160) detailZoom = zoomT;
+        const gesture = zooming || extMoving || !!panDrag || now - lastZoomAt < 160;
+        // a big hull zoomed in costs ~10 full-canvas blits per render: where that can't keep up (CPU-rastered canvas,
+        // hi-dpi), pan/zoom gestures CSS-scale the last render and only re-render every few frames' worth of time, and an
+        // idle bench redraws at <= 10 fps (only the slow turret sway / rotors animate); a fast machine redraws every frame
+        const slow = drawCost > 24;
+        const same = !!drawn && drawn.d === draft && drawn.w === preview.clientWidth && drawn.h === preview.clientHeight;
+        const opts = { side: 0 as const, time: t, angle: -Math.PI / 2, minExtent: viewExt, still: true, zoom, pan, detailZoom };
+        if (slow && gesture && same && now - lastPreview < Math.max(250, drawCost * 4)) {
+          const g2 = drawUnitPreview(preview, draft, { ...opts, measureOnly: true });
+          if (g2 && drawn) {
+            const k = g2.px / drawn.g.px;
+            preview.style.transform = `translate(${(g2.cx - k * drawn.g.cx).toFixed(2)}px, ${(g2.cy - k * drawn.g.cy).toFixed(2)}px) scale(${k.toFixed(4)})`;
+            geom = g2;
+            drawGrid(g2); placeSockets();
+          }
+        } else if (!same || (!slow && (gesture || now - lastPoke < 500)) || (slow && !gesture && preview.style.transform !== '')
+          || now - lastPreview >= (slow ? Math.max(100, drawCost * 4) : 30)) {
+          geom = drawUnitPreview(preview, draft, opts);
+          preview.style.transform = '';
+          lastPreview = now;
+          drewLast = true;
+          drawn = geom ? { g: geom, d: draft, w: preview.clientWidth, h: preview.clientHeight } : null;
+          if (geom) { drawGrid(geom); placeSockets(); }
+        }
       }
       if (frame++ % 2 === 0) {
         for (const { c, get } of listCanvases) if (fit(c)) drawUnitPreview(c, get(), { side: 0, time: t, angle: -Math.PI / 2 });

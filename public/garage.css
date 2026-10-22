@@ -225,7 +225,7 @@
 .garage .g-stage::before { left: 7px; top: 7px; border-right: 0; border-bottom: 0; }
 .garage .g-stage::after { right: 7px; bottom: 7px; border-left: 0; border-top: 0; }
 .garage .g-grid, .garage .g-preview { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.garage .g-preview { pointer-events: none; }
+.garage .g-preview { pointer-events: none; transform-origin: 0 0; }
 .garage .g-stage-hud { position: absolute; top: 12px; left: 40px; right: 40px; display: flex; justify-content: flex-start; pointer-events: none; z-index: 2; }
 .garage .g-prev-tags { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
 .garage .g-prev-cost {
