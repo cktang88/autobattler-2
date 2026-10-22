@@ -1547,6 +1547,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     // nothing had been drawn since the last frame (the deploy rings then stayed up through the whole battle).
     // Assigning width always drops the bitmap (and the context state).
     ringCv.width = ringCv.width;
+    ringCv.style.visibility = 'hidden'; // and hide the layer, belt and braces (seen under GPU load with 3D)
     ringsShown = false;
     legendEl.classList.add('hidden');
   }
@@ -1601,6 +1602,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (ringsShown) ringCv.width = ringCv.width; // full reset (see clearRings)
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     ringsShown = true;
+    ringCv.style.visibility = '';
     legendEl.classList.remove('hidden');
     const o = view.worldToScreen(0, 0), o1 = view.worldToScreen(1, 0);
     const k = Math.hypot(o1.x - o.x, o1.y - o.y);
