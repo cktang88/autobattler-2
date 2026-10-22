@@ -1065,6 +1065,29 @@ const spriteCache = new Map<string, UnitSprites>();
 const PART_LOD_PX = 14;
 const turretCache = new Map<string, HTMLCanvasElement>();
 const MAX_SPRITES = 400;
+/** Backing-store budget (pixels) for the sprite cache: a few close-zoom designer sets (2048² canvases) must not pile up. */
+const MAX_SPRITE_PIXELS = 4.0e7;
+let spritePixels = 0;
+const spritePx = new Map<string, number>();
+function spriteSetPixels(s: UnitSprites): number {
+  let n = s.hull.width * s.hull.height * 4 + s.halo.width * s.halo.height;
+  if (s.top) n += s.top.width * s.top.height;
+  if (s.anchor) n += s.anchor.width * s.anchor.height;
+  if (s.shell) n += s.shell.width * s.shell.height;
+  for (const q of s.parts) n += q.c.width * q.c.height + q.halo.width * q.halo.height;
+  return n;
+}
+/** Evict the oldest sets until `need` more pixels fit the budget (battlefield-sized sets are tiny and rarely touched). */
+function spriteRoom(need: number): void {
+  for (const [k] of spriteCache) {
+    if (spritePixels + need <= MAX_SPRITE_PIXELS) break;
+    const s = spriteCache.get(k)!;
+    spriteCache.delete(k);
+    spritePixels -= spritePx.get(k) ?? 0;
+    spritePx.delete(k);
+    if (litOwners.delete(s)) for (const c of s.lit ?? []) if (c) litPixels -= c.width * c.height;
+  }
+}
 
 function beginSprite(px: number, ext: number): { c: HTMLCanvasElement; g: Ctx } {
   const size = Math.ceil(2 * ext * px);
@@ -1085,7 +1108,10 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const key = `${L.key}|${team}|${px}`;
   let s = spriteCache.get(key);
   if (s) return s;
-  if (spriteCache.size > MAX_SPRITES) spriteCache.clear();
+  if (spriteCache.size > MAX_SPRITES) { spriteCache.clear(); spritePx.clear(); spritePixels = 0; }
+  // make room before baking a big set (the estimate: ~6 hull-sized canvases)
+  const est = Math.ceil(2 * L.ext * px) ** 2 * 6;
+  if (spritePixels + est > MAX_SPRITE_PIXELS) spriteRoom(est);
   const pal = TEAM_PAL[team];
   const o = outlineW(px, L.S);
   const ext = L.ext;
@@ -1185,7 +1211,10 @@ export function unitSprites(design: Design, team: Team, px: number): UnitSprites
   const hl = buildHalo(silhouette(s, '#000'), ext, px, pal);
   s.halo = hl.c;
   s.haloExt = hl.ext;
+  const n = spriteSetPixels(s);
   spriteCache.set(key, s);
+  spritePx.set(key, n);
+  spritePixels += n;
   return s;
 }
 
