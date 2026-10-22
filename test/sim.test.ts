@@ -52,6 +52,8 @@ const DESIGNS: Design[] = [
   D('mgtank', 'warden', 'halftrack', ['mg', null]),
   D('uplinker', 'warden', 'halftrack', ['uplink', 'mg']),
   D('titanW', 'titan', 'megatracks', [null, null, 'cannon', 'cannon', 'cannon']),
+  D('mlrsTruck', 'warden', 'halftrack', ['mlrs', null]),
+  D('swarmer', 'warden', 'halftrack', ['swarm', null]),
 ];
 
 test('test designs are legal', () => {
@@ -1072,4 +1074,48 @@ test('the biggest hull (10x10 weaver titan) is found by the spatial hash: splash
   const hp0 = e.hp;
   (b as unknown as { splash(...a: unknown[]): void }).splash(37.5, 40.5, 0.3, 500, 1, 1, 0, false, 'cannon', -1, false);
   assert.ok(e.hp < hp0, 'splash 0.2 cells from the hull edge missed it');
+});
+
+test('salvo: rocket and missile batteries launch the whole burst at once, rockets spread into a cluster', () => {
+  for (const [design, mod, n] of [['mlrsTruck', 'mlrs', 12], ['rocketeer', 'rockets', 4], ['swarmer', 'swarm', 8]] as const) {
+    const b = new Battle(input(5, [P(design, 10, 0)], [{ ...P('bulwark', 10, 0), stance: 'holdPos' }]));
+    type PP = { moduleId: string; tx: number; ty: number; src: number };
+    const projs = () => (b as unknown as { projs: PP[] }).projs.filter((p) => p.moduleId === mod && p.src === 0);
+    let fires = 0;
+    while (!b.done && b.tick < 20 * 40 && projs().length === 0) {
+      b.step();
+      fires += b.events.filter((e) => e.t === 'fire' && e.moduleId === mod).length;
+    }
+    const first = projs();
+    assert.equal(first.length, n, `${mod}: all ${n} rounds leave on the same tick`);
+    assert.equal(fires, 1, `${mod}: one launch event per salvo`);
+    if (mod === 'swarm') continue; // homing missiles fly to the target, not to scattered points
+    let minD = Infinity;
+    for (let i = 0; i < first.length; i++) for (let j = i + 1; j < first.length; j++) minD = Math.min(minD, Math.hypot(first[i].tx - first[j].tx, first[i].ty - first[j].ty));
+    assert.ok(minD > 0.15, `${mod}: impact points are spread out (closest pair ${minD.toFixed(3)} cells apart)`);
+  }
+});
+
+test('overkill: shooters do not pile onto a target that rounds in flight will already kill', () => {
+  // three snipers, two enemies; the near one dies to a single hit. Without overkill prevention every sniper takes it.
+  const b = new Battle(input(3, [
+    { ...P('sniperw', 6, 0), target: 'closest', focus: false },
+    { ...P('sniperw', 10, 0), target: 'closest', focus: false },
+    { ...P('sniperw', 14, 0), target: 'closest', focus: false },
+  ], [{ ...P('bulwark', 10, 0), stance: 'holdPos' }, { ...P('bulwark', 16, 2), stance: 'holdPos' }]));
+  const near = b.units[3];
+  near.hp = 20; near.shield = 0;
+  type PP = { id: number; aimT: number };
+  const seen = new Set<number>();
+  let atNear = 0;
+  for (let i = 0; i < 20 * 20 && near.alive; i++) {
+    b.step();
+    for (const p of (b as unknown as { projs: PP[] }).projs) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      if (p.aimT === near.id) atNear++;
+    }
+  }
+  assert.equal(near.alive, false);
+  assert.equal(atNear, 1, 'only one round is spent on the doomed unit');
 });

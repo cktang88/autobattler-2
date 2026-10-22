@@ -35,6 +35,8 @@
   display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 999px;
   background: var(--bg2, var(--bg, #0f151c)); border: 1px solid var(--line, #2c3a4a); font-size: 0.94rem; white-space: nowrap;
 }
+.lobby button.lobby-chip { cursor: pointer; min-height: 0; color: var(--muted, #8a9aaa); }
+.lobby button.lobby-chip.is-on { color: inherit; border-color: var(--accent, #2ed3c0); background: rgba(46, 211, 192, 0.1); }
 .lobby .lobby-chip small { color: var(--gold, var(--warn, #f2c94c)); font-family: var(--font-head, inherit); }
 
 /* actions */

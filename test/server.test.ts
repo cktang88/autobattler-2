@@ -253,6 +253,40 @@ test('deploy, redaction, polling and round resolution', async () => {
   assert.equal(poll.body.match.history.length, 1);
 });
 
+test('long poll: a waiting GET returns as soon as the opponent deploys', async () => {
+  const a = await login('LongA');
+  const b = await login('LongB');
+  const id = (await api('POST', '/api/matches', a.token, { deck: DECK })).body.id;
+  await api('POST', `/api/matches/${id}/join`, b.token, { deck: DECK });
+  const ga = (await api('GET', `/api/matches/${id}`, a.token)).body;
+  const gb = (await api('GET', `/api/matches/${id}`, b.token)).body;
+
+  // nothing changes: the server holds the request for the wait, then answers unchanged
+  let t0 = Date.now();
+  const idle = await api('GET', `/api/matches/${id}?since=${ga.match.updatedAt}&wait=300`, a.token);
+  assert.deepEqual(idle.body, { unchanged: true });
+  assert.ok(Date.now() - t0 >= 250, 'held for the wait');
+
+  // alice waits; bob's deploy wakes her immediately (long before the 15 s wait would end)
+  t0 = Date.now();
+  const pending = api('GET', `/api/matches/${id}?since=${ga.match.updatedAt}&wait=15000`, a.token);
+  await new Promise((r) => setTimeout(r, 50));
+  const db = await api('POST', `/api/matches/${id}/deploy`, b.token, { action: placeOne(gb.match, 1) });
+  assert.equal(db.status, 200);
+  const woke = await pending;
+  assert.equal(woke.status, 200);
+  assert.equal(woke.body.match.players[1].ready, true);
+  assert.ok(Date.now() - t0 < 5000, 'woken by the deploy');
+
+  // both ready: the poll is woken by the resolved round
+  const pending2 = api('GET', `/api/matches/${id}?since=${db.body.match.updatedAt}&wait=15000`, b.token);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal((await api('POST', `/api/matches/${id}/deploy`, a.token, { action: placeOne(ga.match, 0) })).status, 200);
+  const resolved = await pending2;
+  assert.equal(resolved.body.match.round, 2);
+  assert.equal(resolved.body.match.history.length, 1);
+});
+
 test('private matches and join codes', async () => {
   const c = await api('POST', '/api/matches', carol.token, { deck: DECK, private: true });
   assert.equal(c.status, 200);

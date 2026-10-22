@@ -20,6 +20,11 @@ const AIM_TOLERANCE = 0.06; // rad
 const RETARGET_EVERY = 0.3; // s
 const GOAL_EVERY = 0.4; // s
 const BURST_GAP = 0.1; // s
+/** golden angle: successive rounds of a salvo spiral out evenly instead of clumping */
+const GOLDEN_ANGLE = 2.399963229728653;
+/** a fresh shot is held (and the turret looks for another target) while rounds already in flight are expected to
+ *  finish its target off; rechecked every this many seconds */
+const OVERKILL_RECHECK = 0.3; // s
 const SHIELD_DELAY = 3; // s
 const SHIELD_REGEN = 0.05; // fraction of max per s
 const EVADE_CHANCE = 0.2;
@@ -152,6 +157,12 @@ interface Wpn {
   preaim: number;
   /** direction (+1/-1) of the last full-speed swing; keeps a turret committed when the target sits ~180° away */
   turnDir: number;
+  /** launcher battery (rocket racks, missile pods with 4+ tubes): the whole burst leaves at once as a salvo */
+  salvo: boolean;
+  /** random rotation of the current salvo's impact pattern */
+  salvoRot: number;
+  /** tick before which the overkill check is not repeated (no other target was found) */
+  okHold: number;
   /** [mount origins] hull-local mount offset (cells, +x = forward, +y = right; same point the art draws the turret
    *  at, see shared/mountgeo.ts). Ranges, aim and shot origins are measured from here. 0,0 for melee (reach stays
    *  measured from the hull edge). */
@@ -355,6 +366,9 @@ interface Proj extends SimProjectile {
   fx: ModuleDef | null;
   fxMult: number;
   cls: number;
+  /** unit this round was fired at (-1: none) and the damage it is expected to deal there (overkill bookkeeping) */
+  aimT: number;
+  est: number;
 }
 
 export class Battle {
@@ -381,6 +395,8 @@ export class Battle {
   private blockUnits: number[][] = [];
   private healers: Internal[] = [];
   private focusMark: Int32Array = new Int32Array(0);
+  /** expected damage of rounds in flight toward each unit (see Proj.est) */
+  private incoming: Float64Array = new Float64Array(0);
   private focusStamp = 0;
   /** pickTarget scratch: valid candidates (unit index, score, distance) in scan order */
   private candJ: Int32Array = new Int32Array(0);
@@ -499,6 +515,7 @@ export class Battle {
       if (I.hasHeal || I.aura) this.healers.push(I);
     }
     this.focusMark = new Int32Array(n);
+    this.incoming = new Float64Array(n);
     this.candJ = new Int32Array(n); this.candS = new Float64Array(n); this.candD = new Float64Array(n);
     for (const I of this.ints) {
       if (I.cloak) this.hasCloak = true;
@@ -550,6 +567,8 @@ export class Battle {
         def, heal: def.heal ?? 0, range, minRange: def.minRange ?? 0,
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
+        salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
+        salvoRot: 0, okHold: 0,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -1026,10 +1045,11 @@ export class Battle {
       const a = this.blockAtk[I.block];
       if (a >= 0 && this.tick - this.blockAtkT[I.block] <= THREAT_MEMORY) {
         const o = units[a];
-        if (o.alive && o.side !== u.side && this.canHit(w, o) && this.inRangeFrom(mx, my, u, w, o, mult) >= 0 && this.visible(u, o)) return a;
+        if (o.alive && o.side !== u.side && !this.doomed(a) && this.canHit(w, o) && this.inRangeFrom(mx, my, u, w, o, mult) >= 0 && this.visible(u, o)) return a;
       }
     }
     let best = -1, bestS = Infinity, bestD = Infinity;
+    let doomedBest = -1, doomedD = Infinity;
     // valid candidates in scan order, kept for the focus pass (most scans find none, so focus is only worked out
     // when there is something to choose between; nothing in the scan below depends on it)
     const focus = I.focus, candJ = this.candJ, candS = this.candS, candD = this.candD;
@@ -1060,6 +1080,8 @@ export class Battle {
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
       const d = this.inRangeFrom(mx, my, u, w, o, mult);
       if (d < 0 || !this.visible(u, o)) continue;
+      // already doomed by rounds in flight: only a fallback when nothing else is in reach
+      if (this.doomed(j)) { if (doomedBest < 0 || d < doomedD) { doomedBest = j; doomedD = d; } continue; }
       const O = this.ints[j];
       let sc: number;
       switch (prio) {
@@ -1079,7 +1101,7 @@ export class Battle {
       if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && (d < bestD || (d === bestD && j < best)))) { bestS = sc; bestD = d; best = j; }
       if (focus) { candJ[nc] = j; candS[nc] = sc; candD[nc] = d; nc++; }
     }
-    if (nc === 0) return best;
+    if (nc === 0) return best >= 0 ? best : doomedBest;
     // focus: enemies that allies nearby (and we ourselves) are already shooting are preferred
     const stamp = ++this.focusStamp;
     const fcnt = this.gatherSideNear(u.side, u.x, u.y, FOCUS_RADIUS + MAX_RADIUS, FOCUS_RADIUS);
@@ -1238,6 +1260,15 @@ export class Battle {
         continue;
       }
       if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
+        // overkill: rounds already in flight are expected to finish this target -- switch to another one, or hold
+        // the shot until they land (the target dies, or survives and incoming drops so we fire after all)
+        if (this.doomed(t.id) && this.tick >= w.okHold) {
+          w.okHold = this.tick + Math.round(OVERKILL_RECHECK * TICK_RATE);
+          const c = this.pickTarget(I, w, 1);
+          if (c !== m.target) { m.target = c; w.retarget = RETARGET_EVERY; }
+          continue;
+        }
+        if (this.doomed(t.id)) continue;
         w.aimX = ax; w.aimY = ay;
         m.cooldown = Math.max(m.cooldown, -DT) + (w.def.cooldown ?? 1); // carry sub-tick remainder
         if (m.ammo !== undefined) {
@@ -1245,6 +1276,12 @@ export class Battle {
           if (m.ammo <= 0) { m.ammo = 0; m.reloading = true; m.cooldown = Math.max(m.cooldown, (w.def.reload ?? 0) * I.reloadMult); }
         }
         const burst = w.def.burst ?? 1;
+        if (w.salvo) {
+          // launcher battery: every tube fires in the same instant, spread into a cluster around the aim point
+          w.salvoRot = this.rng() * Math.PI * 2;
+          for (let k = 0; k < burst; k++) this.fire(I, mi, w, t, ax, ay, k, burst);
+          continue;
+        }
         if (burst > 1) { w.burstLeft = burst - 1; w.burstTimer = BURST_GAP; }
         this.fire(I, mi, w, t, ax, ay);
       }
@@ -1291,13 +1328,27 @@ export class Battle {
 
   // ---------------------------------------------------------------- firing
 
-  private fire(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number): void {
+  private fire(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number, salvoK = 0, salvoN = 1): void {
     this.curSrc = this.dmgSrc = I.u.id;
-    this.fireImpl(I, mi, w, t, ax, ay);
+    this.fireImpl(I, mi, w, t, ax, ay, salvoK, salvoN);
     this.curSrc = this.dmgSrc = -1;
   }
 
-  private fireImpl(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number): void {
+  /** Damage one round is expected to deal to `t` after armour (shields count as hp, see doomed). */
+  private expectedHit(t: SimUnit, raw: number, ap: number, airBonus: number): number {
+    const r = t.flying ? raw * airBonus : raw;
+    return Math.max(r * MIN_DMG_FRAC, r - t.stats.armor * (1 - ap));
+  }
+
+  /** Rounds already in flight are expected to kill this unit. */
+  private doomed(j: number): boolean {
+    const inc = this.incoming[j];
+    if (inc <= 0) return false;
+    const o = this.units[j];
+    return inc >= o.hp + o.shield + o.auraShield;
+  }
+
+  private fireImpl(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number, salvoK = 0, salvoN = 1): void {
     const u = I.u;
     const def = w.def;
     const m = u.mounts[mi];
@@ -1307,9 +1358,15 @@ export class Battle {
     this.mountAt(I, w);
     const px = this.mpx, py = this.mpy;
     const aim = Math.atan2(ay - py, ax - px);
-    const mx = px + Math.cos(aim) * w.muz;
-    const my = py + Math.sin(aim) * w.muz;
-    this.events.push({ t: 'fire', unit: u.id, mount: mi, moduleId: def.id, x: mx, y: my, angle: aim });
+    let mx = px + Math.cos(aim) * w.muz;
+    let my = py + Math.sin(aim) * w.muz;
+    if (salvoK === 0) this.events.push({ t: 'fire', unit: u.id, mount: mi, moduleId: def.id, x: mx, y: my, angle: aim });
+    if (salvoN > 1) {
+      // each tube of the pod launches from its own spot across the launcher face
+      const lat = ((salvoK + 0.5) / salvoN - 0.5) * Math.min(0.6, 0.08 * salvoN);
+      mx += -Math.sin(aim) * lat;
+      my += Math.cos(aim) * lat;
+    }
     const dist0 = Math.hypot(ax - px, ay - py);
     let raw = (def.damage ?? 0) * I.dmgMult;
     if (def.falloff != null && def.falloff !== 1 && w.range > 0) raw *= 1 + (def.falloff - 1) * Math.min(1, dist0 / w.range);
@@ -1349,9 +1406,22 @@ export class Battle {
     const err = w.spread * Math.min(1.2, dist0 / Math.max(1, w.range)) * (t && this.ints[t.id].jammed ? 2 : 1);
     const speed = def.projectileSpeed ?? 15;
     const air = kind === 'arc' || kind === 'flame' ? false : t ? t.flying : !w.hitG;
+    // overkill bookkeeping: what one round is expected to deal to the target it was fired at
+    const est = t && kind !== 'flame'
+      ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : pellets > 1 || salvoN > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
+      : 0;
     for (let k = 0; k < pellets; k++) {
       let tx = ax, ty = ay;
-      if (kind === 'flame') {
+      if (salvoN > 1 && kind !== 'missile') {
+        // salvo cluster: rounds spiral out from the aim point (golden angle) so the blasts land side by side like a
+        // cluster strike instead of stacking; a bit longer along the line of fire, where rockets scatter most
+        const R = Math.max(err, (def.splash ?? 0.5) * 0.35 * Math.sqrt(salvoN));
+        const r = R * Math.sqrt((salvoK + 0.5) / salvoN) * (0.85 + 0.3 * this.rng());
+        const th = w.salvoRot + salvoK * GOLDEN_ANGLE;
+        const e1 = r * Math.sin(th), e2 = r * Math.cos(th) * 1.25;
+        tx = ax - s * e1 + c * e2;
+        ty = ay + c * e1 + s * e2;
+      } else if (kind === 'flame') {
         const a = aim + (this.rng() - 0.5) * 0.5;
         tx = mx + Math.cos(a) * w.range;
         ty = my + Math.sin(a) * w.range;
@@ -1368,7 +1438,9 @@ export class Battle {
       const bomb = kind === 'arc' && u.flying;
       const ox = bomb ? u.x : mx, oy = bomb ? u.y : my;
       const total = Math.max(0.3, Math.hypot(tx - ox, ty - oy));
-      const ang = Math.atan2(ty - oy, tx - ox);
+      let ang = Math.atan2(ty - oy, tx - ox);
+      // missile salvo: the pod fans its missiles out on launch; they curve back in on the target
+      if (salvoN > 1 && kind === 'missile') ang += ((salvoK + 0.5) / salvoN - 0.5) * 1.2 + (this.rng() - 0.5) * 0.15;
       const pierce = !!def.pierce;
       const p: Proj = {
         id: this.nextProjId++, side: u.side, moduleId: def.id, kind: kind as Proj['kind'], x: ox, y: oy, z: bomb ? BOMB_ALT : 0, z0: bomb ? BOMB_ALT : 0, src: u.id, angle: ang, progress: 0,
@@ -1377,7 +1449,9 @@ export class Battle {
         maxDist: kind === 'flame' ? total : kind === 'missile' ? w.range * 1.8 : pierce ? w.range + 1 : total + 2,
         ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * 0.22 : 0, dead: false,
         pierce, hits: [], fx, fxMult: lm, cls, mount: mi,
+        aimT: est > 0 && t ? t.id : -1, est,
       };
+      if (p.aimT >= 0) this.incoming[p.aimT] += est;
       if (air && kind !== 'missile') p.z = 1;
       else if (kind === 'orb') p.z = 0.4;
       this.projs.push(p);
@@ -1677,7 +1751,11 @@ export class Battle {
     }
     // compact
     let wi = 0;
-    for (let i = 0; i < ps.length; i++) if (!ps[i].dead) ps[wi++] = ps[i];
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (!p.dead) { ps[wi++] = p; continue; }
+      if (p.aimT >= 0) { const v = this.incoming[p.aimT] - p.est; this.incoming[p.aimT] = v > 1e-9 ? v : 0; }
+    }
     ps.length = wi;
     this.projectiles = ps;
   }

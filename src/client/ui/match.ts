@@ -113,6 +113,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let nextUid = 1;
   let selCard = -1;
   let sel: Sel = null;
+  /** box / shift-click group selection of my blocks (2+); their battle orders are edited together */
+  let multi: NonNullable<Sel>[] = [];
+  const inMulti = (s: Side, uid: number, pending: boolean) => multi.some((x) => x.side === s && x.uid === uid && x.pending === pending);
   let hover: { x: number; y: number; size: Size; spacing: number; rot?: boolean; w: number; h: number; valid: boolean; reason: string | null } | null = null;
   /** next squad is placed turned 90° (R while a card is selected) */
   let rotCard = false;
@@ -203,13 +206,15 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     nextUid = me().nextUid;
     selCard = -1;
     sel = null;
+    multi = [];
     hover = null;
   }
 
   // ---------- DOM ----------
   const canvas = h('canvas');
   const ringCv = h('canvas.rings', { 'aria-hidden': 'true' });
-  const fieldwrap = h('div.fieldwrap', null, canvas, ringCv);
+  const boxEl = h('div.box-select.hidden', { 'aria-hidden': 'true' });
+  const fieldwrap = h('div.fieldwrap', null, canvas, ringCv, boxEl);
   const view: FieldWithEvents = makeView(canvas, side);
   applyViewSettings(view);
 
@@ -529,6 +534,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (costOf(d) > remaining()) { sfx('invalid'); app.toast(`Not enough supply for ${d.name}`, 'error'); return; }
     selCard = i;
     sel = null;
+    multi = [];
     sfx('click');
     renderAll();
   }
@@ -613,34 +619,53 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let escortPick: NonNullable<Sel> | null = null;
 
   /** change battle orders of one of my blocks (pending: stored on the placement, locked: via `configure`) */
-  function setBlockOrders(sl: NonNullable<Sel>, patch: OrdersPatch) {
-    if (phase !== 'deploy' || sl.side !== side) return;
+  function setBlockOrders(sl: NonNullable<Sel>, patch: OrdersPatch, quiet = false): string | null {
+    if (phase !== 'deploy' || sl.side !== side) return null;
     const cur = blockOrders(sl);
-    if (!cur) return;
+    if (!cur) return null;
     const { escort: escPatch, ...op } = patch;
     const next: Orders = { ...cur, ...op };
     const esc = escPatch === undefined ? blockEscort(sl) : escPatch >= 0 ? escPatch : undefined;
     if (sl.pending) {
       const i = place.findIndex((x) => x.uid === sl.uid);
-      if (i < 0) return;
+      if (i < 0) return null;
       const { target: _t, hold: _h, kite: _k, kiteMount: _km, focus: _f, stance: _s, delay: _d, retreat: _r, escort: _e, ...rest } = place[i];
       const np: Placement = { ...rest, ...orderFields({ ...next, hold: next.hold && hasSpacing(sizeOf(designOf(side, rest.designId))) }, defsOf(side, rest.designId)), ...(esc != null ? { escort: esc } : {}) };
       const cand = action();
       cand.place[i] = np;
       const err = check(cand);
-      if (err) { sfx('invalid'); app.toast(err, 'error'); return; }
+      if (err) { if (!quiet) { sfx('invalid'); app.toast(err, 'error'); } return err; }
       place[i] = np;
     } else {
       const base = m.players[side].board.find((x) => x.uid === sl.uid);
-      if (!base) return;
+      if (!base) return null;
       const prev = cfg.get(sl.uid);
       const entry: UnitConfig = { uid: sl.uid, ...next, escort: esc ?? -1 };
       const same = ordersEqual(next, ordersOf(base, defsOf(side, base.designId))) && (esc ?? -1) === (base.escort ?? -1);
       if (same) cfg.delete(sl.uid); else cfg.set(sl.uid, entry);
       const err = check(action());
-      if (err) { if (prev) cfg.set(sl.uid, prev); else cfg.delete(sl.uid); sfx('invalid'); app.toast(err, 'error'); return; }
+      if (err) { if (prev) cfg.set(sl.uid, prev); else cfg.delete(sl.uid); if (!quiet) { sfx('invalid'); app.toast(err, 'error'); } return err; }
     }
+    if (quiet) return null;
     sfx('click');
+    renderAll();
+    return null;
+  }
+
+  /** the same order change for every block of the group selection (squad-only orders skip single units) */
+  function setGroupOrders(patch: OrdersPatch) {
+    let ok = 0, err: string | null = null;
+    for (const sl of multi) {
+      const p = blockSrc(sl);
+      const squad = p ? squadOf(designOf(sl.side, p.designId)) > 1 : false;
+      const { hold, ...rest } = patch;
+      const pp: OrdersPatch = hold !== undefined && squad ? { ...rest, hold } : rest;
+      if (!Object.keys(pp).length) continue;
+      const e = setBlockOrders(sl, pp, true);
+      if (e) err = e; else ok++;
+    }
+    if (err) { sfx(ok ? 'click' : 'invalid'); app.toast(ok ? `Applied to ${ok} of ${multi.length} blocks: ${err}` : err, 'error'); }
+    else sfx('click');
     renderAll();
   }
 
@@ -736,7 +761,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     else if (phase === 'deploy') {
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
-      else t = place.length ? 'Tap a new block to adjust or remove it · tap your units to upgrade' : 'Pick a unit card, then tap your zone to deploy';
+      else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
+      else t = place.length || me().board.length ? 'Tap a block to adjust it · Shift+drag to box-select several and set their orders together' : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -779,7 +805,30 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     requestAnimationFrame(() => paintPreview(prev, d, 0));
     return true;
   }
+  function renderGroupInfo() {
+    hideTip();
+    const lead = multi[0];
+    const o = blockOrders(lead)!;
+    const anySquad = multi.some((sl) => { const p = blockSrc(sl); return !!p && squadOf(designOf(sl.side, p.designId)) > 1; });
+    const counts = new Map<string, number>();
+    for (const sl of multi) { const p = blockSrc(sl); const n = (p && designOf(sl.side, p.designId)?.name) ?? '?'; counts.set(n, (counts.get(n) ?? 0) + 1); }
+    infoEl.replaceChildren(
+      h('button.icon.small.ghost.close', { onclick: () => { multi = []; renderAll(); } }, '✕'),
+      h('div.head', null, h('div', null,
+        h('h3', { class: 'friendly' }, `${multi.length} blocks selected`),
+        h('div.sc-sub', null, [...counts].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(' · ')),
+      )),
+      h('p.muted', { style: { margin: '4px 0 0', fontSize: '0.85rem' } }, 'Order changes apply to every selected block (showing the first one\'s orders).'),
+      h('div.info-spacing', null, ordersControl(o, anySquad, (patch) => setGroupOrders(patch), { custom: false })),
+    );
+    infoEl.classList.remove('hidden');
+    infoEl.classList.remove('picking');
+  }
+
   function renderInfo() {
+    multi = multi.filter((sl) => !!blockSrc(sl));
+    if (multi.length >= 2 && phase === 'deploy') { renderGroupInfo(); return; }
+    if (multi.length < 2) multi = [];
     if (!sel || (phase !== 'deploy' && phase !== 'waiting')) {
       if (!renderCardPreview()) { infoEl.classList.add('hidden'); ringHi = null; }
       return;
@@ -1093,11 +1142,48 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     renderHint();
   }
 
+  /** Shift+drag on the field (deploy, no card picked): rubber-band selection of my blocks, canvas CSS px */
+  let boxSel: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  function drawBox() {
+    if (!boxSel) { boxEl.classList.add('hidden'); return; }
+    const l = Math.min(boxSel.x0, boxSel.x1), t = Math.min(boxSel.y0, boxSel.y1);
+    Object.assign(boxEl.style, { left: `${l}px`, top: `${t}px`, width: `${Math.abs(boxSel.x1 - boxSel.x0)}px`, height: `${Math.abs(boxSel.y1 - boxSel.y0)}px` });
+    boxEl.classList.remove('hidden');
+  }
+  /** my blocks whose footprint centre falls inside the box */
+  function blocksInBox(b: NonNullable<typeof boxSel>): NonNullable<Sel>[] {
+    const l = Math.min(b.x0, b.x1), r = Math.max(b.x0, b.x1), t = Math.min(b.y0, b.y1), bt = Math.max(b.y0, b.y1);
+    const out: NonNullable<Sel>[] = [];
+    const test = (p: Placement, pending: boolean) => {
+      const d = designOf(side, p.designId);
+      const wr = blockWorldRect(side, p, sizeOf(d), footOf(d));
+      let sp: { x: number; y: number };
+      try { sp = view.worldToScreen(wr.col + wr.w / 2, wr.row + wr.h / 2); } catch { return; }
+      if (sp.x >= l && sp.x <= r && sp.y >= t && sp.y <= bt) out.push({ side, uid: p.uid, pending });
+    };
+    for (const p of me().board) test(p, false);
+    for (const p of place) test(p, true);
+    return out;
+  }
+  /** make `list` the selection: one block = normal single selection, more = group */
+  function selectBlocks(list: NonNullable<Sel>[]) {
+    if (list.length === 1) { sel = list[0]; multi = []; } else { sel = null; multi = list; }
+    if (list.length) sfx('click');
+    renderAll();
+  }
+
   canvas.addEventListener('pointerdown', (e) => {
     downAt = { x: e.clientX, y: e.clientY };
     lpDone = false;
     clearTimeout(lpTimer);
     moveDrag = null;
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0 && e.shiftKey) {
+      const { px, rawY } = local(e);
+      boxSel = { x0: px, y0: rawY, x1: px, y1: rawY };
+      view.controls.enabled = false; // this gesture draws the selection box, not a camera pan
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* */ }
+      return;
+    }
     if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0) {
       const { px, rawY } = local(e);
       const p = myPendingAt(px, rawY);
@@ -1129,6 +1215,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   canvas.addEventListener('pointermove', (e) => {
     const lp = local(e);
     lastPtr = { px: lp.px, py: lp.py };
+    if (boxSel) { boxSel.x1 = lp.px; boxSel.y1 = lp.rawY; drawBox(); return; }
     if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) clearTimeout(lpTimer);
     if (moveDrag && downAt) {
       if (!moveDrag.started && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) {
@@ -1180,11 +1267,31 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     renderAll();
     return true;
   }
-  canvas.addEventListener('pointercancel', () => { downAt = null; hover = null; clearTimeout(lpTimer); endMove(false); });
+  canvas.addEventListener('pointercancel', () => {
+    downAt = null; hover = null; clearTimeout(lpTimer); endMove(false);
+    if (boxSel) { boxSel = null; drawBox(); view.controls.enabled = true; }
+  });
   canvas.addEventListener('pointerup', (e) => {
     const start = downAt;
     downAt = null;
     clearTimeout(lpTimer);
+    if (boxSel) {
+      const b = boxSel;
+      boxSel = null;
+      drawBox();
+      view.controls.enabled = true;
+      if (Math.abs(b.x1 - b.x0) < 6 && Math.abs(b.y1 - b.y0) < 6) {
+        // shift-click: add / remove one of my blocks to the group
+        const hit = unitAt(b.x0, b.y0);
+        if (!hit || hit.side !== side) return;
+        const cur = multi.length ? multi : sel && sel.side === side ? [sel] : [];
+        const has = cur.some((x) => x.uid === hit.uid && x.pending === hit.pending);
+        selectBlocks(has ? cur.filter((x) => !(x.uid === hit.uid && x.pending === hit.pending)) : [...cur, hit]);
+        return;
+      }
+      selectBlocks(blocksInBox(b));
+      return;
+    }
     if (endMove(true)) return; // a drag-move, not a click
     if (lpDone) { lpDone = false; return; }
     if (!start || e.button > 0) return;
@@ -1215,6 +1322,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return;
     }
     if (hit && phase === 'deploy' && hit.pending && sel?.pending && sel.uid === hit.uid) { removePending(hit.uid); return; }
+    multi = [];
     sel = hit;
     if (hit) sfx('click');
     renderAll();
@@ -1246,7 +1354,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (tipEl?.classList.contains('sheet') || liveTip) { hideTip(); return; }
       if (escortPick) escortPick = null;
       else if (selCard >= 0) { selCard = -1; hover = null; }
-      else sel = null;
+      else { sel = null; multi = []; }
       renderAll();
     } else if (e.key === ' ' || e.key === 'Enter') {
       if (t && t.tagName === 'BUTTON') return; // let the focused button / kit control handle it
@@ -1404,9 +1512,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       for (const c of placementUnitCenters(s, p, sizeOf(d), footOf(d))) out.push({ side: s, design: d, x: c.x, y: c.y, level: p.level, ...extra });
     };
     for (const p of foe().board) add(opp, p, { selected: sel?.side === opp && sel.uid === p.uid });
-    for (const p of me().board) add(side, p, { level: Math.min(MAX_LEVEL, p.level + pendingUps(p.uid)), selected: sel?.side === side && !sel.pending && sel.uid === p.uid });
+    for (const p of me().board) add(side, p, { level: Math.min(MAX_LEVEL, p.level + pendingUps(p.uid)), selected: (sel?.side === side && !sel.pending && sel.uid === p.uid) || inMulti(side, p.uid, false) });
     if (phase === 'deploy') {
-      for (const p of place) add(side, p, { selected: !!sel?.pending && sel.uid === p.uid });
+      for (const p of place) add(side, p, { selected: (!!sel?.pending && sel.uid === p.uid) || inMulti(side, p.uid, true) });
       const d = deck()[selCard];
       if (hover && d) {
         for (const c of placementUnitCenters(side, { x: hover.x, y: hover.y, spacing: hover.spacing, rot: hover.rot }, hover.size, footOf(d))) {
