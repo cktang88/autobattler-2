@@ -285,8 +285,8 @@
 /* drag feedback (stage + strip) */
 .garage.dragging .g-sock.can .g-sock-ring { border: 3px solid var(--teal) !important; background: radial-gradient(circle, rgba(53, 214, 191, 0.3), rgba(5, 7, 9, 0.4) 70%); box-shadow: 0 0 0 2px var(--ink), 0 0 18px rgba(53, 214, 191, 0.6); animation: g-sockpulse 0.9s ease-in-out infinite; }
 .garage.picking:not(.dragging) .g-sock.can .g-sock-ring { border: 3px solid var(--teal) !important; background: radial-gradient(circle, rgba(53, 214, 191, 0.3), rgba(5, 7, 9, 0.4) 70%); box-shadow: 0 0 0 2px var(--ink), 0 0 18px rgba(53, 214, 191, 0.6);  }
-.garage.dragging .g-sock.cant { opacity: 0.35; }
-.garage.picking:not(.dragging) .g-sock.cant { opacity: 0.35; }
+.garage.dragging .g-sock.cant { opacity: 0.55; }
+.garage.picking:not(.dragging) .g-sock.cant { opacity: 0.55; }
 .garage.dragging .g-sock.cant .g-sock-ring { border: 2px solid var(--red) !important; animation: none; background: rgba(60, 10, 8, 0.5); }
 .garage.picking:not(.dragging) .g-sock.cant .g-sock-ring { border: 2px solid var(--red) !important; animation: none; background: rgba(60, 10, 8, 0.5); }
 .garage.dragging .g-sock.hot.can .g-sock-ring { transform: scale(1.22); border-color: var(--amber) !important; background: radial-gradient(circle, rgba(255, 178, 30, 0.45), rgba(5, 7, 9, 0.3) 70%); box-shadow: 0 0 0 2px var(--ink), 0 0 26px rgba(255, 178, 30, 0.8); }
@@ -708,6 +708,10 @@
 .garage .g-stagebtn.on { color: var(--amber-ink) !important; background: linear-gradient(180deg, var(--amber2), var(--amber)) !important; box-shadow: inset 0 0 0 2px var(--ink); }
 .garage .g-stagebtn.on .g-ico { color: var(--amber-ink); }
 .garage .g-stage.ranges .g-sockets, .garage .g-stage.ranges .g-sock { opacity: 0; pointer-events: none; }
+/* dragging a part with the range view up: the sockets come back as drop targets */
+.garage.dragging .g-stage.ranges .g-sockets { opacity: 1; }
+.garage.dragging .g-stage.ranges .g-sock { opacity: 1; pointer-events: auto; }
+.garage.dragging .g-stage.ranges .g-sock.cant { opacity: 0.55; }
 .garage .g-sockets { transition: opacity 0.2s; }
 .garage .g-stage .g-stage-hint { font-size: 0.94rem; letter-spacing: 0.08em; color: rgba(241, 236, 224, 0.75); }
 .garage .g-stage.ranges .g-stage-hint { display: none; }
@@ -817,7 +821,8 @@
 .garage .g-item-meta .g-size { white-space: nowrap; flex: none; }
 .garage .g-lslot { flex: 1 1 170px; max-width: none; }
 .garage .g-lslot-name { font-size: 0.95rem; }
-@media (max-width: 1360px) { .garage .g-body { grid-template-columns: 218px minmax(0, 1fr) 420px; } }
+/* (not below 1101px: that would undo the two-column roster-strip layout, which comes earlier in the file) */
+@media (max-width: 1360px) and (min-width: 1101px) { .garage .g-body { grid-template-columns: 218px minmax(0, 1fr) 420px; } }
 
 /* ---- unit class step ---- */
 .garage .g-classes { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px; align-items: stretch; flex: none; }
@@ -870,3 +875,14 @@
 .garage .g-lslot-edge { font-family: var(--head); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #ffb21e; padding: 1px 5px; box-shadow: inset 0 0 0 1px rgba(255, 178, 30, 0.6); white-space: nowrap; }
 .garage .g-showall { display: block; margin: 8px 0; padding: 4px 10px; font-family: var(--head); font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim2); background: transparent; border: 1px dashed var(--plate4); cursor: pointer; }
 .garage .g-showall:hover, .garage .g-showall[aria-pressed="true"] { color: var(--txt); border-color: var(--txt); }
+
+/* sockets zoomed/panned out of view: pinned to the stage edge, smaller, with a pointer towards the real mount */
+.garage .g-sock.off { --r: 13px !important; }
+.garage .g-sock.off .g-sock-ring { border-style: dashed; animation: none; }
+.garage .g-sock.off .g-sock-plus, .garage .g-sock.off .g-sock-edge { display: none; }
+.garage .g-sock.off .g-sock-ring::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -5px 0 0 -3px; pointer-events: none;
+  border: 5px solid transparent; border-left: 7px solid var(--c); border-right: 0;
+  transform: rotate(var(--off, 0deg)) translateX(calc(var(--r) + 3px));
+}
+.garage .g-sock.off.active .g-sock-ring::after { border-left-color: var(--amber); }

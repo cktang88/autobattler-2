@@ -10,14 +10,14 @@ import { sfx } from '../audio.ts';
 import { kiteOptions, ordersControl, ordersOf, orderFields, ringsOf } from './match-ui.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
-import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
+import { METERS_PER_CELL, fmtMeters, squadSize } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { slotError } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { MAX_LOAD, PARTS_WEIGHT, POWER_K, accuracyRating, computeStats, defaultOrders, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStats, defaultOrders, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
@@ -306,6 +306,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     draft = d ? clone(d) : blankDesign(designs.map((x) => x.name), dom);
     autoName = !d;
     activeSlot = null;
+    // a part picked for the previous design would grey out every socket of this one that it doesn't fit
+    delete pinned.weapons; delete pinned.systems;
+    hoverInspect = null;
     pan.x = pan.y = 0; // new design: recentre (zoom level is kept)
     nameInput.value = draft.name;
     update();
@@ -658,7 +661,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     let best: number | null = null, bd = Infinity;
     for (const s of sockets()) {
       const r = s.el.getBoundingClientRect();
-      if (rangesOn && s.el.classList.contains('g-sock')) continue; // hidden while the range view is up
+      if (rangesOn && !drag?.started && s.el.classList.contains('g-sock')) continue; // hidden in the range view (shown again while dragging)
       const pad = s.el.classList.contains('g-sock') ? 14 : 2;
       if (x < r.left - pad || x > r.right + pad || y < r.top - pad || y > r.bottom + pad) continue;
       const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
@@ -723,7 +726,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   /** While a module is selected in the bay (not dragging), light up the sockets it can legally go in. */
   function applyPick() {
     if (drag?.started) return;
-    const sel = tab === 'weapons' || tab === 'systems' ? pinned[tab] : null;
+    // the part under the pointer previews where it fits; otherwise the part picked in the bay
+    const hov = hoverInspect?.kind === 'module' ? hoverInspect : null;
+    const sel = hov ?? (tab === 'weapons' || tab === 'systems' ? pinned[tab] : null);
     const mod = sel?.kind === 'module' ? MODULE_BY_ID.get(sel.id) : undefined;
     el.classList.toggle('picking', !!mod);
     for (const s of sockets()) {
@@ -817,7 +822,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         h('span.g-item-meta', null,
           h('span.g-tag.dom', { class: `d-${designDomain(d)}`, title: DOMAINS.find((x) => x.id === designDomain(d))?.name ?? '' }, DOMAIN_BADGE[designDomain(d)]),
           h('span.g-size', null, s ? designSizeLabel(s) : '?'),
-          h('span.g-item-cost', { title: s && s.squad > 1 ? `Block of ${s.squad} (${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
+          h('span.g-item-cost', { title: s && s.squad > 1 ? `Supply per block of ${s.squad} (≈${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
           s?.flying ? h('span.g-tag.air', null, 'AIR') : null,
           s?.isStatic ? h('span.g-tag.static', null, 'FIX') : null,
         ),
@@ -875,7 +880,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       s?.isStatic ? h('span.g-plate.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-plate.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
     ].filter((x): x is HTMLSpanElement => !!x));
-    stageCost.replaceChildren(h('span.g-prev-cost-l', null, s && s.squad > 1 ? `Supply / block · ${s.unitCost} each` : 'Supply'), h('span.g-prev-cost-v', null, icon('cost'), h('b', null, s ? String(s.cost) : '–'), delta(ss && s ? s.cost - ss.cost : null, { invert: true })));
+    stageCost.replaceChildren(h('span.g-prev-cost-l', { title: s && s.squad > 1 ? `Price of one block of ${s.squad} units (about ${s.unitCost} per unit)` : 'Supply price' }, s && s.squad > 1 ? `Supply · block of ${s.squad} · ≈${s.unitCost} each` : 'Supply'), h('span.g-prev-cost-v', null, icon('cost'), h('b', null, s ? String(s.cost) : '–'), delta(ss && s ? s.cost - ss.cost : null, { invert: true })));
     const empty = draft.mounts.filter((m, i) => !m && i < c.mounts.length).length + Math.max(0, c.mounts.length - draft.mounts.length);
     stageHint.replaceChildren(empty ? `Drag parts onto the ${empty} empty socket${empty > 1 ? 's' : ''}` : 'Drag a part onto a socket to swap it');
     rangeBtn.classList.toggle('on', rangesOn);
@@ -886,19 +891,24 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
     if (!s) { readoutEl.replaceChildren(); loadEl.replaceChildren(); return; }
     const sub = (...xs: (string | null | false)[]) => xs.filter(Boolean).join(' · ');
+    // every number here is one unit's; a squad design adds "each" and the block total (labelled) underneath
+    const sq = s.squad > 1;
+    const each = (u: string) => (sq ? (u ? `${u} each` : 'each') : u);
+    const block = (v: number, u = '') => (sq ? `×${s.squad} = ${fmt(Math.round(v * s.squad))}${u} per block` : null);
+    const sqTip = sq ? ` Shown per unit: one purchase deploys a block of ${s.squad}.` : '';
     readoutEl.replaceChildren(
       gauge('Health', String(s.hp), delta(ss ? s.hp - ss.hp : null), {
-        sub: sub(s.armor ? `${s.armor} armor` : 'no armor', s.shield ? `${s.shield} shield` : null),
-        tip: 'Hull hit points. Armor subtracts from every hit; shields soak damage and recharge.',
+        unit: each(''), sub: sub(block(s.hp), s.armor ? `${s.armor} armor` : 'no armor', s.shield ? `${s.shield} shield` : null),
+        tip: `Hull hit points. Armor subtracts from every hit; shields soak damage and recharge.${sqTip}`,
       }),
       gauge('Firepower', String(s.dps), delta(ss ? s.dps - ss.dps : null), {
-        unit: 'dps', cls: 'hl', sub: s.range ? `reach ${fmtMeters(s.range)}` : 'unarmed',
-        tip: 'Damage per second of all weapons combined; reach is the longest weapon range.',
+        unit: each('dps'), cls: 'hl', sub: sub(block(s.dps, ' dps'), s.range ? `reach ${fmtMeters(s.range)}` : 'unarmed'),
+        tip: `Damage per second of all weapons combined; reach is the longest weapon range.${sqTip}`,
       }),
       gauge('Speed', s.isStatic ? '—' : String(Math.round(s.speed * METERS_PER_CELL)), delta(ss ? (s.speed - ss.speed) * METERS_PER_CELL : null), {
         unit: s.isStatic ? '' : 'm/s', sub: s.isStatic ? 'static emplacement' : `turns ${deg(s.turn)}°/s`,
       }),
-      ...(s.heal ? [gauge('Repair', String(s.heal), delta(ss ? s.heal - ss.heal : null), { unit: 'hp/s', sub: 'to nearby allies' })] : []),
+      ...(s.heal ? [gauge('Repair', String(s.heal), delta(ss ? s.heal - ss.heal : null), { unit: each('hp/s'), sub: sub(block(s.heal, ' hp/s'), 'to nearby allies') })] : []),
     );
 
     const pct = s.load * 100;
@@ -921,7 +931,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('div.g-bar-fill', { style: { width: `${Math.min(100, (s.load / BAR_MAX) * 100).toFixed(2)}%` } }),
       h('span.g-bar-mark.m1'), h('span.g-bar-mark.m2'),
       ),
-      h('span.g-load-num', null, h('b', null, fmt(s.weight)), `/${s.capacity}`),
+      h('span.g-load-num', { title: s.squad > 1 ? `Weight / capacity of each unit in the block of ${s.squad}` : 'Weight / capacity' }, h('b', null, fmt(s.weight)), `/${s.capacity}`),
       h('span.g-speednote', { class: spd < 0 || s.load > MAX_LOAD ? 'neg' : 'pos' }, speedNote),
     );
   }
@@ -976,23 +986,48 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return b;
     }));
     lastSockKey = '';
+    // new socket nodes start unplaced: position them now rather than on the next preview frame (which can be
+    // a while off when the bench is throttled or scrolled out of view), so they never flash or sit at the corner
+    if (draft !== drawnDesign() || !geom) {
+      const g = previewGeomNow();
+      if (g) geom = g;
+    }
+    placeSockets();
   }
 
   let showAllMods = false;
   let lastSockKey = '';
+  /** Sync the on-hull socket buttons to the renderer's mount points. Sockets that the zoom/pan pushed out of view are
+   *  pinned to the stage edge (class `off`) so they can still be seen, clicked and dropped on; crowded sockets shrink so
+   *  neighbours don't cover each other. Unplaced sockets stay hidden (no stack in the corner before the first frame). */
   function placeSockets() {
-    if (!geom) return;
-    const key = geom.mounts.map((m) => `${m.x.toFixed(1)},${m.y.toFixed(1)},${m.r.toFixed(1)}`).join('|');
+    const kids = socketsEl.children;
+    if (!geom || geom.mounts.length !== kids.length) {
+      for (const n of kids) (n as HTMLElement).style.visibility = 'hidden';
+      lastSockKey = '';
+      return;
+    }
+    const W = socketsEl.clientWidth, H = socketsEl.clientHeight;
+    const key = `${W}x${H}|` + geom.mounts.map((m) => `${m.x.toFixed(1)},${m.y.toFixed(1)},${m.r.toFixed(1)}`).join('|');
     if (key === lastSockKey) return;
     lastSockKey = key;
-    const kids = socketsEl.children;
-    geom.mounts.forEach((m, i) => {
-      const n = kids[i] as HTMLElement | undefined;
-      if (!n) return;
-      const r = Math.max(15, Math.min(48, m.r * 1.1));
-      n.style.left = `${m.x}px`;
-      n.style.top = `${m.y}px`;
+    const ms = geom.mounts;
+    ms.forEach((m, i) => {
+      const n = kids[i] as HTMLElement;
+      let r = Math.max(15, Math.min(48, m.r * 1.1));
+      // crowded hulls (small stage, many sockets): never let a ring cover its neighbour's centre
+      let nn = Infinity;
+      for (let j = 0; j < ms.length; j++) if (j !== i) nn = Math.min(nn, Math.hypot(ms[j].x - m.x, ms[j].y - m.y));
+      r = Math.max(9, Math.min(r, nn * 0.55));
+      const pad = Math.min(r + 6, W / 2, H / 2);
+      const x = Math.max(pad, Math.min(W - pad, m.x)), y = Math.max(pad, Math.min(H - pad, m.y));
+      const off = W > 0 && H > 0 && (x !== m.x || y !== m.y);
+      n.style.left = `${(W > 0 ? x : m.x).toFixed(1)}px`;
+      n.style.top = `${(H > 0 ? y : m.y).toFixed(1)}px`;
       n.style.setProperty('--r', `${r.toFixed(1)}px`);
+      n.style.visibility = '';
+      n.classList.toggle('off', off);
+      if (off) n.style.setProperty('--off', `${(Math.atan2(m.y - y, m.x - x) * 180 / Math.PI).toFixed(0)}deg`);
     });
   }
 
@@ -1024,10 +1059,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   function hoverable(node: HTMLElement, it: Inspect) {
-    node.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && !drag?.started) { hoverInspect = it; renderInspector(); } });
-    node.addEventListener('pointerleave', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); } });
-    node.addEventListener('focus', () => { hoverInspect = it; renderInspector(); });
-    node.addEventListener('blur', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); } });
+    node.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && !drag?.started) { hoverInspect = it; renderInspector(); applyPick(); } });
+    node.addEventListener('pointerleave', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); applyPick(); } });
+    node.addEventListener('focus', () => { hoverInspect = it; renderInspector(); applyPick(); });
+    node.addEventListener('blur', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); applyPick(); } });
   }
 
   /** Single-choice role dropdown (shared by every tab). */
@@ -1248,14 +1283,17 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       if (Math.abs(d) < 0.5 * 10 ** -(opts.digits ?? 0)) return;
       cells.push(h('div.g-cmp-c', null, h('span', null, k), h('b', null, `${fmt(vb, opts.digits ?? 0)}${opts.unit ?? ''}`), delta(d, opts)));
     };
-    cell('Cost', a.cost, b.cost, { invert: true });
-    cell('DPS', a.dps, b.dps);
-    cell('HP', a.hp, b.hp);
+    // cost is per purchase (a block for squads); hp/dps are one unit's
+    const sq = a.squad > 1 || b.squad > 1;
+    if (a.squad !== b.squad) cells.push(h('div.g-cmp-c', null, h('span', null, 'Units/buy'), h('b', null, `×${b.squad}`), h('span.g-delta', { class: b.squad > a.squad ? 'up' : 'down' }, `was ×${a.squad}`)));
+    cell(sq ? 'Cost/buy' : 'Cost', a.cost, b.cost, { invert: true });
+    cell(sq ? 'DPS each' : 'DPS', a.dps, b.dps);
+    cell(sq ? 'HP each' : 'HP', a.hp, b.hp);
     cell('Range', a.range * METERS_PER_CELL, b.range * METERS_PER_CELL, { unit: 'm' });
     cell('Speed', a.speed * METERS_PER_CELL, b.speed * METERS_PER_CELL);
     cell('Load', a.load * 100, b.load * 100, { invert: true, unit: '%' });
     if (!cells.length) return null;
-    return h('div.g-insp-sec', null, h('span.g-sec-l', null, title), h('div.g-cmp', null, ...cells.slice(0, 5)));
+    return h('div.g-insp-sec', null, h('span.g-sec-l', null, title), h('div.g-cmp', null, ...cells.slice(0, sq ? 6 : 5)));
   }
 
   function inspHead(kind: 'chassis' | 'mobility' | 'module', id: string, name: string, sub: (Node | string | null)[], color?: string) {
@@ -1281,9 +1319,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return { ...draft, chassis: c.id, mobility, mounts: reseat(draft.mounts, c, mobility) };
     })();
     return [
-      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), roleTags(c.roles, 2)]),
+      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), squadSize(c.size) > 1 ? h('span.g-plate.squad', { title: `One purchase deploys a block of ${squadSize(c.size)} of these` }, `Squad ×${squadSize(c.size)}`) : null, roleTags(c.roles, 2)]),
       h('div.g-kstats', null,
-        kstat('Hull', String(c.hp), 'hp'),
+        kstat(squadSize(c.size) > 1 ? 'Hull each' : 'Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),
         kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}`, title: sizeTip(m) }, ML[m]))))),
       h('p.g-insp-desc', null, c.desc),
@@ -1431,13 +1469,13 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           h('span.parts', { style: { width: `${(parts / tot) * 100}%` } }),
           h('span.power', { style: { width: `${(pow / tot) * 100}%` } })),
         h('div.g-specs', null,
-          s.squad > 1 ? row('Per unit value', `${s.unitCost} ×${s.squad}`) : null,
-          row('Parts complexity', `${Math.round(s.partsCost)} ≈${Math.round(parts)}`, d('partsCost')),
-          row('Combat power', `${s.power} ≈${Math.round(pow)}`, d('power')),
-          row('Offense rating', String(s.offense), d('offense')),
-          row('Effective HP', String(s.ehp), d('ehp')),
+          s.squad > 1 ? row('Per unit', `≈${s.unitCost} × ${s.squad} units`) : null,
+          row(s.squad > 1 ? 'Parts complexity (each)' : 'Parts complexity', `${Math.round(s.partsCost)} ≈${Math.round(parts)}`, d('partsCost')),
+          row(s.squad > 1 ? 'Combat power (each)' : 'Combat power', `${s.power} ≈${Math.round(pow)}`, d('power')),
+          row(s.squad > 1 ? 'Offense rating (each)' : 'Offense rating', String(s.offense), d('offense')),
+          row(s.squad > 1 ? 'Effective HP (each)' : 'Effective HP', String(s.ehp), d('ehp')),
         ),
-        h('p.g-note', null, `Cost = ${PARTS_WEIGHT} × parts + ${POWER_K} × power, rounded up to 5. Power = √(offense × effective hp) × mobility, so equal-supply armies are balanced.`),
+        h('p.g-note', null, `Unit value = ${PARTS_WEIGHT} × parts + ${POWER_K} × power, scaled by hull size class and drive, ÷ ${PRICE_DIV}${s.squad > 1 ? `; a block is ${s.squad} units` : ''}; the price is rounded (to 10, or 50 above 1000). Power = √(offense × effective hp) × mobility, so equal-supply armies are balanced.`),
       ),
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, 'Hardpoints'),
@@ -1450,7 +1488,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         h('span.g-sec-l', null, 'Profile'),
         h('div.g-specs', null,
           row('Footprint', `${footprintLabel(s.fw)} × ${footprintLabel(s.fh)}`),
-          row('Weight', `${fmt(s.weight)} / ${s.capacity}`),
+          s.squad > 1 ? row('Block', `${s.squad} units · ${fmt(s.hp * s.squad)} hp · ${fmt(s.dps * s.squad)} dps in all`) : null,
+          row(s.squad > 1 ? 'Weight (each)' : 'Weight', `${fmt(s.weight)} / ${s.capacity}`),
           row('Turn', s.isStatic ? '—' : `${deg(s.turn)}°/s`),
         ),
         s.traits.length ? h('div.g-fxs', null, ...[...new Set(s.traits)].map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null,
@@ -1628,6 +1667,14 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight) return false;
     return true; // drawUnitPreview sizes the backing store itself (one formula, no per-frame reallocation)
   }
+  /** The bench geometry for the current draft/zoom/pan without drawing (null while the stage has no size). */
+  function previewGeomNow(): PreviewGeom | null {
+    if (preview.clientWidth < 2 || preview.clientHeight < 2) return null;
+    try {
+      return drawUnitPreview(preview, draft, { side: 0, angle: -Math.PI / 2, minExtent: viewExt, still: true, zoom, pan, measureOnly: true });
+    } catch { return null; }
+  }
+  const drawnDesign = () => drawn?.d ?? null;
   let frame = 0;
   let raf = 0;
   /** the preview canvas's last real render: its geometry, design and size (a gesture CSS-scales it from there) */
