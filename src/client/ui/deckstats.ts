@@ -3,8 +3,47 @@
 import { METERS_PER_CELL } from '../../shared/grid.ts';
 import { START_SUPPLY } from '../../shared/match.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
-import { computeStats, weaponDps } from '../../shared/stats.ts';
-import type { Design, UnitStats } from '../../shared/types.ts';
+import { computeStats, levelMult } from '../../shared/stats.ts';
+import type { Design, ModuleDef, UnitStats } from '../../shared/types.ts';
+
+// ---- firepower as the sim computes it (per unit) ----
+// Every number here is for ONE unit. A size-1 design is bought as a block of `st.squad` (16) units: multiply by
+// st.squad for the squad total. The UI convention: plain numbers are per unit; squad totals are always labelled.
+
+export interface FireMods { fireRate: number; reloadMult: number }
+/** Weapon fire-rate and clip-reload multipliers from a design's utilities (same sums as the sim's addUnit). */
+export function fireMods(d: Design): FireMods {
+  let fireRate = 1, reloadBonus = 0;
+  for (const id of d.mounts) {
+    const m = id ? MODULE_BY_ID.get(id) : undefined;
+    if (!m) continue;
+    fireRate += m.fireRateBonus ?? 0;
+    reloadBonus += m.reloadBonus ?? 0;
+  }
+  return { fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus) };
+}
+/** Sustained dps of one weapon on one unit vs 0 armor: cooldowns (and clip reloads) tick at fireRate, reloads take
+ *  reload x reloadMult, damage x levelMult(level). 0 for non-weapons. */
+export function mountDps(m: ModuleDef, fm: FireMods, level = 1): number {
+  if (m.kind !== 'weapon' || !m.damage || !m.cooldown) return 0;
+  const cd = m.cooldown;
+  const cyc = m.magazine && m.reload ? (cd * (m.magazine - 1) + m.reload * fm.reloadMult) / m.magazine : cd;
+  return ((m.damage * (m.burst ?? 1) * (m.pellets ?? 1)) / cyc) * fm.fireRate * levelMult(level);
+}
+/** Per-unit sustained dps vs ground and vs air (air includes airBonus); weapons = number of damaging weapons. */
+export function unitDps(d: Design, level = 1): { ground: number; air: number; weapons: number } {
+  const fm = fireMods(d);
+  let ground = 0, air = 0, weapons = 0;
+  for (const id of d.mounts) {
+    const m = id ? MODULE_BY_ID.get(id) : undefined;
+    if (!m || m.kind !== 'weapon' || !m.damage) continue;
+    weapons++;
+    const v = mountDps(m, fm, level);
+    if (m.targetsGround) ground += v;
+    if (m.targetsAir) air += v * (m.airBonus ?? 1);
+  }
+  return { ground, air, weapons };
+}
 
 export type Cap = 'aa' | 'armor' | 'swarm' | 'long' | 'front' | 'support' | 'detect' | 'air' | 'fast';
 
@@ -13,7 +52,7 @@ export const CAPS: { id: Cap; label: string; tip: string }[] = [
   { id: 'armor', label: 'Anti-armor', tip: 'Armor-piercing or heavy single hits that crack tanks' },
   { id: 'swarm', label: 'Anti-swarm', tip: 'Splash, flame, chains or spread that shred light squads' },
   { id: 'long', label: 'Long range', tip: 'Reaches 80 m or more: artillery, snipers, missiles' },
-  { id: 'front', label: 'Frontline', tip: 'Tough enough to hold the line (lots of hp, armor or shields)' },
+  { id: 'front', label: 'Frontline', tip: 'Each unit is tough enough to hold the line (lots of hp, armor or shields); a squad of flimsy units does not count' },
   { id: 'support', label: 'Support', tip: 'Repairs or shields allies' },
   { id: 'detect', label: 'Detection', tip: 'Sensors that reveal cloaked units' },
   { id: 'air', label: 'Aircraft', tip: 'Flying units: only anti-air can hit them' },
@@ -24,7 +63,7 @@ export interface DesignInfo {
   d: Design;
   st: UnitStats;
   cost: number;
-  /** combined dps of weapons that can hit ground / air */
+  /** squad (block) total dps vs ground / air: per-unit dps x st.squad */
   gnd: number;
   air: number;
   /** longest reach in metres */
@@ -37,14 +76,13 @@ export function designInfo(d: Design): DesignInfo | null {
   let st: UnitStats;
   try { st = computeStats(d); } catch { return null; }
   const caps = new Set<Cap>();
-  let gnd = 0, air = 0;
+  const dp = unitDps(d);
+  const gnd = dp.ground * st.squad, air = dp.air * st.squad;
   for (const id of d.mounts) {
     const m = id ? MODULE_BY_ID.get(id) : undefined;
     if (!m) continue;
     if (m.kind === 'weapon') {
-      const dps = weaponDps(m) * st.squad;
-      if (m.targetsGround) gnd += dps;
-      if (m.targetsAir) { air += dps; caps.add('aa'); }
+      if (m.targetsAir) caps.add('aa');
       if ((m.ap ?? 0) >= 0.3 || (m.damage ?? 0) >= 60) caps.add('armor');
       if ((m.splash ?? 0) > 0 || m.chain || m.burn || (m.pellets ?? 1) > 2 || m.category === 'flame') caps.add('swarm');
     }
@@ -54,7 +92,8 @@ export function designInfo(d: Design): DesignInfo | null {
   const rangeM = st.range * METERS_PER_CELL;
   const speedMs = st.isStatic ? 0 : st.speed * METERS_PER_CELL;
   if (rangeM >= 80) caps.add('long');
-  if (st.ehp >= 1500 || st.armor >= 12 || st.hp * st.squad >= 2000) caps.add('front');
+  // per-unit toughness: a squad of 16 paper-thin scouts adds up to lots of hp but holds no line (splash shreds it)
+  if (st.ehp >= 1500 || st.armor >= 12) caps.add('front');
   if (st.heal > 0) caps.add('support');
   if (st.flying) caps.add('air');
   if (speedMs >= 15) caps.add('fast');

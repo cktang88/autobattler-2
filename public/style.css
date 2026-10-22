@@ -253,7 +253,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .speedbar button { background: rgba(20, 27, 36, 0.92); }
 
 .banner {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; width: min(420px, calc(100% - 24px));
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 35; width: min(420px, calc(100% - 24px));
   text-align: center; animation: banner-in 0.35s cubic-bezier(.2, 1.4, .4, 1);
 }
 .banner h1 { font-size: clamp(2rem, 8vw, 3rem); margin-bottom: 4px; letter-spacing: 0.1em; }
@@ -266,7 +266,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .banner .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .banner .actions button { flex: 1; min-width: 120px; }
 @keyframes banner-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-.gameover-back { position: absolute; inset: 0; z-index: 5; background: rgba(3, 6, 10, 0.6); }
+.gameover-back { position: absolute; inset: 0; z-index: 34; background: rgba(3, 6, 10, 0.6); }
 
 .waiting { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; width: min(380px, calc(100% - 24px)); text-align: center; }
 .spinner { width: 38px; height: 38px; margin: 6px auto 12px; border: 3px solid var(--line2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
@@ -415,6 +415,8 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .sc-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-family: var(--font-head); font-weight: 700; font-size: 0.92rem; letter-spacing: 0.06em; line-height: 1.4; background: var(--panel3); color: var(--text); border: 1px solid var(--line2); }
 .sc-badge.air { color: #5fc8ff; border-color: #2f6f93; }
 .sc-badge.squad { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.sc-note { font-size: 0.92rem; color: var(--muted); margin-top: -2px; }
+.sc-note b { color: var(--accent); font-weight: 700; }
 .sc-badge.aa { color: #06210f; background: #4be08a; border-color: #4be08a; }
 .sc-badge.noair { color: #fff; background: #b3262b; border-color: #ff5a5f; }
 .sc-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -480,6 +482,12 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .stat-tip .sc-dmg span { font-size: 0.91rem; letter-spacing: 0.12em; text-transform: uppercase; color: #b4b9bd; }
 .stat-tip .sc-dmg b { font-size: 1.35rem; color: #ffcb5c; line-height: 1; }
 .stat-tip .sc-dmg em { margin-left: auto; font-style: normal; font-size: 0.94rem; color: #f1ece0; }
+.stat-tip .sc-live { flex-wrap: wrap; row-gap: 4px; }
+.stat-tip .sc-live-sq { flex-basis: 100%; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.stat-tip .sc-live-sq span { margin-right: 4px; }
+.stat-tip .sc-live-sq b { font-size: 1.1rem; }
+.stat-tip .sc-live-sq small { font-size: 0.9rem; color: #b4b9bd; }
+.sc-cost .sc-per { font-family: var(--font-body); font-size: 0.8rem; font-weight: 600; color: var(--muted); }
 .stat-tip .sc-dmg.none { display: block; font-size: 0.92rem; color: #b4b9bd; border-left-color: #5e666d; background: rgba(255, 255, 255, 0.04); }
 .setting.check { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .setting.check .k-toggle { white-space: nowrap; }
