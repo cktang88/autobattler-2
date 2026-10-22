@@ -5,7 +5,8 @@ import { h } from '../app.ts';
 import * as kit from './kit.ts';
 import { sfx } from '../audio.ts';
 import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
-import { computeStats, firingStyle, levelMult, weaponDps, type DefaultOrders } from '../../shared/stats.ts';
+import { computeStats, firingStyle, levelMult, type DefaultOrders } from '../../shared/stats.ts';
+import { fireMods, mountDps, unitDps } from './deckstats.ts';
 import { blockDims, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { START_DELAYS, STANCES, TARGET_PRIORITIES, type Design, type ModuleDef, type Side, type Size, type Stance, type TargetPriority, type UnitBehavior, type UnitStats } from '../../shared/types.ts';
@@ -59,8 +60,9 @@ export function paintWhenLaidOut(items: { canvas: HTMLCanvasElement; design: Des
   }));
 }
 
+const SIZE_NAMES = ['Light', 'Medium', 'Heavy', 'Giant', 'Titan'];
 export function sizeLabel(size: number): string {
-  return size === 1 ? 'Light' : size === 2 ? 'Medium' : 'Heavy';
+  return SIZE_NAMES[Math.max(1, Math.min(5, Math.round(size))) - 1];
 }
 
 export function safeStats(d: Design) {
@@ -259,20 +261,9 @@ const auraRadius = (m: ModuleDef): number | undefined => m.shieldAura?.radius ??
 /** hull radius the sim uses for edge-to-edge distances (0.45 * sqrt(fw * fh)) */
 const hullRadius = (st: UnitStats) => 0.45 * Math.sqrt(st.fw * st.fh);
 
-/** Effective sustained dps of the whole unit against ground and air targets (0 = cannot hit). */
-export function dpsSplit(d: Design, st: UnitStats, level = 1): { ground: number; air: number; weapons: number } {
-  let fire = 1, ground = 0, air = 0, weapons = 0;
-  const mods = d.mounts.map((id) => (id ? MODULE_BY_ID.get(id) : undefined)).filter((m): m is ModuleDef => !!m);
-  for (const m of mods) fire += m.fireRateBonus ?? 0;
-  for (const m of mods) {
-    if (m.kind !== 'weapon' || !m.damage) continue;
-    weapons++;
-    const v = weaponDps(m) * fire * levelMult(level);
-    if (m.targetsGround) ground += v;
-    if (m.targetsAir) air += v * (m.airBonus ?? 1);
-  }
-  void st;
-  return { ground, air, weapons };
+/** Effective sustained dps of ONE unit against ground and air targets (0 = cannot hit); x st.squad for a squad. */
+export function dpsSplit(d: Design, _st: UnitStats, level = 1): { ground: number; air: number; weapons: number } {
+  return unitDps(d, level);
 }
 
 const ICON_PATHS: Record<string, string> = {
@@ -299,19 +290,25 @@ export function svgIcon(name: string, px = 18): HTMLElement {
 
 const n1 = (n: number) => String(Math.round(n * 10) / 10);
 const dpsFmt = (n: number) => String(Math.round(n));
+const big = (n: number) => Math.round(n).toLocaleString('en-US');
 
 export interface StatCardOpts {
   design: Design;
   st: UnitStats;
   level?: number;
   spacing?: number;
+  /** block turned 90° (footprint badge follows it) */
+  rot?: boolean;
   /** highlight a ring on the field while a weapon row is hovered */
   onRing?: (key: string | null) => void;
   /** pending upgrades shown in green */
   upgraded?: boolean;
 }
 
-/** The at-a-glance stat card: badges, big numbers, GND/AIR dps, weapon list. Shows only public data. */
+/** The at-a-glance stat card: badges, big numbers, GND/AIR dps, weapon list. Shows only public data.
+ *  Display convention for squads (size-1 designs, bought as a block of st.squad units): every number on the card is
+ *  for ONE unit, and the card says so ("per unit" note, "/ unit" on hp, shield and dps); squad totals are always
+ *  spelled out as "squad ×16: N". The footprint badge is the whole block's footprint. */
 export function statCard(o: StatCardOpts): HTMLElement {
   const { design: d, st } = o;
   const lv = o.level ?? 1, mult = levelMult(lv), squad = st.squad ?? 1;
@@ -320,12 +317,12 @@ export function statCard(o: StatCardOpts): HTMLElement {
     h('div.sc-tile', { class: cls }, svgIcon(icon, 18), h('div.sc-tv', null, h('b', null, value), extra ? h('small', null, extra) : null), h('span.sc-tl', null, label));
   const hp = Math.round(st.hp * mult);
   const flags: HTMLElement[] = [];
-  const fp = blockDims(st.size as Size, o.spacing ?? 0, st);
-  flags.push(h('span.sc-badge.neutral', null, svgIcon('size', 14), `${sizeLabel(st.size)} · ${fmtMeters(fp.w)}×${fmtMeters(fp.h)}`));
+  const fp = blockDims(st.size as Size, o.spacing ?? 0, st, !!o.rot);
+  flags.push(h('span.sc-badge.neutral', { title: squad > 1 ? `Footprint of the whole ${squad}-unit squad` : 'Footprint' }, svgIcon('size', 14), `${sizeLabel(st.size)} · ${fmtMeters(fp.w)}×${fmtMeters(fp.h)}`));
   if (st.flying) flags.push(h('span.sc-badge.air', null, svgIcon('air', 14), 'FLYING'));
   else if (st.isStatic) flags.push(h('span.sc-badge.neutral', null, 'STATIC'));
   else flags.push(h('span.sc-badge.neutral', null, svgIcon('ground', 14), 'GROUND'));
-  if (squad > 1) flags.push(h('span.sc-badge.squad', null, `SQUAD ×${squad}`));
+  if (squad > 1) flags.push(h('span.sc-badge.squad', { title: `Bought and deployed as a block of ${squad} units. Stats below are per unit.` }, `SQUAD ×${squad}`));
   if (dp.weapons) {
     if (dp.air > 0 && dp.ground > 0) flags.push(h('span.sc-badge.aa', null, svgIcon('air', 14), 'ANTI-AIR'));
     else if (dp.air > 0) flags.push(h('span.sc-badge.aa', null, svgIcon('air', 14), 'ANTI-AIR ONLY'));
@@ -340,20 +337,22 @@ export function statCard(o: StatCardOpts): HTMLElement {
       h('div.sc-dv', null,
         h('span.sc-dl', null, `DPS vs ${kind === 'ground' ? 'GROUND' : 'AIR'}`),
         h('b', null, none ? '—' : dpsFmt(v)),
-        squad > 1 && !none ? h('small', null, `per unit · block ${dpsFmt(v * squad)}`) : null),
+        squad > 1 && !none ? h('small', null, `per unit · squad ×${squad}: ${big(v * squad)}`) : null),
     );
   };
 
   const tiles = h('div.sc-tiles', null,
-    tile('hp', 'HP', String(hp), squad > 1 ? `×${squad}` : null, o.upgraded ? 'up' : ''),
+    tile('hp', squad > 1 ? 'HP / unit' : 'HP', String(hp), null, o.upgraded ? 'up' : ''),
     tile('armor', 'Armor', String(st.armor)),
-    tile('shield', 'Shield', st.shield ? String(st.shield) : '—', null, st.shield ? '' : 'dim'),
+    tile('shield', squad > 1 && st.shield ? 'Shield / unit' : 'Shield', st.shield ? String(st.shield) : '—', null, st.shield ? '' : 'dim'),
     tile('speed', 'Speed', st.isStatic ? '—' : fmtSpeed(st.speed).replace(' m/s', ''), st.isStatic ? null : 'm/s', st.isStatic ? 'dim' : ''),
     tile('turn', 'Turn', st.isStatic ? '—' : String(Math.round((st.turn * 180) / Math.PI)), st.isStatic ? null : '°/s', st.isStatic ? 'dim' : ''),
     tile('range', 'Range', st.range ? String(Math.round(st.range * 5)) : '—', st.range ? 'm' : null, st.range ? '' : 'dim'),
   );
 
   const rows: HTMLElement[] = [];
+  const fm = fireMods(d);
+  const perUnit = squad > 1 ? ' dps/unit' : ' dps';
   for (const id of d.mounts) {
     const m = id ? MODULE_BY_ID.get(id) : undefined;
     if (!m || m.kind === 'armor') continue;
@@ -369,7 +368,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
       const melee = m.projectile === 'melee';
       const range = (m.range ?? 0) * (melee ? 1 : st.rangeMult);
       const g = !!m.targetsGround, a = !!m.targetsAir;
-      const dps = weaponDps(m) * mult;
+      const dps = mountDps(m, fm, lv); // incl. fire-rate / reload utilities, like the sim
       tags.push(firingStyle(m));
       if (m.splash) tags.push(`Splash ${fmtMeters(m.splash)}`);
       if (m.pierce) tags.push('Pierce');
@@ -384,7 +383,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
       head = [
         h('span.sc-chip', { class: g ? 'g' : 'off' }, 'GND'),
         h('span.sc-chip', { class: a ? 'a' : 'off' }, 'AIR'),
-        h('b.sc-wdps', null, `${dpsFmt(dps)}`, h('small', null, ' dps')),
+        h('b.sc-wdps', { title: squad > 1 ? `Per unit · squad ×${squad}: ${big(dps * squad)} dps` : null }, `${dpsFmt(dps)}`, h('small', null, perUnit)),
       ];
       const sub = h('div.sc-wsub', null,
         h('span.sc-wr', null, melee ? `Melee ${fmtMeters(range)}` : `Range ${fmtMeters(range)}`, m.minRange ? h('span.min', null, ` · min ${fmtMeters(m.minRange)}`) : null),
@@ -392,8 +391,8 @@ export function statCard(o: StatCardOpts): HTMLElement {
       rows.push(wRow(icon, m.name, head, sub, key, o.onRing, g && a ? 'both' : a ? 'air' : 'ground'));
     } else {
       const bits: string[] = [];
-      if (m.heal) bits.push(`Repairs ${m.heal * mult | 0}/s · ${fmtMeters((m.range ?? 0) * st.rangeMult)}`);
-      if (m.shield) bits.push(`Shield ${m.shield}`);
+      if (m.heal) bits.push(`Repairs ${Math.round(m.heal)}/s${squad > 1 ? ' per unit' : ''} · ${fmtMeters((m.range ?? 0) * st.rangeMult)}`);
+      if (m.shield) bits.push(`Shield ${m.shield}${squad > 1 ? ' per unit' : ''}`);
       if (m.shieldAura) bits.push(`Shield dome ${m.shieldAura.amount} · radius ${fmtMeters(m.shieldAura.radius)}`);
       if (m.fireRateAura) bits.push(`Allies +${Math.round(m.fireRateAura.bonus * 100)}% fire rate · ${fmtMeters(m.fireRateAura.radius)}`);
       if (m.detect) bits.push(`Detects cloaked · ${fmtMeters(m.detect)}`);
@@ -407,6 +406,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
   }
   return h('div.sc', null,
     h('div.sc-badges', null, ...flags),
+    squad > 1 ? h('div.sc-note', null, h('b', null, 'Per-unit stats'), ` · squad of ${squad} · ${big(hp * squad)} HP total`) : null,
     tiles,
     h('div.sc-dpsrow', null, dpsBox('ground', dp.ground), dpsBox('air', dp.air)),
     rows.length ? h('div.sc-weps', null, ...rows) : null,
@@ -426,10 +426,10 @@ function wRow(icon: HTMLElement, name: string, head: HTMLElement[], sub: HTMLEle
   return row;
 }
 
-/** One-line summary for the placement hint: HP · speed · range · GND dps · AIR dps. */
+/** One-line summary for the placement hint: HP · speed · range · GND dps · AIR dps (per unit; "×16" marks a squad). */
 export function miniStats(d: Design, st: UnitStats, level = 1): HTMLElement {
   const dp = dpsSplit(d, st, level);
-  const sq = st.squad > 1 ? h('span.ms-sq', null, `×${st.squad}`) : null;
+  const sq = st.squad > 1 ? h('span.ms-sq', { title: `Squad of ${st.squad}: hp and dps shown per unit` }, `each ×${st.squad}`) : null;
   return h('div.ministats', null,
     h('span', null, svgIcon('hp', 15), h('b', null, String(Math.round(st.hp * levelMult(level)))), sq),
     h('span', null, svgIcon('speed', 15), h('b', null, st.isStatic ? 'static' : fmtSpeed(st.speed))),

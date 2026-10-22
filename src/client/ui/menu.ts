@@ -66,7 +66,7 @@ export function howToPlay(): HTMLElement {
   return h('div.howto', null,
     h('ol', null,
       h('li', null, h('b', null, 'Design'), ' units in the ', h('b', null, 'Garage'), ': pick a chassis, a mobility system and weapon modules. Up to 9 designs form your deck.'),
-      h('li', null, h('b', null, 'Deploy'), ': each round you get supply. Buy units from your deck and place them on your half of the field — or upgrade units you already own.'),
+      h('li', null, h('b', null, 'Deploy'), ': each round you get supply. Buy units from your deck (a light design comes as a squad of 16 per purchase) and place them on your half of the field — or upgrade units you already own.'),
       h('li', null, h('b', null, 'Fight'), ': the battle plays out automatically. Units you placed persist and redeploy every round.'),
       h('li', null, 'The round loser takes damage based on the enemy units still standing. Reduce your opponent to 0 HP to win.'),
     ),

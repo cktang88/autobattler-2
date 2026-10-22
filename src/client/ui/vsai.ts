@@ -148,9 +148,9 @@ export function vsaiScreen(app: App): Screen {
     c,
     h('div.db-name', { title: i.d.name }, i.d.name),
     h('div.db-meta', null,
-      h('b.db-cost', null, String(i.cost)),
+      h('b.db-cost', { title: st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${st.unitCost} each)` : 'Supply price' }, String(i.cost)),
       // footprint width × length in cells (same as the garage badge), not the size class squared
-      h('span', { title: st.squad > 1 ? `Squad of ${st.squad}` : 'Footprint in cells (width × length)' }, st.squad > 1 ? `×${st.squad}` : `${st.fw}×${st.fh}`),
+      h('span', { title: st.squad > 1 ? `Squad: one purchase deploys ${st.squad} units` : 'Footprint in cells (width × length)' }, st.squad > 1 ? `×${st.squad}` : `${st.fw}×${st.fh}`),
       h('span', { title: 'Longest reach' }, `${Math.round(i.rangeM)} m`)),
     capBadges(i),
     where === 'coll' && inDeck ? h('span.db-tick', { 'aria-hidden': 'true' }, '✓') : null,
@@ -228,8 +228,8 @@ export function vsaiScreen(app: App): Screen {
           stat('Round-1 buys', `${r.roundOne}/${r.infos.length}`, 'Designs you can afford with round 1 supply'),
           stat('Avg speed', `${Math.round(r.avgSpeed)} m/s`, 'Mobile designs only'),
           stat('Max reach', `${Math.round(r.maxRange)} m`),
-          stat('Ground DPS', String(Math.round(r.gnd)), 'One block of each design, combined'),
-          stat('Air DPS', String(Math.round(r.air)), 'One block of each design, combined'),
+          stat('Ground DPS · all blocks', String(Math.round(r.gnd)), 'One block of each design combined (a light design\'s block is its whole squad of 16)'),
+          stat('Air DPS · all blocks', String(Math.round(r.air)), 'One block of each design combined (a light design\'s block is its whole squad of 16)'),
         )),
     );
   }

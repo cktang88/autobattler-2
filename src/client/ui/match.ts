@@ -17,7 +17,7 @@ import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockD
 import { mountOffsets } from '../../shared/mountgeo.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
-import { MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
+import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
 import { mapForRound } from '../render/ground.ts';
@@ -39,9 +39,9 @@ export function worldToLocalRect(side: Side, col: number, row: number, w: number
 const lastSpacing = new Map<string, number>();
 
 /** Tiny diagram of a squad (8 x 2 units) at the given spacing, plus the footprint in metres. */
-function spacingDiagram(spacing: number, foot?: UnitFoot): SVGElement {
+function spacingDiagram(spacing: number, foot?: UnitFoot, rot = false): SVGElement {
   const NS = 'http://www.w3.org/2000/svg';
-  const { w: cw, h: ch } = blockDims(1, spacing, foot);
+  const { w: cw, h: ch } = blockDims(1, spacing, foot, rot);
   const px = Math.max(1.5, Math.min(4, 120 / cw));
   const svg = document.createElementNS(NS, 'svg');
   const W = cw * px, H = ch * px;
@@ -54,7 +54,7 @@ function spacingDiagram(spacing: number, foot?: UnitFoot): SVGElement {
   r.setAttribute('x', '0.5'); r.setAttribute('y', '0.5'); r.setAttribute('width', String(W - 1)); r.setAttribute('height', String(H - 1));
   r.setAttribute('class', 'fp');
   svg.append(r);
-  for (const o of squadOffsets(1, spacing, foot)) {
+  for (const o of squadOffsets(1, spacing, foot, rot)) {
     const c = document.createElementNS(NS, 'circle');
     c.setAttribute('cx', String(o.x * px)); c.setAttribute('cy', String(o.y * px)); c.setAttribute('r', '1.4');
     svg.append(c);
@@ -63,16 +63,17 @@ function spacingDiagram(spacing: number, foot?: UnitFoot): SVGElement {
 }
 
 /** Segmented spacing control: "Spacing 0 1 2" + live diagram + footprint size. */
-function spacingControl(value: number, onPick: ((v: number) => void) | null, foot?: UnitFoot): HTMLElement {
+/** `rot`: the block is turned 90° (footprint and diagram follow it) */
+function spacingControl(value: number, onPick: ((v: number) => void) | null, foot?: UnitFoot, rot = false): HTMLElement {
   const segs = kit.segmented({
     value, label: 'Squad spacing', disabled: !onPick,
     options: Array.from({ length: MAX_SPACING + 1 }, (_, v) => ({ value: v, label: String(v), title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units` })),
     onChange: (v) => onPick?.(v),
   });
-  const d = blockDims(1, value, foot);
+  const d = blockDims(1, value, foot, rot);
   return h('div.spacing', null,
     h('div.sp-head', null, h('span', null, 'Spacing'), h('span.muted', null, ...(onPick ? [h('kbd', null, '['), ' ', h('kbd', null, ']')] : ['locked']))),
-    h('div.sp-row', null, spacingDiagram(value, foot), segs),
+    h('div.sp-row', null, spacingDiagram(value, foot, rot), segs),
     h('div.sp-foot', null, `Footprint ${fmtMeters(d.w)} × ${fmtMeters(d.h)}`),
   );
 }
@@ -154,10 +155,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (v === undefined) return h('div.sc-dmg.none', null, 'New: no battle record yet');
     const ranked = [...lastDmg.by].filter(([k]) => k.startsWith(`${sd}:`)).map(([, x]) => x).sort((a, b) => b - a);
     const rank = ranked.indexOf(v) + 1;
-    return h('div.sc-dmg', null,
-      h('span', null, `Round ${lastDmg.round} damage`),
+    // the sim tallies damage per block: for a squad this is all its units together
+    const p = m.players[sd].board.find((b) => b.uid === uid);
+    const sq = squadOf(p && designOf(sd, p.designId));
+    return h('div.sc-dmg', { title: sq > 1 ? `Damage dealt by all ${sq} units of this squad in round ${lastDmg.round}` : null },
+      h('span', null, `Round ${lastDmg.round} damage${sq > 1 ? ' · squad' : ''}`),
       h('b', null, v.toLocaleString()),
-      v > 0 && ranked.length > 1 ? h('em', null, rank === 1 ? 'top of army' : `#${rank} of ${ranked.length}`) : null);
+      v > 0 && ranked.length > 1 ? h('em', null, rank === 1 ? 'top of army' : `#${rank} of ${ranked.length} blocks`) : null);
   };
   let acc = 0;
   let endTimer = 0;
@@ -355,17 +359,34 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
     return best;
   }
+  /** live hp / damage of a clicked unit. The sim only tallies damage per block, so for a squad the hp is this one
+   *  unit's (plus a squad hp / alive line) and the damage is labelled as the whole squad's. */
   function liveLine(u: SimUnit): HTMLElement {
     const dealt = battle ? Math.round(battle.blockDamage(u.side, u.uid)) : 0;
+    const squad = u.stats.squad ?? 1;
+    let alive = 0, hpSum = 0, hpMax = 0;
+    if (squad > 1 && battle) for (const q of battle.units) {
+      if (q.side !== u.side || q.uid !== u.uid) continue;
+      hpMax += q.maxHp;
+      if (q.alive) { alive++; hpSum += Math.max(0, q.hp); }
+    }
+    const fmt = (n: number) => Math.round(n).toLocaleString();
     return h('div.sc-dmg.sc-live', null,
-      h('span', null, u.alive ? 'Now' : 'Destroyed'),
+      h('span', null, u.alive ? (squad > 1 ? 'This unit' : 'Now') : (squad > 1 ? 'Unit destroyed' : 'Destroyed')),
       u.alive ? h('b', null, `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)} HP${u.shield > 0 ? ` · ${Math.ceil(u.shield)} shield` : ''}`) : null,
       u.alive && u.para > 0 ? h('em', { style: { color: '#9fe0ff' } }, u.stun > 0 ? `stunned ${u.stun.toFixed(1)}s` : `paralysis ${Math.round((100 * u.para) / u.maxHp)}%`) : null,
-      h('em', null, `dealt ${dealt.toLocaleString()} this battle`));
+      squad > 1
+        ? h('div.sc-live-sq', null,
+          h('span', null, 'Squad'),
+          h('b', null, `${alive}/${squad}`), h('small', null, ' alive · '),
+          h('b', null, fmt(hpSum)), h('small', null, ` / ${fmt(hpMax)} HP`),
+          h('em', null, `squad dealt ${dealt.toLocaleString()} this battle`))
+        : h('em', null, `dealt ${dealt.toLocaleString()} this battle`));
   }
   function showLiveTip(u: SimUnit, at: { x: number; y: number }) {
     const mine = u.side === side;
-    const tip = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats.size, undefined), false, liveLine(u));
+    const bp = replay?.boards[u.side].find((q) => q.uid === u.uid); // the block's placement: real spacing / rotation
+    const tip = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats.size, bp?.spacing), false, liveLine(u), !!bp?.rot);
     mountTip(tip, false);
     tipKey = `live:${u.id}`;
     liveTip = { id: u.id, at };
@@ -386,16 +407,19 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const old = tipEl.querySelector('.sc-live');
     if (u && old) old.replaceWith(liveLine(u));
   }
-  function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean, dmg: HTMLElement | null = null): HTMLElement {
+  /** block price; for a squad it buys all its units */
+  const costTag = (st: UnitStats) => h('span.sc-cost', { title: st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${st.unitCost} each)` : 'Supply price' },
+    svgIcon('cost', 16), String(st.cost), st.squad > 1 ? h('small.sc-per', null, ` for ${st.squad}`) : null);
+  function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean, dmg: HTMLElement | null = null, rot = false): HTMLElement {
     const lv = Math.max(1, Math.min(MAX_LEVEL, level));
     return h('div.stat-tip', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
       h('div.sc-head', null,
         h('b.sc-name', null, d.name),
         h('span.stars', null, stars(lv)),
         h('span.sc-tag2', null, tag),
-        h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost))),
+        costTag(st)),
       dmg,
-      statCard({ design: d, st, level: lv, spacing, onRing: interactive ? (k) => { ringHi = k; } : undefined }));
+      statCard({ design: d, st, level: lv, spacing, rot, onRing: interactive ? (k) => { ringHi = k; } : undefined }));
   }
   function mountTip(tip: HTMLElement, sheet: boolean) {
     hideTip();
@@ -413,7 +437,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function showDeckTip(b: HTMLElement, d: Design, sheet: boolean) {
     const st = statsOf(d);
     if (!st) return;
-    mountTip(tipFor(d, st, 1, 'In shop', true, spacingOfCard(d), sheet), sheet);
+    mountTip(tipFor(d, st, 1, 'In shop', true, spacingOfCard(d), sheet, null, rotCard), sheet);
     if (sheet) return;
     const r = b.getBoundingClientRect(), er = el.getBoundingClientRect();
     const { w, h: ht } = tipSize;
@@ -439,7 +463,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const sheet = !at; // no pointer position = touch long-press: bottom sheet
     if (key !== tipKey || !tipEl) {
       if (!t.pending) ensureLastDamage();
-      mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet, t.pending ? null : damageLine(t.side, t.uid)), sheet);
+      mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet, t.pending ? null : damageLine(t.side, t.uid), !!p.rot), sheet);
       tipKey = key;
     }
     if (sheet || !at) return;
@@ -556,7 +580,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!d) { shopSpacingEl.classList.add('hidden'); shopSpacingEl.replaceChildren(); return; }
     shopSpacingEl.classList.remove('hidden');
     const squad = hasSpacing(sizeOf(d));
-    shopSpacingEl.replaceChildren(squad ? spacingControl(spacingOfCard(d), (v) => setCardSpacing(v), footOf(d)) : '');
+    shopSpacingEl.replaceChildren(squad ? spacingControl(spacingOfCard(d), (v) => setCardSpacing(v), footOf(d), rotCard) : '');
     shopSpacingEl.classList.toggle('hidden', !squad);
   }
 
@@ -746,9 +770,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       h('button.icon.small.ghost.close', { onclick: () => { selCard = -1; hover = null; renderAll(); } }, '✕'),
       h('div.head', null, prev, h('div', null,
         h('h3.friendly', null, d.name),
-        h('div.sc-sub', null, 'Placing · ', h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost)))),
+        h('div.sc-sub', null, 'Placing · ', costTag(st))),
       ),
-      statCard({ design: d, st, level: 1, spacing: spacingOfCard(d), onRing: onRingHi }),
+      statCard({ design: d, st, level: 1, spacing: spacingOfCard(d), rot: rotCard, onRing: onRingHi }),
     );
     infoEl.classList.remove('hidden');
     infoEl.classList.remove('picking');
@@ -785,7 +809,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           const cand = action();
           cand.upgrade.push(p.uid);
           const err = cost > remaining() ? 'Not enough supply' : check(cand);
-          actions.push(h('button.small.warn', { onclick: () => upgrade(p.uid), disabled: !!err, title: err ?? '' }, `Upgrade · ${cost}`));
+          const what = squad > 1 ? `all ${squad} units of this squad` : 'this unit';
+          actions.push(h('button.small.warn', { onclick: () => upgrade(p.uid), disabled: !!err, title: err ?? `Level ${lv + 1}: ${what} get +${Math.round(LEVEL_BONUS * 100)}% HP and damage` }, `Upgrade${squad > 1 ? ' squad' : ''} · ${cost}`));
         } else actions.push(h('button.small', { disabled: true }, 'Max level'));
         if (ups) actions.push(h('button.small', { onclick: () => undoUpgrade(p.uid) }, 'Undo upgrade'));
       }
@@ -795,11 +820,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       h('div.head', null, prev, h('div', null,
         h('h3', { class: mine ? 'friendly' : 'enemy' }, d.name),
         h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.85rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
-        h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, h('span.sc-cost', null, svgIcon('cost', 16), String(st.cost)), squad > 1 ? h('span.sc-blk', null, ` block of ${squad}`) : null),
+        h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, costTag(st)),
       )),
-      statCard({ design: d, st, level: lv, spacing: sp, upgraded: ups > 0, onRing: onRingHi }),
+      statCard({ design: d, st, level: lv, spacing: sp, rot: !!p.rot, upgraded: ups > 0, onRing: onRingHi }),
       mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)), defaults: defsOf(s.side, p.designId) } : { defaults: defsOf(s.side, p.designId) })) : '',
-      squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, footOf(d))) : '',
+      squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, footOf(d), !!p.rot)) : '',
       h('div.parts', null, parts),
       actions.length ? h('div.actions', null, ...actions) : '',
     );
@@ -809,6 +834,17 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   // ---------- overlays (waiting / result / game over) ----------
+  /** " · 23/40 units" from the finished replay (squads count each unit) when it differs from the block count */
+  function unitsLeft(sd: Side): HTMLElement | null {
+    if (!battle || !replay || !battle.done) return null;
+    let alive = 0, total = 0;
+    for (const u of battle.units) if (u.side === sd) { total++; if (u.alive) alive++; }
+    return total !== replay.boards[sd].length ? h('small.muted', null, ` · ${alive}/${total} units`) : null;
+  }
+  function fieldedUnits(): HTMLElement | null {
+    const n = me().board.reduce((a, p) => a + squadOf(designOf(side, p.designId)), 0);
+    return n !== me().board.length ? h('small.muted', null, ` · ${n} units`) : null;
+  }
   function renderOverlay() {
     overlayEl.replaceChildren();
     if (phase === 'waiting') {
@@ -836,8 +872,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           // commander HP lost this round, with what's left after it
           h('span', null, 'Enemy commander'), h('b', null, h(r.damage[opp] ? 'span.good' : 'span', null, r.damage[opp] ? `−${r.damage[opp]} HP` : 'unhurt'), h('small.muted', null, ` · ${Math.max(0, hpAt(opp, replay.round))} left`)),
           h('span', null, 'Your commander'), h('b', null, h(r.damage[side] ? 'span.bad' : 'span', null, r.damage[side] ? `−${r.damage[side]} HP` : 'unhurt'), h('small.muted', null, ` · ${Math.max(0, hpAt(side, replay.round))} left`)),
-          h('span', null, 'Your survivors'), h('b', null, `${r.survivors[side].length} / ${replay.boards[side].length}`),
-          h('span', null, 'Enemy survivors'), h('b', null, `${r.survivors[opp].length} / ${replay.boards[opp].length}`),
+          h('span', { title: 'Blocks with at least one unit left (a squad block counts once)' }, 'Your blocks left'), h('b', null, `${r.survivors[side].length} / ${replay.boards[side].length}`, unitsLeft(side)),
+          h('span', { title: 'Blocks with at least one unit left (a squad block counts once)' }, 'Enemy blocks left'), h('b', null, `${r.survivors[opp].length} / ${replay.boards[opp].length}`, unitsLeft(opp)),
         ),
         h('div.actions', null, cont),
       ));
@@ -859,7 +895,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           h('span', null, 'Rounds won'), h('b', null, `${roundsWon}`),
           h('span', null, 'Commander damage dealt'), h('b.good', null, String(dealt)),
           h('span', null, 'Commander damage taken'), h('b.bad', null, String(taken)),
-          h('span', null, 'Units fielded'), h('b', null, String(me().board.length)),
+          h('span', { title: 'Blocks on your board at the end (a squad block counts once)' }, 'Blocks fielded'), h('b', null, String(me().board.length), fieldedUnits()),
           h('span', null, 'Final HP'), h('b', null, `${Math.max(0, me().hp)} – ${Math.max(0, foe().hp)}`),
         ),
         h('div.actions', null, ...buttons),
@@ -1262,6 +1298,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     }
     if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } }
+    if (p !== 'deploy' && p !== 'waiting') clearRings();
     renderAll();
     renderOverlay();
   }
@@ -1398,8 +1435,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let ringW = 0, ringH = 0, ringDpr = 1, ringsShown = false;
   function clearRings() {
     if (!ringCtx || !ringsShown) return;
-    ringCtx.setTransform(1, 0, 0, 1, 0, 0);
-    ringCtx.clearRect(0, 0, ringCv.width, ringCv.height);
+    // Reset the backing store instead of clearRect: Chrome was seen skipping a lone clearRect on this canvas when
+    // nothing had been drawn since the last frame (the deploy rings then stayed up through the whole battle).
+    // Assigning width always drops the bitmap (and the context state).
+    ringCv.width = ringCv.width;
     ringsShown = false;
     legendEl.classList.add('hidden');
   }
@@ -1449,13 +1488,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       ringCv.height = Math.max(1, Math.round(ch * dpr));
     }
     const g = ringCtx;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, ringCv.width, ringCv.height);
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const targets = rangeTargets();
-    ringsShown = targets.length > 0;
-    legendEl.classList.toggle('hidden', !targets.length);
-    if (!targets.length) return;
+    if (!targets.length) { clearRings(); return; }
+    if (ringsShown) ringCv.width = ringCv.width; // full reset (see clearRings)
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ringsShown = true;
+    legendEl.classList.remove('hidden');
     const o = view.worldToScreen(0, 0), o1 = view.worldToScreen(1, 0);
     const k = Math.hypot(o1.x - o.x, o1.y - o.y);
     const taken: { x: number; y: number; w: number; h: number }[] = [];
@@ -1615,9 +1653,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
             if (endTimer > 1.2) showResult();
           }
         }
+        clearRings(); // first: a slow (3D) or throwing drawBattle must not leave deploy rings up
         view.drawBattle(battle, dt);
         refreshLiveTip(dt);
-        clearRings();
       } else {
         let hov: BoardOverlay['hover'] = null;
         if (hover && phase === 'deploy') {
