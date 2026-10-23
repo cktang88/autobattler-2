@@ -69,6 +69,16 @@ const BIG_SUPPLY = Number(process.env.BAL_BIG_SUPPLY ?? 1600);
 const UNIT_CAP = 220;
 const SHARDS = 4;
 const FIELD_DIV = Math.max(1, Number(process.env.BAL_FIELD_DIV ?? 1));
+/** BAL_MIX=1 (default): mixed-army test. Each design gets MIX_SHARE of the budget, topped up with a reference mix of
+ *  starters, and fights the full budget of the same mix (MIX_PER_SEED mixes per seed, both sides). This is what the
+ *  design adds to a real army. BAL_MIX=0: the old pure-army test (the design alone vs each starter alone), which is
+ *  dominated by rock-paper-scissors: a ground-only gun loses every fight against the air starters however strong it
+ *  is, so the fit under-priced strong ground-only weapons (ATGM, artillery) and over-priced anti-air ones. */
+const MIX = process.env.BAL_MIX !== '0';
+const MIX_SHARE = Number(process.env.BAL_MIX_SHARE ?? 0.6);
+const MIX_PER_SEED = Number(process.env.BAL_MIX_PER_SEED ?? 4);
+/** reference mix pool: every starter up to size 3 (ground, air, anti-air, artillery, support) */
+const MIX_POOL: Design[] = STARTER_DESIGNS.filter((d) => computeStats(d).size <= 3);
 
 /** Fillers that top up a giant/titan army (bought in equal supply shares): a balanced, cheap-ish mix. */
 const FILLER_IDS = ['starter-bulwark', 'starter-buzzsaw', 'starter-tankbuster', 'starter-skyguard'];
@@ -125,6 +135,19 @@ function army(specs: Spec[], side: 0 | 1, seed: number): { place: Placement[]; d
   return { place, designs };
 }
 
+/** A reference mix worth ~S: starters bought round-robin from a seed-dependent starting point (seed k's mix is the
+ *  same for the tested side's top-up and the opponent's army). */
+function mixSpecs(S: number, k: number): { specs: Spec[]; spend: number } {
+  const n = new Map<Design, number>();
+  let left = S, spend = 0, i = (k * 5) % MIX_POOL.length, misses = 0;
+  while (misses < MIX_POOL.length) {
+    const d = MIX_POOL[i++ % MIX_POOL.length];
+    const c = rawCost(d);
+    if (c <= left) { n.set(d, (n.get(d) ?? 0) + 1); left -= c; spend += c; misses = 0; } else misses++;
+  }
+  return { specs: [...n].map(([d, c]) => ({ d, n: c })), spend };
+}
+
 interface TestDesign { d: Design; module: string | null; base: boolean; carrier: string }
 
 /** Generate sensible designs for each module. Utilities/armor ride on a carrier design with a standard weapon;
@@ -141,7 +164,8 @@ function moduleDesigns(): TestDesign[] {
     if (mod.kind === 'weapon') {
       const melee = mod.projectile === 'melee';
       const f = (x: string | null) => (mod.targetsGround === false ? null : x); // anti-air-only designs stay anti-air-only
-      if (mod.mount === 'L') {
+      // mount classes: S (light), M (medium), L (giant), XL (titan)
+      if (mod.mount === 'S') {
         add(`t-${m}-a`, m, false, '', 'raider', melee ? 'hover' : 'halftrack', [m, null]);
         add(`t-${m}-b`, m, false, '', 'raider', melee ? 'jumpjets' : 'legs', [m, m]);
         add(`t-${m}-c`, m, false, '', melee ? 'scout' : 'drone', melee ? 'hover' : 'rotor', [m]);
@@ -149,11 +173,7 @@ function moduleDesigns(): TestDesign[] {
         add(`t-${m}-a`, m, false, '', 'warden', melee ? 'treads' : 'halftrack', [m, melee ? 'plateL' : null]);
         add(`t-${m}-b`, m, false, '', 'striker', melee ? 'jumpjets' : 'halftrack', [m, m, null]);
         add(`t-${m}-c`, m, false, '', melee ? 'striker' : 'gunship', melee ? 'treads' : 'rotor', melee ? [m, 'plateM', 'plateL'] : [m, null]);
-      } else if (mod.mount === 'H') {
-        add(`t-${m}-a`, m, false, '', 'longarm', melee ? 'treads' : 'halftrack', [m]);
-        add(`t-${m}-b`, m, false, '', 'bastion', 'treads', [m, 'plateM', null]);
-        add(`t-${m}-c`, m, false, '', 'colossus', 'treads', [m, melee ? 'plateH' : null, null, null]);
-      } else if (mod.mount === 'G') {
+      } else if (mod.mount === 'L') {
         add(`t-${m}-a`, m, false, '', 'goliath', 'megatracks', melee ? [m, 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), f('autocannon')]);
         add(`t-${m}-b`, m, false, '', 'leviathan', 'megatracks', melee ? [m, m, 'plateM', 'plateM'] : [m, m, f('autocannon'), f('autocannon')]);
         add(`t-${m}-c`, m, false, '', 'goliath', 'spider', [m, null, null, null]);
@@ -166,10 +186,9 @@ function moduleDesigns(): TestDesign[] {
     } else {
       // carriers: [chassis, mobility, mounts-with-slot-index-of-util, mounts-without]
       const carriers: [string, string, (string | null)[], number][] =
-        mod.mount === 'L' ? [['warden', 'halftrack', ['autocannon', 'U'], 1], ['raider', 'legs', ['laser', 'U'], 1], ['striker', 'treads', ['cannon75', 'autocannon', 'U'], 2]]
+        mod.mount === 'S' ? [['warden', 'halftrack', ['autocannon', 'U'], 1], ['raider', 'legs', ['laser', 'U'], 1], ['striker', 'treads', ['cannon75', 'autocannon', 'U'], 2]]
         : mod.mount === 'M' ? [['striker', 'halftrack', ['autocannon', 'U', 'hmg'], 1], ['warden', 'treads', ['U', 'hmg'], 0], ['striker', 'spider', ['cannon75', 'U', 'laser'], 1]]
-        : mod.mount === 'H' ? [['bastion', 'treads', ['U', 'autocannon', 'cannon75'], 0], ['colossus', 'treads', ['cannon', 'U', 'autocannon', 'laser'], 1]]
-        : mod.mount === 'G' ? [['goliath', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon'], 0], ['leviathan', 'megatracks', ['U', 'cannon', 'autocannon', 'autocannon'], 0], ['goliath', 'titanlegs', ['U', 'hmg', 'cannon', 'autocannon'], 0]]
+        : mod.mount === 'L' ? [['goliath', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon'], 0], ['leviathan', 'megatracks', ['U', 'cannon', 'autocannon', 'autocannon'], 0], ['goliath', 'titanlegs', ['U', 'hmg', 'cannon', 'autocannon'], 0]]
         : [['titan', 'megatracks', ['U', 'cannon', 'cannon', 'cannon', 'autocannon'], 0], ['citadel', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon', 'autocannon', 'laser'], 0], ['titan', 'titanlegs', ['U', 'cannon', 'cannon', 'hmg', 'autocannon'], 0]];
       carriers.forEach(([ch, mob, mounts], i) => {
         const key = `${ch}/${mob}/${mounts.join(',')}`;
@@ -182,7 +201,7 @@ function moduleDesigns(): TestDesign[] {
     }
   }
   // plain frames: every legal chassis/mobility pairing with a neutral loadout (calibrates hulls and drives)
-  const FILL: Record<string, string> = { L: 'laser', M: 'autocannon', H: 'cannon', G: 'cannon', T: 'cannon' };
+  const FILL: Record<string, string> = { S: 'laser', M: 'autocannon', L: 'cannon', XL: 'cannon' };
   for (const c of CHASSIS) {
     for (const mob of MOBILITY) {
       if (pairingError(c.id, mob.id)) continue;
@@ -214,6 +233,32 @@ function runShard(pool: Design[], seeds: number, shard: number): Result[] {
   pool.forEach((d, i) => {
     if (i % SHARDS !== shard) return;
     let score = 0, games = 0;
+    if (MIX) {
+      const S = st(d).size >= 4 ? BIG_SUPPLY : ARMY_SUPPLY;
+      const pd = plan(d, S * MIX_SHARE);
+      for (let s = 0; s < seeds; s++) {
+        for (let k = 0; k < MIX_PER_SEED; k++) {
+          const mixK = s * MIX_PER_SEED + k;
+          const top = mixSpecs(S - pd.spend, mixK);
+          const opp = mixSpecs(pd.spend + top.spend, mixK);
+          const mine = [...pd.specs, ...top.specs];
+          for (const side of [0, 1] as const) {
+            const other = (1 - side) as 0 | 1;
+            const A = army(mine, side, s + 1);
+            const B = army(opp.specs, other, s + 101);
+            const units: [Placement[], Placement[]] = [[], []];
+            const designs: [Design[], Design[]] = [[], []];
+            units[side] = A.place; designs[side] = A.designs;
+            units[other] = B.place; designs[other] = B.designs;
+            const r = runBattle({ seed: 1000 + mixK * 31 + side, sides: [{ designs: designs[0], units: units[0] }, { designs: designs[1], units: units[1] }] });
+            score += r.winner === side ? 1 : r.winner === -1 ? 0.5 : 0;
+            games++;
+          }
+        }
+      }
+      res.push({ id: d.id, score, games });
+      return;
+    }
     const field = antiAirOnly(d) ? AIR_FIELD : STARTER_DESIGNS;
     // BAL_FIELD_DIV=k: each design faces only every k-th opponent (staggered by design index) -> k times faster, noisier
     for (const [j, e] of field.entries()) {
