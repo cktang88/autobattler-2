@@ -223,10 +223,10 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 3; background: rgba(13, 18, 24, 0.85); border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; font-size: 0.92rem; color: var(--muted); pointer-events: none; white-space: nowrap; max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; }
 
 .info { position: absolute; left: 10px; top: 10px; z-index: 4; width: 260px; max-width: calc(100% - 20px); padding: 12px; }
-.info .head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
-.info .head canvas { width: 64px; height: 64px; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; flex: none; }
-.info .head h3 { margin: 0; font-size: 1.15rem; }
-.info .stars { color: var(--gold); letter-spacing: 2px; }
+.info .head, .unit-card .head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.info .head canvas, .unit-card .head canvas { width: 64px; height: 64px; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; flex: none; }
+.info .head h3, .unit-card .head h3 { margin: 0; font-size: 1.15rem; }
+.info .stars, .unit-card .stars { color: var(--gold); letter-spacing: 2px; }
 .info .close { position: absolute; top: 6px; right: 6px; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; font-size: 0.92rem; margin-bottom: 8px; }
 .stats div { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255, 255, 255, 0.05); }
@@ -473,7 +473,7 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
   .info { width: auto; max-height: 52%; }
   .sc-tile b { font-size: 1.35rem; }
 }
-.info .sc { margin-bottom: 8px; }
+.info .sc, .unit-card .sc { margin-bottom: 8px; }
 
 .sc-dps.na { --c: var(--line2); color: var(--muted); background: var(--bg2); }
 .sc-dps.na b { color: var(--muted); }

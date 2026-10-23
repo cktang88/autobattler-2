@@ -471,7 +471,15 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const sheet = !at; // no pointer position = touch long-press: bottom sheet
     if (key !== tipKey || !tipEl) {
       if (!t.pending) ensureLastDamage();
-      mountTip(tipFor(d, st, lv, mine ? (t.pending ? 'Yours · new' : 'Yours') : 'Enemy', mine, normSpacing(st.size, p.spacing), sheet, t.pending ? null : damageLine(t.side, t.uid), !!p.rot), sheet);
+      // the same card as the pinned panel (minus its buttons): header, round damage, stats, parts
+      const prev = h('canvas');
+      const ups = lv - p.level;
+      mountTip(h('div.stat-tip.unit-card', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
+        blockHead(t, p, d, st, lv, ups, prev),
+        t.pending ? null : damageLine(t.side, t.uid),
+        statCard({ design: d, st, level: lv, spacing: normSpacing(st.size, p.spacing), rot: !!p.rot, upgraded: ups > 0, onRing: sheet ? (k) => { ringHi = k; } : undefined }),
+        blockParts(d)), sheet);
+      requestAnimationFrame(() => paintPreview(prev, d, mine ? 0 : 1));
       tipKey = key;
     }
     if (sheet || !at) return;
@@ -829,6 +837,17 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     infoEl.classList.remove('picking');
   }
 
+  /** header shared by the hover card and the pinned panel of a block on the field: portrait, name, level, status */
+  function blockHead(s: NonNullable<Sel>, p: Placement, d: Design, st: UnitStats, lv: number, ups: number, prev: HTMLCanvasElement): HTMLElement {
+    const mine = s.side === side;
+    return h('div.head', null, prev, h('div', null,
+      h('h3', { class: mine ? 'friendly' : 'enemy' }, d.name),
+      h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.85rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
+      h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, costTag(st)),
+    ));
+  }
+  const blockParts = (d: Design) => h('div.parts', null, [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name].filter(Boolean).join(' · '));
+
   function renderInfo() {
     multi = multi.filter((sl) => !!blockSrc(sl));
     if (multi.length >= 2 && phase === 'deploy') { renderGroupInfo(); return; }
@@ -849,7 +868,6 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const squad = st.squad ?? 1;
     const sp = normSpacing(st.size, p.spacing);
     const prev = h('canvas');
-    const parts = [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name].filter(Boolean).join(' · ');
     const actions: HTMLElement[] = [];
     if (mine && phase === 'deploy') {
       if (s.pending) {
@@ -870,16 +888,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
     infoEl.replaceChildren(
       h('button.icon.small.ghost.close', { onclick: () => { sel = null; renderAll(); } }, '✕'),
-      h('div.head', null, prev, h('div', null,
-        h('h3', { class: mine ? 'friendly' : 'enemy' }, d.name),
-        h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.85rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
-        h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, costTag(st)),
-      )),
+      blockHead(s, p, d, st, lv, ups, prev),
       s.pending ? '' : (ensureLastDamage(), damageLine(s.side, s.uid) ?? ''),
       statCard({ design: d, st, level: lv, spacing: sp, rot: !!p.rot, upgraded: ups > 0, onRing: onRingHi }),
       mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)), defaults: defsOf(s.side, p.designId) } : { defaults: defsOf(s.side, p.designId) })) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, footOf(d), !!p.rot)) : '',
-      h('div.parts', null, parts),
+      blockParts(d),
       actions.length ? h('div.actions', null, ...actions) : '',
     );
     infoEl.classList.remove('hidden');
