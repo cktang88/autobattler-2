@@ -3,6 +3,7 @@
 import { h, type Screen, type ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { activeDeck, allDesigns, setDeck } from '../collection.ts';
+import { syncGarage } from '../sync.ts';
 import {
   createMatch, createPrivateMatch, currentSession, forfeitMatch, getMe, joinMatch, listMatches, login, logout,
   NetError, openMatch, quickMatch, type MatchSummary,
@@ -129,6 +130,8 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
 
   const doLogin = (name: string) => act(async () => {
     await login(name);
+    // a brand-new account (first login, or after Sign out) gets this device's garage right away
+    void syncGarage();
     sfx('ready');
     app.toast(`Welcome, ${currentSession()!.name}.`, 'good');
     render();
