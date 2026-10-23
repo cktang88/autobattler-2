@@ -655,15 +655,18 @@ export class FieldView {
         }
         this.drawUnitOf(p, px);
         if (u.invalid) {
-          const s = unitSprites(u.design, p.team, px);
-          g.globalAlpha = 0.55;
-          const cs = Math.cos(p.angle), sn = Math.sin(p.angle);
-          const tr = g.getTransform();
-          const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)));
-          g.transform(cs, sn, -sn, cs, u.x + lv.x, u.y + lv.y);
-          g.drawImage(silhouette(s, '#ff3030'), -s.ext, -s.ext, s.ext * 2, s.ext * 2);
-          g.setTransform(tr);
-          g.globalAlpha = 1;
+          // red silhouette over the unit as drawn: same body scale and lift (bodyScaled) as drawUnitOf
+          this.bodyScaled(p, px, (q) => {
+            const s = unitSprites(u.design, p.team, q);
+            g.globalAlpha = 0.55;
+            const cs = Math.cos(p.angle), sn = Math.sin(p.angle);
+            const tr = g.getTransform();
+            const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)));
+            g.transform(cs, sn, -sn, cs, u.x + lv.x, u.y + lv.y);
+            g.drawImage(silhouette(s, '#ff3030'), -s.ext, -s.ext, s.ext * 2, s.ext * 2);
+            g.setTransform(tr);
+            g.globalAlpha = 1;
+          });
         }
       }
     }
@@ -1983,11 +1986,13 @@ function shieldR(L: { X: number; Y: number; S: number }): number {
   return 0.36 * (L.X + L.Y) * bodyScale(L.S) + 0.15;
 }
 
-/** Half extents (cells) of a unit's footprint box rotated to `ang` (screen-axis aligned), plus its mean edge. */
+/** Half extents (cells) of a unit's footprint box rotated to `ang` (screen-axis aligned) at the battlefield body scale
+ *  it is drawn at (bars and pips sit on the drawn hull, not on the full footprint cell), plus its unscaled mean edge
+ *  (bar width: kept readable). */
 function boxHalf(d: Design, ang: number): { hx: number; hy: number; w: number } {
-  const L = layoutOf(d);
+  const L = layoutOf(d), bs = bodyScale(L.S);
   const c = Math.abs(Math.cos(ang)), sn = Math.abs(Math.sin(ang));
-  return { hx: (c * L.FX + sn * L.FY) / 2, hy: (sn * L.FX + c * L.FY) / 2, w: (L.FX + L.FY) / 2 };
+  return { hx: (c * L.FX + sn * L.FY) / 2 * bs, hy: (sn * L.FX + c * L.FY) / 2 * bs, w: (L.FX + L.FY) / 2 };
 }
 
 /** Render a single design centered in a canvas (garage preview, cards). `time` animates rotors/legs. */
