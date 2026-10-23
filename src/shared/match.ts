@@ -13,9 +13,9 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { computeStats, levelMult, MAX_LEVEL, roundPrice, validateDesign } from './stats.ts';
-import type { UnitFoot } from './grid.ts';
-import { MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadSize } from './grid.ts';
+import { computeStats, levelMult, MAX_LEVEL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
+import type { BlockShape } from './grid.ts';
+import { MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadLayout } from './grid.ts';
 import { mixSeed } from './rng.ts';
 import { MODULE_BY_ID } from './parts.ts';
 import { runBattle } from './sim/battle.ts';
@@ -37,8 +37,13 @@ export const MAX_SIM_UNITS = 240;
 export const MAX_PLAYER_NAME = 24;
 
 /** Rules / price-scale version stamped on every new match (MatchState.rules).
- *  2: prices are raw cost / PRICE_DIV (5) -- supply 600 + 120 per round instead of 3000 + 600. */
-export const RULES_VERSION = 2;
+ *  2: prices are raw cost / PRICE_DIV (5) -- supply 600 + 120 per round instead of 3000 + 600.
+ *  3: light squads are 16, 8 or 4 units by per-unit price (stats.ts squadFor) instead of always 16. */
+export const RULES_VERSION = 3;
+/** First rules version on the / 5 price scale. */
+const RESCALED_RULES = 2;
+/** Units per light block before rules 3. */
+const LEGACY_SQUAD = 16;
 /** When the price / 5 rescale shipped (commit 4a9c201). An unmarked match created before it ran on 5x supply. */
 export const PRICE_RESCALE_AT = Date.UTC(2026, 9, 14, 2, 48, 53);
 const OLD_PRICE_DIV = 5;
@@ -92,20 +97,61 @@ export function survivorDamage(design: Design, level: number, fraction = 1): num
 /** Was this saved match created under the old 5x price scale? Only unmarked saves can be: those created before the
  *  rescale shipped, or holding more supply than the current rules ever grant (an older client or server made it). */
 export function isPreRescaleMatch(m: MatchState): boolean {
-  if (m.rules !== undefined) return m.rules < RULES_VERSION;
+  if (m.rules !== undefined) return m.rules < RESCALED_RULES;
   if (m.createdAt > 0 && m.createdAt < PRICE_RESCALE_AT) return true;
   const granted = totalSupplyThrough(m.round);
   return m.players.some((p) => p.supply > granted);
 }
 
 /** Bring a saved match up to RULES_VERSION in place; returns true when it changed (the caller should persist it).
- *  Pre-rescale matches had every supply amount at 5x: unspent supply is divided by 5, so it buys what it bought
- *  before (boards, levels, hp and history need no change; their prices are computed from the designs). */
+ *  - Pre-rescale matches had every supply amount at 5x: unspent supply is divided by 5, so it buys what it bought
+ *    before (boards, levels, hp and history need no change; their prices are computed from the designs).
+ *  - Before rules 3 every light block was 16 units. A board block of a design that is now an 8- or 4-unit squad is
+ *    split into 2 or 4 blocks of the new size covering exactly the old unit positions (same level, orders, spacing,
+ *    rotation; the first keeps the uid), so the army is unchanged; any supply the old block cost beyond its pieces
+ *    is refunded. Past rounds' records are left as they were. */
 export function migrateMatch(m: MatchState): boolean {
   if (m.rules !== undefined && m.rules >= RULES_VERSION) return false;
   if (isPreRescaleMatch(m)) for (const p of m.players) p.supply = Math.floor(p.supply / OLD_PRICE_DIV);
+  if (m.status !== 'done') for (const p of m.players) splitLegacySquads(p);
   m.rules = RULES_VERSION;
   return true;
+}
+
+/** Supply a light block cost under the 16-unit rules (price + upgrades up to `level`). */
+function legacyPlacementValue(d: Design, level: number): number {
+  const c = statsWithSquad(d, LEGACY_SQUAD).cost;
+  let v = c;
+  for (let l = 1; l < level; l++) v += roundPrice(c * (0.4 + 0.1 * l));
+  return v;
+}
+
+function splitLegacySquads(p: PlayerState): void {
+  const designs = new Map(p.deck.map((d) => [d.id, d] as const));
+  const out: Placement[] = [];
+  let refund = 0;
+  for (let i = 0; i < p.board.length; i++) {
+    const u = p.board[i];
+    const d = designs.get(u.designId);
+    const shape = shapeOf(d);
+    if (!d || shape.size !== 1 || shape.squad === LEGACY_SQUAD) { out.push(u); continue; }
+    const [oc, or] = squadLayout(LEGACY_SQUAD), [nc, nr] = squadLayout(shape.squad);
+    const pieces = LEGACY_SQUAD / shape.squad;
+    // the old 8 x 2 block cut along its long axis into pieces of the new cols x 2 layout
+    const splits = or === nr && oc % nc === 0 && oc / nc === pieces && out.length + (p.board.length - i) + pieces - 1 <= MAX_BLOCKS;
+    const value = placementValue(d, u.level);
+    refund += Math.max(0, legacyPlacementValue(d, u.level) - (splits ? pieces : 1) * value);
+    if (!splits) { out.push(u); continue; }
+    const sp = normSpacing(shape, u.spacing);
+    const step = nc * ((u.rot ? (shape.fh ?? 1) : (shape.fw ?? 1)) + sp);
+    for (let k = 0; k < pieces; k++) {
+      const piece: Placement = { ...u, uid: k === 0 ? u.uid : p.nextUid++ };
+      if (u.rot) piece.y = u.y + k * step; else piece.x = u.x + k * step;
+      out.push(piece);
+    }
+  }
+  p.board = out;
+  p.supply += refund;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -230,11 +276,9 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   // escort may reference any block already on the board or bought in this very action
   const knownUids = new Set<number>(seenUids);
   for (const pl of a.place) if (pl && typeof pl === 'object' && isInt(pl.uid)) knownUids.add(pl.uid);
-  const footprints: { x: number; y: number; spacing?: number; rot?: boolean; size: Size; foot: UnitFoot }[] = p.board.map((u) => {
-    const dd = designs.get(u.designId);
-    return { x: u.x, y: u.y, spacing: u.spacing, rot: u.rot, size: sizeOf(dd), foot: footOf(dd) };
-  });
-  let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
+  const footprints: { x: number; y: number; spacing?: number; rot?: boolean; shape: BlockShape }[] = p.board.map((u) =>
+    ({ x: u.x, y: u.y, spacing: u.spacing, rot: u.rot, shape: shapeOf(designs.get(u.designId)) }));
+  let simUnits = p.board.reduce((n, u) => n + shapeOf(designs.get(u.designId)).squad, 0);
 
   for (const pl of a.place) {
     if (!pl || typeof pl !== 'object') return 'Bad placement';
@@ -245,23 +289,22 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     seenUids.add(pl.uid);
     if (pl.level !== 1) return 'New units start at level 1';
     if (pl.round !== m.round) return 'Placement round mismatch';
-    const size = sizeOf(d);
-    const foot = footOf(d);
+    const shape = shapeOf(d);
     if (pl.spacing !== undefined) {
       if (!isInt(pl.spacing) || pl.spacing < 0 || pl.spacing > MAX_SPACING) return `Bad spacing for ${d.name}`;
-      if (!hasSpacing(size) && pl.spacing !== 0) return `${d.name} can't be spaced`;
+      if (!hasSpacing(shape) && pl.spacing !== 0) return `${d.name} can't be spaced`;
     }
     if (pl.rot !== undefined && typeof pl.rot !== 'boolean') return `Bad rotation for ${d.name}`;
-    if (pl.rot && !hasSpacing(size)) return `${d.name} can't be rotated`;
+    if (pl.rot && !hasSpacing(shape)) return `${d.name} can't be rotated`;
     const be = behaviorError(behaviorOf(pl));
     if (be) return `${d.name}: ${be}`;
     if (pl.kiteMount !== undefined && !validKiteMount(d, pl.kiteMount, false)) return `${d.name}: Bad kite weapon`;
     if (pl.escort !== undefined && (!isInt(pl.escort) || pl.escort === pl.uid || !knownUids.has(pl.escort))) return `${d.name}: Bad escort target`;
-    simUnits += squadSize(size);
+    simUnits += shape.squad;
     if (simUnits > MAX_SIM_UNITS) return `Too many units (max ${MAX_SIM_UNITS})`;
-    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, size, pl.spacing, foot, !!pl.rot)) return `${d.name} is outside the deploy zone`;
-    for (const f of footprints) if (blocksOverlap(pl, size, f, f.size, foot, f.foot)) return `${d.name} overlaps another unit`;
-    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, rot: pl.rot, size, foot });
+    if (!isInt(pl.x) || !isInt(pl.y) || !blockInZone(pl.x, pl.y, shape, pl.spacing, !!pl.rot)) return `${d.name} is outside the deploy zone`;
+    for (const f of footprints) if (blocksOverlap(pl, shape, f, f.shape)) return `${d.name} overlaps another unit`;
+    footprints.push({ x: pl.x, y: pl.y, spacing: pl.spacing, rot: pl.rot, shape });
     cost += designCost(d);
   }
 
@@ -335,10 +378,10 @@ export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
     if (c.escort !== undefined) { if (c.escort === -1) delete u.escort; else u.escort = c.escort; }
   }
   for (const pl of a.place) {
-    const size = sizeOf(p.deck.find((d) => d.id === pl.designId));
+    const shape = shapeOf(p.deck.find((d) => d.id === pl.designId));
     const b: Placement = { uid: pl.uid, designId: pl.designId, x: pl.x, y: pl.y, level: 1, round: m.round };
-    if (hasSpacing(size)) b.spacing = normSpacing(size, pl.spacing);
-    if (pl.rot && hasSpacing(size)) b.rot = true;
+    if (hasSpacing(shape)) b.spacing = normSpacing(shape, pl.spacing);
+    if (pl.rot && hasSpacing(shape)) b.rot = true;
     if (pl.target !== undefined) b.target = pl.target;
     if (pl.hold !== undefined) b.hold = pl.hold;
     if (pl.kite !== undefined) b.kite = pl.kite;
@@ -463,13 +506,10 @@ function validKiteMount(d: Design | undefined, i: unknown, allowClear: boolean):
   return !!id && MODULE_BY_ID.get(id)?.kind === 'weapon';
 }
 
-function footOf(d: Design | undefined): UnitFoot {
-  if (!d) return undefined;
-  try { const s = computeStats(d); return { fw: s.fw, fh: s.fh }; } catch { return undefined; }
-}
-function sizeOf(d: Design | undefined): Size {
-  if (!d) return 1;
-  try { return computeStats(d).size; } catch { return 1; }
+/** A design's block shape (size, squad, footprint) from its stats; an unknown or unpriceable design is one 1x1 unit. */
+export function shapeOf(d: Design | undefined): BlockShape {
+  if (d) try { return computeStats(d); } catch { /* fall through */ }
+  return { size: 1, squad: 1 };
 }
 function clonePlacement(p: Placement): Placement {
   const c: Placement = { uid: p.uid, designId: p.designId, x: p.x, y: p.y, level: p.level, round: p.round };

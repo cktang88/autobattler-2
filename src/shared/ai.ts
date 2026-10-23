@@ -16,7 +16,7 @@
 
 import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from './parts.ts';
 import { computeStats, defaultOrders, designModules, MAX_LEVEL, slotError, validateDesign, type DefaultOrders } from './stats.ts';
-import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap, squadSize } from './grid.ts';
+import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { runBattle } from './sim/battle.ts';
 import { STARTER_DESIGNS } from './starters.ts';
@@ -354,7 +354,7 @@ function preferredRow(p: Profile, h: number, rng: Rng): number {
 
 /** Squad spacing by role and by how splashy the enemy is: spread vs splash, packed otherwise. */
 export function chooseSpacing(p: Profile, oppSplashShare: number): number {
-  if (!hasSpacing(p.size as Size)) return 0;
+  if (!hasSpacing(p.stats)) return 0;
   let sp = p.melee || p.role === 'swarm' || p.role === 'skirmisher' ? 1 : 0;
   if (oppSplashShare > 0.5) sp = 3;
   else if (oppSplashShare > 0.2) sp = Math.max(sp, 2);
@@ -426,7 +426,7 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
   if (stance === 'charge') kite = false;
   // back-line shooters wait a moment so the tanks lead
   if (mobile && stance === 'advance' && p.range >= 7 && (p.role === 'artillery' || p.role === 'skirmisher' || p.role === 'antiArmor')) delay = rng() < 0.5 ? 3 : 6;
-  const hold = hasSpacing(p.size as Size) && spacing >= 2 && oppSplashShare > 0.2;
+  const hold = hasSpacing(p.stats) && spacing >= 2 && oppSplashShare > 0.2;
   const focus = p.defaults.focus;
   const retreat = mobile && ctx.hasRepair && p.unitCost >= 20 && p.role !== 'support' && p.role !== 'artillery' && rng() < 0.7;
   if (stance === 'flankLeft' || stance === 'flankRight') ctx.flankCount++;
@@ -545,9 +545,9 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
   const occ: Foot[] = me.board.map((u) => {
     const pd = byId.get(u.designId);
     const pp = pd ? profile(pd) : null;
-    return { x: u.x, y: u.y, ...blockDims(pp ? (pp.size as Size) : 2, u.spacing, pp?.stats, !!u.rot) };
+    return { x: u.x, y: u.y, ...blockDims(pp ? pp.stats : { size: 2, squad: 1 }, u.spacing, !!u.rot) };
   });
-  let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? squadSize(profile(byId.get(u.designId)!).size as Size) : 1), 0);
+  let simUnits = me.board.reduce((n, u) => n + (byId.get(u.designId) ? profile(byId.get(u.designId)!).stats.squad : 1), 0);
   const splashShare = opp.total > 0 ? opp.splashy / opp.total : 0;
   let nextUid = me.nextUid;
   let units = me.board.length;
@@ -598,7 +598,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
   const minCost = Math.min(...deck.map((d) => designCost(d)));
   let guard = 0;
   while (!saveForGiant && budget >= minCost && units < MAX_BLOCKS && guard++ < 80) {
-    const afford = deck.filter((d) => designCost(d) <= budget && simUnits + squadSize(profile(d).size as Size) <= MAX_SIM_UNITS);
+    const afford = deck.filter((d) => designCost(d) <= budget && simUnits + profile(d).stats.squad <= MAX_SIM_UNITS);
     if (!afford.length) break;
     let choice: Design | null;
     if (easy) {
@@ -617,14 +617,14 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
     }
     if (!choice) break;
     const p = profile(choice);
-    const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.size as Size) ? 1 : 0) : chooseSpacing(p, splashShare);
-    let sp = normSpacing(p.size as Size, spacing);
+    const spacing = easy ? Math.floor(o.rng() * 3) * (hasSpacing(p.stats) ? 1 : 0) : chooseSpacing(p, splashShare);
+    let sp = normSpacing(p.stats, spacing);
     // a spread squad is (8+7s) wide: when no spot is left at this spacing, tighten up before giving up
-    let foot = blockDims(p.size as Size, sp, p.stats);
+    let foot = blockDims(p.stats, sp);
     let spot = findSpot(p, foot.w, foot.h, occ, o.rng, easy, o.flank);
     while (!spot && sp > 0) {
       sp--;
-      foot = blockDims(p.size as Size, sp, p.stats);
+      foot = blockDims(p.stats, sp);
       spot = findSpot(p, foot.w, foot.h, occ, o.rng, easy, o.flank);
     }
     if (!spot) {
@@ -633,13 +633,13 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
       if (!deck.length) break;
       continue;
     }
-    if (!blockInZone(spot.x, spot.y, p.size as Size, sp, p.stats)) break;
+    if (!blockInZone(spot.x, spot.y, p.stats, sp)) break;
     occ.push({ x: spot.x, y: spot.y, ...foot });
     const pl: Placement = { uid: nextUid++, designId: choice.id, x: spot.x, y: spot.y, level: 1, round: m.round };
-    if (hasSpacing(p.size as Size)) pl.spacing = sp;
+    if (hasSpacing(p.stats)) pl.spacing = sp;
     if (!easy) applyBehavior(pl, withKiteMount(chooseBehavior(p, sp, splashShare, o.rng, ctx), choice), p.defaults);
     action.place.push(pl);
-    simUnits += squadSize(p.size as Size);
+    simUnits += p.stats.squad;
     roles.set(p.role, (roles.get(p.role) ?? 0) + 1);
     budget -= p.cost;
     units++;
@@ -668,7 +668,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
           if (u.escort === undefined) { const e = pickEscort(blocks, u.uid); if (e !== undefined) cfg.escort = e; }
         } else {
           if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
-          if (b.hold !== !!u.hold && hasSpacing(pr.size as Size)) cfg.hold = b.hold;
+          if (b.hold !== !!u.hold && hasSpacing(pr.stats)) cfg.hold = b.hold;
           if (b.kite !== (u.kite ?? pr.defaults.kite)) cfg.kite = b.kite;
           if (b.kite && b.kiteMount !== undefined && b.kiteMount !== u.kiteMount) cfg.kiteMount = b.kiteMount;
           else if (!b.kite && u.kiteMount !== undefined) cfg.kiteMount = -1;
@@ -808,7 +808,7 @@ export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): D
   let best: DeployAction | null = null;
   let bestScore = -Infinity;
   // battles cost ~ units^1.3: fewer candidates once both armies are big (keeps the decision under ~1.2 s)
-  const countUnits = (pl: Placement[], deck: Design[]) => pl.reduce((k, u) => { const d = deck.find((x) => x.id === u.designId); return k + (d ? squadSize(profile(d).size as Size) : 1); }, 0);
+  const countUnits = (pl: Placement[], deck: Design[]) => pl.reduce((k, u) => { const d = deck.find((x) => x.id === u.designId); return k + (d ? profile(d).stats.squad : 1); }, 0);
   const bigArmies = countUnits(view.players[side].board, view.players[side].deck) + countUnits(opp.board, opp.deck);
   const secondEval = bigArmies <= 100;
   const n = Math.min(variants.length, bigArmies > 300 ? 2 : bigArmies > 160 ? 3 : HARD_CANDIDATES);

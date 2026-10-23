@@ -55,54 +55,56 @@ export const fmtSpeed = (cellsPerSec: number) => `${Math.round(cellsPerSec * MET
 
 // ---------------------------------------------------------------------------------------------
 // Blocks & squads (Mechabellum-style). Every purchase is one BLOCK placed on the cell grid:
-//   size-1 designs -> a squad of 16 light units in an 8-wide x 2-deep rectangle (SQUAD_LAYOUT)
-//   size-2+ designs -> a single unit (footprint size x size cells)
-// Squads have a player-chosen SPACING of 0..MAX_SPACING empty cells between neighbouring units, so a
-// squad's footprint is (8 + 7s) x (2 + s) cells: packed 40 m x 10 m up to spread 110 m x 20 m.
-// Footprints are RECTANGLES: w = across the field (local x), h = depth (local y). Placement.x/.y is the
-// block's top-left local cell. One Placement = one block; all its units share its uid and level.
+//   size-1 designs -> a squad of light units in a rectangle; how many depends on the design's per-unit price
+//                     (stats.ts squadFor: cheap units come 16 to a block (8 x 2), pricier ones 8 (4 x 2) or 4 (2 x 2))
+//   size-2+ designs -> a single unit (footprint size x size cells, or the chassis footprint)
+// The grid never decides the squad itself: every function takes the design's BlockShape (UnitStats satisfies it),
+// so the squad count has one source of truth (computeStats().squad).
+// Squads have a player-chosen SPACING of 0..MAX_SPACING empty cells between neighbouring units, so a squad of
+// cols x rows units has a footprint of (cols + (cols - 1) s) x (rows + (rows - 1) s) cells (an 8 x 2 squad: packed
+// 40 m x 10 m up to spread 110 m x 20 m). Footprints are RECTANGLES: w = across the field (local x), h = depth
+// (local y). Placement.x/.y is the block's top-left local cell. One Placement = one block; all its units share its
+// uid and level.
 // ---------------------------------------------------------------------------------------------
 
 export const MAX_SPACING = 2;
 
-/** squad formation (cols across, rows deep) per chassis size */
-export const SQUAD_LAYOUT: Record<Size, [number, number]> = { 1: [8, 2], 2: [1, 1], 3: [1, 1], 4: [1, 1], 5: [1, 1] };
+/** What the grid needs to know about a design's block: hull size class, units per block and (non-square chassis)
+ *  the unit footprint (fw across, fh deep; omitted = size x size). UnitStats satisfies it. */
+export interface BlockShape { size: Size; squad: number; fw?: number; fh?: number }
 
-/** number of units bought per block */
-export const squadSize = (size: Size): number => SQUAD_LAYOUT[size][0] * SQUAD_LAYOUT[size][1];
+/** formation (cols across, rows deep) per squad count; other counts fall back to one row */
+const SQUAD_LAYOUTS: Record<number, [number, number]> = { 1: [1, 1], 4: [2, 2], 8: [4, 2], 16: [8, 2] };
 
-/** can this design's block have spacing? (only multi-unit squads) */
-export const hasSpacing = (size: Size): boolean => squadSize(size) > 1;
-
-/** clamp/normalize a spacing value (non-squads always 0) */
-export const normSpacing = (size: Size, spacing: number | undefined): number =>
-  hasSpacing(size) ? Math.max(0, Math.min(MAX_SPACING, Math.round(spacing ?? 0))) : 0;
-
-/** Unit footprint (cells) for blocks: pass UnitStats-like {fw, fh}; omitted = size x size. */
-export type UnitFoot = { fw: number; fh: number } | undefined;
-
-/** footprint of a block in cells: w across the field (local x), h deep (local y).
- *  `foot` = the unit's own footprint (non-square chassis); units face the enemy, so fh runs along local y. */
-/** Squad formation (cols across, rows deep); `rot` turns the block 90° (8x2 -> 2x8). Single units don't rotate. */
-export function squadLayout(size: Size, rot = false): [number, number] {
-  const [c, r] = SQUAD_LAYOUT[size];
+/** Squad formation (cols across, rows deep) for `squad` units; `rot` turns the block 90° (8x2 -> 2x8). */
+export function squadLayout(squad: number, rot = false): [number, number] {
+  const [c, r] = SQUAD_LAYOUTS[squad] ?? [Math.max(1, squad), 1];
   return rot && c * r > 1 ? [r, c] : [c, r];
 }
 
-export function blockDims(size: Size, spacing = 0, foot?: UnitFoot, rot = false): { w: number; h: number } {
-  const uw = foot?.fw ?? size, uh = foot?.fh ?? size;
-  const [cols, rows] = squadLayout(size, rot);
+/** can this block have spacing / be rotated? (only multi-unit squads) */
+export const hasSpacing = (b: Pick<BlockShape, 'squad'>): boolean => b.squad > 1;
+
+/** clamp/normalize a spacing value (non-squads always 0) */
+export const normSpacing = (b: Pick<BlockShape, 'squad'>, spacing: number | undefined): number =>
+  hasSpacing(b) ? Math.max(0, Math.min(MAX_SPACING, Math.round(spacing ?? 0))) : 0;
+
+/** footprint of a block in cells: w across the field (local x), h deep (local y). Units face the enemy, so the unit's
+ *  own fh runs along local y. */
+export function blockDims(b: BlockShape, spacing = 0, rot = false): { w: number; h: number } {
+  const uw = b.fw ?? b.size, uh = b.fh ?? b.size;
+  const [cols, rows] = squadLayout(b.squad, rot);
   if (cols * rows === 1) return { w: uw, h: uh };
-  const sp = normSpacing(size, spacing);
+  const sp = normSpacing(b, spacing);
   return { w: cols * uw + (cols - 1) * sp, h: rows * uh + (rows - 1) * sp };
 }
 
 /** unit centers within a block, as offsets (cells) from the block's top-left corner (local orientation) */
-export function squadOffsets(size: Size, spacing = 0, foot?: UnitFoot, rot = false): { x: number; y: number }[] {
-  const uw = foot?.fw ?? size, uh = foot?.fh ?? size;
-  const [cols, rows] = squadLayout(size, rot);
+export function squadOffsets(b: BlockShape, spacing = 0, rot = false): { x: number; y: number }[] {
+  const uw = b.fw ?? b.size, uh = b.fh ?? b.size;
+  const [cols, rows] = squadLayout(b.squad, rot);
   if (cols * rows === 1) return [{ x: uw / 2, y: uh / 2 }];
-  const sp = normSpacing(size, spacing);
+  const sp = normSpacing(b, spacing);
   const out: { x: number; y: number }[] = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) out.push({ x: uw / 2 + c * (uw + sp), y: uh / 2 + r * (uh + sp) });
   return out;
@@ -127,33 +129,33 @@ export function rectInZone(x: number, y: number, w: number, h: number): boolean 
 type BlockPos = Pick<Placement, 'x' | 'y'> & { spacing?: number; rot?: boolean };
 
 /** World-space centers of every unit in a placed block. Side 1's offsets are mirrored (180° rotation). */
-export function placementUnitCenters(side: Side, p: BlockPos, size: Size, foot?: UnitFoot): { x: number; y: number }[] {
-  const { w, h } = blockDims(size, p.spacing, foot, p.rot);
+export function placementUnitCenters(side: Side, p: BlockPos, b: BlockShape): { x: number; y: number }[] {
+  const { w, h } = blockDims(b, p.spacing, p.rot);
   const { col, row } = localRectToWorld(side, p.x, p.y, w, h);
-  return squadOffsets(size, p.spacing, foot, p.rot).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
+  return squadOffsets(b, p.spacing, p.rot).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
 }
 
 /** World-space center of a placed block. */
-export function blockCenter(side: Side, p: BlockPos, size: Size, foot?: UnitFoot): { x: number; y: number } {
-  const { w, h } = blockDims(size, p.spacing, foot, p.rot);
+export function blockCenter(side: Side, p: BlockPos, b: BlockShape): { x: number; y: number } {
+  const { w, h } = blockDims(b, p.spacing, p.rot);
   const { col, row } = localRectToWorld(side, p.x, p.y, w, h);
   return { x: col + w / 2, y: row + h / 2 };
 }
 
 /** World-space rectangle {col,row,w,h} covered by a placed block (for highlights). */
-export function blockWorldRect(side: Side, p: BlockPos, size: Size, foot?: UnitFoot): { col: number; row: number; w: number; h: number } {
-  const { w, h } = blockDims(size, p.spacing, foot, p.rot);
+export function blockWorldRect(side: Side, p: BlockPos, b: BlockShape): { col: number; row: number; w: number; h: number } {
+  const { w, h } = blockDims(b, p.spacing, p.rot);
   return { ...localRectToWorld(side, p.x, p.y, w, h), w, h };
 }
 
-/** Is a block of this design size (and spacing) inside the deploy zone at local (x, y)? */
-export function blockInZone(x: number, y: number, size: Size, spacing = 0, foot?: UnitFoot, rot = false): boolean {
-  const { w, h } = blockDims(size, spacing, foot, rot);
+/** Is a block of this shape (and spacing) inside the deploy zone at local (x, y)? */
+export function blockInZone(x: number, y: number, b: BlockShape, spacing = 0, rot = false): boolean {
+  const { w, h } = blockDims(b, spacing, rot);
   return rectInZone(x, y, w, h);
 }
 
 /** Do two placed blocks overlap? */
-export function blocksOverlap(a: BlockPos, aSize: Size, b: BlockPos, bSize: Size, aFoot?: UnitFoot, bFoot?: UnitFoot): boolean {
-  const da = blockDims(aSize, a.spacing, aFoot, a.rot), db = blockDims(bSize, b.spacing, bFoot, b.rot);
+export function blocksOverlap(a: BlockPos, aShape: BlockShape, b: BlockPos, bShape: BlockShape): boolean {
+  const da = blockDims(aShape, a.spacing, a.rot), db = blockDims(bShape, b.spacing, b.rot);
   return rectsOverlap(a.x, a.y, da.w, da.h, b.x, b.y, db.w, db.h);
 }

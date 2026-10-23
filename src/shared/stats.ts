@@ -2,7 +2,6 @@
 
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
 import { hullK, meleeSlots } from './mountgeo.ts';
-import { squadSize } from './grid.ts';
 import { REPAIR_AURA_RANGE } from './types.ts';
 import type { ChassisDef, Design, ModuleDef, UnitStats } from './types.ts';
 
@@ -75,7 +74,7 @@ export function accuracyRating(w: ModuleDef): number {
 
 export const PARTS_WEIGHT = 0.3;
 export const POWER_K = 0.36;
-/** Size-class price factor on the whole unit cost, by chassis size 1..5 (size 1 = per unit of a 4-unit squad).
+/** Size-class price factor on the whole unit cost, by chassis size 1..5 (size 1 = per unit of a light squad).
  *  Sim effects that scale with size (overkill, focus fire, chip damage vs a few big targets, squad splash exposure,
  *  retargeting) are not visible to the analytic power term; this one multiplier per class soaks them up. */
 // Re-tuned by direct equal-supply sims (light/medium/heavy armies vs each other; giants & titans vs mixed armies):
@@ -83,7 +82,9 @@ export const POWER_K = 0.36;
 // light weapons, no squad splash exposure), so price rises steeply with class. Previous fit (0.93/0.83 for 4/5) made
 // giants and titans win ~100% at equal cost; these values bring them to ~50%. Light squads dropped to 0.85 when bodies
 // were scaled down (mountgeo bodyScale: light troopers 0.7, the rest 0.78): size-1 armies fell to ~20% vs size 2.
-export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.49, 1.49];
+// Dynamic squads (16 / 8 / 4 by unit price) made mixed armies stronger (their light blocks fight better): giants and
+// titans went down to 1.37 / 1.34 (from 1.49) to stay ~50% vs mixed armies.
+export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
@@ -168,11 +169,32 @@ const AURA_REACH_CAP = 2.5;
 export function auraReach(radius: number, hullR: number): number {
   return Math.min(AURA_REACH_CAP, ((radius + hullR) / AURA_REF_R) ** 2);
 }
-/** Auras don't stack, so the 16 carriers of one squad mostly cover the same allies: per unit, a squad's aura is
- *  worth this share of a lone carrier's (the squad's union covers ~2 lone carriers' worth of ground). */
 /** Raw cost per point-defense module at cooldown 0.6 s (x MODULE_CAL.pointdef): ~+12 supply on a medium hull, as before. */
 const PD_PTS = 23;
+/** Auras don't stack, so the carriers of one squad mostly cover the same allies: per unit, a squad's aura is worth
+ *  this share of a lone carrier's (the squad's union covers ~2 lone carriers' worth of ground). */
 export const auraSquadShare = (squad: number) => (squad > 1 ? Math.min(1, 2 / squad) : 1);
+
+/** Light (size-1) squads: units per block by per-unit price (supply). Cheap light units come in big blocks, pricier
+ *  ones in smaller blocks so one purchase stays affordable: [max per-unit price, squad]. Sizes 2+ are single units.
+ *  Per-unit stats and price don't depend on the tier (except a support aura's share, see auraSquadShare), so equal
+ *  supply still buys the same army; the tier only changes the purchase granularity and formation (grid.ts). */
+/** Price factor per light squad count (on the unit value, before support): smaller blocks fight better per unit in the
+ *  sim (each block picks its own targets and moves on its own; a wide 8 x 2 block bunches up and overkills), so a unit
+ *  costs a little more in a smaller squad. Tuned with `node scripts/size-check.ts` and `node scripts/duels.ts groups`. */
+// Tuned (N=24, 48 fights per row) with size-check: light vs medium armies 19% -> 54% (the old always-16 blocks were weak
+// for their price), giants/titans vs mixed armies kept where they were by SIZE_K[3..4] x0.92 / x0.9.
+export const SQUAD_K: Record<number, number> = { 16: 1, 8: 1.2, 4: 1.35 };
+export const SQUAD_TIERS: readonly (readonly [number, number])[] = [[11, 16], [24, 8], [Infinity, 4]];
+
+/** Units per block for a hull of `size`; `unitPrice(squad)` = one unit's price (supply, unrounded) in that squad. The
+ *  biggest squad whose unit price fits its tier wins. Deterministic in the design, so a match's stored designs keep
+ *  their squad on server and client. */
+export function squadFor(size: number, unitPrice: (squad: number) => number): number {
+  if (size !== 1) return 1;
+  for (const [max, sq] of SQUAD_TIERS) if (unitPrice(sq) <= max) return sq;
+  return SQUAD_TIERS[SQUAD_TIERS.length - 1][1];
+}
 
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
@@ -208,6 +230,16 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
 }
 
 export function computeStats(d: Design): UnitStats {
+  return statsFor(d);
+}
+
+/** Stats of a light design forced into a `squad`-unit block (legacy pricing for rules migrations / analysis
+ *  scripts); the game itself always lets squadFor decide. */
+export function statsWithSquad(d: Design, squad: number): UnitStats {
+  return statsFor(d, squad);
+}
+
+function statsFor(d: Design, forceSquad?: number): UnitStats {
   const c = CHASSIS_BY_ID.get(d.chassis);
   const m = MOBILITY_BY_ID.get(d.mobility);
   if (!c || !m) throw new Error(`bad design parts: ${d.chassis}/${d.mobility}`);
@@ -296,9 +328,12 @@ export function computeStats(d: Design): UnitStats {
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
   const classK = (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1);
-  const base = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
-  const squad = squadSize(size);
-  const extra = SUPPORT_K * (support * auraSquadShare(squad) + interceptors);
+  let base = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
+  const extraFor = (sq: number) => SUPPORT_K * (support * auraSquadShare(sq) + interceptors);
+  const unitRaw = (sq: number) => base * (SQUAD_K[sq] ?? 1) + extraFor(sq);
+  const squad = size === 1 && forceSquad ? forceSquad : squadFor(size, (sq) => unitRaw(sq) / PRICE_DIV);
+  const extra = extraFor(squad);
+  base *= SQUAD_K[squad] ?? 1;
   // the block price is the only rounded number: every per-unit figure below is derived from it or sums to it
   const cost = roundCost((base + extra) * squad);
   const priceParts = Math.min(base, PARTS_WEIGHT * partsCost * classK) / PRICE_DIV;
@@ -388,6 +423,11 @@ export function validateDesign(d: Design): string[] {
 }
 
 export const isValidDesign = (d: Design) => validateDesign(d).length === 0;
+
+/** Units bought per block of a design (computeStats().squad; 1 for a design that can't be priced). */
+export function squadOf(d: Design): number {
+  try { return computeStats(d).squad; } catch { return 1; }
+}
 
 /** Effective range (cells, after range bonuses) a kiting-by-default design's main guns must reach: clearly past the
  *  typical frontline guns (autocannons 7.5, cannons 9) so kiting actually keeps it out of their reach. */

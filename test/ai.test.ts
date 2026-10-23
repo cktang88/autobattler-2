@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aiDeck, aiDeploy, profile, type AiDifficulty } from '../src/shared/ai.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateDeploy, applyDeploy, resolveRound, redactFor, DECK_SIZE } from '../src/shared/match.ts';
-import { DEPLOY_D, DEPLOY_W, blockDims, squadSize, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, blockDims, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
 import { computeStats, defaultOrders } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
 
@@ -67,9 +67,9 @@ function checkBoard(m: MatchState, side: 0 | 1, board: Placement[]) {
   for (const p of board) {
     const st = computeStats(byId.get(p.designId)!);
     const size = st.size;
-    units += squadSize(size);
-    assert.ok(blockInZone(p.x, p.y, size, p.spacing ?? 0, st), 'in zone');
-    const { w, h } = blockDims(size, p.spacing ?? 0, st);
+    units += st.squad;
+    assert.ok(blockInZone(p.x, p.y, st, p.spacing ?? 0, !!p.rot), 'in zone');
+    const { w, h } = blockDims(st, p.spacing ?? 0, !!p.rot);
     for (const f of feet) assert.ok(!rectsOverlap(p.x, p.y, w, h, f.x, f.y, f.w, f.h), 'no overlap');
     feet.push({ x: p.x, y: p.y, w, h });
     if (size > 1) assert.ok(!p.spacing, 'non-squads have no spacing');
@@ -139,7 +139,7 @@ test('AI never hands the opponent an exploitable view: redacted deck has no beha
   for (const d of v.players[1].deck) assert.equal(d.behavior, undefined);
 });
 
-test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 16-unit squad deployments', () => {
+test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 4/8/16-unit squad deployments', () => {
   const lens: number[] = [];
   for (let i = 0; i < 5; i++) {
     const m = playMatch(600 + i, 'normal', 'normal');
@@ -158,7 +158,7 @@ test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone
     assert.ok(a.place.length >= 2 && a.place.length <= 14, `blocks ${a.place.length}`);
     for (const p of a.place) {
       const st = computeStats(m.players[0].deck.find((d) => d.id === p.designId)!);
-      const { w, h } = blockDims(st.size, p.spacing ?? 0, st);
+      const { w, h } = blockDims(st, p.spacing ?? 0, !!p.rot);
       assert.ok(p.x + w <= DEPLOY_W && p.y + h <= DEPLOY_D, 'footprint inside zone');
     }
   }

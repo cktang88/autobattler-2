@@ -10,7 +10,7 @@ import { sfx } from '../audio.ts';
 import { kiteOptions, ordersControl, ordersOf, orderFields, ringsOf } from './match-ui.ts';
 import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
 import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
-import { METERS_PER_CELL, fmtMeters, squadSize } from '../../shared/grid.ts';
+import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import { slotError } from '../../shared/stats.ts';
@@ -1327,10 +1327,13 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const mobility = pairingError(c.id, draft.mobility) ? firstLegalMobility(c.id) : draft.mobility;
       return { ...draft, chassis: c.id, mobility, mounts: reseat(draft.mounts, c, mobility) };
     })();
+    // the squad count comes from the design's per-unit price (stats.ts squadFor): what this hull would be with the
+    // current loadout, not a fixed number per hull size
+    const sq = statsOf(next ?? draft)?.squad ?? 1;
     return [
-      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), squadSize(c.size) > 1 ? h('span.g-plate.squad', { title: `One purchase deploys a block of ${squadSize(c.size)} of these` }, `Squad ×${squadSize(c.size)}`) : null, roleTags(c.roles, 2)]),
+      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), sq > 1 ? h('span.g-plate.squad', { title: `With this loadout one purchase deploys a block of ${sq} of these (cheaper light units come in bigger squads: ×16, ×8 or ×4)` }, `Squad ×${sq}`) : null, roleTags(c.roles, 2)]),
       h('div.g-kstats', null,
-        kstat(squadSize(c.size) > 1 ? 'Hull each' : 'Hull', String(c.hp), 'hp'),
+        kstat(sq > 1 ? 'Hull each' : 'Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),
         kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}`, title: sizeTip(m) }, ML[m]))))),
       h('p.g-insp-desc', null, c.desc),

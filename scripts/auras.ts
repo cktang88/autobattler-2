@@ -74,7 +74,7 @@ function place(side: 0 | 1, specs: Spec[]): Placement[] {
   const uids = specs.map(() => uidSeq++);
   return specs.map((b, i) => {
     const s = ST.get(b.id)!;
-    const { w, h } = blockDims(s.size as 1, b.spacing ?? 0, s);
+    const { w, h } = blockDims(s, b.spacing ?? 0);
     let x = Math.round(side === 0 ? b.cx - w / 2 : FIELD_W - b.cx - w / 2);
     x = Math.max(0, Math.min(FIELD_W - w, x));
     const y = Math.max(0, Math.min(DEPLOY_D - h, b.y));
@@ -82,7 +82,7 @@ function place(side: 0 | 1, specs: Spec[]): Placement[] {
   });
 }
 /** a block in front, support/extra pieces right behind it */
-const depthOf = (id: string, spacing = 0) => blockDims(ST.get(id)!.size as 1, spacing, ST.get(id)!).h;
+const depthOf = (id: string, spacing = 0) => blockDims(ST.get(id)!, spacing).h;
 
 type Kind = 'uplink' | 'dome' | 'jammer';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,7 +244,7 @@ function vsField(A: Spec[]): number {
     if (c > 1.3 * S) continue;
     const k = Math.max(1, Math.round(S / c));
     const st = ST.get(e.id)!;
-    const { w, h } = blockDims(st.size as 1, 1, st);
+    const { w, h } = blockDims(st, 1);
     const perRow = Math.max(1, Math.min(k, Math.floor(80 / (w + 2))));
     const B: Spec[] = Array.from({ length: k }, (_, i) => {
       const r = Math.floor(i / perRow), col = i % perRow, inRow = Math.min(perRow, k - r * perRow);

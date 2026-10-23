@@ -247,8 +247,8 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = {
           stat('Round-1 buys', `${r.roundOne}/${r.infos.length}`, 'Designs you can afford with round 1 supply'),
           stat('Avg speed', `${Math.round(r.avgSpeed)} m/s`, 'Mobile designs only'),
           stat('Max reach', `${Math.round(r.maxRange)} m`),
-          stat('Ground DPS · all blocks', String(Math.round(r.gnd)), 'One block of each design combined (a light design\'s block is its whole squad of 16)'),
-          stat('Air DPS · all blocks', String(Math.round(r.air)), 'One block of each design combined (a light design\'s block is its whole squad of 16)'),
+          stat('Ground DPS · all blocks', String(Math.round(r.gnd)), 'One block of each design combined (a light design\'s block is its whole squad of 4, 8 or 16)'),
+          stat('Air DPS · all blocks', String(Math.round(r.air)), 'One block of each design combined (a light design\'s block is its whole squad of 4, 8 or 16)'),
         )),
     );
   }

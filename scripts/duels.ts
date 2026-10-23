@@ -115,7 +115,7 @@ interface Block { id: string; cx: number; y: number; stance?: Stance }
 function place(side: 0 | 1, blocks: Block[]): Placement[] {
   return blocks.map((b) => {
     const s = ST.get(b.id)!;
-    const { w, h } = blockDims(s.size as 1, 0, s);
+    const { w, h } = blockDims(s, 0);
     let x = Math.round(side === 0 ? b.cx - w / 2 : FIELD_W - b.cx - w / 2);
     x = Math.max(0, Math.min(FIELD_W - w, x));
     const y = Math.max(0, Math.min(DEPLOY_D - h, b.y));
@@ -213,7 +213,7 @@ const BUDGET = 300;
 /** n blocks of a design spread across the field centre, rows of up to 4, `y0` local depth of the first row. */
 function groupBlocks(id: string, n: number, y0: number, stance?: Stance): Block[] {
   const s = ST.get(id)!;
-  const { w, h } = blockDims(s.size as 1, 0, s);
+  const { w, h } = blockDims(s, 0);
   const out: Block[] = [];
   const perRow = Math.max(1, Math.min(n, Math.floor(60 / (w + 2))));
   for (let i = 0; i < n; i++) {

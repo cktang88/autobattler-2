@@ -10,7 +10,7 @@ for (let i = 0; i < 5; i++) SIZE_K[i] = base[i] * mult[i];
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 function pack(list: Design[]): Placement[] {
   const out: Placement[] = []; const occ: { x: number; y: number; w: number; h: number }[] = []; let uid = 1;
-  for (const d of list) { const s = computeStats(d); const { w, h } = blockDims(s.size, 1, s); let placed = false;
+  for (const d of list) { const s = computeStats(d); const { w, h } = blockDims(s, 1); let placed = false;
     for (let y = 0; y + h <= DEPLOY_D && !placed; y++) for (let x = 0; x + w <= DEPLOY_W && !placed; x++) {
       if (occ.some((o) => rectsOverlap(x, y, w, h, o.x, o.y, o.w, o.h))) continue;
       occ.push({ x, y, w, h }); out.push({ uid: uid++, designId: d.id, x, y, level: 1, round: 1, spacing: 1 }); placed = true; } }

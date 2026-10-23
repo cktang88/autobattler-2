@@ -472,7 +472,7 @@ test('blocks: size-1 designs spawn a squad of 16 (8x2) at spacing-dependent posi
   assert.equal(ext(tight, 'y'), 1);
   assert.equal(ext(wide, 'x'), 21);
   assert.equal(ext(wide, 'y'), 3);
-  const expect = placementUnitCenters(0, { x: 10, y: 0, spacing: 2 }, 1);
+  const expect = placementUnitCenters(0, { x: 10, y: 0, spacing: 2 }, { size: 1, squad: 16 });
   assert.deepEqual(wide.units.map((u) => [u.x, u.y]), expect.map((c) => [c.x, c.y]));
   // size-2 / size-3 are single units; spacing is ignored for them
   assert.equal(new Battle(input(1, [{ ...P('bulwark', 10, 0), spacing: 2 }, P('ironclad', 20, 0)], [])).units.length, 2);
@@ -945,7 +945,7 @@ test('non-square footprints: long units spawn on their footprint centre and cont
   assert.equal(st.fh, 3);
   const mk = (blocks: Placement[]) => new Battle({ seed: 3, sides: [{ designs, units: blocks }, { designs, units: [] }] });
   const b = mk([P('longone', 10, 2)]);
-  const c = placementUnitCenters(0, { x: 10, y: 2 }, st.size, st)[0];
+  const c = placementUnitCenters(0, { x: 10, y: 2 }, st)[0];
   assert.deepEqual([b.units[0].x, b.units[0].y], [c.x, c.y]);
   assert.deepEqual([c.x, c.y], [10.5, FIELD_H - DEPLOY_D + 2 + 1.5]);
   // deterministic and still resolves a full fight

@@ -10,7 +10,7 @@ import { MAPS } from '../render/ground.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { TICK_RATE, type BattleInput } from '../../shared/sim/types.ts';
-import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blocksOverlap, hasSpacing, placementUnitCenters } from '../../shared/grid.ts';
+import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blocksOverlap, hasSpacing, placementUnitCenters, type BlockShape } from '../../shared/grid.ts';
 import { computeStats } from '../../shared/stats.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { makeRng } from '../../shared/rng.ts';
@@ -29,11 +29,11 @@ function demoInput(seed: number): BattleInput | null {
       const d = designs[Math.floor(rng() * designs.length)];
       const st = computeStats(d);
       if (st.cost > budget) continue;
-      const spacing = hasSpacing(st.size) ? Math.floor(rng() * (MAX_SPACING + 1)) : 0;
-      const dim = blockDims(st.size, spacing, st);
+      const spacing = hasSpacing(st) ? Math.floor(rng() * (MAX_SPACING + 1)) : 0;
+      const dim = blockDims(st, spacing);
       const x = Math.floor(rng() * (DEPLOY_W - dim.w + 1));
       const y = Math.floor(rng() * (DEPLOY_D - dim.h + 1));
-      if (out.some((p) => blocksOverlap({ x, y, spacing }, st.size, p, sizeOf(designs, p.designId), st, footOf(designs, p.designId)))) continue;
+      if (out.some((p) => blocksOverlap({ x, y, spacing }, st, p, shapeOf(designs, p.designId)))) continue;
       out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rng() * 2), round: 1, ...(spacing ? { spacing } : {}) });
       budget -= st.cost;
     }
@@ -42,13 +42,9 @@ function demoInput(seed: number): BattleInput | null {
   return { seed, sides: [{ designs, units: mk() }, { designs, units: mk() }] };
 }
 
-function footOf(designs: Design[], id: string): { fw: number; fh: number } | undefined {
+function shapeOf(designs: Design[], id: string): BlockShape {
   const d = designs.find((x) => x.id === id);
-  return d ? computeStats(d) : undefined;
-}
-function sizeOf(designs: Design[], id: string): Size {
-  const d = designs.find((x) => x.id === id);
-  return d ? computeStats(d).size : 1;
+  return d ? computeStats(d) : { size: 1, squad: 1 };
 }
 function boardUnits(input: BattleInput): BoardUnit[] {
   const out: BoardUnit[] = [];
@@ -56,7 +52,7 @@ function boardUnits(input: BattleInput): BoardUnit[] {
     for (const p of s.units) {
       const d = s.designs.find((x) => x.id === p.designId);
       if (!d) continue;
-      for (const c of placementUnitCenters(side as Side, p, computeStats(d).size, computeStats(d))) out.push({ side: side as Side, design: d, x: c.x, y: c.y, level: p.level });
+      for (const c of placementUnitCenters(side as Side, p, computeStats(d))) out.push({ side: side as Side, design: d, x: c.x, y: c.y, level: p.level });
     }
   });
   return out;
@@ -66,7 +62,7 @@ export function howToPlay(): HTMLElement {
   return h('div.howto', null,
     h('ol', null,
       h('li', null, h('b', null, 'Design'), ' units in the ', h('b', null, 'Garage'), ': pick a chassis, a mobility system and weapon modules. Up to 9 designs form your deck.'),
-      h('li', null, h('b', null, 'Deploy'), ': each round you get supply. Buy units from your deck (a light design comes as a squad of 16 per purchase) and place them on your half of the field — or upgrade units you already own.'),
+      h('li', null, h('b', null, 'Deploy'), ': each round you get supply. Buy units from your deck (a light design comes as a squad of 4, 8 or 16 per purchase: the cheaper the unit, the bigger the squad) and place them on your half of the field — or upgrade units you already own.'),
       h('li', null, h('b', null, 'Fight'), ': the battle plays out automatically. Units you placed persist and redeploy every round.'),
       h('li', null, 'The round loser takes damage based on the enemy units still standing. Reduce your opponent to 0 HP to win.'),
     ),

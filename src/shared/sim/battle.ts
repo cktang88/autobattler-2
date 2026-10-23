@@ -555,9 +555,9 @@ export class Battle {
           validCache.set(d, ok);
         }
         if (!ok) continue;
-        const size = computeStats(d).size;
-        const sp = normSpacing(size, p.spacing);
-        const cs = placementUnitCenters(s, { x: p.x, y: p.y, spacing: sp, rot: p.rot }, size, computeStats(d));
+        const shape = computeStats(d); // squad count + footprint: the same shape the rules validated the placement with
+        const sp = normSpacing(shape, p.spacing);
+        const cs = placementUnitCenters(s, { x: p.x, y: p.y, spacing: sp, rot: p.rot && shape.squad > 1 }, shape);
         let mx = 0, my = 0;
         for (const c of cs) { mx += c.x; my += c.y; }
         mx /= cs.length; my /= cs.length;

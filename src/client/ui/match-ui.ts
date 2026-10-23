@@ -322,7 +322,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
     h('div.sc-tile', { class: cls }, svgIcon(icon, 18), h('div.sc-tv', null, h('b', null, value), extra ? h('small', null, extra) : null), h('span.sc-tl', null, label));
   const hp = Math.round(st.hp * mult);
   const flags: HTMLElement[] = [];
-  const fp = blockDims(st.size as Size, o.spacing ?? 0, st, !!o.rot);
+  const fp = blockDims(st, o.spacing ?? 0, !!o.rot);
   flags.push(h('span.sc-badge.neutral', { title: squad > 1 ? `Footprint of the whole ${squad}-unit squad` : 'Footprint' }, svgIcon('size', 14), `${sizeLabel(st.size)} · ${fmtMeters(fp.w)}×${fmtMeters(fp.h)}`));
   if (st.flying) flags.push(h('span.sc-badge.air', null, svgIcon('air', 14), 'FLYING'));
   else if (st.isStatic) flags.push(h('span.sc-badge.neutral', null, 'STATIC'));

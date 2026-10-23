@@ -7,7 +7,7 @@ import { computeStats, levelMult } from '../../shared/stats.ts';
 import type { Design, ModuleDef, UnitStats } from '../../shared/types.ts';
 
 // ---- firepower as the sim computes it (per unit) ----
-// Every number here is for ONE unit. A size-1 design is bought as a block of `st.squad` (16) units: multiply by
+// Every number here is for ONE unit. A size-1 design is bought as a block of `st.squad` units (16, 8 or 4 by unit price, stats.ts squadFor): multiply by
 // st.squad for the squad total. The UI convention: plain numbers are per unit; squad totals are always labelled.
 
 export interface FireMods { fireRate: number; reloadMult: number }
@@ -92,7 +92,7 @@ export function designInfo(d: Design): DesignInfo | null {
   const rangeM = st.range * METERS_PER_CELL;
   const speedMs = st.isStatic ? 0 : st.speed * METERS_PER_CELL;
   if (rangeM >= 80) caps.add('long');
-  // per-unit toughness: a squad of 16 paper-thin scouts adds up to lots of hp but holds no line (splash shreds it)
+  // per-unit toughness: a squad of paper-thin scouts adds up to lots of hp but holds no line (splash shreds it)
   if (st.ehp >= 1500 || st.armor >= 12) caps.add('front');
   if (st.heal > 0) caps.add('support');
   if (st.flying) caps.add('air');

@@ -345,8 +345,10 @@ test('overkill prevention does not let one point-defense laser swat a whole miss
   assert.deepEqual(validateDesign(hunter), []);
   assert.deepEqual(validateDesign(fort), []);
   for (const dx of [3, 9, 11]) {
-    const b = new Battle({ seed: 1, sides: [{ designs: [hunter, fort], units: [pl('hunter', { kite: false, stance: 'holdPos' })] }, { designs: [hunter, fort], units: [pl('fort')] }] });
-    const k = b.units[0], e = b.units[b.units.length - 1]; // squad of 16 hunters vs the fort
+    const b = new Battle({ seed: 1, sides: [{ designs: [hunter, fort], units: [pl('hunter', { kite: false, stance: 'holdPos' }), pl('hunter', { uid: 2, x: 44, kite: false, stance: 'holdPos' })] }, { designs: [hunter, fort], units: [pl('fort')] }] });
+    // two 8-unit squads of hunters (the design is an 8-unit squad since squads size by unit price) vs the fort
+    const k = b.units[0], e = b.units[b.units.length - 1];
+    assert.equal(b.units.length, 17);
     e.x = k.x + dx; e.y = k.y - 10; e.angle = Math.PI / 2;
     (b as unknown as { rebuildHash(): void }).rebuildHash();
     for (let i = 0; i < 20 * TICK_RATE && !b.done; i++) b.step();

@@ -209,12 +209,12 @@ function placeUnits(deck: Design[], seed: number, count: number): Placement[] {
   let guard = 0;
   while (out.length < count && guard++ < 2000) {
     const d = pick(deck);
-    const unit = computeStats(d).size;
+    const unit = computeStats(d);
     const spacing = hasSpacing(unit) ? Math.floor(rnd() * 4) : 0;
     const { w, h } = blockDims(unit, spacing);
     const x = Math.floor(rnd() * (DEPLOY_W - w + 1)), y = Math.floor(rnd() * (DEPLOY_D - h + 1));
     if (!blockInZone(x, y, unit, spacing)) continue;
-    if (out.some((p) => blocksOverlap(p, computeStats(deck.find((q) => q.id === p.designId)!).size, { x, y, spacing }, unit))) continue;
+    if (out.some((p) => blocksOverlap(p, computeStats(deck.find((q) => q.id === p.designId)!), { x, y, spacing }, unit))) continue;
     out.push({ uid: out.length + 1, designId: d.id, x, y, level: 1 + Math.floor(rnd() * 3), round: 1, ...(spacing ? { spacing } : {}) });
   }
   return out;
@@ -240,7 +240,7 @@ function fieldSection(): void {
     for (const s of [0, 1] as Side[]) {
       for (const p of units[s]) {
         const d = decks[s].find((q) => q.id === p.designId)!;
-        for (const c of placementUnitCenters(s, p, computeStats(d).size)) board.push({ side: s, design: d, x: c.x, y: c.y, level: p.level });
+        for (const c of placementUnitCenters(s, p, computeStats(d))) board.push({ side: s, design: d, x: c.x, y: c.y, level: p.level });
       }
     }
     const input: BattleInput = { seed, sides: [{ designs: decks[0], units: units[0] }, { designs: decks[1], units: units[1] }] };
