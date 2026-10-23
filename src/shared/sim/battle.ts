@@ -408,7 +408,7 @@ function deathKindOf(moduleId: string): [DeathKind, number] {
   const def = MODULE_BY_ID.get(moduleId), p = def?.projectile;
   k = [moduleId === 'crush' ? 'crush' : p === 'flame' ? 'fire' : p === 'beam' || p === 'lightning' || (p === 'orb' && def?.category === 'energy') ? 'energy'
     : p === 'shell' || p === 'rocket' || p === 'missile' || p === 'arc' || p === 'orb' ? 'explosive' : 'kinetic',
-    def?.mount === 'XL' ? 4 : def?.mount === 'L' ? 1.5 : 1];
+    def?.mount === 'XL' ? 4 : (def?.damage ?? 0) >= 600 ? 2.5 : def?.mount === 'L' ? 1.5 : 1]; // huge single hits (blockbuster bomb) count heavy too
   deathKinds.set(moduleId, k);
   return k;
 }
