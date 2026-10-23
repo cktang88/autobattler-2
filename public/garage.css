@@ -269,6 +269,11 @@
 .garage.dragging .g-lslot.cant { opacity: 0.4; }
 .garage.picking:not(.dragging) .g-lslot.cant { opacity: 0.4; }
 .garage.dragging .g-lslot.hot.can { background: #3a3218; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--amber); }
+/* the socket being fitted keeps its amber ring while a picked part lights the legal ones (the teal/red pick rules
+   above out-rank the plain .active rule, so the active socket used to look like every other one) */
+.garage.picking:not(.dragging) .g-sock.active { opacity: 1; }
+.garage.picking:not(.dragging) .g-sock.active .g-sock-ring { border-color: var(--amber) !important; border-width: 3px !important; box-shadow: 0 0 0 2px var(--ink), 0 0 20px rgba(255, 178, 30, 0.55); }
+.garage.picking:not(.dragging) .g-lslot.active { opacity: 1; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--amber); }
 .garage.drag-out .g-stage { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px #4a2a20, inset 0 0 70px rgba(0, 0, 0, 0.65); }
 
 .g-ghost {
@@ -617,7 +622,7 @@
 /* phone: single column */
 @media (max-width: 760px) {
   .garage .g-top { gap: 10px; padding: calc(6px + var(--safe-t, 0px)) 10px 6px; }
-  .garage .g-title-k { font-size: 1.3rem; }
+  .garage .g-title-k { font-size: 1.15rem; letter-spacing: 0.08em; white-space: nowrap; }
   .garage .g-title-s, .garage .g-hazard { display: none; }
   .garage .g-deckchip { margin-left: auto; }
   .garage .g-body { display: block; overflow-y: auto; padding-bottom: var(--safe-b, 0px); }
@@ -779,10 +784,18 @@
 @media (max-width: 760px) {
   .garage .g-kstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .garage .g-baytools .k-seg.g-subtabs { overflow-x: auto; }
+  /* stage toolbar: the zoom group + a labelled Ranges button ran off the right edge; Ranges goes icon-only */
+  /* top-aligned: the plate column wraps to 3-4 rows here, and centring the zoom bar against it dropped the bar onto
+     the sockets of tall hulls (it swallowed their taps) */
+  .garage .g-stage-hud { right: 12px; align-items: flex-start; }
+  .garage .g-stage-hud .g-zoom { margin-right: 4px; }
+  .garage .g-stagebtn { font-size: 0 !important; gap: 0 !important; padding: 0 8px !important; }
 }
 
 /* review fixes */
-.garage .g-bay, .garage .g-body { overflow: clip; }
+.garage .g-bay { overflow: clip; }
+/* (not on phones: there .g-body is the single-column page's scroller, see the max-width: 760px block) */
+@media (min-width: 761px) { .garage .g-body { overflow: clip; } }
 .garage .g-lslot { flex: 1 1 170px; max-width: none; }
 .garage .g-lslot-name { font-size: 0.95rem; }
 /* (not below 1101px: that would undo the two-column roster-strip layout, which comes earlier in the file) */
