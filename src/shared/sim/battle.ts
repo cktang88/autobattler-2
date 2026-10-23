@@ -12,8 +12,8 @@ import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
 import type { AirRole } from '../stats.ts';
-import { DT, MAX_TICKS, TICK_RATE } from './types.ts';
-import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
+import { DT, MAX_TICKS, TICK_RATE, wreckLevel } from './types.ts';
+import type { BattleEvent, BattleInput, BattleSummary, DeathKind, MountState, SimProjectile, SimUnit } from './types.ts';
 
 // ---- tuning ----
 /** a turret only fires once its barrel is on target (~3.4°) — bursts included */
@@ -400,6 +400,19 @@ function damageClass(def: ModuleDef): number {
   return c;
 }
 
+/** Wreck flavour and heft of a weapon's killing blow (visual only; see wreckLevel). */
+const deathKinds = new Map<string, [DeathKind, number]>();
+function deathKindOf(moduleId: string): [DeathKind, number] {
+  let k = deathKinds.get(moduleId);
+  if (k) return k;
+  const def = MODULE_BY_ID.get(moduleId), p = def?.projectile;
+  k = [moduleId === 'crush' ? 'crush' : p === 'flame' ? 'fire' : p === 'beam' || p === 'lightning' || (p === 'orb' && def?.category === 'energy') ? 'energy'
+    : p === 'shell' || p === 'rocket' || p === 'missile' || p === 'arc' || p === 'orb' ? 'explosive' : 'kinetic',
+    def?.mount === 'XL' ? 4 : def?.mount === 'L' ? 1.5 : 1];
+  deathKinds.set(moduleId, k);
+  return k;
+}
+
 interface Proj extends SimProjectile {
   /** SimUnit.id of the shooter */
   src: number;
@@ -499,6 +512,8 @@ export class Battle {
   private curSrc = -1;
   /** SimUnit.id credited with damage for the per-block tally (accounting only; never affects the fight) */
   private dmgSrc = -1;
+  /** overrides the killing weapon's DeathKind while a burn tick / death blast deals its damage */
+  private dmgKind: DeathKind | null = null;
   /** damage dealt to enemies per block, keyed side * 1e6 + placement uid */
   private blockDmg = new Map<number, number>();
   private ints: Internal[] = [];
@@ -797,8 +812,10 @@ export class Battle {
           const dmg = I.burnDps * I.burnTick;
           I.burnTick = 0;
           this.dmgSrc = I.burnSrc;
+          this.dmgKind = 'fire';
           this.damage(u, dmg, 1, 1, I.burnSide, I.burnModule, u.x, u.y);
           this.dmgSrc = -1;
+          this.dmgKind = null;
         }
         u.burning = Math.max(0, u.burning - DT);
         if (!u.alive) continue;
@@ -1037,8 +1054,10 @@ export class Battle {
       const I = this.ints[pb[k]];
       const u = I.u;
       this.dmgSrc = u.id;
+      this.dmgKind = 'explosive';
       this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true); // [aura balance] radius beyond the hull
       this.dmgSrc = -1;
+      this.dmgKind = null;
     }
     pb.length = 0;
   }
@@ -1897,6 +1916,7 @@ export class Battle {
       if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { dmg *= REACTIVE_MULT; t.reactive--; }
       dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - t.stats.armor * (1 - ap));
     }
+    const hitDmg = dmg; // what reached the hull: the wreck's "hit size"
     if (dmg > 0) {
       const a = Math.min(t.hp, dmg);
       t.hp -= dmg;
@@ -1911,12 +1931,13 @@ export class Battle {
     T.sinceDamage = 0;
     this.events.push({ t: 'hit', unit: t.id, damage: dealt, shieldHit, x, y, moduleId });
     if (t.hp <= 0) {
+      const overkill = -t.hp / t.maxHp, hit = hitDmg / t.maxHp, [wk, heft] = deathKindOf(moduleId), kind = this.dmgKind ?? wk;
       t.hp = 0;
       t.alive = false;
       t.moving = false;
       t.leap = 0;
       t.cloaked = false;
-      this.events.push({ t: 'death', unit: t.id, x: t.x, y: t.y, size: t.stats.size, flying: t.flying });
+      this.events.push({ t: 'death', unit: t.id, x: t.x, y: t.y, size: t.stats.size, flying: t.flying, moduleId, overkill, hit, kind, wreck: wreckLevel(hit, overkill, kind, this.dmgKind ? 1 : heft) });
       if (T.blastDmg > 0) this.pendingBlasts.push(t.id);
     } else if (T.smokeR > 0 && !T.smokeUsed && t.hp < t.maxHp * SMOKE_AT) {
       T.smokeUsed = true;

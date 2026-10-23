@@ -8,6 +8,7 @@
 
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
+import type { DeathKind, WreckLevel } from '../../shared/sim/types.ts';
 import { clamp, ctx2d, makeCanvas, rgba, softDot, type Ctx } from './palette.ts';
 import { tex, tinted } from './textures.ts';
 import { coneTex, easeOut, fireTex, flameTex, glowTex, hash1, mixHex, puffTex, ringTex, starTex } from './vfx.ts';
@@ -64,7 +65,9 @@ interface Decal {
   ext?: number;
 }
 
-/** A burnt-out hulk: drawn live (crisp at any zoom), smouldering while it cools. Lives until the battle ends. */
+/** A burnt-out hulk: drawn live (crisp at any zoom), smouldering while it cools. Lives until the battle ends.
+ *  lv (sim WreckLevel) sets how broken it is: 0 whole (bullet holes when kinetic), 1 a chunk blown off, 2 broken into
+ *  scattered pieces, 3 nothing but scorch and scrap. */
 interface Wreck {
   x: number; y: number; a: number; sc: number; S: number;
   t0: number; life: number;
@@ -73,6 +76,14 @@ interface Wreck {
   hot: number[];
   scorch: number[];
   smokeT: number;
+  lv: WreckLevel; kind: DeathKind;
+  /** hull pieces, 5 per piece: wedge start / end angle (hull-local), offset x / y, extra rotation; empty = whole hull */
+  pieces: number[];
+  /** hull-local bullet holes (x, y) / scattered scrap (x, y, size, angle, shade 0..1) */
+  holes: number[];
+  scrap: number[];
+  /** seconds the hulk keeps burning */
+  fireT: number;
 }
 
 /** A burning ground patch (sim 'fireField' event: firebombs, incendiary rockets, flame jets): burns until `end` (battle
@@ -741,14 +752,38 @@ export class Fx {
 
   /** Register a wreck: `get(px)` returns its charred sprite at a device-px-per-cell scale, `hot` the ember points
    *  (hull-local cells). Bigger hulks smoulder longer and heavier. */
-  wreck(x: number, y: number, a: number, S: number, ext: number, get: (px: number) => HTMLCanvasElement, hot: number[], sc = 1): void {
+  wreck(x: number, y: number, a: number, S: number, ext: number, get: (px: number) => HTMLCanvasElement, hot: number[], sc = 1, lv: WreckLevel = 1, kind: DeathKind = 'explosive'): void {
     const scorch: number[] = [];
-    const n = 11, R = (0.42 + 0.08 * Math.min(S, 3)) * S * sc + 0.15;
+    // the harder it went up, the wider the blackened ground
+    const n = 11, R = ((0.42 + 0.08 * Math.min(S, 3)) * S * sc + 0.15) * (lv === 0 && kind === 'kinetic' ? 0.75 : 1 + 0.18 * Math.max(0, lv - 1));
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2, r = R * rr(0.7, 1.15);
       scorch.push(Math.cos(t) * r, Math.sin(t) * r * rr(0.8, 1));
     }
-    this.wrecks.push({ x, y, a, sc, S, t0: this.time, life: S >= 4 ? 48 : 14 + 5 * S, ext, get, hot, scorch, smokeT: rr(0.2, 0.8) });
+    const pieces: number[] = [], holes: number[] = [], scrap: number[] = [], e = ext * sc;
+    if (lv === 1 || lv === 2) {
+      // wedges around the hull centre: level 1 = the hull and one chunk knocked aside, level 2 = 3-4 pieces flung apart
+      const np = lv === 1 ? 2 : 3 + (rnd() < 0.5 ? 1 : 0), a0 = rnd() * PI2;
+      let at = a0;
+      for (let i = 0; i < np; i++) {
+        const span = lv === 1 ? (i === 0 ? rr(4.3, 5) : a0 + PI2 - at) : i === np - 1 ? a0 + PI2 - at : (PI2 / np) * rr(0.75, 1.25);
+        const mid = at + span / 2, d = lv === 1 ? (i === 0 ? 0 : e * rr(0.2, 0.32)) : e * rr(0.22, 0.4) * (kind === 'explosive' ? 1.3 : 1);
+        pieces.push(at, at + span, Math.cos(mid) * d, Math.sin(mid) * d, lv === 1 && i === 0 ? 0 : rr(-0.7, 0.7));
+        at += span;
+      }
+    }
+    if (lv === 0 && kind === 'kinetic' && hot.length) {
+      // riddled: holes punched around the hull's hot cracks (always on the hull)
+      for (let i = 0, nh = 4 + Math.round(S * 2.5); i < nh; i++) { const j = Math.floor(rnd() * (hot.length / 2)) * 2; holes.push(hot[j] + rr(-0.25, 0.25) * S * 0.4, hot[j + 1] + rr(-0.25, 0.25) * S * 0.4); }
+    }
+    if (lv >= 2) {
+      const ns = Math.round((lv === 3 ? 9 : 4) + S * (lv === 3 ? 5 : 2)), reach = e * (lv === 3 ? 1.6 : 1.1) / sc;
+      for (let i = 0; i < ns; i++) { const t = rnd() * PI2, d = reach * Math.sqrt(rr(0.04, 1)); scrap.push(Math.cos(t) * d, Math.sin(t) * d, (0.04 + S * rr(0.03, 0.08)) * (lv === 3 ? 1 : 0.8), rnd() * PI2, rnd()); }
+      // nothing left to smoulder but the scrap: its embers and smoke rise from the pieces
+      if (lv === 3) { hot = []; for (let i = 0; i < Math.min(8, ns); i++) hot.push(scrap[i * 5], scrap[i * 5 + 1]); }
+    }
+    const fireT = kind === 'fire' ? 6 + 2 * S : lv === 0 ? 1.5 + S * 0.5 : lv === 3 ? 1 + S * 0.5 : 2.5 + S * (lv === 2 ? 1.5 : 1);
+    this.wrecks.push({ x, y, a, sc, S, t0: this.time, life: (S >= 4 ? 48 : 14 + 5 * S) * (lv === 3 ? 0.5 : kind === 'energy' ? 1.3 : 1), ext, get, hot, scorch, smokeT: rr(0.2, 0.8), lv, kind, pieces, holes, scrap, fireT });
     if (this.wrecks.length > 260) this.wrecks.shift();
   }
 
@@ -759,7 +794,7 @@ export class Fx {
       if (k <= 0) continue;
       const rS = Math.sqrt(w.S);
       // early fire: small flickering flames licking out of the cracks for the first seconds
-      if (age < 2.5 + w.S && rnd() < dt * (2 + w.S) && this.busy < 0.7 && w.hot.length) {
+      if (age < w.fireT && rnd() < dt * (2 + w.S) * (w.kind === 'fire' ? 2 : 1) && this.busy < 0.7 && w.hot.length) {
         const i = Math.floor(rnd() * (w.hot.length / 2)) * 2, p = this.toWorld(w, w.hot[i], w.hot[i + 1]);
         this.fire(p.x, p.y, 0.07 * rS, 0.35, this.up.x * 0.3, this.up.y * 0.3);
       }
@@ -846,7 +881,18 @@ export class Fx {
     g.globalCompositeOperation = prev;
   }
 
+  /** hull-local point -> world, following the piece of a broken hull it lies on */
   private toWorld(w: Wreck, lx: number, ly: number): { x: number; y: number } {
+    const P = w.pieces;
+    if (P.length) {
+      let t = Math.atan2(ly, lx);
+      while (t < P[0]) t += PI2;
+      for (let i = 0; i < P.length; i += 5) if (t < P[i + 1] || i + 5 >= P.length) {
+        const c = Math.cos(P[i + 4]), s = Math.sin(P[i + 4]), ox = P[i + 2] / w.sc, oy = P[i + 3] / w.sc;
+        const x = c * lx - s * ly + ox; ly = s * lx + c * ly + oy; lx = x;
+        break;
+      }
+    }
     const c = Math.cos(w.a), s = Math.sin(w.a);
     return { x: w.x + (c * lx - s * ly) * w.sc, y: w.y + (s * lx + c * ly) * w.sc };
   }
@@ -863,10 +909,36 @@ export class Fx {
       for (let i = 0; i < w.scorch.length; i += 2) g.lineTo(w.scorch[i], w.scorch[i + 1]);
       g.closePath();
       g.fill();
-      g.fillStyle = 'rgba(10,8,6,0.3)';
+      g.fillStyle = w.lv >= 2 ? 'rgba(8,6,4,0.38)' : 'rgba(10,8,6,0.3)';
       g.save(); g.scale(0.62, 0.62); g.fill(); g.restore();
-      const e = w.ext * w.sc;
-      g.drawImage(w.get(px * w.sc), -e, -e, e * 2, e * 2);
+      const e = w.ext * w.sc, P = w.pieces;
+      // scattered scrap (level 2-3): small torn plates, darker the closer to the blast
+      for (let i = 0; i < w.scrap.length; i += 5) {
+        const q = w.scrap, sz = q[i + 2] * w.sc, sh = q[i + 4];
+        g.save(); g.translate(q[i] * w.sc, q[i + 1] * w.sc); g.rotate(q[i + 3]);
+        g.fillStyle = sh < 0.5 ? '#1c1916' : sh < 0.85 ? '#34302b' : '#4a443c';
+        g.beginPath(); g.moveTo(-sz, -sz * 0.5); g.lineTo(sz * 0.7, -sz * 0.7); g.lineTo(sz, sz * 0.4); g.lineTo(-sz * 0.4, sz * 0.6); g.closePath(); g.fill();
+        g.restore();
+      }
+      if (w.lv < 3) {
+        const img = w.get(px * w.sc);
+        if (!P.length) g.drawImage(img, -e, -e, e * 2, e * 2);
+        // broken hull: each piece is a wedge of the hulk's sprite, shifted and turned where the blast threw it
+        for (let i = 0; i < P.length; i += 5) {
+          g.save(); g.translate(P[i + 2], P[i + 3]); g.rotate(P[i + 4]);
+          g.beginPath(); g.moveTo(0, 0);
+          const a0 = P[i], a1 = P[i + 1], R = e * 1.5, st = Math.max(2, Math.ceil((a1 - a0) / 0.5));
+          for (let k = 0; k <= st; k++) { const t = a0 + ((a1 - a0) * k) / st; g.lineTo(Math.cos(t) * R, Math.sin(t) * R); }
+          g.closePath(); g.clip();
+          g.drawImage(img, -e, -e, e * 2, e * 2);
+          g.restore();
+        }
+        if (w.holes.length) {
+          g.fillStyle = 'rgba(6,5,4,0.9)';
+          const hr = Math.max(0.025, 0.035 * Math.sqrt(w.S)) * w.sc;
+          for (let i = 0; i < w.holes.length; i += 2) { g.beginPath(); g.arc(w.holes[i] * w.sc, w.holes[i + 1] * w.sc, hr * (0.7 + 0.6 * hash1(i + w.t0)), 0, PI2); g.fill(); }
+        }
+      }
       g.setTransform(tr);
     }
     const prev = g.globalCompositeOperation;
@@ -876,6 +948,12 @@ export class Fx {
       const k = 1 - (this.time - w.t0) / w.life;
       if (k <= 0) continue;
       const rS = Math.sqrt(Math.min(w.S, 4));
+      // melted (energy kill): the whole hulk glows dull red and cools down
+      if (w.kind === 'energy' && w.lv < 3) {
+        const h = Math.pow(k, 3), e = w.ext * w.sc * (w.lv ? 0.8 : 0.55);
+        g.globalAlpha = clamp(h * 0.7, 0, 1);
+        g.drawImage(hotA, w.x - e, w.y - e, e * 2, e * 2);
+      }
       for (let i = 0; i < w.hot.length; i += 2) {
         const f = 0.6 + 0.4 * Math.sin(this.time * (5 + i) + i * 2.3) * Math.sin(this.time * 2.1 + i);
         const p = this.toWorld(w, w.hot[i], w.hot[i + 1]);

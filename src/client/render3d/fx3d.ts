@@ -338,6 +338,66 @@ class Debris {
   clear(): void { this.n = 0; this.mesh.count = 0; }
 }
 
+/* ------------------------------------------------------------------------------------------------- scrap */
+
+/** Wreck scrap that stays for the rest of the battle: torn plates and chunks thrown out by a hull that blew apart.
+ *  Pieces fly ballistically, then lie flat where they land; only flying pieces cost per-frame work. */
+class Scrap {
+  readonly mesh: THREE.InstancedMesh;
+  private n = 0;
+  private flying = 0;
+  private cap: number;
+  private a: Float32Array; // x y z vx vy vz ry rx rz sx sy sz flying
+  constructor(cap: number) {
+    this.cap = cap;
+    this.a = new Float32Array(cap * 13);
+    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, metalness: 0.3 }), cap);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
+    this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.castShadow = true; this.mesh.receiveShadow = true;
+  }
+  /** a piece of size s (cells) thrown from (x, y, z) to land about `d` cells away at heading `ang`; tone = grey level */
+  add(x: number, y: number, z: number, ang: number, d: number, s: number, tone: number, plate: boolean): void {
+    // past the cap a random old piece is recycled
+    const i = this.n < this.cap ? this.n++ : Math.floor(Math.random() * this.cap);
+    const o = i * 13, a = this.a, vy = R(3, 6.5), t = (vy + Math.sqrt(vy * vy + 28 * y)) / 14;
+    a[o] = x; a[o + 1] = y; a[o + 2] = z;
+    a[o + 3] = Math.cos(ang) * d / t; a[o + 4] = vy; a[o + 5] = Math.sin(ang) * d / t;
+    a[o + 6] = Math.random() * 6.28; a[o + 7] = R(-3, 3); a[o + 8] = R(-3, 3);
+    a[o + 9] = s * R(0.7, 1.4); a[o + 10] = plate ? s * R(0.12, 0.25) : s * R(0.4, 0.8); a[o + 11] = s * R(0.5, 1.1); a[o + 12] = 1;
+    const c = this.mesh.instanceColor!.array as Float32Array;
+    c[i * 3] = tone * R(0.95, 1.15); c[i * 3 + 1] = tone; c[i * 3 + 2] = tone * R(0.85, 0.95);
+    this.mesh.instanceColor!.needsUpdate = true;
+    this.flying++;
+    this.put(i);
+    this.mesh.count = this.n;
+  }
+  private put(i: number): void {
+    const o = i * 13, a = this.a;
+    _q.setFromEuler(_e.set(a[o + 7], a[o + 6], a[o + 8], 'YXZ'));
+    _sm.compose(_p.set(a[o], a[o + 1], a[o + 2]), _q, _s.set(a[o + 9], a[o + 10], a[o + 11]));
+    _sm.toArray(this.mesh.instanceMatrix.array as unknown as number[], i * 16);
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+  update(dt: number): void {
+    if (!this.flying) return;
+    let fl = 0;
+    for (let i = 0; i < this.n; i++) {
+      const o = i * 13, a = this.a;
+      if (!a[o + 12]) continue;
+      a[o + 4] -= 14 * dt;
+      a[o] += a[o + 3] * dt; a[o + 1] += a[o + 4] * dt; a[o + 2] += a[o + 5] * dt;
+      a[o + 7] += a[o + 3] * dt * 2; a[o + 8] += a[o + 5] * dt * 2;
+      // landed: lie (nearly) flat, half sunk into the dirt
+      if (a[o + 1] <= a[o + 10] * 0.3) { a[o + 1] = a[o + 10] * 0.3; a[o + 7] = R(-0.15, 0.15); a[o + 8] = R(-0.15, 0.15); a[o + 12] = 0; } else fl++;
+      this.put(i);
+    }
+    this.flying = fl;
+  }
+  clear(): void { this.n = 0; this.flying = 0; this.mesh.count = 0; }
+}
+const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _sm = new THREE.Matrix4();
+
 /* ----------------------------------------------------------------------------------------------- beams / bolts */
 
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _mid = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
@@ -582,6 +642,7 @@ export class Fx3D {
   private aoe: Flats;
   private pools: Flats;
   private debris = new Debris(500);
+  private scrap = new Scrap(2400);
   private scorch: THREE.InstancedMesh;
   private scorchN = 0;
   private beamsCore = new Segments(2400, true, 10);
@@ -624,7 +685,7 @@ export class Fx3D {
     this.scorch = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: st, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 256);
     this.scorch.frustumCulled = false; this.scorch.count = 0; this.scorch.renderOrder = 2;
     this.debris.mesh.renderOrder = 3;
-    for (const o of [this.scorch, this.groundFire.mesh, this.debris.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.aoe.mesh, this.fire.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.proj.group]) this.group.add(o);
+    for (const o of [this.scorch, this.groundFire.mesh, this.debris.mesh, this.scrap.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.aoe.mesh, this.fire.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.proj.group]) this.group.add(o);
   }
 
   /** tint ground dust to the map */
@@ -635,7 +696,7 @@ export class Fx3D {
   }
 
   clear(): void {
-    this.add.clear(); this.fire.clear(); this.alpha.clear(); this.rings.clear(); this.aoe.clear(); this.pools.clear(); this.debris.clear();
+    this.add.clear(); this.fire.clear(); this.alpha.clear(); this.rings.clear(); this.aoe.clear(); this.pools.clear(); this.debris.clear(); this.scrap.clear();
     this.scorchN = 0; this.scorch.count = 0;
     this.bolts.length = 0; this.later.length = 0; this.smokes.length = 0; this.fields.length = 0;
     this.trauma = 0; this.flashA = 0;
@@ -1265,6 +1326,23 @@ export class Fx3D {
     }
   }
 
+  /** A hull blown apart (wreck level 2-3): n pieces of scrap up to `reach` cells out that stay on the field, plus a
+   *  shower of short-lived fragments. hot: share of glowing (melted) pieces for energy kills. */
+  scatter(x: number, z: number, y: number, n: number, reach: number, size: number, hot = 0): void {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.283, d = reach * Math.sqrt(Math.random()), s = size * R(0.35, 1);
+      this.scrap.add(x + R(-0.3, 0.3) * size, y + R(0.2, 0.6), z + R(-0.3, 0.3) * size, a, d, s, Math.random() < hot ? R(0.45, 0.7) : R(0.05, 0.14), Math.random() < 0.55);
+      if (Math.random() < hot) this.add.emit(x, y + 0.3, z, Math.cos(a) * d * 1.4, R(3, 6), Math.sin(a) * d * 1.4, R(0.6, 1.2), 0.12 + s * 0.3, 0.03, 0, 0.6, -10, 3, RAMPS.ember, this.hdr);
+    }
+    const nc = this.lodN(n);
+    for (let i = 0; i < nc; i++) {
+      const a = Math.random() * 6.283, sp = R(2, 5) + reach;
+      this.debris.add(x, y + 0.4, z, Math.cos(a) * sp, R(5, 10), Math.sin(a) * sp, size * R(0.15, 0.4), R(0.15, 0.35));
+    }
+  }
+  /** blackened ground under a wreck / where a unit was vaporised */
+  scorchMark(x: number, z: number, r: number): void { this.addScorch(x, z, r); }
+
   private addScorch(x: number, z: number, r: number): void {
     const i = this.scorchN % 256;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(_up, Math.random() * 6.28);
@@ -1321,6 +1399,7 @@ export class Fx3D {
     this.aoe.update(dt);
     this.pools.update(dt);
     this.debris.update(dt);
+    this.scrap.update(dt);
     // bolts: rebuilt each frame; lightning re-rolls its jag every 45 ms
     this.beamsCore.begin(); this.beamsGlow.begin();
     const tmp: number[] = [];
