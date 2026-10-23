@@ -17,7 +17,7 @@ import { slotError } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStats, defaultOrders, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
@@ -825,7 +825,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           h('span.g-tag.dom', { class: `d-${designDomain(d)}`, title: DOMAINS.find((x) => x.id === designDomain(d))?.name ?? '' }, DOMAIN_BADGE[designDomain(d)]),
           h('span.g-size', null, s ? (s.squad > 1 ? `${s.fw}×${s.fh}` : designSizeLabel(s)) : '?'),
           s && s.squad > 1 ? h('span.g-tag.squad', { title: `One purchase deploys a squad of ${s.squad} units` }, `×${s.squad}`) : null,
-          h('span.g-item-cost', { title: s && s.squad > 1 ? `Supply per block of ${s.squad} (≈${s.unitCost} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
+          h('span.g-item-cost', { title: s && s.squad > 1 ? `Supply per block of ${s.squad} (≈${fmtUnitPrice(s.unitCost)} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
           s?.flying ? h('span.g-tag.air', null, 'AIR') : null,
           s?.isStatic ? h('span.g-tag.static', null, 'FIX') : null,
         ),
@@ -883,7 +883,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       s?.isStatic ? h('span.g-plate.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-plate.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
     ].filter((x): x is HTMLSpanElement => !!x));
-    stageCost.replaceChildren(h('span.g-prev-cost-l', { title: s && s.squad > 1 ? `Price of one block of ${s.squad} units (about ${s.unitCost} per unit)` : 'Supply price' }, s && s.squad > 1 ? `Supply · block of ${s.squad} · ≈${s.unitCost} each` : 'Supply'), h('span.g-prev-cost-v', null, icon('cost'), h('b', null, s ? String(s.cost) : '–'), delta(ss && s ? s.cost - ss.cost : null, { invert: true })));
+    stageCost.replaceChildren(h('span.g-prev-cost-l', { title: s && s.squad > 1 ? `Price of one block of ${s.squad} units (about ${fmtUnitPrice(s.unitCost)} per unit)` : 'Supply price' }, s && s.squad > 1 ? `Supply · block of ${s.squad} · ≈${fmtUnitPrice(s.unitCost)} each` : 'Supply'), h('span.g-prev-cost-v', null, icon('cost'), h('b', null, s ? String(s.cost) : '–'), delta(ss && s ? s.cost - ss.cost : null, { invert: true })));
     const empty = draft.mounts.filter((m, i) => !m && i < c.mounts.length).length + Math.max(0, c.mounts.length - draft.mounts.length);
     stageHint.replaceChildren(empty ? `Drag parts onto the ${empty} empty socket${empty > 1 ? 's' : ''}` : 'Drag a part onto a socket to swap it');
     rangeBtn.classList.toggle('on', rangesOn);
@@ -1274,6 +1274,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   const row = (k: string, v: Node | string, extra?: Node | null) => h('div.g-spec', null, h('span.g-spec-k', null, k), h('span.g-spec-v', null, v, extra ?? null));
+  /** a part's complexity points: NOT supply (they feed the price x PARTS_WEIGHT, scaled by hull class, ÷ PRICE_DIV); the
+   *  supply effect of a part is the Cost/buy line of its "If you switch" comparison and the Intel cost breakdown */
+  const complexityRow = (pts: number) => h('div.g-spec', { title: `Complexity points, not supply: ${PARTS_WEIGHT} × the design's total complexity goes into its unit value. See Intel for the supply breakdown.` },
+    h('span.g-spec-k', null, 'Complexity'), h('span.g-spec-v', null, String(pts), h('small', null, ' pts')));
   /** Headline number: label on top, big value. */
   const kstat = (label: string, value: Node | string, unit = '', cls = '') =>
     h('div.g-kstat', { class: cls || null }, h('span.g-kstat-l', null, label), h('span.g-kstat-v', null, value, unit ? h('small', null, unit) : null));
@@ -1337,7 +1341,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       ...details([
         row('Weight', String(c.weight)),
         row('Agility', `×${c.agility.toFixed(2)}`),
-        row('Base cost', h('span.g-costv', null, icon('cost'), String(c.cost))),
+        complexityRow(c.cost),
         row('Drives', MOBILITY.filter((m) => !pairingError(c.id, m.id)).map((m) => m.name).join(', ')),
       ], [c.traits.length ? h('div.g-fxs', null, ...c.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null]),
     ].filter(Boolean) as HTMLElement[];
@@ -1364,7 +1368,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       ...details([
         row('Weight', String(m.weight * c.size)),
         row('Hull bonus', `+${m.hp * c.size} hp${m.armor ? ` · +${m.armor} arm` : ''}`),
-        row('Cost', h('span.g-costv', null, icon('cost'), String(m.cost * c.size))),
+        complexityRow(m.cost * c.size),
       ], [m.traits.length ? h('div.g-fxs', null, ...m.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null]),
     ].filter(Boolean) as HTMLElement[];
   }
@@ -1396,7 +1400,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     keys.push(kstat('Weight', fmt(m.weight)));
     const trav = traverseDeg(m);
     if (trav !== null) specs.push(row('Turret turn', `${trav}°/s`, trav < SLOW_TURRET_DEG ? h('span.g-warnlbl', null, ' slow') : null));
-    specs.push(row('Base cost', h('span.g-costv', null, icon('cost'), String(m.cost))));
+    specs.push(complexityRow(m.cost));
     const fx = moduleEffects(m);
     const target = autoSlot(m);
     const lock = reqReason(m);
@@ -1461,27 +1465,33 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const s = statsOf(draft);
     if (!s) return [h('p.g-note', null, 'This design has no valid stats yet.')];
     const ss = saved && dirty() ? statsOf(saved) : null;
-    const parts = PARTS_WEIGHT * s.partsCost;
-    const pow = POWER_K * s.power;
-    const tot = parts + pow || 1;
-    const d = (k: 'offense' | 'ehp' | 'partsCost' | 'power') => (ss ? delta(s[k] - ss[k]) : null);
+    // every row is supply for one purchase (the whole block for a squad), from the same numbers the price is built from
+    const q = s.squad;
+    const parts = s.priceParts * q, pow = s.pricePower * q, sup = s.priceSupport * q;
+    const tot = parts + pow + sup || 1;
+    const rounding = s.cost - (parts + pow + sup);
+    const d = (k: 'offense' | 'ehp' | 'power') => (ss ? delta(s[k] - ss[k]) : null);
     const c = chassis();
     const weapons = c.mounts.map((cls, i) => ({ cls, i, m: draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined }));
+    const sv = (v: number) => (Math.abs(v) < 10 ? (Math.round(v * 10) / 10).toString() : String(Math.round(v)));
     return [
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, 'Cost breakdown'),
-        h('div.g-costhead', null, icon('cost'), h('b', null, String(s.cost)), h('span', null, s.squad > 1 ? `supply / block of ${s.squad}` : 'supply')),
+        h('div.g-costhead', null, icon('cost'), h('b', null, String(s.cost)), h('span', null, q > 1 ? `supply / block of ${q}` : 'supply')),
         h('div.g-cost-bar', { 'aria-hidden': 'true' },
           h('span.parts', { style: { width: `${(parts / tot) * 100}%` } }),
-          h('span.power', { style: { width: `${(pow / tot) * 100}%` } })),
+          h('span.power', { style: { width: `${((pow + sup) / tot) * 100}%` } })),
         h('div.g-specs', null,
-          s.squad > 1 ? row('Per unit', `≈${s.unitCost} × ${s.squad} units`) : null,
-          row(s.squad > 1 ? 'Parts complexity (each)' : 'Parts complexity', `${Math.round(s.partsCost)} ≈${Math.round(parts)}`, d('partsCost')),
-          row(s.squad > 1 ? 'Combat power (each)' : 'Combat power', `${s.power} ≈${Math.round(pow)}`, d('power')),
-          row(s.squad > 1 ? 'Offense rating (each)' : 'Offense rating', String(s.offense), d('offense')),
-          row(s.squad > 1 ? 'Effective HP (each)' : 'Effective HP', String(s.ehp), d('ehp')),
+          q > 1 ? row('Per unit', `≈${fmtUnitPrice(s.unitCost)} × ${q} units`) : null,
+          row('Parts complexity', `${sv(parts)} supply`),
+          row('Combat power', `${sv(pow)} supply`),
+          sup >= 0.05 ? row('Support (auras, point defense)', `${sv(sup)} supply`) : null,
+          Math.abs(rounding) >= 0.05 ? row('Rounding', `${rounding > 0 ? '+' : '−'}${sv(Math.abs(rounding))}`) : null,
+          row(q > 1 ? 'Combat power rating (each)' : 'Combat power rating', String(s.power), d('power')),
+          row(q > 1 ? 'Offense rating (each)' : 'Offense rating', String(s.offense), d('offense')),
+          row(q > 1 ? 'Effective HP (each)' : 'Effective HP', String(s.ehp), d('ehp')),
         ),
-        h('p.g-note', null, `Unit value = ${PARTS_WEIGHT} × parts + ${POWER_K} × power, scaled by hull size class and drive, ÷ ${PRICE_DIV}${s.squad > 1 ? `; a block is ${s.squad} units` : ''}; the price is rounded (to 10, or 50 above 1000). Power = √(offense × effective hp) × mobility, so equal-supply armies are balanced.`),
+        h('p.g-note', null, `Unit value = ${PARTS_WEIGHT} × parts complexity (${Math.round(s.partsCost)}) + ${POWER_K} × power, scaled by hull size class and drive, plus support auras, ÷ ${PRICE_DIV}${q > 1 ? `; × ${q} units per block` : ''}; the price is rounded (to 10, or 50 above 1000). Power = √(offense × effective hp) × mobility, so equal-supply armies are balanced.`),
       ),
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, 'Hardpoints'),

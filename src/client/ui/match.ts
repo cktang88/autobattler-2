@@ -16,9 +16,9 @@ import type { UnitFoot } from '../../shared/grid.ts';
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
 import { bodyScale, hullK, mountOffsets } from '../../shared/mountgeo.ts';
 import { TILT_SIN, flyHeight, hullHeight } from '../render/tilt.ts';
-import { battleInputFor, MAX_BLOCKS, MAX_SIM_UNITS, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
+import { battleInputFor, MAX_BLOCKS, MAX_SIM_UNITS, START_HP, placementValue, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
-import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
+import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, fmtUnitPrice, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
 import { mapForRound } from '../render/ground.ts';
@@ -377,7 +377,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         (() => { const inf = infoOf(d); return inf ? h('div.card-roles', null,
           inf.gnd > 0 ? h('span.db-chip.gnd', { title: 'Hits ground units' }, 'GND') : null,
           inf.air > 0 ? h('span.db-chip.air', { title: 'Hits aircraft' }, 'AIR') : null) : null; })(),
-        h('div.meta', null, h('span.cost', { title: st && st.squad > 1 ? `Block price: ${st.squad} units (${st.unitCost} each)` : 'Supply price' }, st ? String(st.cost) : '?'), st && st.squad > 1 ? h('span.squad-badge', { title: `Squad of ${st.squad}` }, `×${st.squad}`) : null, h('span', null, st ? `${sizeLabel(st.size)}${st.flying ? ' · Air' : ''}` : 'invalid')),
+        h('div.meta', null, h('span.cost', { title: st && st.squad > 1 ? `Block price: ${st.squad} units (≈${fmtUnitPrice(st.unitCost)} each)` : 'Supply price' }, st ? String(st.cost) : '?'), st && st.squad > 1 ? h('span.squad-badge', { title: `Squad of ${st.squad}` }, `×${st.squad}`) : null, h('span', null, st ? `${sizeLabel(st.size)}${st.flying ? ' · Air' : ''}` : 'invalid')),
       );
       attachDeckTip(b, d);
       return b;
@@ -471,8 +471,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (u && old) old.replaceWith(liveLine(u));
   }
   /** block price; for a squad it buys all its units */
-  const costTag = (st: UnitStats) => h('span.sc-cost', { title: st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${st.unitCost} each)` : 'Supply price' },
-    svgIcon('cost', 16), String(st.cost), st.squad > 1 ? h('small.sc-per', null, ` for ${st.squad}`) : null);
+  /** `d` + `level` > 1: also the supply invested in the block (price + its upgrades), which is what it is worth */
+  const costTag = (st: UnitStats, d?: Design, level = 1) => {
+    const inv = d && level > 1 ? placementValue(d, level) : 0;
+    return h('span.sc-cost', { title: `${st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${fmtUnitPrice(st.unitCost)} each)` : 'Supply price'}${inv ? ` · ${inv} invested with level ${level} upgrades` : ''}` },
+      svgIcon('cost', 16), String(st.cost), st.squad > 1 ? h('small.sc-per', null, ` for ${st.squad}`) : null, inv ? h('small.sc-per', null, ` · ${inv} invested`) : null);
+  };
   function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean, dmg: HTMLElement | null = null, rot = false): HTMLElement {
     const lv = Math.max(1, Math.min(MAX_LEVEL, level));
     return h('div.stat-tip', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
@@ -912,7 +916,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     return h('div.head', null, prev, h('div', null,
       h('h3', { class: mine ? 'friendly' : 'enemy' }, d.name),
       h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.85rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
-      h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, costTag(st)),
+      h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, costTag(st, d, lv)),
     ));
   }
   const blockParts = (d: Design) => h('div.parts', null, [CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name].filter(Boolean).join(' · '));

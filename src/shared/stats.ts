@@ -295,14 +295,18 @@ export function computeStats(d: Design): UnitStats {
   ehp = Math.max(ehp, SHELTER_EHP * Math.min(1, Math.max(0, (range - SHELTER_FROM) / SHELTER_SPAN)));
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  let unitCost = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1));
+  const classK = (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1);
+  const base = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
   const squad = squadSize(size);
-  unitCost += SUPPORT_K * (support * auraSquadShare(squad) + interceptors);
-  const cost = roundCost(unitCost * squad);
+  const extra = SUPPORT_K * (support * auraSquadShare(squad) + interceptors);
+  // the block price is the only rounded number: every per-unit figure below is derived from it or sums to it
+  const cost = roundCost((base + extra) * squad);
+  const priceParts = Math.min(base, PARTS_WEIGHT * partsCost * classK) / PRICE_DIV;
 
   return {
     size, fw: c.footprint?.[0] ?? size, fh: c.footprint?.[1] ?? size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
-    speed: Math.round(speed * 100) / 100, turn, cost, unitCost: Math.round(unitCost / PRICE_DIV), squad,
+    speed: Math.round(speed * 100) / 100, turn, cost, unitCost: cost / squad, squad,
+    priceParts, pricePower: base / PRICE_DIV - priceParts, priceSupport: extra / PRICE_DIV,
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
@@ -328,6 +332,12 @@ export const PRICE_DIV = 5;
 /** Round a raw model cost to a supply price. */
 export function roundCost(raw: number): number {
   return roundPrice(raw / PRICE_DIV);
+}
+/** Display text of a per-unit price share (UnitStats.unitCost, = block price / squad): one decimal below 100, so that
+ *  "≈N each × squad" multiplies back to the block price. */
+export function fmtUnitPrice(v: number): string {
+  if (Number.isInteger(v) || v >= 100) return String(Math.round(v));
+  return v.toFixed(1).replace(/\.0$/, '');
 }
 /** Round an already-scaled supply amount: nearest 10 below 1000, nearest 50 above. */
 export function roundPrice(v: number): number {

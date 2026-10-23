@@ -263,8 +263,13 @@ export interface UnitStats {
   turn: number;
   /** supply price of one BLOCK (squadSize units), rounded via roundCost — what the player pays */
   cost: number;
-  /** model value of a single unit (unrounded) — use for per-unit value comparisons in the sim */
+  /** one unit's share of the block price: cost / squad (not rounded; show it with stats.ts fmtUnitPrice) */
   unitCost: number;
+  /** supply breakdown of ONE unit's price (unrounded; (priceParts + pricePower + priceSupport) x squad rounds to cost):
+   *  parts complexity, combat power (both scaled by hull class and drive), support auras / point defense */
+  priceParts: number;
+  pricePower: number;
+  priceSupport: number;
   /** units per purchased block (grid.ts squadSize) */
   squad: number;
   flying: boolean;

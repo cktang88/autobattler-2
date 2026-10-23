@@ -239,7 +239,7 @@ export function moduleTooltip(mod: ModuleDef): string {
   const trav = traverseDeg(mod);
   if (trav !== null) lines.push(`Traverse ${trav}°/s${trav < SLOW_TURRET_DEG ? ' (slow turret)' : ''}`);
   for (const rule of moduleRules(mod)) lines.push(`• ${rule}`);
-  lines.push(`Weight ${mod.weight} · Base cost ${mod.cost}`);
+  lines.push(`Weight ${mod.weight} · Complexity ${mod.cost} pts`);
   return lines.join('\n');
 }
 

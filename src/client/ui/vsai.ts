@@ -12,6 +12,7 @@ import type { Design } from '../../shared/types.ts';
 import { paintPreview, sizeLabel } from './match-ui.ts';
 import * as kit from './kit.ts';
 import { CAPS, analyzeDeck, designInfo, type Cap, type DesignInfo } from './deckstats.ts';
+import { fmtUnitPrice } from '../../shared/stats.ts';
 
 const KEY_DIFF = 'ab2.aiDifficulty';
 const KEY_SORT = 'ab2.deckSort';
@@ -167,7 +168,7 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = {
     h('div.db-name', { title: i.d.name }, i.d.name),
     roleChips(i),
     h('div.db-meta', null,
-      h('b.db-cost', { title: st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${st.unitCost} each)` : 'Supply price' }, String(i.cost)),
+      h('b.db-cost', { title: st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${fmtUnitPrice(st.unitCost)} each)` : 'Supply price' }, String(i.cost)),
       st.squad > 1 ? null : h('span', { title: 'Footprint in cells (width × length)' }, `${st.fw}×${st.fh}`),
       h('span', { title: 'Longest reach' }, `${Math.round(i.rangeM)} m`)),
     capBadges(i),

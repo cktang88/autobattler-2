@@ -115,7 +115,7 @@ test('prices are raw cost / 5: supply, upgrades and unit costs share one scale',
     const s = computeStats(d);
     maxCost = Math.max(maxCost, s.cost);
     // a block's price is its squad's unit costs (both on the /5 scale)
-    assert.ok(Math.abs(s.cost - s.unitCost * s.squad) <= Math.max(10, s.cost * 0.06), `${d.name}: block ${s.cost} vs ${s.unitCost} x ${s.squad}`);
+    assert.ok(Math.abs(s.cost - s.unitCost * s.squad) < 1e-9, `${d.name}: block ${s.cost} vs ${s.unitCost} x ${s.squad}`);
     // upgrades are 50% / 60% of the (already scaled) price -- not divided by 5 a second time
     assert.ok(Math.abs(upgradeCost(d, 1) - 0.5 * s.cost) <= Math.max(10, s.cost * 0.03), `${d.name} L1->2 ${upgradeCost(d, 1)} of ${s.cost}`);
     assert.ok(Math.abs(upgradeCost(d, 2) - 0.6 * s.cost) <= Math.max(10, s.cost * 0.03), `${d.name} L2->3 ${upgradeCost(d, 2)} of ${s.cost}`);
