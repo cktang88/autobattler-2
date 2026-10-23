@@ -145,23 +145,25 @@ export interface EscortUi { label: string | null; picking: boolean; onPick(): vo
 
 /** Compact battle-AI panel. Targeting (priority + focus fire) / Movement (stance, kite, keep spread, delay, retreat, escort). */
 export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void,
-  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[]; defaults?: DefaultOrders } = {}): HTMLElement {
+  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[]; defaults?: DefaultOrders; mixed?: ReadonlySet<keyof Orders> } = {}): HTMLElement {
+  // every control carries a focus key (data-fk): the panel is rebuilt on each change and the caller refocuses it
+  const mx = (k: keyof Orders) => !!opts.mixed?.has(k);
   const chip = (label: string, tip: string, v: boolean, key: keyof Orders) =>
-    kit.toggle({ label, on: v, title: tip, className: `ord-${String(key)}`, onChange: (nv) => on({ [key]: nv }) });
+    kit.toggle({ label, on: v && !mx(key), mixed: mx(key), title: tip, className: `ord-${String(key)}`, fk: `ord-${String(key)}`, onChange: (nv) => on({ [key]: nv }) });
   const tgt = kit.select({
-    value: o.target, label: 'Targeting priority', title: TARGET_INFO[o.target].tip, className: 'ord-sel',
+    value: mx('target') ? '' as TargetPriority : o.target, placeholder: 'Mixed', label: 'Targeting priority', title: mx('target') ? 'The selected blocks use different priorities' : TARGET_INFO[o.target].tip, className: 'ord-sel', fk: 'ord-target',
     options: TARGET_PRIORITIES.map((t) => ({ value: t, label: TARGET_INFO[t].label, icon: TARGET_INFO[t].icon, hint: TARGET_INFO[t].tip })),
     onChange: (v) => on({ target: v }),
   });
   const stance = kit.select({
-    value: o.stance, label: 'Stance', title: STANCE_INFO[o.stance].tip, className: 'ord-sel',
+    value: mx('stance') ? '' as Stance : o.stance, placeholder: 'Mixed', label: 'Stance', title: mx('stance') ? 'The selected blocks use different stances' : STANCE_INFO[o.stance].tip, className: 'ord-sel', fk: 'ord-stance',
     options: STANCES.map((t) => ({ value: t, label: STANCE_INFO[t].label, hint: STANCE_INFO[t].tip })),
     onChange: (v) => on({ stance: v }),
   });
   const esc = opts.escort;
   const ko = opts.kiteOptions ?? [];
   const kiteSel = o.kite && ko.length >= 2 ? h('div.ord-row', null, h('span', null, 'Kite with'), kit.select({
-    value: String(ko.some((k) => k.mount === o.kiteMount) ? o.kiteMount : -1), label: 'Kite with', className: 'ord-sel',
+    value: String(ko.some((k) => k.mount === o.kiteMount) ? o.kiteMount : -1), label: 'Kite with', className: 'ord-sel', fk: 'ord-kitemount',
     title: 'Which weapon\'s range to keep to while kiting',
     options: [{ value: '-1', label: 'Longest range (default)' }, ...ko.map((k) => ({ value: String(k.mount), label: k.label }))],
     onChange: (v) => on({ kiteMount: Number(v) }),
@@ -183,10 +185,10 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
       kiteSel,
       h('div.hold-row', null,
         h('span', { title: 'Wait before moving; weapons still fire at anything in range' }, 'Start delay'),
-        kit.segmented({ value: o.delay, label: 'Start delay', className: 'full', options: START_DELAYS.map((d) => ({ value: d, label: d ? `${d}s` : 'None' })), onChange: (d) => on({ delay: d }) }),
+        kit.segmented({ value: mx('delay') ? -1 : o.delay, label: 'Start delay', className: 'full', fk: 'ord-delay', options: START_DELAYS.map((d) => ({ value: d, label: d ? `${d}s` : 'None' })), onChange: (d) => on({ delay: d }) }),
       ),
       esc ? h('div.ord-row.escort', null,
-        kit.toggle({ label: esc.picking ? 'Click a friendly block…' : 'Escort…', on: esc.picking, title: 'Pick a friendly block to stay close to and protect', onChange: () => esc.onPick() }),
+        kit.toggle({ label: esc.picking ? 'Click a friendly block…' : 'Escort…', on: esc.picking, title: 'Pick a friendly block to stay close to and protect', fk: 'ord-escort', onChange: () => esc.onPick() }),
         esc.label ? h('span.esc-label', null, `→ ${esc.label}`, h('button.k-x', { type: 'button', title: 'Stop escorting', 'aria-label': 'Stop escorting', onclick: () => esc.onClear() }, '✕')) : null,
       ) : null,
     ),

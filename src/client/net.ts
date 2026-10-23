@@ -82,6 +82,8 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, sig
 
 /** Log in with a callsign. With a stored session this renames that same account (its garage and matches stay). */
 export async function login(name: string): Promise<Session> {
+  // an auto-session being created right now (garage sync) is the account to rename, not one to replace
+  if (pendingAuto) await pendingAuto.catch(() => {});
   const prev = currentSession();
   const s = await call<Session>('POST', '/login', prev ? { name, token: prev.token } : { name });
   setSession({ playerId: s.playerId, name: s.name, token: s.token });
@@ -89,12 +91,20 @@ export async function login(name: string): Promise<Session> {
 }
 
 /** The stored session, or a fresh account under a placeholder callsign (so designs can be saved server-side). */
-export async function ensureSession(): Promise<Session> {
+let pendingAuto: Promise<Session> | null = null;
+export function ensureSession(): Promise<Session> {
   const cur = currentSession();
-  if (cur) return cur;
-  const s = await call<Session>('POST', '/login', { name: `Pilot ${1000 + Math.floor(Math.random() * 9000)}` });
-  setSession({ playerId: s.playerId, name: s.name, token: s.token, auto: true });
-  return currentSession()!;
+  if (cur) return Promise.resolve(cur);
+  // one placeholder account at a time (startup sync, a write, the lobby may all ask at once)
+  pendingAuto ??= (async () => {
+    try {
+      const s = await call<Session>('POST', '/login', { name: `Pilot ${1000 + Math.floor(Math.random() * 9000)}` });
+      // a real login that finished meanwhile wins over the placeholder
+      if (!currentSession()) setSession({ playerId: s.playerId, name: s.name, token: s.token, auto: true });
+      return currentSession()!;
+    } finally { pendingAuto = null; }
+  })();
+  return pendingAuto;
 }
 
 export interface GarageData { designs: Design[]; deck: string[]; rev: number; updatedAt: number }
