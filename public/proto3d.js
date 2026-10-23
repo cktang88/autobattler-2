@@ -34141,8 +34141,8 @@ var MODULES = [
   util({ id: "hardened", name: "Hardened Systems", family: "EMP shielding", desc: "Immune to stun, slow, disarm, burning and knockback.", category: "defense", visual: "coolant", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, hardened: true }),
   util({ id: "nanite", name: "Nanite Hull", family: "Self-repair", desc: "Regenerates 2.5% max hp per second when out of combat for 2s.", category: "defense", visual: "nanite", caliber: 0.4, mount: "S", weight: 1, cost: 3, regen: 0.025 }),
   // ---------------- Stealth & ECM ----------------
-  util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Untargetable unless an enemy comes within 2.5 cells or it has just fired.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 2, cost: 15, cloak: "stealth" }),
-  util({ id: "phantom", name: "Phase Veil", family: "Phase cloak", desc: "Untargetable at any range, except for 3s after each shot it fires.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "M", weight: 4, cost: 20, cloak: "phantom" }),
+  util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Optical cloak: enemies can't target it from range. It shows up while any enemy is within 12.5 m of its hull, for 1.5 s after each shot it fires, and inside enemy sensor range.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 2, cost: 15, cloak: "stealth" }),
+  util({ id: "phantom", name: "Phase Veil", family: "Phase cloak", desc: "Phase cloak: enemies can't target it even point-blank. It shows up only for 3 s after each shot it fires, and inside enemy sensor range. Heavier and pricier than the Stealth Cloak.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "M", weight: 4, cost: 20, cloak: "phantom" }),
   util(
     { id: "jammer", name: "ECM Jammer", family: "Jammer", desc: "Enemy missiles lose lock on it and allies within 40 m; enemy guns are half as accurate against them. Jammers don't stack.", category: "stealth", visual: "jammer", caliber: 0.5, mount: "M", weight: 2, cost: 5, jammer: 8 }
     /* [aura balance] 3 -> 8, edge to edge */
@@ -34581,86 +34581,12 @@ var PART_REST = {
   scorpion: [[-1.54, -0.798], [1.83, -0.99], [1.83, 0.99]],
   centipede: [[0.6079999999999998, 0], [-0.06650000000000006, 0], [-0.7410000000000001, 0], [-1.4155000000000002, 0]]
 };
-var RANK = { S: 1, M: 2, L: 3, XL: 4 };
 var PART_SHAPES = /* @__PURE__ */ new Set(["mantis", "mech", "warlord", "arachnid", "broodmother", "arachne", "crab", "saucer", "scorpion", "centipede"]);
 function hardpointsOf(chassis) {
   return FOOT_MOUNTS[chassis.shape] ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : i % 2 ? 0.2 : -0.2]);
 }
-var MELEE_EDGE = 0.38;
-var MELEE_SIDE_MIN = -0.2;
-var meleeCache = /* @__PURE__ */ new Map();
-function meleeSlots(chassis) {
-  let out2 = meleeCache.get(chassis.id);
-  if (out2) return out2;
-  const pts = hardpointsOf(chassis);
-  const Y = chassis.footprint?.[0] ?? chassis.size, X = chassis.footprint?.[1] ?? chassis.size;
-  const rest = FOOT_MOUNTS[chassis.shape] && PART_SHAPES.has(chassis.shape) && chassis.shape !== "centipede" ? PART_REST[chassis.id] : void 0;
-  out2 = chassis.mounts.map((_, i) => {
-    if ((chassis.domain ?? "ground") !== "ground") return false;
-    const r = rest?.[i];
-    if (r) return r[0] / X > MELEE_SIDE_MIN;
-    const p = pts[i] ?? [0, 0];
-    return p[0] >= MELEE_EDGE || Math.abs(p[1]) >= MELEE_EDGE && p[0] > MELEE_SIDE_MIN;
-  });
-  meleeCache.set(chassis.id, out2);
-  return out2;
-}
-function mountPerm(chassis, pts, mods) {
-  return PART_SHAPES.has(chassis.shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods, meleeSlots(chassis));
-}
-function solveMounts(caps, pts, mods, meleeOk) {
-  const n = caps.length;
-  const id0 = caps.map((_, i) => i);
-  if (n <= 1) return id0;
-  const mate = caps.map((_, i) => pts.findIndex((q, j) => j !== i && Math.abs(q[0] - pts[i][0]) < 0.03 && Math.abs(q[1] + pts[i][1]) < 0.03 && Math.abs(q[1]) > 0.04));
-  const prom = (j) => RANK[caps[j]] * 1 + (1 - Math.min(1, Math.abs(pts[j][1]) / 0.3)) * 0.8 + pts[j][0] * 1.2;
-  const isW = (m) => !!m && m.kind === "weapon";
-  const isU = (m) => !!m && m.kind === "utility" && m.visual !== "plate";
-  let best = id0, bestS = -Infinity;
-  const perm = new Array(n), used = new Array(n).fill(false);
-  const score = () => {
-    let sc2 = 0;
-    for (let i = 0; i < n; i++) {
-      const m = mods[i], j = perm[i];
-      if (j === i) sc2 += 0.05;
-      if (isW(m)) sc2 += (RANK[m.mount] + 0.5 * (m.caliber ?? 0.5) + 1) * prom(j);
-      else if (isU(m)) sc2 += -pts[j][0] * 2.2 + RANK[caps[j]] * 0.1;
-    }
-    const at2 = new Array(n).fill(null);
-    for (let i = 0; i < n; i++) at2[perm[i]] = mods[i];
-    for (let j = 0; j < n; j++) {
-      const k = mate[j];
-      if (k < 0 || k < j) continue;
-      const a = at2[j], b = at2[k];
-      if (a && b && a.id === b.id) sc2 += 3;
-      else if (a && b && a.visual === b.visual) sc2 += 1;
-      else if (isW(a) && isU(b) || isU(a) && isW(b)) sc2 -= 0.6;
-      else if (!!a !== !!b) sc2 -= 0.3;
-    }
-    return sc2;
-  };
-  const rec = (i) => {
-    if (i === n) {
-      const s = score();
-      if (s > bestS + 1e-9) {
-        bestS = s;
-        best = perm.slice();
-      }
-      return;
-    }
-    const m = mods[i];
-    for (let j = 0; j < n; j++) {
-      if (used[j]) continue;
-      if (isW(m) && RANK[m.mount] > RANK[caps[j]]) continue;
-      if (meleeOk && m?.category === "melee" && !meleeOk[j]) continue;
-      used[j] = true;
-      perm[i] = j;
-      rec(i + 1);
-      used[j] = false;
-    }
-  };
-  rec(0);
-  return best;
+function mountPerm(chassis, _pts, _mods) {
+  return chassis.mounts.map((_, i) => i);
 }
 function meleeFront(mod, x, X) {
   return mod && mod.kind === "weapon" && mod.projectile === "melee" ? Math.max(x, 0.3 * X) : x;

@@ -140,7 +140,7 @@ export const MODULES: ModuleDef[] = [
   wpn({ id: 'incendiary', name: 'Incendiary Rockets', family: 'Napalm 4-tube', desc: 'Rocket salvo that sets everything in the blasts burning and leaves the ground on fire for 4 s.', category: 'rocket', visual: 'rocketPod', barrels: 4, caliber: 0.5, mount: 'M', weight: 3.2, cost: 34,
     damage: 38, burst: 4, cooldown: 4, range: 10, ...G, projectile: 'rocket', projectileSpeed: 11, splash: 1, ap: 0.2, spread: 0.8, burn: { dps: 14, duration: 4 }, fireField: { radius: 1.1, duration: 4, dps: 10 } }),
   wpn({ id: 'mlrs', name: 'MLRS Battery', family: '12-tube', desc: 'Ripple-fires 12 rockets across a huge area. Minimum range 30 m.', category: 'rocket', visual: 'rocketPod', barrels: 12, caliber: 0.9, mount: 'M', weight: 10, cost: 70,
-    damage: 30, burst: 12, cooldown: 9, range: 22, minRange: 6, ...G, projectile: 'rocket', projectileSpeed: 12, splash: 1, ap: 0.2, spread: 1.6 }),
+    damage: 33, burst: 12, cooldown: 9, range: 22, minRange: 6, ...G, projectile: 'rocket', projectileSpeed: 12, splash: 1, ap: 0.2, spread: 1.6 }),
   // ---------------- Missiles ----------------
   wpn({ id: 'atgm', name: 'ATGM Launcher', family: 'Anti-tank', desc: 'Wire-guided anti-tank missile: slow, homing, ignores most armor. Ground only.', category: 'missile', visual: 'missileRack', barrels: 1, caliber: 0.3, mount: 'S', weight: 1.6, cost: 18,
     damage: 110, cooldown: 4, range: 12, ...G, projectile: 'missile', projectileSpeed: 9, splash: 0.2, ap: 0.8 }),
