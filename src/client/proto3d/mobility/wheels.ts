@@ -99,7 +99,7 @@ export function bogie(b: Bld, kit: Kit, xc: number, len: number, h: number, w: n
   disc((xr + xf) / 2, R * 0.72, R * 0.62);
   b.cyl(kit.accent, R * 0.2, R * 0.16, w * 0.06, [xr, R, zo + side * w * 0.13], ax, 6);
   // chunky fender over the run, sloped at the front
-  block(b, kit.hull, xc - len * 0.02, h * 0.96, z, len * 0.9, w * 1.04, h * 0.1, { ch: h * 0.06, bev: h * 0.035 });
+  block(b, kit.panel, xc - len * 0.02, h * 0.96, z, len * 0.9, w * 1.04, h * 0.1, { ch: h * 0.06, bev: h * 0.035 });
 }
 
 registerMobility('wheels', {

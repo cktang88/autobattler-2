@@ -56,15 +56,18 @@ function skyEnvironment(renderer: THREE.WebGLRenderer, sunDir: THREE.Vector3): T
   return tex;
 }
 
-export function setupStage(renderer: THREE.WebGLRenderer, scene: THREE.Scene, o: { shadowRes?: number; fog?: boolean } = {}): Stage {
+/** o.sun: sun position relative to the view target (direction + height; default up-left-front). A sun from the side and
+ *  a little behind the subject (as seen by the camera) gives form and visible glints on painted plates. */
+export function setupStage(renderer: THREE.WebGLRenderer, scene: THREE.Scene, o: { shadowRes?: number; fog?: boolean; sun?: [number, number, number] } = {}): Stage {
   const fogCol = new THREE.Color('#6f6a58');
   scene.background = fogCol;
   if (o.fog !== false) scene.fog = new THREE.Fog(fogCol, 110, 300);
-  const sunPos = new THREE.Vector3(-30, 40, 20);
+  const sunPos = new THREE.Vector3(...(o.sun ?? [-30, 40, 20]));
   scene.environment = skyEnvironment(renderer, sunPos);
-  scene.environmentIntensity = 0.42;
-  // stylized key + soft sky fill + cool back light: flattering, clean shadows (units use a cel ramp, materials.ts)
-  const sun = new THREE.DirectionalLight('#fff0d8', 2.8);
+  scene.environmentIntensity = 0.6;
+  // strong warm key + low sky fill (the PMREM sky environment does most of the fill and all the reflections on the
+  // painted-metal unit materials) + a faint cool back light: forms get a clear lit side and shadow side
+  const sun = new THREE.DirectionalLight('#fff0d8', 3.4);
   sun.position.copy(sunPos);
   sun.castShadow = true;
   const res = o.shadowRes ?? 4096;
@@ -73,10 +76,11 @@ export function setupStage(renderer: THREE.WebGLRenderer, scene: THREE.Scene, o:
   sun.shadow.normalBias = 0.025;
   sun.shadow.radius = 3;
   scene.add(sun, sun.target);
-  const hemi = new THREE.HemisphereLight('#dfe4ea', '#6e624e', 0.95);
+  const hemi = new THREE.HemisphereLight('#d6e2f0', '#6e624e', 0.3);
   scene.add(hemi);
-  const back = new THREE.DirectionalLight('#9ab8ff', 0.55);
-  back.position.set(30, 18, -25);
+  const back = new THREE.DirectionalLight('#9ab8ff', 0.35);
+  // opposite the sun, low: a cool kicker on the shadow side
+  back.position.set(-sunPos.x, 18, -sunPos.z);
   scene.add(back);
   const dir = sunPos.clone();
   const fitShadow = (cx: number, cz: number, radius: number) => {
@@ -108,10 +112,11 @@ const GradeShader = {
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      // gentle S-curve + split tone (cool shadows, warm highlights) + slight desaturation for a muted military palette
-      c = mix(c, c * c * (3.0 - 2.0 * c), 0.12);
-      c = mix(vec3(l), c, 1.06);
-      c += vec3(-0.006, 0.0, 0.01) * (1.0 - l) + vec3(0.012, 0.006, -0.004) * l;
+      // contrast S-curve + saturation boost (ACES eats saturation in the brights) + split tone (cool shadows, warm
+      // highlights): clean, saturated team paint
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.2);
+      c = max(mix(vec3(l), c, 1.1), 0.0);
+      c += vec3(-0.008, 0.0, 0.012) * (1.0 - l) + vec3(0.016, 0.008, -0.006) * l;
       vec2 d = (vUv - 0.5) * vec2(1.0, 0.85);
       c *= 1.0 - vig * smoothstep(0.25, 0.85, length(d));
       

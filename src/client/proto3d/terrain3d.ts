@@ -64,12 +64,12 @@ function makeMaps(w: number, h: number, pad: number, o: Required<Pick<TerrainOpt
       const n1 = fbm(cx * 0.09, cy * 0.09, 4), n2 = fbm(cx * 0.24 + 40, cy * 0.24 + 40, 4), n3 = fbm(cx * 0.55 + 90, cy * 0.55 + 90, 3);
       let c = mixc(soil, sand, sm(0.42, 0.62, n1));
       c = mixc(c, dry, sm(0.5, 0.72, fbm(cx * 0.15 + 7, cy * 0.15 + 7, 3)) * 0.5);
-      c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.5);
+      c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.32);
       const gv = sm(0.54, 0.68, fbm(cx * 0.35 + 200, cy * 0.35 + 200, 4));
       const grain = noise(x * 0.9, y * 0.9) * 0.6 + noise(x * 2.3 + 11, y * 2.3 + 5) * 0.4;
       c = mixc(c, gravel, gv * 0.5);
       const sc = sm(0.6, 0.72, fbm(cx * 0.2 + 300, cy * 0.2 + 300, 4));
-      c = mixc(c, scrub, sc * 0.4);
+      c = mixc(c, scrub, sc * 0.26);
       // stylized: broad painted patches, very little per-pixel grain
       const m = 0.9 + 0.2 * (n3 * 0.7 + grain * 0.3) + (gv > 0.2 ? (grain - 0.5) * 0.1 * gv : 0);
       const i = (y * W + x) * 4;
@@ -128,8 +128,35 @@ function makeMaps(w: number, h: number, pad: number, o: Required<Pick<TerrainOpt
   const W0 = W, H0 = H;
   void W0; void H0;
   if (o.zoneFrac > 0) {
-    ga.fillStyle = 'rgba(70,150,190,0.05)'; ga.fillRect(0, 0, zw, IH);
-    ga.fillStyle = 'rgba(210,100,50,0.05)'; ga.fillRect(IW - zw, 0, zw, IH);
+    // concrete deployment aprons: poured slabs (4-cell joints, uneven tone), a painted edge line and hazard chevrons
+    // along the front, so the board reads as a designed place even without the gameplay grid
+    const apron = (x0: number, x1: number, front: number) => {
+      const S = PPC * 4;
+      for (let sx = x0; sx < x1 - 1; sx += S) for (let sy = 0; sy < IH - 1; sy += S) {
+        const t = 140 + r() * 22;
+        ga.fillStyle = `rgba(${t},${t - 3},${t - 10},${0.4 + r() * 0.1})`;
+        ga.fillRect(sx, sy, Math.min(S, x1 - sx), Math.min(S, IH - sy));
+      }
+      ga.strokeStyle = 'rgba(38,35,30,0.2)'; ga.lineWidth = 2;
+      for (let sx = x0; sx <= x1 + 0.5; sx += S) { ga.beginPath(); ga.moveTo(sx, 0); ga.lineTo(sx, IH); ga.stroke(); }
+      for (let sy = 0; sy <= IH + 0.5; sy += S) { ga.beginPath(); ga.moveTo(x0, sy); ga.lineTo(x1, sy); ga.stroke(); }
+      // stains so the concrete is not a flat colour
+      for (let i = 0; i < 40; i++) {
+        const x = x0 + r() * (x1 - x0), y = r() * IH, rad = PPC * (0.5 + r() * 2);
+        const g2 = ga.createRadialGradient(x, y, 0, x, y, rad);
+        g2.addColorStop(0, 'rgba(40,34,26,0.16)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
+        ga.fillStyle = g2; ga.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      }
+      const ex = front > x0 + 1 ? front - PPC * 0.6 : front + PPC * 0.6;
+      ga.fillStyle = 'rgba(225,222,210,0.55)'; ga.fillRect(ex - PPC * 0.12, 0, PPC * 0.24, IH);
+      const hx = front > x0 + 1 ? front - PPC * 1.3 : front + PPC * 0.9;
+      for (let y = PPC * 2; y < IH - PPC * 2; y += PPC * 12) for (let k = 0; k < 6; k++) {
+        ga.fillStyle = k % 2 ? 'rgba(25,24,22,0.55)' : 'rgba(222,176,52,0.6)';
+        ga.beginPath(); ga.moveTo(hx, y + k * PPC * 0.5); ga.lineTo(hx + PPC * 0.4, y + k * PPC * 0.5 + PPC * 0.4); ga.lineTo(hx + PPC * 0.4, y + k * PPC * 0.5 + PPC * 0.9); ga.lineTo(hx, y + k * PPC * 0.5 + PPC * 0.5); ga.fill();
+      }
+    };
+    apron(0, zw, zw);
+    apron(IW - zw, IW, IW - zw);
     ga.setLineDash([PPC * 0.3, PPC * 0.2]); ga.lineWidth = 3;
     ga.strokeStyle = 'rgba(130,215,240,0.4)'; ga.beginPath(); ga.moveTo(zw, 0); ga.lineTo(zw, IH); ga.stroke();
     ga.strokeStyle = 'rgba(255,150,100,0.4)'; ga.beginPath(); ga.moveTo(IW - zw, 0); ga.lineTo(IW - zw, IH); ga.stroke();

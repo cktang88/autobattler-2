@@ -90,7 +90,7 @@ export function megaPod(b: Bld, kit: Kit, p: MegaPod, S: number) {
   } else loop(b, kit, x, z, l, h, w * 0.9, side);
   // armoured cowling over the upper loop: sloped ends, panel cap, outer glow strip
   const cw = w * 1.08, ch0 = h * 0.62;
-  block(b, kit.hull, x, ch0, z, l * 0.9, cw, h * 1.04 - ch0, { top: [0.82, 0.86], ch: cw * 0.14, bev: h * 0.06, bot: h * 0.04 });
+  block(b, kit.trim, x, ch0, z, l * 0.9, cw, h * 1.04 - ch0, { top: [0.82, 0.86], ch: cw * 0.14, bev: h * 0.06, bot: h * 0.04 });
   block(b, kit.panel, x, h * 1.0, z, l * 0.56, cw * 0.62, h * 0.08, { top: [0.9, 0.86], ch: cw * 0.1, bev: h * 0.03 });
   glow(b, kit, x, h * 0.8, z + side * cw * 0.5, l * 0.5, h * 0.05, h * 0.05);
   // hazard-striped leading / trailing ends

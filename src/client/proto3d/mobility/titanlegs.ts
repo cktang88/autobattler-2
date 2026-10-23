@@ -26,7 +26,7 @@ const ring = (z: number, wx: number, wy: number, c = 0.3, oy = 0): V3[] => [
 function thigh(b: Bld, kit: Kit, l: number, t: number) {
   b.loft(kit.metal, [ring(0, t * 0.85, t * 0.9), ring(l * 0.5, t * 0.82, t * 0.85), ring(l, t * 0.66, t * 0.66)]);
   // front armour: two overlapping plates, proud of the core
-  b.loft(kit.hull, [ring(l * 0.02, t * 1.12, t * 0.34, 0.45, t * 0.78), ring(l * 0.36, t * 1.22, t * 0.44, 0.45, t * 0.9), ring(l * 0.62, t * 1.06, t * 0.34, 0.45, t * 0.78)]);
+  b.loft(kit.hull2, [ring(l * 0.02, t * 1.12, t * 0.34, 0.45, t * 0.78), ring(l * 0.36, t * 1.22, t * 0.44, 0.45, t * 0.9), ring(l * 0.62, t * 1.06, t * 0.34, 0.45, t * 0.78)]);
   b.loft(kit.panel, [ring(l * 0.5, t * 1.0, t * 0.3, 0.45, t * 0.72), ring(l * 0.72, t * 1.04, t * 0.36, 0.45, t * 0.78), ring(l * 0.92, t * 0.84, t * 0.28, 0.45, t * 0.6)]);
   // side cheek plates
   for (const sx of [-1, 1]) b.g(new THREE.BoxGeometry(t * 0.22, t * 1.2, l * 0.6), kit.hull, new THREE.Matrix4().makeTranslation(sx * t * 0.92, t * 0.05, l * 0.4));
@@ -46,7 +46,7 @@ function thigh(b: Bld, kit: Kit, l: number, t: number) {
 function shin(b: Bld, kit: Kit, l: number, t: number) {
   b.loft(kit.metal, [ring(0, t * 0.7, t * 0.74), ring(l * 0.55, t * 0.64, t * 0.66), ring(l, t * 0.62, t * 0.6)]);
   // greave: big front plate that flares toward the ankle
-  b.loft(kit.hull, [ring(l * 0.08, t * 0.9, t * 0.32, 0.45, t * 0.62), ring(l * 0.55, t * 0.98, t * 0.38, 0.45, t * 0.66), ring(l * 0.92, t * 1.18, t * 0.34, 0.45, t * 0.72)]);
+  b.loft(kit.panel, [ring(l * 0.08, t * 0.9, t * 0.32, 0.45, t * 0.62), ring(l * 0.55, t * 0.98, t * 0.38, 0.45, t * 0.66), ring(l * 0.92, t * 1.18, t * 0.34, 0.45, t * 0.72)]);
   // knee guard: pointed cap over the knee drum + team glow lamp
   b.loft(kit.panel, [ring(-t * 0.6, t * 0.5, t * 0.2, 0.5, t * 0.95), ring(-t * 0.1, t * 1.0, t * 0.36, 0.45, t * 1.0), ring(t * 0.7, t * 0.9, t * 0.3, 0.45, t * 0.85)]);
   b.g(new THREE.BoxGeometry(t * 0.5, t * 0.12, t * 0.26), kit.glow, new THREE.Matrix4().makeTranslation(0, t * 1.33, t * 0.1));
@@ -61,7 +61,7 @@ function shin(b: Bld, kit: Kit, l: number, t: number) {
 function foot(b: Bld, kit: Kit, t: number) {
   const L = t * 4.6, Wd = t * 3.0;
   block(b, kit.rubber, t * 0.3, 0, 0, L * 0.92, Wd, t * 0.26, { ch: t * 0.6, bev: t * 0.07 });
-  block(b, kit.hull, t * 0.05, t * 0.24, 0, L * 0.66, Wd * 0.88, t * 0.75, { top: [0.6, 0.7], shift: [-t * 0.3, 0], ch: t * 0.5, bev: t * 0.18 });
+  block(b, kit.trim, t * 0.05, t * 0.24, 0, L * 0.66, Wd * 0.88, t * 0.75, { top: [0.6, 0.7], shift: [-t * 0.3, 0], ch: t * 0.5, bev: t * 0.18 });
   // four armoured toes fanning forward
   for (const [dz, ry] of [[-1.05, -0.32], [-0.36, -0.1], [0.36, 0.1], [1.05, 0.32]] as [number, number][]) {
     block(b, kit.metal, t * 1.7 + Math.cos(ry) * t * 0.4, 0, dz * t, t * 1.3, t * 0.62, t * 0.55, { top: [0.5, 0.8], shift: [t * 0.3, 0], ch: t * 0.18, bev: t * 0.08 });

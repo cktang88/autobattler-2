@@ -4,9 +4,10 @@
 export type Team = 0 | 1;
 
 /**
- * Per-team paint scheme. Both armies are built from the same hardware: the hull finish is a desaturated military
- * paint (body/light/dark/deep), and team identity lives only in small details: stripes/chevrons and trim (accent),
- * emissive running lights, visors and sensors (glow), and the small far-zoom markers / ground rings (rim).
+ * Per-team paint scheme. Both armies are built from the same hardware, colour-blocked in three values (see
+ * proto3d/materials.ts PAINT_PLAN): the big armour plates carry a saturated team colour (body/light/dark/deep: royal
+ * blue vs signal red-orange), shells are off-white and mechanics near-black. Lights, visors and sensors glow in the
+ * team hue (glow), and the far-zoom markers / ground rings use rim.
  */
 export interface TeamPal {
   /** hull paint, mid tone */
@@ -30,12 +31,12 @@ export interface TeamPal {
   camo: string;
 }
 
-// Viewer = slate blue-grey with cyan lights/stripes; enemy = olive drab with red-orange lights/stripes. The paints are
-// both low-saturation real-world finishes; hue AND luminance differ in the accents (cyan bright, red-orange warmer and
-// darker), and the far-zoom marker adds a shape cue (circle vs diamond) for colour-blind viewers.
+// Viewer = royal blue armour with cyan lights; enemy = red-orange armour with amber/orange lights. Blue vs red-orange
+// is the most separable hue pair (also for red-green colour-blind viewers, who still see blue vs yellow-brown), the
+// two differ in luminance too, and the far-zoom marker adds a shape cue (circle vs diamond).
 export const TEAM_PAL: [TeamPal, TeamPal] = [
-  { body: '#5b6670', light: '#8a959e', dark: '#3a434b', deep: '#1f252a', accent: '#3fd2ff', glow: '#8cf4ff', glowRgb: '140,244,255', bar: '#4fe3d0', rim: '#46dcff', camo: '#4b555d' },
-  { body: '#6a6a4e', light: '#99977a', dark: '#444530', deep: '#25261a', accent: '#ff5a26', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#7d7458' },
+  { body: '#2f5cba', light: '#5a86d6', dark: '#1d3b7c', deep: '#112245', accent: '#3fd2ff', glow: '#8cf4ff', glowRgb: '140,244,255', bar: '#4fe3d0', rim: '#46dcff', camo: '#26498f' },
+  { body: '#bd432d', light: '#dc6d50', dark: '#7d281b', deep: '#43150e', accent: '#ffb02a', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#9a3423' },
 ];
 
 /** Shared hardware materials: gunmetal running gear, rubber, bare steel, hazard paint, glass, soot and dust. */

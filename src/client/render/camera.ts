@@ -26,8 +26,13 @@ export class Camera {
   vh = 400;
   minK = 1;
   maxK = MAX_K;
-  /** ground-plane vertical scale (cos of the tilt) */
+  /** ground-plane vertical scale (cos of the tilt) at the fit view */
   ay = 1;
+  /** optional zoom-dependent foreshortening (a perspective view whose pitch changes with zoom): ay as a function of
+   *  z = k / minK. Must return `ay` at z = 1 (minK is fitted with it). null = constant ay. */
+  ayFn: ((z: number) => number) | null = null;
+  /** ground-plane vertical scale at scale k */
+  ayAt(k: number): number { return this.ayFn ? this.ayFn(k / this.minK) : this.ay; }
   /** exponential smoothing rate (1/s) */
   smooth = 13;
   /** seconds since the camera last moved (used to decide when to re-render hi-res ground) */
@@ -97,12 +102,12 @@ export class Camera {
 
   private clampTarget(): void {
     this.tcx = this.clampAxis(this.tcx, this.tk, this.vw, this.fw, EDGE_X);
-    this.tcy = this.clampAxis(this.tcy, this.tk * this.ay, this.vh, this.fh, EDGE_Y);
+    this.tcy = this.clampAxis(this.tcy, this.tk * this.ayAt(this.tk), this.vh, this.fh, EDGE_Y);
   }
 
   private clampCurrent(): boolean {
     const x = this.clampAxis(this.cx, this.k, this.vw, this.fw, EDGE_X);
-    const y = this.clampAxis(this.cy, this.k * this.ay, this.vh, this.fh, EDGE_Y);
+    const y = this.clampAxis(this.cy, this.k * this.ayAt(this.k), this.vh, this.fh, EDGE_Y);
     const hit = x !== this.cx || y !== this.cy;
     this.cx = x;
     this.cy = y;
@@ -111,11 +116,11 @@ export class Camera {
 
   /** visual cells -> screen CSS px */
   toScreen(vx: number, vy: number): { x: number; y: number } {
-    return { x: this.vw / 2 + (vx - this.cx) * this.k, y: this.vh / 2 + (vy - this.cy) * this.k * this.ay };
+    return { x: this.vw / 2 + (vx - this.cx) * this.k, y: this.vh / 2 + (vy - this.cy) * this.k * this.ayAt(this.k) };
   }
 
   fromScreen(sx: number, sy: number): { x: number; y: number } {
-    return { x: this.cx + (sx - this.vw / 2) / this.k, y: this.cy + (sy - this.vh / 2) / (this.k * this.ay) };
+    return { x: this.cx + (sx - this.vw / 2) / this.k, y: this.cy + (sy - this.vh / 2) / (this.k * this.ayAt(this.k)) };
   }
 
   stopInertia(): void {
@@ -126,7 +131,7 @@ export class Camera {
   panByScreen(dx: number, dy: number): void {
     this.anchor = null;
     this.cx -= dx / this.k;
-    this.cy -= dy / (this.k * this.ay);
+    this.cy -= dy / (this.k * this.ayAt(this.k));
     this.clampCurrent();
     this.tcx = this.cx;
     this.tcy = this.cy;
@@ -141,7 +146,7 @@ export class Camera {
     const nk = clampN(this.k * f, this.minK, this.maxK);
     this.k = nk;
     this.cx = w.x - (sx - this.vw / 2) / nk;
-    this.cy = w.y - (sy - this.vh / 2) / (nk * this.ay);
+    this.cy = w.y - (sy - this.vh / 2) / (nk * this.ayAt(nk));
     this.clampCurrent();
     this.tcx = this.cx;
     this.tcy = this.cy;
@@ -158,7 +163,7 @@ export class Camera {
     this.anchor = { sx, sy, vx: w.x, vy: w.y };
     this.tk = nk;
     this.tcx = w.x - (sx - this.vw / 2) / nk;
-    this.tcy = w.y - (sy - this.vh / 2) / (nk * this.ay);
+    this.tcy = w.y - (sy - this.vh / 2) / (nk * this.ayAt(nk));
     this.clampTarget();
     this.stopInertia();
     this.still = 0;
@@ -169,7 +174,9 @@ export class Camera {
    *  treated as smaller than `minSize` cells, so the last few units of a fight fill the view without absurd zoom. */
   frameBox(x0: number, y0: number, x1: number, y1: number, margin = 6, minSize = 20): void {
     const w = Math.max(minSize, x1 - x0 + 2 * margin), h = Math.max(minSize * 0.75, y1 - y0 + 2 * margin);
-    const k = Math.min(this.vw / w, this.vh / (h * this.ay));
+    let k = Math.min(this.vw / w, this.vh / (h * this.ay));
+    // foreshortening depends on the zoom: refine (converges in a couple of steps, ay changes slowly with k)
+    if (this.ayFn) for (let i = 0; i < 3; i++) k = Math.min(this.vw / w, this.vh / (h * this.ayAt(k)));
     this.setTarget((x0 + x1) / 2, (y0 + y1) / 2, k, false);
   }
 
@@ -195,7 +202,7 @@ export class Camera {
   /** Fling after a drag; velocity in screen px / s. */
   fling(vxPx: number, vyPx: number): void {
     this.velX = -vxPx / this.k;
-    this.velY = -vyPx / (this.k * this.ay);
+    this.velY = -vyPx / (this.k * this.ayAt(this.k));
   }
 
   /** Advance the animation. Returns true while the camera is moving. */
@@ -221,7 +228,7 @@ export class Camera {
       const sp = 560 / this.k;
       this.anchor = null;
       this.tcx += this.keyX * sp * dt;
-      this.tcy += (this.keyY * sp * dt) / this.ay;
+      this.tcy += (this.keyY * sp * dt) / this.ayAt(this.k);
       this.clampTarget();
       moving = true;
     }
@@ -233,11 +240,11 @@ export class Camera {
     if (this.anchor) {
       const a = this.anchor;
       this.cx = a.vx - (a.sx - this.vw / 2) / this.k;
-      this.cy = a.vy - (a.sy - this.vh / 2) / (this.k * this.ay);
+      this.cy = a.vy - (a.sy - this.vh / 2) / (this.k * this.ayAt(this.k));
       if (this.k === this.tk) this.anchor = null;
     } else {
       const ex = this.tcx - this.cx, ey = this.tcy - this.cy;
-      if (Math.abs(ex) * this.k > 0.05 || Math.abs(ey) * this.k * this.ay > 0.05) {
+      if (Math.abs(ex) * this.k > 0.05 || Math.abs(ey) * this.k * this.ayAt(this.k) > 0.05) {
         this.cx += ex * f;
         this.cy += ey * f;
         moving = true;

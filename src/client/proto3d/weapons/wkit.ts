@@ -7,6 +7,8 @@
 //   * housings are lofts of 8-point sections (wedges, casemates, hexes) or low-poly lathes (balls, drums), not boxes;
 //   * small parts use cbox (32 tris) or plain boxes (12 tris), never the extruded bevel box (60+ tris);
 //   * radial segments: 6-8 for barrels and small drums, 10-14 for big drums; one team accent per turret.
+//   * paint plan (materials.ts PAINT_PLAN): housings are light shell (kit.panel), side boxes / shields / pods carry the
+//     team colour (kit.hull), mantlets and receivers are dark (kit.trim), barrels gunmetal (kit.metal).
 
 import * as THREE from 'three';
 import type { ModuleDef } from '../../../shared/types.ts';

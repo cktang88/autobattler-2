@@ -98,8 +98,9 @@ export function pod(b: Bld, mat: MatLike, c: V3, rx: number, ry: number, rz: num
 /** Turret collar: armoured ring the turret sits in (top at y), radius r (turret ring radius), skirt down to y0. */
 export function collar(b: Bld, kit: Kit, x: number, y: number, z: number, r: number, y0 = y - r * 0.35, seg = 18): void {
   const R = r * 1.18;
-  b.lathe(kit.hull, [[0, y0 - y], [R * 1.08, y0 - y], [R * 1.08, -r * 0.16], [R, 0], [r * 1.0, 0], [r * 0.98, -0.01], [0, -0.01]], [x, y, z], 'y', seg);
-  b.lathe(kit.trim, [[0, -0.004], [r * 1.02, -0.004], [r * 1.02, 0.012], [0, 0.012]], [x, y, z], 'y', seg);
+  // dark armoured ring (paint plan: mechanics) separating the light turret from the team-coloured deck
+  b.lathe(kit.trim, [[0, y0 - y], [R * 1.08, y0 - y], [R * 1.08, -r * 0.16], [R, 0], [r * 1.0, 0], [r * 0.98, -0.01], [0, -0.01]], [x, y, z], 'y', seg);
+  b.lathe(kit.metal, [[0, -0.004], [r * 1.02, -0.004], [r * 1.02, 0.012], [0, 0.012]], [x, y, z], 'y', seg);
 }
 
 /** Emissive strip (team glow) lying on a face; rotation optional. */
