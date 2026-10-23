@@ -26,8 +26,18 @@ function sane(d: unknown): d is Design {
   }
 }
 
+/** Starter designs are read-only templates in the player's collection, shown as "Name (Standard)". Saving an edit
+ *  of one creates the player's own copy (new id, no suffix) and leaves the standard as it is. */
+export const STANDARD_SUFFIX = ' (Standard)';
+const STARTER_BY_ID = new Map(STARTER_DESIGNS.map((d) => [d.id, d] as const));
+export const isStandard = (d: Pick<Design, 'id'>) => STARTER_BY_ID.has(d.id);
+const standardCopy = (s: Design): Design => ({ ...clone(s), name: s.name + STANDARD_SUFFIX });
+export const stripStandard = (name: string) => name.replace(/\s*\(Standard\)/gi, '').replace(/\s+/g, ' ').trim() || name;
+/** the player's own copy of an edited standard: a stable id (the same on every device for the same edit) */
+const forkId = (d: Design) => `my-${d.id.replace(/^starter-/, '')}-${Math.round(d.editedAt ?? Date.now()).toString(36)}`;
+
 function seed(): Design[] {
-  const out = STARTER_DESIGNS.filter(sane).map(clone);
+  const out = STARTER_DESIGNS.filter(sane).map(standardCopy);
   if (out.length) saveDesigns(out);
   return out;
 }
@@ -38,30 +48,55 @@ export function allDesigns(): Design[] {
   if (!Array.isArray(raw) || raw.length === 0) return seed();
   const seen = new Set<string>();
   const out: Design[] = [];
+  let changed = false;
+  const deckMap = new Map<string, string>();
   for (const d of raw) {
-    if (!sane(d) || seen.has(d.id)) continue;
+    if (!sane(d) || seen.has(d.id)) { changed = true; continue; }
     seen.add(d.id);
-    out.push(clone(d));
+    const st = STARTER_BY_ID.get(d.id);
+    if (st && d.editedAt != null) {
+      // an edited standard (saved before standards became read-only): it's the player's own design now; the
+      // pristine standard comes back next to it
+      const mine = { ...clone(d), id: forkId(d), name: stripStandard(d.name) };
+      out.push(mine);
+      deckMap.set(d.id, mine.id);
+      if (sane(st)) out.push(standardCopy(st));
+      changed = true;
+    } else if (st) {
+      // untouched standards follow the current template (name suffix, balance updates to the starter itself)
+      const fresh = standardCopy(st);
+      if (JSON.stringify(fresh) !== JSON.stringify(clone(d))) { if (sane(fresh)) { out.push(fresh); changed = true; } else out.push(clone(d)); }
+      else out.push(clone(d));
+    } else out.push(clone(d));
   }
   if (out.length === 0) return seed();
-  if (out.length !== raw.length) saveDesigns(out);
-  return out;
+  const dedup = out.filter((d, i) => out.findIndex((x) => x.id === d.id) === i);
+  if (changed || dedup.length !== out.length) saveDesigns(dedup);
+  if (deckMap.size) { const ids = loadDeckIds(); if (ids) saveDeckIds(ids.map((x) => deckMap.get(x) ?? x)); }
+  return dedup;
 }
 
 export function getDesign(id: string): Design | undefined {
   return allDesigns().find((d) => d.id === id);
 }
 
-/** Insert or replace (by id). Returns false (and saves nothing) when the design is illegal. */
-export function saveDesign(d: Design): boolean {
-  if (!sane(d)) return false;
+/** Insert or replace (by id). Returns the id it was saved under (a standard is saved as the player's own copy with
+ *  a new id, taking the standard's place in the deck), or null (and saves nothing) when the design is illegal. */
+export function saveDesign(d: Design): string | null {
+  if (!sane(d)) return null;
   const list = allDesigns();
-  const i = list.findIndex((x) => x.id === d.id);
-  const saved = { ...clone(d), editedAt: Date.now() };
+  const editedAt = Date.now();
+  let saved: Design = { ...clone(d), editedAt };
+  if (isStandard(d)) {
+    saved = { ...saved, id: forkId(saved), name: stripStandard(d.name) };
+    const ids = loadDeckIds();
+    if (ids?.includes(d.id)) saveDeckIds(ids.map((x) => (x === d.id ? saved.id : x)));
+  }
+  const i = list.findIndex((x) => x.id === saved.id);
   if (i >= 0) list[i] = saved;
   else list.push(saved);
   saveDesigns(list);
-  return true;
+  return saved.id;
 }
 
 /** Remove a design (and drop it from the deck). */

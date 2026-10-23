@@ -8,7 +8,7 @@ import { h } from '../app.ts';
 import type { ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { kiteOptions, ordersControl, ordersOf, orderFields, ringsOf } from './match-ui.ts';
-import { activeDeck, allDesigns, deleteDesign, newDesignId, saveDesign, setDeck } from '../collection.ts';
+import { activeDeck, allDesigns, deleteDesign, isStandard, newDesignId, saveDesign, setDeck, stripStandard } from '../collection.ts';
 import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
@@ -220,8 +220,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   let hideStarters = (() => { try { return localStorage.getItem(LS_HIDE_STARTERS) === '1'; } catch { return false; } })();
   /** the roster as listed (sorted, starters hidden if asked); `keep` stays listed even when it would be hidden */
   const roster = (keep: string | null = selectedId) => sortRoster(designs, rosterSort, deck, statsOf)
-    .filter((d) => !hideStarters || !STARTER_IDS.has(d.id) || d.id === keep);
-  const first = sortRoster(designs, rosterSort, deck, statsOf).find((d) => !hideStarters || !STARTER_IDS.has(d.id)) ?? designs[0];
+    .filter((d) => !hideStarters || !isStandard(d) || d.id === keep);
+  const first = sortRoster(designs, rosterSort, deck, statsOf).find((d) => !hideStarters || !isStandard(d)) ?? designs[0];
   /** roster folders (client-side only) and how the roster is grouped */
   const folders = loadFolders();
   let groupBy: RosterGroupBy = loadGroupBy();
@@ -433,7 +433,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     // (an unsaved new design has no saved copy, so its draft is duplicated)
     const src = clone(saved ?? draft);
     sfx('click');
-    const base = src.name.replace(/\s+Mk\s*\d+$/i, '');
+    const base = stripStandard(src.name).replace(/\s+Mk\s*\d+$/i, '');
     let n = 2;
     const names = new Set(designs.map((d) => d.name));
     let name = `${base} Mk${n}`.slice(0, NAME_MAX);
@@ -477,10 +477,19 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const errs = validateDesign(draft);
     if (errs.length) { sfx('error'); app.toast(errs[0], 'error'); return false; }
     draft.name = draft.name.trim();
-    const isNew = !designs.some((d) => d.id === draft.id);
-    if (!saveDesign(draft)) { sfx('error'); app.toast('Could not save design', 'error'); return false; }
+    const wasStandard = isStandard(draft), standardId = draft.id;
+    const newId = saveDesign(draft);
+    if (!newId) { sfx('error'); app.toast('Could not save design', 'error'); return false; }
+    // a standard design is saved as your own copy: carry on editing the copy (same folder as the standard)
+    if (newId !== draft.id) {
+      draft = { ...draft, id: newId, name: stripStandard(draft.name) };
+      nameInput.value = draft.name;
+      const f = folders.assign[standardId];
+      if (f) pendingFolder = f;
+    }
+    const isNew = wasStandard || !designs.some((d) => d.id === draft.id);
     designs = allDesigns();
-    let msg = `Saved "${draft.name}"`;
+    let msg = wasStandard ? `Saved your own copy "${draft.name}" (the standard stays as it was)` : `Saved "${draft.name}"`;
     if (isNew && pendingFolder) {
       moveToFolder(folders, draft.id, pendingFolder);
       saveFolders(folders);
@@ -488,7 +497,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       if (f) msg += ` · in ${f.name}`;
     }
     if (isNew) pendingFolder = null;
-    if (isNew && deck.length < DECK_SIZE && !deck.includes(draft.id)) {
+    if (wasStandard && deck.includes(standardId)) {
+      deck = deck.map((x) => (x === standardId ? draft.id : x)); // your copy takes the standard's deck slot
+      setDeck(deck);
+    } else if (isNew && deck.length < DECK_SIZE && !deck.includes(draft.id)) {
       deck = [...deck, draft.id];
       setDeck(deck);
       msg += ' · added to deck';
