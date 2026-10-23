@@ -132,7 +132,7 @@ export function trackUnit(b: Bld, kit: Kit, L: number, h: number, w: number, z: 
     // armoured side skirt over the upper ~55% of the loop, nose cut back on a slope, fender lip on top
     const sl = L * 0.84, sh = h * 0.64;
     const zs = z + side * (w / 2 + st * 0.6);
-    block(b, kit.hull, -L * 0.05, h * 0.38, zs, sl, st, sh, { ch: st * 0.4, bev: st * 0.3, bot: st * 0.3, top: [0.97, 0.7], mid: [[0.4, 1.0, 1.0]], shift: [L * 0.03, 0] });
+    block(b, kit.trim, -L * 0.05, h * 0.38, zs, sl, st, sh, { ch: st * 0.4, bev: st * 0.3, bot: st * 0.3, top: [0.97, 0.7], mid: [[0.4, 1.0, 1.0]], shift: [L * 0.03, 0] });
     b.box(kit.trim, sl * 0.86, sh * 0.14, st * 0.4, -L * 0.05, h * 0.56, zs + side * st * 0.42, sh * 0.04);
     const nt = Math.max(2, Math.round(sl / (h * 1.4)));
     for (let i = 0; i < nt; i++) b.box(kit.panel, h * 0.16, sh * 0.5, st * 0.5, -L * 0.05 - sl / 2 + (sl * (i + 0.5)) / nt, h * 0.38 + sh * 0.5, zs + side * st * 0.3, h * 0.03);
@@ -141,8 +141,8 @@ export function trackUnit(b: Bld, kit: Kit, L: number, h: number, w: number, z: 
     // fender: thick chamfered mudguard over the whole run, sloped at the front
     const fw = w * 1.12 + (o.skirt ? st * 0.8 : 0);
     const fz = z + side * (o.skirt ? st * 0.35 : 0);
-    block(b, kit.hull, -L * 0.04, h * 0.98, fz, L * 0.84, fw, h * 0.1, { ch: h * 0.05, bev: h * 0.03 });
-    b.box(kit.hull, h * 0.5, h * 0.08, fw * 0.96, L / 2 - h * 0.42, h * 0.92, fz, h * 0.03, [0, 0, -0.55]);
+    block(b, kit.panel, -L * 0.04, h * 0.98, fz, L * 0.84, fw, h * 0.1, { ch: h * 0.05, bev: h * 0.03 });
+    b.box(kit.panel, h * 0.5, h * 0.08, fw * 0.96, L / 2 - h * 0.42, h * 0.92, fz, h * 0.03, [0, 0, -0.55]);
   }
 }
 
@@ -163,7 +163,7 @@ export function trackNacelle(b: Bld, kit: Kit, L: number, h: number, w: number, 
   const top = h * 1.08, bot = h * 0.34;
   const ry = (top - bot) / 1.45, cy = top - ry, rz = w * 0.66;
   const prof: [number, number, number][] = [[-0.5, 0.62, 0.78], [-0.46, 0.92, 0.94], [-0.3, 1, 1], [0.2, 1, 1], [0.38, 0.9, 0.92], [0.48, 0.62, 0.74], [0.515, 0.25, 0.4]];
-  b.loft(kit.hull, prof.map(([f, sy, sz]) => nring(L * f, cy - (1 - sy) * ry * 0.25, z + side * w * 0.04, ry * sy, rz * sz)));
+  b.loft(kit.hull2, prof.map(([f, sy, sz]) => nring(L * f, cy - (1 - sy) * ry * 0.25, z + side * w * 0.04, ry * sy, rz * sz)));
   // lighter armour band along the flank and a team glow slit, bright plates read from the top camera
   b.loft(kit.panel, [[-0.36, 0.9], [-0.28, 1], [0.18, 1], [0.32, 0.9]].map(([f, s]) => nring(L * f, cy + ry * 0.05, z + side * w * 0.08, ry * 0.42 * s, rz * 1.03 * s, 8, 0.2)));
   b.box(kit.glow, L * 0.32, h * 0.04, h * 0.04, -L * 0.04, cy + ry * 0.05, z + side * (rz * 1.06 + w * 0.08), h * 0.01);
@@ -175,9 +175,9 @@ export function trackNacelle(b: Bld, kit: Kit, L: number, h: number, w: number, 
 function cornerPod(b: Bld, kit: Kit, L: number, h: number, w: number, z: number, side: number, front: boolean) {
   trackUnit(b, kit, L, h, w, z, side, { skirt: false, noFender: true, cleatMaxY: h * 0.4 });
   const hz = z + side * w * 0.04;
-  block(b, kit.hull, 0, h * 0.34, hz, L * 0.98, w * 1.22, h * 0.76, { ch: w * 0.3, bev: h * 0.12, bot: h * 0.06, top: [front ? 0.8 : 0.9, 0.82], shift: [front ? -L * 0.06 : L * 0.04, 0] });
+  block(b, kit.trim, 0, h * 0.34, hz, L * 0.98, w * 1.22, h * 0.76, { ch: w * 0.3, bev: h * 0.12, bot: h * 0.06, top: [front ? 0.8 : 0.9, 0.82], shift: [front ? -L * 0.06 : L * 0.04, 0] });
   // outer armour plate + hazard stripes facing out from the corner
-  block(b, front ? kit.panel : kit.hull, front ? L * 0.06 : -L * 0.04, h * 0.48, z + side * w * 0.66, L * 0.66, w * 0.14, h * 0.46, { ch: w * 0.05, bev: w * 0.04, top: [0.88, 0.6] });
+  block(b, kit.panel, front ? L * 0.06 : -L * 0.04, h * 0.48, z + side * w * 0.66, L * 0.66, w * 0.14, h * 0.46, { ch: w * 0.05, bev: w * 0.04, top: [0.88, 0.6] });
   b.box(front ? kit.hazard : kit.trim, h * 0.1, h * 0.04, w * 0.8, (front ? 1 : -1) * L * 0.36, h * 1.1, hz, h * 0.01);
   if (front) b.box(kit.lamp, h * 0.04, h * 0.08, w * 0.3, L * 0.48, h * 0.8, hz, h * 0.02);
 }
@@ -186,11 +186,11 @@ function cornerPod(b: Bld, kit: Kit, L: number, h: number, w: number, z: number,
 function wallSkirt(b: Bld, kit: Kit, L: number, h: number, w: number, z: number, side: number) {
   trackUnit(b, kit, L, h, w, z, side, { skirt: false, noFender: true, heavy: true, cleatMaxY: h * 0.25 });
   const t = Math.max(0.05, w * 0.2), zs = z + side * (w / 2 + t * 0.4);
-  block(b, kit.hull, -L * 0.03, h * 0.12, zs, L * 0.96, t, h * 1.0, { ch: t * 0.45, bev: t * 0.35, top: [0.88, 0.7], shift: [-L * 0.02, -side * t * 0.35], bot: t * 0.2 });
+  block(b, kit.trim, -L * 0.03, h * 0.12, zs, L * 0.96, t, h * 1.0, { ch: t * 0.45, bev: t * 0.35, top: [0.88, 0.7], shift: [-L * 0.02, -side * t * 0.35], bot: t * 0.2 });
   const n = Math.max(3, Math.round(L / (h * 1.5)));
   for (let i = 0; i < n; i++) {
     const x = -L * 0.03 - L * 0.42 + (L * 0.84 * (i + 0.5)) / n;
-    block(b, i % 2 ? kit.panel : kit.hull, x, h * 0.3, zs + side * t * 0.42, (L * 0.84) / n * 0.82, t * 0.5, h * 0.6, { ch: t * 0.15, bev: t * 0.12, top: [0.9, 0.6], shift: [0, -side * t * 0.12] });
+    block(b, i % 2 ? kit.panel : kit.hull2, x, h * 0.3, zs + side * t * 0.42, (L * 0.84) / n * 0.82, t * 0.5, h * 0.6, { ch: t * 0.15, bev: t * 0.12, top: [0.9, 0.6], shift: [0, -side * t * 0.12] });
   }
   b.box(kit.trim, L * 0.9, h * 0.08, w * 1.3, -L * 0.03, h * 1.1, z + side * t * 0.2, h * 0.03);
 }

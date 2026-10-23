@@ -80,14 +80,14 @@ export function reachArm(b: Bld, kit: Kit, side: number, sh: V3, el: V3, wr: V3,
   b.cyl(kit.hull, dr * 0.7, dr * 0.6, t * 0.2, [sh[0], sh[1], sh[2] + side * t * 0.8], side > 0 ? 'z' : '-z', 8);
   // upper arm: dark core + armour spine on top
   beam(b, kit.trim, sh, el, t * 1.1, t * 1.1);
-  beam(b, kit.hull, [sh[0], sh[1] + t * 0.45, sh[2]], [el[0], el[1] + t * 0.45, el[2]], t * 1.3, t * 0.55);
+  beam(b, kit.panel, [sh[0], sh[1] + t * 0.45, sh[2]], [el[0], el[1] + t * 0.45, el[2]], t * 1.3, t * 0.55);
   // hydraulic ram under the upper arm
   b.strut(kit.steel, [sh[0] + t * 0.3, sh[1] - t * 0.8, sh[2]], [el[0] - t * 0.2, el[1] - t * 0.7, el[2]], t * 0.18, t * 0.18, 6);
   b.cylb(kit.metal, t * 0.85, t * 1.4, t * 0.12, [el[0], el[1], el[2] - side * t * 0.7], side > 0 ? 'z' : '-z', 10);
   // forearm down to the wrist
   const wt: V3 = [wr[0] - podL * 0.3, wr[1] + podH * 0.5, wr[2]];
   beam(b, kit.trim, el, wt, t * 0.95, t * 0.95);
-  beam(b, kit.panel, [el[0], el[1] + t * 0.4, el[2]], [wt[0], wt[1] + t * 0.4, wt[2]], t * 1.1, t * 0.45);
+  beam(b, kit.trim, [el[0], el[1] + t * 0.4, el[2]], [wt[0], wt[1] + t * 0.4, wt[2]], t * 1.1, t * 0.45);
   // wrist housing: armoured fist, chamfered nose, team glow on the outer flank
   block(b, kit.trim, wr[0], wr[1], wr[2], podL * 0.9, podW * 0.82, podH * 0.4, { ch: podW * 0.2 });
   block(b, kit.hull, wr[0], wr[1] + podH * 0.22, wr[2], podL, podW, podH * 0.78, { top: [0.84, 0.86], shift: [-podL * 0.05, 0], ch: podW * 0.26, bev: podH * 0.16, bot: podH * 0.08 });
@@ -126,7 +126,7 @@ function bunkerCrawler(c: ChassisCtx): ChassisOut {
   both((s) => glow(b, kit, cx + 0.1 * u, by + 0.22 * u, s * 1.2 * u, 0.5 * u, 0.04 * u, 0.04 * u, [0, -s * 0.38, 0]));
   // brow: heavy armour lip over the visor, hazard band on top
   const fx = cx + rxF;
-  block(b, kit.hull, fx - 0.12 * u, by + 0.12 * u, 0, 0.4 * u, 1.2 * u, 0.26 * u, { top: [0.6, 0.9], shift: [0.1 * u, 0], ch: 0.16 * u, bev: 0.05 * u });
+  block(b, kit.panel, fx - 0.12 * u, by + 0.12 * u, 0, 0.4 * u, 1.2 * u, 0.26 * u, { top: [0.6, 0.9], shift: [0.1 * u, 0], ch: 0.16 * u, bev: 0.05 * u });
   hazard(b, kit, fx - 0.06 * u, by + 0.38 * u, 0, 0.16 * u, 0.8 * u, 5, Math.PI / 2);
   // visor slit: dark recess + glowing eye band + twin lamps
   b.box(kit.trim, 0.08 * u, 0.1 * u, 1.0 * u, fx + 0.02 * u, by + 0.02 * u, 0, 0.02 * u);
@@ -206,12 +206,12 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
   b.cylb(kit.trim, 0.3 * u, 0.12 * u, 0.04 * u, [baseP[0], by + 0.5 * u, baseP[2]], 'y', 14);
   block(b, kit.hull, baseP[0], by + 0.58 * u, baseP[2], 0.46 * u, 0.36 * u, 0.24 * u, { top: [0.8, 0.8], ch: 0.1 * u, bev: 0.04 * u });
   b.cylb(kit.metal, 0.13 * u, 0.42 * u, 0.03 * u, [baseP[0], baseP[1] + 0.06 * u, baseP[2] - 0.21 * u], 'z', 12);
-  beam(b, kit.hull, baseP, elbow, 0.22 * u, 0.26 * u, [1, 0, 0]);
+  beam(b, kit.panel, baseP, elbow, 0.22 * u, 0.26 * u, [1, 0, 0]);
   beam(b, kit.trim, [baseP[0] + 0.02 * u, baseP[1] - 0.04 * u, baseP[2]], [elbow[0] + 0.02 * u, elbow[1] - 0.04 * u, elbow[2]], 0.16 * u, 0.3 * u, [1, 0, 0]);
   b.strut(kit.steel, [baseP[0] + 0.25 * u, by + 0.6 * u, baseP[2]], [baseP[0] + (elbow[0] - baseP[0]) * 0.6 + 0.12 * u, baseP[1] + (elbow[1] - baseP[1]) * 0.6, baseP[2] + (elbow[2] - baseP[2]) * 0.6], 0.05 * u, 0.05 * u, 6);
   b.cylb(kit.metal, 0.15 * u, 0.36 * u, 0.03 * u, [elbow[0], elbow[1], elbow[2] - 0.18 * u], 'z', 12);
   hazard(b, kit, elbow[0] + 0.12 * u, elbow[1] + 0.12 * u, elbow[2], 0.3 * u, 0.2 * u, 4, -0.9);
-  beam(b, kit.hull, elbow, tipP, 0.2 * u, 0.22 * u, [1, 0, 0]);
+  beam(b, kit.panel, elbow, tipP, 0.2 * u, 0.22 * u, [1, 0, 0]);
   glow(b, kit, (elbow[0] + tipP[0]) / 2, (elbow[1] + tipP[1]) / 2 + 0.12 * u, (elbow[2] + tipP[2]) / 2, 0.06 * u, 0.04 * u, 0.04 * u);
   // cradle: armoured weapon saddle at the boom tip
   block(b, kit.trim, tx, cradleY - 0.24 * u, tz, tr * 2.1, tr * 2.1, 0.2 * u, { top: [0.8, 0.8], ch: tr * 0.5, bev: 0.03 * u });

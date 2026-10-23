@@ -1,4 +1,4 @@
-// node_modules/three/build/three.core.js
+// ../../../node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -17381,76 +17381,6 @@ var MeshStandardMaterial = class extends Material {
     return this;
   }
 };
-var MeshToonMaterial = class extends Material {
-  /**
-   * Constructs a new mesh toon material.
-   *
-   * @param {Object} [parameters] - An object with one or more properties
-   * defining the material's appearance. Any property of the material
-   * (including any property from inherited materials) can be passed
-   * in here. Color values can be passed any type of value accepted
-   * by {@link Color#set}.
-   */
-  constructor(parameters) {
-    super();
-    this.isMeshToonMaterial = true;
-    this.defines = { "TOON": "" };
-    this.type = "MeshToonMaterial";
-    this.color = new Color(16777215);
-    this.map = null;
-    this.gradientMap = null;
-    this.lightMap = null;
-    this.lightMapIntensity = 1;
-    this.aoMap = null;
-    this.aoMapIntensity = 1;
-    this.emissive = new Color(0);
-    this.emissiveIntensity = 1;
-    this.emissiveMap = null;
-    this.bumpMap = null;
-    this.bumpScale = 1;
-    this.normalMap = null;
-    this.normalMapType = TangentSpaceNormalMap;
-    this.normalScale = new Vector2(1, 1);
-    this.displacementMap = null;
-    this.displacementScale = 1;
-    this.displacementBias = 0;
-    this.alphaMap = null;
-    this.wireframe = false;
-    this.wireframeLinewidth = 1;
-    this.wireframeLinecap = "round";
-    this.wireframeLinejoin = "round";
-    this.fog = true;
-    this.setValues(parameters);
-  }
-  copy(source) {
-    super.copy(source);
-    this.color.copy(source.color);
-    this.map = source.map;
-    this.gradientMap = source.gradientMap;
-    this.lightMap = source.lightMap;
-    this.lightMapIntensity = source.lightMapIntensity;
-    this.aoMap = source.aoMap;
-    this.aoMapIntensity = source.aoMapIntensity;
-    this.emissive.copy(source.emissive);
-    this.emissiveMap = source.emissiveMap;
-    this.emissiveIntensity = source.emissiveIntensity;
-    this.bumpMap = source.bumpMap;
-    this.bumpScale = source.bumpScale;
-    this.normalMap = source.normalMap;
-    this.normalMapType = source.normalMapType;
-    this.normalScale.copy(source.normalScale);
-    this.displacementMap = source.displacementMap;
-    this.displacementScale = source.displacementScale;
-    this.displacementBias = source.displacementBias;
-    this.alphaMap = source.alphaMap;
-    this.wireframe = source.wireframe;
-    this.wireframeLinewidth = source.wireframeLinewidth;
-    this.wireframeLinecap = source.wireframeLinecap;
-    this.wireframeLinejoin = source.wireframeLinejoin;
-    this.fog = source.fog;
-    return this;
-  }
-};
 var MeshNormalMaterial = class extends Material {
   /**
    * Constructs a new mesh normal material.
@@ -20488,7 +20418,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// node_modules/three/build/three.module.js
+// ../../../node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -31986,7 +31916,7 @@ var WebGLRenderer = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
+// ../../../node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -34948,8 +34878,8 @@ function mountOffsets(d) {
 
 // src/client/render/palette.ts
 var TEAM_PAL = [
-  { body: "#5b6670", light: "#8a959e", dark: "#3a434b", deep: "#1f252a", accent: "#3fd2ff", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#4b555d" },
-  { body: "#6a6a4e", light: "#99977a", dark: "#444530", deep: "#25261a", accent: "#ff5a26", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#7d7458" }
+  { body: "#2f5cba", light: "#5a86d6", dark: "#1d3b7c", deep: "#112245", accent: "#3fd2ff", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#26498f" },
+  { body: "#bd432d", light: "#dc6d50", dark: "#7d281b", deep: "#43150e", accent: "#ffb02a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#9a3423" }
 ];
 var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
 
@@ -35570,27 +35500,8 @@ function paint(color, o = {}) {
   return m;
 }
 var N_ROWS = 16;
-var rampTex = null;
-function celRamp() {
-  if (rampTex) return rampTex;
-  const N = 64, d = new Uint8Array(N * 4);
-  const sm2 = (a, b, x) => {
-    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
-    return t * t * (3 - 2 * t);
-  };
-  for (let i = 0; i < N; i++) {
-    const x = i / (N - 1);
-    const v = 0.5 + 0.22 * sm2(0.4, 0.47, x) + 0.28 * sm2(0.6, 0.68, x);
-    d.set([v * 255, v * 255, v * 255, 255], i * 4);
-  }
-  rampTex = new DataTexture(d, N, 1, RGBAFormat);
-  rampTex.minFilter = rampTex.magFilter = LinearFilter;
-  rampTex.generateMipmaps = false;
-  rampTex.needsUpdate = true;
-  return rampTex;
-}
 function makeUber(rows) {
-  const A2 = [], B = [], E = [];
+  const A2 = [], B = [], E = [], M = [];
   for (let i = 0; i < N_ROWS; i++) {
     const r = rows[i] ?? rows[0];
     const c = new Color(r.color);
@@ -35599,13 +35510,15 @@ function makeUber(rows) {
     B.push(new Vector4(r.bev ?? 1, r.rim ?? 1, lit ? 0 : r.wear ?? 1, r.ao ?? 1));
     const e = new Color(r.em ?? "#000");
     E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), lit ? 0 : r.grime ?? 1));
+    M.push(new Vector4(lit ? 1 : r.rough ?? 0.5, lit ? 0 : r.metal ?? 0.1, 0, 0));
   }
-  const m = new MeshToonMaterial({ color: "#ffffff", gradientMap: celRamp() });
+  const m = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.5, metalness: 0.1, envMapIntensity: 1 });
   loadSurfaceTextures();
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uA = { value: A2 };
     sh.uniforms.uB = { value: B };
     sh.uniforms.uE = { value: E };
+    sh.uniforms.uM = { value: M };
     Object.assign(sh.uniforms, surfaceUniforms);
     sh.uniforms.rimCol = { value: new Color("#a9c8ff") };
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;" + SD_VERT_DECL).replace("#include <begin_vertex>", `#include <begin_vertex>
@@ -35617,72 +35530,99 @@ function makeUber(rows) {
         vWY = (modelMatrix * wpS).y;`).replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvWN = inverseTransformDirection(transformedNormal, viewMatrix);");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
 varying float vMid; varying vec3 vWN; varying float vWY;
-uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec3 rimCol;${SD_FRAG_DECL}`).replace(
+uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec4 uM[${N_ROWS}]; uniform vec3 rimCol;${SD_FRAG_DECL}`).replace(
       "#include <map_fragment>",
       /* glsl */
       `
         int mi = int(floor(vMid + 0.5));
-        vec4 rA = uA[mi], rB = uB[mi];
+        vec4 rA = uA[mi], rB = uB[mi], rM = uM[mi];
         vec3 wn = normalize(vWN);
         vec3 base = rA.rgb;
-        // painted top-light: up-facing planes lighter, undersides darker
-        base *= mix(0.78, 1.06, smoothstep(-0.7, 0.85, wn.y));
-        // bevel highlight on chamfers (normals between side and up)
+        // painted top-light (subtle: the lighting does the form now)
+        base *= mix(0.9, 1.03, smoothstep(-0.7, 0.85, wn.y));
+        // bevel brightening on chamfers (normals between side and up)
         float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
-        base = mix(base, base * 1.2 + vec3(0.02), bev * rB.x);
+        base = mix(base, base * 1.12 + vec3(0.015), bev * rB.x);
         // soft ground-contact darkening
-        base *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
+        base *= mix(1.0, mix(0.72, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
         // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
         float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
         ${SD_APPLY}
         diffuseColor.rgb = base;`
-    ).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+    ).replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
+        // row roughness, scaled by the skin (grime roughens, chipped edges are bare satin metal)
+        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5), 0.08, 1.0);`).replace("#include <metalnessmap_fragment>", `#include <metalnessmap_fragment>
+        metalnessFactor = mix(rM.y, 0.8, sdMetal * 0.8);`).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
         totalEmissiveRadiance = uE[mi].rgb + uE[10].rgb * sdGlow * 0.5;
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-        totalEmissiveRadiance += rimCol * fres * 0.16 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
+        totalEmissiveRadiance += rimCol * fres * 0.08 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => "uberToon3";
+  m.customProgramCacheKey = () => "uberPBR1";
   return m;
 }
+var PAINT_PLAN = {
+  armor: "hull",
+  armor2: "hull2",
+  shell: "panel",
+  mech: "trim",
+  joint: "metal"
+};
 var TEAM_PAINT = [
-  // hull, trim, panel, canvas
-  ["#5c6a76", "#2f373f", "#7e8c97", "#55605a"],
-  ["#77734f", "#3f3d2b", "#99946f", "#625e43"]
+  ["#24499a", "#183064", "#d2d6d9", "#4f5a62"],
+  ["#a2321f", "#6a1f17", "#dad4ca", "#665c50"]
 ];
 var kits = [null, null];
 function makeKit(team) {
   const hit = kits[team];
   if (hit) return hit;
   const p = TEAM_PAL[team];
-  const names = ["hull", "trim", "panel", "metal", "steel", "rubber", "glass", "canvas", "hazard", "accent", "glow", "lamp", "hot", "plasma", "rail"];
+  const names = ["hull", "trim", "panel", "metal", "steel", "rubber", "glass", "canvas", "hazard", "accent", "glow", "lamp", "hot", "plasma", "rail", "hull2"];
   const tp = TEAM_PAINT[team];
   const rows = [
-    { color: tp[0] },
-    { color: tp[1], bev: 0.6, det: 0.9 },
-    { color: tp[2] },
-    { color: "#4b535b", bev: 0.8, det: 0.55, wear: 0.6 },
-    { color: "#b3bcc3", bev: 0.6, det: 0.2, wear: 0, grime: 0.6 },
-    { color: "#2b2d30", bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.2 },
-    { color: "#1b3440", bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.3 },
-    { color: tp[3], det: 0.12, wear: 0.2 },
-    { color: "#e2b13a", det: 0.6, wear: 1.3 },
-    { color: p.accent, bev: 0.6, det: 0.45, wear: 0.6, grime: 0.6 },
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.15 },
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#fff0d0", emI: 1.8 },
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ff7a2a", emI: 2.4 },
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#79f0d6", emI: 1.8 },
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#86adff", emI: 2.2 }
+    /* hull   */
+    { color: tp[0], rough: 0.36, metal: 0.18, det: 0.8, grime: 0.55, wear: 0.8 },
+    /* trim   */
+    { color: "#24272b", rough: 0.55, metal: 0.45, bev: 0.7, det: 0.7, grime: 0.8, wear: 0.5 },
+    /* panel  */
+    { color: tp[2], rough: 0.42, metal: 0.05, det: 0.7, grime: 0.45, wear: 0.7 },
+    /* metal  */
+    { color: "#3a3f45", rough: 0.38, metal: 0.8, bev: 0.8, det: 0.45, wear: 0.4, grime: 0.6 },
+    /* steel  */
+    { color: "#b3bac0", rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
+    /* rubber */
+    { color: "#1b1c1e", rough: 0.88, metal: 0, bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.1 },
+    /* glass  */
+    { color: "#14262f", rough: 0.08, metal: 0.3, bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.2 },
+    /* canvas */
+    { color: tp[3], rough: 0.85, metal: 0, det: 0.12, wear: 0.2 },
+    /* hazard */
+    { color: "#e8b432", rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
+    /* accent */
+    { color: p.accent, rough: 0.35, metal: 0.1, bev: 0.6, det: 0.35, wear: 0.5, grime: 0.4 },
+    /* glow   */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.6 },
+    /* lamp   */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#fff0d0", emI: 2 },
+    /* hot    */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ff7a2a", emI: 2.6 },
+    /* plasma */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#79f0d6", emI: 2 },
+    /* rail   */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#86adff", emI: 2.4 },
+    /* hull2  */
+    { color: tp[1], rough: 0.4, metal: 0.2, det: 0.8, grime: 0.6, wear: 0.7 }
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
   const kit = {
-    decal: new MeshToonMaterial({ map: decalTex, gradientMap: celRamp(), transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    decal: new MeshStandardMaterial({ map: decalTex, roughness: 0.45, metalness: 0.05, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     uber,
     pal: p
   };
   names.forEach((n, i) => {
     kit[n] = { uid: i, base: uber };
   });
+  for (const [role, slot] of Object.entries(PAINT_PLAN)) kit[role] = kit[slot];
   kits[team] = kit;
   return kits[team];
 }
@@ -35740,7 +35680,7 @@ function weaponD(m, cls) {
 }
 var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
 
-// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -36351,13 +36291,13 @@ var zs = (n, gap) => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap
 function pintle(C) {
   const { b, p, rc, kit, r, y0, nb } = C;
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 8);
+  b.lathe(kit.panel, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 8);
   b.cyl(kit.metal, r * 0.12, r * 0.1, r * 0.3, [0, y0 + r * 0.26, 0], "y", 6);
   C.t.pitch.position.set(r * 0.05, y0 + r * 0.62, 0);
   const w = nb > 1 ? r * 0.5 : r * 0.32;
   cbox(p, kit.trim, -r * 0.05, 0, 0, r * 0.75, r * 0.3, w);
-  bx(p, kit.panel, -r * 0.05, -r * 0.05, w / 2 + r * 0.12, r * 0.38, r * 0.3, r * 0.22);
-  cbox(p, kit.hull, r * 0.38, r * 0.02, 0, r * 0.1, r * 0.72, r * 1.15, r * 0.04, [0, 0, -0.28]);
+  bx(p, kit.hull, -r * 0.05, -r * 0.05, w / 2 + r * 0.12, r * 0.38, r * 0.3, r * 0.22);
+  cbox(p, kit.panel, r * 0.38, r * 0.02, 0, r * 0.1, r * 0.72, r * 1.15, r * 0.04, [0, 0, -0.28]);
   accent(C, r * 0.45, r * 0.02, -r * 0.32, r * 0.08, r * 0.2, [0, 0, -0.28 + Math.PI / 2], p);
   const len = C.D * (1.05 + 0.35 * C.c), x0 = r * 0.25;
   const heavy = calibreMm(C.mod) > 10, jk = nb > 1 ? 1.55 : 1.9;
@@ -36376,8 +36316,8 @@ function pintle(C) {
 function ballMount(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore;
-  ball(b, kit.hull, 0, y0 + r * 0.42, 0, r * 0.82, 0.62, 10);
-  bx(b, kit.panel, -r * 0.2, y0 + r * 0.4, r * 0.78, r * 0.5, r * 0.32, r * 0.18);
+  ball(b, kit.panel, 0, y0 + r * 0.42, 0, r * 0.82, 0.62, 10);
+  bx(b, kit.hull, -r * 0.2, y0 + r * 0.4, r * 0.78, r * 0.5, r * 0.32, r * 0.18);
   C.t.pitch.position.set(r * 0.55, y0 + r * 0.42, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, "x");
   cbox(p, kit.metal, -r * 0.1, r * 0.32, -r * 0.22, r * 0.4, r * 0.2, r * 0.2);
@@ -36390,7 +36330,7 @@ function wedgeAC(C) {
   const { b, p, rc, kit, r, y0, nb } = C;
   const R = C.bore, h = r * 0.52;
   const st = [[-r * 0.9, r * 0.5, r * 0.36, h * 0.85], [-r * 0.6, r * 0.88, r * 0.62, h], [r * 0.2, r * 0.88, r * 0.62, h], [r * 0.95, r * 0.28, r * 0.16, h * 0.68]];
-  shell(b, kit.hull, st, y0);
+  shell(b, kit.panel, st, y0);
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.52, 0);
   const gap = R * 3.4;
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.62, nb > 1 ? gap * nb + R * 3 : R * 5.5);
@@ -36408,12 +36348,12 @@ function wedgeAC(C) {
   const mw = nb > 1 ? gap * nb + R * 3 : R * 5.5;
   if (bofors) {
     bx(p, kit.trim, -r * 0.06, h * 0.31 + r * 0.04, 0, r * 0.22, r * 0.08, R * 2.6);
-    bx(p, kit.panel, -r * 0.06, h * 0.31 + r * 0.24, 0, r * 0.15, r * 0.36, R * 1.7);
+    bx(p, kit.hull, -r * 0.06, h * 0.31 + r * 0.24, 0, r * 0.15, r * 0.36, R * 1.7);
     bx(p, kit.hazard, -r * 0.06, h * 0.31 + r * 0.44, 0, r * 0.12, r * 0.06, R * 1.4);
   } else if (nb === 1) {
-    cbox(p, kit.panel, -r * 0.05, -h * 0.05, -(mw / 2 + r * 0.1), r * 0.3, h * 0.5, r * 0.16, r * 0.03);
+    cbox(p, kit.hull, -r * 0.05, -h * 0.05, -(mw / 2 + r * 0.1), r * 0.3, h * 0.5, r * 0.16, r * 0.03);
   }
-  bx(b, kit.panel, -r * 0.35, y0 + h * 0.75, r * 0.72, r * 0.6, h * 0.5, r * 0.22);
+  bx(b, kit.hull, -r * 0.35, y0 + h * 0.75, r * 0.72, r * 0.6, h * 0.5, r * 0.22);
   cbox(b, kit.trim, -r * 0.45, y0 + h + r * 0.06, -r * 0.2, r * 0.26, r * 0.12, r * 0.26);
   accent(C, -r * 0.1, y0 + h + 2e-3, r * 0.25, r * 0.55, r * 0.1);
   C.t.rate = 0.18 + (1 - C.c) * 0.1;
@@ -36421,15 +36361,15 @@ function wedgeAC(C) {
 function quadAA(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.6, 0], [r * 0.62, r * 0.4], [r * 0.45, r * 0.58], [0, r * 0.58]], [0, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.6, 0], [r * 0.62, r * 0.4], [r * 0.45, r * 0.58], [0, r * 0.58]], [0, y0, 0], "y", 10);
   b.cyl(kit.metal, r * 0.04, r * 0.04, r * 0.4, [-r * 0.45, y0 + r * 0.5, 0], "y", 5);
-  cbox(b, kit.panel, -r * 0.45, y0 + r * 0.95, 0, r * 0.08, r * 0.24, r * 0.6, r * 0.03, [0, 0, 0.3]);
+  cbox(b, kit.hull, -r * 0.45, y0 + r * 0.95, 0, r * 0.08, r * 0.24, r * 0.6, r * 0.03, [0, 0, 0.3]);
   C.t.pitch.position.set(r * 0.05, y0 + r * 0.42, 0);
   C.t.pitch.rotation.z = 0.32;
   bx(p, kit.trim, 0, 0, 0, r * 0.3, r * 0.18, r * 1);
   const len = C.D * 1.2;
   for (const s of [-1, 1]) {
-    cbox(p, kit.hull, r * 0.05, 0, s * r * 0.62, r * 0.75, r * 0.5, r * 0.3);
+    cbox(p, kit.panel, r * 0.05, 0, s * r * 0.62, r * 0.75, r * 0.5, r * 0.3);
     for (const y of [-r * 0.12, r * 0.12]) barrel(C, rc, { len, rad: R, x0: r * 0.35, y, z: s * r * 0.62, seg: 6, brake: "flash" });
   }
   accent(C, r * 0.05, r * 0.26, -r * 0.62, r * 0.5, r * 0.2, void 0, p);
@@ -36437,12 +36377,12 @@ function quadAA(C) {
 }
 function scatter(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.75, 0], [r * 0.75, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 8);
+  b.lathe(kit.panel, [[0, 0], [r * 0.75, 0], [r * 0.75, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 8);
   b.cyl(kit.metal, r * 0.11, r * 0.09, r * 0.4, [-r * 0.3, y0 + r * 0.22, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.72, 0);
-  cbox(p, kit.hull, -r * 0.12, 0, 0, r * 0.95, r * 0.32, r * 0.46, r * 0.06);
+  cbox(p, kit.panel, -r * 0.12, 0, 0, r * 0.95, r * 0.32, r * 0.46, r * 0.06);
   cbox(p, kit.trim, -r * 0.2, r * 0.19, 0, r * 0.55, r * 0.07, r * 0.2, r * 0.02);
-  p.cylb(kit.panel, r * 0.27, r * 0.24, r * 0.05, [r * 0.08, -r * 0.33, -r * 0.12], "z", 10);
+  p.cylb(kit.hull, r * 0.27, r * 0.24, r * 0.05, [r * 0.08, -r * 0.33, -r * 0.12], "z", 10);
   band(p, kit.trim, r * 0.08, -r * 0.33, 0, r * 0.1, r * 0.1, 6);
   accent(C, -r * 0.35, r * 0.165, r * 0.12, r * 0.3, r * 0.08, void 0, p);
   const R = Math.max(C.bore, r * 0.12);
@@ -36453,8 +36393,8 @@ function scatter(C) {
 }
 function pointDefence(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.7, 0], [r * 0.62, r * 0.25], [r * 0.38, r * 0.5], [0, r * 0.58]], [0, y0, 0], "y", 10);
-  cbox(b, kit.panel, -r * 0.1, y0 + r * 0.62, 0, r * 0.1, r * 0.3, r * 0.5, r * 0.03, [0, 0, 0.35]);
+  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.62, r * 0.25], [r * 0.38, r * 0.5], [0, r * 0.58]], [0, y0, 0], "y", 10);
+  cbox(b, kit.hull, -r * 0.1, y0 + r * 0.62, 0, r * 0.1, r * 0.3, r * 0.5, r * 0.03, [0, 0, 0.35]);
   C.t.pitch.position.set(r * 0.35, y0 + r * 0.38, r * 0.3);
   ball(p, kit.trim, 0, 0, 0, r * 0.22, 1, 8, "x");
   rc.cyl(kit.metal, r * 0.13, r * 0.11, r * 0.45, [0, 0, 0], "x", 7);
@@ -36468,18 +36408,18 @@ function flak(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const n = Math.max(1, C.nb);
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.18], [r * 0.6, r * 0.3], [0, r * 0.3]], [0, y0, 0], "y", C.tier >= 4 ? 12 : 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.18], [r * 0.6, r * 0.3], [0, r * 0.3]], [0, y0, 0], "y", C.tier >= 4 ? 12 : 10);
   const cols = n >= 4 ? 2 : n, rows = n >= 4 ? 2 : 1;
   const gap = R * 4, wid = cols * gap + R * 2;
-  for (const s of [-1, 1]) shell(b, kit.panel, [[-r * 0.4, r * 0.05, r * 0.04, r * 0.62], [r * 0.2, r * 0.05, r * 0.04, r * 0.46]], y0 + r * 0.2, s * (wid / 2 + r * 0.08));
+  for (const s of [-1, 1]) shell(b, kit.hull, [[-r * 0.4, r * 0.05, r * 0.04, r * 0.62], [r * 0.2, r * 0.05, r * 0.04, r * 0.46]], y0 + r * 0.2, s * (wid / 2 + r * 0.08));
   C.t.pitch.position.set(0, y0 + r * 0.7, 0);
   C.t.pitch.rotation.z = 0.55;
-  cbox(p, kit.hull, -r * 0.05, 0, 0, r * 0.7, r * (0.3 + 0.22 * (rows - 1)), wid, r * 0.06);
+  cbox(p, kit.panel, -r * 0.05, 0, 0, r * 0.7, r * (0.3 + 0.22 * (rows - 1)), wid, r * 0.06);
   const len = C.D * (1.3 + 0.2 * C.c);
   for (let j = 0; j < rows; j++) for (const z of zs(cols, gap)) {
     const y = rows > 1 ? (j - 0.5) * R * 3.6 : 0;
     barrel(C, rc, { len, rad: R, x0: r * 0.2, y, z, seg: 7, sleeve: true, brake: "flash" });
-    bx(rc, kit.panel, -r * 0.08, y + R * 1.6 + r * 0.1, z, r * 0.32, r * 0.18, R * 1.8);
+    bx(rc, kit.hull, -r * 0.08, y + R * 1.6 + r * 0.1, z, r * 0.32, r * 0.18, R * 1.8);
     bx(rc, kit.hazard, r * 0.1, y + R * 1.6 + r * 0.1, z, r * 0.05, r * 0.14, R * 1.5);
   }
   accent(C, -r * 0.15, r * (0.15 + 0.11 * (rows - 1)), 0, r * 0.4, wid * 0.6, void 0, p);
@@ -36494,17 +36434,17 @@ function gatling(C) {
   const rb = Math.min(Math.max(C.bore * 0.75, r * 0.04), cr * Math.sin(Math.PI / n) * 0.6);
   const len = C.D * (big ? 1.3 : 1.2);
   const ro = cr + rb * 1.8;
-  b.lathe(kit.hull, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.16], [r * 0.6, r * 0.24], [0, r * 0.24]], [0, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.16], [r * 0.6, r * 0.24], [0, r * 0.24]], [0, y0, 0], "y", 10);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.05, y0 + r * 0.42, s * (ro + r * 0.2), r * 0.5, r * 0.5, r * 0.12, r * 0.04);
   C.t.pitch.position.set(-r * 0.05, y0 + r * 0.5, 0);
-  p.lathe(kit.hull, [[0, -r * 0.5], [ro * 0.85, -r * 0.5], [ro + r * 0.04, -r * 0.38], [ro + r * 0.04, r * 0.18], [ro * 0.9, r * 0.3], [0, r * 0.3]], [0, 0, 0], "x", 10);
+  p.lathe(kit.panel, [[0, -r * 0.5], [ro * 0.85, -r * 0.5], [ro + r * 0.04, -r * 0.38], [ro + r * 0.04, r * 0.18], [ro * 0.9, r * 0.3], [0, r * 0.3]], [0, 0, 0], "x", 10);
   if (big) {
-    p.cylb(kit.panel, ro * 1.05, r * 0.75, r * 0.06, [-r * 1.22, 0, 0], "x", 10);
+    p.cylb(kit.hull, ro * 1.05, r * 0.75, r * 0.06, [-r * 1.22, 0, 0], "x", 10);
     band(p, kit.trim, -r * 0.85, 0, 0, ro * 1.1, r * 0.06, 10);
     cbox(p, kit.trim, -r * 0.62, ro * 1, 0, r * 0.5, r * 0.12, r * 0.22, r * 0.03);
     accent(C, -r * 0.85, ro * 1.07, 0, r * 0.4, r * 0.14, void 0, p);
   } else {
-    p.cylb(kit.panel, r * 0.3, r * 0.26, r * 0.05, [-r * 0.2, 0, -(ro + r * 0.06)], "-z", 10);
+    p.cylb(kit.hull, r * 0.3, r * 0.26, r * 0.05, [-r * 0.2, 0, -(ro + r * 0.06)], "-z", 10);
     bx(p, kit.trim, -r * 0.02, -r * 0.12, -(ro + r * 0.01), r * 0.28, r * 0.12, r * 0.1);
     accent(C, -r * 0.25, ro + r * 0.04, 0, r * 0.45, r * 0.12, void 0, p);
   }
@@ -36529,8 +36469,8 @@ var tankCommon = (C, roofY, cx, cz) => {
 function castDome(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.6;
-  b.lathe(kit.hull, [[0, 0], [r * 0.82, 0], [r * 0.86, h * 0.3], [r * 0.7, h * 0.75], [r * 0.38, h], [0, h]], [-r * 0.08, y0, 0], "y", 12);
-  cbox(b, kit.panel, -r * 0.88, y0 + h * 0.45, 0, r * 0.35, h * 0.5, r * 0.9);
+  b.lathe(kit.panel, [[0, 0], [r * 0.82, 0], [r * 0.86, h * 0.3], [r * 0.7, h * 0.75], [r * 0.38, h], [0, h]], [-r * 0.08, y0, 0], "y", 12);
+  cbox(b, kit.hull, -r * 0.88, y0 + h * 0.45, 0, r * 0.35, h * 0.5, r * 0.9);
   tankCommon(C, y0 + h, -r * 0.3, -r * 0.3);
   accent(C, -r * 0.88, y0 + h * 0.71, 0, r * 0.3, r * 0.6);
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.48, 0);
@@ -36542,8 +36482,8 @@ function castDome(C) {
 function wedgeTank(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.5;
-  shell(b, kit.hull, [[-r * 1.05, r * 0.42, r * 0.32, h * 0.85], [-r * 0.7, r * 0.8, r * 0.6, h], [r * 0.3, r * 0.86, r * 0.62, h], [r * 0.75, r * 0.62, r * 0.42, h * 0.85], [r * 0.98, r * 0.3, r * 0.2, h * 0.6]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.panel, -r * 0.3, y0 + h * 0.5, s * r * 0.9, r * 0.9, h * 0.55, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
+  shell(b, kit.panel, [[-r * 1.05, r * 0.42, r * 0.32, h * 0.85], [-r * 0.7, r * 0.8, r * 0.6, h], [r * 0.3, r * 0.86, r * 0.62, h], [r * 0.75, r * 0.62, r * 0.42, h * 0.85], [r * 0.98, r * 0.3, r * 0.2, h * 0.6]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.3, y0 + h * 0.5, s * r * 0.9, r * 0.9, h * 0.55, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
   tankCommon(C, y0 + h, -r * 0.45, -r * 0.32);
   accent(C, -r * 0.2, y0 + h + 2e-3, r * 0.3, r * 0.6, r * 0.12);
   C.t.pitch.position.set(r * 0.82, y0 + h * 0.52, 0);
@@ -36556,9 +36496,9 @@ function wedgeTank(C) {
 function twinHex(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.46, gap = R * 3.6;
-  shell(b, kit.hull, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
+  shell(b, kit.panel, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
   tankCommon(C, y0 + h, -r * 0.5, r * 0.4);
-  cbox(b, kit.panel, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
+  cbox(b, kit.hull, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
   accent(C, -r * 0.1, y0 + h + 2e-3, 0, r * 0.2, r * 0.9);
   C.t.pitch.position.set(r * 0.85, y0 + h * 0.5, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.7, gap + R * 6, r * 0.06, void 0, 0.85);
@@ -36569,8 +36509,8 @@ function twinHex(C) {
 function siegeCasemate(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.62;
-  shell(b, kit.hull, [[-r * 0.95, r * 0.68, r * 0.45, h * 0.9], [r * 0.15, r * 0.78, r * 0.5, h], [r * 0.6, r * 0.78, r * 0.5, h * 0.7], [r * 0.9, r * 0.62, r * 0.42, h * 0.32]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.panel, -r * 0.35, y0 + h * 0.45, s * r * 0.82, r * 1, h * 0.6, r * 0.1, r * 0.03);
+  shell(b, kit.panel, [[-r * 0.95, r * 0.68, r * 0.45, h * 0.9], [r * 0.15, r * 0.78, r * 0.5, h], [r * 0.6, r * 0.78, r * 0.5, h * 0.7], [r * 0.9, r * 0.62, r * 0.42, h * 0.32]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.35, y0 + h * 0.45, s * r * 0.82, r * 1, h * 0.6, r * 0.1, r * 0.03);
   tankCommon(C, y0 + h, -r * 0.55, r * 0.35);
   b.lathe(kit.metal, [[0, 0], [r * 0.09, 0], [r * 0.09, r * 0.18], [0, r * 0.2]], [-r * 0.7, y0 + h, -r * 0.4], "y", 6);
   accent(C, -r * 0.35, y0 + h + 2e-3, -r * 0.05, r * 0.7, r * 0.14);
@@ -36584,9 +36524,9 @@ function siegeCasemate(C) {
 function gauss(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = Math.max(C.bore, r * 0.14), h = r * 0.48;
-  shell(b, kit.hull, [[-r * 0.9, r * 0.75, r * 0.52, h], [r * 0.4, r * 0.8, r * 0.55, h], [r * 0.85, r * 0.45, r * 0.3, h * 0.55]], y0);
+  shell(b, kit.panel, [[-r * 0.9, r * 0.75, r * 0.52, h], [r * 0.4, r * 0.8, r * 0.55, h], [r * 0.85, r * 0.45, r * 0.3, h * 0.55]], y0);
   for (const s of [-1, 1]) {
-    capsule(b, kit.panel, -r * 0.55, y0 + h + r * 0.1, s * r * 0.35, r * 0.15, r * 0.7, "x", 8);
+    capsule(b, kit.hull, -r * 0.55, y0 + h + r * 0.1, s * r * 0.35, r * 0.15, r * 0.7, "x", 8);
     bx(b, kit.rail, -r * 0.55, y0 + h + r * 0.255, s * r * 0.35, r * 0.4, r * 0.02, r * 0.05);
   }
   C.acc = true;
@@ -36604,10 +36544,10 @@ function gauss(C) {
 function sniper(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.6, 0], [r * 0.55, r * 0.15], [r * 0.3, r * 0.24], [0, r * 0.24]], [0, y0, 0], "y", 8);
+  b.lathe(kit.panel, [[0, 0], [r * 0.6, 0], [r * 0.55, r * 0.15], [r * 0.3, r * 0.24], [0, r * 0.24]], [0, y0, 0], "y", 8);
   cbox(b, kit.trim, -r * 0.05, y0 + r * 0.4, 0, r * 0.35, r * 0.3, r * 0.3);
   C.t.pitch.position.set(0, y0 + r * 0.6, 0);
-  cbox(rc, kit.hull, -r * 0.05, 0, 0, r * 1, r * 0.2, r * 0.16, r * 0.04);
+  cbox(rc, kit.panel, -r * 0.05, 0, 0, r * 1, r * 0.2, r * 0.16, r * 0.04);
   cbox(rc, kit.trim, -r * 0.6, -r * 0.04, 0, r * 0.3, r * 0.26, r * 0.13, r * 0.03);
   barrel(C, rc, { len: C.D * 1.75, rad: R, x0: r * 0.3, seg: 6, brake: "block", taper: 0.9 });
   capsule(rc, kit.metal, r * 0.02, r * 0.22, 0, r * 0.075, r * 0.62, "x", 6);
@@ -36620,7 +36560,7 @@ function rail(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = Math.max(C.bore, r * 0.11), h = r * 0.46;
   const xl = C.tier >= 5;
-  shell(b, kit.hull, [[-r * 0.95, r * 0.55, r * 0.4, h * 0.9], [-r * 0.4, r * 0.82, r * 0.58, h], [r * 0.5, r * 0.7, r * 0.5, h], [r * 0.95, r * 0.32, r * 0.2, h * 0.65]], y0);
+  shell(b, kit.panel, [[-r * 0.95, r * 0.55, r * 0.4, h * 0.9], [-r * 0.4, r * 0.82, r * 0.58, h], [r * 0.5, r * 0.7, r * 0.5, h], [r * 0.95, r * 0.32, r * 0.2, h * 0.65]], y0);
   cbox(b, kit.trim, -r * 0.55, y0 + h + r * 0.1, 0, r * 0.5, r * 0.2, r * 0.55);
   for (const s of [-1, 1]) bx(b, kit.rail, -r * 0.55, y0 + h + r * 0.12, s * r * 0.28, r * 0.36, r * 0.1, r * 0.02);
   accent(C, r * 0.2, y0 + h + 2e-3, 0, r * 0.4, r * 0.18);
@@ -36661,7 +36601,7 @@ function missile(B, nose, body, fin3, x0, y, z, R, len, seg = 7) {
   }
 }
 var pedestal = (C, k = 0.6, h = 0.22) => {
-  C.b.lathe(C.kit.hull, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.55], [C.r * k * 0.75, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
+  C.b.lathe(C.kit.panel, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.55], [C.r * k * 0.75, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
 };
 function rocketBundle(C) {
   const { b, p, rc, kit, r, y0, nb } = C;
@@ -36671,13 +36611,13 @@ function rocketBundle(C) {
   pedestal(C);
   cbox(b, kit.trim, -r * 0.1, y0 + r * 0.3, 0, r * 0.45, r * 0.3, r * 0.4, r * 0.05);
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.42 + ph * 0.5, 0);
-  cbox(p, kit.hull, 0, -ph * 0.5 - r * 0.02, 0, r * 0.6, r * 0.08, pw * 0.8, r * 0.02);
+  cbox(p, kit.panel, 0, -ph * 0.5 - r * 0.02, 0, r * 0.6, r * 0.08, pw * 0.8, r * 0.02);
   C.t.pitch.rotation.z = 0.18;
   const tip = C.mod.id === "incendiary" ? kit.hot : kit.hazard;
   const ox = -pl * 0.35;
   for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
     const y = (i - (rows - 1) / 2) * g, z = (j - (cols - 1) / 2) * g;
-    rc.lathe(kit.hull, [[0, 0], [tr * 0.9, 0], [tr, tr * 0.3], [tr, pl], [tr * 0.78, pl], [tr * 0.78, pl - tr * 0.5], [0, pl - tr * 0.5]], [ox, y, z], "x", 8);
+    rc.lathe(kit.panel, [[0, 0], [tr * 0.9, 0], [tr, tr * 0.3], [tr, pl], [tr * 0.78, pl], [tr * 0.78, pl - tr * 0.5], [0, pl - tr * 0.5]], [ox, y, z], "x", 8);
     rc.lathe(tip, [[0, 0], [tr * 0.62, 0], [0, tr * 0.7]], [ox + pl - tr * 0.5, y, z], "x", 6);
     C.muzzle(ox + pl + 0.01, y, z);
   }
@@ -36690,13 +36630,13 @@ function mlrs(C) {
   const { b, p, rc, kit, r, y0, nb } = C;
   const cols = 4, rows = Math.ceil(nb / cols), cell = r * 0.38;
   const pw = cols * cell + r * 0.12, ph = rows * cell + r * 0.12, pl = r * 1.6;
-  shell(b, kit.hull, [[-r * 0.8, r * 0.6, r * 0.5, r * 0.3], [r * 0.6, r * 0.6, r * 0.5, r * 0.3]], y0);
+  shell(b, kit.panel, [[-r * 0.8, r * 0.6, r * 0.5, r * 0.3], [r * 0.6, r * 0.6, r * 0.5, r * 0.3]], y0);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.3, y0 + r * 0.45, s * (pw / 2 + r * 0.06), r * 0.45, r * 0.4, r * 0.1);
   C.t.pitch.position.set(-r * 0.3, y0 + r * 0.55, 0);
   C.t.pitch.rotation.z = 0.28;
   const ox = pl * 0.25;
-  cbox(rc, kit.hull, ox, ph * 0.5, 0, pl, ph, pw, r * 0.06);
-  for (const f of [-0.3, 0.1]) bx(rc, kit.panel, ox + pl * f, ph + r * 0.02, 0, pl * 0.12, r * 0.04, pw * 1.02);
+  cbox(rc, kit.panel, ox, ph * 0.5, 0, pl, ph, pw, r * 0.06);
+  for (const f of [-0.3, 0.1]) bx(rc, kit.hull, ox + pl * f, ph + r * 0.02, 0, pl * 0.12, r * 0.04, pw * 1.02);
   tipGridAt(C, rc, ox + pl / 2, ph * 0.5, cols, rows, cell, kit.hazard);
   accent(C, ox - pl * 0.1, ph + 3e-3, 0, pl * 0.35, pw * 0.4, void 0, rc);
   C.t.shot = "rocket";
@@ -36717,10 +36657,10 @@ function atgm(C) {
   b.cyl(kit.metal, r * 0.1, r * 0.1, r * 0.45, [0, y0 + r * 0.2, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.68, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, r * 0.22, r * 0.5);
-  cbox(p, kit.hull, r * 0.05, r * 0.02, -r * 0.42, r * 0.4, r * 0.3, r * 0.26);
+  cbox(p, kit.panel, r * 0.05, r * 0.02, -r * 0.42, r * 0.4, r * 0.3, r * 0.26);
   p.cyl(kit.glass, r * 0.08, r * 0.08, r * 0.02, [r * 0.25, r * 0.04, -r * 0.42], "x", 6);
   const z = r * 0.38;
-  rc.lathe(kit.panel, [[0, 0], [tr * 0.85, 0], [tr, tr * 0.4], [tr, tl - tr * 0.5], [tr * 1.15, tl - tr * 0.3], [tr * 1.15, tl], [tr * 0.8, tl], [0, tl - tr * 0.3]], [-tl * 0.4, 0, z], "x", 8);
+  rc.lathe(kit.hull, [[0, 0], [tr * 0.85, 0], [tr, tr * 0.4], [tr, tl - tr * 0.5], [tr * 1.15, tl - tr * 0.3], [tr * 1.15, tl], [tr * 0.8, tl], [0, tl - tr * 0.3]], [-tl * 0.4, 0, z], "x", 8);
   rc.lathe(kit.steel, [[0, 0], [tr * 0.6, 0], [0, tr * 0.8]], [tl * 0.6 - tr * 0.3, 0, z], "x", 6);
   hazardRings(rc, kit, -tl * 0.4 + tl * 0.15, 0, z, tr * 1.03, tl * 0.18, 2);
   accent(C, tl * 0.15, tr + 2e-3, z, tl * 0.3, tr * 0.6, void 0, rc);
@@ -36735,8 +36675,8 @@ function railRocket(C) {
   cbox(b, kit.trim, 0, y0 + r * 0.38, 0, r * 0.3, r * 0.34, r * 0.32);
   C.t.pitch.position.set(0, y0 + r * 0.6, 0);
   C.t.pitch.rotation.z = 0.12;
-  cbox(p, kit.hull, r * 0.05, 0, 0, L * 0.9, r * 0.14, r * 0.22, r * 0.03);
-  missile(rc, kit.hazard, kit.panel, kit.trim, -L * 0.4, R + r * 0.08, 0, R, L);
+  cbox(p, kit.panel, r * 0.05, 0, 0, L * 0.9, r * 0.14, r * 0.22, r * 0.03);
+  missile(rc, kit.hazard, kit.hull, kit.trim, -L * 0.4, R + r * 0.08, 0, R, L);
   C.muzzle(L * 0.6, R + r * 0.08, 0);
   accent(C, -r * 0.1, r * 0.075, 0, L * 0.4, r * 0.1, void 0, p);
   C.t.shot = "rocket";
@@ -36749,11 +36689,11 @@ function aaPair(C) {
   b.cyl(kit.metal, r * 0.1, r * 0.1, r * 0.35, [0, y0 + r * 0.2, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.62, 0);
   C.t.pitch.rotation.z = 0.15;
-  capsule(p, kit.hull, r * 0.05, 0, 0, r * 0.22, r * 0.75, "x", 8);
+  capsule(p, kit.panel, r * 0.05, 0, 0, r * 0.22, r * 0.75, "x", 8);
   p.cyl(kit.glass, r * 0.14, r * 0.14, r * 0.03, [r * 0.42, 0, 0], "x", 7);
   for (const s of [-1, 1]) {
     bx(p, kit.trim, 0, 0, s * r * 0.3, L * 0.6, r * 0.06, r * 0.2);
-    missile(rc, kit.steel, kit.panel, kit.trim, -L * 0.45, 0, s * r * 0.44, R, L, 7);
+    missile(rc, kit.steel, kit.hull, kit.trim, -L * 0.45, 0, s * r * 0.44, R, L, 7);
     C.muzzle(L * 0.55, 0, s * r * 0.44);
   }
   accent(C, -r * 0.1, r * 0.22, 0, r * 0.3, r * 0.12, void 0, p);
@@ -36768,11 +36708,11 @@ function samCells(C) {
   C.t.pitch.position.set(-r * 0.2, y0 + r * 0.55, 0);
   C.t.pitch.rotation.z = 0.32;
   const ox = pl * 0.25;
-  cbox(rc, kit.hull, ox, pw * 0.5, 0, pl, pw, pw, r * 0.06);
+  cbox(rc, kit.panel, ox, pw * 0.5, 0, pl, pw, pw, r * 0.06);
   bx(rc, kit.trim, ox + pl / 2 + r * 0.01, pw * 0.5, 0, r * 0.03, pw * 0.94, pw * 0.94);
   for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
     const y = pw * 0.5 + (i - 0.5) * cell, z = (j - 0.5) * cell;
-    cbox(rc, kit.panel, ox + pl / 2 + r * 0.03, y, z, r * 0.05, cell * 0.8, cell * 0.8, r * 0.02);
+    cbox(rc, kit.hull, ox + pl / 2 + r * 0.03, y, z, r * 0.05, cell * 0.8, cell * 0.8, r * 0.02);
     cbox(rc, kit.hazard, ox + pl / 2 + r * 0.06, y, z, r * 0.03, cell * 0.44, cell * 0.44, r * 0.01);
     C.muzzle(ox + pl / 2 + r * 0.08, y, z);
   }
@@ -36789,7 +36729,7 @@ function swarm(C) {
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.55 + ph * 0.5, 0);
   C.t.pitch.rotation.z = 0.2;
   const ox = pl * 0.2;
-  shell(rc, kit.hull, [[ox - pl / 2, pw * 0.38, pw * 0.3, ph * 0.8], [ox - pl * 0.3, pw * 0.5, pw * 0.42, ph], [ox + pl / 2, pw * 0.5, pw * 0.42, ph]], -ph / 2);
+  shell(rc, kit.panel, [[ox - pl / 2, pw * 0.38, pw * 0.3, ph * 0.8], [ox - pl * 0.3, pw * 0.5, pw * 0.42, ph], [ox + pl / 2, pw * 0.5, pw * 0.42, ph]], -ph / 2);
   tipGridAt(C, rc, ox + pl / 2, -ph / 2 + ph * 0.5, cols, rows, cell, kit.hazard);
   accent(C, ox - pl * 0.05, ph / 2 + 3e-3, 0, pl * 0.4, pw * 0.4, void 0, rc);
   C.t.shot = "rocket";
@@ -36799,13 +36739,13 @@ function vls(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const cols = 4, rows = 4, cell = r * 0.36;
   const pw = cols * cell + r * 0.14, pl = r * 1.45;
-  shell(b, kit.hull, [[-r * 0.9, r * 0.75, r * 0.6, r * 0.32], [r * 0.7, r * 0.75, r * 0.6, r * 0.32], [r * 0.9, r * 0.5, r * 0.4, r * 0.25]], y0);
+  shell(b, kit.panel, [[-r * 0.9, r * 0.75, r * 0.6, r * 0.32], [r * 0.7, r * 0.75, r * 0.6, r * 0.32], [r * 0.9, r * 0.5, r * 0.4, r * 0.25]], y0);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.45, y0 + r * 0.55, s * (pw / 2 + r * 0.07), r * 0.5, r * 0.5, r * 0.12);
   b.cyl(kit.steel, r * 0.06, r * 0.06, r * 0.7, [r * 0.3, y0 + r * 0.3, 0], "y", 6);
   C.t.pitch.position.set(-r * 0.45, y0 + r * 0.62, 0);
   C.t.pitch.rotation.z = 0.75;
   const ox = pl * 0.3;
-  cbox(rc, kit.hull, ox, pw * 0.5, 0, pl, pw, pw, r * 0.07);
+  cbox(rc, kit.panel, ox, pw * 0.5, 0, pl, pw, pw, r * 0.07);
   tipGridAt(C, rc, ox + pl / 2, pw * 0.5, cols, rows, cell, kit.hazard);
   accent(C, ox, pw + 3e-3, 0, pl * 0.6, pw * 0.3, void 0, rc);
   C.t.shot = "rocket";
@@ -36815,13 +36755,13 @@ function erector(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const nuke = C.tier >= 5;
   const R = r * (nuke ? 0.26 : 0.22), L = r * 2;
-  shell(b, kit.hull, [[-r * 0.85, r * 0.6, r * 0.5, r * 0.28], [r * 0.6, r * 0.6, r * 0.5, r * 0.28]], y0);
+  shell(b, kit.panel, [[-r * 0.85, r * 0.6, r * 0.5, r * 0.28], [r * 0.6, r * 0.6, r * 0.5, r * 0.28]], y0);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.4, y0 + r * 0.42, s * r * 0.36, r * 0.4, r * 0.35, r * 0.1);
   C.t.pitch.position.set(-r * 0.4, y0 + r * 0.5, 0);
   C.t.pitch.rotation.z = 0.22;
   for (const s of [-1, 1]) cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
   for (const f of [0.15, 0.6]) bx(p, kit.metal, f * L, R * 0.4, 0, r * 0.08, R * 1.4, R * 2.4);
-  missile(rc, nuke ? kit.hazard : kit.steel, kit.panel, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
+  missile(rc, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
   if (nuke) {
     hazardRings(rc, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10);
     band(rc, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10);
@@ -36834,8 +36774,8 @@ function erector(C) {
 function mortar(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = Math.max(C.bore, r * 0.18);
-  b.lathe(kit.hull, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.08], [r * 0.55, r * 0.18], [0, r * 0.2]], [0, y0, 0], "y", 10);
-  cbox(b, kit.panel, -r * 0.45, y0 + r * 0.3, r * 0.42, r * 0.4, r * 0.2, r * 0.3);
+  b.lathe(kit.panel, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.08], [r * 0.55, r * 0.18], [0, r * 0.2]], [0, y0, 0], "y", 10);
+  cbox(b, kit.hull, -r * 0.45, y0 + r * 0.3, r * 0.42, r * 0.4, r * 0.2, r * 0.3);
   cbox(b, kit.trim, -r * 0.1, y0 + r * 0.28, 0, r * 0.4, r * 0.18, r * 0.5);
   C.t.pitch.position.set(-r * 0.15, y0 + r * 0.32, 0);
   C.t.pitch.rotation.z = 1;
@@ -36855,14 +36795,14 @@ function howitzer(C) {
   const xl = C.tier >= 5;
   const h = r * 0.42;
   const wid = Math.max(r * 0.66, n * gap / 2 + R * 3);
-  shell(b, kit.hull, [[-r * 1, wid * 0.82, wid * 0.7, h * 0.9], [r * 0.4, wid, wid * 0.85, h], [r * 0.85, wid * 0.7, wid * 0.55, h * 0.6]], y0);
+  shell(b, kit.panel, [[-r * 1, wid * 0.82, wid * 0.7, h * 0.9], [r * 0.4, wid, wid * 0.85, h], [r * 0.85, wid * 0.7, wid * 0.55, h * 0.6]], y0);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.2, y0 + h + r * 0.12, s * (wid * 0.72), r * 0.75, r * 0.3, r * 0.1, r * 0.03, void 0, 0.75);
-  cbox(b, kit.panel, -r * 0.8, y0 + h + r * 0.08, 0, r * 0.3, r * 0.16, wid * 0.9);
+  cbox(b, kit.hull, -r * 0.8, y0 + h + r * 0.08, 0, r * 0.3, r * 0.16, wid * 0.9);
   accent(C, -r * 0.8, y0 + h + r * 0.165, 0, r * 0.22, wid * 0.6);
   C.t.pitch.position.set(-r * 0.05, y0 + h + r * 0.12, 0);
   C.t.pitch.rotation.z = n >= 3 ? 0.55 : 0.45;
   cbox(p, kit.trim, 0, 0, 0, r * 0.4, R * 3.4, n * gap + R * 2.5, r * 0.05);
-  bx(p, kit.hull, r * 0.3, R * 0.4, 0, r * 0.08, Math.min(R * 3.6, r * 0.5), n * gap + R * 3);
+  bx(p, kit.panel, r * 0.3, R * 0.4, 0, r * 0.08, Math.min(R * 3.6, r * 0.5), n * gap + R * 3);
   const len = C.D * (n >= 3 ? 1.5 : xl ? 1.75 : 1.95);
   for (const z of Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap)) {
     barrel(C, rc, { len, rad: R, x0: r * 0.1, z, seg: xl ? 10 : 8, sleeve: true, brake: "slot", taper: 0.9 });
@@ -36888,7 +36828,7 @@ function charge(C) {
   cbox(b, kit.trim, 0, C.fixed ? -r * 0.06 : y0 + r * 0.7, 0, r * 1.3, r * 0.12, r * 0.9);
   if (id === "clusterbombs") {
     for (const s of [-1, 1]) {
-      capsule(b, kit.panel, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, "x", 8);
+      capsule(b, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, "x", 8);
       for (let i = 0; i < 3; i++) b.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], "y", 5);
     }
   } else {
@@ -36975,8 +36915,8 @@ function pod(b, mat, c, rx, ry, rz, n = 10, k = 6, pw = 2.2, flatBottom = 0) {
 }
 function collar(b, kit, x, y, z, r, y0 = y - r * 0.35, seg = 18) {
   const R = r * 1.18;
-  b.lathe(kit.hull, [[0, y0 - y], [R * 1.08, y0 - y], [R * 1.08, -r * 0.16], [R, 0], [r * 1, 0], [r * 0.98, -0.01], [0, -0.01]], [x, y, z], "y", seg);
-  b.lathe(kit.trim, [[0, -4e-3], [r * 1.02, -4e-3], [r * 1.02, 0.012], [0, 0.012]], [x, y, z], "y", seg);
+  b.lathe(kit.trim, [[0, y0 - y], [R * 1.08, y0 - y], [R * 1.08, -r * 0.16], [R, 0], [r * 1, 0], [r * 0.98, -0.01], [0, -0.01]], [x, y, z], "y", seg);
+  b.lathe(kit.metal, [[0, -4e-3], [r * 1.02, -4e-3], [r * 1.02, 0.012], [0, 0.012]], [x, y, z], "y", seg);
 }
 function glow(b, kit, x, y, z, l, h, w, rot, mat) {
   b.box(mat ?? kit.glow, l, h, w, x, y, z, Math.min(l, h, w) * 0.3, rot);
@@ -37046,7 +36986,7 @@ function buildEnergy(C) {
       return ringEmitter(C, C.kit.plasma, true);
   }
 }
-var eggHousing = (C, l = 0.95, w = 0.8, h = 0.42, x = -0.1, mat = C.kit.hull) => pod(C.b, mat, [C.r * x, C.y0 + C.r * h * 0.55, 0], C.r * l, C.r * h, C.r * w, 10, 6, 2.4, 0.6);
+var eggHousing = (C, l = 0.95, w = 0.8, h = 0.42, x = -0.1, mat = C.kit.panel) => pod(C.b, mat, [C.r * x, C.y0 + C.r * h * 0.55, 0], C.r * l, C.r * h, C.r * w, 10, 6, 2.4, 0.6);
 function lensEmitter(C, B, e, len, z = 0, core = C.kit.rail) {
   const { kit } = C;
   B.lathe(kit.metal, [[0, 0], [e * 0.85, 0], [e * 0.85, len * 0.12], [e * 0.58, len * 0.16], [e * 0.58, len * 0.76], [e * 1.25, len * 0.8], [e * 1.25, len * 0.96], [e * 1.08, len], [0, len]], [0, 0, z], "x", 8);
@@ -37057,7 +36997,7 @@ function lensEmitter(C, B, e, len, z = 0, core = C.kit.rail) {
 }
 function laser(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  ball(b, kit.hull, 0, y0 + r * 0.38, 0, r * 0.78, 0.6, 10);
+  ball(b, kit.panel, 0, y0 + r * 0.38, 0, r * 0.78, 0.6, 10);
   C.t.pitch.position.set(r * 0.4, y0 + r * 0.4, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, "x");
   lensEmitter(C, rc, r * 0.17, C.D * 1.05);
@@ -37079,7 +37019,7 @@ function heatDish(C) {
   eggHousing(C, 0.85, 0.75, 0.42, -0.2);
   C.t.pitch.position.set(r * 0.15, y0 + r * 0.6, 0);
   const dr = r * 0.62;
-  rc.lathe(kit.panel, [[0, 0], [r * 0.18, 0], [dr * 0.7, r * 0.12], [dr, r * 0.3], [dr * 0.92, r * 0.34], [dr * 0.6, r * 0.2], [r * 0.12, r * 0.1], [0, r * 0.1]], [0, 0, 0], "x", 12);
+  rc.lathe(kit.hull, [[0, 0], [r * 0.18, 0], [dr * 0.7, r * 0.12], [dr, r * 0.3], [dr * 0.92, r * 0.34], [dr * 0.6, r * 0.2], [r * 0.12, r * 0.1], [0, r * 0.1]], [0, 0, 0], "x", 12);
   rc.cyl(kit.trim, r * 0.12, r * 0.08, r * 0.4, [r * 0.1, 0, 0], "x", 6);
   rc.lathe(kit.hot, [[0, 0], [r * 0.08, 0], [r * 0.1, r * 0.06], [0, r * 0.14]], [r * 0.5, 0, 0], "x", 6);
   for (let i = 0; i < 3; i++) {
@@ -37101,7 +37041,7 @@ function plasma(C) {
   const len = C.D * (lance2 ? 1.15 : 0.85);
   for (let i = 0; i < n; i++) {
     const z = n > 1 ? (i - 0.5) * gap : 0;
-    ball(rc, kit.panel, r * 0.02, 0, z, cr, 1, 10, "x");
+    ball(rc, kit.hull, r * 0.02, 0, z, cr, 1, 10, "x");
     band(rc, kit.plasma, r * 0.02, 0, z, cr * 1.03, cr * 0.4, 10);
     const br = cr * (lance2 ? 0.45 : 0.5);
     rc.lathe(kit.steel, [[0, 0], [br, 0], [br * 0.9, len], [0, len]], [cr * 0.6, 0, z], "x", 8);
@@ -37128,7 +37068,7 @@ function flamer(C) {
     hazardRings(b, kit, -r * 0.45 - r * 0.2, y0 + r * 0.16 + tr, z, tr * 1.03, r * 0.2, 2, 8);
   }
   C.t.pitch.position.set(r * 0.25, y0 + r * 0.38, 0);
-  cbox(p, kit.hull, 0, 0, 0, r * 0.4, r * 0.3, r * 0.42, r * 0.05);
+  cbox(p, kit.panel, 0, 0, 0, r * 0.4, r * 0.3, r * 0.42, r * 0.05);
   const nn = big ? 2 : 1;
   const len = C.D * (big ? 0.8 : 0.7), R = r * (big ? 0.09 : 0.1);
   for (let i = 0; i < nn; i++) {
@@ -37154,7 +37094,7 @@ function coilStack(B, mat, x, y, z, R, h, n, axis = "y", seg = 10) {
 }
 function teslaCoil(C) {
   const { b, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.78, 0], [r * 0.78, r * 0.12], [r * 0.45, r * 0.32], [0, r * 0.32]], [0, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.78, 0], [r * 0.78, r * 0.12], [r * 0.45, r * 0.32], [0, r * 0.32]], [0, y0, 0], "y", 10);
   coilStack(b, kit.metal, 0, y0 + r * 0.3, 0, r * 0.36, r * 0.75, 4);
   for (let i = 0; i < 3; i++) {
     const a = i / 3 * Math.PI * 2;
@@ -37169,7 +37109,7 @@ function teslaCoil(C) {
 }
 function arcLance(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.14], [r * 0.5, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.14], [r * 0.5, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 10);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.1, y0 + r * 0.42, s * r * 0.38, r * 0.45, r * 0.45, r * 0.12);
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.55, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, "x");
@@ -37182,7 +37122,7 @@ function arcLance(C) {
 }
 function stormTower(C) {
   const { b, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.85, 0], [r * 0.85, r * 0.15], [r * 0.5, r * 0.35], [0, r * 0.35]], [0, y0, 0], "y", 12);
+  b.lathe(kit.panel, [[0, 0], [r * 0.85, 0], [r * 0.85, r * 0.15], [r * 0.5, r * 0.35], [0, r * 0.35]], [0, y0, 0], "y", 12);
   coilStack(b, kit.metal, 0, y0 + r * 0.3, 0, r * 0.32, r * 1, 5);
   for (const [f, k] of [[0.35, 0.55], [0.7, 0.45]]) b.lathe(kit.trim, [[0, 0], [r * k, r * 0.03], [r * k, r * 0.06], [0, r * 0.08]], [0, y0 + r * 0.3 + r * f, 0], "y", 10);
   for (let i = 0; i < 3; i++) {
@@ -37199,7 +37139,7 @@ function stormTower(C) {
 }
 function stormCore(C) {
   const { b, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.9, 0], [r * 0.9, r * 0.15], [r * 0.6, r * 0.32], [0, r * 0.32]], [0, y0, 0], "y", 12);
+  b.lathe(kit.panel, [[0, 0], [r * 0.9, 0], [r * 0.9, r * 0.15], [r * 0.6, r * 0.32], [0, r * 0.32]], [0, y0, 0], "y", 12);
   const n = Math.max(3, C.nb);
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2 + Math.PI / 2, x = Math.cos(a) * r * 0.5, z = Math.sin(a) * r * 0.5;
@@ -37231,7 +37171,7 @@ function empGun(C) {
   const { b, p, rc, kit, r, y0 } = C;
   eggHousing(C, 0.9, 0.78, 0.46, -0.2);
   C.t.pitch.position.set(r * 0.3, y0 + r * 0.46, 0);
-  ball(rc, kit.panel, 0, 0, 0, r * 0.32, 1, 10, "x");
+  ball(rc, kit.hull, 0, 0, 0, r * 0.32, 1, 10, "x");
   band(rc, kit.rail, 0, 0, 0, r * 0.335, r * 0.1, 10);
   const R = r * 0.17, len = C.D * 0.62;
   barrel(C, rc, { len, rad: R, x0: r * 0.2, seg: 8, taper: 1, noMuzzle: true });
@@ -37274,11 +37214,11 @@ function tuningFork(C) {
 }
 function horn(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.15], [r * 0.5, r * 0.28], [0, r * 0.28]], [0, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.15], [r * 0.5, r * 0.28], [0, r * 0.28]], [0, y0, 0], "y", 10);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.1, y0 + r * 0.48, s * r * 0.62, r * 0.4, r * 0.5, r * 0.1);
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.62, 0);
   const R = r * 0.7, L = r * 0.85;
-  rc.lathe(kit.panel, [[0, -r * 0.3], [R * 0.6, -r * 0.3], [R * 0.6, 0], [R * 0.75, L * 0.5], [R, L], [R * 0.9, L], [R * 0.4, L * 0.55], [0, L * 0.5]], [0, 0, 0], "x", 12);
+  rc.lathe(kit.hull, [[0, -r * 0.3], [R * 0.6, -r * 0.3], [R * 0.6, 0], [R * 0.75, L * 0.5], [R, L], [R * 0.9, L], [R * 0.4, L * 0.55], [0, L * 0.5]], [0, 0, 0], "x", 12);
   band(rc, kit.trim, L * 0.12, 0, 0, R * 0.68, r * 0.08, 12);
   rc.cyl(kit.lamp, R * 0.22, R * 0.22, r * 0.03, [L * 0.52, 0, 0], "x", 8);
   C.muzzle(L, 0, 0);
@@ -37294,12 +37234,12 @@ function buildMelee(C) {
   C.t.shot = "none";
   C.t.rate = 99;
   if (v === "ram") return ram(C);
-  b.lathe(kit.hull, [[0, 0], [r * 0.62, 0], [r * 0.62, r * 0.2], [r * 0.48, r * 0.34], [0, r * 0.34]], [-r * 0.15, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.62, 0], [r * 0.62, r * 0.2], [r * 0.48, r * 0.34], [0, r * 0.34]], [-r * 0.15, y0, 0], "y", 10);
   b.cylb(kit.trim, r * 0.3, r * 0.5, r * 0.05, [-r * 0.15, y0 + r * 0.5, -r * 0.25], "z", 10);
   C.t.pitch.position.set(-r * 0.15, y0 + r * 0.5, 0);
   C.t.pitch.rotation.z = -0.06;
   const A2 = r * (C.tier >= 4 ? 1.35 : 1.25);
-  cbox(p, kit.hull, A2 * 0.45, 0, 0, A2 * 0.95, r * 0.26, r * 0.28, r * 0.05);
+  cbox(p, kit.panel, A2 * 0.45, 0, 0, A2 * 0.95, r * 0.26, r * 0.28, r * 0.05);
   p.strut(kit.steel, [r * 0.05, -r * 0.2, 0], [A2 * 0.75, -r * 0.08, 0], r * 0.05, r * 0.05, 5);
   accent(C, A2 * 0.45, r * 0.13 + 2e-3, 0, A2 * 0.5, r * 0.12, void 0, p);
   switch (v) {
@@ -37325,7 +37265,7 @@ function saw(C, A2) {
   const big = C.tier >= 4;
   const R = r * (big ? 0.82 : 0.7), t = r * (big ? 0.12 : 0.05);
   cbox(rc, kit.trim, A2, 0, 0, r * 0.3, r * 0.3, r * 0.34);
-  cbox(rc, kit.hull, A2 + R * 0.2, R * 0.82, 0, R * 1.3, r * 0.08, t * 2 + r * 0.14, r * 0.03);
+  cbox(rc, kit.panel, A2 + R * 0.2, R * 0.82, 0, R * 1.3, r * 0.08, t * 2 + r * 0.14, r * 0.03);
   C.spin("z", [A2 + R * 0.75, 0, 0]);
   sp.lathe(kit.metal, [[0, -t], [R * 0.86, -t], [R, 0], [R * 0.86, t], [0, t]], [0, 0, 0], "x", 14);
   sp.lathe(kit.hazard, [[0, -t * 1.6], [R * 0.3, -t * 1.6], [R * 0.3, t * 1.6], [0, t * 1.6]], [0, 0, 0], "x", 8);
@@ -37338,7 +37278,7 @@ function saw(C, A2) {
 function chainsaw(C, A2) {
   const { rc, kit, r } = C;
   const L = r * 1.5, h = r * 0.34;
-  cbox(rc, kit.hull, A2, 0, 0, r * 0.45, r * 0.45, r * 0.4, r * 0.06);
+  cbox(rc, kit.panel, A2, 0, 0, r * 0.45, r * 0.45, r * 0.4, r * 0.06);
   hazardRings(rc, kit, A2 - r * 0.05, r * 0.24, 0, r * 0.02, r * 0.3, 1);
   bx(rc, kit.metal, A2 + r * 0.2 + L / 2, 0, 0, L, h * 1.12, r * 0.06);
   cbox(rc, kit.steel, A2 + r * 0.2 + L / 2, 0, 0, L * 0.98, h, r * 0.1, r * 0.02, void 0, 1);
@@ -37368,14 +37308,14 @@ function fist(C, A2) {
   const { rc, kit, r } = C;
   cbox(rc, kit.trim, A2, 0, 0, r * 0.3, r * 0.4, r * 0.4);
   hazardRings(rc, kit, A2 - r * 0.05, 0, 0, r * 0.24, r * 0.15, 1, 8);
-  cbox(rc, kit.hull, A2 + r * 0.38, 0, 0, r * 0.55, r * 0.6, r * 0.62, r * 0.1);
+  cbox(rc, kit.panel, A2 + r * 0.38, 0, 0, r * 0.55, r * 0.6, r * 0.62, r * 0.1);
   for (let i = 0; i < 4; i++) cbox(rc, kit.metal, A2 + r * 0.72, r * 0.22 - i * r * 0.145, 0, r * 0.22, r * 0.13, r * 0.56, r * 0.04);
   cbox(rc, kit.metal, A2 + r * 0.45, -r * 0.05, -r * 0.36, r * 0.4, r * 0.18, r * 0.14, r * 0.04, [0, 0.4, 0]);
 }
 function drill(C, A2) {
   const { rc, sp, kit, r } = C;
   const R = r * 0.42, L = r * 1.4;
-  rc.lathe(kit.hull, [[0, 0], [R * 0.9, 0], [R * 1.1, r * 0.15], [R * 1.1, r * 0.3], [0, r * 0.3]], [A2 - r * 0.1, 0, 0], "x", 10);
+  rc.lathe(kit.panel, [[0, 0], [R * 0.9, 0], [R * 1.1, r * 0.15], [R * 1.1, r * 0.3], [0, r * 0.3]], [A2 - r * 0.1, 0, 0], "x", 10);
   C.spin("x", [A2 + r * 0.2, 0, 0]);
   const prof = [[0, 0], [R, 0]];
   const steps = 4;
@@ -37394,7 +37334,7 @@ function blade(C, A2) {
   const { rc, kit, r } = C;
   const L = r * 1.5;
   cbox(rc, kit.trim, A2, 0, 0, r * 0.32, r * 0.34, r * 0.34);
-  cbox(rc, kit.hull, A2 + r * 0.2, 0, 0, r * 0.1, r * 0.6, r * 0.22, r * 0.03);
+  cbox(rc, kit.panel, A2 + r * 0.2, 0, 0, r * 0.1, r * 0.6, r * 0.22, r * 0.03);
   rc.slab(kit.plasma, [[0, -r * 0.12], [L * 0.85, -r * 0.12], [L, r * 0.05], [L * 0.8, r * 0.14], [0, r * 0.12]], r * 0.06, r * 0.015, A2 + r * 0.25, -r * 0.03, 0, [Math.PI / 2, 0, 0]);
 }
 function prod(C, A2) {
@@ -37411,7 +37351,7 @@ function ram(C) {
   const { b, kit, r, y0 } = C;
   cbox(b, kit.trim, -r * 0.2, y0 + r * 0.15, 0, r * 0.6, r * 0.3, r * 0.7);
   for (const s of [-1, 1]) b.strut(kit.steel, [-r * 0.2, y0 + r * 0.3, s * r * 0.25], [r * 0.45, y0 + r * 0.35, s * r * 0.4], r * 0.06, r * 0.06, 5);
-  cbox(b, kit.hull, r * 0.55, y0 + r * 0.35, 0, r * 0.18, r * 0.7, r * 1.5, r * 0.05, [0, 0, -0.35]);
+  cbox(b, kit.panel, r * 0.55, y0 + r * 0.35, 0, r * 0.18, r * 0.7, r * 1.5, r * 0.05, [0, 0, -0.35]);
   for (const z of [-r * 0.5, 0, r * 0.5]) b.lathe(kit.steel, [[0, 0], [r * 0.14, 0], [0, r * 0.55]], [r * 0.62, y0 + r * 0.32, z], "x", 6);
   accent(C, r * 0.45, y0 + r * 0.66, 0, r * 0.1, r * 1.2, [0, 0, -0.35]);
 }
@@ -37452,7 +37392,7 @@ function buildUtility(C) {
       return radar(C);
   }
 }
-var base2 = (C, k = 0.62, h = 0.2) => C.b.lathe(C.kit.hull, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.6], [C.r * k * 0.78, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
+var base2 = (C, k = 0.62, h = 0.2) => C.b.lathe(C.kit.panel, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.6], [C.r * k * 0.78, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
 function repair(C) {
   const { b, p, kit, r, y0 } = C;
   const n = C.c > 0.5 ? 2 : 1;
@@ -37462,8 +37402,8 @@ function repair(C) {
   C.t.pitch.position.set(0, y0 + r * 0.85, 0);
   for (let i = 0; i < n; i++) {
     const z = n > 1 ? (i - 0.5) * r * 0.4 : 0;
-    cbox(p, kit.panel, r * 0.25, r * 0.12, z, r * 0.6, r * 0.12, r * 0.12, r * 0.03, [0, 0, 0.35]);
-    cbox(p, kit.panel, r * 0.68, r * 0.12, z, r * 0.45, r * 0.1, r * 0.1, r * 0.03, [0, 0, -0.5]);
+    cbox(p, kit.hull, r * 0.25, r * 0.12, z, r * 0.6, r * 0.12, r * 0.12, r * 0.03, [0, 0, 0.35]);
+    cbox(p, kit.hull, r * 0.68, r * 0.12, z, r * 0.45, r * 0.1, r * 0.1, r * 0.03, [0, 0, -0.5]);
     p.cyl(kit.trim, r * 0.08, r * 0.05, r * 0.16, [r * 0.86, -r * 0.05, z], "-x", 6);
     ball(p, kit.glow, r * 0.88, -r * 0.08, z, r * 0.07, 1, 6);
   }
@@ -37476,23 +37416,23 @@ function shieldPylon(C) {
   const heavy = C.c > 0.7;
   const H = r * (heavy ? 1.35 : 1.1);
   base2(C, 0.66, 0.22);
-  b.lathe(kit.panel, [[0, 0], [r * 0.26, 0], [r * 0.16, H * 0.8], [0, H * 0.8]], [0, y0 + r * 0.2, 0], "y", 8);
+  b.lathe(kit.hull, [[0, 0], [r * 0.26, 0], [r * 0.16, H * 0.8], [0, H * 0.8]], [0, y0 + r * 0.2, 0], "y", 8);
   for (const f of heavy ? [0.3, 0.55, 0.8] : [0.35, 0.7]) b.lathe(kit.glow, [[0, 0], [r * (0.38 - f * 0.18), 0], [r * (0.38 - f * 0.18), r * 0.05], [0, r * 0.05]], [0, y0 + r * 0.2 + H * f * 0.8, 0], "y", 10);
   b.lathe(kit.trim, [[0, 0], [r * 0.1, 0], [r * 0.4, r * 0.12], [r * 0.38, r * 0.17], [0, r * 0.1]], [0, y0 + r * 0.2 + H * 0.8, 0], "y", 10);
   ball(b, kit.glow, 0, y0 + r * 0.2 + H * 0.8 + r * 0.14, 0, r * 0.12, 0.7, 8);
-  if (heavy) for (const s of [-1, 1]) cbox(b, kit.hull, 0, y0 + r * 0.55, s * r * 0.36, r * 0.5, r * 0.6, r * 0.08, r * 0.03, [s * 0.2, 0, 0], 0.7);
+  if (heavy) for (const s of [-1, 1]) cbox(b, kit.panel, 0, y0 + r * 0.55, s * r * 0.36, r * 0.5, r * 0.6, r * 0.08, r * 0.03, [s * 0.2, 0, 0], 0.7);
   accent(C, 0, y0 + r * 0.221, 0, r * 0.7, r * 0.18);
 }
 function domeProjector(C) {
   const { b, kit, r, y0 } = C;
   const H = r * 0.85;
-  b.lathe(kit.hull, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.16], [r * 0.6, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 12);
+  b.lathe(kit.panel, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.16], [r * 0.6, r * 0.26], [0, r * 0.26]], [0, y0, 0], "y", 12);
   dome(b, kit.glass, [0, y0 + r * 0.24, 0], r * 0.42, r * 0.38, 10, 2);
   const n = C.tier >= 5 ? 6 : 4;
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2 + Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
-    b.strut(kit.panel, [c * r * 0.68, y0 + r * 0.22, s * r * 0.68], [c * r * 0.5, y0 + H * 0.8, s * r * 0.5], r * 0.06, r * 0.05, 4);
-    b.strut(kit.panel, [c * r * 0.5, y0 + H * 0.8, s * r * 0.5], [0, y0 + H + r * 0.08, 0], r * 0.05, r * 0.04, 4);
+    b.strut(kit.hull, [c * r * 0.68, y0 + r * 0.22, s * r * 0.68], [c * r * 0.5, y0 + H * 0.8, s * r * 0.5], r * 0.06, r * 0.05, 4);
+    b.strut(kit.hull, [c * r * 0.5, y0 + H * 0.8, s * r * 0.5], [0, y0 + H + r * 0.08, 0], r * 0.05, r * 0.04, 4);
   }
   b.lathe(kit.trim, [[0, 0], [r * 0.22, 0], [r * 0.22, r * 0.06], [0, r * 0.08]], [0, y0 + H + r * 0.04, 0], "y", 8);
   ball(b, kit.glow, 0, y0 + H + r * 0.2, 0, r * 0.13, 1, 8);
@@ -37503,8 +37443,8 @@ function uplink(C) {
   base2(C);
   cbox(b, kit.trim, -r * 0.1, y0 + r * 0.32, 0, r * 0.5, r * 0.25, r * 0.5);
   b.lathe(kit.metal, [[0, 0], [r * 0.08, 0], [r * 0.04, r * 1.3], [0, r * 1.3]], [r * 0.05, y0 + r * 0.4, 0], "y", 6);
-  for (const f of [0.3, 0.6]) bx(b, kit.panel, r * 0.05, y0 + r * 0.4 + r * 1.3 * f, 0, r * 0.05, r * 0.05, r * 0.5);
-  b.lathe(kit.panel, [[0, 0], [r * 0.08, 0], [r * 0.3, r * 0.06], [r * 0.28, r * 0.09], [0, r * 0.03]], [r * 0.08, y0 + r * 1, 0], "x", 10, [0, 0, 0.6]);
+  for (const f of [0.3, 0.6]) bx(b, kit.hull, r * 0.05, y0 + r * 0.4 + r * 1.3 * f, 0, r * 0.05, r * 0.05, r * 0.5);
+  b.lathe(kit.hull, [[0, 0], [r * 0.08, 0], [r * 0.3, r * 0.06], [r * 0.28, r * 0.09], [0, r * 0.03]], [r * 0.08, y0 + r * 1, 0], "x", 10, [0, 0, 0.6]);
   ball(b, kit.lamp, r * 0.05, y0 + r * 1.72, 0, r * 0.06, 1, 6);
   for (const z of [-r * 0.2, r * 0.2]) b.cyl(kit.metal, r * 0.02, r * 0.01, r * 0.7, [-r * 0.3, y0 + r * 0.45, z], "y", 4);
   accent(C, -r * 0.1, y0 + r * 0.446, 0, r * 0.35, r * 0.3);
@@ -37516,7 +37456,7 @@ function radar(C) {
   C.t.pitch.position.set(0, y0 + r * 1, 0);
   C.t.pitch.rotation.z = 0.5;
   const dr = r * 0.85;
-  p.lathe(kit.panel, [[0, 0], [r * 0.1, 0], [dr * 0.7, r * 0.1], [dr, r * 0.24], [dr * 0.94, r * 0.27], [dr * 0.6, r * 0.14], [0, r * 0.06]], [-r * 0.1, 0, 0], "x", 12);
+  p.lathe(kit.hull, [[0, 0], [r * 0.1, 0], [dr * 0.7, r * 0.1], [dr, r * 0.24], [dr * 0.94, r * 0.27], [dr * 0.6, r * 0.14], [0, r * 0.06]], [-r * 0.1, 0, 0], "x", 12);
   p.strut(kit.steel, [0, 0, 0], [r * 0.38, 0, 0], r * 0.025, r * 0.02, 4);
   ball(p, kit.glow, r * 0.4, 0, 0, r * 0.06, 1, 6);
   bx(p, kit.trim, -r * 0.2, 0, 0, r * 0.2, r * 0.18, r * 0.18);
@@ -37527,7 +37467,7 @@ function optics(C) {
   base2(C, 0.55);
   b.cyl(kit.metal, r * 0.12, r * 0.12, r * 0.3, [0, y0 + r * 0.18, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.62, 0);
-  cbox(p, kit.hull, -r * 0.05, 0, 0, r * 0.6, r * 0.38, r * 0.75, r * 0.07, void 0, 0.85);
+  cbox(p, kit.panel, -r * 0.05, 0, 0, r * 0.6, r * 0.38, r * 0.75, r * 0.07, void 0, 0.85);
   for (const [z, R] of [[-r * 0.18, r * 0.15], [r * 0.2, r * 0.1]]) {
     p.cyl(kit.trim, R * 1.2, R * 1.2, r * 0.08, [r * 0.24, 0, z], "x", 8);
     p.cyl(kit.glass, R, R, r * 0.02, [r * 0.32, 0, z], "x", 8);
@@ -37547,12 +37487,12 @@ function stealthFins(C) {
   accent(C, -r * 0.45, y0 + r * 0.25, 0, r * 0.2, r * 0.4);
 }
 function shellLow(C) {
-  cbox(C.b, C.kit.hull, 0, C.y0 + C.r * 0.12, 0, C.r * 1.2, C.r * 0.24, C.r * 1, C.r * 0.08, void 0, 0.85);
+  cbox(C.b, C.kit.panel, 0, C.y0 + C.r * 0.12, 0, C.r * 1.2, C.r * 0.24, C.r * 1, C.r * 0.08, void 0, 0.85);
 }
 function jammer(C) {
   const { b, kit, r, y0 } = C;
   shellLow(C);
-  cbox(b, kit.panel, -r * 0.1, y0 + r * 0.36, 0, r * 0.6, r * 0.25, r * 0.6, r * 0.05);
+  cbox(b, kit.hull, -r * 0.1, y0 + r * 0.36, 0, r * 0.6, r * 0.25, r * 0.6, r * 0.05);
   const pts = [[-r * 0.35, -r * 0.35, 1.1], [-r * 0.35, r * 0.35, 0.8], [r * 0.3, -r * 0.3, 0.6], [r * 0.3, r * 0.3, 0.9], [r * 0.45, 0, 0.5]];
   for (const [x, z, h] of pts) {
     b.cyl(kit.metal, r * 0.03, r * 0.012, r * h, [x, y0 + r * 0.24, z], "y", 4);
@@ -37566,7 +37506,7 @@ function smoke(C) {
   const { b, kit, r, y0 } = C;
   base2(C, 0.5, 0.16);
   for (const s of [-1, 1]) {
-    cbox(b, kit.hull, 0, y0 + r * 0.26, s * r * 0.32, r * 0.5, r * 0.22, r * 0.3, r * 0.04);
+    cbox(b, kit.panel, 0, y0 + r * 0.26, s * r * 0.32, r * 0.5, r * 0.22, r * 0.3, r * 0.04);
     for (let i = 0; i < 3; i++) {
       const x = -r * 0.15 + i * r * 0.15;
       b.lathe(kit.metal, [[0, 0], [r * 0.065, 0], [r * 0.065, r * 0.32], [0, r * 0.32]], [x, y0 + r * 0.32, s * r * 0.36], "y", 6, [s * 0.5, 0, -0.5]);
@@ -37579,7 +37519,7 @@ function armour(C) {
   const w = r * 1.8, layers = C.tier >= 3 ? 2 : 1;
   for (let i = 0; i < layers; i++) {
     const k = 1 - i * 0.18;
-    cbox(b, i ? kit.panel : kit.hull, -i * r * 0.15, r * 0.2 * k + i * r * 0.2, 0, r * 1.1 * k, r * 0.4 * k, w * k, r * 0.08, [0, 0, 0], 0.7);
+    cbox(b, i ? kit.hull : kit.panel, -i * r * 0.15, r * 0.2 * k + i * r * 0.2, 0, r * 1.1 * k, r * 0.4 * k, w * k, r * 0.08, [0, 0, 0], 0.7);
   }
   for (const z of [-w * 0.3, w * 0.3]) bx(b, kit.trim, r * 0.42, r * 0.22, z, r * 0.06, r * 0.2, r * 0.1);
   accent(C, -r * 0.1, r * (layers > 1 ? 0.6 : 0.4) + 2e-3, 0, r * 0.3, w * 0.35);
@@ -37588,7 +37528,7 @@ function reactive(C) {
   const { b, kit, r } = C;
   const w = r * 1.7;
   cbox(b, kit.trim, 0, r * 0.12, 0, r * 0.95, r * 0.24, w, r * 0.05);
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) cbox(b, (i + j) % 2 ? kit.panel : kit.hull, -r * 0.22 + i * r * 0.44, r * 0.34, (j - 1) * w * 0.32, r * 0.4, r * 0.2, w * 0.29, r * 0.05, [0, 0, 0], 0.8);
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) cbox(b, (i + j) % 2 ? kit.hull : kit.panel, -r * 0.22 + i * r * 0.44, r * 0.34, (j - 1) * w * 0.32, r * 0.4, r * 0.2, w * 0.29, r * 0.05, [0, 0, 0], 0.8);
   accent(C, -r * 0.22, r * 0.442, 0, r * 0.25, w * 0.2);
 }
 function mirror(C) {
@@ -37596,18 +37536,18 @@ function mirror(C) {
   cbox(b, kit.trim, 0, r * 0.08, 0, r * 1.1, r * 0.16, r * 1.4, r * 0.04);
   for (const s of [-1, 1]) for (const x of [-r * 0.26, r * 0.26]) cbox(b, kit.glass, x, r * 0.26, s * r * 0.34, r * 0.48, r * 0.08, r * 0.6, r * 0.03, [s * 0.4, 0, 0]);
   bx(b, kit.glow, 0, r * 0.24, 0, r * 1, r * 0.05, r * 0.06);
-  bx(b, kit.panel, 0, r * 0.26, 0, r * 0.06, r * 0.1, r * 1.3);
+  bx(b, kit.hull, 0, r * 0.26, 0, r * 0.06, r * 0.1, r * 1.3);
 }
 function cage(C) {
   const { b, kit, r, y0 } = C;
-  cbox(b, kit.hull, 0, y0 + r * 0.3, 0, r * 0.95, r * 0.6, r * 0.85, r * 0.08, void 0, 0.85);
+  cbox(b, kit.panel, 0, y0 + r * 0.3, 0, r * 0.95, r * 0.6, r * 0.85, r * 0.08, void 0, 0.85);
   for (const x of [-r * 0.28, 0, r * 0.28]) bx(b, kit.steel, x, y0 + r * 0.3, 0, r * 0.06, r * 0.64, r * 0.9);
   ball(b, kit.rail, 0, y0 + r * 0.66, 0, r * 0.12, 0.6, 6);
   accent(C, -r * 0.14, y0 + r * 0.6, 0, r * 0.18, r * 0.5);
 }
 function autoloader(C) {
   const { b, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.3], [r * 0.62, r * 0.36], [0, r * 0.36]], [0, y0, 0], "y", 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.3], [r * 0.62, r * 0.36], [0, r * 0.36]], [0, y0, 0], "y", 10);
   for (let i = 0; i < 6; i++) {
     const a = i / 6 * Math.PI * 2;
     capsule(b, kit.hazard, Math.cos(a) * r * 0.45, y0 + r * 0.44, Math.sin(a) * r * 0.45, r * 0.09, r * 0.34, "y", 5);
@@ -37617,7 +37557,7 @@ function autoloader(C) {
 }
 function radiator(C) {
   const { b, kit, r, y0 } = C;
-  cbox(b, kit.hull, 0, y0 + r * 0.12, 0, r * 1.1, r * 0.24, r * 0.95, r * 0.06);
+  cbox(b, kit.panel, 0, y0 + r * 0.12, 0, r * 1.1, r * 0.24, r * 0.95, r * 0.06);
   b.cyl(kit.hot, r * 0.18, r * 0.18, r * 0.5, [0, y0 + r * 0.24, 0], "y", 8);
   for (let i = 0; i < 5; i++) bx(b, i % 2 ? kit.steel : kit.metal, -r * 0.4 + i * r * 0.2, y0 + r * 0.45, 0, r * 0.06, r * 0.42, r * 0.8);
   hazardRings(b, kit, 0, y0 + r * 0.26, -r * 0.5, r * 0.03, r * 0.8, 4, 4);
@@ -37625,7 +37565,7 @@ function radiator(C) {
 }
 function nanite(C) {
   const { b, kit, r, y0 } = C;
-  dome(b, kit.panel, [0, y0, 0], r * 0.68, r * 0.5, 8, 2);
+  dome(b, kit.hull, [0, y0, 0], r * 0.68, r * 0.5, 8, 2);
   for (let i = 0; i < 5; i++) {
     const a = i / 5 * Math.PI * 2;
     ball(b, kit.glow, Math.cos(a) * r * 0.42, y0 + r * 0.36, Math.sin(a) * r * 0.42, r * 0.08, 0.6, 6);
@@ -37636,7 +37576,7 @@ function nanite(C) {
 }
 function turbo(C) {
   const { b, kit, r, y0 } = C;
-  cbox(b, kit.hull, 0, y0 + r * 0.15, 0, r * 1.1, r * 0.3, r * 0.85, r * 0.06);
+  cbox(b, kit.panel, 0, y0 + r * 0.15, 0, r * 1.1, r * 0.3, r * 0.85, r * 0.06);
   b.cylb(kit.metal, r * 0.26, r * 0.4, r * 0.05, [r * 0.15, y0 + r * 0.42, 0], "x", 10);
   b.cyl(kit.trim, r * 0.18, r * 0.18, r * 0.02, [r * 0.55, y0 + r * 0.42, 0], "x", 8);
   for (const s of [-1, 1]) {
@@ -37649,7 +37589,7 @@ function gyro(C) {
   const { b, kit, r, y0 } = C;
   base2(C, 0.55, 0.18);
   const c = y0 + r * 0.6, R = r * 0.42;
-  b.lathe(kit.panel, [[R * 0.82, 0], [R, 0], [R, r * 0.08], [R * 0.82, r * 0.08]], [0, c - r * 0.04, 0], "y", 10);
+  b.lathe(kit.hull, [[R * 0.82, 0], [R, 0], [R, r * 0.08], [R * 0.82, r * 0.08]], [0, c - r * 0.04, 0], "y", 10);
   b.lathe(kit.steel, [[R * 0.72, 0], [R * 0.88, 0], [R * 0.88, r * 0.07], [R * 0.72, r * 0.07]], [-r * 0.035, c, 0], "x", 10);
   b.cyl(kit.metal, r * 0.05, r * 0.05, c - y0, [0, y0, 0], "y", 5);
   ball(b, kit.glow, 0, c, 0, r * 0.16, 1, 8);
@@ -38140,12 +38080,12 @@ function reachArm(b, kit, side, sh, el, wr, o) {
   b.cylb(kit.metal, dr, t * 1.6, dr * 0.2, [sh[0], sh[1], sh[2] - side * t * 0.8], side > 0 ? "z" : "-z", 12);
   b.cyl(kit.hull, dr * 0.7, dr * 0.6, t * 0.2, [sh[0], sh[1], sh[2] + side * t * 0.8], side > 0 ? "z" : "-z", 8);
   beam(b, kit.trim, sh, el, t * 1.1, t * 1.1);
-  beam(b, kit.hull, [sh[0], sh[1] + t * 0.45, sh[2]], [el[0], el[1] + t * 0.45, el[2]], t * 1.3, t * 0.55);
+  beam(b, kit.panel, [sh[0], sh[1] + t * 0.45, sh[2]], [el[0], el[1] + t * 0.45, el[2]], t * 1.3, t * 0.55);
   b.strut(kit.steel, [sh[0] + t * 0.3, sh[1] - t * 0.8, sh[2]], [el[0] - t * 0.2, el[1] - t * 0.7, el[2]], t * 0.18, t * 0.18, 6);
   b.cylb(kit.metal, t * 0.85, t * 1.4, t * 0.12, [el[0], el[1], el[2] - side * t * 0.7], side > 0 ? "z" : "-z", 10);
   const wt = [wr[0] - podL * 0.3, wr[1] + podH * 0.5, wr[2]];
   beam(b, kit.trim, el, wt, t * 0.95, t * 0.95);
-  beam(b, kit.panel, [el[0], el[1] + t * 0.4, el[2]], [wt[0], wt[1] + t * 0.4, wt[2]], t * 1.1, t * 0.45);
+  beam(b, kit.trim, [el[0], el[1] + t * 0.4, el[2]], [wt[0], wt[1] + t * 0.4, wt[2]], t * 1.1, t * 0.45);
   block(b, kit.trim, wr[0], wr[1], wr[2], podL * 0.9, podW * 0.82, podH * 0.4, { ch: podW * 0.2 });
   block(b, kit.hull, wr[0], wr[1] + podH * 0.22, wr[2], podL, podW, podH * 0.78, { top: [0.84, 0.86], shift: [-podL * 0.05, 0], ch: podW * 0.26, bev: podH * 0.16, bot: podH * 0.08 });
   glow(b, kit, wr[0] - podL * 0.05, wr[1] + podH * 0.55, wr[2] + side * podW * 0.5, podL * 0.5, podH * 0.1, podW * 0.05);
@@ -38174,7 +38114,7 @@ function bunkerCrawler(c) {
   shell2(b, kit.panel, cx - 0.1 * u, 0, 0.42 * u, 0.42 * u, 0.6 * u, [[by + 0.46 * u, 1], [by + 0.53 * u, 0.98], [by + 0.56 * u, 0.86]], 8, 2);
   both((s) => glow(b, kit, cx + 0.1 * u, by + 0.22 * u, s * 1.2 * u, 0.5 * u, 0.04 * u, 0.04 * u, [0, -s * 0.38, 0]));
   const fx2 = cx + rxF;
-  block(b, kit.hull, fx2 - 0.12 * u, by + 0.12 * u, 0, 0.4 * u, 1.2 * u, 0.26 * u, { top: [0.6, 0.9], shift: [0.1 * u, 0], ch: 0.16 * u, bev: 0.05 * u });
+  block(b, kit.panel, fx2 - 0.12 * u, by + 0.12 * u, 0, 0.4 * u, 1.2 * u, 0.26 * u, { top: [0.6, 0.9], shift: [0.1 * u, 0], ch: 0.16 * u, bev: 0.05 * u });
   hazard(b, kit, fx2 - 0.06 * u, by + 0.38 * u, 0, 0.16 * u, 0.8 * u, 5, Math.PI / 2);
   b.box(kit.trim, 0.08 * u, 0.1 * u, 1 * u, fx2 + 0.02 * u, by + 0.02 * u, 0, 0.02 * u);
   glow(b, kit, fx2 + 0.06 * u, by + 0.03 * u, 0, 0.03 * u, 0.04 * u, 0.8 * u);
@@ -38254,12 +38194,12 @@ function tailgunCrawler(c) {
   b.cylb(kit.trim, 0.3 * u, 0.12 * u, 0.04 * u, [baseP[0], by + 0.5 * u, baseP[2]], "y", 14);
   block(b, kit.hull, baseP[0], by + 0.58 * u, baseP[2], 0.46 * u, 0.36 * u, 0.24 * u, { top: [0.8, 0.8], ch: 0.1 * u, bev: 0.04 * u });
   b.cylb(kit.metal, 0.13 * u, 0.42 * u, 0.03 * u, [baseP[0], baseP[1] + 0.06 * u, baseP[2] - 0.21 * u], "z", 12);
-  beam(b, kit.hull, baseP, elbow, 0.22 * u, 0.26 * u, [1, 0, 0]);
+  beam(b, kit.panel, baseP, elbow, 0.22 * u, 0.26 * u, [1, 0, 0]);
   beam(b, kit.trim, [baseP[0] + 0.02 * u, baseP[1] - 0.04 * u, baseP[2]], [elbow[0] + 0.02 * u, elbow[1] - 0.04 * u, elbow[2]], 0.16 * u, 0.3 * u, [1, 0, 0]);
   b.strut(kit.steel, [baseP[0] + 0.25 * u, by + 0.6 * u, baseP[2]], [baseP[0] + (elbow[0] - baseP[0]) * 0.6 + 0.12 * u, baseP[1] + (elbow[1] - baseP[1]) * 0.6, baseP[2] + (elbow[2] - baseP[2]) * 0.6], 0.05 * u, 0.05 * u, 6);
   b.cylb(kit.metal, 0.15 * u, 0.36 * u, 0.03 * u, [elbow[0], elbow[1], elbow[2] - 0.18 * u], "z", 12);
   hazard(b, kit, elbow[0] + 0.12 * u, elbow[1] + 0.12 * u, elbow[2], 0.3 * u, 0.2 * u, 4, -0.9);
-  beam(b, kit.hull, elbow, tipP, 0.2 * u, 0.22 * u, [1, 0, 0]);
+  beam(b, kit.panel, elbow, tipP, 0.2 * u, 0.22 * u, [1, 0, 0]);
   glow(b, kit, (elbow[0] + tipP[0]) / 2, (elbow[1] + tipP[1]) / 2 + 0.12 * u, (elbow[2] + tipP[2]) / 2, 0.06 * u, 0.04 * u, 0.04 * u);
   block(b, kit.trim, tx, cradleY - 0.24 * u, tz, tr * 2.1, tr * 2.1, 0.2 * u, { top: [0.8, 0.8], ch: tr * 0.5, bev: 0.03 * u });
   const arms = c.mounts.filter((m) => m.x > 1 * u);
@@ -39698,7 +39638,7 @@ function trackUnit(b, kit, L, h, w, z, side, o) {
   if (o.skirt) {
     const sl = L * 0.84, sh = h * 0.64;
     const zs2 = z + side * (w / 2 + st * 0.6);
-    block(b, kit.hull, -L * 0.05, h * 0.38, zs2, sl, st, sh, { ch: st * 0.4, bev: st * 0.3, bot: st * 0.3, top: [0.97, 0.7], mid: [[0.4, 1, 1]], shift: [L * 0.03, 0] });
+    block(b, kit.trim, -L * 0.05, h * 0.38, zs2, sl, st, sh, { ch: st * 0.4, bev: st * 0.3, bot: st * 0.3, top: [0.97, 0.7], mid: [[0.4, 1, 1]], shift: [L * 0.03, 0] });
     b.box(kit.trim, sl * 0.86, sh * 0.14, st * 0.4, -L * 0.05, h * 0.56, zs2 + side * st * 0.42, sh * 0.04);
     const nt = Math.max(2, Math.round(sl / (h * 1.4)));
     for (let i = 0; i < nt; i++) b.box(kit.panel, h * 0.16, sh * 0.5, st * 0.5, -L * 0.05 - sl / 2 + sl * (i + 0.5) / nt, h * 0.38 + sh * 0.5, zs2 + side * st * 0.3, h * 0.03);
@@ -39706,8 +39646,8 @@ function trackUnit(b, kit, L, h, w, z, side, o) {
   if (!o.noFender) {
     const fw = w * 1.12 + (o.skirt ? st * 0.8 : 0);
     const fz2 = z + side * (o.skirt ? st * 0.35 : 0);
-    block(b, kit.hull, -L * 0.04, h * 0.98, fz2, L * 0.84, fw, h * 0.1, { ch: h * 0.05, bev: h * 0.03 });
-    b.box(kit.hull, h * 0.5, h * 0.08, fw * 0.96, L / 2 - h * 0.42, h * 0.92, fz2, h * 0.03, [0, 0, -0.55]);
+    block(b, kit.panel, -L * 0.04, h * 0.98, fz2, L * 0.84, fw, h * 0.1, { ch: h * 0.05, bev: h * 0.03 });
+    b.box(kit.panel, h * 0.5, h * 0.08, fw * 0.96, L / 2 - h * 0.42, h * 0.92, fz2, h * 0.03, [0, 0, -0.55]);
   }
 }
 function nring(x, cy, cz, ry, rz, n = 10, flat2 = 0.55) {
@@ -39724,7 +39664,7 @@ function trackNacelle(b, kit, L, h, w, z, side) {
   const top = h * 1.08, bot = h * 0.34;
   const ry = (top - bot) / 1.45, cy = top - ry, rz = w * 0.66;
   const prof = [[-0.5, 0.62, 0.78], [-0.46, 0.92, 0.94], [-0.3, 1, 1], [0.2, 1, 1], [0.38, 0.9, 0.92], [0.48, 0.62, 0.74], [0.515, 0.25, 0.4]];
-  b.loft(kit.hull, prof.map(([f, sy, sz]) => nring(L * f, cy - (1 - sy) * ry * 0.25, z + side * w * 0.04, ry * sy, rz * sz)));
+  b.loft(kit.hull2, prof.map(([f, sy, sz]) => nring(L * f, cy - (1 - sy) * ry * 0.25, z + side * w * 0.04, ry * sy, rz * sz)));
   b.loft(kit.panel, [[-0.36, 0.9], [-0.28, 1], [0.18, 1], [0.32, 0.9]].map(([f, s]) => nring(L * f, cy + ry * 0.05, z + side * w * 0.08, ry * 0.42 * s, rz * 1.03 * s, 8, 0.2)));
   b.box(kit.glow, L * 0.32, h * 0.04, h * 0.04, -L * 0.04, cy + ry * 0.05, z + side * (rz * 1.06 + w * 0.08), h * 0.01);
   b.box(kit.lamp, h * 0.05, h * 0.08, w * 0.3, L * 0.5, cy, z + side * w * 0.04, h * 0.02);
@@ -39732,19 +39672,19 @@ function trackNacelle(b, kit, L, h, w, z, side) {
 function cornerPod(b, kit, L, h, w, z, side, front) {
   trackUnit(b, kit, L, h, w, z, side, { skirt: false, noFender: true, cleatMaxY: h * 0.4 });
   const hz = z + side * w * 0.04;
-  block(b, kit.hull, 0, h * 0.34, hz, L * 0.98, w * 1.22, h * 0.76, { ch: w * 0.3, bev: h * 0.12, bot: h * 0.06, top: [front ? 0.8 : 0.9, 0.82], shift: [front ? -L * 0.06 : L * 0.04, 0] });
-  block(b, front ? kit.panel : kit.hull, front ? L * 0.06 : -L * 0.04, h * 0.48, z + side * w * 0.66, L * 0.66, w * 0.14, h * 0.46, { ch: w * 0.05, bev: w * 0.04, top: [0.88, 0.6] });
+  block(b, kit.trim, 0, h * 0.34, hz, L * 0.98, w * 1.22, h * 0.76, { ch: w * 0.3, bev: h * 0.12, bot: h * 0.06, top: [front ? 0.8 : 0.9, 0.82], shift: [front ? -L * 0.06 : L * 0.04, 0] });
+  block(b, kit.panel, front ? L * 0.06 : -L * 0.04, h * 0.48, z + side * w * 0.66, L * 0.66, w * 0.14, h * 0.46, { ch: w * 0.05, bev: w * 0.04, top: [0.88, 0.6] });
   b.box(front ? kit.hazard : kit.trim, h * 0.1, h * 0.04, w * 0.8, (front ? 1 : -1) * L * 0.36, h * 1.1, hz, h * 0.01);
   if (front) b.box(kit.lamp, h * 0.04, h * 0.08, w * 0.3, L * 0.48, h * 0.8, hz, h * 0.02);
 }
 function wallSkirt(b, kit, L, h, w, z, side) {
   trackUnit(b, kit, L, h, w, z, side, { skirt: false, noFender: true, heavy: true, cleatMaxY: h * 0.25 });
   const t = Math.max(0.05, w * 0.2), zs2 = z + side * (w / 2 + t * 0.4);
-  block(b, kit.hull, -L * 0.03, h * 0.12, zs2, L * 0.96, t, h * 1, { ch: t * 0.45, bev: t * 0.35, top: [0.88, 0.7], shift: [-L * 0.02, -side * t * 0.35], bot: t * 0.2 });
+  block(b, kit.trim, -L * 0.03, h * 0.12, zs2, L * 0.96, t, h * 1, { ch: t * 0.45, bev: t * 0.35, top: [0.88, 0.7], shift: [-L * 0.02, -side * t * 0.35], bot: t * 0.2 });
   const n = Math.max(3, Math.round(L / (h * 1.5)));
   for (let i = 0; i < n; i++) {
     const x = -L * 0.03 - L * 0.42 + L * 0.84 * (i + 0.5) / n;
-    block(b, i % 2 ? kit.panel : kit.hull, x, h * 0.3, zs2 + side * t * 0.42, L * 0.84 / n * 0.82, t * 0.5, h * 0.6, { ch: t * 0.15, bev: t * 0.12, top: [0.9, 0.6], shift: [0, -side * t * 0.12] });
+    block(b, i % 2 ? kit.panel : kit.hull2, x, h * 0.3, zs2 + side * t * 0.42, L * 0.84 / n * 0.82, t * 0.5, h * 0.6, { ch: t * 0.15, bev: t * 0.12, top: [0.9, 0.6], shift: [0, -side * t * 0.12] });
   }
   b.box(kit.trim, L * 0.9, h * 0.08, w * 1.3, -L * 0.03, h * 1.1, z + side * t * 0.2, h * 0.03);
 }
@@ -39862,7 +39802,7 @@ var ring = (z, wx, wy, c = 0.3) => [
 ];
 function thigh(b, kit, l, t, spider, lite = false) {
   b.loft(kit.trim, [ring(0, t * 0.8, t * 0.85), ring(l * 0.5, t * 0.78, t * 0.8), ring(l, t * 0.62, t * 0.62)]);
-  b.loft(kit.hull, [
+  b.loft(kit.hull2, [
     ring(l * 0.04, t * 1, t * 0.3, 0.45).map(([x, y, z]) => [x, y + t * 0.75, z]),
     ring(l * 0.42, t * 1.12, t * 0.4, 0.45).map(([x, y, z]) => [x, y + t * 0.82, z]),
     ring(l * 0.86, t * 0.86, t * 0.3, 0.45).map(([x, y, z]) => [x, y + t * 0.66, z])
@@ -39882,7 +39822,7 @@ function thigh(b, kit, l, t, spider, lite = false) {
 function shin(b, kit, l, t, spider, lite = false) {
   if (spider) {
     b.loft(kit.trim, [ring(0, t * 0.72, t * 0.75), ring(l * 0.45, t * 0.6, t * 0.65), ring(l * 0.9, t * 0.34, t * 0.36)]);
-    b.loft(kit.hull, [
+    b.loft(kit.panel, [
       ring(l * 0.02, t * 0.86, t * 0.32, 0.45).map(([x, y, z]) => [x, y + t * 0.6, z]),
       ring(l * 0.3, t * 0.9, t * 0.38, 0.45).map(([x, y, z]) => [x, y + t * 0.7, z]),
       ring(l * 0.72, t * 0.5, t * 0.22, 0.45).map(([x, y, z]) => [x, y + t * 0.42, z])
@@ -39893,7 +39833,7 @@ function shin(b, kit, l, t, spider, lite = false) {
     return;
   }
   b.loft(kit.trim, [ring(0, t * 0.66, t * 0.7), ring(l * 0.5, t * 0.6, t * 0.64), ring(l, t * 0.5, t * 0.52)]);
-  b.loft(kit.hull, [
+  b.loft(kit.panel, [
     ring(l * 0.08, t * 0.86, t * 0.32, 0.45).map(([x, y, z]) => [x, y + t * 0.62, z]),
     ring(l * 0.5, t * 0.8, t * 0.34, 0.45).map(([x, y, z]) => [x, y + t * 0.6, z]),
     ring(l * 0.9, t * 0.62, t * 0.26, 0.45).map(([x, y, z]) => [x, y + t * 0.48, z])
@@ -39910,12 +39850,12 @@ function shin(b, kit, l, t, spider, lite = false) {
 function foot(b, kit, t, spider, lite = false) {
   if (spider && lite) {
     b.cyl(kit.rubber, t * 0.9, t * 0.8, t * 0.2, [0, 0, 0], "y", 6);
-    block(b, kit.hull, 0, t * 0.18, 0, t * 1.3, t * 1.3, t * 0.55, { top: [0.5, 0.5], ch: t * 0.4, bev: t * 0.1 });
+    block(b, kit.trim, 0, t * 0.18, 0, t * 1.3, t * 1.3, t * 0.55, { top: [0.5, 0.5], ch: t * 0.4, bev: t * 0.1 });
     return;
   }
   if (spider) {
     b.cyl(kit.rubber, t * 0.95, t * 0.85, t * 0.2, [0, 0, 0], "y", 8);
-    block(b, kit.hull, 0, t * 0.18, 0, t * 1.4, t * 1.4, t * 0.6, { top: [0.55, 0.55], ch: t * 0.4, bev: t * 0.12 });
+    block(b, kit.trim, 0, t * 0.18, 0, t * 1.4, t * 1.4, t * 0.6, { top: [0.55, 0.55], ch: t * 0.4, bev: t * 0.12 });
     for (let k = 0; k < 3; k++) {
       const a = k / 3 * Math.PI * 2 + 0.5;
       b.g(new BoxGeometry(t * 0.9, t * 0.26, t * 0.36), kit.metal, new Matrix4().makeRotationY(-a).setPosition(Math.cos(a) * t * 0.85, t * 0.13, Math.sin(a) * t * 0.85));
@@ -39924,7 +39864,7 @@ function foot(b, kit, t, spider, lite = false) {
   }
   const L = t * 4.2, Wd = t * 2.5;
   block(b, kit.rubber, t * 0.3, 0, 0, L * 0.9, Wd, t * 0.24, { ch: t * 0.5, bev: t * 0.06 });
-  block(b, kit.hull, t * 0.1, t * 0.22, 0, L * 0.62, Wd * 0.86, t * 0.62, { top: [0.66, 0.74], shift: [-t * 0.25, 0], ch: t * 0.45, bev: t * 0.16 });
+  block(b, kit.panel, t * 0.1, t * 0.22, 0, L * 0.62, Wd * 0.86, t * 0.62, { top: [0.66, 0.74], shift: [-t * 0.25, 0], ch: t * 0.45, bev: t * 0.16 });
   for (const [dz, ry] of lite ? [[0, 0]] : [[-0.8, -0.28], [0, 0], [0.8, 0.28]]) {
     block(b, kit.metal, t * 1.5 + Math.cos(ry) * t * 0.5, 0, dz * t, t * 1.4, lite ? t * 2 : t * 0.7, t * 0.5, { top: [0.55, 0.8], shift: [t * 0.3, 0], ch: t * 0.2, bev: t * 0.08 });
   }
@@ -40087,7 +40027,7 @@ function megaPod(b, kit, p, S) {
     block(b, kit.trim, x, h * 0.18, z, l * 0.7, w * 0.2, h * 0.6, { ch: w * 0.05 });
   } else loop(b, kit, x, z, l, h, w * 0.9, side);
   const cw = w * 1.08, ch0 = h * 0.62;
-  block(b, kit.hull, x, ch0, z, l * 0.9, cw, h * 1.04 - ch0, { top: [0.82, 0.86], ch: cw * 0.14, bev: h * 0.06, bot: h * 0.04 });
+  block(b, kit.trim, x, ch0, z, l * 0.9, cw, h * 1.04 - ch0, { top: [0.82, 0.86], ch: cw * 0.14, bev: h * 0.06, bot: h * 0.04 });
   block(b, kit.panel, x, h * 1, z, l * 0.56, cw * 0.62, h * 0.08, { top: [0.9, 0.86], ch: cw * 0.1, bev: h * 0.03 });
   glow(b, kit, x, h * 0.8, z + side * cw * 0.5, l * 0.5, h * 0.05, h * 0.05);
   const ex = x + (front ? 1 : -1) * l * 0.36;
@@ -41143,7 +41083,7 @@ function bogie(b, kit, xc, len, h, w, z, side) {
   disc(xf, h - Ri, Ri * 0.8);
   disc((xr + xf) / 2, R * 0.72, R * 0.62);
   b.cyl(kit.accent, R * 0.2, R * 0.16, w * 0.06, [xr, R, zo + side * w * 0.13], ax, 6);
-  block(b, kit.hull, xc - len * 0.02, h * 0.96, z, len * 0.9, w * 1.04, h * 0.1, { ch: h * 0.06, bev: h * 0.035 });
+  block(b, kit.panel, xc - len * 0.02, h * 0.96, z, len * 0.9, w * 1.04, h * 0.1, { ch: h * 0.06, bev: h * 0.035 });
 }
 registerMobility("wheels", {
   stance: wheelStance,
@@ -41332,7 +41272,7 @@ var ring2 = (z, wx, wy, c = 0.3, oy = 0) => [
 ];
 function thigh2(b, kit, l, t) {
   b.loft(kit.metal, [ring2(0, t * 0.85, t * 0.9), ring2(l * 0.5, t * 0.82, t * 0.85), ring2(l, t * 0.66, t * 0.66)]);
-  b.loft(kit.hull, [ring2(l * 0.02, t * 1.12, t * 0.34, 0.45, t * 0.78), ring2(l * 0.36, t * 1.22, t * 0.44, 0.45, t * 0.9), ring2(l * 0.62, t * 1.06, t * 0.34, 0.45, t * 0.78)]);
+  b.loft(kit.hull2, [ring2(l * 0.02, t * 1.12, t * 0.34, 0.45, t * 0.78), ring2(l * 0.36, t * 1.22, t * 0.44, 0.45, t * 0.9), ring2(l * 0.62, t * 1.06, t * 0.34, 0.45, t * 0.78)]);
   b.loft(kit.panel, [ring2(l * 0.5, t * 1, t * 0.3, 0.45, t * 0.72), ring2(l * 0.72, t * 1.04, t * 0.36, 0.45, t * 0.78), ring2(l * 0.92, t * 0.84, t * 0.28, 0.45, t * 0.6)]);
   for (const sx of [-1, 1]) b.g(new BoxGeometry(t * 0.22, t * 1.2, l * 0.6), kit.hull, new Matrix4().makeTranslation(sx * t * 0.92, t * 0.05, l * 0.4));
   b.strut(kit.metal, [0, -t * 1, l * 0.1], [0, -t * 0.9, l * 0.6], t * 0.34, t * 0.34, 8);
@@ -41346,7 +41286,7 @@ function thigh2(b, kit, l, t) {
 }
 function shin2(b, kit, l, t) {
   b.loft(kit.metal, [ring2(0, t * 0.7, t * 0.74), ring2(l * 0.55, t * 0.64, t * 0.66), ring2(l, t * 0.62, t * 0.6)]);
-  b.loft(kit.hull, [ring2(l * 0.08, t * 0.9, t * 0.32, 0.45, t * 0.62), ring2(l * 0.55, t * 0.98, t * 0.38, 0.45, t * 0.66), ring2(l * 0.92, t * 1.18, t * 0.34, 0.45, t * 0.72)]);
+  b.loft(kit.panel, [ring2(l * 0.08, t * 0.9, t * 0.32, 0.45, t * 0.62), ring2(l * 0.55, t * 0.98, t * 0.38, 0.45, t * 0.66), ring2(l * 0.92, t * 1.18, t * 0.34, 0.45, t * 0.72)]);
   b.loft(kit.panel, [ring2(-t * 0.6, t * 0.5, t * 0.2, 0.5, t * 0.95), ring2(-t * 0.1, t * 1, t * 0.36, 0.45, t * 1), ring2(t * 0.7, t * 0.9, t * 0.3, 0.45, t * 0.85)]);
   b.g(new BoxGeometry(t * 0.5, t * 0.12, t * 0.26), kit.glow, new Matrix4().makeTranslation(0, t * 1.33, t * 0.1));
   for (const sx of [-1, 1]) {
@@ -41358,7 +41298,7 @@ function shin2(b, kit, l, t) {
 function foot2(b, kit, t) {
   const L = t * 4.6, Wd = t * 3;
   block(b, kit.rubber, t * 0.3, 0, 0, L * 0.92, Wd, t * 0.26, { ch: t * 0.6, bev: t * 0.07 });
-  block(b, kit.hull, t * 0.05, t * 0.24, 0, L * 0.66, Wd * 0.88, t * 0.75, { top: [0.6, 0.7], shift: [-t * 0.3, 0], ch: t * 0.5, bev: t * 0.18 });
+  block(b, kit.trim, t * 0.05, t * 0.24, 0, L * 0.66, Wd * 0.88, t * 0.75, { top: [0.6, 0.7], shift: [-t * 0.3, 0], ch: t * 0.5, bev: t * 0.18 });
   for (const [dz, ry] of [[-1.05, -0.32], [-0.36, -0.1], [0.36, 0.1], [1.05, 0.32]]) {
     block(b, kit.metal, t * 1.7 + Math.cos(ry) * t * 0.4, 0, dz * t, t * 1.3, t * 0.62, t * 0.55, { top: [0.5, 0.8], shift: [t * 0.3, 0], ch: t * 0.18, bev: t * 0.08 });
   }
@@ -42571,12 +42511,12 @@ function makeMaps(w, h, pad, o) {
       const n1 = fbm(cx * 0.09, cy * 0.09, 4), n2 = fbm(cx * 0.24 + 40, cy * 0.24 + 40, 4), n3 = fbm(cx * 0.55 + 90, cy * 0.55 + 90, 3);
       let c = mixc(soil, sand, sm(0.42, 0.62, n1));
       c = mixc(c, dry, sm(0.5, 0.72, fbm(cx * 0.15 + 7, cy * 0.15 + 7, 3)) * 0.5);
-      c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.5);
+      c = mixc(c, dirt, sm(0.56, 0.74, n2) * 0.32);
       const gv = sm(0.54, 0.68, fbm(cx * 0.35 + 200, cy * 0.35 + 200, 4));
       const grain = noise(x * 0.9, y * 0.9) * 0.6 + noise(x * 2.3 + 11, y * 2.3 + 5) * 0.4;
       c = mixc(c, gravel, gv * 0.5);
       const sc2 = sm(0.6, 0.72, fbm(cx * 0.2 + 300, cy * 0.2 + 300, 4));
-      c = mixc(c, scrub, sc2 * 0.4);
+      c = mixc(c, scrub, sc2 * 0.26);
       const m = 0.9 + 0.2 * (n3 * 0.7 + grain * 0.3) + (gv > 0.2 ? (grain - 0.5) * 0.1 * gv : 0);
       const i = (y * W + x) * 4;
       ia.data[i] = c[0] * m;
@@ -42671,10 +42611,51 @@ function makeMaps(w, h, pad, o) {
   void W0;
   void H0;
   if (o.zoneFrac > 0) {
-    ga.fillStyle = "rgba(70,150,190,0.05)";
-    ga.fillRect(0, 0, zw, IH);
-    ga.fillStyle = "rgba(210,100,50,0.05)";
-    ga.fillRect(IW - zw, 0, zw, IH);
+    const apron = (x0, x1, front) => {
+      const S = PPC * 4;
+      for (let sx = x0; sx < x1 - 1; sx += S) for (let sy = 0; sy < IH - 1; sy += S) {
+        const t = 140 + r() * 22;
+        ga.fillStyle = `rgba(${t},${t - 3},${t - 10},${0.4 + r() * 0.1})`;
+        ga.fillRect(sx, sy, Math.min(S, x1 - sx), Math.min(S, IH - sy));
+      }
+      ga.strokeStyle = "rgba(38,35,30,0.2)";
+      ga.lineWidth = 2;
+      for (let sx = x0; sx <= x1 + 0.5; sx += S) {
+        ga.beginPath();
+        ga.moveTo(sx, 0);
+        ga.lineTo(sx, IH);
+        ga.stroke();
+      }
+      for (let sy = 0; sy <= IH + 0.5; sy += S) {
+        ga.beginPath();
+        ga.moveTo(x0, sy);
+        ga.lineTo(x1, sy);
+        ga.stroke();
+      }
+      for (let i = 0; i < 40; i++) {
+        const x = x0 + r() * (x1 - x0), y = r() * IH, rad = PPC * (0.5 + r() * 2);
+        const g2 = ga.createRadialGradient(x, y, 0, x, y, rad);
+        g2.addColorStop(0, "rgba(40,34,26,0.16)");
+        g2.addColorStop(1, "rgba(0,0,0,0)");
+        ga.fillStyle = g2;
+        ga.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      }
+      const ex = front > x0 + 1 ? front - PPC * 0.6 : front + PPC * 0.6;
+      ga.fillStyle = "rgba(225,222,210,0.55)";
+      ga.fillRect(ex - PPC * 0.12, 0, PPC * 0.24, IH);
+      const hx = front > x0 + 1 ? front - PPC * 1.3 : front + PPC * 0.9;
+      for (let y = PPC * 2; y < IH - PPC * 2; y += PPC * 12) for (let k2 = 0; k2 < 6; k2++) {
+        ga.fillStyle = k2 % 2 ? "rgba(25,24,22,0.55)" : "rgba(222,176,52,0.6)";
+        ga.beginPath();
+        ga.moveTo(hx, y + k2 * PPC * 0.5);
+        ga.lineTo(hx + PPC * 0.4, y + k2 * PPC * 0.5 + PPC * 0.4);
+        ga.lineTo(hx + PPC * 0.4, y + k2 * PPC * 0.5 + PPC * 0.9);
+        ga.lineTo(hx, y + k2 * PPC * 0.5 + PPC * 0.5);
+        ga.fill();
+      }
+    };
+    apron(0, zw, zw);
+    apron(IW - zw, IW, IW - zw);
     ga.setLineDash([PPC * 0.3, PPC * 0.2]);
     ga.lineWidth = 3;
     ga.strokeStyle = "rgba(130,215,240,0.4)";
@@ -42895,7 +42876,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// node_modules/three/examples/jsm/shaders/CopyShader.js
+// ../../../node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -42935,7 +42916,7 @@ var CopyShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/Pass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -43026,7 +43007,7 @@ var FullScreenQuad = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -43091,7 +43072,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -43179,7 +43160,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// ../../../node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -43364,7 +43345,7 @@ var EffectComposer = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -43437,7 +43418,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// ../../../node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -43489,7 +43470,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -43828,7 +43809,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// node_modules/three/examples/jsm/shaders/GTAOShader.js
+// ../../../node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -44194,7 +44175,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// ../../../node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -44397,7 +44378,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// node_modules/three/examples/jsm/math/SimplexNoise.js
+// ../../../node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -44831,7 +44812,7 @@ var SimplexNoise = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -45258,7 +45239,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// node_modules/three/examples/jsm/shaders/OutputShader.js
+// ../../../node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -45346,7 +45327,7 @@ var OutputShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
@@ -45457,10 +45438,10 @@ function setupStage(renderer2, scene2, o = {}) {
   const fogCol = new Color("#6f6a58");
   scene2.background = fogCol;
   if (o.fog !== false) scene2.fog = new Fog(fogCol, 110, 300);
-  const sunPos = new Vector3(-30, 40, 20);
+  const sunPos = new Vector3(...o.sun ?? [-30, 40, 20]);
   scene2.environment = skyEnvironment(renderer2, sunPos);
-  scene2.environmentIntensity = 0.42;
-  const sun = new DirectionalLight("#fff0d8", 2.8);
+  scene2.environmentIntensity = 0.6;
+  const sun = new DirectionalLight("#fff0d8", 3.4);
   sun.position.copy(sunPos);
   sun.castShadow = true;
   const res = o.shadowRes ?? 4096;
@@ -45469,10 +45450,10 @@ function setupStage(renderer2, scene2, o = {}) {
   sun.shadow.normalBias = 0.025;
   sun.shadow.radius = 3;
   scene2.add(sun, sun.target);
-  const hemi = new HemisphereLight("#dfe4ea", "#6e624e", 0.95);
+  const hemi = new HemisphereLight("#d6e2f0", "#6e624e", 0.3);
   scene2.add(hemi);
-  const back = new DirectionalLight("#9ab8ff", 0.55);
-  back.position.set(30, 18, -25);
+  const back = new DirectionalLight("#9ab8ff", 0.35);
+  back.position.set(-sunPos.x, 18, -sunPos.z);
   scene2.add(back);
   const dir = sunPos.clone();
   const fitShadow = (cx, cz, radius) => {
@@ -45502,10 +45483,11 @@ var GradeShader = {
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      // gentle S-curve + split tone (cool shadows, warm highlights) + slight desaturation for a muted military palette
-      c = mix(c, c * c * (3.0 - 2.0 * c), 0.12);
-      c = mix(vec3(l), c, 1.06);
-      c += vec3(-0.006, 0.0, 0.01) * (1.0 - l) + vec3(0.012, 0.006, -0.004) * l;
+      // contrast S-curve + saturation boost (ACES eats saturation in the brights) + split tone (cool shadows, warm
+      // highlights): clean, saturated team paint
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.2);
+      c = max(mix(vec3(l), c, 1.1), 0.0);
+      c += vec3(-0.008, 0.0, 0.012) * (1.0 - l) + vec3(0.016, 0.008, -0.006) * l;
       vec2 d = (vUv - 0.5) * vec2(1.0, 0.85);
       c *= 1.0 - vig * smoothstep(0.25, 0.85, length(d));
       

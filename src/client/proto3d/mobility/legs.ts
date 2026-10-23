@@ -56,7 +56,7 @@ function thigh(b: Bld, kit: Kit, l: number, t: number, spider: boolean, lite = f
   // core: a tapering armoured box
   b.loft(kit.trim, [ring(0, t * 0.8, t * 0.85), ring(l * 0.5, t * 0.78, t * 0.8), ring(l, t * 0.62, t * 0.62)]);
   // armour shell on the knee side, proud of the core, chamfered edges, slight bulge
-  b.loft(kit.hull, [ring(l * 0.04, t * 1.0, t * 0.3, 0.45).map(([x, y, z]) => [x, y + t * 0.75, z] as V3),
+  b.loft(kit.hull2, [ring(l * 0.04, t * 1.0, t * 0.3, 0.45).map(([x, y, z]) => [x, y + t * 0.75, z] as V3),
     ring(l * 0.42, t * 1.12, t * 0.4, 0.45).map(([x, y, z]) => [x, y + t * 0.82, z] as V3),
     ring(l * 0.86, t * 0.86, t * 0.3, 0.45).map(([x, y, z]) => [x, y + t * 0.66, z] as V3)]);
   // side plates (panel colour) for a layered read (bipeds; spiders keep the budget)
@@ -80,7 +80,7 @@ function shin(b: Bld, kit: Kit, l: number, t: number, spider: boolean, lite = fa
   if (spider) {
     // strong tapering spar with an outer armour fin, ending in a spike
     b.loft(kit.trim, [ring(0, t * 0.72, t * 0.75), ring(l * 0.45, t * 0.6, t * 0.65), ring(l * 0.9, t * 0.34, t * 0.36)]);
-    b.loft(kit.hull, [ring(l * 0.02, t * 0.86, t * 0.32, 0.45).map(([x, y, z]) => [x, y + t * 0.6, z] as V3),
+    b.loft(kit.panel, [ring(l * 0.02, t * 0.86, t * 0.32, 0.45).map(([x, y, z]) => [x, y + t * 0.6, z] as V3),
       ring(l * 0.3, t * 0.9, t * 0.38, 0.45).map(([x, y, z]) => [x, y + t * 0.7, z] as V3),
       ring(l * 0.72, t * 0.5, t * 0.22, 0.45).map(([x, y, z]) => [x, y + t * 0.42, z] as V3)]);
     if (lite) return;
@@ -90,7 +90,7 @@ function shin(b: Bld, kit: Kit, l: number, t: number, spider: boolean, lite = fa
   }
   b.loft(kit.trim, [ring(0, t * 0.66, t * 0.7), ring(l * 0.5, t * 0.6, t * 0.64), ring(l, t * 0.5, t * 0.52)]);
   // shin guard: big plate on the knee side, plus a knee cap overhanging the drum
-  b.loft(kit.hull, [ring(l * 0.08, t * 0.86, t * 0.32, 0.45).map(([x, y, z]) => [x, y + t * 0.62, z] as V3),
+  b.loft(kit.panel, [ring(l * 0.08, t * 0.86, t * 0.32, 0.45).map(([x, y, z]) => [x, y + t * 0.62, z] as V3),
     ring(l * 0.5, t * 0.8, t * 0.34, 0.45).map(([x, y, z]) => [x, y + t * 0.6, z] as V3),
     ring(l * 0.9, t * 0.62, t * 0.26, 0.45).map(([x, y, z]) => [x, y + t * 0.48, z] as V3)]);
   b.box(kit.panel, t * 1.3, t * 0.42, t * 1.1, 0, t * 0.82, -t * 0.12, t * 0.14, [0.35, 0, 0]);
@@ -107,13 +107,13 @@ function foot(b: Bld, kit: Kit, t: number, spider: boolean, lite = false) {
   if (spider && lite) {
     // lite claw pad: armoured hoof on a rubber sole
     b.cyl(kit.rubber, t * 0.9, t * 0.8, t * 0.2, [0, 0, 0], 'y', 6);
-    block(b, kit.hull, 0, t * 0.18, 0, t * 1.3, t * 1.3, t * 0.55, { top: [0.5, 0.5], ch: t * 0.4, bev: t * 0.1 });
+    block(b, kit.trim, 0, t * 0.18, 0, t * 1.3, t * 1.3, t * 0.55, { top: [0.5, 0.5], ch: t * 0.4, bev: t * 0.1 });
     return;
   }
   if (spider) {
     // splayed claw pad: rubber sole, armoured hoof, three short claws
     b.cyl(kit.rubber, t * 0.95, t * 0.85, t * 0.2, [0, 0, 0], 'y', 8);
-    block(b, kit.hull, 0, t * 0.18, 0, t * 1.4, t * 1.4, t * 0.6, { top: [0.55, 0.55], ch: t * 0.4, bev: t * 0.12 });
+    block(b, kit.trim, 0, t * 0.18, 0, t * 1.4, t * 1.4, t * 0.6, { top: [0.55, 0.55], ch: t * 0.4, bev: t * 0.12 });
     for (let k = 0; k < 3; k++) {
       const a = (k / 3) * Math.PI * 2 + 0.5;
       b.g(new THREE.BoxGeometry(t * 0.9, t * 0.26, t * 0.36), kit.metal, new THREE.Matrix4().makeRotationY(-a).setPosition(Math.cos(a) * t * 0.85, t * 0.13, Math.sin(a) * t * 0.85));
@@ -123,7 +123,7 @@ function foot(b: Bld, kit: Kit, t: number, spider: boolean, lite = false) {
   // stomper: broad sole, armoured upper, three chunky toes forward and a heel spur
   const L = t * 4.2, Wd = t * 2.5;
   block(b, kit.rubber, t * 0.3, 0, 0, L * 0.9, Wd, t * 0.24, { ch: t * 0.5, bev: t * 0.06 });
-  block(b, kit.hull, t * 0.1, t * 0.22, 0, L * 0.62, Wd * 0.86, t * 0.62, { top: [0.66, 0.74], shift: [-t * 0.25, 0], ch: t * 0.45, bev: t * 0.16 });
+  block(b, kit.panel, t * 0.1, t * 0.22, 0, L * 0.62, Wd * 0.86, t * 0.62, { top: [0.66, 0.74], shift: [-t * 0.25, 0], ch: t * 0.45, bev: t * 0.16 });
   for (const [dz, ry] of (lite ? [[0, 0]] : [[-0.8, -0.28], [0, 0], [0.8, 0.28]]) as [number, number][]) {
     block(b, kit.metal, t * 1.5 + Math.cos(ry) * t * 0.5, 0.0, dz * t, t * 1.4, lite ? t * 2.0 : t * 0.7, t * 0.5, { top: [0.55, 0.8], shift: [t * 0.3, 0], ch: t * 0.2, bev: t * 0.08 });
   }
