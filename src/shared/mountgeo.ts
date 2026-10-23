@@ -2,8 +2,8 @@
 //
 // Hardpoint positions are fractions of the footprint (X = length along the facing, Y = width across; square
 // chassis X = Y = S) in the hull-local frame: +x = forward (nose), +y = right. The render's
-// `layoutOf(design).mounts[i].x/.y` (src/client/render/unitart.ts) is built from exactly these tables and this
-// solver, so `mountOffsets(design)` matches it by construction. The one exception is mounts that ride animated
+// `layoutOf(design).mounts[i].x/.y` (src/client/render/unitart.ts) is built from exactly these tables (socket i always
+// sits on hardpoint i), so `mountOffsets(design)` matches it by construction. The one exception is mounts that ride animated
 // anatomy on footprint frames (arms, claws, tails, train cars): the art places those from its part rig, which is
 // render-only, so their rest-pose positions are snapshotted in PART_REST below (test/mountgeo.test.ts asserts
 // parity with layoutOf for every chassis + starter design, so a rig change that moves a weapon fails loudly).
@@ -137,61 +137,10 @@ export function meleeSlots(chassis: ChassisDef): boolean[] {
   return out;
 }
 
-/** perm[i] = hardpoint index module i occupies (anatomical frames keep their fixed points). */
-export function mountPerm(chassis: ChassisDef, pts: Pt[], mods: (ModuleDef | null)[]): number[] {
-  return PART_SHAPES.has(chassis.shape) ? chassis.mounts.map((_, i) => i) : solveMounts(chassis.mounts, pts, mods, meleeSlots(chassis));
-}
-
-/**
- * Hardpoint assignment by role and class: the heaviest weapon takes the most prominent hardpoint (big, centreline,
- * forward), identical weapons pair up on mirrored flank points, utilities (dishes, emitters, packs) go to the rear
- * deck. Returns perm[i] = hardpoint index of module i. Weapons must fit the hardpoint class.
- */
-export function solveMounts(caps: MountClass[], pts: [number, number][], mods: (ModuleDef | null)[], meleeOk?: boolean[]): number[] {
-  const n = caps.length;
-  const id0 = caps.map((_, i) => i);
-  if (n <= 1) return id0;
-  // mirrored hardpoint pairs
-  const mate = caps.map((_, i) => pts.findIndex((q, j) => j !== i && Math.abs(q[0] - pts[i][0]) < 0.03 && Math.abs(q[1] + pts[i][1]) < 0.03 && Math.abs(q[1]) > 0.04));
-  const prom = (j: number) => RANK[caps[j]] * 1.0 + (1 - Math.min(1, Math.abs(pts[j][1]) / 0.3)) * 0.8 + pts[j][0] * 1.2;
-  const isW = (m: ModuleDef | null) => !!m && m.kind === 'weapon';
-  const isU = (m: ModuleDef | null) => !!m && m.kind === 'utility' && m.visual !== 'plate';
-  let best = id0, bestS = -Infinity;
-  const perm = new Array<number>(n), used = new Array<boolean>(n).fill(false);
-  const score = () => {
-    let sc = 0;
-    for (let i = 0; i < n; i++) {
-      const m = mods[i], j = perm[i];
-      if (j === i) sc += 0.05;
-      if (isW(m)) sc += (RANK[m!.mount] + 0.5 * (m!.caliber ?? 0.5) + 1) * prom(j);
-      else if (isU(m)) sc += -pts[j][0] * 2.2 + RANK[caps[j]] * 0.1;
-    }
-    // pairs: identical modules mirror each other
-    const at = new Array<ModuleDef | null>(n).fill(null);
-    for (let i = 0; i < n; i++) at[perm[i]] = mods[i];
-    for (let j = 0; j < n; j++) {
-      const k = mate[j];
-      if (k < 0 || k < j) continue;
-      const a = at[j], b = at[k];
-      if (a && b && a.id === b.id) sc += 3;
-      else if (a && b && a.visual === b.visual) sc += 1;
-      else if ((isW(a) && isU(b)) || (isU(a) && isW(b))) sc -= 0.6;
-      else if (!!a !== !!b) sc -= 0.3;
-    }
-    return sc;
-  };
-  const rec = (i: number) => {
-    if (i === n) { const s = score(); if (s > bestS + 1e-9) { bestS = s; best = perm.slice(); } return; }
-    const m = mods[i];
-    for (let j = 0; j < n; j++) {
-      if (used[j]) continue;
-      if (isW(m) && RANK[m!.mount] > RANK[caps[j]]) continue;
-      if (meleeOk && m?.category === 'melee' && !meleeOk[j]) continue;
-      used[j] = true; perm[i] = j; rec(i + 1); used[j] = false;
-    }
-  };
-  rec(0);
-  return best;
+/** perm[i] = hardpoint index module i occupies. Sockets are fixed by the chassis: the part the player puts in socket i
+ *  sits on hardpoint i (its class and edge/melee eligibility come from that same hardpoint), never re-shuffled by role. */
+export function mountPerm(chassis: ChassisDef, _pts: Pt[], _mods: (ModuleDef | null)[]): number[] {
+  return chassis.mounts.map((_, i) => i);
 }
 
 /** Melee tools (saws, prods, claws, rams...) sit at the hull's front edge so the tool reaches out ahead of it, not on a
