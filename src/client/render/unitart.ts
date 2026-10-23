@@ -1968,7 +1968,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     if (dis) g.globalAlpha = alpha * (0.6 + 0.3 * Math.sin(p.time * 11 + i * 2));
     blit(g, ts, mx, my, ta + rot, TURRET_EXT * Math.round(m.d * 100) / 100, sc);
     g.globalAlpha = alpha;
-    if (m.mod.id === 'grinder' || moduleTier(m.mod) >= 4) drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha, chargeOf(m.mod, mp));
+    if (m.mod.id === 'grinder' || m.mod.visual === 'gatling' || moduleTier(m.mod) >= 4) drawTurretDynamic(g, m.mod, pal, m.d, mx, my, ta + rot, sc, p.time + (p.seed ?? 0) + i, fl, sw, px, alpha, chargeOf(m.mod, mp));
     if ((m.mod.visual === 'saw' || m.mod.visual === 'drill') && m.mod.id !== 'grinder') {
       // spinning blade / bore highlight
       const ml = muzzleLen(m.mod) * m.d * (m.mod.visual === 'saw' ? 0.95 : 0.7);
