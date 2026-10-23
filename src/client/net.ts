@@ -214,12 +214,15 @@ export class NetDriver implements MatchDriver {
     let held = false;
     try {
       const wait = this.m.status === 'done' ? 0 : LONG_POLL_MS;
+      const asked = this.m;
       this.abort = new AbortController();
       const r = await call<Partial<MatchResponse> & { unchanged?: boolean }>(
         'GET', `/matches/${encodeURIComponent(this.id)}?since=${this.m.updatedAt}&wait=${wait}`, undefined, this.abort.signal);
       this.failures = 0;
       held = wait > 0 && (!!r.match || Date.now() - t0 > LONG_POLL_MS / 2);
-      if (r.match) this.update(r.match);
+      // nothing changed locally while the poll was out: an OLDER answer means the server rolled back (it lost
+      // writes in a crash), so take it rather than waiting on state the server no longer has
+      if (r.match) this.update(r.match, this.m === asked);
     } catch (e) {
       this.failures++;
       // permanent failures (logged out / match gone) end polling
@@ -242,8 +245,8 @@ export class NetDriver implements MatchDriver {
     this.timer = setTimeout(() => void this.refresh(), delay);
   }
 
-  private update(m: MatchState): void {
-    if (m.updatedAt < this.m.updatedAt) return; // out-of-order response
+  private update(m: MatchState, force = false): void {
+    if (!force && m.updatedAt < this.m.updatedAt) return; // out-of-order response
     this.m = m;
     for (const cb of [...this.subs]) {
       try { cb(m); } catch (e) { console.error('[net] subscriber failed', e); }

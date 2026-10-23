@@ -236,7 +236,9 @@ export class Api {
     }
     this.maybeRetryResolve(r);
     const since = Number(c.query.get('since'));
-    if (c.query.has('since') && Number.isFinite(since) && r.match.updatedAt <= since) {
+    // updatedAt is monotonic, so a client copy NEWER than ours means this server lost writes (crash inside the save
+    // debounce): answer with the full state instead of holding "unchanged" forever against a phantom version
+    if (c.query.has('since') && Number.isFinite(since) && r.match.updatedAt === since) {
       // long poll: hold the request until the match changes (opponent joined/ready, round resolved) or the wait ends
       const wait = noWait ? 0 : Math.min(MAX_WAIT_MS, Math.max(0, Number(c.query.get('wait')) || 0));
       if (wait > 0) return this.waitForChange(c, r.match.id, wait).then(() => this.get(c, idOrCode, true));

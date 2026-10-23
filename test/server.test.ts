@@ -287,6 +287,25 @@ test('long poll: a waiting GET returns as soon as the opponent deploys', async (
   assert.equal(resolved.body.match.history.length, 1);
 });
 
+test('long poll: a client copy newer than the server (writes lost in a crash) gets the full state, not a hang', async () => {
+  const a = alice;
+  const b = carol;
+  const id = (await api('POST', '/api/matches', a.token, { deck: DECK })).body.id;
+  await api('POST', `/api/matches/${id}/join`, b.token, { deck: DECK });
+  const ga = (await api('GET', `/api/matches/${id}`, a.token)).body;
+  // alice's deploy was acknowledged, then the server crashed before its debounced save: it restarts on the older state
+  const before = structuredClone(srv.store.matches.get(id)!.match);
+  const da = await api('POST', `/api/matches/${id}/deploy`, a.token, { action: placeOne(ga.match, 0) });
+  assert.equal(da.status, 200);
+  srv.store.matches.get(id)!.match = before;
+  const t0 = Date.now();
+  const r = await api('GET', `/api/matches/${id}?since=${da.body.match.updatedAt}&wait=5000`, a.token);
+  assert.equal(r.status, 200);
+  assert.ok(r.body.match, 'full state returned');
+  assert.equal(r.body.match.players[0].ready, false, 'alice sees she must deploy again');
+  assert.ok(Date.now() - t0 < 2000, 'not held');
+});
+
 test('private matches and join codes', async () => {
   const c = await api('POST', '/api/matches', carol.token, { deck: DECK, private: true });
   assert.equal(c.status, 200);
