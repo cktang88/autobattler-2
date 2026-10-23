@@ -54,7 +54,8 @@ export function playerName(): string {
   try { const s = currentSession(); return (s && !s.auto && s.name) || 'Commander'; } catch { return 'Commander'; }
 }
 
-export function vsaiScreen(app: App): Screen {
+export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = { name: 'vsai' }): Screen {
+  const forLobby = route.from === 'lobby';
   playMusic('menu');
   let diff: AiDifficulty = 'normal';
   let sort: Sort = 'cost';
@@ -286,15 +287,16 @@ export function vsaiScreen(app: App): Screen {
 
   const el = h('div.screen.dbscreen', null,
     h('div.topbar', null,
-      h('button.icon', { onclick: () => { sfx('click'); app.go({ name: 'menu' }); }, title: 'Back' }, '‹ Back'),
-      h('h2', null, 'Play vs AI'),
+      h('button.icon', { onclick: () => { sfx('click'); app.go({ name: forLobby ? 'lobby' : 'menu' }); }, title: 'Back' }, '‹ Back'),
+      h('h2', null, forLobby ? 'Multiplayer deck' : 'Play vs AI'),
       h('span.spacer'),
-      diffHost,
-      resumable ? h('button.warn', {
+      forLobby ? null : diffHost,
+      forLobby ? h('button.big.primary', { onclick: () => { sfx('click'); app.go({ name: 'lobby' }); }, disabled: !deck.length }, 'Done ›') : null,
+      !forLobby && resumable ? h('button.warn', {
         onclick: () => { sfx('click'); const d = LocalDriver.resume(); if (d) app.go({ name: 'match', driver: d }); },
         title: `Round ${resumable.match.round} vs ${resumable.match.players[1].name} · HP ${resumable.match.players[0].hp} – ${resumable.match.players[1].hp}`,
       }, `Resume round ${resumable.match.round}`) : null,
-      startBtn,
+      forLobby ? null : startBtn,
     ),
     h('div.db-body', null,
       h('section.panel.db-left', null,
@@ -304,7 +306,8 @@ export function vsaiScreen(app: App): Screen {
       h('section.db-right', null,
         h('div.panel', null, deckHost),
         h('div.panel', null, statsHost),
-        resumable ? h('p.muted.db-note', null, 'Starting a new match abandons the one in progress.') : null,
+        forLobby ? h('p.muted.db-note', null, 'This is also your vs-AI deck. Each multiplayer match keeps the deck you had when you created or joined it.')
+          : resumable ? h('p.muted.db-note', null, 'Starting a new match abandons the one in progress.') : null,
       ),
     ),
   );

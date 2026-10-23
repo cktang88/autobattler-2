@@ -2,7 +2,7 @@
 
 import { h, type Screen, type ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
-import { activeDeck, allDesigns, setDeck } from '../collection.ts';
+import { activeDeck } from '../collection.ts';
 import { syncGarage } from '../sync.ts';
 import {
   createMatch, createPrivateMatch, currentSession, forfeitMatch, getMe, joinMatch, listMatches, login, logout,
@@ -38,8 +38,6 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   let loadError: string | null = null;
   /** code of a private match just created, highlighted at the top */
   let freshCode: string | null = null;
-  /** roster editor open in the deck panel */
-  let editingDeck = false;
   /** half-typed join code and the "Finished" list state survive the periodic re-render */
   let codeDraft = '';
   let codeInput: HTMLInputElement | null = null;
@@ -220,43 +218,22 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     return form;
   }
 
-  /** Add/remove a design from the active deck right here in the lobby (no trip to the Garage). */
-  const toggleDeck = (id: string) => {
-    const ids = activeDeck().map((d) => d.id);
-    if (ids.includes(id)) {
-      if (ids.length <= 1) { sfx('error'); app.toast('Your deck needs at least one design', 'error'); return; }
-      setDeck(ids.filter((x) => x !== id));
-    } else {
-      if (ids.length >= DECK_SIZE) { sfx('error'); app.toast(`Deck is full (${DECK_SIZE} max) — remove one first`, 'error'); return; }
-      setDeck([...ids, id]);
-    }
-    sfx('click');
-    render();
-  };
-
   function deckPanel(): HTMLElement {
     const deck = activeDeck();
     const errs = deck.length ? validateDeck(deck) : ['Your deck is empty'];
-    const inDeck = new Set(deck.map((d) => d.id));
     const chip = (d: Design) => {
       let cost = '';
       try { cost = String(computeStats(d).cost); } catch { /* invalid design */ }
-      const on = inDeck.has(d.id);
-      return editingDeck
-        ? h(on ? 'button.lobby-chip.is-on' : 'button.lobby-chip', {
-          title: `${d.chassis} / ${d.mobility} — click to ${on ? 'remove from' : 'add to'} deck`,
-          onclick: () => toggleDeck(d.id),
-        }, on ? '✓ ' : '+ ', d.name, cost ? h('small', null, cost) : null)
-        : h('span.lobby-chip', { title: `${d.chassis} / ${d.mobility}` }, d.name, cost ? h('small', null, cost) : null);
+      return h('span.lobby-chip', { title: `${d.chassis} / ${d.mobility}` }, d.name, cost ? h('small', null, cost) : null);
     };
     return h('div.panel.lobby-deck', null,
       h('div.lobby-head', null,
         h('div.panel-title', null, `Deck · ${deck.length}/${DECK_SIZE} designs`),
         h('div.spacer'),
-        h('button.lobby-link', { onclick: () => { sfx('click'); editingDeck = !editingDeck; render(); } }, editingDeck ? 'Done' : 'Change roster'),
+        h('button.lobby-link', { onclick: () => { sfx('click'); app.go({ name: 'vsai', from: 'lobby' }); } }, 'Change roster'),
         h('button.lobby-link', { onclick: () => { sfx('click'); app.go({ name: 'garage' }); } }, 'Edit in Garage ›'),
       ),
-      h('div.lobby-chips', null, ...(editingDeck ? allDesigns() : deck).map(chip)),
+      h('div.lobby-chips', null, ...deck.map(chip)),
       errs.length ? h('p.lobby-warn', null, `⚠ ${errs[0]}`) : null,
       h('p.muted.lobby-small', null, 'Each match uses the deck you had when you created or joined it — change it here before starting the next one.'),
     );
