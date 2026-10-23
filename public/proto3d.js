@@ -33274,7 +33274,7 @@ var MODULES = [
     id: "incendiary",
     name: "Incendiary Rockets",
     family: "Napalm 4-tube",
-    desc: "Rocket salvo that sets everything in the blasts burning.",
+    desc: "Rocket salvo that sets everything in the blasts burning and leaves the ground on fire for 4 s.",
     category: "rocket",
     visual: "rocketPod",
     barrels: 4,
@@ -33292,7 +33292,8 @@ var MODULES = [
     splash: 1,
     ap: 0.2,
     spread: 0.8,
-    burn: { dps: 14, duration: 4 }
+    burn: { dps: 14, duration: 4 },
+    fireField: { radius: 1.1, duration: 4, dps: 10 }
   }),
   wpn({
     id: "mlrs",
@@ -33667,7 +33668,7 @@ var MODULES = [
     id: "flamer",
     name: "Flamethrower",
     family: "Light flame",
-    desc: "Short cone of fire: ignores most armor and sets everything in it burning.",
+    desc: "Short cone of fire: ignores most armor, sets everything in it burning and scorches the ground briefly.",
     category: "flame",
     visual: "flamer",
     caliber: 0.3,
@@ -33682,13 +33683,14 @@ var MODULES = [
     projectileSpeed: 9,
     splash: 0.8,
     ap: 0.8,
-    burn: { dps: 6, duration: 2 }
+    burn: { dps: 6, duration: 2 },
+    fireField: { radius: 0.7, duration: 1.5, dps: 4 }
   }),
   wpn({
     id: "napalm",
     name: "Napalm Projector",
     family: "Napalm",
-    desc: "Sticky gel: wide flame cone and a long, hot burn.",
+    desc: "Sticky gel: wide flame cone, a long hot burn, and burning gel pools that last 4 s.",
     category: "flame",
     visual: "flamer",
     caliber: 0.6,
@@ -33703,7 +33705,8 @@ var MODULES = [
     projectileSpeed: 8,
     splash: 1.2,
     ap: 0.8,
-    burn: { dps: 15, duration: 3 }
+    burn: { dps: 15, duration: 3 },
+    fireField: { radius: 1.1, duration: 4, dps: 10 }
   }),
   // ---------------- Stun & disruption ----------------
   wpn({
@@ -34310,7 +34313,7 @@ var MODULES = [
     id: "inferno",
     name: "Inferno Projector",
     family: "Giant flame",
-    desc: "A river of fire: wide cone, ferocious burn.",
+    desc: "A river of fire: wide cone, ferocious burn, and the ground stays ablaze where it lands.",
     category: "flame",
     visual: "flamer",
     caliber: 1,
@@ -34325,7 +34328,8 @@ var MODULES = [
     projectileSpeed: 9,
     splash: 1.8,
     ap: 0.9,
-    burn: { dps: 30, duration: 3 }
+    burn: { dps: 30, duration: 3 },
+    fireField: { radius: 1.6, duration: 3.5, dps: 18 }
   }),
   wpn({
     id: "grinder",
