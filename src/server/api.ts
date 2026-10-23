@@ -9,9 +9,9 @@ import {
 import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { hashToken, type MatchRecord, type PlayerRecord, type Store } from './store.ts';
-import { HttpError, sanitizeAction, sanitizeDeck, sanitizeName } from './validate.ts';
+import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName } from './validate.ts';
 
-export const BODY_LIMIT = 64 * 1024;
+export const BODY_LIMIT = 256 * 1024; // a full garage upload (up to MAX_GARAGE designs) is the largest body
 export const MAX_ACTIVE_MATCHES = 20;
 const DAY = 24 * 3600 * 1000;
 export const STALE_TURN_MS = 7 * DAY;
@@ -108,6 +108,10 @@ export class Api {
     if (a === 'health' && !b && M === 'GET') return { ok: true };
     if (a === 'login' && !b && M === 'POST') return this.login(c);
     if (a === 'me' && !b && M === 'GET') return this.me(c);
+    if (a === 'garage' && !b) {
+      if (M === 'GET') return this.getGarage(c);
+      if (M === 'POST') return this.putGarage(c);
+    }
     if (a === 'matches') {
       if (!b) {
         if (M === 'GET') return this.list(c);
@@ -158,6 +162,26 @@ export class Api {
     const p = this.auth(c);
     const active = this.activeCount(p.id);
     return { playerId: p.id, name: p.name, activeMatches: active, maxActiveMatches: MAX_ACTIVE_MATCHES };
+  }
+
+  // ---------------------------------------------------------------- garage (designs + deck, kept in players.json)
+
+  private getGarage(c: Ctx) {
+    const p = this.auth(c);
+    return { garage: p.garage ?? null };
+  }
+
+  /** Replace the stored garage. `baseRev` is the rev the client last synced; if another session wrote since,
+   *  nothing is stored and the server copy comes back as `conflict` for the client to merge and resend. */
+  private putGarage(c: Ctx) {
+    const p = this.auth(c);
+    const body = obj(c.body);
+    const baseRev = typeof body.baseRev === 'number' && Number.isInteger(body.baseRev) ? body.baseRev : 0;
+    if (p.garage && p.garage.rev !== baseRev) return { ok: false, conflict: p.garage };
+    const { designs, deck } = sanitizeGarage(body);
+    p.garage = { designs, deck, rev: (p.garage?.rev ?? 0) + 1, updatedAt: Date.now() };
+    this.store.save();
+    return { ok: true, rev: p.garage.rev, kept: designs.length };
   }
 
   // ---------------------------------------------------------------- lobby

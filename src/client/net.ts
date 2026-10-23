@@ -3,7 +3,8 @@
 import type { DeployAction, Design, MatchState, Side } from '../shared/types.ts';
 import type { MatchDriver } from './driver.ts';
 
-export interface Session { playerId: string; name: string; token: string }
+/** `auto`: created silently so the garage can be stored server-side; the lobby still asks for a callsign. */
+export interface Session { playerId: string; name: string; token: string; auto?: boolean }
 export interface MatchSummary {
   id: string;
   status: MatchState['status'];
@@ -79,10 +80,29 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, sig
   return data as T;
 }
 
+/** Log in with a callsign. With a stored session this renames that same account (its garage and matches stay). */
 export async function login(name: string): Promise<Session> {
-  const s = await call<Session>('POST', '/login', { name });
+  const prev = currentSession();
+  const s = await call<Session>('POST', '/login', prev ? { name, token: prev.token } : { name });
   setSession({ playerId: s.playerId, name: s.name, token: s.token });
   return currentSession()!;
+}
+
+/** The stored session, or a fresh account under a placeholder callsign (so designs can be saved server-side). */
+export async function ensureSession(): Promise<Session> {
+  const cur = currentSession();
+  if (cur) return cur;
+  const s = await call<Session>('POST', '/login', { name: `Pilot ${1000 + Math.floor(Math.random() * 9000)}` });
+  setSession({ playerId: s.playerId, name: s.name, token: s.token, auto: true });
+  return currentSession()!;
+}
+
+export interface GarageData { designs: Design[]; deck: string[]; rev: number; updatedAt: number }
+export async function getGarage(): Promise<GarageData | null> {
+  return (await call<{ garage: GarageData | null }>('GET', '/garage')).garage;
+}
+export async function putGarage(designs: Design[], deck: string[], baseRev: number): Promise<{ ok: true; rev: number } | { ok: false; conflict: GarageData }> {
+  return call('POST', '/garage', { designs, deck, baseRev });
 }
 
 export function logout(): void {
