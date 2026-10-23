@@ -395,6 +395,8 @@ export interface DeployAction {
   place: Placement[];
   /** uids of existing units to upgrade by one level (may repeat a uid to upgrade twice) */
   upgrade: number[];
+  /** uids of units placed in earlier rounds to sell back for SELL_REFUND of what was spent on them */
+  sell?: number[];
   /** setting changes for units placed in earlier rounds (spacing can't change once locked in) */
   configure?: UnitConfig[];
 }

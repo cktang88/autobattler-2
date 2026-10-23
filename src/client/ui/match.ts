@@ -16,7 +16,7 @@ import type { UnitFoot } from '../../shared/grid.ts';
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
 import { bodyScale, hullK, mountOffsets } from '../../shared/mountgeo.ts';
 import { TILT_SIN, flyHeight, hullHeight } from '../render/tilt.ts';
-import { battleInputFor, MAX_BLOCKS, MAX_SIM_UNITS, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
+import { battleInputFor, MAX_BLOCKS, MAX_SIM_UNITS, placementValue, SELL_REFUND, sellValue, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
@@ -79,7 +79,7 @@ function spacingControl(value: number, onPick: ((v: number) => void) | null, foo
   );
 }
 
-type Op = { kind: 'place' | 'upgrade'; uid: number };
+type Op = { kind: 'place' | 'upgrade' | 'sell'; uid: number };
 type Sel = { side: Side; uid: number; pending: boolean } | null;
 type FieldWithEvents = BattleView;
 
@@ -110,6 +110,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let pendingRound = -1;
   let place: Placement[] = [];
   let upgrades: number[] = [];
+  /** units from earlier rounds sold this turn (refund SELL_REFUND of their investment) */
+  let sold: number[] = [];
   let ops: Op[] = [];
   let nextUid = 1;
   let selCard = -1;
@@ -176,7 +178,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const me = () => m.players[side];
   const foe = () => m.players[opp];
   const deck = () => me().deck;
-  const action = (): DeployAction => ({ round: m.round, place: place.map((p) => ({ ...p })), upgrade: [...upgrades], ...(cfg.size ? { configure: [...cfg.values()].map((c) => ({ ...c })) } : {}) });
+  const action = (): DeployAction => ({ round: m.round, place: place.map((p) => ({ ...p })), upgrade: [...upgrades], ...(sold.length ? { sell: [...sold] } : {}), ...(cfg.size ? { configure: [...cfg.values()].map((c) => ({ ...c })) } : {}) });
+  /** a side's board as the player sees it this turn (my sold units are gone) */
+  const boardOf = (s: Side): Placement[] => (s === side && sold.length ? me().board.filter((b) => !sold.includes(b.uid)) : m.players[s].board);
+  const myBoard = () => boardOf(side);
   const check = (a: DeployAction): string | null => {
     try { return validateDeploy(m, side, a); } catch (e) { return (e as Error).message; }
   };
@@ -194,6 +199,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       try { c += upgradeCost(d, u.level + k); } catch { /* ignore */ }
       seen.set(uid, k + 1);
     }
+    for (const uid of sold) {
+      const u = me().board.find((b) => b.uid === uid);
+      const d = u && designOf(side, u.designId);
+      if (u && d) c -= sellValue(d, u.level);
+    }
     return c;
   }
   const remaining = () => me().supply - spent();
@@ -202,6 +212,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     pendingRound = m.round;
     place = [];
     upgrades = [];
+    sold = [];
     ops = [];
     cfg.clear();
     nextUid = me().nextUid;
@@ -231,9 +242,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let capWarned = false;
   function capUse() {
     let units = 0;
-    for (const p of me().board) units += squadOf(designOf(side, p.designId));
+    for (const p of myBoard()) units += squadOf(designOf(side, p.designId));
     for (const p of place) units += squadOf(designOf(side, p.designId));
-    return { blocks: me().board.length + place.length, units };
+    return { blocks: myBoard().length + place.length, units };
   }
   /** why buying one more block of d would break a cap (null = fits) */
   function capBlock(d: Design | undefined): string | null {
@@ -664,7 +675,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   function escortUi(sl: NonNullable<Sel>): EscortUi {
     const e = blockEscort(sl);
-    const tp = e != null ? place.find((x) => x.uid === e) ?? me().board.find((x) => x.uid === e) : undefined;
+    const tp = e != null ? place.find((x) => x.uid === e) ?? myBoard().find((x) => x.uid === e) : undefined;
     return {
       label: e != null ? designOf(side, tp?.designId ?? '')?.name ?? `#${e}` : null,
       picking: escortPick?.uid === sl.uid && escortPick.pending === sl.pending,
@@ -673,7 +684,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     };
   }
   type OrdersPatch = Partial<Orders> & { escort?: number }; // escort -1 = clear
-  const blockSrc = (sl: NonNullable<Sel>) => (sl.pending ? place.find((x) => x.uid === sl.uid) : m.players[sl.side].board.find((x) => x.uid === sl.uid));
+  const blockSrc = (sl: NonNullable<Sel>) => (sl.pending ? place.find((x) => x.uid === sl.uid) : boardOf(sl.side).find((x) => x.uid === sl.uid));
   /** the design's default kite / focus orders (what unset placement fields resolve to, as in the sim) */
   const defsOf = (s: Side, designId: string) => defaultOrders(designOf(s, designId));
   const blockOrders = (sl: NonNullable<Sel>): Orders | null => {
@@ -834,7 +845,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
-      else t = place.length || me().board.length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several to set their orders together · right-drag to pan') : 'Pick a unit card, then tap your zone to deploy';
+      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several to set their orders together · right-drag to pan') : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -926,7 +937,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return;
     }
     const s = sel;
-    const p = s.pending ? place.find((x) => x.uid === s.uid) : m.players[s.side].board.find((x) => x.uid === s.uid);
+    const p = s.pending ? place.find((x) => x.uid === s.uid) : boardOf(s.side).find((x) => x.uid === s.uid);
     const d = p && designOf(s.side, p.designId);
     const st = d && statsOf(d);
     if (!p || !d || !st) { sel = null; infoEl.classList.add('hidden'); return; }
@@ -953,6 +964,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           actions.push(h('button.small.warn', { onclick: () => upgrade(p.uid), disabled: !!err, title: err ?? `Level ${lv + 1}: ${what} get +${Math.round(LEVEL_BONUS * 100)}% HP and damage` }, `Upgrade${squad > 1 ? ' squad' : ''} · ${cost}`));
         } else actions.push(h('button.small', { disabled: true }, 'Max level'));
         if (ups) actions.push(h('button.small', { onclick: () => undoUpgrade(p.uid) }, 'Undo upgrade'));
+        const back = sellValue(d, p.level);
+        actions.push(h('button.small.danger', { onclick: () => sellBlock(p.uid), title: `Sell for ${Math.round(SELL_REFUND * 100)}% of the ${placementValue(d, p.level)} supply spent on it (purchase + upgrades)` }, `Sell · +${back}`));
       }
     }
     infoEl.replaceChildren(
@@ -1120,6 +1133,30 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     renderAll();
   }
 
+  /** sell a unit from an earlier round (refund applies this turn; undo brings it back) */
+  function sellBlock(uid: number) {
+    const u = me().board.find((b) => b.uid === uid);
+    const d = u && designOf(side, u.designId);
+    if (!u || !d || sold.includes(uid)) return;
+    const cand = action();
+    cand.upgrade = cand.upgrade.filter((x) => x !== uid);
+    cand.configure = cand.configure?.filter((c) => c.uid !== uid);
+    cand.sell = [...(cand.sell ?? []), uid];
+    const err = check(cand);
+    if (err) { sfx('invalid'); app.toast(err, 'error'); return; }
+    upgrades = upgrades.filter((x) => x !== uid);
+    ops = ops.filter((o) => !(o.kind === 'upgrade' && o.uid === uid));
+    cfg.delete(uid);
+    sold.push(uid);
+    ops.push({ kind: 'sell', uid });
+    dropEscortsTo(uid);
+    if (sel && !sel.pending && sel.uid === uid) sel = null;
+    multi = multi.filter((x) => x.pending || x.uid !== uid);
+    sfx('click');
+    app.toast(`Sold ${d.name} for ${sellValue(d, u.level)} supply (Undo brings it back)`, 'info');
+    renderAll();
+  }
+
   function undoUpgrade(uid: number) {
     const i = upgrades.lastIndexOf(uid);
     if (i >= 0) upgrades.splice(i, 1);
@@ -1132,6 +1169,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const o = ops.pop();
     if (!o) return;
     if (o.kind === 'place') { place = place.filter((p) => p.uid !== o.uid); dropEscortsTo(o.uid); if (sel?.pending && sel.uid === o.uid) sel = null; }
+    else if (o.kind === 'sell') sold = sold.filter((x) => x !== o.uid);
     else { const i = upgrades.lastIndexOf(o.uid); if (i >= 0) upgrades.splice(i, 1); }
     sfx('click');
     renderAll();
@@ -1141,6 +1179,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     cfg.clear();
     place = [];
     upgrades = [];
+    sold = [];
     ops = [];
     sel = null;
     sfx('click');
@@ -1152,7 +1191,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const a = action();
     const err = check(a);
     if (err) { sfx('error'); app.toast(err, 'error'); return; }
-    if (!a.place.length && !a.upgrade.length) {
+    if (!a.place.length && !a.upgrade.length && !a.sell?.length) {
       const cheapest = Math.min(...deck().map(costOf));
       if (cheapest <= remaining()) {
         const ok = await confirmModal('Deploy nothing?', 'You have unspent supply and no new units or upgrades. Fight with your current army anyway?', 'Fight');
@@ -1200,7 +1239,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       return w.x >= r.col && w.x <= r.col + r.w && w.y >= r.row && w.y <= r.row + r.h;
     };
     if (phase === 'deploy') for (const p of place) if (hit(side, p)) return { side, uid: p.uid, pending: true };
-    for (const p of me().board) if (hit(side, p)) return { side, uid: p.uid, pending: false };
+    for (const p of myBoard()) if (hit(side, p)) return { side, uid: p.uid, pending: false };
     for (const p of foe().board) if (hit(opp, p)) return { side: opp, uid: p.uid, pending: false };
     return null;
   }
@@ -1257,7 +1296,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       try { sp = view.worldToScreen(wr.col + wr.w / 2, wr.row + wr.h / 2); } catch { return; }
       if (sp.x >= l && sp.x <= r && sp.y >= t && sp.y <= bt) out.push({ side, uid: p.uid, pending });
     };
-    for (const p of me().board) test(p, false);
+    for (const p of myBoard()) test(p, false);
     for (const p of place) test(p, true);
     return out;
   }
@@ -1522,7 +1561,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (rec) { startReplay(rec); return; }
     if (m.status === 'done') { showOver(); return; }
     if (pendingRound !== m.round) resetPending();
-    else if (me().ready && (ops.length || cfg.size)) { cfg.clear(); place = []; upgrades = []; ops = []; selCard = -1; hover = null; sel = null; multi = []; } // submitted: now on the board
+    else if (me().ready && (ops.length || cfg.size)) { cfg.clear(); place = []; upgrades = []; sold = []; ops = []; selCard = -1; hover = null; sel = null; multi = []; } // submitted: now on the board
     const blocked = me().ready || (m.status === 'waiting' && !!check({ round: m.round, place: [], upgrade: [] }));
     if (blocked) { if (phase !== 'waiting') setPhase('waiting'); else { renderAll(); renderOverlay(); } }
     else if (phase !== 'deploy') setPhase('deploy');
@@ -1615,7 +1654,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       for (const c of placementUnitCenters(s, p, sizeOf(d), footOf(d))) out.push({ side: s, design: d, x: c.x, y: c.y, level: p.level, ...extra });
     };
     for (const p of foe().board) add(opp, p, { selected: sel?.side === opp && sel.uid === p.uid });
-    for (const p of me().board) add(side, p, { level: Math.min(MAX_LEVEL, p.level + pendingUps(p.uid)), selected: (sel?.side === side && !sel.pending && sel.uid === p.uid) || inMulti(side, p.uid, false) });
+    for (const p of myBoard()) add(side, p, { level: Math.min(MAX_LEVEL, p.level + pendingUps(p.uid)), selected: (sel?.side === side && !sel.pending && sel.uid === p.uid) || inMulti(side, p.uid, false) });
     if (phase === 'deploy') {
       for (const p of place) add(side, p, { selected: (!!sel?.pending && sel.uid === p.uid) || inMulti(side, p.uid, true) });
       const d = deck()[selCard];
@@ -1632,7 +1671,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function blockOutline(): BoardOverlay['hover'] {
     const t = sel ?? hoverUnit;
     if (!t) return null;
-    const p = t.pending ? place.find((x) => x.uid === t.uid) : m.players[t.side].board.find((x) => x.uid === t.uid);
+    const p = t.pending ? place.find((x) => x.uid === t.uid) : boardOf(t.side).find((x) => x.uid === t.uid);
     const d = p && designOf(t.side, p.designId);
     if (!p || !d) return null;
     const size = sizeOf(d);
@@ -1672,7 +1711,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       if (p) push(t.side, p, designOf(t.side, p.designId), true, keyOf(t.side, t.uid));
     }
     if (showMine || shiftDown) {
-      for (const p of me().board) push(side, p, designOf(side, p.designId), false, keyOf(side, p.uid));
+      for (const p of myBoard()) push(side, p, designOf(side, p.designId), false, keyOf(side, p.uid));
       if (phase === 'deploy') for (const p of place) push(side, p, designOf(side, p.designId), false, keyOf(side, p.uid));
     }
     if (showFoe) for (const p of foe().board) push(opp, p, designOf(opp, p.designId), false, keyOf(opp, p.uid));

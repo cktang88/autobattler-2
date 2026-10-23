@@ -4,7 +4,7 @@ import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { validateDesign, computeStats, MAX_LEVEL } from '../src/shared/stats.ts';
 import {
   START_HP, DECK_SIZE, MAX_UNITS, MAX_SIM_UNITS, newPlayer, newMatch, joinMatch, validateDeck, validateDeploy, applyDeploy,
-  resolveRound, redactFor, battleInputFor, supplyForRound, upgradeCost, submitDeploy, isPlaceholder, roundDamage,
+  resolveRound, redactFor, battleInputFor, supplyForRound, upgradeCost, submitDeploy, isPlaceholder, roundDamage, sellValue, SELL_REFUND,
 } from '../src/shared/match.ts';
 import { blockDims, blockInZone, blocksOverlap, rectInZone, rectsOverlap, localRectToWorld, placementUnitCenters, squadSize, FIELD_W, FIELD_H, DEPLOY_W, DEPLOY_D } from '../src/shared/grid.ts';
 /** zone edges, so geometry tests hold at any field size */
@@ -405,4 +405,36 @@ test('rotation: squads turn 90° (8x2 -> 2x8), validated, stored, and units laid
   // stored on the board through applyDeploy
   applyDeploy(m, 0, { round: 1, place: [r(1, 0, 0)], upgrade: [] });
   assert.equal(m.players[0].board.find((u) => u.uid === 1)?.rot, true);
+});
+
+test('selling: units from earlier rounds sell for 75% of purchase + upgrades; room, units and refund are usable the same turn; hidden from the opponent', () => {
+  const m = fresh();
+  assert.equal(submitDeploy(m, 0, { round: 1, place: [pl(1, 0, 0), pl(2, 12, 0)], upgrade: [] }), null);
+  submitDeploy(m, 1, { round: 1, place: [], upgrade: [] });
+  assert.equal(m.round, 2);
+  const p = m.players[0];
+  // upgrade unit 1 this turn first, then sell it next turn
+  p.supply = 100000;
+  applyDeploy(m, 0, { round: 2, place: [], upgrade: [1] });
+  p.ready = false;
+  const lvl = p.board.find((u) => u.uid === 1)!.level;
+  assert.equal(lvl, 2);
+  const invested = computeStats(cheap).cost + upgradeCost(cheap, 1);
+  assert.ok(Math.abs(sellValue(cheap, 2) - invested * SELL_REFUND) <= 10, `${sellValue(cheap, 2)} vs ${invested * SELL_REFUND}`);
+  // can't sell unknown / twice / then upgrade the sold unit
+  assert.match(validateDeploy(m, 0, { round: 2, place: [], upgrade: [], sell: [99] })!, /unknown/);
+  assert.match(validateDeploy(m, 0, { round: 2, place: [], upgrade: [], sell: [1, 1] })!, /twice/);
+  assert.match(validateDeploy(m, 0, { round: 2, place: [], upgrade: [1], sell: [1] })!, /unknown/);
+  // the sold block's spot is free for a new block in the same action, and the refund pays for it
+  p.supply = 0;
+  const reuse = { round: 2, place: [pl(3, 0, 0, cheap.id, 2)], upgrade: [], sell: [1] };
+  assert.equal(validateDeploy(m, 0, reuse), null);
+  const before = p.supply;
+  applyDeploy(m, 0, reuse);
+  assert.equal(p.supply, before + sellValue(cheap, 2) - computeStats(cheap).cost);
+  assert.ok(!p.board.some((u) => u.uid === 1));
+  // the opponent still sees the board as it fought last round (sold unit included, new one hidden)
+  const view = redactFor(m, 1);
+  assert.ok(view.players[0].board.some((u) => u.uid === 1));
+  assert.ok(!view.players[0].board.some((u) => u.uid === 3));
 });

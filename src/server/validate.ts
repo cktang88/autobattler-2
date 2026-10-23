@@ -171,6 +171,13 @@ export function sanitizeAction(raw: unknown): DeployAction {
     return u as number;
   });
   const out: DeployAction = { round: a.round as number, place, upgrade };
+  if (a.sell !== undefined) {
+    if (!Array.isArray(a.sell) || a.sell.length > 64) bad('action.sell must be an array (max 64)');
+    out.sell = (a.sell as unknown[]).map((u) => {
+      if (!isInt(u) || Math.abs(u) > 1e6) bad('sell entries must be unit uids');
+      return u as number;
+    });
+  }
   if (a.configure !== undefined) {
     if (!Array.isArray(a.configure) || a.configure.length > 200) bad('action.configure must be an array (max 200)');
     out.configure = (a.configure as unknown[]).map((c): UnitConfig => {

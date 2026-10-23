@@ -76,6 +76,13 @@ export function placementValue(design: Design, level: number): number {
   return v;
 }
 
+/** Share of a unit's total investment (purchase + upgrades) refunded when it is sold after fighting. */
+export const SELL_REFUND = 0.75;
+/** Supply returned for selling a placement at `level`. */
+export function sellValue(design: Design, level: number): number {
+  return roundPrice(placementValue(design, level) * SELL_REFUND);
+}
+
 /** Base damage the loser of `round` takes, before surviving-unit damage. */
 export function baseDamage(round: number): number {
   return 2 + round;
@@ -222,19 +229,35 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
   if (!a || typeof a !== 'object') return 'Bad action';
   if (a.round !== m.round) return `Wrong round (expected ${m.round})`;
   if (!Array.isArray(a.place) || !Array.isArray(a.upgrade)) return 'Bad action';
-  if (p.board.length + a.place.length > MAX_BLOCKS) return `Too many blocks (max ${MAX_BLOCKS})`;
-
   const designs = new Map(p.deck.map((d) => [d.id, d] as const));
+  // sold units leave before anything new is placed: their room, unit count and refund are usable this turn
+  const sold = new Set<number>();
+  let refund = 0;
+  if (a.sell !== undefined) {
+    if (!Array.isArray(a.sell) || a.sell.length > MAX_BLOCKS) return 'Bad sell list';
+    for (const uid of a.sell) {
+      const u = isInt(uid) ? p.board.find((b) => b.uid === uid) : undefined;
+      if (!u) return `Can't sell unknown unit ${String(uid)}`;
+      if (sold.has(uid)) return `Unit ${uid} sold twice`;
+      const d = designs.get(u.designId);
+      if (!d) return 'Unit has unknown design';
+      sold.add(uid);
+      refund += sellValue(d, u.level);
+    }
+  }
+  const board = p.board.filter((u) => !sold.has(u.uid));
+  if (board.length + a.place.length > MAX_BLOCKS) return `Too many blocks (max ${MAX_BLOCKS})`;
+
   let cost = 0;
-  const seenUids = new Set<number>(p.board.map((u) => u.uid));
-  // escort may reference any block already on the board or bought in this very action
-  const knownUids = new Set<number>(seenUids);
+  const seenUids = new Set<number>(p.board.map((u) => u.uid)); // sold uids stay used
+  // escort may reference any block still on the board or bought in this very action
+  const knownUids = new Set<number>(board.map((u) => u.uid));
   for (const pl of a.place) if (pl && typeof pl === 'object' && isInt(pl.uid)) knownUids.add(pl.uid);
-  const footprints: { x: number; y: number; spacing?: number; rot?: boolean; size: Size; foot: UnitFoot }[] = p.board.map((u) => {
+  const footprints: { x: number; y: number; spacing?: number; rot?: boolean; size: Size; foot: UnitFoot }[] = board.map((u) => {
     const dd = designs.get(u.designId);
     return { x: u.x, y: u.y, spacing: u.spacing, rot: u.rot, size: sizeOf(dd), foot: footOf(dd) };
   });
-  let simUnits = p.board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
+  let simUnits = board.reduce((n, u) => n + squadSize(sizeOf(designs.get(u.designId))), 0);
 
   for (const pl of a.place) {
     if (!pl || typeof pl !== 'object') return 'Bad placement';
@@ -269,7 +292,7 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     if (!Array.isArray(a.configure) || a.configure.length > 200) return 'Bad configure list';
     for (const c of a.configure) {
       if (!c || typeof c !== 'object' || !isInt(c.uid)) return 'Bad configure entry';
-      if (!p.board.some((u) => u.uid === c.uid)) return `Can't configure unknown unit ${String(c.uid)}`;
+      if (!board.some((u) => u.uid === c.uid)) return `Can't configure unknown unit ${String(c.uid)}`;
       const be = behaviorError(behaviorOf(c));
       if (be) return be;
       if (c.kiteMount !== undefined) {
@@ -282,7 +305,7 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
 
   const pending = new Map<number, number>();
   for (const uid of a.upgrade) {
-    const u = p.board.find((b) => b.uid === uid);
+    const u = board.find((b) => b.uid === uid);
     if (!u) return `Can't upgrade unknown unit ${String(uid)}`;
     const d = designs.get(u.designId);
     if (!d) return 'Unit has unknown design';
@@ -293,15 +316,16 @@ export function validateDeploy(m: MatchState, side: Side, a: DeployAction): stri
     pending.set(uid, extra + 1);
   }
 
-  if (cost > p.supply) return `Not enough supply (${cost} > ${p.supply})`;
+  if (cost > p.supply + refund) return `Not enough supply (${cost} > ${p.supply + refund})`;
   return null;
 }
 
-/** Cost of an action for `side` (assumes it is valid). */
+/** Net supply an action spends for `side` (purchases + upgrades - sell refunds; assumes it is valid). */
 export function actionCost(m: MatchState, side: Side, a: DeployAction): number {
   const p = m.players[side];
   const designs = new Map(p.deck.map((d) => [d.id, d] as const));
   let cost = 0;
+  for (const uid of a.sell ?? []) { const u = p.board.find((b) => b.uid === uid); const d = u && designs.get(u.designId); if (u && d) cost -= sellValue(d, u.level); }
   for (const pl of a.place) cost += designCost(designs.get(pl.designId)!);
   const lv = new Map(p.board.map((u) => [u.uid, u.level] as const));
   for (const uid of a.upgrade) {
@@ -317,6 +341,11 @@ export function actionCost(m: MatchState, side: Side, a: DeployAction): number {
 export function applyDeploy(m: MatchState, side: Side, a: DeployAction): void {
   const p = m.players[side];
   p.supply -= actionCost(m, side, a);
+  if (a.sell?.length) {
+    const sold = new Set(a.sell);
+    p.board = p.board.filter((u) => !sold.has(u.uid));
+    for (const u of p.board) if (u.escort !== undefined && sold.has(u.escort)) delete u.escort;
+  }
   for (const uid of a.upgrade) {
     const u = p.board.find((b) => b.uid === uid);
     if (u) u.level = Math.min(MAX_LEVEL, u.level + 1);
@@ -429,7 +458,8 @@ export function redactFor(m: MatchState, viewer: Side): MatchState {
   const last = c.history[c.history.length - 1];
   const prevLevel = new Map<number, number>();
   if (last) for (const u of last.boards[oppSide]) prevLevel.set(u.uid, u.level);
-  opp.board = opp.board
+  // the board as it fought last round: hides this round's purchases AND sells
+  opp.board = (last ? last.boards[oppSide] : [])
     .filter((u) => u.round < c.round)
     .map((u) => {
       const v = { ...u, level: prevLevel.get(u.uid) ?? u.level };
