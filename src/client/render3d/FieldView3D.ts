@@ -1609,7 +1609,7 @@ export class FieldView3D implements BattleView {
     const smoke = catchUp ? 0 : (10 + S * 4) * (lv === 0 && kind === 'kinetic' ? 0.6 : lv === 3 ? 0.5 : 1);
     if (lv === 3) {
       this.layer.release(rig);
-      this.fx.scorchMark(x, y, 0.5 + rig.radius * 1.1);
+      this.fx.scorchMark(x, y, 0.3 + rig.radius * 0.75);
       this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, tint: 1, hx, hz, deck: 0.1 });
       return;
     }

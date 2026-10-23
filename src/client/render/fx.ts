@@ -755,7 +755,7 @@ export class Fx {
   wreck(x: number, y: number, a: number, S: number, ext: number, get: (px: number) => HTMLCanvasElement, hot: number[], sc = 1, lv: WreckLevel = 1, kind: DeathKind = 'explosive'): void {
     const scorch: number[] = [];
     // the harder it went up, the wider the blackened ground
-    const n = 11, R = ((0.42 + 0.08 * Math.min(S, 3)) * S * sc + 0.15) * (lv === 0 && kind === 'kinetic' ? 0.75 : 1 + 0.3 * Math.max(0, lv - 1));
+    const n = 11, R = ((0.42 + 0.08 * Math.min(S, 3)) * S * sc + 0.15) * (lv === 0 && kind === 'kinetic' ? 0.75 : 1 + 0.18 * Math.max(0, lv - 1));
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2, r = R * rr(0.7, 1.15);
       scorch.push(Math.cos(t) * r, Math.sin(t) * r * rr(0.8, 1));
@@ -767,7 +767,7 @@ export class Fx {
       let at = a0;
       for (let i = 0; i < np; i++) {
         const span = lv === 1 ? (i === 0 ? rr(4.3, 5) : a0 + PI2 - at) : i === np - 1 ? a0 + PI2 - at : (PI2 / np) * rr(0.75, 1.25);
-        const mid = at + span / 2, d = lv === 1 ? (i === 0 ? 0 : e * rr(0.18, 0.3)) : e * rr(0.12, 0.3) * (kind === 'explosive' ? 1.4 : 1);
+        const mid = at + span / 2, d = lv === 1 ? (i === 0 ? 0 : e * rr(0.2, 0.32)) : e * rr(0.22, 0.4) * (kind === 'explosive' ? 1.3 : 1);
         pieces.push(at, at + span, Math.cos(mid) * d, Math.sin(mid) * d, lv === 1 && i === 0 ? 0 : rr(-0.7, 0.7));
         at += span;
       }
@@ -778,7 +778,7 @@ export class Fx {
     }
     if (lv >= 2) {
       const ns = Math.round((lv === 3 ? 9 : 4) + S * (lv === 3 ? 5 : 2)), reach = e * (lv === 3 ? 1.6 : 1.1) / sc;
-      for (let i = 0; i < ns; i++) { const t = rnd() * PI2, d = reach * Math.sqrt(rr(0.04, 1)); scrap.push(Math.cos(t) * d, Math.sin(t) * d, S * rr(0.05, 0.13) * (lv === 3 ? 1 : 0.8), rnd() * PI2, rnd()); }
+      for (let i = 0; i < ns; i++) { const t = rnd() * PI2, d = reach * Math.sqrt(rr(0.04, 1)); scrap.push(Math.cos(t) * d, Math.sin(t) * d, (0.04 + S * rr(0.03, 0.08)) * (lv === 3 ? 1 : 0.8), rnd() * PI2, rnd()); }
       // nothing left to smoulder but the scrap: its embers and smoke rise from the pieces
       if (lv === 3) { hot = []; for (let i = 0; i < Math.min(8, ns); i++) hot.push(scrap[i * 5], scrap[i * 5 + 1]); }
     }
@@ -909,7 +909,7 @@ export class Fx {
       for (let i = 0; i < w.scorch.length; i += 2) g.lineTo(w.scorch[i], w.scorch[i + 1]);
       g.closePath();
       g.fill();
-      g.fillStyle = w.lv >= 2 ? 'rgba(8,6,4,0.45)' : 'rgba(10,8,6,0.3)';
+      g.fillStyle = w.lv >= 2 ? 'rgba(8,6,4,0.38)' : 'rgba(10,8,6,0.3)';
       g.save(); g.scale(0.62, 0.62); g.fill(); g.restore();
       const e = w.ext * w.sc, P = w.pieces;
       // scattered scrap (level 2-3): small torn plates, darker the closer to the blast

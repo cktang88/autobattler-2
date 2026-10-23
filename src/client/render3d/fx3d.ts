@@ -1331,7 +1331,7 @@ export class Fx3D {
   scatter(x: number, z: number, y: number, n: number, reach: number, size: number, hot = 0): void {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * 6.283, d = reach * Math.sqrt(Math.random()), s = size * R(0.35, 1);
-      this.scrap.add(x + R(-0.3, 0.3) * size, y + R(0.2, 0.6), z + R(-0.3, 0.3) * size, a, d, s, Math.random() < hot ? R(0.5, 0.75) : R(0.13, 0.32), Math.random() < 0.55);
+      this.scrap.add(x + R(-0.3, 0.3) * size, y + R(0.2, 0.6), z + R(-0.3, 0.3) * size, a, d, s, Math.random() < hot ? R(0.45, 0.7) : R(0.05, 0.14), Math.random() < 0.55);
       if (Math.random() < hot) this.add.emit(x, y + 0.3, z, Math.cos(a) * d * 1.4, R(3, 6), Math.sin(a) * d * 1.4, R(0.6, 1.2), 0.12 + s * 0.3, 0.03, 0, 0.6, -10, 3, RAMPS.ember, this.hdr);
     }
     const nc = this.lodN(n);
