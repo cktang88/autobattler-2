@@ -27,13 +27,25 @@ import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+/** camera pitch at the fit (zoomed-out) view: steep, for readability of the whole board */
 const ELEV = (60 * Math.PI) / 180;
+/** camera pitch when zoomed in (k >= PITCH_Z x fit): lower, so unit flanks, legs and tracks show */
+const ELEV_CLOSE = (43 * Math.PI) / 180;
+const PITCH_Z = 3.5;
+/** sun offset from the view centre for the viewer at side 0 (x: left, y: up, z: toward the camera; negative = behind) */
+const SUN: [number, number, number] = [30, 40, -16];
+/** pitch for zoom z = k / minK: ELEV at the fit view easing down to ELEV_CLOSE (log-zoom smoothstep) */
+function pitchAt(z: number): number {
+  const t = clamp(Math.log(Math.max(1, z)) / Math.log(PITCH_Z), 0, 1);
+  return lerp(ELEV, ELEV_CLOSE, t * t * (3 - 2 * t));
+}
 /** vertical field of view of the perspective camera (narrow: depth cue without a fish-eye look) */
 const FOV = 32;
 const GUN_H = 0.55;
 const SHAKE_CAP = 3;
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
@@ -168,7 +180,8 @@ const terrainCache = new Map<string, BuiltTerrain>();
 function terrainFor(map: MapTheme): BuiltTerrain {
   let t = terrainCache.get(map.id);
   if (t) { terrainCache.delete(map.id); terrainCache.set(map.id, t); return t; }
-  const b = buildTerrain(FIELD_H, FIELD_W, { seed: map.seed * 13 + 5, ppc: 14, grid: true, zoneFrac: DEPLOY_D / FIELD_H, props: false });
+  // no baked cell grid: the board reads as a place during battle; the placement grid is an overlay shown while deploying
+  const b = buildTerrain(FIELD_H, FIELD_W, { seed: map.seed * 13 + 5, ppc: 14, grid: false, zoneFrac: DEPLOY_D / FIELD_H, props: false });
   // restyle per map: multiply the sandy base by the 2D theme's mid ramp colour (relative to the base's own tone)
   const c1 = new THREE.Color().setRGB(map.ramp[1][0] / 255, map.ramp[1][1] / 255, map.ramp[1][2] / 255, THREE.SRGBColorSpace);
   const ref = new THREE.Color().setRGB(120 / 255, 108 / 255, 84 / 255, THREE.SRGBColorSpace);
@@ -297,9 +310,13 @@ export class FieldView3D implements BattleView {
     this.renderer.setPixelRatio(this.dprNow);
     this.controls = new CameraControls(this.cam, canvas, opts?.interactive !== false);
     this.cam.setAspect(this.ay);
+    this.cam.ayFn = (z) => Math.sin(pitchAt(z));
     try { setPanFlip(viewerSide === 1); } catch { /* audio optional */ }
 
-    this.stage = setupStage(this.renderer, this.scene, { fog: false, shadowRes: 2048 });
+    // sun up-left and a little BEHIND the field as the viewer sees it: lit tops and left flanks, darker faces toward the
+    // camera, glints on the painted plates, shadows falling toward the viewer's lower right
+    const ss = viewerSide === 1 ? -1 : 1;
+    this.stage = setupStage(this.renderer, this.scene, { fog: true, shadowRes: 2048, sun: [-ss * SUN[0], SUN[1], ss * SUN[2]] });
     this.sun = this.stage.sun;
     this.post = setupPost(this.renderer, this.scene, this.camera, 512, 512, { ao: true, bloom: true, grade: true });
     this.outline.install(this.post.composer.passes, (p, i) => this.post.composer.insertPass(p, i));
@@ -369,11 +386,15 @@ export class FieldView3D implements BattleView {
 
   /* ------------------------------------------------------------------------------------------ settings */
 
+  /** ground foreshortening at the fit view (the Camera's base aspect) */
   get ay(): number { return this.tiltOn ? Math.sin(ELEV) : 1; }
+  /** ground foreshortening at the current zoom (the pitch eases lower as you zoom in) */
+  private get ayNow(): number { return this.cam.ayAt(this.cam.k); }
   get tilted(): boolean { return this.tiltOn; }
   setTilt(on: boolean): void {
     if (on === this.tiltOn) return;
     this.tiltOn = on;
+    this.cam.ayFn = on ? (z) => Math.sin(pitchAt(z)) : null;
     this.cam.setAspect(this.ay);
   }
   get mapTheme(): MapTheme { return this.map; }
@@ -397,7 +418,10 @@ export class FieldView3D implements BattleView {
     this.scene.add(group);
     this.terrain = { group, ground: built.ground };
     this.scatterRocks(map, built.tint);
-    this.scene.background = new THREE.Color(map.void);
+    // atmospheric haze: distance fog toward a light sky-tinted version of the map's void colour (also the background)
+    const haze = new THREE.Color(map.void).lerp(new THREE.Color('#a7b6c4'), 0.5);
+    this.scene.background = haze;
+    if (this.scene.fog) (this.scene.fog as THREE.Fog).color.copy(haze);
     this.fx.setGround([clamp(map.ramp[1][0] / 255 * 0.9, 0, 1), clamp(map.ramp[1][1] / 255 * 0.9, 0, 1), clamp(map.ramp[1][2] / 255 * 0.9, 0, 1)]);
   }
 
@@ -473,9 +497,10 @@ export class FieldView3D implements BattleView {
     const c = this.cam;
     const rows = DEPLOY_D + 6;
     let k = Math.min(c.vw / FIELD_W, c.vh / (rows * c.ay));
+    for (let i = 0; i < 3; i++) k = Math.min(c.vw / FIELD_W, c.vh / (rows * c.ayAt(k)));
     if (c.vw < 640) k = Math.max(k, 11);
     k = Math.max(c.minK, k);
-    c.setTarget(FIELD_W / 2, FIELD_H - c.vh / (2 * k * c.ay) + 0.4, k, instant);
+    c.setTarget(FIELD_W / 2, FIELD_H - c.vh / (2 * k * c.ayAt(k)) + 0.4, k, instant);
   }
   focusOn(x: number, y: number, zoom?: number, instant = false): void {
     const v = this.toVisual(x, y);
@@ -486,7 +511,7 @@ export class FieldView3D implements BattleView {
   get wasDrag(): boolean { return this.controls.wasDrag; }
 
   private get ox(): number { return this.cssW / 2 - this.cam.cx * this.cam.k; }
-  private get oy(): number { return this.cssH / 2 - this.cam.cy * this.cam.k * this.ay; }
+  private get oy(): number { return this.cssH / 2 - this.cam.cy * this.cam.k * this.ayNow; }
   worldToScreen(x: number, y: number): { x: number; y: number } {
     this.placeCamera();
     const v = this.v3.set(x, 0, y).project(this.camera);
@@ -517,7 +542,7 @@ export class FieldView3D implements BattleView {
     if (a[0] === c.cx && a[1] === c.cy && a[2] === k && a[3] === this.cssW && a[4] === this.cssH && a[5] === tilt && a[6] === this.viewerSide) return;
     a[0] = c.cx; a[1] = c.cy; a[2] = k; a[3] = this.cssW; a[4] = this.cssH; a[5] = tilt; a[6] = this.viewerSide;
     const t = this.toVisual(c.cx, c.cy); // symmetric: visual centre -> world centre
-    const e = this.tiltOn ? ELEV : Math.PI / 2 - 1e-3;
+    const e = this.tiltOn ? pitchAt(k / c.minK) : Math.PI / 2 - 1e-3;
     const s = this.viewerSide === 1 ? -1 : 1;
     const D = this.cssH / (2 * k * Math.tan((FOV * Math.PI) / 360));
     this.camera.aspect = this.cssW / Math.max(1, this.cssH);
@@ -560,8 +585,14 @@ export class FieldView3D implements BattleView {
       this.camera.position.z += (me[2] * sh.sx + me[6] * sh.sy) / k;
       this.camera.updateMatrixWorld();
     }
+    // haze scales with the camera distance: the far side of the view fades a little, more as the pitch drops
+    const fog = this.scene.fog as THREE.Fog | null;
+    if (fog) {
+      const D = this.cssH / (2 * k * Math.tan((FOV * Math.PI) / 360));
+      fog.near = D * 0.8; fog.far = D * 3.2;
+    }
     // shadow frustum follows the visible ground (snapped so shadows don't shimmer as the camera glides)
-    const hw = this.cssW / (2 * k), hh = this.cssH / (2 * k * this.ay);
+    const hw = this.cssW / (2 * k), hh = this.cssH / (2 * k * this.ayNow);
     const radius = clamp(Math.ceil(Math.hypot(hw, hh) * 1.08 / 4) * 4, 16, 72);
     const cx = Math.round(t.x * 2) / 2, cz = Math.round(t.y * 2) / 2;
     const key = `${cx},${cz},${radius},${s}`;
@@ -569,7 +600,7 @@ export class FieldView3D implements BattleView {
       this.lastShadowKey = key;
       this.stage.fitShadow(cx, cz, radius);
       // keep the light up-left on screen whichever way the camera faces
-      this.sun.position.set(cx - s * 30, 40, cz + s * 20);
+      this.sun.position.set(cx - s * SUN[0], SUN[1], cz + s * SUN[2]);
       this.sun.target.updateMatrixWorld();
     }
   }
@@ -848,7 +879,7 @@ export class FieldView3D implements BattleView {
   /** true if a ground point is far enough outside the viewport that nothing of a unit there can be seen */
   private offscreen(x: number, y: number, margin: number): boolean {
     const p = this.worldToScreen(x, y), m = margin * this.cam.k;
-    return p.x < -m || p.x > this.cssW + m || p.y < -m * this.ay - 60 || p.y > this.cssH + m * this.ay + 60;
+    return p.x < -m || p.x > this.cssW + m || p.y < -m * this.ayNow - 60 || p.y > this.cssH + m * this.ayNow + 60;
   }
 
   private poseUnit(u: SimUnit, v: UView, dt: number): void {
@@ -1008,7 +1039,7 @@ export class FieldView3D implements BattleView {
     const w = boss ? Math.max(40, ((rig.L + rig.W) / 2) * k * 1.0) : Math.max(14, ((rig.L + rig.W) / 2) * k * 0.78);
     const bh = boss ? (S >= 5 ? 9 : 7) : S >= 2 ? 4 : 3;
     const x0 = -w / 2;
-    const y0 = hy * k * this.ay * (boss ? 1.1 : 1.04) + 4;
+    const y0 = hy * k * this.ayNow * (boss ? 1.1 : 1.04) + 4;
     // status glyphs left of the bar: a snowflake while slowed, a crossed-out gun (amber X) while disarmed
     let gx = x0 - 7;
     const gy = y0 + bh / 2;
@@ -1054,7 +1085,7 @@ export class FieldView3D implements BattleView {
   private drawPips(x: number, y: number, rig: Rig, ang: number, level: number, alpha: number, baseY = 0): void {
     const ui = this.ui, k = this.cam.k;
     const sz = clamp(k * 0.18, 3, 6);
-    const hy = this.halfY(rig, ang) * k * this.ay * 0.9;
+    const hy = this.halfY(rig, ang) * k * this.ayNow * 0.9;
     const by = -hy - sz * 0.9;
     for (let i = 0; i < level - 1; i++) {
       const cx = (i - (level - 2) / 2) * sz * 1.5;

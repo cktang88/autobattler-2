@@ -27,14 +27,14 @@ const zs = (n: number, gap: number) => Array.from({ length: n }, (_, i) => (i - 
 function pintle(C: WCtx) {
   const { b, p, rc, kit, r, y0, nb } = C;
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 8);
+  b.lathe(kit.panel, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 8);
   b.cyl(kit.metal, r * 0.12, r * 0.1, r * 0.3, [0, y0 + r * 0.26, 0], 'y', 6);
   C.t.pitch.position.set(r * 0.05, y0 + r * 0.62, 0);
   const w = nb > 1 ? r * 0.5 : r * 0.32;
   cbox(p, kit.trim, -r * 0.05, 0, 0, r * 0.75, r * 0.3, w);
-  bx(p, kit.panel, -r * 0.05, -r * 0.05, w / 2 + r * 0.12, r * 0.38, r * 0.3, r * 0.22);
+  bx(p, kit.hull, -r * 0.05, -r * 0.05, w / 2 + r * 0.12, r * 0.38, r * 0.3, r * 0.22);
   // gun shield: leaning plate, wider than the gun
-  cbox(p, kit.hull, r * 0.38, r * 0.02, 0, r * 0.1, r * 0.72, r * 1.15, r * 0.04, [0, 0, -0.28]);
+  cbox(p, kit.panel, r * 0.38, r * 0.02, 0, r * 0.1, r * 0.72, r * 1.15, r * 0.04, [0, 0, -0.28]);
   accent(C, r * 0.45, r * 0.02, -r * 0.32, r * 0.08, r * 0.2, [0, 0, -0.28 + Math.PI / 2], p);
   const len = C.D * (1.05 + 0.35 * C.c), x0 = r * 0.25;
   const heavy = calibreMm(C.mod) > 10, jk = nb > 1 ? 1.55 : 1.9;
@@ -57,8 +57,8 @@ function pintle(C: WCtx) {
 function ballMount(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore;
-  ball(b, kit.hull, 0, y0 + r * 0.42, 0, r * 0.82, 0.62, 10);
-  bx(b, kit.panel, -r * 0.2, y0 + r * 0.4, r * 0.78, r * 0.5, r * 0.32, r * 0.18);
+  ball(b, kit.panel, 0, y0 + r * 0.42, 0, r * 0.82, 0.62, 10);
+  bx(b, kit.hull, -r * 0.2, y0 + r * 0.4, r * 0.78, r * 0.5, r * 0.32, r * 0.18);
   C.t.pitch.position.set(r * 0.55, y0 + r * 0.42, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
   cbox(p, kit.metal, -r * 0.1, r * 0.32, -r * 0.22, r * 0.4, r * 0.2, r * 0.2);
@@ -73,7 +73,7 @@ function wedgeAC(C: WCtx) {
   const { b, p, rc, kit, r, y0, nb } = C;
   const R = C.bore, h = r * 0.52;
   const st: Station[] = [[-r * 0.9, r * 0.5, r * 0.36, h * 0.85], [-r * 0.6, r * 0.88, r * 0.62, h], [r * 0.2, r * 0.88, r * 0.62, h], [r * 0.95, r * 0.28, r * 0.16, h * 0.68]];
-  shell(b, kit.hull, st, y0);
+  shell(b, kit.panel, st, y0);
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.52, 0);
   const gap = R * 3.4;
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.62, nb > 1 ? gap * nb + R * 3 : R * 5.5);
@@ -93,13 +93,13 @@ function wedgeAC(C: WCtx) {
   if (bofors) {
     // the Bofors tell: a 4-round clip standing upright in the feed guide on top of the breech
     bx(p, kit.trim, -r * 0.06, h * 0.31 + r * 0.04, 0, r * 0.22, r * 0.08, R * 2.6);
-    bx(p, kit.panel, -r * 0.06, h * 0.31 + r * 0.24, 0, r * 0.15, r * 0.36, R * 1.7);
+    bx(p, kit.hull, -r * 0.06, h * 0.31 + r * 0.24, 0, r * 0.15, r * 0.36, R * 1.7);
     bx(p, kit.hazard, -r * 0.06, h * 0.31 + r * 0.44, 0, r * 0.12, r * 0.06, R * 1.4);
   } else if (nb === 1) {
     // side box magazine + feed chute
-    cbox(p, kit.panel, -r * 0.05, -h * 0.05, -(mw / 2 + r * 0.1), r * 0.3, h * 0.5, r * 0.16, r * 0.03);
+    cbox(p, kit.hull, -r * 0.05, -h * 0.05, -(mw / 2 + r * 0.1), r * 0.3, h * 0.5, r * 0.16, r * 0.03);
   }
-  bx(b, kit.panel, -r * 0.35, y0 + h * 0.75, r * 0.72, r * 0.6, h * 0.5, r * 0.22);
+  bx(b, kit.hull, -r * 0.35, y0 + h * 0.75, r * 0.72, r * 0.6, h * 0.5, r * 0.22);
   cbox(b, kit.trim, -r * 0.45, y0 + h + r * 0.06, -r * 0.2, r * 0.26, r * 0.12, r * 0.26);
   accent(C, -r * 0.1, y0 + h + 0.002, r * 0.25, r * 0.55, r * 0.1);
   C.t.rate = 0.18 + (1 - C.c) * 0.1;
@@ -109,15 +109,15 @@ function wedgeAC(C: WCtx) {
 function quadAA(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.6, 0], [r * 0.62, r * 0.4], [r * 0.45, r * 0.58], [0, r * 0.58]], [0, y0, 0], 'y', 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.6, 0], [r * 0.62, r * 0.4], [r * 0.45, r * 0.58], [0, r * 0.58]], [0, y0, 0], 'y', 10);
   b.cyl(kit.metal, r * 0.04, r * 0.04, r * 0.4, [-r * 0.45, y0 + r * 0.5, 0], 'y', 5);
-  cbox(b, kit.panel, -r * 0.45, y0 + r * 0.95, 0, r * 0.08, r * 0.24, r * 0.6, r * 0.03, [0, 0, 0.3]);
+  cbox(b, kit.hull, -r * 0.45, y0 + r * 0.95, 0, r * 0.08, r * 0.24, r * 0.6, r * 0.03, [0, 0, 0.3]);
   C.t.pitch.position.set(r * 0.05, y0 + r * 0.42, 0);
   C.t.pitch.rotation.z = 0.32;
   bx(p, kit.trim, 0, 0, 0, r * 0.3, r * 0.18, r * 1.0);
   const len = C.D * 1.2;
   for (const s of [-1, 1]) {
-    cbox(p, kit.hull, r * 0.05, 0, s * r * 0.62, r * 0.75, r * 0.5, r * 0.3);
+    cbox(p, kit.panel, r * 0.05, 0, s * r * 0.62, r * 0.75, r * 0.5, r * 0.3);
     for (const y of [-r * 0.12, r * 0.12]) barrel(C, rc, { len, rad: R, x0: r * 0.35, y, z: s * r * 0.62, seg: 6, brake: 'flash' });
   }
   accent(C, r * 0.05, r * 0.26, -r * 0.62, r * 0.5, r * 0.2, undefined, p);
@@ -127,13 +127,13 @@ function quadAA(C: WCtx) {
 /** Scattergun: pintle-mounted blunt receiver, drum magazine slung underneath, two short flared barrels side by side. */
 function scatter(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.75, 0], [r * 0.75, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 8);
+  b.lathe(kit.panel, [[0, 0], [r * 0.75, 0], [r * 0.75, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 8);
   b.cyl(kit.metal, r * 0.11, r * 0.09, r * 0.4, [-r * 0.3, y0 + r * 0.22, 0], 'y', 6);
   C.t.pitch.position.set(0, y0 + r * 0.72, 0);
-  cbox(p, kit.hull, -r * 0.12, 0, 0, r * 0.95, r * 0.32, r * 0.46, r * 0.06);
+  cbox(p, kit.panel, -r * 0.12, 0, 0, r * 0.95, r * 0.32, r * 0.46, r * 0.06);
   cbox(p, kit.trim, -r * 0.2, r * 0.19, 0, r * 0.55, r * 0.07, r * 0.2, r * 0.02);
   // drum magazine: the scattergun's signature lump
-  p.cylb(kit.panel, r * 0.27, r * 0.24, r * 0.05, [r * 0.08, -r * 0.33, -r * 0.12], 'z', 10);
+  p.cylb(kit.hull, r * 0.27, r * 0.24, r * 0.05, [r * 0.08, -r * 0.33, -r * 0.12], 'z', 10);
   band(p, kit.trim, r * 0.08, -r * 0.33, 0, r * 0.1, r * 0.1, 6);
   accent(C, -r * 0.35, r * 0.165, r * 0.12, r * 0.3, r * 0.08, undefined, p);
   const R = Math.max(C.bore, r * 0.12);
@@ -146,8 +146,8 @@ function scatter(C: WCtx) {
 /** APS: sensor dome with a lens emitter on a short arm. */
 function pointDefence(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.hull, [[0, 0], [r * 0.7, 0], [r * 0.62, r * 0.25], [r * 0.38, r * 0.5], [0, r * 0.58]], [0, y0, 0], 'y', 10);
-  cbox(b, kit.panel, -r * 0.1, y0 + r * 0.62, 0, r * 0.1, r * 0.3, r * 0.5, r * 0.03, [0, 0, 0.35]);
+  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.62, r * 0.25], [r * 0.38, r * 0.5], [0, r * 0.58]], [0, y0, 0], 'y', 10);
+  cbox(b, kit.hull, -r * 0.1, y0 + r * 0.62, 0, r * 0.1, r * 0.3, r * 0.5, r * 0.03, [0, 0, 0.35]);
   C.t.pitch.position.set(r * 0.35, y0 + r * 0.38, r * 0.3);
   ball(p, kit.trim, 0, 0, 0, r * 0.22, 1, 8, 'x');
   rc.cyl(kit.metal, r * 0.13, r * 0.11, r * 0.45, [0, 0, 0], 'x', 7);
@@ -163,20 +163,20 @@ function flak(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const n = Math.max(1, C.nb);
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.18], [r * 0.6, r * 0.3], [0, r * 0.3]], [0, y0, 0], 'y', C.tier >= 4 ? 12 : 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.18], [r * 0.6, r * 0.3], [0, r * 0.3]], [0, y0, 0], 'y', C.tier >= 4 ? 12 : 10);
   const cols = n >= 4 ? 2 : n, rows = n >= 4 ? 2 : 1;
   const gap = R * 4, wid = cols * gap + R * 2;
   // trunnion cheeks: thin, light plates either side of the cradle (not a solid wall)
-  for (const s of [-1, 1]) shell(b, kit.panel, [[-r * 0.4, r * 0.05, r * 0.04, r * 0.62], [r * 0.2, r * 0.05, r * 0.04, r * 0.46]], y0 + r * 0.2, s * (wid / 2 + r * 0.08));
+  for (const s of [-1, 1]) shell(b, kit.hull, [[-r * 0.4, r * 0.05, r * 0.04, r * 0.62], [r * 0.2, r * 0.05, r * 0.04, r * 0.46]], y0 + r * 0.2, s * (wid / 2 + r * 0.08));
   C.t.pitch.position.set(0, y0 + r * 0.7, 0);
   C.t.pitch.rotation.z = 0.55;
-  cbox(p, kit.hull, -r * 0.05, 0, 0, r * 0.7, r * (0.3 + 0.22 * (rows - 1)), wid, r * 0.06);
+  cbox(p, kit.panel, -r * 0.05, 0, 0, r * 0.7, r * (0.3 + 0.22 * (rows - 1)), wid, r * 0.06);
   const len = C.D * (1.3 + 0.2 * C.c);
   for (let j = 0; j < rows; j++) for (const z of zs(cols, gap)) {
     const y = rows > 1 ? (j - 0.5) * R * 3.6 : 0;
     barrel(C, rc, { len, rad: R, x0: r * 0.2, y, z, seg: 7, sleeve: true, brake: 'flash' });
     // ready clip on top of each breech, shell tips showing
-    bx(rc, kit.panel, -r * 0.08, y + R * 1.6 + r * 0.1, z, r * 0.32, r * 0.18, R * 1.8);
+    bx(rc, kit.hull, -r * 0.08, y + R * 1.6 + r * 0.1, z, r * 0.32, r * 0.18, R * 1.8);
     bx(rc, kit.hazard, r * 0.1, y + R * 1.6 + r * 0.1, z, r * 0.05, r * 0.14, R * 1.5);
   }
   accent(C, -r * 0.15, r * (0.15 + 0.11 * (rows - 1)), 0, r * 0.4, wid * 0.6, undefined, p);
@@ -196,19 +196,19 @@ function gatling(C: WCtx) {
   const len = C.D * (big ? 1.3 : 1.2);
   const ro = cr + rb * 1.8; // clamp / receiver outer radius
   // yoke
-  b.lathe(kit.hull, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.16], [r * 0.6, r * 0.24], [0, r * 0.24]], [0, y0, 0], 'y', 10);
+  b.lathe(kit.panel, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.16], [r * 0.6, r * 0.24], [0, r * 0.24]], [0, y0, 0], 'y', 10);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.05, y0 + r * 0.42, s * (ro + r * 0.2), r * 0.5, r * 0.5, r * 0.12, r * 0.04);
   C.t.pitch.position.set(-r * 0.05, y0 + r * 0.5, 0);
   // receiver drum (pitches with the barrels)
-  p.lathe(kit.hull, [[0, -r * 0.5], [ro * 0.85, -r * 0.5], [ro + r * 0.04, -r * 0.38], [ro + r * 0.04, r * 0.18], [ro * 0.9, r * 0.3], [0, r * 0.3]], [0, 0, 0], 'x', 10);
+  p.lathe(kit.panel, [[0, -r * 0.5], [ro * 0.85, -r * 0.5], [ro + r * 0.04, -r * 0.38], [ro + r * 0.04, r * 0.18], [ro * 0.9, r * 0.3], [0, r * 0.3]], [0, 0, 0], 'x', 10);
   if (big) {
     // linkless ammo drum behind the receiver, with a feed/return chute arching over it
-    p.cylb(kit.panel, ro * 1.05, r * 0.75, r * 0.06, [-r * 1.22, 0, 0], 'x', 10);
+    p.cylb(kit.hull, ro * 1.05, r * 0.75, r * 0.06, [-r * 1.22, 0, 0], 'x', 10);
     band(p, kit.trim, -r * 0.85, 0, 0, ro * 1.1, r * 0.06, 10);
     cbox(p, kit.trim, -r * 0.62, ro * 1.0, 0, r * 0.5, r * 0.12, r * 0.22, r * 0.03);
     accent(C, -r * 0.85, ro * 1.07, 0, r * 0.4, r * 0.14, undefined, p);
   } else {
-    p.cylb(kit.panel, r * 0.3, r * 0.26, r * 0.05, [-r * 0.2, 0, -(ro + r * 0.06)], '-z', 10);
+    p.cylb(kit.hull, r * 0.3, r * 0.26, r * 0.05, [-r * 0.2, 0, -(ro + r * 0.06)], '-z', 10);
     bx(p, kit.trim, -r * 0.02, -r * 0.12, -(ro + r * 0.01), r * 0.28, r * 0.12, r * 0.1);
     accent(C, -r * 0.25, ro + r * 0.04, 0, r * 0.45, r * 0.12, undefined, p);
   }
@@ -234,8 +234,8 @@ const tankCommon = (C: WCtx, roofY: number, cx: number, cz: number) => {
 function castDome(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.6;
-  b.lathe(kit.hull, [[0, 0], [r * 0.82, 0], [r * 0.86, h * 0.3], [r * 0.7, h * 0.75], [r * 0.38, h], [0, h]], [-r * 0.08, y0, 0], 'y', 12);
-  cbox(b, kit.panel, -r * 0.88, y0 + h * 0.45, 0, r * 0.35, h * 0.5, r * 0.9);
+  b.lathe(kit.panel, [[0, 0], [r * 0.82, 0], [r * 0.86, h * 0.3], [r * 0.7, h * 0.75], [r * 0.38, h], [0, h]], [-r * 0.08, y0, 0], 'y', 12);
+  cbox(b, kit.hull, -r * 0.88, y0 + h * 0.45, 0, r * 0.35, h * 0.5, r * 0.9);
   tankCommon(C, y0 + h, -r * 0.3, -r * 0.3);
   accent(C, -r * 0.88, y0 + h * 0.71, 0, r * 0.3, r * 0.6);
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.48, 0);
@@ -250,8 +250,8 @@ function castDome(C: WCtx) {
 function wedgeTank(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.5;
-  shell(b, kit.hull, [[-r * 1.05, r * 0.42, r * 0.32, h * 0.85], [-r * 0.7, r * 0.8, r * 0.6, h], [r * 0.3, r * 0.86, r * 0.62, h], [r * 0.75, r * 0.62, r * 0.42, h * 0.85], [r * 0.98, r * 0.3, r * 0.2, h * 0.6]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.panel, -r * 0.3, y0 + h * 0.5, s * r * 0.9, r * 0.9, h * 0.55, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
+  shell(b, kit.panel, [[-r * 1.05, r * 0.42, r * 0.32, h * 0.85], [-r * 0.7, r * 0.8, r * 0.6, h], [r * 0.3, r * 0.86, r * 0.62, h], [r * 0.75, r * 0.62, r * 0.42, h * 0.85], [r * 0.98, r * 0.3, r * 0.2, h * 0.6]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.3, y0 + h * 0.5, s * r * 0.9, r * 0.9, h * 0.55, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
   tankCommon(C, y0 + h, -r * 0.45, -r * 0.32);
   accent(C, -r * 0.2, y0 + h + 0.002, r * 0.3, r * 0.6, r * 0.12);
   C.t.pitch.position.set(r * 0.82, y0 + h * 0.52, 0);
@@ -267,9 +267,9 @@ function wedgeTank(C: WCtx) {
 function twinHex(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.46, gap = R * 3.6;
-  shell(b, kit.hull, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
+  shell(b, kit.panel, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
   tankCommon(C, y0 + h, -r * 0.5, r * 0.4);
-  cbox(b, kit.panel, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
+  cbox(b, kit.hull, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
   accent(C, -r * 0.1, y0 + h + 0.002, 0, r * 0.2, r * 0.9);
   C.t.pitch.position.set(r * 0.85, y0 + h * 0.5, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.7, gap + R * 6, r * 0.06, undefined, 0.85);
@@ -282,8 +282,8 @@ function twinHex(C: WCtx) {
 function siegeCasemate(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.62;
-  shell(b, kit.hull, [[-r * 0.95, r * 0.68, r * 0.45, h * 0.9], [r * 0.15, r * 0.78, r * 0.5, h], [r * 0.6, r * 0.78, r * 0.5, h * 0.7], [r * 0.9, r * 0.62, r * 0.42, h * 0.32]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.panel, -r * 0.35, y0 + h * 0.45, s * r * 0.82, r * 1.0, h * 0.6, r * 0.1, r * 0.03);
+  shell(b, kit.panel, [[-r * 0.95, r * 0.68, r * 0.45, h * 0.9], [r * 0.15, r * 0.78, r * 0.5, h], [r * 0.6, r * 0.78, r * 0.5, h * 0.7], [r * 0.9, r * 0.62, r * 0.42, h * 0.32]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.35, y0 + h * 0.45, s * r * 0.82, r * 1.0, h * 0.6, r * 0.1, r * 0.03);
   tankCommon(C, y0 + h, -r * 0.55, r * 0.35);
   b.lathe(kit.metal, [[0, 0], [r * 0.09, 0], [r * 0.09, r * 0.18], [0, r * 0.2]], [-r * 0.7, y0 + h, -r * 0.4], 'y', 6);
   accent(C, -r * 0.35, y0 + h + 0.002, -r * 0.05, r * 0.7, r * 0.14);
@@ -299,9 +299,9 @@ function siegeCasemate(C: WCtx) {
 function gauss(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = Math.max(C.bore, r * 0.14), h = r * 0.48;
-  shell(b, kit.hull, [[-r * 0.9, r * 0.75, r * 0.52, h], [r * 0.4, r * 0.8, r * 0.55, h], [r * 0.85, r * 0.45, r * 0.3, h * 0.55]], y0);
+  shell(b, kit.panel, [[-r * 0.9, r * 0.75, r * 0.52, h], [r * 0.4, r * 0.8, r * 0.55, h], [r * 0.85, r * 0.45, r * 0.3, h * 0.55]], y0);
   for (const s of [-1, 1]) {
-    capsule(b, kit.panel, -r * 0.55, y0 + h + r * 0.1, s * r * 0.35, r * 0.15, r * 0.7, 'x', 8);
+    capsule(b, kit.hull, -r * 0.55, y0 + h + r * 0.1, s * r * 0.35, r * 0.15, r * 0.7, 'x', 8);
     bx(b, kit.rail, -r * 0.55, y0 + h + r * 0.255, s * r * 0.35, r * 0.4, r * 0.02, r * 0.05);
   }
   C.acc = true;
@@ -321,10 +321,10 @@ function gauss(C: WCtx) {
 function sniper(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore;
-  b.lathe(kit.hull, [[0, 0], [r * 0.6, 0], [r * 0.55, r * 0.15], [r * 0.3, r * 0.24], [0, r * 0.24]], [0, y0, 0], 'y', 8);
+  b.lathe(kit.panel, [[0, 0], [r * 0.6, 0], [r * 0.55, r * 0.15], [r * 0.3, r * 0.24], [0, r * 0.24]], [0, y0, 0], 'y', 8);
   cbox(b, kit.trim, -r * 0.05, y0 + r * 0.4, 0, r * 0.35, r * 0.3, r * 0.3);
   C.t.pitch.position.set(0, y0 + r * 0.6, 0);
-  cbox(rc, kit.hull, -r * 0.05, 0, 0, r * 1.0, r * 0.2, r * 0.16, r * 0.04);
+  cbox(rc, kit.panel, -r * 0.05, 0, 0, r * 1.0, r * 0.2, r * 0.16, r * 0.04);
   cbox(rc, kit.trim, -r * 0.6, -r * 0.04, 0, r * 0.3, r * 0.26, r * 0.13, r * 0.03);
   barrel(C, rc, { len: C.D * 1.75, rad: R, x0: r * 0.3, seg: 6, brake: 'block', taper: 0.9 });
   capsule(rc, kit.metal, r * 0.02, r * 0.22, 0, r * 0.075, r * 0.62, 'x', 6);
@@ -339,7 +339,7 @@ function rail(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = Math.max(C.bore, r * 0.11), h = r * 0.46;
   const xl = C.tier >= 5;
-  shell(b, kit.hull, [[-r * 0.95, r * 0.55, r * 0.4, h * 0.9], [-r * 0.4, r * 0.82, r * 0.58, h], [r * 0.5, r * 0.7, r * 0.5, h], [r * 0.95, r * 0.32, r * 0.2, h * 0.65]], y0);
+  shell(b, kit.panel, [[-r * 0.95, r * 0.55, r * 0.4, h * 0.9], [-r * 0.4, r * 0.82, r * 0.58, h], [r * 0.5, r * 0.7, r * 0.5, h], [r * 0.95, r * 0.32, r * 0.2, h * 0.65]], y0);
   cbox(b, kit.trim, -r * 0.55, y0 + h + r * 0.1, 0, r * 0.5, r * 0.2, r * 0.55);
   for (const s of [-1, 1]) bx(b, kit.rail, -r * 0.55, y0 + h + r * 0.12, s * r * 0.28, r * 0.36, r * 0.1, r * 0.02);
   accent(C, r * 0.2, y0 + h + 0.002, 0, r * 0.4, r * 0.18);
