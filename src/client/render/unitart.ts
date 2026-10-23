@@ -1673,7 +1673,8 @@ export interface UnitPose {
   leap?: number;
   flying?: boolean;
   hitFlash?: number;
-  /** world-space mount angles; omitted = point along the hull with idle sway */
+  /** world-space mount angles; omitted = turrets rest pointing along the hull (no idle motion: a parked unit's guns
+   *  hold still, in the designer, on the deploy board and in every preview) */
   mounts?: MountPose[];
   alpha?: number;
   /** status effects (optional sim fields) */
@@ -1685,6 +1686,9 @@ export interface UnitPose {
   cloak?: 'own' | 'enemy';
   /** stable per-unit seed for idle variation */
   seed?: number;
+  /** hold every animated part (creature / walker arms, booms) at its rest pose: designer bench and previews, where
+   *  the mount markers are drawn over the parts and an idling arm carried its weapon off its marker */
+  still?: boolean;
   /** tilted views: extra world-space lift (along the view's up) of turrets above the hull, so they stand on top of it */
   turretLift?: number;
 }
@@ -1869,8 +1873,8 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     let armed = false, fire = 0;
     if (p.mounts) for (const mp of p.mounts) { if (mp.armed) armed = true; if (mp.flash > fire) fire = mp.flash; }
     const ai: AnimIn = { t: p.time, odo, moving: !!p.moving && L.mob.kind !== 'static', seed: p.seed ?? 0, walk: (odo / L.cycle) * Math.PI * 2, armed, fire: Math.min(1, fire) };
-    pxf = partXfs(pdefs, ai);
     prest = partXfs(pdefs, null);
+    pxf = p.still ? prest : partXfs(pdefs, ai);
   }
   const partBlit = (j: number, c: HTMLCanvasElement, e: number) => {
     const f = pxf[j];
@@ -1897,8 +1901,9 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   blit(g, frame, x, y, ang, s.ext, sc);
   // jets: afterburner
   if (L.mob.id === 'jet') {
-    // parked (designer / still previews): idle burn that stays inside the footprint; full afterburner in flight
-    const fl = (0.85 + Math.random() * 0.3) * (p.moving === false ? 0.4 : 1);
+    // parked (designer / still previews): a steady idle burn that stays inside the footprint (re-rolling it every
+    // frame made a parked jet's tail flicker); full, flickering afterburner in flight
+    const fl = p.moving === false ? 0.4 : 0.85 + Math.random() * 0.3;
     for (const n of L.nozzles) {
       const nx = x + (cs * (n.x - 0.02) - sn * n.y) * sc, ny = y + (sn * (n.x - 0.02) + cs * n.y) * sc;
       flame(g, nx, ny, ang + Math.PI, 0.35 * L.S * fl, n.w * 1.1, 'rgba(255,150,60,0.8)');
@@ -1938,8 +1943,7 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
     const m = L.mounts[i];
     if (!m.turret || !m.mod) continue;
     const mp = p.mounts?.[i];
-    const sway = m.mod.projectile === 'melee' ? 0 : Math.sin(p.time * 0.7 + i * 1.7 + (p.seed ?? 0)) * 0.25;
-    const ta = mp ? mp.angle : ang + sway;
+    const ta = mp ? mp.angle : ang;
     const fl = mp ? Math.max(0, Math.min(1, mp.flash)) : 0;
     let rec = fl * fl * m.d * (moduleTier(m.mod) >= 4 ? 0.34 : 0.18);
     let rot = 0;

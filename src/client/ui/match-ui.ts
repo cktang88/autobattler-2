@@ -51,7 +51,7 @@ export function paintPreview(canvas: HTMLCanvasElement, design: Design, side: Si
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = Math.round(r.width * dpr), hh = Math.round(r.height * dpr);
   if (canvas.width !== w || canvas.height !== hh) { canvas.width = w; canvas.height = hh; }
-  try { drawUnitPreview(canvas, design, { side, time, angle: -Math.PI / 2 }); } catch (e) { console.warn('preview', e); }
+  try { drawUnitPreview(canvas, design, { side, time, angle: -Math.PI / 2, still: true }); } catch (e) { console.warn('preview', e); }
 }
 
 /** Paint previews once the canvases are laid out (call after inserting into DOM). */

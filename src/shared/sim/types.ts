@@ -57,7 +57,7 @@ export interface SimUnit {
   maxShield: number;
   alive: boolean;
   flying: boolean;
-  /** true while it moved this tick (for wheel/leg animation) */
+  /** true while its own locomotion moved it this tick (for wheel/leg animation; being shoved aside does not count) */
   moving: boolean;
   /** distance travelled so far (drives tread/leg animation phase) */
   odometer: number;

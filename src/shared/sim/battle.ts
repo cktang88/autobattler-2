@@ -228,6 +228,10 @@ interface Internal {
   py: number;
   vx: number;
   vy: number;
+  /** velocity from this unit's own locomotion this tick (cells/s), without separation shoves: what shots at it lead
+   *  (see aimPoint) */
+  lvx: number;
+  lvy: number;
   sinceDamage: number;
   leapCd: number;
   leapT: number;
@@ -674,7 +678,7 @@ export class Battle {
       fireOnMove: traits.includes('fireOnMove'), strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
-      goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, sinceDamage: 99,
+      goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
       burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
@@ -781,8 +785,10 @@ export class Battle {
     for (let i = 0; i < n; i++) {
       const I = ints[i];
       if (I.u.alive) {
+        const x0 = I.u.x, y0 = I.u.y;
         this.move(I);
         const u = I.u;
+        I.lvx = (u.x - x0) / DT; I.lvy = (u.y - y0) / DT; // own locomotion only (separate() runs after this loop)
         snapX[i] = u.x; snapY[i] = u.y;
         this.drift = Math.max(this.drift, Math.abs(u.x - hashX[i]), Math.abs(u.y - hashY[i]));
       }
@@ -817,9 +823,12 @@ export class Battle {
       const d = Math.sqrt(dx * dx + dy * dy);
       I.vx = dx / DT;
       I.vy = dy / DT;
-      u.moving = d > 0.002;
+      // walking / rolling (drives the gear animation) is the unit's own locomotion; a parked unit nudged by separation
+      // from a squadmate is not walking (measured on total displacement, those sub-cell shoves toggled the flag on and
+      // off every few ticks and the legs/treads of standing units snapped between stride and rest frames)
+      u.moving = (I.lvx * I.lvx + I.lvy * I.lvy) * (DT * DT) > 0.002 * 0.002;
       u.odometer += d;
-      if (u.moving) active = true;
+      if (d > 0.002) active = true;
       // a gun holding a live target fires again once its cooldown runs out (a 20 s nuke reload is not a stalemate)
       if (!active) for (let mi = 0; mi < I.wpns.length; mi++) {
         const w = I.wpns[mi], tg = u.mounts[mi].target;
@@ -1353,7 +1362,10 @@ export class Battle {
     const kind = w.def.projectile ?? 'bullet';
     if (kind === 'missile' || kind === 'beam' || kind === 'rail' || kind === 'lightning' || kind === 'melee' || kind === 'flame' || kind === 'none') return p;
     const T = this.ints[t.id];
-    const vx = T.vx, vy = T.vy;
+    // lead the target's own locomotion, not its total displacement: separation shoves inside a packed squad flip
+    // direction tick to tick, and multiplied by a slow round's flight time (seconds for a mortar) they swung the lead
+    // point -- and with it a parked shooter's turret -- back and forth every few ticks while it held one target
+    const vx = T.lvx, vy = T.lvy;
     if (vx * vx + vy * vy < 1e-4) return p;
     const u = I.u;
     let tof: number;

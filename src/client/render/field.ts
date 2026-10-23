@@ -2451,6 +2451,7 @@ export function drawUnitPreview(canvas: HTMLCanvasElement, design: Design, opts?
     design, team, x: 0, y: L.air ? 0.1 * L.S : 0, angle, time,
     // the Needle Frame alternates running (arms folded) and standing (arms deployed) in animated previews
     moving: !opts?.still && L.mob.kind !== 'static' && (L.shape !== 'mantis' || time % 5 < 2.2), odometer: opts?.still ? 0 : time * Math.max(0.6, L.cycle * 1.5), seed: 1,
+    still: !!opts?.still,
   };
   const dirs: ViewDirs = { sx: 0.45, sy: 0.75, ux: 0, uy: -1 };
   // sprite resolution: quantised, capped, and taken from the settled zoom (the transform above still uses the live px)

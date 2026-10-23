@@ -91,6 +91,8 @@ export class Rig {
   /** true for rigs that never move again (wrecks): transforms are not recomputed */
   frozen = false;
   private settle = 2;
+  /** set once anything moved off the template's rest pose (gear animated, a turret aimed or kicked) */
+  dirty = false;
 
   constructor(tpl: Template) {
     this.tpl = tpl;
@@ -121,6 +123,7 @@ export class Rig {
   /** Advance gear animation (legs / wheels / rotors). t is the unit's own phase clock, moving 0..1. */
   animate(t: number, dt: number, moving: number): void {
     const tpl = this.tpl;
+    this.dirty = true;
     tpl.unit.animate(t, dt, moving);
     for (const k of tpl.animated) {
       const s = tpl.nodes[k], d = this.objs[k]!;
@@ -147,9 +150,29 @@ export class Rig {
     const tu = this.turrets[i];
     if (!tu || tu.fixed) return;
     const x0 = tu.yaw.position.x, z0 = tu.yaw.position.z;
+    this.dirty = true;
     aimTurret(tu, x0 + Math.cos(localAngle) * 10, z0 + Math.sin(localAngle) * 10, dt, 22);
   }
-  kick(i: number): void { const tu = this.turrets[i]; if (tu) recoilKick(tu); }
+  kick(i: number): void { const tu = this.turrets[i]; if (tu) { this.dirty = true; recoilKick(tu); } }
+
+  /** Back to the template's rest pose: turrets facing forward, barrels home and not spinning, gear at its idle stance.
+   *  Rigs are pooled per design, so without this a recycled rig kept the last pose of whatever unit used it before
+   *  (a turret still laid on last round's target, a leg mid-stride). The deploy board re-acquires its rigs every frame
+   *  and the pool hands them out in the opposite order each time, so same-design units swapped those stale poses
+   *  frame to frame: their turrets and legs flickered between two poses while standing still. */
+  restPose(): void {
+    const tpl = this.tpl;
+    if (tpl.animates) tpl.unit.animate(0, 0, 0);
+    tpl.nodes.forEach((n, i) => {
+      const o = this.objs[i];
+      if (!o) return;
+      o.position.copy(n.src.position); o.quaternion.copy(n.src.quaternion); o.scale.copy(n.src.scale);
+      if (n.manual) o.matrix.copy(n.src.matrix); else o.updateMatrix();
+    });
+    for (const tu of this.all) tu.spinV = tu.idleSpin;
+    this.settle = 2;
+    this.dirty = false;
+  }
 
   /** recompute transforms of the turret rigs / animated nodes after pose changes (root must already be positioned) */
   update(dt: number): void {
@@ -353,6 +376,7 @@ export class UnitLayer {
   acquire(design: Design, team: 0 | 1): Rig {
     const t = this.template(design, team);
     const r = this.free.get(t.key)?.pop() ?? new Rig(t);
+    if (r.dirty) r.restPose();
     r.look = 'normal'; r.frozen = false; r.mv = 0; r.odo = 0; r.tr = r.tg = r.tb = 1;
     r.root.position.set(0, 0, 0); r.root.rotation.set(0, 0, 0);
     return r;
