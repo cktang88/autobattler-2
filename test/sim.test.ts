@@ -7,6 +7,7 @@ import type { BattleInput } from '../src/shared/sim/types.ts';
 import { defaultOrders, validateDesign } from '../src/shared/stats.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 import { hullK } from '../src/shared/mountgeo.ts';
+import { MODULE_BY_ID } from '../src/shared/parts.ts';
 
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 
@@ -59,6 +60,8 @@ const DESIGNS: Design[] = [
   D('titanW', 'titan', 'megatracks', [null, null, 'cannon', 'cannon', 'cannon']),
   D('mlrsTruck', 'warden', 'halftrack', ['mlrs', null]),
   D('swarmer', 'warden', 'halftrack', ['swarm', null]),
+  D('hunter', 'raider', 'legs', ['atgm', 'atgm']),
+  D('cruiser', 'warden', 'halftrack', ['cruise', null]),
 ];
 
 test('test designs are legal', () => {
@@ -1081,24 +1084,114 @@ test('the biggest hull (10x10 weaver titan) is found by the spatial hash: splash
   assert.ok(e.hp < hp0, 'splash 0.2 cells from the hull edge missed it');
 });
 
-test('salvo: rocket and missile batteries launch the whole burst at once, rockets spread into a cluster', () => {
+type SP = { id: number; moduleId: string; kind: string; tx: number; ty: number; sx: number; sy: number; src: number; target: number; speed: number; total: number; x: number; y: number; z: number };
+const simProjs = (b: Battle) => (b as unknown as { projs: SP[] }).projs;
+
+test('salvo: rocket and missile batteries ripple-fire the burst, rockets scatter into a random cloud', () => {
   for (const [design, mod, n] of [['mlrsTruck', 'mlrs', 12], ['rocketeer', 'rockets', 4], ['swarmer', 'swarm', 8]] as const) {
     const b = new Battle(input(5, [P(design, 10, 0)], [{ ...P('bulwark', 10, 0), stance: 'holdPos' }]));
-    type PP = { moduleId: string; tx: number; ty: number; src: number };
-    const projs = () => (b as unknown as { projs: PP[] }).projs.filter((p) => p.moduleId === mod && p.src === 0);
+    const seen = new Map<number, SP & { tick: number }>();
     let fires = 0;
-    while (!b.done && b.tick < 20 * 40 && projs().length === 0) {
+    while (!b.done && b.tick < 20 * 40 && seen.size < n) {
       b.step();
       fires += b.events.filter((e) => e.t === 'fire' && e.moduleId === mod).length;
+      for (const p of simProjs(b)) if (p.moduleId === mod && p.src === 0 && !seen.has(p.id)) seen.set(p.id, { ...p, tick: b.tick });
     }
-    const first = projs();
-    assert.equal(first.length, n, `${mod}: all ${n} rounds leave on the same tick`);
+    const rounds = [...seen.values()];
+    assert.equal(rounds.length, n, `${mod}: all ${n} rounds launched`);
     assert.equal(fires, 1, `${mod}: one launch event per salvo`);
-    if (mod === 'swarm') continue; // homing missiles fly to the target, not to scattered points
+    const ticks = rounds.map((r) => r.tick);
+    const span = Math.max(...ticks) - Math.min(...ticks);
+    assert.ok(span >= n - 1 && span <= 2 * (n - 1), `${mod}: tubes ripple-fire over ${span} ticks, not all at once`);
+    assert.equal(new Set(ticks).size, n, `${mod}: one tube per launch tick`);
+    if (mod === 'swarm') continue; // homing missiles fly to their targets, not to scattered points
     let minD = Infinity;
-    for (let i = 0; i < first.length; i++) for (let j = i + 1; j < first.length; j++) minD = Math.min(minD, Math.hypot(first[i].tx - first[j].tx, first[i].ty - first[j].ty));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) minD = Math.min(minD, Math.hypot(rounds[i].tx - rounds[j].tx, rounds[i].ty - rounds[j].ty));
     assert.ok(minD > 0.15, `${mod}: impact points are spread out (closest pair ${minD.toFixed(3)} cells apart)`);
+    // the impact points fill an area (both principal axes of their spread are substantial), not a line / flat fan
+    const mx = rounds.reduce((a, r) => a + r.tx, 0) / n, my = rounds.reduce((a, r) => a + r.ty, 0) / n;
+    let sxx = 0, syy = 0, sxy = 0;
+    for (const r of rounds) { sxx += (r.tx - mx) ** 2; syy += (r.ty - my) ** 2; sxy += (r.tx - mx) * (r.ty - my); }
+    const tr = sxx + syy, det = sxx * syy - sxy * sxy, d = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+    const l1 = tr / 2 + d, l2 = tr / 2 - d;
+    assert.ok(l2 / l1 > 0.15, `${mod}: impact cloud is 2-D (axis ratio ${(l2 / l1).toFixed(3)})`);
+    if (n >= 12) {
+      // a disc, not a ring or a spiral arm: points both near the centre and out at the edge, all round
+      const ds = rounds.map((r) => Math.hypot(r.tx - mx, r.ty - my)), R = Math.max(...ds);
+      assert.ok(ds.some((x) => x < R * 0.5), `${mod}: some impacts land near the middle of the cloud`);
+      const quad = new Set(rounds.map((r) => (r.tx > mx ? 1 : 0) + (r.ty > my ? 2 : 0)));
+      assert.equal(quad.size, 4, `${mod}: impacts fall all round the aim point`);
+    }
   }
+});
+
+test('missiles boost: they leave the launcher slow and speed up; flight times stay as at constant speed', () => {
+  for (const [design, mod, foe] of [['hunter', 'atgm', 'fortress'], ['swarmer', 'swarm', 'fortress'], ['cruiser', 'cruise', 'fortress'], ['rocketeer', 'rockets', 'fortress']] as const) {
+    const b = new Battle(input(3, [P(design, 10, 0)], [{ ...P(foe, 10, 0), stance: 'holdPos' }]));
+    const spd = MODULE_BY_ID.get(mod)!.projectileSpeed!;
+    const track = new Map<number, { t0: number; t1: number; total: number; v: number[] }>();
+    while (!b.done && b.tick < 20 * 60) {
+      b.step();
+      const live = new Set<number>();
+      for (const p of simProjs(b)) {
+        if (p.moduleId !== mod || p.src !== 0) continue;
+        live.add(p.id);
+        let r = track.get(p.id);
+        if (!r) track.set(p.id, (r = { t0: b.tick - 1, t1: -1, total: p.total, v: [] }));
+        r.v.push(p.speed);
+      }
+      for (const [id, r] of track) if (r.t1 < 0 && !live.has(id)) r.t1 = b.tick;
+      if ([...track.values()].filter((r) => r.t1 >= 0).length >= 6) break;
+    }
+    const done = [...track.values()].filter((r) => r.t1 >= 0 && r.v.length > 4);
+    assert.ok(done.length >= 2, `${mod}: rounds landed (${done.length})`);
+    const ratio = done.reduce((a, r) => a + ((r.t1 - r.t0) / 20) / (r.total / spd), 0) / done.length;
+    assert.ok(ratio > 0.85 && ratio < 1.15, `${mod}: mean flight time ${ratio.toFixed(3)} x the constant-speed time`);
+    if (mod === 'rockets') continue; // rockets: the path parameter accelerates (speed field unused)
+    for (const r of done) {
+      assert.ok(r.v[0] < 0.6 * Math.max(...r.v), `${mod}: launch speed ${r.v[0].toFixed(2)} well below top ${Math.max(...r.v).toFixed(2)}`);
+      for (let i = 1; i < r.v.length; i++) assert.ok(r.v[i] >= r.v[i - 1] - 1e-9, `${mod}: speed never drops in flight`);
+    }
+  }
+});
+
+test('guided volleys split over several weak targets, but all go to one tough target', () => {
+  // weak targets: a row of buggies (one swarm missile kills each with margin) -> the 8 missiles spread out
+  {
+    const b = new Battle(input(4, [P('swarmer', 10, 0)], [0, 2, 4, 6, 8].map((x) => ({ ...P('buggy', 6 + x, 0), stance: 'holdPos' as const }))));
+    for (const u of b.units) if (u.side === 1) { u.hp = 20; u.maxHp = 20; u.shield = 0; }
+    const targets = new Map<number, number>();
+    while (!b.done && b.tick < 20 * 40 && targets.size < 8) {
+      b.step();
+      for (const p of simProjs(b)) if (p.moduleId === 'swarm' && p.src === 0 && !targets.has(p.id)) targets.set(p.id, p.target);
+    }
+    const distinct = new Set([...targets.values()].filter((t) => t >= 0));
+    assert.ok(distinct.size > 1, `swarm volley spread over ${distinct.size} targets`);
+  }
+  // one tough target: every missile of the volley goes for it
+  {
+    const b = new Battle(input(4, [P('swarmer', 10, 0)], [{ ...P('fortress', 10, 0), stance: 'holdPos' }]));
+    const targets = new Map<number, number>();
+    while (!b.done && b.tick < 20 * 40 && targets.size < 8) {
+      b.step();
+      for (const p of simProjs(b)) if (p.moduleId === 'swarm' && p.src === 0 && !targets.has(p.id)) targets.set(p.id, p.target);
+    }
+    assert.equal(targets.size, 8);
+    assert.deepEqual([...new Set(targets.values())], [b.units[1].id], 'all missiles on the one target');
+  }
+});
+
+test('unguided rocket salvos keep saturating one aim point even when it overkills', () => {
+  const b = new Battle(input(4, [P('mlrsTruck', 10, 0)], [0, 2, 4, 6].map((x) => ({ ...P('buggy', 7 + x, 0), stance: 'holdPos' as const }))));
+  for (const u of b.units) if (u.side === 1) { u.hp = 10; u.maxHp = 10; u.shield = 0; }
+  const seen = new Map<number, SP>();
+  while (!b.done && b.tick < 20 * 40 && seen.size < 12) {
+    b.step();
+    for (const p of simProjs(b)) if (p.moduleId === 'mlrs' && p.src === 0 && !seen.has(p.id)) seen.set(p.id, p);
+  }
+  const rs = [...seen.values()];
+  const mx = rs.reduce((a, r) => a + r.tx, 0) / rs.length, my = rs.reduce((a, r) => a + r.ty, 0) / rs.length;
+  assert.ok(rs.every((r) => Math.hypot(r.tx - mx, r.ty - my) < 4), 'one cloud round a single aim point');
 });
 
 test('overkill: shooters do not pile onto a target that rounds in flight will already kill', () => {

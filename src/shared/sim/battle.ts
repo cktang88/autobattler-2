@@ -20,8 +20,23 @@ const AIM_TOLERANCE = 0.06; // rad
 const RETARGET_EVERY = 0.3; // s
 const GOAL_EVERY = 0.4; // s
 const BURST_GAP = 0.1; // s
-/** golden angle: successive rounds of a salvo spiral out evenly instead of clumping */
-const GOLDEN_ANGLE = 2.399963229728653;
+/** salvo impact cloud: best-of-N candidate points per round (blue-noise scatter: random, but no two rounds stack) */
+const SALVO_CANDIDATES = 4;
+/** salvo cloud: stretched this much along the line of fire (rockets scatter most in range) */
+const SALVO_LONG = 1.3;
+/** rockets: speed at ignition as a fraction of the mean (they burn and speed up; flight time is unchanged) */
+const ROCKET_V0 = 0.55;
+/** rockets: a rocket whose loft carries it this high (cells) overflies ground units instead of striking them */
+const ROCKET_OVERFLY = 1;
+/** missiles: launch speed (fraction of top speed) and the boost time to reach top speed, by class */
+const MSL_V0 = 0.35, MSL_BOOST = 0.6;
+const MSL_V0_SWARM = 0.45, MSL_BOOST_SWARM = 0.4;
+const MSL_V0_HEAVY = 0.25, MSL_BOOST_HEAVY = 0.9;
+/** missiles at least this long-ranged fly a lofted climb-cruise-dive profile */
+const MSL_LOFT_RANGE = 18;
+/** guided volleys: a missile goes to another target once the damage already headed at its target reaches this
+ *  multiple of the target's hp + shields */
+const SPLIT_MARGIN = 1.1;
 /** a fresh shot is held (and the turret looks for another target) while rounds already in flight are expected to
  *  finish its target off; rechecked every this many seconds */
 const OVERKILL_RECHECK = 0.3; // s
@@ -169,8 +184,20 @@ interface Wpn {
   turnDir: number;
   /** launcher battery (rocket racks, missile pods with 4+ tubes): the whole burst leaves at once as a salvo */
   salvo: boolean;
-  /** random rotation of the current salvo's impact pattern */
-  salvoRot: number;
+  /** ripple fire: tubes still to launch in the current salvo, the next tube's index, the salvo size, ticks until the
+   *  next tube, ticks between tubes, the salvo's target (-1) and aim point, and the impact points chosen so far */
+  salvoLeft: number;
+  salvoK: number;
+  salvoN: number;
+  salvoTimer: number;
+  ripple: number;
+  salvoTgt: number;
+  salvoAx: number;
+  salvoAy: number;
+  salvoPts: number[];
+  /** guided volleys (missile salvos and bursts): [unit id, expected damage] committed by this volley's missiles that the
+   *  overkill bookkeeping (incoming) does not count, so the volley spreads over several targets */
+  split: number[];
   /** tick before which the overkill check is not repeated (no other target was found) */
   okHold: number;
   /** spin-up weapons: 0..1 barrel speed (rate of fire = SPIN_MIN .. 1 of full) */
@@ -393,6 +420,19 @@ interface Proj extends SimProjectile {
    *  released on landing (ModuleDef.cluster) */
   ff: ModuleDef['fireField'] | null;
   cl: ModuleDef['cluster'] | null;
+  /** s since launch */
+  age: number;
+  /** rockets: flight time (s); missiles: launch speed, top speed and boost time (s) */
+  tof: number;
+  v0: number;
+  vmax: number;
+  boost: number;
+  /** rockets: sideways bow of the flight path (cells, signed; the rocket leaves off-line and corrects onto its
+   *  impact point); missiles: weave amplitude (rad) */
+  bow: number;
+  /** peak height of the rocket's / missile's loft (cells); lofted: climb-cruise-dive profile instead of a hump */
+  loft: number;
+  lofted: boolean;
 }
 
 /** A firebomb's burning patch (ModuleDef.fireField). */
@@ -618,7 +658,8 @@ export class Battle {
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
-        salvoRot: 0, okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
+        salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], split: [],
+        okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -1322,6 +1363,19 @@ export class Battle {
         }
         continue;
       }
+      // salvo ripple: the battery's tubes go off one after another at the aim point the salvo was laid on
+      if (w.salvoLeft > 0) {
+        if (u.disarm > 0) { w.salvoLeft = 0; continue; }
+        if (--w.salvoTimer <= 0) {
+          w.salvoTimer = w.ripple;
+          w.salvoLeft--;
+          const st = w.salvoTgt >= 0 && units[w.salvoTgt].alive ? units[w.salvoTgt] : null;
+          // still laid on the salvo's target: follow its lead point (a moving target is not left behind the cloud)
+          if (st && t === st) { w.salvoAx = ax; w.salvoAy = ay; }
+          this.fire(I, mi, w, st, w.salvoAx, w.salvoAy, w.salvoK++, w.salvoN);
+        }
+        continue;
+      }
       if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
         // overkill: rounds already in flight are expected to finish this target -- switch to another one, or hold
         // the shot until they land (the target dies, or survives and incoming drops so we fire after all)
@@ -1339,10 +1393,14 @@ export class Battle {
           if (m.ammo <= 0) { m.ammo = 0; m.reloading = true; m.cooldown = Math.max(m.cooldown, (w.def.reload ?? 0) * I.reloadMult); }
         }
         const burst = w.def.burst ?? 1;
+        w.split.length = 0; // a new volley
         if (w.salvo) {
-          // launcher battery: every tube fires in the same instant, spread into a cluster around the aim point
-          w.salvoRot = this.rng() * Math.PI * 2;
-          for (let k = 0; k < burst; k++) this.fire(I, mi, w, t, ax, ay, k, burst);
+          // launcher battery: the tubes ripple-fire (one every `ripple` ticks), all laid on this aim point, their
+          // impacts scattered through a cloud around it
+          w.salvoPts.length = 0;
+          w.salvoN = burst; w.salvoK = 1; w.salvoLeft = burst - 1; w.salvoTimer = w.ripple;
+          w.salvoTgt = t.id; w.salvoAx = ax; w.salvoAy = ay;
+          this.fire(I, mi, w, t, ax, ay, 0, burst);
           continue;
         }
         if (burst > 1) { w.burstLeft = burst - 1; w.burstTimer = BURST_GAP; }
@@ -1425,10 +1483,46 @@ export class Battle {
     return inc >= o.hp + o.shield + o.auraShield;
   }
 
+  /** Damage a guided volley already has headed at unit `id`: what incoming counts plus this volley's uncounted share. */
+  private volleyLoad(w: Wpn, id: number): number {
+    let d = this.incoming[id];
+    const sp = w.split;
+    for (let j = 0; j < sp.length; j += 2) if (sp[j] === id) d += sp[j + 1];
+    return d;
+  }
+
+  /** Guided volleys split up: the next missile keeps the volley's target `t` until the damage headed there would kill
+   *  it with margin, then takes the valid target (layer, sight, range) nearest to it that is not covered yet -- back to
+   *  `t` when there is none. `t` gone (killed mid-volley): the nearest valid target to the aim point. */
+  private splitTarget(I: Internal, w: Wpn, t: SimUnit | null, ax: number, ay: number): SimUnit | null {
+    const covered = (o: SimUnit) => this.volleyLoad(w, o.id) >= (o.hp + o.shield + o.auraShield) * SPLIT_MARGIN;
+    if (t && t.alive && !covered(t)) return t;
+    const u = I.u, units = this.units;
+    const rx = t && t.alive ? t.x : ax, ry = t && t.alive ? t.y : ay;
+    this.mountAt(I, w);
+    const mx = this.mpx, my = this.mpy;
+    let best: SimUnit | null = null, bestD = Infinity;
+    for (let j = 0; j < units.length; j++) {
+      const o = units[j];
+      if (!o.alive || o.side === u.side || o === t || !this.canHit(w, o) || !this.visible(u, o)) continue;
+      const d = this.inRangeFrom(mx, my, u, w, o, 1);
+      if (d < 0 || d < w.minRange || covered(o)) continue;
+      const dd = (o.x - rx) ** 2 + (o.y - ry) ** 2;
+      if (dd < bestD) { bestD = dd; best = o; }
+    }
+    return best ?? (t && t.alive ? t : null);
+  }
+
   private fireImpl(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number, salvoK = 0, salvoN = 1): void {
     const u = I.u;
     const def = w.def;
     const m = u.mounts[mi];
+    const guidedVolley = def.projectile === 'missile' && (salvoN > 1 || (def.burst ?? 1) > 1);
+    if (guidedVolley) {
+      // individually guided missiles of one volley share out the targets instead of overkilling one
+      const nt = this.splitTarget(I, w, t, ax, ay);
+      if (nt && nt !== t) { t = nt; ax = nt.x; ay = nt.y; }
+    }
     m.flash = 1;
     I.sinceFire = 0;
     // [mount origins] shots leave the muzzle: mount point + barrel direction * muzzle reach
@@ -1496,17 +1590,31 @@ export class Battle {
     const est = t && kind !== 'flame' && !(this.interceptable(kind) && this.sideHasPd(t.side))
       ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : pellets > 1 || salvoN > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
       : 0;
+    if (guidedVolley && t) {
+      // this volley's next missiles see what this one will deal, PD or not (incoming already counts est)
+      const exp = this.expectedHit(t, raw, ap, airBonus) * 0.9 * pellets - est * pellets;
+      if (exp > 0) w.split.push(t.id, exp);
+    }
     for (let k = 0; k < pellets; k++) {
       let tx = ax, ty = ay;
       if (salvoN > 1 && kind !== 'missile') {
-        // salvo cluster: rounds spiral out from the aim point (golden angle) so the blasts land side by side like a
-        // cluster strike instead of stacking; a bit longer along the line of fire, where rockets scatter most
+        // salvo cloud: each round lands at a random point of an ellipse around the aim point (longer along the line of
+        // fire, where rockets scatter most) -- the best of a few uniform-in-disc candidates, the one farthest from
+        // the salvo's earlier impacts, so the blasts carpet the area at random instead of stacking
         const R = Math.max(err, (def.splash ?? 0.5) * 0.35 * Math.sqrt(salvoN));
-        const r = R * Math.sqrt((salvoK + 0.5) / salvoN) * (0.85 + 0.3 * this.rng());
-        const th = w.salvoRot + salvoK * GOLDEN_ANGLE;
-        const e1 = r * Math.sin(th), e2 = r * Math.cos(th) * 1.25;
-        tx = ax - s * e1 + c * e2;
-        ty = ay + c * e1 + s * e2;
+        const pts = w.salvoPts;
+        let be1 = 0, be2 = 0, bestD = -1;
+        for (let q = 0; q < SALVO_CANDIDATES; q++) {
+          const th = this.rng() * TAU, r = R * Math.sqrt(this.rng());
+          const e1 = r * Math.sin(th), e2 = r * Math.cos(th) * SALVO_LONG;
+          let dmin = Infinity;
+          for (let j = 0; j < pts.length; j += 2) { const a = pts[j] - e1, b = (pts[j + 1] - e2) / SALVO_LONG; dmin = Math.min(dmin, a * a + b * b); }
+          if (dmin > bestD) { bestD = dmin; be1 = e1; be2 = e2; }
+          if (!pts.length) break;
+        }
+        pts.push(be1, be2);
+        tx = ax - s * be1 + c * be2;
+        ty = ay + c * be1 + s * be2;
       } else if (kind === 'flame') {
         const a = aim + (this.rng() - 0.5) * 0.5;
         tx = mx + Math.cos(a) * w.range;
@@ -1525,19 +1633,41 @@ export class Battle {
       const ox = bomb ? u.x : mx, oy = bomb ? u.y : my;
       const total = Math.max(0.3, Math.hypot(tx - ox, ty - oy));
       let ang = Math.atan2(ty - oy, tx - ox);
-      // missile salvo: the pod fans its missiles out on launch; they curve back in on the target
-      if (salvoN > 1 && kind === 'missile') ang += ((salvoK + 0.5) / salvoN - 0.5) * 1.2 + (this.rng() - 0.5) * 0.15;
+      // missile salvo: the pod throws its missiles out to either side on launch; they curve back in on the target
+      if (salvoN > 1 && kind === 'missile') ang += ((salvoK + 0.5) / salvoN - 0.5) * 1.2 + (this.rng() - 0.5) * 0.35;
       const pierce = !!def.pierce;
       const p: Proj = {
         id: this.nextProjId++, side: u.side, moduleId: def.id, kind: kind as Proj['kind'], x: ox, y: oy, z: bomb ? BOMB_ALT : 0, z0: bomb ? BOMB_ALT : 0, src: u.id, angle: ang, progress: 0,
         vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed: bomb ? total / BOMB_FALL : speed, dmg: raw, ap, splash: def.splash ?? 0, airBonus, air,
         target: kind === 'missile' && t ? t.id : -1, tx, ty, sx: ox, sy: oy, total, traveled: 0,
         maxDist: kind === 'flame' ? total : kind === 'missile' ? w.range * 1.8 : pierce ? w.range + 1 : total + 2,
-        ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * 0.22 : 0, dead: false,
+        // mortars lob steeply, guns (howitzers) fire flatter -- the flight time is the same either way
+        ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * (def.visual === 'mortar' ? 0.38 : 0.2) : 0, dead: false,
         pierce, hits: [], fx, fxMult: lm, cls, mount: mi,
         aimT: est > 0 && t ? t.id : -1, est,
         ff: air ? null : def.fireField ?? null, cl: kind === 'arc' ? def.cluster ?? null : null,
+        age: 0, tof: 0, v0: speed, vmax: speed, boost: 0, bow: 0, loft: 0, lofted: false,
       };
+      if (kind === 'rocket') {
+        // unguided rocket: ignites slow and burns faster (same flight time as a constant-speed round), leaves the
+        // tube a little off line and bows back onto its impact point, lofting with range (not from aircraft)
+        p.tof = total / speed;
+        const bowK = (salvoN > 1 ? 0.07 : 0.035) * (u.flying ? 0.4 : 1);
+        p.bow = (this.rng() * 2 - 1) * bowK * total;
+        p.loft = u.flying || air ? 0 : (0.15 + 0.045 * total) * (0.75 + 0.5 * this.rng());
+      } else if (kind === 'missile') {
+        // missile: ejected / boosted slow, accelerating to top speed; top speed is set so a flight of the initial
+        // distance takes as long as it did at a constant projectileSpeed. Long-range missiles climb, cruise and dive
+        const swarm = salvoN > 1 && w.range < MSL_LOFT_RANGE, heavy = w.range >= MSL_LOFT_RANGE;
+        const f0 = swarm ? MSL_V0_SWARM : heavy ? MSL_V0_HEAVY : MSL_V0, tb = swarm ? MSL_BOOST_SWARM : heavy ? MSL_BOOST_HEAVY : MSL_BOOST;
+        const tt = total / speed, lag = tb * (1 - f0) / 2;
+        const vmax = Math.min(speed * 2, total / Math.max(tt - lag, tt * 0.5));
+        p.v0 = vmax * f0; p.vmax = vmax; p.boost = tb; p.speed = p.v0;
+        p.vx = Math.cos(ang) * p.v0; p.vy = Math.sin(ang) * p.v0;
+        p.bow = swarm ? 0.35 + 0.2 * this.rng() : 0;
+        p.lofted = heavy && !air;
+        p.loft = air ? 0 : heavy ? Math.min(4, 1 + total * 0.12) : 0.25 + 0.04 * total;
+      }
       if (p.aimT >= 0) this.incoming[p.aimT] += est;
       if (air && kind !== 'missile') p.z = 1;
       else if (kind === 'orb') p.z = 0.4;
@@ -1785,28 +1915,51 @@ export class Battle {
         }
         continue;
       }
+      p.age += DT;
       if (p.kind === 'missile') {
         if (p.target >= 0) {
           const t = this.units[p.target];
           // jammed targets break the lock: the missile flies on to its last known point
           if (t.alive && !this.ints[t.id].jammed) { p.tx = t.x; p.ty = t.y; } else p.target = -1;
         }
-        const want = Math.atan2(p.ty - p.y, p.tx - p.x);
+        // boost: speed builds from launch to top speed
+        p.speed = p.age >= p.boost ? p.vmax : p.v0 + (p.vmax - p.v0) * (p.age / p.boost);
+        let want = Math.atan2(p.ty - p.y, p.tx - p.x);
+        if (p.bow > 0) {
+          // swarm missiles weave on their way in, settling as they close
+          const dl = Math.hypot(p.tx - p.x, p.ty - p.y);
+          want += p.bow * Math.sin(p.age * 11 + p.id * 2.3) * clamp((dl - 0.8) / 3, 0, 1);
+        }
         p.angle = turnToward(p.angle, want, 5 * DT);
         p.vx = Math.cos(p.angle) * p.speed;
         p.vy = Math.sin(p.angle) * p.speed;
       }
       const ox = p.x, oy = p.y;
-      const step = p.speed * DT;
-      p.x += p.vx * DT;
-      p.y += p.vy * DT;
-      p.traveled += step;
-      p.progress = Math.min(1, p.traveled / p.total);
-      if (p.kind === 'missile') {
-        p.z = p.air ? 1 : 0.2 + 0.8 * Math.sin(Math.PI * Math.min(1, p.traveled / Math.max(1, p.total)));
+      let step = p.speed * DT;
+      if (p.kind === 'rocket') {
+        // path parameter k(u) = a u + (1 - a) u^2 over u = age / tof: ignition speed a x the mean, burn-out 2 - a
+        const u = Math.min(1, p.age / p.tof), k = u >= 1 ? 1 : ROCKET_V0 * u + (1 - ROCKET_V0) * u * u;
+        const lx = p.tx - p.sx, ly = p.ty - p.sy, b = p.bow * Math.sin(Math.PI * k) / p.total;
+        p.x = p.sx + lx * k - ly * b;
+        p.y = p.sy + ly * k + lx * b;
+        p.z = p.loft * 4 * k * (1 - k);
+        const mx = p.x - ox, my = p.y - oy;
+        step = Math.hypot(mx, my);
+        if (step > 1e-9) { p.angle = Math.atan2(my, mx); p.vx = mx / DT; p.vy = my / DT; }
+        p.traveled = k * p.total;
+        p.progress = k;
+      } else {
+        p.x += p.vx * DT;
+        p.y += p.vy * DT;
+        p.traveled += step;
+        p.progress = Math.min(1, p.traveled / p.total);
       }
-      // contact
-      const hitId = this.sweep(p, ox, oy);
+      if (p.kind === 'missile') {
+        const k = Math.min(1, p.traveled / Math.max(1, p.total));
+        p.z = p.air ? 1 : p.loft * (p.lofted ? (k < 0.3 ? Math.sin(k / 0.3 * Math.PI / 2) : k < 0.65 ? 1 : Math.cos((k - 0.65) / 0.35 * Math.PI / 2)) : Math.sin(Math.PI * k));
+      }
+      // contact (a rocket lofted high overflies the ground units under it)
+      const hitId = p.kind === 'rocket' && p.z > ROCKET_OVERFLY ? -1 : this.sweep(p, ox, oy);
       if (hitId >= 0) {
         const t = this.units[hitId];
         const T = this.ints[hitId];
@@ -1831,6 +1984,9 @@ export class Battle {
         this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
         this.dropFire(p, p.tx, p.ty);
         p.dead = true;
+        continue;
+      } else if (p.kind === 'rocket' && p.progress >= 1) {
+        p.dead = true; // a dud: no warhead to burst at the end of its flight
         continue;
       }
       if (p.traveled >= p.maxDist || p.x < -2 || p.y < -2 || p.x > FIELD_W + 2 || p.y > FIELD_H + 2) {
@@ -1861,7 +2017,7 @@ export class Battle {
         vx: 0, vy: 0, speed: 3 + total * 1.2 + this.rng() * 1.5, dmg: cl.damage * p.fxMult, ap: p.ap, splash: cl.splash, airBonus: 1, air: false,
         target: -1, tx, ty, sx: p.tx, sy: p.ty, total, traveled: 0, maxDist: total + 2,
         ignore: -1, arcH: 0.4 + total * 0.3, dead: false, pierce: false, hits: [], fx: null, fxMult: p.fxMult, cls: p.cls, mount: p.mount,
-        aimT: -1, est: 0, ff: null, cl: null,
+        aimT: -1, est: 0, ff: null, cl: null, age: 0, tof: 0, v0: 0, vmax: 0, boost: 0, bow: 0, loft: 0, lofted: false,
       });
     }
   }

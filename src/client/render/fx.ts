@@ -16,7 +16,7 @@ export const modOf = (id: string | null | undefined): ModuleDef | undefined => (
 export const visualOf = (id: string | null | undefined): ModuleVisual | undefined => modOf(id)?.visual;
 
 const SPARK = 0, SMOKE = 1, FIRE = 2, GLOW = 3, DEBRIS = 4, RING = 5, HEAL = 6, DUST = 7, EMBER = 8, STAR = 9, HEX = 10, BOLT = 11,
-  FBALL = 12, CONE = 13, LIGHT = 14, HOT = 15, PATCH = 16, DRING = 17;
+  FBALL = 12, CONE = 13, LIGHT = 14, HOT = 15, PATCH = 16, DRING = 17, AOE = 18;
 
 interface Particle {
   k: number;
@@ -258,6 +258,14 @@ export class Fx {
     if (r1 < 3) return; // only big blasts get a visible shock ring; small ones looked like glassy discs
     alpha *= 0.45;
     this.add(RING, x, y, { size: r0, r1, max: life, color, alpha });
+  }
+
+  /** A blast's damage area: a thin ring that snaps out to exactly radius r (the sim's splash radius) and fades, with
+   *  a faint fill -- subtle for small splash, clear for big blasts. */
+  aoe(x: number, y: number, r: number, color = '#ffb060'): void {
+    if (r < 0.25 || (this.busy > 0.9 && r < 1)) return;
+    const alpha = clamp(0.3 + (r - 0.3) * 0.3, 0.3, 0.85);
+    this.add(AOE, x, y, { size: r, r1: r, max: 0.55 + Math.min(0.6, r * 0.15), color, alpha });
   }
 
   /** Dusty ground ring (normal blend): the displaced dirt wave. */
@@ -1201,6 +1209,19 @@ export class Fx {
           g.transform(cs, sn, -sn, cs, p.x, p.y);
           g.drawImage(coneTex(p.color), -len * 0.0625, -w / 2, len, w);
           g.setTransform(tr);
+          break;
+        }
+        case AOE: {
+          const u = 1 - t, k = Math.min(1, u / 0.18), s = p.r1 * (0.55 + 0.45 * easeOut(k));
+          if (s * px < 3) break;
+          const a = p.alpha * (u < 0.18 ? 0.6 + 0.4 * k : t / 0.82);
+          g.strokeStyle = p.color;
+          g.fillStyle = p.color;
+          g.globalAlpha = clamp(a * 0.12, 0, 1);
+          g.beginPath(); g.arc(p.x, p.y, s, 0, Math.PI * 2); g.fill();
+          g.globalAlpha = clamp(a, 0, 1);
+          g.lineWidth = Math.max(1.5 / px, Math.min(0.08, s * 0.045));
+          g.stroke();
           break;
         }
         case RING: {
