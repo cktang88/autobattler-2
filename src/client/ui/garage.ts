@@ -951,7 +951,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('button.g-lslot-main', {
         type: 'button', 'data-fk': `slot-${i}`, 'aria-pressed': String(activeSlot === i),
         title: cur ? `${cur.name} — drag to another socket to swap, or off the robot to remove` : `Empty size ${ML[cls]} socket — drag a part here or click to choose`,
-        onclick: () => { if (!suppressClick) focusSlot(i); },
+        // the 2nd click of a double-click must not toggle the socket straight back off
+        onclick: (e: MouseEvent) => { if (!suppressClick && e.detail < 2) focusSlot(i); },
       },
       h('span.g-sockno', null, String(i + 1)),
       h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]),
@@ -977,7 +978,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         style: cur ? { '--cat': moduleCategoryColor(cur.id) } : null,
         title: (cur ? `Socket ${i + 1} (size ${ML[cls]}): ${cur.name}` : `Socket ${i + 1}: empty size ${ML[cls]} socket`) + (isEdge(i) ? ' — Edge mount: fits melee weapons' : ''),
         'aria-label': cur ? `Socket ${i + 1}, ${cur.name}` : `Socket ${i + 1}, empty size ${ML[cls]}`,
-        onclick: () => { if (!suppressClick) focusSlot(i); },
+        // the 2nd click of a double-click must not toggle the socket straight back off
+        onclick: (e: MouseEvent) => { if (!suppressClick && e.detail < 2) focusSlot(i); },
       },
       h('span.g-sock-ring'),
       h('span.g-sock-tag', null, h('b', null, String(i + 1)), ML[cls]),
