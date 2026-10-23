@@ -265,6 +265,11 @@ function runShard(pool: Design[], seeds: number, shard: number): Result[] {
             units[side] = A.place; designs[side] = A.designs;
             units[other] = B.place; designs[other] = B.designs;
             const r = runBattle({ seed: 1000 + mixK * 31 + side, sides: [{ designs: designs[0], units: units[0] }, { designs: designs[1], units: units[1] }] });
+            if (process.env.BAL_DEBUG) {
+              const val = (pl: Placement[], ds: Design[]) => pl.reduce((t, p) => t + st(ds.find((x) => x.id === p.designId)!).cost, 0);
+              const want = (sp: Spec[]) => sp.reduce((t, x) => t + x.n * st(x.d).cost, 0);
+              console.error(`${d.id} k${mixK} side${side}: mine placed ${val(A.place, A.designs)}/${want(mine)} (${A.place.length} blocks)  opp placed ${val(B.place, B.designs)}/${want(opp.specs)} (${B.place.length} blocks)  winner ${r.winner === side ? 'mine' : r.winner === -1 ? 'draw' : 'opp'}`);
+            }
             score += r.winner === side ? 1 : r.winner === -1 ? 0.5 : 0;
             games++;
           }
