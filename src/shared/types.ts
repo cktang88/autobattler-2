@@ -273,7 +273,7 @@ export interface UnitStats {
   priceParts: number;
   pricePower: number;
   priceSupport: number;
-  /** units per purchased block (stats.ts squadFor: 16, 8 or 4 for light hulls by unit price, else 1) */
+  /** units per purchased block (stats.ts squadFor, by unit price: 16, 8 or 4 for light hulls, 4, 2 or 1 for medium, else 1) */
   squad: number;
   flying: boolean;
   isStatic: boolean;

@@ -232,25 +232,37 @@ const PD_PTS = 23;
  *  this share of a lone carrier's (the squad's union covers ~2 lone carriers' worth of ground). */
 export const auraSquadShare = (squad: number) => (squad > 1 ? Math.min(1, 2 / squad) : 1);
 
-/** Light (size-1) squads: units per block by per-unit price (supply). Cheap light units come in big blocks, pricier
- *  ones in smaller blocks so one purchase stays affordable: [max per-unit price, squad]. Sizes 2+ are single units.
- *  Per-unit stats and price don't depend on the tier (except a support aura's share, see auraSquadShare), so equal
- *  supply still buys the same army; the tier only changes the purchase granularity and formation (grid.ts). */
-/** Price factor per light squad count (on the unit value, before support): smaller blocks fight better per unit in the
- *  sim (each block picks its own targets and moves on its own; a wide 8 x 2 block bunches up and overkills), so a unit
- *  costs a little more in a smaller squad. Tuned with `node scripts/size-check.ts` and `node scripts/duels.ts groups`. */
+/** Squads: units per block by hull size and per-unit price (supply). Cheap units come in big blocks, pricier ones in
+ *  smaller blocks so one purchase stays affordable: per size, [max per-unit price, squad] tiers. Light (size-1) hulls
+ *  come 16 / 8 / 4 to a block, medium (size-2) ones 4 / 2 / 1 (a ~30-supply turret is a 4-block, not a 30-supply
+ *  single); sizes 3+ are single units. Per-unit stats and price don't depend on the tier (except the SQUAD_K factor
+ *  and a support aura's share, see auraSquadShare), so equal supply still buys about the same army; the tier only
+ *  changes the purchase granularity and formation (grid.ts). */
+/** Price factor per squad count (on the unit value, before support), per hull size: smaller blocks fight better per
+ *  unit in the sim (each block picks its own targets and moves on its own; a wide 8 x 2 block bunches up and
+ *  overkills), so a unit costs a little more in a smaller squad. Tuned with `node scripts/size-check.ts` and
+ *  `node scripts/duels.ts groups`. */
+// Medium squads: 2 x 2 / 2 x 1 blocks of the same design vs the same units as singles (9 designs, 48 fights per
+// point, mixed armies, 1-cell gaps around every block) break even at 0.94..1.05 singles per squad unit, ~1.0 on
+// average for both x4 and x2: a 2-4 unit block barely overkills, so the per-unit price is the single's.
 // Tuned (N=24, 48 fights per row) with size-check: light vs medium armies 19% -> 54% (the old always-16 blocks were weak
 // for their price), giants/titans vs mixed armies kept where they were by SIZE_K[3..4] x0.92 / x0.9.
-export const SQUAD_K: Record<number, number> = { 16: 1, 8: 1.2, 4: 1.35 };
-export const SQUAD_TIERS: readonly (readonly [number, number])[] = [[11, 16], [24, 8], [Infinity, 4]];
+export const SQUAD_K: Record<number, Record<number, number>> = { 1: { 16: 1, 8: 1.2, 4: 1.35 }, 2: { 4: 1, 2: 1, 1: 1 } };
+export const SQUAD_TIERS: Record<number, readonly (readonly [number, number])[]> = {
+  1: [[11, 16], [24, 8], [Infinity, 4]],
+  2: [[35, 4], [60, 2], [Infinity, 1]],
+};
+/** price factor of a `squad`-unit block of a size-`size` hull */
+export const squadK = (size: number, squad: number): number => SQUAD_K[size]?.[squad] ?? 1;
 
 /** Units per block for a hull of `size`; `unitPrice(squad)` = one unit's price (supply, unrounded) in that squad. The
  *  biggest squad whose unit price fits its tier wins. Deterministic in the design, so a match's stored designs keep
  *  their squad on server and client. */
 export function squadFor(size: number, unitPrice: (squad: number) => number): number {
-  if (size !== 1) return 1;
-  for (const [max, sq] of SQUAD_TIERS) if (unitPrice(sq) <= max) return sq;
-  return SQUAD_TIERS[SQUAD_TIERS.length - 1][1];
+  const tiers = SQUAD_TIERS[size];
+  if (!tiers) return 1;
+  for (const [max, sq] of tiers) if (unitPrice(sq) <= max) return sq;
+  return tiers[tiers.length - 1][1];
 }
 
 /** Share of a fight a weapon gets to fire in, next to the design's longest weapon (`longest`, cells): full within
@@ -299,7 +311,7 @@ export function computeStats(d: Design): UnitStats {
   return statsFor(d);
 }
 
-/** Stats of a light design forced into a `squad`-unit block (legacy pricing for rules migrations / analysis
+/** Stats of a light / medium design forced into a `squad`-unit block (legacy pricing for rules migrations / analysis
  *  scripts); the game itself always lets squadFor decide. */
 export function statsWithSquad(d: Design, squad: number): UnitStats {
   return statsFor(d, squad);
@@ -404,10 +416,10 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   const classK = (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1);
   let base = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
   const extraFor = (sq: number) => SUPPORT_K * (support * auraSquadShare(sq) + interceptors);
-  const unitRaw = (sq: number) => base * (SQUAD_K[sq] ?? 1) + extraFor(sq);
-  const squad = size === 1 && forceSquad ? forceSquad : squadFor(size, (sq) => unitRaw(sq) / PRICE_DIV);
+  const unitRaw = (sq: number) => base * squadK(size, sq) + extraFor(sq);
+  const squad = forceSquad && SQUAD_TIERS[size] ? forceSquad : squadFor(size, (sq) => unitRaw(sq) / PRICE_DIV);
   const extra = extraFor(squad);
-  base *= SQUAD_K[squad] ?? 1;
+  base *= squadK(size, squad);
   // the block price is the only rounded number: every per-unit figure below is derived from it or sums to it
   const cost = roundCost((base + extra) * squad);
   const priceParts = Math.min(base, PARTS_WEIGHT * partsCost * classK) / PRICE_DIV;

@@ -66,13 +66,12 @@ function checkBoard(m: MatchState, side: 0 | 1, board: Placement[]) {
   const feet: { x: number; y: number; w: number; h: number }[] = [];
   for (const p of board) {
     const st = computeStats(byId.get(p.designId)!);
-    const size = st.size;
     units += st.squad;
     assert.ok(blockInZone(p.x, p.y, st, p.spacing ?? 0, !!p.rot), 'in zone');
     const { w, h } = blockDims(st, p.spacing ?? 0, !!p.rot);
     for (const f of feet) assert.ok(!rectsOverlap(p.x, p.y, w, h, f.x, f.y, f.w, f.h), 'no overlap');
     feet.push({ x: p.x, y: p.y, w, h });
-    if (size > 1) assert.ok(!p.spacing, 'non-squads have no spacing');
+    if (st.squad === 1) assert.ok(!p.spacing, 'non-squads have no spacing');
   }
   assert.ok(units <= MAX_SIM_UNITS);
 }
@@ -86,7 +85,7 @@ test('AI boards are valid blocks; squads get spacing; matches last about 5-8 rou
       checkBoard(m, side, r.boards[side]);
       for (const p of r.boards[side]) {
         const d = m.players[side].deck.find((x) => x.id === p.designId)!;
-        if (computeStats(d).size === 1) { squads++; if ((p.spacing ?? 0) > 0) spaced++; }
+        if (computeStats(d).squad > 1) { squads++; if ((p.spacing ?? 0) > 0) spaced++; }
       }
     }
   }
@@ -139,7 +138,7 @@ test('AI never hands the opponent an exploitable view: redacted deck has no beha
   for (const d of v.players[1].deck) assert.equal(d.behavior, undefined);
 });
 
-test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 4/8/16-unit squad deployments', () => {
+test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 2/4/8/16-unit squad deployments', () => {
   const lens: number[] = [];
   for (let i = 0; i < 5; i++) {
     const m = playMatch(600 + i, 'normal', 'normal');

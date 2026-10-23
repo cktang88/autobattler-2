@@ -76,10 +76,10 @@ const isWeaponTab = (m: ModuleDef) => WEAPON_CAT_SET.has(m.category);
 const LS_DETAILS = 'garage.details';
 
 /** Roster order (remembered), applied inside each folder / group (or across everything with no folders): by unit
- *  size by default: light squads x16, then x8, then x4, then single units medium -> titan. */
+ *  size by default: light squads x16, then x8, then x4, medium squads x4, x2, then single units medium -> titan. */
 type RosterSort = 'edited' | 'name' | 'deck' | 'cost' | 'size';
 const ROSTER_SORTS: { value: RosterSort; label: string; hint: string }[] = [
-  { value: 'size', label: 'Unit size', hint: 'Squads ×16, ×8, ×4, then single units light to heavy' },
+  { value: 'size', label: 'Unit size', hint: 'Light squads ×16, ×8, ×4, medium ×4, ×2, then single units medium to titan' },
   { value: 'edited', label: 'Last edited', hint: 'Newest first, untouched starters last' },
   { value: 'name', label: 'Name A–Z', hint: 'Alphabetical' },
   { value: 'deck', label: 'In deck first', hint: 'Deck designs on top' },
@@ -101,9 +101,10 @@ const loadSort = (): RosterSort => {
   return 'size';
 };
 
-/** Size rank for the 'Unit size' sort / grouping: light squads by squad count (x16 < x8 < x4), then hull size. */
-const sizeRank = (s: UnitStats | null): number => !s ? 99 : s.size === 1 ? (s.squad >= 16 ? 0 : s.squad >= 8 ? 1 : 2) : s.size + 1;
-const SIZE_RANK_LABEL = ['Light ×16', 'Light ×8', 'Light ×4', '', 'Medium', 'Heavy', 'Giant', 'Titan'];
+/** Size rank for the 'Unit size' sort / grouping: light squads by squad count (x16 < x8 < x4), medium likewise
+ *  (x4 < x2 < single), then hull size. */
+const sizeRank = (s: UnitStats | null): number => !s ? 99 : s.size === 1 ? (s.squad >= 16 ? 0 : s.squad >= 8 ? 1 : 2) : s.size === 2 ? (s.squad >= 4 ? 3 : s.squad >= 2 ? 4 : 5) : s.size + 3;
+const SIZE_RANK_LABEL = ['Light ×16', 'Light ×8', 'Light ×4', 'Medium ×4', 'Medium ×2', 'Medium', 'Heavy', 'Giant', 'Titan'];
 
 /** The roster in display order. Ties (and every design without an edit stamp) keep a stable order: your own
  *  designs newest-added first, then the starters in their usual order. */
@@ -129,7 +130,7 @@ type RosterGroupBy = 'folders' | 'domain' | 'size' | 'role';
 const ROSTER_GROUPS: { value: RosterGroupBy; label: string; hint: string }[] = [
   { value: 'folders', label: 'My folders', hint: 'Your own folders: drag designs in, or use a row\'s folder button' },
   { value: 'domain', label: 'Unit class', hint: 'Ground · Jet · Helicopter' },
-  { value: 'size', label: 'Size', hint: 'Light ×16 · ×8 · ×4 squads, then Medium to Titan' },
+  { value: 'size', label: 'Size', hint: 'Light ×16 · ×8 · ×4 and Medium ×4 · ×2 squads, then Medium to Titan' },
   { value: 'role', label: 'Role', hint: 'Air role, or the job of the main weapon' },
 ];
 const LS_GROUP = 'garage.groupBy';
@@ -964,7 +965,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         add(`domain:${dom}`, DOMAIN_SHORT[dom], i, d, DOMAINS[i]?.desc);
       } else if (groupBy === 'size') {
         const r = sizeRank(s);
-        add(`size:${r}`, SIZE_RANK_LABEL[r] ?? 'Unknown', r, d, s ? (s.size === 1 ? `Light units, ${s.squad} per block` : `${footprintLabel(s.size)} hulls`) : undefined);
+        add(`size:${r}`, SIZE_RANK_LABEL[r] ?? 'Unknown', r, d, s ? (s.squad > 1 ? `${SIZE_CLASSES[s.size - 1]} units, ${s.squad} per block` : `${footprintLabel(s.size)} hulls`) : undefined);
       } else {
         const r = designRole(d, s);
         add(`role:${r.key}`, r.label, r.order, d);
@@ -1705,7 +1706,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     // current loadout, not a fixed number per hull size
     const sq = statsOf(next ?? draft)?.squad ?? 1;
     return [
-      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), sq > 1 ? h('span.g-plate.squad', { title: `With this loadout one purchase deploys a block of ${sq} of these (cheaper light units come in bigger squads: ×16, ×8 or ×4)` }, `Squad ×${sq}`) : null, roleTags(c.roles, 2)]),
+      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), sq > 1 ? h('span.g-plate.squad', { title: `With this loadout one purchase deploys a block of ${sq} of these (cheaper units come in bigger squads: light ×16, ×8 or ×4, medium ×4 or ×2)` }, `Squad ×${sq}`) : null, roleTags(c.roles, 2)]),
       h('div.g-kstats', null,
         kstat(sq > 1 ? 'Hull each' : 'Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),

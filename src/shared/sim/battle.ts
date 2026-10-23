@@ -361,7 +361,7 @@ interface Internal {
   /** deployed offset from the block centroid (world cells) */
   offx: number;
   offy: number;
-  /** minimum squadmate separation while holding formation */
+  /** minimum squadmate separation while holding formation (the formation pitch: unit width + spacing) */
   sepMin: number;
   /** target-selection value: damage output incl. level */
   dpsVal: number;
@@ -604,7 +604,7 @@ export class Battle {
         const defs = defaultOrders(d);
         for (const c of cs) {
           this.blockUnits[block].push(this.units.length);
-          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: typeof p.kite === 'boolean' ? p.kite : defs.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: typeof p.focus === 'boolean' ? p.focus : defs.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + 1 });
+          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: typeof p.kite === 'boolean' ? p.kite : defs.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: typeof p.focus === 'boolean' ? p.focus : defs.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + Math.min(shape.fw, shape.fh) });
         }
       }
     }

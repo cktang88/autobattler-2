@@ -4,12 +4,16 @@ import { Battle as SimBattle } from '../src/shared/sim/battle.ts';
 import { MAX_TICKS } from '../src/shared/sim/types.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, placementUnitCenters } from '../src/shared/grid.ts';
 import type { BattleInput } from '../src/shared/sim/types.ts';
-import { defaultOrders, validateDesign } from '../src/shared/stats.ts';
+import { SQUAD_TIERS, defaultOrders, validateDesign } from '../src/shared/stats.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 import { hullK } from '../src/shared/mountgeo.ts';
 import { MODULE_BY_ID } from '../src/shared/parts.ts';
 
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
+// These are per-unit mechanics tests laid out (and indexed: units[1] = the enemy) for single medium units, and most of
+// their cheap one-gun medium designs would now come as 2- or 4-squads: keep medium hulls single in this file (light
+// squads stay as in the game). Medium squads in the sim are covered by squads.test.ts.
+SQUAD_TIERS[2] = [[Infinity, 1]];
 
 const DESIGNS: Design[] = [
   D('buggy', 'scout', 'wheels', ['mg']),

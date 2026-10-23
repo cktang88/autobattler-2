@@ -307,10 +307,10 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   assert.deepEqual(validateDesign(flame), []);
   assert.deepEqual(validateDesign(cit), []);
   const b = new Battle({ seed: 1, sides: [{ designs: [flame, cit], units: [pl('flametower')] }, { designs: [flame, cit], units: [pl('cit')] }] });
-  const s = b.units[0], t = b.units[1];
+  const s = b.units[0], t = b.units.find((u) => u.side === 1)!; // (the cheap flame tower is a 4-squad: its first unit)
   type W = { range: number; ox: number; oy: number };
   const I = (b as unknown as { ints: { wpns: (W | null)[]; hl: number; hw: number }[] }).ints;
-  const w = I[0].wpns[0]!, T = I[1];
+  const w = I[0].wpns[0]!, T = I[t.id];
   // mount world position at the shooter's facing; put the citadel's corner 0.8 x range away, diagonally
   const mx = s.x + Math.cos(s.angle) * w.ox - Math.sin(s.angle) * w.oy, my = s.y + Math.sin(s.angle) * w.ox + Math.cos(s.angle) * w.oy;
   t.angle = Math.PI / 2; // long axis (hl) along y, hw across x

@@ -29,8 +29,8 @@ export const START_HP = 100;
 export const START_SUPPLY = 600;
 /** After this round resolves the match ends regardless; higher hp wins. */
 export const MAX_ROUNDS = 15;
-/** Hard cap on blocks (placements) per side. */
-export const MAX_UNITS = 40;
+/** Hard cap on blocks (placements) per side (60: cheap designs come in squads, so a block is ~1 purchase of 70-200). */
+export const MAX_UNITS = 60;
 export const MAX_BLOCKS = MAX_UNITS;
 /** Hard cap on simulated units per side, counting every unit of every squad (bounds simulation cost). */
 export const MAX_SIM_UNITS = 240;
@@ -38,12 +38,15 @@ export const MAX_PLAYER_NAME = 24;
 
 /** Rules / price-scale version stamped on every new match (MatchState.rules).
  *  2: prices are raw cost / PRICE_DIV (5) -- supply 600 + 120 per round instead of 3000 + 600.
- *  3: light squads are 16, 8 or 4 units by per-unit price (stats.ts squadFor) instead of always 16. */
-export const RULES_VERSION = 3;
+ *  3: light squads are 16, 8 or 4 units by per-unit price (stats.ts squadFor) instead of always 16.
+ *  4: medium (size-2) designs come 4, 2 or 1 to a block by per-unit price, likewise; 60 blocks per side instead of 40. */
+export const RULES_VERSION = 4;
 /** First rules version on the / 5 price scale. */
 const RESCALED_RULES = 2;
 /** Units per light block before rules 3. */
 const LEGACY_SQUAD = 16;
+/** First rules version with medium squads. */
+const MEDIUM_SQUAD_RULES = 4;
 /** When the price / 5 rescale shipped (commit 4a9c201). An unmarked match created before it ran on 5x supply. */
 export const PRICE_RESCALE_AT = Date.UTC(2026, 9, 14, 2, 48, 53);
 const OLD_PRICE_DIV = 5;
@@ -116,18 +119,26 @@ export function isPreRescaleMatch(m: MatchState): boolean {
  *  - Before rules 3 every light block was 16 units. A board block of a design that is now an 8- or 4-unit squad is
  *    split into 2 or 4 blocks of the new size covering exactly the old unit positions (same level, orders, spacing,
  *    rotation; the first keeps the uid), so the army is unchanged; any supply the old block cost beyond its pieces
- *    is refunded. Past rounds' records are left as they were. */
+ *    is refunded.
+ *  - Before rules 4 every medium block was 1 unit. One unit can't be split into a squad, so a board block of a design
+ *    that is now a 2- or 4-unit squad is sold back at the full supply it cost (price + upgrades, single-unit prices)
+ *    and leaves the board (escorts of it are dropped); the player rebuys it as squads.
+ *  Past rounds' records are left as they were. */
 export function migrateMatch(m: MatchState): boolean {
   if (m.rules !== undefined && m.rules >= RULES_VERSION) return false;
+  const from = m.rules ?? 0;
   if (isPreRescaleMatch(m)) for (const p of m.players) p.supply = Math.floor(p.supply / OLD_PRICE_DIV);
-  if (m.status !== 'done') for (const p of m.players) splitLegacySquads(p);
+  if (m.status !== 'done') for (const p of m.players) {
+    if (from < 3) splitLegacySquads(p);
+    if (from < MEDIUM_SQUAD_RULES) refundMediumSingles(p);
+  }
   m.rules = RULES_VERSION;
   return true;
 }
 
-/** Supply a light block cost under the 16-unit rules (price + upgrades up to `level`). */
-function legacyPlacementValue(d: Design, level: number): number {
-  const c = statsWithSquad(d, LEGACY_SQUAD).cost;
+/** Supply a block cost under rules where the design came `squad` to a block (price + upgrades up to `level`). */
+function legacyPlacementValue(d: Design, level: number, squad = LEGACY_SQUAD): number {
+  const c = statsWithSquad(d, squad).cost;
   let v = c;
   for (let l = 1; l < level; l++) v += roundPrice(c * (0.4 + 0.1 * l));
   return v;
@@ -159,6 +170,21 @@ function splitLegacySquads(p: PlayerState): void {
   }
   p.board = out;
   p.supply += refund;
+}
+
+function refundMediumSingles(p: PlayerState): void {
+  const designs = new Map(p.deck.map((d) => [d.id, d] as const));
+  const gone = new Set<number>();
+  for (const u of p.board) {
+    const d = designs.get(u.designId);
+    const shape = shapeOf(d);
+    if (!d || shape.size !== 2 || shape.squad === 1) continue;
+    p.supply += legacyPlacementValue(d, u.level, 1);
+    gone.add(u.uid);
+  }
+  if (!gone.size) return;
+  p.board = p.board.filter((u) => !gone.has(u.uid));
+  for (const u of p.board) if (u.escort !== undefined && gone.has(u.escort)) delete u.escort;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -58,7 +58,16 @@ function spacingDiagram(spacing: number, shape: BlockShape, rot = false): SVGEle
   r.setAttribute('x', '0.5'); r.setAttribute('y', '0.5'); r.setAttribute('width', String(W - 1)); r.setAttribute('height', String(H - 1));
   r.setAttribute('class', 'fp');
   svg.append(r);
+  const uw = shape.fw ?? shape.size, uh = shape.fh ?? shape.size;
   for (const o of squadOffsets(shape, spacing, rot)) {
+    if (uw * uh > 1) {
+      // medium squads: each unit's real footprint (a 2 x 3 hull is not a dot)
+      const u = document.createElementNS(NS, 'rect');
+      u.setAttribute('x', String((o.x - uw / 2 + 0.2) * px)); u.setAttribute('y', String((o.y - uh / 2 + 0.2) * px));
+      u.setAttribute('width', String((uw - 0.4) * px)); u.setAttribute('height', String((uh - 0.4) * px)); u.setAttribute('rx', '1'); u.setAttribute('class', 'un');
+      svg.append(u);
+      continue;
+    }
     const c = document.createElementNS(NS, 'circle');
     c.setAttribute('cx', String(o.x * px)); c.setAttribute('cy', String(o.y * px)); c.setAttribute('r', '1.4');
     svg.append(c);
@@ -241,7 +250,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const topbar = h('div.mbar', null, leaveBtn, hpMe, roundEl, hpFoe);
 
   const supplyVal = h('div.val');
-  // army caps: blocks (purchases) and simulated units (a light squad is 4, 8 or 16 of them)
+  // army caps: blocks (purchases) and simulated units (a light squad is 4, 8 or 16 of them, a medium one 2 or 4)
   const capEl = h('div.capmeter');
   let capWarned = false;
   function capUse() {
@@ -268,7 +277,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       h('span', null, label), h('div.cap-bar', null, h('i', { style: { width: `${Math.min(100, (100 * v) / max)}%` } })), h('b', null, `${v}/${max}`));
     capEl.className = `capmeter ${lvl}`;
     capEl.replaceChildren(
-      bar('Units', u.units, MAX_SIM_UNITS, `Every unit on your side counts (a light squad is 4, 8 or 16). Max ${MAX_SIM_UNITS}.`),
+      bar('Units', u.units, MAX_SIM_UNITS, `Every unit on your side counts (a light squad is 4, 8 or 16, a medium one 2 or 4). Max ${MAX_SIM_UNITS}.`),
       bar('Blocks', u.blocks, MAX_BLOCKS, `Each purchase is one block. Max ${MAX_BLOCKS}.`),
       lvl ? h('div.cap-banner', null, lvl === 'full'
         ? (u.units >= MAX_SIM_UNITS ? `Unit cap reached: ${MAX_SIM_UNITS} units on the field` : `Block cap reached: ${MAX_BLOCKS} blocks`)

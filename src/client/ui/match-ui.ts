@@ -311,7 +311,7 @@ export interface StatCardOpts {
 }
 
 /** The at-a-glance stat card: badges, big numbers, GND/AIR dps, weapon list. Shows only public data.
- *  Display convention for squads (size-1 designs, bought as a block of st.squad units): every number on the card is
+ *  Display convention for squads (light and cheap medium designs, bought as a block of st.squad units): every number on the card is
  *  for ONE unit, and the card says so ("per unit" note, "/ unit" on hp, shield and dps); squad totals are always
  *  spelled out as "squad ×16: N". The footprint badge is the whole block's footprint. */
 export function statCard(o: StatCardOpts): HTMLElement {

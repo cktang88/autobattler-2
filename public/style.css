@@ -325,7 +325,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .spacing .sp-row { display: flex; align-items: center; gap: 10px; }
 .sp-diagram { flex: none; width: 34px; height: 34px; }
 .sp-diagram .fp { fill: rgba(46, 211, 192, 0.08); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }
-.sp-diagram circle { fill: var(--accent); }
+.sp-diagram circle, .sp-diagram .un { fill: var(--accent); }
 .sp-segs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line2, var(--line)); border-radius: 4px; overflow: hidden; }
 .sp-segs .seg { border: none; border-radius: 0; padding: 6px 0; min-height: 34px; background: var(--panel2, var(--panel)); font-family: var(--font-head); font-weight: 600; }
 .sp-segs .seg + .seg { border-left: 1px solid var(--line); }
