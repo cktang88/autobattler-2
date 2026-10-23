@@ -261,7 +261,7 @@ export interface UnitStats {
   load: number;
   speed: number;
   turn: number;
-  /** supply price of one BLOCK (squadSize units), rounded via roundCost — what the player pays */
+  /** supply price of one BLOCK (squad units), rounded via roundCost — what the player pays */
   cost: number;
   /** one unit's share of the block price: cost / squad (not rounded; show it with stats.ts fmtUnitPrice) */
   unitCost: number;
@@ -270,7 +270,7 @@ export interface UnitStats {
   priceParts: number;
   pricePower: number;
   priceSupport: number;
-  /** units per purchased block (grid.ts squadSize) */
+  /** units per purchased block (stats.ts squadFor: 16, 8 or 4 for light hulls by unit price, else 1) */
   squad: number;
   flying: boolean;
   isStatic: boolean;
@@ -400,6 +400,8 @@ export interface DeployAction {
   place: Placement[];
   /** uids of existing units to upgrade by one level (may repeat a uid to upgrade twice) */
   upgrade: number[];
+  /** uids of units placed in earlier rounds to sell back for SELL_REFUND of what was spent on them */
+  sell?: number[];
   /** setting changes for units placed in earlier rounds (spacing can't change once locked in) */
   configure?: UnitConfig[];
 }

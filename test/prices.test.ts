@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { computeStats, fmtUnitPrice, roundPrice } from '../src/shared/stats.ts';
-import { actionCost, applyDeploy, designCost, newMatch, newPlayer, placementValue, redactFor, upgradeCost, validateDeploy } from '../src/shared/match.ts';
+import { SELL_REFUND, actionCost, applyDeploy, designCost, newMatch, newPlayer, placementValue, redactFor, sellValue, upgradeCost, validateDeploy } from '../src/shared/match.ts';
 import { generateDesign, profile, type Role } from '../src/shared/ai.ts';
 import { designInfo } from '../src/client/ui/deckstats.ts';
 import { makeRng } from '../src/shared/rng.ts';
@@ -56,7 +56,7 @@ test('per-unit price x squad is the block price, and the garage breakdown rows a
   assert.equal(fmtUnitPrice(1234.5), '1235');
 });
 
-test('buying and upgrading charges exactly the shown price', () => {
+test('buying, upgrading and selling move exactly the shown supply', () => {
   for (const d of DESIGNS) {
     const cost = computeStats(d).cost;
     const a = { round: 1, place: [{ uid: 1, designId: d.id, x: 0, y: 0, level: 1, round: 1 }], upgrade: [] as number[] };
@@ -76,6 +76,15 @@ test('buying and upgrading charges exactly the shown price', () => {
     assert.equal(before - m.players[0].supply, shown, d.name);
     assert.equal(m.players[0].board[0].level, 3);
     assert.equal(placementValue(d, 3), cost + shown);
+    // selling it next round returns exactly the shown "Sell · +N"
+    m.round = 3; m.players[0].ready = false;
+    const back = sellValue(d, 3);
+    assert.equal(back, roundPrice((cost + shown) * SELL_REFUND));
+    const sell = { round: 3, place: [], upgrade: [], sell: [1] };
+    assert.equal(validateDeploy(m, 0, sell), null, d.name);
+    const pre = m.players[0].supply;
+    applyDeploy(m, 0, sell);
+    assert.equal(m.players[0].supply - pre, back, `${d.name}: sell refund`);
     assert.equal(computeStats(redactFor(m, 1).players[0].deck[0]).cost, cost, 'the opponent sees the same price');
   }
 });

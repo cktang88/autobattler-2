@@ -13,10 +13,11 @@
 //   perunit    unitCost x squad vs block cost              "≈N each" texts
 //   breakdown  priceParts + pricePower + priceSupport (x squad, rounded) vs block cost   garage Intel rows
 //   upgrade    upgradeCost(d, L) shown vs supply delta of a real upgrade (incl. two upgrades in one action)
+//   sell       "Sell · +N" (sellValue = 75% of placementValue) vs supply actually returned by a real sell
 
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { computeStats, fmtUnitPrice, roundPrice } from '../src/shared/stats.ts';
-import { actionCost, applyDeploy, designCost, newMatch, newPlayer, placementValue, redactFor, upgradeCost, validateDeploy } from '../src/shared/match.ts';
+import { SELL_REFUND, actionCost, applyDeploy, designCost, newMatch, newPlayer, placementValue, redactFor, sellValue, upgradeCost, validateDeploy } from '../src/shared/match.ts';
 import { generateDesign, profile, type Role } from '../src/shared/ai.ts';
 import { designInfo } from '../src/client/ui/deckstats.ts';
 import { makeRng } from '../src/shared/rng.ts';
@@ -88,6 +89,20 @@ for (const d of designs) {
     if (b2 - m.players[0].supply !== shown1 + shown2) flag('upgrade', `${tag}: charged ${b2 - m.players[0].supply} vs shown ${shown1}+${shown2}`);
     if (m.players[0].board[0].level !== 3) flag('upgrade', `${tag}: level ${m.players[0].board[0].level} after two upgrades`);
     if (placementValue(d, 3) !== cost + shown1 + shown2) flag('upgrade', `${tag}: placementValue ${placementValue(d, 3)} vs ${cost + shown1 + shown2}`);
+    // selling next round: the button shows "Sell · +sellValue(d, level)"
+    m.round = 3; m.players[0].ready = false;
+    const back = sellValue(d, 3);
+    if (back !== roundPrice((cost + shown1 + shown2) * SELL_REFUND)) flag('sell', `${tag}: sellValue ${back} vs ${SELL_REFUND} x invested`);
+    const sa = { round: 3, place: [], upgrade: [] as number[], sell: [1] };
+    const es = validateDeploy(m, 0, sa);
+    if (es) flag('sell', `${tag}: sell rejected: ${es}`);
+    else {
+      const b3 = m.players[0].supply;
+      if (actionCost(m, 0, sa) !== -back) flag('sell', `${tag}: actionCost ${actionCost(m, 0, sa)} vs -${back}`);
+      applyDeploy(m, 0, sa);
+      if (m.players[0].supply - b3 !== back) flag('sell', `${tag}: returned ${m.players[0].supply - b3} vs shown +${back}`);
+      if (m.players[0].board.length !== 0) flag('sell', `${tag}: still on the board after selling`);
+    }
   }
   // redacted / resumed copies price the same
   const rc = redactFor(m, 1).players[0].deck[0];
