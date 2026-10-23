@@ -2106,7 +2106,7 @@ export class FieldView {
           case 'rail': {
             const heavy = (mod?.caliber ?? 0.5) > 0.7;
             const huge = !!mod && moduleTier(mod) === 5;
-            const w = huge ? 0.5 : heavy ? 0.1 : 0.06;
+            const w = huge ? 0.5 : heavy ? 0.16 : 0.09;
             fx.beam('rail', pts, '#9fe8ff', w, huge ? 0.9 : heavy ? 0.5 : 0.35);
             // the hot line leaves a fading ion trail and rings of displaced air along its path
             fx.beam('ion', pts, '#8fdcff', w, huge ? 1.4 : heavy ? 0.9 : 0.6);

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 
 const R = (a: number, b: number) => a + Math.random() * (b - a);
+const _rc = new THREE.Color();
 /** light breeze the lingering smoke trails drift off with (world x, z per s) */
 const WIND_X = 0.22, WIND_Z = 0.09;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -33,6 +34,8 @@ export const RAMPS = {
   jam: [3.0, 2.2, 0.4, 1, 2.0, 1.1, 0.1, 0.8, 0.6, 0.2, 0, 0],
   /** gauss slug: blue-white */
   gauss: [1.8, 2.6, 4.0, 1, 0.8, 1.4, 3.0, 0.7, 0.2, 0.4, 1.2, 0],
+  /** rail muzzle / impact: white-hot, then electric blue */
+  railFlash: [4.0, 4.4, 5.0, 1, 1.4, 2.2, 4.4, 0.8, 0.25, 0.5, 1.6, 0],
   /** flak burst: oily black puffs */
   flakSmoke: [0.05, 0.05, 0.05, 0.8, 0.09, 0.09, 0.09, 0.6, 0.14, 0.14, 0.14, 0],
   /** rocket motor flame: orange, hot but not blown out */
@@ -1098,6 +1101,51 @@ export class Fx3D {
   }
 
   /* ----------------------------------------------------------------------------------- weapon signatures (trails) */
+
+  /** Railgun shot (s = weapon scale ~0.5 rail rifle .. 1 railgun, mega = spinal mass driver): a white-hot core inside a
+   *  wide electric-blue sheath that lingers and fades, a muzzle blast (flash, shockwave ring, sparks venting sideways
+   *  out of the rails), a thick corkscrew of ionised air along the path, and a heavy impact burst. Bigger guns kick
+   *  the camera. */
+  railShot(ax: number, ay: number, az: number, bx: number, by: number, bz: number, s: number, mega = false): void {
+    const h = this.hdr, k = mega ? 2.4 : 1;
+    const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l;
+    // core + sheath + afterglow
+    // (beams draw additively: the outer layers are dark blues that only add up to a glow around the white core)
+    _rc.setRGB(0.95, 0.97, 1);
+    this.beam(ax, ay, az, bx, by, bz, _rc, (0.035 + 0.03 * s) * k, 0.2 + 0.08 * k);
+    _rc.setRGB(0.22, 0.4, 0.95);
+    this.beam(ax, ay, az, bx, by, bz, _rc, (0.08 + 0.07 * s) * k, 0.32 + 0.12 * k);
+    _rc.setRGB(0.06, 0.12, 0.42);
+    this.beam(ax, ay, az, bx, by, bz, _rc, (0.17 + 0.13 * s) * k, 0.5 + 0.2 * k);
+    // muzzle blast: flash, ground shockwave, sparks venting sideways out of the rails
+    this.add.emit(ax, ay, az, 0, 0, 0, 0.12 + 0.05 * k, (0.35 + 0.5 * s) * k, 0.15, 0, 0, 0, 0, RAMPS.railFlash, h);
+    this.rings.add(ax, az, 0.08, 0.1 * s * k, (0.6 + 0.7 * s) * k, 0.28 + 0.1 * k, 0.12 * h, 0.22 * h, 0.5 * h);
+    const nv = this.lodN(Math.round((6 + 10 * s) * k));
+    for (let i = 0; i < nv; i++) {
+      const side = i & 1 ? 1 : -1, sp = R(3, 8) * k, fwd = R(-0.5, 1.5);
+      this.add.emit(ax, ay, az, (-nz * side * sp) + nx * fwd, R(0.2, 2), (nx * side * sp) + nz * fwd, R(0.12, 0.28), 0.06 + 0.04 * s, 0.015, 0, 2.5, -8, 3, RAMPS.gauss, h);
+    }
+    // ionised corkscrew + vapour puffs hanging on the line
+    this.railTrail(ax, ay, az, bx, by, bz, RAMPS.gauss, Math.min(1.6, s * 1.3 * k));
+    // electric crackle: short jagged arcs flickering along the slug's path (no end flares: there are several)
+    const len = Math.hypot(dx, by - ay, dz);
+    const na = Math.min(10, this.lodN(Math.round((2 + 3 * s) * k + len / 8)));
+    for (let i = 0; i < na && this.bolts.length < 560; i++) {
+      const t0 = Math.random() * 0.9, t1 = Math.min(1, t0 + R(1.2, 3) / Math.max(1, len));
+      const o0 = R(-0.18, 0.18) * k, o1 = R(-0.18, 0.18) * k;
+      const lf = R(0.12, 0.3);
+      this.bolts.push({
+        kind: 'bolt', ax: ax + dx * t0 - nz * o0, ay: ay + (by - ay) * t0 + R(-0.05, 0.15), az: az + dz * t0 + nx * o0,
+        bx: ax + dx * t1 - nz * o1, by: ay + (by - ay) * t1 + R(-0.05, 0.15), bz: az + dz * t1 + nx * o1,
+        r: 0.55, g: 0.75, b: 1, w: (0.02 + 0.015 * s) * k, life: lf, max: lf, seed: (Math.random() * 1e9) | 0, roll: -1, pts: [], wob: 0,
+      });
+    }
+    // impact: white flash, blue shock ring, spray of sparks along the line of fire, molten debris
+    this.add.emit(bx, by, bz, 0, 0, 0, 0.16 + 0.06 * k, (0.45 + 0.7 * s) * k, 0.2, 0, 0, 0, 0, RAMPS.railFlash, h * 1.1);
+    this.rings.add(bx, bz, 0.08, 0.12 * s * k, (0.7 + 0.9 * s) * k, 0.34 + 0.1 * k, 0.14 * h, 0.26 * h, 0.55 * h);
+    this.apHit(bx, by, bz, dx, dz, Math.min(2, (0.8 + s) * k), RAMPS.gauss);
+    this.trauma = Math.min(1, this.trauma + (mega ? 0.35 : 0.03 + 0.07 * s));
+  }
 
   /** rail slug path: an ionised streak of light puffs and sparkles left hanging along the line */
   railTrail(ax: number, ay: number, az: number, bx: number, by: number, bz: number, ramp: Ramp, s: number): void {

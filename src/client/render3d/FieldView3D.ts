@@ -145,7 +145,7 @@ function styleOf(id: string): WStyle {
   return st;
 }
 /** families whose beam / bolt event draws its own impact (their 'hit' only flares a shield) */
-const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd']);
+const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
 
 const _v3 = new THREE.Vector3();
 const _col = new THREE.Color();
@@ -1400,8 +1400,14 @@ export class FieldView3D implements BattleView {
           life += 0.1 * rk;
           if (rk > 0.4) fx.glow(sx, ay, sz, 0.2 + rk * 0.5, 0.14, RAMPS.molten);
         }
-        fx.beam(sx, ay, sz, end.x, by, end.y, col, w, life, bs.wob);
         const s = st.s;
+        if (st.fam === 'rail') {
+          // railguns get their own big signature (core + sheath + muzzle blast + ion corkscrew + impact + kick)
+          const def = MODULE_BY_ID.get(e.moduleId);
+          fx.railShot(sx, ay, sz, end.x, by, end.y, 0.4 + (def?.caliber ?? 0.5) * 0.7, def?.mount === 'XL'); // rail rifle 0.75, railgun ~1
+          break;
+        }
+        fx.beam(sx, ay, sz, end.x, by, end.y, col, w, life, bs.wob);
         switch (st.fam) {
           case 'laser': fx.burnHit(end.x, by, end.y, s, 0.8); break;
           case 'focus': fx.burnHit(end.x, by, end.y, s, 0.6 + 1.9 * rk); break;
@@ -1409,7 +1415,6 @@ export class FieldView3D implements BattleView {
           case 'slow': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.frost, 3); fx.frostHit(end.x, by, end.y, s); break;
           case 'disarm': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.jam, 4); fx.jamHit(end.x, by, end.y, s); break;
           case 'gravity': fx.beamMotes(end.x, by, end.y, sx, ay, sz, RAMPS.gravity, 5); break;
-          case 'rail': fx.railTrail(sx, ay, sz, end.x, by, end.y, RAMPS.gauss, s); break;
           case 'plasma': fx.railTrail(sx, ay, sz, end.x, by, end.y, RAMPS.plasma, s * 0.6); break;
           default: break;
         }
