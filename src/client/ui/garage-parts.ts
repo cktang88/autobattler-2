@@ -139,19 +139,21 @@ export function moduleEffects(mod: ModuleDef): string[] {
   return t;
 }
 
-/** Firing pattern text, e.g. "Clip: 6 rds, 2.0s reload", "Salvo ×4 every 4s", "Sustained". */
+/** Firing pattern + timing, e.g. "5-rd clip · 0.45 s/shot · 2.5 s reload", "Salvo ×4 · reloads 4.0 s",
+ *  "Sustained · 20 rds/s", "Single shot · reloads 1.5 s". Base numbers (before fire-rate utilities / spin-up). */
 export function firingText(mod: ModuleDef): string {
   if (mod.kind !== 'weapon') return '';
   const style = firingStyle(mod);
   const cd = mod.cooldown ?? 1;
-  const rds = mod.magazine && mod.reload ? `${mod.magazine} rds · ${mod.reload.toFixed(1)}s reload` : '';
+  const clip = mod.magazine && mod.reload ? `${mod.magazine}-rd clip · ${secs(cd)}/shot · ${secs(mod.reload)} reload` : '';
+  const spin = mod.spinUp ? ` · spin-up ${secs(mod.spinUp)}` : '';
   if (style === 'Salvo') {
     const n = (mod.burst ?? 1) * (mod.pellets ?? 1);
-    return `Salvo ×${n} every ${cd.toFixed(1)}s${rds ? ` · ${rds}` : ''}`;
+    return clip ? `Salvo ×${n} · ${clip}` : `Salvo ×${n} · reloads ${secs(cd)}`;
   }
-  if (style === 'Clip') return `Clip · ${rds}`;
-  if (style === 'Sustained') return 'Sustained';
-  return `Single shot · ${cd.toFixed(1)}s`;
+  if (style === 'Clip') return clip;
+  if (style === 'Sustained') return `Sustained · ${Math.round(1 / Math.max(0.05, cd))} rds/s${spin}`;
+  return `Single shot · reloads ${secs(cd)}`;
 }
 
 /** "Hitscan" / "Guided" label for perfect-accuracy weapons, else null. */
@@ -181,6 +183,8 @@ export function traverseDeg(mod: ModuleDef): number | null {
   return Math.round(turretTurnRate(mod) * 180 / Math.PI);
 }
 
+const secs = (s: number) => `${s < 1 ? s.toFixed(2).replace(/0$/, '') : s.toFixed(1)} s`;
+
 /** Compact key stats line for a module. */
 export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
   const out = h('span.g-modstats');
@@ -188,7 +192,11 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
   if (mod.kind === 'weapon') {
     stat('dps', fmt(weaponDps(mod), 0));
     stat('rng', mod.minRange ? `${Math.round(mod.minRange * METERS_PER_CELL)}–${fmtMeters(mod.range ?? 0)}` : fmtMeters(mod.range ?? 0));
-    if (mod.splash) stat('splash', fmtMeters(mod.splash));
+    const cd = mod.cooldown ?? 1;
+    if (mod.magazine && mod.reload) stat('reload', secs(mod.reload));
+    else if (firingStyle(mod) === 'Sustained') stat('rds/s', String(Math.round(1 / Math.max(0.05, cd))));
+    else stat('reload', secs(cd));
+    if (mod.splash) stat('AoE', fmtMeters(mod.splash));
     if (mod.ap) stat('ap', `${Math.round(mod.ap * 100)}%`);
     out.append(targetBadges(mod));
   } else if (mod.kind === 'armor') {
@@ -222,7 +230,7 @@ export function moduleTooltip(mod: ModuleDef): string {
     const tg = [mod.targetsGround ? 'ground' : '', mod.targetsAir ? 'air' : ''].filter(Boolean).join(' + ');
     lines.push(`DPS ${fmt(weaponDps(mod), 0)} · Range ${mod.minRange ? Math.round(mod.minRange * METERS_PER_CELL) + '–' : ''}${fmtMeters(mod.range ?? 0)} · Targets ${tg}`);
     const extra: string[] = [`${mod.damage}${mod.pellets && mod.pellets > 1 ? '×' + mod.pellets : ''}${mod.burst && mod.burst > 1 ? ' ×' + mod.burst : ''} dmg / ${mod.cooldown}s`];
-    if (mod.splash) extra.push(`splash ${fmtMeters(mod.splash)}`);
+    if (mod.splash) extra.push(`AoE radius ${fmtMeters(mod.splash)}`);
     if (mod.ap) extra.push(`${Math.round(mod.ap * 100)}% armor pierce`);
     lines.push(extra.join(' · '));
     lines.push(`${firingText(mod)} · Accuracy ${accuracyLabel(mod) ?? accuracyRating(mod) + '/100'}`);

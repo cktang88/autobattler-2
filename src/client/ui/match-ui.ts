@@ -5,7 +5,8 @@ import { h } from '../app.ts';
 import * as kit from './kit.ts';
 import { sfx } from '../audio.ts';
 import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
-import { computeStats, firingStyle, levelMult, type DefaultOrders } from '../../shared/stats.ts';
+import { computeStats, levelMult, type DefaultOrders } from '../../shared/stats.ts';
+import { firingText } from './garage-parts.ts';
 import { fireMods, mountDps, unitDps } from './deckstats.ts';
 import { blockDims, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
 import { hullK } from '../../shared/mountgeo.ts';
@@ -373,8 +374,8 @@ export function statCard(o: StatCardOpts): HTMLElement {
       const range = (m.range ?? 0) * (melee ? 1 : st.rangeMult);
       const g = !!m.targetsGround, a = !!m.targetsAir;
       const dps = mountDps(m, fm, lv); // incl. fire-rate / reload utilities, like the sim
-      tags.push(firingStyle(m));
-      if (m.splash) tags.push(`Splash ${fmtMeters(m.splash)}`);
+      tags.push(firingText(m));
+      if (m.splash) tags.push(`AoE ${fmtMeters(m.splash)} radius`);
       if (m.pierce) tags.push('Pierce');
       if (m.chain) tags.push(`Chain ×${m.chain}`);
       if (m.stun) tags.push(`Paralyse ${Math.round(m.stun * PARA_PER_STUN)}`);

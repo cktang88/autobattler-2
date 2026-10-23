@@ -1384,7 +1384,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       );
       const per = `${m.damage ?? 0}${m.pellets && m.pellets > 1 ? ` ×${m.pellets}` : ''}${m.burst && m.burst > 1 ? ` ×${m.burst} burst` : ''}`;
       specs.push(row('Damage', per), row('Firing', firingText(m)), row('Accuracy', accMeter(m)));
-      if (m.splash) specs.push(row('Splash', fmtMeters(m.splash)));
+      if (m.splash) specs.push(row('AoE radius', fmtMeters(m.splash)));
       if (m.ap) specs.push(row('Armor pierce', `${Math.round(m.ap * 100)}%`));
     } else {
       if (m.heal) keys.push(kstat('Repair', fmt(m.heal, 0), 'hp/s', 'hl'), kstat('Range', String(Math.round((m.range ?? 0) * METERS_PER_CELL)), 'm'));
