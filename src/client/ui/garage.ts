@@ -20,6 +20,7 @@ import * as kit from './kit.ts';
 import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
+import { addFolder, folderOf, loadFolders, moveToFolder, removeFolder, renameFolder, saveFolders, FOLDER_NAME_MAX, type Folder } from '../folders.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
   apBadge, damageKindBadges, showDamageRules,
@@ -108,6 +109,42 @@ function sortRoster(list: Design[], sort: RosterSort, deck: string[], stats: (d:
   return [...list].sort(cmp[sort]);
 }
 
+/** Roster grouping (remembered): the player's own folders, or an automatic split by class / size / role. */
+type RosterGroupBy = 'folders' | 'domain' | 'size' | 'role';
+const ROSTER_GROUPS: { value: RosterGroupBy; label: string; hint: string }[] = [
+  { value: 'folders', label: 'My folders', hint: 'Your own folders: drag designs in, or use a row\'s folder button' },
+  { value: 'domain', label: 'Unit class', hint: 'Ground · Jet · Helicopter' },
+  { value: 'size', label: 'Size', hint: 'Light to Titan' },
+  { value: 'role', label: 'Role', hint: 'Air role, or the job of the main weapon' },
+];
+const LS_GROUP = 'garage.groupBy';
+const loadGroupBy = (): RosterGroupBy => {
+  try { const v = localStorage.getItem(LS_GROUP); if (v && ROSTER_GROUPS.some((x) => x.value === v)) return v as RosterGroupBy; } catch { /* storage unavailable */ }
+  return 'folders';
+};
+const FOLDER_SVG = '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/>';
+const FOLDER_PLUS_SVG = `${FOLDER_SVG}<path d="M12 11v6M9 14h6"/>`;
+const TRAY_SVG = '<path d="M3 13h5l1.5 3h5l1.5-3h5"/><path d="M5.5 5h13L21 13v6H3v-6z"/>';
+const PEN_SVG = '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>';
+const GROUP_SVG = '<path d="M4 6h16M4 12h10M4 18h6"/>';
+/** option value of "New folder…" in a row's folder menu (cannot clash with a folder id) */
+const NEW_FOLDER = '+new';
+
+/** One coarse role per design for the "Role" grouping: aircraft by air role, emplacements together, everything else
+ *  by the first role of its strongest weapon (unarmed designs by their support / defense modules). */
+function designRole(d: Design, s: UnitStats | null): { key: string; label: string; order: number } {
+  const ar = s?.flying ? airRole(d) : null;
+  if (ar) return { key: `air-${ar}`, label: AIR_ROLE_INFO[ar].label, order: 100 + Object.keys(AIR_ROLE_INFO).indexOf(ar) };
+  if (s?.isStatic) return { key: 'static', label: 'Emplacement', order: 200 };
+  const mods = d.mounts.map((m) => (m ? MODULE_BY_ID.get(m) : undefined)).filter((m): m is ModuleDef => !!m);
+  const weapons = mods.filter((m) => m.kind === 'weapon');
+  const main = weapons.sort((a, b) => weaponDps(b) - weaponDps(a) || RANK[b.mount] - RANK[a.mount])[0];
+  const roles = main ? moduleRoles(main) : mods.flatMap(moduleRoles);
+  const r = main && (main.range ?? 0) >= 10 ? 'artillery' : roles[0];
+  const i = r ? ROLES.findIndex((x) => x.id === r) : -1;
+  return i >= 0 ? { key: `role-${r}`, label: ROLES[i].name, order: i } : { key: 'other', label: 'Other', order: 300 };
+}
+
 const LS_TAB = 'garage.tab';
 const loadTab = (): Tab => {
   try { const t = localStorage.getItem(LS_TAB); if (t && TABS.some((x) => x.id === t)) return t as Tab; } catch { /* storage unavailable */ }
@@ -186,6 +223,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const roster = (keep: string | null = selectedId) => sortRoster(designs, rosterSort, deck, statsOf)
     .filter((d) => !hideStarters || !STARTER_IDS.has(d.id) || d.id === keep);
   const first = sortRoster(designs, rosterSort, deck, statsOf).find((d) => !hideStarters || !STARTER_IDS.has(d.id)) ?? designs[0];
+  /** roster folders (client-side only) and how the roster is grouped */
+  const folders = loadFolders();
+  let groupBy: RosterGroupBy = loadGroupBy();
+  /** folder whose name is being edited inline */
+  let renaming: string | null = null;
+  /** design being dragged onto a folder (HTML drag and drop) */
+  let dragDesign: string | null = null;
+  /** folder a new / duplicated design is filed into when it is first saved */
+  let pendingFolder: string | null = null;
   let selectedId: string | null = first?.id ?? null;
   let saved: Design | null = first ? clone(first) : null;
   let draft: Design = saved ? clone(saved) : blankDesign(designs.map((d) => d.name));
@@ -244,7 +290,6 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const tabsEl = h('nav.g-tabs', { role: 'tablist', 'aria-label': 'Parts' });
   const bayBody = h('div.g-baybody', { role: 'tabpanel' });
   const inspector = h('div.g-inspector', { 'aria-live': 'polite' });
-  const listCanvases: { c: HTMLCanvasElement; get: () => Design }[] = [];
 
   nameInput.addEventListener('input', () => {
     draft.name = nameInput.value.slice(0, NAME_MAX);
@@ -307,9 +352,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         h('div.g-plate-h', null,
           h('h2', null, 'Roster'),
           h('div.g-list-btns', null,
-            h('button.g-iconbtn', { type: 'button', title: 'New design', 'aria-label': 'New design', onclick: () => newDesign() }, icon('plus')),
-            h('button.g-iconbtn', { type: 'button', title: 'Duplicate', 'aria-label': 'Duplicate design', onclick: () => duplicate() }, icon('copy')),
-            h('button.g-iconbtn.danger', { type: 'button', title: 'Delete', 'aria-label': 'Delete design', onclick: () => remove() }, icon('trash')),
+            h('button.g-btn.small.g-lbtn', { type: 'button', title: 'New design: start a blank design of the current unit class', onclick: () => newDesign() }, icon('plus'), 'New'),
+            h('button.g-btn.small.g-lbtn', { type: 'button', title: 'Duplicate: copy the selected design into a new one you can edit (the original stays as it is)', onclick: () => duplicate() }, icon('copy'), 'Duplicate'),
+            h('button.g-btn.small.g-lbtn.g-ldel', { type: 'button', title: 'Delete the selected design (asks first)', onclick: () => remove() }, icon('trash'), 'Delete'),
           ),
           toolsEl,
         ),
@@ -351,6 +396,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     saved = d ? clone(d) : null;
     draft = d ? clone(d) : blankDesign(designs.map((x) => x.name), dom);
     autoName = !d;
+    pendingFolder = null;
     activeSlot = null;
     // a part picked for the previous design would grey out every socket of this one that it doesn't fit
     delete pinned.weapons; delete pinned.systems;
@@ -358,7 +404,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     pan.x = pan.y = 0; // new design: recentre (zoom level is kept)
     nameInput.value = draft.name;
     update();
-    listEl.querySelector('.g-item.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    revealSelected();
+    listEl.querySelector('.g-row.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   async function select(id: string) {
@@ -368,10 +415,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     load(designs.find((d) => d.id === id) ?? null);
   }
 
+  /** folder of the selected saved design (a new / duplicated design is filed next to it) */
+  const currentFolder = () => (selectedId ? folderOf(folders, selectedId) : pendingFolder);
+
   async function newDesign() {
     if (!(await guard())) return;
     sfx('click');
+    const into = currentFolder();
     load(null, designDomain(draft));
+    pendingFolder = into;
     nameInput.focus();
     nameInput.select();
   }
@@ -387,7 +439,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const names = new Set(designs.map((d) => d.name));
     let name = `${base} Mk${n}`.slice(0, NAME_MAX);
     while (names.has(name) && n < 99) name = `${base.slice(0, NAME_MAX - 5)} Mk${++n}`;
+    const into = currentFolder();
     load(null, designDomain(src));
+    pendingFolder = into;
     draft = { ...src, id: newDesignId(), name, mounts: [...src.mounts], ...(src.behavior ? { behavior: { ...src.behavior } } : {}) };
     nameInput.value = draft.name;
     update();
@@ -410,6 +464,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const before = roster();
     const idx = before.findIndex((d) => d.id === selectedId);
     deleteDesign(selectedId);
+    moveToFolder(folders, selectedId, null);
+    saveFolders(folders);
     designs = allDesigns();
     deck = activeDeck().map((d) => d.id);
     sfx('click');
@@ -426,6 +482,13 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (!saveDesign(draft)) { sfx('error'); app.toast('Could not save design', 'error'); return false; }
     designs = allDesigns();
     let msg = `Saved "${draft.name}"`;
+    if (isNew && pendingFolder) {
+      moveToFolder(folders, draft.id, pendingFolder);
+      saveFolders(folders);
+      const f = folders.folders.find((x) => x.id === pendingFolder);
+      if (f) msg += ` · in ${f.name}`;
+    }
+    if (isNew) pendingFolder = null;
     if (isNew && deck.length < DECK_SIZE && !deck.includes(draft.id)) {
       deck = [...deck, draft.id];
       setDeck(deck);
@@ -850,78 +913,272 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     h('span.g-class-txt', null, h('b', null, DOMAIN_SHORT[dm.id]), h('small', null, dm.desc)))));
   }
 
-  function listItem(d: Design, opts: { selected: boolean; unsaved: boolean; isDraft: boolean }) {
-    const s = statsOf(d);
-    const inDeck = deck.includes(d.id);
-    const canvas = h('canvas.g-mini', { 'aria-hidden': 'true' });
-    listCanvases.push({ c: canvas, get: () => (opts.selected ? draft : d) });
-    const toggle = opts.isDraft
-      ? h('span.g-decktog.na', { title: 'Save to add to deck' }, 'new')
-      : h('button.g-decktog', {
-        type: 'button', class: inDeck ? 'in' : null, 'aria-pressed': String(inDeck), 'data-fk': `deck-${d.id}`,
-        title: inDeck ? 'In deck — click to remove' : 'Add to deck', 'aria-label': `${inDeck ? 'Remove' : 'Add'} ${d.name} ${inDeck ? 'from' : 'to'} deck`,
-        onclick: (e: Event) => { e.stopPropagation(); toggleDeck(d.id); },
-      }, icon(inDeck ? 'check' : 'plus'), h('span', null, 'Deck'));
-    return h('div.g-item', { role: 'listitem', class: [opts.selected ? 'sel' : '', inDeck ? 'indeck' : ''].join(' ') },
-      h('button.g-item-main', {
-        type: 'button', 'data-fk': `item-${d.id}`, 'aria-current': opts.selected ? 'true' : null,
-        onclick: () => (opts.isDraft ? undefined : select(d.id)),
-      },
-      canvas,
-      h('span.g-item-txt', null,
-        h('span.g-item-name', null, h('span.g-item-nm', { title: d.name || 'Untitled' }, d.name || 'Untitled'), opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null),
-        h('span.g-item-meta', null,
-          h('span.g-tag.dom', { class: `d-${designDomain(d)}`, title: DOMAINS.find((x) => x.id === designDomain(d))?.name ?? '' }, DOMAIN_BADGE[designDomain(d)]),
-          h('span.g-size', null, s ? (s.squad > 1 ? `${s.fw}×${s.fh}` : designSizeLabel(s)) : '?'),
-          s && s.squad > 1 ? h('span.g-tag.squad', { title: `One purchase deploys a squad of ${s.squad} units` }, `×${s.squad}`) : null,
-          h('span.g-item-cost', { title: s && s.squad > 1 ? `Supply per block of ${s.squad} (≈${fmtUnitPrice(s.unitCost)} per unit)` : 'Supply price' }, icon('cost'), s ? String(s.cost) : '–'),
-          s?.flying ? h('span.g-tag.air', null, 'AIR') : null,
-          s?.isStatic ? h('span.g-tag.static', null, 'FIX') : null,
-        ),
-      )),
-      toggle,
-    );
+  // ---------------- roster: compact rows in folders / groups ----------------
+  type RosterGroup = { key: string; label: string; folder?: Folder; tip?: string; items: Design[] };
+
+  /** The listed designs split by the chosen grouping (each group keeps the sort order). Key '' = no header. */
+  function rosterGroups(shown: Design[]): RosterGroup[] {
+    if (groupBy === 'folders') {
+      if (!folders.folders.length) return [{ key: '', label: '', items: shown }];
+      const byId = new Map(folders.folders.map((f) => [f.id, { key: `folder:${f.id}`, label: f.name, folder: f, items: [] as Design[] }] as const));
+      const unfiled: RosterGroup = { key: 'unfiled', label: 'Unfiled', tip: 'designs in no folder', items: [] };
+      for (const d of shown) (byId.get(folderOf(folders, d.id) ?? '') ?? unfiled).items.push(d);
+      return [...byId.values(), unfiled];
+    }
+    const groups = new Map<string, RosterGroup & { order: number }>();
+    const add = (key: string, label: string, order: number, d: Design, tip?: string) => {
+      let g = groups.get(key);
+      if (!g) groups.set(key, (g = { key, label, order, tip, items: [] }));
+      g.items.push(d);
+    };
+    for (const d of shown) {
+      const s = statsOf(d);
+      if (groupBy === 'domain') {
+        const dom = designDomain(d);
+        const i = DOMAINS.findIndex((x) => x.id === dom);
+        add(`domain:${dom}`, DOMAIN_SHORT[dom], i, d, DOMAINS[i]?.desc);
+      } else if (groupBy === 'size') {
+        const z = s?.size ?? 0;
+        add(`size:${z}`, SIZE_CLASSES[z - 1] ?? 'Unknown', z || 99, d, z ? `${footprintLabel(z)} hulls` : undefined);
+      } else {
+        const r = designRole(d, s);
+        add(`role:${r.key}`, r.label, r.order, d);
+      }
+    }
+    return [...groups.values()].sort((a, b) => a.order - b.order);
   }
 
-  /** Sort + "hide starters" controls above the roster (rebuilt only when they change, so an open list survives updates). */
-  function renderTools(focus?: 'sort' | 'hide') {
+  const isCollapsed = (g: RosterGroup) => (g.folder ? g.folder.collapsed : folders.collapsed.includes(g.key));
+  function setCollapsed(g: RosterGroup, on: boolean) {
+    if (g.folder) g.folder.collapsed = on;
+    else folders.collapsed = on ? [...new Set([...folders.collapsed, g.key])] : folders.collapsed.filter((k) => k !== g.key);
+    saveFolders(folders);
+  }
+  /** Open the group holding the selected design (after a programmatic selection change). */
+  function revealSelected() {
+    if (!selectedId) return;
+    const g = rosterGroups(roster()).find((x) => x.items.some((d) => d.id === selectedId));
+    if (g?.key && isCollapsed(g)) { setCollapsed(g, false); renderList(); }
+  }
+
+  function newFolder(fileId?: string) {
+    const f = addFolder(folders);
+    if (!f) { sfx('error'); app.toast('Folder limit reached', 'error'); return; }
+    if (fileId) moveToFolder(folders, fileId, f.id);
+    saveFolders(folders);
+    sfx('click');
+    renaming = f.id;
+    renderList();
+    listEl.querySelector('.g-frename')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function fileDesign(id: string, folderId: string | null) {
+    if (folderOf(folders, id) === folderId) return;
+    moveToFolder(folders, id, folderId);
+    const f = folders.folders.find((x) => x.id === folderId);
+    // keep the design being edited in view
+    if (f?.collapsed && id === selectedId) f.collapsed = false;
+    saveFolders(folders);
+    sfx('click');
+    const name = (id === selectedId ? draft.name : designs.find((x) => x.id === id)?.name) || 'Design';
+    app.toast(`Moved "${name}" to ${f ? f.name : 'Unfiled'}`);
+    renderList();
+  }
+
+  async function deleteFolder(f: Folder) {
+    const n = designs.filter((d) => folderOf(folders, d.id) === f.id).length;
+    if (n) {
+      const r = await modal(el, 'Delete folder?', `"${f.name}" holds ${n} design${n === 1 ? '' : 's'}. The designs are kept: they move to Unfiled.`, [
+        { id: 'del', label: 'Delete folder', kind: 'danger' },
+        { id: 'cancel', label: 'Cancel', kind: 'ghost' },
+      ]);
+      if (r !== 'del') return;
+    }
+    removeFolder(folders, f.id);
+    if (pendingFolder === f.id) pendingFolder = null;
+    saveFolders(folders);
+    sfx('click');
+    renderList();
+  }
+
+  function renameField(f: Folder): HTMLInputElement {
+    const input = h('input.g-frename', { type: 'text', maxlength: FOLDER_NAME_MAX, 'aria-label': 'Folder name', spellcheck: 'false', autocomplete: 'off' });
+    input.value = f.name;
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      renaming = null;
+      if (ok && renameFolder(folders, f.id, input.value)) saveFolders(folders);
+      renderList();
+      (listEl.querySelector(`[data-fk="grp-folder:${f.id}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    requestAnimationFrame(() => { if (input.isConnected) { input.focus(); input.select(); } });
+    return input;
+  }
+
+  function endRosterDrag() {
+    dragDesign = null;
+    listEl.classList.remove('dragging');
+    for (const x of listEl.querySelectorAll('.drop, .dragsrc')) x.classList.remove('drop', 'dragsrc');
+  }
+
+  function groupEl(g: RosterGroup, rows: HTMLElement[]): HTMLElement {
+    const collapsed = isCollapsed(g);
+    const f = g.folder;
+    // folder mode: every group is a drop target (a folder, or Unfiled = null)
+    const target = groupBy === 'folders' ? (f?.id ?? null) : undefined;
+    const head = f && renaming === f.id ? renameField(f) : h('button.g-fhead-main', {
+      type: 'button', 'aria-expanded': String(!collapsed), 'data-fk': `grp-${g.key}`,
+      title: `${collapsed ? 'Expand' : 'Collapse'} ${g.label}${g.tip ? ` (${g.tip})` : ''}`,
+      onclick: () => { setCollapsed(g, !collapsed); sfx('click'); renderList(); },
+    },
+    h('span.g-fchev', null, icon('chevron')),
+    svgIcon(f ? FOLDER_SVG : g.key === 'unfiled' ? TRAY_SVG : GROUP_SVG),
+    h('span.g-fname', null, g.label),
+    h('span.g-fcount', { title: `${g.items.length} design${g.items.length === 1 ? '' : 's'}` }, String(g.items.length)));
+    const tools = f && renaming !== f.id ? h('span.g-ftools', null,
+      h('button.g-fbtn', { type: 'button', title: `Rename folder "${f.name}"`, 'aria-label': `Rename folder ${f.name}`, 'data-fk': `fren-${f.id}`, onclick: () => { renaming = f.id; renderList(); } }, svgIcon(PEN_SVG)),
+      h('button.g-fbtn.danger', { type: 'button', title: `Delete folder "${f.name}" (its designs move to Unfiled)`, 'aria-label': `Delete folder ${f.name}`, onclick: () => deleteFolder(f) }, icon('trash')),
+    ) : null;
+    const empty = target === undefined ? 'Empty' : f ? 'Empty: drag designs here' : 'Nothing unfiled';
+    const wrap = h('div.g-folder', { class: [collapsed ? 'collapsed' : '', f ? 'user' : ''].join(' ') },
+      h('div.g-fhead', null, head, tools),
+      collapsed ? null : h('div.g-fbody', { role: 'list', 'aria-label': g.label }, ...(rows.length ? rows : [h('p.g-fempty', null, empty)])));
+    if (target !== undefined) {
+      wrap.addEventListener('dragover', (e) => {
+        if (!dragDesign) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        wrap.classList.add('drop');
+      });
+      wrap.addEventListener('dragleave', (e) => { if (!wrap.contains(e.relatedTarget as Node | null)) wrap.classList.remove('drop'); });
+      wrap.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const id = dragDesign;
+        endRosterDrag();
+        if (id) fileDesign(id, target);
+      });
+    }
+    return wrap;
+  }
+
+  /** One compact roster row: name, class tag, size, price, folder menu, deck toggle. */
+  function rowEl(d: Design, opts: { selected: boolean; unsaved: boolean; isDraft: boolean }) {
+    const s = statsOf(d);
+    const inDeck = deck.includes(d.id);
+    const dom = designDomain(d);
+    const name = d.name || 'Untitled';
+    const canDrag = !opts.isDraft && groupBy === 'folders' && folders.folders.length > 0;
+    const costTip = s && s.squad > 1 ? `${s.cost} supply per block of ${s.squad} (≈${fmtUnitPrice(s.unitCost)} per unit)` : s ? `${s.cost} supply` : 'not legal yet';
+    const main: HTMLButtonElement = h('button.g-row-main', {
+      type: 'button', 'data-fk': `item-${d.id}`, 'aria-current': opts.selected ? 'true' : null, draggable: canDrag ? 'true' : null,
+      title: `${name}\n${DOMAIN_SHORT[dom]} · ${s ? designSizeLabel(s) : '?'} · ${costTip}${canDrag ? '\nDrag onto a folder to file it' : ''}`,
+      onclick: () => (opts.isDraft ? undefined : select(d.id)),
+      ondragstart: (e: DragEvent) => {
+        dragDesign = d.id;
+        e.dataTransfer?.setData('text/plain', name);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        listEl.classList.add('dragging');
+        main.closest('.g-row')?.classList.add('dragsrc');
+      },
+      ondragend: () => endRosterDrag(),
+    },
+    h('span.g-row-nm', null, name),
+    opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null,
+    h('span.g-row-tags', null,
+      h('span.g-tag.dom', { class: `d-${dom}` }, DOMAIN_BADGE[dom]),
+      s && s.squad > 1 ? h('span.g-tag.squad', null, `×${s.squad}`) : h('span.g-size', null, s ? designSizeLabel(s) : '?'),
+      h('span.g-item-cost', null, icon('cost'), s ? String(s.cost) : '–')));
+    const move = opts.isDraft ? null : kit.select<string>({
+      value: folderOf(folders, d.id) ?? '', label: `Move ${name} to folder`, title: 'Move to folder', className: 'g-rmove', fk: `move-${d.id}`,
+      options: [
+        { value: '', label: 'Unfiled', hint: 'In no folder', icon: svgIcon(TRAY_SVG) },
+        ...folders.folders.map((f) => ({ value: f.id, label: f.name, icon: svgIcon(FOLDER_SVG) })),
+        { value: NEW_FOLDER, label: 'New folder…', hint: 'Create one and file this design in it', icon: svgIcon(FOLDER_PLUS_SVG) },
+      ],
+      onChange: (v) => (v === NEW_FOLDER ? newFolder(d.id) : fileDesign(d.id, v || null)),
+    });
+    const deckBtn = opts.isDraft
+      ? h('span.g-rdeck.na', { title: 'New design: save it to add it to the deck' }, 'new')
+      : h('button.g-rdeck', {
+        type: 'button', class: inDeck ? 'in' : null, 'aria-pressed': String(inDeck), 'data-fk': `deck-${d.id}`,
+        title: inDeck ? 'In deck: click to remove' : 'Not in deck: click to add', 'aria-label': `${inDeck ? 'Remove' : 'Add'} ${name} ${inDeck ? 'from' : 'to'} deck`,
+        onclick: (e: Event) => { e.stopPropagation(); toggleDeck(d.id); },
+      }, icon(inDeck ? 'check' : 'plus'));
+    return h('div.g-row', { role: 'listitem', class: [opts.selected ? 'sel' : '', inDeck ? 'indeck' : '', opts.isDraft ? 'draft' : ''].join(' ') },
+      main, move, deckBtn);
+  }
+
+  /** Group / sort / folder / hide-starters controls above the roster (rebuilt only when they change, so an open list survives updates). */
+  function renderTools(focus?: 'sort' | 'hide' | 'group' | 'folder') {
     const starters = designs.filter((d) => STARTER_IDS.has(d.id)).length;
     toolsEl.replaceChildren(
-      kit.select({
-        value: rosterSort, label: 'Sort designs', prefix: 'Sort', options: ROSTER_SORTS, className: 'g-sort', fk: 'roster-sort',
-        onChange: (v) => {
-          rosterSort = v;
-          try { localStorage.setItem(LS_SORT, v); } catch { /* ignore */ }
-          sfx('click');
-          renderTools('sort');
-          renderList();
-          listEl.querySelector('.g-item.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        },
-      }),
-      ...(starters ? [kit.toggle({
-        label: 'Hide starters', on: hideStarters, className: 'g-hidestart', fk: 'roster-hide',
-        title: `Hide the ${starters} built-in starter designs (the one you're editing stays listed)`,
-        onChange: (v) => {
-          hideStarters = v;
-          try { localStorage.setItem(LS_HIDE_STARTERS, v ? '1' : '0'); } catch { /* ignore */ }
-          sfx('click');
-          renderTools('hide');
-          renderList();
-        },
-      })] : []),
+      h('div.g-tools-row', null,
+        kit.select({
+          value: groupBy, label: 'Group designs', prefix: 'Group', options: ROSTER_GROUPS, className: 'g-sort', fk: 'roster-group',
+          title: 'Group the roster: your own folders, or automatically by class, size or role',
+          onChange: (v) => {
+            groupBy = v;
+            try { localStorage.setItem(LS_GROUP, v); } catch { /* ignore */ }
+            sfx('click');
+            renderTools('group');
+            renderList();
+            revealSelected();
+            listEl.querySelector('.g-row.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          },
+        }),
+        kit.select({
+          value: rosterSort, label: 'Sort designs', prefix: 'Sort', options: ROSTER_SORTS, className: 'g-sort', fk: 'roster-sort',
+          title: 'Order of the designs inside each group',
+          onChange: (v) => {
+            rosterSort = v;
+            try { localStorage.setItem(LS_SORT, v); } catch { /* ignore */ }
+            sfx('click');
+            renderTools('sort');
+            renderList();
+            listEl.querySelector('.g-row.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          },
+        }),
+      ),
+      h('div.g-tools-row', null,
+        groupBy === 'folders' ? h('button.g-btn.small.g-lbtn', {
+          type: 'button', 'data-fk': 'roster-folder', title: 'New folder: then drag designs onto it, or file a design with the folder button on its row',
+          onclick: () => newFolder(),
+        }, svgIcon(FOLDER_PLUS_SVG), 'New folder') : null,
+        starters ? kit.toggle({
+          label: 'Hide starters', on: hideStarters, className: 'g-hidestart', fk: 'roster-hide',
+          title: `Hide the ${starters} built-in starter designs (the one you're editing stays listed)`,
+          onChange: (v) => {
+            hideStarters = v;
+            try { localStorage.setItem(LS_HIDE_STARTERS, v ? '1' : '0'); } catch { /* ignore */ }
+            sfx('click');
+            renderTools('hide');
+            renderList();
+          },
+        }) : null,
+      ),
     );
     if (focus) (toolsEl.querySelector(`[data-fk="roster-${focus}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
   function renderList() {
-    listCanvases.length = 0;
     const items: HTMLElement[] = [];
-    // an unsaved new design sits on top, then the roster in the chosen order (by saved content, so it doesn't jump while editing)
-    if (selectedId === null) items.push(listItem(draft, { selected: true, unsaved: true, isDraft: true }));
+    // an unsaved new design sits on top, then the roster in the chosen grouping and order (by saved content, so it doesn't jump while editing)
+    if (selectedId === null) items.push(rowEl(draft, { selected: true, unsaved: true, isDraft: true }));
     const shown = roster();
-    for (const d of shown) {
+    const row = (d: Design) => {
       const sel = d.id === selectedId;
-      items.push(listItem(sel ? draft : d, { selected: sel, unsaved: sel && dirty(), isDraft: false }));
+      return rowEl(sel ? draft : d, { selected: sel, unsaved: sel && dirty(), isDraft: false });
+    };
+    for (const g of rosterGroups(shown)) {
+      if (!g.key) items.push(...g.items.map(row));
+      else items.push(groupEl(g, isCollapsed(g) ? [] : g.items.map(row)));
     }
     const hidden = designs.length - shown.length;
     if (hidden > 0) {
@@ -1824,9 +2081,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           if (geom) { drawGrid(geom); placeSockets(); }
         }
       }
-      if (frame++ % 2 === 0) {
-        for (const { c, get } of listCanvases) if (fit(c)) drawUnitPreview(c, get(), { side: 0, time: t, angle: -Math.PI / 2, still: true });
-      }
+      frame++;
     } catch (err) {
       // a renderer hiccup must never kill the garage
       if (frame < 3) console.warn('preview render failed', err);

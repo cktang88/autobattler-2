@@ -108,7 +108,7 @@
 /* ---------- layout ---------- */
 .garage .g-body {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 232px minmax(0, 1fr) 468px; grid-template-areas: 'list bench bay';
+  display: grid; grid-template-columns: 272px minmax(0, 1fr) 468px; grid-template-areas: 'list bench bay';
 }
 .garage .g-list { grid-area: list; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: rgba(0, 0, 0, 0.22); box-shadow: inset -2px 0 0 var(--ink); display: flex; flex-direction: column; }
 .garage .g-bench { grid-area: bench; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; overflow-y: auto; }
@@ -121,39 +121,11 @@
 }
 .garage .g-plate-h h2 { margin: 0; font-size: 1rem; letter-spacing: 0.2em; color: var(--dim); display: flex; align-items: center; gap: 8px; }
 .garage .g-plate-h h2::before { content: ''; width: 4px; height: 16px; background: var(--amber); }
-.garage .g-list-btns { display: flex; gap: 4px; }
 
 /* ---------- roster ---------- */
-.garage .g-items { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
-.garage .g-empty { color: var(--dim); padding: 12px; }
-.garage .g-item {
-  position: relative; display: flex; align-items: stretch;
-  background: var(--plate2); box-shadow: inset 0 0 0 2px var(--ink), inset 0 2px 0 var(--edge);
-}
-.garage .g-item:hover { background: var(--plate3); }
-.garage .g-item.sel { background: #2a2a20; box-shadow: inset 0 0 0 2px var(--ink), inset 4px 0 0 var(--amber), inset 0 0 0 3px rgba(255, 178, 30, 0.35); }
-.garage .g-item-main { flex: 1; min-width: 0; display: flex !important; align-items: center; gap: 9px !important; padding: 6px 6px 6px 9px !important; cursor: pointer; }
-.garage .g-item-main:focus-visible { outline-offset: -3px; }
-.garage .g-mini {
-  width: 48px; height: 48px; flex: none;
-  background: radial-gradient(circle at 50% 55%, rgba(99, 213, 255, 0.14), transparent 70%), #0a141b;
-  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 12px rgba(0, 0, 0, 0.6);
-}
-.garage .g-item-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.garage .g-item-name { font-family: var(--head); font-weight: 700; font-size: 1.04rem; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
 .garage .g-dot { width: 7px; height: 7px; background: var(--amber); flex: none; transform: rotate(45deg); }
-.garage .g-item-meta { display: flex; align-items: center; gap: 6px; font-size: 0.91rem; color: var(--dim); }
 .garage .g-item-cost { display: inline-flex; align-items: center; gap: 3px; color: var(--txt); font-family: var(--head); font-weight: 700; font-size: 0.95rem; }
 .garage .g-item-cost .g-ico, .garage .g-costv .g-ico, .garage .g-tile-cost .g-ico { color: var(--gold); }
-.garage .g-decktog {
-  flex: none; width: 44px; display: flex !important; flex-direction: column; align-items: center; justify-content: center !important; gap: 2px !important;
-  color: var(--dim2); cursor: pointer; font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.91rem !important; letter-spacing: 0.12em !important; text-transform: uppercase !important;
-  box-shadow: inset 2px 0 0 var(--ink); background: rgba(0, 0, 0, 0.25) !important;
-}
-.garage .g-decktog .g-ico { width: 16px; height: 16px; }
-.garage .g-decktog:hover { color: var(--txt); }
-.garage .g-decktog.in { color: var(--teal); }
-.garage .g-decktog.na { cursor: default; color: var(--amber); font-size: 0.92rem; font-family: var(--head); text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; justify-content: center; }
 
 /* ---------- small badges ---------- */
 .garage .g-size {
@@ -630,8 +602,7 @@
 
 /* ---------- medium: narrower side panels ---------- */
 @media (max-width: 1360px) {
-  .garage .g-body { grid-template-columns: 200px minmax(0, 1fr) 420px; }
-  .garage .g-mini { width: 40px; height: 40px; }
+  .garage .g-body { grid-template-columns: 250px minmax(0, 1fr) 420px; }
 }
 @media (max-width: 1360px) {
   .garage .g-stage .g-stage-hint { display: none; }
@@ -641,8 +612,6 @@
   .garage .g-body { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'list list' 'bench bay'; }
   .garage .g-list { overflow: visible; box-shadow: inset 0 -2px 0 var(--ink); flex-direction: row; align-items: center; }
   .garage .g-plate-h { position: static; box-shadow: none; background: none; flex-direction: column; align-items: flex-start; padding: 6px 4px 6px 12px; }
-  .garage .g-items { flex-direction: row; overflow-x: auto; padding: 6px 8px; flex: 1; min-width: 0; }
-  .garage .g-item { flex: 0 0 auto; width: 200px; }
   .garage .g-tiles { grid-template-columns: 1fr; }
 }
 /* phone: single column */
@@ -693,7 +662,6 @@
 .garage .g-readout { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .garage .g-load { font-size: 0.92rem; }
 .garage .g-lslot-name { font-size: 1rem; }
-.garage .g-item-meta { font-size: 0.92rem; }
 .garage .g-tab { font-size: 0.92rem !important; height: 54px; }
 .garage .g-tab .g-ico { width: 20px; height: 20px; }
 
@@ -815,15 +783,10 @@
 
 /* review fixes */
 .garage .g-bay, .garage .g-body { overflow: clip; }
-.garage .g-item-txt { flex: 1; }
-.garage .g-item-name { min-width: 0; }
-.garage .g-item-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.garage .g-item-meta { min-width: 0; flex-wrap: wrap; row-gap: 2px; }
-.garage .g-item-meta .g-size { white-space: nowrap; flex: none; }
 .garage .g-lslot { flex: 1 1 170px; max-width: none; }
 .garage .g-lslot-name { font-size: 0.95rem; }
 /* (not below 1101px: that would undo the two-column roster-strip layout, which comes earlier in the file) */
-@media (max-width: 1360px) and (min-width: 1101px) { .garage .g-body { grid-template-columns: 218px minmax(0, 1fr) 420px; } }
+@media (max-width: 1360px) and (min-width: 1101px) { .garage .g-body { grid-template-columns: 250px minmax(0, 1fr) 420px; } }
 
 /* ---- unit class step ---- */
 .garage .g-classes { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px; align-items: stretch; flex: none; }
@@ -917,20 +880,104 @@
 .garage .g-dr-ico.dk-explosive { color: #ff9a4a; }
 .garage .g-dr-ico.ml { color: #ff6b4a; }
 
-/* ---------- roster sort / hide starters ---------- */
-.garage .g-plate-h { flex-wrap: wrap; }
-.garage .g-list-tools { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
-.garage .g-list-tools .g-sort { flex: 1 1 auto; min-width: 0; min-height: 34px; font-size: 0.94rem; }
-.garage .g-list-tools .g-hidestart { min-height: 34px; font-size: 0.92rem; }
+/* ---------- roster: labeled toolbar, group / sort controls, folder tree of compact rows ---------- */
+.garage .g-plate-h { flex-wrap: wrap; row-gap: 8px; }
+.garage .g-list-btns { flex: 1 0 100%; display: flex; gap: 4px; }
+.garage .g-btn.g-lbtn { flex: 1 1 auto; min-width: 0; gap: 5px; padding: 0 8px; letter-spacing: 0.05em; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.garage .g-btn.g-lbtn .g-ico { width: 15px; height: 15px; color: var(--amber); }
+.garage .g-btn.g-ldel .g-ico { color: var(--dim); }
+.garage .g-btn.g-ldel:hover:not(:disabled) { background: #6d1f1a; }
+.garage .g-btn.g-ldel:hover:not(:disabled) .g-ico { color: #fff; }
+.garage .g-list-tools { flex: 1 0 100%; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.garage .g-tools-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.garage .g-tools-row:empty { display: none; }
+.garage .g-tools-row .g-sort { flex: 1 1 150px; min-width: 0; min-height: 32px; font-size: 0.94rem; }
+.garage .g-tools-row .g-hidestart { min-height: 32px; font-size: 0.92rem; }
+.garage .g-tools-row .g-lbtn { flex: 0 1 auto; }
 .garage .g-hidden-note {
   background: none; border: 1px dashed var(--plate4); clip-path: none; color: var(--dim2); font-size: 0.92rem;
-  padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; font-family: inherit;
+  padding: 8px; margin-top: 6px; min-height: 0; text-transform: none; letter-spacing: 0; font-family: inherit;
 }
 .garage .g-hidden-note:hover:not(:disabled) { background: var(--plate2); color: var(--dim); }
+
+.garage .g-items { display: flex; flex-direction: column; gap: 2px; padding: 6px 6px 12px; }
+.garage .g-empty { color: var(--dim); padding: 12px; }
+/* a design row: name · class · size · price | folder menu | deck toggle */
+.garage .g-row { position: relative; display: flex; align-items: stretch; min-height: 32px; background: var(--plate2); box-shadow: inset 0 0 0 1px var(--ink); }
+.garage .g-row:hover { background: var(--plate3); }
+.garage .g-row.sel { background: #2a2a20; box-shadow: inset 3px 0 0 var(--amber), inset 0 0 0 1px rgba(255, 178, 30, 0.5); }
+.garage .g-row.dragsrc { opacity: 0.45; }
+.garage .g-row-main { flex: 1; min-width: 0; display: flex !important; align-items: center; gap: 6px !important; padding: 3px 4px 3px 9px !important; cursor: pointer; }
+.garage .g-row-main:focus-visible { outline-offset: -2px; }
+.garage .g-row-nm { flex: 1; min-width: 0; font-family: var(--head); font-weight: 700; font-size: 0.96rem; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.garage .g-row.sel .g-row-nm { color: var(--amber2); }
+.garage .g-row-tags { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.garage .g-row-tags .g-tag, .garage .g-row-tags .g-size { font-size: 0.8rem; height: 16px; line-height: 16px; padding: 0 3px; letter-spacing: 0.05em; }
+.garage .g-row-tags .g-item-cost { min-width: 32px; justify-content: flex-end; font-size: 0.92rem; }
+.garage .g-row-tags .g-item-cost .g-ico { width: 13px; height: 13px; }
+.garage .g-rdeck { flex: none; width: 28px; display: flex !important; align-items: center; justify-content: center !important; color: var(--dim2); cursor: pointer; box-shadow: inset 1px 0 0 var(--ink); background: rgba(0, 0, 0, 0.22) !important; }
+.garage .g-rdeck .g-ico { width: 15px; height: 15px; }
+.garage .g-rdeck:hover { color: var(--txt); }
+.garage .g-rdeck.in { color: var(--teal); background: rgba(53, 214, 191, 0.12) !important; }
+.garage .g-rdeck.na { cursor: default; color: var(--amber); font-family: var(--head); font-weight: 700; font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; }
+/* folder menu: icon only, on the selected (or keyboard-focused) row so the other rows keep their width for the name */
+.garage button.k-select.g-rmove { flex: none; width: 26px; min-height: 0; padding: 0; gap: 0; justify-content: center; background: transparent; box-shadow: none; color: var(--dim2); display: none; }
+.garage button.k-select.g-rmove:hover:not(:disabled) { background: var(--plate4); color: var(--amber); }
+.garage .g-rmove .k-select-v, .garage .g-rmove .k-chev { display: none; }
+.garage .g-rmove .k-select-ico { color: inherit; }
+.garage .g-rmove .g-ico { width: 15px; height: 15px; }
+.garage .g-row.sel button.k-select.g-rmove, .garage .g-row:focus-within button.k-select.g-rmove, .garage button.k-select.g-rmove.open { display: inline-flex; }
+
+/* folder / group header + body */
+.garage .g-folder { display: flex; flex-direction: column; gap: 2px; }
+.garage .g-folder + .g-folder, .garage .g-row + .g-folder { margin-top: 4px; }
+.garage .g-fhead { display: flex; align-items: center; min-height: 30px; }
+.garage .g-fhead-main {
+  flex: 1; min-width: 0; display: flex !important; align-items: center; gap: 6px !important; padding: 4px 4px 4px 2px !important; cursor: pointer;
+  font-family: var(--head) !important; font-weight: 700 !important; font-size: 0.95rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: var(--dim) !important;
+}
+.garage .g-fhead-main:hover { color: var(--txt) !important; }
+.garage .g-fhead-main:focus-visible { outline-offset: -2px; }
+.garage .g-fchev { display: inline-flex; flex: none; transition: transform 0.12s; color: var(--dim2); }
+.garage .g-fchev .g-ico { width: 14px; height: 14px; }
+.garage .g-folder.collapsed .g-fchev { transform: rotate(-90deg); }
+.garage .g-fhead-main > .g-ico { width: 16px; height: 16px; color: var(--dim2); }
+.garage .g-folder.user .g-fhead-main > .g-ico { color: var(--amber); }
+.garage .g-fname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.garage .g-fcount { margin-left: auto; flex: none; padding: 0 6px; font-size: 0.82rem; line-height: 16px; letter-spacing: 0.04em; color: var(--dim2); background: var(--plate); box-shadow: inset 0 0 0 1px var(--plate4); }
+.garage .g-ftools { display: inline-flex; gap: 1px; opacity: 0; }
+.garage .g-fhead:hover .g-ftools, .garage .g-ftools:focus-within { opacity: 1; }
+@media (hover: none) { .garage .g-ftools { opacity: 1; } }
+.garage .g-fbtn { display: inline-flex !important; align-items: center; justify-content: center !important; width: 26px; height: 26px; color: var(--dim2); cursor: pointer; }
+.garage .g-fbtn:hover:not(:disabled) { color: var(--amber); background: var(--plate3) !important; }
+.garage .g-fbtn.danger:hover:not(:disabled) { color: var(--red); }
+.garage .g-fbtn .g-ico { width: 15px; height: 15px; }
+.garage .g-fbody { display: flex; flex-direction: column; gap: 2px; margin-left: 7px; padding-left: 5px; box-shadow: inset 1px 0 0 var(--plate4); }
+.garage .g-fempty { margin: 0; padding: 5px 8px; font-size: 0.88rem; color: var(--dim2); font-style: italic; }
+.garage .g-frename {
+  flex: 1; min-width: 0; height: 28px; min-height: 0; margin: 1px 0; padding: 0 8px; border: 0; border-radius: 0;
+  font-family: var(--head); font-weight: 700; font-size: 0.95rem; letter-spacing: 0.06em; color: var(--txt); background: var(--ink); box-shadow: inset 0 0 0 2px var(--amber);
+}
+.garage .g-frename:focus { outline: none; }
+/* drag a row onto a folder */
+.garage .g-items.dragging .g-folder { outline: 1px dashed var(--plate4); outline-offset: -1px; }
+.garage .g-items.dragging .g-folder.drop { outline: 2px solid var(--amber); background: rgba(255, 178, 30, 0.08); }
+
+/* roster panel across the top (tablet) / stacked (phone): a scrolling box, rows flow into columns when wide */
 @media (max-width: 1100px) {
-  .garage .g-list-tools { flex: none; flex-direction: column; align-items: stretch; width: 150px; }
-  .garage .g-hidden-note { flex: 0 0 auto; align-self: center; }
+  .garage .g-list { flex-direction: column; align-items: stretch; overflow-y: auto; max-height: 36vh; }
+  .garage .g-plate-h { position: sticky; flex-direction: row; align-items: center; padding: 8px 10px 8px 12px; background: #12171b; box-shadow: 0 2px 0 var(--ink); }
+  .garage .g-list-btns { flex: 0 1 auto; }
+  .garage .g-list-tools { flex: 1 1 360px; flex-direction: row; flex-wrap: wrap; }
+  .garage .g-tools-row { flex: 1 1 auto; }
+  .garage .g-items { display: block; columns: 300px; column-gap: 10px; overflow: visible; padding: 6px 8px 10px; }
+  .garage .g-items > * { break-inside: avoid; margin-bottom: 2px; }
+  .garage .g-items > .g-folder { margin-bottom: 6px; }
+  .garage .g-folder + .g-folder, .garage .g-row + .g-folder { margin-top: 0; }
+  .garage .g-hidden-note { width: 100%; }
 }
 @media (max-width: 760px) {
-  .garage .g-list-tools { flex: 1 0 100%; flex-direction: row; width: auto; }
+  .garage .g-list { max-height: 52vh; }
+  .garage .g-list-btns { flex: 1 0 100%; }
+  .garage .g-list-tools { flex: 1 0 100%; flex-direction: column; }
 }
