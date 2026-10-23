@@ -140,7 +140,7 @@ export function vsaiScreen(app: App): Screen {
     const st = i.st;
     const el = h('div.db-card', {
       class: [where === 'coll' && inDeck ? 'in' : '', st.flying ? 'air' : ''].join(' '),
-      role: 'button', tabindex: '0',
+      role: 'button', tabindex: '0', 'data-fk': `${where}-${i.d.id}`,
       title: where === 'coll' ? (inDeck ? 'In your deck · click or drag back to remove' : 'Click or drag into your deck') : 'Drag out (or click ✕) to remove · drop another design here to replace',
       onclick: () => (where === 'deck' ? undefined : inDeck ? remove(i.d.id) : add(i.d.id)),
       onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (where === 'coll') (inDeck ? remove(i.d.id) : add(i.d.id)); } if ((e.key === 'Delete' || e.key === 'Backspace') && where === 'deck') remove(i.d.id); },
@@ -235,10 +235,14 @@ export function vsaiScreen(app: App): Screen {
   }
 
   function render() {
+    // cards are rebuilt: keyboard focus moves to the same card's replacement
+    const ae = document.activeElement as HTMLElement | null;
+    const fk = ae && (collHost.contains(ae) || deckHost.contains(ae)) ? ae.getAttribute('data-fk') : null;
     previews.length = 0;
     renderColl();
     renderDeck();
     renderStats();
+    if (fk) (collHost.querySelector<HTMLElement>(`[data-fk="${CSS.escape(fk)}"]`) ?? deckHost.querySelector<HTMLElement>(`[data-fk="${CSS.escape(fk)}"]`))?.focus({ preventScroll: true });
     requestAnimationFrame(() => requestAnimationFrame(() => { for (const p of previews) paintPreview(p.c, p.d, 0); }));
   }
 

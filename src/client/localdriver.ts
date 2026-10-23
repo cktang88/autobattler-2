@@ -133,9 +133,17 @@ export class LocalDriver implements MatchDriver {
       console.warn('AI deploy rejected:', aiErr, ai);
       ai = { round: m.round, place: [], upgrade: [] };
     }
-    applyDeploy(m, 0, structuredClone(a));
-    if (!m.players[1].ready) applyDeploy(m, 1, ai);
-    resolveRound(m, Date.now());
+    // the rules mutate the match in place: if anything throws (a sim bug), roll back to the state before this
+    // submit so the player can retry instead of being stuck with both sides marked ready and the supply spent
+    const before = structuredClone(m);
+    try {
+      applyDeploy(m, 0, structuredClone(a));
+      if (!m.players[1].ready) applyDeploy(m, 1, ai);
+      resolveRound(m, Date.now());
+    } catch (e) {
+      this.match = before;
+      throw e;
+    }
     this.save();
     const view = this.state();
     for (const cb of [...this.subs]) {
