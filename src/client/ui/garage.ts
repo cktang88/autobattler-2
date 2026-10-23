@@ -1096,8 +1096,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     h('span.g-row-nm', null, name),
     opts.unsaved ? h('i.g-dot', { title: 'Unsaved changes' }) : null,
     h('span.g-row-tags', null,
-      h('span.g-tag.dom', { class: `d-${dom}` }, DOMAIN_BADGE[dom]),
-      s && s.squad > 1 ? h('span.g-tag.squad', null, `×${s.squad}`) : h('span.g-size', null, s ? designSizeLabel(s) : '?'),
+      // only aircraft get a class tag (everything else is ground) and only squads a count tag: no footprint sizes
+      dom !== 'ground' ? h('span.g-tag.dom', { class: `d-${dom}` }, DOMAIN_BADGE[dom]) : null,
+      s && s.squad > 1 ? h('span.g-tag.squad', null, `×${s.squad}`) : null,
       h('span.g-item-cost', null, icon('cost'), s ? String(s.cost) : '–')));
     const move = opts.isDraft ? null : kit.select<string>({
       value: folderOf(folders, d.id) ?? '', label: `Move ${name} to folder`, title: 'Move to folder', className: 'g-rmove', fk: `move-${d.id}`,
