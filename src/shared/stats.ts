@@ -103,6 +103,38 @@ const SHELTER_FROM = 10;
 const SHELTER_SPAN = 10;
 const RANGE_CAP = 2.8;
 
+// ---------------------------------------------------------------------------------------------
+// Damage rules (shared by the sim and every UI text):
+//   1. Shields (module shields and dome shields) soak each hit first, at full strength: armour and armour
+//      penetration don't matter against a shield.
+//   2. Whatever gets past the shield hits the hull. Hull armour takes a flat amount off every hit (armour 10 = -10
+//      per hit, never below 15% of the hit), so many small hits lose far more to armour than a few big ones.
+//   3. Armour penetration comes in three tiers: none, half (ignores half the armour) and full (ignores all of it).
+//   4. Damage types: explosive (shells, rockets, missiles, bombs) is cut by reactive armour; energy (beams, lasers,
+//      lightning, rails, flame, plasma) by mirror coating; kinetic (bullets, melee) by neither.
+// ---------------------------------------------------------------------------------------------
+
+export type ApTier = 'none' | 'half' | 'full';
+export const AP_TIERS: Record<ApTier, { value: number; label: string; short: string; desc: string }> = {
+  none: { value: 0, label: 'No penetration', short: 'AP none', desc: "Full armour applies: every hit loses the target's armour value." },
+  half: { value: 0.5, label: 'Half penetration', short: 'AP half', desc: "Ignores half the target's armour." },
+  full: { value: 1, label: 'Full penetration', short: 'AP full', desc: "Ignores the target's armour completely." },
+};
+/** Penetration tier of a weapon (parts only use 0 / 0.5 / 1; anything else rounds to the nearest tier). */
+export function apTier(mod: Pick<ModuleDef, 'ap'>): ApTier {
+  const a = mod.ap ?? 0;
+  return a >= 0.75 ? 'full' : a >= 0.25 ? 'half' : 'none';
+}
+export type DamageKind = 'kinetic' | 'explosive' | 'energy';
+/** Damage types of a weapon (plasma orbs are both explosive and energy). */
+export function damageKinds(mod: Pick<ModuleDef, 'projectile' | 'category'>): DamageKind[] {
+  const k = mod.projectile;
+  if (k === 'shell' || k === 'rocket' || k === 'missile' || k === 'arc') return ['explosive'];
+  if (k === 'orb') return mod.category === 'energy' ? ['energy', 'explosive'] : ['explosive'];
+  if (k === 'beam' || k === 'lightning' || k === 'rail' || k === 'flame') return ['energy'];
+  return ['kinetic'];
+}
+
 /** Fraction of raw damage that gets through the reference armor mix (sim damage formula). */
 export function armorEfficiency(damage: number, ap: number): number {
   let sum = 0;
@@ -319,7 +351,8 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
     if (mod.cloak === 'phantom') ehpMult *= eh(1.5);
   }
   offense = Math.max(offense, 5);
-  let ehp = (hp + 1.2 * shield * shieldCal + reactiveHp) * (1 + armor / 15) * ehpMult;
+  // shields soak hits at full strength (armour doesn't help them); armour multiplies only the hull's worth
+  let ehp = ((hp + reactiveHp) * (1 + armor / 15) + 1.2 * shield * shieldCal) * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   // long reach shelters a fragile hull: artillery behind a front line is rarely shot, so a paper-thin carriage with a

@@ -165,7 +165,21 @@ function moduleDesigns(): TestDesign[] {
       const melee = mod.projectile === 'melee';
       const f = (x: string | null) => (mod.targetsGround === false ? null : x); // anti-air-only designs stay anti-air-only
       // mount classes: S (light), M (medium), L (giant), XL (titan)
-      if (mod.mount === 'S') {
+      if (melee && mod.mount !== 'XL') {
+        // melee only fits mounts near the hull edge (stats.ts meleeSlots): brawler hulls that have them
+        if (mod.mount === 'S') {
+          add(`t-${m}-a`, m, false, '', 'mantis', 'legs', [m, m]);
+          add(`t-${m}-b`, m, false, '', 'mantis', 'hover', [m, null]);
+          add(`t-${m}-c`, m, false, '', 'strider', 'jumpjets', ['plateM', m, m]);
+        } else if (mod.mount === 'M') {
+          add(`t-${m}-a`, m, false, '', 'crab', 'treads', [m, m, 'plateL']);
+          add(`t-${m}-b`, m, false, '', 'crab', 'hover', [m, null, null]);
+          add(`t-${m}-c`, m, false, '', 'scorpion', 'treads', ['plateM', m, m]);
+        } else {
+          add(`t-${m}-a`, m, false, '', 'titan', 'megatracks', ['plateT', m, 'plateM', 'plateM', 'plateM']);
+          add(`t-${m}-b`, m, false, '', 'titan', 'titanlegs', [null, m, null, null, null]);
+        }
+      } else if (mod.mount === 'S') {
         add(`t-${m}-a`, m, false, '', 'raider', melee ? 'hover' : 'halftrack', [m, null]);
         add(`t-${m}-b`, m, false, '', 'raider', melee ? 'jumpjets' : 'legs', [m, m]);
         add(`t-${m}-c`, m, false, '', melee ? 'scout' : 'drone', melee ? 'hover' : 'rotor', [m]);

@@ -152,7 +152,8 @@ export interface ModuleDef {
   projectileSpeed?: number;
   /** splash radius in cells (0 = single target) */
   splash?: number;
-  /** armor pierce 0..1 (fraction of target armor ignored) */
+  /** armour penetration tier: 0 (none), 0.5 (half: ignores half the target's armour) or 1 (full: ignores all of it).
+   *  Only these three values are used (see AP_TIERS / apTier in stats.ts); shields ignore penetration entirely. */
   ap?: number;
   /** random aim error in cells at max range (0 = pinpoint). Hitscan beams/lightning/rail never miss;
    *  homing missiles track their target; every other projectile flies to where the target WAS when fired

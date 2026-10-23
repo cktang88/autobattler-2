@@ -6,7 +6,7 @@
 
 import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
-import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { computeStats, damageKinds, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -104,6 +104,9 @@ const FLANK_TURN_IN = 1.3; // flankers turn in once the goal is within this many
 const ESCORT_NEAR = 3; // cells: escorts try to stay this close to the escorted block
 const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will chase a threat
 const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
+/** units armed only with melee weapons sprint this much faster while closing on an enemy (crossing the killing zone
+ *  of guns that reach 20+ m is what made brawlers useless) */
+export const MELEE_SPRINT = 1.35;
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
 /** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
@@ -377,11 +380,9 @@ function kiteMountOf(wpns: (Wpn | null)[], mount: number): number {
 
 /** Damage class of a weapon for reactive armor / energy resist. */
 function damageClass(def: ModuleDef): number {
-  const k = def.projectile;
-  if (k === 'shell' || k === 'rocket' || k === 'missile' || k === 'arc') return CLS_EXPLOSIVE;
-  if (k === 'orb') return def.category === 'energy' ? CLS_ENERGY | CLS_EXPLOSIVE : CLS_EXPLOSIVE;
-  if (k === 'beam' || k === 'lightning' || k === 'rail' || k === 'flame') return CLS_ENERGY;
-  return 0;
+  let c = 0;
+  for (const k of damageKinds(def)) c |= k === 'explosive' ? CLS_EXPLOSIVE : k === 'energy' ? CLS_ENERGY : 0;
+  return c;
 }
 
 interface Proj extends SimProjectile {
@@ -1461,6 +1462,7 @@ export class Battle {
   /** Damage one round is expected to deal to `t` after armour (shields count as hp, see doomed). */
   private expectedHit(t: SimUnit, raw: number, ap: number, airBonus: number): number {
     const r = t.flying ? raw * airBonus : raw;
+    if (t.shield > 0 || t.auraShield > 0) return r; // shields soak hits at full strength
     return Math.max(r * MIN_DMG_FRAC, r - t.stats.armor * (1 - ap));
   }
 
@@ -1828,12 +1830,9 @@ export class Battle {
       if (fx.burn) this.ignite(t, fx.burn.dps * fxMult, fx.burn.duration, side, this.dmgSrc, moduleId);
     }
     if (t.flying) raw *= airBonus;
-    if (cls) {
-      if ((cls & CLS_ENERGY) && T.energyResist > 0) raw *= 1 - T.energyResist;
-      if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { raw *= REACTIVE_MULT; t.reactive--; }
-    }
-    const effArmor = t.stats.armor * (1 - ap);
-    let dmg = Math.max(raw * MIN_DMG_FRAC, raw - effArmor);
+    // damage rules (stats.ts): shields soak the hit first at full strength (armour and penetration don't matter);
+    // what gets through hits the hull, where reactive armour / mirror coating and then flat armour apply
+    let dmg = raw;
     let dealt = 0;
     let shieldHit = false;
     if (t.shield > 0) {
@@ -1849,6 +1848,11 @@ export class Battle {
       dmg -= a;
       dealt += a;
       shieldHit = true;
+    }
+    if (dmg > 0) {
+      if ((cls & CLS_ENERGY) && T.energyResist > 0) dmg *= 1 - T.energyResist;
+      if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { dmg *= REACTIVE_MULT; t.reactive--; }
+      dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - t.stats.armor * (1 - ap));
     }
     if (dmg > 0) {
       const a = Math.min(t.hp, dmg);
@@ -2387,7 +2391,8 @@ export class Battle {
     const diff = Math.abs(angDiff(u.angle, want));
     let f = diff >= Math.PI / 2 ? 0 : Math.cos(diff);
     if (u.flying) f = Math.max(f, 0.3); // rotors can drift sideways
-    const sp = Math.min(I.speed * (1 - u.slow) * f * DT, d - stopDist * 0.5);
+    const sprint = I.meleeOnly && goalId >= 0 && this.units[goalId].side !== u.side ? MELEE_SPRINT : 1;
+    const sp = Math.min(I.speed * sprint * (1 - u.slow) * f * DT, d - stopDist * 0.5);
     if (sp <= 0) return;
     if (u.flying) {
       // rotors slide toward the goal directly; body heading follows

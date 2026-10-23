@@ -21,6 +21,7 @@ import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStat
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
+  apBadge, damageKindBadges, showDamageRules,
   designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
 } from './garage-parts.ts';
 
@@ -1191,6 +1192,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
       });
+      // penetration + damage type at a glance on weapon tiles
+      if (m.kind === 'weapon') t.querySelector('.g-ptile-sub')?.append(' ', apBadge(m), ' ', damageKindBadges(m));
       if (fh) armDrag(t, () => ({ mod: m.id, from: null }));
       return t;
     };
@@ -1392,7 +1395,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const per = `${m.damage ?? 0}${m.pellets && m.pellets > 1 ? ` ×${m.pellets}` : ''}${m.burst && m.burst > 1 ? ` ×${m.burst} burst` : ''}`;
       specs.push(row('Damage', per), row('Firing', firingText(m)), row('Accuracy', accMeter(m)));
       if (m.splash) specs.push(row('AoE radius', fmtMeters(m.splash)));
-      if (m.ap) specs.push(row('Armor pierce', `${Math.round(m.ap * 100)}%`));
+      specs.push(row('Armour penetration', apBadge(m, true)), row('Damage type', damageKindBadges(m, true)));
     } else {
       if (m.heal) keys.push(kstat('Repair', fmt(m.heal, 0), 'hp/s', 'hl'), kstat('Range', String(Math.round((m.range ?? 0) * METERS_PER_CELL)), 'm'));
       if (m.shield) keys.push(kstat('Shield', String(m.shield), '', 'hl'));
@@ -1420,10 +1423,14 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]), h('span.g-sockbtn-l', null, here ? 'Mounted' : occ ? `Replace ${occ.name}` : 'Empty'));
     });
     return [
-      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
+      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null,
+        ...(m.kind === 'weapon' ? [apBadge(m), damageKindBadges(m, true)] : [])], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
-      h('div.g-rules', null, h('div.g-rules-h', null, 'How it works'), h('ul', null, ...moduleRules(m).map((t) => h('li', null, t)))),
+      h('div.g-rules', null, h('div.g-rules-h', null, 'How it works'), h('ul', null, ...moduleRules(m).map((t) => h('li', null, t))),
+        m.kind === 'weapon' || m.shield || m.armor || m.reactive || m.energyResist
+          ? h('button.g-more.g-dr-link', { type: 'button', onclick: () => { sfx('click'); showDamageRules(el); } }, icon('help'), 'How damage works: shields, armour, penetration')
+          : null),
       next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, lock ?? noFitReason(m) ?? 'Mount in'),
