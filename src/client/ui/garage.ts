@@ -1702,7 +1702,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         const gesture = zooming || extMoving || !!panDrag || now - lastZoomAt < 160;
         // a big hull zoomed in costs ~10 full-canvas blits per render: where that can't keep up (CPU-rastered canvas,
         // hi-dpi), pan/zoom gestures CSS-scale the last render and only re-render every few frames' worth of time, and an
-        // idle bench redraws at <= 10 fps (only the slow turret sway / rotors animate); a fast machine redraws every frame
+        // idle bench redraws at <= 10 fps (only rotors / glows animate); a fast machine redraws every frame
         const slow = drawCost > 24;
         const same = !!drawn && drawn.d === draft && drawn.w === preview.clientWidth && drawn.h === preview.clientHeight;
         const opts = { side: 0 as const, time: t, angle: -Math.PI / 2, minExtent: viewExt, still: true, zoom, pan, detailZoom };
@@ -1725,7 +1725,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         }
       }
       if (frame++ % 2 === 0) {
-        for (const { c, get } of listCanvases) if (fit(c)) drawUnitPreview(c, get(), { side: 0, time: t, angle: -Math.PI / 2 });
+        for (const { c, get } of listCanvases) if (fit(c)) drawUnitPreview(c, get(), { side: 0, time: t, angle: -Math.PI / 2, still: true });
       }
     } catch (err) {
       // a renderer hiccup must never kill the garage

@@ -32,6 +32,10 @@ export interface Turret {
   muzzles: THREE.Object3D[];
   /** spinning barrel cluster (gatling), saw disc or drill: rotated about its local X */
   spin?: THREE.Object3D;
+  /** spin rate (rad/s) of `spin` right now: kicked up by each shot, winding down to idleSpin between bursts */
+  spinV: number;
+  /** spin rate at rest: 0 for rotary barrels (a parked gatling holds still), a slow idle for saw discs / drills */
+  idleSpin: number;
   /** weapon fires fixed forward (aircraft hardpoints) */
   fixed: boolean;
   /** visual projectile style */
@@ -60,7 +64,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   const r = D / 2;
   const yaw = new THREE.Group(), pitch = new THREE.Group(), recoil = new THREE.Group();
   yaw.add(pitch); pitch.add(recoil);
-  const t: Turret = { yaw, pitch, recoil, muzzles: [], fixed, shot: 'tracer', rate: 0.5, r, tris: 0 };
+  const t: Turret = { yaw, pitch, recoil, muzzles: [], fixed, shot: 'tracer', rate: 0.5, r, tris: 0, spinV: 0, idleSpin: 0 };
   let spinG: THREE.Group | null = null;
   const C: WCtx = {
     b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
@@ -80,6 +84,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   const segK = S >= 4 ? 1 : 0.85;
   C.b.segK = C.p.segK = C.rc.segK = C.sp.segK = segK;
   const v = mod.visual;
+  if (MELEE.has(v)) t.idleSpin = t.spinV = 6;
   if (!fixed && v !== 'plate' && !MELEE.has(v)) deckRing(C);
 
   if (GUNS.has(v)) buildGun(C);
@@ -110,10 +115,17 @@ export function aimTurret(t: Turret, lx: number, lz: number, dt: number, rate = 
   return Math.abs(diff);
 }
 /** Kick the barrel assembly back (call on each shot) and relax it each frame with recoilRelax. */
-export function recoilKick(t: Turret): void { t.recoil.position.x = -t.r * 0.18; }
+export function recoilKick(t: Turret): void { t.recoil.position.x = -t.r * 0.18; t.spinV = 30; }
 export function recoilRelax(t: Turret, dt: number): void {
   t.recoil.position.x *= Math.max(0, 1 - dt * 9);
-  if (t.spin) t.spin.rotation.x += dt * (t.recoil.position.x < -0.01 ? 30 : 6);
+  if (t.spin) {
+    // rotary barrels spin at full rate while firing and wind down to rest after the burst (they used to turn at a
+    // constant 6 rad/s forever, so every parked minigun / gatling kept whirring)
+    if (t.recoil.position.x < -0.01) t.spinV = 30;
+    else t.spinV = t.idleSpin + (t.spinV - t.idleSpin) * Math.max(0, 1 - dt * 2.5);
+    if (Math.abs(t.spinV - t.idleSpin) < 0.05) t.spinV = t.idleSpin;
+    t.spin.rotation.x = (t.spin.rotation.x + dt * t.spinV) % (Math.PI * 2);
+  }
 }
 
 export { loft };
