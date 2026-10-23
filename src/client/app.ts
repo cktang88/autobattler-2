@@ -5,8 +5,8 @@ import type { MatchDriver } from './driver.ts';
 export type Route =
   | { name: 'menu' }
   | { name: 'garage' }
-  /** from: 'lobby' = deck picking for multiplayer (Done returns to the lobby instead of starting an AI match) */
-  | { name: 'vsai'; from?: 'lobby' }
+  /** from: 'lobby' / 'menu' = just the loadout (deck) editor: Done returns there instead of starting an AI match */
+  | { name: 'vsai'; from?: 'lobby' | 'menu' }
   | { name: 'lobby' }
   | { name: 'match'; driver: MatchDriver }
   | { name: 'settings' };

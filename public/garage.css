@@ -916,3 +916,21 @@
 .garage .g-dr-ico.ap-none { color: #f2b84b; }
 .garage .g-dr-ico.dk-explosive { color: #ff9a4a; }
 .garage .g-dr-ico.ml { color: #ff6b4a; }
+
+/* ---------- roster sort / hide starters ---------- */
+.garage .g-plate-h { flex-wrap: wrap; }
+.garage .g-list-tools { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.garage .g-list-tools .g-sort { flex: 1 1 auto; min-width: 0; min-height: 34px; font-size: 0.94rem; }
+.garage .g-list-tools .g-hidestart { min-height: 34px; font-size: 0.92rem; }
+.garage .g-hidden-note {
+  background: none; border: 1px dashed var(--plate4); clip-path: none; color: var(--dim2); font-size: 0.92rem;
+  padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; font-family: inherit;
+}
+.garage .g-hidden-note:hover:not(:disabled) { background: var(--plate2); color: var(--dim); }
+@media (max-width: 1100px) {
+  .garage .g-list-tools { flex: none; flex-direction: column; align-items: stretch; width: 150px; }
+  .garage .g-hidden-note { flex: 0 0 auto; align-self: center; }
+}
+@media (max-width: 760px) {
+  .garage .g-list-tools { flex: 1 0 100%; flex-direction: row; width: auto; }
+}

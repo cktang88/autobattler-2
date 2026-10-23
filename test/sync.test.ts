@@ -127,9 +127,42 @@ test('ensureSession: concurrent callers share one placeholder account; a login m
   assert.equal(a.playerId, b.playerId);
   net.logout();
   const p = net.ensureSession();
-  const named = await net.login('Named');
+  const named = (await net.signIn('Named', 'pass1')).session;
   await p;
   assert.equal(net.currentSession()?.name, 'Named');
   assert.equal(net.currentSession()?.auto, undefined);
+  assert.equal(net.currentSession()?.registered, true);
   assert.equal(named.playerId, net.currentSession()?.playerId);
+});
+
+test('sign in: a guest registering keeps its account; signing in to an existing account merges the guest garage', async () => {
+  // guest designs a unit, then registers: the same (upgraded) account, garage intact
+  storage.saveDesigns([D('g1')]);
+  await syncGarage();
+  const guestId = net.currentSession()!.playerId;
+  assert.equal(net.currentSession()!.auto, true);
+  const reg = await net.signIn('Merger', 'pw1234');
+  assert.equal(reg.status, 'registered');
+  assert.equal(reg.session.playerId, guestId);
+  await syncGarage();
+  assert.deepEqual(ids((await api('GET', '/api/garage')).garage.designs), ['g1']);
+  // a fresh device: its own guest garage, then signs in to the account -> union of both, on both sides
+  mem.clear();
+  net.logout();
+  storage.saveDesigns([D('g2')]);
+  await syncGarage();
+  assert.notEqual(net.currentSession()!.playerId, guestId);
+  const again = await net.signIn('merger', 'pw1234');
+  assert.equal(again.status, 'signed-in');
+  assert.equal(again.session.playerId, guestId);
+  await syncGarage();
+  assert.deepEqual(ids(storage.loadDesigns()).sort(), ['g1', 'g2']);
+  assert.deepEqual(ids((await api('GET', '/api/garage')).garage.designs).sort(), ['g1', 'g2']);
+  // wrong password: rejected, and the current session is not dropped
+  await assert.rejects(net.signIn('Merger', 'nope'), /wrong password/i);
+  assert.equal(net.currentSession()?.playerId, guestId);
+  // signing out keeps the local garage
+  net.logout();
+  assert.equal(net.currentSession(), null);
+  assert.deepEqual(ids(storage.loadDesigns()).sort(), ['g1', 'g2']);
 });

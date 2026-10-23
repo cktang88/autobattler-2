@@ -3,8 +3,10 @@
 import type { DeployAction, Design, MatchState, Side } from '../shared/types.ts';
 import type { MatchDriver } from './driver.ts';
 
-/** `auto`: created silently so the garage can be stored server-side; the lobby still asks for a callsign. */
-export interface Session { playerId: string; name: string; token: string; auto?: boolean }
+/** `auto`: a guest placeholder created silently so the garage can be stored server-side.
+ *  `registered`: signed in with a username + password (the account works on any device). A session with neither is
+ *  a callsign from before passwords existed: signing in with that name and a password claims it. */
+export interface Session { playerId: string; name: string; token: string; auto?: boolean; registered?: boolean }
 export interface MatchSummary {
   id: string;
   status: MatchState['status'];
@@ -43,12 +45,27 @@ export function currentSession(): Session | null {
   return session;
 }
 
+/** Signed in with a username + password (multiplayer needs this). */
+export function signedIn(): boolean {
+  const s = currentSession();
+  return !!s && !!s.registered;
+}
+
+/** Called whenever the session changes (sign in / out): the menu and lobby re-render their account box. */
+const sessionListeners = new Set<() => void>();
+export function onSessionChange(fn: () => void): () => void {
+  sessionListeners.add(fn);
+  return () => { sessionListeners.delete(fn); };
+}
+
 function setSession(s: Session | null): void {
+  const changed = (session?.token ?? null) !== (s?.token ?? null) || session?.registered !== s?.registered || session?.name !== s?.name;
   session = s;
   try {
     if (s) localStorage.setItem(KEY_SESSION, JSON.stringify(s));
     else localStorage.removeItem(KEY_SESSION);
   } catch { /* storage unavailable */ }
+  if (changed) for (const fn of [...sessionListeners]) { try { fn(); } catch (e) { console.error('[net] session listener failed', e); } }
 }
 
 /** Thrown for non-2xx responses; `status` is the HTTP status (0 = network failure). */
@@ -60,7 +77,8 @@ export class NetError extends Error {
   }
 }
 
-async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+/** `keepSession`: a 401 means bad credentials in the body (wrong password), not an expired token. */
+async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal, keepSession = false): Promise<T> {
   const headers: Record<string, string> = {};
   const s = currentSession();
   if (s) headers.Authorization = `Bearer ${s.token}`;
@@ -74,20 +92,40 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, sig
   let data: any = null;
   try { data = await res.json(); } catch { /* empty / non-JSON */ }
   if (!res.ok) {
-    if (res.status === 401 && s) setSession(null);
+    if (res.status === 401 && s && !keepSession && currentSession()?.token === s.token) setSession(null);
     throw new NetError((data && typeof data.error === 'string' && data.error) || `Server error (${res.status})`, res.status);
   }
   return data as T;
 }
 
-/** Log in with a callsign. With a stored session this renames that same account (its garage and matches stay). */
-export async function login(name: string): Promise<Session> {
-  // an auto-session being created right now (garage sync) is the account to rename, not one to replace
+export type SignInStatus = 'signed-in' | 'registered' | 'claimed';
+
+/** Sign in with a username + password: an existing name opens that account (its garage and matches, on any device);
+ *  a new name creates it. A guest placeholder or an old password-less callsign on this device is upgraded in place, so
+ *  its server-side garage stays with it; otherwise sync.ts merges this device's garage into the account. */
+export async function signIn(name: string, password: string): Promise<{ session: Session; status: SignInStatus }> {
+  // an auto-session being created right now (garage sync) is the one to upgrade, not one to replace
   if (pendingAuto) await pendingAuto.catch(() => {});
   const prev = currentSession();
-  const s = await call<Session>('POST', '/login', prev ? { name, token: prev.token } : { name });
-  setSession({ playerId: s.playerId, name: s.name, token: s.token });
-  return currentSession()!;
+  const body: Record<string, string> = { name, password };
+  if (prev && !prev.registered) body.token = prev.token;
+  const s = await call<Session & { status: SignInStatus }>('POST', '/login', body, undefined, true);
+  setSession({ playerId: s.playerId, name: s.name, token: s.token, registered: true });
+  return { session: currentSession()!, status: s.status };
+}
+
+/** Change the signed-in account's password. */
+export async function changePassword(password: string, newPassword: string): Promise<void> {
+  await call('POST', '/password', { password, newPassword }, undefined, true);
+}
+
+/** Re-read name / registered from the server (e.g. a session stored by an older build). */
+export async function refreshSession(): Promise<void> {
+  const s = currentSession();
+  if (!s) return;
+  const me = await getMe();
+  const cur = currentSession();
+  if (cur && cur.token === s.token) setSession({ ...cur, name: me.name, registered: me.registered || undefined, ...(me.registered ? { auto: undefined } : {}) });
 }
 
 /** The stored session, or a fresh account under a placeholder callsign (so designs can be saved server-side). */
@@ -115,12 +153,15 @@ export async function putGarage(designs: Design[], deck: string[], baseRev: numb
   return call('POST', '/garage', { designs, deck, baseRev });
 }
 
+/** Sign out on this device: the server forgets this session's token; the local garage copy stays (as a guest). */
 export function logout(): void {
+  const s = currentSession();
+  if (s) void call('POST', '/logout').catch(() => { /* offline: the token just stays valid server-side */ });
   setSession(null);
 }
 
 /** Verify the stored session with the server (clears it if the token is no longer valid). */
-export async function getMe(): Promise<{ playerId: string; name: string; activeMatches: number; maxActiveMatches: number }> {
+export async function getMe(): Promise<{ playerId: string; name: string; registered?: boolean; activeMatches: number; maxActiveMatches: number }> {
   return call('GET', '/me');
 }
 

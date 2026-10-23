@@ -23,6 +23,12 @@ export class RateLimiter {
     return true;
   }
 
+  /** Whether a take() would succeed now, without consuming anything. */
+  ok(key: string, now = Date.now()): boolean {
+    const b = this.buckets.get(key);
+    return !b || Math.min(this.burst, b.tokens + ((now - b.at) / 1000) * this.perSec) >= 1;
+  }
+
   /** Drop buckets that have fully refilled. */
   prune(now = Date.now()): void {
     for (const [k, b] of this.buckets) {
