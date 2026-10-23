@@ -23,6 +23,7 @@ import { buildTerrain, createRenderer, setupPost, setupStage, type Post, type St
 import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts';
 import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
+import { UnitOutline } from './outline3d.ts';
 
 const ELEV = (58 * Math.PI) / 180;
 const GUN_H = 0.55;
@@ -196,6 +197,8 @@ export class FieldView3D implements BattleView {
   private stage: Stage;
   private sun: THREE.DirectionalLight;
   private post: Post;
+  /** dark contact edge around unit silhouettes (post pass fed by a unit coverage mask) */
+  private outline = new UnitOutline();
   private map: MapTheme = MAPS[0];
   private terrain: { group: THREE.Group; ground: THREE.Mesh } | null = null;
   private rocks: THREE.Object3D[] = [];
@@ -277,6 +280,7 @@ export class FieldView3D implements BattleView {
     this.stage = setupStage(this.renderer, this.scene, { fog: false, shadowRes: 2048 });
     this.sun = this.stage.sun;
     this.post = setupPost(this.renderer, this.scene, this.camera, 512, 512, { ao: true, bloom: true, grade: true });
+    this.outline.install(this.post.composer.passes, (p, i) => this.post.composer.insertPass(p, i));
     // AO must not treat billboards / beams / bubbles as geometry: hide the fx root during its normal pass
     const g = this.post.gtao as unknown as { _overrideVisibility?: () => void; _visibilityCache?: THREE.Object3D[] } | null;
     if (g && typeof g._overrideVisibility === 'function' && Array.isArray(g._visibilityCache)) {
@@ -564,6 +568,7 @@ export class FieldView3D implements BattleView {
     else {
       if (this.post.gtao) this.post.gtao.enabled = q.ao;
       if (this.post.bloom) { this.post.bloom.enabled = q.bloom; this.post.bloom.strength = 0.2 + 0.14 * clamp(this.flashScale, 0, 1); }
+      this.outline.renderMask(this.renderer, this.scene, this.camera);
       this.post.render();
     }
     // overlay on top of the finished frame (exact colours, no tone mapping)
@@ -1556,6 +1561,7 @@ export class FieldView3D implements BattleView {
 
   destroy(): void {
     this.controls.destroy();
+    this.outline.dispose();
     if (typeof window !== 'undefined') {
       if (this.onKey) { window.removeEventListener('keydown', this.onKey); window.removeEventListener('keyup', this.onKey); }
       if (this.onBlur) window.removeEventListener('blur', this.onBlur);
