@@ -176,6 +176,18 @@ export interface ModuleDef {
   disarm?: number;
   /** damage multiplier at max range (beams that fade with distance, e.g. 0.3); 1 = none */
   falloff?: number;
+  /** rotary barrels: seconds of continuous fire to reach full rate of fire; starts at SPIN_MIN (25%) of it and
+   *  spins back down while it has no target. `cooldown` is the full-speed rate */
+  spinUp?: number;
+  /** focusing beam: damage multiplier reached after RAMP_TIME (2.5 s) of continuous fire on the SAME target
+   *  (resets on a target switch or a pause of more than 1 s); `damage` is the starting value */
+  ramp?: number;
+  /** arc shells: the landing leaves a burning patch (radius beyond the impact, cells) for `duration` s; enemy
+   *  ground units inside are set alight at `dps` (burn rules: armour sheds heat, shields and hardened block it) */
+  fireField?: { radius: number; duration: number; dps: number };
+  /** arc shells: the shell bursts on landing into `count` bomblets that scatter up to `radius` cells from the
+   *  impact and each explode for `damage` with `splash` */
+  cluster?: { count: number; radius: number; damage: number; splash: number };
   // ---- utility ----
   /** hp healed per second to the most damaged ally in range */
   heal?: number;

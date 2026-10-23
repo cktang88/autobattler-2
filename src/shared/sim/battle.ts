@@ -63,6 +63,13 @@ const SLOW_PER = 1000;
 const SLOW_DMG_DECAY = 0.5;
 const MAX_SLOW = 0.6;
 const BURN_EVERY = 0.5; // s between burn damage pulses
+/** spin-up weapons (ModuleDef.spinUp) start at this fraction of their full rate of fire */
+const SPIN_MIN = 0.25;
+/** focusing beams (ModuleDef.ramp): seconds on one target to reach full power; a pause longer than RAMP_GAP resets */
+const RAMP_TIME = 2.5;
+const RAMP_GAP = 1;
+/** seconds a unit keeps burning after leaving a fire field (it is re-lit every BURN_EVERY while inside) */
+const FIELD_BURN = 1;
 const STEALTH_FIRE_REVEAL = 1.5; // s a stealth unit stays visible after firing
 const PHANTOM_FIRE_REVEAL = 3;
 const SMOKE_SIGHT = 2.5; // units inside smoke can only be targeted from within this distance
@@ -164,6 +171,12 @@ interface Wpn {
   salvoRot: number;
   /** tick before which the overkill check is not repeated (no other target was found) */
   okHold: number;
+  /** spin-up weapons: 0..1 barrel speed (rate of fire = SPIN_MIN .. 1 of full) */
+  spin: number;
+  /** focusing beams: unit being focused (-1), tick focus began, tick of the last shot */
+  rampT: number;
+  rampStart: number;
+  rampLast: number;
   /** [mount origins] hull-local mount offset (cells, +x = forward, +y = right; same point the art draws the turret
    *  at, see shared/mountgeo.ts). Ranges, aim and shot origins are measured from here. 0,0 for melee (reach stays
    *  measured from the hull edge). */
@@ -370,6 +383,23 @@ interface Proj extends SimProjectile {
   /** unit this round was fired at (-1: none) and the damage it is expected to deal there (overkill bookkeeping) */
   aimT: number;
   est: number;
+  /** arc shells: burning patch left on landing / bomblets released on landing (ModuleDef.fireField / cluster) */
+  ff: ModuleDef['fireField'] | null;
+  cl: ModuleDef['cluster'] | null;
+}
+
+/** A firebomb's burning patch (ModuleDef.fireField). */
+interface FireField {
+  x: number;
+  y: number;
+  r: number;
+  t: number;
+  dps: number;
+  side: Side;
+  src: number;
+  moduleId: string;
+  /** s until the next ignition pulse */
+  pulse: number;
 }
 
 export class Battle {
@@ -452,6 +482,7 @@ export class Battle {
   /** per unit hull radius (constant), for avoid()'s geometric pre-check */
   private radA: Float64Array = new Float64Array(0);
   private smokes: Smoke[] = [];
+  private fires: FireField[] = [];
   private pendingBlasts: number[] = [];
   private hasCloak = false;
   private detectors: Internal[] = [];
@@ -580,7 +611,7 @@ export class Battle {
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
-        salvoRot: 0, okHold: 0,
+        salvoRot: 0, okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -768,11 +799,12 @@ export class Battle {
 
     if (this.pds.length) this.pointDefense();
     this.updateProjectiles();
+    if (this.fires.length) this.updateFires();
     this.dmgSrc = -1;
     this.flushBlasts();
 
     // bookkeeping
-    let active = this.events.length > 0 || this.projs.length > 0 || this.smokes.length > 0 || this.tick <= this.maxDelay;
+    let active = this.events.length > 0 || this.projs.length > 0 || this.smokes.length > 0 || this.fires.length > 0 || this.tick <= this.maxDelay;
     let hpSum = 0;
     for (let i = 0; i < n; i++) {
       const I = ints[i];
@@ -1211,7 +1243,7 @@ export class Battle {
       const w = I.wpns[mi];
       if (!w) continue;
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
-      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
+      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
       if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
 
       if (w.heal > 0) {
@@ -1261,6 +1293,9 @@ export class Battle {
         else w.preaim = -1;
       }
       m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
+      // rotary barrels spin up while laid on a target, and wind down without one
+      const su = w.def.spinUp;
+      if (su) w.spin = t && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE ? Math.min(1, w.spin + DT / su) : Math.max(0, w.spin - DT / su);
 
       // burst continuation
       if (w.burstLeft > 0) {
@@ -1397,6 +1432,13 @@ export class Battle {
     const dist0 = Math.hypot(ax - px, ay - py);
     let raw = (def.damage ?? 0) * I.dmgMult;
     if (def.falloff != null && def.falloff !== 1 && w.range > 0) raw *= 1 + (def.falloff - 1) * Math.min(1, dist0 / w.range);
+    if (def.ramp && def.ramp > 1) {
+      // focusing beam: power builds while it stays on one target
+      const tid = t ? t.id : -1;
+      if (tid !== w.rampT || this.tick - w.rampLast > RAMP_GAP * TICK_RATE) { w.rampT = tid; w.rampStart = this.tick; }
+      w.rampLast = this.tick;
+      raw *= 1 + (def.ramp - 1) * Math.min(1, (this.tick - w.rampStart) / (RAMP_TIME * TICK_RATE));
+    }
     const kind = def.projectile ?? 'bullet';
     const ap = def.ap ?? 0;
     const airBonus = def.airBonus ?? 1;
@@ -1479,6 +1521,7 @@ export class Battle {
         ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * 0.22 : 0, dead: false,
         pierce, hits: [], fx, fxMult: lm, cls, mount: mi,
         aimT: est > 0 && t ? t.id : -1, est,
+        ff: kind === 'arc' ? def.fireField ?? null : null, cl: kind === 'arc' ? def.cluster ?? null : null,
       };
       if (p.aimT >= 0) this.incoming[p.aimT] += est;
       if (air && kind !== 'missile') p.z = 1;
@@ -1637,12 +1680,7 @@ export class Battle {
         T.slowDmg = Math.min(t.maxHp, T.slowDmg + fx.slow * SLOW_PER * fxMult);
         t.slow = MAX_SLOW * Math.min(1, T.slowDmg / t.maxHp);
       }
-      if (fx.burn) {
-        // armour sheds some of the heat: 10 armour halves the burn
-        const dps = fx.burn.dps * fxMult * (10 / (10 + t.stats.armor));
-        if (t.burning <= 0 || dps >= T.burnDps) { T.burnDps = dps; T.burnSide = side; T.burnSrc = this.dmgSrc; T.burnModule = moduleId; }
-        t.burning = Math.max(t.burning, fx.burn.duration);
-      }
+      if (fx.burn) this.ignite(t, fx.burn.dps * fxMult, fx.burn.duration, side, this.dmgSrc, moduleId);
     }
     if (t.flying) raw *= airBonus;
     if (cls) {
@@ -1727,6 +1765,12 @@ export class Battle {
         if (k >= 1) {
           this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, false, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
           p.dead = true;
+          if (p.ff) {
+            const r = p.ff.radius;
+            this.fires.push({ x: p.tx, y: p.ty, r, t: p.ff.duration, dps: p.ff.dps * p.fxMult, side: p.side, src: p.src, moduleId: p.moduleId, pulse: 0 });
+            this.events.push({ t: 'fireField', x: p.tx, y: p.ty, radius: r, duration: p.ff.duration, moduleId: p.moduleId });
+          }
+          if (p.cl) this.releaseCluster(p);
         }
         continue;
       }
@@ -1787,6 +1831,55 @@ export class Battle {
     }
     ps.length = wi;
     this.projectiles = ps;
+  }
+
+  /** Cluster shell landed: bomblets hop out to random points around the impact and burst there. */
+  private releaseCluster(p: Proj): void {
+    const cl = p.cl!;
+    for (let k = 0; k < cl.count; k++) {
+      const th = this.rng() * TAU, r = cl.radius * Math.sqrt(0.15 + 0.85 * this.rng());
+      const tx = clamp(p.tx + Math.cos(th) * r, 0, FIELD_W), ty = clamp(p.ty + Math.sin(th) * r, 0, FIELD_H);
+      const total = Math.max(0.3, Math.hypot(tx - p.tx, ty - p.ty));
+      this.projs.push({
+        id: this.nextProjId++, side: p.side, moduleId: p.moduleId, kind: 'arc', x: p.tx, y: p.ty, z: 0, z0: 0, src: p.src, angle: th, progress: 0,
+        vx: 0, vy: 0, speed: 3 + total * 1.2 + this.rng() * 1.5, dmg: cl.damage * p.fxMult, ap: p.ap, splash: cl.splash, airBonus: 1, air: false,
+        target: -1, tx, ty, sx: p.tx, sy: p.ty, total, traveled: 0, maxDist: total + 2,
+        ignore: -1, arcH: 0.4 + total * 0.3, dead: false, pierce: false, hits: [], fx: null, fxMult: p.fxMult, cls: p.cls, mount: p.mount,
+        aimT: -1, est: 0, ff: null, cl: null,
+      });
+    }
+  }
+
+  /** Fire fields burn down; every BURN_EVERY they (re)ignite the enemy ground units inside. */
+  private updateFires(): void {
+    let wi = 0;
+    for (const f of this.fires) {
+      f.t -= DT;
+      f.pulse -= DT;
+      if (f.pulse <= 0) {
+        f.pulse += BURN_EVERY;
+        const cnt = this.gather(f.x, f.y, f.r + MAX_RADIUS);
+        for (let q = 0; q < cnt; q++) {
+          const id = this.scratch[q];
+          const o = this.units[id];
+          if (!o.alive || o.side === f.side || o.flying) continue;
+          if (this.edgeC(this.ints[id], f.x, f.y) > f.r) continue;
+          this.ignite(o, f.dps, FIELD_BURN, f.side, f.src, f.moduleId);
+        }
+      }
+      if (f.t > 0) this.fires[wi++] = f;
+    }
+    this.fires.length = wi;
+  }
+
+  /** Set a unit alight (burn refreshes, the hottest fire wins; armour sheds heat, shields and hardening block it). */
+  private ignite(t: SimUnit, dps: number, duration: number, side: Side, src: number, moduleId: string): void {
+    const T = this.ints[t.id];
+    if (T.hardened || t.shield > 0 || t.auraShield > 0) return;
+    // armour sheds some of the heat: 10 armour halves the burn
+    const d = dps * (10 / (10 + t.stats.armor));
+    if (t.burning <= 0 || d >= T.burnDps) { T.burnDps = d; T.burnSide = side; T.burnSrc = src; T.burnModule = moduleId; }
+    t.burning = Math.max(t.burning, duration);
   }
 
   /** First enemy (of the projectile's layer) whose circle the segment (ox,oy)->(p.x,p.y) touches. */

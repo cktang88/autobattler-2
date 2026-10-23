@@ -31,7 +31,8 @@ export function designModules(d: Design): ModuleDef[] {
 /** Sustained dps of one weapon vs 0 armor (no splash/chain multipliers). */
 export function weaponDps(w: ModuleDef): number {
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
-  return (w.damage * (w.burst ?? 1) * (w.pellets ?? 1)) / cycleTime(w);
+  const cl = w.cluster ? w.cluster.count * w.cluster.damage : 0; // bomblets released by each shell
+  return ((w.damage + cl) * (w.burst ?? 1) * (w.pellets ?? 1)) / cycleTime(w);
 }
 
 /** Average seconds per shot including magazine reloads. */
@@ -130,19 +131,20 @@ export function hitFactor(w: ModuleDef): number {
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
   aamissile: 3.74, ac20: 3.07, ac40: 2.44, aegisT: 1.25, annihilator: 3.56, arclance: 2.20, atgm: 1.22,
-  autocannon: 2.46, autoloader: 2.35, avenger: 0.67, barrage: 7.54, bombs: 1.16, bulwarkshield: 1.53, buzzsaw: 0.35,
-  cannon: 0.96, cannon75: 4.91, chainsaw: 0.90, claw: 1.46, clusterbombs: 5.60, cruise: 8.78, disarm: 1.46,
+  autocannon: 2.25, autoloader: 2.35, avenger: 0.72, barrage: 7.54, bombs: 1.16, bulwarkshield: 1.53, buzzsaw: 0.35,
+  cannon: 0.88, cannon75: 4.91, chainsaw: 0.90, claw: 1.46, clusterbombs: 5.60, cruise: 9.80, disarm: 1.46,
   dome: 1.0, domeG: 1.0, doomsday: 8.01, drill: 2.29, empcannon: 0.39, flak: 1.37, flamer: 0.37, gauss: 5.56,
-  gravity: 3.09, grinder: 2.29, guidedrocket: 2.42, gyro: 0.10, hammer: 1.25, hardened: 0.13, heatray: 0.60,
-  heavyflak: 5.46, hmg: 3.17, howitzer: 13.25, incendiary: 0.50, inferno: 2.36, jammer: 0.25, laser: 5.85,
-  lightrail: 7.45, massdriver: 0.30, mg: 2.95, minigun: 0.77, mirror: 0.31, missilebattery: 2.28, mlrs: 4.86,
-  mortar: 2.54, nanite: 0.10, napalm: 1.33, overclock: 0.22, phantom: 0.14, plasma: 6.39, plasmablade: 1.04,
-  plasmaorb: 2.20, pointdef: 3.3, quad20: 2.97, railgun: 11.66, ram: 0.76, reactive: 0.88, repair: 4.2,
+  gravity: 3.09, grinder: 2.29, guidedrocket: 2.42, gyro: 0.10, hammer: 1.25, hardened: 0.13, heatray: 0.52,
+  heavyflak: 5.46, hmg: 3.17, howitzer: 13.25, incendiary: 0.55, inferno: 2.10, jammer: 0.25, laser: 5.85,
+  lightrail: 10.00, massdriver: 0.30, mg: 2.95, minigun: 1.00, mirror: 0.31, missilebattery: 2.28, mlrs: 4.86,
+  mortar: 2.75, nanite: 0.10, napalm: 0.90, overclock: 0.22, phantom: 0.14, plasma: 4.60, plasmablade: 1.04,
+  plasmaorb: 1.90, pointdef: 3.3, quad20: 2.97, railgun: 11.66, ram: 0.76, reactive: 0.88, repair: 4.2,
   repairM: 4.17, rocketL: 2.18, rockets: 0.74, sam: 3.14, selfdestruct: 0.22, sensor: 1.0, shield: 1.04,
-  shieldH: 1.11, shieldL: 0.84, shockprod: 0.68, shotgun: 1.39, siege240: 1.54, siegeplasma: 0.48, skyfortress: 2.80,
-  slowbeam: 5.00, smoke: 4.00, sniper: 30.00, sonic: 1.04, stealth: 0.20, stormcore: 0.33, stormtower: 2.09,
-  stungun: 1.22, swarm: 2.64, tactnuke: 5.85, targeting: 3.45, tesla: 1.37, titanfist: 2.82, turbo: 0.10,
-  twin120: 0.50, twin30: 2.76, twinlaser: 2.86, twinmg: 5.39, uplink: 0.3,
+  shieldH: 1.11, shieldL: 0.84, shockprod: 0.68, shotgun: 0.70, siege240: 1.54, siegeplasma: 0.48, skyfortress: 2.80,
+  slowbeam: 5.00, smoke: 4.00, sniper: 30.00, sonic: 1.04, stealth: 0.20, stormcore: 0.33, stormtower: 1.85,
+  stungun: 1.22, swarm: 3.10, tactnuke: 5.85, targeting: 3.45, tesla: 1.22, titanfist: 2.82, turbo: 0.10,
+  twin120: 0.28, twin30: 2.70, twinlaser: 3.40, twinmg: 8.00, uplink: 0.3,
+  clusterhow: 1.4, firebomb: 0.8, flechette: 3.1, grenade: 2.5,
   // [aura balance] aura strengths (uplink, dome, domeG, jammer, sensor above and these two) were set by hand after the
   // radius rework: `node scripts/balance.ts army 3 <id>` (every unit carries the aura -> heavy overlap) lands at a
   // delta of -7..+2, i.e. a little overpriced when massed, and `node scripts/auras.ts field` (ONE carrier escorting a
@@ -178,15 +180,22 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.heal) return w.heal * 1.6 * rangeF * cal(w.id);
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
-  let v = weaponDps(w) * armorEfficiency(w.damage, w.ap ?? 0);
+  const cl = w.cluster;
+  const cyc = cycleTime(w);
+  let v = (weaponDps(w) - (cl ? (cl.count * cl.damage * shots) / cyc : 0)) * armorEfficiency(w.damage, w.ap ?? 0);
   v *= 1 + 0.6 * (w.splash ?? 0);
+  // cluster bomblets: scatter widely, so only part of them land on something
+  if (cl) v += ((cl.count * cl.damage * shots) / cyc) * armorEfficiency(cl.damage, w.ap ?? 0) * (1 + 0.6 * cl.splash) * 0.6;
   v *= 1 + 0.45 * (w.chain ?? 0);
   if (w.pierce) v *= 1.5;
   if ((w.pellets ?? 1) > 1) v *= 0.7; // pellets rarely all land
   if (w.falloff != null) v *= 0.3 + 0.7 * w.falloff;
-  const cyc = cycleTime(w);
+  if (w.spinUp) v *= 0.85; // time lost spinning up at the start of each engagement
+  if (w.ramp) v *= 1 + (w.ramp - 1) * 0.5; // average power over a focus
   // burn refreshes rather than stacks: worth ~its dps on each target it keeps alight
   if (w.burn) v += w.burn.dps * Math.min(1, w.burn.duration / cyc) * (1 + 0.6 * (w.splash ?? 0));
+  // fire field: burns everyone who stands in (or walks through) the patch while it lasts
+  if (w.fireField) v += w.fireField.dps * Math.min(1.5, w.fireField.duration / cyc) * (1 + 0.6 * w.fireField.radius);
   if (w.stun) v += ((w.stun * shots) / cyc) * 22 * (1 + 0.8 * (w.splash ?? 0));
   if (w.slow) v += (w.slow / cyc) * 14;
   if (w.disarm) v += (w.disarm / cyc) * 28;

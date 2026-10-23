@@ -20,6 +20,14 @@ import { runBattle } from '../src/shared/sim/battle.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 
 if (process.env.BAL_CAL) Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CAL));
+// DUEL_PATCH='{"minigun":{"cooldown":0.03}}' trials module numbers without editing parts.ts (children inherit it)
+if (process.env.DUEL_PATCH) {
+  for (const [id, patch] of Object.entries(JSON.parse(process.env.DUEL_PATCH) as Record<string, object>)) {
+    const m = MODULE_BY_ID.get(id);
+    if (!m) throw new Error(`DUEL_PATCH: unknown module ${id}`);
+    Object.assign(m, patch);
+  }
+}
 
 export type Size = 'S' | 'M' | 'L' | 'XL';
 export interface Group { size: Size; name: string; ids: string[]; air?: boolean }
@@ -29,23 +37,23 @@ export interface Group { size: Size; name: string; ids: string[]; air?: boolean 
 export const GROUPS: Group[] = [
   // ---- S (light mounts) ----
   { size: 'S', name: 'riot (short-range)', ids: ['mg', 'twinmg', 'shotgun', 'flamer'] },
-  { size: 'S', name: 'sustained mid-range', ids: ['hmg', 'ac20', 'laser', 'rocketL', 'guidedrocket'] },
+  { size: 'S', name: 'sustained mid-range', ids: ['hmg', 'ac20', 'laser', 'rocketL', 'guidedrocket', 'grenade'] },
   { size: 'S', name: 'precision (single target)', ids: ['sniper', 'atgm'] },
   { size: 'S', name: 'melee', ids: ['ram', 'buzzsaw', 'shockprod'] },
   { size: 'S', name: 'disruption', ids: ['stungun'] },
   { size: 'S', name: 'anti-air', ids: ['aamissile'], air: true },
   // ---- M (medium + heavy mounts) ----
-  { size: 'M', name: 'riot (short-range)', ids: ['minigun', 'napalm', 'heatray', 'tesla', 'plasma'] },
+  { size: 'M', name: 'riot (short-range)', ids: ['minigun', 'napalm', 'heatray', 'tesla', 'plasma', 'flechette'] },
   { size: 'M', name: 'sustained mid-range', ids: ['autocannon', 'twin30', 'ac40', 'twinlaser', 'rockets', 'swarm', 'sam', 'plasmaorb', 'incendiary'] },
   { size: 'M', name: 'precision (single target)', ids: ['cannon75', 'cannon', 'twin120', 'gauss', 'lightrail', 'railgun'] },
-  { size: 'M', name: 'long-range artillery', ids: ['mortar', 'howitzer', 'barrage', 'mlrs', 'cruise'] },
+  { size: 'M', name: 'long-range artillery', ids: ['mortar', 'howitzer', 'barrage', 'mlrs', 'cruise', 'firebomb'] },
   { size: 'M', name: 'melee', ids: ['claw', 'hammer', 'drill', 'chainsaw', 'plasmablade'] },
   { size: 'M', name: 'disruption', ids: ['sonic', 'disarm', 'gravity', 'slowbeam', 'empcannon', 'arclance'] },
   { size: 'M', name: 'anti-air', ids: ['flak', 'heavyflak', 'quad20'], air: true },
   { size: 'M', name: 'bombs (air carrier)', ids: ['bombs', 'clusterbombs'] },
   // ---- L (giant mounts) ----
   { size: 'L', name: 'riot (short-range)', ids: ['avenger', 'inferno', 'stormtower', 'grinder'] },
-  { size: 'L', name: 'long-range / siege', ids: ['siege240', 'siegeplasma', 'missilebattery'] },
+  { size: 'L', name: 'long-range / siege', ids: ['siege240', 'siegeplasma', 'missilebattery', 'clusterhow'] },
   { size: 'L', name: 'anti-air', ids: ['skyfortress'], air: true },
   // ---- XL (titan mounts) ----
   { size: 'XL', name: 'riot (short-range)', ids: ['annihilator', 'stormcore', 'titanfist'] },
