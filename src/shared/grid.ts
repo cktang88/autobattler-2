@@ -57,11 +57,12 @@ export const fmtSpeed = (cellsPerSec: number) => `${Math.round(cellsPerSec * MET
 // Blocks & squads (Mechabellum-style). Every purchase is one BLOCK placed on the cell grid:
 //   size-1 designs -> a squad of light units in a rectangle; how many depends on the design's per-unit price
 //                     (stats.ts squadFor: cheap units come 16 to a block (8 x 2), pricier ones 8 (4 x 2) or 4 (2 x 2))
-//   size-2+ designs -> a single unit (footprint size x size cells, or the chassis footprint)
+//   size-2 designs  -> likewise 4 (2 x 2), 2 (2 x 1) or 1 medium unit(s); each unit keeps its chassis footprint
+//   size-3+ designs -> a single unit (footprint size x size cells, or the chassis footprint)
 // The grid never decides the squad itself: every function takes the design's BlockShape (UnitStats satisfies it),
 // so the squad count has one source of truth (computeStats().squad).
 // Squads have a player-chosen SPACING of 0..MAX_SPACING empty cells between neighbouring units, so a squad of
-// cols x rows units has a footprint of (cols + (cols - 1) s) x (rows + (rows - 1) s) cells (an 8 x 2 squad: packed
+// cols x rows units of fw x fh cells has a footprint of (cols fw + (cols - 1) s) x (rows fh + (rows - 1) s) cells (an 8 x 2 squad: packed
 // 40 m x 10 m up to spread 110 m x 20 m). Footprints are RECTANGLES: w = across the field (local x), h = depth
 // (local y). Placement.x/.y is the block's top-left local cell. One Placement = one block; all its units share its
 // uid and level.
@@ -74,7 +75,7 @@ export const MAX_SPACING = 2;
 export interface BlockShape { size: Size; squad: number; fw?: number; fh?: number }
 
 /** formation (cols across, rows deep) per squad count; other counts fall back to one row */
-const SQUAD_LAYOUTS: Record<number, [number, number]> = { 1: [1, 1], 4: [2, 2], 8: [4, 2], 16: [8, 2] };
+const SQUAD_LAYOUTS: Record<number, [number, number]> = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 8: [4, 2], 16: [8, 2] };
 
 /** Squad formation (cols across, rows deep) for `squad` units; `rot` turns the block 90° (8x2 -> 2x8). */
 export function squadLayout(squad: number, rot = false): [number, number] {

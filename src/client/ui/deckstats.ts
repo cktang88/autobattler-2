@@ -7,7 +7,7 @@ import { computeStats, levelMult } from '../../shared/stats.ts';
 import type { Design, ModuleDef, UnitStats } from '../../shared/types.ts';
 
 // ---- firepower as the sim computes it (per unit) ----
-// Every number here is for ONE unit. A size-1 design is bought as a block of `st.squad` units (16, 8 or 4 by unit price, stats.ts squadFor): multiply by
+// Every number here is for ONE unit. A light / medium design is bought as a block of `st.squad` units (by unit price, stats.ts squadFor): multiply by
 // st.squad for the squad total. The UI convention: plain numbers are per unit; squad totals are always labelled.
 
 export interface FireMods { fireRate: number; reloadMult: number }

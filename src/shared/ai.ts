@@ -809,7 +809,10 @@ export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): D
   let bestScore = -Infinity;
   // battles cost ~ units^1.3: fewer candidates once both armies are big (keeps the decision under ~1.2 s)
   const countUnits = (pl: Placement[], deck: Design[]) => pl.reduce((k, u) => { const d = deck.find((x) => x.id === u.designId); return k + (d ? profile(d).stats.squad : 1); }, 0);
-  const bigArmies = countUnits(view.players[side].board, view.players[side].deck) + countUnits(opp.board, opp.deck);
+  // and ~ battle length: a long last round (squads of static turrets, stand-offs up to the 180 s cap) predicts long
+  // evaluations, so it counts as a bigger army
+  const lastTicks = view.history[view.history.length - 1]?.result.ticks ?? 0;
+  const bigArmies = (countUnits(view.players[side].board, view.players[side].deck) + countUnits(opp.board, opp.deck)) * Math.max(1, lastTicks / 1500);
   const secondEval = bigArmies <= 100;
   const n = Math.min(variants.length, bigArmies > 300 ? 2 : bigArmies > 160 ? 3 : HARD_CANDIDATES);
   // a second (visible-board-only) evaluation per candidate doubles the cost: only while the armies are small
