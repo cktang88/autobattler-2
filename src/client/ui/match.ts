@@ -289,7 +289,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     h('span.sup', { style: `--c:${RING_COLOR.support}` }, 'Support'),
     h('span.dash', { style: `--c:${'#ffffff'}` }, 'Min range'),
   );
-  const rangeBar = h('div.rangebar.hidden', null, h('div.rbtns', null, mineBtn, foeBtn), legendEl);
+  // box-select mode: plain drag on the field draws a selection box (same as Shift+drag; the only way on touch)
+  let boxMode = false;
+  const selBtn = h('button.small.rbtn.sel', { type: 'button', title: 'Box select: drag a rectangle over your blocks to set their orders together (or hold Shift and drag)', 'aria-pressed': 'false', onclick: () => { boxMode = !boxMode; selBtn.setAttribute('aria-pressed', String(boxMode)); selBtn.classList.toggle('active', boxMode); renderAll(); } }, svgIcon('select', 16), 'Box select');
+  const rangeBar = h('div.rangebar.hidden', null, h('div.rbtns', null, mineBtn, foeBtn, selBtn), legendEl);
   function paintRangeBtns() {
     mineBtn.classList.toggle('active', showMine);
     mineBtn.setAttribute('aria-pressed', String(showMine));
@@ -762,7 +765,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
-      else t = place.length || me().board.length ? 'Tap a block to adjust it · Shift+drag to box-select several and set their orders together' : 'Pick a unit card, then tap your zone to deploy';
+      else t = place.length || me().board.length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : 'Tap a block to adjust it · Box select (or Shift+drag) picks several to set their orders together') : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -781,6 +784,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     pauseBtn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
     speedbar.classList.toggle('hidden', phase !== 'battle');
     rangeBar.classList.toggle('hidden', phase !== 'deploy' && phase !== 'waiting');
+    selBtn.classList.toggle('hidden', phase !== 'deploy');
   }
 
   // ---------- info panel ----------
@@ -871,6 +875,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('div.stars', null, stars(lv), ups ? h('span.good', { style: { fontSize: '0.85rem', marginLeft: '6px' } }, `+${ups} pending`) : null),
         h('div.sc-sub', null, `${mine ? (s.pending ? 'New this round' : `Deployed round ${p.round}`) : 'Enemy unit'} · `, costTag(st)),
       )),
+      s.pending ? '' : (ensureLastDamage(), damageLine(s.side, s.uid) ?? ''),
       statCard({ design: d, st, level: lv, spacing: sp, rot: !!p.rot, upgraded: ups > 0, onRing: onRingHi }),
       mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)), defaults: defsOf(s.side, p.designId) } : { defaults: defsOf(s.side, p.designId) })) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, footOf(d), !!p.rot)) : '',
@@ -1178,7 +1183,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     lpDone = false;
     clearTimeout(lpTimer);
     moveDrag = null;
-    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0 && e.shiftKey) {
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0 && (e.shiftKey || boxMode)) {
       const { px, rawY } = local(e);
       boxSel = { x0: px, y0: rawY, x1: px, y1: rawY };
       view.controls.enabled = false; // this gesture draws the selection box, not a camera pan

@@ -485,17 +485,17 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 }
 
 /* last-round damage line in the field tooltip */
-.stat-tip .sc-dmg { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 8px; padding: 6px 10px; background: rgba(255, 178, 30, 0.08); border-left: 3px solid #ffb21e; font-family: var(--font-head); }
-.stat-tip .sc-dmg span { font-size: 0.91rem; letter-spacing: 0.12em; text-transform: uppercase; color: #b4b9bd; }
-.stat-tip .sc-dmg b { font-size: 1.35rem; color: #ffcb5c; line-height: 1; }
-.stat-tip .sc-dmg em { margin-left: auto; font-style: normal; font-size: 0.94rem; color: #f1ece0; }
+.stat-tip .sc-dmg, .info .sc-dmg { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 8px; padding: 6px 10px; background: rgba(255, 178, 30, 0.08); border-left: 3px solid #ffb21e; font-family: var(--font-head); }
+.stat-tip .sc-dmg span, .info .sc-dmg span { font-size: 0.91rem; letter-spacing: 0.12em; text-transform: uppercase; color: #b4b9bd; }
+.stat-tip .sc-dmg b, .info .sc-dmg b { font-size: 1.35rem; color: #ffcb5c; line-height: 1; }
+.stat-tip .sc-dmg em, .info .sc-dmg em { margin-left: auto; font-style: normal; font-size: 0.94rem; color: #f1ece0; }
 .stat-tip .sc-live { flex-wrap: wrap; row-gap: 4px; }
 .stat-tip .sc-live-sq { flex-basis: 100%; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
 .stat-tip .sc-live-sq span { margin-right: 4px; }
 .stat-tip .sc-live-sq b { font-size: 1.1rem; }
 .stat-tip .sc-live-sq small { font-size: 0.9rem; color: #b4b9bd; }
 .sc-cost .sc-per { font-family: var(--font-body); font-size: 0.8rem; font-weight: 600; color: var(--muted); }
-.stat-tip .sc-dmg.none { display: block; font-size: 0.92rem; color: #b4b9bd; border-left-color: #5e666d; background: rgba(255, 255, 255, 0.04); }
+.stat-tip .sc-dmg.none, .info .sc-dmg.none { display: block; font-size: 0.92rem; color: #b4b9bd; border-left-color: #5e666d; background: rgba(255, 255, 255, 0.04); }
 .setting.check { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .setting.check .k-toggle { white-space: nowrap; }
 /* deploy cards: rows keep their content height and the list scrolls (rows were squeezed at short viewports) */
