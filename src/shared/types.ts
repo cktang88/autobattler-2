@@ -140,6 +140,8 @@ export interface ModuleDef {
   magazine?: number;
   /** seconds to reload a full magazine */
   reload?: number;
+  /** bomb bay: an empty magazine only reloads over the unit's own deploy zone, so the bomber flies home to rearm */
+  resupply?: boolean;
   /** projectiles per shot fired simultaneously in a spread (shotguns, barrage) */
   pellets?: number;
   /** cells */

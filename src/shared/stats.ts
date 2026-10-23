@@ -34,11 +34,13 @@ export function weaponDps(w: ModuleDef): number {
   return ((w.damage + cl) * (w.burst ?? 1) * (w.pellets ?? 1)) / cycleTime(w);
 }
 
-/** Average seconds per shot including magazine reloads. */
+/** Estimated seconds a bomber spends flying home and back to rearm a resupply (bomb bay) magazine. */
+export const RESUPPLY_TRIP = 8;
+/** Average seconds per shot including magazine reloads (and, for bomb bays, the flight home to rearm). */
 export function cycleTime(w: ModuleDef): number {
   const cd = w.cooldown ?? 1;
   if (!w.magazine || !w.reload) return cd;
-  return (cd * (w.magazine - 1) + w.reload) / w.magazine;
+  return (cd * (w.magazine - 1) + w.reload + (w.resupply ? RESUPPLY_TRIP : 0)) / w.magazine;
 }
 
 /** Firing pattern label for UI. */
@@ -88,7 +90,7 @@ export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
-export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.06, halftrack: 1.17, hover: 0.98, jet: 0.92, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
+export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.17, hover: 0.98, jet: 0.92, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -164,8 +166,8 @@ export function hitFactor(w: ModuleDef): number {
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
   aamissile: 2.76, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 3.43, arclance: 2.95, atgm: 5.94,
-  autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 1.17, bulwarkshield: 1.48, buzzsaw: 0.27,
-  cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 4.18, cruise: 7.74, disarm: 1.86,
+  autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 3.88, bulwarkshield: 1.48, buzzsaw: 0.27,
+  cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 7.69, heavybomb: 3.32, cruise: 7.74, disarm: 1.86,
   dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 1.06, flak: 0.31, flamer: 0.41, gauss: 14.19,
   gravity: 3.14, grinder: 3.99, guidedrocket: 0.99, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.93,
   heavyflak: 1.19, hmg: 1.19, howitzer: 22.16, incendiary: 1.21, inferno: 1.41, jammer: 0.25, laser: 1.69,
@@ -311,8 +313,11 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   const load = weight / capacity;
   let range = 0;
   for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.projectile === 'melee' ? mod.range : mod.range * rangeMult);
-  const sizeSpeed = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
-  const speed = m.kind === 'static' ? 0 : m.speed * loadSpeedFactor(load) * sizeSpeed * (1 + speedBonus);
+  // jets barely slow with size (a strato bomber cruises nearly as fast as a fighter) and shrug off half the overload
+  const jet = d.mobility === 'jet';
+  const sizeSpeed = (jet ? [1, 1, 0.95, 0.9, 0.85] : [1, 0.95, 0.85, 0.75, 0.65])[size - 1];
+  const loadF = jet && load > 1 ? Math.max(0.5, 1 - (load - 1) * 0.6) : loadSpeedFactor(load);
+  const speed = m.kind === 'static' ? 0 : m.speed * loadF * sizeSpeed * (1 + speedBonus);
   // body turn rate: mobility base x hull agility x size inertia, slowed when overloaded (heavier armament = slower)
   const sizeTurn = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
   const turn = m.turn * c.agility * sizeTurn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);

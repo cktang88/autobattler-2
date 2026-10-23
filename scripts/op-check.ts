@@ -15,6 +15,10 @@ export const CANDIDATES: Design[] = [
   D('swarmies', 'interceptor', 'jet', ['twinmg', 'mg']),
   D('hornet', 'gunship', 'rotor', ['sam', 'swarm']),
   D('pokiesA', 'mantis', 'legs', ['atgm', 'aamissile']),
+  D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']),
+  D('deltabomb', 'deltawing', 'jet', ['bombs', 'mg', 'mg']),
+  D('heavybomber', 'bomberhull', 'gravlift', ['bombs', 'bombs', 'heavybomb']),
+  D('clusterjet', 'stratobomber', 'jet', ['clusterbombs', 'clusterbombs', 'heavybomb', 'mg']),
   ...(process.env.OP_DESIGNS ? (JSON.parse(process.env.OP_DESIGNS) as Design[]).map((d) => ({ name: d.id, ...d })) : []),
 ];
 

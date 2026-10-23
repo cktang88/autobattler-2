@@ -172,6 +172,7 @@ export function showDamageRules(host: HTMLElement): void {
 /** Special-effect tags for a module (stun, burn, pierce...). */
 export function moduleEffects(mod: ModuleDef): string[] {
   const t: string[] = [];
+  if (mod.resupply) t.push('rearms at base');
   if (mod.chain) t.push(`chain ${mod.chain}`);
   if (mod.pierce) t.push('pierce');
   if (mod.stun) t.push(`paralyse ${Math.round(mod.stun * PARA_PER_STUN)}`);
@@ -441,6 +442,7 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.projectile === 'missile') r.push('Homing: follows its target. Point defense can shoot it down; jammers break its lock.');
     else if (mod.projectile === 'rocket' || mod.projectile === 'shell' || mod.projectile === 'arc') r.push('Flies to where the target was when fired, so fast movers can dodge it. Point defense can shoot it down.');
     else if (mod.projectile === 'beam' || mod.projectile === 'lightning' || mod.projectile === 'rail') r.push('Hitscan: hits instantly, can\'t miss or be intercepted.');
+    if (mod.resupply) r.push(`Bomb bay: ${mod.magazine ?? 1} pass${(mod.magazine ?? 1) > 1 ? 'es' : ''} per load. Bombs are released just short of the target and carry on with the plane's speed. When the bay is empty the bomber flies back over its own deploy zone and rearms there (${mod.reload ?? 0} s), then returns.`);
     if (mod.pierce) r.push('Pierces: keeps going through every unit in its path.');
     if (mod.chain) r.push(`Chains to ${mod.chain} more nearby enemies.`);
     if (mod.falloff != null && mod.falloff < 1) r.push(`Damage falls off with distance: ${Math.round(mod.falloff * 100)}% at max range.`);

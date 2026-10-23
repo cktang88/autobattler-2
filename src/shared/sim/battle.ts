@@ -7,7 +7,7 @@
 import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
 import { computeStats, damageKinds, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
-import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
@@ -58,6 +58,9 @@ const HEAL_EVENT_EVERY = 0.3;
 const CRUSH_EVERY = 0.3;
 const BOMB_ALT = 1.5; // cells: height bombs start falling from
 const BOMB_FALL = 0.5; // seconds a bomb takes to land
+/** a flyer releases bombs at a target inside this cone ahead of its nose (bombs keep the plane's forward speed, so
+ *  they're dropped short of the target and carry on to it); straight overhead always counts */
+const BOMB_CONE = 0.6; // rad
 const CRUSH_DMG = 14; // per size of the crusher, per contact pulse
 const RANGE_KEEP = 1.08; // hysteresis: a held target stays valid out to range * this
 const STALL_CHECK_EVERY = 20; // ticks
@@ -185,6 +188,10 @@ interface Wpn {
   preaim: number;
   /** direction (+1/-1) of the last full-speed swing; keeps a turret committed when the target sits ~180° away */
   turnDir: number;
+  /** bomb on a flyer: aimed by flying at the target (bay follows the hull), reach includes the forward throw */
+  bomb: boolean;
+  /** only reloads over its own deploy zone (bomb bays: a bomber flies home to rearm, see needsResupply) */
+  resupply: boolean;
   /** launcher battery (rocket racks, missile pods with 4+ tubes): the whole burst leaves at once as a salvo */
   salvo: boolean;
   /** ripple fire: tubes still to launch in the current salvo, the next tube's index, the salvo size, ticks until the
@@ -270,6 +277,8 @@ interface Internal {
   lx1: number;
   ly1: number;
   strafeT: number;
+  /** turn direction of a jet's loop back to its target (+1 / -1), flipped every pass (figure-eight runs) */
+  loopDir: number;
   crushCd: number;
   burnDps: number;
   /** accumulated slow / disarm damage (see SLOW_PER, DISARM_PER_S); u.slow / u.disarm are derived from them */
@@ -653,7 +662,8 @@ export class Battle {
       if (!def || (def.kind === 'armor') || (def.kind === 'utility' && !def.heal)) { wpns.push(null); continue; }
       const isWeapon = def.kind === 'weapon';
       const melee = def.projectile === 'melee';
-      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult);
+      // bombs from a flyer: released short of the target and thrown on by the plane's speed, so they reach further
+      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult) + (isWeapon && def.projectile === 'arc' && stats.flying ? stats.speed * BOMB_FALL : 0);
       const w: Wpn = {
         def, heal: def.heal ?? 0, range, minRange: def.minRange ?? 0,
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
@@ -661,6 +671,7 @@ export class Battle {
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
         salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], split: [],
         okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
+        bomb: isWeapon && def.projectile === 'arc' && stats.flying, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -721,7 +732,7 @@ export class Battle {
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
-      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
+      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, crushCd: 0,
       burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
@@ -1297,7 +1308,7 @@ export class Battle {
       const w = I.wpns[mi];
       if (!w) continue;
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
-      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
+      if (m.cooldown > -DT && !(w.resupply && m.reloading && !this.overHome(u))) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
       if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
 
       if (w.heal > 0) {
@@ -1346,7 +1357,11 @@ export class Battle {
         if (pa && pa.alive && this.visible(u, pa)) want = Math.atan2(pa.y - my, pa.x - mx);
         else w.preaim = -1;
       }
-      m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
+      if (w.bomb) m.angle = u.angle; // bomb bay: aimed by flying at the target
+      else m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
+      const onTarget = w.bomb
+        ? !!t && (Math.abs(angDiff(u.angle, want)) < BOMB_CONE || Math.hypot(t.x - u.x, t.y - u.y) < 1.5)
+        : Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE;
       // rotary barrels spin up while laid on a target, and wind down without one
       const su = w.def.spinUp;
       if (su) w.spin = t && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE ? Math.min(1, w.spin + DT / su) : Math.max(0, w.spin - DT / su);
@@ -1356,7 +1371,7 @@ export class Battle {
         if (u.disarm > 0) { w.burstLeft = 0; continue; }
         w.burstTimer -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
         // follow-up rounds wait for the barrel too (a target that moves out of the arc pauses the burst)
-        if (w.burstTimer <= 0 && (!t || Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE)) {
+        if (w.burstTimer <= 0 && (!t || onTarget)) {
           w.burstLeft--;
           w.burstTimer = BURST_GAP;
           if (t) { w.aimX = ax; w.aimY = ay; }
@@ -1377,7 +1392,7 @@ export class Battle {
         }
         continue;
       }
-      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
+      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && onTarget && I.leapT < 0) {
         // overkill: rounds already in flight are expected to finish this target -- switch to another one, or hold
         // the shot until they land (the target dies, or survives and incoming drops so we fire after all)
         if (this.doomed(t.id) && this.tick >= w.okHold) {
@@ -2160,6 +2175,11 @@ export class Battle {
     if (I.stance === 'holdPos') { this.faceTarget(I); return; }
     let goal = I.goal >= 0 ? this.units[I.goal] : null;
     if (I.strafe) { this.strafeMove(I, goal); return; }
+    // hovering bombers (rotor / grav lift) with empty bays fly back over their own lines and wait there to rearm
+    if (this.needsResupply(I)) {
+      if (!this.overHome(u)) this.steer(I, u.x, u.side === 0 ? FIELD_H - DEPLOY_D * 0.5 : DEPLOY_D * 0.5, 0.5, -1);
+      return;
+    }
 
     if (I.retreatOn) {
       const r = u.hp / u.maxHp;
@@ -2479,6 +2499,23 @@ export class Battle {
     return I.avoidSide * (0.5 + 0.9 * strength);
   }
 
+  /** over its own deploy zone (where bomb bays rearm) */
+  private overHome(u: SimUnit): boolean {
+    return u.side === 0 ? u.y >= FIELD_H - DEPLOY_D : u.y <= DEPLOY_D;
+  }
+
+  /** every bomb bay is empty: fly home to rearm before the next run */
+  private needsResupply(I: Internal): boolean {
+    let any = false;
+    for (let mi = 0; mi < I.wpns.length; mi++) {
+      const w = I.wpns[mi];
+      if (!w || !w.resupply) continue;
+      if (!I.u.mounts[mi].reloading) return false;
+      any = true;
+    }
+    return any;
+  }
+
   private strafeMove(I: Internal, goal: SimUnit | null): void {
     const u = I.u;
     let want: number;
@@ -2486,6 +2523,10 @@ export class Battle {
     if (u.x < margin || u.x > FIELD_W - margin || u.y < margin || u.y > FIELD_H - margin) {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);
       I.strafeT = Math.max(I.strafeT, 0.2);
+    } else if (this.needsResupply(I)) {
+      // bays empty: head home and circle over the own lines until rearmed
+      const hy = u.side === 0 ? FIELD_H - DEPLOY_D * 0.5 : DEPLOY_D * 0.5;
+      want = this.overHome(u) ? u.angle + 0.8 * I.loopDir : Math.atan2(hy - u.y, (u.x < FIELD_W / 2 ? FIELD_W * 0.35 : FIELD_W * 0.65) - u.x);
     } else if (I.strafeT > 0) {
       I.strafeT -= DT;
       want = u.angle;
@@ -2495,7 +2536,10 @@ export class Battle {
       want = Math.atan2(dy, dx);
       if (d < 1.2 || (d < 2.5 && Math.abs(angDiff(u.angle, want)) > 1.2)) {
         I.strafeT = 1.1; // overshoot, then loop back
+        I.loopDir = -I.loopDir; // alternate the loop each pass: runs trace a figure eight over the target
         want = u.angle;
+      } else if (Math.abs(angDiff(u.angle, want)) > 2.4) {
+        want = u.angle + I.loopDir; // target behind: swing round in this pass's loop direction
       }
     } else {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);
