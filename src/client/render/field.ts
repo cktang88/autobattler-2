@@ -761,6 +761,12 @@ export class FieldView {
         const bomblet = p.kind === 'arc' && !!modOf(p.moduleId)?.cluster && (!src || Math.hypot(src.x - p.x, src.y - p.y) > 6);
         const tip = !bomblet && p.src !== undefined && p.mount !== undefined && p.z <= 0.5 ? this.muzzleOf(p.src, p.mount) : null;
         this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x - this.liftVec(GUN_H).x : 0, oy: tip ? tip.y - p.y - this.liftVec(GUN_H).y : 0, bomblet });
+        if ((p.kind === 'rocket' || p.kind === 'missile') && this.fx.busy < 0.8) {
+          // every tube of a ripple-firing battery: its own ignition flash and a backblast puff thrown out behind
+          const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
+          this.fx.glow(p.x, p.y, 0.28, p.kind === 'missile' ? '#fff0d0' : '#ffb060', 0.09, 0.8);
+          this.fx.smoke(p.x - ca * 0.3, p.y - sa * 0.3, 0.2, 1.3, '#b4aea4', -ca * 1.6 + this.fx.wind.x * 0.5, -sa * 1.6 + this.fx.wind.y * 0.5, 0.32, 0.15, GUN_H);
+        }
       }
     }
   }
@@ -1355,7 +1361,7 @@ export class FieldView {
     const minW = 1.5 / this.px;
     for (const p of list) {
       const kind = p.kind as string;
-      const isHigh = kind === 'arc' || kind === 'missile';
+      const isHigh = kind === 'arc' || kind === 'missile' || (kind === 'rocket' && p.z > 0.05);
       if (isHigh !== elevated) continue;
       let pos = this.projPos(p);
       const t = this.ptrack.get(p.id);
@@ -1368,9 +1374,14 @@ export class FieldView {
       const cal = mod?.caliber ?? 0.5;
       const cs = Math.cos(pos.angle), sn = Math.sin(pos.angle);
       // height above the ground (cells): the gun line, plus the round's own altitude (shells and missiles arc up the screen)
-      const hz = this.tiltOn ? GUN_H + pos.z * (kind === 'arc' || kind === 'missile' ? 0.8 : 0.5) : 0;
-      const lift = this.tiltOn ? hz * TILT_TAN : kind === 'missile' ? Math.min(0.6, pos.z * 0.4) : kind === 'arc' ? pos.z * 0.45 : 0;
-      const x = pos.x + this.dirs.ux * lift, y = pos.y + this.dirs.uy * lift;
+      const hz = this.tiltOn ? GUN_H + pos.z * (kind === 'arc' || kind === 'missile' || kind === 'rocket' ? 0.8 : 0.5) : 0;
+      const lift = this.tiltOn ? hz * TILT_TAN : kind === 'missile' || kind === 'rocket' ? Math.min(0.6, pos.z * 0.4) : kind === 'arc' ? pos.z * 0.45 : 0;
+      let x = pos.x + this.dirs.ux * lift, y = pos.y + this.dirs.uy * lift;
+      if (kind === 'rocket' || (kind === 'missile' && mod?.id === 'swarm')) {
+        // rockets don't fly on rails: a little wobble round the true path (none at the ends)
+        const w = (kind === 'rocket' ? 0.07 : 0.05) * Math.sin(Math.PI * clamp(pos.progress, 0, 1)) * Math.sin(this.time * 19 + p.id * 2.3);
+        x -= sn * w; y += cs * w;
+      }
       const glowC = mod ? moduleGlow(mod, TEAM_PAL[this.teamOf(p.side)]) : '#ffd27a';
       // dark soft backing (normal blend) so additive tracers/shells stay visible on any ground
       if (kind === 'bullet' || kind === 'shell' || kind === 'rocket' || kind === 'missile' || kind === 'arc') {
@@ -1486,12 +1497,20 @@ export class FieldView {
         case 'rocket': {
           const incend = mod?.id === 'incendiary';
           g.globalCompositeOperation = prevOp;
+          if (pos.z > 0.2) {
+            // lofted: its shadow on the ground below reads the height of the arc
+            const so = this.tiltOn ? pos.z * 0.4 : lift;
+            g.globalAlpha = 0.25;
+            g.drawImage(softDot('rgba(0,0,0,0.9)', 0.3), pos.x + this.dirs.sx * so - 0.12, pos.y + this.dirs.sy * so - 0.12, 0.24, 0.24);
+            g.globalAlpha = 1;
+          }
           g.strokeStyle = '#d8d4c8';
           g.lineWidth = Math.max(minW * 1.5, 0.06);
           g.lineCap = 'round';
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.22, y - sn * 0.22); g.stroke();
           g.globalCompositeOperation = 'lighter';
-          const fl = 0.12 + Math.random() * 0.06;
+          // the motor roars hardest early in the burn and flickers every frame
+          const fl = (0.11 + Math.random() * 0.07) * (1.25 - 0.4 * clamp(pos.progress, 0, 1));
           g.drawImage(glowTex(incend ? '#ff7820' : '#ff9a40'), x - cs * 0.27 - fl * 1.6, y - sn * 0.27 - fl * 1.6, fl * 3.2, fl * 3.2);
           g.drawImage(glowTex('#fff2c8'), x - cs * 0.24 - fl * 0.6, y - sn * 0.24 - fl * 0.6, fl * 1.2, fl * 1.2);
           // smoke trail that persists and drifts with the wind (incendiary: darker, with burning gel dripping off)
@@ -1529,7 +1548,9 @@ export class FieldView {
           g.lineWidth = Math.max(minW, sz * 0.2);
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * sz * 0.2, y - sn * sz * 0.2); g.stroke();
           g.globalCompositeOperation = 'lighter';
-          const fr = sz * (0.4 + Math.random() * 0.2);
+          // boost: a fierce plume while the motor accelerates the missile off the rail, settling to a cruise flame
+          const boost = t ? Math.max(0, 1 - (this.time - t.born) / (cruise || nuke || mod?.id === 'missilebattery' ? 0.9 : 0.6)) : 0;
+          const fr = sz * (0.4 + Math.random() * 0.2) * (1 + 0.9 * boost);
           const col = mod?.targetsAir && !mod.targetsGround ? 'rgba(120,170,255,0.9)' : 'rgba(255,220,120,0.9)';
           g.drawImage(glowTex(mod?.targetsAir && !mod.targetsGround ? '#78aaff' : '#ffc060'), x - cs * sz * 1.1 - fr * 1.8, y - sn * sz * 1.1 - fr * 1.8, fr * 3.6, fr * 3.6);
           g.drawImage(glowTex('#fff4d0'), x - cs * sz * 1.0 - fr * 0.6, y - sn * sz * 1.0 - fr * 0.6, fr * 1.2, fr * 1.2);
@@ -2239,6 +2260,8 @@ export class FieldView {
           }
           if (best) { const al = this.airLift(best); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
         }
+        // the area the blast actually damaged: a ring at exactly the sim's splash radius
+        if (mod?.projectile !== 'flame' && vis !== 'pointdef') fx.aoe(e.x, e.y, r, vis === 'emp' || vis === 'plasma' || vis === 'sonic' ? '#8fd0ff' : '#ffb060');
         if (mod?.projectile === 'flame') {
           // a flame jet's splash: the jet itself, its hits and the burning ground carry the look; a blast flash per
           // round (10 a second per flamer) only blew a dozen jets on one target out to a white ball

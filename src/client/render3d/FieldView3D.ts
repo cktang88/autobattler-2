@@ -21,7 +21,7 @@ import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
 import { buildTerrain, createRenderer, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
 import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts';
-import { Fx3D, RAMPS, type MuzzleKind, type Ramp } from './fx3d.ts';
+import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 
 const ELEV = (58 * Math.PI) / 180;
@@ -45,7 +45,11 @@ interface UView {
   posed: boolean;
 }
 interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
-interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean }
+interface ProjRec {
+  y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean;
+  /** smoothed 3D flight direction, the last trail emission point, launch time, wobble phase */
+  dx: number; dy: number; dz: number; ex: number; ey: number; ez: number; born: number; seed: number;
+}
 
 /** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
 const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb' || p.kind === 'missile') && Math.abs(p.z - 1) < 1e-6;
@@ -1022,6 +1026,8 @@ export class FieldView3D implements BattleView {
     const seen = this.projRec;
     const alive = new Set<number>();
     const dt = 1 / 60;
+    const fdt = this.frameDt();
+    const lod = this.fx.lod;
     for (const p of list) {
       alive.add(p.id);
       let rec = seen.get(p.id);
@@ -1043,22 +1049,76 @@ export class FieldView3D implements BattleView {
         // rotary guns: how far the barrels had spun up when this round left them
         const k = st.fam === 'gatling' && p.src !== undefined && p.mount !== undefined ? this.spin.get(p.src * 16 + p.mount)?.k ?? 1 : 1;
         const bomblet = st.fam === 'cluster' && this.clusterPts.some((c) => Math.abs(c.x - p.x) < 0.7 && Math.abs(c.y - p.y) < 0.7);
-        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet };
+        if (bomblet || st.fam === 'bomb') y0 = pos.z + 0.12;
+        const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
+        rec = {
+          y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet,
+          dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x, ey: y0, ez: pos.y, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
+        };
         seen.set(p.id, rec);
+        // every rocket / missile leaves its own tube: a launch flash, a backblast jet and a smoke cloud behind the pod
+        if ((p.kind === 'rocket' || p.kind === 'missile') && !this.offscreen(pos.x, pos.y, 3)) {
+          this.fx.launch(pos.x, y0, pos.y, ca, sa, st.s, p.kind === 'missile' ? (st.fam === 'bigMissile' ? 2 : 1) : 0);
+        }
       }
-      if (this.offscreen(pos.x, pos.y, 4)) { rec.px = pos.x; rec.py = pos.y; continue; }
+      if (this.offscreen(pos.x, pos.y, 4)) { rec.px = rec.ex = pos.x; rec.py = rec.ez = pos.y; continue; }
       // homing anti-air missiles turn onto their target after launch: keep re-reading its height along the heading
       if (rec.air && p.kind === 'missile' && byId) rec.hEnd = this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, rec.hEnd, true);
-      const arcs = p.z > 0.05 && !rec.air;
-      // height from the interpolated snapshot too (the sim's own z / progress are a tick ahead of x, y)
-      const H = arcs ? pos.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(pos.progress, 0, 1));
-      const ang = pos.angle;
-      const dx = Math.cos(ang), dz = Math.sin(ang);
-      const dh = H - rec.lastH;
       const st = rec.st, sz = st.s;
-      const pitch = arcs ? clamp(dh / Math.max(0.02, Math.hypot(pos.x - rec.px, pos.y - rec.py) || 0.1), -2, 2) : 0;
-      const emit = Math.random() < Math.min(1, this.frameDt() * 60);
-      const tracer = (len: number, w: number, r: number, g: number, b: number) => proj.streak(pos.x - dx * len, H, pos.y - dz * len, pos.x, H, pos.y, w, r, g, b);
+      const kp = clamp(pos.progress, 0, 1);
+      const age = this.time - rec.born;
+      // height (from the interpolated snapshot: the sim's own z / progress are a tick ahead of x, y). Lofted rounds
+      // (shells, rockets, missiles) ride their sim altitude on top of the line from the barrel down to the ground
+      const lofts = !rec.air && (p.kind === 'arc' || p.kind === 'rocket' || p.kind === 'missile');
+      let H: number;
+      if (rec.bomblet || st.fam === 'bomb') H = pos.z + 0.12;
+      else if (lofts) H = lerp(rec.y0, 0.15, kp) + pos.z;
+      else H = lerp(rec.y0, rec.hEnd, kp);
+      let X = pos.x, Z = pos.y;
+      // rockets and swarm missiles don't fly on rails: a little corkscrew wobble round the true path (none at the ends)
+      if (p.kind === 'rocket' || (p.kind === 'missile' && st.def?.id === 'swarm')) {
+        const env = Math.sin(Math.PI * kp), ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
+        const w = (p.kind === 'rocket' ? 0.07 : 0.05) * env;
+        const ph = age * 19 + rec.seed;
+        X += -sa * Math.sin(ph) * w; Z += ca * Math.sin(ph) * w;
+        H += Math.cos(ph * 0.83) * w * 0.7;
+      }
+      // orientation: along the round's actual 3D velocity (smoothed), so lofted rounds pitch up, over and down. The
+      // heading is the sim's; climb and sideways drift come from the motion since the last frame, measured only while it
+      // moves forward (a new tick's snapshot can step the interpolation back a hair)
+      {
+        const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
+        const mx = X - rec.px, my = H - rec.lastH, mz = Z - rec.py;
+        const fwd = mx * ca + mz * sa;
+        let tx = ca, ty = 0, tz = sa;
+        if (fwd > 1e-4 && fwd < 3) {
+          const lat = clamp((-mx * sa + mz * ca) / fwd, -0.6, 0.6), slope = clamp(my / fwd, -4, 4);
+          tx = ca - sa * lat; ty = slope; tz = sa + ca * lat;
+        } else ty = rec.dy / Math.max(0.2, Math.hypot(rec.dx, rec.dz));
+        const tl = Math.hypot(tx, ty, tz);
+        const s = Math.min(1, 0.5 * fdt * 60 + 0.1);
+        rec.dx += (tx / tl - rec.dx) * s; rec.dy += (ty / tl - rec.dy) * s; rec.dz += (tz / tl - rec.dz) * s;
+        const l = Math.hypot(rec.dx, rec.dy, rec.dz) || 1;
+        rec.dx /= l; rec.dy /= l; rec.dz /= l;
+      }
+      const dx = rec.dx, dy = rec.dy, dz = rec.dz;
+      const emit = Math.random() < Math.min(1, fdt * 60);
+      /** point `b` cells behind the head along the flight direction */
+      const bx = (b: number) => X - dx * b, by = (b: number) => H - dy * b, bz = (b: number) => Z - dz * b;
+      const tracer = (len: number, w: number, r: number, g: number, b: number) => proj.streak(bx(len), by(len), bz(len), X, H, Z, w, r, g, b);
+      /** trail puffs laid every `sp` cells along the path since the last frame, from `back` cells behind the head */
+      const trailAlong = (back: number, kind: TrailKind, size: number, sp: number) => {
+        const tx = bx(back), ty = by(back), tz = bz(back);
+        const ex = tx - rec.ex, ey = ty - rec.ey, ez = tz - rec.ez, d = Math.hypot(ex, ey, ez);
+        if (d > 6) { rec.ex = tx; rec.ey = ty; rec.ez = tz; return; }
+        const step = sp / Math.max(0.35, lod);
+        const n = Math.min(10, Math.floor(d / step));
+        for (let i = 1; i <= n; i++) {
+          const f = (i * step) / d;
+          this.fx.trail(rec.ex + ex * f, rec.ey + ey * f, rec.ez + ez * f, kind, size);
+        }
+        if (n > 0) { const f = (n * step) / d; rec.ex += ex * f; rec.ey += ey * f; rec.ez += ez * f; }
+      };
       switch (p.kind) {
         case 'bullet': {
           switch (st.fam) {
@@ -1080,88 +1140,107 @@ export class FieldView3D implements BattleView {
         case 'shell': {
           if (st.fam === 'gauss') { // magnetic slug: a long blue streak, glowing head and an ionised sparkle trail
             tracer(2.4, 0.08, 0.45, 0.65, 1);
-            this.fx.glow(pos.x, H, pos.y, 0.35 + sz * 0.3, dt * 2.2, RAMPS.gauss);
-            if (emit) this.fx.trail(pos.x - dx * 0.4, H, pos.y - dz * 0.4, 'gauss', 0.8 + sz);
+            this.fx.glow(X, H, Z, 0.35 + sz * 0.3, dt * 2.2, RAMPS.gauss);
+            trailAlong(0.4, 'gauss', 0.8 + sz, 0.3);
           } else if (st.fam === 'flak') { // small dark shell with a fuse spark
-            proj.body(pos.x, H, pos.y, dx, 0, dz, 0.18 + 0.2 * sz, 0.06 + 0.05 * sz, 0.25, 0.25, 0.22);
+            proj.body(X, H, Z, dx, dy, dz, 0.18 + 0.2 * sz, 0.06 + 0.05 * sz, 0.25, 0.25, 0.22);
             tracer(0.3, 0.03, 1, 0.6, 0.25);
           } else if (st.fam === 'he') { // fat olive HE shell, short orange tracer, a smoke wisp
-            proj.body(pos.x, H, pos.y, dx, 0, dz, 0.3 + 0.35 * sz, 0.1 + 0.1 * sz, 0.55, 0.55, 0.35);
-            proj.streak(pos.x - dx * 0.5, H, pos.y - dz * 0.5, pos.x, H, pos.y, 0.06 + sz * 0.05, 1, 0.5, 0.15);
-            if (emit) this.fx.trail(pos.x, H, pos.y, 'shell', 0.6 + sz);
+            proj.body(X, H, Z, dx, dy, dz, 0.3 + 0.35 * sz, 0.1 + 0.1 * sz, 0.55, 0.55, 0.35);
+            proj.streak(bx(0.5), by(0.5), bz(0.5), X, H, Z, 0.06 + sz * 0.05, 1, 0.5, 0.15);
+            trailAlong(0, 'shell', 0.6 + sz, 0.35);
           } else { // AP shot: slim bright penetrator with a hot red tank tracer
-            proj.body(pos.x, H, pos.y, dx, 0, dz, 0.3 + 0.35 * sz, 0.05 + 0.06 * sz, 0.9, 0.8, 0.55);
+            proj.body(X, H, Z, dx, dy, dz, 0.3 + 0.35 * sz, 0.05 + 0.06 * sz, 0.9, 0.8, 0.55);
             tracer(1.0 + sz * 0.6, 0.05 + 0.04 * sz, 1, 0.32, 0.14);
           }
           break;
         }
         case 'arc': {
           switch (st.fam) {
-            case 'grenade': // small olive grenade tumbling over with a fuse spark
-              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.13, 0.1, 0.35, 0.42, 0.25);
-              if (emit) this.fx.trail(pos.x, H, pos.y, 'spark', 0.8);
+            case 'grenade': { // small olive grenade tumbling end over end with a fuse spark
+              const a = age * 14 + rec.seed, c = Math.cos(a);
+              proj.body(X, H, Z, dx * c, Math.sin(a), dz * c, 0.13, 0.1, 0.35, 0.42, 0.25);
+              trailAlong(0, 'spark', 0.8, 0.25);
               break;
+            }
             case 'firebomb': // incendiary shell glowing and trailing flame
-              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.24, 0.14, 0.7, 0.35, 0.15);
-              this.fx.glow(pos.x, H, pos.y, 0.4, dt * 2.2, RAMPS.ember);
-              if (emit) this.fx.trail(pos.x, H, pos.y, 'firebomb', 1);
+              proj.body(X, H, Z, dx, dy, dz, 0.24, 0.14, 0.7, 0.35, 0.15);
+              this.fx.glow(X, H, Z, 0.4, dt * 2.2, RAMPS.ember);
+              trailAlong(0, 'firebomb', 1, 0.2);
               break;
-            case 'bomb': // dropped bomb: dark, no trail
-              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.3, 0.13, 0.3, 0.32, 0.3);
+            case 'bomb': // dropped bomb: dark, nose tipping down as it falls, no trail
+              proj.body(X, H, Z, dx, dy, dz, 0.3, 0.13, 0.3, 0.32, 0.3);
               break;
             case 'cluster':
-              if (rec.bomblet) { // bomblet: a tiny dark pellet with a spark trail
-                proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.1, 0.08, 0.3, 0.3, 0.28);
-                if (emit) this.fx.trail(pos.x, H, pos.y, 'spark', 0.9);
-              } else { // big yellow-banded cargo shell with a smoke streamer
-                proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.4 + 0.4 * sz, 0.12 + 0.1 * sz, 0.8, 0.7, 0.3);
-                if (emit) this.fx.trail(pos.x, H, pos.y, 'heavyShell', 0.8 + sz);
+              if (rec.bomblet) { // bomblet: a tiny dark pellet tumbling, with a spark trail
+                const a = age * 20 + rec.seed, c = Math.cos(a);
+                proj.body(X, H, Z, dx * c, Math.sin(a), dz * c, 0.1, 0.08, 0.3, 0.3, 0.28);
+                trailAlong(0, 'spark', 0.9, 0.25);
+              } else { // big yellow-banded cargo shell with a faint tracer and a smoke streamer
+                proj.body(X, H, Z, dx, dy, dz, 0.4 + 0.4 * sz, 0.12 + 0.1 * sz, 0.8, 0.7, 0.3);
+                proj.streak(bx(0.7 + sz * 0.4), by(0.7 + sz * 0.4), bz(0.7 + sz * 0.4), bx(0.15), by(0.15), bz(0.15), 0.05 + sz * 0.04, 0.9, 0.45, 0.12);
+                trailAlong(0.2, 'heavyShell', 0.8 + sz, 0.3);
               }
               break;
-            case 'mortar':
-              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.25 + 0.2 * sz, 0.1 + 0.06 * sz, 0.45, 0.48, 0.4);
-              if (emit) this.fx.trail(pos.x, H, pos.y, 'shell', 0.5 + sz);
+            case 'mortar': // finned bomb lobbed high: a glowing fuse tail and a thin smoke line
+              proj.body(X, H, Z, dx, dy, dz, 0.32 + 0.2 * sz, 0.13 + 0.06 * sz, 0.4, 0.43, 0.36);
+              proj.streak(bx(0.55), by(0.55), bz(0.55), bx(0.12), by(0.12), bz(0.12), 0.045 + sz * 0.03, 1, 0.45, 0.12);
+              this.fx.glow(bx(0.14), by(0.14), bz(0.14), 0.22 + 0.1 * sz, dt * 2.2, RAMPS.exhaust);
+              trailAlong(0.15, 'heavyShell', 0.55 + sz, 0.2);
               break;
-            default: // howitzer / barrage: heavy shell and a lazy grey streamer
-              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.35 + 0.4 * sz, 0.1 + 0.1 * sz, 0.62, 0.6, 0.52);
-              if (emit) this.fx.trail(pos.x, H, pos.y, 'heavyShell', 0.8 + sz);
+            default: // howitzer / barrage: heavy shell, a glowing base-bleed tracer and a lazy grey streamer
+              proj.body(X, H, Z, dx, dy, dz, 0.35 + 0.4 * sz, 0.1 + 0.1 * sz, 0.62, 0.6, 0.52);
+              proj.streak(bx(0.9 + sz * 0.5), by(0.9 + sz * 0.5), bz(0.9 + sz * 0.5), bx(0.18), by(0.18), bz(0.18), 0.05 + sz * 0.05, 1, 0.5, 0.15);
+              trailAlong(0.2, 'heavyShell', 0.8 + sz, 0.2);
               break;
           }
           break;
         }
-        case 'rocket': { // stubby rocket: orange flame and a thick billowing smoke trail
-          proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.4 + 0.25 * sz, 0.08 + 0.07 * sz, 0.75, 0.72, 0.62);
+        case 'rocket': { // stubby rocket: a flickering flame tongue and a thick, curving, lingering smoke trail
           const inc = st.fam === 'incend';
-          proj.streak(pos.x - dx * 0.8, H, pos.y - dz * 0.8, pos.x - dx * 0.22, H, pos.y - dz * 0.22, 0.07 + sz * 0.04, 1, inc ? 0.35 : 0.55, 0.12);
-          if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, inc ? 'incend' : 'rocket', 0.8 + sz * 0.8);
+          const len = 0.36 + 0.22 * sz;
+          proj.body(X, H, Z, dx, dy, dz, len, 0.07 + 0.06 * sz, 0.5, 0.5, 0.44);
+          // burn: the motor roars hardest early on, the flame tongue flickers every frame
+          const fl = (0.7 + 0.6 * Math.random()) * (1.2 - 0.35 * kp);
+          const t0 = len * 0.5, t1 = t0 + (0.22 + 0.2 * sz) * fl;
+          proj.streak(bx(t1), by(t1), bz(t1), bx(t0), by(t0), bz(t0), (0.03 + sz * 0.025) * fl, 1, inc ? 0.3 : 0.5, 0.1);
+          this.fx.glow(bx(t0 + 0.08), by(t0 + 0.08), bz(t0 + 0.08), (0.22 + 0.18 * sz) * fl, dt * 2.2, inc ? RAMPS.ember : RAMPS.exhaust);
+          trailAlong(t0 + 0.12, inc ? 'incend' : 'rocket', 0.8 + sz * 0.8, 0.16);
           break;
         }
-        case 'missile': { // slim white missile: white-hot exhaust point and a thin lasting contrail
+        case 'missile': { // slim white missile: a white-hot exhaust plume (fierce in the boost) and a long contrail
           const big = st.fam === 'bigMissile';
-          proj.body(pos.x, H, pos.y, dx, pitch, dz, (big ? 0.6 : 0.4) + 0.3 * sz, (big ? 0.1 : 0.05) + 0.05 * sz, 0.95, 0.95, 0.92);
-          proj.streak(pos.x - dx * 0.5, H, pos.y - dz * 0.5, pos.x - dx * 0.2, H, pos.y - dz * 0.2, 0.05 + sz * 0.04, 1, 0.9, 0.7);
-          if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, big ? 'bigMissile' : 'missile', 0.8 + sz);
+          const len = (big ? 0.6 : 0.4) + 0.3 * sz;
+          proj.body(X, H, Z, dx, dy, dz, len, (big ? 0.1 : 0.05) + 0.05 * sz, 0.95, 0.95, 0.92);
+          const boost = Math.max(0, 1 - age / (big ? 0.9 : 0.6));
+          const fl = (0.8 + 0.4 * Math.random()) * (1 + 0.9 * boost);
+          const t0 = len * 0.5, t1 = t0 + (big ? 0.45 : 0.25) * (0.6 + sz) * fl;
+          proj.streak(bx(t1), by(t1), bz(t1), bx(t0), by(t0), bz(t0), (0.025 + sz * 0.03) * fl * (big ? 1.6 : 1), 1, 0.9, 0.7);
+          this.fx.glow(bx(t0 + 0.06), by(t0 + 0.06), bz(t0 + 0.06), (big ? 0.45 : 0.24) * (0.6 + sz) * fl, dt * 2.2, RAMPS.flash);
+          trailAlong(t0 + 0.08, big ? 'bigMissile' : 'missile', (0.8 + sz) * (1 + 0.6 * boost), big ? 0.2 : 0.14);
           break;
         }
         case 'flame': // two puffs a frame: a dense, rolling jet
-          if (emit) this.fx.flameJet(pos.x, H, pos.y, clamp(pos.progress, 0, 1), 0.7 + sz, st.def?.id === 'napalm' || st.def?.id === 'inferno');
-          if (emit && Math.random() < 0.6 * this.fx.lod) this.fx.flameJet(pos.x - dx * 0.2, H, pos.y - dz * 0.2, clamp(pos.progress - 0.05, 0, 1), 0.7 + sz, false);
+          if (emit) this.fx.flameJet(X, H, Z, kp, 0.7 + sz, st.def?.id === 'napalm' || st.def?.id === 'inferno');
+          if (emit && Math.random() < 0.6 * lod) this.fx.flameJet(X - dx * 0.2, H, Z - dz * 0.2, clamp(pos.progress - 0.05, 0, 1), 0.7 + sz, false);
           break;
         case 'orb': {
           if (st.fam === 'sonic') { // pressure wave: a pale shimmering ball that leaves ripples
-            this.fx.glow(pos.x, H, pos.y, 0.4 + sz * 0.6, dt * 2.2, RAMPS.sonic);
-            if (Math.random() < this.frameDt() * 9) this.fx.sonicPulse(pos.x, H, pos.y, 0.6 + sz);
+            this.fx.glow(X, H, Z, 0.4 + sz * 0.6, dt * 2.2, RAMPS.sonic);
+            if (Math.random() < fdt * 9) this.fx.sonicPulse(X, H, Z, 0.6 + sz);
             break;
           }
           const ramp: Ramp = st.fam === 'empOrb' ? RAMPS.emp : RAMPS.plasma;
-          this.fx.glow(pos.x, H, pos.y, 0.4 + sz * 0.7, dt * 2.2, ramp);
-          if (emit) this.fx.trail(pos.x, H, pos.y, 'orb', 0.5 + sz * 0.6, ramp);
-          if (st.fam === 'empOrb' && Math.random() < this.frameDt() * 10) this.fx.arcs(pos.x, H, pos.y, 0.25 + sz * 0.3, 0.25 + sz * 0.3);
+          this.fx.glow(X, H, Z, 0.4 + sz * 0.7, dt * 2.2, ramp);
+          if (emit) this.fx.trail(X, H, Z, 'orb', 0.5 + sz * 0.6, ramp);
+          if (st.fam === 'empOrb' && Math.random() < fdt * 10) this.fx.arcs(X, H, Z, 0.25 + sz * 0.3, 0.25 + sz * 0.3);
           break;
         }
         default: break;
       }
-      rec.lastH = H; rec.px = pos.x; rec.py = pos.y;
+      // lofted rounds cast a soft shadow on the ground under them: it reads the arc's height from above
+      if (lofts && pos.z > 0.25 && !rec.bomblet) this.fx.shadow(X, Z, (p.kind === 'arc' ? 0.28 : 0.22) + 0.15 * sz, 0.32 / (1 + 0.35 * pos.z), fdt);
+      rec.lastH = H; rec.px = X; rec.py = Z;
     }
     proj.end();
     for (const id of seen.keys()) if (!alive.has(id)) seen.delete(id);
@@ -1393,6 +1472,8 @@ export class FieldView3D implements BattleView {
           }
           if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
         }
+        // the area the blast actually damaged (the sim's splash radius), marked on the ground / at the burst height
+        if (st.fam !== 'pd') fx.aoeRing(e.x, st.fam === 'flak' ? (ey > 0 ? ey : 1.3) : ey, e.y, e.radius, st.fam === 'plasmaOrb' || st.fam === 'plasma' || st.fam === 'empOrb' || st.fam === 'chain' || st.fam === 'sonic');
         switch (st.fam) {
           case 'mg': case 'hmg': case 'gatling': case 'ac': case 'twinmg': case 'shotgun': case 'sniper':
             fx.pop(e.x, ey, e.y, r * 0.8); break; // autocannon HE round: a sharp little pop
