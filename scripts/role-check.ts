@@ -5,14 +5,16 @@
 //   field and the seeds: +1 = won without a scratch, 0 = even trade, -1 = wiped out for nothing.
 // A good result: the weapon beats its intended targets (score well above 0.5), and its mean over those targets sits
 // with its peers (not far above = underpriced, not far below = overpriced or not doing its job).
-// Run: node scripts/role-check.ts [seeds=4] [budget=700] [roles...]
+// Small fights (about 5 blocks a side, like a real round), not 240-unit brawls: our side buys `blocks` blocks of the
+// weapon design and the opponent the same supply (at least one block, so a titan target always shows up).
+// Run: node scripts/role-check.ts [seeds=4] [blocks=5] [roles...]
 import { Battle } from '../src/shared/sim/battle.ts';
 import { blockDims, DEPLOY_D, DEPLOY_W, rectsOverlap } from '../src/shared/grid.ts';
 import { computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 
-const seeds = Number(process.argv[2] ?? 4), budget0 = Number(process.argv[3] ?? 700);
+const seeds = Number(process.argv[2] ?? 4), blocks = Number(process.argv[3] ?? 5);
 const only = process.argv.slice(4);
 const S = (id: string) => STARTER_DESIGNS.find((d) => d.id === `starter-${id}`)!;
 const mk = (mounts: (string | null)[], chassis = 'warden', mobility = 'halftrack'): Design => ({ id: mounts.filter(Boolean).join('+'), name: mounts.filter(Boolean).join('+'), chassis, mobility, mounts });
@@ -48,7 +50,7 @@ const buy = (d: Design, budget: number) => Array.from({ length: Math.max(1, Math
 
 /** remaining-value margin of `d` vs `t`, equal supply (the exact spend of whichever side buys more) */
 function score(d: Design, t: Design): number {
-  const budget = Math.max(budget0, computeStats(t).cost);
+  const budget = Math.max(blocks * computeStats(d).cost, computeStats(t).cost);
   const a = { ...d, id: 'role-a' }, b = { ...t, id: 'role-b' };
   let A = buy(a, budget), B = buy(b, budget);
   const ca = computeStats(a).cost * A.length, cb = computeStats(b).cost * B.length;

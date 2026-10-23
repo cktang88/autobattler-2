@@ -188,15 +188,15 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  leech: 1.16, prism: 14.4, voidlance: 1.49, entropy: 1,
+  leech: 1.16, prism: 5.18, voidlance: 1.49, entropy: 1,
   aamissile: 1.26, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 2.22, arclance: 2.95, atgm: 8.11,
   autocannon: 2.29, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 8.69, bulwarkshield: 1.48, buzzsaw: 0.27,
   cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 14.00, heavybomb: 6.05, cruise: 7.74, disarm: 0.416,
   dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 0.53, flak: 0.31, flamer: 0.61, gauss: 4.58,
-  gravity: 3.14, grinder: 3.99, guidedrocket: 3.35, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 0.611,
-  heavyflak: 1.19, hmg: 1.67, howitzer: 22.16, incendiary: 0.35, inferno: 0.4, jammer: 0.25, laser: 3.83,
+  gravity: 3.14, grinder: 3.99, guidedrocket: 3.35, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.32,
+  heavyflak: 1.19, hmg: 1.67, howitzer: 22.16, incendiary: 0.35, inferno: 0.4, jammer: 0.25, laser: 2.3,
   lightrail: 12, massdriver: 0.75, mg: 3, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
-  mortar: 10.84, nanite: 0.14, napalm: 0.12, overclock: 0.21, phantom: 0.16, plasma: 6.18, plasmablade: 0.69,
+  mortar: 10.84, nanite: 0.14, napalm: 0.12, overclock: 0.21, phantom: 0.16, plasma: 3.4, plasmablade: 0.69,
   plasmaorb: 0.868, pointdef: 4.00, quad20: 0.66, railgun: 20, ram: 0.86, reactive: 0.78, repair: 12.45,
   repairM: 4.00, rocketL: 1.16, rockets: 1.67, sam: 4.55, selfdestruct: 0.14, sensor: 1.0, shield: 0.81,
   shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 1, siege240: 1.53, siegeplasma: 0.85, skyfortress: 0.62,

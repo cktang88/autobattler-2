@@ -1,7 +1,8 @@
 // Overpowered-design check (real sim, both sides of the field, several seeds): half the budget spent on one design
 // plus half on a mix of starter designs, vs the full budget on the mix. ~50% = fairly priced; far above = underpriced,
 // far below = overpriced. (Pure mono armies are no test: an army that can't hit aircraft loses however strong it is.)
-// Run: node scripts/op-check.ts [budget=1200] [seeds=4] [ids...]   (ids from the list below; default all)
+// Small armies (~5 blocks a side at the default 700 budget), like a real round, not 240-unit brawls.
+// Run: node scripts/op-check.ts [budget=700] [seeds=4] [ids...]   (ids from the list below; default all)
 //      OP_DESIGNS='[{"id":"x","chassis":"..","mobility":"..","mounts":[..]}]' adds designs.
 import { Battle } from '../src/shared/sim/battle.ts';
 import { computeStats, validateDesign } from '../src/shared/stats.ts';
@@ -63,7 +64,7 @@ export function winRate(d: Design, budget: number, seeds: number, pool: Design[]
 
 const isMain = process.argv[1]?.endsWith('op-check.ts');
 if (isMain) {
-  const budget = Number(process.argv[2] ?? 1200), seeds = Number(process.argv[3] ?? 4);
+  const budget = Number(process.argv[2] ?? 700), seeds = Number(process.argv[3] ?? 4);
   const ids = process.argv.slice(4);
   const pool = STARTER_DESIGNS.filter((d) => computeStats(d).size <= 3);
   const list = [...CANDIDATES, ...STARTER_DESIGNS].filter((d) => !ids.length || ids.includes(d.id));

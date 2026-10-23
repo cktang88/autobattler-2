@@ -17,7 +17,7 @@ for (let it = 0; it < passes; it++) {
   const acc = new Map<string, [number, number]>();
   let rms = 0;
   for (const d of designs) {
-    const r = winRate(d, 1500, seeds, pool);
+    const r = winRate(d, 700, seeds, pool); // ~5 blocks a side
     rms += (r / 100 - 0.5) ** 2;
     const mods = [...new Set(d.mounts.filter((m): m is string => !!m && MODULE_BY_ID.get(m)?.kind !== 'armor'))];
     for (const m of mods) {
