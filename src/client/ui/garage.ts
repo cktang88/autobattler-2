@@ -74,22 +74,27 @@ const WEAPON_CAT_SET = new Set(WEAPON_GROUPS.flatMap((g) => g.cats));
 const isWeaponTab = (m: ModuleDef) => WEAPON_CAT_SET.has(m.category);
 const LS_DETAILS = 'garage.details';
 
-/** Roster order (remembered): last edited first by default, so your own designs sit above the starters. */
+/** Roster order (remembered), applied inside each folder / group (or across everything with no folders): by unit
+ *  size by default: light squads x16, then x8, then x4, then single units medium -> titan. */
 type RosterSort = 'edited' | 'name' | 'deck' | 'cost' | 'size';
 const ROSTER_SORTS: { value: RosterSort; label: string; hint: string }[] = [
+  { value: 'size', label: 'Unit size', hint: 'Squads ×16, ×8, ×4, then single units light to heavy' },
   { value: 'edited', label: 'Last edited', hint: 'Newest first, untouched starters last' },
   { value: 'name', label: 'Name A–Z', hint: 'Alphabetical' },
   { value: 'deck', label: 'In deck first', hint: 'Deck designs on top' },
   { value: 'cost', label: 'Cost', hint: 'Cheapest first' },
-  { value: 'size', label: 'Weight class', hint: 'Lightest class first' },
 ];
 const LS_SORT = 'garage.sort';
 const LS_HIDE_STARTERS = 'garage.hideStarters';
 const STARTER_IDS = new Set(STARTER_DESIGNS.map((d) => d.id));
 const loadSort = (): RosterSort => {
   try { const v = localStorage.getItem(LS_SORT); if (v && ROSTER_SORTS.some((x) => x.value === v)) return v as RosterSort; } catch { /* storage unavailable */ }
-  return 'edited';
+  return 'size';
 };
+
+/** Size rank for the 'Unit size' sort / grouping: light squads by squad count (x16 < x8 < x4), then hull size. */
+const sizeRank = (s: UnitStats | null): number => !s ? 99 : s.size === 1 ? (s.squad >= 16 ? 0 : s.squad >= 8 ? 1 : 2) : s.size + 1;
+const SIZE_RANK_LABEL = ['Light ×16', 'Light ×8', 'Light ×4', '', 'Medium', 'Heavy', 'Giant', 'Titan'];
 
 /** The roster in display order. Ties (and every design without an edit stamp) keep a stable order: your own
  *  designs newest-added first, then the starters in their usual order. */
@@ -105,7 +110,7 @@ function sortRoster(list: Design[], sort: RosterSort, deck: string[], stats: (d:
     name: (a, b) => name(a, b) || recency(a, b),
     deck: (a, b) => Number(deck.includes(b.id)) - Number(deck.includes(a.id)) || recency(a, b),
     cost: (a, b) => cost(a) - cost(b) || name(a, b),
-    size: (a, b) => (stats(a)?.size ?? 99) - (stats(b)?.size ?? 99) || cost(a) - cost(b) || name(a, b),
+    size: (a, b) => sizeRank(stats(a)) - sizeRank(stats(b)) || cost(a) - cost(b) || name(a, b),
   };
   return [...list].sort(cmp[sort]);
 }
@@ -115,7 +120,7 @@ type RosterGroupBy = 'folders' | 'domain' | 'size' | 'role';
 const ROSTER_GROUPS: { value: RosterGroupBy; label: string; hint: string }[] = [
   { value: 'folders', label: 'My folders', hint: 'Your own folders: drag designs in, or use a row\'s folder button' },
   { value: 'domain', label: 'Unit class', hint: 'Ground · Jet · Helicopter' },
-  { value: 'size', label: 'Size', hint: 'Light to Titan' },
+  { value: 'size', label: 'Size', hint: 'Light ×16 · ×8 · ×4 squads, then Medium to Titan' },
   { value: 'role', label: 'Role', hint: 'Air role, or the job of the main weapon' },
 ];
 const LS_GROUP = 'garage.groupBy';
@@ -937,8 +942,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         const i = DOMAINS.findIndex((x) => x.id === dom);
         add(`domain:${dom}`, DOMAIN_SHORT[dom], i, d, DOMAINS[i]?.desc);
       } else if (groupBy === 'size') {
-        const z = s?.size ?? 0;
-        add(`size:${z}`, SIZE_CLASSES[z - 1] ?? 'Unknown', z || 99, d, z ? `${footprintLabel(z)} hulls` : undefined);
+        const r = sizeRank(s);
+        add(`size:${r}`, SIZE_RANK_LABEL[r] ?? 'Unknown', r, d, s ? (s.size === 1 ? `Light units, ${s.squad} per block` : `${footprintLabel(s.size)} hulls`) : undefined);
       } else {
         const r = designRole(d, s);
         add(`role:${r.key}`, r.label, r.order, d);
