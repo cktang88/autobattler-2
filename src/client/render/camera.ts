@@ -32,6 +32,9 @@ export class Camera {
   smooth = 13;
   /** seconds since the camera last moved (used to decide when to re-render hi-res ground) */
   still = 0;
+  /** performance.now() of the player's last own camera input (drag, pinch, wheel, camera keys / buttons); the auto
+   *  camera stays off once the player has taken control */
+  userAt = 0;
   /** continuous key pan direction, -1..1 (screen axes) */
   keyX = 0;
   keyY = 0;
@@ -162,6 +165,14 @@ export class Camera {
   }
 
   /** Eased move to a view (visual coords). k in CSS px per cell. */
+  /** Auto camera: ease toward framing a visual-space box (cells) with `margin` cells around it; the box is never
+   *  treated as smaller than `minSize` cells, so the last few units of a fight fill the view without absurd zoom. */
+  frameBox(x0: number, y0: number, x1: number, y1: number, margin = 6, minSize = 20): void {
+    const w = Math.max(minSize, x1 - x0 + 2 * margin), h = Math.max(minSize * 0.75, y1 - y0 + 2 * margin);
+    const k = Math.min(this.vw / w, this.vh / (h * this.ay));
+    this.setTarget((x0 + x1) / 2, (y0 + y1) / 2, k, false);
+  }
+
   setTarget(vx: number, vy: number, k: number, instant = false): void {
     this.anchor = null;
     this.stopInertia();
@@ -352,7 +363,7 @@ export class CameraControls {
     this.cam.stopInertia();
     if (e.button === 1) e.preventDefault();
     if (this.ptrs.size === 2) this.startPinch();
-    else if (this.ptrs.size === 1 && (e.button === 1 || e.button === 2)) { this.panning = true; this.dragged = true; }
+    else if (this.ptrs.size === 1 && (e.button === 1 || e.button === 2)) { this.panning = true; this.dragged = true; this.cam.userAt = performance.now(); }
   }
 
   private startPinch(): void {
@@ -360,6 +371,7 @@ export class CameraControls {
     this.pinching = true;
     this.panning = false;
     this.dragged = true;
+    this.cam.userAt = performance.now();
     this.pinchDist = Math.max(8, Math.hypot(a.x - b.x, a.y - b.y));
     this.pinchMidX = (a.x + b.x) / 2;
     this.pinchMidY = (a.y + b.y) / 2;
@@ -391,6 +403,7 @@ export class CameraControls {
       if (Math.hypot(p.x - q.sx, p.y - q.sy) <= thr) return;
       this.panning = true;
       this.dragged = true;
+      this.cam.userAt = performance.now();
       this.cam.panByScreen(p.x - q.sx, p.y - q.sy);
     } else this.cam.panByScreen(dx, dy);
     if (q.button === 2) this.rightDragged = true;
@@ -455,6 +468,7 @@ export class CameraControls {
     const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     const f = clampN(Math.exp(-dy * (e.ctrlKey ? 0.011 : 0.0016)), 0.6, 1.7);
     const p = this.pos(e);
+    this.cam.userAt = performance.now();
     this.cam.zoomBy(f, p.x, p.y);
   }
 
@@ -472,6 +486,7 @@ export class CameraControls {
   private keyDown(e: KeyboardEvent): void {
     if (!this.keyOk(e)) return;
     const k = e.key.toLowerCase();
+    if (CameraControls.PAN.has(k) || k === '+' || k === '=' || k === 'add' || k === '-' || k === '_' || k === 'subtract' || k === 'home' || k === 'f') this.cam.userAt = performance.now();
     if (CameraControls.PAN.has(k)) {
       this.keys.add(k);
       this.syncKeys();

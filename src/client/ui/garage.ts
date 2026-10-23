@@ -17,10 +17,12 @@ import { slotError } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
+import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
+  apBadge, damageKindBadges, showDamageRules,
   designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
 } from './garage-parts.ts';
 import { firstLegalMobility, refitForClass, reqReason as reqReasonFor, reseat } from './garage-fit.ts';
@@ -70,6 +72,42 @@ const SYSTEM_GROUPS: Group[] = [
 const WEAPON_CAT_SET = new Set(WEAPON_GROUPS.flatMap((g) => g.cats));
 const isWeaponTab = (m: ModuleDef) => WEAPON_CAT_SET.has(m.category);
 const LS_DETAILS = 'garage.details';
+
+/** Roster order (remembered): last edited first by default, so your own designs sit above the starters. */
+type RosterSort = 'edited' | 'name' | 'deck' | 'cost' | 'size';
+const ROSTER_SORTS: { value: RosterSort; label: string; hint: string }[] = [
+  { value: 'edited', label: 'Last edited', hint: 'Newest first, untouched starters last' },
+  { value: 'name', label: 'Name A–Z', hint: 'Alphabetical' },
+  { value: 'deck', label: 'In deck first', hint: 'Deck designs on top' },
+  { value: 'cost', label: 'Cost', hint: 'Cheapest first' },
+  { value: 'size', label: 'Weight class', hint: 'Lightest class first' },
+];
+const LS_SORT = 'garage.sort';
+const LS_HIDE_STARTERS = 'garage.hideStarters';
+const STARTER_IDS = new Set(STARTER_DESIGNS.map((d) => d.id));
+const loadSort = (): RosterSort => {
+  try { const v = localStorage.getItem(LS_SORT); if (v && ROSTER_SORTS.some((x) => x.value === v)) return v as RosterSort; } catch { /* storage unavailable */ }
+  return 'edited';
+};
+
+/** The roster in display order. Ties (and every design without an edit stamp) keep a stable order: your own
+ *  designs newest-added first, then the starters in their usual order. */
+function sortRoster(list: Design[], sort: RosterSort, deck: string[], stats: (d: Design) => UnitStats | null): Design[] {
+  const idx = new Map(list.map((d, i) => [d.id, i] as const));
+  const starter = (d: Design) => (STARTER_IDS.has(d.id) && d.editedAt == null ? 1 : 0);
+  const recency = (a: Design, b: Design) => (b.editedAt ?? 0) - (a.editedAt ?? 0) || starter(a) - starter(b)
+    || (starter(a) ? idx.get(a.id)! - idx.get(b.id)! : idx.get(b.id)! - idx.get(a.id)!);
+  const cost = (d: Design) => stats(d)?.cost ?? Infinity;
+  const name = (a: Design, b: Design) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  const cmp: Record<RosterSort, (a: Design, b: Design) => number> = {
+    edited: recency,
+    name: (a, b) => name(a, b) || recency(a, b),
+    deck: (a, b) => Number(deck.includes(b.id)) - Number(deck.includes(a.id)) || recency(a, b),
+    cost: (a, b) => cost(a) - cost(b) || name(a, b),
+    size: (a, b) => (stats(a)?.size ?? 99) - (stats(b)?.size ?? 99) || cost(a) - cost(b) || name(a, b),
+  };
+  return [...list].sort(cmp[sort]);
+}
 
 const LS_TAB = 'garage.tab';
 const loadTab = (): Tab => {
@@ -127,8 +165,14 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   // ---------------- state ----------------
   let designs = allDesigns();
   let deck = activeDeck().map((d) => d.id);
-  let selectedId: string | null = designs[0]?.id ?? null;
-  let saved: Design | null = designs[0] ? clone(designs[0]) : null;
+  let rosterSort: RosterSort = loadSort();
+  let hideStarters = (() => { try { return localStorage.getItem(LS_HIDE_STARTERS) === '1'; } catch { return false; } })();
+  /** the roster as listed (sorted, starters hidden if asked); `keep` stays listed even when it would be hidden */
+  const roster = (keep: string | null = selectedId) => sortRoster(designs, rosterSort, deck, statsOf)
+    .filter((d) => !hideStarters || !STARTER_IDS.has(d.id) || d.id === keep);
+  const first = sortRoster(designs, rosterSort, deck, statsOf).find((d) => !hideStarters || !STARTER_IDS.has(d.id)) ?? designs[0];
+  let selectedId: string | null = first?.id ?? null;
+  let saved: Design | null = first ? clone(first) : null;
   let draft: Design = saved ? clone(saved) : blankDesign(designs.map((d) => d.name));
   /** true while the name is an auto-generated one the player has not typed over */
   let autoName = !saved;
@@ -167,6 +211,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   // ---------------- static skeleton ----------------
   const deckChip = h('span.g-deckchip', { role: 'status', 'aria-live': 'polite' });
   const listEl = h('div.g-items', { role: 'list' });
+  const toolsEl = h('div.g-list-tools');
   const gridCv = h('canvas.g-grid', { 'aria-hidden': 'true' });
   const preview = h('canvas.g-preview', { 'aria-label': 'Unit blueprint', role: 'img' });
   const socketsEl = h('div.g-sockets');
@@ -238,7 +283,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const el = h('div.garage', null,
     h('header.g-top', null,
       h('button.g-btn.g-back', { type: 'button', onclick: () => leave() }, icon('back'), 'Menu'),
-      h('h1.g-title', null, h('span.g-title-k', null, 'Hangar'), h('span.g-title-s', null, 'Design bureau')),
+      h('h1.g-title', null, h('span.g-title-k', null, 'Unit Designer'), h('span.g-title-s', null, 'Hangar · design bureau')),
       h('span.g-hazard', { 'aria-hidden': 'true' }),
       deckChip,
     ),
@@ -251,6 +296,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
             h('button.g-iconbtn', { type: 'button', title: 'Duplicate', 'aria-label': 'Duplicate design', onclick: () => duplicate() }, icon('copy')),
             h('button.g-iconbtn.danger', { type: 'button', title: 'Delete', 'aria-label': 'Delete design', onclick: () => remove() }, icon('trash')),
           ),
+          toolsEl,
         ),
         listEl,
       ),
@@ -337,7 +383,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (!saved || selectedId === null) {
       // unsaved draft: just drop it
       sfx('click');
-      load(designs[0] ?? null);
+      load(roster(null)[0] ?? designs[0] ?? null);
       return;
     }
     if (designs.length <= 1) { sfx('error'); app.toast('Keep at least one design', 'error'); return; }
@@ -346,12 +392,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       { id: 'cancel', label: 'Cancel', kind: 'ghost' },
     ]);
     if (r !== 'del') return;
-    const idx = designs.findIndex((d) => d.id === selectedId);
+    const before = roster();
+    const idx = before.findIndex((d) => d.id === selectedId);
     deleteDesign(selectedId);
     designs = allDesigns();
     deck = activeDeck().map((d) => d.id);
     sfx('click');
-    load(designs[Math.min(idx, designs.length - 1)] ?? null);
+    // select the neighbour in the list as shown
+    const after = roster(null);
+    load(after[Math.min(Math.max(idx, 0), after.length - 1)] ?? designs[0] ?? null);
   }
 
   function doSave(): boolean {
@@ -833,13 +882,52 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     );
   }
 
+  /** Sort + "hide starters" controls above the roster (rebuilt only when they change, so an open list survives updates). */
+  function renderTools(focus?: 'sort' | 'hide') {
+    const starters = designs.filter((d) => STARTER_IDS.has(d.id)).length;
+    toolsEl.replaceChildren(
+      kit.select({
+        value: rosterSort, label: 'Sort designs', prefix: 'Sort', options: ROSTER_SORTS, className: 'g-sort', fk: 'roster-sort',
+        onChange: (v) => {
+          rosterSort = v;
+          try { localStorage.setItem(LS_SORT, v); } catch { /* ignore */ }
+          sfx('click');
+          renderTools('sort');
+          renderList();
+          listEl.querySelector('.g-item.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        },
+      }),
+      ...(starters ? [kit.toggle({
+        label: 'Hide starters', on: hideStarters, className: 'g-hidestart', fk: 'roster-hide',
+        title: `Hide the ${starters} built-in starter designs (the one you're editing stays listed)`,
+        onChange: (v) => {
+          hideStarters = v;
+          try { localStorage.setItem(LS_HIDE_STARTERS, v ? '1' : '0'); } catch { /* ignore */ }
+          sfx('click');
+          renderTools('hide');
+          renderList();
+        },
+      })] : []),
+    );
+    if (focus) (toolsEl.querySelector(`[data-fk="roster-${focus}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+
   function renderList() {
     listCanvases.length = 0;
     const items: HTMLElement[] = [];
+    // an unsaved new design sits on top, then the roster in the chosen order (by saved content, so it doesn't jump while editing)
     if (selectedId === null) items.push(listItem(draft, { selected: true, unsaved: true, isDraft: true }));
-    for (const d of designs) {
+    const shown = roster();
+    for (const d of shown) {
       const sel = d.id === selectedId;
       items.push(listItem(sel ? draft : d, { selected: sel, unsaved: sel && dirty(), isDraft: false }));
+    }
+    const hidden = designs.length - shown.length;
+    if (hidden > 0) {
+      items.push(h('button.g-hidden-note', {
+        type: 'button', 'data-fk': 'roster-showall', title: 'Show the starter designs again',
+        onclick: () => { hideStarters = false; try { localStorage.setItem(LS_HIDE_STARTERS, '0'); } catch { /* ignore */ } sfx('click'); renderTools('hide'); renderList(); },
+      }, `${hidden} starter${hidden === 1 ? '' : 's'} hidden · show`));
     }
     if (!items.length) items.push(h('p.g-empty', null, 'No designs yet.'));
     listEl.replaceChildren(...items);
@@ -879,6 +967,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('span.g-plate.big', { title: `${c.name}: ${footDims(c)} footprint` }, h('b', null, sizeLabel(c.size, c.footprint?.[0], c.footprint?.[1])), ` ${footDims(c)}`),
       s && s.squad > 1 ? h('span.g-plate.squad', { title: `One purchase deploys a block of ${s.squad} units with adjustable spacing` }, `Squad ×${s.squad}`) : null,
       s?.flying ? h('span.g-plate.air', null, icon('air'), 'Flying') : null,
+      (() => { const r = s?.flying ? airRole(draft) : null; return r ? h('span.g-plate.air', { title: AIR_ROLE_INFO[r].desc }, AIR_ROLE_INFO[r].label) : null; })(),
       s?.isStatic ? h('span.g-plate.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-plate.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
     ].filter((x): x is HTMLSpanElement => !!x));
@@ -1190,6 +1279,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
       });
+      // penetration + damage type at a glance on weapon tiles
+      if (m.kind === 'weapon') t.querySelector('.g-ptile-sub')?.append(' ', apBadge(m), ' ', damageKindBadges(m));
       if (fh) armDrag(t, () => ({ mod: m.id, from: null }));
       return t;
     };
@@ -1391,7 +1482,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const per = `${m.damage ?? 0}${m.pellets && m.pellets > 1 ? ` ×${m.pellets}` : ''}${m.burst && m.burst > 1 ? ` ×${m.burst} burst` : ''}`;
       specs.push(row('Damage', per), row('Firing', firingText(m)), row('Accuracy', accMeter(m)));
       if (m.splash) specs.push(row('AoE radius', fmtMeters(m.splash)));
-      if (m.ap) specs.push(row('Armor pierce', `${Math.round(m.ap * 100)}%`));
+      specs.push(row('Penetration', apBadge(m)), row('Damage type', damageKindBadges(m, true)));
     } else {
       if (m.heal) keys.push(kstat('Repair', fmt(m.heal, 0), 'hp/s', 'hl'), kstat('Range', String(Math.round((m.range ?? 0) * METERS_PER_CELL)), 'm'));
       if (m.shield) keys.push(kstat('Shield', String(m.shield), '', 'hl'));
@@ -1407,27 +1498,19 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const target = autoSlot(m);
     const lock = reqReason(m);
     const next = target !== null && draft.mounts[target] !== m.id ? (() => { const mounts = [...draft.mounts]; mounts[target] = m.id; return { ...draft, mounts }; })() : null;
-    const socketBtns = c.mounts.map((cls, i) => {
-      const why = slotBlock(m, i);
-      const occ = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
-      const here = occ?.id === m.id;
-      return h('button.g-sockbtn', {
-        type: 'button', disabled: !!why || here, class: [i === target && !here ? 'best' : '', here ? 'here' : '', activeSlot === i ? 'active' : ''].join(' '),
-        title: why ?? (here ? 'Already mounted here' : occ ? `Replace ${occ.name}` : 'Mount in this empty socket'),
-        'data-fk': `mount-${m.id}-${i}`,
-        onclick: () => equip(i, m.id),
-      }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]), h('span.g-sockbtn-l', null, here ? 'Mounted' : occ ? `Replace ${occ.name}` : 'Empty'));
-    });
     return [
-      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
+      inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null,
+        ...(m.kind === 'weapon' ? [apBadge(m), damageKindBadges(m, true)] : [])], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
-      h('div.g-rules', null, h('div.g-rules-h', null, 'How it works'), h('ul', null, ...moduleRules(m).map((t) => h('li', null, t)))),
+      // full specs always shown for modules (the rules text lives in the part tooltip); mounting is by drag / double-click
+      h('div.g-specs', null, ...specs.filter(Boolean) as HTMLElement[]),
+      fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null,
+      m.kind === 'weapon' || m.shield || m.armor || m.reactive || m.energyResist
+        ? h('button.g-more.g-dr-link', { type: 'button', onclick: () => { sfx('click'); showDamageRules(el); } }, icon('help'), 'How damage works: shields, armour, penetration')
+        : null,
+      lock ?? noFitReason(m) ? h('p.g-warnlbl', null, lock ?? noFitReason(m)) : null,
       next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
-      h('div.g-insp-sec', null,
-        h('span.g-sec-l', null, lock ?? noFitReason(m) ?? 'Mount in'),
-        h('div.g-sockbtns', null, ...socketBtns)),
-      ...details(specs, [fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null]),
     ].filter(Boolean) as HTMLElement[];
   }
 
@@ -1786,6 +1869,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   window.addEventListener('beforeunload', onUnload);
 
   nameInput.value = draft.name;
+  renderTools();
   update();
   raf = requestAnimationFrame(tick);
 

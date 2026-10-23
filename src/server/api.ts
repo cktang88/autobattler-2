@@ -8,8 +8,22 @@ import {
 } from '../shared/match.ts';
 import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
-import { hashToken, type MatchRecord, type PlayerRecord, type Store } from './store.ts';
-import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName } from './validate.ts';
+import { hashToken, nameKey, type MatchRecord, type PasswordHash, type PlayerRecord, type Store } from './store.ts';
+import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
+
+const scrypt = (pw: string, salt: Buffer) => new Promise<Buffer>((resolve, reject) =>
+  crypto.scrypt(pw.normalize('NFKC'), salt, 32, (e, k) => (e ? reject(e) : resolve(k))));
+async function hashPassword(pw: string): Promise<PasswordHash> {
+  const salt = crypto.randomBytes(16);
+  return { salt: salt.toString('hex'), hash: (await scrypt(pw, salt)).toString('hex') };
+}
+async function checkPassword(pw: string, h: PasswordHash): Promise<boolean> {
+  const want = Buffer.from(h.hash, 'hex');
+  const got = await scrypt(pw, Buffer.from(h.salt, 'hex'));
+  return want.length === got.length && crypto.timingSafeEqual(want, got);
+}
+/** names the old client gave its silent placeholder accounts: never claimable as a username */
+const PLACEHOLDER_NAME = /^Pilot \d{4}$/;
 
 export const BODY_LIMIT = 256 * 1024; // a full garage upload (up to MAX_GARAGE designs) is the largest body
 export const MAX_ACTIVE_MATCHES = 20;
@@ -41,6 +55,8 @@ export interface MatchSummary {
   forfeitBy?: Side;
 }
 
+interface SessionInfo { playerId: string; name: string; token: string; registered: boolean }
+
 interface Ctx {
   req: IncomingMessage;
   method: string;
@@ -62,6 +78,8 @@ export class Api {
   readonly store: Store;
   private readonly limiter: RateLimiter;
   private readonly loginLimiter: RateLimiter;
+  /** wrong passwords per username: slows guessing one account from many IPs */
+  private readonly failLimiter = new RateLimiter(10, 1 / 30);
   private readonly trustProxy: boolean;
   /** long-poll waiters per match id, woken whenever that match changes */
   private readonly waiters = new Map<string, Set<() => void>>();
@@ -107,6 +125,8 @@ export class Api {
     const M = c.method === 'HEAD' ? 'GET' : c.method;
     if (a === 'health' && !b && M === 'GET') return { ok: true };
     if (a === 'login' && !b && M === 'POST') return this.login(c);
+    if (a === 'logout' && !b && M === 'POST') return this.logout(c);
+    if (a === 'password' && !b && M === 'POST') return this.changePassword(c);
     if (a === 'me' && !b && M === 'GET') return this.me(c);
     if (a === 'garage' && !b) {
       if (M === 'GET') return this.getGarage(c);
@@ -130,22 +150,102 @@ export class Api {
 
   // ---------------------------------------------------------------- auth
 
+  /** With a password: sign in to (or register) the account that owns `name` — see signIn. Without one: a guest
+   *  placeholder account (names not unique), or — with `token` — resume/rename the account that token belongs to. */
   private login(c: Ctx) {
     const body = obj(c.body);
+    if (body.password !== undefined) return this.signIn(c, body);
     const existing = typeof body.token === 'string' ? this.store.playersByToken.get(hashToken(body.token)) : undefined;
     if (existing) {
-      if (body.name != null && body.name !== existing.name) existing.name = sanitizeName(body.name);
+      if (body.name != null && body.name !== existing.name) {
+        const name = sanitizeName(body.name);
+        const owner = this.store.playersByName.get(nameKey(name));
+        if (existing.pw && owner && owner !== existing) throw new HttpError(409, `The name "${name}" is already taken`);
+        this.store.setIdentity(existing, name);
+      }
       existing.lastSeen = Date.now();
       this.store.save();
-      return { playerId: existing.id, name: existing.name, token: body.token as string };
+      return this.session(existing, body.token as string);
     }
     if (!this.loginLimiter.take(`ip:${c.ip}`)) throw new HttpError(429, 'Too many logins — try again shortly');
     const name = sanitizeName(body.name);
     const token = crypto.randomBytes(32).toString('hex');
     const now = Date.now();
-    const p: PlayerRecord = { id: 'p_' + crypto.randomBytes(8).toString('hex'), name, tokenHash: hashToken(token), createdAt: now, lastSeen: now };
+    const p: PlayerRecord = { id: newPlayerId(), name, tokenHashes: [hashToken(token)], guest: true, createdAt: now, lastSeen: now };
     this.store.addPlayer(p);
-    return { playerId: p.id, name: p.name, token };
+    return this.session(p, token);
+  }
+
+  /** Username + password. A registered name: the right password opens that same account (same playerId, garage and
+   *  matches) with a fresh token for this device; a wrong one is a 401. An unregistered name: claim the passwordless
+   *  account of that name from before passwords existed (most recently seen one), else upgrade the guest account in
+   *  `token` (its garage stays), else create a new account. */
+  private async signIn(c: Ctx, body: Record<string, unknown>): Promise<SessionInfo & { status: 'signed-in' | 'registered' | 'claimed' }> {
+    if (!this.loginLimiter.take(`ip:${c.ip}`)) throw new HttpError(429, 'Too many sign-in attempts — try again in a minute');
+    const name = sanitizeName(body.name);
+    const password = sanitizePassword(body.password);
+    const key = nameKey(name);
+    const token = crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    const acct = this.store.playersByName.get(key);
+    if (acct) {
+      if (!this.failLimiter.ok(key)) throw new HttpError(429, 'Too many wrong passwords for this name — try again in a few minutes');
+      if (!(await checkPassword(password, acct.pw!))) {
+        this.failLimiter.take(key);
+        throw new HttpError(401, `Wrong password for "${acct.name}". (That name is taken: if it isn't yours, pick another.)`);
+      }
+      acct.lastSeen = now;
+      this.store.addToken(acct, hashToken(token));
+      return { ...this.session(acct, token), status: 'signed-in' as const };
+    }
+    const pw = await hashPassword(password);
+    // the name may have been registered while we were hashing
+    if (this.store.playersByName.has(key)) return this.signIn(c, body);
+    const guest = typeof body.token === 'string' ? this.store.playersByToken.get(hashToken(body.token)) : undefined;
+    let legacy: PlayerRecord | undefined;
+    if (!PLACEHOLDER_NAME.test(name)) {
+      const claimable = (p: PlayerRecord) => !p.pw && !p.guest && nameKey(p.name) === key;
+      // this device's own passwordless callsign first, else the most recently seen one of that name
+      if (guest && claimable(guest)) legacy = guest;
+      else {
+        for (const p of this.store.players.values()) {
+          if (claimable(p) && (!legacy || p.lastSeen > legacy.lastSeen)) legacy = p;
+        }
+      }
+    }
+    const target = legacy ?? (guest && !guest.pw ? guest : undefined);
+    if (target) {
+      this.store.setIdentity(target, legacy ? target.name : name, pw);
+      target.lastSeen = now;
+      this.store.addToken(target, hashToken(token));
+      return { ...this.session(target, token), status: legacy ? 'claimed' as const : 'registered' as const };
+    }
+    const p: PlayerRecord = { id: newPlayerId(), name, tokenHashes: [hashToken(token)], pw, createdAt: now, lastSeen: now };
+    this.store.addPlayer(p);
+    return { ...this.session(p, token), status: 'registered' as const };
+  }
+
+  private session(p: PlayerRecord, token: string): SessionInfo {
+    return { playerId: p.id, name: p.name, token, registered: !!p.pw };
+  }
+
+  /** Forget this device's session (the account and its other sessions stay). */
+  private logout(c: Ctx) {
+    const t = bearer(c.req);
+    if (t) this.store.removeToken(hashToken(t));
+    return { ok: true };
+  }
+
+  private async changePassword(c: Ctx) {
+    const p = this.auth(c);
+    const body = obj(c.body);
+    if (!p.pw) throw new HttpError(400, 'Sign in with a username and password first');
+    if (!this.loginLimiter.take(`ip:${c.ip}`)) throw new HttpError(429, 'Too many attempts — try again in a minute');
+    const next = sanitizePassword(body.newPassword);
+    if (!(await checkPassword(typeof body.password === 'string' ? body.password : '', p.pw))) throw new HttpError(401, 'Current password is wrong');
+    p.pw = await hashPassword(next);
+    this.store.save();
+    return { ok: true };
   }
 
   private auth(c: Ctx): PlayerRecord {
@@ -161,7 +261,7 @@ export class Api {
   private me(c: Ctx) {
     const p = this.auth(c);
     const active = this.activeCount(p.id);
-    return { playerId: p.id, name: p.name, activeMatches: active, maxActiveMatches: MAX_ACTIVE_MATCHES };
+    return { playerId: p.id, name: p.name, registered: !!p.pw, activeMatches: active, maxActiveMatches: MAX_ACTIVE_MATCHES };
   }
 
   // ---------------------------------------------------------------- garage (designs + deck, kept in players.json)
@@ -456,10 +556,13 @@ export class Api {
   prune(): void {
     this.limiter.prune();
     this.loginLimiter.prune();
+    this.failLimiter.prune();
   }
 }
 
 // ------------------------------------------------------------------ pure helpers
+
+const newPlayerId = () => 'p_' + crypto.randomBytes(8).toString('hex');
 
 function forfeitSide(r: MatchRecord, side: Side): void {
   const m = r.match;

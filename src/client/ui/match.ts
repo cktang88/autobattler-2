@@ -360,9 +360,9 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const speedbar = h('div.speedbar.hidden', null, pauseBtn, ...speedBtns, skipBtn);
   const overlayEl = h('div');
   const zoomBar = h('div.zoombtns', null,
-    h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => view.zoomBy(1.5) }, '+'),
-    h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => view.zoomBy(1 / 1.5) }, '−'),
-    h('button.small', { title: 'Fit whole field (F)', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
+    h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1.5); } }, '+'),
+    h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1 / 1.5); } }, '−'),
+    h('button.small', { title: 'Fit whole field (F)', 'aria-label': 'Fit whole field', onclick: () => { view.cam.userAt = performance.now(); view.fit(); } }, '⤢'),
   );
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
 
@@ -1555,7 +1555,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       // resumed mid-match: rebuild last round's damage tally off the critical path
       if (m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     }
-    if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } }
+    if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } autoCam = { on: loadSettings().autoCam !== false, since: view.cam.userAt, box: null }; }
     if (p !== 'deploy' && p !== 'waiting') clearRings();
     renderAll();
     renderOverlay();
@@ -1753,12 +1753,13 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     ringsShown = true;
     ringCv.style.visibility = '';
     legendEl.classList.remove('hidden');
-    const o = view.worldToScreen(0, 0), o1 = view.worldToScreen(1, 0);
-    const k = Math.hypot(o1.x - o.x, o1.y - o.y);
     const taken: { x: number; y: number; w: number; h: number }[] = [];
     // weak (all-units) rings first so the focused block's rings sit on top
     for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
       const worldCenters = placementUnitCenters(t.side, t.pos, t.st);
+      // local ground scale at this block (the 3D perspective camera draws nearer ground larger)
+      const sc = view.scaleAt(worldCenters[0]?.x ?? 0, worldCenters[0]?.y ?? 0);
+      const k = sc.k;
       // units deploy facing the enemy; ranges are measured from each weapon's own mount (same offsets as the sim)
       const bs = bodyScale(t.st.size), offs = mountOffsets(t.design).map((o) => ({ x: o.x * bs, y: o.y * bs }));
       const head = forwardY(t.side) < 0 ? -Math.PI / 2 : Math.PI / 2, hc = Math.cos(head), hs = Math.sin(head);
@@ -1777,7 +1778,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
       // the ring lives on the ground plane (foreshortened by the camera tilt): a circle around the mount for one unit,
       // the rounded outline of all its circles for a squad
-      const ay = view.ay;
+      const ay = sc.ay;
       let uh = 0;
       let cur = new Path2D();
       const path = (r: number) => {
@@ -1892,6 +1893,32 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let raf = 0;
   let last = performance.now();
   let drawErr = false;
+  /** Auto camera for the battle replay: frames every living unit (zooming in as the fight thins out) until the
+   *  player moves the camera themselves (Camera.userAt changes); back on at the next battle. `box` is the eased
+   *  bounding box (world cells), so the framing glides instead of jumping when a unit dies or a jet loops away. */
+  let autoCam: { on: boolean; since: number; box: [number, number, number, number] | null } = { on: false, since: 0, box: null };
+  function updateAutoCam(b: Battle, dt: number) {
+    if (!autoCam.on) return;
+    if (view.cam.userAt > autoCam.since) { autoCam.on = false; return; }
+    // where most of the units are: with 8+ alive, the outer 8% on each axis (stragglers, jets looping wide) is
+    // left out so one far unit doesn't hold the whole field in view
+    const xs: number[] = [], ys: number[] = [];
+    for (const u of b.units) if (u.alive) { xs.push(u.x); ys.push(u.y); }
+    if (!xs.length) return;
+    xs.sort((p, q) => p - q); ys.sort((p, q) => p - q);
+    const cut = xs.length >= 8 ? Math.floor(xs.length * 0.08) : 0, hiI = xs.length - 1 - cut;
+    const x0 = xs[cut], x1 = xs[hiI], y0 = ys[cut], y1 = ys[hiI];
+    const bx = autoCam.box;
+    if (!bx) autoCam.box = [x0, y0, x1, y1];
+    else {
+      // ease toward the live box: grows a little faster than it shrinks so units rarely leave the frame
+      const ease = (cur: number, want: number, out: boolean) => cur + (want - cur) * Math.min(1, dt * (out ? 2.2 : 0.9));
+      bx[0] = ease(bx[0], x0, x0 < bx[0]); bx[1] = ease(bx[1], y0, y0 < bx[1]);
+      bx[2] = ease(bx[2], x1, x1 > bx[2]); bx[3] = ease(bx[3], y1, y1 > bx[3]);
+    }
+    const f = autoCam.box!;
+    view.frameWorldBox(f[0], f[1], f[2], f[3]);
+  }
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     view.controls.doubleClickZoom = phase !== 'deploy' || (selCard < 0 && !sel);
@@ -1913,6 +1940,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           }
         }
         clearRings(); // first: a slow (3D) or throwing drawBattle must not leave deploy rings up
+        if (phase === 'battle') updateAutoCam(battle, dt);
         view.drawBattle(battle, dt);
         refreshLiveTip(dt);
       } else {

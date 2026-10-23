@@ -5,6 +5,7 @@ import { setVolumes, unlockAudio } from './audio.ts';
 import { preload3d } from './render/viewfactory.ts';
 import { loadSettings } from './storage.ts';
 import { startGarageSync } from './sync.ts';
+import { currentSession, refreshSession } from './net.ts';
 import { menuScreen } from './ui/menu.ts';
 import { vsaiScreen } from './ui/vsai.ts';
 import { matchScreen } from './ui/match.ts';
@@ -37,6 +38,8 @@ window.addEventListener('keydown', unlock, true);
 await Promise.race([startGarageSync(), new Promise((r) => setTimeout(r, 2500))]);
 if (s.renderer === '3d') await preload3d().catch(() => {});
 app.go({ name: 'menu' });
+// a session stored by an older build doesn't know whether it has a password yet (the menu re-renders on change)
+if (currentSession() && !currentSession()!.auto && !currentSession()!.registered) void refreshSession().catch(() => {});
 
 // handy for debugging in the console
 (window as unknown as { app: App }).app = app;

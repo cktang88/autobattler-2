@@ -34,11 +34,13 @@ export function weaponDps(w: ModuleDef): number {
   return ((w.damage + cl) * (w.burst ?? 1) * (w.pellets ?? 1)) / cycleTime(w);
 }
 
-/** Average seconds per shot including magazine reloads. */
+/** Estimated seconds a bomber spends flying home and back to rearm a resupply (bomb bay) magazine. */
+export const RESUPPLY_TRIP = 8;
+/** Average seconds per shot including magazine reloads (and, for bomb bays, the flight home to rearm). */
 export function cycleTime(w: ModuleDef): number {
   const cd = w.cooldown ?? 1;
   if (!w.magazine || !w.reload) return cd;
-  return (cd * (w.magazine - 1) + w.reload) / w.magazine;
+  return (cd * (w.magazine - 1) + w.reload + (w.resupply ? RESUPPLY_TRIP : 0)) / w.magazine;
 }
 
 /** Firing pattern label for UI. */
@@ -88,7 +90,7 @@ export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
-export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.06, halftrack: 1.17, hover: 0.98, jet: 0.85, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
+export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.17, hover: 0.98, jet: 0.7, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -102,6 +104,38 @@ export const SHELTER_EHP = 400;
 const SHELTER_FROM = 10;
 const SHELTER_SPAN = 10;
 const RANGE_CAP = 2.8;
+
+// ---------------------------------------------------------------------------------------------
+// Damage rules (shared by the sim and every UI text):
+//   1. Shields (module shields and dome shields) soak each hit first, at full strength: armour and armour
+//      penetration don't matter against a shield.
+//   2. Whatever gets past the shield hits the hull. Hull armour takes a flat amount off every hit (armour 10 = -10
+//      per hit, never below 15% of the hit), so many small hits lose far more to armour than a few big ones.
+//   3. Armour penetration comes in three tiers: none, half (ignores half the armour) and full (ignores all of it).
+//   4. Damage types: explosive (shells, rockets, missiles, bombs) is cut by reactive armour; energy (beams, lasers,
+//      lightning, rails, flame, plasma) by mirror coating; kinetic (bullets, melee) by neither.
+// ---------------------------------------------------------------------------------------------
+
+export type ApTier = 'none' | 'half' | 'full';
+export const AP_TIERS: Record<ApTier, { value: number; label: string; short: string; desc: string }> = {
+  none: { value: 0, label: 'No penetration', short: 'AP none', desc: "Full armour applies: every hit loses the target's armour value." },
+  half: { value: 0.5, label: 'Half penetration', short: 'AP half', desc: "Ignores half the target's armour." },
+  full: { value: 1, label: 'Full penetration', short: 'AP full', desc: "Ignores the target's armour completely." },
+};
+/** Penetration tier of a weapon (parts only use 0 / 0.5 / 1; anything else rounds to the nearest tier). */
+export function apTier(mod: Pick<ModuleDef, 'ap'>): ApTier {
+  const a = mod.ap ?? 0;
+  return a >= 0.75 ? 'full' : a >= 0.25 ? 'half' : 'none';
+}
+export type DamageKind = 'kinetic' | 'explosive' | 'energy';
+/** Damage types of a weapon (plasma orbs are both explosive and energy). */
+export function damageKinds(mod: Pick<ModuleDef, 'projectile' | 'category'>): DamageKind[] {
+  const k = mod.projectile;
+  if (k === 'shell' || k === 'rocket' || k === 'missile' || k === 'arc') return ['explosive'];
+  if (k === 'orb') return mod.category === 'energy' ? ['energy', 'explosive'] : ['explosive'];
+  if (k === 'beam' || k === 'lightning' || k === 'rail' || k === 'flame') return ['energy'];
+  return ['kinetic'];
+}
 
 /** Fraction of raw damage that gets through the reference armor mix (sim damage formula). */
 export function armorEfficiency(damage: number, ap: number): number {
@@ -131,21 +165,21 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 3.74, ac20: 3.07, ac40: 2.44, aegisT: 1.25, annihilator: 3.56, arclance: 2.20, atgm: 1.22,
-  autocannon: 2.25, autoloader: 2.35, avenger: 0.72, barrage: 7.54, bombs: 1.16, bulwarkshield: 1.53, buzzsaw: 0.35,
-  cannon: 0.88, cannon75: 4.91, chainsaw: 0.90, claw: 1.46, clusterbombs: 5.60, cruise: 9.80, disarm: 1.46,
-  dome: 1.0, domeG: 1.0, doomsday: 8.01, drill: 2.29, empcannon: 0.39, flak: 1.37, flamer: 0.32, gauss: 5.56,
-  gravity: 3.09, grinder: 2.29, guidedrocket: 2.42, gyro: 0.10, hammer: 1.25, hardened: 0.13, heatray: 0.52,
-  heavyflak: 5.46, hmg: 3.17, howitzer: 13.25, incendiary: 0.48, inferno: 1.96, jammer: 0.25, laser: 5.85,
-  lightrail: 10.00, massdriver: 0.30, mg: 2.95, minigun: 1.00, mirror: 0.31, missilebattery: 2.28, mlrs: 4.86,
-  mortar: 2.75, nanite: 0.10, napalm: 0.71, overclock: 0.22, phantom: 0.14, plasma: 4.60, plasmablade: 1.04,
-  plasmaorb: 1.90, pointdef: 3.3, quad20: 2.97, railgun: 11.66, ram: 0.76, reactive: 0.88, repair: 4.2,
-  repairM: 4.17, rocketL: 2.18, rockets: 0.74, sam: 3.14, selfdestruct: 0.22, sensor: 1.0, shield: 1.04,
-  shieldH: 1.11, shieldL: 0.84, shockprod: 0.68, shotgun: 0.70, siege240: 1.54, siegeplasma: 0.48, skyfortress: 2.80,
-  slowbeam: 5.00, smoke: 4.00, sniper: 30.00, sonic: 1.04, stealth: 0.20, stormcore: 0.33, stormtower: 1.85,
-  stungun: 1.22, swarm: 3.10, tactnuke: 5.85, targeting: 3.45, tesla: 1.22, titanfist: 2.82, turbo: 0.10,
-  twin120: 0.28, twin30: 2.70, twinlaser: 3.40, twinmg: 8.00, uplink: 0.3,
-  clusterhow: 1.4, firebomb: 0.8, flechette: 3.1, grenade: 2.5,
+  aamissile: 2.76, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 3.43, arclance: 2.95, atgm: 5.94,
+  autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 8.69, bulwarkshield: 1.48, buzzsaw: 0.27,
+  cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 14.00, heavybomb: 6.05, cruise: 7.74, disarm: 1.86,
+  dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 1.06, flak: 0.31, flamer: 0.41, gauss: 14.19,
+  gravity: 3.14, grinder: 3.99, guidedrocket: 0.99, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.93,
+  heavyflak: 1.19, hmg: 1.19, howitzer: 22.16, incendiary: 1.21, inferno: 1.41, jammer: 0.25, laser: 1.69,
+  lightrail: 37.27, massdriver: 1.22, mg: 4.05, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
+  mortar: 10.84, nanite: 0.14, napalm: 0.53, overclock: 0.21, phantom: 0.16, plasma: 5.01, plasmablade: 0.69,
+  plasmaorb: 1.24, pointdef: 4.00, quad20: 0.66, railgun: 11.71, ram: 0.86, reactive: 0.78, repair: 12.45,
+  repairM: 4.00, rocketL: 1.93, rockets: 1.90, sam: 15.40, selfdestruct: 0.14, sensor: 1.0, shield: 0.81,
+  shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 0.68, siege240: 1.53, siegeplasma: 0.53, skyfortress: 0.62,
+  slowbeam: 4.95, smoke: 4.00, sniper: 16.11, sonic: 0.38, stealth: 0.44, stormcore: 0.91, stormtower: 2.55,
+  stungun: 1.67, swarm: 17.16, tactnuke: 1.51, targeting: 4.00, tesla: 2.09, titanfist: 3.06, turbo: 0.14,
+  twin120: 1.05, twin30: 1.99, twinlaser: 3.18, twinmg: 2.02, uplink: 0.34,
+  clusterhow: 3.48, firebomb: 2.27, flechette: 5.75, grenade: 2.46,
   // [aura balance] aura strengths (uplink, dome, domeG, jammer, sensor above and these two) were set by hand after the
   // radius rework: `node scripts/balance.ts army 3 <id>` (every unit carries the aura -> heavy overlap) lands at a
   // delta of -7..+2, i.e. a little overpriced when massed, and `node scripts/auras.ts field` (ONE carrier escorting a
@@ -279,8 +313,11 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   const load = weight / capacity;
   let range = 0;
   for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.projectile === 'melee' ? mod.range : mod.range * rangeMult);
-  const sizeSpeed = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
-  const speed = m.kind === 'static' ? 0 : m.speed * loadSpeedFactor(load) * sizeSpeed * (1 + speedBonus);
+  // jets barely slow with size (a strato bomber cruises nearly as fast as a fighter) and shrug off half the overload
+  const jet = d.mobility === 'jet';
+  const sizeSpeed = (jet ? [1, 1, 0.95, 0.9, 0.85] : [1, 0.95, 0.85, 0.75, 0.65])[size - 1];
+  const loadF = jet && load > 1 ? Math.max(0.5, 1 - (load - 1) * 0.6) : loadSpeedFactor(load);
+  const speed = m.kind === 'static' ? 0 : m.speed * loadF * sizeSpeed * (1 + speedBonus);
   // body turn rate: mobility base x hull agility x size inertia, slowed when overloaded (heavier armament = slower)
   const sizeTurn = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
   const turn = m.turn * c.agility * sizeTurn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
@@ -319,7 +356,8 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
     if (mod.cloak === 'phantom') ehpMult *= eh(1.5);
   }
   offense = Math.max(offense, 5);
-  let ehp = (hp + 1.2 * shield * shieldCal + reactiveHp) * (1 + armor / 15) * ehpMult;
+  // shields soak hits at full strength (armour doesn't help them); armour multiplies only the hull's worth
+  let ehp = ((hp + reactiveHp) * (1 + armor / 15) + 1.2 * shield * shieldCal) * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   // long reach shelters a fragile hull: artillery behind a front line is rarely shot, so a paper-thin carriage with a
@@ -348,7 +386,8 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   };
 }
 
-const TIER_TRAVERSE = [7, 5, 3.2, 2, 1.2];
+/** fastest turret traverse (rad/s): 300 deg/s */
+const MAX_TRAVERSE = (300 * Math.PI) / 180;
 const VISUAL_TRAVERSE: Partial<Record<string, number>> = {
   gatling: 1.1, shotgun: 1.2, sniper: 0.6, rail: 0.7, gauss: 0.7, cannon: 0.8, artillery: 0.5, mortar: 0.8, flak: 1.3,
   missileRack: 1.4, cruise: 0.6, rocketPod: 1.1, laser: 1.2, heatray: 1.0, plasma: 0.9, flamer: 1.2, tesla: 1.5, emp: 1.1,
@@ -358,7 +397,10 @@ const VISUAL_TRAVERSE: Partial<Record<string, number>> = {
 /** Turret traverse speed (rad/s) of a module: explicit turretTurn, else mount-class base x weapon-type factor. */
 export function turretTurnRate(mod: ModuleDef): number {
   if (mod.turretTurn != null) return mod.turretTurn;
-  return TIER_TRAVERSE[moduleTier(mod) - 1] * (VISUAL_TRAVERSE[mod.visual] ?? 1);
+  // heavier turrets swing slower: 300 deg/s at 1.5 weight, falling with weight^0.45; x the turret-style factor;
+  // never above MAX_TRAVERSE (a light missile rack spun at 560 deg/s before this was weight-based)
+  const base = MAX_TRAVERSE * Math.min(1, (1.5 / Math.max(0.5, mod.weight)) ** 0.45);
+  return Math.min(MAX_TRAVERSE, base * (VISUAL_TRAVERSE[mod.visual] ?? 1));
 }
 
 /** Round a supply cost to a friendly number: nearest 50 (min 50). */
@@ -434,6 +476,45 @@ export function squadOf(d: Design): number {
 export const DEFAULT_KITE_RANGE = 10;
 /** Shortest effective range at which focus fire is on by default (shotguns / flamers / sonic stay off). */
 export const DEFAULT_FOCUS_RANGE = 5;
+
+/** Air roles: what a flying design is for, decided by its drive and loadout (shared by the sim's air AI and the UI).
+ *  - bomber:   carries bomb bays; flies at the most valuable ground targets, rearms at home between runs
+ *  - fighter:  air superiority; hunts enemy aircraft first, strafes ground units only when the sky is clear
+ *  - harasser: fast jet with ground guns/rockets; raids artillery and support behind the enemy line
+ *  - gunship:  hovering rotor / grav-lift gun platform; hangs over the ground fight and keeps firing */
+export type AirRole = 'bomber' | 'fighter' | 'harasser' | 'gunship';
+export const AIR_ROLE_INFO: Record<AirRole, { label: string; desc: string }> = {
+  bomber: { label: 'Bomber', desc: 'Flies at the most valuable ground targets, drops its bombs, and flies home to rearm between runs.' },
+  fighter: { label: 'Fighter', desc: 'Air superiority: hunts enemy aircraft first and strafes ground units only when the sky is clear.' },
+  harasser: { label: 'Harasser', desc: 'Fast raider: goes for artillery, support and other soft targets behind the enemy line.' },
+  gunship: { label: 'Gunship', desc: 'Hovers over the ground fight and keeps its guns firing on the nearest targets.' },
+};
+const airRoleCache = new Map<string, AirRole | null>();
+/** Air role of a design, or null for ground / static designs. */
+export function airRole(d: Design): AirRole | null {
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.join(',')}`;
+  if (airRoleCache.has(key)) return airRoleCache.get(key)!;
+  let out: AirRole | null = null;
+  try {
+    const st = computeStats(d);
+    if (st.flying) {
+      const mods = designModules(d).filter((m) => m.kind === 'weapon');
+      if (mods.some((m) => m.resupply)) out = 'bomber';
+      else if (d.mobility !== 'jet') out = 'gunship';
+      else {
+        let total = 0, aa = 0;
+        for (const m of mods) {
+          const v = weaponDps(m);
+          total += v;
+          if (m.targetsAir && (m.targetsGround === false || (m.airBonus ?? 1) > 1)) aa += v;
+        }
+        out = d.chassis === 'interceptor' || (total > 0 && aa >= 0.4 * total) ? 'fighter' : 'harasser';
+      }
+    }
+  } catch { /* unknown parts */ }
+  airRoleCache.set(key, out);
+  return out;
+}
 
 export interface DefaultOrders { kite: boolean; focus: boolean }
 const defaultOrdersCache = new Map<string, DefaultOrders>();

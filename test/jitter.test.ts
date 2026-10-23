@@ -10,7 +10,7 @@ import type { Design, Placement } from '../src/shared/types.ts';
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 const DESIGNS: Design[] = [
   D('buzz', 'scout', 'wheels', ['mg']), // squad of 16
-  D('walker', 'raider', 'legs', ['atgm', 'atgm']), // squad of 16, legged
+  D('walker', 'raider', 'legs', ['laser', null]), // light legged squad (8 at current prices)
   D('mortar', 'carriage', 'wheels', ['mortar']),
 ];
 let uid = 1;
@@ -76,19 +76,23 @@ test('a parked mortar battery under attack by a weaving squad: hulls hold still,
   // 3 mortar blocks on holdPos at the back of their zone, 3 squads of 16 wheeled raiders charging them (the squads weave
   // around each other on the way in). Over the whole fight: no hull turns at all, and the barrels' back-swing while
   // they hold one target stays bounded (a target flip-flop or aim wrap-around bug shows up as tens of deg/s).
+  // (The mortar's turret is slower than its carriage, so a parked hull may turn to help it aim: that is allowed, but
+  // the hull must not saw back and forth either.)
   const sideA: Placement[] = [], sideB: Placement[] = [];
   for (let k = 0; k < 3; k++) sideA.push(P('mortar', 20 + k * 8, 13));
   for (let k = 0; k < 3; k++) sideB.push({ ...P('buzz', 26 + k * 7, 0), stance: undefined });
   const b = new Battle({ seed: 3, sides: [{ designs: DESIGNS, units: sideA }, { designs: DESIGNS, units: sideB }] });
   const ms = b.units.filter((u) => u.side === 0);
-  const prev = ms.map((u) => ({ hull: u.angle, a: u.mounts[0].angle, d: 0, t: -1 }));
-  let hullTurn = 0, back = 0, held = 0;
+  const prev = ms.map((u) => ({ hull: u.angle, a: u.mounts[0].angle, d: 0, t: -1, hd: 0 }));
+  let hullBack = 0, back = 0, held = 0;
   for (let t = 0; t < 120 / DT && !b.done; t++) {
     b.step();
     ms.forEach((u, k) => {
       const q = prev[k], m = u.mounts[0];
       if (!u.alive) return;
-      hullTurn += Math.abs(angDiff(q.hull, u.angle));
+      const hd = angDiff(q.hull, u.angle);
+      if (Math.abs(hd) > 1e-4 && Math.abs(q.hd) > 1e-4 && Math.sign(hd) !== Math.sign(q.hd)) hullBack += Math.min(Math.abs(hd), Math.abs(q.hd));
+      q.hd = hd;
       const d = angDiff(q.a, m.angle);
       if (m.target >= 0 && m.target === q.t) {
         held++;
@@ -98,7 +102,7 @@ test('a parked mortar battery under attack by a weaving squad: hulls hold still,
     });
   }
   assert.ok(held * DT > 20, `setup: the mortars should spend a while on targets (${(held * DT).toFixed(1)} s)`);
-  assert.equal(hullTurn, 0, 'parked hulls turned');
+  assert.ok((hullBack * 180 / Math.PI) / (held * DT) < 4.5, `parked hulls sawed back and forth (${((hullBack * 180 / Math.PI) / (held * DT)).toFixed(2)} deg/s)`);
   const rate = (back * 180 / Math.PI) / (held * DT);
   // measured 5.4 deg/s when shots led separation shoves, 3.9 now (what is left comes from the attackers' own
   // stop-and-go and weaving on the way in, which a leading gunner follows)

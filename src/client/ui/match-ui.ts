@@ -5,7 +5,7 @@ import { h } from '../app.ts';
 import * as kit from './kit.ts';
 import { sfx } from '../audio.ts';
 import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
-import { computeStats, levelMult, type DefaultOrders } from '../../shared/stats.ts';
+import { apTier, computeStats, damageKinds, levelMult, type DefaultOrders } from '../../shared/stats.ts';
 import { firingText } from './garage-parts.ts';
 import { fireMods, mountDps, unitDps } from './deckstats.ts';
 import { blockDims, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
@@ -387,7 +387,10 @@ export function statCard(o: StatCardOpts): HTMLElement {
       if (m.ramp) tags.push(`Focus ×${n1(m.ramp)}`);
       if (m.fireField) tags.push('Fire field');
       if (m.cluster) tags.push(`Cluster ×${m.cluster.count}`);
-      if (m.ap && m.ap >= 0.3) tags.push(`AP ${Math.round(m.ap * 100)}%`);
+      const apT = apTier(m);
+      tags.push(apT === 'full' ? 'AP full' : apT === 'half' ? 'AP ½' : 'AP 0');
+      const kinds = damageKinds(m).filter((k) => k !== 'kinetic');
+      if (kinds.length) tags.push(kinds.map((k) => (k === 'energy' ? 'Energy' : 'Explosive')).join('+'));
       if (a && m.airBonus && m.airBonus > 1) tags.push(`×${n1(m.airBonus)} vs air`);
       head = [
         h('span.sc-chip', { class: g ? 'g' : 'off' }, 'GND'),

@@ -16,6 +16,8 @@ import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { makeRng } from '../../shared/rng.ts';
 import type { Design, Placement, Side, Size } from '../../shared/types.ts';
 import { openModal } from './match-ui.ts';
+import { accountChip } from './account.ts';
+import { onSessionChange } from '../net.ts';
 
 /** Random but legal-looking boards built from starter designs. */
 function demoInput(seed: number): BattleInput | null {
@@ -61,7 +63,7 @@ function boardUnits(input: BattleInput): BoardUnit[] {
 export function howToPlay(): HTMLElement {
   return h('div.howto', null,
     h('ol', null,
-      h('li', null, h('b', null, 'Design'), ' units in the ', h('b', null, 'Garage'), ': pick a chassis, a mobility system and weapon modules. Up to 9 designs form your deck.'),
+      h('li', null, h('b', null, 'Design'), ' units in the ', h('b', null, 'Unit Designer'), ': pick a chassis, a mobility system and weapon modules. Pick up to 9 designs as your deck in ', h('b', null, 'Loadout'), '.'),
       h('li', null, h('b', null, 'Deploy'), ': each round you get supply. Buy units from your deck (a light design comes as a squad of 4, 8 or 16 per purchase: the cheaper the unit, the bigger the squad) and place them on your half of the field — or upgrade units you already own.'),
       h('li', null, h('b', null, 'Fight'), ': the battle plays out automatically. Units you placed persist and redeploy every round.'),
       h('li', null, 'The round loser takes damage based on the enemy units still standing. Reduce your opponent to 0 HP to win.'),
@@ -94,9 +96,15 @@ export function menuScreen(app: App): Screen {
       }, `Resume vs AI · Round ${resumable.match.round}`)
     : null;
 
+  const acctHost = h('div.menu-acct');
+  const renderAcct = () => acctHost.replaceChildren(accountChip(app, renderAcct));
+  renderAcct();
+  const offSession = onSessionChange(renderAcct);
+
   const el = h('div.screen.menu', null,
     canvas,
     h('div.menu-veil'),
+    acctHost,
     h('div.menu-content', null,
       h('div.logo', null,
         h('img', { src: 'icon.svg', alt: '' }),
@@ -106,8 +114,11 @@ export function menuScreen(app: App): Screen {
       h('div.menu-buttons', null,
         resumeBtn,
         h('button.big.primary', { onclick: go(() => app.go({ name: 'vsai' })) }, 'Play vs AI'),
-        h('button.big', { onclick: go(() => app.go({ name: 'lobby' })) }, 'Async Multiplayer'),
-        h('button.big', { onclick: go(() => app.go({ name: 'garage' })) }, 'Garage'),
+        h('button.big', { onclick: go(() => app.go({ name: 'lobby' })), title: 'Async matches against other players (needs an account)' }, 'Multiplayer'),
+        h('div.row.menu-pair', null,
+          h('button.big.grow', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })), title: 'Choose the 9 designs you take into battle' }, 'Loadout'),
+          h('button.big.grow', { onclick: go(() => app.go({ name: 'garage' })), title: 'Build and edit unit designs' }, 'Unit Designer'),
+        ),
         h('div.row', null,
           h('button.grow', { onclick: go(() => app.go({ name: 'settings' })) }, 'Settings'),
           h('button.grow', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),
@@ -186,6 +197,7 @@ export function menuScreen(app: App): Screen {
   return {
     el,
     destroy() {
+      offSession();
       gone = true;
       cancelAnimationFrame(raf);
       ro.disconnect();

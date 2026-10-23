@@ -147,7 +147,7 @@ test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 4/8/16-unit sq
     for (const r of m.history) for (const side of [0, 1] as const) checkBoard(m, side, r.boards[side]);
   }
   const avg = lens.reduce((a, b) => a + b, 0) / lens.length;
-  assert.ok(avg >= 5 && avg <= 8.5, `avg rounds ${avg} (${lens})`);
+  assert.ok(avg >= 5 && avg <= 9, `avg rounds ${avg} (${lens})`); // 8.5 -> 9 when air roles made air fights more even
   assert.ok(lens.every((n) => n >= 4 && n <= 12), `rounds ${lens}`);
 });
 

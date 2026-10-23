@@ -4,7 +4,8 @@ import { PARA_PER_STUN, PHANTOM_FIRE_REVEAL, REGEN_DELAY, SHIELD_DELAY, SHIELD_R
 import { CLOAK_REVEAL } from '../../shared/types.ts';
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
-import { accuracyRating, firingStyle, turretTurnRate, weaponDps } from '../../shared/stats.ts';
+import { AP_TIERS, accuracyRating, apTier, damageKinds, firingStyle, turretTurnRate, weaponDps, type ApTier, type DamageKind } from '../../shared/stats.ts';
+import { MELEE_SPRINT } from '../../shared/sim/battle.ts';
 import { MOUNT_LETTER, ROLES } from '../../shared/parts.ts';
 import type { ModuleDef, MoveKind, Role } from '../../shared/types.ts';
 import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
@@ -63,6 +64,16 @@ const ICONS: Record<string, string> = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   chevron: '<path d="M6 9l6 6 6-6"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  // armour penetration: a hull plate, and an arrow that stops at it / gets halfway in / goes clean through
+  apnone: '<path d="M14 4l6 2.2v5.6c0 4.4-2.6 7.4-6 8.2"/><path d="M14 4v16"/><path d="M2 12h8.5"/><path d="M7.5 9l3 3-3 3"/>',
+  aphalf: '<path d="M14 4l6 2.2v5.6c0 4.4-2.6 7.4-6 8.2"/><path d="M14 4v5M14 15v5"/><path d="M2 12h14.5"/><path d="M13.5 9l3 3-3 3"/>',
+  apfull: '<path d="M10 4l6 2.2v5.6c0 4.4-2.6 7.4-6 8.2"/><path d="M10 4v5M10 15v5"/><path d="M2 12h20"/><path d="M19 9l3 3-3 3"/>',
+  // damage types
+  kinetic: '<path d="M5 15.5l7.5-7.5 3.5 3.5-7.5 7.5z"/><path d="M12.5 8l3-3c1.4-1.4 3.5 0 3.5 0s1.4 2.1 0 3.5l-3 3"/><path d="M3 21l2-2"/>',
+  explosive: '<path d="M12 2l1.8 5.2L19 5l-2.2 5.2L22 12l-5.2 1.8L19 19l-5.2-2.2L12 22l-1.8-5.2L5 19l2.2-5.2L2 12l5.2-1.8L5 5l5.2 2.2z"/>',
+  energy: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.8-3.4 8-8 9-4.6-1-8-4.2-8-9V6z"/><path d="M8 12l3 3 5-6"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"/><path d="M12 17h.01"/>',
 };
 
 export type IconName = keyof typeof ICONS;
@@ -114,9 +125,54 @@ export function targetBadges(mod: ModuleDef): HTMLElement {
 
 const n1 = (v: number) => (Math.round(v * 10) / 10).toString();
 
+const DMG_KIND: Record<DamageKind, { label: string; desc: string }> = {
+  kinetic: { label: 'Kinetic', desc: 'Kinetic (bullets, slugs, blades): no special armour counters it.' },
+  explosive: { label: 'Explosive', desc: 'Explosive (shells, rockets, missiles, bombs): reactive armour cuts it by 75% for a few hits; point defense can shoot the round down.' },
+  energy: { label: 'Energy', desc: 'Energy (lasers, beams, lightning, rails, flame, plasma): mirror coating reduces it.' },
+};
+const AP_SHORT: Record<ApTier, string> = { none: 'AP 0', half: 'AP ½', full: 'AP full' };
+
+/** Armour-penetration badge: icon + tier, colour-coded (grey none / amber half / red full). */
+export function apBadge(mod: ModuleDef, long = false): HTMLElement {
+  const t = apTier(mod);
+  const info = AP_TIERS[t];
+  return h('span.g-ap', { class: `ap-${t}`, title: `${info.label}: ${info.desc} Shields are hit first and ignore penetration.` },
+    icon(`ap${t}` as IconName), h('span', null, long ? info.label : AP_SHORT[t]));
+}
+/** Damage-type badge(s): kinetic / explosive / energy. */
+export function damageKindBadges(mod: ModuleDef, long = false): HTMLElement {
+  return h('span.g-dks', null, ...damageKinds(mod).map((k) =>
+    h('span.g-dk', { class: `dk-${k}`, title: DMG_KIND[k].desc }, icon(k as IconName), long ? h('span', null, DMG_KIND[k].label) : null)));
+}
+
+/** "How damage works": the game's damage rules in one place (same numbers as the sim). */
+export function showDamageRules(host: HTMLElement): void {
+  const prevFocus = document.activeElement as HTMLElement | null;
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey, true); prevFocus?.focus?.(); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  const li = (ic: IconName, cls: string, title: string, text: string) => h('li', null, h('span.g-dr-ico', { class: cls }, icon(ic)), h('div', null, h('b', null, title), ' ', text));
+  const box = h('div.g-modal.g-dmgrules', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'g-dr-title' },
+    h('h3#g-dr-title', null, 'How damage works'),
+    h('p.g-dr-sub', null, 'Every hit goes through these steps, in this order:'),
+    h('ol.g-dr-steps', null,
+      li('shield', 'sh', '1. Shields first.', `Shield modules and dome shields soak each hit at full strength. Armour and armour penetration don't matter against a shield. Shields recharge ${Math.round(SHIELD_REGEN * 100)}%/s after ${SHIELD_DELAY} s without damage, and while up they block burning, slow, disarm and knockback.`),
+      li('armor', 'ar', '2. Then armour.', 'Whatever gets past the shield hits the hull. Armour takes a flat amount off every hit: armour 10 means -10 per hit (a hit never drops below 15% of its damage). Many small hits lose far more to armour than a few big ones, so machine guns struggle against tanks.'),
+      li('apnone', 'ap-none', 'Armour penetration: 0 / ½ / full.', 'Each weapon either uses no penetration (full armour applies), half (ignores half the armour) or full (ignores all of it). Cannons, anti-tank missiles, rails and every melee weapon have full penetration.'),
+      li('explosive', 'dk-explosive', 'Damage types.', 'Explosive (shells, rockets, missiles, bombs) is cut by reactive armour and can be shot down by point defense. Energy (lasers, beams, lightning, rails, flame, plasma) is reduced by mirror coating. Kinetic (bullets, blades) has no special counter.'),
+      li('weapon', 'ml', 'Melee.', `Melee weapons ignore armour completely. Units armed only with melee weapons sprint ${Math.round((MELEE_SPRINT - 1) * 100)}% faster toward enemies to get through enemy fire.`),
+    ),
+    h('div.g-modal-btns', null, h('button.g-btn.primary', { type: 'button', onclick: close }, 'Got it')),
+  );
+  const back = h('div.g-modal-back', { onclick: (e: Event) => { if (e.target === back) close(); } }, box);
+  host.append(back);
+  document.addEventListener('keydown', onKey, true);
+  (box.querySelector('button') as HTMLElement | null)?.focus();
+}
+
 /** Special-effect tags for a module (stun, burn, pierce...). */
 export function moduleEffects(mod: ModuleDef): string[] {
   const t: string[] = [];
+  if (mod.resupply) t.push('rearms at base');
   if (mod.chain) t.push(`chain ${mod.chain}`);
   if (mod.pierce) t.push('pierce');
   if (mod.stun) t.push(`paralyse ${Math.round(mod.stun * PARA_PER_STUN)}`);
@@ -198,7 +254,7 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
     else if (firingStyle(mod) === 'Sustained') stat('rds/s', String(Math.round(1 / Math.max(0.05, cd))));
     else stat('reload', secs(cd));
     if (mod.splash) stat('AoE', fmtMeters(mod.splash));
-    if (mod.ap) stat('ap', `${Math.round(mod.ap * 100)}%`);
+    out.append(apBadge(mod), damageKindBadges(mod));
     out.append(targetBadges(mod));
   } else if (mod.kind === 'armor') {
     if (mod.armor) stat('armor', `+${mod.armor}`);
@@ -232,7 +288,7 @@ export function moduleTooltip(mod: ModuleDef): string {
     lines.push(`DPS ${fmt(weaponDps(mod), 0)} · Range ${mod.minRange ? Math.round(mod.minRange * METERS_PER_CELL) + '–' : ''}${fmtMeters(mod.range ?? 0)} · Targets ${tg}`);
     const extra: string[] = [`${mod.damage}${mod.pellets && mod.pellets > 1 ? '×' + mod.pellets : ''}${mod.burst && mod.burst > 1 ? ' ×' + mod.burst : ''} dmg / ${mod.cooldown}s`];
     if (mod.splash) extra.push(`AoE radius ${fmtMeters(mod.splash)}`);
-    if (mod.ap) extra.push(`${Math.round(mod.ap * 100)}% armor pierce`);
+    extra.push(AP_TIERS[apTier(mod)].label.toLowerCase(), damageKinds(mod).map((k) => DMG_KIND[k].label).join(' + ').toLowerCase() + ' damage');
     lines.push(extra.join(' · '));
     lines.push(`${firingText(mod)} · Accuracy ${accuracyLabel(mod) ?? accuracyRating(mod) + '/100'}`);
   }
@@ -377,11 +433,16 @@ export function moduleRules(mod: ModuleDef): string[] {
     r.push(`Hits ${tg || 'nothing'} up to ${m(mod.range ?? 0)} away${mod.minRange ? `, but nothing closer than ${m(mod.minRange)}` : ''}.`);
     r.push(`${firingText(mod)}.`);
     const dmg = `${mod.damage ?? 0}${mod.pellets && mod.pellets > 1 ? ` × ${mod.pellets} pellets` : ''}${mod.burst && mod.burst > 1 ? ` × ${mod.burst} per salvo` : ''}`;
-    r.push(`Damage ${dmg} per shot${mod.ap ? `, ignoring ${Math.round(mod.ap * 100)}% of the target's armor` : ''}.`);
+    r.push(`Damage ${dmg} per shot.`);
+    const tier = apTier(mod);
+    r.push(`Armour penetration: ${tier === 'none' ? 'none (every hit loses the target\'s full armour value)' : tier === 'half' ? 'half (ignores half the target\'s armour)' : 'full (ignores the target\'s armour completely)'}. Shields are hit first and ignore penetration.`);
+    r.push(damageKinds(mod).map((k) => DMG_KIND[k].desc).join(' '));
+    if (mod.projectile === 'melee') r.push(`Melee: needs to reach its target. A unit armed only with melee weapons sprints ${Math.round((MELEE_SPRINT - 1) * 100)}% faster toward enemies.`);
     if (mod.splash) r.push(`Area damage: hurts every enemy within ${m(mod.splash)} of the impact.`);
     if (mod.projectile === 'missile') r.push('Homing: follows its target. Point defense can shoot it down; jammers break its lock.');
     else if (mod.projectile === 'rocket' || mod.projectile === 'shell' || mod.projectile === 'arc') r.push('Flies to where the target was when fired, so fast movers can dodge it. Point defense can shoot it down.');
     else if (mod.projectile === 'beam' || mod.projectile === 'lightning' || mod.projectile === 'rail') r.push('Hitscan: hits instantly, can\'t miss or be intercepted.');
+    if (mod.resupply) r.push(`Bomb bay: ${mod.magazine ?? 1} pass${(mod.magazine ?? 1) > 1 ? 'es' : ''} per load. Bombs are released just short of the target and carry on with the plane's speed. When the bay is empty the bomber flies back over its own deploy zone and rearms there (${mod.reload ?? 0} s), then returns.`);
     if (mod.pierce) r.push('Pierces: keeps going through every unit in its path.');
     if (mod.chain) r.push(`Chains to ${mod.chain} more nearby enemies.`);
     if (mod.falloff != null && mod.falloff < 1) r.push(`Damage falls off with distance: ${Math.round(mod.falloff * 100)}% at max range.`);
@@ -399,7 +460,7 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.cloak === 'stealth') r.push(`Can't be targeted from range. Revealed while any enemy is within ${m(CLOAK_REVEAL)} of its hull, for ${STEALTH_FIRE_REVEAL} s after each shot it fires, and inside enemy sensor range.`);
     if (mod.cloak === 'phantom') r.push(`Can't be targeted at any distance. Revealed only for ${PHANTOM_FIRE_REVEAL} s after each shot it fires, and inside enemy sensor range.`);
     if (mod.detect) r.push(`Reveals cloaked enemies within ${m(mod.detect)} of this unit's hull, for your whole army.`);
-    if (mod.shield) r.push(`Absorbs ${mod.shield} damage before the hull is hit. While it's up, burning, slow, disarm and knockback are blocked and paralysis drains the shield instead. Recharges ${Math.round(SHIELD_REGEN * 100)}% per second after ${SHIELD_DELAY} s without damage.`);
+    if (mod.shield) r.push(`Absorbs ${mod.shield} damage before the hull is hit; every hit drains it at full strength (armour and armour penetration don't matter against shields). While it's up, burning, slow, disarm and knockback are blocked and paralysis drains the shield instead. Recharges ${Math.round(SHIELD_REGEN * 100)}% per second after ${SHIELD_DELAY} s without damage.`);
     if (mod.shieldAura) r.push(`Gives every ally within ${m(mod.shieldAura.radius)} a ${mod.shieldAura.amount}-point shield (at most half that ally's HP). Domes don't stack.`);
     if (mod.fireRateAura) r.push(`Allies within ${m(mod.fireRateAura.radius)} fire ${Math.round(mod.fireRateAura.bonus * 100)}% faster. Doesn't stack.`);
     if (mod.heal) r.push(`Repairs the most damaged ally within ${m(mod.range ?? 0)} for ${mod.heal} HP/s.`);
@@ -417,7 +478,7 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.reloadBonus) r.push(`Clip weapons reload ${Math.round(mod.reloadBonus * 100)}% faster.`);
     if (mod.fireRateBonus) r.push(`All weapons fire ${Math.round(mod.fireRateBonus * 100)}% faster.`);
     if (mod.deathBlast) r.push(`When destroyed, explodes for ${mod.deathBlast.damage} damage up to ${m(mod.deathBlast.radius)} beyond its hull.`);
-    if (mod.armor) r.push(`+${mod.armor} armor: every hit loses that much damage (armor-piercing ignores part of it).`);
+    if (mod.armor) r.push(`+${mod.armor} armour: every hit that reaches the hull loses that much damage. Half-penetration weapons ignore half of it, full-penetration weapons all of it; shields are hit before armour.`);
     if (mod.hp) r.push(`+${mod.hp} hull HP.`);
   }
   return r;

@@ -56,6 +56,13 @@ export function sanitizeName(raw: unknown): string {
   return name;
 }
 
+export const PASSWORD_MIN = 4;
+export function sanitizePassword(raw: unknown): string {
+  if (typeof raw !== 'string' || [...raw].length < PASSWORD_MIN) bad(`Password must be at least ${PASSWORD_MIN} characters`);
+  if ((raw as string).length > 128) bad('Password is too long (128 characters max)');
+  return raw as string;
+}
+
 export function sanitizeDeck(raw: unknown): Design[] {
   if (!Array.isArray(raw) || raw.length === 0) bad('Deck must be a non-empty array of designs');
   const arr = raw as unknown[];
