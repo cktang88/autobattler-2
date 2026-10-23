@@ -23,6 +23,7 @@ import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
   designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
 } from './garage-parts.ts';
+import { firstLegalMobility, refitForClass, reqReason as reqReasonFor, reseat } from './garage-fit.ts';
 
 const RANK: Record<MountClass, number> = MOUNT_RANK;
 const ML = MOUNT_LETTER;
@@ -92,22 +93,6 @@ const footDims = (c: ChassisDef, full = false) => {
   const w = c.footprint?.[0] ?? c.size, l = c.footprint?.[1] ?? c.size;
   return w === l && !full ? footprintLabel(w) : `${footprintLabel(w)} × ${footprintLabel(l)}`;
 };
-const firstLegalMobility =(chassisId: string) => MOBILITY.find((m) => !pairingError(chassisId, m.id))?.id ?? MOBILITY[0].id;
-
-/** Re-seat modules onto a new chassis: biggest modules first, each into the smallest free slot that fits. */
-function reseat(mods: (string | null)[], c: ChassisDef, mobility: string): (string | null)[] {
-  const out: (string | null)[] = c.mounts.map(() => null);
-  const list = mods.filter((m): m is string => !!m && MODULE_BY_ID.has(m))
-    .sort((a, b) => RANK[MODULE_BY_ID.get(b)!.mount] - RANK[MODULE_BY_ID.get(a)!.mount]);
-  const slots = c.mounts.map((cls, i) => ({ cls, i })).sort((a, b) => RANK[a.cls] - RANK[b.cls]);
-  for (const id of list) {
-    const mod = MODULE_BY_ID.get(id)!;
-    const s = slots.find((s) => out[s.i] === null && !slotError(c, mobility, s.i, mod));
-    if (s) out[s.i] = id;
-  }
-  return out;
-}
-
 /** Class badge shown on roster rows. */
 const DOMAIN_BADGE: Record<Domain, string> = { ground: 'GND', jet: 'JET', heli: 'HELI' };
 /** Representative hull drawn on each class card, and the default hull of a new design in that class. */
@@ -308,7 +293,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     activeSlot = null;
     // a part picked for the previous design would grey out every socket of this one that it doesn't fit
     delete pinned.weapons; delete pinned.systems;
-    hoverInspect = null;
+    prunePins();
     pan.x = pan.y = 0; // new design: recentre (zoom level is kept)
     nameInput.value = draft.name;
     update();
@@ -399,6 +384,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     draft = clone(saved);
     nameInput.value = draft.name;
     activeSlot = null;
+    prunePins();
     update();
   }
 
@@ -440,25 +426,27 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const lost = before - draft.mounts.filter(Boolean).length;
     if (autoName) { draft.name = randomDesignName(id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
     activeSlot = null;
+    prunePins();
     if (lost > 0) app.toast(`${lost} module${lost > 1 ? 's' : ''} did not fit the ${c.name} and went back to stores`);
     sfx('click');
     update();
   }
 
-  /** Switch unit class: first hull + first legal drive of that class; modules that still fit stay mounted. */
+  /** Switch unit class: the class's hull that keeps most of the loadout (garage-fit.ts refitForClass) + its first legal
+   *  drive; modules that still fit stay mounted. */
   function pickDomain(dom: Domain) {
     if (dom === designDomain(draft)) return;
-    const c = domainChassis(dom).sort((a, b) => a.size - b.size || a.weight - b.weight)[0];
-    if (!c) return;
-    const mobility = firstLegalMobility(c.id);
+    const next = refitForClass(draft, dom);
+    if (!next) return;
+    const c = CHASSIS_BY_ID.get(next.chassis)!;
     const before = draft.mounts.filter(Boolean).length;
-    const usable = draft.mounts.map((id) => (id && !reqReason(MODULE_BY_ID.get(id) ?? {}, mobility) ? id : null));
-    draft = { ...draft, chassis: c.id, mobility, mounts: reseat(usable, c, mobility) };
+    draft = next;
     const lost = before - draft.mounts.filter(Boolean).length;
     if (autoName) { draft.name = randomDesignName(c.id, Math.random, designs.filter((d) => d.id !== draft.id).map((d) => d.name)).slice(0, NAME_MAX); nameInput.value = draft.name; }
-    pinned.hull = { kind: 'chassis', id: c.id };
-    pinned.drive = { kind: 'mobility', id: mobility };
     activeSlot = null;
+    prunePins();
+    pinned.hull = { kind: 'chassis', id: c.id };
+    pinned.drive = { kind: 'mobility', id: draft.mobility };
     sizeSel = 0; roleSel = '*'; driveSel = '*';
     if (lost > 0) app.toast(`${lost} module${lost > 1 ? 's' : ''} did not fit the ${c.name} and went back to stores`);
     sfx('click');
@@ -469,18 +457,29 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     pinned.drive = { kind: 'mobility', id };
     const err = pairingError(draft.chassis, id);
     if (err) { sfx('error'); app.toast(err, 'error'); update(); return; }
-    if (id !== draft.mobility) { draft = { ...draft, mobility: id }; sfx('click'); }
+    if (id !== draft.mobility) { draft = { ...draft, mobility: id }; prunePins(); sfx('click'); }
     update();
   }
 
-  /** why a module can't be mounted with the current mobility (null = fine) */
-  function reqReason(mod: { requires?: 'air' | 'ground' }, mobility = draft.mobility): string | null {
-    if (!mod.requires) return null;
-    const flies = MOBILITY_BY_ID.get(mobility)?.kind === 'air';
-    if (mod.requires === 'air' && !flies) return 'Flying designs only';
-    if (mod.requires === 'ground' && flies) return 'Ground designs only';
-    return null;
+  /** Drop bay picks a hull / drive / class change (or loading another design) made stale: a hull or drive of another
+   *  class, a part that fits no socket any more. A stale part pick kept every socket lit red and turned each click on
+   *  an empty socket into an error toast. */
+  function prunePins() {
+    const dom = designDomain(draft);
+    const ch = pinned.hull && CHASSIS_BY_ID.get(pinned.hull.id);
+    if (pinned.hull && (!ch || chassisDomain(ch) !== dom)) delete pinned.hull;
+    const mob = pinned.drive && MOBILITY_BY_ID.get(pinned.drive.id);
+    if (pinned.drive && (!mob || mobilityDomain(mob) !== dom)) delete pinned.drive;
+    for (const t of ['weapons', 'systems'] as const) {
+      const id = pinned[t]?.id;
+      const mod = id ? MODULE_BY_ID.get(id) : undefined;
+      if (id && (!mod || noFitReason(mod))) delete pinned[t];
+    }
+    hoverInspect = null;
   }
+
+  /** why a module can't be mounted with the current mobility (null = fine) */
+  const reqReason = (mod: { requires?: 'air' | 'ground' }, mobility = draft.mobility) => reqReasonFor(mod, mobility);
 
   /** null if `mod` can go into socket `i`, else the reason it can't (shared rules: size, melee edge, air/ground) */
   function slotBlock(mod: ModuleDef, i: number): string | null {
