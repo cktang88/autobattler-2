@@ -39,6 +39,10 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   let freshCode: string | null = null;
   /** roster editor open in the deck panel */
   let editingDeck = false;
+  /** half-typed join code and the "Finished" list state survive the periodic re-render */
+  let codeDraft = '';
+  let codeInput: HTMLInputElement | null = null;
+  let doneOpen = false;
   const baseTitle = document.title;
 
   // ---------------------------------------------------------------- actions
@@ -178,12 +182,20 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     );
     const yourTurn = lastData?.mine.filter((m) => m.yourTurn).length ?? 0;
     document.title = yourTurn ? `(${yourTurn}) ${baseTitle}` : baseTitle;
+    const prevInput = codeInput;
+    const hadFocus = !!prevInput && document.activeElement === prevInput;
+    const caret = hadFocus ? [prevInput!.selectionStart, prevInput!.selectionEnd] as const : null;
     body.replaceChildren(
       deckPanel(),
       actionsPanel(),
       minePanel(),
       openPanel(),
     );
+    if (hadFocus && codeInput) {
+      const ci: HTMLInputElement = codeInput;
+      ci.focus({ preventScroll: true });
+      if (caret) try { ci.setSelectionRange(caret[0], caret[1]); } catch { /* */ }
+    }
   }
 
   function loginPanel(): HTMLElement {
@@ -247,7 +259,8 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   }
 
   function actionsPanel(): HTMLElement {
-    const { el: codeField, input: code } = kit.textField({ maxlength: 16, placeholder: 'Join code', label: 'Join code', className: 'lobby-input lobby-code-input', attrs: { autocapitalize: 'characters' } });
+    const { el: codeField, input: code } = kit.textField({ value: codeDraft, maxlength: 16, placeholder: 'Join code', label: 'Join code', className: 'lobby-input lobby-code-input', attrs: { autocapitalize: 'characters' }, onInput: (v) => { codeDraft = v; } });
+    codeInput = code;
     const fresh = freshCode
       ? h('div.lobby-fresh', null,
         h('span.muted', null, 'Share this code:'),
@@ -283,7 +296,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
       !lastData && !loadError ? h('p.muted', null, 'Loading…') : null,
       lastData && !list.length ? h('p.muted', null, 'No matches yet. Start one with Quick Match.') : null,
       active.length ? h('div.lobby-list', null, ...active.map(mineRow)) : null,
-      done.length ? h('details.lobby-done', null,
+      done.length ? h('details.lobby-done', { open: doneOpen, ontoggle: (e: Event) => { doneOpen = (e.currentTarget as HTMLDetailsElement).open; } },
         h('summary', null, `Finished (${done.length})`),
         h('div.lobby-list', null, ...done.map(mineRow)),
       ) : null,

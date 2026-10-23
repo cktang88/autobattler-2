@@ -828,7 +828,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function renderInfo() {
     multi = multi.filter((sl) => !!blockSrc(sl));
     if (multi.length >= 2 && phase === 'deploy') { renderGroupInfo(); return; }
-    if (multi.length < 2) multi = [];
+    if (multi.length < 2 || phase !== 'deploy') multi = [];
     if (!sel || (phase !== 'deploy' && phase !== 'waiting')) {
       if (!renderCardPreview()) { infoEl.classList.add('hidden'); ringHi = null; }
       return;
@@ -1069,6 +1069,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     selCard = -1;
     hover = null;
     sel = null;
+    multi = [];
     renderAll();
     sfx('ready');
     try {
@@ -1419,7 +1420,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (rec) { startReplay(rec); return; }
     if (m.status === 'done') { showOver(); return; }
     if (pendingRound !== m.round) resetPending();
-    else if (me().ready && (ops.length || cfg.size)) { cfg.clear(); place = []; upgrades = []; ops = []; selCard = -1; hover = null; sel = null; } // submitted: now on the board
+    else if (me().ready && (ops.length || cfg.size)) { cfg.clear(); place = []; upgrades = []; ops = []; selCard = -1; hover = null; sel = null; multi = []; } // submitted: now on the board
     const blocked = me().ready || (m.status === 'waiting' && !!check({ round: m.round, place: [], upgrade: [] }));
     if (blocked) { if (phase !== 'waiting') setPhase('waiting'); else { renderAll(); renderOverlay(); } }
     else if (phase !== 'deploy') setPhase('deploy');

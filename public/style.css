@@ -478,6 +478,11 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .sc-dps.na { --c: var(--line2); color: var(--muted); background: var(--bg2); }
 .sc-dps.na b { color: var(--muted); }
 @media (min-width: 761px) and (hover: hover) { .info.right { left: auto; right: 56px; } }
+/* a docked unit card would cover the centred hint: slide the hint into the free part of the field */
+@media (min-width: 761px) and (hover: hover) {
+  .fieldwrap:has(> .info:not(.hidden):not(.picking)) > .hint { left: 360px; transform: none; max-width: calc(100% - 420px); }
+  .fieldwrap:has(> .info.right:not(.hidden):not(.picking)) > .hint { left: 10px; }
+}
 
 /* last-round damage line in the field tooltip */
 .stat-tip .sc-dmg { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 8px; padding: 6px 10px; background: rgba(255, 178, 30, 0.08); border-left: 3px solid #ffb21e; font-family: var(--font-head); }
