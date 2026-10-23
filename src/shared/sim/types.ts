@@ -10,6 +10,21 @@ export const TICK_RATE = 20; // ticks per second
 export const DT = 1 / TICK_RATE;
 export const MAX_TICKS = TICK_RATE * 180; // 180s battle cap (480 x 460 m field)
 
+/** What dealt a killing blow, for the wreck's look: bullets/rails/blades perforate, explosives tear apart and scatter,
+ *  energy melts, fire (burn ticks, fire fields) chars, crush flattens. */
+export type DeathKind = 'kinetic' | 'explosive' | 'energy' | 'fire' | 'crush';
+/** 0 intact (perforated) hull, 1 burnt and broken, 2 broken apart into pieces, 3 blown to smithereens (scorch + debris) */
+export type WreckLevel = 0 | 1 | 2 | 3;
+const WRECK_KIND_K: Record<DeathKind, number> = { kinetic: 0.75, explosive: 1.3, energy: 1, fire: 0.5, crush: 0.45 };
+
+/** Destruction level of a wreck from the killing blow: a unit chewed up by many small hits leaves a whole hull, one
+ *  giant hit (nuke, doomsday shell, mass driver slug) leaves next to nothing. `hit` and `overkill` are in max hp;
+ *  `heft` scales for the weapon's class (titan weapons tear apart even what a small fraction of their hit kills). */
+export function wreckLevel(hit: number, overkill: number, kind: DeathKind, heft = 1): WreckLevel {
+  const s = (0.55 * hit + 0.45 * overkill) * WRECK_KIND_K[kind] * heft;
+  return s < 0.12 ? 0 : s < 0.45 ? 1 : s < 1.8 ? 2 : 3;
+}
+
 export interface SideInput {
   /** the player's deck; placements reference these by id */
   designs: Design[];
@@ -110,7 +125,9 @@ export type BattleEvent =
   | { t: 'hit'; unit: number; damage: number; shieldHit: boolean; x: number; y: number; moduleId: string }
   | { t: 'explode'; x: number; y: number; radius: number; moduleId: string }
   | { t: 'heal'; unit: number; amount: number; from: number }
-  | { t: 'death'; unit: number; x: number; y: number; size: number; flying: boolean }
+  /** overkill / hit: how far below 0 hp the killing blow went, and that blow's size (after armour), both in max hp;
+   *  kind: what killed it; wreck: WreckLevel derived from the three (visual only) */
+  | { t: 'death'; unit: number; x: number; y: number; size: number; flying: boolean; moduleId: string; overkill: number; hit: number; kind: DeathKind; wreck: WreckLevel }
   | { t: 'leap'; unit: number }
   | { t: 'smoke'; x: number; y: number; radius: number; duration: number }
   /** a firebomb's burning patch on the ground (ModuleDef.fireField); lasts `duration` s */

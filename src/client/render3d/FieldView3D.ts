@@ -11,7 +11,7 @@ import { battleSfx, setPanFlip } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
-import { DT, type BattleEvent, type SimProjectile, type SimUnit } from '../../shared/sim/types.ts';
+import { DT, type BattleEvent, type DeathKind, type SimProjectile, type SimUnit, type WreckLevel } from '../../shared/sim/types.ts';
 import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
@@ -44,7 +44,9 @@ interface UView {
   /** rig transforms are current (posed last frame); culled / hidden rigs keep stale muzzle positions */
   posed: boolean;
 }
-interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
+/** rig null: the unit was blown to smithereens, only scorch, scattered scrap and smoke remain. smoke / fire: seconds of
+ *  smoke and flames left; heat 0..1: glow of a melted (energy) or freshly blasted hull, cooling */
+interface Wreck { rig: Rig | null; x: number; z: number; smoke: number; S: number; fire: number; heat: number; tint: number; hx: number; hz: number; deck: number }
 interface ProjRec {
   y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean;
   /** smoothed 3D flight direction, the last trail emission point, launch time, wobble phase */
@@ -590,7 +592,7 @@ export class FieldView3D implements BattleView {
   private clearBattle(): void {
     for (const v of this.bu.values()) this.layer.release(v.rig);
     this.bu.clear();
-    for (const w of this.wrecks) this.layer.release(w.rig);
+    for (const w of this.wrecks) if (w.rig) this.layer.release(w.rig);
     this.wrecks = [];
     this.fx.clear();
     this.projRec.clear();
@@ -770,7 +772,7 @@ export class FieldView3D implements BattleView {
     for (const u of battle.units) {
       if (!u.alive) {
         const v = this.bu.get(u.id);
-        if (v && jump && !u.flying) this.toWreck(u.id, v, u.x, u.y, u.angle, 0);
+        if (v && jump && !u.flying) this.toWreck(u.id, v, u.x, u.y, u.angle, 1, 'kinetic', true);
         else if (v) { this.layer.release(v.rig); this.bu.delete(u.id); }
         continue;
       }
@@ -1254,12 +1256,18 @@ export class FieldView3D implements BattleView {
 
   private syncWrecks(dt: number): void {
     for (const w of this.wrecks) {
-      if (this.offscreen(w.x, w.z, w.rig.radius + 3)) continue;
-      this.layer.submit(w.rig, 'wreck');
-      if (w.smoke > 0) {
-        w.smoke -= dt;
-        if (Math.random() < dt * (2.5 + w.S) * this.fx.lod) this.fx.wreckSmoke(w.x, w.z, w.S);
+      if (w.heat > 0) w.heat = Math.max(0, w.heat - dt * 0.2);
+      if (w.fire > 0) w.fire -= dt;
+      if (w.smoke > 0) w.smoke -= dt;
+      if (this.offscreen(w.x, w.z, (w.rig?.radius ?? w.S) + 3)) continue;
+      if (w.rig) {
+        // a melted / blasted hull glows dull red and cools to char
+        const h = w.heat * w.heat;
+        w.rig.tr = w.tint + h * 2.6; w.rig.tg = w.tint + h * 0.7; w.rig.tb = w.tint * (1 - h * 0.5);
+        this.layer.submit(w.rig, 'wreck');
       }
+      if (w.smoke > 0 && Math.random() < dt * (2.5 + w.S) * this.fx.lod) this.fx.wreckSmoke(w.x, w.z, w.S);
+      if (w.fire > 0 && Math.random() < dt * (3 + w.hx * w.hz * 6) * this.fx.lod) this.fx.burning(w.x, w.deck, w.z, w.hx, w.hz);
     }
   }
 
@@ -1510,11 +1518,21 @@ export class FieldView3D implements BattleView {
       case 'death': {
         const v = this.bu.get(e.unit);
         const vis = !this.offscreen(e.x, e.y, 6);
+        const lv = e.wreck, sz = e.size;
         if (vis) {
-          if (e.flying) fx.bigExplosion(e.x, e.y, Math.max(1, e.size * 0.8), v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1);
-          else fx.bigExplosion(e.x, e.y, e.size);
+          const y = e.flying ? (v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1) : 0;
+          // the blast grows with the destruction: a perforated hull just coughs fire, a vaporised one goes up whole
+          if (lv === 0) fx.explosion(e.x, e.y, 0.45 + sz * 0.4, e.kind === 'energy' ? 'plasma' : 'fire', y, e.kind !== 'kinetic', 0.7);
+          else fx.bigExplosion(e.x, e.y, e.flying ? Math.max(1, sz * 0.8) : sz + (lv - 1) * 0.6, y);
+          if (e.kind === 'energy' && lv > 0) fx.explosion(e.x, e.y, 0.5 + sz * 0.45, 'plasma', y, false, 0.6);
+          if (lv === 3) { fx.dirtGeyser(e.x, e.y, 0.6 + sz * 0.4); fx.trauma = Math.min(1, fx.trauma + 0.1 + sz * 0.04); }
         }
-        if (v && !e.flying) this.toWreck(e.unit, v, e.x, e.y, byId.get(e.unit)?.angle ?? 0, 10 + e.size * 4);
+        // blown apart: torn scrap all around (aircraft rain theirs onto the ground below)
+        if (lv >= 2) {
+          const r0 = v?.rig.radius ?? 0.3 + sz * 0.3;
+          fx.scatter(e.x, e.y, e.flying ? 1.2 : 0.2, Math.round((lv === 3 ? 10 : 5) + sz * (lv === 3 ? 5 : 2.5)), r0 * (lv === 3 ? 3.2 : 2) + 0.4, 0.14 + sz * 0.07, e.kind === 'energy' ? 0.5 : 0);
+        }
+        if (v && !e.flying) this.toWreck(e.unit, v, e.x, e.y, byId.get(e.unit)?.angle ?? 0, lv, e.kind);
         else if (v) { this.layer.release(v.rig); this.bu.delete(e.unit); }
         break;
       }
@@ -1539,19 +1557,43 @@ export class FieldView3D implements BattleView {
     }
   }
 
-  /** the hull stays as a charred wreck for the rest of the battle */
-  private toWreck(id: number, v: UView, x: number, y: number, angle: number, smoke: number): void {
+  /** The hull stays as a wreck for the rest of the battle, as broken as the killing blow (sim WreckLevel): 0 a whole,
+   *  perforated hull; 1 burnt, sagging, its main turret blown off; 2 crumpled and sunk with every turret thrown clear;
+   *  3 nothing left but a scorch mark and the scrap scattered by the death blast. catchUp: found dead after a seek (no fresh smoke / fire). */
+  private toWreck(id: number, v: UView, x: number, y: number, angle: number, lv: WreckLevel, kind: DeathKind, catchUp = false): void {
     this.bu.delete(id);
-    const rig = v.rig;
+    const rig = v.rig, S = rig.S, rnd = (k: number) => (Math.random() - 0.5) * k;
+    const hx = rig.L * 0.5, hz = rig.W * 0.5;
+    const fire = catchUp ? 0 : kind === 'fire' ? 5 + S * 2 : kind === 'explosive' && lv >= 1 ? 2 + S * lv : kind === 'energy' && lv >= 1 ? 1.5 + S : 0;
+    const smoke = catchUp ? 0 : (10 + S * 4) * (lv === 0 && kind === 'kinetic' ? 0.6 : lv === 3 ? 0.5 : 1);
+    if (lv === 3) {
+      this.layer.release(rig);
+      this.fx.scorchMark(x, y, 0.5 + rig.radius * 1.1);
+      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, tint: 1, hx, hz, deck: 0.1 });
+      return;
+    }
     rig.look = 'wreck';
-    rig.tr = rig.tg = rig.tb = 1;
-    rig.root.position.set(x, -0.03, y);
+    rig.root.position.set(x, -0.03 - (lv === 2 ? rig.height * 0.22 : lv === 1 ? 0.05 : 0) - (kind === 'energy' && lv ? rig.height * 0.08 : 0), y);
     rig.root.rotation.y = -angle;
-    rig.root.rotation.z = (Math.random() - 0.5) * 0.06; rig.root.rotation.x = (Math.random() - 0.5) * 0.06;
-    for (const tu of rig.all) { if (!tu.fixed) tu.yaw.rotation.y += (Math.random() - 0.5) * 1.2; tu.yaw.updateMatrix(); tu.recoil.position.x = 0; tu.recoil.updateMatrix(); }
+    const tilt = lv === 0 ? 0.06 : lv === 1 ? 0.18 : 0.42;
+    rig.root.rotation.z = rnd(tilt); rig.root.rotation.x = rnd(tilt);
+    // crumpled: flattened and splayed
+    if (lv === 2) rig.root.scale.set(rig.root.scale.x * 1.06, rig.root.scale.y * 0.62, rig.root.scale.z * 1.1);
+    const L = rig.tpl.unit.L, W = rig.tpl.unit.W;
+    rig.all.forEach((tu, i) => {
+      // level 1 loses its biggest (first) turret, level 2 all of them; they land a little way off, tipped over
+      if (!tu.fixed && (lv === 2 || (lv === 1 && i === 0))) {
+        const a = Math.random() * 6.283, d = (lv === 2 ? 0.75 : 0.6) + Math.random() * 0.5;
+        rig.dropTurret(i, Math.cos(a) * L * d, Math.sin(a) * W * d * 1.4, 0.5 + Math.random() * 1.1, Math.random() * 6.283);
+      } else if (!tu.fixed) tu.yaw.rotation.y += rnd(1.2);
+      tu.yaw.updateMatrix(); tu.recoil.position.x = 0; tu.recoil.updateMatrix();
+    });
     rig.update(0);
     rig.frozen = true;
-    this.wrecks.push({ rig, x, z: y, smoke, S: rig.S });
+    // a bullet-riddled hull stays steel grey, burnt and blasted ones go black
+    const tint = lv === 0 ? (kind === 'kinetic' || kind === 'crush' ? 1.35 : kind === 'fire' ? 0.8 : 1) : lv === 1 ? 0.8 : 0.62;
+    const heat = catchUp ? 0 : kind === 'energy' ? (lv ? 1 : 0.7) : kind === 'explosive' && lv === 2 ? 0.55 : 0;
+    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, tint, hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)) });
   }
 
   destroy(): void {

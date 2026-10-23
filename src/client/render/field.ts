@@ -32,7 +32,7 @@ import { moduleTier } from '../../shared/parts.ts';
 import { bodyScale } from '../../shared/mountgeo.ts';
 import { Camera, CameraControls } from './camera.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
-import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types.ts';
+import type { BattleEvent, DeathKind, SimProjectile, SimUnit, WreckLevel } from '../../shared/sim/types.ts';
 import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
@@ -718,12 +718,12 @@ export class FieldView {
   /* ----------------------------------------------------------------------------------------- battle */
 
   /** A destroyed unit leaves a smouldering hulk for the rest of this battle (cleared with the battle's fx). */
-  private addWreck(u: { design: Design }, team: Team, x: number, y: number, angle: number, k: number): void {
+  private addWreck(u: { design: Design }, team: Team, x: number, y: number, angle: number, k: number, lv: WreckLevel = 1, kind: DeathKind = 'explosive'): void {
     const d = u.design;
     const S = layoutOf(d).S;
     const ext = unitSprites(d, team, DECAL_PX).ext;
     wreckSprite(d, team, DECAL_PX);
-    this.fx.wreck(x, y, angle, S, ext, (px) => wreckSprite(d, team, px), wreckHotspots(d), k);
+    this.fx.wreck(x, y, angle, S, ext, (px) => wreckSprite(d, team, px), wreckHotspots(d), k, lv, kind);
   }
 
   private reset(b: Battle): void {
@@ -2317,32 +2317,39 @@ export class FieldView {
         const team = u ? this.teamOf(u.side) : 1;
         const x = e.x, y = e.y;
         const pal = TEAM_PAL[team];
+        // destruction level (sim): 0 a riddled whole hull, 1 burnt and broken, 2 blown apart, 3 vaporised
+        const lv = e.wreck, kind = e.kind, energy = kind === 'energy';
         if (e.flying && S >= 4) {
           fx.megaDeath(x, y, S, pal.dark);
-          if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.9);
+          if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.9, lv, kind);
         } else if (e.flying) {
           // blows up in the air where it is drawn, then the hulk hits the ground
           const al = u ? this.airLift(u) : { x: this.dirs.ux * 0.3, y: this.dirs.uy * 0.3 };
-          fx.boom(x + al.x, y + al.y, 0.5 * S, 'fire', false);
-          fx.debris(x + al.x, y + al.y, 6 * S, pal.dark, 2.5, 0.07 * S);
+          fx.boom(x + al.x, y + al.y, (0.4 + 0.12 * lv) * S, energy ? 'plasma' : 'fire', false);
+          fx.debris(x + al.x, y + al.y, (3 + 2.5 * lv) * S, pal.dark, 2 + lv, 0.07 * S);
           fx.schedule(0.35, () => {
             fx.boom(x, y, 0.6 * S, 'fire');
-            if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.8);
+            if (u) this.addWreck(u, team, x, y, u.angle + 0.6, 0.8, lv, kind);
           });
         } else if (S >= 4) {
           fx.megaDeath(x, y, S, pal.dark);
-          if (u) this.addWreck(u, team, x, y, u.angle, 1);
+          if (lv === 3) fx.debris(x, y, 12 * S, '#2a2622', 9, 0.08 * S, 1);
+          if (u) this.addWreck(u, team, x, y, u.angle, 1, lv, kind);
         } else {
-          fx.boom(x, y, 0.55 + 0.45 * S, S >= 3 ? 'big' : 'fire');
-          fx.debris(x, y, 5 + 5 * S, pal.dark, 3 + S, 0.06 * S);
-          fx.debris(x, y, 3 + 2 * S, '#2a2622', 3, 0.05 * S);
-          fx.embers(x, y, 6 * S, S * 0.6);
-          if (u) this.addWreck(u, team, x, y, u.angle, 1);
-          for (let i = 0; i < S; i++) fx.schedule(0.15 + i * 0.2, () => fx.boom(x + (Math.random() - 0.5) * S * 0.6, y + (Math.random() - 0.5) * S * 0.6, 0.3 + 0.2 * S, 'fire'));
+          // a riddled hull just coughs fire; the bigger the blow, the bigger the blast and the further the bits fly
+          const kb = lv === 0 ? 0.65 : 1 + 0.25 * (lv - 1);
+          fx.boom(x, y, (0.55 + 0.45 * S) * kb, energy ? 'plasma' : S >= 3 || lv >= 2 ? 'big' : 'fire');
+          fx.debris(x, y, (5 + 5 * S) * (lv === 0 ? 0.4 : lv), pal.dark, (3 + S) * (lv === 3 ? 2 : lv === 2 ? 1.4 : 1), 0.06 * S, lv >= 2 ? 1 : 0);
+          fx.debris(x, y, (3 + 2 * S) * Math.max(0.5, lv), '#2a2622', 3 + lv, 0.05 * S);
+          fx.embers(x, y, 6 * S * (energy ? 2 : 1), S * 0.6);
+          if (energy && lv) fx.molten(x, y, 4 + 3 * S);
+          if (lv === 3) { fx.shockwave(x, y, 0.6 + 0.5 * S); fx.decal('crater', x, y, 0.4 + 0.35 * S); }
+          if (u) this.addWreck(u, team, x, y, u.angle, 1, lv, kind);
+          for (let i = 0; i < S * (lv === 0 ? 0.5 : 1); i++) fx.schedule(0.15 + i * 0.2, () => fx.boom(x + (Math.random() - 0.5) * S * 0.6, y + (Math.random() - 0.5) * S * 0.6, 0.3 + 0.2 * S, 'fire'));
           // lingering smoke column
           for (let i = 0; i < 4; i++) fx.schedule(0.4 + i * 0.5, () => fx.smoke(x, y, 0.3 * S, 2.5, '#1e1c1a', 0.2, -0.3, 0.45));
         }
-        fx.shake(0.1 + 0.12 * S);
+        fx.shake((0.1 + 0.12 * S) * (lv === 0 ? 0.7 : 1 + 0.2 * Math.max(0, lv - 1)));
         break;
       }
       case 'fireField': {

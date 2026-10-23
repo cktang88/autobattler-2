@@ -69,6 +69,7 @@ interface Template {
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
 const _tmpV = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s = new THREE.Vector3(), _eu = new THREE.Euler();
 
 /** One placed unit. Cheap to create (a few dozen Object3D) and recycle. */
 export class Rig {
@@ -172,6 +173,23 @@ export class Rig {
     for (const tu of this.all) tu.spinV = tu.idleSpin;
     this.settle = 2;
     this.dirty = false;
+  }
+
+  /** Wreck: knock turret ti off the hull onto the ground at hull-local (x, z) (template units), tipped over by `tip`
+   *  radians and turned by `yaw`. restPose() puts it back when the rig is recycled. */
+  dropTurret(ti: number, x: number, z: number, tip: number, yaw: number): void {
+    const tpl = this.tpl, src = tpl.unit.turrets[ti]?.yaw;
+    const k = tpl.nodes.findIndex((n) => n.src === src);
+    const o = k >= 0 ? this.objs[k] : null;
+    if (!o) return;
+    this.dirty = true;
+    // rest pose relative to the unit root, re-placed on the ground, then expressed in the parent's (rest) frame
+    tpl.nodes[k].rel.decompose(_tmpV, _q, _s);
+    _q.premultiply(_q2.setFromEuler(_eu.set(tip, yaw, tip * 0.4, 'YXZ')));
+    _m.compose(_tmpV.set(x, 0.04, z), _q, _s);
+    _m2.copy(tpl.nodes[tpl.nodes[k].parent].rel).invert().multiply(_m);
+    _m2.decompose(o.position, o.quaternion, o.scale);
+    o.updateMatrix();
   }
 
   /** recompute transforms of the turret rigs / animated nodes after pose changes (root must already be positioned) */
@@ -378,7 +396,7 @@ export class UnitLayer {
     const r = this.free.get(t.key)?.pop() ?? new Rig(t);
     if (r.dirty) r.restPose();
     r.look = 'normal'; r.frozen = false; r.mv = 0; r.odo = 0; r.tr = r.tg = r.tb = 1;
-    r.root.position.set(0, 0, 0); r.root.rotation.set(0, 0, 0);
+    r.root.position.set(0, 0, 0); r.root.rotation.set(0, 0, 0); r.root.scale.setScalar(bodyScale(t.unit.S)); // wrecks squash it
     return r;
   }
   release(r: Rig): void {
