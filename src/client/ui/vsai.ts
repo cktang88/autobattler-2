@@ -55,8 +55,10 @@ export function playerName(): string {
   try { const s = currentSession(); return (s && !s.auto && s.name) || 'Commander'; } catch { return 'Commander'; }
 }
 
-export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = { name: 'vsai' }): Screen {
-  const forLobby = route.from === 'lobby';
+export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' | 'menu' } = { name: 'vsai' }): Screen {
+  /** loadout editor only (menu "Loadout" / lobby "Change loadout"): Done goes back, no difficulty / Start */
+  const editOnly = route.from != null;
+  const backTo = route.from === 'lobby' ? 'lobby' as const : 'menu' as const;
   playMusic('menu');
   let diff: AiDifficulty = 'normal';
   let sort: Sort = 'cost';
@@ -198,7 +200,7 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = {
         onChange: (v) => { capFilter = v as Cap | '*'; render(); },
       }),
       h('span.spacer'),
-      h('button.small', { onclick: () => { sfx('click'); app.go({ name: 'garage' }); } }, 'Open Garage'),
+      h('button.small', { onclick: () => { sfx('click'); app.go({ name: 'garage' }); }, title: 'Build and edit unit designs' }, 'Unit Designer'),
     );
     collHost.replaceChildren(...(infos.length ? infos.map((i) => card(i, 'coll')) : [h('p.muted', null, 'No designs match.')]));
   }
@@ -288,16 +290,16 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = {
 
   const el = h('div.screen.dbscreen', null,
     h('div.topbar', null,
-      h('button.icon', { onclick: () => { sfx('click'); app.go({ name: forLobby ? 'lobby' : 'menu' }); }, title: 'Back' }, '‹ Back'),
-      h('h2', null, forLobby ? 'Multiplayer deck' : 'Play vs AI'),
+      h('button.icon', { onclick: () => { sfx('click'); app.go({ name: backTo }); }, title: 'Back' }, '‹ Back'),
+      h('h2', null, route.from === 'lobby' ? 'Multiplayer loadout' : editOnly ? 'Loadout' : 'Play vs AI'),
       h('span.spacer'),
-      forLobby ? null : diffHost,
-      forLobby ? h('button.big.primary', { onclick: () => { sfx('click'); app.go({ name: 'lobby' }); }, disabled: !deck.length }, 'Done ›') : null,
-      !forLobby && resumable ? h('button.warn', {
+      editOnly ? null : diffHost,
+      editOnly ? h('button.big.primary', { onclick: () => { sfx('click'); app.go({ name: backTo }); }, disabled: !deck.length }, 'Done ›') : null,
+      !editOnly && resumable ? h('button.warn', {
         onclick: () => { sfx('click'); const d = LocalDriver.resume(); if (d) app.go({ name: 'match', driver: d }); },
         title: `Round ${resumable.match.round} vs ${resumable.match.players[1].name} · HP ${resumable.match.players[0].hp} – ${resumable.match.players[1].hp}`,
       }, `Resume round ${resumable.match.round}`) : null,
-      forLobby ? null : startBtn,
+      editOnly ? null : startBtn,
     ),
     h('div.db-body', null,
       h('section.panel.db-left', null,
@@ -307,7 +309,7 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' } = {
       h('section.db-right', null,
         h('div.panel', null, deckHost),
         h('div.panel', null, statsHost),
-        forLobby ? h('p.muted.db-note', null, 'This is also your vs-AI deck. Each multiplayer match keeps the deck you had when you created or joined it.')
+        editOnly ? h('p.muted.db-note', null, 'One loadout for vs-AI and multiplayer: changes save as you go. Each multiplayer match keeps the deck you had when you created or joined it.')
           : resumable ? h('p.muted.db-note', null, 'Starting a new match abandons the one in progress.') : null,
       ),
     ),

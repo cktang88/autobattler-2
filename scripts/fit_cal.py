@@ -41,7 +41,20 @@ CHASSIS_MIN = 0.35
 CGAIN = float(os.environ.get('FIT_CGAIN', '0.22'))
 CSTEP = float(os.environ.get('FIT_CSTEP', '0.08'))
 ONLY_CHASSIS = os.environ.get('FIT_ONLY_CHASSIS') == '1'  # frames-only run (filter f-): fit hulls + drives only
-ETA = {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}
+ETA_SCALE = float(os.environ.get('FIT_ETA_SCALE', '1'))
+# FIT_CLAMP: largest per-iteration log-step of a module calibration (raise it with FIT_ETA_SCALE for a quick 2-3 pass fit)
+CLAMP = float(os.environ.get('FIT_CLAMP', '0.15'))
+# FIT_MOB=0 keeps MOBILITY_CAL fixed
+FIT_MOB = os.environ.get('FIT_MOB', '1') == '1'
+ETA = {k: v * ETA_SCALE for k, v in {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}.items()}
+# FIT_CENTER=starters: logits are measured relative to the starter designs (the reference mix of balance.ts's
+# mixed-army test), so the whole price level is pulled toward "fair vs the starters" instead of only the spread
+# between test designs. Without it every row is centred on the mean of all rows and the level can drift.
+CENTER = os.environ.get('FIT_CENTER', 'all')
+# FIT_AVG=k: also write the geometric mean of the last k iterations' tables to *_avg.json (averages out the
+# iteration-to-iteration noise of a small-seed fit)
+AVG = int(os.environ.get('FIT_AVG', '0'))
+hist = []
 STEP_S = float(os.environ.get('FIT_STEP_S', '0.12'))
 
 
@@ -57,7 +70,8 @@ for it in range(iters):
     if ONLY_CHASSIS:
         rows = [r for r in rows if r['id'].startswith('f-')]
     baserate = {r['carrier']: r['rate'] for r in rows if r['base']}
-    cen = sum(lg(r['rate']) for r in rows) / len(rows)
+    srows = [r for r in rows if r['id'].startswith('starter-') and r['id'] not in IGNORE]
+    cen = (sum(lg(r['rate']) for r in srows) / len(srows)) if CENTER == 'starters' and srows else sum(lg(r['rate']) for r in rows) / len(rows)
     acc = collections.defaultdict(lambda: [0.0, 0.0])
     sacc = collections.defaultdict(lambda: [0.0, 0.0])
     for r in rows:
@@ -86,7 +100,7 @@ for it in range(iters):
         if k in fixed or w == 0 or ONLY_CHASSIS:
             continue
         t = 'u' if MODS.get(k) == 'util' else 'w'
-        step = max(-0.15, min(0.15, ETA[t] * s / (w + 0.5)))
+        step = max(-CLAMP, min(CLAMP, ETA[t] * s / (w + 0.5)))
         v = cal.get(k, 1.0) * math.exp(step)
         v = v ** 0.99
         if t == 'u':
@@ -120,7 +134,7 @@ for it in range(iters):
         macc[r['mobility']][0] += res * w
         macc[r['mobility']][1] += 1
     for k, (s, w) in macc.items():
-        if w == 0:
+        if w == 0 or not FIT_MOB:
             continue
         step = max(-0.1, min(0.1, ETA['m'] * s / (w + 1.0)))
         mobcal[k] = max(0.4, min(2.5, mobcal.get(k, 1.0) * math.exp(step)))
@@ -167,7 +181,15 @@ for it in range(iters):
             mm[r['module']].append(r['rate'])
     mr = math.sqrt(sum((sum(v) / len(v) - 0.5) ** 2 for v in mm.values()) / max(1, len(mm)))
     inb = sum(1 for v in mm.values() if 0.35 <= sum(v) / len(v) <= 0.65)
-    print(it, 'modrms', round(mr * 100, 1), 'inband', f'{inb}/{len(mm)}', 'sizek', [round(x, 3) for x in sizek], flush=True)
+    meanr = sum(r['rate'] for r in rows) / len(rows)
+    print(it, 'modrms', round(mr * 100, 1), 'inband', f'{inb}/{len(mm)}', 'mean', round(meanr, 3), 'sizek', [round(x, 3) for x in sizek], flush=True)
+    if AVG:
+        hist.append((dict(cal), list(sizek), dict(mobcal)))
+        last = hist[-AVG:]
+        gm = lambda xs: math.exp(sum(math.log(x) for x in xs) / len(xs))
+        json.dump({k: gm([h[0].get(k, 1.0) for h in last]) for k in cal}, open(f'{FIT}/cal_avg.json', 'w'))
+        json.dump([gm([h[1][i] for h in last]) for i in range(5)], open(f'{FIT}/sizek_avg.json', 'w'))
+        json.dump({k: gm([h[2].get(k, 1.0) for h in last]) for k in mobcal}, open(f'{FIT}/mobcal_avg.json', 'w'))
     json.dump(cal, open(calf, 'w'))
     json.dump(sizek, open(szf, 'w'))
     json.dump(mobcal, open(mbf, 'w'))

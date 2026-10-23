@@ -102,3 +102,46 @@
   .lobby .lobby-callsign { max-width: 34vw; font-size: 0.94rem; }
   .lobby button.lobby-link { min-height: 22px; padding: 0 2px; font-size: 0.92rem; }
 }
+
+/* ---------- account: menu chip, sign-in panel, account dialog (src/client/ui/account.ts) ---------- */
+.menu-acct { position: absolute; top: calc(10px + var(--safe-t, 0px)); right: 12px; z-index: 2; max-width: calc(100% - 24px); }
+.acct-chip {
+  display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border-radius: var(--radius, 6px);
+  background: rgba(15, 21, 28, 0.82); border: 1px solid var(--line, #2c3a4a); backdrop-filter: blur(3px); min-width: 0;
+}
+.acct-chip .acct-who { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
+.acct-chip .acct-who small { color: var(--muted, #8193a5); font-size: 0.82rem; }
+.acct-chip .acct-who b {
+  font-family: var(--font-head, system-ui); letter-spacing: 0.06em; text-transform: uppercase; font-size: 1.05rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;
+}
+.acct-chip.in .acct-who b { color: var(--accent, #2ed3c0); }
+.acct-chip.guest .acct-who b { color: var(--text, #dfe7ee); }
+.acct-chip button.acct-link { min-height: 34px; padding: 4px 12px; white-space: nowrap; }
+
+.acct-panel h3 { margin-top: 2px; }
+.acct-fields { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.acct-input { min-height: 44px; width: 100%; }
+.acct-err { color: var(--bad, #ef4d4d); margin: 6px 0 0; min-height: 0; }
+.acct-err:empty { display: none; }
+.acct-row { display: flex; gap: 8px; margin-top: 10px; }
+.acct-row .acct-submit { flex: 1; min-height: 44px; }
+.acct-notes { margin: 12px 0 0; padding-left: 18px; color: var(--muted, #8193a5); font-size: 0.93rem; }
+.acct-notes li { margin-bottom: 4px; }
+.acct-notes b { color: var(--text, #dfe7ee); font-weight: 600; }
+/* inside a modal the dialog is the panel already (its title replaces the h3) */
+.acct-modal .acct-in-modal h3 { display: none; }
+.acct-modal .acct-in-modal { background: none; border: none; padding: 0; box-shadow: none; }
+.acct-modal .acct-in-modal > .panel-title { display: none; }
+.acct-dialog .acct-name { color: var(--accent, #2ed3c0); }
+.acct-pwform { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, #2c3a4a); }
+.lobby button.lobby-link.lobby-callsign { text-decoration: none; color: var(--accent, #2ed3c0); }
+
+/* the menu's Loadout / Unit Designer pair */
+.menu-buttons .menu-pair button { width: auto; white-space: nowrap; }
+@media (max-width: 480px) { .menu-buttons .menu-pair button { padding-left: 8px; padding-right: 8px; font-size: 1.15rem; } }
+@media (max-width: 340px) { .menu-buttons .menu-pair { flex-direction: column; } .menu-buttons .menu-pair button { width: 100%; } }
+@media (max-width: 760px) {
+  .menu-acct { top: calc(8px + var(--safe-t, 0px)); right: 8px; }
+  .menu .menu-content { padding-top: 64px; }
+}

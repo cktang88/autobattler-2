@@ -1,13 +1,13 @@
-// Multiplayer lobby: callsign login, your async matches, open public matches, create/join/quick match.
+// Multiplayer lobby: sign-in (account.ts) for guests, your async matches, open public matches, create/join/quick match.
 
 import { h, type Screen, type ScreenFn } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { activeDeck } from '../collection.ts';
-import { syncGarage } from '../sync.ts';
 import {
-  createMatch, createPrivateMatch, currentSession, forfeitMatch, getMe, joinMatch, listMatches, login, logout,
-  NetError, openMatch, quickMatch, type MatchSummary,
+  createMatch, createPrivateMatch, currentSession, forfeitMatch, getMe, joinMatch, listMatches, logout,
+  NetError, onSessionChange, openMatch, quickMatch, signedIn, type MatchSummary,
 } from '../net.ts';
+import { openAccount, signInPanel } from './account.ts';
 import { DECK_SIZE, validateDeck } from '../../shared/match.ts';
 import { computeStats } from '../../shared/stats.ts';
 import type { Design, Side } from '../../shared/types.ts';
@@ -68,7 +68,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     const deck = activeDeck();
     const errs = deck.length ? validateDeck(deck) : ['Your deck is empty'];
     if (errs.length) {
-      app.toast(`Fix your deck in the Garage first: ${errs[0]}`, 'error');
+      app.toast(`Fix your loadout first: ${errs[0]}`, 'error');
       return null;
     }
     return deck;
@@ -126,16 +126,6 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     await refresh();
   });
 
-  const doLogin = (name: string) => act(async () => {
-    await login(name);
-    // a brand-new account (first login, or after Sign out) gets this device's garage right away
-    void syncGarage();
-    sfx('ready');
-    app.toast(`Welcome, ${currentSession()!.name}.`, 'good');
-    render();
-    await refresh();
-  });
-
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -148,8 +138,8 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   // ---------------------------------------------------------------- data
 
   async function refresh(manual = false): Promise<void> {
-    // a placeholder (garage sync) account has no matches: the lobby is asking for a callsign
-    if (!currentSession() || currentSession()!.auto || destroyed) return;
+    // guests (placeholder garage-sync accounts) see the sign-in panel instead
+    if (!signedIn() || destroyed) return;
     refreshBtn.classList.add('lobby-spin');
     try {
       lastData = await listMatches();
@@ -169,17 +159,21 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   function render(): void {
     const s = currentSession();
     userBox.replaceChildren();
-    refreshBtn.classList.toggle('hidden', !s || !!s.auto);
-    if (!s || s.auto) {
+    refreshBtn.classList.toggle('hidden', !signedIn());
+    if (!s || !signedIn()) {
       document.title = baseTitle;
-      body.replaceChildren(loginPanel());
+      body.replaceChildren(signInPanel(app, {
+        className: 'lobby-login',
+        lead: 'Multiplayer needs an account so opponents know who you are and your matches follow you to any device. Async matches are played over hours or days: submit your deployment whenever you like, and the battle resolves once your opponent has submitted theirs.',
+        onDone: () => { render(); void refresh(); },
+      }));
       return;
     }
     userBox.append(
-      h('span.lobby-callsign', { title: `Player id ${s.playerId}` }, s.name),
+      h('button.lobby-link.lobby-callsign', { title: 'Account: change password or sign out', onclick: () => { sfx('click'); openAccount(app, () => render()); } }, s.name),
       h('button.lobby-link', {
         onclick: () => { logout(); lastData = null; render(); },
-        title: 'Forget this callsign on this device',
+        title: 'Sign out on this device (your units stay here)',
       }, 'Sign out'),
     );
     const yourTurn = lastData?.mine.filter((m) => m.yourTurn).length ?? 0;
@@ -200,24 +194,6 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     }
   }
 
-  function loginPanel(): HTMLElement {
-    const { el: field, input } = kit.textField({ maxlength: 16, placeholder: 'Callsign', label: 'Callsign', className: 'lobby-input', attrs: { minlength: '2', autocomplete: 'nickname' } });
-    const submit = (e?: Event) => { e?.preventDefault(); void doLogin(input.value); };
-    const form = h('form.panel.lobby-login', { onsubmit: submit },
-      h('div.panel-title', null, 'Enlist'),
-      h('h3', null, 'Choose a callsign'),
-      h('p.muted', null,
-        'Async matches are played over hours or days: submit your deployment whenever you like, and the battle resolves once your opponent has submitted theirs.'),
-      h('div.lobby-row', null,
-        field,
-        h('button.primary', { type: 'submit' }, 'Enlist'),
-      ),
-      h('p.muted.lobby-small', null, '2–16 characters. Your callsign is remembered on this device.'),
-    );
-    setTimeout(() => input.focus(), 0);
-    return form;
-  }
-
   function deckPanel(): HTMLElement {
     const deck = activeDeck();
     const errs = deck.length ? validateDeck(deck) : ['Your deck is empty'];
@@ -230,8 +206,8 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
       h('div.lobby-head', null,
         h('div.panel-title', null, `Deck · ${deck.length}/${DECK_SIZE} designs`),
         h('div.spacer'),
-        h('button.lobby-link', { onclick: () => { sfx('click'); app.go({ name: 'vsai', from: 'lobby' }); } }, 'Change roster'),
-        h('button.lobby-link', { onclick: () => { sfx('click'); app.go({ name: 'garage' }); } }, 'Edit in Garage ›'),
+        h('button.lobby-link', { onclick: () => { sfx('click'); app.go({ name: 'vsai', from: 'lobby' }); } }, 'Change loadout'),
+        h('button.lobby-link', { onclick: () => { sfx('click'); app.go({ name: 'garage' }); } }, 'Unit Designer ›'),
       ),
       h('div.lobby-chips', null, ...deck.map(chip)),
       errs.length ? h('p.lobby-warn', null, `⚠ ${errs[0]}`) : null,
@@ -364,11 +340,14 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     if (document.visibilityState === 'visible' && !busy) void refresh();
   }, REFRESH_MS);
 
+  // signing in/out elsewhere (the account dialog, a 401 that dropped the session) re-renders
+  const offSession = onSessionChange(() => { if (!destroyed && !busy) { lastData = null; render(); void refresh(); } });
+
   render();
-  if (currentSession() && !currentSession()!.auto) {
+  if (signedIn()) {
     void refresh();
     // verify the stored token is still known to the server (e.g. after a data reset)
-    getMe().catch((e) => { if (e instanceof NetError && e.status === 401) { app.toast('Session expired — enlist again.', 'error'); render(); } });
+    getMe().catch((e) => { if (e instanceof NetError && e.status === 401) { app.toast('Session expired — please sign in again.', 'error'); render(); } });
   }
 
   const screen: Screen = {
@@ -378,6 +357,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('storage', onStorage);
+      offSession();
       document.title = baseTitle;
     },
   };

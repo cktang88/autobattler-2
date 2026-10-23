@@ -12,12 +12,25 @@ import type { Design, MatchState } from '../shared/types.ts';
 export interface PlayerRecord {
   id: string;
   name: string;
-  /** sha256(token) hex — the raw token is never stored */
-  tokenHash: string;
+  /** sha256(token) hex of every live session (one per device that signed in) — raw tokens are never stored */
+  tokenHashes: string[];
+  /** @deprecated single-session records from before tokenHashes; migrated on load */
+  tokenHash?: string;
+  /** scrypt password hash: present on registered accounts (username + password), which own their name */
+  pw?: PasswordHash;
+  /** placeholder account made silently for garage sync; never claimable by name */
+  guest?: boolean;
   createdAt: number;
   lastSeen: number;
   /** the player's saved designs and active deck (synced from the client's garage) */
   garage?: GarageRecord;
+}
+
+export interface PasswordHash {
+  /** hex salt (per user) */
+  salt: string;
+  /** hex scrypt(password, salt) */
+  hash: string;
 }
 
 export interface GarageRecord {
@@ -45,11 +58,17 @@ export interface MatchRecord {
 const VERSION = 1;
 
 export const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
+/** most sessions (devices) kept per account; signing in on one more drops the oldest */
+export const MAX_SESSIONS = 20;
+/** key of the case-insensitive username index */
+export const nameKey = (name: string) => name.normalize('NFKC').toLowerCase();
 
 export class Store {
   readonly dir: string;
   readonly players = new Map<string, PlayerRecord>();
   readonly playersByToken = new Map<string, PlayerRecord>();
+  /** registered accounts (with a password) by nameKey(name): usernames are unique case-insensitively */
+  readonly playersByName = new Map<string, PlayerRecord>();
   readonly matches = new Map<string, MatchRecord>();
   readonly matchesByCode = new Map<string, MatchRecord>();
   private timer: NodeJS.Timeout | null = null;
@@ -65,9 +84,18 @@ export class Store {
     fs.mkdirSync(this.dir, { recursive: true });
     const players = readJson<{ players?: PlayerRecord[] }>(path.join(this.dir, 'players.json'));
     for (const p of players?.players ?? []) {
-      if (!p || typeof p.id !== 'string' || typeof p.tokenHash !== 'string') continue;
+      if (!p || typeof p.id !== 'string') continue;
+      if (!Array.isArray(p.tokenHashes)) p.tokenHashes = typeof p.tokenHash === 'string' ? [p.tokenHash] : [];
+      delete p.tokenHash;
+      p.tokenHashes = p.tokenHashes.filter((t) => typeof t === 'string');
       this.players.set(p.id, p);
-      this.playersByToken.set(p.tokenHash, p);
+      for (const t of p.tokenHashes) this.playersByToken.set(t, p);
+      if (p.pw && typeof p.name === 'string') {
+        const k = nameKey(p.name);
+        const other = this.playersByName.get(k);
+        // two registered accounts with one name can't be made by the API; keep the most recently seen one indexed
+        if (!other || other.lastSeen < p.lastSeen) this.playersByName.set(k, p);
+      }
     }
     const matches = readJson<{ matches?: MatchRecord[] }>(path.join(this.dir, 'matches.json'));
     let migrated = 0;
@@ -93,7 +121,34 @@ export class Store {
 
   addPlayer(p: PlayerRecord): void {
     this.players.set(p.id, p);
-    this.playersByToken.set(p.tokenHash, p);
+    for (const t of p.tokenHashes) this.playersByToken.set(t, p);
+    if (p.pw) this.playersByName.set(nameKey(p.name), p);
+    this.save();
+  }
+
+  /** Start one more session for the player (oldest dropped beyond MAX_SESSIONS). */
+  addToken(p: PlayerRecord, tokenHash: string): void {
+    p.tokenHashes.push(tokenHash);
+    this.playersByToken.set(tokenHash, p);
+    while (p.tokenHashes.length > MAX_SESSIONS) this.playersByToken.delete(p.tokenHashes.shift()!);
+    this.save();
+  }
+
+  /** End one session (sign out). */
+  removeToken(tokenHash: string): void {
+    const p = this.playersByToken.get(tokenHash);
+    if (!p) return;
+    this.playersByToken.delete(tokenHash);
+    p.tokenHashes = p.tokenHashes.filter((t) => t !== tokenHash);
+    this.save();
+  }
+
+  /** Rename and/or register (set the password of) a player, keeping the username index in step. */
+  setIdentity(p: PlayerRecord, name: string, pw?: PasswordHash): void {
+    if (p.pw && this.playersByName.get(nameKey(p.name)) === p) this.playersByName.delete(nameKey(p.name));
+    p.name = name;
+    if (pw) { p.pw = pw; delete p.guest; }
+    if (p.pw) this.playersByName.set(nameKey(p.name), p);
     this.save();
   }
 

@@ -6,13 +6,14 @@
 
 import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
-import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
-import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
+import { airRole, computeStats, damageKinds, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
+import type { AirRole } from '../stats.ts';
 import { DT, MAX_TICKS, TICK_RATE, wreckLevel } from './types.ts';
-import type { BattleEvent, DeathKind, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
+import type { BattleEvent, BattleInput, BattleSummary, DeathKind, MountState, SimProjectile, SimUnit } from './types.ts';
 
 // ---- tuning ----
 /** a turret only fires once its barrel is on target (~3.4°) — bursts included */
@@ -58,6 +59,12 @@ const HEAL_EVENT_EVERY = 0.3;
 const CRUSH_EVERY = 0.3;
 const BOMB_ALT = 1.5; // cells: height bombs start falling from
 const BOMB_FALL = 0.5; // seconds a bomb takes to land
+/** jets keep at least this share of their combined radius apart (soft: JET_SEP_SOFT of the overlap per tick) */
+const JET_SEP = 0.55;
+const JET_SEP_SOFT = 0.5;
+/** a flyer releases bombs at a target inside this cone ahead of its nose (bombs keep the plane's forward speed, so
+ *  they're dropped short of the target and carry on to it); straight overhead always counts */
+const BOMB_CONE = 0.6; // rad
 const CRUSH_DMG = 14; // per size of the crusher, per contact pulse
 const RANGE_KEEP = 1.08; // hysteresis: a held target stays valid out to range * this
 const STALL_CHECK_EVERY = 20; // ticks
@@ -104,6 +111,9 @@ const FLANK_TURN_IN = 1.3; // flankers turn in once the goal is within this many
 const ESCORT_NEAR = 3; // cells: escorts try to stay this close to the escorted block
 const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will chase a threat
 const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
+/** units armed only with melee weapons sprint this much faster while closing on an enemy (crossing the killing zone
+ *  of guns that reach 20+ m is what made brawlers useless) */
+export const MELEE_SPRINT = 1.35;
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
 /** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
@@ -182,6 +192,10 @@ interface Wpn {
   preaim: number;
   /** direction (+1/-1) of the last full-speed swing; keeps a turret committed when the target sits ~180° away */
   turnDir: number;
+  /** bomb on a flyer: aimed by flying at the target (bay follows the hull), reach includes the forward throw */
+  bomb: boolean;
+  /** only reloads over its own deploy zone (bomb bays: a bomber flies home to rearm, see needsResupply) */
+  resupply: boolean;
   /** launcher battery (rocket racks, missile pods with 4+ tubes): the whole burst leaves at once as a salvo */
   salvo: boolean;
   /** ripple fire: tubes still to launch in the current salvo, the next tube's index, the salvo size, ticks until the
@@ -267,6 +281,8 @@ interface Internal {
   lx1: number;
   ly1: number;
   strafeT: number;
+  /** turn direction of a jet's loop back to its target (+1 / -1), flipped every pass (figure-eight runs) */
+  loopDir: number;
   crushCd: number;
   burnDps: number;
   /** accumulated slow / disarm damage (see SLOW_PER, DISARM_PER_S); u.slow / u.disarm are derived from them */
@@ -334,6 +350,8 @@ interface Internal {
   escThreat: number;
   /** support module/trait present (heal, dome, uplink, jammer, sensor, repair aura) */
   isSupport: boolean;
+  /** air role (stats.ts airRole) steering a flyer's goal choice; null on the ground */
+  airRole: AirRole | null;
   /** unitCost x level multiplier (target 'valuable') */
   valueVal: number;
   /** size-major, cost-minor key (target 'swarm': smallest first) */
@@ -377,11 +395,9 @@ function kiteMountOf(wpns: (Wpn | null)[], mount: number): number {
 
 /** Damage class of a weapon for reactive armor / energy resist. */
 function damageClass(def: ModuleDef): number {
-  const k = def.projectile;
-  if (k === 'shell' || k === 'rocket' || k === 'missile' || k === 'arc') return CLS_EXPLOSIVE;
-  if (k === 'orb') return def.category === 'energy' ? CLS_ENERGY | CLS_EXPLOSIVE : CLS_EXPLOSIVE;
-  if (k === 'beam' || k === 'lightning' || k === 'rail' || k === 'flame') return CLS_ENERGY;
-  return 0;
+  let c = 0;
+  for (const k of damageKinds(def)) c |= k === 'explosive' ? CLS_EXPLOSIVE : k === 'energy' ? CLS_ENERGY : 0;
+  return c;
 }
 
 /** Wreck flavour and heft of a weapon's killing blow (visual only; see wreckLevel). */
@@ -667,7 +683,8 @@ export class Battle {
       if (!def || (def.kind === 'armor') || (def.kind === 'utility' && !def.heal)) { wpns.push(null); continue; }
       const isWeapon = def.kind === 'weapon';
       const melee = def.projectile === 'melee';
-      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult);
+      // bombs from a flyer: released short of the target and thrown on by the plane's speed, so they reach further
+      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult) + (isWeapon && def.projectile === 'arc' && stats.flying ? stats.speed * BOMB_FALL : 0);
       const w: Wpn = {
         def, heal: def.heal ?? 0, range, minRange: def.minRange ?? 0,
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
@@ -675,6 +692,7 @@ export class Battle {
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
         salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], split: [],
         okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
+        bomb: isWeapon && def.projectile === 'arc' && stats.flying, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -735,7 +753,7 @@ export class Battle {
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
-      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, crushCd: 0,
+      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, crushCd: 0,
       burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
@@ -744,7 +762,7 @@ export class Battle {
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
-      escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
@@ -1077,6 +1095,7 @@ export class Battle {
       return best;
     }
     const foes = this.liveIdx[u.side === 0 ? 1 : 0], nf = this.liveN[u.side === 0 ? 1 : 0];
+    if (I.airRole && I.airRole !== 'gunship') return this.airGoal(I, foes, nf);
     const snap = this.posSnapOk, sx = this.snapX, sy = this.snapY;
     for (let k = 0; k < nf; k++) {
       const j = foes[k];
@@ -1087,6 +1106,27 @@ export class Battle {
       if (o.flying ? !I.canHitA : !I.canHitG) continue;
       const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
       if (d < bestD && this.visible(u, o)) { bestD = d; best = j; }
+    }
+    return best;
+  }
+
+  /** Goal of a flyer by air role (stats.ts airRole): fighters hunt aircraft (ground only once the sky is clear),
+   *  bombers go for the most valuable ground target in reach of a run, harassers for artillery and support. A
+   *  role weight scales the squared distance, so a much nearer target still wins over a far preferred one. */
+  private airGoal(I: Internal, foes: ArrayLike<number>, nf: number): number {
+    const u = I.u, units = this.units, role = I.airRole;
+    let best = -1, bestS = Infinity;
+    for (let k = 0; k < nf; k++) {
+      const j = foes[k];
+      const o = units[j];
+      if (!o.alive || (o.flying ? !I.canHitA : !I.canHitG) || !this.visible(u, o)) continue;
+      const O = this.ints[j];
+      const dx = o.x - u.x, dy = o.y - u.y;
+      let sc = dx * dx + dy * dy;
+      if (role === 'fighter') sc *= o.flying ? 0.08 : 3;
+      else if (role === 'bomber') { if (o.flying) continue; sc /= Math.max(1, O.valueVal / 20); }
+      else if (role === 'harasser') sc *= o.flying ? 2 : O.isSupport || o.stats.range >= 10 ? 0.25 : 1;
+      if (sc < bestS) { bestS = sc; best = j; }
     }
     return best;
   }
@@ -1216,7 +1256,7 @@ export class Battle {
         case 'support': sc = O.isSupport ? 0 : 1; break;
         case 'valuable': sc = -O.valueVal; break;
         case 'swarm': sc = O.swarmKey; break;
-        default: sc = d;
+        default: sc = I.airRole === 'fighter' && o.flying ? d * 0.3 : d; // fighters: aircraft first
       }
       if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && (d < bestD || (d === bestD && j < best)))) { bestS = sc; bestD = d; best = j; }
       if (focus) { candJ[nc] = j; candS[nc] = sc; candD[nc] = d; nc++; }
@@ -1315,7 +1355,7 @@ export class Battle {
       const w = I.wpns[mi];
       if (!w) continue;
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
-      if (m.cooldown > -DT) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
+      if (m.cooldown > -DT && !(w.resupply && m.reloading && !this.overHome(u))) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
       if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
 
       if (w.heal > 0) {
@@ -1364,7 +1404,11 @@ export class Battle {
         if (pa && pa.alive && this.visible(u, pa)) want = Math.atan2(pa.y - my, pa.x - mx);
         else w.preaim = -1;
       }
-      m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
+      if (w.bomb) m.angle = u.angle; // bomb bay: aimed by flying at the target
+      else m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
+      const onTarget = w.bomb
+        ? !!t && (Math.abs(angDiff(u.angle, want)) < BOMB_CONE || Math.hypot(t.x - u.x, t.y - u.y) < 1.5)
+        : Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE;
       // rotary barrels spin up while laid on a target, and wind down without one
       const su = w.def.spinUp;
       if (su) w.spin = t && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE ? Math.min(1, w.spin + DT / su) : Math.max(0, w.spin - DT / su);
@@ -1374,7 +1418,7 @@ export class Battle {
         if (u.disarm > 0) { w.burstLeft = 0; continue; }
         w.burstTimer -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
         // follow-up rounds wait for the barrel too (a target that moves out of the arc pauses the burst)
-        if (w.burstTimer <= 0 && (!t || Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE)) {
+        if (w.burstTimer <= 0 && (!t || onTarget)) {
           w.burstLeft--;
           w.burstTimer = BURST_GAP;
           if (t) { w.aimX = ax; w.aimY = ay; }
@@ -1395,7 +1439,7 @@ export class Battle {
         }
         continue;
       }
-      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && Math.abs(angDiff(m.angle, want)) < AIM_TOLERANCE && I.leapT < 0) {
+      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && onTarget && I.leapT < 0) {
         // overkill: rounds already in flight are expected to finish this target -- switch to another one, or hold
         // the shot until they land (the target dies, or survives and incoming drops so we fire after all)
         if (this.doomed(t.id) && this.tick >= w.okHold) {
@@ -1480,6 +1524,7 @@ export class Battle {
   /** Damage one round is expected to deal to `t` after armour (shields count as hp, see doomed). */
   private expectedHit(t: SimUnit, raw: number, ap: number, airBonus: number): number {
     const r = t.flying ? raw * airBonus : raw;
+    if (t.shield > 0 || t.auraShield > 0) return r; // shields soak hits at full strength
     return Math.max(r * MIN_DMG_FRAC, r - t.stats.armor * (1 - ap));
   }
 
@@ -1847,13 +1892,9 @@ export class Battle {
       if (fx.burn) this.ignite(t, fx.burn.dps * fxMult, fx.burn.duration, side, this.dmgSrc, moduleId);
     }
     if (t.flying) raw *= airBonus;
-    if (cls) {
-      if ((cls & CLS_ENERGY) && T.energyResist > 0) raw *= 1 - T.energyResist;
-      if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { raw *= REACTIVE_MULT; t.reactive--; }
-    }
-    const effArmor = t.stats.armor * (1 - ap);
-    let dmg = Math.max(raw * MIN_DMG_FRAC, raw - effArmor);
-    const hitDmg = dmg;
+    // damage rules (stats.ts): shields soak the hit first at full strength (armour and penetration don't matter);
+    // what gets through hits the hull, where reactive armour / mirror coating and then flat armour apply
+    let dmg = raw;
     let dealt = 0;
     let shieldHit = false;
     if (t.shield > 0) {
@@ -1870,6 +1911,12 @@ export class Battle {
       dealt += a;
       shieldHit = true;
     }
+    if (dmg > 0) {
+      if ((cls & CLS_ENERGY) && T.energyResist > 0) dmg *= 1 - T.energyResist;
+      if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { dmg *= REACTIVE_MULT; t.reactive--; }
+      dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - t.stats.armor * (1 - ap));
+    }
+    const hitDmg = dmg; // what reached the hull: the wreck's "hit size"
     if (dmg > 0) {
       const a = Math.min(t.hp, dmg);
       t.hp -= dmg;
@@ -2177,6 +2224,11 @@ export class Battle {
     if (I.stance === 'holdPos') { this.faceTarget(I); return; }
     let goal = I.goal >= 0 ? this.units[I.goal] : null;
     if (I.strafe) { this.strafeMove(I, goal); return; }
+    // hovering bombers (rotor / grav lift) with empty bays fly back over their own lines and wait there to rearm
+    if (this.needsResupply(I)) {
+      if (!this.overHome(u)) this.steer(I, u.x, u.side === 0 ? FIELD_H - DEPLOY_D * 0.5 : DEPLOY_D * 0.5, 0.5, -1);
+      return;
+    }
 
     if (I.retreatOn) {
       const r = u.hp / u.maxHp;
@@ -2408,7 +2460,8 @@ export class Battle {
     const diff = Math.abs(angDiff(u.angle, want));
     let f = diff >= Math.PI / 2 ? 0 : Math.cos(diff);
     if (u.flying) f = Math.max(f, 0.3); // rotors can drift sideways
-    const sp = Math.min(I.speed * (1 - u.slow) * f * DT, d - stopDist * 0.5);
+    const sprint = I.meleeOnly && goalId >= 0 && this.units[goalId].side !== u.side ? MELEE_SPRINT : 1;
+    const sp = Math.min(I.speed * sprint * (1 - u.slow) * f * DT, d - stopDist * 0.5);
     if (sp <= 0) return;
     if (u.flying) {
       // rotors slide toward the goal directly; body heading follows
@@ -2495,6 +2548,23 @@ export class Battle {
     return I.avoidSide * (0.5 + 0.9 * strength);
   }
 
+  /** over its own deploy zone (where bomb bays rearm) */
+  private overHome(u: SimUnit): boolean {
+    return u.side === 0 ? u.y >= FIELD_H - DEPLOY_D : u.y <= DEPLOY_D;
+  }
+
+  /** every bomb bay is empty: fly home to rearm before the next run */
+  private needsResupply(I: Internal): boolean {
+    let any = false;
+    for (let mi = 0; mi < I.wpns.length; mi++) {
+      const w = I.wpns[mi];
+      if (!w || !w.resupply) continue;
+      if (!I.u.mounts[mi].reloading) return false;
+      any = true;
+    }
+    return any;
+  }
+
   private strafeMove(I: Internal, goal: SimUnit | null): void {
     const u = I.u;
     let want: number;
@@ -2502,6 +2572,10 @@ export class Battle {
     if (u.x < margin || u.x > FIELD_W - margin || u.y < margin || u.y > FIELD_H - margin) {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);
       I.strafeT = Math.max(I.strafeT, 0.2);
+    } else if (this.needsResupply(I)) {
+      // bays empty: head home and circle over the own lines until rearmed
+      const hy = u.side === 0 ? FIELD_H - DEPLOY_D * 0.5 : DEPLOY_D * 0.5;
+      want = this.overHome(u) ? u.angle + 0.8 * I.loopDir : Math.atan2(hy - u.y, (u.x < FIELD_W / 2 ? FIELD_W * 0.35 : FIELD_W * 0.65) - u.x);
     } else if (I.strafeT > 0) {
       I.strafeT -= DT;
       want = u.angle;
@@ -2511,7 +2585,10 @@ export class Battle {
       want = Math.atan2(dy, dx);
       if (d < 1.2 || (d < 2.5 && Math.abs(angDiff(u.angle, want)) > 1.2)) {
         I.strafeT = 1.1; // overshoot, then loop back
+        I.loopDir = -I.loopDir; // alternate the loop each pass: runs trace a figure eight over the target
         want = u.angle;
+      } else if (Math.abs(angDiff(u.angle, want)) > 2.4) {
+        want = u.angle + I.loopDir; // target behind: swing round in this pass's loop direction
       }
     } else {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);
@@ -2714,7 +2791,26 @@ export class Battle {
             if (!b.alive || b.flying !== a.flying) continue;
             const B = ints[j];
             if (B.leapT >= 0) continue;
-            if (A.strafe || B.strafe) continue; // jets pass through each other
+            if (A.strafe || B.strafe) {
+              // jets fly past each other, but never stack in the same spot: a small soft keep-out (JET_SEP of the
+              // combined radius) eases overlapping jets apart a little each tick without stopping them
+              const jr = JET_SEP * (A.radius + B.radius);
+              let jx = b.x - a.x, jy = b.y - a.y;
+              const jd2 = jx * jx + jy * jy;
+              if (jd2 >= jr * jr) continue;
+              let jd = Math.sqrt(jd2);
+              if (jd < 1e-6) { const ang = ((i * 7 + j * 13) % 16) * (TAU / 16); jx = Math.cos(ang); jy = Math.sin(ang); jd = 0; } else { jx /= jd; jy /= jd; }
+              const push = (jr - jd) * 0.5 * JET_SEP_SOFT;
+              a.x -= jx * push; a.y -= jy * push;
+              b.x += jx * push; b.y += jy * push;
+              px[i] = a.x; py[i] = a.y; px[j] = b.x; py[j] = b.y;
+              D = Math.max(D, Math.abs(a.x - hx[i]), Math.abs(a.y - hy[i]), Math.abs(b.x - hx[j]), Math.abs(b.y - hy[j]));
+              far = far0 + D;
+              wy1 = Math.min(rowHi, clamp(Math.floor((py[i] + far) / CELL), 0, HROWS - 1));
+              wx0 = Math.max(colLo, clamp(Math.floor((px[i] - far) / CELL), 0, HCOLS - 1));
+              wx1 = Math.min(colHi, clamp(Math.floor((px[i] + far) / CELL), 0, HCOLS - 1));
+              continue;
+            }
             let dx = b.x - a.x, dy = b.y - a.y;
             let rr = A.radius + B.radius;
             let d2 = dx * dx + dy * dy;

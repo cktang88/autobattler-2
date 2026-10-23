@@ -890,3 +890,47 @@
 .garage .g-rules { margin: 6px 0 8px; padding: 8px 10px; background: rgba(53, 214, 191, 0.06); border-left: 3px solid #35d6bf; border-radius: 3px; }
 .garage .g-rules-h { font-family: var(--head); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; color: #35d6bf; margin-bottom: 4px; }
 .garage .g-rules ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; font-size: 0.92rem; line-height: 1.35; color: var(--txt); }
+
+/* armour penetration / damage type badges (garage-parts apBadge, damageKindBadges) */
+.garage .g-ap, .garage .g-dk { display: inline-flex; align-items: center; gap: 3px; font-family: var(--head); font-weight: 700; font-size: 0.86rem; letter-spacing: 0.06em; text-transform: uppercase; line-height: 18px; padding: 0 5px 0 3px; border-radius: 3px; box-shadow: inset 0 0 0 1px currentColor; white-space: nowrap; }
+.garage .g-ap .g-ico, .garage .g-dk .g-ico { width: 15px; height: 15px; }
+.garage .g-ap.ap-none { color: var(--dim2, #6f7d8c); }
+.garage .g-ap.ap-half { color: #f2b84b; }
+.garage .g-ap.ap-full { color: #ff6b5a; }
+.garage .g-dks { display: inline-flex; gap: 4px; }
+.garage .g-dk { padding: 0 3px; }
+.garage .g-dk:has(span) { padding: 0 5px 0 3px; }
+.garage .g-dk.dk-kinetic { color: #c9d3dc; }
+.garage .g-dk.dk-explosive { color: #ff9a4a; }
+.garage .g-dk.dk-energy { color: #6fe3ff; }
+.garage .g-dr-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
+.garage .g-dr-link .g-ico { width: 16px; height: 16px; }
+.garage .g-dmgrules { width: min(560px, 100%); }
+.garage .g-dr-sub { margin: 0 0 8px; color: var(--dim, #9aa7b4); }
+.garage .g-dr-steps { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+.garage .g-dr-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; line-height: 1.4; }
+.garage .g-dr-ico { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 4px; box-shadow: inset 0 0 0 1px currentColor; }
+.garage .g-dr-ico .g-ico { width: 18px; height: 18px; }
+.garage .g-dr-ico.sh { color: #6fb8ff; }
+.garage .g-dr-ico.ar { color: #c9d3dc; }
+.garage .g-dr-ico.ap-none { color: #f2b84b; }
+.garage .g-dr-ico.dk-explosive { color: #ff9a4a; }
+.garage .g-dr-ico.ml { color: #ff6b4a; }
+
+/* ---------- roster sort / hide starters ---------- */
+.garage .g-plate-h { flex-wrap: wrap; }
+.garage .g-list-tools { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.garage .g-list-tools .g-sort { flex: 1 1 auto; min-width: 0; min-height: 34px; font-size: 0.94rem; }
+.garage .g-list-tools .g-hidestart { min-height: 34px; font-size: 0.92rem; }
+.garage .g-hidden-note {
+  background: none; border: 1px dashed var(--plate4); clip-path: none; color: var(--dim2); font-size: 0.92rem;
+  padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; font-family: inherit;
+}
+.garage .g-hidden-note:hover:not(:disabled) { background: var(--plate2); color: var(--dim); }
+@media (max-width: 1100px) {
+  .garage .g-list-tools { flex: none; flex-direction: column; align-items: stretch; width: 150px; }
+  .garage .g-hidden-note { flex: 0 0 auto; align-self: center; }
+}
+@media (max-width: 760px) {
+  .garage .g-list-tools { flex: 1 0 100%; flex-direction: row; width: auto; }
+}

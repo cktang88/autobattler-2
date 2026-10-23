@@ -16,7 +16,7 @@ export interface BattleView {
   flashScale: number;
   alwaysShowHealth: boolean;
   /** camera state: k = CSS px per cell (1 cell = 5 m) */
-  readonly cam: { readonly k: number };
+  readonly cam: { readonly k: number; userAt: number };
   readonly controls: { enabled: boolean; doubleClickZoom: boolean; readonly wasDrag: boolean };
   /** true if the pointer gesture that just ended was a pan/pinch */
   readonly wasDrag: boolean;
@@ -32,6 +32,11 @@ export interface BattleView {
   /** world cells <-> canvas CSS px (ground plane) */
   worldToScreen(x: number, y: number): { x: number; y: number };
   screenToWorld(px: number, py: number): { x: number; y: number };
+  /** local ground scale at a world point: CSS px per cell across (k) and the vertical foreshortening (ay); constant
+   *  for the flat 2D view, varies with depth under the 3D perspective camera */
+  scaleAt(x: number, y: number): { k: number; ay: number };
+  /** auto camera: ease toward framing a world-space box (cells) */
+  frameWorldBox(x0: number, y0: number, x1: number, y1: number): void;
   /** queue a sim step's events (call after EVERY battle.step()) */
   pushEvents(events: BattleEvent[]): void;
   drawBoard(units: BoardUnit[], overlay: BoardOverlay, time: number): void;

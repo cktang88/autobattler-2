@@ -36,7 +36,7 @@ export function settingsScreen(app: App): Screen {
   const rendererHost = h('div');
   const renderRenderer = () => rendererHost.replaceChildren(kit.segmented({
     value: s.renderer, label: 'Battlefield art', options: [{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }],
-    onChange: (v) => { sfx('click'); s.renderer = v; saveSettings(s); if (v === '3d') void preload3d(); renderRenderer(); },
+    onChange: (v) => { sfx('click'); s.renderer = v; s.rendererChosen = true; saveSettings(s); if (v === '3d') void preload3d(); renderRenderer(); },
   }));
   renderRenderer();
 
@@ -76,6 +76,16 @@ export function settingsScreen(app: App): Screen {
             draw();
             return host;
           })(), h('span.muted', null, 'A slight 3D tilt of the battlefield; turn off for a flat top-down view')),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Auto battle camera', on: s.autoCam !== false,
+              title: 'The camera follows the fight and zooms in as it thins out; moving the camera yourself turns it off until the next battle',
+              onChange: (v) => { s.autoCam = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'Follows the fight and zooms in as it thins out; moving the camera yourself takes over until the next battle')),
           h('div.setting.check', null, (() => {
             const host = h('span');
             const draw = () => host.replaceChildren(kit.toggle({

@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import crypto from 'node:crypto';
 import { startServer, type RunningServer } from '../src/server/main.ts';
 import { resolveStatic } from '../src/server/static.ts';
 import type { DeployAction, Design, MatchState, Side } from '../src/shared/types.ts';
@@ -454,6 +455,100 @@ test('random (unknown) bearer tokens share the IP rate-limit bucket', async () =
       statuses.push(r.status);
     }
     assert.ok(statuses.includes(429), `fresh fake tokens must not each get a new bucket: ${statuses}`);
+  } finally {
+    await s2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('accounts: register, sign in again from a new device, wrong password, unique names, legacy claim, sign out', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ab2-acct-'));
+  // players.json from before passwords: two passwordless "Dana"s (most recent one gets claimed), an old placeholder
+  const sha = (x: string) => crypto.createHash('sha256').update(x).digest('hex');
+  const oldToken = (id: string) => sha('tok:' + id);
+  const old = (id: string, name: string, lastSeen: number, garageIds: string[]) => ({
+    id, name, tokenHash: sha(oldToken(id)), createdAt: 1, lastSeen,
+    garage: { designs: DECK.filter((d) => garageIds.includes(d.id)), deck: garageIds, rev: 3, updatedAt: lastSeen },
+  });
+  fs.writeFileSync(path.join(dir, 'players.json'), JSON.stringify({ version: 1, players: [
+    old('p_dana_old', 'Dana', 1000, ['d-buzz']), old('p_dana_new', 'Dana', 5000, ['d-lance']), old('p_pilot', 'Pilot 1234', 9000, []),
+  ] }));
+  const opts = { port: 0, host: '127.0.0.1', dataDir: dir, publicDir, saveDebounceMs: 10, loginRateLimit: 600 };
+  let s2 = await startServer(opts);
+  const call = async (method: string, url: string, token?: string, body?: unknown): Promise<Res> => {
+    const r = await fetch(`http://127.0.0.1:${s2.port}${url}`, {
+      method,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    return { status: r.status, body: await r.json() };
+  };
+  const signIn = (name: string, password: string, token?: string) => call('POST', '/api/login', undefined, { name, password, ...(token ? { token } : {}) });
+  try {
+    // a guest placeholder with a garage; registering "Alice" upgrades that same account (garage kept)
+    const guest = (await call('POST', '/api/login', undefined, { name: 'Pilot 4321' })).body;
+    assert.equal(guest.registered, false);
+    assert.equal((await call('POST', '/api/garage', guest.token, { designs: DECK, deck: ['d-buzz'], baseRev: 0 })).status, 200);
+    const reg = await signIn('Alice', 'hunter22', guest.token);
+    assert.equal(reg.status, 200, JSON.stringify(reg.body));
+    assert.equal(reg.body.status, 'registered');
+    assert.equal(reg.body.playerId, guest.playerId);
+    assert.equal(reg.body.registered, true);
+    assert.match(reg.body.token, /^[0-9a-f]{64}$/);
+    // "new device": no token, same username (any case) + password -> same account and garage, a different token
+    const dev2 = await signIn('alice', 'hunter22');
+    assert.equal(dev2.status, 200, JSON.stringify(dev2.body));
+    assert.equal(dev2.body.status, 'signed-in');
+    assert.equal(dev2.body.playerId, guest.playerId);
+    assert.equal(dev2.body.name, 'Alice');
+    assert.notEqual(dev2.body.token, reg.body.token);
+    const g = (await call('GET', '/api/garage', dev2.body.token)).body.garage;
+    assert.deepEqual(g.designs.map((d: Design) => d.id), ['d-buzz', 'd-lance']);
+    assert.deepEqual(g.deck, ['d-buzz']);
+    // both devices' sessions stay valid
+    assert.equal((await call('GET', '/api/me', reg.body.token)).body.playerId, guest.playerId);
+    assert.equal((await call('GET', '/api/me', dev2.body.token)).body.registered, true);
+    // wrong password: 401 with a clear message
+    const wrong = await signIn('ALICE', 'nope1234');
+    assert.equal(wrong.status, 401);
+    assert.match(wrong.body.error, /wrong password/i);
+    // too-short password; a different-case name can't register a second "Bob"
+    assert.equal((await signIn('Bob', 'abc')).status, 400);
+    const bob = await signIn('Bob', 'abcd');
+    assert.equal(bob.body.status, 'registered');
+    assert.notEqual(bob.body.playerId, guest.playerId);
+    assert.equal((await signIn('bOB', 'abce')).status, 401);
+    assert.equal((await signIn('bOB', 'abcd')).body.playerId, bob.body.playerId);
+    // a registered account can't be renamed onto another registered name
+    assert.equal((await call('POST', '/api/login', undefined, { name: 'Bob', token: reg.body.token })).status, 409);
+    // legacy passwordless "Dana": the most recently seen one is claimed (its garage kept), the other left alone
+    const dana = await signIn('Dana', 'secret');
+    assert.equal(dana.body.status, 'claimed');
+    assert.equal(dana.body.playerId, 'p_dana_new');
+    assert.deepEqual((await call('GET', '/api/garage', dana.body.token)).body.garage.deck, ['d-lance']);
+    assert.equal((await call('GET', '/api/me', oldToken('p_dana_new'))).body.playerId, 'p_dana_new', 'its old token still works');
+    assert.equal((await call('GET', '/api/me', oldToken('p_dana_old'))).body.registered, false);
+    assert.equal((await signIn('Dana', 'other')).status, 401);
+    // an old placeholder name is not claimable: a new account
+    const pilot = await signIn('Pilot 1234', 'pppp');
+    assert.equal(pilot.body.status, 'registered');
+    assert.notEqual(pilot.body.playerId, 'p_pilot');
+    // change password; sign out ends only that device's session
+    assert.equal((await call('POST', '/api/password', dev2.body.token, { password: 'bad', newPassword: 'newpass' })).status, 401);
+    assert.equal((await call('POST', '/api/password', dev2.body.token, { password: 'hunter22', newPassword: 'newpass' })).status, 200);
+    assert.equal((await signIn('Alice', 'hunter22')).status, 401);
+    assert.equal((await signIn('Alice', 'newpass')).status, 200);
+    assert.equal((await call('POST', '/api/logout', dev2.body.token)).status, 200);
+    assert.equal((await call('GET', '/api/me', dev2.body.token)).status, 401);
+    assert.equal((await call('GET', '/api/me', reg.body.token)).status, 200);
+    // passwords and raw tokens are never written; the name index survives a restart
+    await s2.close();
+    const raw = fs.readFileSync(path.join(dir, 'players.json'), 'utf8');
+    assert.ok(!raw.includes('hunter22') && !raw.includes('newpass') && !raw.includes(reg.body.token));
+    s2 = await startServer(opts);
+    assert.equal((await signIn('alice', 'nope')).status, 401);
+    assert.equal((await signIn('alice', 'newpass')).body.playerId, guest.playerId);
+    assert.equal((await call('GET', '/api/me', reg.body.token)).body.playerId, guest.playerId);
   } finally {
     await s2.close();
     fs.rmSync(dir, { recursive: true, force: true });

@@ -140,6 +140,8 @@ export interface ModuleDef {
   magazine?: number;
   /** seconds to reload a full magazine */
   reload?: number;
+  /** bomb bay: an empty magazine only reloads over the unit's own deploy zone, so the bomber flies home to rearm */
+  resupply?: boolean;
   /** projectiles per shot fired simultaneously in a spread (shotguns, barrage) */
   pellets?: number;
   /** cells */
@@ -152,7 +154,8 @@ export interface ModuleDef {
   projectileSpeed?: number;
   /** splash radius in cells (0 = single target) */
   splash?: number;
-  /** armor pierce 0..1 (fraction of target armor ignored) */
+  /** armour penetration tier: 0 (none), 0.5 (half: ignores half the target's armour) or 1 (full: ignores all of it).
+   *  Only these three values are used (see AP_TIERS / apTier in stats.ts); shields ignore penetration entirely. */
   ap?: number;
   /** random aim error in cells at max range (0 = pinpoint). Hitscan beams/lightning/rail never miss;
    *  homing missiles track their target; every other projectile flies to where the target WAS when fired

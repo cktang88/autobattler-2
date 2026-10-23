@@ -14,6 +14,9 @@ import { Battle } from '../src/shared/sim/battle.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 
 const S = (id: string) => STARTER_DESIGNS.find((d) => d.id === id)!;
+/** an 8-unit light block at current prices (the tests below were written around Tank Hunter, which reprices move
+ *  between tiers); asserted in the first test so a price change that moves it fails loudly here */
+const EIGHT: Design = { id: 'eight', name: 'Eight', chassis: 'raider', mobility: 'legs', mounts: ['laser', null] };
 
 test('squad tiers: cheap light units 16 to a block, pricier ones 8 or 4; bigger hulls single units', () => {
   assert.deepEqual(SQUAD_TIERS.map((t) => t[1]), [16, 8, 4]);
@@ -22,7 +25,8 @@ test('squad tiers: cheap light units 16 to a block, pricier ones 8 or 4; bigger 
   for (const size of [2, 3, 4, 5]) assert.equal(squadFor(size, () => 1), 1);
   // the starters
   const sq = Object.fromEntries(STARTER_DESIGNS.map((d) => [d.name, computeStats(d).squad]));
-  assert.deepEqual([sq['Buzzsaw'], sq['Torchbug'], sq['Gnasher'], sq['Tank Hunter'], sq['Lancer'], sq['Hornet']], [16, 16, 16, 8, 4, 4]);
+  assert.deepEqual([sq['Buzzsaw'], sq['Torchbug'], sq['Gnasher'], sq['Tank Hunter'], sq['Lancer'], sq['Hornet']], [16, 16, 8, 4, 4, 8]);
+  assert.equal(computeStats(EIGHT).squad, 8, 'test design EIGHT');
   for (const d of STARTER_DESIGNS) if (computeStats(d).size > 1) assert.equal(computeStats(d).squad, 1, d.name);
   // a squad's unit price (one decimal shown) sits in its tier
   for (const d of STARTER_DESIGNS) {
@@ -73,7 +77,7 @@ test('formations and spacing for every squad size', () => {
 });
 
 test('rules: zone, overlap and the sim-unit cap use the real squad', () => {
-  const lancer = S('starter-lancer'), hunter = S('starter-hunter');
+  const lancer = S('starter-lancer'), hunter = EIGHT;
   const m = newMatch('q', 'ai', 1, newPlayer('A', [lancer, hunter]), newPlayer('B', [lancer], true), 0);
   m.players[0].supply = 100000;
   const pl = (uid: number, id: string, x: number, y: number, extra: Partial<Placement> = {}): Placement => ({ uid, designId: id, x, y, level: 1, round: 1, ...extra });
@@ -94,7 +98,7 @@ test('rules: zone, overlap and the sim-unit cap use the real squad', () => {
 });
 
 test('migrating a rules-2 match splits old 16-unit blocks into blocks of the new squad on the same unit positions', () => {
-  const lancer = S('starter-lancer'), hunter = S('starter-hunter'), buzz = S('starter-buzzsaw');
+  const lancer = S('starter-lancer'), hunter = EIGHT, buzz = S('starter-buzzsaw');
   const deck = [lancer, hunter, buzz];
   const m = newMatch('old', 'ai', 1, newPlayer('A', deck), newPlayer('B', deck, true), 0);
   m.rules = 2;

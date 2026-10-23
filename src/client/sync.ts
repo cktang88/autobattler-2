@@ -105,7 +105,8 @@ async function syncOnce(): Promise<void> {
 
 /** Pull/push now. Resolves when done (never rejects: failures leave the local edits for the next try). */
 export function syncGarage(): Promise<void> {
-  if (running) { again = true; return running; }
+  // already syncing: run once more afterwards (edits / a sign-in since it started) and resolve after that run
+  if (running) { again = true; return running.then(() => running ?? undefined); }
   running = syncOnce()
     // a token the server no longer knows (data reset) was just cleared by net.ts: sync again under a fresh account
     .catch((e) => (e instanceof NetError && e.status === 401 ? syncOnce() : undefined))
