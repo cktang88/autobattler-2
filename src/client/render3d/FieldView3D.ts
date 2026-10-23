@@ -88,7 +88,7 @@ function famOf(def: ModuleDef | undefined): Fam {
   if (def.heal) return 'heal';
   const v = def.visual, pk = def.projectile ?? 'bullet', pellets = def.pellets ?? 1;
   if (def.category === 'melee') return 'melee';
-  if (def.fireField) return 'firebomb';
+  if (def.fireField && pk === 'arc') return 'firebomb';
   if (def.cluster) return 'cluster';
   switch (def.category) {
     case 'machinegun':
@@ -831,7 +831,19 @@ export class FieldView3D implements BattleView {
 
     // status effects
     const S = rig.S;
-    if (u.burning > 0 && Math.random() < dt * (6 + 3 * S) * this.fx.lod) this.fx.burning(x + (Math.random() - 0.5) * rig.L * 0.5, h + rig.height * 0.6, y + (Math.random() - 0.5) * rig.W * 0.5, S);
+    if (u.burning > 0) {
+      // licking flames over the whole hull (rate scales with its footprint), lit from within by a flickering glow
+      const hx = rig.L * 0.42, hz = rig.W * 0.42, ca = Math.cos(ang), sa = Math.sin(ang);
+      let acc = dt * (8 + 12 * rig.L * rig.W) * Math.max(0.5, this.fx.lod);
+      while (acc > 0) {
+        if (acc < 1 && Math.random() > acc) break;
+        acc--;
+        // a random point on the rotated footprint
+        const lx = (Math.random() * 2 - 1) * hx, lz = (Math.random() * 2 - 1) * hz;
+        this.fx.burning(x + lx * ca - lz * sa, h + rig.height * (0.45 + 0.45 * Math.random()), y + lx * sa + lz * ca, 0.05 + rig.L * 0.08, 0.05 + rig.W * 0.08);
+      }
+      if (Math.random() < dt * 8) this.fx.glow(x, h + rig.height * 0.7, y, 0.6 + Math.max(rig.L, rig.W) * 0.7, 0.18, RAMPS.fire);
+    }
     if (u.stun > 0 && Math.random() < dt * 5) this.fx.arcs(x, h + rig.height * 0.55, y, rig.L * 0.42, rig.W * 0.42);
     else if (u.para > 0 && Math.random() < dt * 8 * clamp(u.para / u.maxHp, 0.1, 1)) this.fx.paraSpark(x, h + rig.height * 0.6, y, rig.L * 0.4, rig.W * 0.4);
     if (sk && Math.random() < dt * (4 + 8 * sk) * (0.6 + 0.2 * S) * this.fx.lod) this.fx.frost(x, h + rig.height * 0.75, y, rig.L * 0.45, rig.W * 0.45, sk);
@@ -1131,8 +1143,9 @@ export class FieldView3D implements BattleView {
           if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, big ? 'bigMissile' : 'missile', 0.8 + sz);
           break;
         }
-        case 'flame':
-          if (emit) this.fx.trail(pos.x, H, pos.y, 'flame', 0.6 + sz);
+        case 'flame': // two puffs a frame: a dense, rolling jet
+          if (emit) this.fx.flameJet(pos.x, H, pos.y, clamp(pos.progress, 0, 1), 0.7 + sz, st.def?.id === 'napalm' || st.def?.id === 'inferno');
+          if (emit && Math.random() < 0.6 * this.fx.lod) this.fx.flameJet(pos.x - dx * 0.2, H, pos.y - dz * 0.2, clamp(pos.progress - 0.05, 0, 1), 0.7 + sz, false);
           break;
         case 'orb': {
           if (st.fam === 'sonic') { // pressure wave: a pale shimmering ball that leaves ripples

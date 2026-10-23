@@ -460,6 +460,87 @@ export class ProjLayer {
   }
 }
 
+/* ---------------------------------------------------------------------------------------- burning ground */
+
+/** Burning ground patches: one instanced ground quad per patch with an animated noise-flame shader (a bed of
+ *  licking flames and glowing embers, flaring on landing and guttering out at the end). One draw call for all. */
+class GroundFire {
+  readonly mesh: THREE.Mesh;
+  private geo: THREE.InstancedBufferGeometry;
+  private aA: THREE.InstancedBufferAttribute; // x, z, r, seed
+  private aB: THREE.InstancedBufferAttribute; // intensity
+  private mat: THREE.ShaderMaterial;
+  readonly cap: number;
+  constructor(cap: number) {
+    this.cap = cap;
+    const quad = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = quad.index;
+    geo.setAttribute('position', quad.getAttribute('position'));
+    this.aA = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4); this.aA.setUsage(THREE.DynamicDrawUsage);
+    this.aB = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); this.aB.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('iA', this.aA); geo.setAttribute('iB', this.aB);
+    geo.instanceCount = 0;
+    this.geo = geo;
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uHdr: { value: 1 } },
+      vertexShader: /* glsl */ `
+        attribute vec4 iA; attribute float iB;
+        varying vec2 vUv; varying float vSeed; varying float vI;
+        void main() {
+          float r = iA.z * 1.25;
+          vec3 p = vec3(iA.x + position.x * r, 0.045, iA.y + position.z * r);
+          vUv = position.xz * 1.25; vSeed = iA.w; vI = iB;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime; uniform float uHdr;
+        varying vec2 vUv; varying float vSeed; varying float vI;
+        float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+        float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int k = 0; k < 4; k++) { s += a * n(p); p = p * 2.03 + 3.1; a *= 0.5; } return s; }
+        void main() {
+          float d = length(vUv);
+          vec2 q = vUv * 2.6 + vSeed * 17.0;
+          // two noise layers drifting different ways: flames 'lick' instead of scrolling
+          float f1 = fbm(q + vec2(uTime * 0.7, -uTime * 1.6));
+          float f2 = fbm(q * 1.7 - vec2(uTime * 1.1, uTime * 0.9));
+          float body = smoothstep(1.02, 0.45, d + (f1 - 0.5) * 0.55);
+          float tongues = smoothstep(0.42, 0.85, f1 * 0.6 + f2 * 0.6) * body;
+          float embers = smoothstep(0.6, 0.95, n(q * 4.0 + vec2(0.0, uTime * 0.3))) * body;
+          float flick = 0.85 + 0.15 * sin(uTime * 13.0 + vSeed * 40.0) * sin(uTime * 7.3 + vSeed * 9.0);
+          vec3 col = vec3(0.55, 0.08, 0.01) * body * 0.9            // dull red bed
+                   + vec3(2.6, 1.05, 0.2) * tongues * flick           // orange flame tongues
+                   + vec3(2.2, 1.9, 1.0) * pow(tongues, 3.0) * 1.5    // yellow-white cores
+                   + vec3(1.6, 0.4, 0.05) * embers * 0.6;
+          float a = clamp(body * 0.55 + tongues * 0.6, 0.0, 1.0) * vI;
+          if (a < 0.004) discard;
+          gl_FragColor = vec4(col * vI * uHdr * a, a * 0.55);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, depthTest: true,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    });
+    this.mesh = new THREE.Mesh(geo, this.mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 5;
+  }
+  /** write the live patches (intensity 0..~1.3 each) */
+  set(list: readonly { x: number; z: number; r: number; seed: number; k: number }[], time: number, hdr: number): void {
+    const A = this.aA.array as Float32Array, B = this.aB.array as Float32Array;
+    const n = Math.min(this.cap, list.length);
+    for (let i = 0; i < n; i++) { const f = list[i]; A[i * 4] = f.x; A[i * 4 + 1] = f.z; A[i * 4 + 2] = f.r; A[i * 4 + 3] = f.seed; B[i] = f.k; }
+    this.geo.instanceCount = n;
+    this.aA.needsUpdate = this.aB.needsUpdate = true;
+    this.mat.uniforms.uTime.value = time;
+    this.mat.uniforms.uHdr.value = hdr;
+  }
+  dispose(): void { this.geo.dispose(); this.mat.dispose(); }
+}
+
 /* ----------------------------------------------------------------------------------------------------- Fx3D */
 
 /** muzzle flash families (Fx3D.muzzleFx) */
@@ -493,7 +574,8 @@ export class Fx3D {
   private later: { t: number; fn: () => void }[] = [];
   private smokes: { x: number; z: number; r: number; left: number; acc: number }[] = [];
   /** burning ground patches (sim 'fireField') */
-  private fields: { x: number; z: number; r: number; left: number; max: number; acc: number; pool: number }[] = [];
+  private fields: { x: number; z: number; r: number; left: number; max: number; acc: number; seed: number; k: number; age: number }[] = [];
+  private groundFire = new GroundFire(200);
   private time = 0;
   /** recent blast count (decays): stacked explosions dim each other so mass deaths don't blow out to white */
   private heat = 0;
@@ -525,7 +607,7 @@ export class Fx3D {
     this.scorch = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: st, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 256);
     this.scorch.frustumCulled = false; this.scorch.count = 0; this.scorch.renderOrder = 2;
     this.debris.mesh.renderOrder = 3;
-    for (const o of [this.scorch, this.debris.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.fire.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.proj.group]) this.group.add(o);
+    for (const o of [this.scorch, this.groundFire.mesh, this.debris.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.fire.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.proj.group]) this.group.add(o);
   }
 
   /** tint ground dust to the map */
@@ -589,7 +671,7 @@ export class Fx3D {
     switch (kind) {
       case 'rocket': // unguided rocket: sputtering orange flame and a thick, billowing grey smoke trail
         this.add.emit(x, y, z, 0, 0, 0, 0.12, 0.34 * size, 0.1, 0, 0, 0, 0, RAMPS.fire, this.hdr);
-        this.alpha.emit(x, y, z, R(-0.25, 0.25), R(0.05, 0.35), R(-0.25, 0.25), R(1.2, 2.0), 0.26 * size, 0.95 * size, R(-1, 1), 1.0, 0, pf, Math.random() < 0.5 ? RAMPS.smokeLight : RAMPS.smoke);
+        this.alpha.emit(x, y, z, R(-0.25, 0.25), R(0.05, 0.35), R(-0.25, 0.25), R(1.2, 2.0), 0.26 * size, 0.95 * size, R(-1, 1), 1.0, 0, pf, Math.random() < 0.3 ? RAMPS.smokeLight : RAMPS.smoke);
         break;
       case 'incend': // incendiary rocket: red-orange flame, embers and dark smoke
         this.fire.emit(x, y, z, R(-0.2, 0.2), R(0, 0.3), R(-0.2, 0.2), R(0.2, 0.35), 0.3 * size, 0.15 * size, 0, 1, 0, pf, RAMPS.ember, this.hdr);
@@ -662,11 +744,30 @@ export class Fx3D {
 
   /* --------------------------------------------------------------------------------------------- status */
 
-  burning(x: number, y: number, z: number, S: number): void {
-    const s = 0.25 + S * 0.12;
-    this.fire.emit(x + R(-1, 1) * s, y, z + R(-1, 1) * s, R(-0.2, 0.2), R(0.8, 1.6), R(-0.2, 0.2), R(0.35, 0.6), s * 1.5, s * 0.6, R(-2, 2), 0.8, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.flame, this.hdr);
-    if (Math.random() < 0.6) this.alpha.emit(x + R(-1, 1) * s, y + 0.1, z + R(-1, 1) * s, R(-0.2, 0.2), R(0.8, 1.6), R(-0.2, 0.2), R(1.1, 2.0), s * 1.2, s * 3.2, R(-1, 1), 0.6, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.smoke);
+  /** One lick of fire on a burning hull (call at a rate scaled to the hull's area): a tongue of flame climbing off a
+   *  random spot of the hull (hx, hz = half extents, y = deck height), a hot yellow core and dark smoke above. */
+  burning(x: number, y: number, z: number, hx: number, hz: number): void {
+    const m = Math.min(hx, hz), px = x + R(-1, 1) * hx * 0.85, pz = z + R(-1, 1) * hz * 0.85, py = y + R(-0.15, 0.1);
+    const pf = 1 + (Math.random() < 0.5 ? 1 : 0), s = 0.2 + m * 1.3;
+    // a tongue: a fat base puff with a narrower, faster tip stacked above it, so the flame reads tall, not round
+    const vy = R(1.1, 2.0), vx = R(-0.25, 0.25), vz = R(-0.25, 0.25);
+    this.fire.emit(px, py, pz, vx, vy, vz, R(0.35, 0.6), s * R(0.9, 1.3), s * 0.3, R(-1, 1), 1.6, 1.2, pf, RAMPS.flame, this.hdr);
+    this.fire.emit(px + vx * 0.1, py + s * 0.45, pz + vz * 0.1, vx * 1.3, vy * 1.4, vz * 1.3, R(0.22, 0.38), s * 0.6, s * 0.12, R(-1, 1), 1.6, 1.5, 3 - pf, RAMPS.flame, this.hdr);
+    this.fire.emit(px + vx * 0.2, py + s * 0.8, pz + vz * 0.2, vx * 1.5, vy * 1.8, vz * 1.5, R(0.15, 0.25), s * 0.35, s * 0.08, 0, 1.6, 1.5, pf, RAMPS.flame, this.hdr);
+    if (Math.random() < 0.45) this.add.emit(px, py + 0.05, pz, 0, R(0.6, 1.2), 0, R(0.12, 0.22), s * 0.6, s * 0.2, 0, 1, 0, 0, RAMPS.flash, this.hdr * 0.7);
+    if (Math.random() < 0.45) this.alpha.emit(px, py + 0.5 + s, pz, R(-0.2, 0.2), R(1.0, 1.7), R(-0.2, 0.2), R(1.3, 2.4), s * 1.2, s * 3.8, R(-1, 1), 0.6, 0.2, pf, RAMPS.flakSmoke);
+    if (Math.random() < 0.12) this.add.emit(px, py + 0.2, pz, R(-0.6, 0.6), R(1.2, 2.8), R(-0.6, 0.6), R(0.5, 1), 0.04, 0.02, 0, 0.6, 0.6, 3, RAMPS.ember, this.hdr);
   }
+
+  /** a flamethrower jet particle at `prog` 0..1 of its reach: white-yellow and tight at the nozzle, billowing orange
+   *  further out, rolling into dark smoke at the tip; napalm burns redder and sootier */
+  flameJet(x: number, y: number, z: number, prog: number, size: number, napalm: boolean): void {
+    const pf = 1 + (Math.random() < 0.5 ? 1 : 0), g = 0.3 + prog * 0.9;
+    if (prog < 0.45) this.add.emit(x + R(-0.05, 0.05), y, z + R(-0.05, 0.05), R(-0.2, 0.2), R(0, 0.3), R(-0.2, 0.2), R(0.08, 0.14), 0.22 * size * (0.6 + prog), 0.1 * size, 0, 2, 0, 0, RAMPS.flash, this.hdr * 0.8);
+    this.fire.emit(x + R(-0.1, 0.1) * g, y, z + R(-0.1, 0.1) * g, R(-0.5, 0.5) * g, R(0.3, 1.2) * g, R(-0.5, 0.5) * g, R(0.22, 0.4), 0.25 * size * g, 0.8 * size * g, R(-3, 3), 1.2, 0.8, pf, napalm ? RAMPS.ember : RAMPS.flame, this.hdr);
+    if (prog > 0.55 && Math.random() < (napalm ? 0.45 : 0.25)) this.alpha.emit(x, y + 0.15, z, R(-0.2, 0.2), R(0.7, 1.3), R(-0.2, 0.2), R(0.9, 1.6), 0.25 * size, 0.9 * size, R(-1, 1), 0.8, 0.2, pf, RAMPS.smoke);
+  }
+
   wreckSmoke(x: number, z: number, S: number): void {
     this.alpha.emit(x + R(-0.2, 0.2) * S, 0.35 + 0.1 * S, z + R(-0.2, 0.2) * S, R(-0.1, 0.1), R(0.7, 1.4), R(-0.1, 0.1), R(1.6, 2.8), 0.3 + S * 0.12, 0.9 + S * 0.35, R(-0.6, 0.6), 0.4, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.smoke);
     if (Math.random() < 0.3) this.fire.emit(x + R(-0.15, 0.15) * S, 0.3, z + R(-0.15, 0.15) * S, 0, R(0.3, 0.8), 0, R(0.3, 0.5), 0.2 + S * 0.05, 0.1, 0, 0, 0, 1, RAMPS.flame, this.hdr);
@@ -940,10 +1041,14 @@ export class Fx3D {
 
   /** a burning ground patch (sim 'fireField') that flickers for `dur` seconds */
   fireField(x: number, z: number, r: number, dur: number): void {
-    if (this.fields.length >= 48) this.fields.shift();
-    this.fields.push({ x, z, r, left: dur, max: dur, acc: 0, pool: 0 });
+    // the sim tops up a patch that is hit again and re-announces it at the same spot: extend, don't stack
+    for (const f of this.fields) {
+      if (Math.abs(f.x - x) < 0.05 && Math.abs(f.z - z) < 0.05) { f.left = Math.max(f.left, dur); f.max = Math.max(f.max, f.left); f.r = Math.max(f.r, r); return; }
+    }
+    if (this.fields.length >= 200) this.fields.shift();
+    this.fields.push({ x, z, r, left: dur, max: dur, acc: 0, seed: Math.random(), k: 0, age: 0 });
     this.addScorch(x, z, r * 0.75);
-    this.fireSplash(x, z, Math.min(1.4, r * 0.6));
+    if (r >= 1) this.fireSplash(x, z, Math.min(1.4, r * 0.6));
   }
 
   /* ----------------------------------------------------------------------------------- weapon signatures (trails) */
@@ -1082,13 +1187,18 @@ export class Fx3D {
     this.time += dt;
     this.heat = Math.max(0, this.heat - dt * 4);
     for (let i = this.later.length - 1; i >= 0; i--) if (this.later[i].t <= this.time) { const f = this.later[i].fn; this.later.splice(i, 1); f(); }
+    // rising flames over the patches share one budget, so a carpet of 160 napalm patches stays affordable
+    let area = 0;
+    for (const f of this.fields) area += 4 + f.r * f.r * 7;
+    const share = Math.min(1, 700 / Math.max(1, area));
     for (let i = this.fields.length - 1; i >= 0; i--) {
       const f = this.fields[i];
-      f.left -= dt;
+      f.left -= dt; f.age += dt;
       if (f.left <= 0) { this.fields.splice(i, 1); continue; }
       // flare up on landing, burn steadily, gutter out over the last second
-      const fade = Math.min(1, f.left / 1.2) * (0.75 + 0.25 * Math.min(1, (f.max - f.left) / 0.4));
-      f.acc += dt * (10 + f.r * f.r * 7) * this.lod * (0.4 + 0.6 * fade);
+      const fade = Math.min(1, f.left / 1.2) * (0.8 + 0.4 * Math.max(0, 1 - f.age / 0.5));
+      f.k = fade * Math.min(1, f.age / 0.12);
+      f.acc += dt * (4 + f.r * f.r * 7) * share * this.lod * (0.4 + 0.6 * fade);
       while (f.acc >= 1) {
         f.acc--;
         const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * f.r;
@@ -1097,14 +1207,8 @@ export class Fx3D {
         if (Math.random() < 0.18) this.alpha.emit(px, 0.5, pz, R(-0.1, 0.1), R(0.6, 1.2), R(-0.1, 0.1), R(1.4, 2.4), 0.25, 0.9, R(-0.5, 0.5), 0.4, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.smoke);
         if (Math.random() < 0.1) this.add.emit(px, 0.2, pz, R(-0.4, 0.4), R(1, 2.5), R(-0.4, 0.4), R(0.5, 1), 0.04, 0.02, 0, 0.5, 0.5, 3, RAMPS.ember, this.hdr);
       }
-      // flickering glow on the ground beneath the flames
-      f.pool -= dt;
-      if (f.pool <= 0) {
-        f.pool = R(0.08, 0.16);
-        const g = this.hdr * fade * R(0.35, 0.6);
-        this.pools.add(f.x + R(-0.15, 0.15) * f.r, f.z + R(-0.15, 0.15) * f.r, 0.05, f.r * 2.1, f.r * R(2.3, 2.7), 0.3, 1.0 * g, 0.42 * g, 0.1 * g);
-      }
     }
+    this.groundFire.set(this.fields, this.time, this.hdr);
     for (let i = this.smokes.length - 1; i >= 0; i--) {
       const s = this.smokes[i];
       s.left -= dt;
@@ -1151,7 +1255,7 @@ export class Fx3D {
   }
 
   dispose(): void {
-    this.add.dispose(); this.fire.dispose(); this.alpha.dispose();
+    this.add.dispose(); this.fire.dispose(); this.alpha.dispose(); this.groundFire.dispose();
     this.atlas.dispose();
   }
 }
