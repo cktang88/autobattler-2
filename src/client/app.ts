@@ -9,6 +9,8 @@ export type Route =
   | { name: 'vsai'; from?: 'lobby' | 'menu' }
   | { name: 'lobby' }
   | { name: 'match'; driver: MatchDriver }
+  /** sandbox: place any designs on both sides for free and watch them fight */
+  | { name: 'playground' }
   | { name: 'settings' };
 
 export interface Screen {

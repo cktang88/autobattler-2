@@ -119,6 +119,7 @@ export function menuScreen(app: App): Screen {
           h('button.big.grow', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })), title: 'Choose the 9 designs you take into battle' }, 'Loadout'),
           h('button.big.grow', { onclick: go(() => app.go({ name: 'garage' })), title: 'Build and edit unit designs' }, 'Unit Designer'),
         ),
+        h('button.big', { title: 'Sandbox: place any of your designs on both sides for free and watch them fight', onclick: go(() => app.go({ name: 'playground' })) }, 'Playground'),
         h('div.row', null,
           h('button.grow', { onclick: go(() => app.go({ name: 'settings' })) }, 'Settings'),
           h('button.grow', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),

@@ -12,6 +12,7 @@ import { matchScreen } from './ui/match.ts';
 import { settingsScreen } from './ui/settings.ts';
 import { garageScreen } from './ui/garage.ts';
 import { lobbyScreen } from './ui/lobby.ts';
+import { playgroundScreen } from './ui/playground.ts';
 
 const root = document.getElementById('app') ?? document.body.appendChild(document.createElement('div'));
 const app = new App(root);
@@ -22,6 +23,7 @@ app.register('match', matchScreen);
 app.register('settings', settingsScreen);
 app.register('garage', garageScreen);
 app.register('lobby', lobbyScreen);
+app.register('playground', playgroundScreen);
 
 const s = loadSettings();
 setVolumes({ master: s.master, music: s.music, sfx: s.sfx });
