@@ -1007,10 +1007,11 @@ export class FieldView {
   private drawStatusFx(g: Ctx, list: { u: SimUnit; p: UnitPose }[], dt: number): void {
     const px = this.px;
     if (px < 5) return;
-    let any = false;
+    let any = false, nBurn = 0;
     for (const { u, p } of list) {
       if (p.cloak === 'enemy') continue;
       if (u.burning > 0) {
+        nBurn++;
         const S = layoutOf(u.design).S;
         const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)) * 0.5);
         if (Math.random() < dt * (6 + 3 * S)) this.fx.burning(p.x + lv.x, p.y + lv.y, S);
@@ -1032,10 +1033,12 @@ export class FieldView {
       }
       const R = Math.max(L.X, L.Y) * 0.5 * bs;
       if (u.burning > 0) {
-        // the fire lights the ground and hull from below
+        // on fire: the flames light the ground below, and tongues of flame lick up off the hull (scaled to it)
         const f = 0.8 + 0.2 * Math.sin(this.time * 11 + u.id);
         g.globalAlpha = 0.3 * f;
         g.drawImage(glowTex('#ff6a20'), p.x - R * 1.3, p.y - R * 1.3, R * 2.6, R * 2.6);
+        const lv = this.liftVec(this.heightOf(p, L) * 0.7);
+        this.fx.drawBurning(g, p.x + lv.x, p.y + lv.y, R * 0.9, u.id, clamp(u.burning / 0.6, 0.35, 1), nBurn > 60);
       }
       if (u.slow > 0.01) {
         const lv = this.liftVec(this.heightOf(p, L) * 0.5);
@@ -1123,7 +1126,7 @@ export class FieldView {
     const x = Math.round(s.x - w / 2);
     const y = Math.round(s.y - bh.hy * this.k * this.ay * 1.04 - h - 3 - lift);
     // status glyphs (burning / slowed / disarmed) to the left of the bar, shown even when the bar itself is hidden
-    if (status && this.k > 6) this.drawStatusIcons(u, x - 5, y + h / 2);
+    if (status && this.k > 14) this.drawStatusIcons(u, x - 5, y + h / 2);
     if (vis <= 0.01) return;
     g.globalAlpha = vis;
     g.fillStyle = 'rgba(0,0,0,0.88)';
@@ -1275,6 +1278,9 @@ export class FieldView {
       this.ptrack.delete(id);
       if (!t) continue;
       if (this.gone.length < 400) this.gone.push({ x: last.x, y: last.y, angle: last.angle, moduleId: t.moduleId });
+      // a fire round landing in its own weapon's burning patch keeps it alight (the sim tops it up without an event)
+      const ff = modOf(t.moduleId)?.fireField;
+      if (ff) this.fx.topUpField(last.x, last.y, ff.duration, t.moduleId);
       if (t.kind !== 'bullet' && t.kind !== 'shell' && t.kind !== 'rocket') continue;
       // extrapolate one tick forward to where it would land
       const x = last.x, y = last.y;
@@ -1529,22 +1535,29 @@ export class FieldView {
           break;
         }
         case 'flame': {
-          // rolling flame: white-yellow at the nozzle cooling to orange then red, with dark smoke curling off the top
-          const napalm = mod?.id === 'napalm';
+          // a rope of fire: each round is drawn as a stretched, turbulent segment of the jet (they overlap into one
+          // stream) — a thin white-yellow rope at the nozzle that widens into a rolling orange-red front, lifting as
+          // it goes, with black smoke curling off. Bodies are normal-blended (deep colour), only the core is additive,
+          // so a dozen jets on one target stay fire-coloured instead of blowing out to white.
+          const napalm = mod?.id === 'napalm' || (mod?.caliber ?? 0) >= 0.9;
           const prog = clamp(pos.progress, 0, 1);
-          const r = (0.16 + prog * 0.5) * (napalm ? 1.3 : 1) * (0.7 + 0.5 * cal);
-          const rot = p.id * 1.7 + this.time * 4;
+          const w = (0.09 + prog * 0.4) * (napalm ? 1.25 : 1) * (0.7 + 0.5 * cal);
+          const L = Math.max(0.6, w * 2.8);
+          const rise = prog * prog * 0.45;
+          const fx0 = x + this.dirs.ux * rise, fy0 = y + this.dirs.uy * rise;
+          const flick = ((this.time * 9) | 0) + p.id;
           const tr = g.getTransform();
-          g.transform(Math.cos(rot), Math.sin(rot), -Math.sin(rot), Math.cos(rot), x, y);
-          g.globalAlpha = 0.9 * (1 - prog * 0.55);
-          g.drawImage(fireTex(prog < 0.3 ? 1 : prog < 0.7 ? 2 : 3, p.id), -r, -r, r * 2, r * 2);
-          if (prog < 0.55) {
-            g.globalAlpha = 0.85 * (1 - prog * 1.7);
-            g.drawImage(fireTex(0, p.id + 1), -r * 0.5, -r * 0.5, r, r);
-          }
+          g.transform(cs, sn, -sn, cs, fx0, fy0);
+          g.globalCompositeOperation = prevOp;
+          g.globalAlpha = clamp(0.62 * (1 - prog * 0.35), 0, 1);
+          g.drawImage(fireTex(prog < 0.45 ? 2 : 3, flick), -L * 0.8, -w, L, w * 2);
+          g.globalCompositeOperation = 'lighter';
+          g.globalAlpha = clamp(0.55 * (1 - prog * 0.7), 0, 1);
+          g.drawImage(fireTex(prog < 0.3 ? 0 : 1, flick + 1), -L * 0.7, -w * 0.55, L * 0.85, w * 1.1);
+          if (prog > 0.35) { g.globalAlpha = 0.35 * (1 - prog * 0.5); g.drawImage(fireTex(2, flick + 2), -L * 0.4, -w * 1.15, L * 0.6, w * 2.3); }
           g.setTransform(tr);
-          if (Math.random() < dt * 45 && this.fx.busy < 0.6) this.fx.fire(pos.x, pos.y, r * 0.55, 0.38, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0.5 + Math.random(), hz);
-          if (Math.random() < dt * 9 && this.fx.busy < 0.5) this.fx.smoke(pos.x, pos.y, r * 0.55, 1.3, '#26221e', this.fx.wind.x * 0.4, 0, 0.32, 0.8, hz);
+          if (prog > 0.25 && Math.random() < dt * 12 && this.fx.busy < 0.55) this.fx.fire(pos.x, pos.y, w * 0.8, 0.42, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0.6 + Math.random(), hz + rise);
+          if (prog > 0.4 && Math.random() < dt * 10 && this.fx.busy < 0.5) this.fx.smoke(pos.x, pos.y, w * 0.9, 1.5, '#221e1a', this.fx.wind.x * 0.4, 0, 0.38, 0.9, hz + rise);
           if (prog > 0.3 && Math.random() < dt * 5 && this.fx.busy < 0.5) this.fx.sparks(pos.x, pos.y, 1, '#ffb050', 1.5, undefined, Math.PI, 0.5, true);
           break;
         }
@@ -2223,7 +2236,11 @@ export class FieldView {
           }
           if (best) { const al = this.airLift(best); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
         }
-        if (mod?.cluster) {
+        if (mod?.projectile === 'flame') {
+          // a flame jet's splash: the jet itself, its hits and the burning ground carry the look; a blast flash per
+          // round (10 a second per flamer) only blew a dozen jets on one target out to a white ball
+          if (fx.busy < 0.6 && Math.random() < 0.35) fx.fire(e.x + (Math.random() - 0.5) * r, e.y + (Math.random() - 0.5) * r, 0.12 + r * 0.12, 0.5, 0, 0, 0.8 + Math.random() * 0.6, 0.1);
+        } else if (mod?.cluster) {
           // cluster shell: the carrier bursts open over the target, then each bomblet pops where it lands (a carpet)
           if (r <= mod.cluster.splash + 0.01) fx.bomblet(e.x, e.y, Math.max(0.35, r * 0.7));
           else { fx.clusterBurst(e.x, e.y, Math.max(0.5, r * 0.6), this.liftVec(1.4)); fx.boom(e.x, e.y, r * 0.35, 'fire'); }
@@ -2303,7 +2320,7 @@ export class FieldView {
         break;
       }
       case 'fireField': {
-        fx.fireField(e.x, e.y, e.radius, e.duration);
+        fx.fireField(e.x, e.y, e.radius, e.duration, e.moduleId);
         break;
       }
       case 'leap': {

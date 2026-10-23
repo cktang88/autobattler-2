@@ -10,7 +10,7 @@ import { MODULE_BY_ID } from '../../shared/parts.ts';
 import type { ModuleDef, ModuleVisual } from '../../shared/types.ts';
 import { clamp, ctx2d, makeCanvas, rgba, softDot, type Ctx } from './palette.ts';
 import { tex, tinted } from './textures.ts';
-import { coneTex, easeOut, fireTex, glowTex, hash1, mixHex, puffTex, ringTex, starTex } from './vfx.ts';
+import { coneTex, easeOut, fireTex, flameTex, glowTex, hash1, mixHex, puffTex, ringTex, starTex } from './vfx.ts';
 
 export const modOf = (id: string | null | undefined): ModuleDef | undefined => (id ? MODULE_BY_ID.get(id) : undefined);
 export const visualOf = (id: string | null | undefined): ModuleVisual | undefined => modOf(id)?.visual;
@@ -75,14 +75,20 @@ interface Wreck {
   smokeT: number;
 }
 
-/** A firebomb's burning ground patch (sim 'fireField' event): lives for its sim duration, flickers, throws flames. */
+/** A burning ground patch (sim 'fireField' event: firebombs, incendiary rockets, flame jets): burns until `end` (battle
+ *  clock), flickers, throws flames. Repeated events at one spot from the same weapon extend it (see fireField). */
 interface FireField {
   x: number; y: number; r: number;
-  t0: number; dur: number;
+  t0: number; end: number;
   seed: number;
+  /** module that lit it (top-ups match on it) */
+  key: string;
   /** flame-tongue emission accumulator */
   acc: number;
 }
+
+/** most fire patches drawn at once (the sim caps its own at 160) */
+const MAX_FIELDS = 170;
 
 const MAX_P = 2600;
 /** global cap on wreck smoke: puffs per second across all wrecks (token bucket) */
@@ -297,11 +303,63 @@ export class Fx {
     this.beams.push({ kind, pts, life, max: life, color, width: width * k, seed: (rnd() * 1e6) | 0, ramp });
   }
 
-  /** A firebomb's burning patch: lasts `dur` s (the sim's own duration), drawn under the units (see drawFields). */
-  fireField(x: number, y: number, r: number, dur: number): void {
-    if (this.fields.length > 60) this.fields.shift();
-    this.fields.push({ x, y, r, t0: this.simT, dur, seed: (rnd() * 1e4) | 0, acc: 0 });
+  /** A burning ground patch for `dur` s of battle time, drawn under the units (see drawFields). The sim re-sends the
+   *  event for a patch it tops up (same weapon, same spot): that extends the patch instead of stacking a new one. */
+  fireField(x: number, y: number, r: number, dur: number, key = ''): void {
+    const end = this.simT + dur;
+    for (const f of this.fields) {
+      if (f.key !== key || (f.x - x) ** 2 + (f.y - y) ** 2 > (f.r * 0.6) ** 2) continue;
+      f.end = Math.max(f.end, end);
+      f.r = Math.max(f.r, r);
+      return;
+    }
+    if (this.fields.length >= MAX_FIELDS) {
+      // drop the patch closest to burning out
+      let wi = 0;
+      for (let i = 1; i < this.fields.length; i++) if (this.fields[i].end < this.fields[wi].end) wi = i;
+      this.fields.splice(wi, 1);
+    }
+    this.fields.push({ x, y, r, t0: this.simT, end, seed: (rnd() * 1e4) | 0, key, acc: 0 });
     this.decal('burn', x, y, r * 0.95);
+  }
+
+  /** Mirror of the sim's silent top-up (a flame round of `key` landing in its own patch keeps it burning `dur` s more);
+   *  the sim only re-sends the event once a patch is half burnt down. */
+  topUpField(x: number, y: number, dur: number, key: string): void {
+    for (const f of this.fields) {
+      if (f.key !== key || (f.x - x) ** 2 + (f.y - y) ** 2 > (f.r * 0.6) ** 2) continue;
+      f.end = Math.max(f.end, this.simT + dur);
+      return;
+    }
+  }
+
+  /** One licking flame tongue standing on (x, y), `h` tall along screen-up, flickering; additive. */
+  tongue(g: Ctx, x: number, y: number, w: number, h: number, variant: number, alpha: number): void {
+    if (alpha <= 0.02) return;
+    const ux = this.up.x, uy = this.up.y;
+    // local +y = down the flame (screen down), local +x = screen right
+    const tr = g.getTransform();
+    g.transform(-uy, ux, -ux, -uy, x, y);
+    g.globalAlpha = clamp(alpha, 0, 1);
+    g.drawImage(flameTex(variant), -w / 2, -h * (60 / 64), w, h);
+    g.setTransform(tr);
+  }
+
+  /** A unit on fire, drawn every frame over its hull (additive pass): a cluster of flickering flame tongues scaled to the
+   *  hull, leaning with the wind, plus a hot glow; `k` 0..1 fades it in/out. */
+  drawBurning(g: Ctx, x: number, y: number, R: number, seed: number, k: number, crowd = false): void {
+    const time = this.time, n = crowd ? (R > 1.2 ? 4 : 2) : R > 1.2 ? 7 : R > 0.6 ? 5 : 3;
+    g.globalAlpha = clamp(0.35 * k * (0.85 + 0.15 * Math.sin(time * 13 + seed)), 0, 1);
+    g.drawImage(glowTex('#ff7a24'), x - R * 1.2, y - R * 1.2, R * 2.4, R * 2.4);
+    for (let i = 0; i < n; i++) {
+      const h1 = hash1(seed * 7 + i * 13), h2 = hash1(seed * 3 + i * 29), h3 = hash1(seed + i * 41);
+      const a = h1 * PI2, d = Math.sqrt(h2) * R * 0.6;
+      // each tongue flickers on its own rhythm and slowly re-rolls its silhouette
+      const fl = 0.55 + 0.45 * Math.sin(time * (9 + h3 * 8) + i * 2.3) * Math.sin(time * (3.3 + h1 * 2) + i);
+      const var_ = (i + ((time * (2 + h3 * 2)) | 0)) % 6;
+      const h = R * (0.55 + 0.5 * h3) * (0.7 + 0.45 * fl) * (0.5 + 0.5 * k);
+      this.tongue(g, x + Math.cos(a) * d, y + Math.sin(a) * d * 0.8, h * 0.55, h, var_, (0.55 + 0.45 * fl) * k);
+    }
   }
 
   /** Grenade: a sharp, small frag blast — white pop, a dark grey puff, a fast spray of fragments, no rolling fireball. */
@@ -448,18 +506,19 @@ export class Fx {
 
   /** Flames taking hold on the target: a few rising tongues, smoke above, and a scorched burning patch. */
   flameHit(x: number, y: number, S = 1): void {
-    if (this.busy > 0.7) return;
+    // flame jets land ~10 times a second per gun: thin out so stacked jets stay fire-coloured (additive) instead of white
+    if (this.busy > 0.7 || rnd() < 0.55) return;
     this.fire(x + rr(-0.15, 0.15), y + rr(-0.15, 0.15), 0.16 * S, 0.5, 0, 0, rr(0.6, 1.2), 0.1);
-    if (rnd() < 0.5) this.smoke(x, y, 0.15 * S, 1.4, '#2a2622', 0, 0, 0.3, 0.9, 0.3);
-    if (rnd() < 0.08) this.patch(x, y, 0.35 * S, 2.5);
+    if (rnd() < 0.6) this.smoke(x, y, 0.15 * S, 1.6, '#221e1a', this.wind.x * 0.4, 0, 0.35, 0.9, 0.3);
   }
 
   /** A unit on fire: tongues of flame from the hull and a thin smoke column. */
   burning(x: number, y: number, S: number): void {
     if (this.busy > 0.75) return;
     const r = Math.sqrt(S);
-    this.fire(x + rr(-0.3, 0.3) * S, y + rr(-0.3, 0.3) * S, 0.1 * r, 0.5, 0, 0, rr(0.7, 1.4), 0.15);
-    if (rnd() < 0.35) this.smoke(x + rr(-0.2, 0.2) * S, y + rr(-0.2, 0.2) * S, 0.09 * r, 1.6, '#2a2622', 0, 0, 0.3, 1.0, 0.3);
+    // rising flame puffs and a dark smoke column (the flames on the hull itself are drawn live, see drawBurning)
+    this.fire(x + rr(-0.2, 0.2) * S, y + rr(-0.2, 0.2) * S, 0.1 * r, 0.5, 0, 0, rr(0.9, 1.6), 0.3);
+    if (rnd() < 0.6) this.smoke(x + rr(-0.15, 0.15) * S, y + rr(-0.15, 0.15) * S, 0.12 * r, 2.0, '#221e1a', this.wind.x * 0.5, this.wind.y * 0.5, 0.42, 1.1, 0.5);
   }
 
   /* ----------------------------------------------------------------------------------------- explosions */
@@ -711,22 +770,24 @@ export class Fx {
     }
   }
 
-  /** 0..1 strength of a fire field now (quick fade-in, burns down over its last second); <= 0 once out */
+  /** 0..1 strength of a fire field now (quick fade-in, burns down over its last moments); <= 0 once out */
   private fieldK(f: FireField): number {
-    const age = this.simT - f.t0, left = f.dur - age;
+    const age = this.simT - f.t0, left = f.end - this.simT;
     if (left <= 0) return 0;
-    return Math.min(1, age / 0.25 + 0.2, left / 1.2);
+    return Math.min(1, age / 0.25 + 0.2, 0.25 + left / 1.0);
   }
 
   private updateFields(dt: number): void {
     if (!this.fields.length) return;
-    this.fields = this.fields.filter((f) => this.simT - f.t0 < f.dur && this.simT >= f.t0 - 0.5);
-    const busy = this.busy;
+    this.fields = this.fields.filter((f) => this.simT < f.end && this.simT >= f.t0 - 0.5);
+    const busy = this.busy, share = Math.min(1, 14 / this.fields.length), vw = this.view;
     for (const f of this.fields) {
       const k = this.fieldK(f);
       if (k <= 0 || busy > 0.8) continue;
-      // flame tongues rise all over the patch (fewer when the pool is busy); smoke now and then
-      f.acc += dt * (5 + f.r * 7) * k * (busy > 0.5 ? 0.4 : 1);
+      if (vw && (f.x < vw.x0 - f.r || f.x > vw.x1 + f.r || f.y < vw.y0 - f.r || f.y > vw.y1 + f.r)) continue;
+      // rising flame puffs and smoke over the patch (the drawn tongues carry the look; these add height and motion);
+      // the particle budget is shared out when many patches burn at once
+      f.acc += dt * (3 + f.r * 4) * k * share * (busy > 0.5 ? 0.4 : 1);
       while (f.acc >= 1) {
         f.acc -= 1;
         const a = rnd() * PI2, d = Math.sqrt(rnd()) * f.r * 0.85;
@@ -760,17 +821,17 @@ export class Fx {
       g.drawImage(glowTex('#ff5410'), f.x - f.r * 1.35, f.y - f.r * 1.35, f.r * 2.7, f.r * 2.7);
       g.globalAlpha = clamp(0.45 * k * pulse, 0, 1);
       g.drawImage(glowTex('#ffa040'), f.x - f.r * 0.7, f.y - f.r * 0.7, f.r * 1.4, f.r * 1.4);
-      // flickering tongues: fixed spots in the patch, each with its own flicker phase and fire stage
-      if (f.r * px < 6) continue;
-      const n = Math.min(22, Math.round(7 + f.r * 6));
+      // flickering tongues standing up out of the patch (fewer per patch when many burn), each with its own rhythm
+      if (f.r * px < 5) continue;
+      const nf = this.fields.length, many = nf > 40;
+      const n = Math.min(nf > 100 ? 3 : many ? 5 : 14, Math.round(4 + f.r * (many ? 2 : 5)));
       for (let i = 0; i < n; i++) {
         const h1 = hash1(f.seed + i * 7.3), h2 = hash1(f.seed * 3 + i * 11.1), h3 = hash1(f.seed + i * 19.7);
-        const a = h1 * PI2, d = Math.sqrt(h2) * f.r * 0.85;
-        const fl = 0.5 + 0.5 * Math.sin(time * (8 + h3 * 9) + i * 2.1);
-        const s = (0.18 + 0.18 * h3) * Math.sqrt(f.r) * (0.75 + 0.4 * fl) * (0.6 + 0.4 * k);
-        const x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d - s * 0.3;
-        g.globalAlpha = clamp((0.35 + 0.55 * fl) * k, 0, 1);
-        g.drawImage(fireTex(fl > 0.7 ? 1 : 2, i), x - s, y - s, s * 2, s * 2);
+        const a = h1 * PI2, d = Math.sqrt(h2) * f.r * 0.8;
+        const fl = 0.55 + 0.45 * Math.sin(time * (8 + h3 * 9) + i * 2.1) * Math.sin(time * (2.7 + h2 * 2) + i * 0.7);
+        const h = (0.35 + 0.35 * h3) * Math.sqrt(f.r) * (0.65 + 0.5 * fl) * (0.45 + 0.55 * k);
+        const x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d * 0.85;
+        this.tongue(g, x, y, h * 0.6, h, (i + ((time * (1.5 + h3 * 2)) | 0)) % 6, (0.45 + 0.5 * fl) * k);
       }
     }
     g.globalAlpha = 1;
