@@ -12,7 +12,7 @@ import { DEPLOY_D, FIELD_H, FIELD_W } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import { DT, type BattleEvent, type SimProjectile, type SimUnit } from '../../shared/sim/types.ts';
-import type { Side } from '../../shared/types.ts';
+import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
 import { MAPS, type MapTheme } from '../render/ground.ts';
@@ -21,7 +21,7 @@ import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
 import { buildTerrain, createRenderer, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
 import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts';
-import { Fx3D, RAMPS } from './fx3d.ts';
+import { Fx3D, RAMPS, type MuzzleKind, type Ramp } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 
 const ELEV = (58 * Math.PI) / 180;
@@ -45,41 +45,103 @@ interface UView {
   posed: boolean;
 }
 interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
-interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean }
+interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean }
 
 /** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
 const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb' || p.kind === 'missile') && Math.abs(p.z - 1) < 1e-6;
 
 /** beams / bolts: colour + width + life by module visual */
 function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
-  const v = MODULE_BY_ID.get(moduleId)?.visual;
+  const def = MODULE_BY_ID.get(moduleId), v = def?.visual;
+  if (def?.disarm) return { color: '#ffb02a', w: 0.05, life: 0.2, wob: 0.15 }; // amber jamming beam
+  if (v === 'gravity') return { color: '#9a5cff', w: 0.1, life: 0.14, wob: 0.45 };
   switch (v) {
     case 'laser': return { color: '#ff4a3a', w: 0.05, life: 0.1, wob: 0 };
     case 'heatray': return { color: '#ff8a2a', w: 0.13, life: 0.12, wob: 0.25 };
     case 'plasma': return { color: '#e070ff', w: 0.15, life: 0.12, wob: 0.2 };
     case 'tesla': case 'emp': return { color: '#9fc8ff', w: 0.05, life: 0.2, wob: 0 };
-    case 'slowbeam': case 'sonic': case 'gravity': return { color: '#5ec8ff', w: 0.09, life: 0.12, wob: 0.35 };
+    case 'slowbeam': case 'sonic': return { color: '#5ec8ff', w: 0.09, life: 0.12, wob: 0.35 };
     case 'rail': case 'gauss': return { color: '#9fb8ff', w: 0.07, life: 0.24, wob: 0 };
     case 'repair': case 'nanite': return { color: '#7dff9a', w: 0.06, life: 0.12, wob: 0.2 };
     default: return { color: '#ffd890', w: 0.05, life: 0.1, wob: 0 };
   }
 }
-const BEAM_VIS = new Set(['laser', 'heatray', 'plasma', 'tesla', 'emp', 'slowbeam', 'sonic', 'gravity', 'repair', 'nanite', 'rail', 'gauss']);
 
-/** tracer colour for a bullet of this module */
-function tracerColor(moduleId: string): [number, number, number] {
-  const v = MODULE_BY_ID.get(moduleId)?.visual;
-  switch (v) {
-    case 'rail': case 'gauss': case 'sniper': return [0.5, 0.65, 1.0];
-    case 'laser': return [1, 0.25, 0.2];
-    case 'plasma': return [0.9, 0.4, 1];
-    case 'flak': return [1, 0.6, 0.25];
-    default: return [1, 0.72, 0.3];
-  }
+/** Weapon families for the effects: every weapon gets a readable signature (tracer / round, muzzle flash, impact). */
+type Fam =
+  | 'mg' | 'twinmg' | 'hmg' | 'gatling' | 'shotgun' | 'flechette' | 'ac' | 'apc' | 'he' | 'gauss' | 'sniper' | 'rail'
+  | 'rocket' | 'incend' | 'missile' | 'bigMissile' | 'grenade' | 'mortar' | 'howitzer' | 'cluster' | 'firebomb' | 'bomb'
+  | 'flak' | 'laser' | 'focus' | 'heatray' | 'plasma' | 'plasmaOrb' | 'empOrb' | 'sonic' | 'chain' | 'slow' | 'disarm'
+  | 'gravity' | 'flame' | 'melee' | 'heal' | 'pd' | 'other';
+interface WStyle {
+  fam: Fam;
+  /** effect size: ~0.25 light gun .. ~1.25 titan gun (mount class x calibre) */
+  s: number;
+  def: ModuleDef | undefined;
+  muzzle: MuzzleKind | null;
 }
+const CLASS_S: Record<string, number> = { S: 0.3, M: 0.5, L: 0.8, XL: 1 };
+
+function famOf(def: ModuleDef | undefined): Fam {
+  if (!def) return 'other';
+  if (def.pointDefense) return 'pd';
+  if (def.heal) return 'heal';
+  const v = def.visual, pk = def.projectile ?? 'bullet', pellets = def.pellets ?? 1;
+  if (def.category === 'melee') return 'melee';
+  if (def.fireField && pk === 'arc') return 'firebomb';
+  if (def.cluster) return 'cluster';
+  switch (def.category) {
+    case 'machinegun':
+      if (def.spinUp || v === 'gatling') return 'gatling';
+      if (pellets > 1) return def.pierce ? 'flechette' : 'shotgun';
+      return def.slow ? 'twinmg' : (def.ap ?? 0) >= 0.4 ? 'hmg' : 'mg';
+    case 'autocannon': return def.spinUp || v === 'gatling' ? 'gatling' : 'ac';
+    case 'cannon': return v === 'gauss' ? 'gauss' : def.impulse && (def.splash ?? 0) >= 1 ? 'he' : 'apc';
+    case 'precision': return pk === 'rail' ? 'rail' : 'sniper';
+    case 'rocket': return def.burn ? 'incend' : 'rocket';
+    case 'missile': return v === 'cruise' || (def.splash ?? 0) >= 2 ? 'bigMissile' : 'missile';
+    case 'artillery': return def.requires === 'air' ? 'bomb' : v === 'mortar' ? (def.mount === 'S' ? 'grenade' : 'mortar') : 'howitzer';
+    case 'antiair': return 'flak';
+    case 'flame': return 'flame';
+    default: break;
+  }
+  if (pk === 'orb') return v === 'emp' ? 'empOrb' : v === 'sonic' ? 'sonic' : 'plasmaOrb';
+  if (pk === 'lightning') return 'chain';
+  if (def.ramp) return 'focus';
+  if (def.disarm) return 'disarm';
+  if (def.slow || v === 'slowbeam') return 'slow';
+  if (v === 'gravity') return 'gravity';
+  if (v === 'heatray') return 'heatray';
+  if (v === 'plasma') return 'plasma';
+  if (v === 'rail' || v === 'gauss') return 'rail';
+  if (pk === 'beam') return 'laser';
+  return 'other';
+}
+
+const MUZZLE: Partial<Record<Fam, MuzzleKind>> = {
+  mg: 'gun', twinmg: 'gun', hmg: 'gun', gatling: 'gatling', shotgun: 'blast', flechette: 'darts', ac: 'ac', apc: 'cannon', he: 'he',
+  gauss: 'gauss', sniper: 'sniper', rocket: 'rocket', incend: 'rocket', missile: 'missile', bigMissile: 'missile', grenade: 'mortar',
+  mortar: 'mortar', firebomb: 'mortar', howitzer: 'cannon', cluster: 'cannon', flak: 'flak', other: 'gun',
+};
+
+const STYLES = new Map<string, WStyle>();
+function styleOf(id: string): WStyle {
+  let st = STYLES.get(id);
+  if (!st) {
+    const def = MODULE_BY_ID.get(id);
+    const fam = famOf(def);
+    const s = (CLASS_S[def?.mount ?? 'M'] ?? 0.5) * (0.75 + 0.5 * (def?.caliber ?? 0.5));
+    st = { fam, s, def, muzzle: MUZZLE[fam] ?? null };
+    STYLES.set(id, st);
+  }
+  return st;
+}
+/** families whose beam / bolt event draws its own impact (their 'hit' only flares a shield) */
+const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd']);
 
 const _v3 = new THREE.Vector3();
 const _col = new THREE.Color();
+const _c2 = new THREE.Color();
 
 /** Terrain generation is a ~1 s CPU job (fbm per pixel), so built maps are cached and shared across views (menu backdrop, match, ...). */
 interface BuiltTerrain { group: THREE.Group; ground: THREE.Mesh; tint: THREE.Color }
@@ -175,6 +237,12 @@ export class FieldView3D implements BattleView {
    *  at a unit's centre (beams, arcs, splash) are moved out to the side facing them */
   private shotFrom = new Map<number, { x: number; y: number }>();
   private lastBlast: { x: number; y: number; r: number } | null = null;
+  /** rotary guns (ModuleDef.spinUp): spin estimate per unit * 16 + mount, rebuilt from the fire cadence */
+  private spin = new Map<number, { k: number; t: number }>();
+  /** focusing beams (ModuleDef.ramp): time on the current target per unit * 16 + mount */
+  private ramp = new Map<number, { start: number; last: number; x: number; y: number }>();
+  /** where cluster shells just burst (their bomblets are drawn as bomblets) */
+  private clusterPts: { x: number; y: number; t: number }[] = [];
   // quality
   /** 'auto' scales AO / bloom / shadows / resolution from frame time; a number pins the level (0 best) */
   quality: 'auto' | 0 | 1 | 2 | 3 = 'auto';
@@ -522,6 +590,7 @@ export class FieldView3D implements BattleView {
     this.wrecks = [];
     this.fx.clear();
     this.projRec.clear();
+    this.spin.clear(); this.ramp.clear(); this.clusterPts.length = 0;
     this.prevU.clear(); this.curU.clear(); this.prevP.clear(); this.curP.clear();
     this.pending = [];
   }
@@ -751,6 +820,10 @@ export class FieldView3D implements BattleView {
     if (u.hitFlash > 0.02) { const f = u.hitFlash; tr += f * 1.7; tg += f * 1.3; tb += f * 0.9; }
     if (u.burning > 0) { const f = 0.12 + 0.1 * Math.sin(this.time * 17 + u.id); tr += f * 2; tg += f * 0.6; }
     if (u.stun > 0) { const f = 0.5 + 0.5 * Math.sin(this.time * 43 + u.id * 2.1); tr += f * 0.3; tg += f * 0.9; tb += f * 1.8; }
+    // slowed: frosted over (cold blue-white); disarmed: a slow amber warning pulse
+    const sk = u.slow > 0.02 ? clamp(u.slow / 0.6, 0.25, 1) : 0;
+    if (sk) { tr *= 1 - 0.25 * sk; tg *= 1 + 0.05 * sk; tb += 0.7 * sk; }
+    if (u.disarm > 0) { const f = 0.5 + 0.5 * Math.sin(this.time * 9 + u.id); tr += f * 0.45; tg += f * 0.28; }
     rig.tr = tr; rig.tg = tg; rig.tb = tb;
     rig.update(dt);
     v.posed = true;
@@ -758,11 +831,68 @@ export class FieldView3D implements BattleView {
 
     // status effects
     const S = rig.S;
-    if (u.burning > 0 && Math.random() < dt * (6 + 3 * S) * this.fx.lod) this.fx.burning(x + (Math.random() - 0.5) * rig.L * 0.5, h + rig.height * 0.6, y + (Math.random() - 0.5) * rig.W * 0.5, S);
+    if (u.burning > 0) {
+      // licking flames over the whole hull (rate scales with its footprint), lit from within by a flickering glow
+      const hx = rig.L * 0.42, hz = rig.W * 0.42, ca = Math.cos(ang), sa = Math.sin(ang);
+      let acc = dt * (8 + 12 * rig.L * rig.W) * Math.max(0.5, this.fx.lod);
+      while (acc > 0) {
+        if (acc < 1 && Math.random() > acc) break;
+        acc--;
+        // a random point on the rotated footprint
+        const lx = (Math.random() * 2 - 1) * hx, lz = (Math.random() * 2 - 1) * hz;
+        this.fx.burning(x + lx * ca - lz * sa, h + rig.height * (0.45 + 0.45 * Math.random()), y + lx * sa + lz * ca, 0.05 + rig.L * 0.08, 0.05 + rig.W * 0.08);
+      }
+      if (Math.random() < dt * 8) this.fx.glow(x, h + rig.height * 0.7, y, 0.6 + Math.max(rig.L, rig.W) * 0.7, 0.18, RAMPS.fire);
+    }
     if (u.stun > 0 && Math.random() < dt * 5) this.fx.arcs(x, h + rig.height * 0.55, y, rig.L * 0.42, rig.W * 0.42);
+    else if (u.para > 0 && Math.random() < dt * 8 * clamp(u.para / u.maxHp, 0.1, 1)) this.fx.paraSpark(x, h + rig.height * 0.6, y, rig.L * 0.4, rig.W * 0.4);
+    if (sk && Math.random() < dt * (4 + 8 * sk) * (0.6 + 0.2 * S) * this.fx.lod) this.fx.frost(x, h + rig.height * 0.75, y, rig.L * 0.45, rig.W * 0.45, sk);
+    if (u.disarm > 0 && Math.random() < dt * 7 * this.fx.lod) {
+      const i = Math.floor(Math.random() * u.mounts.length);
+      const m = u.mounts[i]?.moduleId ? rig.muzzleWorld(i, _v3) : null;
+      if (m) this.fx.jam(m.x, m.y, m.z); else this.fx.jam(x, h + rig.height * 0.8, y);
+    }
+    this.heat(u, rig);
 
     this.drawShield(u, v, x, h, y);
     this.drawBars(u, v, x, h, y, ang, dt);
+  }
+
+  /** rotary guns that have been firing glow at the muzzle, brighter the further they have spun up */
+  private heat(u: SimUnit, rig: Rig): void {
+    if (!this.spin.size) return;
+    const now = this.curTick * DT;
+    for (let i = 0; i < u.mounts.length; i++) {
+      const sp = this.spin.get(u.id * 16 + i);
+      if (!sp || sp.k < 0.15) continue;
+      const since = now - sp.t;
+      if (since > 1.2) continue;
+      const m = rig.muzzleWorld(i, _v3);
+      if (!m) continue;
+      const st = styleOf(u.mounts[i].moduleId ?? '');
+      this.fx.heatGlow(m.x, m.y, m.z, st.s, sp.k * (1 - since / 1.2));
+    }
+  }
+
+  /** a rotary gun fired: advance its spin estimate (sim: +DT / spinUp per tick on target, the same back down off it) */
+  private spinShot(unit: number, mount: number, su: number): number {
+    const key = unit * 16 + mount, now = this.curTick * DT;
+    let sp = this.spin.get(key);
+    if (!sp) { sp = { k: 0, t: now }; this.spin.set(key, sp); }
+    const gap = now - sp.t;
+    sp.k = gap > 0.45 ? Math.max(0, sp.k - gap / su) : Math.min(1, sp.k + gap / su);
+    sp.t = now;
+    return sp.k;
+  }
+
+  /** a focusing beam fired: 0..1 of its build-up on this target (sim: RAMP_TIME 2.5 s, reset by a switch or a 1 s gap) */
+  private rampShot(unit: number, mount: number, x: number, y: number): number {
+    const key = unit * 16 + mount, now = this.curTick * DT;
+    let rp = this.ramp.get(key);
+    if (!rp) { rp = { start: now, last: now, x, y }; this.ramp.set(key, rp); }
+    if (now - rp.last > 1 || Math.hypot(x - rp.x, y - rp.y) > 1.6) rp.start = now;
+    rp.last = now; rp.x = x; rp.y = y;
+    return clamp((now - rp.start) / 2.5, 0, 1);
   }
 
   /** hp / shield change detection (burn, splash, auras) on top of 'hit' events, for the bar visibility timers */
@@ -808,7 +938,8 @@ export class FieldView3D implements BattleView {
     v.hpShown = v.hpShown > u.hp ? Math.max(u.hp, v.hpShown - (u.maxHp * 0.6 + (v.hpShown - u.hp) * 3) * dt) : u.hp;
     const hy = this.halfY(rig, ang);
     if (u.level > 1) this.drawPips(x, y, rig, ang, u.level, 0.9, h);
-    const vis = Math.max(this.barAlpha(v, S), u.para > 0 ? 1 : 0);
+    const slowed = u.slow > 0.02, disarmed = u.disarm > 0;
+    const vis = Math.max(this.barAlpha(v, S), u.para > 0 || slowed || disarmed ? 1 : 0);
     if (vis <= 0.01) return;
     const top = h + rig.height + 0.05;
     const boss = S >= 4;
@@ -817,6 +948,25 @@ export class FieldView3D implements BattleView {
     const bh = boss ? (S >= 5 ? 9 : 7) : S >= 2 ? 4 : 3;
     const x0 = -w / 2;
     const y0 = hy * k * this.ay * (boss ? 1.1 : 1.04) + 4;
+    // status glyphs left of the bar: a snowflake while slowed, a crossed-out gun (amber X) while disarmed
+    let gx = x0 - 7;
+    const gy = y0 + bh / 2;
+    if (disarmed) {
+      const r = 3.6, t = 1.1;
+      for (const sg of [1, -1]) {
+        ui.quad(x, top, y, [gx - r - t, gy - sg * r, gx - r + t, gy - sg * r - t * 1.4, gx + r + t, gy + sg * r, gx + r - t, gy + sg * r + t * 1.4], BLACK, 0.8);
+        ui.quad(x, top, y, [gx - r, gy - sg * r, gx - r + t * 0.7, gy - sg * r - t * 0.7, gx + r, gy + sg * r, gx + r - t * 0.7, gy + sg * r + t * 0.7], JAM_COL, 1);
+      }
+      gx -= 9;
+    }
+    if (slowed) {
+      const r = 3.8;
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI + Math.PI / 2, c = Math.cos(a) * r, sn = Math.sin(a) * r, px = -Math.sin(a) * 0.8, py = Math.cos(a) * 0.8;
+        ui.quad(x, top, y, [gx - c - px * 1.8, gy - sn - py * 1.8, gx - c + px * 1.8, gy - sn + py * 1.8, gx + c + px * 1.8, gy + sn + py * 1.8, gx + c - px * 1.8, gy + sn - py * 1.8], BLACK, 0.7);
+        ui.quad(x, top, y, [gx - c - px, gy - sn - py, gx - c + px, gy - sn + py, gx + c + px, gy + sn + py, gx + c - px, gy + sn - py], ICE_HI, 1);
+      }
+    }
     const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
     const pad = boss ? 3 : 1.5;
     ui.rect(x, top, y, x0 - pad, y0 - pad, w + pad * 2, bh + pad * 2, boss ? BAR_COL[team] : BLACK, boss ? 0.95 * vis : 0.88 * vis);
@@ -889,7 +1039,11 @@ export class FieldView3D implements BattleView {
         const hEnd = !byId ? 0.42
           : air ? this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, p.z + 0.12, true)
           : p.z > 0.05 ? 0.42 : this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, 0.42, false);
-        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air };
+        const st = styleOf(p.moduleId);
+        // rotary guns: how far the barrels had spun up when this round left them
+        const k = st.fam === 'gatling' && p.src !== undefined && p.mount !== undefined ? this.spin.get(p.src * 16 + p.mount)?.k ?? 1 : 1;
+        const bomblet = st.fam === 'cluster' && this.clusterPts.some((c) => Math.abs(c.x - p.x) < 0.7 && Math.abs(c.y - p.y) < 0.7);
+        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet };
         seen.set(p.id, rec);
       }
       if (this.offscreen(pos.x, pos.y, 4)) { rec.px = pos.x; rec.py = pos.y; continue; }
@@ -901,37 +1055,108 @@ export class FieldView3D implements BattleView {
       const ang = pos.angle;
       const dx = Math.cos(ang), dz = Math.sin(ang);
       const dh = H - rec.lastH;
-      const cal = MODULE_BY_ID.get(p.moduleId)?.caliber ?? 0.5;
+      const st = rec.st, sz = st.s;
       const pitch = arcs ? clamp(dh / Math.max(0.02, Math.hypot(pos.x - rec.px, pos.y - rec.py) || 0.1), -2, 2) : 0;
       const emit = Math.random() < Math.min(1, this.frameDt() * 60);
+      const tracer = (len: number, w: number, r: number, g: number, b: number) => proj.streak(pos.x - dx * len, H, pos.y - dz * len, pos.x, H, pos.y, w, r, g, b);
       switch (p.kind) {
         case 'bullet': {
-          const [r, g, b] = tracerColor(p.moduleId);
-          const len = rec.bright ? 1.0 + cal * 0.8 : 0.45 + cal * 0.4;
-          proj.streak(pos.x - dx * len, H, pos.y - dz * len, pos.x, H, pos.y, 0.05 + cal * 0.06, r, g, b);
+          switch (st.fam) {
+            case 'gatling': { // rotary: short dim tracers at first, a hose of long bright ones once spun up
+              const k = rec.k, f = 0.7 + sz;
+              tracer((0.3 + 0.9 * k) * f * (rec.bright ? 1.3 : 1), (0.022 + 0.03 * k) * f, 1, 0.5 + 0.35 * k, 0.15 + 0.35 * k);
+              break;
+            }
+            case 'shotgun': tracer(0.16, 0.04 + sz * 0.03, 1, 0.85, 0.55); break; // a spray of short pellet dots
+            case 'flechette': tracer(0.85, 0.018, 0.7, 0.88, 1); break; // long thin steel needles
+            case 'ac': tracer(0.35 + 0.4 * sz, 0.05 + 0.06 * sz, 1, 0.36, 0.12); break; // fat red-orange HE tracer
+            case 'hmg': tracer(0.9 + 0.4 * sz, 0.05, 1, 0.6, 0.22); break; // every round a heavy orange tracer
+            case 'sniper': tracer(3.2, 0.03, 0.8, 0.92, 1); break; // one long white-blue streak
+            case 'twinmg': tracer(rec.bright ? 0.9 : 0.45, 0.035, 0.7, 0.88, 1); break; // cold pale tracers (it slows)
+            default: tracer(rec.bright ? 0.9 + sz * 0.6 : 0.4 + sz * 0.3, 0.03 + sz * 0.05, 1, 0.8, 0.35); break;
+          }
           break;
         }
-        case 'shell': case 'arc': {
-          const l = 0.34 + 0.4 * cal, d = 0.08 + 0.1 * cal;
-          proj.body(pos.x, H, pos.y, dx, pitch, dz, l, d, 0.75, 0.72, 0.68);
-          proj.streak(pos.x - dx * 0.35, H - pitch * 0.1, pos.y - dz * 0.35, pos.x + dx * l * 0.4, H, pos.y + dz * l * 0.4, 0.06 + cal * 0.05, 1, 0.55, 0.2);
-          if (emit) this.fx.trail(pos.x, H, pos.y, 'shell', 0.6 + cal);
+        case 'shell': {
+          if (st.fam === 'gauss') { // magnetic slug: a long blue streak, glowing head and an ionised sparkle trail
+            tracer(2.4, 0.08, 0.45, 0.65, 1);
+            this.fx.glow(pos.x, H, pos.y, 0.35 + sz * 0.3, dt * 2.2, RAMPS.gauss);
+            if (emit) this.fx.trail(pos.x - dx * 0.4, H, pos.y - dz * 0.4, 'gauss', 0.8 + sz);
+          } else if (st.fam === 'flak') { // small dark shell with a fuse spark
+            proj.body(pos.x, H, pos.y, dx, 0, dz, 0.18 + 0.2 * sz, 0.06 + 0.05 * sz, 0.25, 0.25, 0.22);
+            tracer(0.3, 0.03, 1, 0.6, 0.25);
+          } else if (st.fam === 'he') { // fat olive HE shell, short orange tracer, a smoke wisp
+            proj.body(pos.x, H, pos.y, dx, 0, dz, 0.3 + 0.35 * sz, 0.1 + 0.1 * sz, 0.55, 0.55, 0.35);
+            proj.streak(pos.x - dx * 0.5, H, pos.y - dz * 0.5, pos.x, H, pos.y, 0.06 + sz * 0.05, 1, 0.5, 0.15);
+            if (emit) this.fx.trail(pos.x, H, pos.y, 'shell', 0.6 + sz);
+          } else { // AP shot: slim bright penetrator with a hot red tank tracer
+            proj.body(pos.x, H, pos.y, dx, 0, dz, 0.3 + 0.35 * sz, 0.05 + 0.06 * sz, 0.9, 0.8, 0.55);
+            tracer(1.0 + sz * 0.6, 0.05 + 0.04 * sz, 1, 0.32, 0.14);
+          }
           break;
         }
-        case 'rocket': case 'missile': {
-          proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.5 + 0.2 * cal, 0.09 + 0.06 * cal, 0.9, 0.9, 0.86);
-          proj.streak(pos.x - dx * 0.8, H, pos.y - dz * 0.8, pos.x - dx * 0.22, H, pos.y - dz * 0.22, 0.07, 1, 0.55, 0.15);
-          if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, 'rocket', 0.8 + cal * 0.6);
+        case 'arc': {
+          switch (st.fam) {
+            case 'grenade': // small olive grenade tumbling over with a fuse spark
+              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.13, 0.1, 0.35, 0.42, 0.25);
+              if (emit) this.fx.trail(pos.x, H, pos.y, 'spark', 0.8);
+              break;
+            case 'firebomb': // incendiary shell glowing and trailing flame
+              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.24, 0.14, 0.7, 0.35, 0.15);
+              this.fx.glow(pos.x, H, pos.y, 0.4, dt * 2.2, RAMPS.ember);
+              if (emit) this.fx.trail(pos.x, H, pos.y, 'firebomb', 1);
+              break;
+            case 'bomb': // dropped bomb: dark, no trail
+              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.3, 0.13, 0.3, 0.32, 0.3);
+              break;
+            case 'cluster':
+              if (rec.bomblet) { // bomblet: a tiny dark pellet with a spark trail
+                proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.1, 0.08, 0.3, 0.3, 0.28);
+                if (emit) this.fx.trail(pos.x, H, pos.y, 'spark', 0.9);
+              } else { // big yellow-banded cargo shell with a smoke streamer
+                proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.4 + 0.4 * sz, 0.12 + 0.1 * sz, 0.8, 0.7, 0.3);
+                if (emit) this.fx.trail(pos.x, H, pos.y, 'heavyShell', 0.8 + sz);
+              }
+              break;
+            case 'mortar':
+              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.25 + 0.2 * sz, 0.1 + 0.06 * sz, 0.45, 0.48, 0.4);
+              if (emit) this.fx.trail(pos.x, H, pos.y, 'shell', 0.5 + sz);
+              break;
+            default: // howitzer / barrage: heavy shell and a lazy grey streamer
+              proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.35 + 0.4 * sz, 0.1 + 0.1 * sz, 0.62, 0.6, 0.52);
+              if (emit) this.fx.trail(pos.x, H, pos.y, 'heavyShell', 0.8 + sz);
+              break;
+          }
           break;
         }
-        case 'flame':
-          if (emit) this.fx.trail(pos.x, H, pos.y, 'flame', 0.8 + cal * 0.6);
+        case 'rocket': { // stubby rocket: orange flame and a thick billowing smoke trail
+          proj.body(pos.x, H, pos.y, dx, pitch, dz, 0.4 + 0.25 * sz, 0.08 + 0.07 * sz, 0.75, 0.72, 0.62);
+          const inc = st.fam === 'incend';
+          proj.streak(pos.x - dx * 0.8, H, pos.y - dz * 0.8, pos.x - dx * 0.22, H, pos.y - dz * 0.22, 0.07 + sz * 0.04, 1, inc ? 0.35 : 0.55, 0.12);
+          if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, inc ? 'incend' : 'rocket', 0.8 + sz * 0.8);
+          break;
+        }
+        case 'missile': { // slim white missile: white-hot exhaust point and a thin lasting contrail
+          const big = st.fam === 'bigMissile';
+          proj.body(pos.x, H, pos.y, dx, pitch, dz, (big ? 0.6 : 0.4) + 0.3 * sz, (big ? 0.1 : 0.05) + 0.05 * sz, 0.95, 0.95, 0.92);
+          proj.streak(pos.x - dx * 0.5, H, pos.y - dz * 0.5, pos.x - dx * 0.2, H, pos.y - dz * 0.2, 0.05 + sz * 0.04, 1, 0.9, 0.7);
+          if (emit) this.fx.trail(pos.x - dx * 0.3, H, pos.y - dz * 0.3, big ? 'bigMissile' : 'missile', 0.8 + sz);
+          break;
+        }
+        case 'flame': // two puffs a frame: a dense, rolling jet
+          if (emit) this.fx.flameJet(pos.x, H, pos.y, clamp(pos.progress, 0, 1), 0.7 + sz, st.def?.id === 'napalm' || st.def?.id === 'inferno');
+          if (emit && Math.random() < 0.6 * this.fx.lod) this.fx.flameJet(pos.x - dx * 0.2, H, pos.y - dz * 0.2, clamp(pos.progress - 0.05, 0, 1), 0.7 + sz, false);
           break;
         case 'orb': {
-          const v = MODULE_BY_ID.get(p.moduleId)?.visual;
-          const ramp = v === 'emp' || v === 'tesla' ? RAMPS.emp : v === 'plasma' ? RAMPS.plasma : [2.2, 3.0, 2.6, 1, 0.6, 1.8, 1.6, 0.8, 0.1, 0.4, 0.4, 0] as const;
-          this.fx.glow(pos.x, H, pos.y, 0.5 + cal * 0.6, dt * 2.2, ramp);
-          if (emit) this.fx.trail(pos.x, H, pos.y, 'orb', 0.6 + cal * 0.5, ramp);
+          if (st.fam === 'sonic') { // pressure wave: a pale shimmering ball that leaves ripples
+            this.fx.glow(pos.x, H, pos.y, 0.4 + sz * 0.6, dt * 2.2, RAMPS.sonic);
+            if (Math.random() < this.frameDt() * 9) this.fx.sonicPulse(pos.x, H, pos.y, 0.6 + sz);
+            break;
+          }
+          const ramp: Ramp = st.fam === 'empOrb' ? RAMPS.emp : RAMPS.plasma;
+          this.fx.glow(pos.x, H, pos.y, 0.4 + sz * 0.7, dt * 2.2, ramp);
+          if (emit) this.fx.trail(pos.x, H, pos.y, 'orb', 0.5 + sz * 0.6, ramp);
+          if (st.fam === 'empOrb' && Math.random() < this.frameDt() * 10) this.fx.arcs(pos.x, H, pos.y, 0.25 + sz * 0.3, 0.25 + sz * 0.3);
           break;
         }
         default: break;
@@ -940,6 +1165,7 @@ export class FieldView3D implements BattleView {
     }
     proj.end();
     for (const id of seen.keys()) if (!alive.has(id)) seen.delete(id);
+    if (this.clusterPts.length && this.time - this.clusterPts[0].t > 0.6) this.clusterPts = this.clusterPts.filter((c) => this.time - c.t <= 0.6);
   }
 
   private _lastFrameDt = 1 / 60;
@@ -1027,18 +1253,21 @@ export class FieldView3D implements BattleView {
     switch (e.t) {
       case 'fire': {
         const v = this.bu.get(e.unit);
+        const st = styleOf(e.moduleId);
+        // rotary guns track their spin even off screen (the tracers and barrel glow read it)
+        const k = st.fam === 'gatling' ? this.spinShot(e.unit, e.mount, st.def?.spinUp ?? 1.5) : 1;
         if (!v || this.offscreen(e.x, e.y, 3)) break;
         v.rig.kick(e.mount);
-        const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
-        if (vis && BEAM_VIS.has(vis)) break; // beams draw their own flare
-        const cal = MODULE_BY_ID.get(e.moduleId)?.caliber ?? 0.5;
+        if (!st.muzzle) break; // beams / bolts / flame / melee draw their own flare
         const m = v.posed ? v.rig.muzzleWorld(e.mount, _v3) : null;
-        if (m) fx.muzzle(m.x, m.y, m.z, Math.cos(e.angle), Math.sin(e.angle), cal);
-        else fx.muzzle(e.x, GUN_H, e.y, Math.cos(e.angle), Math.sin(e.angle), cal);
+        if (m) fx.muzzleFx(m.x, m.y, m.z, Math.cos(e.angle), Math.sin(e.angle), st.s, st.muzzle, k);
+        else fx.muzzleFx(e.x, GUN_H, e.y, Math.cos(e.angle), Math.sin(e.angle), st.s, st.muzzle, k);
         break;
       }
       case 'beam': {
-        const st = beamStyle(e.moduleId);
+        const st = styleOf(e.moduleId);
+        const bs = beamStyle(e.moduleId);
+        const rk = st.fam === 'focus' && e.unit !== undefined && e.mount !== undefined ? this.rampShot(e.unit, e.mount, e.x2, e.y2) : 0;
         const rig = this.posedRig(e.unit);
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
         if (!m && this.offscreen(e.x1, e.y1, 3) && this.offscreen(e.x2, e.y2, 3)) break;
@@ -1046,7 +1275,29 @@ export class FieldView3D implements BattleView {
         const sx = m ? m.x : e.x1, sz = m ? m.z : e.y1;
         // stop on the target's hull side / shield bubble, not inside the model (its impact flare would be hidden)
         const end = this.shotEnd(sx, sz, e.x2, e.y2, byId);
-        fx.beam(sx, ay, sz, end.x, this.aimHeightAt(e.x2, e.y2, byId, e.side), end.y, _col.set(st.color).clone(), st.w, st.life, st.wob);
+        const by = this.aimHeightAt(e.x2, e.y2, byId, e.side);
+        const col = _col.set(bs.color).clone();
+        let w = bs.w * (0.7 + st.s * 0.8), life = bs.life;
+        if (st.fam === 'focus') {
+          // focusing: the beam fattens and burns from red to white-hot as it holds one target
+          col.lerp(_c2.setRGB(1, 0.9, 0.75), rk * 0.8);
+          w *= 1 + 3.5 * rk;
+          life += 0.1 * rk;
+          if (rk > 0.4) fx.glow(sx, ay, sz, 0.2 + rk * 0.5, 0.14, RAMPS.molten);
+        }
+        fx.beam(sx, ay, sz, end.x, by, end.y, col, w, life, bs.wob);
+        const s = st.s;
+        switch (st.fam) {
+          case 'laser': fx.burnHit(end.x, by, end.y, s, 0.8); break;
+          case 'focus': fx.burnHit(end.x, by, end.y, s, 0.6 + 1.9 * rk); break;
+          case 'heatray': fx.burnHit(end.x, by, end.y, s, 1.4); break;
+          case 'slow': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.frost, 3); fx.frostHit(end.x, by, end.y, s); break;
+          case 'disarm': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.jam, 4); fx.jamHit(end.x, by, end.y, s); break;
+          case 'gravity': fx.beamMotes(end.x, by, end.y, sx, ay, sz, RAMPS.gravity, 5); break;
+          case 'rail': fx.railTrail(sx, ay, sz, end.x, by, end.y, RAMPS.gauss, s); break;
+          case 'plasma': fx.railTrail(sx, ay, sz, end.x, by, end.y, RAMPS.plasma, s * 0.6); break;
+          default: break;
+        }
         break;
       }
       case 'chain': {
@@ -1054,13 +1305,14 @@ export class FieldView3D implements BattleView {
         const col = new THREE.Color(st.color);
         const rig = this.posedRig(e.unit);
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
+        const w = 0.04 + styleOf(e.moduleId).s * 0.04;
         let hPrev = GUN_H;
         for (let i = 1; i < e.points.length; i++) {
           const p0 = e.points[i - 1], p1 = e.points[i];
           const h1 = this.aimHeightAt(p1.x, p1.y, byId, e.side);
           const sx = i === 1 && m ? m.x : p0.x, sy = i === 1 && m ? m.y : hPrev, sz = i === 1 && m ? m.z : p0.y;
           const end = this.shotEnd(sx, sz, p1.x, p1.y, byId);
-          fx.lightning(sx, sy, sz, end.x, h1, end.y, col, 0.06, 0.2);
+          fx.lightning(sx, sy, sz, end.x, h1, end.y, col, w, 0.2);
           hPrev = h1;
         }
         break;
@@ -1070,6 +1322,8 @@ export class FieldView3D implements BattleView {
         const yh = this.unitHeight(e.unit, byId);
         const su = byId.get(e.unit);
         const d0 = v && su ? Math.hypot(e.x - su.x, e.y - su.y) : 0;
+        // direction the shot was travelling when it struck (AP sparks and darts carry on along it)
+        let tdx = 0, tdz = 0;
         if (v && su) {
           // hits reported at (about) the centre (beams, arcs, splash) go to the hull side facing the shot or blast;
           // shield hits always flare on the bubble, not inside it
@@ -1082,28 +1336,55 @@ export class FieldView3D implements BattleView {
               : d0 > 0.05 ? Math.atan2(e.y - su.y, e.x - su.x) : Math.random() * Math.PI * 2;
             const r = e.shieldHit ? Math.max(v.rig.L, v.rig.W) * 0.58 + 0.18 : Math.min(v.rig.L, v.rig.W) * 0.42;
             e = { ...e, x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r };
-          } else e = { ...e, x: e.x + c.x - su.x, y: e.y + c.y - su.y };
+            tdx = -Math.cos(a); tdz = -Math.sin(a);
+          } else {
+            if (d0 > 0.05) { tdx = (su.x - e.x) / d0; tdz = (su.y - e.y) / d0; }
+            e = { ...e, x: e.x + c.x - su.x, y: e.y + c.y - su.y };
+          }
         }
+        if (!tdx && !tdz) { const a = Math.random() * Math.PI * 2; tdx = Math.cos(a); tdz = Math.sin(a); }
         if (v) {
           v.dmgT = this.time;
           if (e.shieldHit) { v.shT = this.time; v.hx = e.x; v.hy = yh; v.hz = e.y; }
         }
         if (this.hitBudget-- <= 0 || this.offscreen(e.x, e.y, 2)) break;
-        if (e.shieldHit) fx.shieldHit(e.x, yh, e.y);
-        else {
-          const cal = MODULE_BY_ID.get(e.moduleId)?.caliber ?? 0.4;
-          fx.impact(e.x, yh, e.y, 0.15 + cal * 0.55, true);
+        const st = styleOf(e.moduleId), s = st.s;
+        if (e.shieldHit) { fx.shieldHit(e.x, yh, e.y); break; }
+        // knockback weapons shove the hull: dust kicked up under it
+        if (st.def?.impulse && st.def.impulse > 0 && su && !su.flying && v && Math.random() < 0.7) fx.dustPuff(e.x, e.y, 0.3 + v.rig.S * 0.12);
+        if (SELF_IMPACT.has(st.fam)) break;
+        switch (st.fam) {
+          case 'mg': case 'gatling': fx.impact(e.x, yh, e.y, 0.1 + s * 0.4, true); break;
+          case 'twinmg': fx.impact(e.x, yh, e.y, 0.1 + s * 0.3, true); if (Math.random() < 0.35) fx.frostHit(e.x, yh, e.y, 0.15); break;
+          case 'hmg': case 'sniper': case 'apc': fx.apHit(e.x, yh, e.y, tdx, tdz, s); break;
+          case 'gauss': case 'rail': fx.apHit(e.x, yh, e.y, tdx, tdz, s, RAMPS.gauss); break;
+          case 'shotgun': fx.pelletHit(e.x, yh, e.y); break;
+          case 'flechette': fx.dartHit(e.x, yh, e.y, tdx, tdz); break;
+          case 'ac': fx.impact(e.x, yh, e.y, 0.1, true); break; // its 'explode' pops right after
+          case 'plasma': case 'plasmaOrb': fx.plasmaHit(e.x, yh, e.y, s); break;
+          case 'chain': case 'empOrb': fx.empHit(e.x, yh, e.y, s); break;
+          case 'flame': break; // the flames and the burn say it all
+          case 'melee': {
+            const vis = st.def?.visual;
+            if (vis === 'prod') fx.empHit(e.x, yh, e.y, s);
+            else if (vis === 'blade') fx.plasmaHit(e.x, yh, e.y, s);
+            else if (vis === 'claw') { fx.grind(e.x, yh, e.y, s); fx.jamHit(e.x, yh, e.y, s * 0.6); }
+            else if (vis === 'hammer' || vis === 'ram') { fx.impact(e.x, yh, e.y, 0.5 + s * 0.5, false); fx.shockwave(e.x, e.y, 0.3 + s * 0.4); }
+            else fx.grind(e.x, yh, e.y, s);
+            break;
+          }
+          default: fx.impact(e.x, yh, e.y, 0.1 + s * 0.35, true); break;
         }
         break;
       }
       case 'explode': {
         this.lastBlast = { x: e.x, y: e.y, r: e.radius };
-        const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
-        const style = vis === 'plasma' ? 'plasma' : vis === 'emp' || vis === 'tesla' ? 'emp' : 'fire';
+        const st = styleOf(e.moduleId), r = Math.max(0.3, e.radius);
+        if (st.fam === 'cluster' && e.radius >= 1.1) this.clusterPts.push({ x: e.x, y: e.y, t: this.time });
         if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
         // air bursts and missiles striking an aircraft go off at its altitude, not on the ground below (as in 2D)
         let ey = 0;
-        if (MODULE_BY_ID.get(e.moduleId)?.targetsAir) {
+        if (st.def?.targetsAir) {
           let bd = 1.2 * 1.2, best = -1;
           for (const u of byId.values()) {
             if (!u.flying || !this.bu.has(u.id)) continue;
@@ -1112,7 +1393,37 @@ export class FieldView3D implements BattleView {
           }
           if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
         }
-        fx.explosion(e.x, e.y, Math.max(0.5, e.radius), style, ey);
+        switch (st.fam) {
+          case 'mg': case 'hmg': case 'gatling': case 'ac': case 'twinmg': case 'shotgun': case 'sniper':
+            fx.pop(e.x, ey, e.y, r * 0.8); break; // autocannon HE round: a sharp little pop
+          case 'apc': fx.pop(e.x, ey, e.y, r * 0.7); break; // AP shell's small bursting charge (the hit throws the AP sparks)
+          case 'he': fx.explosion(e.x, e.y, r * 1.25, 'fire', ey); fx.shockwave(e.x, e.y, r * 1.1); break; // HE: big blast + knockback dust
+          case 'grenade': fx.pop(e.x, ey, e.y, r * 0.65); fx.dirtGeyser(e.x, e.y, r * 0.45); break;
+          case 'mortar': case 'howitzer': case 'bomb': fx.explosion(e.x, e.y, r, 'fire', ey); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.7); break;
+          case 'cluster':
+            if (e.radius >= 1.1) { fx.clusterBurst(e.x, e.y, r); fx.explosion(e.x, e.y, r * 0.75, 'fire', 0, false, 0.6); } // the cargo shell splits
+            else { fx.explosion(e.x, e.y, r * 0.8, 'fire', 0, false, 0.4); fx.dirtGeyser(e.x, e.y, r * 0.35); } // one of the bomblet carpet
+            break;
+          case 'firebomb': fx.pop(e.x, ey, e.y, r * 0.8, RAMPS.ember); break; // the burning patch ('fireField') follows
+          case 'incend': fx.explosion(e.x, e.y, r, 'fire', ey); fx.fireSplash(e.x, e.y, r * 0.8); break;
+          case 'flak': fx.airBurst(e.x, ey > 0 ? ey : 1.3, e.y, r * 0.75); break;
+          case 'plasmaOrb': case 'plasma': fx.explosion(e.x, e.y, r, 'plasma', ey); break;
+          case 'empOrb': case 'chain': {
+            fx.explosion(e.x, e.y, r, 'emp', ey, false, 0.7);
+            for (let i = 0; i < 4; i++) fx.arcs(e.x, ey + 0.3, e.y, r * 0.8, r * 0.8);
+            break;
+          }
+          case 'sonic': fx.shockwave(e.x, e.y, r); fx.sonicPulse(e.x, 0.4, e.y, r * 1.4); break;
+          case 'pd': fx.pop(e.x, 1, e.y, 0.25, RAMPS.fire, false); break;
+          case 'melee': {
+            const vis = st.def?.visual;
+            if (vis === 'blade') fx.pop(e.x, 0.3, e.y, r * 0.6, RAMPS.plasma, false);
+            else if (vis === 'hammer' || vis === 'ram') { fx.shockwave(e.x, e.y, r); fx.dustPuff(e.x, e.y, r); }
+            else fx.grind(e.x, 0.4, e.y, r);
+            break;
+          }
+          default: fx.explosion(e.x, e.y, r, 'fire', ey); break;
+        }
         break;
       }
       case 'death': {
@@ -1139,6 +1450,9 @@ export class FieldView3D implements BattleView {
       }
       case 'smoke':
         fx.smokeScreen(e.x, e.y, e.radius, e.duration);
+        break;
+      case 'fireField':
+        fx.fireField(e.x, e.y, e.radius, e.duration);
         break;
       default:
     }
@@ -1207,6 +1521,7 @@ const SHIELD_COL = rgb('#8fe0ff');
 const PARA_COL = rgb('#4aa8ff');
 const ICE_HI = rgb('#e6f6ff');
 const ICE_LO = rgb('#7fd0ff');
+const JAM_COL = rgb('#ffb02a');
 const BAR_COL = [rgb(TEAM_PAL[0].bar), rgb(TEAM_PAL[1].bar)] as const;
 type RGB = readonly [number, number, number];
 void templateKey;
