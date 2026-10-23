@@ -45,13 +45,16 @@ interface UView {
   lx: number; ly: number; seen: boolean;
   dmgT: number; healT: number; hpLast: number; shLast: number; hpShown: number;
   shT: number; hx: number; hy: number; hz: number;
+  /** last 4 shield-bubble hits (x, y, z, time) and the ring index, for the dome ripples */
+  shHits?: number[]; shN?: number;
   hits: number;
   /** rig transforms are current (posed last frame); culled / hidden rigs keep stale muzzle positions */
   posed: boolean;
 }
 /** rig null: the unit was blown to smithereens, only scorch, scattered scrap and smoke remain. smoke / fire: seconds of
- *  smoke and flames left; heat 0..1: glow of a melted (energy) or freshly blasted hull, cooling */
-interface Wreck { rig: Rig | null; x: number; z: number; smoke: number; S: number; fire: number; heat: number; tint: number; hx: number; hz: number; deck: number }
+ *  smoke and flames left; heat 0..1: ember glow of a melted (energy) or freshly blasted hull, cooling; char: how burnt
+ *  the hull looks 0..1; seed: varies the soot pattern (units-adapter wreck look) */
+interface Wreck { rig: Rig | null; x: number; z: number; smoke: number; S: number; fire: number; heat: number; char: number; seed: number; hx: number; hz: number; deck: number }
 interface ProjRec {
   y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean;
   /** smoothed 3D flight direction, the last trail emission point, launch time, wobble phase */
@@ -642,6 +645,13 @@ export class FieldView3D implements BattleView {
   /* ------------------------------------------------------------------------------------------- unit pool */
 
   private teamOf(side: Side): 0 | 1 { return side === this.viewerSide ? 0 : 1; }
+  private paints: [number, number, number][] = [];
+  /** linear rgb of a side's team body paint (blown-up hull debris) */
+  private paintOf(side: Side): [number, number, number] {
+    const t = this.teamOf(side);
+    if (!this.paints[t]) { const c = new THREE.Color(TEAM_PAL[t].body); this.paints[t] = [c.r, c.g, c.b]; }
+    return this.paints[t];
+  }
   private clearBattle(): void {
     for (const v of this.bu.values()) this.layer.release(v.rig);
     this.bu.clear();
@@ -667,6 +677,7 @@ export class FieldView3D implements BattleView {
     if (this.battle) { this.battle = null; this.lastTick = -1; this.clearBattle(); }
     this.cam.update(dt);
     this.fx.eye.copy(this.camera.position);
+    this.fx.viewFrom(this.camera, this.renderer.domElement.height, this.sun);
     this.fx.update(dt);
     this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
@@ -839,6 +850,7 @@ export class FieldView3D implements BattleView {
     this.shields.end();
     this.ui.end();
     this.fx.eye.copy(this.camera.position);
+    this.fx.viewFrom(this.camera, this.renderer.domElement.height, this.sun);
     this.fx.update(dt);
     this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
@@ -974,11 +986,16 @@ export class FieldView3D implements BattleView {
     const hit = since < 0.55 ? 1 - since / 0.55 : 0;
     const frac = u.maxShield > 0 ? u.shield / u.maxShield : 0.5;
     const un = b.mat.uniforms;
-    un.uBase.value = (0.05 + 0.07 * frac) * clamp(0.6 + 0.4 * this.flashScale, 0, 1) + hit * 0.1;
-    un.uHit.value = hit;
-    un.uAge.value = since < 0.55 ? since / 0.55 : 1;
+    un.uBase.value = (0.045 + 0.06 * frac) * clamp(0.6 + 0.4 * this.flashScale, 0, 1) + hit * 0.05;
     un.uTime.value = this.time;
-    (un.uHitDir.value as THREE.Vector3).set((v.hx - x) / R, (v.hy - (h + Hh * 0.42)) / Hh, (v.hz - y) / R).normalize();
+    // the last 4 hits ripple at once; directions relative to the bubble's centre in its unit-sphere space
+    const hs = un.uHits.value as THREE.Vector4[], cy = h + Hh * 0.42;
+    for (let i = 0; i < 4; i++) {
+      const o = i * 4, age = v.shHits ? (this.time - v.shHits[o + 3]) / 0.8 : 1;
+      if (!v.shHits || age >= 1 || age < 0) { hs[i].w = 1; continue; }
+      _v3.set((v.shHits[o] - x) / R, (v.shHits[o + 1] - cy) / Hh, (v.shHits[o + 2] - y) / R).normalize();
+      hs[i].set(_v3.x, _v3.y, _v3.z, age);
+    }
   }
 
   /* ----------------------------------------------------------------------------------- bars / meters / pips */
@@ -1311,14 +1328,13 @@ export class FieldView3D implements BattleView {
 
   private syncWrecks(dt: number): void {
     for (const w of this.wrecks) {
-      if (w.heat > 0) w.heat = Math.max(0, w.heat - dt * 0.2);
+      if (w.heat > 0) w.heat = Math.max(0, w.heat - dt * 0.16);
       if (w.fire > 0) w.fire -= dt;
       if (w.smoke > 0) w.smoke -= dt;
       if (this.offscreen(w.x, w.z, (w.rig?.radius ?? w.S) + 3)) continue;
       if (w.rig) {
-        // a melted / blasted hull glows dull red and cools to char
-        const h = w.heat * w.heat;
-        w.rig.tr = w.tint + h * 2.6; w.rig.tg = w.tint + h * 0.7; w.rig.tb = w.tint * (1 - h * 0.5);
+        // the wreck look reads the instance colour as data: char amount, ember heat, soot-pattern seed
+        w.rig.tr = w.char; w.rig.tg = w.heat; w.rig.tb = w.seed;
         this.layer.submit(w.rig, 'wreck');
       }
       if (w.smoke > 0 && Math.random() < dt * (2.5 + w.S) * this.fx.lod) this.fx.wreckSmoke(w.x, w.z, w.S);
@@ -1497,7 +1513,13 @@ export class FieldView3D implements BattleView {
         if (!tdx && !tdz) { const a = Math.random() * Math.PI * 2; tdx = Math.cos(a); tdz = Math.sin(a); }
         if (v) {
           v.dmgT = this.time;
-          if (e.shieldHit) { v.shT = this.time; v.hx = e.x; v.hy = yh; v.hz = e.y; }
+          if (e.shieldHit) {
+            v.shT = this.time; v.hx = e.x; v.hy = yh; v.hz = e.y;
+            // ring buffer of the last 4 bubble hits (x, y, z, time) for the dome's ripples
+            const sh = (v.shHits ??= [0, 0, 0, -99, 0, 0, 0, -99, 0, 0, 0, -99, 0, 0, 0, -99]);
+            const o = (v.shN = ((v.shN ?? 0) + 1) % 4) * 4;
+            sh[o] = e.x; sh[o + 1] = yh; sh[o + 2] = e.y; sh[o + 3] = this.time;
+          }
         }
         if (this.hitBudget-- <= 0 || this.offscreen(e.x, e.y, 2)) break;
         const st = styleOf(e.moduleId), s = st.s;
@@ -1584,18 +1606,21 @@ export class FieldView3D implements BattleView {
         const v = this.bu.get(e.unit);
         const vis = !this.offscreen(e.x, e.y, 6);
         const lv = e.wreck, sz = e.size;
+        // the hull's team paint: its debris and scrap show it
+        const du = byId.get(e.unit);
+        const paint = du ? this.paintOf(du.side) : undefined;
         if (vis) {
           const y = e.flying ? (v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1) : 0;
           // the blast grows with the destruction: a perforated hull just coughs fire, a vaporised one goes up whole
-          if (lv === 0) fx.explosion(e.x, e.y, 0.45 + sz * 0.4, e.kind === 'energy' ? 'plasma' : 'fire', y, e.kind !== 'kinetic', 0.7);
-          else fx.bigExplosion(e.x, e.y, e.flying ? Math.max(1, sz * 0.8) : sz + (lv - 1) * 0.6, y);
+          if (lv === 0) fx.explosion(e.x, e.y, 0.45 + sz * 0.4, e.kind === 'energy' ? 'plasma' : 'fire', y, e.kind !== 'kinetic', 0.7, paint);
+          else fx.bigExplosion(e.x, e.y, e.flying ? Math.max(1, sz * 0.8) : sz + (lv - 1) * 0.6, y, paint);
           if (e.kind === 'energy' && lv > 0) fx.explosion(e.x, e.y, 0.5 + sz * 0.45, 'plasma', y, false, 0.6);
           if (lv === 3) { fx.dirtGeyser(e.x, e.y, 0.6 + sz * 0.4); fx.trauma = Math.min(1, fx.trauma + 0.1 + sz * 0.04); }
         }
         // blown apart: torn scrap all around (aircraft rain theirs onto the ground below)
         if (lv >= 2) {
           const r0 = v?.rig.radius ?? 0.3 + sz * 0.3;
-          fx.scatter(e.x, e.y, e.flying ? 1.2 : 0.2, Math.round((lv === 3 ? 10 : 5) + sz * (lv === 3 ? 5 : 2.5)), r0 * (lv === 3 ? 3.2 : 2) + 0.4, 0.14 + sz * 0.07, e.kind === 'energy' ? 0.5 : 0);
+          fx.scatter(e.x, e.y, e.flying ? 1.2 : 0.2, Math.round((lv === 3 ? 10 : 5) + sz * (lv === 3 ? 5 : 2.5)), r0 * (lv === 3 ? 3.2 : 2) + 0.4, 0.14 + sz * 0.07, e.kind === 'energy' ? 0.5 : 0, paint);
         }
         if (v && !e.flying) this.toWreck(e.unit, v, e.x, e.y, byId.get(e.unit)?.angle ?? 0, lv, e.kind);
         else if (v) { this.layer.release(v.rig); this.bu.delete(e.unit); }
@@ -1634,7 +1659,7 @@ export class FieldView3D implements BattleView {
     if (lv === 3) {
       this.layer.release(rig);
       this.fx.scorchMark(x, y, 0.3 + rig.radius * 0.75);
-      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, tint: 1, hx, hz, deck: 0.1 });
+      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, char: 1, seed: 0, hx, hz, deck: 0.1 });
       return;
     }
     rig.look = 'wreck';
@@ -1656,9 +1681,10 @@ export class FieldView3D implements BattleView {
     rig.update(0);
     rig.frozen = true;
     // a bullet-riddled hull stays steel grey, burnt and blasted ones go black
-    const tint = lv === 0 ? (kind === 'kinetic' || kind === 'crush' ? 1.35 : kind === 'fire' ? 0.8 : 1) : lv === 1 ? 0.8 : 0.62;
-    const heat = catchUp ? 0 : kind === 'energy' ? (lv ? 1 : 0.7) : kind === 'explosive' && lv === 2 ? 0.55 : 0;
-    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, tint, hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)) });
+    const char = lv === 0 ? (kind === 'kinetic' || kind === 'crush' ? 0.42 : kind === 'fire' ? 0.85 : 0.6) : lv === 1 ? 0.85 : 0.97;
+    // still glowing: melted (energy), blown up or burnt out hulls show ember cracks that cool over a few seconds
+    const heat = catchUp ? 0 : kind === 'energy' ? (lv ? 1 : 0.75) : kind === 'explosive' ? (lv ? 0.55 + 0.15 * lv : 0.3) : kind === 'fire' ? 0.6 : 0;
+    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, char, seed: Math.random(), hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)) });
   }
 
   destroy(): void {

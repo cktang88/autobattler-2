@@ -23,7 +23,11 @@ export const RAMPS = {
   spark: [3.5, 2.6, 1.2, 1, 2.5, 1.0, 0.25, 0.9, 1.0, 0.25, 0.05, 0],
   flash: [3.4, 2.8, 1.8, 1, 2.2, 1.3, 0.5, 0.6, 1.0, 0.45, 0.12, 0],
   smoke: [0.15, 0.14, 0.13, 0.5, 0.22, 0.2, 0.18, 0.36, 0.3, 0.28, 0.26, 0],
-  smokeLight: [0.45, 0.44, 0.42, 0.32, 0.45, 0.45, 0.43, 0.2, 0.45, 0.45, 0.45, 0],
+  smokeLight: [0.34, 0.33, 0.31, 0.32, 0.34, 0.33, 0.32, 0.2, 0.34, 0.34, 0.33, 0],
+  /** flipbook fireball tint: the atlas carries the temperature, this sets the hue and brightness */
+  fireball: [2.6, 1.25, 0.4, 1, 2.2, 0.85, 0.22, 1, 1.4, 0.45, 0.12, 0],
+  /** explosion smoke: fades in while the fire burns, lingers grey-brown, lit by the sun */
+  blastSmoke: [0.15, 0.14, 0.13, 0.05, 0.2, 0.185, 0.165, 0.8, 0.26, 0.24, 0.22, 0],
   heal: [0.7, 2.8, 1.1, 1, 0.3, 1.6, 0.6, 0.6, 0.1, 0.8, 0.3, 0],
   shield: [1.2, 2.6, 3.4, 1, 0.5, 1.5, 2.6, 0.7, 0.2, 0.6, 1.2, 0],
   bolt: [2.8, 3.4, 4.5, 1, 1.6, 2.4, 4.0, 0.8, 0.3, 0.7, 2.0, 0],
@@ -41,7 +45,7 @@ export const RAMPS = {
   /** rocket motor flame: orange, hot but not blown out */
   exhaust: [2.2, 1.2, 0.35, 0.9, 1.4, 0.45, 0.08, 0.6, 0.4, 0.08, 0.02, 0],
   /** missile contrail: thin white */
-  contrail: [0.9, 0.9, 0.9, 0.42, 0.85, 0.85, 0.85, 0.24, 0.8, 0.8, 0.8, 0],
+  contrail: [0.92, 0.92, 0.9, 0.55, 0.86, 0.86, 0.85, 0.36, 0.8, 0.8, 0.8, 0],
   /** napalm / incendiary: sticky deep orange + dark smoke */
   ember: [3.0, 1.4, 0.3, 1, 2.2, 0.6, 0.05, 0.9, 0.5, 0.1, 0, 0],
   molten: [3.2, 2.0, 0.8, 1, 2.4, 0.9, 0.15, 0.9, 0.8, 0.15, 0.02, 0],
@@ -100,8 +104,53 @@ function makeAtlas(): THREE.CanvasTexture {
   return tex;
 }
 
+/* ------------------------------------------------------------------------------------------- flipbook atlas */
+
+// public/assets/fx/fx_atlas.webp (scripts/gen-fx-atlas.py): fireball + smoke flipbooks (8x8 frames each, RG = screen
+// normal, B = temperature / thinness, A = density) and a row of misc sprites. Loaded once, asynchronously; until it
+// arrives (or if it is missing) every effect keeps the procedural canvas atlas above.
+let fxBase = 'assets/fx/';
+/** Override the effect texture folder (relative to the page). */
+export function setFxTextureBase(path: string): void { fxBase = path.endsWith('/') ? path : path + '/'; }
+let fxAtlas: THREE.Texture | null = null;
+let fxAtlasState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle';
+const fxAtlasWaiters: ((t: THREE.Texture) => void)[] = [];
+function whenFxAtlas(cb: (t: THREE.Texture) => void): void {
+  if (fxAtlas) { cb(fxAtlas); return; }
+  fxAtlasWaiters.push(cb);
+  if (fxAtlasState !== 'idle' || typeof document === 'undefined' || typeof Image === 'undefined') return;
+  fxAtlasState = 'loading';
+  new THREE.TextureLoader().load(fxBase + 'fx_atlas.webp', (t) => {
+    t.colorSpace = THREE.NoColorSpace; // packed data (normals / temperature), not colour
+    t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    t.generateMipmaps = true; t.anisotropy = 4;
+    t.needsUpdate = true;
+    fxAtlas = t; fxAtlasState = 'ready';
+    for (const w of fxAtlasWaiters.splice(0)) w(t);
+  }, undefined, () => { fxAtlasState = 'failed'; });
+}
+/** misc sprite tiles of the atlas (bottom half, 8 x 4 tiles of 1/8 x 1/8) */
+const MISC = { glow: 0, streak: 1, star: 2, dot: 3, ring: 4, scorch: 5, chip: 6, disc: 7 } as const;
+function miscUv(tex: THREE.Texture, tile: number): THREE.Texture {
+  const t = tex.clone();
+  t.repeat.set(1 / 8, 1 / 8);
+  t.offset.set((tile % 8) / 8, 0.5 - (Math.floor(tile / 8) + 1) / 8);
+  t.needsUpdate = true;
+  return t;
+}
+
+/** shared per-frame view uniforms for every effect shader */
+const fxView = {
+  /** world direction toward the sun (lights the smoke) */
+  uSun: { value: new THREE.Vector3(-0.55, 0.62, 0.35).normalize() },
+  /** world size of one screen pixel per unit of view distance (2 tan(fov/2) / viewport px): keeps thin streaks >= ~1 px */
+  uPxK: { value: 0.0015 },
+};
+
 /* ---------------------------------------------------------------------------------------------- particles */
 
+/** Particle tiles (emit `tex`): 0 glow, 1 + 2 billowing puff (fire pool: fireball flipbook, otherwise smoke flipbook;
+ *  2 is the mirrored variant), 3 spark (a streak stretched along its velocity once the atlas is in), 4 star flare. */
 class Particles {
   readonly mesh: THREE.Mesh;
   n = 0;
@@ -112,7 +161,9 @@ class Particles {
   private tex: Float32Array; private ramp: Float32Array;
   private aPos: THREE.InstancedBufferAttribute; private aSR: THREE.InstancedBufferAttribute;
   private aCol: THREE.InstancedBufferAttribute; private aTex: THREE.InstancedBufferAttribute;
+  private aVel: THREE.InstancedBufferAttribute;
   private geo: THREE.InstancedBufferGeometry;
+  private mat: THREE.ShaderMaterial;
 
   readonly cap: number;
   constructor(cap: number, atlas: THREE.Texture, mode: 'add' | 'alpha' | 'fire') {
@@ -127,32 +178,109 @@ class Particles {
     geo.setAttribute('position', quad.getAttribute('position'));
     geo.setAttribute('uv', quad.getAttribute('uv'));
     const mk = (k: number) => { const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * k), k); a.setUsage(THREE.DynamicDrawUsage); return a; };
-    this.aPos = mk(3); this.aSR = mk(2); this.aCol = mk(4); this.aTex = mk(1);
-    geo.setAttribute('iPos', this.aPos); geo.setAttribute('iSR', this.aSR); geo.setAttribute('iCol', this.aCol); geo.setAttribute('iTex', this.aTex);
+    this.aPos = mk(3); this.aSR = mk(2); this.aCol = mk(4); this.aTex = mk(1); this.aVel = mk(3);
+    geo.setAttribute('iPos', this.aPos); geo.setAttribute('iSR', this.aSR); geo.setAttribute('iCol', this.aCol); geo.setAttribute('iTex', this.aTex); geo.setAttribute('iVel', this.aVel);
     geo.instanceCount = 0;
     this.geo = geo;
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: atlas } },
+    const kind = mode === 'add' ? 0 : mode === 'fire' ? 1 : 2;
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: atlas }, uMode: { value: 0 }, uSun: fxView.uSun, uPxK: fxView.uPxK },
+      defines: { KIND: kind },
       vertexShader: /* glsl */ `
-        attribute vec3 iPos; attribute vec2 iSR; attribute vec4 iCol; attribute float iTex;
-        varying vec2 vUv; varying vec4 vCol;
+        attribute vec3 iPos; attribute vec2 iSR; attribute vec4 iCol; attribute float iTex; attribute vec3 iVel;
+        uniform float uMode; uniform vec3 uSun; uniform float uPxK;
+        varying vec2 vUv; varying vec4 vCol; varying float vT; varying float vTile; varying vec2 vRot; varying vec3 vSunV;
+        varying float vSoft; varying float vGain;
         void main() {
-          vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
+          float tile = floor(iTex + 1e-3);
+          vT = clamp(iTex - tile, 0.0, 1.0);
+          vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+          vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
           float c = cos(iSR.y), s = sin(iSR.y);
+          vec2 ax = vec2(c, s), ay = vec2(-s, c);
           vec2 q = position.xy * iSR.x;
-          mv.xy += vec2(q.x * c - q.y * s, q.x * s + q.y * c);
-          gl_Position = projectionMatrix * mv;
-          vec2 cell = vec2(mod(iTex, 2.0), floor(iTex / 2.0));
-          vUv = (cell + uv) * 0.5;
+          vGain = 1.0;
+          float dist = length(cameraPosition - iPos);
+          if (uMode > 0.5 && tile > 2.5 && tile < 3.5) {
+            // spark: a streak along its screen-space velocity, long when fast; at least ~1.3 px thick
+            vec3 vv = (viewMatrix * vec4(iVel, 0.0)).xyz;
+            float sp = length(vv.xy);
+            if (sp > 0.25) {
+              ax = vv.xy / sp; ay = vec2(-ax.y, ax.x);
+              float len = iSR.x * 1.6 + length(iVel) * 0.075;
+              float w = iSR.x * 0.5, wMin = uPxK * dist * 2.6;
+              vGain = min(1.0, w / wMin) * 1.6;
+              q = vec2(position.x * len, position.y * max(w, wMin));
+              tile = 5.0; // streak sprite
+            }
+          }
+          vec2 o = ax * q.x + ay * q.y;
+          vec3 wp = iPos + right * o.x + up * o.y;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(wp, 1.0);
+          vRot = ax;
+          // soft particles against the ground plane: fade as the billboard nears y = 0 along the view ray
+          vec3 fwd = -vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
+          vSoft = (wp.y / max(0.3, -fwd.y)) / max(0.04, iSR.x * 0.3);
+          vSunV = normalize((viewMatrix * vec4(uSun, 0.0)).xyz);
+          vTile = tile;
+          vUv = uv;
           vCol = iCol;
         }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D map; varying vec2 vUv; varying vec4 vCol;
+        uniform sampler2D map; uniform float uMode;
+        varying vec2 vUv; varying vec4 vCol; varying float vT; varying float vTile; varying vec2 vRot; varying vec3 vSunV;
+        varying float vSoft; varying float vGain;
+        vec2 miscUv(float m, vec2 uv) { return vec2((mod(m, 8.0) + uv.x) / 8.0, 0.5 - (floor(m / 8.0) + 1.0 - uv.y) / 8.0); }
+        vec2 flipUv(float region, float fr, vec2 uv) {
+          float col = mod(fr, 8.0), row = floor(fr / 8.0);
+          return vec2((region * 8.0 + col + uv.x) / 16.0, 1.0 - (row + 1.0 - uv.y) / 16.0);
+        }
         void main() {
-          float a = texture2D(map, vUv).a * vCol.a;
+          vec3 rgb = vCol.rgb; float a;
+          if (uMode < 0.5) {
+            // procedural fallback atlas (2 x 2)
+            float t = vTile > 3.5 ? 0.0 : vTile;
+            vec2 cell = vec2(mod(t, 2.0), floor(t / 2.0));
+            a = texture2D(map, (cell + vUv) * 0.5).a * vCol.a;
+          } else if (vTile > 0.5 && vTile < 2.5) {
+            // billowing flipbook puff, two frames blended
+            vec2 uv = vTile > 1.5 ? vec2(1.0 - vUv.x, vUv.y) : vUv;
+            float fr = vT * 62.999, f0 = floor(fr);
+            float region = ${kind === 1 ? '0.0' : '1.0'};
+            vec4 tx = mix(texture2D(map, flipUv(region, f0, uv)), texture2D(map, flipUv(region, min(f0 + 1.0, 63.0), uv)), fr - f0);
+            vec2 nxy = tx.rg * 2.0 - 1.0;
+            if (vTile > 1.5) nxy.x = -nxy.x;
+            nxy = vec2(nxy.x * vRot.x - nxy.y * vRot.y, nxy.x * vRot.y + nxy.y * vRot.x);
+            vec3 n = vec3(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
+            float ndl = dot(n, vSunV);
+            float lit = clamp(ndl * 0.62 + 0.42, 0.0, 1.0);
+            float soft = clamp(vSoft, 0.0, 1.0);
+            a = tx.a * vCol.a * soft;
+            #if KIND == 1
+              // fireball: emission by temperature (tinted by the particle colour), cold parts are lit soot
+              float T = tx.b;
+              float hot = smoothstep(0.04, 0.5, T);
+              vec3 emit = rgb * (0.1 + 0.8 * T * T) * hot + vec3(1.0, 0.75, 0.4) * smoothstep(0.88, 1.0, T) * 0.7 * min(1.0, dot(rgb, vec3(0.33)));
+              vec3 soot = vec3(0.075, 0.068, 0.062) * (0.35 + 1.5 * lit) + vec3(0.12, 0.05, 0.01) * hot;
+              rgb = mix(soot, emit, hot);
+            #elif KIND == 2
+              // smoke / dust: lit by the sun (wrap diffuse), thin wisps let a little light through
+              rgb *= (0.3 + 1.05 * lit) * vec3(1.08, 1.0, 0.88) + tx.b * 0.1;
+            #else
+              a *= 0.8;
+            #endif
+          } else {
+            if (vTile > 4.5) {
+              // velocity streak: gaussian across, hot head, long tapering tail
+              vec2 c = vUv * 2.0 - 1.0;
+              a = exp(-c.y * c.y * 6.0) * smoothstep(1.0, 0.75, c.x) * smoothstep(-1.0, 0.2, c.x) * (0.45 + 0.55 * (c.x * 0.5 + 0.5)) * vCol.a * vGain;
+            } else {
+              float m = vTile < 0.5 ? ${MISC.glow}.0 : vTile < 3.5 ? ${MISC.dot}.0 : ${MISC.star}.0;
+              a = texture2D(map, miscUv(m, vUv)).a * vCol.a * vGain;
+            }
+          }
           if (a < 0.003) discard;
-          gl_FragColor = vec4(vCol.rgb, a);
-          ${mode === 'fire' ? 'gl_FragColor = vec4(vCol.rgb * a, a * 0.5);' : ''}
+          ${mode === 'fire' ? 'gl_FragColor = vec4(rgb * a, a);' : 'gl_FragColor = vec4(rgb, a);'}
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -160,10 +288,13 @@ class Particles {
       blending: mode === 'add' ? THREE.AdditiveBlending : mode === 'fire' ? THREE.CustomBlending : THREE.NormalBlending,
       ...(mode === 'fire' ? { blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor } : {}),
     });
-    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = mode === 'add' ? 8 : mode === 'fire' ? 7 : 6;
   }
+
+  /** switch to the flipbook atlas */
+  useAtlas(t: THREE.Texture): void { this.mat.uniforms.map.value = t; this.mat.uniforms.uMode.value = 1; }
 
   get full(): boolean { return this.n >= this.cap; }
 
@@ -194,10 +325,11 @@ class Particles {
       if (this.py[i] < 0.03 && this.grav[i] < 0) { this.py[i] = 0.03; this.vy[i] = 0; this.vx[i] *= 0.5; this.vz[i] *= 0.5; }
       i++;
     }
-    const aP = this.aPos.array as Float32Array, aS = this.aSR.array as Float32Array, aC = this.aCol.array as Float32Array, aT = this.aTex.array as Float32Array;
+    const aP = this.aPos.array as Float32Array, aS = this.aSR.array as Float32Array, aC = this.aCol.array as Float32Array, aT = this.aTex.array as Float32Array, aV = this.aVel.array as Float32Array;
     for (let j = 0; j < this.n; j++) {
       const t = this.age[j] / this.life[j];
       aP[j * 3] = this.px[j]; aP[j * 3 + 1] = this.py[j]; aP[j * 3 + 2] = this.pz[j];
+      aV[j * 3] = this.vx[j]; aV[j * 3 + 1] = this.vy[j]; aV[j * 3 + 2] = this.vz[j];
       this.rot[j] += this.spin[j] * dt;
       aS[j * 2] = this.s0[j] + (this.s1[j] - this.s0[j]) * Math.sqrt(t);
       aS[j * 2 + 1] = this.rot[j];
@@ -208,10 +340,11 @@ class Particles {
       const r = this.ramp;
       aC[j * 4] = r[a0] + (r[a1] - r[a0]) * f; aC[j * 4 + 1] = r[a0 + 1] + (r[a1 + 1] - r[a0 + 1]) * f; aC[j * 4 + 2] = r[a0 + 2] + (r[a1 + 2] - r[a0 + 2]) * f;
       aC[j * 4 + 3] = (r[a0 + 3] + (r[a1 + 3] - r[a0 + 3]) * f) * fade;
-      aT[j] = this.tex[j];
+      // tile in the integer part, life fraction (flipbook frame) in the fraction
+      aT[j] = this.tex[j] + Math.min(0.999, t);
     }
     this.geo.instanceCount = this.n;
-    this.aPos.needsUpdate = this.aSR.needsUpdate = this.aCol.needsUpdate = this.aTex.needsUpdate = true;
+    this.aPos.needsUpdate = this.aSR.needsUpdate = this.aCol.needsUpdate = this.aTex.needsUpdate = this.aVel.needsUpdate = true;
   }
 
   private copy(from: number, to: number): void {
@@ -220,7 +353,7 @@ class Particles {
   }
 
   clear(): void { this.n = 0; this.geo.instanceCount = 0; }
-  dispose(): void { this.geo.dispose(); (this.mesh.material as THREE.Material).dispose(); }
+  dispose(): void { this.geo.dispose(); this.mat.dispose(); }
 }
 
 /* ------------------------------------------------------------------------------------------ flat decal pool */
@@ -276,15 +409,47 @@ class Flats {
 
 /* ------------------------------------------------------------------------------------------------- debris */
 
+/** chunky angular shard: a flattened, irregular low-poly lump (reads as a torn plate or a rock at any angle) */
+function shardGeometry(): THREE.BufferGeometry {
+  const g = new THREE.DodecahedronGeometry(0.62, 0);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  let s = 7;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const jit = new Map<string, number>();
+  for (let i = 0; i < p.count; i++) {
+    const k = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
+    let j = jit.get(k);
+    if (j === undefined) { j = 0.75 + rnd() * 0.5; jit.set(k, j); }
+    p.setXYZ(i, p.getX(i) * j * 1.15, p.getY(i) * j * 0.5, p.getZ(i) * j * 0.9);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Short-lived flying fragments: chunky shards in the dead unit's paint (or dirt / rock), glowing hot for their first
+ *  half second, tumbling, bouncing and shrinking away. */
 class Debris {
   readonly mesh: THREE.InstancedMesh;
   private n = 0;
   private cap: number;
-  private a: Float32Array; // x y z vx vy vz rx ry rz wx wy wz size life age
+  private a: Float32Array; // x y z vx vy vz rx ry rz wx wy wz size life age heat
+  private heatAttr: THREE.InstancedBufferAttribute;
   constructor(cap: number) {
     this.cap = cap;
-    this.a = new Float32Array(cap * 15);
-    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.6, 0.8), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.8, metalness: 0.5 }), cap);
+    this.a = new Float32Array(cap * 16);
+    const geo = shardGeometry();
+    this.heatAttr = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
+    this.heatAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('iHeat', this.heatAttr);
+    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.62, metalness: 0.45, flatShading: true });
+    mat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float iHeat; varying float vHeat;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeat = iHeat;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vHeat;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(2.6, 0.9, 0.22) * vHeat * vHeat * 2.0;');
+    };
+    mat.customProgramCacheKey = () => 'fxDebris1';
+    this.mesh = new THREE.InstancedMesh(geo, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
     this.mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
@@ -292,32 +457,35 @@ class Debris {
     this.colors = new Float32Array(cap * 3);
   }
   private colors: Float32Array;
-  add(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, tone: number): void {
+  /** tone: grey level, or an rgb paint colour; heat 0..1: glows orange-hot, cooling over ~0.6 s */
+  add(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, tone: number | readonly [number, number, number], heat = 0): void {
     const i = this.n < this.cap ? this.n++ : Math.floor(Math.random() * this.cap);
-    const o = i * 15, a = this.a;
+    const o = i * 16, a = this.a;
     a[o] = x; a[o + 1] = y; a[o + 2] = z; a[o + 3] = vx; a[o + 4] = vy; a[o + 5] = vz;
     a[o + 6] = Math.random() * 6; a[o + 7] = Math.random() * 6; a[o + 8] = Math.random() * 6;
     a[o + 9] = R(-9, 9); a[o + 10] = R(-9, 9); a[o + 11] = R(-9, 9);
-    a[o + 12] = size; a[o + 13] = R(1.6, 3.2); a[o + 14] = 0;
-    this.colors[i * 3] = tone; this.colors[i * 3 + 1] = tone * 0.92; this.colors[i * 3 + 2] = tone * 0.85;
+    a[o + 12] = size; a[o + 13] = R(1.6, 3.2); a[o + 14] = 0; a[o + 15] = heat;
+    if (typeof tone === 'number') { this.colors[i * 3] = tone; this.colors[i * 3 + 1] = tone * 0.92; this.colors[i * 3 + 2] = tone * 0.85; }
+    else { this.colors[i * 3] = tone[0]; this.colors[i * 3 + 1] = tone[1]; this.colors[i * 3 + 2] = tone[2]; }
   }
   update(dt: number): void {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), e = new THREE.Euler();
-    const col = this.mesh.instanceColor!.array as Float32Array;
+    const col = this.mesh.instanceColor!.array as Float32Array, ht = this.heatAttr.array as Float32Array;
     let i = 0;
     while (i < this.n) {
-      const o = i * 15, a = this.a;
+      const o = i * 16, a = this.a;
       a[o + 14] += dt;
       if (a[o + 14] >= a[o + 13]) { // swap-remove
-        const l = (this.n - 1) * 15;
-        for (let k = 0; k < 15; k++) a[o + k] = a[l + k];
+        const l = (this.n - 1) * 16;
+        for (let k = 0; k < 16; k++) a[o + k] = a[l + k];
         this.colors[i * 3] = this.colors[(this.n - 1) * 3]; this.colors[i * 3 + 1] = this.colors[(this.n - 1) * 3 + 1]; this.colors[i * 3 + 2] = this.colors[(this.n - 1) * 3 + 2];
         this.n--;
         continue;
       }
       a[o + 4] -= 14 * dt;
       a[o] += a[o + 3] * dt; a[o + 1] += a[o + 4] * dt; a[o + 2] += a[o + 5] * dt;
-      const half = a[o + 12] * 0.3;
+      a[o + 15] = Math.max(0, a[o + 15] - dt * 1.6);
+      const half = a[o + 12] * 0.25;
       if (a[o + 1] < half) {
         a[o + 1] = half;
         if (a[o + 4] < -1) a[o + 4] *= -0.32; else a[o + 4] = 0;
@@ -327,16 +495,18 @@ class Debris {
       i++;
     }
     for (let j = 0; j < this.n; j++) {
-      const o = j * 15, a = this.a;
+      const o = j * 16, a = this.a;
       const k = a[o + 13] - a[o + 14] < 0.5 ? Math.max(0.01, (a[o + 13] - a[o + 14]) / 0.5) : 1;
       q.setFromEuler(e.set(a[o + 6], a[o + 7], a[o + 8]));
       m.compose(p.set(a[o], a[o + 1], a[o + 2]), q, s.setScalar(a[o + 12] * k));
       m.toArray(this.mesh.instanceMatrix.array as unknown as number[], j * 16);
       col[j * 3] = this.colors[j * 3]; col[j * 3 + 1] = this.colors[j * 3 + 1]; col[j * 3 + 2] = this.colors[j * 3 + 2];
+      ht[j] = a[o + 15];
     }
     this.mesh.count = this.n;
     this.mesh.instanceMatrix.needsUpdate = true;
     this.mesh.instanceColor!.needsUpdate = true;
+    this.heatAttr.needsUpdate = true;
   }
   clear(): void { this.n = 0; this.mesh.count = 0; }
 }
@@ -360,7 +530,7 @@ class Scrap {
     this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.castShadow = true; this.mesh.receiveShadow = true;
   }
   /** a piece of size s (cells) thrown from (x, y, z) to land about `d` cells away at heading `ang`; tone = grey level */
-  add(x: number, y: number, z: number, ang: number, d: number, s: number, tone: number, plate: boolean): void {
+  add(x: number, y: number, z: number, ang: number, d: number, s: number, tone: number, plate: boolean, rgb: THREE.Color | null = null): void {
     // past the cap a random old piece is recycled
     const i = this.n < this.cap ? this.n++ : Math.floor(Math.random() * this.cap);
     const o = i * 13, a = this.a, vy = R(3, 6.5), t = (vy + Math.sqrt(vy * vy + 28 * y)) / 14;
@@ -369,7 +539,7 @@ class Scrap {
     a[o + 6] = Math.random() * 6.28; a[o + 7] = R(-3, 3); a[o + 8] = R(-3, 3);
     a[o + 9] = s * R(0.7, 1.4); a[o + 10] = plate ? s * R(0.12, 0.25) : s * R(0.4, 0.8); a[o + 11] = s * R(0.5, 1.1); a[o + 12] = 1;
     const c = this.mesh.instanceColor!.array as Float32Array;
-    c[i * 3] = tone * R(0.95, 1.15); c[i * 3 + 1] = tone; c[i * 3 + 2] = tone * R(0.85, 0.95);
+    if (rgb) { c[i * 3] = rgb.r; c[i * 3 + 1] = rgb.g; c[i * 3 + 2] = rgb.b; } else { c[i * 3] = tone * R(0.95, 1.15); c[i * 3 + 1] = tone; c[i * 3 + 2] = tone * R(0.85, 0.95); }
     this.mesh.instanceColor!.needsUpdate = true;
     this.flying++;
     this.put(i);
@@ -406,42 +576,79 @@ const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _mid = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 const _bm = new THREE.Matrix4();
 
-/** instanced box segments, rebuilt every frame */
-class Segments {
-  readonly mesh: THREE.InstancedMesh;
+/** Camera-facing soft ribbons (tracers, beams, lightning): each segment is one instanced quad turned toward the eye,
+ *  with a gaussian cross-section (white-hot core inside a coloured glow), round soft caps and an optional bright head
+ *  at the b end. Never thinner than ~1.3 px (thinner ones widen and dim instead, so distant tracers don't shimmer). */
+class Ribbons {
+  readonly mesh: THREE.Mesh;
   n = 0;
   readonly cap: number;
-  constructor(cap: number, additive: boolean, order: number) {
+  private geo: THREE.InstancedBufferGeometry;
+  private aA: THREE.InstancedBufferAttribute; private aB: THREE.InstancedBufferAttribute; private aC: THREE.InstancedBufferAttribute;
+  constructor(cap: number, order: number) {
     this.cap = cap;
-    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
-      color: '#ffffff', toneMapped: false, transparent: true, depthWrite: false,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    }), cap);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
-    this.mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.renderOrder = order;
+    const quad = new THREE.PlaneGeometry(1, 2).translate(0.5, 0, 0);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = quad.index;
+    geo.setAttribute('position', quad.getAttribute('position'));
+    const mk = (k: number) => { const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * k), k); a.setUsage(THREE.DynamicDrawUsage); return a; };
+    this.aA = mk(4); this.aB = mk(4); this.aC = mk(4);
+    geo.setAttribute('iA', this.aA); geo.setAttribute('iB', this.aB); geo.setAttribute('iC', this.aC);
+    geo.instanceCount = 0;
+    this.geo = geo;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uPxK: fxView.uPxK },
+      vertexShader: /* glsl */ `
+        attribute vec4 iA; attribute vec4 iB; attribute vec4 iC;
+        uniform float uPxK;
+        varying float vV; varying float vAlong; varying float vLen; varying float vW; varying vec4 vCol; varying float vHead; varying float vCore;
+        void main() {
+          vec3 A = iA.xyz, B = iB.xyz;
+          vec3 d = B - A; float len = max(1e-4, length(d)); d /= len;
+          float w = iA.w;
+          vec3 P = mix(A, B, position.x);
+          float dist = length(cameraPosition - P);
+          float wMin = uPxK * dist * 1.3;
+          float we = max(w, wMin);
+          vec3 side = normalize(cross(d, cameraPosition - P) + vec3(1e-5, 0.0, 0.0));
+          // caps: stretch the quad past both ends by the width
+          float ext = (position.x * 2.0 - 1.0) * we;
+          P += d * ext + side * position.y * we;
+          vAlong = position.x * len + ext; vLen = len; vW = we;
+          vV = position.y;
+          vCol = vec4(iC.rgb * min(1.0, w / we), 1.0);
+          vHead = iB.w; vCore = iC.w;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(P, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying float vV; varying float vAlong; varying float vLen; varying float vW; varying vec4 vCol; varying float vHead; varying float vCore;
+        void main() {
+          float e = max(-vAlong, vAlong - vLen) / vW;
+          float cap = exp(-max(e, 0.0) * max(e, 0.0) * 3.0);
+          float v2 = vV * vV;
+          float core = exp(-v2 * 22.0 / max(0.15, vCore)), glow = exp(-v2 * 3.5) * 0.55;
+          float x = clamp(vAlong / vLen, 0.0, 1.0);
+          float k = mix(1.0, mix(0.25, 1.35, x * x), vHead);
+          vec3 c = vCol.rgb * glow + mix(vCol.rgb, vec3(max(vCol.r, max(vCol.g, vCol.b))), 0.55) * core * 1.4;
+          gl_FragColor = vec4(c * cap * k, 1.0);
+        }`,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    });
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.frustumCulled = false; this.mesh.renderOrder = order;
   }
   begin(): void { this.n = 0; }
-  seg(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, h: number, r: number, g: number, b: number): void {
-    if (this.n >= this.cap) return;
-    _x.set(bx - ax, by - ay, bz - az);
-    const len = _x.length();
-    if (len < 1e-4) return;
-    _x.multiplyScalar(1 / len);
-    _z.crossVectors(_x, Math.abs(_x.y) > 0.98 ? _mid.set(1, 0, 0) : _up).normalize();
-    _y.crossVectors(_z, _x);
-    _bm.makeBasis(_x.multiplyScalar(len), _y.multiplyScalar(h), _z.multiplyScalar(w));
-    _bm.setPosition((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
-    _bm.toArray(this.mesh.instanceMatrix.array as unknown as number[], this.n * 16);
-    const c = this.mesh.instanceColor!.array as Float32Array;
-    c[this.n * 3] = r; c[this.n * 3 + 1] = g; c[this.n * 3 + 2] = b;
-    this.n++;
+  /** a soft line from a to b, half-width w; head: 1 = brighter toward b (a tracer's tail fades); core: 1 = normal core width */
+  seg(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, r: number, g: number, b: number, head = 0, core = 1): void {
+    if (this.n >= this.cap || !(w > 0)) return;
+    const i = this.n++, A = this.aA.array as Float32Array, B = this.aB.array as Float32Array, C = this.aC.array as Float32Array;
+    A[i * 4] = ax; A[i * 4 + 1] = ay; A[i * 4 + 2] = az; A[i * 4 + 3] = w;
+    B[i * 4] = bx; B[i * 4 + 1] = by; B[i * 4 + 2] = bz; B[i * 4 + 3] = head;
+    C[i * 4] = r; C[i * 4 + 1] = g; C[i * 4 + 2] = b; C[i * 4 + 3] = core;
   }
   end(): void {
-    this.mesh.count = this.n;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor!.needsUpdate = true;
+    this.geo.instanceCount = this.n;
+    this.aA.needsUpdate = this.aB.needsUpdate = this.aC.needsUpdate = true;
   }
 }
 
@@ -574,8 +781,7 @@ const _shadowRamp = [0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, 0, 0, 0];
 
 export class ProjLayer {
   readonly group = new THREE.Group();
-  private streaks = new Segments(1600, true, 9);
-  private glow = new Segments(1600, true, 9);
+  private streaks = new Ribbons(2400, 9);
   private bodies: THREE.InstancedMesh;
   private nb = 0;
   constructor() {
@@ -586,13 +792,13 @@ export class ProjLayer {
     this.bodies.setColorAt(0, new THREE.Color(1, 1, 1));
     this.bodies.instanceColor!.setUsage(THREE.DynamicDrawUsage);
     this.bodies.frustumCulled = false; this.bodies.count = 0;
-    this.group.add(this.bodies, this.glow.mesh, this.streaks.mesh);
+    this.group.add(this.bodies, this.streaks.mesh);
   }
-  begin(): void { this.streaks.begin(); this.glow.begin(); this.nb = 0; }
+  begin(): void { this.streaks.begin(); this.nb = 0; }
   /** bright streak (tracer round / energy bolt) from tail to head */
   streak(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, r: number, g: number, b: number): void {
-    this.streaks.seg(ax, ay, az, bx, by, bz, w * 0.45, w * 0.45, 3.2 * Math.min(1, r + 0.4), 2.9 * Math.min(1, g + 0.4), 2.4 * Math.min(1, b + 0.4));
-    this.glow.seg(ax, ay, az, bx, by, bz, w * 1.8, w * 1.8, r * 0.7, g * 0.7, b * 0.7);
+    // one soft ribbon: a white-hot core in a coloured glow, brightest at the head
+    this.streaks.seg(ax, ay, az, bx, by, bz, w * 1.9, 2.6 * (r + 0.15), 2.6 * (g + 0.12), 2.6 * (b + 0.1), 1, 1.3);
   }
   /** solid body (shell / rocket) centred at c, pointing along (dx,dy,dz) */
   body(cx: number, cy: number, cz: number, dx: number, dy: number, dz: number, len: number, d: number, r: number, g: number, b: number): void {
@@ -608,7 +814,7 @@ export class ProjLayer {
     this.nb++;
   }
   end(): void {
-    this.streaks.end(); this.glow.end();
+    this.streaks.end();
     this.bodies.count = this.nb;
     this.bodies.instanceMatrix.needsUpdate = true; this.bodies.instanceColor!.needsUpdate = true;
   }
@@ -695,6 +901,43 @@ class GroundFire {
   dispose(): void { this.geo.dispose(); this.mat.dispose(); }
 }
 
+/* ------------------------------------------------------------------------------------- fallback decal sprites */
+
+function makeRingTexture(): THREE.Texture {
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d')!, m = N / 2, R = m * 0.9;
+  const wash = g.createRadialGradient(m, m, R * 0.2, m, m, R);
+  wash.addColorStop(0, 'rgba(255,255,255,0)'); wash.addColorStop(1, 'rgba(255,255,255,0.18)');
+  g.fillStyle = wash; g.beginPath(); g.arc(m, m, R, 0, 6.2832); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,1)'; g.lineWidth = 3; g.beginPath(); g.arc(m, m, R, 0, 6.2832); g.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace; return t;
+}
+
+function makeScorchTexture(): THREE.Texture {
+  const N = 128, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d')!;
+  const gr = g.createRadialGradient(64, 64, 4, 64, 64, 60);
+  gr.addColorStop(0, 'rgba(22,17,12,0.85)'); gr.addColorStop(0.55, 'rgba(26,20,14,0.5)'); gr.addColorStop(1, 'rgba(30,24,16,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, N, N);
+  for (let i = 0; i < 22; i++) {
+    const a = Math.random() * 6.283, l = 26 + Math.random() * 30;
+    g.strokeStyle = `rgba(20,15,10,${0.1 + Math.random() * 0.18})`; g.lineWidth = 1 + Math.random() * 3;
+    g.beginPath(); g.moveTo(64 + Math.cos(a) * 18, 64 + Math.sin(a) * 18); g.lineTo(64 + Math.cos(a) * l, 64 + Math.sin(a) * l); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+const _scrapRgb = new THREE.Color();
+const LIGHT_NEUTRAL = [0.62, 0.63, 0.6] as const, GUNMETAL = [0.1, 0.11, 0.12] as const;
+/** colour of one fragment of a blown-up hull: mostly its team paint, some light armour shell, some dark mechanics,
+ *  all a little scorched; dirt / rock when there's no hull */
+function paintChip(paint: readonly [number, number, number] | undefined, dirt: readonly [number, number, number]): readonly [number, number, number] {
+  const u = Math.random();
+  if (!paint) return u < 0.5 ? dirt : [0.16, 0.15, 0.14];
+  const c = u < 0.5 ? paint : u < 0.75 ? LIGHT_NEUTRAL : GUNMETAL, k = R(0.55, 0.85);
+  return [c[0] * k, c[1] * k, c[2] * k];
+}
+
 /* ----------------------------------------------------------------------------------------------------- Fx3D */
 
 /** muzzle flash families (Fx3D.muzzleFx) */
@@ -716,7 +959,7 @@ export class Fx3D {
   private atlas = makeAtlas();
   private add = new Particles(4000, this.atlas, 'add');
   private fire = new Particles(3000, this.atlas, 'fire');
-  private alpha = new Particles(6000, this.atlas, 'alpha');
+  private alpha = new Particles(8000, this.atlas, 'alpha');
   private rings: Flats;
   /** splash-radius rings (sized exactly to the sim's blast radius) */
   private aoe: Flats;
@@ -725,11 +968,10 @@ export class Fx3D {
   private scrap = new Scrap(2400);
   private scorch: THREE.InstancedMesh;
   private scorchN = 0;
-  private beamsCore = new Segments(2400, true, 10);
+  private beams = new Ribbons(4000, 10);
   private rails = new RailBeams();
   /** camera position (set by the view each frame) so rail beams can face it */
   readonly eye = new THREE.Vector3(0, 100, 0);
-  private beamsGlow = new Segments(2400, true, 10);
   private bolts: BoltFx[] = [];
   private later: { t: number; fn: () => void }[] = [];
   private smokes: { x: number; z: number; r: number; left: number; acc: number }[] = [];
@@ -739,44 +981,56 @@ export class Fx3D {
   /** radioactive zones (sim 'fireField' with rad): green motes rising and a drifting haze, no flames */
   private radZones: { x: number; z: number; r: number; left: number; acc: number }[] = [];
   private time = 0;
+  private disposed = false;
+  /** the flipbook atlas is in (effects tuned for it; the fallback keeps the older look) */
+  atlasReady = false;
   /** recent blast count (decays): stacked explosions dim each other so mass deaths don't blow out to white */
   private heat = 0;
   private dust: number[] = [0.55, 0.46, 0.34, 0.5, 0.5, 0.42, 0.32, 0.3, 0.45, 0.38, 0.3, 0];
   /** darker, denser ground colour for thrown-up earth */
   private dirt: number[] = [0.3, 0.24, 0.17, 0.75, 0.32, 0.26, 0.19, 0.55, 0.36, 0.3, 0.22, 0];
+  private dirtRgb: [number, number, number] = [0.3, 0.24, 0.17];
 
   constructor() {
     this.group.name = 'fx';
-    const ringMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
-    this.rings = new Flats(220, new THREE.RingGeometry(0.955, 1, 48).rotateX(-Math.PI / 2), ringMat, 7);
-    this.aoe = new Flats(160, new THREE.RingGeometry(0.93, 1, 64).rotateX(-Math.PI / 2), ringMat, 7, true);
+    // shock rings: one crisp thin line with a faint wash inside (atlas sprite; a canvas copy until it loads)
+    const ringMat = new THREE.MeshBasicMaterial({ color: '#ffffff', map: makeRingTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    const ringGeo = new THREE.PlaneGeometry(2 / 0.9, 2 / 0.9).rotateX(-Math.PI / 2);
+    this.rings = new Flats(220, ringGeo, ringMat, 7);
+    // damage-radius markers: the same sprite, held at the sim's exact radius and kept faint
+    const aoeMat = ringMat.clone();
+    this.aoe = new Flats(160, ringGeo, aoeMat, 7, true);
     const poolTex = this.atlas.clone();
     poolTex.repeat.set(0.5, 0.5); poolTex.offset.set(0, 0); poolTex.needsUpdate = true;
     const poolMat = new THREE.MeshBasicMaterial({ color: '#ffffff', map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
     this.pools = new Flats(220, new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), poolMat, 7);
-    // scorch decals
-    const c = document.createElement('canvas'); c.width = c.height = 128;
-    const g = c.getContext('2d')!;
-    const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
-    gr.addColorStop(0, 'rgba(8,6,4,0.85)'); gr.addColorStop(0.5, 'rgba(10,8,6,0.55)'); gr.addColorStop(1, 'rgba(10,8,6,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 26; i++) { // ragged blast streaks
-      const a = Math.random() * 6.283, l = 18 + Math.random() * 40;
-      g.strokeStyle = `rgba(8,6,4,${0.12 + Math.random() * 0.2})`; g.lineWidth = 1 + Math.random() * 3;
-      g.beginPath(); g.moveTo(64 + Math.cos(a) * 14, 64 + Math.sin(a) * 14); g.lineTo(64 + Math.cos(a) * l, 64 + Math.sin(a) * l); g.stroke();
-    }
-    const st = new THREE.CanvasTexture(c);
-    st.colorSpace = THREE.SRGBColorSpace;
-    this.scorch = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: st, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 256);
+    // scorch decals: soft brown-black blots with radial streaks, ~60% opaque
+    const scorchMat = new THREE.MeshBasicMaterial({ map: makeScorchTexture(), transparent: true, opacity: 0.62, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    this.scorch = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), scorchMat, 256);
     this.scorch.frustumCulled = false; this.scorch.count = 0; this.scorch.renderOrder = 2;
     this.debris.mesh.renderOrder = 3;
-    for (const o of [this.scorch, this.groundFire.mesh, this.debris.mesh, this.scrap.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.aoe.mesh, this.fire.mesh, this.add.mesh, this.beamsGlow.mesh, this.beamsCore.mesh, this.rails.group, this.proj.group]) this.group.add(o);
+    whenFxAtlas((t) => {
+      if (this.disposed) return;
+      this.add.useAtlas(t); this.fire.useAtlas(t); this.alpha.useAtlas(t);
+      ringMat.map = miscUv(t, MISC.ring); aoeMat.map = ringMat.map; poolMat.map = miscUv(t, MISC.glow); scorchMat.map = miscUv(t, MISC.scorch);
+      for (const m of [ringMat, aoeMat, poolMat, scorchMat]) m.needsUpdate = true;
+      this.atlasReady = true;
+    });
+    for (const o of [this.scorch, this.groundFire.mesh, this.debris.mesh, this.scrap.mesh, this.alpha.mesh, this.pools.mesh, this.rings.mesh, this.aoe.mesh, this.fire.mesh, this.add.mesh, this.beams.mesh, this.rails.group, this.proj.group]) this.group.add(o);
+  }
+
+  /** per-frame view state for the effect shaders: pixel footprint (streak / ribbon minimum width) and the sun direction
+   *  (smoke lighting); heightPx = drawing-buffer height */
+  viewFrom(camera: THREE.PerspectiveCamera, heightPx: number, sun?: THREE.DirectionalLight): void {
+    fxView.uPxK.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, heightPx) / Math.max(1e-3, camera.zoom);
+    if (sun) fxView.uSun.value.subVectors(sun.position, sun.target.position).normalize();
   }
 
   /** tint ground dust to the map */
   setGround(rgb: [number, number, number]): void {
-    const k = 1.05;
+    const k = 0.8;
     this.dust = [rgb[0] * k, rgb[1] * k, rgb[2] * k, 0.5, rgb[0] * k * 0.92, rgb[1] * k * 0.92, rgb[2] * k * 0.92, 0.3, rgb[0] * 0.8, rgb[1] * 0.8, rgb[2] * 0.8, 0];
+    this.dirtRgb = [rgb[0] * 0.55, rgb[1] * 0.5, rgb[2] * 0.45];
     this.dirt = [rgb[0] * 0.5, rgb[1] * 0.45, rgb[2] * 0.4, 0.78, rgb[0] * 0.55, rgb[1] * 0.5, rgb[2] * 0.45, 0.55, rgb[0] * 0.6, rgb[1] * 0.55, rgb[2] * 0.5, 0];
   }
 
@@ -812,8 +1066,8 @@ export class Fx3D {
 
   /** small impact: sparks + a dust puff (hull or ground) */
   impact(x: number, y: number, z: number, big = 0.5, hot = true): void {
-    const n = this.lodN(3 + Math.round(big * 6));
-    for (let i = 0; i < n; i++) this.add.emit(x, y, z, R(-3, 3), R(1, 4.5), R(-3, 3), R(0.18, 0.4), 0.07 + big * 0.06, 0.02, 0, 1.5, -12, 3, RAMPS.spark, this.hdr);
+    const n = this.lodN(4 + Math.round(big * 9));
+    for (let i = 0; i < n; i++) this.add.emit(x, y, z, R(-5, 5), R(1, 6), R(-5, 5), R(0.15, 0.35), 0.06 + big * 0.05, 0.02, 0, 1.5, -12, 3, RAMPS.spark, this.hdr);
     this.add.emit(x, y, z, 0, 0, 0, 0.1, 0.35 + big * 0.5, 0.15, 0, 0, 0, 0, RAMPS.flash, hot ? this.hdr : this.hdr * 0.6);
     if (big > 0.3) this.alpha.emit(x, y + 0.1, z, R(-0.3, 0.3), R(0.3, 0.9), R(-0.3, 0.3), R(0.5, 0.9), 0.3 + big * 0.3, 0.7 + big * 0.7, R(-1, 1), 1.5, 0, 1, this.dust);
   }
@@ -834,7 +1088,7 @@ export class Fx3D {
     switch (kind) {
       case 'rocket': // unguided rocket: sputtering orange flame and a thick, billowing grey smoke trail that lingers and drifts
         if (Math.random() < 0.6) this.fire.emit(x, y, z, R(-0.2, 0.2), R(-0.1, 0.2), R(-0.2, 0.2), R(0.1, 0.2), 0.26 * size, 0.1 * size, 0, 1, 0, pf, RAMPS.fire, this.hdr);
-        this.alpha.emit(x, y, z, R(-0.12, 0.12) + WIND_X, R(0.05, 0.25), R(-0.12, 0.12) + WIND_Z, R(2.2, 3.4), 0.2 * size, 1.15 * size, R(-0.6, 0.6), 0.5, 0.02, pf, Math.random() < 0.45 ? RAMPS.smokeLight : RAMPS.smoke);
+        this.alpha.emit(x, y, z, R(-0.12, 0.12) + WIND_X, R(0.05, 0.25), R(-0.12, 0.12) + WIND_Z, R(3.0, 4.6), 0.24 * size, 1.5 * size, R(-0.3, 0.3), 0.5, 0.02, pf, Math.random() < 0.55 ? RAMPS.smokeLight : RAMPS.smoke);
         break;
       case 'incend': // incendiary rocket: red-orange flame, embers and dark smoke
         this.fire.emit(x, y, z, R(-0.2, 0.2), R(0, 0.3), R(-0.2, 0.2), R(0.2, 0.35), 0.3 * size, 0.15 * size, 0, 1, 0, pf, RAMPS.ember, this.hdr);
@@ -842,13 +1096,13 @@ export class Fx3D {
         this.alpha.emit(x, y, z, R(-0.12, 0.12) + WIND_X, R(0.1, 0.35), R(-0.12, 0.12) + WIND_Z, R(1.8, 2.8), 0.22 * size, 1.0 * size, R(-0.6, 0.6), 0.5, 0.02, pf, RAMPS.smoke);
         break;
       case 'missile': // guided missile: a white-hot exhaust point and a thin, long-lived white contrail
-        if (Math.random() < 0.5) this.add.emit(x, y, z, 0, 0, 0, 0.08, 0.26 * size, 0.1, 0, 0, 0, 0, RAMPS.flash, this.hdr * 1.2);
-        this.alpha.emit(x, y, z, R(-0.04, 0.04) + WIND_X * 0.8, R(0.02, 0.1), R(-0.04, 0.04) + WIND_Z * 0.8, R(2.4, 3.6), 0.08 * size, 0.42 * size, R(-0.5, 0.5), 0.4, 0.01, pf, RAMPS.contrail);
+        if (Math.random() < 0.6) this.add.emit(x, y, z, 0, 0, 0, 0.08, 0.34 * size, 0.12, 0, 0, 0, 0, RAMPS.flash, this.hdr * 1.4);
+        this.alpha.emit(x, y, z, R(-0.05, 0.05) + WIND_X * 0.8, R(0.02, 0.12), R(-0.05, 0.05) + WIND_Z * 0.8, R(3.4, 5.0), 0.12 * size, 0.75 * size, R(-0.3, 0.3), 0.4, 0.01, pf, RAMPS.contrail);
         break;
       case 'bigMissile': // cruise / nuke: a roaring flame tongue and a heavy white plume
         this.add.emit(x, y, z, 0, 0, 0, 0.12, 0.5 * size, 0.2, 0, 0, 0, 0, RAMPS.flash, this.hdr);
         this.fire.emit(x, y, z, R(-0.2, 0.2), R(0, 0.2), R(-0.2, 0.2), R(0.15, 0.3), 0.35 * size, 0.2 * size, 0, 2, 0, pf, RAMPS.fire, this.hdr);
-        this.alpha.emit(x, y, z, R(-0.1, 0.1) + WIND_X * 0.8, R(0.05, 0.2), R(-0.1, 0.1) + WIND_Z * 0.8, R(3.0, 4.4), 0.2 * size, 1.0 * size, R(-0.5, 0.5), 0.4, 0.01, pf, RAMPS.contrail);
+        this.alpha.emit(x, y, z, R(-0.1, 0.1) + WIND_X * 0.8, R(0.05, 0.2), R(-0.1, 0.1) + WIND_Z * 0.8, R(4.5, 6.0), 0.26 * size, 1.45 * size, R(-0.3, 0.3), 0.4, 0.01, pf, RAMPS.contrail);
         break;
       case 'gauss': // magnetic slug: blue ionisation sparkle
         this.add.emit(x, y, z, R(-0.3, 0.3), R(-0.2, 0.3), R(-0.3, 0.3), R(0.2, 0.4), 0.14 * size, 0.03, 0, 2, 0, 3, RAMPS.gauss, this.hdr);
@@ -955,7 +1209,7 @@ export class Fx3D {
     switch (kind) {
       case 'gatling': { // star-shaped flicker that grows with the spin
         const q = s * (0.55 + 0.6 * k);
-        this.add.emit(x, y, z, 0, 0, 0, 0.05, q * 0.9, q * 0.5, 0, 0, 0, 3, RAMPS.flash, h);
+        this.add.emit(x, y, z, 0, 0, 0, 0.05, q * 1.2, q * 0.6, 0, 0, 0, 4, RAMPS.flash, h);
         this.add.emit(x + nx * q * 0.5, y, z + nz * q * 0.5, nx * 4, 0, nz * 4, 0.045, q * 0.8, q * 0.25, 0, 2, 0, 3, RAMPS.flash, h);
         if (Math.random() < 0.35 * k) this.add.emit(x, y, z, px * R(-2, 2) + nx, R(0.5, 2), pz * R(-2, 2) + nz, R(0.15, 0.3), 0.05, 0.02, 0, 1.5, -12, 3, RAMPS.spark, h);
         break;
@@ -973,6 +1227,7 @@ export class Fx3D {
       }
       case 'cannon': case 'he': { // big flash, muzzle-brake side jets, a smoke ring and ground dust
         this.add.emit(x, y, z, 0, 0, 0, 0.1, s * 2.0, s * 1.0, 0, 0, 0, 0, RAMPS.flash, h);
+        this.add.emit(x + nx * s * 0.3, y, z + nz * s * 0.3, 0, 0, 0, 0.07, s * 2.6, s * 1.4, 0, 0, 0, 4, RAMPS.flash, h);
         this.add.emit(x + nx * s * 0.6, y, z + nz * s * 0.6, nx * 5, 0, nz * 5, 0.08, s * 1.3, s * 0.5, 0, 3, 0, 3, RAMPS.flash, h);
         for (const sd of [-1, 1]) this.add.emit(x + px * sd * s * 0.2, y, z + pz * sd * s * 0.2, px * sd * 4, 0, pz * sd * 4, 0.07, s * 0.8, s * 0.3, 0, 4, 0, 3, RAMPS.fire, h);
         const n = this.lodN(kind === 'he' ? 6 : 4);
@@ -1024,7 +1279,7 @@ export class Fx3D {
         break;
       }
       case 'ac': { // autocannon: chunky flash + side vents, no smoke
-        this.add.emit(x, y, z, 0, 0, 0, 0.07, s * 1.2, s * 0.6, 0, 0, 0, 0, RAMPS.flash, h);
+        this.add.emit(x, y, z, 0, 0, 0, 0.07, s * 1.6, s * 0.8, 0, 0, 0, 4, RAMPS.flash, h);
         this.add.emit(x + nx * s * 0.45, y, z + nz * s * 0.45, nx * 3.5, 0, nz * 3.5, 0.06, s * 0.8, s * 0.3, 0, 2, 0, 3, RAMPS.fire, h);
         for (const sd of [-1, 1]) this.add.emit(x, y, z, px * sd * 2.5, 0, pz * sd * 2.5, 0.05, s * 0.45, s * 0.2, 0, 3, 0, 3, RAMPS.flash, h);
         break;
@@ -1058,8 +1313,8 @@ export class Fx3D {
   /** the blast's damage radius on the ground: a ring that snaps out to exactly `r` and fades (subtle for small
    *  splash, clear for big blasts); y > 0: an air burst, the ring drawn at that height */
   aoeRing(x: number, y: number, z: number, r: number, cool = false): void {
-    if (r < 0.25) return;
-    const k = clamp(0.22 + (r - 0.3) * 0.32, 0.22, 0.75) * this.hdr;
+    if (r < 0.6) return;
+    const k = clamp(0.1 + (r - 0.6) * 0.1, 0.1, 0.3) * this.hdr;
     const life = 0.55 + Math.min(0.6, r * 0.15);
     if (cool) this.aoe.add(x, z, y + 0.06, r * 0.55, r, life, 0.55 * k, 0.8 * k, 1.1 * k);
     else this.aoe.add(x, z, y + 0.06, r * 0.55, r, life, 1.2 * k, 0.62 * k, 0.24 * k);
@@ -1169,7 +1424,7 @@ export class Fx3D {
     const nd = this.lodN(2 + Math.round(r * 2));
     for (let i = 0; i < nd; i++) {
       const a = Math.random() * 6.283, sp = R(1, 3) + r;
-      this.debris.add(x, 0.2, z, Math.cos(a) * sp, R(5, 9), Math.sin(a) * sp, R(0.04, 0.09) * (0.7 + r * 0.3), R(0.12, 0.22));
+      this.debris.add(x, 0.2, z, Math.cos(a) * sp, R(5, 9), Math.sin(a) * sp, R(0.06, 0.12) * (0.7 + r * 0.3), this.dirtRgb);
     }
   }
 
@@ -1179,15 +1434,16 @@ export class Fx3D {
     r = clamp(r, 0.15, 2);
     const h = this.hdr, kq = 1 / (1 + this.heat * 0.3);
     this.heat += 0.35;
-    this.add.emit(x, y + 0.05, z, 0, 0, 0, 0.08, r * 2.2, r * 1.2, 0, 0, 0, 0, RAMPS.flash, h * kq);
-    const nf = this.lodN(2 + Math.round(r * 5));
+    this.add.emit(x, y + 0.1, z, 0, 0, 0, 0.07, r * 1.6, r * 1.0, 0, 0, 0, 0, RAMPS.flash, h * kq);
+    const fr = ramp === RAMPS.fire ? RAMPS.fireball : ramp;
+    const nf = this.lodN(2 + Math.round(r * 3));
     for (let i = 0; i < nf; i++) {
-      const a = Math.random() * 6.283, sp = r * R(1.5, 3.5);
-      this.fire.emit(x, y + 0.05, z, Math.cos(a) * sp, R(0.5, 2) * (0.6 + r), Math.sin(a) * sp, R(0.22, 0.4), r * R(0.5, 0.8), r * R(1.1, 1.5), R(-2, 2), 4, 0, 1 + (i & 1), ramp, h * (0.6 + 0.4 * kq));
+      const a = Math.random() * 6.283, sp = r * R(0.8, 2);
+      this.fire.emit(x + Math.cos(a) * r * 0.2, y + 0.1 + r * 0.25, z + Math.sin(a) * r * 0.2, Math.cos(a) * sp, R(0.5, 1.5) * (0.6 + r), Math.sin(a) * sp, R(0.4, 0.62), r * R(0.6, 0.85), r * R(1.3, 1.7), R(-1, 1), 4, 0, 1 + (i & 1), fr, h * (0.6 + 0.4 * kq));
     }
-    const nk = this.lodN(3 + Math.round(r * 6));
-    for (let i = 0; i < nk; i++) { const a = Math.random() * 6.283, sp = R(2, 5); this.add.emit(x, y + 0.05, z, Math.cos(a) * sp, R(1.5, 4.5), Math.sin(a) * sp, R(0.2, 0.45), 0.05 + r * 0.04, 0.02, 0, 1.2, -12, 3, RAMPS.spark, h); }
-    this.alpha.emit(x, y + 0.1, z, R(-0.2, 0.2), R(0.4, 0.9), R(-0.2, 0.2), R(0.6, 1.1), r * 0.6, r * 1.7, R(-1, 1), 1.5, 0, 1, RAMPS.smoke);
+    const nk = this.lodN(4 + Math.round(r * 8));
+    for (let i = 0; i < nk; i++) { const a = Math.random() * 6.283, sp = R(3, 8); this.add.emit(x, y + 0.1, z, Math.cos(a) * sp, R(1.5, 5.5), Math.sin(a) * sp, R(0.22, 0.5), 0.05 + r * 0.04, 0.02, 0, 1.0, -10, 3, RAMPS.spark, h); }
+    this.alpha.emit(x, y + 0.15 + r * 0.2, z, R(-0.2, 0.2) + WIND_X, R(0.4, 0.9), R(-0.2, 0.2) + WIND_Z, R(1.2, 2.0), r * 0.7, r * 2.0, R(-0.4, 0.4), 1.2, 0, 1, RAMPS.blastSmoke);
     if (scorch && y < 0.2) this.addScorch(x, z, r * 0.8);
     this.trauma = Math.min(1, this.trauma + 0.01 + r * 0.03);
   }
@@ -1350,48 +1606,70 @@ export class Fx3D {
 
   /* ------------------------------------------------------------------------------------------- explosions */
 
-  /** Fireball + shock ring + smoke column + debris + scorch, scaled by radius r (cells). style picks the palette. */
-  explosion(x: number, z: number, r: number, style: 'fire' | 'plasma' | 'emp' = 'fire', y = 0, debris = true, q = 1): void {
+  /** Explosion scaled by radius r (cells): a short white flash, a few big lobed flipbook fireballs that roll over into
+   *  dark soot, a column of sun-lit smoke that lingers and drifts, a ground-hugging dust shove, long hot spark streaks,
+   *  one crisp shock ring, chunky tumbling debris (in `paint` where a hull blew up) and a soft scorch. r > 3.2 (titan
+   *  deaths, nukes) adds a rising fire column and a slow wide dust wave. style picks the palette. */
+  explosion(x: number, z: number, r: number, style: 'fire' | 'plasma' | 'emp' = 'fire', y = 0, debris = true, q = 1, paint?: readonly [number, number, number]): void {
     r = clamp(r, 0.3, 9);
     const lodN = (n: number) => this.lodN(n * q);
-    const fire = style === 'plasma' ? RAMPS.plasma : style === 'emp' ? RAMPS.emp : RAMPS.fire;
-    const cy = y + 0.15 + r * 0.22;
+    const fire = style === 'plasma' ? RAMPS.plasma : style === 'emp' ? RAMPS.emp : RAMPS.fireball;
+    const cy = y + 0.1 + r * 0.3;
     const kq = 1 / (1 + this.heat * 0.45);
     this.heat += 1;
-    this.add.emit(x, cy, z, 0, 0, 0, 0.11, r * 2.0, r * 1.5, 0, 0, 0, 0, RAMPS.flash, this.hdr * kq);
-    this.pools.add(x, z, y + 0.04, r * 1.2, r * 3.0, 0.45, 1.0 * this.hdr * kq, 0.5 * this.hdr * kq, 0.15 * this.hdr * kq);
-    // fireball puffs
-    const nf = lodN(4 + Math.round(r * 3.2));
+    const h = this.hdr;
+    this.add.emit(x, cy, z, 0, 0, 0, 0.09, r * 1.5, r * 1.1, 0, 0, 0, 0, RAMPS.flash, h * kq);
+    this.pools.add(x, z, y + 0.04, r * 1.0, r * 2.3, 0.42, 0.85 * h * kq, 0.42 * h * kq, 0.12 * h * kq);
+    // fireball: lobed flipbook puffs that expand, cool from the outside in and roll over into soot
+    const nf = lodN(3 + Math.round(r * 2.2));
     for (let i = 0; i < nf; i++) {
-      const a = Math.random() * 6.283, el = R(0.1, 1.2), sp = r * R(0.9, 2.6);
-      const d = Math.random() * r * 0.4;
-      this.fire.emit(x + Math.cos(a) * d, cy + R(0, r * 0.3), z + Math.sin(a) * d, Math.cos(a) * sp * 0.6, el * sp * 0.9 + 0.6, Math.sin(a) * sp * 0.6, R(0.45, 0.9) * (0.8 + r * 0.1), r * R(0.5, 0.9), r * R(1.3, 1.9), R(-1.5, 1.5), 2.6, 0.5, 1 + (i & 1), fire, this.hdr * (0.55 + 0.45 * kq));
+      const a = Math.random() * 6.283, d = r * 0.38 * Math.sqrt(Math.random()), sp = r * R(0.5, 1.5);
+      this.fire.emit(x + Math.cos(a) * d, cy + R(-0.15, 0.35) * r, z + Math.sin(a) * d, Math.cos(a) * sp * 0.5, R(0.3, 1.1) * r * 0.7 + 0.3, Math.sin(a) * sp * 0.5,
+        R(0.8, 1.25) * (0.85 + r * 0.08), r * R(0.7, 1.0), r * R(1.5, 2.1), R(-0.4, 0.4), 2.2, 0.35, 1 + (i & 1), fire, h * (0.6 + 0.4 * kq));
     }
-    // smoke column
-    const ns = lodN(3 + Math.round(r * 2.6));
+    // smoke column: fades in as the fire dies, rises, spreads and drifts off with the breeze
+    const ns = lodN(3 + Math.round(r * 2.2));
     for (let i = 0; i < ns; i++) {
-      const a = Math.random() * 6.283, d = Math.random() * r * 0.5;
-      this.alpha.emit(x + Math.cos(a) * d, y + 0.3 + r * 0.25, z + Math.sin(a) * d, R(-0.5, 0.5), R(1.0, 2.0) + r * 0.25, R(-0.5, 0.5), R(1.6, 3.1) * (0.75 + r * 0.12), r * R(0.5, 0.9), r * R(1.8, 3.0), R(-0.7, 0.7), 0.5, 0.3, 1 + (i & 1), i % 3 === 0 ? RAMPS.smokeLight : RAMPS.smoke);
+      const a = Math.random() * 6.283, d = Math.random() * r * 0.45;
+      this.alpha.emit(x + Math.cos(a) * d, cy + R(0, 0.4) * r, z + Math.sin(a) * d, R(-0.3, 0.3) + WIND_X * 2, R(0.6, 1.3) + r * 0.2, R(-0.3, 0.3) + WIND_Z * 2,
+        R(2.6, 4.4) * (0.8 + r * 0.1), r * R(0.7, 0.95), r * R(2.2, 3.2), R(-0.25, 0.25), 0.6, 0.12, 1 + (i & 1), style === 'fire' ? RAMPS.blastSmoke : RAMPS.smokeLight);
     }
-    // ground-hugging dust shock
+    // ground-hugging dust shove
     const nd = lodN(4 + Math.round(r * 3));
     for (let i = 0; i < nd; i++) {
       const a = (i / nd) * 6.283 + Math.random() * 0.4, sp = r * R(2.2, 4.2);
-      this.alpha.emit(x, 0.14, z, Math.cos(a) * sp, R(0, 0.4), Math.sin(a) * sp, R(0.55, 1.0), r * 0.4, r * 1.1, R(-1, 1), 3.4, 0, 1 + (i & 1), this.dust);
+      this.alpha.emit(x, 0.14, z, Math.cos(a) * sp, R(0, 0.4), Math.sin(a) * sp, R(0.8, 1.4), r * 0.45, r * 1.3, R(-0.5, 0.5), 3.4, 0, 1 + (i & 1), this.dust);
     }
-    // sparks
-    const nk = lodN(6 + Math.round(r * 6));
+    // hot spark streaks flung out in every direction
+    const nk = lodN(10 + Math.round(r * 8));
     for (let i = 0; i < nk; i++) {
-      const a = Math.random() * 6.283, sp = R(2, 6) + r * 1.5;
-      this.add.emit(x, cy, z, Math.cos(a) * sp, R(2.5, 7) + r * 0.8, Math.sin(a) * sp, R(0.45, 1.0), 0.09 + r * 0.025, 0.02, 0, 0.9, -12, 3, RAMPS.spark, this.hdr);
+      const a = Math.random() * 6.283, e = R(0.1, 1.3), sp = R(4, 11) + r * 2;
+      this.add.emit(x, cy, z, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 1, Math.sin(a) * Math.cos(e) * sp, R(0.35, 0.8), 0.06 + r * 0.02, 0.03, 0, 0.7, -9, 3, RAMPS.spark, h);
     }
-    this.rings.add(x, z, y + 0.07, r * 0.4, r * 2.6, 0.45 + r * 0.04, 0.6 * this.hdr * kq, 0.42 * this.hdr * kq, 0.24 * this.hdr * kq);
+    // one crisp shock ring, quick (secondary blasts of a chain don't add their own)
+    if (q >= 1) this.rings.add(x, z, y + 0.07, r * 0.35, r * 2.4, 0.24 + r * 0.03, 0.6 * h * kq, 0.56 * h * kq, 0.5 * h * kq);
     if (debris) {
-      const nc = this.lodN(2 + Math.round(r * 2.5));
+      const nc = this.lodN(3 + Math.round(r * 2));
       for (let i = 0; i < nc; i++) {
         const a = Math.random() * 6.283, sp = R(1.5, 4.5) + r * 1.2;
-        this.debris.add(x, cy, z, Math.cos(a) * sp, R(4, 9) + r * 0.7, Math.sin(a) * sp, R(0.05, 0.14) * (0.7 + r * 0.35), R(0.18, 0.4));
+        this.debris.add(x, cy, z, Math.cos(a) * sp, R(4, 9) + r * 0.7, Math.sin(a) * sp, R(0.08, 0.18) * (0.7 + r * 0.3), paintChip(paint, this.dirtRgb), Math.random() < 0.6 ? R(0.5, 1) : 0);
       }
+    }
+    if (r > 3.2) {
+      // titan-scale: a column of fire climbing out of the blast and a slow, wide dust wave
+      const nc = lodN(5 + Math.round(r));
+      for (let i = 0; i < nc; i++) {
+        const k = i / nc;
+        this.fire.emit(x + R(-0.3, 0.3) * r * 0.3, cy + k * r * 0.5, z + R(-0.3, 0.3) * r * 0.3, R(-0.2, 0.2), R(1.2, 2.2) + k * r * 0.5, R(-0.2, 0.2),
+          R(1.3, 1.9), r * R(0.4, 0.6), r * R(1.0, 1.4), R(-0.3, 0.3), 1.0, 0.1, 1 + (i & 1), fire, h * kq);
+        this.alpha.emit(x, cy + k * r * 0.6, z, R(-0.3, 0.3) + WIND_X * 2, R(1.2, 2.2) + k * r * 0.4, R(-0.3, 0.3) + WIND_Z * 2, R(4, 6), r * 0.5, r * R(1.6, 2.4), R(-0.2, 0.2), 0.5, 0.05, 1 + (i & 1), RAMPS.blastSmoke);
+      }
+      const nw = lodN(10 + Math.round(r * 2));
+      for (let i = 0; i < nw; i++) {
+        const a = (i / nw) * 6.283 + Math.random() * 0.3, sp = r * R(1.6, 2.4);
+        this.alpha.emit(x + Math.cos(a) * r * 0.5, 0.2, z + Math.sin(a) * r * 0.5, Math.cos(a) * sp, R(0.2, 0.6), Math.sin(a) * sp, R(2, 3), r * 0.4, r * 1.2, R(-0.3, 0.3), 1.4, 0, 1 + (i & 1), this.dust);
+      }
+      this.rings.add(x, z, y + 0.08, r * 0.6, r * 3.6, 0.8, 0.22 * h, 0.2 * h, 0.17 * h);
     }
     this.addScorch(x, z, r * R(1.0, 1.35));
     this.trauma = Math.min(1, this.trauma + 0.05 + r * 0.07);
@@ -1399,33 +1677,37 @@ export class Fx3D {
   }
 
   /** multi-stage blast for big hulls: chain of secondaries, a rolling fireball and a final cook-off */
-  bigExplosion(x: number, z: number, size: number, y = 0): void {
+  bigExplosion(x: number, z: number, size: number, y = 0, paint?: readonly [number, number, number]): void {
     const r = 0.6 + size * 0.7;
-    this.explosion(x, z, r, 'fire', y);
+    this.explosion(x, z, r, 'fire', y, true, 1, paint);
     const stages = Math.min(8, Math.max(0, size - 1) * 2);
     for (let i = 0; i < stages; i++) {
       const t = 0.12 + i * 0.17 + R(0, 0.1);
       const a = Math.random() * 6.283, d = Math.random() * size * 0.45;
-      this.later.push({ t: this.time + t, fn: () => this.explosion(x + Math.cos(a) * d, z + Math.sin(a) * d, r * R(0.4, 0.75), 'fire', y, true) });
+      this.later.push({ t: this.time + t, fn: () => this.explosion(x + Math.cos(a) * d, z + Math.sin(a) * d, r * R(0.4, 0.75), 'fire', y, true, 0.7, paint) });
     }
     if (size >= 4) {
-      this.later.push({ t: this.time + 0.25 + stages * 0.17, fn: () => { this.explosion(x, z, r * 1.25, 'fire', y); this.trauma = Math.min(1, this.trauma + 0.35); this.flashA = Math.min(1, this.flashA + 0.45); } });
+      this.later.push({ t: this.time + 0.25 + stages * 0.17, fn: () => { this.explosion(x, z, r * 1.25, 'fire', y, true, 1, paint); this.trauma = Math.min(1, this.trauma + 0.35); this.flashA = Math.min(1, this.flashA + 0.45); } });
       this.smokeScreen(x, z, size * 0.5, 3);
     }
   }
 
   /** A hull blown apart (wreck level 2-3): n pieces of scrap up to `reach` cells out that stay on the field, plus a
-   *  shower of short-lived fragments. hot: share of glowing (melted) pieces for energy kills. */
-  scatter(x: number, z: number, y: number, n: number, reach: number, size: number, hot = 0): void {
+   *  shower of short-lived fragments. hot: share of glowing (melted) pieces for energy kills. paint: the hull's team
+   *  colour (scraps and fragments show it, scorched). */
+  scatter(x: number, z: number, y: number, n: number, reach: number, size: number, hot = 0, paint?: readonly [number, number, number]): void {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * 6.283, d = reach * Math.sqrt(Math.random()), s = size * R(0.35, 1);
-      this.scrap.add(x + R(-0.3, 0.3) * size, y + R(0.2, 0.6), z + R(-0.3, 0.3) * size, a, d, s, Math.random() < hot ? R(0.45, 0.7) : R(0.05, 0.14), Math.random() < 0.55);
-      if (Math.random() < hot) this.add.emit(x, y + 0.3, z, Math.cos(a) * d * 1.4, R(3, 6), Math.sin(a) * d * 1.4, R(0.6, 1.2), 0.12 + s * 0.3, 0.03, 0, 0.6, -10, 3, RAMPS.ember, this.hdr);
+      const melt = Math.random() < hot;
+      const tone = melt ? R(0.45, 0.7) : R(0.05, 0.14);
+      const rgb = !melt && paint && Math.random() < 0.4 ? _scrapRgb.set(paint[0] * 0.38, paint[1] * 0.38, paint[2] * 0.38) : null;
+      this.scrap.add(x + R(-0.3, 0.3) * size, y + R(0.2, 0.6), z + R(-0.3, 0.3) * size, a, d, s, tone, Math.random() < 0.55, rgb);
+      if (melt) this.add.emit(x, y + 0.3, z, Math.cos(a) * d * 1.4, R(3, 6), Math.sin(a) * d * 1.4, R(0.6, 1.2), 0.12 + s * 0.3, 0.03, 0, 0.6, -10, 3, RAMPS.ember, this.hdr);
     }
     const nc = this.lodN(n);
     for (let i = 0; i < nc; i++) {
       const a = Math.random() * 6.283, sp = R(2, 5) + reach;
-      this.debris.add(x, y + 0.4, z, Math.cos(a) * sp, R(5, 10), Math.sin(a) * sp, size * R(0.15, 0.4), R(0.15, 0.35));
+      this.debris.add(x, y + 0.4, z, Math.cos(a) * sp, R(5, 10), Math.sin(a) * sp, size * R(0.3, 0.7), paintChip(paint, this.dirtRgb), Math.random() < 0.5 + hot * 0.5 ? R(0.6, 1) : 0);
     }
   }
   /** blackened ground under a wreck / where a unit was vaporised */
@@ -1434,7 +1716,7 @@ export class Fx3D {
   private addScorch(x: number, z: number, r: number): void {
     const i = this.scorchN % 256;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(_up, Math.random() * 6.28);
-    m.compose(new THREE.Vector3(x, 0.02 + (i % 7) * 0.0004, z), q, new THREE.Vector3(r * 2.4, 1, r * 2.4));
+    m.compose(new THREE.Vector3(x, 0.02 + (i % 7) * 0.0004, z), q, new THREE.Vector3(r * 1.5 * R(0.85, 1.15), 1, r * 1.5));
     m.toArray(this.scorch.instanceMatrix.array as unknown as number[], i * 16);
     this.scorchN++;
     this.scorch.count = Math.min(256, this.scorchN);
@@ -1505,7 +1787,7 @@ export class Fx3D {
     this.scrap.update(dt);
     this.rails.update(dt, this.eye);
     // bolts: rebuilt each frame; lightning re-rolls its jag every 45 ms
-    this.beamsCore.begin(); this.beamsGlow.begin();
+    this.beams.begin();
     const tmp: number[] = [];
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const f = this.bolts[i];
@@ -1514,8 +1796,8 @@ export class Fx3D {
       const k = f.life / f.max, a = k < 0.5 ? k * 2 : 1;
       if (f.kind === 'beam') {
         const w = f.w * (1 + (f.wob ? Math.sin(this.time * 55 + i) * f.wob : 0)) * (0.6 + 0.4 * a);
-        this.beamsGlow.seg(f.ax, f.ay, f.az, f.bx, f.by, f.bz, w * 3.2, w * 3.2, f.r * 0.5 * a * this.hdr, f.g * 0.5 * a * this.hdr, f.b * 0.5 * a * this.hdr);
-        this.beamsCore.seg(f.ax, f.ay, f.az, f.bx, f.by, f.bz, w, w, (0.6 + f.r * 2.2) * a * this.hdr, (0.6 + f.g * 2.2) * a * this.hdr, (0.6 + f.b * 2.2) * a * this.hdr);
+        const k = a * this.hdr;
+        this.beams.seg(f.ax, f.ay, f.az, f.bx, f.by, f.bz, w * 2.4, (0.3 + f.r * 1.5) * k, (0.3 + f.g * 1.5) * k, (0.3 + f.b * 1.5) * k, 0, 1.8);
       } else {
         const roll = Math.floor((f.max - f.life) / 0.045);
         if (roll !== f.roll) { f.roll = roll; jag(f, mulberry(f.seed + roll * 7919), f.pts); }
@@ -1523,16 +1805,17 @@ export class Fx3D {
         for (let j = 0; j + 5 < p.length; j += 6) {
           const main = j < 16 * 6 && j / 6 < clamp(Math.round(Math.hypot(f.bx - f.ax, f.by - f.ay, f.bz - f.az) / 0.45), 4, 16);
           const w = main ? f.w : f.w * 0.6;
-          this.beamsGlow.seg(p[j], p[j + 1], p[j + 2], p[j + 3], p[j + 4], p[j + 5], w * 3.5, w * 3.5, f.r * 0.45 * a * this.hdr, f.g * 0.45 * a * this.hdr, f.b * 0.45 * a * this.hdr);
-          this.beamsCore.seg(p[j], p[j + 1], p[j + 2], p[j + 3], p[j + 4], p[j + 5], w, w, (0.9 + f.r * 2.0) * a * this.hdr, (0.9 + f.g * 2.0) * a * this.hdr, (0.9 + f.b * 2.0) * a * this.hdr);
+          const k = a * this.hdr;
+          this.beams.seg(p[j], p[j + 1], p[j + 2], p[j + 3], p[j + 4], p[j + 5], w * 2.6, (0.45 + f.r * 1.4) * k, (0.45 + f.g * 1.4) * k, (0.45 + f.b * 1.4) * k, 0, 1.8);
         }
       }
     }
     void tmp;
-    this.beamsCore.end(); this.beamsGlow.end();
+    this.beams.end();
   }
 
   dispose(): void {
+    this.disposed = true;
     this.add.dispose(); this.fire.dispose(); this.alpha.dispose(); this.groundFire.dispose();
     this.atlas.dispose();
   }

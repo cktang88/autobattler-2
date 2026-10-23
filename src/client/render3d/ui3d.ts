@@ -1,5 +1,5 @@
 // Screen-constant overlays for the 3D view: a batched quad/triangle painter for health bars, paralysis meters and level pips
-// (drawn after post-processing so colours stay exact), and pooled shield bubbles with a hit ripple.
+// (drawn after post-processing so colours stay exact), and pooled hex-lattice shield domes with hit ripples.
 
 import * as THREE from 'three';
 
@@ -84,28 +84,59 @@ export class Overlay {
 
 /* --------------------------------------------------------------------------------------------- shield bubbles */
 
+// An energy dome: a hex lattice (projected from above, so the cells read evenly from the battle camera) that ripples
+// like water, a bright fresnel rim, a glowing band where it meets the ground, shimmering cells, and up to 4 hit
+// ripples at once (rings racing out from each impact, lighting the hex edges as they pass). Additive, both faces (the
+// far inside wall adds depth at a third of the strength).
 const shieldVS = /* glsl */ `
-  varying vec3 vN; varying vec3 vP;
+  varying vec3 vN; varying vec3 vP; varying vec3 vV;
   void main() {
-    vP = normalize(position);
+    vP = position;
     vN = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vV = normalize(-mv.xyz);
+    gl_Position = projectionMatrix * mv;
   }`;
 const shieldFS = /* glsl */ `
-  varying vec3 vN; varying vec3 vP;
-  uniform float uBase; uniform float uHit; uniform vec3 uHitDir; uniform float uAge; uniform float uTime; uniform vec3 uCol;
+  varying vec3 vN; varying vec3 vP; varying vec3 vV;
+  uniform float uBase; uniform float uTime; uniform vec3 uCol; uniform vec4 uHits[4]; uniform float uSeed;
+  float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  // nearest hex cell: xy = offset from its centre, zw = cell id
+  vec4 hexCell(vec2 uv) {
+    const vec2 s = vec2(1.0, 1.7320508);
+    vec4 c = floor(vec4(uv, uv - vec2(0.5, 1.0)) / s.xyxy) + 0.5;
+    vec4 h = vec4(uv - c.xy * s, uv - (c.zw + 0.5) * s);
+    return dot(h.xy, h.xy) < dot(h.zw, h.zw) ? vec4(h.xy, c.xy) : vec4(h.zw, c.zw + 0.5);
+  }
   void main() {
-    float f = 1.0 - abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0)));
-    float rim = pow(f, 2.2);
-    float scan = 0.5 + 0.5 * sin(vP.y * 28.0 - uTime * 1.6 + vP.x * 6.0);
-    float a = uBase * (0.35 + 0.65 * rim) + rim * 0.12 + scan * 0.012 * uBase * 8.0;
-    // hit ripple: an expanding ring around the impact direction
-    float ang = acos(clamp(dot(normalize(vP), uHitDir), -1.0, 1.0));
-    float rr = uAge * 2.4;
-    float ring = exp(-pow((ang - rr) * 5.0, 2.0)) * uHit;
-    float core = exp(-pow(ang * 2.4, 2.0)) * uHit * 0.55;
-    float al = a + ring * 0.9 + core;
-    gl_FragColor = vec4(uCol * (1.0 + ring * 1.6), min(1.0, al));
+    vec3 p = normalize(vP);
+    // ripples: hit rings plus a slow ambient swell, also used to warp the lattice (water-like)
+    float ring = 0.0, flash = 0.0, warp = 0.0;
+    for (int i = 0; i < 4; i++) {
+      vec4 hh = uHits[i];
+      if (hh.w >= 1.0) continue;
+      float ang = acos(clamp(dot(p, hh.xyz), -1.0, 1.0));
+      float k = 1.0 - hh.w;
+      float d = ang - hh.w * 2.3;
+      ring += (exp(-d * d * 60.0) + 0.45 * exp(-(d + 0.28) * (d + 0.28) * 90.0)) * k;
+      flash += exp(-ang * ang * 10.0) * k * k;
+      warp += sin(d * 26.0) * exp(-d * d * 12.0) * k;
+    }
+    vec2 uv = vP.xz * 7.0 + vec2(sin(vP.z * 9.0 + uTime * 1.3), cos(vP.x * 8.0 - uTime * 1.1)) * 0.06 + p.xz * warp * 0.35;
+    vec4 hx = hexCell(uv);
+    float hd = max(dot(abs(hx.xy), vec2(0.8660254, 0.5)), abs(hx.y));
+    float edge = smoothstep(0.4, 0.49, hd);
+    float rid = h21(hx.zw + uSeed);
+    float shimmer = smoothstep(0.82, 1.0, sin(uTime * (1.2 + rid * 2.0) + rid * 40.0)) * 0.6;
+    float fres = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+    float rim = pow(fres, 2.6);
+    float ground = exp(-pow((vP.y + 0.42) * 10.0, 2.0));
+    float face = gl_FrontFacing ? 1.0 : 0.35;
+    float a = uBase * (0.25 + 0.9 * rim + edge * (0.55 + 1.4 * rim) + shimmer * (1.0 - edge) * 0.25)
+            + rim * 0.06 + ground * uBase * 2.2
+            + ring * (0.35 + edge * 1.6) + flash * 0.7;
+    vec3 col = uCol * (1.0 + ring * 1.4 + flash) + vec3(0.6, 0.8, 1.0) * (ring * edge + flash * 0.6);
+    gl_FragColor = vec4(col * a * face, 1.0);
   }`;
 
 export interface Bubble { mesh: THREE.Mesh; mat: THREE.ShaderMaterial }
@@ -114,15 +145,18 @@ export class ShieldPool {
   readonly group = new THREE.Group();
   private items: Bubble[] = [];
   private used = 0;
-  private geo = new THREE.SphereGeometry(1, 28, 16);
+  private geo = new THREE.SphereGeometry(1, 40, 24);
   constructor() { this.group.name = 'shields'; }
   begin(): void { this.used = 0; }
   next(): Bubble {
     let b = this.items[this.used];
     if (!b) {
       const mat = new THREE.ShaderMaterial({
-        vertexShader: shieldVS, fragmentShader: shieldFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-        uniforms: { uBase: { value: 0.1 }, uHit: { value: 0 }, uHitDir: { value: new THREE.Vector3(0, 1, 0) }, uAge: { value: 0 }, uTime: { value: 0 }, uCol: { value: new THREE.Color(0.35, 0.85, 1.2) } },
+        vertexShader: shieldVS, fragmentShader: shieldFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+        uniforms: {
+          uBase: { value: 0.1 }, uTime: { value: 0 }, uCol: { value: new THREE.Color(0.32, 0.7, 1.25) }, uSeed: { value: Math.random() * 50 },
+          uHits: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 1, 0, 1)) },
+        },
       });
       const mesh = new THREE.Mesh(this.geo, mat);
       mesh.renderOrder = 9; mesh.frustumCulled = false;

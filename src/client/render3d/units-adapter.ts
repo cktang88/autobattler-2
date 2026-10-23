@@ -30,6 +30,69 @@ const lookMats: Record<Exclude<Look, 'normal'>, THREE.Material> = {
   cloak: new THREE.MeshStandardMaterial({ color: '#8fb8d0', transparent: true, opacity: 0.32, roughness: 0.5, metalness: 0.1, depthWrite: false }),
 };
 
+// ---- charred wrecks: each unit material gets a wreck twin running the same program (team paint, plate detail, decals)
+// with a char pass on top: desaturated, darkened, soot-black on upper surfaces and in noisy burnt patches, lamps out,
+// and glowing ember cracks while the hull is hot. For the wreck look the per-instance colour is NOT a tint but data:
+//   r = char amount 0..1, g = heat 0..1 (ember glow), b = per-wreck seed 0..1.
+const CHAR_VERT_DECL = '\nvarying vec3 vChP; varying vec3 vChN;';
+const CHAR_FRAG_DECL = /* glsl */ `
+varying vec3 vChP; varying vec3 vChN;
+float chH(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float chN(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(chH(i), chH(i + vec3(1, 0, 0)), f.x), mix(chH(i + vec3(0, 1, 0)), chH(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(chH(i + vec3(0, 0, 1)), chH(i + vec3(1, 0, 1)), f.x), mix(chH(i + vec3(0, 1, 1)), chH(i + vec3(1, 1, 1)), f.x), f.y), f.z); }`;
+const CHAR_COLOR = /* glsl */ `
+  #if defined( USE_COLOR_ALPHA )
+    vec3 chK = vColor.rgb;
+  #elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
+    vec3 chK = vColor;
+  #else
+    vec3 chK = vec3(0.8, 0.0, 0.0);
+  #endif
+  vec3 chP = vChP * 2.2 + chK.b * 23.0;
+  float chNs = chN(chP) * 0.6 + chN(chP * 2.7) * 0.4;
+  vec3 chWn = normalize(vChN);
+  float chTop = smoothstep(-0.3, 0.9, chWn.y);
+  float chSoot = clamp(chK.r * (0.5 + 0.55 * chTop) + (chNs - 0.5) * 0.7 * chK.r, 0.0, 1.0);
+  float chL = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+  // paint survives faintly under the soot; burnt-through patches go black, the rest heat-tinted brown-grey metal
+  vec3 chC = mix(vec3(chL), diffuseColor.rgb, 0.5 - 0.3 * chK.r) * (1.0 - 0.72 * chSoot);
+  chC = mix(chC, vec3(0.05, 0.042, 0.036), smoothstep(0.62, 0.92, chSoot));
+  chC = mix(chC, chC * vec3(1.12, 0.96, 0.82), 0.5 * chK.r);
+  diffuseColor.rgb = chC;`;
+const CHAR_EMBER = /* glsl */ `
+  totalEmissiveRadiance = vec3(0.0);
+  float chCrack = smoothstep(0.58, 0.78, chN(vChP * 4.6 + chK.b * 41.0)) * smoothstep(0.35, 0.7, chSoot + 0.2);
+  totalEmissiveRadiance += vec3(2.4, 0.62, 0.1) * chK.g * chK.g * (chCrack * 1.8 + 0.08 * chSoot);
+  #include <lights_fragment_begin>`;
+const charCache = new WeakMap<THREE.Material, THREE.Material>();
+function charred(src: THREE.Material): THREE.Material | null {
+  const hit = charCache.get(src);
+  if (hit) return hit;
+  const s = src as THREE.Material & { isMeshStandardMaterial?: boolean; isMeshToonMaterial?: boolean; isMeshLambertMaterial?: boolean; isMeshPhongMaterial?: boolean };
+  if (!(s.isMeshStandardMaterial || s.isMeshToonMaterial || s.isMeshLambertMaterial || s.isMeshPhongMaterial) || src.transparent) return null;
+  const m = src.clone();
+  const base = src.onBeforeCompile, key = src.customProgramCacheKey();
+  m.onBeforeCompile = (sh, r) => {
+    base.call(src, sh, r);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>' + CHAR_VERT_DECL)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvChP = position;')
+      .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvChN = inverseTransformDirection(transformedNormal, viewMatrix);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>' + CHAR_FRAG_DECL)
+      .replace('#include <color_fragment>', CHAR_COLOR)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.95, chSoot);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor *= 1.0 - 0.6 * chSoot;')
+      .replace('#include <lights_fragment_begin>', CHAR_EMBER);
+  };
+  m.customProgramCacheKey = () => key + '|char1';
+  charCache.set(src, m);
+  return m;
+}
+/** wreck twin of a unit part material (the plain burnt-out look for anything the char pass can't wrap) */
+function wreckMat(src: THREE.Material): THREE.Material { return charred(src) ?? charred(lookMats.wreck) ?? lookMats.wreck; }
+
 interface TNode {
   src: THREE.Object3D;
   parent: number;
@@ -250,7 +313,7 @@ class Pool {
     this.cap = cap;
     this.tpl.meshes.forEach((src, j) => {
       if (this.look !== 'normal' && this.tpl.isBlob[j]) { this.meshes.push(null as unknown as THREE.InstancedMesh); return; }
-      const mat = this.look === 'normal' ? (src.material as THREE.Material) : lookMats[this.look];
+      const mat = this.look === 'normal' ? (src.material as THREE.Material) : this.look === 'wreck' ? wreckMat(src.material as THREE.Material) : lookMats[this.look];
       const im = new THREE.InstancedMesh(src.geometry, mat, cap);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       im.setColorAt(0, new THREE.Color(1, 1, 1));
