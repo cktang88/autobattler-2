@@ -23,6 +23,7 @@ const one = (w: string) => mk([w, null]);
 interface Role { key: string; job: string; weapon: Design; peers: Design[]; targets: Design[]; off?: Design[] }
 export const ROLES: Role[] = [
   { key: 'laser', job: 'fast movers and aircraft', weapon: one('laser'), peers: [one('mg'), one('hmg'), one('ac40'), one('guidedrocket')], targets: [S('strafer'), S('hornet'), S('buzzsaw')], off: [S('ironclad'), S('ripper')] },
+  { key: 'aa', job: 'aircraft only (air-only guns should beat the versatile ones here)', weapon: one('flak'), peers: [one('quad20'), one('aamissile'), one('ac40'), one('sam'), one('hmg')], targets: [S('hornet'), S('strafer'), mk(['sam', 'swarm'], 'gunship', 'rotor')], off: [S('bulwark')] },
   { key: 'twinlaser', job: 'single armoured targets (focus)', weapon: one('twinlaser'), peers: [one('cannon75'), one('autocannon'), one('atgm'), one('heatray')], targets: [S('ironclad'), S('bulwark'), S('aegiswall')], off: [S('buzzsaw'), S('hornet')] },
   { key: 'heatray', job: 'armour at knife range', weapon: one('heatray'), peers: [one('cannon75'), one('twinlaser'), one('atgm')], targets: [S('ironclad'), S('bulwark'), S('ripper')], off: [S('thunderhead'), S('hornet')] },
   { key: 'plasma', job: 'squads and columns (piercing lance)', weapon: one('plasma'), peers: [one('flechette'), one('minigun'), one('autocannon')], targets: [S('ripper'), S('torchbug'), S('hunter')], off: [S('ironclad')] },

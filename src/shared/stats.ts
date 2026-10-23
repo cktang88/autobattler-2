@@ -310,7 +310,9 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   v *= hitFactor(w);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;
-  const coverage = w.targetsGround && w.targetsAir ? 1.15 : w.targetsGround ? 0.85 : 1.5 * (w.airBonus ?? 1);
+  // versatility costs: a gun that hits both ground and air pays a premium; ground-only or air-only guns get more
+  // dps per supply (air-only: x its anti-air bonus, since its dps is counted against ground armour)
+  const coverage = w.targetsGround && w.targetsAir ? 1.5 : w.targetsGround ? 0.65 : 1.05 * (w.airBonus ?? 1);
   return v * coverage * rangeF * cal(w.id);
 }
 
