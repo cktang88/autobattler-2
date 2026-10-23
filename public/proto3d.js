@@ -34955,6 +34955,85 @@ var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
 
 // src/client/proto3d/surface3d.ts
 var base = "assets/tex/";
+var LAYER = {
+  scout: 0,
+  cast: 1,
+  slab: 2,
+  titan: 3,
+  air: 4,
+  rotor: 5,
+  arty: 6,
+  support: 7,
+  carapace: 8,
+  ceramic: 9,
+  brawler: 10,
+  stealth: 11,
+  grating: 12,
+  machinery: 13
+};
+var N_LAYERS = 14;
+var TEX = 512;
+var L0 = {
+  scout: [1, 0.3, 0, 0],
+  cast: [1.2, 0.4, 0, 0],
+  slab: [1.4, 0.3, 0, 0],
+  titan: [1.1, 0.5, 0.3, 0],
+  air: [0.8, 0, 0, 0],
+  rotor: [1, 0, 0, 0],
+  arty: [1, 0, 0, 0],
+  support: [0.7, 0, 0, 0.7],
+  carapace: [0.9, 0, 0, 0],
+  ceramic: [0.7, 0, 0, 0],
+  brawler: [1.3, 0, 0.9, 0],
+  stealth: [0.6, 0, 0, 0],
+  grating: [1.3, 0, 0, 0],
+  machinery: [1.2, 0, 0, 0]
+};
+var L1 = {
+  scout: [0, 0, 0, 0],
+  cast: [0, 0, 0, 0],
+  slab: [0, 0, 0, 0.7],
+  titan: [0, 0, 0, 0],
+  air: [0, 0, 0, 0],
+  rotor: [0, 0, 0, 0.6],
+  arty: [0, 0.55, 0, 0],
+  support: [0, 0, 0, 0],
+  carapace: [0, 0, 0.35, 0],
+  ceramic: [0.6, 0, 0.08, 0],
+  brawler: [0, 0, 0, 0],
+  stealth: [0, 0, 0, 0],
+  grating: [0, 0, 0, 0],
+  machinery: [0, 0, 0, 0.6]
+};
+var UNIT = {
+  scout: [0.8, 0.8, 1, 0],
+  cast: [0.7, 1, 1, 0],
+  slab: [0.75, 1.35, 1, 0],
+  titan: [1.1, 1.2, 0.9, 0],
+  air: [0.45, 0.3, 0.6, 0],
+  rotor: [0.7, 0.8, 0.8, 0],
+  arty: [0.8, 1.2, 1, 0],
+  support: [0.35, 0.45, 0.5, 0],
+  carapace: [0.1, 0.6, 0.7, 0],
+  ceramic: [0.25, 0.35, 0.4, 0],
+  brawler: [1.8, 1.1, 1, 0],
+  stealth: [0.2, 0.4, 0.4, 0],
+  grating: [1, 1, 1, 0],
+  machinery: [1, 1, 1, 0]
+};
+var vec4s = (t) => {
+  const out2 = [];
+  for (let i = 0; i < 16; i++) {
+    const k = Object.keys(LAYER).find((n) => LAYER[n] === i);
+    out2.push(new Vector4(...k ? t[k] : [1, 0, 0, 0]));
+  }
+  return out2;
+};
+function flatArray() {
+  const t = new DataArrayTexture(new Uint8Array([128, 128, 191, 0]), 1, 1, 1);
+  t.needsUpdate = true;
+  return t;
+}
 function flat(r, g, b) {
   const t = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat);
   t.wrapS = t.wrapT = RepeatWrapping;
@@ -34962,90 +35041,232 @@ function flat(r, g, b) {
   return t;
 }
 var surfaceUniforms = {
-  sdA: { value: flat(128, 128, 191) },
+  sdA: { value: flatArray() },
   sdB: { value: flat(0, 0, 128) },
+  sdM: { value: flat(0, 0, 0) },
   /** 1 when the maps are loaded and detail is enabled */
   sdOn: { value: 0 },
-  /** texture tiles per object-space unit (1 unit = 1 cell = 5 m): one 1024 px tile spans ~1.6 cells */
-  sdScale: { value: 0.62 },
-  /** bump strength */
-  sdBump: { value: 0.9 }
+  /** global bump strength */
+  sdBump: { value: 0.9 },
+  sdL0: { value: vec4s(L0) },
+  sdL1: { value: vec4s(L1) },
+  sdU: { value: vec4s(UNIT) }
 };
 var loaded = 0;
 var started = false;
 var wanted = true;
+var NEED = 3;
 var sync = () => {
-  surfaceUniforms.sdOn.value = loaded === 2 && wanted ? 1 : 0;
+  surfaceUniforms.sdOn.value = loaded === NEED && wanted ? 1 : 0;
 };
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = rej;
+    im.src = src;
+  });
+}
+function pixels(im) {
+  const c = document.createElement("canvas");
+  c.width = im.width;
+  c.height = im.height;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(im, 0, 0);
+  return g.getImageData(0, 0, im.width, im.height).data;
+}
 function loadSurfaceTextures() {
   if (started || typeof document === "undefined" || typeof Image === "undefined") return;
   started = true;
-  const ld = new TextureLoader();
-  const get = (file, key) => ld.load(base + file, (t) => {
+  const done = () => {
+    loaded++;
+    sync();
+  };
+  Promise.all([loadImage(base + "surf_detail.png"), loadImage(base + "surf_mask.png")]).then(([rgb, msk]) => {
+    const a = pixels(rgb), m = pixels(msk);
+    const layers = Math.min(N_LAYERS, Math.floor(rgb.height / TEX));
+    const data = new Uint8Array(TEX * TEX * 4 * layers);
+    for (let l = 0; l < layers; l++) for (let y = 0; y < TEX; y++) {
+      const src = (l * TEX + (TEX - 1 - y)) * TEX * 4, dst = (l * TEX + y) * TEX * 4;
+      for (let x = 0; x < TEX * 4; x += 4) {
+        data[dst + x] = a[src + x];
+        data[dst + x + 1] = a[src + x + 1];
+        data[dst + x + 2] = a[src + x + 2];
+        data[dst + x + 3] = m[src + x];
+      }
+    }
+    const t = new DataArrayTexture(data, TEX, TEX, layers);
     t.wrapS = t.wrapT = RepeatWrapping;
-    t.colorSpace = NoColorSpace;
     t.minFilter = LinearMipmapLinearFilter;
     t.magFilter = LinearFilter;
     t.generateMipmaps = true;
     t.anisotropy = 8;
+    t.colorSpace = NoColorSpace;
     t.needsUpdate = true;
-    surfaceUniforms[key].value = t;
-    loaded++;
-    sync();
+    surfaceUniforms.sdA.value = t;
+    done();
+  }).catch(() => {
+  });
+  const ld = new TextureLoader();
+  ld.load(base + "hull_wear.jpg", (t) => {
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.colorSpace = NoColorSpace;
+    t.minFilter = LinearMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 8;
+    t.needsUpdate = true;
+    surfaceUniforms.sdB.value = t;
+    done();
   }, void 0, () => {
   });
-  get("hull_detail.png", "sdA");
-  get("hull_wear.jpg", "sdB");
+  ld.load(base + "surf_marks.png", (t) => {
+    t.colorSpace = NoColorSpace;
+    t.generateMipmaps = false;
+    t.minFilter = LinearFilter;
+    t.needsUpdate = true;
+    surfaceUniforms.sdM.value = t;
+    done();
+  }, void 0, () => {
+  });
 }
 var SD_VERT_DECL = (
   /* glsl */
   `
-varying vec3 vSdP; varying vec3 vSdN; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;`
+attribute vec4 sdv; attribute vec4 sdb;
+varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;`
 );
 var SD_VERT_MAIN = (
   /* glsl */
   `
-  vSdP = position; vSdN = normal;
+  vSdP = position; vSdV = sdv; vSdB = sdb;
   {
-    mat3 sdM = mat3(modelViewMatrix);
+    mat3 sdMv = mat3(modelViewMatrix);
     #ifdef USE_INSTANCING
-      sdM = sdM * mat3(instanceMatrix);
+      sdMv = sdMv * mat3(instanceMatrix);
     #endif
-    vSdAX = sdM[0]; vSdAY = sdM[1]; vSdAZ = sdM[2];
+    vSdAX = normalize(sdMv[0]); vSdAY = normalize(sdMv[1]); vSdAZ = normalize(sdMv[2]);
   }`
 );
 var SD_FRAG_DECL = (
   /* glsl */
   `
-varying vec3 vSdP; varying vec3 vSdN; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;
-uniform sampler2D sdA; uniform sampler2D sdB; uniform float sdOn; uniform float sdScale; uniform float sdBump;`
+varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;
+uniform highp sampler2DArray sdA; uniform sampler2D sdB; uniform sampler2D sdM; uniform float sdOn; uniform float sdBump;
+uniform vec4 sdL0[16]; uniform vec4 sdL1[16]; uniform vec4 sdU[16];
+float sdCav, sdWear, sdGrime, sdMot, sdMask, sdLayer, sdRegion, sdGiant; vec3 sdGrad; vec3 sdON;
+float sdLayerFor(int mi, float wny) {
+  float w = floor(vSdV.w + 0.5);
+  sdRegion = floor(w / 32.0);
+  float sec = mod(w, 32.0) - 1.0;
+  sdGiant = sec >= 0.0 ? 1.0 : 0.0;
+  bool mech = mi == 3 || mi == 4;
+  if (sdRegion > 1.5 && mech) return 13.0;               // running gear joints / hubs: machinery
+  if (sec >= 0.0 && sdRegion < 0.5) {                     // giant hull: skin by part
+    if (mi == 2) return sec;                              // superstructure panels
+    if (mi == 1 && wny > 0.8) return 12.0;                // decks: grating
+    if (mech) return 13.0;                                // exposed machinery
+  }
+  return floor(vSdV.x + 0.5);
+}
+void sdRun(int mi, vec3 nView) {
+  sdCav = 1.0; sdWear = 0.0; sdGrime = 0.0; sdMot = 0.0; sdMask = 0.0; sdGrad = vec3(0.0); sdLayer = 0.0;
+  sdON = normalize(vec3(dot(nView, vSdAX), dot(nView, vSdAY), dot(nView, vSdAZ)));
+  sdLayer = sdLayerFor(mi, sdON.y);
+  if (sdOn < 0.5) return;
+  float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
+  vec3 tw = pow(abs(sdON), vec3(6.0)); tw /= (tw.x + tw.y + tw.z);
+  vec3 p = vSdP * dens;
+  vec2 uX = p.zy + vec2(0.37, 0.11), uY = p.xz + vec2(0.71, 0.29), uZ = p.xy + vec2(0.13, 0.57);
+  vec4 aX = texture(sdA, vec3(uX, sdLayer)), aY = texture(sdA, vec3(uY, sdLayer)), aZ = texture(sdA, vec3(uZ, sdLayer));
+  vec3 bX = texture2D(sdB, uX * 0.5).rgb, bY = texture2D(sdB, uY * 0.5).rgb, bZ = texture2D(sdB, uZ * 0.5).rgb;
+  vec4 a = aX * tw.x + aY * tw.y + aZ * tw.z;
+  vec3 b = bX * tw.x + bY * tw.y + bZ * tw.z;
+  sdCav = a.b / 0.75; sdMask = a.a;
+  float macro = texture2D(sdB, (vSdP.xz + vSdP.yy * vec2(0.6, -0.4)) * 0.17 + vec2(0.5, 0.2)).g;
+  sdWear = b.r; sdGrime = b.g * (0.45 + 0.9 * macro); sdMot = b.b - 0.5 + (0.35 - macro) * 0.35;
+  vec2 sX = aX.rg - 0.5, sY = aY.rg - 0.5, sZ = aZ.rg - 0.5;
+  sdGrad = tw.x * vec3(0.0, sX.y, sX.x) + tw.y * vec3(sY.x, 0.0, sY.y) + tw.z * vec3(sZ.x, sZ.y, 0.0);
+  sdGrad *= sdL0[int(sdLayer)].x;
+}
+/** one glyph of the marks atlas painted on the flank (object x/y), read from the side the fragment faces */
+float sdGlyph(float cell, vec2 c, float h, float sgn) {
+  float u = (vSdP.x - c.x) * sgn / (0.75 * h) + 0.5, v = (vSdP.y - c.y) / h + 0.5;
+  float inb = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
+  return texture2D(sdM, vec2((cell + clamp(u, 0.01, 0.99)) / 12.0, clamp(v, 0.01, 0.99))).r * inb;
+}
+/** the same on the top deck, upright when seen from behind (object z across, x up the glyph) */
+float sdGlyphTop(float cell, vec2 c, float h) {
+  float u = (vSdP.z - c.y) / (0.75 * h) + 0.5, v = (vSdP.x - c.x) / h + 0.5;
+  float inb = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
+  return texture2D(sdM, vec2((cell + clamp(u, 0.01, 0.99)) / 12.0, clamp(v, 0.01, 0.99))).r * inb;
+}`
 );
-var SD_FRAG_SAMPLE = (
+var SD_APPLY = (
   /* glsl */
   `
-  float sdCav = 1.0, sdWear = 0.0, sdGrime = 0.0, sdMot = 0.0;
-  vec3 sdGrad = vec3(0.0);
-  if (sdOn > 0.5) {
-    vec3 tw = pow(abs(normalize(vSdN)), vec3(6.0)); tw /= (tw.x + tw.y + tw.z);
-    vec3 p = vSdP * sdScale;
-    vec2 uX = p.zy + vec2(0.37, 0.11), uY = p.xz + vec2(0.71, 0.29), uZ = p.xy + vec2(0.13, 0.57);
-    vec3 aX = texture2D(sdA, uX).rgb, aY = texture2D(sdA, uY).rgb, aZ = texture2D(sdA, uZ).rgb;
-    vec3 bX = texture2D(sdB, uX).rgb, bY = texture2D(sdB, uY).rgb, bZ = texture2D(sdB, uZ).rgb;
-    vec3 a = aX * tw.x + aY * tw.y + aZ * tw.z;
-    vec3 b = bX * tw.x + bY * tw.y + bZ * tw.z;
-    sdCav = a.b / 0.75;
-    // one coarse, skewed planar fetch for large-scale weathering (patchy grime, uneven paint) that breaks up tiling
-    float macro = texture2D(sdB, (vSdP.xz + vSdP.yy * vec2(0.6, -0.4)) * 0.17 + vec2(0.5, 0.2)).g;
-    sdWear = b.r; sdGrime = b.g * (0.45 + 0.9 * macro); sdMot = b.b - 0.5 + (0.35 - macro) * 0.35;
-    vec2 sX = aX.rg - 0.5, sY = aY.rg - 0.5, sZ = aZ.rg - 0.5;
-    sdGrad = tw.x * vec3(0.0, sX.y, sX.x) + tw.y * vec3(sY.x, 0.0, sY.y) + tw.z * vec3(sZ.x, sZ.y, 0.0);
+  float sdGlow = 0.0, sdRough = 1.0, sdMetal = 0.0; vec3 sdGradR = vec3(0.0);
+  sdRun(mi, normalize(vNormal));
+  {
+    int sl = int(sdLayer + 0.5);
+    vec4 l0 = sdL0[sl], l1 = sdL1[sl], up = sdU[int(vSdV.z + 0.5)];
+    // fine detail (seams, rivets, small stencils, pits) fades out once a texel is well under a pixel, so a zoomed-out
+    // battle shows clean paint instead of averaged-down grey mud; big features (masks, markings, wear on edges) stay
+    float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
+    float lod = log2(max(length(fwidth(vSdP)) * dens * 512.0, 1e-4));
+    float fine = 1.0 - smoothstep(2.2, 4.0, lod);
+    float det = sdRowDet * fine;
+    float sdW = sdRowWear * up.x, sdGr = sdRowGrime * up.y;
+    base *= mix(1.0, pow(sdCav, 1.5), det);
+    // the skin's special mask: camo / pits / scorch darken, gouges = bare metal, role paint in the team accent,
+    // dust, chitin sheen, soot / oil = grime, circuit glow
+    float mk = sdMask * sdRowDet;
+    base *= 1.0 - mk * l0.y;
+    float wearSrc = max(sdWear * up.x, sdMask * l0.z);
+    base = mix(base, sdAccent * (0.85 + 0.2 * sdCav), mk * l0.w);
+    base = mix(base, vec3(0.6, 0.53, 0.42), mk * l1.y * 0.55);
+    base *= 1.0 + mk * l1.z * 0.35;
+    float grimeSrc = max(sdGrime, sdMask * l1.w);
+    sdGlow = mk * l1.x;
+    // mottling and grime: low on the hull, underneath and in streaks down the sides; top faces stay clean
+    base *= 1.0 + sdMot * 0.32 * sdRowGrime * up.z * (0.4 + 0.6 * fine);
+    float low = 1.0 - smoothstep(0.05, 0.7, vWY);
+    float topClean = mix(1.0, 0.3, smoothstep(0.5, 0.9, wn.y));
+    float gr = clamp(grimeSrc * (0.6 + 0.6 * low) * topClean + sdGiant * 0.5 * smoothstep(-0.2, -0.7, wn.y), 0.0, 1.0) * sdGr;
+    base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.65);
+    // chipped paint: bare metal, concentrated on chamfer edges
+    float wm = wearSrc * sdRowWear * (0.15 + 1.5 * bev + 0.15 * smoothstep(0.5, 1.0, wn.y));
+    wm = smoothstep(0.5, 0.75, wm);
+    base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
+    sdMetal = wm; sdRough = mix(1.0 + gr * 0.3, 0.55, wm);
+    if (sdOn > 0.5) {
+      // giants: hazard bands on turret collars (the trim row of a turret)
+      if (sdGiant > 0.5 && sdRegion > 0.5 && sdRegion < 1.5 && mi == 1 && abs(sdON.y) < 0.5) {
+        float hz = step(0.5, fract((vSdP.x + vSdP.y + vSdP.z) * 5.0));
+        base = mix(base, mix(vec3(0.08), vec3(0.85, 0.64, 0.16), hz), 0.85 * (1.0 - wm * 0.7));
+      }
+      // heavy and bigger units: a hull number + insignia + kill tally on the flanks, the number again on the rear deck
+      if (vSdB.z > 0.0 && (mi == 0 || mi == 2)) {
+        float sgn = sign(sdON.z), side = smoothstep(0.6, 0.8, abs(sdON.z));
+        float h = vSdB.z; vec2 c = vSdB.xy;
+        float num = floor(vSdB.w + 0.5);
+        float gNum = max(sdGlyph(floor(num / 10.0), c - vec2(0.4 * h * sgn, 0.0), h, sgn), sdGlyph(mod(num, 10.0), c + vec2(0.4 * h * sgn, 0.0), h, sgn));
+        float gTally = sdGlyph(10.0, c - vec2(0.0, 0.82 * h), 0.5 * h, sgn) * side;
+        float gIns = sdGlyph(11.0, c - vec2(2.1 * h, 0.0), 1.15 * h, sgn) * side;
+        float th = 1.25 * h, tx = c.x - 3.2 * h, top = smoothstep(0.8, 0.92, sdON.y) * (mi == 0 ? 1.0 : 0.0);
+        gNum = max(gNum * side, top * max(sdGlyphTop(floor(num / 10.0), vec2(tx, -0.4 * th), th), sdGlyphTop(mod(num, 10.0), vec2(tx, 0.4 * th), th)));
+        float keep = 1.0 - 0.75 * smoothstep(0.3, 0.6, wearSrc);
+        base = mix(base, vec3(0.88, 0.87, 0.82), max(gNum, gTally) * keep * 0.92);
+        base = mix(base, sdAccent, gIns * keep * 0.9);
+      }
+    }
+    sdGradR = sdGrad * det;
   }`
 );
 var sdBumpGLSL = (g) => (
   /* glsl */
   `
   if (sdOn > 0.5) {
-    vec3 sdG = (normalize(vSdAX) * (${g}).x + normalize(vSdAY) * (${g}).y + normalize(vSdAZ) * (${g}).z) * sdBump;
+    vec3 sdG = (vSdAX * (${g}).x + vSdAY * (${g}).y + vSdAZ * (${g}).z) * sdBump;
     normal = normalize(normal - (sdG - normal * dot(normal, sdG)));
   }`
 );
@@ -35411,28 +35632,16 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         base = mix(base, base * 1.2 + vec3(0.02), bev * rB.x);
         // soft ground-contact darkening
         base *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
-        // ---- surface detail (surface3d.ts) ----
-        ${SD_FRAG_SAMPLE}
-        float sdDet = rA.w, sdW = rB.z, sdGr = uE[mi].w;
-        // plate seams, rivets, hatches, stencil paint
-        base *= mix(1.0, sdCav, sdDet);
-        // fine mottling and patchy grime / drip streaks (darker, slightly warmer), more of it low on the hull
-        base *= 1.0 + sdMot * 0.32 * sdGr;
-        float low = 1.0 - smoothstep(0.05, 0.7, vWY);
-        float gr = clamp(sdGrime * (0.75 + 0.6 * low), 0.0, 1.0) * sdGr;
-        base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.7);
-        // chipped paint: bare metal flecks, concentrated on chamfer edges and upper surfaces
-        float wm = sdWear * sdW * (0.4 + 1.3 * bev + 0.2 * smoothstep(0.5, 1.0, wn.y));
-        wm = smoothstep(0.5, 0.75, wm);
-        base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
-        vec3 sdGradR = sdGrad * sdDet;
+        // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
+        float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
+        ${SD_APPLY}
         diffuseColor.rgb = base;`
     ).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
-        totalEmissiveRadiance = uE[mi].rgb;
+        totalEmissiveRadiance = uE[mi].rgb + uE[10].rgb * sdGlow * 0.5;
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
         totalEmissiveRadiance += rimCol * fres * 0.16 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => "uberToon2";
+  m.customProgramCacheKey = () => "uberToon3";
   return m;
 }
 var TEAM_PAINT = [
@@ -41758,8 +41967,8 @@ function monolith(c) {
   planLoft(b, kit.trim, ngon2(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
   const P1 = sc2(mirror3([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
   const s1 = yt + 1.25 * k, sTop = 0.78;
-  const L1 = [[yt - 0.12, 0.9], [yt + 0.2 * k, 1], [s1, sTop]];
-  planLoft(b, kit.hull, P1, L1);
+  const L12 = [[yt - 0.12, 0.9], [yt + 0.2 * k, 1], [s1, sTop]];
+  planLoft(b, kit.hull, P1, L12);
   planLoft(b, kit.trim, P1, [[yt + 0.1 * k, 1.014], [yt + 0.26 * k, 1.014]]);
   const P2u = sc2(mirror3([[3.05, 0], [2.95, -0.55], [1.7, -2.15], [-1.5, -2.3], [-2.75, -1.6], [-2.75, 0]]));
   planLoft(b, kit.trim, P2u, [[s1 - 0.04, 0.84], [s1 + 0.42 * k, 0.86]]);
@@ -42090,6 +42299,86 @@ function buildRotor(b, kit, parent, chassisId, L, W, S) {
   }), hpY: () => 0.3 };
 }
 
+// src/client/proto3d/skins.ts
+var TILE_SPAN = [0, 0.95, 1.3, 1.8, 2.4, 3];
+var CREATURES = /* @__PURE__ */ new Set(["mantis", "arachnid", "crab", "centipede", "scorpion", "broodmother", "arachne", "leviathan"]);
+var SUPPORT_UTIL = /* @__PURE__ */ new Set(["support"]);
+function turretSkin(m, hull, giant) {
+  if (!m) return null;
+  if (hull === "stealth" || hull === "carapace") return hull;
+  if (m.category === "energy") return "ceramic";
+  if (m.category === "artillery" || m.category === "missile" || m.category === "rocket") return "arty";
+  if (m.category === "melee") return "brawler";
+  if (SUPPORT_UTIL.has(m.category) || m.category === "defense") return "support";
+  return giant ? hull === "titan" ? "slab" : hull : hull;
+}
+function pickSkin(design, ch, mob, mods) {
+  const S = Math.max(1, Math.min(5, ch.size));
+  const giant = S >= 4;
+  const ms = mods.filter((m) => !!m);
+  const weps = ms.filter((m) => m.kind === "weapon");
+  const share = (pred, list = weps) => list.length ? list.filter(pred).length / list.length : 0;
+  const roles = ch.roles ?? [];
+  let hull;
+  if (ch.domain === "jet" || mob.id === "jet") hull = "air";
+  else if (ch.domain === "heli" || mob.kind === "air") hull = "rotor";
+  else if (ch.shape === "saucer") hull = "ceramic";
+  else if (CREATURES.has(ch.id) || CREATURES.has(ch.shape)) hull = "carapace";
+  else if (ms.some((m) => m.category === "stealth" && /cloak|veil/i.test(m.name))) hull = "stealth";
+  else if (roles.includes("support") || share((m) => SUPPORT_UTIL.has(m.category), ms) >= 0.5) hull = "support";
+  else if (roles.includes("melee") || share((m) => m.category === "melee") >= 0.25) hull = "brawler";
+  else if (share((m) => m.category === "energy") >= 0.5) hull = "ceramic";
+  else if (giant) hull = "titan";
+  else if (roles.includes("artillery") || share((m) => m.category === "artillery") >= 0.5) hull = "arty";
+  else hull = S >= 3 ? "slab" : S === 2 ? "cast" : "scout";
+  const secondary = !giant ? null : hull === "carapace" ? "ceramic" : hull === "air" || hull === "rotor" ? "scout" : hull === "ceramic" ? "scout" : "scout";
+  return { hull, secondary, turret: mods.map((m) => turretSkin(m, hull, giant)), density: 1 / TILE_SPAN[S], giant, size: S };
+}
+function setAttr(g, name, v) {
+  const n = g.attributes.position.count;
+  const a = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) a.set(v, i * 4);
+  g.setAttribute(name, new BufferAttribute(a, 4));
+}
+function applySkin(root, body, turretRoots, uber, skin, designId) {
+  const prim = LAYER[skin.hull];
+  const sec = skin.secondary ? LAYER[skin.secondary] + 1 : 0;
+  const turretOf = /* @__PURE__ */ new Map();
+  for (const t of turretRoots) turretOf.set(t.obj, t.mount);
+  const regionOf = (o) => {
+    let underBody = false;
+    for (let p = o; p; p = p.parent) {
+      const m = turretOf.get(p);
+      if (m !== void 0) return { region: 1, mount: m };
+      if (p === body) underBody = true;
+      if (p === root) break;
+    }
+    return { region: underBody ? 0 : 2, mount: -1 };
+  };
+  const hullMeshes = [];
+  root.traverse((o) => {
+    const me = o;
+    if (!me.isMesh || me.material !== uber) return;
+    const { region, mount } = regionOf(me);
+    const layer = region === 1 ? LAYER[skin.turret[mount] ?? skin.hull] : prim;
+    setAttr(me.geometry, "sdv", [layer, skin.density, prim, sec + 32 * region]);
+    if (region === 0) hullMeshes.push(me);
+  });
+  if (skin.size < 3 || !hullMeshes.length || skin.hull === "stealth" || skin.hull === "carapace") return;
+  const box = new Box3();
+  for (const me of hullMeshes) {
+    me.geometry.computeBoundingBox();
+    box.union(me.geometry.boundingBox);
+  }
+  const size = box.getSize(new Vector3());
+  const h = Math.max(0.25, Math.min(size.y * 0.24, size.x * 0.09, 0.75));
+  let hash = 7;
+  for (const c of designId) hash = hash * 31 + c.charCodeAt(0) >>> 0;
+  const num = 10 + hash % 90;
+  const cx = box.min.x + size.x * 0.6, cy = box.min.y + size.y * 0.6;
+  for (const me of hullMeshes) setAttr(me.geometry, "sdb", [cx, cy, h, num]);
+}
+
 // src/client/proto3d/units3d.ts
 var blobTex = null;
 var blobMat = null;
@@ -42197,6 +42486,7 @@ function buildUnit(design, team) {
     turrets.push(tu);
   }
   hb.mount(body, kit.decal);
+  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i].yaw, mount: m.i })), kit.uber, pickSkin(design, ch, mob, mods), design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => {
