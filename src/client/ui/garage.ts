@@ -20,6 +20,7 @@ import * as kit from './kit.ts';
 import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
+import { TARGETS, THREATS, intelNumbers, percentile, referenceMeans, runMatchups, type IntelNumbers, type Matchup } from '../../shared/intel.ts';
 import { addFolder, folderOf, loadFolders, moveToFolder, removeFolder, renameFolder, saveFolders, FOLDER_NAME_MAX, type Folder } from '../folders.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
@@ -87,6 +88,14 @@ const ROSTER_SORTS: { value: RosterSort; label: string; hint: string }[] = [
 const LS_SORT = 'garage.sort';
 const LS_HIDE_STARTERS = 'garage.hideStarters';
 const STARTER_IDS = new Set(STARTER_DESIGNS.map((d) => d.id));
+/** Intel tab: reference roster (the starters) and its averages, equal-supply budget for the matchup fights, and the
+ *  matchup results cached per loadout (they take a second or two to compute). */
+const INTEL_BUDGET = 600;
+const INTEL_REFS = () => STARTER_DESIGNS;
+let INTEL_REF: { means: IntelNumbers; all: IntelNumbers[] } | null = null;
+const INTEL_CACHE = new Map<string, Matchup[]>();
+const intelKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.join(',')}|${JSON.stringify(d.behavior ?? {})}`;
+let intelStop: (() => void) | null = null;
 const loadSort = (): RosterSort => {
   try { const v = localStorage.getItem(LS_SORT); if (v && ROSTER_SORTS.some((x) => x.value === v)) return v as RosterSort; } catch { /* storage unavailable */ }
   return 'size';
@@ -1809,9 +1818,78 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       }, { custom: false, kiteOptions: ko, defaults: defs }));
   }
 
+  /** Intel: what the design beats, what it's good at killing, how long it lasts and how it reaches, all at equal
+   *  supply against the starter designs (shared/intel.ts). The price breakdown sits collapsed at the bottom. */
   function renderIntel(): HTMLElement[] {
     const s = statsOf(draft);
     if (!s) return [h('p.g-note', null, 'This design has no valid stats yet.')];
+    const n = intelNumbers(draft);
+    if (!n) return [h('p.g-note', null, 'This design has no valid stats yet.')];
+    INTEL_REF ??= { means: referenceMeans(STARTER_DESIGNS), all: STARTER_DESIGNS.map(intelNumbers).filter((x): x is IntelNumbers => !!x) };
+    const ref = INTEL_REF;
+    const rate = (r: number) => (r <= 0 ? ['Can\'t hit', 'r-none'] : r >= 1.4 ? ['Strong', 'r-hi'] : r >= 0.85 ? ['Good', 'r-ok'] : r >= 0.5 ? ['Weak', 'r-lo'] : ['Poor', 'r-bad']);
+    const bar = (r: number, cls: string) => h('span.g-ibar', { class: cls }, h('span', { style: { width: `${Math.min(100, (r / 2.5) * 100)}%` } }), h('i', { style: { left: `${100 / 2.5}%` } }));
+    const ratioRow = (label: string, tip: string, r: number, val: string) => {
+      const [word, cls] = rate(r);
+      return h('div.g-irow', { title: tip }, h('span.g-irow-k', null, label), bar(r, cls), h('span.g-irow-v', { class: cls }, word), h('span.g-irow-n', null, val));
+    };
+    const pct = (v: number) => `${Math.round(v * 100)}%`;
+    const sp = (v: number) => `${Math.round(v * METERS_PER_CELL)} m/s`;
+    const reachP = percentile(n.range, ref.all.map((x) => x.range)), speedP = percentile(n.speed, ref.all.map((x) => x.speed));
+    return [
+      h('div.g-insp-sec', null,
+        h('span.g-sec-l', { title: `Quick fights at about ${INTEL_BUDGET} supply each side, from both ends of the field, against every starter design` }, `Matchups · equal supply (${INTEL_BUDGET})`),
+        matchupsEl(),
+      ),
+      h('div.g-insp-sec', null,
+        h('span.g-sec-l', { title: 'Damage per second for every 100 supply spent, after armour, penetration, shields and accuracy, compared with the average starter (the tick marks 1×)' }, 'Damage per 100 supply vs'),
+        h('div.g-irows', null, ...TARGETS.map((t, i) => ratioRow(t.label, t.tip, n.dmg[i] / (ref.means.dmg[i] || 1), n.dmg[i] > 0 ? `${Math.round(n.dmg[i])} dps · ${(n.dmg[i] / (ref.means.dmg[i] || 1)).toFixed(1)}×` : '—'))),
+      ),
+      h('div.g-insp-sec', null,
+        h('span.g-sec-l', { title: 'How long 100 supply of this design survives 100 dps of each kind of fire (armour counts hugely against small arms, not against anti-tank), compared with the average starter' }, 'Toughness per 100 supply vs'),
+        h('div.g-irows', null, ...THREATS.map((t, i) => ratioRow(t.label, t.tip, n.tough[i] / (ref.means.tough[i] || 1), `${Math.round(n.tough[i])} s · ${(n.tough[i] / (ref.means.tough[i] || 1)).toFixed(1)}×`))),
+      ),
+      h('div.g-insp-sec', null,
+        h('span.g-sec-l', null, 'Reach & speed'),
+        h('div.g-specs', null,
+          row('Range', `${fmtMeters(n.range)} · outranges ${pct(reachP)} of starters`),
+          row('Speed', s.isStatic ? 'static emplacement' : `${sp(n.speed)} · faster than ${pct(speedP)} of starters`),
+        ),
+      ),
+      h('details.g-insp-sec.g-idetails', null, h('summary.g-sec-l', null, 'Price breakdown & raw stats'), ...renderPriceDetails(s)),
+    ];
+  }
+
+  /** equal-supply matchups, computed in small chunks after the tab renders and cached per loadout */
+  function matchupsEl(): HTMLElement {
+    const key = intelKey(draft);
+    const host = h('div.g-match');
+    const paint = (list: Matchup[], done: boolean) => {
+      const chip = (m: Matchup) => h('span.g-mchip', { title: `${m.opp.name}: ${m.score === 1 ? 'won both fights' : m.score === 0 ? 'lost both fights' : 'split / close'} at ~${INTEL_BUDGET} supply each` }, m.opp.name);
+      const beats = list.filter((m) => m.score > 0.6), close = list.filter((m) => m.score >= 0.4 && m.score <= 0.6), loses = list.filter((m) => m.score < 0.4);
+      host.replaceChildren(
+        done ? h('p.g-mverdict', null, h('b', null, `Wins ${beats.length} of ${list.length}`), ` equal-supply fights${close.length ? `, ${close.length} close` : ''}. The bars below explain why: damage and toughness per supply, and reach.`) : h('span'),
+        h('div.g-mrow.win', null, h('span.g-mrow-k', null, 'Beats'), h('span.g-mchips', null, ...(beats.length ? beats.map(chip) : [h('span.muted', null, '—')]))),
+        h('div.g-mrow.even', null, h('span.g-mrow-k', null, 'Close'), h('span.g-mchips', null, ...(close.length ? close.map(chip) : [h('span.muted', null, '—')]))),
+        h('div.g-mrow.lose', null, h('span.g-mrow-k', null, 'Loses to'), h('span.g-mchips', null, ...(loses.length ? loses.map(chip) : [h('span.muted', null, '—')]))),
+        ...(done ? [] : [h('p.g-note', null, `Testing… ${list.length} / ${INTEL_REFS().length}`)]),
+      );
+    };
+    const cached = INTEL_CACHE.get(key);
+    if (cached) { paint(cached, true); return host; }
+    intelStop?.();
+    paint([], false);
+    const refs = INTEL_REFS().filter((d) => d.id !== draft.id);
+    const target = { ...draft };
+    intelStop = runMatchups(target, refs, INTEL_BUDGET, (part) => { if (host.isConnected) paint(part, false); }, (all) => {
+      INTEL_CACHE.set(key, all);
+      if (INTEL_CACHE.size > 40) INTEL_CACHE.delete(INTEL_CACHE.keys().next().value!);
+      if (host.isConnected) paint(all, true);
+    });
+    return host;
+  }
+
+  function renderPriceDetails(s: UnitStats): HTMLElement[] {
     const ss = saved && dirty() ? statsOf(saved) : null;
     // every row is supply for one purchase (the whole block for a squad), from the same numbers the price is built from
     const q = s.squad;
