@@ -14,6 +14,7 @@ import { Bld } from './geo.ts';
 import './chassis/index.ts';
 import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
 import { buildJet, buildRotor, type Air } from './air3d.ts';
+import { applySkin, pickSkin } from './skins.ts';
 
 export interface Unit3D {
   root: THREE.Group;
@@ -130,6 +131,8 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     turrets.push(tu);
   }
   hb.mount(body, kit.decal);
+  // surface skin by role / domain / scale (skins.ts); turrets keep their own per-weapon skin
+  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), kit.uber, pickSkin(design, ch, mob, mods), design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && !(me.material as THREE.MeshBasicMaterial).isMeshBasicMaterial) tris += (me.geometry.index ? me.geometry.index.count : me.geometry.attributes.position.count) / 3; });
