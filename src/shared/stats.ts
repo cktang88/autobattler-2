@@ -188,6 +188,7 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
+  leech: 0.3, prism: 1.4, voidlance: 1.3, entropy: 1,
   aamissile: 1.26, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 2.22, arclance: 2.95, atgm: 8.11,
   autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 8.69, bulwarkshield: 1.48, buzzsaw: 0.27,
   cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 14.00, heavybomb: 6.05, cruise: 7.74, disarm: 0.416,
@@ -301,6 +302,10 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.slow) v += (w.slow / cyc) * 14;
   if (w.disarm) v += (w.disarm / cyc) * 28;
   if (w.shieldMult && w.shieldMult > 1) v *= 1 + 0.15 * (w.shieldMult - 1); // only matters against shielded targets
+  if (w.lifesteal) v *= 1 + 0.6 * w.lifesteal; // sustain: the unit lasts longer the more it hits
+  if (w.split && w.split > 1) v *= 1 + 0.55 * (w.split - 1); // extra beams find targets when there are several
+  if (w.pctHp) v += ((w.pctHp * 1500) / cyc) * 0.6; // ~1500 hp: the hulls worth pointing it at
+  if (w.shred) v += (w.shred / cyc) * 6; // stripped armour helps every other gun on the target
   if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 6 * (1 + 0.6 * (w.splash ?? 0));
   v *= hitFactor(w);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses

@@ -65,6 +65,10 @@ const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell'
 function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
   const def = MODULE_BY_ID.get(moduleId), v = def?.visual;
   if (def?.disarm) return { color: '#ffb02a', w: 0.05, life: 0.2, wob: 0.15 }; // amber jamming beam
+  if (def?.lifesteal) return { color: '#ff2a5a', w: 0.08, life: 0.14, wob: 0.2 }; // leech: crimson
+  if (def?.split) return { color: '#b8f4ff', w: 0.04, life: 0.12, wob: 0 }; // prism: thin cyan-white
+  if (def?.pctHp) return { color: '#7a2aff', w: 0.2, life: 0.3, wob: 0.1 }; // void lance: fat violet
+  if (def?.shred) return { color: '#c8e83a', w: 0.07, life: 0.12, wob: 0.3 }; // entropy: corrosive yellow-green
   if (v === 'gravity') return { color: '#9a5cff', w: 0.1, life: 0.14, wob: 0.45 };
   switch (v) {
     case 'laser': return { color: '#ff4a3a', w: 0.05, life: 0.1, wob: 0 };
@@ -82,7 +86,7 @@ function beamStyle(moduleId: string): { color: string; w: number; life: number; 
 type Fam =
   | 'mg' | 'twinmg' | 'hmg' | 'gatling' | 'shotgun' | 'flechette' | 'ac' | 'apc' | 'he' | 'gauss' | 'sniper' | 'rail'
   | 'rocket' | 'incend' | 'missile' | 'bigMissile' | 'grenade' | 'mortar' | 'howitzer' | 'cluster' | 'firebomb' | 'bomb'
-  | 'flak' | 'laser' | 'focus' | 'heatray' | 'plasma' | 'plasmaOrb' | 'empOrb' | 'sonic' | 'chain' | 'slow' | 'disarm'
+  | 'flak' | 'laser' | 'focus' | 'leech' | 'prism' | 'void' | 'entropy' | 'heatray' | 'plasma' | 'plasmaOrb' | 'empOrb' | 'sonic' | 'chain' | 'slow' | 'disarm'
   | 'gravity' | 'flame' | 'melee' | 'heal' | 'pd' | 'other';
 interface WStyle {
   fam: Fam;
@@ -119,6 +123,10 @@ function famOf(def: ModuleDef | undefined): Fam {
   if (pk === 'orb') return v === 'emp' ? 'empOrb' : v === 'sonic' ? 'sonic' : 'plasmaOrb';
   if (pk === 'lightning') return 'chain';
   if (def.ramp) return 'focus';
+  if (def.lifesteal) return 'leech';
+  if (def.split) return 'prism';
+  if (def.pctHp) return 'void';
+  if (def.shred) return 'entropy';
   if (def.disarm) return 'disarm';
   if (def.slow || v === 'slowbeam') return 'slow';
   if (v === 'gravity') return 'gravity';
@@ -148,7 +156,7 @@ function styleOf(id: string): WStyle {
   return st;
 }
 /** families whose beam / bolt event draws its own impact (their 'hit' only flares a shield) */
-const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
+const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'leech', 'prism', 'void', 'entropy', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
 
 const _v3 = new THREE.Vector3();
 const _col = new THREE.Color();
@@ -1430,6 +1438,11 @@ export class FieldView3D implements BattleView {
           case 'slow': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.frost, 3); fx.frostHit(end.x, by, end.y, s); break;
           case 'disarm': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.jam, 4); fx.jamHit(end.x, by, end.y, s); break;
           case 'gravity': fx.beamMotes(end.x, by, end.y, sx, ay, sz, RAMPS.gravity, 5); break;
+          // leech: life motes flow back along the beam into the shooter
+          case 'leech': fx.burnHit(end.x, by, end.y, s, 0.6); fx.beamMotes(end.x, by, end.y, sx, ay, sz, RAMPS.heal, 4); break;
+          case 'prism': fx.burnHit(end.x, by, end.y, s * 0.6, 0.5); break;
+          case 'void': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.gravity, 6); fx.glow(end.x, by, end.y, 0.6 + s * 0.4, 0.3, RAMPS.gravity); break;
+          case 'entropy': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.jam, 3); fx.burnHit(end.x, by, end.y, s, 0.5); break;
           case 'plasma': fx.railTrail(sx, ay, sz, end.x, by, end.y, RAMPS.plasma, s * 0.6); break;
           default: break;
         }

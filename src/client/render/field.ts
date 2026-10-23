@@ -2054,6 +2054,27 @@ export class FieldView {
         const back = dirA + Math.PI;
         let impact = true;
         const q = fx.busy < 0.7;
+        // the exotic energy weapons: each reads differently at a glance
+        if (mod?.lifesteal) { // leech: crimson beam, life motes flowing back to the shooter
+          fx.beam('laser', pts, '#ff2a5a', 0.06, 0.14);
+          if (q) { fx.glow(e.x2, e.y2, 0.3, '#ff3a6a', 0.15, 0.8); if (Math.random() < 0.5) fx.glow(sx, sy, 0.35, '#7dff9a', 0.25, 0.5); }
+          break;
+        }
+        if (mod?.split) { // prism: thin cyan-white beams
+          fx.beam('laser', pts, '#b8f4ff', 0.035, 0.12);
+          if (q) fx.glow(e.x2, e.y2, 0.22, '#c8f8ff', 0.12, 0.8);
+          break;
+        }
+        if (mod?.pctHp) { // void lance: a fat black-violet beam that swallows light
+          fx.beam('gravity', pts, '#6a1aff', 0.14, 0.3);
+          if (q) { fx.glow(e.x2, e.y2, 0.7, '#4a00c8', 0.4, 0.7); fx.ring(e.x2, e.y2, 0.7, 0.05, '#b08aff', 0.35, 0.7); }
+          break;
+        }
+        if (mod?.shred) { // entropy: sickly yellow-green corrosion
+          fx.beam('heat', pts, '#c8e83a', 0.05, 0.12);
+          if (q && Math.random() < 0.5) fx.molten(e.x2, e.y2, 1, '#d8ff5a');
+          break;
+        }
         switch (vis) {
           case 'heatray': {
             fx.beam('heat', pts, '#ff6a1a', 0.07, 0.14);

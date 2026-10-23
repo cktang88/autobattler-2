@@ -61,6 +61,11 @@ const BOMB_ALT = 1.5; // cells: height bombs start falling from
 const BOMB_FALL = 0.5; // seconds a bomb takes to land
 /** jets keep at least this share of their combined radius apart (soft: JET_SEP_SOFT of the overlap per tick) */
 const JET_SEP = 0.55;
+/** ModuleDef.lifesteal by module id: share of the damage a hit deals that heals the shooter */
+const LIFESTEAL = new Map([...MODULE_BY_ID.values()].filter((m) => m.lifesteal).map((m) => [m.id, m.lifesteal!]));
+/** armour shred (ModuleDef.shred) holds this long after the last shredding hit, then grows back at SHRED_REGEN / s */
+const SHRED_HOLD = 3;
+const SHRED_REGEN = 4;
 /** ModuleDef.shieldMult by module id (looked up per hit) */
 const SHIELD_MULT = new Map([...MODULE_BY_ID.values()].filter((m) => m.shieldMult && m.shieldMult !== 1).map((m) => [m.id, m.shieldMult!]));
 /** cells: the closest two friendly units' centres get, even without keep spread (small squads used to pile into one blob) */
@@ -353,6 +358,9 @@ interface Internal {
   flankDone: boolean;
   /** ticks since any of this unit's weapons last held a target (hold position breaks if shot at while idle) */
   idleT: number;
+  /** armour currently stripped by shredding hits (entropy ray), and s until it starts growing back */
+  shred: number;
+  shredT: number;
   /** escorted block index or -1 */
   escortBlock: number;
   escUnit: number;
@@ -772,7 +780,7 @@ export class Battle {
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
-      idleT: 0, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      idleT: 0, shred: 0, shredT: 0, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
@@ -812,6 +820,10 @@ export class Battle {
         I.disarmDmg = Math.max(0, I.disarmDmg - rate * DT);
         u.disarm = I.disarmDmg > u.maxHp ? (I.disarmDmg - u.maxHp) / rate : 0;
       } else if (u.disarm > 0) u.disarm = 0;
+      if (I.shred > 0) {
+        if (I.shredT > 0) I.shredT -= DT;
+        else I.shred = Math.max(0, I.shred - SHRED_REGEN * DT);
+      }
       if (I.slowDmg > 0) {
         I.slowDmg = Math.max(0, I.slowDmg - u.maxHp * SLOW_DMG_DECAY * DT);
         u.slow = MAX_SLOW * Math.min(1, I.slowDmg / u.maxHp);
@@ -1539,7 +1551,7 @@ export class Battle {
   private expectedHit(t: SimUnit, raw: number, ap: number, airBonus: number): number {
     const r = t.flying ? raw * airBonus : raw;
     if (t.shield > 0 || t.auraShield > 0) return r; // shields soak hits at full strength
-    return Math.max(r * MIN_DMG_FRAC, r - t.stats.armor * (1 - ap));
+    return Math.max(r * MIN_DMG_FRAC, r - (t.stats.armor - this.ints[t.id].shred) * (1 - ap));
   }
 
   /** projectile kinds point defense shoots down (see pointDefense) */
@@ -1629,7 +1641,7 @@ export class Battle {
     const kind = def.projectile ?? 'bullet';
     const ap = def.ap ?? 0;
     const airBonus = def.airBonus ?? 1;
-    const fx = def.stun || def.slow || def.burn || def.impulse || def.disarm ? def : null;
+    const fx = def.stun || def.slow || def.burn || def.impulse || def.disarm || def.shred ? def : null;
     const lm = I.dmgMult;
 
     const cls = w.cls;
@@ -1643,7 +1655,27 @@ export class Battle {
     if (kind === 'beam') {
       if (!t || !t.alive) return;
       this.events.push({ t: 'beam', moduleId: def.id, x1: mx, y1: my, x2: t.x, y2: t.y, side: u.side, unit: u.id, mount: mi });
-      this.damage(t, raw, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm, mx, my, cls);
+      // void lance: on top of its own damage, a share of the target's max hp (nothing to a scout, a lot to a titan)
+      const pct = def.pctHp ? def.pctHp * lm : 0;
+      this.damage(t, raw + t.maxHp * pct, ap, airBonus, u.side, def.id, t.x, t.y, fx, lm, mx, my, cls);
+      if (def.split && def.split > 1) {
+        // prism: the same pulse splits onto the nearest other targets in reach, one beam each
+        const reach = w.range * RANGE_KEEP;
+        const cnt = this.gather(mx, my, reach + MAX_RADIUS);
+        const picks: { j: number; d: number }[] = [];
+        for (let q = 0; q < cnt; q++) {
+          const j = this.scratch[q], o = this.units[j];
+          if (j === t.id || !o.alive || o.side === u.side || !this.canHit(w, o) || !this.visible(u, o)) continue;
+          const d = this.edgeC(this.ints[j], mx, my);
+          if (d <= reach) picks.push({ j, d });
+        }
+        picks.sort((a, b) => a.d - b.d || a.j - b.j);
+        for (let k = 0; k < Math.min(def.split - 1, picks.length); k++) {
+          const o = this.units[picks[k].j];
+          this.events.push({ t: 'beam', moduleId: def.id, x1: mx, y1: my, x2: o.x, y2: o.y, side: u.side, unit: u.id, mount: mi });
+          this.damage(o, raw + o.maxHp * pct, ap, airBonus, u.side, def.id, o.x, o.y, fx, lm, mx, my, cls);
+        }
+      }
       return;
     }
     if (kind === 'lightning') {
@@ -1884,6 +1916,8 @@ export class Battle {
       t.auraShield = Math.max(0, t.auraShield - (drain - a));
     }
     if (fx && !T.hardened && !shielded) {
+      // shred: each hit strips armour (never below none); it grows back once the hits stop
+      if (fx.shred) { T.shred = Math.min(t.stats.armor, T.shred + fx.shred * fxMult); T.shredT = SHRED_HOLD; }
       // disarm: like paralysis, builds against max hp
       if (fx.disarm) {
         const rate = t.maxHp * PARA_DECAY;
@@ -1940,7 +1974,7 @@ export class Battle {
     if (dmg > 0) {
       if ((cls & CLS_ENERGY) && T.energyResist > 0) dmg *= 1 - T.energyResist;
       if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { dmg *= REACTIVE_MULT; t.reactive--; }
-      dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - t.stats.armor * (1 - ap));
+      dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - (t.stats.armor - T.shred) * (1 - ap));
     }
     const hitDmg = dmg; // what reached the hull: the wreck's "hit size"
     if (dmg > 0) {
@@ -1956,6 +1990,16 @@ export class Battle {
     t.hitFlash = 1;
     T.sinceDamage = 0;
     this.events.push({ t: 'hit', unit: t.id, damage: dealt, shieldHit, x, y, moduleId });
+    // vampiric weapons: part of what the hit took (hull or shield) flows back into the shooter's hull
+    const ls = LIFESTEAL.get(moduleId);
+    if (ls && this.dmgSrc >= 0 && dealt > 0) {
+      const src = this.units[this.dmgSrc];
+      if (src.alive && src.hp < src.maxHp) {
+        const amt = Math.min(src.maxHp - src.hp, dealt * ls);
+        src.hp += amt;
+        if (amt > 0.5) this.events.push({ t: 'heal', unit: src.id, amount: amt, from: t.id });
+      }
+    }
     if (t.hp <= 0) {
       const overkill = -t.hp / t.maxHp, hit = hitDmg / t.maxHp, [wk, heft] = deathKindOf(moduleId), kind = this.dmgKind ?? wk;
       t.hp = 0;
@@ -2169,7 +2213,7 @@ export class Battle {
     const T = this.ints[t.id];
     if (T.hardened || t.shield > 0 || t.auraShield > 0) return;
     // armour sheds some of the heat: 10 armour halves the burn
-    const d = dps * (10 / (10 + t.stats.armor));
+    const d = dps * (10 / (10 + t.stats.armor - T.shred));
     if (t.burning <= 0 || d >= T.burnDps) { T.burnDps = d; T.burnSide = side; T.burnSrc = src; T.burnModule = moduleId; }
     t.burning = Math.max(t.burning, duration);
   }

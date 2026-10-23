@@ -189,6 +189,10 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.spinUp) t.push(`spin-up ${n1(mod.spinUp)}s`);
   if (mod.ramp) t.push(`focus ×${n1(mod.ramp)}`);
   if (mod.shieldMult && mod.shieldMult !== 1) t.push(`×${n1(mod.shieldMult)} vs shields`);
+  if (mod.lifesteal) t.push(`lifesteal ${Math.round(mod.lifesteal * 100)}%`);
+  if (mod.split && mod.split > 1) t.push(`${mod.split} targets`);
+  if (mod.pctHp) t.push(`+${Math.round(mod.pctHp * 100)}% max hp`);
+  if (mod.shred) t.push(`armor shred ${n1(mod.shred)}`);
   if (mod.fireField) t.push(mod.fireField.rad ? `radiation ${n1(mod.fireField.duration)}s` : `fire field ${n1(mod.fireField.duration)}s`);
   if (mod.cluster) t.push(`cluster ×${mod.cluster.count}`);
   if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
@@ -453,6 +457,10 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.falloff != null && mod.falloff < 1) r.push(`Damage falls off with distance: ${Math.round(mod.falloff * 100)}% at max range.`);
     if (mod.airBonus && mod.airBonus !== 1) r.push(`Deals ×${mod.airBonus} damage to aircraft.`);
     if (mod.spinUp) r.push(`Spin-up: starts at a quarter of its fire rate and reaches full rate after ${n1(mod.spinUp)} s of firing; winds down when idle.`);
+    if (mod.lifesteal) r.push(`Vampiric: ${Math.round(mod.lifesteal * 100)}% of the damage each hit deals heals this unit.`);
+    if (mod.split && mod.split > 1) r.push(`Splits: every pulse hits ${mod.split} different targets at once (the nearest others in reach).`);
+    if (mod.pctHp) r.push(`Each hit also deals ${Math.round(mod.pctHp * 100)}% of the target's max HP: weak vs small units, huge vs giants and titans.`);
+    if (mod.shred) r.push(`Strips ${n1(mod.shred)} armor per hit (up to all of it) while it keeps hitting; it grows back 3 s after.`);
     if (mod.shieldMult && mod.shieldMult !== 1) r.push(`Overloads shields: ×${n1(mod.shieldMult)} damage against shields.`);
     if (mod.ramp) r.push(`Focus: damage builds up to ×${n1(mod.ramp)} while it stays on one target; resets on a new target or a pause.`);
     if (mod.burn) r.push(`Sets the target burning: ${mod.burn.dps} dmg/s for ${mod.burn.duration} s (armor reduces it; shields and hardening block it).`);

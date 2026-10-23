@@ -167,6 +167,14 @@ export interface ModuleDef {
   airBonus?: number;
   /** rail/gauss: hits every enemy along its path (once each) */
   pierce?: boolean;
+  /** vampiric: this share of the damage each hit deals (hull or shield) heals the shooter */
+  lifesteal?: number;
+  /** beam: each pulse also hits this many targets in total (the nearest others in reach, one beam each) */
+  split?: number;
+  /** beam: extra damage per hit = this share of the target's max hp (applied before armour) */
+  pctHp?: number;
+  /** armour stripped per hit (up to all of it); grows back 3 s after the last such hit */
+  shred?: number;
   /** damage multiplier against shields (each point of the hit drains this many shield points; default 1) */
   shieldMult?: number;
   /** spinal weapon: fixed in the hull, aims only within this many radians of the hull's heading (the hull turns to aim) */
