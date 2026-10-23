@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { TEAM_PAL } from '../render/palette.ts';
 import type { UMat, MatLike } from './geo.ts';
-import { surfaceUniforms, loadSurfaceTextures, SD_VERT_DECL, SD_VERT_MAIN, SD_FRAG_DECL, SD_FRAG_SAMPLE, sdBumpGLSL } from './surface3d.ts';
+import { surfaceUniforms, loadSurfaceTextures, SD_VERT_DECL, SD_VERT_MAIN, SD_FRAG_DECL, SD_APPLY, sdBumpGLSL } from './surface3d.ts';
 export type { UMat, MatLike };
 
 export function rng(seed: number) {
@@ -289,29 +289,18 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         base = mix(base, base * 1.12 + vec3(0.015), bev * rB.x);
         // soft ground-contact darkening
         base *= mix(1.0, mix(0.72, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
-        // ---- surface detail (surface3d.ts) ----
-        ${SD_FRAG_SAMPLE}
-        float sdDet = rA.w, sdW = rB.z, sdGr = uE[mi].w;
-        // plate seams, rivets, hatches, stencil paint
-        base *= mix(1.0, sdCav, sdDet);
-        // fine mottling and patchy grime / drip streaks (darker, slightly warmer), more of it low on the hull
-        base *= 1.0 + sdMot * 0.25 * sdGr;
-        float low = 1.0 - smoothstep(0.05, 0.7, vWY);
-        float gr = clamp(sdGrime * (0.55 + 0.7 * low), 0.0, 1.0) * sdGr;
-        base = mix(base, base * vec3(0.6, 0.54, 0.45), gr * 0.55);
-        // chipped paint: bare metal flecks, concentrated on chamfer edges and upper surfaces
-        float wm = sdWear * sdW * (0.4 + 1.3 * bev + 0.2 * smoothstep(0.5, 1.0, wn.y));
-        wm = smoothstep(0.5, 0.75, wm);
-        base = mix(base, vec3(0.42, 0.43, 0.44) * (0.8 + 0.3 * sdCav), wm * 0.6);
-        vec3 sdGradR = sdGrad * sdDet;
+        // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
+        float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
+        ${SD_APPLY}
         diffuseColor.rgb = base;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = clamp(rM.x * (1.0 - wm * 0.35) + gr * 0.25 + (1.0 - sdCav) * 0.2 * sdDet, 0.08, 1.0);`)
+        // row roughness, scaled by the skin (grime roughens, chipped edges are bare satin metal)
+        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5), 0.08, 1.0);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
-        metalnessFactor = mix(rM.y, 0.8, wm * 0.8);`)
+        metalnessFactor = mix(rM.y, 0.8, sdMetal * 0.8);`)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + sdBumpGLSL('sdGradR'))
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance = uE[mi].rgb;
+        totalEmissiveRadiance = uE[mi].rgb + uE[10].rgb * sdGlow * 0.5;
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
         totalEmissiveRadiance += rimCol * fres * 0.08 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
