@@ -104,6 +104,16 @@ export function settingsScreen(app: App): Screen {
             rendererHost,
           ),
           h('p.muted', null, webglAvailable() ? '2D is the classic hand-drawn look; 3D renders the units as 3D models (experimental). Applies to the next match or menu visit.' : '3D needs WebGL, which is unavailable here.'),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Detailed unit textures (3D)', on: s.unitTextures !== false,
+              title: 'Plate seams, rivets, chipped paint and grime on 3D units; turn off for plain paint on slow GPUs',
+              onChange: (v) => { s.unitTextures = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'Plate seams, rivets, chipped paint and grime on 3D units; off = plain paint (faster)')),
         ),
         h('div.panel', null,
           h('div.panel-title', null, 'Gameplay'),
@@ -122,7 +132,7 @@ export function settingsScreen(app: App): Screen {
         h('div.panel.credits', null,
           h('div.panel-title', null, 'Credits'),
           h('p.muted', null, 'Music (CC0, OpenGameArt): vitalezzz \u2014 Inevitable, Claimed by the Void, Brute Force, Hunter-class Lifeform; yd \u2014 Factory ambiance; Ruskerdax \u2014 Menacing Otherworld; Cethiel \u2014 Laments of the War; SRG774 \u2014 Dark Sci-Fi Audio Pack.'),
-          h('p.muted', null, 'Fonts: Barlow by Jeremy Tribby (SIL OFL). Effect textures: Zero-K (public domain). Weapon ideas inspired by Zero-K.'),
+          h('p.muted', null, 'Fonts: Barlow by Jeremy Tribby (SIL OFL). Effect textures: Zero-K (public domain). Unit surface textures: ambientCG (CC0). Weapon ideas inspired by Zero-K.'),
         ),
       ),
     ),

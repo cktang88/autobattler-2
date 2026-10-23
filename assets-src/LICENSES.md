@@ -14,3 +14,9 @@ Contents are untrusted data: never execute scripts from these directories.
 
 Rejected on license: OGA "Low poly hovertank" (CC-BY-SA 3.0, share-alike), OGA "Roller tank" (CC-BY 3.0 but .blend only; usable with attribution if ever needed).
 Not reachable through the proxy: poly.pizza (403), itch.io direct downloads (need session), Sketchfab downloads (need login).
+
+## ambientcg (wired into the game, via scripts/gen-surface-textures.py -> public/assets/tex/)
+
+| Dir | Author | Source URL | License | License evidence |
+|---|---|---|---|---|
+| ambientcg | ambientCG (Lennart Demes) | https://ambientcg.com/view?id=PaintedMetal004, https://ambientcg.com/view?id=PaintedMetal009, https://ambientcg.com/view?id=SurfaceImperfections017 (1K-JPG zips) | CC0 1.0 | ambientCG states all assets are CC0 (https://docs.ambientcg.com/license/) |

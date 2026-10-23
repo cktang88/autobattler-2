@@ -14,10 +14,10 @@ import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { flyHeight } from '../render/tilt.ts';
-import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, type Turret, type Unit3D } from '../proto3d/index.ts';
+import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withSurfaceDetail, type Turret, type Unit3D } from '../proto3d/index.ts';
 import { OUTLINE_LAYER } from './outline3d.ts';
 
-export { buildTerrain, createRenderer, setupPost, setupStage, type Post, type Stage } from '../proto3d/index.ts';
+export { buildTerrain, createRenderer, setupPost, setupStage, setSurfaceDetail, type Post, type Stage } from '../proto3d/index.ts';
 
 export type Look = 'normal' | 'ghost' | 'invalid' | 'wreck' | 'cloak';
 const LOOKS: Look[] = ['normal', 'ghost', 'invalid', 'wreck', 'cloak'];
@@ -25,7 +25,8 @@ const LOOKS: Look[] = ['normal', 'ghost', 'invalid', 'wreck', 'cloak'];
 const lookMats: Record<Exclude<Look, 'normal'>, THREE.Material> = {
   ghost: new THREE.MeshStandardMaterial({ color: '#9fe8c0', transparent: true, opacity: 0.5, roughness: 0.6, metalness: 0.1, depthWrite: false }),
   invalid: new THREE.MeshStandardMaterial({ color: '#ff5050', transparent: true, opacity: 0.55, roughness: 0.6, metalness: 0.1, depthWrite: false }),
-  wreck: new THREE.MeshStandardMaterial({ color: '#3a352f', roughness: 0.95, metalness: 0.12, envMapIntensity: 0.6 }),
+  // burnt-out hull: same plate seams / grime as the living paint, scorched darker
+  wreck: withSurfaceDetail(new THREE.MeshStandardMaterial({ color: '#3a352f', roughness: 0.95, metalness: 0.12, envMapIntensity: 0.6 }), { det: 1, grime: 1.4 }),
   cloak: new THREE.MeshStandardMaterial({ color: '#8fb8d0', transparent: true, opacity: 0.32, roughness: 0.5, metalness: 0.1, depthWrite: false }),
 };
 

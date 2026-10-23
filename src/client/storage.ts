@@ -44,6 +44,8 @@ export interface Settings {
   autoCam: boolean;
   /** battlefield renderer: classic 2D canvas art or the three.js 3D view */
   renderer: '2d' | '3d';
+  /** 3D view: detailed unit surface textures (plate seams, wear, grime); off = plain paint (faster on weak GPUs) */
+  unitTextures?: boolean;
   /** the player picked the renderer in Settings; until then the default (3D) applies, even over older saves that
    *  stored the then-default '2d' */
   rendererChosen?: boolean;
@@ -54,11 +56,12 @@ export const speedLabel = (v: number) => (v === 0.25 ? '¼×' : v === 0.5 ? '½�
 export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false, tilt: true, autoCam: true, renderer: '3d' };
 
 /** Apply the visual accessibility settings to a FieldView-like object. */
-export function applyViewSettings(view: { shakeScale?: number; flashScale?: number; alwaysShowHealth?: boolean; setTilt?: (on: boolean) => void }, s: Settings = loadSettings()): void {
+export function applyViewSettings(view: { shakeScale?: number; flashScale?: number; alwaysShowHealth?: boolean; setTilt?: (on: boolean) => void; setUnitTextures?: (on: boolean) => void }, s: Settings = loadSettings()): void {
   view.shakeScale = s.shake;
   view.flashScale = s.flashes;
   view.alwaysShowHealth = s.alwaysHealth;
   view.setTilt?.(s.tilt !== false);
+  view.setUnitTextures?.(s.unitTextures !== false);
 }
 export const loadSettings = (): Settings => {
   const s: Settings = { ...defaultSettings, ...read<Partial<Settings>>(KEY_SETTINGS, {}) };

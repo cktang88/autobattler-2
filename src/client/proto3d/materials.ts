@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { TEAM_PAL } from '../render/palette.ts';
 import type { UMat, MatLike } from './geo.ts';
+import { surfaceUniforms, loadSurfaceTextures, SD_VERT_DECL, SD_VERT_MAIN, SD_FRAG_DECL, SD_FRAG_SAMPLE, sdBumpGLSL } from './surface3d.ts';
 export type { UMat, MatLike };
 
 export function rng(seed: number) {
@@ -226,8 +227,17 @@ export function paint(color: string, o: PaintOpts = {}): THREE.MeshStandardMater
 // ---- uber material: every static part of a unit shares one program/material; the part type is a per-vertex id ----
 // Stylized, not photoreal: flat part colours, a soft three-band cel ramp (MeshToonMaterial), a painted top-light
 // gradient, bevel highlights on chamfer faces (geometry is flat-shaded, so every chamfer reads as an edge highlight),
-// a gentle ground-contact darkening and a faint cool rim. No grime, camo or photographic texture.
-interface Row { color: string; bev?: number; rim?: number; ao?: number; em?: string; emI?: number }
+// a gentle ground-contact darkening and a faint cool rim. Surface detail (surface3d.ts: triplanar plate seams, rivets,
+// hatches, stencils, chipped edges, grime streaks) modulates each row's colour by the row's det / wear / grime weights.
+interface Row {
+  color: string; bev?: number; rim?: number; ao?: number; em?: string; emI?: number;
+  /** panel seams / rivets / stencils (cavity + bump) weight, default 1 */
+  det?: number;
+  /** chipped paint / scratches weight, default 1 */
+  wear?: number;
+  /** grime / streaks / mottling weight, default 1 */
+  grime?: number;
+}
 
 const N_ROWS = 16;
 let rampTex: THREE.DataTexture | null = null;
@@ -252,19 +262,22 @@ function makeUber(rows: Row[]): THREE.MeshToonMaterial {
   for (let i = 0; i < N_ROWS; i++) {
     const r = rows[i] ?? rows[0];
     const c = new THREE.Color(r.color);
-    A.push(new THREE.Vector4(c.r, c.g, c.b, 0));
-    B.push(new THREE.Vector4(r.bev ?? 1, r.rim ?? 1, 0, r.ao ?? 1));
+    const lit = (r.emI ?? 0) > 0 && r.color === '#000000';
+    A.push(new THREE.Vector4(c.r, c.g, c.b, lit ? 0 : r.det ?? 1));
+    B.push(new THREE.Vector4(r.bev ?? 1, r.rim ?? 1, lit ? 0 : r.wear ?? 1, r.ao ?? 1));
     const e = new THREE.Color(r.em ?? '#000');
-    E.push(new THREE.Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), 0));
+    E.push(new THREE.Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), lit ? 0 : r.grime ?? 1));
   }
   const m = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: celRamp() });
+  loadSurfaceTextures();
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uA = { value: A }; sh.uniforms.uB = { value: B }; sh.uniforms.uE = { value: E };
+    Object.assign(sh.uniforms, surfaceUniforms);
     sh.uniforms.rimCol = { value: new THREE.Color('#a9c8ff') };
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;')
+      .replace('#include <common>', '#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;' + SD_VERT_DECL)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vMid = mid;
+        vMid = mid;${SD_VERT_MAIN}
         vec4 wpS = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
           wpS = instanceMatrix * wpS;
@@ -274,7 +287,7 @@ function makeUber(rows: Row[]): THREE.MeshToonMaterial {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying float vMid; varying vec3 vWN; varying float vWY;
-uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec3 rimCol;`)
+uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec3 rimCol;${SD_FRAG_DECL}`)
       .replace('#include <map_fragment>', /* glsl */ `
         int mi = int(floor(vMid + 0.5));
         vec4 rA = uA[mi], rB = uB[mi];
@@ -287,13 +300,29 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         base = mix(base, base * 1.2 + vec3(0.02), bev * rB.x);
         // soft ground-contact darkening
         base *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
+        // ---- surface detail (surface3d.ts) ----
+        ${SD_FRAG_SAMPLE}
+        float sdDet = rA.w, sdW = rB.z, sdGr = uE[mi].w;
+        // plate seams, rivets, hatches, stencil paint
+        base *= mix(1.0, sdCav, sdDet);
+        // fine mottling and patchy grime / drip streaks (darker, slightly warmer), more of it low on the hull
+        base *= 1.0 + sdMot * 0.32 * sdGr;
+        float low = 1.0 - smoothstep(0.05, 0.7, vWY);
+        float gr = clamp(sdGrime * (0.75 + 0.6 * low), 0.0, 1.0) * sdGr;
+        base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.7);
+        // chipped paint: bare metal flecks, concentrated on chamfer edges and upper surfaces
+        float wm = sdWear * sdW * (0.4 + 1.3 * bev + 0.2 * smoothstep(0.5, 1.0, wn.y));
+        wm = smoothstep(0.5, 0.75, wm);
+        base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
+        vec3 sdGradR = sdGrad * sdDet;
         diffuseColor.rgb = base;`)
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + sdBumpGLSL('sdGradR'))
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance = uE[mi].rgb;
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
         totalEmissiveRadiance += rimCol * fres * 0.16 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => 'uberToon1';
+  m.customProgramCacheKey = () => 'uberToon2';
   return m;
 }
 
@@ -329,15 +358,15 @@ export function makeKit(team: 0 | 1): Kit {
   const tp = TEAM_PAINT[team];
   const rows: Row[] = [
     { color: tp[0] },
-    { color: tp[1], bev: 0.6 },
+    { color: tp[1], bev: 0.6, det: 0.9 },
     { color: tp[2] },
-    { color: '#4b535b', bev: 0.8 },
-    { color: '#b3bcc3', bev: 0.6 },
-    { color: '#2b2d30', bev: 0.3, rim: 0.4 },
-    { color: '#1b3440', bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12 },
-    { color: tp[3] },
-    { color: '#e2b13a' },
-    { color: p.accent, bev: 0.6 },
+    { color: '#4b535b', bev: 0.8, det: 0.55, wear: 0.6 },
+    { color: '#b3bcc3', bev: 0.6, det: 0.2, wear: 0, grime: 0.6 },
+    { color: '#2b2d30', bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.2 },
+    { color: '#1b3440', bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.3 },
+    { color: tp[3], det: 0.12, wear: 0.2 },
+    { color: '#e2b13a', det: 0.6, wear: 1.3 },
+    { color: p.accent, bev: 0.6, det: 0.45, wear: 0.6, grime: 0.6 },
     { color: '#000000', bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.15 },
     { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#fff0d0', emI: 1.8 },
     { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#ff7a2a', emI: 2.4 },
