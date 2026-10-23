@@ -1395,7 +1395,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const per = `${m.damage ?? 0}${m.pellets && m.pellets > 1 ? ` ×${m.pellets}` : ''}${m.burst && m.burst > 1 ? ` ×${m.burst} burst` : ''}`;
       specs.push(row('Damage', per), row('Firing', firingText(m)), row('Accuracy', accMeter(m)));
       if (m.splash) specs.push(row('AoE radius', fmtMeters(m.splash)));
-      specs.push(row('Armour penetration', apBadge(m, true)), row('Damage type', damageKindBadges(m, true)));
+      specs.push(row('Penetration', apBadge(m)), row('Damage type', damageKindBadges(m, true)));
     } else {
       if (m.heal) keys.push(kstat('Repair', fmt(m.heal, 0), 'hp/s', 'hl'), kstat('Range', String(Math.round((m.range ?? 0) * METERS_PER_CELL)), 'm'));
       if (m.shield) keys.push(kstat('Shield', String(m.shield), '', 'hl'));
@@ -1411,31 +1411,19 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const target = autoSlot(m);
     const lock = reqReason(m);
     const next = target !== null && draft.mounts[target] !== m.id ? (() => { const mounts = [...draft.mounts]; mounts[target] = m.id; return { ...draft, mounts }; })() : null;
-    const socketBtns = c.mounts.map((cls, i) => {
-      const why = slotBlock(m, i);
-      const occ = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
-      const here = occ?.id === m.id;
-      return h('button.g-sockbtn', {
-        type: 'button', disabled: !!why || here, class: [i === target && !here ? 'best' : '', here ? 'here' : '', activeSlot === i ? 'active' : ''].join(' '),
-        title: why ?? (here ? 'Already mounted here' : occ ? `Replace ${occ.name}` : 'Mount in this empty socket'),
-        'data-fk': `mount-${m.id}-${i}`,
-        onclick: () => equip(i, m.id),
-      }, h('span.g-sockno', null, String(i + 1)), h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]), h('span.g-sockbtn-l', null, here ? 'Mounted' : occ ? `Replace ${occ.name}` : 'Empty'));
-    });
     return [
       inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null,
         ...(m.kind === 'weapon' ? [apBadge(m), damageKindBadges(m, true)] : [])], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
-      h('div.g-rules', null, h('div.g-rules-h', null, 'How it works'), h('ul', null, ...moduleRules(m).map((t) => h('li', null, t))),
-        m.kind === 'weapon' || m.shield || m.armor || m.reactive || m.energyResist
-          ? h('button.g-more.g-dr-link', { type: 'button', onclick: () => { sfx('click'); showDamageRules(el); } }, icon('help'), 'How damage works: shields, armour, penetration')
-          : null),
+      // full specs always shown for modules (the rules text lives in the part tooltip); mounting is by drag / double-click
+      h('div.g-specs', null, ...specs.filter(Boolean) as HTMLElement[]),
+      fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null,
+      m.kind === 'weapon' || m.shield || m.armor || m.reactive || m.energyResist
+        ? h('button.g-more.g-dr-link', { type: 'button', onclick: () => { sfx('click'); showDamageRules(el); } }, icon('help'), 'How damage works: shields, armour, penetration')
+        : null,
+      lock ?? noFitReason(m) ? h('p.g-warnlbl', null, lock ?? noFitReason(m)) : null,
       next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
-      h('div.g-insp-sec', null,
-        h('span.g-sec-l', null, lock ?? noFitReason(m) ?? 'Mount in'),
-        h('div.g-sockbtns', null, ...socketBtns)),
-      ...details(specs, [fx.length ? h('div.g-fxs', null, ...fx.map((t) => h('span.g-fx', null, t))) : null]),
     ].filter(Boolean) as HTMLElement[];
   }
 

@@ -42,6 +42,10 @@ CGAIN = float(os.environ.get('FIT_CGAIN', '0.22'))
 CSTEP = float(os.environ.get('FIT_CSTEP', '0.08'))
 ONLY_CHASSIS = os.environ.get('FIT_ONLY_CHASSIS') == '1'  # frames-only run (filter f-): fit hulls + drives only
 ETA_SCALE = float(os.environ.get('FIT_ETA_SCALE', '1'))
+# FIT_CLAMP: largest per-iteration log-step of a module calibration (raise it with FIT_ETA_SCALE for a quick 2-3 pass fit)
+CLAMP = float(os.environ.get('FIT_CLAMP', '0.15'))
+# FIT_MOB=0 keeps MOBILITY_CAL fixed
+FIT_MOB = os.environ.get('FIT_MOB', '1') == '1'
 ETA = {k: v * ETA_SCALE for k, v in {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}.items()}
 # FIT_CENTER=starters: logits are measured relative to the starter designs (the reference mix of balance.ts's
 # mixed-army test), so the whole price level is pulled toward "fair vs the starters" instead of only the spread
@@ -96,7 +100,7 @@ for it in range(iters):
         if k in fixed or w == 0 or ONLY_CHASSIS:
             continue
         t = 'u' if MODS.get(k) == 'util' else 'w'
-        step = max(-0.15, min(0.15, ETA[t] * s / (w + 0.5)))
+        step = max(-CLAMP, min(CLAMP, ETA[t] * s / (w + 0.5)))
         v = cal.get(k, 1.0) * math.exp(step)
         v = v ** 0.99
         if t == 'u':
@@ -130,7 +134,7 @@ for it in range(iters):
         macc[r['mobility']][0] += res * w
         macc[r['mobility']][1] += 1
     for k, (s, w) in macc.items():
-        if w == 0:
+        if w == 0 or not FIT_MOB:
             continue
         step = max(-0.1, min(0.1, ETA['m'] * s / (w + 1.0)))
         mobcal[k] = max(0.4, min(2.5, mobcal.get(k, 1.0) * math.exp(step)))
