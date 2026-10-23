@@ -1,6 +1,7 @@
 // Garage helpers: icons, labels, module stat summaries and a small modal dialog.
 
-import { PARA_PER_STUN } from '../../shared/sim/battle.ts';
+import { PARA_PER_STUN, PHANTOM_FIRE_REVEAL, REGEN_DELAY, SHIELD_DELAY, SHIELD_REGEN, SMOKE_AT, SMOKE_SIGHT, STEALTH_FIRE_REVEAL } from '../../shared/sim/battle.ts';
+import { CLOAK_REVEAL } from '../../shared/types.ts';
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { accuracyRating, firingStyle, turretTurnRate, weaponDps } from '../../shared/stats.ts';
@@ -237,8 +238,7 @@ export function moduleTooltip(mod: ModuleDef): string {
   }
   const trav = traverseDeg(mod);
   if (trav !== null) lines.push(`Traverse ${trav}°/s${trav < SLOW_TURRET_DEG ? ' (slow turret)' : ''}`);
-  const fx = moduleEffects(mod);
-  if (fx.length) lines.push(fx.join(' · '));
+  for (const rule of moduleRules(mod)) lines.push(`• ${rule}`);
   lines.push(`Weight ${mod.weight} · Base cost ${mod.cost}`);
   return lines.join('\n');
 }
@@ -366,4 +366,59 @@ export function roleBar(fk: string, onChange: () => void, extra?: { sizes?: bool
     ));
   }
   return bar;
+}
+
+/** Plain-language rules for a part: exactly what it does in battle, with the sim's own numbers. */
+export function moduleRules(mod: ModuleDef): string[] {
+  const r: string[] = [];
+  const m = (cells: number) => fmtMeters(cells);
+  if (mod.kind === 'weapon') {
+    const tg = [mod.targetsGround ? 'ground units' : '', mod.targetsAir ? 'aircraft' : ''].filter(Boolean).join(' and ');
+    r.push(`Hits ${tg || 'nothing'} up to ${m(mod.range ?? 0)} away${mod.minRange ? `, but nothing closer than ${m(mod.minRange)}` : ''}.`);
+    r.push(`${firingText(mod)}.`);
+    const dmg = `${mod.damage ?? 0}${mod.pellets && mod.pellets > 1 ? ` × ${mod.pellets} pellets` : ''}${mod.burst && mod.burst > 1 ? ` × ${mod.burst} per salvo` : ''}`;
+    r.push(`Damage ${dmg} per shot${mod.ap ? `, ignoring ${Math.round(mod.ap * 100)}% of the target's armor` : ''}.`);
+    if (mod.splash) r.push(`Area damage: hurts every enemy within ${m(mod.splash)} of the impact.`);
+    if (mod.projectile === 'missile') r.push('Homing: follows its target. Point defense can shoot it down; jammers break its lock.');
+    else if (mod.projectile === 'rocket' || mod.projectile === 'shell' || mod.projectile === 'arc') r.push('Flies to where the target was when fired, so fast movers can dodge it. Point defense can shoot it down.');
+    else if (mod.projectile === 'beam' || mod.projectile === 'lightning' || mod.projectile === 'rail') r.push('Hitscan: hits instantly, can\'t miss or be intercepted.');
+    if (mod.pierce) r.push('Pierces: keeps going through every unit in its path.');
+    if (mod.chain) r.push(`Chains to ${mod.chain} more nearby enemies.`);
+    if (mod.falloff != null && mod.falloff < 1) r.push(`Damage falls off with distance: ${Math.round(mod.falloff * 100)}% at max range.`);
+    if (mod.airBonus && mod.airBonus !== 1) r.push(`Deals ×${mod.airBonus} damage to aircraft.`);
+    if (mod.spinUp) r.push(`Spin-up: starts at a quarter of its fire rate and reaches full rate after ${n1(mod.spinUp)} s of firing; winds down when idle.`);
+    if (mod.ramp) r.push(`Focus: damage builds up to ×${n1(mod.ramp)} while it stays on one target; resets on a new target or a pause.`);
+    if (mod.burn) r.push(`Sets the target burning: ${mod.burn.dps} dmg/s for ${mod.burn.duration} s (armor reduces it; shields and hardening block it).`);
+    if (mod.fireField) r.push(`Leaves burning ground ${m(mod.fireField.radius)} across for ${mod.fireField.duration} s that sets enemy ground units on fire.`);
+    if (mod.cluster) r.push(`Releases ${mod.cluster.count} bomblets (${mod.cluster.damage} dmg each) over ${m(mod.cluster.radius)} where it lands.`);
+    if (mod.stun) r.push(`Paralyses: builds ${Math.round(mod.stun * PARA_PER_STUN)} paralysis per hit; when it passes the target's max HP the target is stunned. Shields soak it first.`);
+    if (mod.slow) r.push(`Slows: each hit slows the target's movement and turning by up to ${Math.round(mod.slow * 100)}%.`);
+    if (mod.disarm) r.push('Disarms: builds up per hit; past the target\'s max HP its weapons stop firing for a while.');
+    if (mod.impulse) r.push(mod.impulse > 0 ? 'Knocks targets back (light units fly further than heavy ones).' : 'Pulls targets toward the shooter.');
+  } else {
+    if (mod.cloak === 'stealth') r.push(`Can't be targeted from range. Revealed while any enemy is within ${m(CLOAK_REVEAL)} of its hull, for ${STEALTH_FIRE_REVEAL} s after each shot it fires, and inside enemy sensor range.`);
+    if (mod.cloak === 'phantom') r.push(`Can't be targeted at any distance. Revealed only for ${PHANTOM_FIRE_REVEAL} s after each shot it fires, and inside enemy sensor range.`);
+    if (mod.detect) r.push(`Reveals cloaked enemies within ${m(mod.detect)} of this unit's hull, for your whole army.`);
+    if (mod.shield) r.push(`Absorbs ${mod.shield} damage before the hull is hit. While it's up, burning, slow, disarm and knockback are blocked and paralysis drains the shield instead. Recharges ${Math.round(SHIELD_REGEN * 100)}% per second after ${SHIELD_DELAY} s without damage.`);
+    if (mod.shieldAura) r.push(`Gives every ally within ${m(mod.shieldAura.radius)} a ${mod.shieldAura.amount}-point shield (at most half that ally's HP). Domes don't stack.`);
+    if (mod.fireRateAura) r.push(`Allies within ${m(mod.fireRateAura.radius)} fire ${Math.round(mod.fireRateAura.bonus * 100)}% faster. Doesn't stack.`);
+    if (mod.heal) r.push(`Repairs the most damaged ally within ${m(mod.range ?? 0)} for ${mod.heal} HP/s.`);
+    if (mod.pointDefense) r.push(`Shoots down an incoming rocket, missile or shell within ${m(mod.pointDefense.range)} every ${mod.pointDefense.cooldown} s (aimed at it or nearby allies).`);
+    if (mod.jammer) r.push(`Enemy missiles aimed at it or allies within ${m(mod.jammer)} lose their lock; enemy guns are half as accurate against them. Doesn't stack.`);
+    if (mod.smoke) r.push(`Below ${Math.round(SMOKE_AT * 100)}% HP, once per battle: smoke ${m(mod.smoke.radius)} around it for ${mod.smoke.duration} s. Units inside can only be targeted from within ${m(SMOKE_SIGHT)}.`);
+    if (mod.reactive) r.push(`The next ${mod.reactive} shell, rocket or missile hits deal 75% less damage.`);
+    if (mod.energyResist) r.push(`Takes ${Math.round(mod.energyResist * 100)}% less damage from beams, lightning, rails, plasma and flame.`);
+    if (mod.hardened) r.push('Immune to paralysis/stun, slow, disarm, burning and knockback.');
+    if (mod.regen) r.push(`Regenerates ${n1(mod.regen * 100)}% of max HP per second after ${REGEN_DELAY} s without taking damage.`);
+    if (mod.rangeBonus) r.push(`All weapons on this unit reach ${Math.round(mod.rangeBonus * 100)}% further.`);
+    if (mod.spreadMult && mod.spreadMult < 1) r.push(`Weapon spread ${Math.round((1 - mod.spreadMult) * 100)}% tighter.`);
+    if (mod.speedBonus) r.push(`Moves ${Math.round(mod.speedBonus * 100)}% faster.`);
+    if (mod.gyro) r.push('Every weapon can fire while moving.');
+    if (mod.reloadBonus) r.push(`Clip weapons reload ${Math.round(mod.reloadBonus * 100)}% faster.`);
+    if (mod.fireRateBonus) r.push(`All weapons fire ${Math.round(mod.fireRateBonus * 100)}% faster.`);
+    if (mod.deathBlast) r.push(`When destroyed, explodes for ${mod.deathBlast.damage} damage up to ${m(mod.deathBlast.radius)} beyond its hull.`);
+    if (mod.armor) r.push(`+${mod.armor} armor: every hit loses that much damage (armor-piercing ignores part of it).`);
+    if (mod.hp) r.push(`+${mod.hp} hull HP.`);
+  }
+  return r;
 }

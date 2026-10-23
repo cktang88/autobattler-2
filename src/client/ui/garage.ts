@@ -20,7 +20,7 @@ import * as kit from './kit.ts';
 import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStats, defaultOrders, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
-  KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
+  KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
   designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
 } from './garage-parts.ts';
 
@@ -1416,6 +1416,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       inspHead('module', m.id, m.name, [h('span.g-plate.cat', null, catName), h('span.g-chip', { class: `c${m.mount}`, title: sizeTip(m.mount) }, ML[m.mount]), m.requires ? h('span.g-plate.warn', null, m.requires === 'air' ? 'Air only' : 'Ground only') : null], moduleCategoryColor(m.id)),
       h('div.g-kstats', null, ...keys.slice(0, 4)),
       h('p.g-insp-desc', null, m.desc),
+      h('div.g-rules', null, h('div.g-rules-h', null, 'How it works'), h('ul', null, ...moduleRules(m).map((t) => h('li', null, t)))),
       next ? compare(next, `If mounted in socket ${target! + 1}`) : null,
       h('div.g-insp-sec', null,
         h('span.g-sec-l', null, lock ?? noFitReason(m) ?? 'Mount in'),

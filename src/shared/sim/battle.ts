@@ -25,8 +25,8 @@ const GOLDEN_ANGLE = 2.399963229728653;
 /** a fresh shot is held (and the turret looks for another target) while rounds already in flight are expected to
  *  finish its target off; rechecked every this many seconds */
 const OVERKILL_RECHECK = 0.3; // s
-const SHIELD_DELAY = 3; // s
-const SHIELD_REGEN = 0.05; // fraction of max per s
+export const SHIELD_DELAY = 3; // s
+export const SHIELD_REGEN = 0.05; // fraction of max per s
 const EVADE_CHANCE = 0.2;
 const MIN_DMG_FRAC = 0.15;
 const SPLASH_EDGE = 0.3;
@@ -72,11 +72,11 @@ const RAMP_GAP = 1;
 const FIELD_BURN = 1;
 /** most burning ground patches alive at once (flame spam is merged per weapon first, see dropFire) */
 const MAX_FIRES = 160;
-const STEALTH_FIRE_REVEAL = 1.5; // s a stealth unit stays visible after firing
-const PHANTOM_FIRE_REVEAL = 3;
-const SMOKE_SIGHT = 2.5; // units inside smoke can only be targeted from within this distance
-const SMOKE_AT = 0.6; // hp fraction that pops smoke
-const REGEN_DELAY = 2;
+export const STEALTH_FIRE_REVEAL = 1.5; // s a stealth unit stays visible after firing
+export const PHANTOM_FIRE_REVEAL = 3;
+export const SMOKE_SIGHT = 2.5; // units inside smoke can only be targeted from within this distance
+export const SMOKE_AT = 0.6; // hp fraction that pops smoke
+export const REGEN_DELAY = 2;
 const REACTIVE_MULT = 0.25;
 const CLS_EXPLOSIVE = 1;
 const CLS_ENERGY = 2;

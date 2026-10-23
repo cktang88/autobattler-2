@@ -887,3 +887,6 @@
   transform: rotate(var(--off, 0deg)) translateX(calc(var(--r) + 3px));
 }
 .garage .g-sock.off.active .g-sock-ring::after { border-left-color: var(--amber); }
+.garage .g-rules { margin: 6px 0 8px; padding: 8px 10px; background: rgba(53, 214, 191, 0.06); border-left: 3px solid #35d6bf; border-radius: 3px; }
+.garage .g-rules-h { font-family: var(--head); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; color: #35d6bf; margin-bottom: 4px; }
+.garage .g-rules ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; font-size: 0.92rem; line-height: 1.35; color: var(--txt); }
