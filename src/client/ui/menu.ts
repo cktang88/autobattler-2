@@ -108,6 +108,7 @@ export function menuScreen(app: App): Screen {
         h('button.big.primary', { onclick: go(() => app.go({ name: 'vsai' })) }, 'Play vs AI'),
         h('button.big', { onclick: go(() => app.go({ name: 'lobby' })) }, 'Async Multiplayer'),
         h('button.big', { onclick: go(() => app.go({ name: 'garage' })) }, 'Garage'),
+        h('button.big', { title: 'Sandbox: place any of your designs on both sides for free and watch them fight', onclick: go(() => app.go({ name: 'playground' })) }, 'Playground'),
         h('div.row', null,
           h('button.grow', { onclick: go(() => app.go({ name: 'settings' })) }, 'Settings'),
           h('button.grow', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),

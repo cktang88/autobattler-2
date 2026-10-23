@@ -68,7 +68,7 @@ function spacingDiagram(spacing: number, shape: BlockShape, rot = false): SVGEle
 
 /** Segmented spacing control: "Spacing 0 1 2" + live diagram + footprint size. */
 /** `rot`: the block is turned 90° (footprint and diagram follow it) */
-function spacingControl(value: number, onPick: ((v: number) => void) | null, shape: BlockShape, rot = false): HTMLElement {
+export function spacingControl(value: number, onPick: ((v: number) => void) | null, shape: BlockShape, rot = false): HTMLElement {
   const segs = kit.segmented({
     value, label: 'Squad spacing', disabled: !onPick,
     options: Array.from({ length: MAX_SPACING + 1 }, (_, v) => ({ value: v, label: String(v), title: `${v} empty ${v === 1 ? 'cell' : 'cells'} between units` })),
