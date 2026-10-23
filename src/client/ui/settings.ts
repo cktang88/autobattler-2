@@ -79,6 +79,16 @@ export function settingsScreen(app: App): Screen {
           h('div.setting.check', null, (() => {
             const host = h('span');
             const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Auto battle camera', on: s.autoCam !== false,
+              title: 'The camera follows the fight and zooms in as it thins out; moving the camera yourself turns it off until the next battle',
+              onChange: (v) => { s.autoCam = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'Follows the fight and zooms in as it thins out; moving the camera yourself takes over until the next battle')),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
               label: 'Always show health bars', on: !!s.alwaysHealth,
               title: 'Otherwise bars show briefly after damage; hold Alt in battle',
               onChange: (v) => { s.alwaysHealth = v; saveSettings(s); sfx('click'); draw(); },

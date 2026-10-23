@@ -356,6 +356,15 @@ export class FieldView {
     return { x: this.ox + x * this.k, y: this.oy + y * ky };
   }
 
+  scaleAt(_x: number, _y: number): { k: number; ay: number } {
+    return { k: this.k, ay: this.ay };
+  }
+
+  frameWorldBox(x0: number, y0: number, x1: number, y1: number): void {
+    const a = this.toVisual(x0, y0), b = this.toVisual(x1, y1);
+    this.cam.frameBox(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
+  }
+
   /** canvas CSS px (e.g. from offsetX/offsetY) -> world cells */
   screenToWorld(px: number, py: number): { x: number; y: number } {
     const wx = (px - this.ox) / this.k, wy = (py - this.oy) / (this.k * this.ay);

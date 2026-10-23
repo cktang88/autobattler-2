@@ -40,6 +40,8 @@ export interface Settings {
   alwaysHealth: boolean;
   /** slight camera tilt (2.5D look) on the battlefield; off = classic straight-down view */
   tilt: boolean;
+  /** battle replay camera follows the fight (frames every living unit, zooms in as it thins out) until moved */
+  autoCam: boolean;
   /** battlefield renderer: classic 2D canvas art or the three.js 3D view */
   renderer: '2d' | '3d';
   /** the player picked the renderer in Settings; until then the default (3D) applies, even over older saves that
@@ -49,7 +51,7 @@ export interface Settings {
 /** replay speeds offered in battle and settings (slow-mo included) */
 export const BATTLE_SPEEDS = [0.25, 0.5, 1, 2, 4];
 export const speedLabel = (v: number) => (v === 0.25 ? '¼×' : v === 0.5 ? '½×' : `${v}×`);
-export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false, tilt: true, renderer: '3d' };
+export const defaultSettings: Settings = { master: 0.8, music: 0.5, sfx: 0.8, battleSpeed: 1, shake: 1, flashes: 1, alwaysHealth: false, tilt: true, autoCam: true, renderer: '3d' };
 
 /** Apply the visual accessibility settings to a FieldView-like object. */
 export function applyViewSettings(view: { shakeScale?: number; flashScale?: number; alwaysShowHealth?: boolean; setTilt?: (on: boolean) => void }, s: Settings = loadSettings()): void {

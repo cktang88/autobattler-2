@@ -1,6 +1,8 @@
 // FieldView3D: three.js battlefield renderer implementing BattleView (see render/view.ts).
-// Orthographic camera tilted ~58 degrees so the 2D ground mapping (Camera/CameraControls from render/camera.ts) stays
-// exact: worldToScreen/screenToWorld and match.ts's 2D overlays (range rings, labels) line up with the 3D ground.
+// Perspective camera (narrow FOV) looking down at ~60 degrees from the viewer's side of the board, so nearer units read
+// bigger and you look out across the field at the enemy. Camera/CameraControls (render/camera.ts) keep the pan/zoom
+// state: k = CSS px per cell at the view centre. worldToScreen/screenToWorld project through the real camera (exact
+// picking); scaleAt gives the local ground scale for match.ts's 2D overlays (range rings).
 // Scene axes: three x = field x (cells), three z = field y, three y = up (cells).
 //
 // Layers: terrain (proto3d buildTerrain, restyled per map) -> instanced units (units-adapter) -> effects (fx3d) -> post
@@ -24,7 +26,9 @@ import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts'
 import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 
-const ELEV = (58 * Math.PI) / 180;
+const ELEV = (60 * Math.PI) / 180;
+/** vertical field of view of the perspective camera (narrow: depth cue without a fish-eye look) */
+const FOV = 32;
 const GUN_H = 0.55;
 const SHAKE_CAP = 3;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -192,7 +196,12 @@ export class FieldView3D implements BattleView {
   private cssH = 400;
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 100, 800);
+  private camera = new THREE.PerspectiveCamera(FOV, 1, 1, 2000);
+  /** camera state the perspective camera was last placed for (cx, cy, k, w, h, tilt, side); NaN = re-place */
+  private camAt = [NaN, 0, 0, 0, 0, 0, 0];
+  private readonly v3 = new THREE.Vector3();
+  private readonly ray = new THREE.Raycaster();
+  private readonly ndc = new THREE.Vector2();
   private stage: Stage;
   private sun: THREE.DirectionalLight;
   private post: Post;
@@ -462,13 +471,46 @@ export class FieldView3D implements BattleView {
   private get ox(): number { return this.cssW / 2 - this.cam.cx * this.cam.k; }
   private get oy(): number { return this.cssH / 2 - this.cam.cy * this.cam.k * this.ay; }
   worldToScreen(x: number, y: number): { x: number; y: number } {
-    const k = this.cam.k, ky = k * this.ay;
-    if (this.viewerSide === 1) return { x: this.ox + (FIELD_W - x) * k, y: this.oy + (FIELD_H - y) * ky };
-    return { x: this.ox + x * k, y: this.oy + y * ky };
+    this.placeCamera();
+    const v = this.v3.set(x, 0, y).project(this.camera);
+    return { x: (v.x + 1) * 0.5 * this.cssW, y: (1 - v.y) * 0.5 * this.cssH };
   }
   screenToWorld(px: number, py: number): { x: number; y: number } {
-    const wx = (px - this.ox) / this.cam.k, wy = (py - this.oy) / (this.cam.k * this.ay);
-    return this.viewerSide === 1 ? { x: FIELD_W - wx, y: FIELD_H - wy } : { x: wx, y: wy };
+    this.placeCamera();
+    this.ndc.set((px / Math.max(1, this.cssW)) * 2 - 1, 1 - (py / Math.max(1, this.cssH)) * 2);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    const o = this.ray.ray.origin, d = this.ray.ray.direction;
+    const t = Math.abs(d.y) > 1e-6 ? -o.y / d.y : 0;
+    return { x: o.x + d.x * t, y: o.z + d.z * t };
+  }
+  scaleAt(x: number, y: number): { k: number; ay: number } {
+    const a = this.worldToScreen(x, y), b = this.worldToScreen(x + 1, y), c = this.worldToScreen(x, y + 1);
+    const k = Math.max(1e-6, Math.hypot(b.x - a.x, b.y - a.y));
+    return { k, ay: Math.hypot(c.x - a.x, c.y - a.y) / k };
+  }
+  frameWorldBox(x0: number, y0: number, x1: number, y1: number): void {
+    const a = this.toVisual(x0, y0), b = this.toVisual(x1, y1);
+    this.cam.frameBox(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
+  }
+  /** Position the perspective camera from the Camera state (no shake): looking at the view centre from the
+   *  viewer's side at ELEV, at the distance where one cell spans k CSS px across the centre. Cached per state. */
+  private placeCamera(): void {
+    const c = this.cam, k = c.k;
+    const a = this.camAt, tilt = this.tiltOn ? 1 : 0;
+    if (a[0] === c.cx && a[1] === c.cy && a[2] === k && a[3] === this.cssW && a[4] === this.cssH && a[5] === tilt && a[6] === this.viewerSide) return;
+    a[0] = c.cx; a[1] = c.cy; a[2] = k; a[3] = this.cssW; a[4] = this.cssH; a[5] = tilt; a[6] = this.viewerSide;
+    const t = this.toVisual(c.cx, c.cy); // symmetric: visual centre -> world centre
+    const e = this.tiltOn ? ELEV : Math.PI / 2 - 1e-3;
+    const s = this.viewerSide === 1 ? -1 : 1;
+    const D = this.cssH / (2 * k * Math.tan((FOV * Math.PI) / 360));
+    this.camera.aspect = this.cssW / Math.max(1, this.cssH);
+    this.camera.near = Math.max(0.5, D * 0.05);
+    this.camera.far = D * 4 + 300;
+    this.camera.position.set(t.x, D * Math.sin(e), t.y + s * D * Math.cos(e));
+    this.camera.up.set(0, 0, -s);
+    this.camera.lookAt(t.x, 0, t.y);
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld();
   }
 
   /** photosensitivity-safe shake: nothing at the fit view, ramps in when zoomed close, hard-capped (CSS px) */
@@ -488,19 +530,13 @@ export class FieldView3D implements BattleView {
   /** place the three camera + sun shadow frustum from the Camera state */
   private syncCamera(): void {
     const c = this.cam, k = c.k;
-    const t = this.toVisual(c.cx, c.cy); // symmetric: visual centre -> world centre
-    const e = this.tiltOn ? ELEV : Math.PI / 2;
+    const t = this.toVisual(c.cx, c.cy);
     const s = this.viewerSide === 1 ? -1 : 1;
-    const D = 400;
     const sh = this.shakeOffset();
-    this.camera.position.set(t.x, D * Math.sin(e), t.y + s * D * Math.cos(e));
-    this.camera.up.set(0, 0, -s);
-    this.camera.lookAt(t.x, 0, t.y);
-    this.camera.left = -this.cssW / (2 * k); this.camera.right = this.cssW / (2 * k);
-    this.camera.top = this.cssH / (2 * k); this.camera.bottom = -this.cssH / (2 * k);
-    this.camera.updateProjectionMatrix();
-    this.camera.updateMatrixWorld();
+    this.camAt[0] = NaN; // re-place (a previous frame's shake moved the camera)
+    this.placeCamera();
     if (sh.sx || sh.sy) {
+      this.camAt[0] = NaN; // shaken: the next mapping call re-places it
       const me = this.camera.matrixWorld.elements;
       this.camera.position.x += (me[0] * sh.sx + me[4] * sh.sy) / k;
       this.camera.position.y += (me[1] * sh.sx + me[5] * sh.sy) / k;
