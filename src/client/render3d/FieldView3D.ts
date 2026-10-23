@@ -21,7 +21,7 @@ import { MAPS, type MapTheme } from '../render/ground.ts';
 import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
-import { buildTerrain, createRenderer, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
+import { buildTerrain, createRenderer, setSurfaceDetail, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
 import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts';
 import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
@@ -272,6 +272,9 @@ export class FieldView3D implements BattleView {
   // quality
   /** 'auto' scales AO / bloom / shadows / resolution from frame time; a number pins the level (0 best) */
   quality: 'auto' | 0 | 1 | 2 | 3 = 'auto';
+  /** textured unit surfaces (plate seams, wear, grime); the lowest quality level drops them too */
+  unitTextures = true;
+  setUnitTextures(on: boolean): void { this.unitTextures = on; }
   private level = 0;
   private ema = 16;
   private lastRender = 0;
@@ -587,6 +590,7 @@ export class FieldView3D implements BattleView {
       else if (this.fastT > 9000 && this.level > 0) { this.level--; this.fastT = 0; }
     } else this.level = this.quality;
     const L = this.level;
+    setSurfaceDetail(this.unitTextures && L < 3);
     const dpr = this.dprFor(L);
     if (dpr !== this.dprNow) { this.dprNow = dpr; this.resize(); }
     // AO only pays off when zoomed in and the scene is light
