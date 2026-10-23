@@ -45,10 +45,10 @@ interface UView {
   posed: boolean;
 }
 interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
-interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number }
+interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean }
 
 /** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
-const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb') && Math.abs(p.z - 1) < 1e-6;
+const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb' || p.kind === 'missile') && Math.abs(p.z - 1) < 1e-6;
 
 /** beams / bolts: colour + width + life by module visual */
 function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
@@ -885,14 +885,17 @@ export class FieldView3D implements BattleView {
         }
         // straight rounds end at the body height of the first enemy along their path (aircraft fly well above the ground);
         // rounds fired at aircraft (the sim flies them at z = 1) climb to the first aircraft along their path
+        const air = airShot(p);
         const hEnd = !byId ? 0.42
-          : airShot(p) ? this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, p.z + 0.12, true)
+          : air ? this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, p.z + 0.12, true)
           : p.z > 0.05 ? 0.42 : this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, 0.42, false);
-        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd };
+        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air };
         seen.set(p.id, rec);
       }
       if (this.offscreen(pos.x, pos.y, 4)) { rec.px = pos.x; rec.py = pos.y; continue; }
-      const arcs = p.z > 0.05 && !airShot(p);
+      // homing anti-air missiles turn onto their target after launch: keep re-reading its height along the heading
+      if (rec.air && p.kind === 'missile' && byId) rec.hEnd = this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, rec.hEnd, true);
+      const arcs = p.z > 0.05 && !rec.air;
       const H = arcs ? p.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(p.progress, 0, 1));
       const ang = pos.angle;
       const dx = Math.cos(ang), dz = Math.sin(ang);
@@ -1097,7 +1100,18 @@ export class FieldView3D implements BattleView {
         const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
         const style = vis === 'plasma' ? 'plasma' : vis === 'emp' || vis === 'tesla' ? 'emp' : 'fire';
         if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
-        fx.explosion(e.x, e.y, Math.max(0.5, e.radius), style);
+        // air bursts and missiles striking an aircraft go off at its altitude, not on the ground below (as in 2D)
+        let ey = 0;
+        if (MODULE_BY_ID.get(e.moduleId)?.targetsAir) {
+          let bd = 1.2 * 1.2, best = -1;
+          for (const u of byId.values()) {
+            if (!u.flying || !this.bu.has(u.id)) continue;
+            const d = (u.x - e.x) ** 2 + (u.y - e.y) ** 2;
+            if (d < bd) { bd = d; best = u.id; }
+          }
+          if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
+        }
+        fx.explosion(e.x, e.y, Math.max(0.5, e.radius), style, ey);
         break;
       }
       case 'death': {
