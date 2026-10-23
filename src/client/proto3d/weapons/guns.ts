@@ -1,5 +1,5 @@
 // Kinetic guns: machine guns (pintle nests, ball mounts), autocannons (low wedges, quad AA cradles), scatterguns,
-// gatlings (fork mounts with fat barrel clusters), tank cannons (cast domes, angular wedges, twin hexes, siege
+// gatlings (fork mounts with thin clamped barrel clusters + ammo drum), tank cannons (cast domes, angular wedges, twin hexes, siege
 // casemates), gauss (square coil barrels), sniper (open long rifle), rails (twin glowing prongs), flak and point defence.
 
 import { calibreMm } from '../../render/weaponsize.ts';
@@ -36,8 +36,20 @@ function pintle(C: WCtx) {
   // gun shield: leaning plate, wider than the gun
   cbox(p, kit.hull, r * 0.38, r * 0.02, 0, r * 0.1, r * 0.72, r * 1.15, r * 0.04, [0, 0, -0.28]);
   accent(C, r * 0.45, r * 0.02, -r * 0.32, r * 0.08, r * 0.2, [0, 0, -0.28 + Math.PI / 2], p);
-  const len = C.D * (0.95 + 0.35 * C.c);
-  for (const z of zs(nb, w * 0.62)) barrel(C, rc, { len, rad: R, x0: r * 0.25, z, seg: 6, brake: calibreMm(C.mod) > 10 ? 'cone' : 'none', taper: 0.9 });
+  const len = C.D * (1.05 + 0.35 * C.c), x0 = r * 0.25;
+  const heavy = calibreMm(C.mod) > 10, jk = nb > 1 ? 1.55 : 1.9;
+  for (const z of zs(nb, w * 0.62)) {
+    barrel(C, rc, { len, rad: R * 0.85, x0, z, seg: 6, brake: heavy ? 'cone' : 'flash', taper: 0.95 });
+    if (heavy) {
+      // heavy MG: short perforated barrel-support sleeve at the receiver, long bare barrel, muzzle can
+      rc.lathe(kit.trim, [[0, 0], [R * 1.55, 0], [R * 1.55, len * 0.22], [R * 1.05, len * 0.26], [0, len * 0.26]], [x0, 0, z], 'x', 7);
+      band(rc, kit.metal, x0 + len * 0.11, 0, z, R * 1.7, len * 0.04, 7);
+    } else {
+      // rifle-calibre MG: fat ribbed cooling jacket over the first half, thin barrel poking out of it
+      rc.lathe(kit.trim, [[0, 0], [R * jk, 0], [R * jk, len * 0.5], [R * 1.2, len * 0.56], [0, len * 0.56]], [x0, 0, z], 'x', 7);
+      for (const f of [0.14, 0.3, 0.44]) band(rc, kit.metal, x0 + len * f, 0, z, R * (jk + 0.15), len * 0.035, 7);
+    }
+  }
   C.t.rate = 0.12;
 }
 
@@ -51,7 +63,7 @@ function ballMount(C: WCtx) {
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
   cbox(p, kit.metal, -r * 0.1, r * 0.32, -r * 0.22, r * 0.4, r * 0.2, r * 0.2);
   bx(p, kit.glass, r * 0.11, r * 0.32, -r * 0.22, r * 0.03, r * 0.12, r * 0.14);
-  barrel(C, rc, { len: C.D * 1.1, rad: R, x0: r * 0.1, seg: 7, brake: 'flash' });
+  barrel(C, rc, { len: C.D * 1.25, rad: R, x0: r * 0.1, seg: 7, sleeve: true, brake: 'flash' });
   accent(C, -r * 0.35, y0 + r * 0.92, 0, r * 0.4, r * 0.12);
   C.t.rate = 0.2;
 }
@@ -65,8 +77,28 @@ function wedgeAC(C: WCtx) {
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.52, 0);
   const gap = R * 3.4;
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.62, nb > 1 ? gap * nb + R * 3 : R * 5.5);
-  const len = C.D * (1.0 + 0.35 * C.c);
-  for (const z of zs(nb, gap)) barrel(C, rc, { len, rad: R, x0: r * 0.1, z, seg: 7, sleeve: C.c > 0.6, brake: C.c > 0.6 ? 'cone' : 'flash' });
+  const len = C.D * (1.1 + 0.35 * C.c), x0 = r * 0.1;
+  const bofors = C.mod.id === 'ac40';
+  for (const z of zs(nb, gap)) {
+    if (bofors) {
+      // Bofors: recoil spring sleeve over the root, bare barrel, big conical flash hider
+      const lb = len * 0.85;
+      barrel(C, rc, { len: lb, rad: R, x0, z, seg: 7, noMuzzle: true });
+      rc.lathe(kit.trim, [[0, 0], [R * 1.5, 0], [R * 1.5, len * 0.3], [R * 1.15, len * 0.34], [0, len * 0.34]], [x0, 0, z], 'x', 7);
+      rc.lathe(kit.metal, [[0, 0], [R * 0.95, 0], [R * 1.75, len * 0.15], [R * 1.3, len * 0.15], [0, len * 0.08]], [x0 + lb, 0, z], 'x', 7);
+      C.muzzle(x0 + lb + len * 0.15, 0, z);
+    } else barrel(C, rc, { len, rad: R, x0, z, seg: 7, sleeve: nb === 1, brake: nb > 1 ? 'flash' : 'slot' });
+  }
+  const mw = nb > 1 ? gap * nb + R * 3 : R * 5.5;
+  if (bofors) {
+    // the Bofors tell: a 4-round clip standing upright in the feed guide on top of the breech
+    bx(p, kit.trim, -r * 0.06, h * 0.31 + r * 0.04, 0, r * 0.22, r * 0.08, R * 2.6);
+    bx(p, kit.panel, -r * 0.06, h * 0.31 + r * 0.24, 0, r * 0.15, r * 0.36, R * 1.7);
+    bx(p, kit.hazard, -r * 0.06, h * 0.31 + r * 0.44, 0, r * 0.12, r * 0.06, R * 1.4);
+  } else if (nb === 1) {
+    // side box magazine + feed chute
+    cbox(p, kit.panel, -r * 0.05, -h * 0.05, -(mw / 2 + r * 0.1), r * 0.3, h * 0.5, r * 0.16, r * 0.03);
+  }
   bx(b, kit.panel, -r * 0.35, y0 + h * 0.75, r * 0.72, r * 0.6, h * 0.5, r * 0.22);
   cbox(b, kit.trim, -r * 0.45, y0 + h + r * 0.06, -r * 0.2, r * 0.26, r * 0.12, r * 0.26);
   accent(C, -r * 0.1, y0 + h + 0.002, r * 0.25, r * 0.55, r * 0.1);
@@ -83,7 +115,7 @@ function quadAA(C: WCtx) {
   C.t.pitch.position.set(r * 0.05, y0 + r * 0.42, 0);
   C.t.pitch.rotation.z = 0.32;
   bx(p, kit.trim, 0, 0, 0, r * 0.3, r * 0.18, r * 1.0);
-  const len = C.D * 1.0;
+  const len = C.D * 1.2;
   for (const s of [-1, 1]) {
     cbox(p, kit.hull, r * 0.05, 0, s * r * 0.62, r * 0.75, r * 0.5, r * 0.3);
     for (const y of [-r * 0.12, r * 0.12]) barrel(C, rc, { len, rad: R, x0: r * 0.35, y, z: s * r * 0.62, seg: 6, brake: 'flash' });
@@ -92,16 +124,22 @@ function quadAA(C: WCtx) {
   C.t.rate = 0.1;
 }
 
-/** Scattergun: blunt riot casemate, short fat barrel with a bell muzzle, drum magazine. */
+/** Scattergun: pintle-mounted blunt receiver, drum magazine slung underneath, two short flared barrels side by side. */
 function scatter(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  const h = r * 0.55;
-  shell(b, kit.hull, [[-r * 0.75, r * 0.62, r * 0.48, h], [r * 0.45, r * 0.7, r * 0.5, h], [r * 0.72, r * 0.55, r * 0.36, h * 0.72]], y0);
-  C.t.pitch.position.set(r * 0.62, y0 + h * 0.5, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.25, h * 0.6, r * 0.55);
-  const R = Math.max(C.bore, r * 0.17);
-  barrel(C, rc, { len: C.D * 0.62, rad: R, x0: r * 0.05, seg: 8, brake: 'cone', taper: 1 });
-  rc.cylb(kit.panel, r * 0.24, r * 0.2, r * 0.03, [r * 0.38, -R - r * 0.16, 0], 'y', 8);
+  b.lathe(kit.hull, [[0, 0], [r * 0.75, 0], [r * 0.75, r * 0.14], [r * 0.55, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 8);
+  b.cyl(kit.metal, r * 0.11, r * 0.09, r * 0.4, [-r * 0.3, y0 + r * 0.22, 0], 'y', 6);
+  C.t.pitch.position.set(0, y0 + r * 0.72, 0);
+  cbox(p, kit.hull, -r * 0.12, 0, 0, r * 0.95, r * 0.32, r * 0.46, r * 0.06);
+  cbox(p, kit.trim, -r * 0.2, r * 0.19, 0, r * 0.55, r * 0.07, r * 0.2, r * 0.02);
+  // drum magazine: the scattergun's signature lump
+  p.cylb(kit.panel, r * 0.27, r * 0.24, r * 0.05, [r * 0.08, -r * 0.33, -r * 0.12], 'z', 10);
+  band(p, kit.trim, r * 0.08, -r * 0.33, 0, r * 0.1, r * 0.1, 6);
+  accent(C, -r * 0.35, r * 0.165, r * 0.12, r * 0.3, r * 0.08, undefined, p);
+  const R = Math.max(C.bore, r * 0.12);
+  const len = C.D * 0.72, x0 = r * 0.33;
+  for (const z of [-R * 1.08, R * 1.08]) barrel(C, rc, { len, rad: R, x0, z, seg: 7, brake: 'flash', taper: 1 });
+  cbox(rc, kit.trim, x0 + len * 0.45, 0, 0, r * 0.08, R * 2.3, R * 4.5, R * 0.2);
   C.t.rate = 0.5;
 }
 
@@ -120,52 +158,69 @@ function pointDefence(C: WCtx) {
   C.t.rate = 0.3;
 }
 
-/** Flak: open AA mount: drum base, tall cheek plates, elevated barrels with clip racks. */
+/** Flak: open AA mount: drum base, cheek plates, long steeply elevated barrels with flash hiders and clip racks. */
 function flak(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const n = Math.max(1, C.nb);
   const R = C.bore;
   b.lathe(kit.hull, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.18], [r * 0.6, r * 0.3], [0, r * 0.3]], [0, y0, 0], 'y', C.tier >= 4 ? 12 : 10);
   const cols = n >= 4 ? 2 : n, rows = n >= 4 ? 2 : 1;
-  const gap = R * 3.6, wid = cols * gap + R * 2;
-  for (const s of [-1, 1]) shell(b, kit.trim, [[-r * 0.55, r * 0.07, r * 0.05, r * 0.75], [r * 0.25, r * 0.07, r * 0.05, r * 0.55]], y0 + r * 0.2, s * (wid / 2 + r * 0.1));
+  const gap = R * 4, wid = cols * gap + R * 2;
+  // trunnion cheeks: thin, light plates either side of the cradle (not a solid wall)
+  for (const s of [-1, 1]) shell(b, kit.panel, [[-r * 0.4, r * 0.05, r * 0.04, r * 0.62], [r * 0.2, r * 0.05, r * 0.04, r * 0.46]], y0 + r * 0.2, s * (wid / 2 + r * 0.08));
   C.t.pitch.position.set(0, y0 + r * 0.7, 0);
-  C.t.pitch.rotation.z = 0.5;
-  cbox(p, kit.hull, 0, 0, 0, r * 0.75, r * (0.35 + 0.22 * (rows - 1)), wid, r * 0.06);
-  const len = C.D * (1.05 + 0.2 * C.c);
+  C.t.pitch.rotation.z = 0.55;
+  cbox(p, kit.hull, -r * 0.05, 0, 0, r * 0.7, r * (0.3 + 0.22 * (rows - 1)), wid, r * 0.06);
+  const len = C.D * (1.3 + 0.2 * C.c);
   for (let j = 0; j < rows; j++) for (const z of zs(cols, gap)) {
-    const y = rows > 1 ? (j - 0.5) * R * 3.4 : 0;
-    barrel(C, rc, { len, rad: R, x0: r * 0.2, y, z, seg: 7, brake: 'slot' });
-    bx(rc, kit.panel, -r * 0.05, y + R * 2.2 + r * 0.05, z, r * 0.35, r * 0.12, R * 2.2);
+    const y = rows > 1 ? (j - 0.5) * R * 3.6 : 0;
+    barrel(C, rc, { len, rad: R, x0: r * 0.2, y, z, seg: 7, sleeve: true, brake: 'flash' });
+    // ready clip on top of each breech, shell tips showing
+    bx(rc, kit.panel, -r * 0.08, y + R * 1.6 + r * 0.1, z, r * 0.32, r * 0.18, R * 1.8);
+    bx(rc, kit.hazard, r * 0.1, y + R * 1.6 + r * 0.1, z, r * 0.05, r * 0.14, R * 1.5);
   }
-  accent(C, -r * 0.1, r * (0.18 + 0.11 * (rows - 1)), 0, r * 0.4, wid * 0.6, undefined, p);
+  accent(C, -r * 0.15, r * (0.15 + 0.11 * (rows - 1)), 0, r * 0.4, wid * 0.6, undefined, p);
   C.t.shot = 'shell';
   C.t.rate = 0.35;
 }
 
-/** Gatling: fork-mounted drum receiver with a fat spinning barrel cluster and a side ammo drum. */
+/** Gatling: fork-mounted receiver drum, a spinning cluster of thin barrels (rear carrier, spindle, mid and muzzle
+ *  clamps) and an ammo drum: a side drum on the minigun, a huge drum behind the receiver on the L/XL rotary cannon. */
 function gatling(C: WCtx) {
   const { b, p, rc, sp, kit, r, y0 } = C;
-  const n = Math.max(5, C.nb);
-  const rb = Math.max(C.bore, r * 0.1), cr = Math.max(rb * 2.5, r * 0.28);
+  const n = Math.max(6, C.nb);
+  const big = C.tier >= 4;
+  const cr = r * (big ? 0.3 : 0.25);
+  // thin barrels with clear gaps between them (a fat tube bundle reads as a revolver cylinder)
+  const rb = Math.min(Math.max(C.bore * 0.75, r * 0.04), cr * Math.sin(Math.PI / n) * 0.6);
+  const len = C.D * (big ? 1.3 : 1.2);
+  const ro = cr + rb * 1.8; // clamp / receiver outer radius
   // yoke
   b.lathe(kit.hull, [[0, 0], [r * 0.72, 0], [r * 0.72, r * 0.16], [r * 0.6, r * 0.24], [0, r * 0.24]], [0, y0, 0], 'y', 10);
-  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.05, y0 + r * 0.45, s * (cr + r * 0.3), r * 0.55, r * 0.55, r * 0.14, r * 0.05);
-  C.t.pitch.position.set(-r * 0.05, y0 + r * 0.55, 0);
+  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.05, y0 + r * 0.42, s * (ro + r * 0.2), r * 0.5, r * 0.5, r * 0.12, r * 0.04);
+  C.t.pitch.position.set(-r * 0.05, y0 + r * 0.5, 0);
   // receiver drum (pitches with the barrels)
-  p.lathe(kit.hull, [[0, -r * 0.55], [cr * 0.9, -r * 0.55], [cr + r * 0.12, -r * 0.4], [cr + r * 0.12, r * 0.2], [cr + r * 0.02, r * 0.32], [0, r * 0.32]], [0, 0, 0], 'x', 10);
-  // side ammo drum + chute
-  p.cylb(kit.panel, r * 0.32, r * 0.3, r * 0.05, [-r * 0.2, 0, -(cr + r * 0.16)], '-z', 10);
-  bx(p, kit.trim, -r * 0.02, -r * 0.12, -(cr + r * 0.06), r * 0.3, r * 0.14, r * 0.12);
-  accent(C, -r * 0.25, cr + r * 0.12, 0, r * 0.5, r * 0.14, undefined, p);
-  const len = C.D * (0.95 + 0.25 * C.c);
-  C.spin('x', [r * 0.32, 0, 0]);
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; sp.cyl(kit.metal, rb, rb, len, [0, Math.sin(a) * cr, Math.cos(a) * cr], 'x', 6); }
-  sp.cyl(kit.trim, cr * 0.55, cr * 0.55, len * 0.96, [0, 0, 0], 'x', 6);
-  band(sp, kit.steel, len * 0.35, 0, 0, cr + rb * 1.2, r * 0.07, 8);
-  band(sp, kit.steel, len * 0.96, 0, 0, cr + rb * 1.3, r * 0.1, 8);
-  rc.lathe(kit.trim, [[0, 0], [cr + rb * 1.5, 0], [cr + rb * 1.5, r * 0.14], [0, r * 0.14]], [r * 0.25, 0, 0], 'x', 10);
-  C.muzzle(r * 0.32 + len + r * 0.05, 0, 0);
+  p.lathe(kit.hull, [[0, -r * 0.5], [ro * 0.85, -r * 0.5], [ro + r * 0.04, -r * 0.38], [ro + r * 0.04, r * 0.18], [ro * 0.9, r * 0.3], [0, r * 0.3]], [0, 0, 0], 'x', 10);
+  if (big) {
+    // linkless ammo drum behind the receiver, with a feed/return chute arching over it
+    p.cylb(kit.panel, ro * 1.05, r * 0.75, r * 0.06, [-r * 1.22, 0, 0], 'x', 10);
+    band(p, kit.trim, -r * 0.85, 0, 0, ro * 1.1, r * 0.06, 10);
+    cbox(p, kit.trim, -r * 0.62, ro * 1.0, 0, r * 0.5, r * 0.12, r * 0.22, r * 0.03);
+    accent(C, -r * 0.85, ro * 1.07, 0, r * 0.4, r * 0.14, undefined, p);
+  } else {
+    p.cylb(kit.panel, r * 0.3, r * 0.26, r * 0.05, [-r * 0.2, 0, -(ro + r * 0.06)], '-z', 10);
+    bx(p, kit.trim, -r * 0.02, -r * 0.12, -(ro + r * 0.01), r * 0.28, r * 0.12, r * 0.1);
+    accent(C, -r * 0.25, ro + r * 0.04, 0, r * 0.45, r * 0.12, undefined, p);
+  }
+  // fixed front bearing collar (recoils)
+  rc.lathe(kit.trim, [[0, 0], [ro, 0], [ro, r * 0.1], [0, r * 0.1]], [r * 0.25, 0, 0], 'x', 10);
+  C.spin('x', [r * 0.33, 0, 0]);
+  sp.cyl(kit.trim, ro * 0.95, ro * 0.95, r * 0.08, [0, 0, 0], 'x', n); // rear barrel carrier
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; sp.cyl(kit.metal, rb, rb, len, [0, Math.sin(a) * cr, Math.cos(a) * cr], 'x', 5); }
+  sp.cyl(kit.trim, cr * 0.42, cr * 0.42, len * 0.84, [0, 0, 0], 'x', 6); // central spindle
+  sp.cyl(kit.steel, ro * 0.92, ro * 0.92, r * 0.05, [len * 0.42, 0, 0], 'x', n); // mid clamp
+  sp.cyl(kit.steel, ro, ro, r * 0.1, [len * 0.8, 0, 0], 'x', 10); // muzzle clamp; the barrels stick out past it
+  C.muzzle(r * 0.33 + len + r * 0.04, 0, 0);
   C.t.rate = 0.07;
 }
 
@@ -175,7 +230,7 @@ const tankCommon = (C: WCtx, roofY: number, cx: number, cz: number) => {
   bx(b, kit.glass, cx + r * 0.15, roofY + r * 0.05, cz, r * 0.03, r * 0.05, r * 0.12);
 };
 
-/** 75 mm class: rounded cast turret (squashed dome) with a bustle box and a long gun. */
+/** 75 mm class: rounded cast turret (squashed dome) with a bustle box and a long gun with a double-baffle brake. */
 function castDome(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.6;
@@ -185,12 +240,13 @@ function castDome(C: WCtx) {
   accent(C, -r * 0.88, y0 + h * 0.71, 0, r * 0.3, r * 0.6);
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.48, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.6, R * 5.5, r * 0.06, undefined, 0.8);
-  barrel(C, rc, { len: C.D * 1.2, rad: R, x0: r * 0.1, seg: 8, evac: true, brake: 'cone' });
+  barrel(C, rc, { len: C.D * 1.45, rad: R, x0: r * 0.1, seg: 8, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 1.0;
 }
 
-/** 120 mm class: angular wedge turret with a long bustle, chunky mantlet, sleeve, evacuator, slot brake. */
+/** 120 mm class: angular wedge turret with a long bustle, chunky mantlet and a long clean smoothbore (thermal
+ *  sleeve + fume extractor, no brake). */
 function wedgeTank(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = C.bore, h = r * 0.5;
@@ -200,7 +256,9 @@ function wedgeTank(C: WCtx) {
   accent(C, -r * 0.2, y0 + h + 0.002, r * 0.3, r * 0.6, r * 0.12);
   C.t.pitch.position.set(r * 0.82, y0 + h * 0.52, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.35, h * 0.72, R * 6, r * 0.06, undefined, 0.8);
-  barrel(C, rc, { len: C.D * 1.25, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, brake: 'slot' });
+  barrel(C, rc, { len: C.D * 1.6, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, taper: 0.88 });
+  // muzzle reference sensor: a small box on top of the muzzle
+  cbox(rc, kit.trim, r * 0.12 + C.D * 1.55, R * 1.05, 0, R * 1.4, R * 0.5, R * 0.7, R * 0.1);
   C.t.shot = 'shell';
   C.t.rate = 1.2;
 }
@@ -208,14 +266,14 @@ function wedgeTank(C: WCtx) {
 /** Twin 120: wide flat hex turret, two barrels on one broad mantlet. */
 function twinHex(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.46, gap = R * 3.4;
+  const R = C.bore, h = r * 0.46, gap = R * 3.6;
   shell(b, kit.hull, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
   tankCommon(C, y0 + h, -r * 0.5, r * 0.4);
   cbox(b, kit.panel, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
   accent(C, -r * 0.1, y0 + h + 0.002, 0, r * 0.2, r * 0.9);
   C.t.pitch.position.set(r * 0.85, y0 + h * 0.5, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.7, gap + R * 6, r * 0.06, undefined, 0.85);
-  for (const z of zs(2, gap)) barrel(C, rc, { len: C.D * 1.15, rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: 'slot' });
+  for (const z of zs(2, gap)) barrel(C, rc, { len: C.D * 1.4, rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 0.9;
 }
@@ -232,7 +290,7 @@ function siegeCasemate(C: WCtx) {
   C.t.pitch.position.set(r * 0.55, y0 + h * 0.6, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.4, h * 0.85, R * 5, r * 0.07, undefined, 0.85);
   for (const s of [-1, 1]) p.cyl(kit.steel, R * 0.4, R * 0.4, C.D * 0.45, [r * 0.1, R * 1.5, s * R * 1.2], 'x', 6);
-  barrel(C, rc, { len: C.D * 1.4, rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: 'slot' });
+  barrel(C, rc, { len: C.D * 1.6, rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 2.2;
 }

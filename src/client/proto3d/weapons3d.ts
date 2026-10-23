@@ -65,8 +65,9 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   const C: WCtx = {
     b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
     c: classPos(mod, ov), tier: (ov ? CLASS_RANK[ov] : moduleTier(mod)) as WCtx['tier'], nb: mod.barrels ?? 1,
-    // chunky: barrel radius ~0.6 x the true bore width, never thinner than 9% of the housing radius
-    bore: Math.max(boreOf(calibreMm(mod)) * 0.6 * kS, r * 0.11),
+    // stylized but gun-like: barrel radius ~0.5 x the true bore width (long slim tubes read better than fat pipes at
+    // battle distance), never thinner than 9% of the housing radius so it survives a small screen
+    bore: Math.max(boreOf(calibreMm(mod)) * 0.5 * kS, r * 0.09),
     y0: fixed ? 0 : r * 0.1, fixed, bv: Math.max(0.004, r * 0.05), t,
     muzzle: (x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); recoil.add(o); t.muzzles.push(o); },
     spin: (axis = 'x', at = [0, 0, 0]) => {
