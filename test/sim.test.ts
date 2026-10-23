@@ -35,7 +35,11 @@ const DESIGNS: Design[] = [
   D('gunner', 'warden', 'halftrack', ['minigun', null]),
   D('sonic', 'warden', 'halftrack', ['sonic', null]),
   D('disarmer', 'warden', 'halftrack', ['disarm', null]),
-  D('pulse', 'warden', 'halftrack', ['twinlaser', null]),
+  D('pulse', 'warden', 'halftrack', ['autocannon', null]),
+  D('focus', 'warden', 'halftrack', ['twinlaser', null]),
+  D('firebomber', 'warden', 'halftrack', ['firebomb', null]),
+  D('clusterarty', 'goliath', 'megatracks', ['clusterhow', 'plateH', 'plateH', 'plateH']),
+  D('flechetter', 'warden', 'halftrack', ['flechette', null]),
   D('brawler', 'mantis', 'legs', ['buzzsaw', 'buzzsaw']),
   D('runner', 'scout', 'wheels', ['mg']),
   D('mortartruck', 'warden', 'halftrack', ['mortar', null]),
@@ -244,9 +248,9 @@ test('magazines pause for reload', () => {
   const ticks = fires.filter((f) => f.unit === 0).map((f) => f.tick);
   assert.ok(ticks.length > 12);
   const gaps = ticks.slice(1).map((t, i) => (t - ticks[i]) / 20);
-  // 6-shot magazine at 0.15s, then a 1.5s reload
-  assert.ok(gaps.slice(0, 5).every((g) => g < 0.3), `gaps ${gaps.slice(0, 8)}`);
-  assert.ok(gaps[5] >= 1.4, `reload gap ${gaps[5]}`);
+  // 6-shot magazine at 0.3s, then a 2s reload
+  assert.ok(gaps.slice(0, 5).every((g) => g < 0.4), `gaps ${gaps.slice(0, 8)}`);
+  assert.ok(gaps[5] >= 1.9, `reload gap ${gaps[5]}`);
 });
 
 test('accuracy: sniper is pinpoint, minigun sprays', () => {
@@ -1119,4 +1123,80 @@ test('overkill: shooters do not pile onto a target that rounds in flight will al
   }
   assert.equal(near.alive, false);
   assert.equal(atNear, 1, 'only one round is spent on the doomed unit');
+});
+
+test('spin-up: a rotary gun starts slow and reaches full rate after continuous fire', () => {
+  const b = new Battle(input(1, [P('gunner', 10, 0)], [{ ...P('fortress', 9, 0), stance: 'holdPos' }]));
+  const ticks: number[] = [];
+  while (!b.done && b.tick < 20 * 40 && ticks.length < 80) {
+    b.step();
+    for (const e of b.events) if (e.t === 'fire' && e.unit === 0) ticks.push(b.tick);
+  }
+  const gaps = ticks.slice(1).map((t, i) => t - ticks[i]);
+  // (the very first gap can be short: a ready gun carries its sub-tick remainder)
+  const early = gaps.slice(1, 5).reduce((a, g) => a + g, 0) / 4;
+  assert.ok(early >= 2.2, `first shots come slowly (${gaps.slice(0, 6)} ticks apart)`);
+  const late = gaps.slice(-20);
+  assert.ok(late.every((g) => g === 1), `spun up: one round per tick (${late})`);
+});
+
+test('focus beam: damage ramps up while it stays on one target', () => {
+  const b = new Battle(input(1, [P('focus', 10, 0)], [{ ...P('fortress', 9, 0), stance: 'holdPos' }]));
+  const dmg: number[] = [];
+  while (!b.done && b.tick < 20 * 40 && dmg.length < 40) {
+    b.step();
+    for (const e of b.events) if (e.t === 'hit' && e.moduleId === 'twinlaser') dmg.push(e.damage);
+  }
+  assert.ok(dmg.length >= 30, `hits ${dmg.length}`);
+  assert.ok(dmg[dmg.length - 1] > 2.2 * dmg[0], `ramped from ${dmg[0].toFixed(1)} to ${dmg[dmg.length - 1].toFixed(1)}`);
+});
+
+test('fire field: a firebomb leaves a burning patch that sets units inside alight', () => {
+  const b = new Battle(input(2, [{ ...P('firebomber', 10, 0), stance: 'holdPos' }], [P('bulwark', 10, 0)]));
+  let field: { x: number; y: number; radius: number } | null = null;
+  while (!b.done && b.tick < 20 * 60 && !field) {
+    b.step();
+    for (const e of b.events) if (e.t === 'fireField') field = e;
+  }
+  assert.ok(field, 'a fire field was laid');
+  // drop a fresh enemy into the patch: it catches fire although no shell hit it
+  const v = b.units[1];
+  v.x = field.x; v.y = field.y; v.burning = 0; v.shield = 0; v.auraShield = 0;
+  (b as unknown as { rebuildHash(): void }).rebuildHash();
+  for (let i = 0; i < 12; i++) b.step();
+  assert.ok(v.burning > 0, 'unit standing in the fire field burns');
+});
+
+test('cluster shell: the landing releases bomblets that burst across the area', () => {
+  const b = new Battle(input(3, [{ ...P('clusterarty', 10, 0), stance: 'holdPos' }], [{ ...P('bulwark', 10, 0), stance: 'holdPos' }]));
+  type PP = { moduleId: string; tx: number; ty: number; src: number; cl: unknown };
+  const projs = () => (b as unknown as { projs: PP[] }).projs.filter((p) => p.moduleId === 'clusterhow');
+  let bomblets: PP[] = [];
+  while (!b.done && b.tick < 20 * 60 && bomblets.length === 0) {
+    b.step();
+    bomblets = projs().filter((p) => p.cl === null);
+  }
+  assert.equal(bomblets.length, 10, 'ten bomblets released on landing');
+  let minD = Infinity;
+  for (let i = 0; i < bomblets.length; i++) for (let j = i + 1; j < bomblets.length; j++) minD = Math.min(minD, Math.hypot(bomblets[i].tx - bomblets[j].tx, bomblets[i].ty - bomblets[j].ty));
+  assert.ok(minD > 0.05, 'bomblets scatter to separate points');
+  let blasts = 0;
+  for (let i = 0; i < 40; i++) { b.step(); blasts += b.events.filter((e) => e.t === 'explode' && e.moduleId === 'clusterhow').length; }
+  assert.ok(blasts >= 10, `bomblets burst (${blasts} blasts)`);
+});
+
+test('flechettes pierce: one dart can hit several units in a line', () => {
+  const b = new Battle(input(4, [{ ...P('flechetter', 10, 0), stance: 'holdPos' }], [{ ...P('buggy', 10, 0), stance: 'holdPos' }]));
+  type PP = { moduleId: string; hits: number[] };
+  let maxHits = 0;
+  // line the enemy squad up straight in front of the gun
+  const shooter = b.units[0];
+  const foes = b.units.filter((u) => u.side === 1);
+  foes.forEach((u, i) => { u.x = shooter.x + (i % 2) * 0.1; u.y = shooter.y - 3 - i * 0.6; });
+  (b as unknown as { rebuildHash(): void }).rebuildHash();
+  for (let i = 0; i < 20 * 6 && !b.done; i++) {
+    b.step();
+    for (const p of (b as unknown as { projs: PP[] }).projs) if (p.moduleId === 'flechette') maxHits = Math.max(maxHits, p.hits.length);
+  }
+  assert.ok(maxHits >= 2, `a dart passed through ${maxHits} units`);
 });

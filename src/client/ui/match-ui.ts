@@ -379,6 +379,10 @@ export function statCard(o: StatCardOpts): HTMLElement {
       if (m.disarm) tags.push(`Disarm ${n1(m.disarm)}s`);
       if (m.burn) tags.push(`Burn ${Math.round(m.burn.dps)}/s`);
       if (m.impulse) tags.push(m.impulse > 0 ? 'Knockback' : 'Pull');
+      if (m.spinUp) tags.push('Spin-up');
+      if (m.ramp) tags.push(`Focus ×${n1(m.ramp)}`);
+      if (m.fireField) tags.push('Fire field');
+      if (m.cluster) tags.push(`Cluster ×${m.cluster.count}`);
       if (m.ap && m.ap >= 0.3) tags.push(`AP ${Math.round(m.ap * 100)}%`);
       if (a && m.airBonus && m.airBonus > 1) tags.push(`×${n1(m.airBonus)} vs air`);
       head = [

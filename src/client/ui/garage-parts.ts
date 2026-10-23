@@ -129,6 +129,10 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.burn) t.push(`burn ${mod.burn.dps}/s ${mod.burn.duration}s`);
   if (mod.airBonus && mod.airBonus !== 1) t.push(`×${mod.airBonus} vs air`);
   if (mod.falloff != null && mod.falloff < 1) t.push('falloff');
+  if (mod.spinUp) t.push(`spin-up ${n1(mod.spinUp)}s`);
+  if (mod.ramp) t.push(`focus ×${n1(mod.ramp)}`);
+  if (mod.fireField) t.push(`fire field ${n1(mod.fireField.duration)}s`);
+  if (mod.cluster) t.push(`cluster ×${mod.cluster.count}`);
   if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
   if (mod.rangeBonus) t.push(`+${Math.round(mod.rangeBonus * 100)}% unit range`);
   if (mod.spreadMult && mod.spreadMult < 1) t.push(`-${Math.round((1 - mod.spreadMult) * 100)}% spread`);
