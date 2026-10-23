@@ -36,7 +36,7 @@ export function settingsScreen(app: App): Screen {
   const rendererHost = h('div');
   const renderRenderer = () => rendererHost.replaceChildren(kit.segmented({
     value: s.renderer, label: 'Battlefield art', options: [{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }],
-    onChange: (v) => { sfx('click'); s.renderer = v; saveSettings(s); if (v === '3d') void preload3d(); renderRenderer(); },
+    onChange: (v) => { sfx('click'); s.renderer = v; s.rendererChosen = true; saveSettings(s); if (v === '3d') void preload3d(); renderRenderer(); },
   }));
   renderRenderer();
 

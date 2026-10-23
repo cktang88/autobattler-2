@@ -12,9 +12,9 @@ test('armour penetration uses only the three tiers; every melee weapon has full 
     assert.ok([0, 0.5, 1].includes(m.ap ?? 0), `${m.id}: ap ${m.ap}`);
     if (m.projectile === 'melee') assert.equal(apTier(m), 'full', m.id);
   }
-  assert.deepEqual(damageKinds({ projectile: 'rocket' }), ['explosive']);
-  assert.deepEqual(damageKinds({ projectile: 'beam' }), ['energy']);
-  assert.deepEqual(damageKinds({ projectile: 'bullet' }), ['kinetic']);
+  assert.deepEqual(damageKinds({ projectile: 'rocket', category: 'rocket' }), ['explosive']);
+  assert.deepEqual(damageKinds({ projectile: 'beam', category: 'energy' }), ['energy']);
+  assert.deepEqual(damageKinds({ projectile: 'bullet', category: 'machinegun' }), ['kinetic']);
 });
 
 test('shields soak hits at full strength before armour; armour then takes a flat amount off', () => {
