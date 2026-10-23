@@ -609,15 +609,22 @@ export class FieldView {
       g.strokeRect(hv.col + 0.04, hv.row + 0.04, hw - 0.08, hh - 0.08);
     }
     const poses: { u: BoardUnit; p: UnitPose; air: boolean }[] = [];
+    const giants = new Map<string, number>();
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
       const LS = layoutOf(u.design).S;
       if (LS >= 4 && !u.ghost && !u.dim) {
         const key = `${u.side}|${u.x}|${u.y}|${u.design.chassis}`;
+        // only a newly placed giant lands with a thump: one dragged to a new spot (same count as last frame) does not
+        // shake the camera at every cell it passes
+        const gk = `${u.side}|${u.design.id}`, n = (giants.get(gk) ?? 0) + 1;
+        giants.set(gk, n);
         if (!this.landed.has(key)) {
           this.landed.add(key);
-          this.fx.shockwave(u.x, u.y, 0.9 * LS, '#d8c8a0', 0.8);
-          this.fx.shake(0.12 + 0.03 * LS);
+          if (n > (this.giantsShown.get(gk) ?? 0)) {
+            this.fx.shockwave(u.x, u.y, 0.9 * LS, '#d8c8a0', 0.8);
+            this.fx.shake(0.12 + 0.03 * LS);
+          }
         }
       }
       const seed = hash01(i * 7919 + Math.round(u.x * 13 + u.y * 101)) * 10;
@@ -627,6 +634,7 @@ export class FieldView {
       };
       poses.push({ u, p, air: layoutOf(u.design).air });
     }
+    this.giantsShown = giants;
     this.depthSort(poses, (q) => q.p.y);
     for (const pass of [false, true]) {
       for (const { air, p } of poses) if (air === pass) this.drawShadowOf(p, px);
@@ -918,6 +926,8 @@ export class FieldView {
   }
 
   private landed = new Set<string>();
+  /** giants per side|design drawn by the last drawBoard */
+  private giantsShown = new Map<string, number>();
   /** heat of the annihilator that fired most recently (fire event precedes its beam event) */
   private beamHeat = 0;
 
@@ -1505,18 +1515,18 @@ export class FieldView {
 
   /** Where a shot from (fx, fy) meets unit u's drawn hull (a rounded box), so beams and sparks land on armour instead of
    *  the middle of the sprite. Render only: the sim still resolves the hit against the whole unit. */
-  private hullEdge(u: SimUnit, fx: number, fy: number): { x: number; y: number } {
+  private hullEdge(u: SimUnit, fx: number, fy: number, cx = u.x, cy = u.y): { x: number; y: number } {
     const L = layoutOf(u.design);
-    const dx = fx - u.x, dy = fy - u.y;
+    const dx = fx - cx, dy = fy - cy;
     const c = Math.cos(u.angle), sn = Math.sin(u.angle);
     const lx = Math.abs(dx * c + dy * sn), ly = Math.abs(-dx * sn + dy * c);
     const hx = L.X * 0.42, hy = L.Y * 0.42;
-    if (lx < 1e-6 && ly < 1e-6) return { x: u.x, y: u.y };
+    if (lx < 1e-6 && ly < 1e-6) return { x: cx, y: cy };
     const box = Math.min(lx > 1e-6 ? hx / lx : Infinity, ly > 1e-6 ? hy / ly : Infinity);
     const ell = 1 / Math.hypot(lx / hx, ly / hy);
     const f = (box + ell) / 2;
-    if (f >= 1) return { x: u.x, y: u.y };
-    return { x: u.x + dx * f, y: u.y + dy * f };
+    if (f >= 1) return { x: cx, y: cy };
+    return { x: cx + dx * f, y: cy + dy * f };
   }
 
   /** World offset from an aircraft's ground position to its drawn body (altitude under the tilt, plus the small
@@ -1540,12 +1550,14 @@ export class FieldView {
   private clipToHull(x1: number, y1: number, x2: number, y2: number, t = this.unitNear(x2, y2)): { x: number; y: number } {
     if (!t) return { x: x2, y: y2 };
     this.shotFrom.set(t.id, { x: x1, y: y1 });
+    // the hull is drawn interpolated (a tick behind the sim): clip to it as drawn
+    const c = this.unitRender(t.id) ?? t;
     if (t.shield > 0 || t.auraShield > 0) {
       // shielded: stop on the bubble (same radius the shield hex flashes at)
-      const r = shieldR(layoutOf(t.design)), d = Math.hypot(x1 - t.x, y1 - t.y);
-      if (d > r) return { x: t.x + ((x1 - t.x) / d) * r, y: t.y + ((y1 - t.y) / d) * r };
+      const r = shieldR(layoutOf(t.design)), d = Math.hypot(x1 - c.x, y1 - c.y);
+      if (d > r) return { x: c.x + ((x1 - c.x) / d) * r, y: c.y + ((y1 - c.y) / d) * r };
     }
-    return this.hullEdge(t, x1, y1);
+    return this.hullEdge(t, x1, y1, c.x, c.y);
   }
 
   private handleEvent(e: BattleEvent): void {
@@ -1811,15 +1823,17 @@ export class FieldView {
           break;
         }
         if (e.damage > 0) this.visOf(ur).dmgT = this.time;
+        // the hull is drawn interpolated (a tick behind the sim): hits flash on it as drawn
+        const dr = this.unitRender(ur.id) ?? ur;
         // direct hits (beams, rails, arcs, splash) are reported at the unit centre: move them to the edge facing the shooter
         if ((e.x - ur.x) ** 2 + (e.y - ur.y) ** 2 < 0.01) {
           const from = this.shotFrom.get(ur.id);
-          const a = from ? Math.atan2(from.y - ur.y, from.x - ur.x) : Math.random() * Math.PI * 2;
-          const far = { x: ur.x + Math.cos(a) * 50, y: ur.y + Math.sin(a) * 50 };
+          const a = from ? Math.atan2(from.y - dr.y, from.x - dr.x) : Math.random() * Math.PI * 2;
+          const far = { x: dr.x + Math.cos(a) * 50, y: dr.y + Math.sin(a) * 50 };
           const r = shieldR(layoutOf(ur.design));
-          const p = e.shieldHit ? { x: ur.x + Math.cos(a) * r, y: ur.y + Math.sin(a) * r } : this.hullEdge(ur, far.x, far.y);
+          const p = e.shieldHit ? { x: dr.x + Math.cos(a) * r, y: dr.y + Math.sin(a) * r } : this.hullEdge(ur, far.x, far.y, dr.x, dr.y);
           e = { ...e, x: p.x, y: p.y };
-        }
+        } else e = { ...e, x: e.x + dr.x - ur.x, y: e.y + dr.y - ur.y };
         // aircraft are drawn at altitude: their hits flash on the drawn body, not on the ground below it
         const al = this.airLift(ur);
         const hx0 = e.x, hy0 = e.y; // hit point on the ground plane (knockback direction)
@@ -1827,7 +1841,7 @@ export class FieldView {
         if (e.shieldHit) {
           const v = this.visOf(ur);
           v.shieldT = this.time;
-          if (fx.busy < 0.7) fx.hex(ur.x + al.x, ur.y + al.y, shieldR(layoutOf(ur.design)), e.x, e.y);
+          if (fx.busy < 0.7) fx.hex(dr.x + al.x, dr.y + al.y, shieldR(layoutOf(ur.design)), e.x, e.y);
           fx.sparks(e.x, e.y, 3, '#bfefff', 2.5, undefined, Math.PI, 0.2);
           break;
         }

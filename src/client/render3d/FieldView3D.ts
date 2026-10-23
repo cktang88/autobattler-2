@@ -33,7 +33,7 @@ const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
 interface Snap { x: number; y: number; angle: number; mounts: number[] }
-interface PSnap { x: number; y: number; z: number; angle: number }
+interface PSnap { x: number; y: number; z: number; angle: number; progress: number }
 /** per-unit presentation state */
 interface UView {
   rig: Rig;
@@ -45,7 +45,10 @@ interface UView {
   posed: boolean;
 }
 interface Wreck { rig: Rig; x: number; z: number; smoke: number; S: number }
-interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number }
+interface ProjRec { y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean }
+
+/** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
+const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb' || p.kind === 'missile') && Math.abs(p.z - 1) < 1e-6;
 
 /** beams / bolts: colour + width + life by module visual */
 function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
@@ -149,7 +152,14 @@ export class FieldView3D implements BattleView {
   private battle: Battle | null = null;
   private lastTick = -1;
   private sinceTick = 0;
-  private tickInterval = DT;
+  /** render clock (in ticks), same scheme as the 2D view: advances at the observed tick rate, eased toward one tick
+   *  behind the estimated sim time and clamped to the snapshot pair it interpolates (prevTick..curTick), so units move
+   *  by the same amount every frame at any speed and uneven ticks per frame don't judder */
+  private rt = 0;
+  private tickRate = 1 / DT;
+  private prevTick = 0;
+  private curTick = 0;
+  private rateWin = { n: 0, t: 0 };
   private alpha = 1;
   private prevU = new Map<number, Snap>();
   private curU = new Map<number, Snap>();
@@ -161,6 +171,10 @@ export class FieldView3D implements BattleView {
   private time = 0;
   private altHeld = false;
   private hitBudget = 0;
+  /** where the beam / arc that just struck a unit came from, and the last blast (this event batch): hits the sim reports
+   *  at a unit's centre (beams, arcs, splash) are moved out to the side facing them */
+  private shotFrom = new Map<number, { x: number; y: number }>();
+  private lastBlast: { x: number; y: number; r: number } | null = null;
   // quality
   /** 'auto' scales AO / bloom / shadows / resolution from frame time; a number pins the level (0 best) */
   quality: 'auto' | 0 | 1 | 2 | 3 = 'auto';
@@ -438,7 +452,7 @@ export class FieldView3D implements BattleView {
   /* ------------------------------------------------------------------------------------------ quality / render */
 
   /** Frame-time driven level: 0 = AO + bloom + shadows, 1 = no AO, 2 = no bloom + 1x pixels, 3 = no shadows + direct render. */
-  private updateQuality(units: number): { ao: boolean; bloom: boolean; shadow: boolean; direct: boolean } {
+  private updateQuality(units: number, load: number): { ao: boolean; bloom: boolean; shadow: boolean; direct: boolean } {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const dtMs = this.lastRender ? now - this.lastRender : 16;
     this.lastRender = now;
@@ -455,17 +469,18 @@ export class FieldView3D implements BattleView {
     if (dpr !== this.dprNow) { this.dprNow = dpr; this.resize(); }
     // AO only pays off when zoomed in and the scene is light
     const aoZoom = this.cam.k >= 9;
-    const ao = L === 0 && aoZoom && units <= 120;
+    const ao = L === 0 && aoZoom && load <= 120;
     this.fx.lod = L >= 2 ? 0.5 : units > 160 ? 0.6 : 1;
-    // very crowded zoomed-out views drop unit shadows first (they double the triangle load)
-    const shadow = L <= 2 && !(units > 250 && this.cam.k < 12);
+    // very crowded zoomed-out views drop unit shadows first (they double the triangle load); wrecks are full hulls too,
+    // so they count, or shadows switch back on mid-battle as units die and the triangle load doubles
+    const shadow = L <= 2 && !(load > 250 && this.cam.k < 12);
     return { ao, bloom: L <= 1, shadow, direct: L >= 3 };
   }
 
   private render(units: number): void {
     this.lastUnits = units;
     this.layer.flush();
-    const q = this.updateQuality(units);
+    const q = this.updateQuality(units, units + this.wrecks.length);
     this.syncCamera();
     this.sun.castShadow = q.shadow;
     this.renderer.shadowMap.enabled = q.shadow;
@@ -599,6 +614,8 @@ export class FieldView3D implements BattleView {
     this.battle = b;
     this.lastTick = -1;
     this.sinceTick = 0;
+    this.rt = this.prevTick = this.curTick = 0;
+    this.rateWin.n = this.rateWin.t = 0;
     this.grid.visible = false;
     (this.myZone.material as THREE.MeshBasicMaterial).opacity = 0;
     this.hoverFill.visible = this.hoverLine.visible = false;
@@ -615,22 +632,46 @@ export class FieldView3D implements BattleView {
     let newTicks: BattleEvent[] | null = null;
     // a big jump (SKIP to the end) is shown as-is: units that died unseen leave their hulks like the 2D view
     let jump = false;
-    if (battle.tick !== this.lastTick) {
-      jump = this.lastTick >= 0 && battle.tick - this.lastTick > 40;
-      if (this.lastTick >= 0) {
-        const n = Math.max(1, battle.tick - this.lastTick);
-        this.tickInterval = clamp(lerp(this.tickInterval, Math.max(this.sinceTick / n, 1 / 240) * n, 0.3), 1 / 120, 0.25);
+    const newTick = battle.tick !== this.lastTick;
+    if (newTick) {
+      const n = battle.tick - this.lastTick;
+      jump = this.lastTick >= 0 && n > 40;
+      // ticks per second as observed by this view (speed x frame pacing), measured over >= 0.2 s windows; the time since
+      // the previous snapshot includes this frame; long gaps (pause, background tab) say nothing about the rate
+      const span = this.sinceTick + dt;
+      if (this.lastTick < 0 || jump || span >= 0.4) this.rateWin.n = this.rateWin.t = 0;
+      else if (span >= 0.05 && (n / span > this.tickRate * 1.7 || n / span < this.tickRate * 0.6)) {
+        this.tickRate = clamp(n / span, 1, 600);
+        this.rateWin.n = this.rateWin.t = 0;
+      } else {
+        this.rateWin.n += n;
+        this.rateWin.t += span;
+        const r = this.rateWin.n / this.rateWin.t;
+        const changed = this.rateWin.t >= 0.05 && (r > this.tickRate * 1.7 || r < this.tickRate * 0.6);
+        if (this.rateWin.t >= 0.2 || changed) {
+          this.tickRate = clamp(changed ? r : lerp(this.tickRate, r, 0.6), 1, 600);
+          this.rateWin.n = this.rateWin.t = 0;
+        }
       }
+      const snapJump = this.lastTick < 0 || jump;
+      this.prevTick = snapJump ? battle.tick : this.curTick;
+      this.curTick = battle.tick;
+      if (snapJump) this.rt = battle.tick;
       this.prevU = this.curU; this.curU = new Map();
       for (const u of battle.units) if (u.alive) this.curU.set(u.id, { x: u.x, y: u.y, angle: u.angle, mounts: u.mounts.map((m) => m.angle) });
-      if (this.lastTick < 0) this.prevU = new Map(this.curU);
+      if (snapJump) this.prevU = new Map(this.curU);
       this.prevP = this.curP; this.curP = new Map();
-      for (const p of battle.projectiles) this.curP.set(p.id, { x: p.x, y: p.y, z: p.z, angle: p.angle });
+      for (const p of battle.projectiles) this.curP.set(p.id, { x: p.x, y: p.y, z: p.z, angle: p.angle, progress: p.progress });
+      if (snapJump) this.prevP = new Map(this.curP);
       this.lastTick = battle.tick;
       this.sinceTick = 0;
       if (!this.usePush) newTicks = battle.events;
     } else this.sinceTick += dt;
-    this.alpha = clamp(this.sinceTick / this.tickInterval, 0, 1);
+    const target = this.curTick + this.sinceTick * this.tickRate - 1;
+    this.rt += dt * this.tickRate;
+    this.rt += (target - this.rt) * 0.05;
+    this.rt = clamp(this.rt, this.prevTick, this.curTick);
+    this.alpha = this.curTick > this.prevTick ? (this.rt - this.prevTick) / (this.curTick - this.prevTick) : 1;
 
     const byId = new Map<number, SimUnit>();
     for (const u of battle.units) byId.set(u.id, u);
@@ -642,6 +683,7 @@ export class FieldView3D implements BattleView {
     const events = newTicks ?? this.pending;
     if (events.length) {
       for (const e of events) this.handleEvent(e, byId);
+      this.shotFrom.clear(); this.lastBlast = null;
       if (!this.muted) try { battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
     }
@@ -821,7 +863,7 @@ export class FieldView3D implements BattleView {
     if (!c) return p;
     if (!pr) return c;
     const a = this.alpha;
-    return { x: lerp(pr.x, c.x, a), y: lerp(pr.y, c.y, a), z: lerp(pr.z, c.z, a), angle: lerpAngle(pr.angle, c.angle, a) };
+    return { x: lerp(pr.x, c.x, a), y: lerp(pr.y, c.y, a), z: lerp(pr.z, c.z, a), angle: lerpAngle(pr.angle, c.angle, a), progress: lerp(pr.progress, c.progress, a) };
   }
 
   private syncProjectiles(list: SimProjectile[], byId?: Map<number, SimUnit>): void {
@@ -841,14 +883,21 @@ export class FieldView3D implements BattleView {
           const rig = this.posedRig(p.src);
           if (rig && rig.muzzleWorld(p.mount, _v3)) y0 = _v3.y;
         }
-        // straight rounds end at the body height of the first enemy along their path (aircraft fly well above the ground)
-        const hEnd = p.z > 0.05 || !byId ? 0.42 : this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, 0.42, p.moduleId);
-        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd };
+        // straight rounds end at the body height of the first enemy along their path (aircraft fly well above the ground);
+        // rounds fired at aircraft (the sim flies them at z = 1) climb to the first aircraft along their path
+        const air = airShot(p);
+        const hEnd = !byId ? 0.42
+          : air ? this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, p.z + 0.12, true)
+          : p.z > 0.05 ? 0.42 : this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, 0.42, false);
+        rec = { y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air };
         seen.set(p.id, rec);
       }
       if (this.offscreen(pos.x, pos.y, 4)) { rec.px = pos.x; rec.py = pos.y; continue; }
-      const arcs = p.z > 0.05;
-      const H = arcs ? p.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(p.progress, 0, 1));
+      // homing anti-air missiles turn onto their target after launch: keep re-reading its height along the heading
+      if (rec.air && p.kind === 'missile' && byId) rec.hEnd = this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, rec.hEnd, true);
+      const arcs = p.z > 0.05 && !rec.air;
+      // height from the interpolated snapshot too (the sim's own z / progress are a tick ahead of x, y)
+      const H = arcs ? pos.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(pos.progress, 0, 1));
       const ang = pos.angle;
       const dx = Math.cos(ang), dz = Math.sin(ang);
       const dh = H - rec.lastH;
@@ -917,14 +966,13 @@ export class FieldView3D implements BattleView {
     return su.flying ? flyHeight(v.rig.S) + 0.4 + v.rig.midY : Math.min(v.rig.height * 0.6, Math.max(0.7, v.rig.height * 0.35));
   }
 
-  /** body height of the first enemy (of a shooter on `side`) whose hull lies across a ray from (x, y) at `ang` */
-  private aimHeightAlong(x: number, y: number, ang: number, byId: Map<number, SimUnit>, side: Side, fallback: number, moduleId: string): number {
+  /** body height of the first enemy (of a shooter on `side`) whose hull lies across a ray from (x, y) at `ang`; only
+   *  units of the round's own layer (the sim's air rounds only hit aircraft, ground rounds only ground units) */
+  private aimHeightAlong(x: number, y: number, ang: number, byId: Map<number, SimUnit>, side: Side, fallback: number, air: boolean): number {
     const dx = Math.cos(ang), dy = Math.sin(ang);
-    const mod = MODULE_BY_ID.get(moduleId);
-    const air = mod?.targetsAir !== false, ground = mod?.targetsGround !== false;
     let best = Infinity, id = -1;
     for (const u of byId.values()) {
-      if (!u.alive || u.side === side || (u.flying ? !air : !ground)) continue;
+      if (!u.alive || u.side === side || u.flying !== air) continue;
       const rx = u.x - x, ry = u.y - y, t = rx * dx + ry * dy;
       if (t <= 0 || t >= best) continue;
       const v = this.bu.get(u.id);
@@ -943,6 +991,29 @@ export class FieldView3D implements BattleView {
       if (d < best && d < 1 + (v ? v.rig.radius : 1)) { best = d; id = u.id; }
     }
     return id >= 0 ? this.unitHeight(id, byId, fallback) : fallback;
+  }
+
+  /** A shot from (x1, y1) that the sim ends on a unit's centre (x2, y2): where it is drawn to end (that unit's shield
+   *  bubble or hull side facing the shooter). Remembers the origin for the 'hit' that follows. */
+  private shotEnd(x1: number, y1: number, x2: number, y2: number, byId: Map<number, SimUnit>): { x: number; y: number } {
+    let best = 0.3 * 0.3, t: SimUnit | null = null;
+    for (const u of byId.values()) { const d = (u.x - x2) ** 2 + (u.y - y2) ** 2; if (d < best) { best = d; t = u; } }
+    const v = t && this.bu.get(t.id);
+    if (!t || !v) return { x: x2, y: y2 };
+    this.shotFrom.set(t.id, { x: x1, y: y1 });
+    // the model is drawn interpolated (a tick behind the sim): end on it, not where the sim already has it
+    const c = this.drawnAt(t);
+    const d = Math.hypot(x1 - c.x, y1 - c.y);
+    const r = t.shield > 0 || t.auraShield > 0 ? Math.max(v.rig.L, v.rig.W) * 0.58 + 0.18 : Math.min(v.rig.L, v.rig.W) * 0.42;
+    if (d <= r) return c;
+    return { x: c.x + ((x1 - c.x) / d) * r, y: c.y + ((y1 - c.y) / d) * r };
+  }
+
+  /** where a live unit is drawn this frame (the same interpolation poseUnit uses) */
+  private drawnAt(u: SimUnit): { x: number; y: number } {
+    const c = this.curU.get(u.id), pr = this.prevU.get(u.id) ?? c;
+    if (!c || !pr || Math.hypot(c.x - pr.x, c.y - pr.y) > 3) return { x: u.x, y: u.y };
+    return { x: lerp(pr.x, c.x, this.alpha), y: lerp(pr.y, c.y, this.alpha) };
   }
 
   /** a unit's rig, only if its transforms are current (muzzle positions of culled rigs are stale or at the origin) */
@@ -972,7 +1043,10 @@ export class FieldView3D implements BattleView {
         const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
         if (!m && this.offscreen(e.x1, e.y1, 3) && this.offscreen(e.x2, e.y2, 3)) break;
         const ay = m ? m.y : GUN_H;
-        fx.beam(m ? m.x : e.x1, ay, m ? m.z : e.y1, e.x2, this.aimHeightAt(e.x2, e.y2, byId, e.side), e.y2, _col.set(st.color).clone(), st.w, st.life, st.wob);
+        const sx = m ? m.x : e.x1, sz = m ? m.z : e.y1;
+        // stop on the target's hull side / shield bubble, not inside the model (its impact flare would be hidden)
+        const end = this.shotEnd(sx, sz, e.x2, e.y2, byId);
+        fx.beam(sx, ay, sz, end.x, this.aimHeightAt(e.x2, e.y2, byId, e.side), end.y, _col.set(st.color).clone(), st.w, st.life, st.wob);
         break;
       }
       case 'chain': {
@@ -985,7 +1059,8 @@ export class FieldView3D implements BattleView {
           const p0 = e.points[i - 1], p1 = e.points[i];
           const h1 = this.aimHeightAt(p1.x, p1.y, byId, e.side);
           const sx = i === 1 && m ? m.x : p0.x, sy = i === 1 && m ? m.y : hPrev, sz = i === 1 && m ? m.z : p0.y;
-          fx.lightning(sx, sy, sz, p1.x, h1, p1.y, col, 0.06, 0.2);
+          const end = this.shotEnd(sx, sz, p1.x, p1.y, byId);
+          fx.lightning(sx, sy, sz, end.x, h1, end.y, col, 0.06, 0.2);
           hPrev = h1;
         }
         break;
@@ -993,6 +1068,22 @@ export class FieldView3D implements BattleView {
       case 'hit': {
         const v = this.bu.get(e.unit);
         const yh = this.unitHeight(e.unit, byId);
+        const su = byId.get(e.unit);
+        const d0 = v && su ? Math.hypot(e.x - su.x, e.y - su.y) : 0;
+        if (v && su) {
+          // hits reported at (about) the centre (beams, arcs, splash) go to the hull side facing the shot or blast;
+          // shield hits always flare on the bubble, not inside it
+          const lb = this.lastBlast;
+          const from = d0 < 0.3 ? this.shotFrom.get(e.unit) ?? (lb && Math.hypot(lb.x - su.x, lb.y - su.y) <= lb.r + 3 ? lb : null) : null;
+          // drawn a tick behind the sim (interpolation): the flare goes on the model as drawn
+          const c = this.drawnAt(su);
+          if (from || e.shieldHit) {
+            const a = from && Math.hypot(from.x - c.x, from.y - c.y) > 0.05 ? Math.atan2(from.y - c.y, from.x - c.x)
+              : d0 > 0.05 ? Math.atan2(e.y - su.y, e.x - su.x) : Math.random() * Math.PI * 2;
+            const r = e.shieldHit ? Math.max(v.rig.L, v.rig.W) * 0.58 + 0.18 : Math.min(v.rig.L, v.rig.W) * 0.42;
+            e = { ...e, x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r };
+          } else e = { ...e, x: e.x + c.x - su.x, y: e.y + c.y - su.y };
+        }
         if (v) {
           v.dmgT = this.time;
           if (e.shieldHit) { v.shT = this.time; v.hx = e.x; v.hy = yh; v.hz = e.y; }
@@ -1006,10 +1097,22 @@ export class FieldView3D implements BattleView {
         break;
       }
       case 'explode': {
+        this.lastBlast = { x: e.x, y: e.y, r: e.radius };
         const vis = MODULE_BY_ID.get(e.moduleId)?.visual;
         const style = vis === 'plasma' ? 'plasma' : vis === 'emp' || vis === 'tesla' ? 'emp' : 'fire';
         if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
-        fx.explosion(e.x, e.y, Math.max(0.5, e.radius), style);
+        // air bursts and missiles striking an aircraft go off at its altitude, not on the ground below (as in 2D)
+        let ey = 0;
+        if (MODULE_BY_ID.get(e.moduleId)?.targetsAir) {
+          let bd = 1.2 * 1.2, best = -1;
+          for (const u of byId.values()) {
+            if (!u.flying || !this.bu.has(u.id)) continue;
+            const d = (u.x - e.x) ** 2 + (u.y - e.y) ** 2;
+            if (d < bd) { bd = d; best = u.id; }
+          }
+          if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
+        }
+        fx.explosion(e.x, e.y, Math.max(0.5, e.radius), style, ey);
         break;
       }
       case 'death': {
@@ -1025,12 +1128,13 @@ export class FieldView3D implements BattleView {
       }
       case 'heal': {
         const v = this.bu.get(e.unit);
-        if (v) { v.healT = this.time; if (Math.random() < 0.5) fx.heal(v.rig.root.position.x, v.rig.root.position.y + v.rig.height * 0.5, v.rig.root.position.z); }
+        // culled / never-drawn rigs keep a stale (or origin) transform: only units drawn last frame sparkle
+        if (v) { v.healT = this.time; if (v.posed && Math.random() < 0.5) fx.heal(v.rig.root.position.x, v.rig.root.position.y + v.rig.height * 0.5, v.rig.root.position.z); }
         break;
       }
       case 'leap': {
         const v = this.bu.get(e.unit);
-        if (v) fx.dustPuff(v.rig.root.position.x, v.rig.root.position.z, 0.5 + v.rig.S * 0.2);
+        if (v?.posed) fx.dustPuff(v.rig.root.position.x, v.rig.root.position.z, 0.5 + v.rig.S * 0.2);
         break;
       }
       case 'smoke':
