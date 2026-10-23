@@ -128,10 +128,10 @@ export const MODULES: ModuleDef[] = [
   // ---------------- Sniper & rail ----------------
   wpn({ id: 'sniper', name: 'Sniper Rifle', family: 'Sniper', desc: 'Pinpoint rifle: out-ranges nearly every gun and picks off one target per shot. Slow to fire.', category: 'precision', visual: 'sniper', caliber: 0.4, mount: 'S', weight: 1.5, cost: 20,
     damage: 140, cooldown: 3.5, range: 14, ...G, projectile: 'bullet', projectileSpeed: 60, ap: 0.5, spread: 0 }),
-  wpn({ id: 'lightrail', name: 'Rail Rifle', family: 'Light rail', desc: 'Hitscan rail: pierces every enemy in a line.', category: 'precision', visual: 'rail', caliber: 0.5, mount: 'M', weight: 4, cost: 40,
-    damage: 150, cooldown: 3, range: 14, ...GA, projectile: 'rail', ap: 1, pierce: true }),
-  wpn({ id: 'railgun', name: 'Railgun', family: 'Heavy rail', desc: 'Heavy rail: pierces everything in a line at extreme range.', category: 'precision', visual: 'rail', caliber: 0.9, mount: 'M', weight: 9, cost: 75,
-    damage: 320, cooldown: 4.5, range: 17, ...GA, projectile: 'rail', ap: 1, pierce: true }),
+  wpn({ id: 'lightrail', name: 'Rail Rifle', family: 'Light rail', desc: 'Hitscan rail: a needle-thin slug that punches through the hulls in its exact line, losing punch with each.', category: 'precision', visual: 'rail', caliber: 0.5, mount: 'M', weight: 4, cost: 40,
+    damage: 150, cooldown: 3, range: 14, ...GA, projectile: 'rail', ap: 1, pierce: true, beamWidth: 0.04, pierceKeep: 0.5 }),
+  wpn({ id: 'railgun', name: 'Railgun', family: 'Heavy rail', desc: 'Heavy rail: a thin slug at long range that punches through the hulls in its line. Slow to recharge.', category: 'precision', visual: 'rail', caliber: 0.9, mount: 'M', weight: 9, cost: 75,
+    damage: 320, cooldown: 5.5, range: 16, ...GA, projectile: 'rail', ap: 1, pierce: true, beamWidth: 0.12, pierceKeep: 0.6 }),
   // ---------------- Rockets ----------------
   wpn({ id: 'rocketL', name: 'Light Rocket Rack', family: '2-tube', desc: 'Two-rocket salvo that lands as a pair of separate blasts.', category: 'rocket', visual: 'rocketPod', barrels: 2, caliber: 0.3, mount: 'S', weight: 1.5, cost: 12,
     damage: 32, burst: 2, cooldown: 3, range: 9, ...G, projectile: 'rocket', projectileSpeed: 11, splash: 0.7, ap: 0, spread: 0.7 }),
@@ -277,8 +277,8 @@ export const MODULES: ModuleDef[] = [
   util({ id: 'domeG', name: 'Fortress Dome', family: 'Giant dome', desc: 'Projects a 400-point shield (at most half the ally\'s hp) onto every ally within 45 m. Domes don\'t stack.', category: 'support', visual: 'dome', caliber: 1, mount: 'L', weight: 14, cost: 110, shieldAura: { radius: 9, amount: 400 } } /* [aura balance] 5 -> 9 */),
   { id: 'plateG', name: 'Giant Armor', family: 'Giant plate', desc: '+16 armor, +1200 hp.', category: 'armor', visual: 'plate', caliber: 1, mount: 'L', kind: 'armor', weight: 26, cost: 130, armor: 16, hp: 1200 },
   // ---------------- Titan class (T mounts, size-5 chassis) ----------------
-  wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.', category: 'precision', visual: 'rail', turretTurn: 0.5, barrels: 2, caliber: 1, mount: 'XL', weight: 38, cost: 220,
-    damage: 1700, cooldown: 6, range: 28, ...GA, projectile: 'rail', ap: 1, pierce: true }),
+  wpn({ id: 'massdriver', name: 'Spinal Mass Driver', family: 'Titan rail', desc: 'Hull-length railgun. A wide slug that ploughs through a battle line at extreme range, but takes ages to recharge. Barely traverses: the hull must face the target.', category: 'precision', visual: 'rail', turretTurn: 0.5, barrels: 2, caliber: 1, mount: 'XL', weight: 38, cost: 220,
+    damage: 1700, cooldown: 9, range: 26, ...GA, projectile: 'rail', ap: 1, pierce: true, beamWidth: 0.45, pierceKeep: 0.75 }),
   wpn({ id: 'doomsday', name: 'Doomsday Howitzer', family: 'Titan artillery', desc: 'Twin super-heavy howitzer. Craters half a company per salvo. Minimum range 50 m.', category: 'artillery', visual: 'artillery', barrels: 2, caliber: 1, mount: 'XL', weight: 40, cost: 230,
     damage: 700, cooldown: 8, range: 40, minRange: 10, ...G, projectile: 'arc', projectileSpeed: 14, splash: 4, ap: 0.5, spread: 1.5 }),
   wpn({ id: 'annihilator', name: 'Annihilator Beam', family: 'Titan beam', desc: 'Continuous plasma beam that cuts through anything.', category: 'energy', visual: 'plasma', barrels: 2, caliber: 1, mount: 'XL', weight: 36, cost: 220,

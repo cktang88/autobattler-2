@@ -110,6 +110,7 @@ const FLANK_EDGE = 4; // cells from the field edge a flanker swings out to
 const FLANK_TURN_IN = 1.3; // flankers turn in once the goal is within this many weapon ranges
 const ESCORT_NEAR = 3; // cells: escorts try to stay this close to the escorted block
 const ESCORT_LEASH = 7; // cells: how far from the escorted unit an escort will chase a threat
+const ESCORT_ORBIT = 2.5; // cells: radius escorting jets circle their charge at (wider if they can't turn that tight)
 const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are engaged
 /** units armed only with melee weapons sprint this much faster while closing on an enemy (crossing the killing zone
  *  of guns that reach 20+ m is what made brawlers useless) */
@@ -1771,17 +1772,27 @@ export class Battle {
     // the centre, a big hull whose edge is in range sat beyond the slug and every shot missed
     const len = w.range * RANGE_KEEP;
     const ex = mx + c * len, ey = my + s * len;
+    // a thin slug, not a wall: it hits a hull only where the line (plus the weapon's beam half-width) crosses its
+    // capsule, and loses punch with every hull it passes through (heavier slugs keep more of it)
+    const bw = w.def.beamWidth ?? 0.1, keep = w.def.pierceKeep ?? 0.6;
+    const hits: { j: number; t: number }[] = [];
     const units = this.units;
     for (let j = 0; j < units.length; j++) {
       const o = units[j];
       if (!o.alive || o.side === u.side || !this.canHit(w, o)) continue;
-      const dx = o.x - mx, dy = o.y - my;
-      const along = dx * c + dy * s;
       const O = this.ints[j];
-      const ob = O.elong ? O.capS + O.capR : O.bound; // hull reach of hullK * longest side (box corners not counted)
-      if (along < -0.3 || along > len + ob) continue;
-      const perp = Math.abs(-dx * s + dy * c);
-      if (perp <= ob + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
+      const ob = O.elong ? O.capS + O.capR : O.bound;
+      const dx = o.x - mx, dy = o.y - my, along = dx * c + dy * s;
+      if (along < -0.3 - ob || along > len + ob || Math.abs(-dx * s + dy * c) > ob + bw) continue;
+      const t = this.segCapsule(mx, my, c * (len + ob), s * (len + ob), O, bw);
+      if (t >= 0) hits.push({ j, t });
+    }
+    hits.sort((a, b) => a.t - b.t);
+    let k = 1;
+    for (const h of hits) {
+      const o = units[h.j];
+      this.damage(o, raw * k, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);
+      k *= keep;
     }
     this.events.push({ t: 'beam', moduleId: w.def.id, x1: mx, y1: my, x2: clamp(ex, -2, FIELD_W + 2), y2: clamp(ey, -2, FIELD_H + 2), side: u.side, unit: u.id, mount: mi });
   }
@@ -2171,7 +2182,7 @@ export class Battle {
   }
 
   /** Does the segment (ox, oy) + (sx, sy) * t, t in [0, 1], touch O's capsule? Returns t of its closest approach, or -1. */
-  private segCapsule(ox: number, oy: number, sx: number, sy: number, O: Internal): number {
+  private segCapsule(ox: number, oy: number, sx: number, sy: number, O: Internal, pad = 0): number {
     const o = O.u;
     const ar = O.capAcross ? o.angle + Math.PI / 2 : o.angle;
     const vx = Math.cos(ar) * O.capS, vy = Math.sin(ar) * O.capS;
@@ -2193,7 +2204,8 @@ export class Battle {
       }
     }
     const qx = rx + d1x * t - d2x * s, qy = ry + d1y * t - d2y * s;
-    return qx * qx + qy * qy <= O.capR * O.capR ? t : -1;
+    const r = O.capR + pad;
+    return qx * qx + qy * qy <= r * r ? t : -1;
   }
 
   // ---------------------------------------------------------------- movement
@@ -2564,13 +2576,33 @@ export class Battle {
     return any;
   }
 
+  /** an escorting jet's charge, and whether to circle it (true) or to run at the threat near it (goal swapped in) */
+  private jetEscort(I: Internal): { E: SimUnit; orbit: boolean; thr: SimUnit | null } | null {
+    if (I.escortBlock < 0 || I.escUnit < 0 || I.stance === 'charge') return null;
+    const E = this.units[I.escUnit], u = I.u;
+    if (!E.alive) return null;
+    const thr = I.escThreat >= 0 && this.units[I.escThreat].alive ? this.units[I.escThreat] : null;
+    // engage only threats close to the charge, and break off a run that has dragged the jet far from it
+    const near = !!thr && Math.hypot(thr.x - E.x, thr.y - E.y) <= ESCORT_LEASH && Math.hypot(u.x - E.x, u.y - E.y) <= ESCORT_LEASH * 1.6;
+    return { E, orbit: !near, thr: near ? thr : null };
+  }
+
   private strafeMove(I: Internal, goal: SimUnit | null): void {
     const u = I.u;
     let want: number;
+    const esc = this.jetEscort(I);
+    if (esc?.thr) goal = esc.thr;
     const margin = 1.5;
     if (u.x < margin || u.x > FIELD_W - margin || u.y < margin || u.y > FIELD_H - margin) {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);
       I.strafeT = Math.max(I.strafeT, 0.2);
+    } else if (esc?.orbit) {
+      // escorting with nothing near the charge to fight: circle the escorted unit instead of tearing across the map.
+      // Steer along the circle's tangent, bending in or out to hold the orbit radius (never tighter than the jet can turn)
+      const E = esc.E, R = Math.max(ESCORT_ORBIT, (1.25 * I.speed) / Math.max(0.5, I.turn));
+      const dx = u.x - E.x, dy = u.y - E.y, d = Math.sqrt(dx * dx + dy * dy);
+      want = d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
+      I.strafeT = 0;
     } else if (this.needsResupply(I)) {
       // bays empty: head home and circle over the own lines until rearmed
       const hy = u.side === 0 ? FIELD_H - DEPLOY_D * 0.5 : DEPLOY_D * 0.5;

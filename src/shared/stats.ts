@@ -194,9 +194,9 @@ export const MODULE_CAL: Record<string, number> = {
   dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 1.06, flak: 0.31, flamer: 0.41, gauss: 14.19,
   gravity: 3.14, grinder: 3.99, guidedrocket: 0.99, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.93,
   heavyflak: 1.19, hmg: 1.19, howitzer: 22.16, incendiary: 1.21, inferno: 1.41, jammer: 0.25, laser: 1.69,
-  lightrail: 37.27, massdriver: 1.22, mg: 4.05, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
+  lightrail: 37.27, massdriver: 1.75, mg: 4.05, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
   mortar: 10.84, nanite: 0.14, napalm: 0.53, overclock: 0.21, phantom: 0.16, plasma: 5.01, plasmablade: 0.69,
-  plasmaorb: 1.24, pointdef: 4.00, quad20: 0.66, railgun: 11.71, ram: 0.86, reactive: 0.78, repair: 12.45,
+  plasmaorb: 1.24, pointdef: 4.00, quad20: 0.66, railgun: 20, ram: 0.86, reactive: 0.78, repair: 12.45,
   repairM: 4.00, rocketL: 1.93, rockets: 1.90, sam: 15.40, selfdestruct: 0.14, sensor: 1.0, shield: 0.81,
   shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 0.68, siege240: 1.53, siegeplasma: 0.53, skyfortress: 0.62,
   slowbeam: 4.95, smoke: 4.00, sniper: 16.11, sonic: 0.38, stealth: 0.44, stormcore: 0.91, stormtower: 2.55,
@@ -287,7 +287,8 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   // cluster bomblets: scatter widely, so only part of them land on something
   if (cl) v += ((cl.count * cl.damage * shots) / cyc) * armorEfficiency(cl.damage, w.ap ?? 0) * (1 + 0.6 * cl.splash) * 0.6;
   v *= 1 + 0.45 * (w.chain ?? 0);
-  if (w.pierce) v *= 1.5;
+  // pierce: rails lose punch per hull and only catch what lines up under a thin slug (wider slugs catch more)
+  if (w.pierce) v *= w.projectile === 'rail' ? 1 + (w.pierceKeep ?? 0.6) * (0.5 + (w.beamWidth ?? 0.1)) : 1.5;
   if ((w.pellets ?? 1) > 1) v *= 0.7; // pellets rarely all land
   if (w.falloff != null) v *= 0.3 + 0.7 * w.falloff;
   if (w.spinUp) v *= 0.85; // time lost spinning up at the start of each engagement

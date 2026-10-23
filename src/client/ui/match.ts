@@ -862,7 +862,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(shapeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
-      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several to set their orders together · right-drag to pan') : 'Pick a unit card, then tap your zone to deploy';
+      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag to pan') : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -1317,6 +1317,16 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     for (const p of place) test(p, true);
     return out;
   }
+  /** every block of `id` on my side (placed and pending) */
+  function blocksOfDesign(id: string): NonNullable<Sel>[] {
+    return [
+      ...myBoard().filter((p) => p.designId === id).map((p) => ({ side, uid: p.uid, pending: false })),
+      ...place.filter((p) => p.designId === id).map((p) => ({ side, uid: p.uid, pending: true })),
+    ];
+  }
+  // last plain click on one of my blocks, for double-click detection (the canvas dblclick event fires after the
+  // second click already ran, and that click removes a selected pending block)
+  let lastTap: { uid: number; pending: boolean; at: number } | null = null;
   /** make `list` the selection: one block = normal single selection, more = group */
   function selectBlocks(list: NonNullable<Sel>[]) {
     if (list.length === 1) { sel = list[0]; multi = []; } else { sel = null; multi = list; }
@@ -1480,7 +1490,16 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       else { sfx('invalid'); renderAll(); }
       return;
     }
-    if (hit && phase === 'deploy' && hit.pending && sel?.pending && sel.uid === hit.uid) { removePending(hit.uid); return; }
+    // double-click one of my blocks: select every block of that design, to retune their orders together
+    const now = performance.now();
+    const dbl = !!hit && phase === 'deploy' && hit.side === side && !!lastTap && lastTap.uid === hit.uid && lastTap.pending === hit.pending && now - lastTap.at < 400;
+    lastTap = hit && !dbl ? { uid: hit.uid, pending: hit.pending, at: now } : null;
+    if (dbl) {
+      const id = blockSrc(hit!)?.designId;
+      const all = id ? blocksOfDesign(id) : [];
+      if (all.length > 1) { selectBlocks(all); app.toast(`Selected all ${all.length} ${designOf(side, id!)?.name ?? ''} blocks`); return; }
+    }
+    if (hit && phase === 'deploy' && hit.pending && sel?.pending && sel.uid === hit.uid && !dbl) { removePending(hit.uid); return; }
     multi = [];
     sel = hit;
     if (hit) sfx('click');

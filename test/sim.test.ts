@@ -826,6 +826,23 @@ test('escort: stays near the escorted block; invalid escort target behaves norma
   assert.ok(run(undefined) > 8, 'no escort');
 });
 
+test('escort: a jet circles its slow ground charge instead of streaking away', () => {
+  const tank = P('ironclad', 20, 2);
+  const run = (escort?: number) => {
+    const b = new Battle(input(3, [tank, { ...P('strafer', 4, 0), escort }], [{ ...P('bulwark', 20, 0), stance: 'holdPos' }]));
+    const E = b.units[0], jet = b.units.find((u) => u.flying)!;
+    let far = 0;
+    for (let i = 0; i < 400 && !b.done && E.alive && jet.alive; i++) {
+      b.step();
+      if (i > 120) far = Math.max(far, Math.hypot(jet.x - E.x, jet.y - E.y));
+    }
+    return far;
+  };
+  const esc = run(tank.uid);
+  assert.ok(esc < 9, `jet stays on station around its charge: ${esc.toFixed(1)}`);
+  assert.ok(run(undefined) > esc + 3, 'unescorted jet ranges much further');
+});
+
 test('stances + priorities: 120v120 stays fast and deterministic', () => {
   const stances = ['advance', 'holdPos', 'charge', 'flankLeft', 'flankRight'] as const;
   const prios = ['closest', 'aircraft', 'armored', 'longestRange', 'support', 'valuable', 'swarm', 'threat'] as const;

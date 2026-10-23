@@ -154,7 +154,9 @@ test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone
   for (let seed = 1; seed <= 6; seed++) {
     const m = newMatch('b', 'ai', seed, newPlayer('A', aiDeck(seed, 'normal'), true), newPlayer('B', aiDeck(seed + 50, 'normal'), true));
     const a = aiDeploy(m, 0, 'normal');
-    assert.ok(a.place.length >= 2 && a.place.length <= 14, `blocks ${a.place.length}`);
+    // one block is fine when it's a giant that takes most of the round's supply
+    const big = a.place.length === 1 && computeStats(m.players[0].deck.find((d) => d.id === a.place[0].designId)!).cost > 400;
+    assert.ok((a.place.length >= 2 || big) && a.place.length <= 14, `blocks ${a.place.length}`);
     for (const p of a.place) {
       const st = computeStats(m.players[0].deck.find((d) => d.id === p.designId)!);
       const { w, h } = blockDims(st, p.spacing ?? 0, !!p.rot);

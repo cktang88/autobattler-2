@@ -167,6 +167,10 @@ export interface ModuleDef {
   airBonus?: number;
   /** rail/gauss: hits every enemy along its path (once each) */
   pierce?: boolean;
+  /** rail: half-width (m) of the slug's path, added to each hull's width when testing what it passes through (default 0.1) */
+  beamWidth?: number;
+  /** rail: share of damage kept after each hull the slug passes through (default 0.6) */
+  pierceKeep?: number;
   /** seconds of paralysis applied per hit (target can't move or fire); stacks up to 4s */
   stun?: number;
   /** slow applied per hit: fraction of speed & fire rate removed (0..1) for 2s; max 0.6 */

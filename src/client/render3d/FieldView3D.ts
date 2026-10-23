@@ -1419,7 +1419,7 @@ export class FieldView3D implements BattleView {
         if (st.fam === 'rail') {
           // railguns get their own big signature (core + sheath + muzzle blast + ion corkscrew + impact + kick)
           const def = MODULE_BY_ID.get(e.moduleId);
-          fx.railShot(sx, ay, sz, end.x, by, end.y, 0.4 + (def?.caliber ?? 0.5) * 0.7, def?.mount === 'XL'); // rail rifle 0.75, railgun ~1
+          fx.railShot(sx, ay, sz, end.x, by, end.y, 0.3 + (def?.beamWidth ?? 0.1) * 2.2, def?.mount === 'XL'); // width follows the slug's hit width: rail rifle ~0.4, railgun ~0.55, mass driver ~1.3
           break;
         }
         fx.beam(sx, ay, sz, end.x, by, end.y, col, w, life, bs.wob);
