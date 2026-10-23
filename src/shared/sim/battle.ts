@@ -70,6 +70,8 @@ const RAMP_TIME = 2.5;
 const RAMP_GAP = 1;
 /** seconds a unit keeps burning after leaving a fire field (it is re-lit every BURN_EVERY while inside) */
 const FIELD_BURN = 1;
+/** most burning ground patches alive at once (flame spam is merged per weapon first, see dropFire) */
+const MAX_FIRES = 160;
 const STEALTH_FIRE_REVEAL = 1.5; // s a stealth unit stays visible after firing
 const PHANTOM_FIRE_REVEAL = 3;
 const SMOKE_SIGHT = 2.5; // units inside smoke can only be targeted from within this distance
@@ -383,7 +385,8 @@ interface Proj extends SimProjectile {
   /** unit this round was fired at (-1: none) and the damage it is expected to deal there (overkill bookkeeping) */
   aimT: number;
   est: number;
-  /** arc shells: burning patch left on landing / bomblets released on landing (ModuleDef.fireField / cluster) */
+  /** burning patch left where the round lands / bursts (ModuleDef.fireField, any ground round); arc shells: bomblets
+   *  released on landing (ModuleDef.cluster) */
   ff: ModuleDef['fireField'] | null;
   cl: ModuleDef['cluster'] | null;
 }
@@ -1521,7 +1524,7 @@ export class Battle {
         ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * 0.22 : 0, dead: false,
         pierce, hits: [], fx, fxMult: lm, cls, mount: mi,
         aimT: est > 0 && t ? t.id : -1, est,
-        ff: kind === 'arc' ? def.fireField ?? null : null, cl: kind === 'arc' ? def.cluster ?? null : null,
+        ff: air ? null : def.fireField ?? null, cl: kind === 'arc' ? def.cluster ?? null : null,
       };
       if (p.aimT >= 0) this.incoming[p.aimT] += est;
       if (air && kind !== 'missile') p.z = 1;
@@ -1765,11 +1768,7 @@ export class Battle {
         if (k >= 1) {
           this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, false, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
           p.dead = true;
-          if (p.ff) {
-            const r = p.ff.radius;
-            this.fires.push({ x: p.tx, y: p.ty, r, t: p.ff.duration, dps: p.ff.dps * p.fxMult, side: p.side, src: p.src, moduleId: p.moduleId, pulse: 0 });
-            this.events.push({ t: 'fireField', x: p.tx, y: p.ty, radius: r, duration: p.ff.duration, moduleId: p.moduleId });
-          }
+          this.dropFire(p, p.tx, p.ty);
           if (p.cl) this.releaseCluster(p);
         }
         continue;
@@ -1805,22 +1804,27 @@ export class Battle {
           if (p.splash > 0) this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, hitId, p.kind !== 'flame', p.fx, p.fxMult, p.cls);
           else this.damage(t, p.dmg, p.ap, p.airBonus, p.side, p.moduleId, p.x, p.y, p.fx, p.fxMult, p.x - p.vx * DT, p.y - p.vy * DT, p.cls);
           if (p.pierce) { p.hits.push(hitId); p.ignore = hitId; }
-          else { p.dead = true; continue; }
+          else { this.dropFire(p, p.x, p.y); p.dead = true; continue; }
         }
       }
       if (p.kind === 'missile') {
         const dx = p.tx - p.x, dy = p.ty - p.y;
         if (p.target < 0 && dx * dx + dy * dy < step * step) {
           this.splash(p.tx, p.ty, Math.max(0.4, p.splash), p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
+          this.dropFire(p, p.tx, p.ty);
           p.dead = true;
           continue;
         }
       } else if (p.splash > 0 && p.kind !== 'flame' && !p.pierce && p.traveled >= p.total) {
         this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
+        this.dropFire(p, p.tx, p.ty);
         p.dead = true;
         continue;
       }
-      if (p.traveled >= p.maxDist || p.x < -2 || p.y < -2 || p.x > FIELD_W + 2 || p.y > FIELD_H + 2) p.dead = true;
+      if (p.traveled >= p.maxDist || p.x < -2 || p.y < -2 || p.x > FIELD_W + 2 || p.y > FIELD_H + 2) {
+        if (p.kind === 'flame' && p.traveled >= p.maxDist) this.dropFire(p, p.x, p.y); // the gel lands where the jet ends
+        p.dead = true;
+      }
     }
     // compact
     let wi = 0;
@@ -1848,6 +1852,27 @@ export class Battle {
         aimT: -1, est: 0, ff: null, cl: null,
       });
     }
+  }
+
+  /** Leave the round's burning patch (ModuleDef.fireField) at x, y. A patch from the same weapon still burning close
+   *  by is topped up instead (flamers fire 10x a second: one growing pool, not hundreds of puddles). */
+  private dropFire(p: Proj, x: number, y: number): void {
+    const ff = p.ff;
+    if (!ff || x < 0 || y < 0 || x > FIELD_W || y > FIELD_H) return;
+    const dps = ff.dps * p.fxMult;
+    for (const f of this.fires) {
+      if (f.side !== p.side || f.moduleId !== p.moduleId) continue;
+      const dx = f.x - x, dy = f.y - y;
+      if (dx * dx + dy * dy > (f.r * 0.6) ** 2) continue;
+      const fresh = f.t < ff.duration * 0.5;
+      f.t = Math.max(f.t, ff.duration);
+      f.dps = Math.max(f.dps, dps);
+      if (fresh) this.events.push({ t: 'fireField', x: f.x, y: f.y, radius: f.r, duration: f.t, moduleId: f.moduleId });
+      return;
+    }
+    if (this.fires.length >= MAX_FIRES) return;
+    this.fires.push({ x, y, r: ff.radius, t: ff.duration, dps, side: p.side, src: p.src, moduleId: p.moduleId, pulse: 0 });
+    this.events.push({ t: 'fireField', x, y, radius: ff.radius, duration: ff.duration, moduleId: p.moduleId });
   }
 
   /** Fire fields burn down; every BURN_EVERY they (re)ignite the enemy ground units inside. */
