@@ -654,6 +654,7 @@ export class FieldView3D implements BattleView {
     this.time = time;
     if (this.battle) { this.battle = null; this.lastTick = -1; this.clearBattle(); }
     this.cam.update(dt);
+    this.fx.eye.copy(this.camera.position);
     this.fx.update(dt);
     this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
@@ -825,6 +826,7 @@ export class FieldView3D implements BattleView {
     this.syncProjectiles(battle.projectiles, byId);
     this.shields.end();
     this.ui.end();
+    this.fx.eye.copy(this.camera.position);
     this.fx.update(dt);
     this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
