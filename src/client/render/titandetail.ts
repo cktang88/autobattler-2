@@ -12,7 +12,7 @@ import { emis, hazard } from './giantart.ts';
 import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
-export const TITAN_SHAPES = new Set(['colossal', 'citadel', 'arachne']);
+export const TITAN_SHAPES = new Set(['colossal', 'citadel', 'arachne', 'lance', 'monolith']);
 
 /** device px per cell of the sprite being drawn (set by unitart before the hull details run) */
 let curPx = 30;
@@ -586,6 +586,84 @@ function arachne(d: D, hull: Path2D): void {
   d.stencil(-0.275, 0.0, 'WT-07', 0.22, 0.5);
 }
 
+/* ---------------------------------------------------------------------------------------- Lance Dreadnought */
+
+function lance(d: D, hull: Path2D): void {
+  const lvl = d.lvl, h = d.h;
+  d.weather(hull, 51, [[-0.5, -0.22], [-0.5, 0.22], [-0.26, -0.28], [-0.26, 0.28]], 16);
+  // hull: frame seams down both flanks, plate breaks across the deck, bow chines
+  for (const s of [-1, 1]) {
+    d.seam([0.36, s * 0.14, 0.19, s * 0.33, -0.3, s * 0.38, -0.43, s * 0.31]);
+    for (const u of [-0.42, -0.3, -0.04, 0.1, 0.22]) d.seam([u, s * 0.2, u, s * (u > 0.15 ? 0.3 : 0.38)], 0.8);
+    if (lvl >= 2) {
+      d.hatch(0.13, s * 0.27, 0.16, s);
+      d.vent(-0.2, s * 0.33, 0.06 * d.X, 0.035 * d.Y, 4);
+      d.rail(-0.29, s * 0.36, 0.1, s * 0.36, 9);
+      d.blister(0.2, s * 0.3, 0.16, s * Math.PI * 0.35);
+      d.blister(-0.44, s * 0.29, 0.16, Math.PI - s * 0.6);
+      d.glowSlit(0.33, s * 0.17, 0.27, s * 0.23, h * 1.4, 0.45);
+      d.cable([-0.11, s * 0.2, -0.05, s * 0.17, 0.02, s * 0.2], 0.06);
+    }
+    if (lvl >= 3) { d.rivets(-0.28, s * 0.395, 0.12, s * 0.375, 14); d.rivets(0.2, s * 0.215, 0.43, s * 0.11, 7); }
+  }
+  // spine: side walls of the gun deck, bolts round the breech, coil feeders
+  d.seam([-0.06, -0.19, 0.4, -0.18]); d.seam([-0.06, 0.19, 0.4, 0.18]);
+  if (lvl >= 2) {
+    d.boltRing(0.06, 0, d.S * 0.2, 16, 0.025);
+    d.accent(-0.08, -0.17, -0.08, 0.17, h * 3.5);
+    for (const u of [0.156, 0.231, 0.306, 0.381]) { d.cable([u, -0.17, u + 0.02, -0.21], 0.05); d.cable([u, 0.17, u + 0.02, 0.21], 0.05); }
+  }
+  // bridge: masts, sensor bar, dish; aft deck service rail and hazard rim
+  if (lvl >= 2) {
+    d.sensors(-0.2, 0, 0.35, 3, 0.07);
+    d.mast(-0.25, -0.06, 2.2, Math.PI * 0.85); d.mast(-0.25, 0.06, 1.5, Math.PI * 1.15, '#ffd060');
+    d.dish(-0.23, 0.17, 0.4, 0.5);
+    d.haz(-0.275, 0, 0.12, 0.3 * d.Y, true);
+    d.rail(-0.45, -0.19, -0.45, 0.19, 5);
+    d.vent(-0.47, 0, 0.04 * d.X, 0.14 * d.Y, 4, 0.2);
+  }
+  d.stencil(0.0, 0.3, 'LD-03', 0.22, 0.5);
+}
+
+/* --------------------------------------------------------------------------------------------- Monolith */
+
+function monolith(d: D, hull: Path2D): void {
+  const lvl = d.lvl, h = d.h;
+  d.weather(hull, 67, [[-0.48, -0.1], [-0.48, 0.1], [-0.35, -0.1], [-0.35, 0.1]], 24);
+  // tier-1 roof: big cast slabs with heavy seams, bolted edges, a walkway rail round the roof
+  for (const v of [-0.3, 0.3]) d.seam([-0.4, v, 0.4, v], 1.3);
+  for (const u of [-0.3, 0.3]) d.seam([u, -0.4, u, 0.4], 1.3);
+  if (lvl >= 2) {
+    for (const s of [-1, 1]) {
+      d.rail(-0.3, s * 0.39, 0.3, s * 0.39, 8);
+      d.hatch(0.38, s * 0.33, 0.17, s);
+      d.hatch(-0.38, s * 0.31, 0.15, 0.5 * s);
+      d.vent(0.36, s * 0.0 + s * 0.16, 0.05 * d.X, 0.05 * d.Y, 4);
+      d.fins(-0.36, s * 0.26, 0.06 * d.X, 0.035 * d.Y, 5);
+      d.ladder(0.34, s * 0.44, 0.2, s * 0.44, 0.12);
+      // point-defence blisters on the buttresses
+      d.blister(0.417, s * 0.417, 0.18, s * Math.PI * 0.25);
+      d.blister(-0.417, s * 0.417, 0.18, Math.PI - s * Math.PI * 0.25);
+    }
+    d.rail(0.42, -0.25, 0.42, 0.25, 6);
+  }
+  if (lvl >= 3) {
+    for (const s of [-1, 1]) { d.rivets(-0.4, s * 0.43, 0.4, s * 0.43, 16); d.rivets(s * 0.43, -0.36, s * 0.43, 0.36, 14); }
+  }
+  // tier 2: seams, a ring of bolts round the cupola, cable runs from the commander's block
+  d.seam([-0.29, -0.2, 0.31, -0.2], 0.8); d.seam([-0.29, 0.2, 0.31, 0.2], 0.8);
+  if (lvl >= 2) {
+    d.boltRing(0.1, 0, d.S * 0.23, 18, 0.03);
+    d.ring(0.1, 0, d.S * 0.25, 1.4);
+    d.sensors(-0.18, 0, 0.3, 2, 0.07);
+    d.mast(-0.22, 0.05, 2.0, Math.PI * 0.9);
+    d.cable([-0.24, -0.1, -0.24, -0.2, -0.1, -0.24], 0.07);
+    d.door(-0.05, -0.27, 0.6, 0.22);
+    d.accent(0.24, -0.25, 0.24, 0.25, h * 3);
+  }
+  d.stencil(-0.05, 0.2, 'MN-01', 0.28, 0.5);
+}
+
 /** Called after the base footart details for size-5 shapes. `hull` is the hull outline in the unit box. */
 export function titanDetail(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, hull: Path2D): void {
   const d = new D(g, L, pal, o, curPx);
@@ -598,6 +676,8 @@ export function titanDetail(g: Ctx, L: UnitLayout, pal: TeamPal, o: number, hull
     case 'colossal': colossal(d, hull); break;
     case 'citadel': citadel(d, hull); break;
     case 'arachne': arachne(d, hull); break;
+    case 'lance': lance(d, hull); break;
+    case 'monolith': monolith(d, hull); break;
   }
   g.restore();
   g.beginPath();

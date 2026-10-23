@@ -8,7 +8,7 @@ import type { UnitLayout } from './unitart.ts';
 
 const P2 = Math.PI * 2;
 
-export const GIANT_SHAPES = new Set(['goliath', 'leviathan', 'carrier', 'colossal', 'citadel', 'broodmother', 'arachne']);
+export const GIANT_SHAPES = new Set(['goliath', 'leviathan', 'carrier', 'colossal', 'citadel', 'broodmother', 'arachne', 'lance', 'monolith']);
 
 /** Emissive accent colour: cyan for the friendly team, blood red for the enemy. */
 export function emis(pal: TeamPal): string {
@@ -281,6 +281,9 @@ export function giantHullPath(shape: string, S: number): Path2D | null {
     case 'carrier': return pm([0.5, -0.05, 0.42, -0.14, 0.24, -0.19, 0.12, -0.41, -0.04, -0.47, -0.3, -0.47, -0.4, -0.41, -0.42, -0.25, -0.5, -0.2, -0.5, -0.05], S);
     case 'colossal': return pm([0.28, 0, 0.27, -0.04, 0.22, -0.07, 0.19, -0.19, 0.1, -0.27, -0.14, -0.28, -0.23, -0.2, -0.27, -0.13, -0.33, -0.15, -0.4, -0.1, -0.43, -0.04, -0.41, 0], S);
     case 'citadel': return pm([0.48, 0, 0.48, -0.08, 0.43, -0.12, 0.43, -0.26, 0.47, -0.31, 0.52, -0.385, 0.385, -0.52, 0.31, -0.47, 0.2, -0.45, 0.1, -0.45, 0.06, -0.41, -0.06, -0.41, -0.1, -0.45, -0.2, -0.45, -0.31, -0.47, -0.385, -0.52, -0.52, -0.385, -0.47, -0.31, -0.45, -0.2, -0.48, -0.12, -0.48, 0], S);
+    // footprint titans: the same outlines as footart.ts SPECS (fallback only; the footprint frame draws them)
+    case 'lance': return pm([0.5, 0, 0.47, -0.06, 0.39, -0.15, 0.2, -0.37, 0.12, -0.4, 0.08, -0.44, -0.3, -0.44, -0.34, -0.41, -0.44, -0.37, -0.47, -0.31, -0.5, -0.31, -0.5, -0.12, -0.47, -0.09, -0.47, 0], S);
+    case 'monolith': return pm([0.52, 0, 0.52, -0.27, 0.48, -0.29, 0.48, -0.33, 0.517, -0.417, 0.417, -0.517, 0.38, -0.48, 0.31, -0.48, 0.31, -0.52, 0.02, -0.52, 0.02, -0.48, -0.03, -0.48, -0.03, -0.52, -0.31, -0.52, -0.31, -0.48, -0.38, -0.48, -0.417, -0.517, -0.517, -0.417, -0.48, -0.38, -0.48, -0.36, -0.52, -0.36, -0.52, -0.11, -0.48, -0.11, -0.48, 0], S);
   }
   return null;
 }

@@ -83,6 +83,10 @@ export const FOOT_MOUNTS: Record<string, Pt[]> = {
   hunter: [[0.12, 0], [-0.3, 0]],
   colossal: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
   citadel: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  // lance: the titan gun at the breech of the spinal accelerator (centreline, ahead of the bridge), the medium on the
+  // aft deck; monolith: the giant gun in the roof cupola, the medium in a rear-quarter casemate
+  lance: [[0.06, 0], [-0.36, 0]],
+  monolith: [[0.1, 0], [-0.33, 0.33]],
   pod: [[-0.04, 0]],
   box: [[0.06, -0.24], [0.06, 0.24]],
   hex: [[0.04, 0], [-0.24, 0]],
