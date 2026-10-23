@@ -1520,7 +1520,7 @@ export class FieldView {
     const dx = fx - cx, dy = fy - cy;
     const c = Math.cos(u.angle), sn = Math.sin(u.angle);
     const lx = Math.abs(dx * c + dy * sn), ly = Math.abs(-dx * sn + dy * c);
-    const hx = L.X * 0.42, hy = L.Y * 0.42;
+    const bs = bodyScale(L.S), hx = L.X * 0.42 * bs, hy = L.Y * 0.42 * bs;
     if (lx < 1e-6 && ly < 1e-6) return { x: cx, y: cy };
     const box = Math.min(lx > 1e-6 ? hx / lx : Infinity, ly > 1e-6 ? hy / ly : Infinity);
     const ell = 1 / Math.hypot(lx / hx, ly / hy);
@@ -1979,8 +1979,8 @@ export class FieldView {
 }
 
 /** Shield radius (cells): just outside the hull's mean half-extent, so long hulls don't get a giant bubble. */
-function shieldR(L: { X: number; Y: number }): number {
-  return 0.36 * (L.X + L.Y) + 0.15;
+function shieldR(L: { X: number; Y: number; S: number }): number {
+  return 0.36 * (L.X + L.Y) * bodyScale(L.S) + 0.15;
 }
 
 /** Half extents (cells) of a unit's footprint box rotated to `ang` (screen-axis aligned), plus its mean edge. */
