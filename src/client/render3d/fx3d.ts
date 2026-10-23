@@ -588,6 +588,8 @@ export class Fx3D {
   }
 
   lightning(ax: number, ay: number, az: number, bx: number, by: number, bz: number, color: THREE.Color, w = 0.07, life = 0.2): void {
+    // a zero-length arc has no direction: jag() would fill the instance buffer with NaN
+    if (!(Math.hypot(bx - ax, by - ay, bz - az) > 1e-4)) return;
     this.bolts.push({ kind: 'bolt', ax, ay, az, bx, by, bz, r: color.r, g: color.g, b: color.b, w, life, max: life, seed: (Math.random() * 1e9) | 0, roll: -1, pts: [], wob: 0 });
     if (this.bolts.length > 600) this.bolts.shift();
     this.add.emit(bx, by, bz, 0, 0, 0, life, 0.6, 1.0, 0, 0, 0, 0, RAMPS.bolt, this.hdr);
