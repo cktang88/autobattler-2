@@ -1,12 +1,13 @@
 // JSON-file persistence for players and matches.
-// Layout (DATA_DIR): players.json = {version, players: PlayerRecord[]}, matches.json = {version, matches: MatchRecord[]}.
+// Layout (DATA_DIR): players.json = {version, players: PlayerRecord[]} (incl. each player's garage of designs),
+// matches.json = {version, matches: MatchRecord[]}.
 // Writes are debounced and atomic (write tmp file, fsync, rename).
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { migrateMatch } from '../shared/match.ts';
-import type { MatchState } from '../shared/types.ts';
+import type { Design, MatchState } from '../shared/types.ts';
 
 export interface PlayerRecord {
   id: string;
@@ -15,6 +16,17 @@ export interface PlayerRecord {
   tokenHash: string;
   createdAt: number;
   lastSeen: number;
+  /** the player's saved designs and active deck (synced from the client's garage) */
+  garage?: GarageRecord;
+}
+
+export interface GarageRecord {
+  designs: Design[];
+  /** design ids of the active deck */
+  deck: string[];
+  /** bumped on every write; clients send the rev they last saw to detect edits from another session */
+  rev: number;
+  updatedAt: number;
 }
 
 export interface MatchRecord {

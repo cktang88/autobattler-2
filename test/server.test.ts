@@ -119,7 +119,7 @@ test('bad input is rejected', async () => {
   const tooMany = Array.from({ length: 10 }, (_, i) => ({ ...DECK[0], id: 'x' + i }));
   assert.equal((await api('POST', '/api/matches', alice.token, { deck: tooMany })).status, 400);
   const big = await fetch(base + '/api/matches', {
-    method: 'POST', headers: { Authorization: `Bearer ${alice.token}` }, body: 'x'.repeat(70 * 1024),
+    method: 'POST', headers: { Authorization: `Bearer ${alice.token}` }, body: 'x'.repeat(260 * 1024),
   }).catch(() => null);
   assert.ok(!big || big.status === 413);
   const badJson = await fetch(base + '/api/matches', { method: 'POST', headers: { Authorization: `Bearer ${alice.token}` }, body: '{' });
@@ -357,6 +357,34 @@ test('stale turns auto-forfeit', async () => {
   assert.equal(g.body.match.winner, 1);
 });
 
+test('garage: designs + deck stored per player, revs detect another session, rename keeps the account', async () => {
+  const g = carol; // (a fresh login would trip the per-IP login limit in this file)
+  assert.equal((await api('GET', '/api/garage')).status, 401);
+  assert.equal((await api('GET', '/api/garage', g.token)).body.garage, null);
+  const illegal = { id: 'd-bad', name: 'Bad', chassis: 'scout', mobility: 'wheels', mounts: ['nosuchgun'] };
+  const put = await api('POST', '/api/garage', g.token, { designs: [...DECK, illegal, DECK[0]], deck: ['d-lance', 'd-bad', 'nope'], baseRev: 0 });
+  assert.equal(put.status, 200, JSON.stringify(put.body));
+  assert.deepEqual(put.body, { ok: true, rev: 1, kept: 2 });
+  const got = (await api('GET', '/api/garage', g.token)).body.garage;
+  assert.deepEqual(got.designs.map((d: Design) => d.id), ['d-buzz', 'd-lance']);
+  assert.deepEqual(got.deck, ['d-lance']);
+  // a write based on an old rev is refused with the server copy to merge
+  const stale = await api('POST', '/api/garage', g.token, { designs: [DECK[0]], deck: [], baseRev: 0 });
+  assert.equal(stale.body.ok, false);
+  assert.equal(stale.body.conflict.rev, 1);
+  assert.equal((await api('POST', '/api/garage', g.token, { designs: [DECK[0]], deck: ['d-buzz'], baseRev: 1 })).body.rev, 2);
+  // malformed designs are a 400, other players never see this garage
+  assert.equal((await api('POST', '/api/garage', g.token, { designs: [{ id: 5 }], deck: [], baseRev: 2 })).status, 400);
+  assert.equal((await api('GET', '/api/garage', alice.token)).body.garage?.rev ?? null, null);
+  // logging in with the token and a new callsign renames the same account
+  const renamed = await api('POST', '/api/login', undefined, { name: 'Carol B', token: g.token });
+  assert.equal(renamed.body.playerId, g.playerId);
+  assert.equal(renamed.body.name, 'Carol B');
+  garageToken = g.token;
+});
+
+let garageToken = '';
+
 test('persistence survives restart', async () => {
   const before = await api('GET', `/api/matches/${matchId}`, alice.token);
   await srv.close();
@@ -370,6 +398,9 @@ test('persistence survives restart', async () => {
   assert.equal(me.body.playerId, alice.playerId);
   const afterRes = await api('GET', `/api/matches/${matchId}`, alice.token);
   assert.deepEqual(afterRes.body.match, before.body.match);
+  const garage = (await api('GET', '/api/garage', garageToken)).body.garage;
+  assert.equal(garage.rev, 2);
+  assert.deepEqual(garage.designs.map((d: Design) => d.id), ['d-buzz']);
 });
 
 test('static files: index, MIME types, traversal blocked', async () => {

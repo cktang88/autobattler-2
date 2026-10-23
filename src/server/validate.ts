@@ -62,27 +62,9 @@ export function sanitizeDeck(raw: unknown): Design[] {
   if (arr.length > DECK_SIZE) bad(`Deck may hold at most ${DECK_SIZE} designs`);
   const seen = new Set<string>();
   const deck = arr.map((d, i): Design => {
-    if (!isObj(d)) bad(`Design ${i + 1} is not an object`);
-    const o = d as Record<string, unknown>;
-    const id = str(o.id, 40, `design id (#${i + 1})`);
-    if (seen.has(id)) bad(`Duplicate design id ${id}`);
-    seen.add(id);
-    if (typeof o.name !== 'string' || o.name.length > 24) bad(`Invalid design name (#${i + 1})`);
-    if (!Array.isArray(o.mounts) || o.mounts.length > 8) bad(`Invalid mounts (#${i + 1})`);
-    const mounts = (o.mounts as unknown[]).map((m) => {
-      if (m === null) return null;
-      return str(m, 40, `mount (#${i + 1})`);
-    });
-    const design: Design = { id, name: o.name as string, chassis: str(o.chassis, 40, 'chassis'), mobility: str(o.mobility, 40, 'mobility'), mounts };
-    if (o.behavior !== undefined) {
-      if (!isObj(o.behavior)) bad(`Invalid behavior (#${i + 1})`);
-      design.behavior = readBehavior(o.behavior as Record<string, unknown>, 'behavior');
-      const km = (o.behavior as Record<string, unknown>).kiteMount;
-      if (km !== undefined) {
-        if (!isInt(km) || (km as number) < 0 || (km as number) > 16) bad('Invalid behavior.kiteMount');
-        design.behavior.kiteMount = km as number;
-      }
-    }
+    const design = readDesign(d, i);
+    if (seen.has(design.id)) bad(`Duplicate design id ${design.id}`);
+    seen.add(design.id);
     return design;
   });
   for (const d of deck) {
@@ -92,6 +74,58 @@ export function sanitizeDeck(raw: unknown): Design[] {
   const errs = validateDeck(deck);
   if (errs.length) bad(errs.join('; '));
   return deck;
+}
+
+/** Most designs one player's garage may hold on the server. */
+export const MAX_GARAGE = 200;
+
+/** A garage upload: designs are shape-checked (malformed = 400); designs the current rules reject are dropped
+ *  (rule changes can invalidate old saves), as are duplicates and deck ids that name no kept design. */
+export function sanitizeGarage(raw: unknown): { designs: Design[]; deck: string[] } {
+  if (!isObj(raw)) bad('garage required');
+  const g = raw as Record<string, unknown>;
+  if (!Array.isArray(g.designs)) bad('designs must be an array');
+  const arr = g.designs as unknown[];
+  if (arr.length > MAX_GARAGE) bad(`A garage may hold at most ${MAX_GARAGE} designs`);
+  const seen = new Set<string>();
+  const designs: Design[] = [];
+  arr.forEach((d, i) => {
+    const design = readDesign(d, i);
+    if (seen.has(design.id)) return;
+    seen.add(design.id);
+    let ok = false;
+    try { ok = validateDesign(design).length === 0; } catch { ok = false; }
+    if (ok) designs.push(design);
+  });
+  const deckRaw = g.deck ?? [];
+  if (!Array.isArray(deckRaw) || deckRaw.length > DECK_SIZE * 2) bad('deck must be an array of design ids');
+  const kept = new Set(designs.map((d) => d.id));
+  const deck: string[] = [];
+  for (const id of deckRaw as unknown[]) if (typeof id === 'string' && kept.has(id) && !deck.includes(id) && deck.length < DECK_SIZE) deck.push(id);
+  return { designs, deck };
+}
+
+function readDesign(d: unknown, i: number): Design {
+  if (!isObj(d)) bad(`Design ${i + 1} is not an object`);
+  const o = d as Record<string, unknown>;
+  const id = str(o.id, 40, `design id (#${i + 1})`);
+  if (typeof o.name !== 'string' || o.name.length > 24) bad(`Invalid design name (#${i + 1})`);
+  if (!Array.isArray(o.mounts) || o.mounts.length > 8) bad(`Invalid mounts (#${i + 1})`);
+  const mounts = (o.mounts as unknown[]).map((m) => {
+    if (m === null) return null;
+    return str(m, 40, `mount (#${i + 1})`);
+  });
+  const design: Design = { id, name: o.name as string, chassis: str(o.chassis, 40, 'chassis'), mobility: str(o.mobility, 40, 'mobility'), mounts };
+  if (o.behavior !== undefined) {
+    if (!isObj(o.behavior)) bad(`Invalid behavior (#${i + 1})`);
+    design.behavior = readBehavior(o.behavior as Record<string, unknown>, 'behavior');
+    const km = (o.behavior as Record<string, unknown>).kiteMount;
+    if (km !== undefined) {
+      if (!isInt(km) || (km as number) < 0 || (km as number) > 16) bad('Invalid behavior.kiteMount');
+      design.behavior.kiteMount = km as number;
+    }
+  }
+  return design;
 }
 
 export function sanitizeAction(raw: unknown): DeployAction {

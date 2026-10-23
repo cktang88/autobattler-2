@@ -4,6 +4,7 @@ import { App } from './app.ts';
 import { setVolumes, unlockAudio } from './audio.ts';
 import { preload3d } from './render/viewfactory.ts';
 import { loadSettings } from './storage.ts';
+import { startGarageSync } from './sync.ts';
 import { menuScreen } from './ui/menu.ts';
 import { vsaiScreen } from './ui/vsai.ts';
 import { matchScreen } from './ui/match.ts';
@@ -32,6 +33,8 @@ const unlock = () => {
 window.addEventListener('pointerdown', unlock, true);
 window.addEventListener('keydown', unlock, true);
 
+// pull the server copy of the garage before the first screen reads it (bounded: offline play must not wait)
+await Promise.race([startGarageSync(), new Promise((r) => setTimeout(r, 2500))]);
 if (s.renderer === '3d') await preload3d().catch(() => {});
 app.go({ name: 'menu' });
 
