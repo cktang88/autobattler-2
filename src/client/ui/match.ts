@@ -46,7 +46,10 @@ function spacingDiagram(spacing: number, shape: BlockShape, rot = false): SVGEle
   const px = Math.max(1.5, Math.min(4, 120 / cw));
   const svg = document.createElementNS(NS, 'svg');
   const W = cw * px, H = ch * px;
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  // square view of at least 30 units (~7.5 cells): small squads (4 x 2, 2 x 2) draw at the same scale as a packed 8 x 2
+  // one instead of being blown up to fill the fixed-size diagram
+  const S = Math.max(W, H, 30);
+  svg.setAttribute('viewBox', `${(W - S) / 2} ${(H - S) / 2} ${S} ${S}`);
   svg.setAttribute('width', String(Math.round(W * 0.9)));
   svg.setAttribute('height', String(Math.round(H * 0.9 + 4)));
   svg.setAttribute('class', 'sp-diagram');
