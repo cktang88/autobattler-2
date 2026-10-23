@@ -10,7 +10,7 @@ import type { Design, Placement } from '../src/shared/types.ts';
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 const DESIGNS: Design[] = [
   D('buzz', 'scout', 'wheels', ['mg']), // squad of 16
-  D('walker', 'raider', 'legs', ['laser', null]), // light legged squad (8 at current prices)
+  D('walker', 'raider', 'legs', ['hmg', null]), // light legged squad (8 at current prices)
   D('mortar', 'carriage', 'wheels', ['mortar']),
 ];
 let uid = 1;

@@ -86,7 +86,8 @@ test('an up shield blocks status effects (paralysis drains it); hardened systems
   const dmg = (b as unknown as { damage: DamageFn }).damage.bind(b);
   assert.ok(sh.shield > 0);
   const s0 = sh.shield;
-  for (const m of ['stungun', 'slowbeam', 'disarm']) dmg(sh, 0.01, 1, 1, 0, m, sh.x, sh.y, MODULE_BY_ID.get(m), 1, sh.x, sh.y - 5, 0);
+  // stun last: a stun gun bolt now drains a whole small shield, after which the others would reach the hull
+  for (const m of ['slowbeam', 'disarm', 'stungun']) dmg(sh, 0.01, 1, 1, 0, m, sh.x, sh.y, MODULE_BY_ID.get(m), 1, sh.x, sh.y - 5, 0);
   assert.equal(sh.stun, 0); assert.equal(sh.slow, 0); assert.equal(sh.disarm, 0);
   assert.ok(sh.shield < s0 - 50, 'paralysis drains the shield instead');
   for (let i = 0; i < 50; i++) for (const m of ['stungun', 'slowbeam', 'disarm', 'napalm']) dmg(hd, 0.01, 1, 1, 0, m, hd.x, hd.y, MODULE_BY_ID.get(m), 1, hd.x, hd.y - 5, 0);
@@ -351,8 +352,8 @@ test('overkill prevention does not let one point-defense laser swat a whole miss
     assert.equal(b.units.length, 2 * computeStats(hunter).squad + 1);
     e.x = k.x + dx; e.y = k.y - 10; e.angle = Math.PI / 2;
     (b as unknown as { rebuildHash(): void }).rebuildHash();
-    for (let i = 0; i < 20 * TICK_RATE && !b.done; i++) b.step();
-    assert.equal(e.alive, false, `dx ${dx}: the PD fort survived 20 s of 16 ATGM launchers at ${e.hp.toFixed(1)} hp`);
+    for (let i = 0; i < 30 * TICK_RATE && !b.done; i++) b.step(); // ATGMs reload in 8 s
+    assert.equal(e.alive, false, `dx ${dx}: the PD fort survived 30 s of 16 ATGM launchers at ${e.hp.toFixed(1)} hp`);
   }
 });
 

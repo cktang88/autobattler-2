@@ -95,8 +95,8 @@ const wpn = (m: W): ModuleDef => ({ kind: 'weapon', ...m }) as ModuleDef;
 
 export const MODULES: ModuleDef[] = [
   // ---------------- Machine guns ----------------
-  wpn({ id: 'mg', name: '7.62mm Machine Gun', family: '7.62mm', desc: 'Accurate, longer-reaching rapid fire: picks off light units and aircraft from further out than other small guns. Bounces off armor.', category: 'machinegun', visual: 'gun', caliber: 0.2, mount: 'S', weight: 1, cost: 6,
-    damage: 8, cooldown: 0.15, range: 6.5, ...GA, projectile: 'bullet', projectileSpeed: 22, ap: 0, spread: 0.2 }),
+  wpn({ id: 'mg', name: '7.62mm Machine Gun', family: '7.62mm', desc: 'Cheap, accurate rapid fire for picking off light units and aircraft. Bounces off armor.', category: 'machinegun', visual: 'gun', caliber: 0.2, mount: 'S', weight: 1, cost: 6,
+    damage: 8, cooldown: 0.15, range: 6, ...GA, projectile: 'bullet', projectileSpeed: 22, ap: 0, spread: 0.25 }),
   wpn({ id: 'twinmg', name: 'Suppressor MG', family: 'Twin 7.62mm', desc: 'Suppressive fire: a hail of bullets that pins whatever it keeps hitting, cutting its speed and rate of fire by up to 60%. Little damage of its own.', category: 'machinegun', visual: 'gun', barrels: 2, caliber: 0.2, mount: 'S', weight: 1.8, cost: 11,
     damage: 6, cooldown: 0.075, range: 5.5, ...GA, projectile: 'bullet', projectileSpeed: 22, ap: 0, spread: 0.45, slow: 0.05 }),
   wpn({ id: 'hmg', name: '12.7mm Heavy MG', family: '12.7mm', desc: 'Armor-piercing 12.7mm belts: the light gun that still hurts tanks, and reaches a little further.', category: 'machinegun', visual: 'gun', caliber: 0.4, mount: 'S', weight: 1.6, cost: 10,
@@ -173,7 +173,7 @@ export const MODULES: ModuleDef[] = [
   wpn({ id: 'twinlaser', name: 'Focus Laser', family: 'Focus beam', desc: 'Focusing beam: damage builds to 3x over 2.5 s on the same target, resets when it switches.', category: 'energy', visual: 'laser', barrels: 2, caliber: 0.4, mount: 'M', weight: 2.6, cost: 34,
     damage: 10, cooldown: 0.15, range: 7, ...GA, projectile: 'beam', ap: 0.5, ramp: 3 }),
   wpn({ id: 'heatray', name: 'Heat Ray', family: 'Thermal', desc: 'Knife-range armor melter: ignores ALL armor and fades to a quarter of its damage at max range. The flamethrower is for infantry; this is for tanks.', category: 'energy', visual: 'heatray', caliber: 0.5, mount: 'M', weight: 3.5, cost: 32,
-    damage: 42, cooldown: 0.2, range: 5.5, ...GA, projectile: 'beam', ap: 1, falloff: 0.25 }),
+    damage: 42, cooldown: 0.2, range: 6.5, ...GA, projectile: 'beam', ap: 1, falloff: 0.3 }),
   wpn({ id: 'plasmaorb', name: 'Plasma Cannon', family: 'Plasma orb', desc: 'Slow plasma ball that bursts on impact: big splash, but fast units dodge it.', category: 'energy', visual: 'plasma', caliber: 0.5, mount: 'M', weight: 4, cost: 36,
     damage: 85, cooldown: 2, range: 8, ...G, projectile: 'orb', projectileSpeed: 6, splash: 1.1, ap: 0.5, spread: 0.4 }),
   wpn({ id: 'plasma', name: 'Plasma Lance', family: 'Plasma beam', desc: 'Continuous plasma lance that cuts through every enemy in a line.', category: 'energy', visual: 'plasma', caliber: 0.9, mount: 'M', weight: 8, cost: 65,
