@@ -390,6 +390,18 @@ const SPECS: Record<string, Spec> = {
     hw: 0.5,
     hull: () => sharpU([0.48, 0, 0.48, -0.08, 0.43, -0.12, 0.43, -0.26, 0.47, -0.31, 0.52, -0.385, 0.385, -0.52, 0.31, -0.47, 0.2, -0.45, 0.1, -0.45, 0.06, -0.41, -0.06, -0.41, -0.1, -0.45, -0.2, -0.45, -0.31, -0.47, -0.385, -0.52, -0.52, -0.385, -0.47, -0.31, -0.45, -0.2, -0.48, -0.12, -0.48, 0]),
   },
+  // ---- lance dreadnought: a long knife-prowed monitor hull around a spinal accelerator, slim bridge amidships,
+  //      flared aft quarters with twin engine nacelles
+  lance: {
+    hw: 0.44,
+    hull: () => sharpU([0.5, 0, 0.47, -0.06, 0.39, -0.15, 0.2, -0.37, 0.12, -0.4, 0.08, -0.44, -0.3, -0.44, -0.34, -0.41, -0.44, -0.37, -0.47, -0.31, -0.5, -0.31, -0.5, -0.12, -0.47, -0.09, -0.47, 0]),
+  },
+  // ---- monolith: walking bunker - a square block of slab armour, appliqué plates standing proud of every face,
+  //      diamond buttresses on the chamfered corners
+  monolith: {
+    hw: 0.5,
+    hull: () => sharpU([0.52, 0, 0.52, -0.27, 0.48, -0.29, 0.48, -0.33, 0.517, -0.417, 0.417, -0.517, 0.38, -0.48, 0.31, -0.48, 0.31, -0.52, 0.02, -0.52, 0.02, -0.48, -0.03, -0.48, -0.03, -0.52, -0.31, -0.52, -0.31, -0.48, -0.38, -0.48, -0.417, -0.517, -0.517, -0.417, -0.48, -0.38, -0.48, -0.36, -0.52, -0.36, -0.52, -0.11, -0.48, -0.11, -0.48, 0]),
+  },
   // ---- drone: tri-rotor recon probe - a plated sensor orb with a lens eye in a forward head housing, an offset
   //      sensor boom, two ducted fans swept forward on arms and a third on a tail boom
   pod: {
@@ -487,6 +499,8 @@ export function footDetails(g: Ctx, L: UnitLayout, pal: TeamPal, o: number): boo
   if (TITAN_SHAPES.has(L.shape)) { const hp = footHullPath(L.shape); if (hp) titanDetail(g, L, pal, o, hp); }
   return true;
 }
+
+const LANCE_COILS = [0.156, 0.231, 0.306, 0.381, 0.456];
 
 const DETAILS: Record<string, (k: K) => void> = {
 
@@ -1049,6 +1063,68 @@ const DETAILS: Record<string, (k: K) => void> = {
       g.strokeStyle = rgba(k.E, 0.9); g.lineWidth = k.o; g.beginPath(); g.arc(k.x(bu), k.y(bv), 0.06 * S, 0, P2); g.stroke();
     }
   },
+  lance(k) {
+    const S = k.S, g = k.g;
+    // main deck inset, flank glow lines and accent stripes
+    k.plate(k.M([0.45, 0, 0.37, -0.13, 0.19, -0.33, -0.3, -0.39, -0.43, -0.32, -0.46, -0.1, -0.46, 0]), -0.46, -0.39, 0.45, 0.39, -0.03, 0.8);
+    for (const s of [-1, 1]) { k.glow([-0.32, s * 0.405, 0.16, s * 0.37], k.o); k.stripe([0.18, s * 0.31, 0.32, s * 0.17]); k.haz(0.27, s * 0.24, 0.05 * S, 0.12 * S, false); }
+    // aft deck (medium turret) and the engine nacelles astern
+    k.plate(k.R(-0.36, 0, 0.17, 0.42, 0.12), -0.45, -0.21, -0.27, 0.21, 0.02, 1.2);
+    for (const s of [-1, 1]) { k.engine(-0.5, s * 0.225, 0.5, 0.3); k.stack(-0.255, s * 0.28, 0.045 * S); k.grille(-0.02, s * 0.28, 0.1 * k.X, 0.11 * k.Y, 4, 0.5); }
+    // bridge: stepped tower amidships, a glazed visor facing forward, accent fin
+    k.plate(k.M([-0.07, -0.12, -0.11, -0.24, -0.27, -0.22, -0.29, 0]), -0.29, -0.24, -0.07, 0.24, 0.04, 1.6);
+    k.plate(k.M([-0.15, -0.08, -0.18, -0.14, -0.27, -0.12, -0.28, 0]), -0.28, -0.14, -0.15, 0.14, 0.12, 1.5);
+    k.visor(-0.16, -0.085, -0.16, 0.085, 0.022 * S);
+    k.stripe([-0.2, 0, -0.27, 0], k.o * 2.2);
+    // the spine: raised gun deck from the breech to the prow carrying the accelerator
+    k.plate(k.M([0.46, 0, 0.455, -0.12, 0.4, -0.18, -0.06, -0.19, -0.09, -0.12, -0.09, 0]), -0.09, -0.19, 0.46, 0.19, 0.06, 1.4);
+    const ch = k.R(0.29, 0, 0.36, 0.12, 0.03);
+    k.recess(ch, '#0b0f13');
+    k.glow([0.12, 0, 0.47, 0], k.o * 1.6);
+    for (const s of [-1, 1]) { g.fillStyle = METAL.base; g.fillRect(k.x(0.09), k.y(s * 0.09) - 0.06, k.x(0.4), 0.12); g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(k.x(0.09), k.y(s * 0.09) - 0.06, k.x(0.4), 0.03); }
+    for (const u of LANCE_COILS) {
+      const hp = k.Ra(u, 0, 0.16, k.y(0.32), 0.04);
+      k.metal(hp, u - 0.01, -0.16, u + 0.01, 0.16, 1.3);
+      g.fillStyle = rgba(k.E, 0.85); g.fillRect(k.x(u) - 0.025, -k.y(0.13), 0.05, k.y(0.26));
+    }
+    // muzzle ring at the prow
+    k.metal(k.Ra(0.475, 0, 0.22, k.y(0.24), 0.06), 0.46, -0.12, 0.49, 0.12, 1.3);
+    k.dot(0.49, 0, 0.09 * S * 0.5, rgba(k.E, 0.9));
+    // breech barbette glow ring under the titan gun
+    g.strokeStyle = rgba(k.E, 0.8); g.lineWidth = k.o * 1.2; g.beginPath(); g.arc(k.x(0.06), 0, 0.17 * S, 0, P2); g.stroke();
+  },
+  monolith(k) {
+    const S = k.S, g = k.g;
+    // tier-1 roof inside the battered walls; the dark seam where the two slabs meet
+    const sq = (cu: number, h: number, c: number) => k.P([cu + h, -h + c, cu + h, h - c, cu + h - c, h, cu - h + c, h, cu - h, h - c, cu - h, -h + c, cu - h + c, -h, cu + h - c, -h]);
+    k.recess(sq(0, 0.46, 0.09), shade(k.pal.deep, 0.05));
+    k.plate(sq(0, 0.42, 0.085), -0.42, -0.42, 0.42, 0.42, -0.04, 0.9);
+    // appliqué slabs on every face (front glacis with tiny vision slits), diamond corner buttresses
+    k.plate(k.R(0.497, 0, 0.05, 0.56, 0.02), 0.47, -0.28, 0.52, 0.28, 0.1, 1.2);
+    for (const v of [-0.12, 0, 0.12]) k.glow([0.5, v - 0.03, 0.5, v + 0.03], k.o * 1.1);
+    k.haz(0.475, 0, 0.012 * k.X, 0.5 * k.Y, true);
+    for (const s of [-1, 1]) {
+      k.plate(k.R(-0.497, s * 0.235, 0.05, 0.25, 0.02), -0.52, s * 0.11, -0.47, s * 0.36, 0.08, 1.2);
+      for (const u of [0.165, -0.17]) k.plate(k.R(u, s * 0.497, 0.29, 0.05, 0.02), u - 0.14, s * 0.47, u + 0.14, s * 0.52, 0.08, 1.2);
+      for (const su of [-1, 1]) k.plate(k.P([su * 0.517, s * 0.417, su * 0.417, s * 0.517, su * 0.317, s * 0.417, su * 0.417, s * 0.317]), su * 0.417 - 0.1, s * 0.417 - 0.1, su * 0.417 + 0.1, s * 0.417 + 0.1, su > 0 ? 0.06 : 0.0, 1.5);
+      k.stack(-0.35, s * 0.107, 0.05 * S);
+      k.lamp(0.5, s * 0.2, 0.014 * S);
+    }
+    k.grille(-0.47, 0, 0.05 * k.X, 0.16 * k.Y, 4, 0.7);
+    // tier 2: the stepped roof block, accent bands on its flanks
+    k.recess(sq(0.014, 0.33, 0.13), shade(k.pal.deep, -0.05));
+    k.plate(sq(0.014, 0.3, 0.12), -0.29, -0.3, 0.31, 0.3, 0.16, 2.4);
+    for (const s of [-1, 1]) { k.stripe([-0.22, s * 0.285, 0.2, s * 0.285], k.o * 2.4); k.grille(-0.157, s * 0.15, 0.13 * k.X, 0.09 * k.Y, 4, 0.4); }
+    k.glow([0.3, -0.08, 0.3, 0.08], k.o);
+    // commander's block behind the cupola: periscope visor, sensor
+    k.plate(k.R(-0.18, 0, 0.16, 0.19, 0.08), -0.26, -0.095, -0.1, 0.095, 0.16, 1.4);
+    k.visor(-0.11, -0.05, -0.11, 0.05, 0.016 * S);
+    // roof cupola ring for the giant gun
+    k.metal(k.C(0.1, 0, 0.21 * S), 0.05, -0.05, 0.15, 0.05, 1.4);
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = k.o; g.beginPath(); g.arc(k.x(0.1), 0, 0.17 * S, 0, P2); g.stroke();
+    // rear-quarter casemate for the medium gun
+    k.plate(k.Ra(-0.32, 0.33, 0.13 * S, 0.13 * S, 0.1), -0.39, 0.26, -0.25, 0.4, 0.06, 1.5);
+  },
 };
 
 /** Wedge-cab walker hull detail (strider / warlord): a hunched dorsal plate carrying the main mount, a faceted wedge
@@ -1556,7 +1632,7 @@ function footRig(L: UnitLayout): LegRig | null {
     case 'arachne': radial(-0.06, 0.28, 0.72, 0.74, [0.5, 1.1, 1.85, 2.6]); w = 0.045; stride = 0.06; armour = true; style = 'sleek'; break;
     case 'warlord': row([0.2, 0.0, -0.22], 0.3, 0.5, [0.1, 0, -0.1]); w = 0.07; stride = 0.08; armour = true; break;
     case 'titan': row([0.14, -0.1, -0.34], 0.32, 0.5, [0.06, 0, -0.06]); w = 0.07; stride = 0.06; armour = true; break;
-    case 'goliath': case 'leviathan': case 'juggernaut': case 'siegeplat': case 'riot': case 'cross': case 'long': case 'hunter': case 'citadel': case 'colossal': {
+    case 'goliath': case 'leviathan': case 'juggernaut': case 'siegeplat': case 'riot': case 'cross': case 'long': case 'hunter': case 'citadel': case 'colossal': case 'lance': case 'monolith': {
       const n = L.X / L.Y >= 1.6 ? 4 : 3;
       const xs = Array.from({ length: n }, (_, i) => 0.3 - (i * 0.6) / (n - 1));
       row(xs, 0.3, 0.52, xs.map((x) => x * 0.15));
@@ -1631,6 +1707,20 @@ function footGiantLights(L: UnitLayout): GLight[] | null {
       o.push({ x: 0.415 * X, y: 0, r: 0.09 * S, k: 'visor' });
       for (const s of [-1, 1]) nav(0.44, s * 0.13, s);
       break;
+    case 'lance':
+      o.push({ x: 0.49 * X, y: 0, r: 0.05 * S, k: 'core' });
+      o.push({ x: -0.16 * X, y: 0, r: 0.07 * S, k: 'visor' });
+      for (const s of [-1, 1]) {
+        o.push({ x: -0.5 * X, y: s * 0.225 * Y, r: 0.05 * S, k: 'engine', dir: Math.PI });
+        o.push({ x: -0.255 * X, y: s * 0.28 * Y, r: 0.035 * S, k: 'stack' });
+        nav(0.1, s * 0.42, s);
+      }
+      break;
+    case 'monolith':
+      o.push({ x: 0.5 * X, y: 0, r: 0.07 * S, k: 'visor' });
+      o.push({ x: -0.47 * X, y: 0, r: 0.08 * S, k: 'vent' });
+      for (const s of [-1, 1]) { o.push({ x: -0.35 * X, y: s * 0.107 * Y, r: 0.04 * S, k: 'stack' }); nav(0.417, s * 0.417, s); }
+      break;
   }
   gl.set(key, o);
   return o;
@@ -1650,6 +1740,8 @@ function footStrips(L: UnitLayout): number[] | null {
     broodmother: [-0.04, -0.22, -0.2, -0.29, -0.04, 0.22, -0.2, 0.29],
     arachne: [0.06, -0.27, -0.2, -0.35, 0.06, 0.27, -0.2, 0.35],
     citadel: [-0.33, -0.345, 0.33, -0.345, -0.33, 0.345, 0.33, 0.345, -0.345, -0.25, -0.345, 0.25, 0.415, -0.085, 0.415, 0.085],
+    lance: [0.12, 0, 0.47, 0, -0.32, -0.405, 0.16, -0.37, -0.32, 0.405, 0.16, 0.37],
+    monolith: [0.3, -0.08, 0.3, 0.08, -0.15, -0.46, 0.15, -0.46, -0.15, 0.46, 0.15, 0.46],
   };
   const f = u[L.shape] ?? [];
   o = f.map((v, i) => (i % 2 ? v * L.Y : v * L.X));

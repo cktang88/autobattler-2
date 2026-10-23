@@ -191,6 +191,8 @@ function giantDeck(): Design[] {
     mk('k1', 'carrier', 'gravlift', ['skyfortress', 'heavyflak', 'quad20', 'quad20']),
     mk('g1', 'goliath', 'titanlegs', ['stormtower', 'cannon', 'cannon', 'twin30']),
     mk('t2', 'titan', 'megatracks', ['stormcore', 'avenger', 'howitzer', 'cruise', 'autocannon']),
+    mk('n1', 'lance', 'titanlegs', ['massdriver', 'twin30']),
+    mk('m1', 'monolith', 'megatracks', ['siege240', 'quad20']),
   ];
 }
 
@@ -446,12 +448,12 @@ function animate(): void {
   void t0;
 }
 
-/** ?only=titans: the three size-5 chassis side by side. ?px=N canvas size, ?empty=1 bare hulls, ?mob=a,b,c overrides mobility. */
+/** ?only=titans: the size-5 chassis side by side. ?px=N canvas size, ?empty=1 bare hulls, ?mob=a,b,c overrides mobility. */
 function titansSection(): void {
   const host = labSection('titans', 'Titan class (size 5)');
   const px = Number(params.get('px') ?? '520') || 520;
-  const mobs = params.get('mob')?.split(',') ?? ['titanlegs', 'megatracks', 'spider'];
-  ['titan', 'citadel', 'arachne'].forEach((id, i) => {
+  const mobs = params.get('mob')?.split(',') ?? ['titanlegs', 'megatracks', 'spider', 'titanlegs', 'megatracks'];
+  ['titan', 'citadel', 'arachne', 'lance', 'monolith'].forEach((id, i) => {
     const c = CHASSIS.find((x) => x.id === id)!;
     const d: Design = { id: 'ti_' + id, name: id, chassis: id, mobility: mobs[i], mounts: params.get('empty') ? c.mounts.map(() => null) : fillMounts(id, i + 3) };
     host.append(preview(d, px));
