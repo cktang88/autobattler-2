@@ -321,3 +321,93 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   b.step();
   assert.equal(s.mounts[0].target, t.id, 'the flamer should target the citadel corner 0.8 x range away');
 });
+
+// ---------------------------------------------------------------- sim bug pass: quiet end vs long reloads, overkill vs PD
+
+test('a long reload is not a quiet stalemate: two nuke launchers trade shots past the first 20 s cooldown', () => {
+  // the quiet end (nothing moved, fired or got hurt for 10 s) cut the duel at ~20 s as a draw, while both 20 s-reload
+  // launchers still held a live target and were about to fire again
+  const nuker = D('nuker', 'titan', 'anchor', ['tactnuke', null, null, null, null]);
+  assert.deepEqual(validateDesign(nuker), []);
+  const { b } = duel([nuker], { designId: 'nuker' }, { designId: 'nuker' }, 30);
+  while (!b.done) b.step();
+  const s = b.summary();
+  assert.ok(s.ticks > 30 * TICK_RATE, `ended at ${s.ticks / TICK_RATE}s after one exchange`);
+  assert.ok(s.damageDealt[0] > 2 * 2190 && s.damageDealt[1] > 2 * 2190, `only ${s.damageDealt} damage traded`);
+  assert.notEqual(s.winner, -1);
+});
+
+test('overkill prevention does not let one point-defense laser swat a whole missile squad one shot at a time', () => {
+  // with the target "doomed" by the one missile in the air, all 16 launchers held fire; the PD shot each lone missile
+  // down, so the squad never finished a nearly dead target
+  const hunter = D('hunter', 'raider', 'legs', ['atgm', 'atgm']);
+  const fort = D('fort', 'bastion', 'anchor', ['pointdef', 'plateH', null]);
+  assert.deepEqual(validateDesign(hunter), []);
+  assert.deepEqual(validateDesign(fort), []);
+  for (const dx of [3, 9, 11]) {
+    const b = new Battle({ seed: 1, sides: [{ designs: [hunter, fort], units: [pl('hunter', { kite: false, stance: 'holdPos' })] }, { designs: [hunter, fort], units: [pl('fort')] }] });
+    const k = b.units[0], e = b.units[b.units.length - 1]; // squad of 16 hunters vs the fort
+    e.x = k.x + dx; e.y = k.y - 10; e.angle = Math.PI / 2;
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    for (let i = 0; i < 20 * TICK_RATE && !b.done; i++) b.step();
+    assert.equal(e.alive, false, `dx ${dx}: the PD fort survived 20 s of 16 ATGM launchers at ${e.hp.toFixed(1)} hp`);
+  }
+});
+
+test('a fire-on-move walker with a gun and a melee weapon closes to contact and swings (not parked at 70% gun range)', () => {
+  // the fire-on-move "hold at 70% of range" stop ignored that a melee weapon needs contact: legs / titan-legs hulls
+  // with a gun plus a buzzsaw or titan fist parked out of reach and never swung (treads closed in fine)
+  const walker = D('sawwalker', 'strider', 'legs', ['autocannon', 'buzzsaw', null]);
+  const wall = D('sawwall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back
+  assert.deepEqual(validateDesign(walker), []);
+  assert.deepEqual(validateDesign(wall), []);
+  const { b, k } = duel([walker, wall], { designId: 'sawwalker', kite: false }, { designId: 'sawwall' }, 20);
+  let swings = 0;
+  for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
+    b.step();
+    for (const ev of b.events) if (ev.t === 'fire' && ev.unit === k.id && ev.mount === 1) swings++;
+  }
+  assert.ok(swings > 0, 'the buzzsaw never swung');
+});
+
+test('a fire-on-move titan whose guns sit behind its centre keeps closing until one reaches (no park with nothing in range)', () => {
+  // the 70% stop is measured from the hull centre, ranges from the mounts: this layout puts the laser 2.5 cells aft,
+  // so the walker parked at 70% of the laser's range with every gun out of reach and never fired
+  const titan = D('reartitan', 'titan', 'titanlegs', ['shotgun', 'twinmg', 'shotgun', 'laser', 'mg']);
+  const wall = D('rearwall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back
+  assert.deepEqual(validateDesign(titan), []);
+  const { b, k, e } = duel([titan, wall], { designId: 'reartitan', kite: false }, { designId: 'rearwall' }, 25);
+  let shots = 0;
+  for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
+    b.step();
+    for (const ev of b.events) if (ev.t === 'fire' && ev.unit === k.id) shots++;
+  }
+  assert.ok(shots > 0 && e.hp < e.maxHp, 'the titan never fired');
+});
+
+test('the contact pivot swings a gun that can fire at contact range, not a longer one held back by its minimum range', () => {
+  // same nose-in as the land-train test above, plus a howitzer: the pivot picked the longest-ranged gun (the howitzer,
+  // mounted near the centre, so no pivot at all), although its 8-cell minimum range never lets it fire there
+  const train = D('trainH', 'centipede', 'halftrack', ['howitzer', null, 'shieldH', 'flamer']);
+  const fort = D('fort', 'leviathan', 'anchor', [null, null, 'flak', null]);
+  assert.deepEqual(validateDesign(train), []);
+  const { b, k } = duel([train, fort], { designId: 'trainH', kite: false, focus: false }, { designId: 'fort' }, 20);
+  let flames = 0;
+  for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
+    b.step();
+    for (const ev of b.events) if (ev.t === 'fire' && ev.unit === k.id && ev.mount === 3) flames++;
+  }
+  assert.ok(flames > 0, 'the rear flamer never got on the emplacement');
+});
+
+test('blocks that escort each other (A -> B, B -> A) fight normally instead of huddling for the whole battle', () => {
+  const bul = STARTER_DESIGNS.find((d) => d.id === 'starter-bulwark')!, tb = STARTER_DESIGNS.find((d) => d.id === 'starter-tankbuster')!;
+  const designs = [bul, tb];
+  const b = new Battle({ seed: 3, sides: [
+    { designs, units: [pl(bul.id, { uid: 1, x: 30, y: 2, escort: 2 }), pl(tb.id, { uid: 2, x: 50, y: 2, escort: 1 })] },
+    { designs, units: [pl(bul.id, { uid: 1, x: 40, y: 2, stance: 'holdPos' }), pl(tb.id, { uid: 2, x: 60, y: 2, stance: 'holdPos' })] },
+  ] });
+  while (!b.done) b.step();
+  const s = b.summary();
+  assert.ok(s.damageDealt[0] > 0, `the escort pair never engaged (battle ended at ${s.ticks / TICK_RATE}s)`);
+});
