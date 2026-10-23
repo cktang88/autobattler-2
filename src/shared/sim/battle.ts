@@ -6,11 +6,12 @@
 
 import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
-import { computeStats, damageKinds, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { airRole, computeStats, damageKinds, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
+import type { AirRole } from '../stats.ts';
 import { DT, MAX_TICKS, TICK_RATE } from './types.ts';
 import type { BattleEvent, BattleInput, BattleSummary, MountState, SimProjectile, SimUnit } from './types.ts';
 
@@ -58,6 +59,9 @@ const HEAL_EVENT_EVERY = 0.3;
 const CRUSH_EVERY = 0.3;
 const BOMB_ALT = 1.5; // cells: height bombs start falling from
 const BOMB_FALL = 0.5; // seconds a bomb takes to land
+/** jets keep at least this share of their combined radius apart (soft: JET_SEP_SOFT of the overlap per tick) */
+const JET_SEP = 0.55;
+const JET_SEP_SOFT = 0.5;
 /** a flyer releases bombs at a target inside this cone ahead of its nose (bombs keep the plane's forward speed, so
  *  they're dropped short of the target and carry on to it); straight overhead always counts */
 const BOMB_CONE = 0.6; // rad
@@ -346,6 +350,8 @@ interface Internal {
   escThreat: number;
   /** support module/trait present (heal, dome, uplink, jammer, sensor, repair aura) */
   isSupport: boolean;
+  /** air role (stats.ts airRole) steering a flyer's goal choice; null on the ground */
+  airRole: AirRole | null;
   /** unitCost x level multiplier (target 'valuable') */
   valueVal: number;
   /** size-major, cost-minor key (target 'swarm': smallest first) */
@@ -741,7 +747,7 @@ export class Battle {
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
-      escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
@@ -1070,6 +1076,7 @@ export class Battle {
       return best;
     }
     const foes = this.liveIdx[u.side === 0 ? 1 : 0], nf = this.liveN[u.side === 0 ? 1 : 0];
+    if (I.airRole && I.airRole !== 'gunship') return this.airGoal(I, foes, nf);
     const snap = this.posSnapOk, sx = this.snapX, sy = this.snapY;
     for (let k = 0; k < nf; k++) {
       const j = foes[k];
@@ -1080,6 +1087,27 @@ export class Battle {
       if (o.flying ? !I.canHitA : !I.canHitG) continue;
       const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
       if (d < bestD && this.visible(u, o)) { bestD = d; best = j; }
+    }
+    return best;
+  }
+
+  /** Goal of a flyer by air role (stats.ts airRole): fighters hunt aircraft (ground only once the sky is clear),
+   *  bombers go for the most valuable ground target in reach of a run, harassers for artillery and support. A
+   *  role weight scales the squared distance, so a much nearer target still wins over a far preferred one. */
+  private airGoal(I: Internal, foes: ArrayLike<number>, nf: number): number {
+    const u = I.u, units = this.units, role = I.airRole;
+    let best = -1, bestS = Infinity;
+    for (let k = 0; k < nf; k++) {
+      const j = foes[k];
+      const o = units[j];
+      if (!o.alive || (o.flying ? !I.canHitA : !I.canHitG) || !this.visible(u, o)) continue;
+      const O = this.ints[j];
+      const dx = o.x - u.x, dy = o.y - u.y;
+      let sc = dx * dx + dy * dy;
+      if (role === 'fighter') sc *= o.flying ? 0.08 : 3;
+      else if (role === 'bomber') { if (o.flying) continue; sc /= Math.max(1, O.valueVal / 20); }
+      else if (role === 'harasser') sc *= o.flying ? 2 : O.isSupport || o.stats.range >= 10 ? 0.25 : 1;
+      if (sc < bestS) { bestS = sc; best = j; }
     }
     return best;
   }
@@ -1209,7 +1237,7 @@ export class Battle {
         case 'support': sc = O.isSupport ? 0 : 1; break;
         case 'valuable': sc = -O.valueVal; break;
         case 'swarm': sc = O.swarmKey; break;
-        default: sc = d;
+        default: sc = I.airRole === 'fighter' && o.flying ? d * 0.3 : d; // fighters: aircraft first
       }
       if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && (d < bestD || (d === bestD && j < best)))) { bestS = sc; bestD = d; best = j; }
       if (focus) { candJ[nc] = j; candS[nc] = sc; candD[nc] = d; nc++; }
@@ -2742,7 +2770,26 @@ export class Battle {
             if (!b.alive || b.flying !== a.flying) continue;
             const B = ints[j];
             if (B.leapT >= 0) continue;
-            if (A.strafe || B.strafe) continue; // jets pass through each other
+            if (A.strafe || B.strafe) {
+              // jets fly past each other, but never stack in the same spot: a small soft keep-out (JET_SEP of the
+              // combined radius) eases overlapping jets apart a little each tick without stopping them
+              const jr = JET_SEP * (A.radius + B.radius);
+              let jx = b.x - a.x, jy = b.y - a.y;
+              const jd2 = jx * jx + jy * jy;
+              if (jd2 >= jr * jr) continue;
+              let jd = Math.sqrt(jd2);
+              if (jd < 1e-6) { const ang = ((i * 7 + j * 13) % 16) * (TAU / 16); jx = Math.cos(ang); jy = Math.sin(ang); jd = 0; } else { jx /= jd; jy /= jd; }
+              const push = (jr - jd) * 0.5 * JET_SEP_SOFT;
+              a.x -= jx * push; a.y -= jy * push;
+              b.x += jx * push; b.y += jy * push;
+              px[i] = a.x; py[i] = a.y; px[j] = b.x; py[j] = b.y;
+              D = Math.max(D, Math.abs(a.x - hx[i]), Math.abs(a.y - hy[i]), Math.abs(b.x - hx[j]), Math.abs(b.y - hy[j]));
+              far = far0 + D;
+              wy1 = Math.min(rowHi, clamp(Math.floor((py[i] + far) / CELL), 0, HROWS - 1));
+              wx0 = Math.max(colLo, clamp(Math.floor((px[i] - far) / CELL), 0, HCOLS - 1));
+              wx1 = Math.min(colHi, clamp(Math.floor((px[i] + far) / CELL), 0, HCOLS - 1));
+              continue;
+            }
             let dx = b.x - a.x, dy = b.y - a.y;
             let rr = A.radius + B.radius;
             let d2 = dx * dx + dy * dy;

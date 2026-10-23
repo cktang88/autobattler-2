@@ -19,6 +19,8 @@ export const CANDIDATES: Design[] = [
   D('deltabomb', 'deltawing', 'jet', ['bombs', 'mg', 'mg']),
   D('heavybomber', 'bomberhull', 'gravlift', ['bombs', 'bombs', 'heavybomb']),
   D('clusterjet', 'stratobomber', 'jet', ['clusterbombs', 'clusterbombs', 'heavybomb', 'mg']),
+  D('fighterjet', 'strikejet', 'jet', ['aamissile', 'aamissile', 'mg']),
+  D('harasserjet', 'deltawing', 'jet', ['rockets', 'mg', 'mg']),
   ...(process.env.OP_DESIGNS ? (JSON.parse(process.env.OP_DESIGNS) as Design[]).map((d) => ({ name: d.id, ...d })) : []),
 ];
 

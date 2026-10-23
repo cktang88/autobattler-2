@@ -17,7 +17,7 @@ import { slotError } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import {
   KIND_LABEL, TRAIT_LABEL, accuracyLabel, firingText, moduleRules, fmt, icon, modal, moduleCategoryColor, moduleEffects, partIcon, sizeLabel,
@@ -881,6 +881,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('span.g-plate.big', { title: `${c.name}: ${footDims(c)} footprint` }, h('b', null, sizeLabel(c.size, c.footprint?.[0], c.footprint?.[1])), ` ${footDims(c)}`),
       s && s.squad > 1 ? h('span.g-plate.squad', { title: `One purchase deploys a block of ${s.squad} units with adjustable spacing` }, `Squad ×${s.squad}`) : null,
       s?.flying ? h('span.g-plate.air', null, icon('air'), 'Flying') : null,
+      (() => { const r = s?.flying ? airRole(draft) : null; return r ? h('span.g-plate.air', { title: AIR_ROLE_INFO[r].desc }, AIR_ROLE_INFO[r].label) : null; })(),
       s?.isStatic ? h('span.g-plate.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-plate.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
     ].filter((x): x is HTMLSpanElement => !!x));

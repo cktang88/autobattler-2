@@ -90,7 +90,7 @@ export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
-export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.17, hover: 0.98, jet: 0.92, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
+export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.17, hover: 0.98, jet: 0.7, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -166,8 +166,8 @@ export function hitFactor(w: ModuleDef): number {
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
   aamissile: 2.76, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 3.43, arclance: 2.95, atgm: 5.94,
-  autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 3.88, bulwarkshield: 1.48, buzzsaw: 0.27,
-  cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 7.69, heavybomb: 3.32, cruise: 7.74, disarm: 1.86,
+  autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 8.69, bulwarkshield: 1.48, buzzsaw: 0.27,
+  cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 14.00, heavybomb: 6.05, cruise: 7.74, disarm: 1.86,
   dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 1.06, flak: 0.31, flamer: 0.41, gauss: 14.19,
   gravity: 3.14, grinder: 3.99, guidedrocket: 0.99, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.93,
   heavyflak: 1.19, hmg: 1.19, howitzer: 22.16, incendiary: 1.21, inferno: 1.41, jammer: 0.25, laser: 1.69,
@@ -476,6 +476,45 @@ export function squadOf(d: Design): number {
 export const DEFAULT_KITE_RANGE = 10;
 /** Shortest effective range at which focus fire is on by default (shotguns / flamers / sonic stay off). */
 export const DEFAULT_FOCUS_RANGE = 5;
+
+/** Air roles: what a flying design is for, decided by its drive and loadout (shared by the sim's air AI and the UI).
+ *  - bomber:   carries bomb bays; flies at the most valuable ground targets, rearms at home between runs
+ *  - fighter:  air superiority; hunts enemy aircraft first, strafes ground units only when the sky is clear
+ *  - harasser: fast jet with ground guns/rockets; raids artillery and support behind the enemy line
+ *  - gunship:  hovering rotor / grav-lift gun platform; hangs over the ground fight and keeps firing */
+export type AirRole = 'bomber' | 'fighter' | 'harasser' | 'gunship';
+export const AIR_ROLE_INFO: Record<AirRole, { label: string; desc: string }> = {
+  bomber: { label: 'Bomber', desc: 'Flies at the most valuable ground targets, drops its bombs, and flies home to rearm between runs.' },
+  fighter: { label: 'Fighter', desc: 'Air superiority: hunts enemy aircraft first and strafes ground units only when the sky is clear.' },
+  harasser: { label: 'Harasser', desc: 'Fast raider: goes for artillery, support and other soft targets behind the enemy line.' },
+  gunship: { label: 'Gunship', desc: 'Hovers over the ground fight and keeps its guns firing on the nearest targets.' },
+};
+const airRoleCache = new Map<string, AirRole | null>();
+/** Air role of a design, or null for ground / static designs. */
+export function airRole(d: Design): AirRole | null {
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.join(',')}`;
+  if (airRoleCache.has(key)) return airRoleCache.get(key)!;
+  let out: AirRole | null = null;
+  try {
+    const st = computeStats(d);
+    if (st.flying) {
+      const mods = designModules(d).filter((m) => m.kind === 'weapon');
+      if (mods.some((m) => m.resupply)) out = 'bomber';
+      else if (d.mobility !== 'jet') out = 'gunship';
+      else {
+        let total = 0, aa = 0;
+        for (const m of mods) {
+          const v = weaponDps(m);
+          total += v;
+          if (m.targetsAir && (m.targetsGround === false || (m.airBonus ?? 1) > 1)) aa += v;
+        }
+        out = d.chassis === 'interceptor' || (total > 0 && aa >= 0.4 * total) ? 'fighter' : 'harasser';
+      }
+    }
+  } catch { /* unknown parts */ }
+  airRoleCache.set(key, out);
+  return out;
+}
 
 export interface DefaultOrders { kite: boolean; focus: boolean }
 const defaultOrdersCache = new Map<string, DefaultOrders>();
