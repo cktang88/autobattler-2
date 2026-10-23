@@ -385,7 +385,7 @@ export function statCard(o: StatCardOpts): HTMLElement {
       if (m.impulse) tags.push(m.impulse > 0 ? 'Knockback' : 'Pull');
       if (m.spinUp) tags.push('Spin-up');
       if (m.ramp) tags.push(`Focus ×${n1(m.ramp)}`);
-      if (m.fireField) tags.push('Fire field');
+      if (m.fireField) tags.push(m.fireField.rad ? 'Radiation' : 'Fire field');
       if (m.cluster) tags.push(`Cluster ×${m.cluster.count}`);
       const apT = apTier(m);
       tags.push(apT === 'full' ? 'AP full' : apT === 'half' ? 'AP ½' : 'AP 0');

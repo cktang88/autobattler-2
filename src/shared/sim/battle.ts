@@ -481,6 +481,8 @@ interface FireField {
   moduleId: string;
   /** s until the next ignition pulse */
   pulse: number;
+  /** radioactive zone: damages hulls inside directly (armor-piercing, air too) instead of setting them alight */
+  rad: boolean;
 }
 
 export class Battle {
@@ -2117,7 +2119,7 @@ export class Battle {
     for (const f of this.fires) {
       if (f.side !== p.side || f.moduleId !== p.moduleId) continue;
       const dx = f.x - x, dy = f.y - y;
-      if (dx * dx + dy * dy > (f.r * 0.6) ** 2) continue;
+      if (dx * dx + dy * dy > (f.r * 0.6) ** 2 || f.rad) continue;
       const fresh = f.t < ff.duration * 0.5;
       f.t = Math.max(f.t, ff.duration);
       f.dps = Math.max(f.dps, dps);
@@ -2125,8 +2127,8 @@ export class Battle {
       return;
     }
     if (this.fires.length >= MAX_FIRES) return;
-    this.fires.push({ x, y, r: ff.radius, t: ff.duration, dps, side: p.side, src: p.src, moduleId: p.moduleId, pulse: 0 });
-    this.events.push({ t: 'fireField', x, y, radius: ff.radius, duration: ff.duration, moduleId: p.moduleId });
+    this.fires.push({ x, y, r: ff.radius, t: ff.duration, dps, side: p.side, src: p.src, moduleId: p.moduleId, pulse: 0, rad: !!ff.rad });
+    this.events.push({ t: 'fireField', x, y, radius: ff.radius, duration: ff.duration, moduleId: p.moduleId, rad: ff.rad || undefined });
   }
 
   /** Fire fields burn down; every BURN_EVERY they (re)ignite the enemy ground units inside. */
@@ -2141,9 +2143,14 @@ export class Battle {
         for (let q = 0; q < cnt; q++) {
           const id = this.scratch[q];
           const o = this.units[id];
-          if (!o.alive || o.side === f.side || o.flying) continue;
+          if (!o.alive || o.side === f.side || (o.flying && !f.rad)) continue;
           if (this.edgeC(this.ints[id], f.x, f.y) > f.r) continue;
-          this.ignite(o, f.dps, FIELD_BURN, f.side, f.src, f.moduleId);
+          if (f.rad) {
+            // fallout: a pulse of damage that ignores armor (shields still soak it), fading as the zone decays
+            this.dmgSrc = f.src;
+            this.damage(o, f.dps * BURN_EVERY * Math.min(1, 0.4 + f.t / 10), 1, 1, f.side, f.moduleId, o.x, o.y);
+            this.dmgSrc = -1;
+          } else this.ignite(o, f.dps, FIELD_BURN, f.side, f.src, f.moduleId);
         }
       }
       if (f.t > 0) this.fires[wi++] = f;

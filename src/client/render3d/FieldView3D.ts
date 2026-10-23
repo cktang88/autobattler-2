@@ -99,7 +99,7 @@ function famOf(def: ModuleDef | undefined): Fam {
   if (def.heal) return 'heal';
   const v = def.visual, pk = def.projectile ?? 'bullet', pellets = def.pellets ?? 1;
   if (def.category === 'melee') return 'melee';
-  if (def.fireField && pk === 'arc') return 'firebomb';
+  if (def.fireField && pk === 'arc' && def.mount !== 'XL') return 'firebomb'; // the doomsday's burning craters keep its artillery look
   if (def.cluster) return 'cluster';
   switch (def.category) {
     case 'machinegun':
@@ -1599,7 +1599,7 @@ export class FieldView3D implements BattleView {
         fx.smokeScreen(e.x, e.y, e.radius, e.duration);
         break;
       case 'fireField':
-        fx.fireField(e.x, e.y, e.radius, e.duration);
+        if (e.rad) fx.radField(e.x, e.y, e.radius, e.duration); else fx.fireField(e.x, e.y, e.radius, e.duration);
         break;
       default:
     }

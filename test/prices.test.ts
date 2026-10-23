@@ -54,6 +54,7 @@ test('per-unit price x squad is the block price, and the garage breakdown rows a
   assert.equal(fmtUnitPrice(9.375), '9.4');
   assert.equal(fmtUnitPrice(20), '20');
   assert.equal(fmtUnitPrice(1234.5), '1235');
+  assert.equal(fmtUnitPrice(112.5), '112.5');
 });
 
 test('buying, upgrading and selling move exactly the shown supply', () => {

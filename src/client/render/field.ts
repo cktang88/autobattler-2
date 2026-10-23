@@ -1622,7 +1622,7 @@ export class FieldView {
             this.trail(p.id, x, y, 0.05, '#9a958c', 0.12, false, 0.7, 0.2, 0.05);
             break;
           }
-          if (mod?.fireField) {
+          if (mod?.fireField && !mod.fireField.rad && mod.mount !== 'XL' && mod.category !== 'energy') {
             // firebomb: a canister already alight, trailing flame and black smoke
             const r = (0.08 + 0.07 * cal) * sc;
             g.globalAlpha = 0.85;
@@ -2279,7 +2279,7 @@ export class FieldView {
           // cluster shell: the carrier bursts open over the target, then each bomblet pops where it lands (a carpet)
           if (r <= mod.cluster.splash + 0.01) fx.bomblet(e.x, e.y, Math.max(0.35, r * 0.7));
           else { fx.clusterBurst(e.x, e.y, Math.max(0.5, r * 0.6), this.liftVec(1.4)); fx.boom(e.x, e.y, r * 0.35, 'fire'); }
-        } else if (mod?.fireField) {
+        } else if (mod?.fireField && !mod.fireField.rad && mod.mount !== 'XL' && mod.category !== 'energy') {
           // firebomb: a burst of burning gel splashed outward (the patch itself comes with the 'fireField' event)
           fx.boom(e.x, e.y, Math.max(0.35, r * 0.5), 'fire');
           fx.light(e.x, e.y, r * 2.2, '#ff8030', 0.5, 0.35);
@@ -2362,6 +2362,8 @@ export class FieldView {
         break;
       }
       case 'fireField': {
+        // fallout zone: a lingering green glow with slow pulses instead of flames
+        if (e.rad) { fx.glow(e.x, e.y, e.radius * 1.2, '#7dff4a', e.duration, 0.28); for (let k = 0; k < 4; k++) fx.ring(e.x, e.y, e.radius * 0.3, e.radius, '#9dff6a', 2 + k * 3, 0.35); break; }
         fx.fireField(e.x, e.y, e.radius, e.duration, e.moduleId);
         break;
       }

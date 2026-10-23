@@ -188,19 +188,19 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  aamissile: 2.76, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 3.43, arclance: 2.95, atgm: 5.94,
+  aamissile: 1.26, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 2.22, arclance: 2.95, atgm: 11.93,
   autocannon: 2.30, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 8.69, bulwarkshield: 1.48, buzzsaw: 0.27,
   cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 14.00, heavybomb: 6.05, cruise: 7.74, disarm: 1.86,
-  dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 1.06, flak: 0.31, flamer: 0.41, gauss: 14.19,
-  gravity: 3.14, grinder: 3.99, guidedrocket: 0.99, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.93,
-  heavyflak: 1.19, hmg: 1.19, howitzer: 22.16, incendiary: 1.21, inferno: 1.41, jammer: 0.25, laser: 1.69,
-  lightrail: 37.27, massdriver: 1.75, mg: 4.05, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
-  mortar: 10.84, nanite: 0.14, napalm: 0.53, overclock: 0.21, phantom: 0.16, plasma: 5.01, plasmablade: 0.69,
+  dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 1.06, flak: 0.31, flamer: 0.61, gauss: 14.19,
+  gravity: 3.14, grinder: 3.99, guidedrocket: 0.8, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.93,
+  heavyflak: 1.19, hmg: 1.19, howitzer: 22.16, incendiary: 0.35, inferno: 0.4, jammer: 0.25, laser: 1.69,
+  lightrail: 37.27, massdriver: 0.75, mg: 3, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
+  mortar: 10.84, nanite: 0.14, napalm: 0.12, overclock: 0.21, phantom: 0.16, plasma: 5.01, plasmablade: 0.69,
   plasmaorb: 1.24, pointdef: 4.00, quad20: 0.66, railgun: 20, ram: 0.86, reactive: 0.78, repair: 12.45,
   repairM: 4.00, rocketL: 1.93, rockets: 1.90, sam: 15.40, selfdestruct: 0.14, sensor: 1.0, shield: 0.81,
-  shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 0.68, siege240: 1.53, siegeplasma: 0.53, skyfortress: 0.62,
+  shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 1, siege240: 1.53, siegeplasma: 0.85, skyfortress: 0.62,
   slowbeam: 4.95, smoke: 4.00, sniper: 16.11, sonic: 0.38, stealth: 0.44, stormcore: 0.91, stormtower: 2.55,
-  stungun: 1.67, swarm: 17.16, tactnuke: 1.51, targeting: 4.00, tesla: 2.09, titanfist: 3.06, turbo: 0.14,
+  stungun: 1.67, swarm: 3, tactnuke: 3.2, targeting: 4.00, tesla: 2.09, titanfist: 1.8, turbo: 0.14,
   twin120: 1.05, twin30: 1.99, twinlaser: 3.18, twinmg: 2.02, uplink: 0.34,
   clusterhow: 3.48, firebomb: 2.27, flechette: 5.75, grenade: 2.46,
   // [aura balance] aura strengths (uplink, dome, domeG, jammer, sensor above and these two) were set by hand after the
@@ -459,10 +459,10 @@ export const PRICE_DIV = 5;
 export function roundCost(raw: number): number {
   return roundPrice(raw / PRICE_DIV);
 }
-/** Display text of a per-unit price share (UnitStats.unitCost, = block price / squad): one decimal below 100, so that
+/** Display text of a per-unit price share (UnitStats.unitCost, = block price / squad): one decimal below 1000, so that
  *  "≈N each × squad" multiplies back to the block price. */
 export function fmtUnitPrice(v: number): string {
-  if (Number.isInteger(v) || v >= 100) return String(Math.round(v));
+  if (Number.isInteger(v) || v >= 1000) return String(Math.round(v));
   return v.toFixed(1).replace(/\.0$/, '');
 }
 /** Round an already-scaled supply amount: nearest 10 below 1000, nearest 50 above. */

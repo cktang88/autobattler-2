@@ -46,6 +46,9 @@ export const RAMPS = {
   ember: [3.0, 1.4, 0.3, 1, 2.2, 0.6, 0.05, 0.9, 0.5, 0.1, 0, 0],
   molten: [3.2, 2.0, 0.8, 1, 2.4, 0.9, 0.15, 0.9, 0.8, 0.15, 0.02, 0],
   gravity: [1.4, 0.6, 2.6, 1, 0.7, 0.25, 1.8, 0.8, 0.15, 0.02, 0.5, 0],
+  /** fallout: sickly radioactive green glow and haze */
+  rad: [1.2, 3.2, 0.6, 1, 0.5, 2.0, 0.3, 0.7, 0.1, 0.6, 0.1, 0],
+  radHaze: [0.35, 0.6, 0.22, 0.4, 0.3, 0.5, 0.2, 0.25, 0.25, 0.4, 0.18, 0],
   needle: [2.6, 3.0, 3.4, 1, 1.4, 1.8, 2.4, 0.8, 0.3, 0.4, 0.6, 0],
   /** barrel heat (spin-up guns): dull red to orange */
   heat: [1.6, 0.42, 0.08, 0.9, 1.4, 0.32, 0.05, 0.7, 0.8, 0.12, 0.02, 0],
@@ -733,6 +736,8 @@ export class Fx3D {
   /** burning ground patches (sim 'fireField') */
   private fields: { x: number; z: number; r: number; left: number; max: number; acc: number; seed: number; k: number; age: number }[] = [];
   private groundFire = new GroundFire(200);
+  /** radioactive zones (sim 'fireField' with rad): green motes rising and a drifting haze, no flames */
+  private radZones: { x: number; z: number; r: number; left: number; acc: number }[] = [];
   private time = 0;
   /** recent blast count (decays): stacked explosions dim each other so mass deaths don't blow out to white */
   private heat = 0;
@@ -778,7 +783,7 @@ export class Fx3D {
   clear(): void {
     this.add.clear(); this.fire.clear(); this.alpha.clear(); this.rings.clear(); this.aoe.clear(); this.pools.clear(); this.debris.clear(); this.scrap.clear();
     this.scorchN = 0; this.scorch.count = 0;
-    this.bolts.length = 0; this.later.length = 0; this.smokes.length = 0; this.fields.length = 0;
+    this.bolts.length = 0; this.later.length = 0; this.smokes.length = 0; this.fields.length = 0; this.radZones.length = 0;
     this.trauma = 0; this.flashA = 0;
   }
 
@@ -1230,6 +1235,13 @@ export class Fx3D {
   }
 
   /** a burning ground patch (sim 'fireField') that flickers for `dur` seconds */
+  /** a radioactive fallout zone (sim 'fireField' with rad) that glows for `dur` seconds */
+  radField(x: number, z: number, r: number, dur: number): void {
+    if (this.radZones.length >= 24) this.radZones.shift();
+    this.radZones.push({ x, z, r, left: dur, acc: 0 });
+    this.addScorch(x, z, r * 0.9);
+  }
+
   fireField(x: number, z: number, r: number, dur: number): void {
     // the sim tops up a patch that is hit again and re-announces it at the same spot: extend, don't stack
     for (const f of this.fields) {
@@ -1457,6 +1469,21 @@ export class Fx3D {
       }
     }
     this.groundFire.set(this.fields, this.time, this.hdr);
+    for (let i = this.radZones.length - 1; i >= 0; i--) {
+      const f = this.radZones[i];
+      f.left -= dt;
+      if (f.left <= 0) { this.radZones.splice(i, 1); continue; }
+      const fade = Math.min(1, f.left / 3);
+      f.acc += dt * (6 + f.r * f.r * 2.5) * this.lod * fade;
+      while (f.acc >= 1) {
+        f.acc--;
+        const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * f.r;
+        const px = f.x + Math.cos(a) * d, pz = f.z + Math.sin(a) * d;
+        // glowing motes drifting up, a low green haze, the odd bright crackle
+        this.add.emit(px, 0.1, pz, R(-0.1, 0.1), R(0.3, 0.9), R(-0.1, 0.1), R(1.2, 2.4), R(0.05, 0.1), 0.02, 0, 0.2, 0.3, 3, RAMPS.rad, this.hdr);
+        if (Math.random() < 0.25) this.alpha.emit(px, 0.3, pz, R(-0.15, 0.15), R(0.05, 0.25), R(-0.15, 0.15), R(2, 3.5), R(0.6, 1.1), R(1.4, 2.2), R(-0.3, 0.3), 0.3, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.radHaze);
+      }
+    }
     for (let i = this.smokes.length - 1; i >= 0; i--) {
       const s = this.smokes[i];
       s.left -= dt;

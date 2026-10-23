@@ -131,7 +131,7 @@ export type BattleEvent =
   | { t: 'leap'; unit: number }
   | { t: 'smoke'; x: number; y: number; radius: number; duration: number }
   /** a firebomb's burning patch on the ground (ModuleDef.fireField); lasts `duration` s */
-  | { t: 'fireField'; x: number; y: number; radius: number; duration: number; moduleId: string }
+  | { t: 'fireField'; x: number; y: number; radius: number; duration: number; moduleId: string; rad?: boolean }
   | { t: 'end'; winner: Side | -1 };
 
 export interface BattleSummary {

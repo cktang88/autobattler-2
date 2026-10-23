@@ -826,6 +826,16 @@ test('escort: stays near the escorted block; invalid escort target behaves norma
   assert.ok(run(undefined) > 8, 'no escort');
 });
 
+test('hold position: goes after artillery shelling it from out of reach, and fires once in reach', () => {
+  // shelled by a howitzer it can't reach: stops holding and closes in
+  const b = new Battle(input(5, [{ ...P('pulse', 10, 0), stance: 'holdPos' }], [P('arty', 10, 0)]));
+  const me = b.units.find((u) => u.side === 0)!, y0 = me.y;
+  let fired = false;
+  for (let i = 0; i < 1600 && !b.done && me.alive; i++) { b.step(); if (b.events.some((e) => e.t === 'fire' && e.unit === me.id)) fired = true; }
+  assert.ok(Math.abs(me.y - y0) > 4, `moved toward the guns: ${Math.abs(me.y - y0).toFixed(1)}`);
+  assert.ok(fired, 'and once in reach it fires back');
+});
+
 test('escort: a jet circles its slow ground charge instead of streaking away', () => {
   const tank = P('ironclad', 20, 2);
   const run = (escort?: number) => {

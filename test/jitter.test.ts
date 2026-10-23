@@ -34,7 +34,8 @@ for (const squad of ['buzz', 'walker']) {
     const { b, squadIds } = crammed(squad);
     let shoved = 0, moving = 0;
     const px = new Map(squadIds.map((i) => [i, [b.units[i].x, b.units[i].y]]));
-    for (let t = 0; t < 60; t++) {
+    // 2.5 s: after 3 s of being shelled from out of reach a held squad stops holding and goes for the mortar
+    for (let t = 0; t < 50; t++) {
       b.step();
       for (const i of squadIds) {
         const u = b.units[i], [x0, y0] = px.get(i)!;
@@ -44,7 +45,7 @@ for (const squad of ['buzz', 'walker']) {
         px.set(i, [u.x, u.y]);
       }
     }
-    assert.ok(shoved > 50, `setup: separation should shove the crammed squad (${shoved} shoved unit-ticks)`);
+    assert.ok(shoved > 40, `setup: separation should shove the crammed squad (${shoved} shoved unit-ticks)`);
     assert.equal(moving, 0, `parked units flagged as moving on ${moving} unit-ticks`);
   });
 }

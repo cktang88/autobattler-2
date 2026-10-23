@@ -188,7 +188,7 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.falloff != null && mod.falloff < 1) t.push('falloff');
   if (mod.spinUp) t.push(`spin-up ${n1(mod.spinUp)}s`);
   if (mod.ramp) t.push(`focus ×${n1(mod.ramp)}`);
-  if (mod.fireField) t.push(`fire field ${n1(mod.fireField.duration)}s`);
+  if (mod.fireField) t.push(mod.fireField.rad ? `radiation ${n1(mod.fireField.duration)}s` : `fire field ${n1(mod.fireField.duration)}s`);
   if (mod.cluster) t.push(`cluster ×${mod.cluster.count}`);
   if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
   if (mod.rangeBonus) t.push(`+${Math.round(mod.rangeBonus * 100)}% unit range`);
@@ -454,7 +454,8 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.spinUp) r.push(`Spin-up: starts at a quarter of its fire rate and reaches full rate after ${n1(mod.spinUp)} s of firing; winds down when idle.`);
     if (mod.ramp) r.push(`Focus: damage builds up to ×${n1(mod.ramp)} while it stays on one target; resets on a new target or a pause.`);
     if (mod.burn) r.push(`Sets the target burning: ${mod.burn.dps} dmg/s for ${mod.burn.duration} s (armor reduces it; shields and hardening block it).`);
-    if (mod.fireField) r.push(`Leaves burning ground ${m(mod.fireField.radius)} across for ${mod.fireField.duration} s that sets enemy ground units on fire.`);
+    if (mod.fireField?.rad) r.push(`Leaves a radioactive zone ${m(mod.fireField.radius)} across for ${mod.fireField.duration} s: ${mod.fireField.dps} damage per second to every enemy inside, ground or air, ignoring armor.`);
+    else if (mod.fireField) r.push(`Leaves burning ground ${m(mod.fireField.radius)} across for ${mod.fireField.duration} s that sets enemy ground units on fire.`);
     if (mod.cluster) r.push(`Releases ${mod.cluster.count} bomblets (${mod.cluster.damage} dmg each) over ${m(mod.cluster.radius)} where it lands.`);
     if (mod.stun) r.push(`Paralyses: builds ${Math.round(mod.stun * PARA_PER_STUN)} paralysis per hit; when it passes the target's max HP the target is stunned. Shields soak it first.`);
     if (mod.slow) r.push(`Slows: each hit slows the target's movement and turning by up to ${Math.round(mod.slow * 100)}%.`);

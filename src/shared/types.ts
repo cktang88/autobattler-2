@@ -193,7 +193,9 @@ export interface ModuleDef {
   ramp?: number;
   /** arc shells: the landing leaves a burning patch (radius beyond the impact, cells) for `duration` s; enemy
    *  ground units inside are set alight at `dps` (burn rules: armour sheds heat, shields and hardened block it) */
-  fireField?: { radius: number; duration: number; dps: number };
+  /** rad: a radioactive zone instead of fire: deals its dps straight to hulls inside (armor-piercing, no burn rules),
+   *  air included */
+  fireField?: { radius: number; duration: number; dps: number; rad?: boolean };
   /** arc shells: the shell bursts on landing into `count` bomblets that scatter up to `radius` cells from the
    *  impact and each explode for `damage` with `splash` */
   cluster?: { count: number; radius: number; damage: number; splash: number };
