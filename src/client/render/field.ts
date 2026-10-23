@@ -104,6 +104,14 @@ interface UVis {
   /** visual-only knockback / recoil offset of the drawn sprite (cells), decays quickly */
   kx?: number;
   ky?: number;
+  /** spin-up guns (ModuleDef.spinUp), per mount: 0..1 barrel speed as drawn (mirrors the sim: rises while it keeps
+   *  firing, winds down after) and the battle time (s) of the last shot */
+  spin?: number[];
+  lastFire?: number[];
+  /** focusing beams (ModuleDef.ramp), per mount: unit focused, battle time focus began and of the last pulse */
+  ramp?: ({ t: number; start: number; last: number } | undefined)[];
+  /** per mount: spin-up time (s) of a spin-up gun, 0 otherwise */
+  spinT?: number[];
 }
 
 interface PSnap {
@@ -126,6 +134,8 @@ interface PTrack {
   moduleId: string;
   side: Side;
   born: number;
+  /** cluster bomblet (spawned where its carrier shell burst, not at a barrel) */
+  bomblet?: boolean;
 }
 
 /** fixed resolution (device px per cell) of the cached base ground and the decal layer */
@@ -743,8 +753,11 @@ export class FieldView {
       if (!this.ptrack.has(p.id)) {
         // projectiles spawn at their first observed position; start interpolation there
         // the sim spawns rounds at the hull edge; draw them leaving the barrel tip and blend onto the true path
-        const tip = p.src !== undefined && p.mount !== undefined && p.z <= 0.5 ? this.muzzleOf(p.src, p.mount) : null;
-        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x - this.liftVec(GUN_H).x : 0, oy: tip ? tip.y - p.y - this.liftVec(GUN_H).y : 0 });
+        // cluster bomblets start where the carrier burst, far from any barrel: no muzzle blend for them
+        const src = p.src !== undefined ? this.units.get(p.src) : undefined;
+        const bomblet = p.kind === 'arc' && !!modOf(p.moduleId)?.cluster && (!src || Math.hypot(src.x - p.x, src.y - p.y) > 6);
+        const tip = !bomblet && p.src !== undefined && p.mount !== undefined && p.z <= 0.5 ? this.muzzleOf(p.src, p.mount) : null;
+        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x - this.liftVec(GUN_H).x : 0, oy: tip ? tip.y - p.y - this.liftVec(GUN_H).y : 0, bomblet });
       }
     }
   }
@@ -792,6 +805,7 @@ export class FieldView {
     this.rt += (target - this.rt) * 0.05;
     this.rt = clamp(this.rt, this.prevTick, this.curTick);
     this.alpha = this.curTick > this.prevTick ? (this.rt - this.prevTick) / (this.curTick - this.prevTick) : 1;
+    this.fx.simT = this.rt * DT;
     if (newTick) {
       const before = this.curU;
       this.snapshot(battle);
@@ -812,8 +826,12 @@ export class FieldView {
 
     const events = newTicks ?? this.pending;
     if (events.length) {
+      this.blasts.length = 0;
+      for (const e of events) if (e.t === 'explode') this.blasts.push(e);
       for (const e of events) this.handleEvent(e);
       this.shotFrom.clear();
+      this.gone.length = 0;
+      this.flying = null;
       if (!this.muted) try { setSfxView(this.cam.k / this.cam.minK); battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
     }
@@ -831,6 +849,16 @@ export class FieldView {
       if (v.kx !== undefined) { v.kx *= kd; v.ky = (v.ky ?? 0) * kd; if (Math.abs(v.kx) + Math.abs(v.ky) < 0.001) { v.kx = undefined; v.ky = undefined; } }
       for (let i = 0; i < v.swing.length; i++) v.swing[i] = Math.max(0, v.swing[i] - dt * 3.5);
       if (v.heat) for (let i = 0; i < v.heat.length; i++) v.heat[i] = Math.max(0, v.heat[i] - dt * 0.9);
+      if (v.spin) {
+        // spin-up guns: the barrels keep spinning up while shots keep coming, and wind down without them (sim time)
+        const sdt = dt * this.tickRate * DT, now = this.fx.simT;
+        for (let i = 0; i < v.spin.length; i++) {
+          const su = v.spinT?.[i] ?? 0;
+          if (!su) continue;
+          const on = now - (v.lastFire?.[i] ?? -9) < 0.35;
+          v.spin[i] = clamp(v.spin[i] + (on ? sdt : -sdt) / su, 0, 1);
+        }
+      }
     }
 
     const g = this.g;
@@ -838,6 +866,7 @@ export class FieldView {
     this.drawGround(false, sx, sy);
     const px = this.spritePx;
     this.fx.drawWrecks(g, px);
+    this.fx.drawFields(g, px);
 
     // poses
     const ground: UnitPose[] = [], air: UnitPose[] = [];
@@ -930,6 +959,10 @@ export class FieldView {
   private giantsShown = new Map<string, number>();
   /** heat of the annihilator that fired most recently (fire event precedes its beam event) */
   private beamHeat = 0;
+  /** rounds that vanished since the last processed events (their last heading tells hits which way a round flew) */
+  private gone: { x: number; y: number; angle: number; moduleId: string }[] = [];
+  /** 'explode' events of the batch being handled (knockback dust needs the blast centre for each splash hit) */
+  private blasts: { x: number; y: number; radius: number; moduleId: string }[] = [];
 
   private visOf(u: SimUnit): UVis {
     let v = this.vis.get(u.id);
@@ -968,30 +1001,74 @@ export class FieldView {
     };
   }
 
-  /** Status looks: stunned units crackle with arcs crawling over the hull, burning units throw flames and smoke. */
+  /** Status looks (each status its own colour, matching its weapons): stunned units crackle with blue-white arcs,
+   *  burning units throw flames over an orange underglow, slowed units sit in a turning violet ring with a cold haze,
+   *  disarmed units carry a flickering red "no fire" sign. Spin-up guns glow at the barrels as they heat up. */
   private drawStatusFx(g: Ctx, list: { u: SimUnit; p: UnitPose }[], dt: number): void {
     const px = this.px;
     if (px < 5) return;
-    let shock = false;
+    let any = false, nBurn = 0;
     for (const { u, p } of list) {
       if (p.cloak === 'enemy') continue;
       if (u.burning > 0) {
+        nBurn++;
         const S = layoutOf(u.design).S;
         const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)) * 0.5);
         if (Math.random() < dt * (6 + 3 * S)) this.fx.burning(p.x + lv.x, p.y + lv.y, S);
       }
-      if (u.stun > 0) shock = true;
+      if (u.stun > 0 || u.burning > 0 || u.slow > 0.01 || u.disarm > 0 || this.vis.get(u.id)?.spin) any = true;
     }
-    if (!shock) return;
+    if (!any) return;
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
     const minW = 1 / px;
     for (const { u, p } of list) {
-      if (u.stun <= 0 || p.cloak === 'enemy') continue;
+      if (p.cloak === 'enemy') continue;
       const L = layoutOf(u.design);
-      const lv = this.liftVec(this.heightOf(p, L) * 0.55);
-      this.fx.drawShock(g, p.x + lv.x, p.y + lv.y, 0.46 * L.X, 0.46 * L.Y, p.angle, u.id, minW);
-      if (Math.random() < dt * 5) this.fx.sparks(p.x + lv.x + (Math.random() - 0.5) * L.X * 0.6, p.y + lv.y + (Math.random() - 0.5) * L.Y * 0.6, 2, '#cfe0ff', 2.2, undefined, Math.PI, 0.15, true);
+      const bs = bodyScale(L.S);
+      if (u.stun > 0) {
+        const lv = this.liftVec(this.heightOf(p, L) * 0.55);
+        this.fx.drawShock(g, p.x + lv.x, p.y + lv.y, 0.46 * L.X * bs, 0.46 * L.Y * bs, p.angle, u.id, minW);
+        if (Math.random() < dt * 5) this.fx.sparks(p.x + lv.x + (Math.random() - 0.5) * L.X * bs * 0.6, p.y + lv.y + (Math.random() - 0.5) * L.Y * bs * 0.6, 2, '#cfe0ff', 2.2, undefined, Math.PI, 0.15, true);
+      }
+      const R = Math.max(L.X, L.Y) * 0.5 * bs;
+      if (u.burning > 0) {
+        // on fire: the flames light the ground below, and tongues of flame lick up off the hull (scaled to it)
+        const f = 0.8 + 0.2 * Math.sin(this.time * 11 + u.id);
+        g.globalAlpha = 0.3 * f;
+        g.drawImage(glowTex('#ff6a20'), p.x - R * 1.3, p.y - R * 1.3, R * 2.6, R * 2.6);
+        const lv = this.liftVec(this.heightOf(p, L) * 0.7);
+        this.fx.drawBurning(g, p.x + lv.x, p.y + lv.y, R * 0.9, u.id, clamp(u.burning / 0.6, 0.35, 1), nBurn > 60);
+      }
+      if (u.slow > 0.01) {
+        const lv = this.liftVec(this.heightOf(p, L) * 0.5);
+        this.fx.drawSlow(g, p.x, p.y, p.x + lv.x, p.y + lv.y, R * 1.05 + 0.08, clamp(u.slow / 0.6, 0, 1), minW);
+      }
+      if (u.disarm > 0) {
+        const lv = this.liftVec(this.heightOf(p, L) + 0.35);
+        this.fx.drawDisarm(g, p.x + lv.x, p.y + lv.y, 0.16 + 0.05 * L.S, u.id, minW);
+      }
+      const v = this.vis.get(u.id);
+      if (v?.spin) {
+        // spin-up guns: barrels glow dull red, then orange-yellow as the cluster spins to full speed
+        for (let i = 0; i < v.spin.length; i++) {
+          const k = v.spin[i];
+          if (k < 0.05) continue;
+          const tip = this.muzzleOf(u.id, i);
+          if (!tip) continue;
+          const mod = modOf(u.mounts[i]?.moduleId);
+          const sz = (mod && moduleTier(mod) >= 4 ? 0.45 : 0.28) * (0.6 + 0.6 * k);
+          const bx = tip.x - Math.cos(tip.aim) * sz * 0.6, by = tip.y - Math.sin(tip.aim) * sz * 0.6;
+          g.globalAlpha = clamp(0.2 + 0.7 * k * k, 0, 1);
+          g.drawImage(glowTex(k > 0.75 ? '#ff9a40' : '#ff4a1a'), bx - sz, by - sz, sz * 2, sz * 2);
+          if (k > 0.6) {
+            g.globalAlpha = clamp((k - 0.6) * 2, 0, 1) * 0.8;
+            g.drawImage(glowTex('#ffe0a0'), bx - sz * 0.4, by - sz * 0.4, sz * 0.8, sz * 0.8);
+          }
+          // a heat shimmer of smoke off the barrels once it is hot
+          if (k > 0.7 && this.fx.busy < 0.5 && Math.random() < dt * 4 * k) this.fx.smoke(bx, by, sz * 0.5, 1.2, '#6a6560', this.fx.up.x * 0.4, this.fx.up.y * 0.4, 0.18, 0.3, 0.3);
+        }
+      }
     }
     g.globalAlpha = 1;
     g.globalCompositeOperation = prev;
@@ -1038,16 +1115,20 @@ export class FieldView {
     if (u.level > 1) this.drawPips(p.x, p.y, bh.hy, u.level, 0.9);
     // bars stay up while a unit carries paralysis, so stun build-up is always readable
     const vis = Math.max(this.barAlpha(v, S), u.para > 0 ? 1 : 0);
-    if (vis <= 0.01) return;
+    const status = u.burning > 0 || u.slow > 0.05 || u.disarm > 0;
+    if (vis <= 0.01 && !status) return;
     const g = this.g;
-    g.globalAlpha = vis;
-    if (S >= 4) { this.drawBossBar(u, p, v, S, bh); g.globalAlpha = 1; return; }
+    if (S >= 4) { if (vis > 0.01) { g.globalAlpha = vis; this.drawBossBar(u, p, v, S, bh); g.globalAlpha = 1; } return; }
     const s = this.worldToScreen(p.x, p.y);
     const lift = this.barLift(u, p);
     const w = Math.max(14, bh.w * this.k * 0.78);
     const h = S >= 2 ? 4 : 3;
     const x = Math.round(s.x - w / 2);
     const y = Math.round(s.y - bh.hy * this.k * this.ay * 1.04 - h - 3 - lift);
+    // status glyphs (burning / slowed / disarmed) to the left of the bar, shown even when the bar itself is hidden
+    if (status && this.k > 14) this.drawStatusIcons(u, x - 5, y + h / 2);
+    if (vis <= 0.01) return;
+    g.globalAlpha = vis;
     g.fillStyle = 'rgba(0,0,0,0.88)';
     g.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
     const f = clamp(u.hp / u.maxHp, 0, 1), fs = clamp(v.hpShown / u.maxHp, 0, 1);
@@ -1062,6 +1143,41 @@ export class FieldView {
     }
     this.drawPara(u, x, y + h + 1.5, w);
     g.globalAlpha = 1;
+  }
+
+  /** Small screen-space status glyphs, right-aligned at (x, cy): flame (burning), snowflake (slowed), no-fire sign
+   *  (disarmed). Colours match the status looks on the field. */
+  private drawStatusIcons(u: SimUnit, x: number, cy: number): void {
+    const g = this.g;
+    g.globalAlpha = 1;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    let cx = x - 4;
+    const pip = (draw: () => void) => {
+      g.fillStyle = 'rgba(0,0,0,0.78)';
+      g.beginPath(); g.arc(cx, cy, 5.5, 0, P2); g.fill();
+      draw();
+      cx -= 12;
+    };
+    if (u.disarm > 0) pip(() => {
+      g.strokeStyle = '#ff4a64'; g.lineWidth = 1.6;
+      g.beginPath(); g.arc(cx, cy, 3.6, 0, P2); g.stroke();
+      g.beginPath(); g.moveTo(cx - 2.5, cy + 2.5); g.lineTo(cx + 2.5, cy - 2.5); g.stroke();
+    });
+    if (u.slow > 0.05) pip(() => {
+      g.strokeStyle = '#c8a0ff'; g.lineWidth = 1.3;
+      g.beginPath();
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI; g.moveTo(cx - Math.cos(a) * 3.8, cy - Math.sin(a) * 3.8); g.lineTo(cx + Math.cos(a) * 3.8, cy + Math.sin(a) * 3.8); }
+      g.stroke();
+    });
+    if (u.burning > 0) pip(() => {
+      g.fillStyle = Math.sin(this.time * 12 + u.id) > 0 ? '#ff8a2a' : '#ffb040';
+      g.beginPath();
+      g.moveTo(cx, cy - 4.2); g.quadraticCurveTo(cx + 3.6, cy, cx + 2.4, cy + 2.4); g.quadraticCurveTo(cx, cy + 4.4, cx - 2.4, cy + 2.4); g.quadraticCurveTo(cx - 3.6, cy, cx, cy - 4.2);
+      g.fill();
+      g.fillStyle = '#ffe8a0';
+      g.beginPath(); g.arc(cx, cy + 1.4, 1.3, 0, P2); g.fill();
+    });
   }
 
   /** Paralysis (Zero-K style) under the hp bar: a blue meter filling toward a stun; while stunned it pulses and shows the
@@ -1161,6 +1277,10 @@ export class FieldView {
       const t = this.ptrack.get(id);
       this.ptrack.delete(id);
       if (!t) continue;
+      if (this.gone.length < 400) this.gone.push({ x: last.x, y: last.y, angle: last.angle, moduleId: t.moduleId });
+      // a fire round landing in its own weapon's burning patch keeps it alight (the sim tops it up without an event)
+      const ff = modOf(t.moduleId)?.fireField;
+      if (ff) this.fx.topUpField(last.x, last.y, ff.duration, t.moduleId);
       if (t.kind !== 'bullet' && t.kind !== 'shell' && t.kind !== 'rocket') continue;
       // extrapolate one tick forward to where it would land
       const x = last.x, y = last.y;
@@ -1172,6 +1292,7 @@ export class FieldView {
       if (x < 0 || y < 0 || x > FIELD_W || y > FIELD_H) continue;
       const fx = this.fx, cal = modOf(t.moduleId)?.caliber ?? 0.5;
       if (t.kind === 'bullet') { fx.dirtKick(x, y, 0.8 + cal); continue; }
+      if (t.kind === 'shell' && modOf(t.moduleId)?.pierce) { fx.dirtKick(x, y, 1.6); continue; } // a piercing slug spent at the end of its line: no blast
       if (t.kind === 'shell') {
         fx.shellImpact(x, y, cal);
         continue;
@@ -1190,15 +1311,16 @@ export class FieldView {
       const pos = this.projPos(p);
       // shadow on the ground under the shell
       const h = pos.z;
-      const r = 0.12 + 0.06 * h;
+      const r = (0.12 + 0.06 * h) * (t.bomblet ? 0.45 : 1);
       g.globalAlpha = clamp(0.5 - h * 0.05, 0.15, 0.5);
       g.drawImage(softDot('rgba(0,0,0,0.9)', 0.3), pos.x + this.dirs.sx * h * 0.3 - r, pos.y + this.dirs.sy * h * 0.3 - r, r * 2, r * 2);
       g.globalAlpha = 1;
       const pr = pos.progress;
-      if (pr < 0.04) continue;
+      if (pr < 0.04 || t.bomblet) continue; // bomblets: no target rings (their carrier already marked the carpet)
       const lx = t.sx + (pos.x - t.sx) / pr, ly = t.sy + (pos.y - t.sy) / pr;
       const mod = modOf(p.moduleId);
-      const rad = Math.max(0.5, mod?.splash ?? 1);
+      // cluster carriers mark the whole carpet their bomblets will cover
+      const rad = mod?.cluster ? mod.cluster.radius + mod.cluster.splash * 0.5 : Math.max(0.5, mod?.splash ?? 1);
       const enemy = p.side !== this.viewerSide;
       const col = enemy ? '#ff5a30' : '#4fe8ff';
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 10 + p.id);
@@ -1262,19 +1384,49 @@ export class FieldView {
       switch (kind) {
         case 'bullet': {
           const sniper = vis === 'sniper';
+          if (vis === 'shotgun') {
+            if (mod?.pierce) {
+              // flechette: a long, thin steel dart with a cold glint at the tip (every dart drawn; they fly on through)
+              g.strokeStyle = '#8fb8e0';
+              g.globalAlpha = 0.5;
+              g.lineCap = 'round';
+              g.lineWidth = Math.max(minW * 1.6, 0.05);
+              g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.75, y - sn * 0.75); g.stroke();
+              g.globalAlpha = 1;
+              g.strokeStyle = '#f4faff';
+              g.lineWidth = Math.max(minW, 0.024);
+              g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.42, y - sn * 0.42); g.stroke();
+              g.globalAlpha = 0.85;
+              g.drawImage(glowTex('#d8f0ff'), x - 0.07, y - 0.07, 0.14, 0.14);
+            } else {
+              // buckshot: a spray of small hot pellets (round dots with a stub of streak), no tracers
+              g.strokeStyle = '#ffd8a0';
+              g.globalAlpha = 0.6;
+              g.lineCap = 'round';
+              g.lineWidth = Math.max(minW * 1.4, 0.045);
+              g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.16, y - sn * 0.16); g.stroke();
+              g.globalAlpha = 0.9;
+              g.drawImage(glowTex('#fff0d0'), x - 0.06, y - 0.06, 0.12, 0.12);
+            }
+            break;
+          }
           const big = mod ? (moduleTier(mod) === 2 ? 1.4 : moduleTier(mod) >= 3 ? 1.8 : 1) * (0.6 + cal) : 1;
-          const len = sniper ? 0.9 : 0.22 + 0.2 * big;
-          const w = sniper ? 0.05 : 0.025 + 0.022 * big;
-          const col = sniper ? '#ff5050' : mod?.category === 'autocannon' ? '#ffb050' : '#ffe27a';
-          // every 4th round is a bright tracer with a hot head; the rest are short dim streaks
-          const tracer = sniper || (p.id & 3) === 0;
-          const L2 = tracer ? len * 1.7 : len * 0.75;
+          const rotary = vis === 'gatling', ac = mod?.category === 'autocannon';
+          const apMg = mod?.category === 'machinegun' && (mod.ap ?? 0) >= 0.4;
+          const len = sniper ? 0.9 : (ac ? 0.16 : 0.22) + 0.2 * big;
+          const w = sniper ? 0.05 : (0.025 + 0.022 * big) * (ac ? 1.25 : 1);
+          // tracer colour by family: MG yellow, suppressor violet (slows), heavy MG white-hot (AP), rotary hot orange,
+          // autocannon orange HE slugs, sniper red
+          const col = sniper ? '#ff5050' : rotary ? (ac ? '#ff7a30' : '#ff9a48') : ac ? '#ffa040' : mod?.slow ? '#c8a8ff' : apMg ? '#fff4dc' : '#ffe27a';
+          // which rounds carry a bright tracer: every 4th (MG), every 3rd (rotary), every 2nd (heavy MG), all (HE autocannon)
+          const tracer = sniper || (ac && !rotary) || (rotary ? p.id % 3 === 0 : apMg ? (p.id & 1) === 0 : (p.id & 3) === 0);
+          const L2 = tracer ? len * 1.7 : len * (rotary ? 1.1 : 0.75);
           g.strokeStyle = col;
-          g.globalAlpha = tracer ? 0.6 : 0.32;
+          g.globalAlpha = tracer ? 0.6 : rotary ? 0.5 : 0.32;
           g.lineWidth = Math.max(minW * 2, w * (tracer ? 2.8 : 1.8));
           g.lineCap = 'round';
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * L2, y - sn * L2); g.stroke();
-          g.globalAlpha = tracer ? 1 : 0.6;
+          g.globalAlpha = tracer ? 1 : rotary ? 0.85 : 0.6;
           g.strokeStyle = '#fff8e0';
           g.lineWidth = Math.max(minW, w * 0.8);
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * L2 * 0.55, y - sn * L2 * 0.55); g.stroke();
@@ -1292,23 +1444,38 @@ export class FieldView {
             g.lineWidth = Math.max(minW, 0.05);
             g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.9, y - sn * 0.9); g.stroke();
             if (t && Math.random() < dt * 30) this.fx.ring(x, y, 0.05, 0.4, '#40ffc0', 0.3, 0.5);
+            // ionised wake: a fading cyan streak left along its line
+            this.trail(p.id, x, y, 0.14, '#5fd8ff', 0.18, true);
           } else if (vis === 'flak') {
             const blink = 0.75 + 0.25 * Math.sin(this.time * 12 + p.id);
             g.globalAlpha = blink;
             g.drawImage(softDot('#ffd080', 0.3), x - 0.12, y - 0.12, 0.24, 0.24);
+          } else if (mod?.impulse) {
+            // HE shell: a fat orange-red round with a hot red nose and a smoky wake (vs the white AP needle)
+            const r = 0.1 + 0.08 * cal;
+            g.globalAlpha = 0.45;
+            g.strokeStyle = '#ff6a28';
+            g.lineCap = 'round';
+            g.lineWidth = Math.max(minW * 2.5, r * 2.4);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 5, y - sn * r * 5); g.stroke();
+            g.globalAlpha = 0.9;
+            g.drawImage(glowTex('#ff7a30'), x - r * 4, y - r * 4, r * 8, r * 8);
+            g.globalAlpha = 1;
+            g.drawImage(glowTex('#ffd0a0'), x - r * 1.4, y - r * 1.4, r * 2.8, r * 2.8);
+            this.trail(p.id, x, y, 0.09, '#6e6860', 0.11, false, 1.0, 0.3);
           } else {
             const r = 0.07 + 0.08 * cal * (mod && moduleTier(mod) === 3 ? 1.3 : 1);
-            // glowing tracer round: hot tail, bright head, soft heat bloom
+            // AP tracer: a long, thin white-hot needle with a hot tail and a small bright head
             g.globalAlpha = 0.4;
             g.strokeStyle = '#ff9a40';
             g.lineCap = 'round';
-            g.lineWidth = Math.max(minW * 2, r * 1.8);
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 7, y - sn * r * 7); g.stroke();
+            g.lineWidth = Math.max(minW * 2, r * 1.4);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 10, y - sn * r * 10); g.stroke();
             g.globalAlpha = 1;
-            g.drawImage(glowTex('#ffa050'), x - r * 3.4, y - r * 3.4, r * 6.8, r * 6.8);
-            g.strokeStyle = '#fff0d0';
-            g.lineWidth = Math.max(minW, r * 1.1);
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 3.2, y - sn * r * 3.2); g.stroke();
+            g.drawImage(glowTex('#ffc080'), x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
+            g.strokeStyle = '#ffffff';
+            g.lineWidth = Math.max(minW, r * 0.9);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 5, y - sn * r * 5); g.stroke();
             if (cal > 0.65) this.trail(p.id, x, y, 0.07 * cal, '#7a746c', 0.14, false, 0.8, 0.25);
           }
           break;
@@ -1324,14 +1491,27 @@ export class FieldView {
           const fl = 0.12 + Math.random() * 0.06;
           g.drawImage(glowTex(incend ? '#ff7820' : '#ff9a40'), x - cs * 0.27 - fl * 1.6, y - sn * 0.27 - fl * 1.6, fl * 3.2, fl * 3.2);
           g.drawImage(glowTex('#fff2c8'), x - cs * 0.24 - fl * 0.6, y - sn * 0.24 - fl * 0.6, fl * 1.2, fl * 1.2);
-          // smoke trail that persists and drifts with the wind
-          this.trail(p.id, x - cs * 0.25, y - sn * 0.25, 0.09, '#a29d94', 0.07, false, 2.2, 0.38, 0.12);
+          // smoke trail that persists and drifts with the wind (incendiary: darker, with burning gel dripping off)
+          this.trail(p.id, x - cs * 0.25, y - sn * 0.25, 0.09, incend ? '#5a524a' : '#a29d94', 0.07, false, 2.2, 0.38, 0.12);
+          if (incend && this.fx.busy < 0.6 && Math.random() < dt * 25) this.fx.fire(x - cs * 0.3, y - sn * 0.3, 0.1, 0.4, -cs * 0.5, -sn * 0.5, 0.2, hz);
           break;
         }
         case 'missile': {
           const cruise = vis === 'cruise';
           const nuke = mod?.id === 'tactnuke';
           const sz = nuke ? 1.3 : cruise ? 0.5 : mod?.id === 'swarm' ? 0.16 : mod?.id === 'missilebattery' ? 0.3 : 0.26;
+          if (mod?.id === 'atgm' && p.src !== undefined && p.mount !== undefined) {
+            // wire-guided: a faint guidance wire paid out from the launcher
+            const tip = this.muzzleOf(p.src, p.mount);
+            if (tip) {
+              g.globalCompositeOperation = prevOp;
+              g.strokeStyle = '#d8dce0';
+              g.globalAlpha = 0.35;
+              g.lineWidth = Math.max(minW * 0.6, 0.012);
+              g.beginPath(); g.moveTo(tip.x, tip.y); g.quadraticCurveTo((tip.x + x) / 2 + this.dirs.sx * 0.3, (tip.y + y) / 2 + this.dirs.sy * 0.3, x - cs * sz, y - sn * sz); g.stroke();
+              g.globalAlpha = 1;
+            }
+          }
           // ground shadow
           g.globalCompositeOperation = prevOp;
           g.globalAlpha = 0.3;
@@ -1355,33 +1535,83 @@ export class FieldView {
           break;
         }
         case 'flame': {
-          // rolling flame: white-yellow at the nozzle cooling to orange then red, with dark smoke curling off the top
-          const napalm = mod?.id === 'napalm';
+          // a rope of fire: each round is drawn as a stretched, turbulent segment of the jet (they overlap into one
+          // stream) — a thin white-yellow rope at the nozzle that widens into a rolling orange-red front, lifting as
+          // it goes, with black smoke curling off. Bodies are normal-blended (deep colour), only the core is additive,
+          // so a dozen jets on one target stay fire-coloured instead of blowing out to white.
+          const napalm = mod?.id === 'napalm' || (mod?.caliber ?? 0) >= 0.9;
           const prog = clamp(pos.progress, 0, 1);
-          const r = (0.16 + prog * 0.5) * (napalm ? 1.3 : 1) * (0.7 + 0.5 * cal);
-          const rot = p.id * 1.7 + this.time * 4;
+          const w = (0.09 + prog * 0.4) * (napalm ? 1.25 : 1) * (0.7 + 0.5 * cal);
+          const L = Math.max(0.6, w * 2.8);
+          const rise = prog * prog * 0.45;
+          const fx0 = x + this.dirs.ux * rise, fy0 = y + this.dirs.uy * rise;
+          const flick = ((this.time * 9) | 0) + p.id;
           const tr = g.getTransform();
-          g.transform(Math.cos(rot), Math.sin(rot), -Math.sin(rot), Math.cos(rot), x, y);
-          g.globalAlpha = 0.9 * (1 - prog * 0.55);
-          g.drawImage(fireTex(prog < 0.3 ? 1 : prog < 0.7 ? 2 : 3, p.id), -r, -r, r * 2, r * 2);
-          if (prog < 0.55) {
-            g.globalAlpha = 0.85 * (1 - prog * 1.7);
-            g.drawImage(fireTex(0, p.id + 1), -r * 0.5, -r * 0.5, r, r);
-          }
+          g.transform(cs, sn, -sn, cs, fx0, fy0);
+          g.globalCompositeOperation = prevOp;
+          g.globalAlpha = clamp(0.62 * (1 - prog * 0.35), 0, 1);
+          g.drawImage(fireTex(prog < 0.45 ? 2 : 3, flick), -L * 0.8, -w, L, w * 2);
+          g.globalCompositeOperation = 'lighter';
+          g.globalAlpha = clamp(0.55 * (1 - prog * 0.7), 0, 1);
+          g.drawImage(fireTex(prog < 0.3 ? 0 : 1, flick + 1), -L * 0.7, -w * 0.55, L * 0.85, w * 1.1);
+          if (prog > 0.35) { g.globalAlpha = 0.35 * (1 - prog * 0.5); g.drawImage(fireTex(2, flick + 2), -L * 0.4, -w * 1.15, L * 0.6, w * 2.3); }
           g.setTransform(tr);
-          if (Math.random() < dt * 45 && this.fx.busy < 0.6) this.fx.fire(pos.x, pos.y, r * 0.55, 0.38, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0.5 + Math.random(), hz);
-          if (Math.random() < dt * 9 && this.fx.busy < 0.5) this.fx.smoke(pos.x, pos.y, r * 0.55, 1.3, '#26221e', this.fx.wind.x * 0.4, 0, 0.32, 0.8, hz);
+          if (prog > 0.25 && Math.random() < dt * 12 && this.fx.busy < 0.55) this.fx.fire(pos.x, pos.y, w * 0.8, 0.42, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0.6 + Math.random(), hz + rise);
+          if (prog > 0.4 && Math.random() < dt * 10 && this.fx.busy < 0.5) this.fx.smoke(pos.x, pos.y, w * 0.9, 1.5, '#221e1a', this.fx.wind.x * 0.4, 0, 0.38, 0.9, hz + rise);
           if (prog > 0.3 && Math.random() < dt * 5 && this.fx.busy < 0.5) this.fx.sparks(pos.x, pos.y, 1, '#ffb050', 1.5, undefined, Math.PI, 0.5, true);
           break;
         }
         case 'arc': {
           const sc = 1 + pos.z * 0.12;
-          const r = (0.09 + 0.07 * cal) * sc;
+          if (t?.bomblet) {
+            // cluster bomblet: a tiny dark canister with a blinking red arming light, tumbling out of the burst
+            const r = 0.055 * sc;
+            g.globalCompositeOperation = prevOp;
+            g.fillStyle = '#26241f';
+            g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+            g.globalCompositeOperation = 'lighter';
+            const on = Math.sin(this.time * 30 + p.id) > 0;
+            g.globalAlpha = on ? 1 : 0.35;
+            g.drawImage(glowTex('#ff4a30'), x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+            break;
+          }
+          if (vis === 'mortar' && cal < 0.4) {
+            // grenade: a small olive-drab egg tumbling end over end, a blinking fuse, a thin wisp of smoke
+            const r = 0.055 * sc, rot = this.time * 14 + p.id;
+            g.globalCompositeOperation = prevOp;
+            g.fillStyle = '#3e4a2a';
+            g.beginPath(); g.ellipse(x, y, r * 1.35, r * 0.9, rot, 0, Math.PI * 2); g.fill();
+            g.fillStyle = '#8a9a68';
+            g.beginPath(); g.arc(x - r * 0.35, y - r * 0.3, r * 0.35, 0, Math.PI * 2); g.fill();
+            g.globalCompositeOperation = 'lighter';
+            g.globalAlpha = Math.sin(this.time * 24 + p.id) > 0 ? 0.9 : 0.3;
+            g.drawImage(glowTex('#ffd080'), x - r * 1.6, y - r * 1.6, r * 3.2, r * 3.2);
+            this.trail(p.id, x, y, 0.05, '#9a958c', 0.12, false, 0.7, 0.2, 0.05);
+            break;
+          }
+          if (mod?.fireField) {
+            // firebomb: a canister already alight, trailing flame and black smoke
+            const r = (0.08 + 0.07 * cal) * sc;
+            g.globalAlpha = 0.85;
+            g.drawImage(glowTex('#ff6a18'), x - r * 3.4, y - r * 3.4, r * 6.8, r * 6.8);
+            g.globalAlpha = 1;
+            g.drawImage(fireTex(1, p.id), x - r * 1.4, y - r * 1.4, r * 2.8, r * 2.8);
+            if (this.fx.busy < 0.6 && Math.random() < dt * 40) this.fx.fire(pos.x, pos.y, r * 1.2, 0.35, 0, 0, 0, hz);
+            this.trail(p.id, x, y, 0.09 * sc, '#2a2622', 0.1, false, 1.4, 0.35, 0.1);
+            break;
+          }
+          const r = (0.09 + 0.07 * cal) * sc * (mod?.cluster ? 1.25 : 1);
           g.globalCompositeOperation = prevOp;
           g.fillStyle = '#2a2a28';
           g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
           g.fillStyle = '#9a9a90';
           g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.4, 0, Math.PI * 2); g.fill();
+          if (mod?.cluster) {
+            // cluster carrier: a yellow band round the body (sub-munitions inside)
+            g.strokeStyle = '#e8c040';
+            g.lineWidth = Math.max(minW, r * 0.35);
+            g.beginPath(); g.arc(x, y, r * 0.8, 0, Math.PI * 2); g.stroke();
+          }
           g.globalCompositeOperation = 'lighter';
           g.globalAlpha = 0.6;
           g.drawImage(glowTex('#ffb060'), x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
@@ -1513,6 +1743,58 @@ export class FieldView {
     return best;
   }
 
+  /** Focusing beam state of a mount (mirrors the sim's ramp: RAMP_TIME 2.5 s on one target, reset by a switch or a pause
+   *  over 1 s): 0..1 focus after this pulse. */
+  private rampOf(unit: number, mount: number, target: number, ramp: number): number {
+    const u = this.units.get(unit);
+    if (!u) return 0;
+    const v = this.visOf(u), now = this.fx.simT;
+    if (!v.ramp) v.ramp = [];
+    let r = v.ramp[mount];
+    if (!r || r.t !== target || now - r.last > 1) r = v.ramp[mount] = { t: target, start: now, last: now };
+    r.last = now;
+    return ramp > 1 ? clamp((now - r.start) / 2.5, 0, 1) : 0;
+  }
+
+  /** The blast of `moduleId` in this event batch nearest (x, y) (splash hits are reported at the struck unit). */
+  private blastNear(moduleId: string, x: number, y: number): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null, bd = 9;
+    for (const b of this.blasts) {
+      if (b.moduleId !== moduleId) continue;
+      const d = (b.x - x) ** 2 + (b.y - y) ** 2;
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+
+  /** rounds in flight by module, built lazily once per event batch (piercing rounds fly on after a hit) */
+  private flying: Map<string, SimProjectile[]> | null = null;
+
+  /** Heading of the round of `moduleId` that struck near (x, y): one that vanished there since the last batch, or one
+   *  still in flight close by (piercing). NaN when there is none. */
+  private hitDir(moduleId: string, x: number, y: number): number {
+    let best = NaN, bd = 2.5 * 2.5;
+    for (const q of this.gone) {
+      if (q.moduleId !== moduleId) continue;
+      const d = (q.x - x) ** 2 + (q.y - y) ** 2;
+      if (d < bd) { bd = d; best = q.angle; }
+    }
+    if (!this.flying) {
+      this.flying = new Map();
+      for (const p of this.battle?.projectiles ?? []) {
+        if (p.kind !== 'bullet' && p.kind !== 'shell') continue;
+        let l = this.flying.get(p.moduleId);
+        if (!l) this.flying.set(p.moduleId, (l = []));
+        l.push(p);
+      }
+    }
+    for (const p of this.flying.get(moduleId) ?? []) {
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < bd) { bd = d; best = p.angle; }
+    }
+    return best;
+  }
+
   /** Where a shot from (fx, fy) meets unit u's drawn hull (a rounded box), so beams and sparks land on armour instead of
    *  the middle of the sprite. Render only: the sim still resolves the hit against the whole unit. */
   private hullEdge(u: SimUnit, fx: number, fy: number, cx = u.x, cy = u.y): { x: number; y: number } {
@@ -1579,7 +1861,15 @@ export class FieldView {
             v.heat[e.mount] = Math.min(1, (v.heat[e.mount] ?? 0) + 0.3);
             this.beamHeat = v.heat[e.mount];
           }
+          if (mod?.spinUp) {
+            // spin-up guns: remember the shot; the drawn barrel speed / heat follows (see drawBattle)
+            const n = ur.u.mounts.length;
+            if (!v.spin) { v.spin = new Array(n).fill(0); v.lastFire = new Array(n).fill(-9); v.spinT = new Array(n).fill(0); }
+            v.spinT![e.mount] = mod.spinUp;
+            v.lastFire![e.mount] = this.fx.simT;
+          }
         }
+        const spin = ur && mod?.spinUp ? this.visOf(ur.u).spin?.[e.mount] ?? 0 : 0;
         const cs = Math.cos(e.angle), sn = Math.sin(e.angle);
         const cal = mod?.caliber ?? 0.5;
         const glowC = moduleGlow(mod, TEAM_PAL[ur ? this.teamOf(ur.u.side) : 0]);
@@ -1618,10 +1908,22 @@ export class FieldView {
         switch (vis) {
           case 'gun': case 'gatling': case 'shotgun': case 'sniper': case 'flak': case 'cannon': case 'artillery': case 'gauss': {
             const heavy = vis === 'cannon' || vis === 'artillery' || vis === 'gauss';
-            const r = Math.max(0.2, d * (0.5 + cal * 0.7)) * (heavy ? 1.1 : 1) * (vis === 'shotgun' ? 1.4 : 1);
-            const col = vis === 'gauss' ? '#9fe8ff' : vis === 'sniper' ? '#ffe6c0' : mod?.category === 'autocannon' ? '#ffb858' : '#ffd890';
+            const dart = vis === 'shotgun' && !!mod?.pierce;
+            const r = Math.max(0.2, d * (0.5 + cal * 0.7)) * (heavy ? 1.1 : 1) * (vis === 'shotgun' ? (dart ? 1.1 : 1.4) : 1) * (vis === 'gatling' ? 0.7 + 0.5 * spin : 1);
+            const col = vis === 'gauss' ? '#9fe8ff' : vis === 'sniper' ? '#ffe6c0' : dart ? '#e8f4ff' : mod?.slow ? '#e8d8ff' : mod?.category === 'autocannon' ? '#ffb858' : '#ffd890';
             fx.muzzle(mx, my, e.angle, r, col, heavy);
-            if (vis === 'gun' || vis === 'gatling' || vis === 'shotgun') { if (Math.random() < 0.45) fx.casing(mx - cs * d * 0.6, my - sn * d * 0.6, e.angle); }
+            if (vis === 'gun' || vis === 'gatling' || vis === 'shotgun') { if (Math.random() < (vis === 'gatling' ? 0.25 + 0.5 * spin : dart ? 0 : 0.45)) fx.casing(mx - cs * d * 0.6, my - sn * d * 0.6, e.angle); }
+            if (vis === 'shotgun') {
+              // scatter guns: a short, wide blast; flechettes add a cold glint of steel leaving in a cone
+              fx.cone(mx, my, e.angle, r * 0.9, r * 1.3, dart ? '#d8ecff' : '#ffc070', 0.05);
+              if (dart) fx.sparks(mx + cs * 0.1, my + sn * 0.1, 6, '#e8f6ff', 8, e.angle, 0.45, 0.12);
+            } else if (vis === 'gatling' && spin > 0.45) {
+              // rotary at speed: a continuous, flickering ring of fire round the barrel cluster
+              fx.glow(mx, my, r * 1.1, spin > 0.85 ? '#ffd080' : '#ffb050', 0.05, 0.35 + 0.4 * spin);
+            } else if (vis === 'gun' && mod?.category === 'autocannon') {
+              // muzzle brake: the blast vents sideways as well as forward
+              for (const sd of [-1, 1]) fx.cone(mx - cs * r * 0.1, my - sn * r * 0.1, e.angle + sd * 1.75, r * 0.65, r * 0.32, col, 0.035);
+            }
             if (heavy || vis === 'shotgun' || vis === 'sniper') {
               fx.sparks(mx, my, heavy ? 8 : 4, vis === 'gauss' ? '#bff0ff' : '#ffd890', 6, e.angle, 0.3, 0.2);
               if (mod && moduleTier(mod) === 3) fx.shake(0.12);
@@ -1647,9 +1949,16 @@ export class FieldView {
             break;
           }
           case 'mortar': {
-            fx.muzzle(mx, my, e.angle, 0.28, '#ffc070', true);
+            if (cal < 0.4) {
+              // grenade launcher: a soft 'thunk', a little puff, no blast
+              fx.cone(mx, my, e.angle, 0.22, 0.14, '#ffd8a0', 0.035);
+              fx.smoke(mx + cs * 0.1, my + sn * 0.1, 0.1, 1.0, '#8a867e', cs * 0.6, sn * 0.6, 0.4, 0.4, 0.2);
+              break;
+            }
+            fx.muzzle(mx, my, e.angle, 0.28, mod?.fireField ? '#ff9a40' : '#ffc070', true);
             fx.ring(mx, my, 0.05, 0.6, '#ffe0b0', 0.2, 0.5);
             fx.smoke(mx, my, 0.18, 1.6, '#77736b', 0, 0, 0.5, 0.7, 0.3);
+            if (mod?.fireField) { fx.embers(mx, my, 4, 0.3); fx.glow(mx, my, 0.4, '#ff7a20', 0.15, 0.7); }
             break;
           }
           case 'sonic':
@@ -1740,7 +2049,16 @@ export class FieldView {
           }
           case 'slowbeam': fx.beam('slow', pts, '#b47cff', 0.05, 0.22); break;
           case 'repair': fx.beam('repair', pts, '#6dff9a', 0.05, 0.25); impact = false; if (Math.random() < 0.3) fx.heal(e.x2, e.y2); break;
-          case 'emp': fx.beam('scramble', pts, glowC, 0.05, 0.28); break;
+          case 'emp': {
+            if (mod?.disarm) {
+              // disarm ray: a jagged crimson scrambler; the struck hull spits red static
+              fx.beam('scramble', pts, '#ff3a5a', 0.05, 0.28);
+              fx.sparks(e.x2, e.y2, 5, '#ff7088', 3.5, back, 1.4, 0.25, true);
+              fx.glow(e.x2, e.y2, 0.45, '#ff2040', 0.2, 0.6);
+              impact = false;
+            } else fx.beam('scramble', pts, glowC, 0.05, 0.28);
+            break;
+          }
           case 'gravity': {
             fx.beam('gravity', pts, '#b070ff', 0.07, 0.3);
             const dx = e.x1 - e.x2, dy = e.y1 - e.y2;
@@ -1784,6 +2102,16 @@ export class FieldView {
           case 'pointdef': fx.beam('laser', pts, '#ff6060', 0.025, 0.08); impact = false; break;
           case 'sniper': fx.beam('sniper', pts, '#ff5050', 0.04, 0.2); break;
           default: {
+            if (mod?.ramp && e.unit !== undefined && e.mount !== undefined) {
+              // focusing beam: one held line that swells, whitens and burns deeper the longer it stays on one target
+              const k = this.rampOf(e.unit, e.mount, tgt ? tgt.id : -1, mod.ramp);
+              fx.beam('laser', pts, '#ff3322', 0.03, 0.17, k);
+              fx.glow(sx, sy, 0.12 + 0.22 * k, k > 0.7 ? '#fff0e0' : '#ff8a70', 0.1, 0.5 + 0.4 * k);
+              if (q && Math.random() < 0.25 + 0.6 * k) fx.molten(e.x2, e.y2, 1 + Math.round(2 * k), k > 0.6 ? '#fff0c0' : '#ffd090');
+              if (q && Math.random() < 0.03 + 0.15 * k) { fx.hot(gx, gy, 0.25 + 0.3 * k, 1.2); if (k > 0.8) fx.decal('scorch', gx, gy, 0.18); }
+              if (q && k > 0.6 && Math.random() < 0.15) fx.smoke(gx, gy, 0.1, 1.2, '#3a342e', 0, 0, 0.3, 0.8, 0.3);
+              break;
+            }
             // pulse lasers: a short, hard red pulse (team colour read from the hull, not the beam)
             fx.beam('laser', pts, '#ff3322', 0.03, 0.09);
             if (q && Math.random() < 0.35) fx.molten(e.x2, e.y2, 1, '#ffd090');
@@ -1825,10 +2153,13 @@ export class FieldView {
         if (e.damage > 0) this.visOf(ur).dmgT = this.time;
         // the hull is drawn interpolated (a tick behind the sim): hits flash on it as drawn
         const dr = this.unitRender(ur.id) ?? ur;
+        // which way the round was flying (projectile weapons whose look depends on it: AP, piercing, knockback)
+        const dirMod = !!mod && !mod.spinUp && (mod.projectile === 'bullet' || mod.projectile === 'shell') && (!!mod.pierce || !!mod.impulse || (mod.ap ?? 0) >= 0.45);
+        const flew = dirMod ? this.hitDir(mod!.id, e.x, e.y) : NaN;
         // direct hits (beams, rails, arcs, splash) are reported at the unit centre: move them to the edge facing the shooter
         if ((e.x - ur.x) ** 2 + (e.y - ur.y) ** 2 < 0.01) {
           const from = this.shotFrom.get(ur.id);
-          const a = from ? Math.atan2(from.y - dr.y, from.x - dr.x) : Math.random() * Math.PI * 2;
+          const a = from ? Math.atan2(from.y - dr.y, from.x - dr.x) : !Number.isNaN(flew) ? flew + Math.PI : Math.random() * Math.PI * 2;
           const far = { x: dr.x + Math.cos(a) * 50, y: dr.y + Math.sin(a) * 50 };
           const r = shieldR(layoutOf(ur.design));
           const p = e.shieldHit ? { x: dr.x + Math.cos(a) * r, y: dr.y + Math.sin(a) * r } : this.hullEdge(ur, far.x, far.y, dr.x, dr.y);
@@ -1859,8 +2190,34 @@ export class FieldView {
         if (vis === 'repair') break;
         if (vis === 'flamer') { fx.flameHit(e.x, e.y, 0.6 + (mod?.caliber ?? 0.3)); break; }
         if (vis === 'heatray') break;
-        const col = mod?.category === 'energy' ? '#ffd8a0' : vis === 'tesla' || vis === 'emp' ? '#dfe8ff' : '#ffe0a0';
+        const S = layoutOf(ur.design).S;
+        // knockback (impulse weapons, ground units): dirt shoved out from under the hull along the push
+        if (mod?.impulse && !ur.flying && mod.category !== 'melee') {
+          const bl = this.blastNear(mod.id, hx0, hy0);
+          const pa = bl ? Math.atan2(ur.y - bl.y, ur.x - bl.x) : flew;
+          if (!Number.isNaN(pa) && (!bl || (ur.x - bl.x) ** 2 + (ur.y - bl.y) ** 2 > 0.01)) fx.knockDust(dr.x, dr.y, pa, S, mod.impulse * 1.5);
+        }
+        if (mod?.pierce && (vis === 'shotgun' || vis === 'gauss')) {
+          // piercing rounds: they go in, and on out the far side
+          const a = Number.isNaN(flew) ? Math.atan2(dr.y - e.y, dr.x - e.x) : flew;
+          const big = vis === 'gauss';
+          fx.sparks(e.x, e.y, big ? 5 : 2, big ? '#dff8ff' : '#e8f4ff', 3, a + Math.PI, 1, 0.15, true);
+          fx.pierceExit(dr.x + al.x + Math.cos(a) * 0.25 * S * bodyScale(S), dr.y + al.y + Math.sin(a) * 0.25 * S * bodyScale(S), a, big ? '#9fe8ff' : '#dcecff', big);
+          if (big) { fx.ring(e.x, e.y, 0.05, 0.7, '#9fe8ff', 0.22, 0.8); fx.glow(e.x, e.y, 0.5, '#9fe8ff', 0.12, 0.7); }
+          break;
+        }
+        if (!Number.isNaN(flew) && (mod?.ap ?? 0) >= 0.45 && !mod?.impulse && !mod?.spinUp && mod?.category !== 'autocannon') {
+          // armour-piercing: a hard white star and spall punching on through (small for the heavy MG / sniper)
+          if (mod!.category === 'machinegun') { fx.armorHit(e.x, e.y, e.damage, '#fff0d0'); fx.sparks(e.x, e.y, 2, '#ffffff', 6, flew, 0.15, 0.12); }
+          else fx.apHit(e.x, e.y, flew, e.damage);
+          break;
+        }
+        const col = mod?.disarm ? '#ff7088' : mod?.slow ? '#d8c0ff' : mod?.category === 'energy' ? '#ffd8a0' : vis === 'tesla' || vis === 'emp' ? '#dfe8ff' : '#ffe0a0';
         fx.armorHit(e.x, e.y, e.damage, col);
+        // status-weapon touches: violet chill (slow), red static (disarm), crackle (paralysis), flames catching (burn)
+        if (mod?.slow && fx.busy < 0.7 && Math.random() < 0.6) fx.glow(e.x, e.y, 0.3, '#a070ff', 0.15, 0.55);
+        if (mod?.stun && fx.busy < 0.7) fx.bolt(e.x, e.y, 0.22, '#cfe4ff', 0.18);
+        if (mod?.burn) fx.flameHit(e.x, e.y, 0.7);
         if (mod && (mod.category === 'cannon' || mod.category === 'artillery') && e.damage >= 60 && !mod.splash && !mod.projectile) fx.shellImpact(e.x, e.y, (mod.caliber ?? 0.5) * 0.9);
         break;
       }
@@ -1879,7 +2236,30 @@ export class FieldView {
           }
           if (best) { const al = this.airLift(best); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
         }
-        if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
+        if (mod?.projectile === 'flame') {
+          // a flame jet's splash: the jet itself, its hits and the burning ground carry the look; a blast flash per
+          // round (10 a second per flamer) only blew a dozen jets on one target out to a white ball
+          if (fx.busy < 0.6 && Math.random() < 0.35) fx.fire(e.x + (Math.random() - 0.5) * r, e.y + (Math.random() - 0.5) * r, 0.12 + r * 0.12, 0.5, 0, 0, 0.8 + Math.random() * 0.6, 0.1);
+        } else if (mod?.cluster) {
+          // cluster shell: the carrier bursts open over the target, then each bomblet pops where it lands (a carpet)
+          if (r <= mod.cluster.splash + 0.01) fx.bomblet(e.x, e.y, Math.max(0.35, r * 0.7));
+          else { fx.clusterBurst(e.x, e.y, Math.max(0.5, r * 0.6), this.liftVec(1.4)); fx.boom(e.x, e.y, r * 0.35, 'fire'); }
+        } else if (mod?.fireField) {
+          // firebomb: a burst of burning gel splashed outward (the patch itself comes with the 'fireField' event)
+          fx.boom(e.x, e.y, Math.max(0.35, r * 0.5), 'fire');
+          fx.light(e.x, e.y, r * 2.2, '#ff8030', 0.5, 0.35);
+          for (let i = 0; i < 10; i++) {
+            const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 2.5;
+            fx.fire(e.x, e.y, 0.14 + Math.random() * 0.12, 0.5 + Math.random() * 0.3, Math.cos(a) * v, Math.sin(a) * v, 0.5 + Math.random(), 0.1);
+          }
+          fx.embers(e.x, e.y, 10, r);
+        } else if (vis === 'mortar' && (mod?.caliber ?? 1) < 0.4) fx.frag(e.x, e.y, Math.max(0.45, r * 0.75));
+        else if (mod?.impulse && mod.category === 'cannon') {
+          // HE shell: a bigger, wider blast whose pressure wave throws a ring of dust (the knockback)
+          fx.boom(e.x, e.y, r * 0.9, 'fire');
+          fx.shockwave(e.x, e.y, r * 1.7, '#e8d4b0', 0.5);
+          fx.shake(0.12);
+        } else if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
         else if (mod?.id === 'doomsday') { fx.boom(e.x, e.y, r * 0.8, 'big'); fx.shake(0.45); }
         else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.6, r * 0.9), 'flak', false);
         else if (vis === 'emp') fx.boom(e.x, e.y, Math.max(0.4, r), 'emp');
@@ -1937,6 +2317,10 @@ export class FieldView {
           for (let i = 0; i < 4; i++) fx.schedule(0.4 + i * 0.5, () => fx.smoke(x, y, 0.3 * S, 2.5, '#1e1c1a', 0.2, -0.3, 0.45));
         }
         fx.shake(0.1 + 0.12 * S);
+        break;
+      }
+      case 'fireField': {
+        fx.fireField(e.x, e.y, e.radius, e.duration, e.moduleId);
         break;
       }
       case 'leap': {

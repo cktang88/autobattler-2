@@ -193,6 +193,44 @@ export function ringTex(color: string, soft = false): HTMLCanvasElement {
   return c;
 }
 
+const flameCache: HTMLCanvasElement[] = [];
+export const FLAME_VARIANTS = 6;
+/** Licking flame tongue, base at the bottom-centre of the sprite, tip at the top (draw it oriented "screen up"): a hot
+ *  yellow-white root, orange body, deep red tip fading out, with a slightly curled, per-variant silhouette. 32 x 64. */
+export function flameTex(variant: number): HTMLCanvasElement {
+  const v = ((variant % FLAME_VARIANTS) + FLAME_VARIANTS) % FLAME_VARIANTS;
+  let c = flameCache[v];
+  if (c) return c;
+  c = makeCanvas(32, 64);
+  const g = ctx2d(c);
+  const R = rng(4242 + v * 97);
+  const curl = (R() - 0.5) * 9, lean = (R() - 0.5) * 6, fat = 0.85 + R() * 0.3;
+  const shape = (k: number) => {
+    // teardrop: round base (centre y = 50), sides pinching in to a curled tip
+    const w = 11 * fat * k, by = 50, ty = 64 - (60 * (0.75 + 0.25 * k));
+    g.beginPath();
+    g.moveTo(16 - w, by);
+    g.bezierCurveTo(16 - w, by + w * 1.1, 16 + w, by + w * 1.1, 16 + w, by);
+    g.bezierCurveTo(16 + w * 0.9 + lean, by - 18, 16 + curl * 0.6 + lean, ty + 16, 16 + curl, ty);
+    g.bezierCurveTo(16 + curl * 0.3 - w * 0.4, ty + 18, 16 - w * 0.9 + lean, by - 16, 16 - w, by);
+    g.closePath();
+  };
+  const lg = (a0: number, stops: [number, string][]) => {
+    const gr = g.createLinearGradient(0, 62, 0, 2);
+    for (const [o, col] of stops) gr.addColorStop(o, col.replace('A', String(a0)));
+    return gr;
+  };
+  // soft outer body, then the brighter inner flame, then the white-hot root
+  g.fillStyle = lg(0.45, [[0, 'rgba(255,150,40,A)'], [0.45, 'rgba(235,80,20,A)'], [0.8, 'rgba(160,30,10,A)'], [1, 'rgba(120,20,5,0)']]);
+  shape(1.15); g.fill();
+  g.fillStyle = lg(0.95, [[0, 'rgba(255,230,140,A)'], [0.3, 'rgba(255,160,50,A)'], [0.65, 'rgba(230,70,20,A)'], [1, 'rgba(170,30,10,0)']]);
+  shape(0.85); g.fill();
+  g.fillStyle = lg(1, [[0, 'rgba(255,255,230,A)'], [0.25, 'rgba(255,230,140,A)'], [0.5, 'rgba(255,190,80,0)'], [1, 'rgba(255,190,80,0)']]);
+  shape(0.5); g.fill();
+  flameCache[v] = c;
+  return c;
+}
+
 /** fast integer hash -> [0,1) */
 export function hash1(n: number): number {
   n = (n | 0) * 2654435761;
