@@ -81,9 +81,9 @@ export const POWER_K = 0.36;
 // Re-tuned by direct equal-supply sims (light/medium/heavy armies vs each other; giants & titans vs mixed armies):
 // bigger hulls concentrate armour and firepower far better than the analytic model credits (flat armour shrugs off
 // light weapons, no squad splash exposure), so price rises steeply with class. Previous fit (0.93/0.83 for 4/5) made
-// giants and titans win ~100% at equal cost; these values bring them to ~50%. Light squads dropped to 0.9 when bodies
+// giants and titans win ~100% at equal cost; these values bring them to ~50%. Light squads dropped to 0.85 when bodies
 // were scaled down (mountgeo bodyScale: light troopers 0.7, the rest 0.78): size-1 armies fell to ~20% vs size 2.
-export const SIZE_K: number[] = [0.9, 1.11, 1.19, 1.49, 1.49];
+export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.49, 1.49];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
