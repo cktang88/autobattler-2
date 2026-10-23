@@ -331,8 +331,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   async function duplicate() {
-    const src = clone(draft);
     if (!(await guard())) return;
+    // copy what the player kept: after "Save" that's the new edits, after "Discard" the last saved version
+    // (an unsaved new design has no saved copy, so its draft is duplicated)
+    const src = clone(saved ?? draft);
     sfx('click');
     const base = src.name.replace(/\s+Mk\s*\d+$/i, '');
     let n = 2;
