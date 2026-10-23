@@ -56,7 +56,7 @@ export interface ChassisDef {
     | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel'
     | 'mantis' | 'mech' | 'arachnid' | 'crab' | 'saucer' | 'delta' | 'warlord' | 'scorpion' | 'centipede' | 'broodmother' | 'arachne'
     | 'carriage' | 'siegeplat' | 'riot' | 'hunter' | 'juggernaut' | 'interceptor' | 'bomber'
-    | 'strikejet' | 'stratobomber' | 'heavyheli';
+    | 'strikejet' | 'stratobomber' | 'heavyheli' | 'lance' | 'monolith';
 }
 
 export interface MobilityDef {
@@ -167,6 +167,8 @@ export interface ModuleDef {
   airBonus?: number;
   /** rail/gauss: hits every enemy along its path (once each) */
   pierce?: boolean;
+  /** spinal weapon: fixed in the hull, aims only within this many radians of the hull's heading (the hull turns to aim) */
+  spinal?: number;
   /** rail: half-width (m) of the slug's path, added to each hull's width when testing what it passes through (default 0.1) */
   beamWidth?: number;
   /** rail: share of damage kept after each hull the slug passes through (default 0.6) */

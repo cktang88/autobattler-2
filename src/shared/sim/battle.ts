@@ -116,6 +116,8 @@ const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are 
  *  of guns that reach 20+ m is what made brawlers useless) */
 export const MELEE_SPRINT = 1.35;
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
+const HOLD_BREAK_IDLE = 3 * TICK_RATE; // ticks a holdPos unit sits with no target in reach before chasing whoever is hitting it
+const HOLD_BREAK_HIT = 6 * TICK_RATE; // ...if it was hit this recently (long enough to span a slow gun's reload)
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
 /** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
 const KITE_PAUSE = 0.15;
@@ -345,6 +347,8 @@ interface Internal {
   retreating: boolean;
   /** flank: swing is over, fight normally */
   flankDone: boolean;
+  /** ticks since any of this unit's weapons last held a target (hold position breaks if shot at while idle) */
+  idleT: number;
   /** escorted block index or -1 */
   escortBlock: number;
   escUnit: number;
@@ -762,7 +766,7 @@ export class Battle {
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
-      escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      idleT: 0, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
@@ -1349,6 +1353,9 @@ export class Battle {
   private updateWeapons(I: Internal): void {
     const u = I.u;
     const units = this.units;
+    let anyTarget = false;
+    for (const m of u.mounts) if (m.target >= 0) { anyTarget = true; break; }
+    I.idleT = anyTarget ? 0 : I.idleT + 1;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const m = u.mounts[mi];
       if (m.flash > 0) m.flash = Math.max(0, m.flash - DT * 6);
@@ -1405,6 +1412,7 @@ export class Battle {
         else w.preaim = -1;
       }
       if (w.bomb) m.angle = u.angle; // bomb bay: aimed by flying at the target
+      else if (w.def.spinal != null) m.angle = u.angle + clamp(angDiff(u.angle, want), -w.def.spinal, w.def.spinal); // fixed in the hull: only the hull's heading aims it
       else m.angle = slewTurret(w, m.angle, want, w.traverse * DT);
       const onTarget = w.bomb
         ? !!t && (Math.abs(angDiff(u.angle, want)) < BOMB_CONE || Math.hypot(t.x - u.x, t.y - u.y) < 1.5)
@@ -2232,8 +2240,15 @@ export class Battle {
     // Movement precedence: delay gates everything at the start; then
     //   holdPos > retreat (while active) > charge > escort > kite > flank > advance.
     if (this.tick < I.delayTicks) return;
-    if (I.stance === 'holdPos') { this.faceTarget(I); return; }
     let goal = I.goal >= 0 ? this.units[I.goal] : null;
+    if (I.stance === 'holdPos') {
+      // hold the spot, unless something keeps shooting us from out of reach: then go after it (sitting still while
+      // being picked apart helps nobody), and hold again wherever the guns can answer
+      const a = this.blockAtk[I.block];
+      const att = a >= 0 && this.tick - this.blockAtkT[I.block] <= HOLD_BREAK_HIT ? this.units[a] : null;
+      if (!att || !att.alive || I.idleT < HOLD_BREAK_IDLE || !I.hasWeapon || (att.flying ? !I.canHitA : !I.canHitG)) { this.faceTarget(I); return; }
+      goal = att;
+    }
     if (I.strafe) { this.strafeMove(I, goal); return; }
     // hovering bombers (rotor / grav lift) with empty bays fly back over their own lines and wait there to rearm
     if (this.needsResupply(I)) {

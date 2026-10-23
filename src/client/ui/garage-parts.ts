@@ -266,7 +266,10 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
     if (mod.armor) stat('armor', `+${mod.armor}`);
   }
   const trav = traverseDeg(mod);
-  if (trav !== null) {
+  if (mod.spinal != null) {
+    stat('traverse', 'fixed');
+    out.append(h('span.g-tag.slowturret', { title: `Spinal mount: fixed in the hull, fires within ${Math.round((mod.spinal * 180) / Math.PI)}° of straight ahead. The whole vehicle turns to aim it` }, 'spinal'));
+  } else if (trav !== null) {
     stat('traverse', `${trav}°/s`);
     if (trav < SLOW_TURRET_DEG) out.append(h('span.g-tag.slowturret', { title: `Turret traverse under ${SLOW_TURRET_DEG}°/s: slow to track moving targets` }, 'slow turret'));
   }
@@ -293,7 +296,8 @@ export function moduleTooltip(mod: ModuleDef): string {
     lines.push(`${firingText(mod)} · Accuracy ${accuracyLabel(mod) ?? accuracyRating(mod) + '/100'}`);
   }
   const trav = traverseDeg(mod);
-  if (trav !== null) lines.push(`Traverse ${trav}°/s${trav < SLOW_TURRET_DEG ? ' (slow turret)' : ''}`);
+  if (mod.spinal != null) lines.push(`Spinal mount: fixed in the hull, fires only within ${Math.round((mod.spinal * 180) / Math.PI)}° of straight ahead`);
+  else if (trav !== null) lines.push(`Traverse ${trav}°/s${trav < SLOW_TURRET_DEG ? ' (slow turret)' : ''}`);
   for (const rule of moduleRules(mod)) lines.push(`• ${rule}`);
   lines.push(`Weight ${mod.weight} · Complexity ${mod.cost} pts`);
   return lines.join('\n');

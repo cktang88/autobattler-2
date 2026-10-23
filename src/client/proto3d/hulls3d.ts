@@ -24,7 +24,7 @@ const RECIPES: Record<string, [number, number, number, number][]> = {
 const ALIAS: Record<string, string> = {
   scout: 'wedge', mantis: 'wedge', hunter: 'wedge', interceptor: 'wedge', pod: 'round', carriage: 'box', riot: 'fortress', juggernaut: 'fortress', crab: 'fortress',
   saucer: 'round', mech: 'hex', arachnid: 'round', warlord: 'titan', scorpion: 'goliath', centipede: 'long', siegeplat: 'long', leviathan: 'goliath',
-  broodmother: 'goliath', arachne: 'colossal', citadel: 'colossal', colossus: 'titan',
+  broodmother: 'goliath', arachne: 'colossal', citadel: 'colossal', colossus: 'titan', lance: 'long', monolith: 'fortress',
 };
 
 function addLoft(b: Bld, mat: MatLike, rows: { x: number; wb: number; wm: number; wt: number; y0: number; y1: number; y2: number; y3: number }[]): LoftInfo {
