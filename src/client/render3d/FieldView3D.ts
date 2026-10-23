@@ -33,7 +33,7 @@ const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
 interface Snap { x: number; y: number; angle: number; mounts: number[] }
-interface PSnap { x: number; y: number; z: number; angle: number }
+interface PSnap { x: number; y: number; z: number; angle: number; progress: number }
 /** per-unit presentation state */
 interface UView {
   rig: Rig;
@@ -661,7 +661,7 @@ export class FieldView3D implements BattleView {
       for (const u of battle.units) if (u.alive) this.curU.set(u.id, { x: u.x, y: u.y, angle: u.angle, mounts: u.mounts.map((m) => m.angle) });
       if (snapJump) this.prevU = new Map(this.curU);
       this.prevP = this.curP; this.curP = new Map();
-      for (const p of battle.projectiles) this.curP.set(p.id, { x: p.x, y: p.y, z: p.z, angle: p.angle });
+      for (const p of battle.projectiles) this.curP.set(p.id, { x: p.x, y: p.y, z: p.z, angle: p.angle, progress: p.progress });
       if (snapJump) this.prevP = new Map(this.curP);
       this.lastTick = battle.tick;
       this.sinceTick = 0;
@@ -863,7 +863,7 @@ export class FieldView3D implements BattleView {
     if (!c) return p;
     if (!pr) return c;
     const a = this.alpha;
-    return { x: lerp(pr.x, c.x, a), y: lerp(pr.y, c.y, a), z: lerp(pr.z, c.z, a), angle: lerpAngle(pr.angle, c.angle, a) };
+    return { x: lerp(pr.x, c.x, a), y: lerp(pr.y, c.y, a), z: lerp(pr.z, c.z, a), angle: lerpAngle(pr.angle, c.angle, a), progress: lerp(pr.progress, c.progress, a) };
   }
 
   private syncProjectiles(list: SimProjectile[], byId?: Map<number, SimUnit>): void {
@@ -896,7 +896,8 @@ export class FieldView3D implements BattleView {
       // homing anti-air missiles turn onto their target after launch: keep re-reading its height along the heading
       if (rec.air && p.kind === 'missile' && byId) rec.hEnd = this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, rec.hEnd, true);
       const arcs = p.z > 0.05 && !rec.air;
-      const H = arcs ? p.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(p.progress, 0, 1));
+      // height from the interpolated snapshot too (the sim's own z / progress are a tick ahead of x, y)
+      const H = arcs ? pos.z + 0.12 : lerp(rec.y0, rec.hEnd, clamp(pos.progress, 0, 1));
       const ang = pos.angle;
       const dx = Math.cos(ang), dz = Math.sin(ang);
       const dh = H - rec.lastH;
@@ -1127,12 +1128,13 @@ export class FieldView3D implements BattleView {
       }
       case 'heal': {
         const v = this.bu.get(e.unit);
-        if (v) { v.healT = this.time; if (Math.random() < 0.5) fx.heal(v.rig.root.position.x, v.rig.root.position.y + v.rig.height * 0.5, v.rig.root.position.z); }
+        // culled / never-drawn rigs keep a stale (or origin) transform: only units drawn last frame sparkle
+        if (v) { v.healT = this.time; if (v.posed && Math.random() < 0.5) fx.heal(v.rig.root.position.x, v.rig.root.position.y + v.rig.height * 0.5, v.rig.root.position.z); }
         break;
       }
       case 'leap': {
         const v = this.bu.get(e.unit);
-        if (v) fx.dustPuff(v.rig.root.position.x, v.rig.root.position.z, 0.5 + v.rig.S * 0.2);
+        if (v?.posed) fx.dustPuff(v.rig.root.position.x, v.rig.root.position.z, 0.5 + v.rig.S * 0.2);
         break;
       }
       case 'smoke':
