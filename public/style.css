@@ -597,11 +597,13 @@ body.db-from-deck .db-coll { box-shadow: inset 0 0 0 2px rgba(255, 90, 74, 0.5);
 /* deck builder cards: size by weight class, role chips, squad badge */
 .db-coll { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-auto-flow: row dense; }
 .db-coll .db-card.sz3 { grid-column: span 2; }
-.db-coll .db-card.sz4, .db-coll .db-card.sz5 { grid-column: span 2; grid-row: span 2; }
+.db-coll .db-card.sz4 { grid-column: span 2; grid-row: span 2; }
+.db-coll .db-card.sz5 { grid-column: span 3; grid-row: span 3; }
 .db-coll .db-card.sz1 .db-prev { height: 58px; }
 .db-coll .db-card.sz2 .db-prev { height: 84px; }
 .db-coll .db-card.sz3 .db-prev { height: 104px; }
 .db-coll .db-card.sz4 .db-prev, .db-coll .db-card.sz5 .db-prev { height: auto; flex: 1; min-height: 200px; }
+.db-coll .db-card.sz5 .db-prev { min-height: 330px; }
 .db-coll .db-card.sz4 .db-prevwrap, .db-coll .db-card.sz5 .db-prevwrap { flex: 1; display: flex; }
 .db-prevwrap { position: relative; }
 .db-squad {
