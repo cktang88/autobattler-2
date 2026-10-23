@@ -507,11 +507,21 @@ export class Battle {
     // resolve escort targets (same side, by placement uid; not itself)
     const byUid: Map<number, number>[] = [new Map(), new Map()];
     for (let b = 0; b < this.blockCount; b++) if (!byUid[this.blockSide[b]].has(this.blockUid[b])) byUid[this.blockSide[b]].set(this.blockUid[b], b);
-    for (const I of this.ints) {
-      const b = I.block;
+    const escOf: number[] = [];
+    for (let b = 0; b < this.blockCount; b++) {
       const eu = this.blockEscortUid[b];
-      const tb = eu >= 0 ? byUid[I.u.side].get(eu) : undefined;
-      I.escortBlock = tb !== undefined && tb !== b ? tb : -1;
+      const tb = eu >= 0 ? byUid[this.blockSide[b]].get(eu) : undefined;
+      escOf.push(tb !== undefined && tb !== b ? tb : -1);
+    }
+    // escorts that form a loop (A escorts B, B escorts A, ...) have nobody to follow: they huddled together for the
+    // whole battle. Every block of such a loop fights normally instead.
+    const inLoop = escOf.map((_, b) => {
+      let x = escOf[b];
+      for (let k = 0; x >= 0 && x !== b && k < this.blockCount; k++) x = escOf[x];
+      return x === b;
+    });
+    for (const I of this.ints) {
+      I.escortBlock = inLoop[I.block] ? -1 : escOf[I.block];
       if (I.hasHeal || I.aura) this.healers.push(I);
     }
     this.focusMark = new Int32Array(n);
@@ -1885,12 +1895,12 @@ export class Battle {
     // Engaged = every weapon that could hit our goal is holding a target, i.e. the whole armament is in range.
     // Until then keep closing (so a long-range gun alone doesn't park a brawler out of reach of its main guns);
     // after that, stop — there's no reason to close further unless melee or Charge.
-    let engagedDps = 0, relevantDps = 0, relevantR = 0;
+    let engagedDps = 0, relevantDps = 0, relevantR = 0, relevantMelee = false;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
       if (!w || w.heal > 0) continue;
       const tg = u.mounts[mi].target;
-      if (!goal || this.canHit(w, goal)) { relevantDps += w.dps; relevantR = Math.max(relevantR, w.range); }
+      if (!goal || this.canHit(w, goal)) { relevantDps += w.dps; relevantR = Math.max(relevantR, w.range); if (w.melee) relevantMelee = true; }
       if (tg >= 0) engagedDps += w.dps;
     }
     const engaged = engagedDps > 0 && engagedDps >= ENGAGE_SHARE * relevantDps;
@@ -1992,7 +2002,11 @@ export class Battle {
         }
         else if (engaged && !I.meleeOnly) wantMove = false; // includes fire-on-move units: hold at range, don't bum-rush
         else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
-        else if (I.fireOnMove && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false; // bombers (tiny range) fly right over the target
+        // bombers (tiny range) fly right over the target; a melee weapon still needs contact (a fire-on-move walker with
+        // a gun and a fist used to park at 70% of the gun's range, and the fist never swung), and so does a hull whose
+        // guns all sit too far back to reach from there (the 70% is measured from the hull centre, ranges from the
+        // mounts: a titan walker with rear-mounted guns parked with nothing in reach and never fired)
+        else if (I.fireOnMove && !relevantMelee && engagedDps > 0 && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false;
         else wantMove = true;
         if (!wantMove) {
           // holding: turrets do the aiming; only a gun that traverses slower than the hull turns swings the hull toward the fight
@@ -2001,10 +2015,11 @@ export class Battle {
         }
         // [mount origins] pressed against the goal's hull with no gun in reach (e.g. a rear-mounted flamer on a long
         // hull nosed into a big emplacement): pushing on gets nowhere and it sat there for good, so pivot in place to
-        // swing the longest-ranged gun's mount toward the goal instead
+        // swing the longest-ranged gun's mount toward the goal instead (one that can fire this close: a howitzer's
+        // minimum range never lets it, and picking it left a rear-mounted short gun out of reach for good)
         if (!u.flying && !goal.flying && !I.meleeOnly && engagedDps <= 0 && this.gap(I, this.ints[goal.id]) <= 0.25) {
           let bw: Wpn | null = null;
-          for (const w of I.wpns) if (w && w.heal <= 0 && !w.melee && this.canHit(w, goal) && (!bw || w.range > bw.range)) bw = w;
+          for (const w of I.wpns) if (w && w.heal <= 0 && !w.melee && w.minRange < d && this.canHit(w, goal) && (!bw || w.range > bw.range)) bw = w;
           if (bw && bw.ox * bw.ox + bw.oy * bw.oy > 0.09) {
             u.angle = turnToward(u.angle, Math.atan2(dy, dx) - Math.atan2(bw.oy, bw.ox), I.turn * DT);
             return;
