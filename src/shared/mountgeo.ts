@@ -200,6 +200,14 @@ export function meleeFront(mod: ModuleDef | null, x: number, X: number): number 
   return mod && mod.kind === 'weapon' && mod.projectile === 'melee' ? Math.max(x, 0.3 * X) : x;
 }
 
+/** How much of its footprint a hull's body fills on the battlefield, by size class. Footprints (deploy grid, squad
+ *  slots) stay whole cells; the body inside them is drawn and simulated at this scale, so light squads have room
+ *  between troopers and big hulls are small next to their weapon ranges. Sim hit shapes, mount origins and the battle
+ *  art (2D + 3D) all scale by it; the designer shows the art at full size. */
+export const bodyScale = (size: number) => (size <= 1 ? 0.7 : 0.78);
+/** Hull half-extent per footprint cell in the sim (radius = hullK * sqrt(fw * fh); boxes hullK * fw x hullK * fh). */
+export const hullK = (size: number) => 0.45 * bodyScale(size);
+
 /** Unit-size factor on turret diameters: a bigger hull carries a slightly bigger mount for the same weapon. */
 export const unitK = (S: number) => (S >= 5 ? 1.12 : S >= 4 ? 1.06 : 1 + 0.12 * (S - 1));
 

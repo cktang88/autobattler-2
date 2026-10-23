@@ -1,7 +1,7 @@
 // Design -> UnitStats, plus design validation.
 
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
-import { meleeSlots } from './mountgeo.ts';
+import { hullK, meleeSlots } from './mountgeo.ts';
 import { squadSize } from './grid.ts';
 import { REPAIR_AURA_RANGE } from './types.ts';
 import type { ChassisDef, Design, ModuleDef, UnitStats } from './types.ts';
@@ -80,8 +80,9 @@ export const POWER_K = 0.36;
 // Re-tuned by direct equal-supply sims (light/medium/heavy armies vs each other; giants & titans vs mixed armies):
 // bigger hulls concentrate armour and firepower far better than the analytic model credits (flat armour shrugs off
 // light weapons, no squad splash exposure), so price rises steeply with class. Previous fit (0.93/0.83 for 4/5) made
-// giants and titans win ~100% at equal cost; these values bring them to ~50%.
-export const SIZE_K: number[] = [1.0, 1.11, 1.19, 1.49, 1.49];
+// giants and titans win ~100% at equal cost; these values bring them to ~50%. Light squads dropped to 0.9 when bodies
+// were scaled down (mountgeo bodyScale: light troopers 0.7, the rest 0.78): size-1 armies fell to ~20% vs size 2.
+export const SIZE_K: number[] = [0.9, 1.11, 1.19, 1.49, 1.49];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
@@ -254,7 +255,7 @@ export function computeStats(d: Design): UnitStats {
   const shieldCal = mods.reduce((a, m) => a + (m.shield ?? 0) * cal(m.id), 0) / Math.max(1, shield);
   let ehpMult = 1;
   // [aura balance] support auras: analytic points x coverage x calibration, added to the unit cost below
-  const hullR = 0.45 * Math.sqrt((c.footprint?.[0] ?? size) * (c.footprint?.[1] ?? size));
+  const hullR = hullK(size) * Math.sqrt((c.footprint?.[0] ?? size) * (c.footprint?.[1] ?? size));
   let interceptors = 0; // not shared within a squad: every PD shoots down its own projectiles
   let support = traits.includes('repairAura') ? 25 * auraReach(REPAIR_AURA_RANGE, hullR) * cal('repairAura') : 0;
   for (const mod of mods) {

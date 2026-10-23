@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
-import { mountOffsets } from '../../shared/mountgeo.ts';
+import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { aimTurret, buildUnit, recoilKick, recoilRelax, type Turret, type Unit3D } from '../proto3d/index.ts';
 
@@ -95,7 +95,10 @@ export class Rig {
   constructor(tpl: Template) {
     this.tpl = tpl;
     const u = tpl.unit;
-    this.L = u.L; this.W = u.W; this.S = u.S; this.flying = u.flying; this.height = tpl.height; this.midY = tpl.midY; this.radius = u.radius;
+    // battlefield body scale (shared/mountgeo bodyScale): the whole rig shrinks about its origin, sizes follow
+    const bs = bodyScale(u.S);
+    this.root.scale.setScalar(bs);
+    this.L = u.L * bs; this.W = u.W * bs; this.S = u.S; this.flying = u.flying; this.height = tpl.height * bs; this.midY = tpl.midY * bs; this.radius = u.radius * bs;
     this.objs = tpl.nodes.map((n) => {
       if (!n.dyn) return null;
       const o = new THREE.Group();

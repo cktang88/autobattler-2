@@ -14,7 +14,7 @@ import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent, type SimUnit } from '../../shared/sim/types.ts';
 import type { UnitFoot } from '../../shared/grid.ts';
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
-import { mountOffsets } from '../../shared/mountgeo.ts';
+import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
@@ -359,7 +359,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     let best: SimUnit | null = null, bd = Infinity;
     for (const u of battle.units) {
       if (!u.alive) continue;
-      const r = 0.45 + 0.5 * u.stats.size, d = Math.hypot(u.x - w.x, u.y - w.y);
+      const r = 0.3 + 0.5 * u.stats.size * bodyScale(u.stats.size), d = Math.hypot(u.x - w.x, u.y - w.y);
       if (d < r && d < bd) { bd = d; best = u; }
     }
     return best;
@@ -1612,7 +1612,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
       const worldCenters = placementUnitCenters(t.side, t.pos, t.size, t.st);
       // units deploy facing the enemy; ranges are measured from each weapon's own mount (same offsets as the sim)
-      const offs = mountOffsets(t.design);
+      const bs = bodyScale(t.st.size), offs = mountOffsets(t.design).map((o) => ({ x: o.x * bs, y: o.y * bs }));
       const head = forwardY(t.side) < 0 ? -Math.PI / 2 : Math.PI / 2, hc = Math.cos(head), hs = Math.sin(head);
       let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
       const frame = (mounts: number[] | null) => {

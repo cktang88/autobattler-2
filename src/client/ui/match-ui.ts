@@ -8,6 +8,7 @@ import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
 import { computeStats, firingStyle, levelMult, type DefaultOrders } from '../../shared/stats.ts';
 import { fireMods, mountDps, unitDps } from './deckstats.ts';
 import { blockDims, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
+import { hullK } from '../../shared/mountgeo.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { START_DELAYS, STANCES, TARGET_PRIORITIES, type Design, type ModuleDef, type Side, type Size, type Stance, type TargetPriority, type UnitBehavior, type UnitStats } from '../../shared/types.ts';
 
@@ -258,8 +259,8 @@ export function moduleRingKey(m: ModuleDef, st: UnitStats): string | null {
 }
 /** [aura balance] a support module's radius (cells), measured from its carrier's hull edge */
 const auraRadius = (m: ModuleDef): number | undefined => m.shieldAura?.radius ?? m.fireRateAura?.radius ?? m.detect ?? m.jammer ?? m.pointDefense?.range;
-/** hull radius the sim uses for edge-to-edge distances (0.45 * sqrt(fw * fh)) */
-const hullRadius = (st: UnitStats) => 0.45 * Math.sqrt(st.fw * st.fh);
+/** hull radius the sim uses for edge-to-edge distances (hullK * sqrt(fw * fh)) */
+const hullRadius = (st: UnitStats) => hullK(st.size) * Math.sqrt(st.fw * st.fh);
 
 /** Effective sustained dps of ONE unit against ground and air targets (0 = cannot hit); x st.squad for a squad. */
 export function dpsSplit(d: Design, _st: UnitStats, level = 1): { ground: number; air: number; weapons: number } {

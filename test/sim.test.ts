@@ -6,6 +6,7 @@ import { DEPLOY_D, FIELD_H, FIELD_W, placementUnitCenters } from '../src/shared/
 import type { BattleInput } from '../src/shared/sim/types.ts';
 import { defaultOrders, validateDesign } from '../src/shared/stats.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
+import { hullK } from '../src/shared/mountgeo.ts';
 
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 
@@ -1067,9 +1068,9 @@ test('the biggest hull (10x10 weaver titan) is found by the spatial hash: splash
   const big = D('weaver', 'arachne', 'spider', ['massdriver', 'flak', 'stormtower', 'railgun']);
   assert.deepEqual(validateDesign(big), []);
   const { b, e } = duel([big, DESIGNS.find((d) => d.id === 'bulwark')!], { designId: 'bulwark' }, { designId: 'weaver', stance: 'holdPos' }, 40);
-  // impact 4.7 from the centre (0.2 outside the 4.5 hull edge), placed so the hull's hash cell lies just past the
-  // impact's gather box at the old margin
-  e.x = 42.2; e.y = 40.5;
+  // impact 0.2 outside the hull edge (hullK * 10 from the centre), placed so the hull's hash cell lies just past the
+  // impact's gather box at a too-small margin
+  e.x = 37.5 + hullK(5) * 10 + 0.2; e.y = 40.5;
   (b as unknown as { rebuildHash(): void }).rebuildHash();
   const hp0 = e.hp;
   (b as unknown as { splash(...a: unknown[]): void }).splash(37.5, 40.5, 0.3, 500, 1, 1, 0, false, 'cannon', -1, false);

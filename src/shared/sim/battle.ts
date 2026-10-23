@@ -5,7 +5,7 @@
 // auras -> projectiles -> bookkeeping -> end check.
 
 import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
-import { approxTurretD, mountOffsets } from '../mountgeo.ts';
+import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
 import { computeStats, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
@@ -92,11 +92,12 @@ const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
 const HROWS = Math.ceil(FIELD_H / CELL);
 const SAT_N = (HCOLS + 1) * (HROWS + 1);
-/** Centre-to-farthest-point radius of a hull's shape: the circle of radius 0.45 * side for square footprints, else the
- *  oriented 0.45 * fw x 0.45 * fh box that range / edge checks measure to, whose corners reach past 0.45 * longest side. */
-const boundOf = (fw: number, fh: number) => (fw === fh ? 0.45 * fw : 0.45 * Math.hypot(fw, fh));
-/** bounding radius of the largest hull (the 8x7 citadel's box corners reach 4.78, the 10x10 weaver titan 4.5), at least 4 */
-const MAX_RADIUS = CHASSIS.reduce((m, c) => Math.max(m, boundOf(c.footprint?.[0] ?? c.size, c.footprint?.[1] ?? c.size)), 4.0);
+/** Centre-to-farthest-point radius of a hull's shape: the circle of radius k * side for square footprints, else the
+ *  oriented k * fw x k * fh box that range / edge checks measure to, whose corners reach past k * longest side
+ *  (k = hullK(size), the body-scaled 0.45). */
+const boundOf = (fw: number, fh: number, size: number) => (fw === fh ? hullK(size) * fw : hullK(size) * Math.hypot(fw, fh));
+/** bounding radius of the largest hull's box corners, at least 3 */
+const MAX_RADIUS = CHASSIS.reduce((m, c) => Math.max(m, boundOf(c.footprint?.[0] ?? c.size, c.footprint?.[1] ?? c.size, c.size)), 3.0);
 
 const TAU = Math.PI * 2;
 function angDiff(a: number, b: number): number {
@@ -175,7 +176,7 @@ interface Wpn {
 interface Internal {
   u: SimUnit;
   wpns: (Wpn | null)[];
-  /** circle radius used for steering / separation broad-phase (0.45 * sqrt(fw*fh); 0.45 * size for squares) */
+  /** circle radius used for steering / separation broad-phase (hullK * sqrt(fw*fh); hullK * size for squares) */
   radius: number;
   /** non-square footprint: contact / edge-range use the oriented box */
   elong: boolean;
@@ -566,6 +567,7 @@ export class Battle {
     // [mount origins] rest-pose mount offsets (identical to the render layout) + hull size for the muzzle reach
     const offs = mountOffsets(design);
     const hullS = (CHASSIS_BY_ID.get(design.chassis) ?? CHASSIS_BY_ID.get('scout')!).size;
+    const bs = bodyScale(stats.size), hk = hullK(stats.size);
         for (const mid of design.mounts) {
       const def = mid ? MODULE_BY_ID.get(mid) ?? null : null;
       mounts.push({ moduleId: mid ?? null, angle: heading, cooldown: 0, flash: 0, target: -1 });
@@ -583,8 +585,8 @@ export class Battle {
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
         melee, cls: damageClass(def),
-        ox: melee ? 0 : offs[mounts.length - 1]?.x ?? 0, oy: melee ? 0 : offs[mounts.length - 1]?.y ?? 0,
-        muz: melee ? 0 : 0.5 * approxTurretD(def.mount, hullS),
+        ox: melee ? 0 : (offs[mounts.length - 1]?.x ?? 0) * bs, oy: melee ? 0 : (offs[mounts.length - 1]?.y ?? 0) * bs,
+        muz: melee ? 0 : 0.5 * approxTurretD(def.mount, hullS) * bs,
       };
       if (isWeapon) {
         hasWeapon = true;
@@ -631,9 +633,9 @@ export class Battle {
     };
     this.units.push(u);
     this.ints.push({
-      u, wpns, radius: 0.45 * Math.sqrt(stats.fw * stats.fh), elong: stats.fw !== stats.fh,
-      hl: 0.45 * stats.fh, hw: 0.45 * stats.fw, capR: 0.45 * Math.min(stats.fw, stats.fh), capS: 0.45 * Math.abs(stats.fh - stats.fw),
-      capAcross: stats.fw > stats.fh, bound: boundOf(stats.fw, stats.fh), mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
+      u, wpns, radius: hk * Math.sqrt(stats.fw * stats.fh), elong: stats.fw !== stats.fh,
+      hl: hk * stats.fh, hw: hk * stats.fw, capR: hk * Math.min(stats.fw, stats.fh), capS: hk * Math.abs(stats.fh - stats.fw),
+      capAcross: stats.fw > stats.fh, bound: boundOf(stats.fw, stats.fh, stats.size), mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
       speed: stats.speed, turn: stats.turn,
       fireOnMove: traits.includes('fireOnMove'), strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
@@ -1525,7 +1527,7 @@ export class Battle {
       const dx = o.x - mx, dy = o.y - my;
       const along = dx * c + dy * s;
       const O = this.ints[j];
-      const ob = O.elong ? O.capS + O.capR : O.bound; // hull reach of 0.45 * longest side (box corners not counted)
+      const ob = O.elong ? O.capS + O.capR : O.bound; // hull reach of hullK * longest side (box corners not counted)
       if (along < -0.3 || along > len + ob) continue;
       const perp = Math.abs(-dx * s + dy * c);
       if (perp <= ob + 0.15) this.damage(o, raw, ap, airBonus, u.side, w.def.id, o.x, o.y, fx, lm, mx, my, w.cls);

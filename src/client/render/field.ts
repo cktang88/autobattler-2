@@ -29,6 +29,7 @@ import { CREATURE_SHAPES } from './creatures.ts';
 import { battleSfx, setPanFlip, setSfxView } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../../shared/grid.ts';
 import { moduleTier } from '../../shared/parts.ts';
+import { bodyScale } from '../../shared/mountgeo.ts';
 import { Camera, CameraControls } from './camera.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import type { BattleEvent, SimProjectile, SimUnit } from '../../shared/sim/types.ts';
@@ -515,6 +516,20 @@ export class FieldView {
 
   /** ground shadow; with the tilt on, cast further along the light the taller the unit is (flyers keep their soft altitude shadow) */
   private drawShadowOf(p: UnitPose, px: number): void {
+    this.bodyScaled(p, px, (q) => this.drawShadowRaw(p, q));
+  }
+
+  /** draw a unit at its battlefield body scale (shared/mountgeo bodyScale): scaled about its centre, sprites cached
+   *  at the scaled pixel density so they stay crisp */
+  private bodyScaled(p: UnitPose, px: number, draw: (px: number) => void): void {
+    const bs = bodyScale(layoutOf(p.design).S);
+    const g = this.g, tr = g.getTransform();
+    g.translate(p.x, p.y); g.scale(bs, bs); g.translate(-p.x, -p.y);
+    draw(px * bs);
+    g.setTransform(tr);
+  }
+
+  private drawShadowRaw(p: UnitPose, px: number): void {
     if (!this.tiltOn) { drawUnitShadow(this.g, p, px, this.dirs); return; }
     const L = layoutOf(p.design);
     if (L.air || p.flying || (p.leap ?? 0) > 0.02) { drawUnitShadow(this.g, p, px, this.dirs); return; }
@@ -526,6 +541,10 @@ export class FieldView {
 
   /** the unit, raised off the ground by its height with a dark side wall (stacked cached silhouettes) joining it to the ground */
   private drawUnitOf(p: UnitPose, px: number): void {
+    this.bodyScaled(p, px, (q) => this.drawUnitRaw(p, q));
+  }
+
+  private drawUnitRaw(p: UnitPose, px: number): void {
     const g = this.g;
     if (!this.tiltOn) { drawUnit(g, p, px, this.dirs); return; }
     const L = layoutOf(p.design);
@@ -1459,7 +1478,8 @@ export class FieldView {
     if (!ur || mount < 0 || !ur.u.mounts[mount]) return null;
     const aim = this.barrelAim(ur.u, mount, ur.x, ur.y, ur.angle, ur.u.mounts[mount].angle);
     const m = muzzlePos(ur.u.design, mount, ur.x, ur.y, ur.angle, aim);
-    let mx = m.x, my = m.y;
+    const bs = bodyScale(layoutOf(ur.u.design).S);
+    let mx = ur.x + (m.x - ur.x) * bs, my = ur.y + (m.y - ur.y) * bs;
     if (ur.u.flying) { mx += this.dirs.ux * 0.12; my += this.dirs.uy * 0.12; }
     if (this.tiltOn) {
       // barrel sits on top of the raised hull; ground rounds are then drawn from the shared gun line (see drawProjectiles)

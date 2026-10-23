@@ -12,7 +12,7 @@ import path from 'node:path';
 import { Battle } from '../src/shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE } from '../src/shared/sim/types.ts';
 import { CHASSIS, MOBILITY, MODULES, MODULE_BY_ID, pairingError } from '../src/shared/parts.ts';
-import { artBox, mountOffsets } from '../src/shared/mountgeo.ts';
+import { artBox, hullK, mountOffsets } from '../src/shared/mountgeo.ts';
 import { PRICE_DIV, computeStats, slotError, validateDesign } from '../src/shared/stats.ts';
 import {
   PRICE_RESCALE_AT, RULES_VERSION, START_SUPPLY, designCost, isPreRescaleMatch, migrateMatch, newMatch, newPlayer,
@@ -317,7 +317,7 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   const g = (0.8 * w.range) / Math.SQRT2;
   t.x = mx + g + T.hw; t.y = my - g - T.hl;
   (b as unknown as { rebuildHash(): void }).rebuildHash();
-  assert.ok(Math.hypot(t.x - mx, t.y - my) > w.range + 0.45 * 8, 'set-up: the corner case the old pre-filter missed');
+  assert.ok(Math.hypot(t.x - mx, t.y - my) > w.range + hullK(5) * 8, 'set-up: the corner case the old pre-filter missed');
   b.step();
   assert.equal(s.mounts[0].target, t.id, 'the flamer should target the citadel corner 0.8 x range away');
 });
