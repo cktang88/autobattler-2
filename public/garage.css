@@ -163,6 +163,7 @@
 }
 .garage .g-tag { font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.12em; padding: 0 5px; line-height: 17px; box-shadow: inset 0 0 0 1px currentColor; }
 .garage .g-tag.air { color: var(--cyan); }
+.garage .g-tag.squad { color: #04201d; background: #35d6bf; font-weight: 800; padding: 0 5px; border-radius: 3px; }
 .garage .g-tag.static { color: var(--cG); }
 .garage .g-plate {
   display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;

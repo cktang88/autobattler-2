@@ -116,6 +116,7 @@ function readDesign(d: unknown, i: number): Design {
     return str(m, 40, `mount (#${i + 1})`);
   });
   const design: Design = { id, name: o.name as string, chassis: str(o.chassis, 40, 'chassis'), mobility: str(o.mobility, 40, 'mobility'), mounts };
+  if (typeof o.editedAt === 'number' && Number.isFinite(o.editedAt) && o.editedAt > 0) design.editedAt = Math.round(o.editedAt);
   if (o.behavior !== undefined) {
     if (!isObj(o.behavior)) bad(`Invalid behavior (#${i + 1})`);
     design.behavior = readBehavior(o.behavior as Record<string, unknown>, 'behavior');

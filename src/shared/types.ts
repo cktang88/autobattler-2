@@ -243,6 +243,8 @@ export interface Design {
   mounts: (string | null)[];
   /** default battle AI for blocks of this design (overridable per placement) */
   behavior?: UnitBehavior;
+  /** last time the player saved this design (ms epoch; starters have none) */
+  editedAt?: number;
 }
 
 /** Derived stats of a design (see stats.ts). */

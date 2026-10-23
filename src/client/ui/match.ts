@@ -15,7 +15,7 @@ import { MAX_TICKS, TICK_RATE, type BattleEvent, type SimUnit } from '../../shar
 import type { UnitFoot } from '../../shared/grid.ts';
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
 import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
-import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
+import { battleInputFor, MAX_BLOCKS, MAX_SIM_UNITS, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
 import { type DeployAction, type Design, type MatchState, type Placement, type RoundRecord, type Side, type Size, type UnitConfig, type UnitStats } from '../../shared/types.ts';
@@ -225,6 +225,42 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const topbar = h('div.mbar', null, leaveBtn, hpMe, roundEl, hpFoe);
 
   const supplyVal = h('div.val');
+  // army caps: blocks (purchases) and simulated units (a light squad is 16 of them)
+  const capEl = h('div.capmeter');
+  let capWarned = false;
+  function capUse() {
+    let units = 0;
+    for (const p of me().board) units += squadOf(designOf(side, p.designId));
+    for (const p of place) units += squadOf(designOf(side, p.designId));
+    return { blocks: me().board.length + place.length, units };
+  }
+  /** why buying one more block of d would break a cap (null = fits) */
+  function capBlock(d: Design | undefined): string | null {
+    if (!d) return null;
+    const u = capUse();
+    if (u.blocks + 1 > MAX_BLOCKS) return `Block cap reached (${MAX_BLOCKS} blocks)`;
+    const sq = squadOf(d);
+    if (u.units + sq > MAX_SIM_UNITS) return `Unit cap: ${u.units}/${MAX_SIM_UNITS} units on the field, ${d.name} adds ${sq}`;
+    return null;
+  }
+  function renderCaps() {
+    const u = capUse();
+    const fb = u.blocks / MAX_BLOCKS, fu = u.units / MAX_SIM_UNITS, f = Math.max(fb, fu);
+    const lvl = f >= 1 ? 'full' : f >= 0.8 ? 'warn' : '';
+    const left = Math.min(MAX_BLOCKS - u.blocks, MAX_SIM_UNITS - u.units);
+    const bar = (label: string, v: number, max: number, tip: string) => h('div.cap-row', { title: tip, class: v >= max ? 'full' : v / max >= 0.8 ? 'warn' : '' },
+      h('span', null, label), h('div.cap-bar', null, h('i', { style: { width: `${Math.min(100, (100 * v) / max)}%` } })), h('b', null, `${v}/${max}`));
+    capEl.className = `capmeter ${lvl}`;
+    capEl.replaceChildren(
+      bar('Units', u.units, MAX_SIM_UNITS, `Every unit on your side counts (a light squad is 16). Max ${MAX_SIM_UNITS}.`),
+      bar('Blocks', u.blocks, MAX_BLOCKS, `Each purchase is one block. Max ${MAX_BLOCKS}.`),
+      lvl ? h('div.cap-banner', null, lvl === 'full'
+        ? (u.units >= MAX_SIM_UNITS ? `Unit cap reached: ${MAX_SIM_UNITS} units on the field` : `Block cap reached: ${MAX_BLOCKS} blocks`)
+        : `Near the army cap: ${MAX_SIM_UNITS - u.units} units / ${MAX_BLOCKS - u.blocks} blocks left`) : '',
+    );
+    if (lvl && phase === 'deploy' && !capWarned) { capWarned = true; app.toast(lvl === 'full' ? 'Army cap reached — no more units fit on the field.' : `Approaching the army cap (${Math.max(0, left)} left).`, lvl === 'full' ? 'error' : 'info'); }
+    if (!lvl) capWarned = false;
+  }
   const supplyLbl = h('div.lbl', null, 'Supply', h('br'), 'remaining');
   const cardsEl = h('div.cards');
   // shop filter: what the card can do (sorted cheapest first; 1-9 follow the visible order)
@@ -269,7 +305,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const deployBtn = h('button.big.primary.deploy-btn', { onclick: () => submit() }, 'Deploy & Fight');
   const shopSpacingEl = h('div.shop-spacing.hidden');
   const sideEl = h('div.side', null,
-    h('div.side-top', null, h('div.supply', null, supplyVal, supplyLbl, h('div.spacer'), h('span.kbd-hint.muted', { style: { fontSize: '0.92rem' } }, h('kbd', null, '1-9'), ' select'))),
+    h('div.side-top', null, h('div.supply', null, supplyVal, supplyLbl, h('div.spacer'), h('span.kbd-hint.muted', { style: { fontSize: '0.92rem' } }, h('kbd', null, '1-9'), ' select')), capEl),
     filterEl,
     cardsEl,
     shopSpacingEl,
@@ -335,7 +371,11 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         c,
         h('span.key', null, String(i + 1)),
         h('span.count'),
+        st && st.squad > 1 ? h('span.card-squad', { title: `One purchase deploys a squad of ${st.squad} units` }, `×${st.squad}`) : null,
         h('div.name', null, d.name),
+        (() => { const inf = infoOf(d); return inf ? h('div.card-roles', null,
+          inf.gnd > 0 ? h('span.db-chip.gnd', { title: 'Hits ground units' }, 'GND') : null,
+          inf.air > 0 ? h('span.db-chip.air', { title: 'Hits aircraft' }, 'AIR') : null) : null; })(),
         h('div.meta', null, h('span.cost', { title: st && st.squad > 1 ? `Block price: ${st.squad} units (${st.unitCost} each)` : 'Supply price' }, st ? String(st.cost) : '?'), st && st.squad > 1 ? h('span.squad-badge', { title: `Squad of ${st.squad}` }, `×${st.squad}`) : null, h('span', null, st ? `${sizeLabel(st.size)}${st.flying ? ' · Air' : ''}` : 'invalid')),
       );
       attachDeckTip(b, d);
@@ -532,7 +572,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const n = place.filter((p) => p.designId === d.id).length;
       b.classList.toggle('sel', i === selCard);
       b.classList.toggle('poor', cost > rem);
-      b.disabled = !deploying || cost > rem || !statsOf(d);
+      const capped = deploying ? capBlock(d) : null;
+      b.classList.toggle('capped', !!capped);
+      if (capped) b.title = capped; else b.removeAttribute('title');
+      b.disabled = !deploying || cost > rem || !statsOf(d) || !!capped;
       (b.querySelector('.count') as HTMLElement).textContent = n ? `+${n}` : '';
     });
   }
@@ -543,6 +586,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (!d) return;
     if (selCard === i) { selCard = -1; hover = null; sfx('click'); renderAll(); return; }
     if (costOf(d) > remaining()) { sfx('invalid'); app.toast(`Not enough supply for ${d.name}`, 'error'); return; }
+    { const capped = capBlock(d); if (capped) { sfx('invalid'); app.toast(capped, 'error'); return; } }
     selCard = i;
     sel = null;
     multi = [];
@@ -588,6 +632,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     clearBtn.disabled = !deploying || (ops.length === 0 && cfg.size === 0);
     deployBtn.disabled = !deploying || submitting;
     deployBtn.textContent = submitting ? 'Deploying…' : 'Deploy & Fight';
+    capEl.classList.toggle('hidden', replaying);
+    if (!replaying) renderCaps();
     renderCards();
     renderShopSpacing();
   }
@@ -773,7 +819,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(sizeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
-      else t = place.length || me().board.length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : 'Tap a block to adjust it · Box select (or Shift+drag) picks several to set their orders together') : 'Pick a unit card, then tap your zone to deploy';
+      else t = place.length || me().board.length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several to set their orders together · right-drag to pan') : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -1163,7 +1209,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   /** Shift+drag on the field (deploy, no card picked): rubber-band selection of my blocks, canvas CSS px */
-  let boxSel: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  /** add: Shift / Box-select mode (a click toggles one block in the group); else a plain drag (a click is a click) */
+  let boxSel: { x0: number; y0: number; x1: number; y1: number; add: boolean } | null = null;
   function drawBox() {
     if (!boxSel) { boxEl.classList.add('hidden'); return; }
     const l = Math.min(boxSel.x0, boxSel.x1), t = Math.min(boxSel.y0, boxSel.y1);
@@ -1197,9 +1244,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     lpDone = false;
     clearTimeout(lpTimer);
     moveDrag = null;
-    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0 && (e.shiftKey || boxMode)) {
+    // box select: Shift / Box-select mode always; with a mouse, any left-drag that starts off your new blocks (those
+    // drag-move). A click without dragging still selects normally (see pointerup). Right/middle-drag pans.
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0
+      && (e.shiftKey || boxMode || (e.pointerType === 'mouse' && !myPendingAt(local(e).px, local(e).rawY)))) {
       const { px, rawY } = local(e);
-      boxSel = { x0: px, y0: rawY, x1: px, y1: rawY };
+      boxSel = { x0: px, y0: rawY, x1: px, y1: rawY, add: e.shiftKey || boxMode };
       view.controls.enabled = false; // this gesture draws the selection box, not a camera pan
       try { canvas.setPointerCapture(e.pointerId); } catch { /* */ }
       return;
@@ -1300,7 +1350,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       boxSel = null;
       drawBox();
       view.controls.enabled = true;
-      if (Math.abs(b.x1 - b.x0) < 6 && Math.abs(b.y1 - b.y0) < 6) {
+      const tiny = Math.abs(b.x1 - b.x0) < 6 && Math.abs(b.y1 - b.y0) < 6;
+      if (tiny && !b.add) {
+        // a plain click, not a drag: fall through to the normal click handling below
+      } else if (tiny) {
         // shift-click: add / remove one of my blocks to the group
         const hit = unitAt(b.x0, b.y0);
         if (!hit || hit.side !== side) return;
@@ -1308,9 +1361,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         const has = cur.some((x) => x.uid === hit.uid && x.pending === hit.pending);
         selectBlocks(has ? cur.filter((x) => !(x.uid === hit.uid && x.pending === hit.pending)) : [...cur, hit]);
         return;
+      } else {
+        selectBlocks(blocksInBox(b));
+        return;
       }
-      selectBlocks(blocksInBox(b));
-      return;
     }
     if (endMove(true)) return; // a drag-move, not a click
     if (lpDone) { lpDone = false; return; }

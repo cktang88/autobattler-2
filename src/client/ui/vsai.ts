@@ -9,7 +9,7 @@ import { currentSession } from '../net.ts';
 import type { AiDifficulty } from '../../shared/ai.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
 import type { Design } from '../../shared/types.ts';
-import { paintPreview } from './match-ui.ts';
+import { paintPreview, sizeLabel } from './match-ui.ts';
 import * as kit from './kit.ts';
 import { CAPS, analyzeDeck, designInfo, type Cap, type DesignInfo } from './deckstats.ts';
 
@@ -23,8 +23,10 @@ const DIFFS: { id: AiDifficulty; name: string; desc: string }[] = [
   { id: 'hard', name: 'Hard', desc: 'Counters your army and spends every credit.' },
 ];
 
-type Sort = 'cost' | 'costDesc' | 'name' | 'range' | 'speed' | 'dps';
+type Sort = 'edited' | 'size' | 'cost' | 'costDesc' | 'name' | 'range' | 'speed' | 'dps';
 const SORTS: { value: Sort; label: string }[] = [
+  { value: 'edited', label: 'Last edited' },
+  { value: 'size', label: 'Weight class' },
   { value: 'cost', label: 'Cost: low to high' },
   { value: 'costDesc', label: 'Cost: high to low' },
   { value: 'dps', label: 'Firepower' },
@@ -33,6 +35,8 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: 'name', label: 'Name' },
 ];
 const sorter: Record<Sort, (a: DesignInfo, b: DesignInfo) => number> = {
+  edited: (a, b) => (b.d.editedAt ?? 0) - (a.d.editedAt ?? 0) || a.cost - b.cost,
+  size: (a, b) => a.st.size - b.st.size || a.cost - b.cost,
   cost: (a, b) => a.cost - b.cost,
   costDesc: (a, b) => b.cost - a.cost,
   dps: (a, b) => b.gnd + b.air - (a.gnd + a.air),
@@ -133,24 +137,36 @@ export function vsaiScreen(app: App): Screen {
   const capBadges = (i: DesignInfo) => h('span.db-caps', null,
     ...CAPS.filter((c) => i.caps.has(c.id)).map((c) => h('span.db-cap', { class: `cap-${c.id}`, title: c.label }, CAP_ICON[c.id])));
 
+  /** what a design is at a glance: weight class, what it can shoot at, and how many units one purchase buys */
+  const roleChips = (i: DesignInfo) => {
+    const st = i.st;
+    return h('div.db-chips', null,
+      h('span.db-chip.cls', { class: `sz${st.size}`, title: `${sizeLabel(st.size)} class · footprint ${st.fw}×${st.fh} cells` }, sizeLabel(st.size)),
+      i.gnd > 0 ? h('span.db-chip.gnd', { title: `Hits ground units · ${Math.round(i.gnd)} dps per block` }, 'GND') : null,
+      i.air > 0 ? h('span.db-chip.air', { title: `Hits aircraft · ${Math.round(i.air)} dps per block` }, 'AIR') : null,
+      i.gnd <= 0 && i.air <= 0 ? h('span.db-chip.none', { title: 'No weapons' }, 'NO GUNS') : null,
+      st.flying ? h('span.db-chip.fly', { title: 'Flies: only anti-air weapons can hit it' }, 'FLYER') : null);
+  };
+
   function card(i: DesignInfo, where: 'coll' | 'deck', slot = -1): HTMLElement {
     const c = h('canvas.db-prev', { 'aria-hidden': 'true' });
     previews.push({ c, d: i.d });
     const inDeck = deck.includes(i.d.id);
     const st = i.st;
     const el = h('div.db-card', {
-      class: [where === 'coll' && inDeck ? 'in' : '', st.flying ? 'air' : ''].join(' '),
+      class: [where === 'coll' && inDeck ? 'in' : '', st.flying ? 'air' : '', `sz${st.size}`].join(' '),
       role: 'button', tabindex: '0',
       title: where === 'coll' ? (inDeck ? 'In your deck · click or drag back to remove' : 'Click or drag into your deck') : 'Drag out (or click ✕) to remove · drop another design here to replace',
       onclick: () => (where === 'deck' ? undefined : inDeck ? remove(i.d.id) : add(i.d.id)),
       onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (where === 'coll') (inDeck ? remove(i.d.id) : add(i.d.id)); } if ((e.key === 'Delete' || e.key === 'Backspace') && where === 'deck') remove(i.d.id); },
     },
-    c,
+    h('div.db-prevwrap', null, c,
+      st.squad > 1 ? h('span.db-squad', { title: `Squad: one purchase deploys ${st.squad} units` }, `×${st.squad}`) : null),
     h('div.db-name', { title: i.d.name }, i.d.name),
+    roleChips(i),
     h('div.db-meta', null,
       h('b.db-cost', { title: st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${st.unitCost} each)` : 'Supply price' }, String(i.cost)),
-      // footprint width × length in cells (same as the garage badge), not the size class squared
-      h('span', { title: st.squad > 1 ? `Squad: one purchase deploys ${st.squad} units` : 'Footprint in cells (width × length)' }, st.squad > 1 ? `×${st.squad}` : `${st.fw}×${st.fh}`),
+      st.squad > 1 ? null : h('span', { title: 'Footprint in cells (width × length)' }, `${st.fw}×${st.fh}`),
       h('span', { title: 'Longest reach' }, `${Math.round(i.rangeM)} m`)),
     capBadges(i),
     where === 'coll' && inDeck ? h('span.db-tick', { 'aria-hidden': 'true' }, '✓') : null,
