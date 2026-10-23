@@ -18,11 +18,17 @@ function write(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ }
 }
 
+/** called after every local garage write (sync.ts pushes the change to the server) */
+let onGarageWrite: (() => void) | null = null;
+export const setGarageWriteHook = (fn: (() => void) | null) => { onGarageWrite = fn; };
+
 export const loadDesigns = (): Design[] | null => read<Design[] | null>(KEY_DESIGNS, null);
-export const saveDesigns = (d: Design[]) => write(KEY_DESIGNS, d);
+export const saveDesigns = (d: Design[]) => { write(KEY_DESIGNS, d); onGarageWrite?.(); };
 /** ids of designs in the active deck (max DECK_SIZE) */
 export const loadDeckIds = (): string[] | null => read<string[] | null>(KEY_DECK, null);
-export const saveDeckIds = (ids: string[]) => write(KEY_DECK, ids);
+export const saveDeckIds = (ids: string[]) => { write(KEY_DECK, ids); onGarageWrite?.(); };
+/** replace the local garage with a server copy (no write hook: this IS the synced state) */
+export const replaceGarage = (designs: Design[], deck: string[]) => { write(KEY_DESIGNS, designs); write(KEY_DECK, deck); };
 
 export interface Settings {
   master: number; music: number; sfx: number; battleSpeed: number;

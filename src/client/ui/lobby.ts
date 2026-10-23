@@ -168,7 +168,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
     const s = currentSession();
     userBox.replaceChildren();
     refreshBtn.classList.toggle('hidden', !s);
-    if (!s) {
+    if (!s || s.auto) {
       document.title = baseTitle;
       body.replaceChildren(loginPanel());
       return;
