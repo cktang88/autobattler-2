@@ -37092,7 +37092,7 @@ function buildTurret(mod, S, kit, fixed = false, cls) {
   const yaw = new Group(), pitch = new Group(), recoil = new Group();
   yaw.add(pitch);
   pitch.add(recoil);
-  const t = { yaw, pitch, recoil, muzzles: [], fixed, shot: "tracer", rate: 0.5, r, tris: 0 };
+  const t = { yaw, pitch, recoil, muzzles: [], fixed, shot: "tracer", rate: 0.5, r, tris: 0, spinV: 0, idleSpin: 0 };
   let spinG = null;
   const C = {
     b: new Bld(),
@@ -37137,6 +37137,7 @@ function buildTurret(mod, S, kit, fixed = false, cls) {
   const segK = S >= 4 ? 1 : 0.85;
   C.b.segK = C.p.segK = C.rc.segK = C.sp.segK = segK;
   const v = mod.visual;
+  if (MELEE2.has(v)) t.idleSpin = t.spinV = 6;
   if (!fixed && v !== "plate" && !MELEE2.has(v)) deckRing(C);
   if (GUNS.has(v)) buildGun(C);
   else if (LAUNCH.has(v)) buildLauncher(C);
@@ -37162,10 +37163,16 @@ function aimTurret(t, lx, lz, dt, rate = 3) {
 }
 function recoilKick(t) {
   t.recoil.position.x = -t.r * 0.18;
+  t.spinV = 30;
 }
 function recoilRelax(t, dt) {
   t.recoil.position.x *= Math.max(0, 1 - dt * 9);
-  if (t.spin) t.spin.rotation.x += dt * (t.recoil.position.x < -0.01 ? 30 : 6);
+  if (t.spin) {
+    if (t.recoil.position.x < -0.01) t.spinV = 30;
+    else t.spinV = t.idleSpin + (t.spinV - t.idleSpin) * Math.max(0, 1 - dt * 2.5);
+    if (Math.abs(t.spinV - t.idleSpin) < 0.05) t.spinV = t.idleSpin;
+    t.spin.rotation.x = (t.spin.rotation.x + dt * t.spinV) % (Math.PI * 2);
+  }
 }
 
 // src/client/proto3d/hulls3d.ts
