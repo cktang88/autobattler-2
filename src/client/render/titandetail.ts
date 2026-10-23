@@ -419,11 +419,10 @@ function citadel(d: D, hull: Path2D): void {
   const lvl = d.lvl, h = d.h, S = d.S, g = d.g, X = d.X, Y = d.Y;
   d.weather(hull, 23, [[-0.5, 0], [-0.4, -0.35], [-0.4, 0.35]], 22);
   // ---- yard: sunken deck plates (tiled), a painted vehicle lane, reactor pad with coolant lines
-  d.floor([-0.34, -0.34, 0.34, -0.34, 0.34, 0.34, -0.34, 0.34], 0.02);
-  for (const s of [-1, 1]) d.floor([0.08, s * 0.22, 0.36, s * 0.22, 0.36, s * 0.34, 0.08, s * 0.34], 0.05);
+  d.floor([0.402, 0.0, 0.372, -0.126, 0.264, -0.263, 0.126, -0.263, 0.036, -0.21, -0.12, -0.21, -0.21, -0.263, -0.342, -0.252, -0.414, -0.137, -0.414, 0.0, -0.414, 0.137, -0.342, 0.252, -0.21, 0.263, -0.12, 0.21, 0.036, 0.21, 0.126, 0.263, 0.264, 0.263, 0.372, 0.126], 0.02);
   if (lvl >= 1) {
-    for (let u = -0.3; u < 0.35; u += 0.1) d.seam([u, -0.34, u, 0.34], 0.7);
-    for (const v of [-0.17, 0.17]) d.seam([-0.34, v, 0.34, v], 0.7);
+    for (let u = -0.3; u < 0.35; u += 0.1) d.seam([u, -0.2, u, 0.2], 0.7);
+    for (const v of [-0.17, 0.17]) d.seam([-0.3, v, 0.34, v], 0.7);
     // lane markings: dashed yellow centre line from the gate to the reactor pad
     g.strokeStyle = 'rgba(214,176,52,0.55)'; g.lineWidth = h * 2.2; g.setLineDash([d.x(0.045), d.x(0.035)]);
     g.beginPath(); g.moveTo(d.x(0.38), 0); g.lineTo(d.x(0.2), 0); g.stroke(); g.setLineDash([]);
@@ -450,18 +449,6 @@ function citadel(d: D, hull: Path2D): void {
     for (const u of [0.22, 0.26, 0.3]) d.seam([u, s * 0.055, u, s * 0.1], 1.2);
     d.hatch(0.26, s * 0.0775, 0.09, 0);
   }
-  // ---- side depots: long roofed blocks along the inner walls with hatches, vents and ID stripes
-  for (const s of [-1, 1]) {
-    d.plate([0.07, s * 0.225, 0.07, s * 0.335, -0.3, s * 0.335, -0.3, s * 0.225], -0.02, 0.9);
-    d.seam([-0.06, s * 0.23, -0.06, s * 0.33], 1); d.seam([-0.18, s * 0.23, -0.18, s * 0.33], 1);
-    d.seam([0.07, s * 0.28, -0.3, s * 0.28], 0.8);
-    if (lvl >= 2) {
-      d.vent(-0.12, s * 0.255, 0.07 * X, 0.04 * Y, 4); d.vent(-0.24, s * 0.255, 0.07 * X, 0.04 * Y, 4);
-      d.hatch(0.0, s * 0.255, 0.13, s); d.hatch(-0.12, s * 0.31, 0.11, 0.5); d.hatch(-0.24, s * 0.31, 0.11, 1);
-      d.accent(0.065, s * 0.24, 0.065, s * 0.32, h * 3.4);
-    }
-    if (lvl >= 3) { d.rivets(0.05, s * 0.23, -0.29, s * 0.23, 9, 0.02); d.rivets(0.05, s * 0.33, -0.29, s * 0.33, 9, 0.02); }
-  }
   // ---- keep: stepped tiers (outer deck, inner deck, raised citadel block), glacis, comms farm
   d.plate([0.02, -0.2, 0.02, 0.2, -0.37, 0.2, -0.37, -0.2], 0.04, 1.0);
   d.plate([-0.01, -0.165, -0.01, 0.165, -0.34, 0.165, -0.34, -0.165], -0.02, 0.9);
@@ -478,17 +465,14 @@ function citadel(d: D, hull: Path2D): void {
     d.dish(-0.255, -0.12, 0.45, 0.4);
   }
   if (lvl >= 3) { d.rivets(0.0, -0.18, -0.36, -0.18, 11); d.rivets(0.0, 0.18, -0.36, 0.18, 11); d.stencil(-0.33, 0.0, 'CF-01', 0.26, 0.5); }
-  // ---- walls: wall-walk rails, gun galleries, ID bands, sally ports
+  // ---- walls: wall-walk rails along the pinched waist, gun slits, sally ports
   if (lvl >= 2) {
     for (const s of [-1, 1]) {
-      d.rail(-0.3, s * 0.365, 0.3, s * 0.365, 10);
-      d.rail(s * 0.0 - 0.355, s * 0.3, -0.355, s * 0.0, 1);
+      d.rail(-0.13, s * 0.215, 0.03, s * 0.215, 4);
+      for (let i = 0; i < 3; i++) d.glowSlit(-0.12 + i * 0.05, s * 0.245, -0.12 + i * 0.05 + 0.025, s * 0.245, h * 1.4, 0.4);
     }
-    d.rail(-0.36, -0.3, -0.36, 0.3, 9);
-    for (const s of [-1, 1]) for (let i = 0; i < 5; i++) d.glowSlit(-0.27 + i * 0.13, s * 0.44, -0.27 + i * 0.13 + 0.05, s * 0.44, h * 1.4, 0.4);
-    d.door(0.0, -0.405, 0.9, 0.34); d.door(0.0, 0.405, 0.9, 0.34);
+    d.door(-0.05, -0.24, 0.6, 0.22); d.door(-0.05, 0.24, 0.6, 0.22);
   }
-  d.seam([-0.34, -0.405, 0.34, -0.405], 0.8); d.seam([-0.34, 0.405, 0.34, 0.405], 0.8);
   // ---- rear engine block: panel breaks, hazard rim, exhaust ports, service rail
   d.seam([-0.355, -0.37, -0.355, 0.37], 1.2);
   d.seam([-0.49, -0.12, -0.35, -0.12], 0.8); d.seam([-0.49, 0.12, -0.35, 0.12], 0.8);
@@ -506,16 +490,13 @@ function citadel(d: D, hull: Path2D): void {
     d.searchlight(0.42, -0.16, 0.13, 0); d.searchlight(0.42, 0.16, 0.13, 0); d.accent(0.4, -0.14, 0.4, 0.14, h * 3);
     d.haz(0.375, 0.0, 0.1, 0.55 * Y * 0.2, true);
   }
-  // ---- bastions: bolt rings, panel splits, point-defence blisters on the faces
+  // ---- corner towers: bolt rings, panel splits, point-defence blisters on the outboard faces
   for (const sx of [1, -1]) for (const sy of [-1, 1]) {
-    const bu = sx * 0.385, bv = sy * 0.385;
-    d.boltRing(bu, bv, 0.15 * S, 12, 0.03);
-    d.ring(bu, bv, 0.18 * S, 1.4);
-    d.seam([bu - 0.1 * sx, bv, bu + 0.1 * sx, bv]); d.seam([bu, bv - 0.1 * sy, bu, bv + 0.1 * sy]);
-    if (lvl >= 2) {
-      d.blister(sx * 0.455, sy * 0.3, 0.17, sx > 0 ? 0 : Math.PI);
-      d.blister(sx * 0.3, sy * 0.455, 0.17, sy * Math.PI * 0.5);
-    }
+    const bu = sx * 0.35, bv = sy * 0.356;
+    d.boltRing(bu, bv, 0.13 * S, 12, 0.03);
+    d.ring(bu, bv, 0.16 * S, 1.4);
+    d.seam([bu - 0.08 * sx, bv, bu + 0.08 * sx, bv]); d.seam([bu, bv - 0.08 * sy, bu, bv + 0.08 * sy]);
+    if (lvl >= 2) d.blister(bu + sx * 0.1, bv + sy * 0.09, 0.15, Math.atan2(sy * 0.09 * Y, sx * 0.1 * X));
   }
 }
 
@@ -635,26 +616,26 @@ function monolith(d: D, hull: Path2D): void {
   for (const u of [-0.3, 0.3]) d.seam([u, -0.4, u, 0.4], 1.3);
   if (lvl >= 2) {
     for (const s of [-1, 1]) {
-      d.rail(-0.3, s * 0.39, 0.3, s * 0.39, 8);
+      d.rail(-0.12, s * 0.31, 0.05, s * 0.31, 4);
       d.hatch(0.38, s * 0.33, 0.17, s);
       d.hatch(-0.38, s * 0.31, 0.15, 0.5 * s);
       d.vent(0.36, s * 0.0 + s * 0.16, 0.05 * d.X, 0.05 * d.Y, 4);
       d.fins(-0.36, s * 0.26, 0.06 * d.X, 0.035 * d.Y, 5);
       d.ladder(0.34, s * 0.44, 0.2, s * 0.44, 0.12);
-      // point-defence blisters on the buttresses
-      d.blister(0.417, s * 0.417, 0.18, s * Math.PI * 0.25);
-      d.blister(-0.417, s * 0.417, 0.18, Math.PI - s * Math.PI * 0.25);
+      // point-defence blisters on the horn tips
+      d.blister(0.29, s * 0.45, 0.18, s * Math.PI * 0.25);
+      d.blister(-0.36, s * 0.45, 0.18, Math.PI - s * Math.PI * 0.25);
     }
     d.rail(0.42, -0.25, 0.42, 0.25, 6);
   }
   if (lvl >= 3) {
-    for (const s of [-1, 1]) { d.rivets(-0.4, s * 0.43, 0.4, s * 0.43, 16); d.rivets(s * 0.43, -0.36, s * 0.43, 0.36, 14); }
+    for (const s of [-1, 1]) { d.rivets(0.18, s * 0.44, 0.3, s * 0.47, 5); d.rivets(-0.26, s * 0.44, -0.36, s * 0.46, 5); d.rivets(s * 0.45, -0.12, s * 0.45, 0.12, 6); }
   }
   // tier 2: seams, a ring of bolts round the cupola, cable runs from the commander's block
   d.seam([-0.29, -0.2, 0.31, -0.2], 0.8); d.seam([-0.29, 0.2, 0.31, 0.2], 0.8);
   if (lvl >= 2) {
-    d.boltRing(0.1, 0, d.S * 0.23, 18, 0.03);
-    d.ring(0.1, 0, d.S * 0.25, 1.4);
+    d.boltRing(0.1, 0, d.S * 0.18, 16, 0.03);
+    d.ring(0.1, 0, d.S * 0.2, 1.4);
     d.sensors(-0.18, 0, 0.3, 2, 0.07);
     d.mast(-0.22, 0.05, 2.0, Math.PI * 0.9);
     d.cable([-0.24, -0.1, -0.24, -0.2, -0.1, -0.24], 0.07);

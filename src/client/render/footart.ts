@@ -385,22 +385,23 @@ const SPECS: Record<string, Spec> = {
     // waist and a reactor backpack with twin exhaust stacks
     hull: () => sharpU([0.4, 0, 0.39, -0.045, 0.34, -0.075, 0.3, -0.09, 0.27, -0.2, 0.2, -0.24, 0.18, -0.28, 0.31, -0.3, 0.34, -0.34, 0.34, -0.44, 0.3, -0.47, 0.1, -0.47, 0.08, -0.52, -0.2, -0.52, -0.28, -0.44, -0.3, -0.3, -0.22, -0.24, -0.24, -0.19, -0.34, -0.19, -0.38, -0.15, -0.5, -0.15, -0.5, -0.04, -0.44, -0.04, -0.44, 0]),
   },
-  // ---- citadel: mobile star fort - curtain walls, corner bastions, keep and gatehouse on a 6 x 5 footprint
+  // ---- citadel: walking castle - curtain walls pinched between four round corner towers, ravelin bastions for the
+  //      twin titan guns bulging from the forward walls, a ram prow (matches the 3D hull)
   citadel: {
     hw: 0.5,
-    hull: () => sharpU([0.48, 0, 0.48, -0.08, 0.43, -0.12, 0.43, -0.26, 0.47, -0.31, 0.52, -0.385, 0.385, -0.52, 0.31, -0.47, 0.2, -0.45, 0.1, -0.45, 0.06, -0.41, -0.06, -0.41, -0.1, -0.45, -0.2, -0.45, -0.31, -0.47, -0.385, -0.52, -0.52, -0.385, -0.47, -0.31, -0.45, -0.2, -0.48, -0.12, -0.48, 0]),
+    hull: () => union(sharpU([0.479, 0.0, 0.443, -0.15, 0.314, -0.312, 0.15, -0.312, 0.043, -0.25, -0.143, -0.25, -0.25, -0.312, -0.407, -0.3, -0.493, -0.163, -0.493, 0.0]), ellU(0.35, -0.356, 0.168, 0.148), ellU(0.35, 0.356, 0.168, 0.148), ellU(-0.35, -0.356, 0.168, 0.148), ellU(-0.35, 0.356, 0.168, 0.148), ellU(0.235, -0.235, 0.143, 0.125), ellU(0.235, 0.235, 0.143, 0.125)),
   },
   // ---- lance dreadnought: a long knife-prowed monitor hull around a spinal accelerator, slim bridge amidships,
   //      flared aft quarters with twin engine nacelles
   lance: {
     hw: 0.44,
-    hull: () => sharpU([0.5, 0, 0.47, -0.06, 0.39, -0.15, 0.2, -0.37, 0.12, -0.4, 0.08, -0.44, -0.3, -0.44, -0.34, -0.41, -0.44, -0.37, -0.47, -0.31, -0.5, -0.31, -0.5, -0.12, -0.47, -0.09, -0.47, 0]),
+    hull: () => sharpU([0.5, 0.0, 0.375, -0.165, 0.169, -0.375, -0.106, -0.34, -0.281, -0.49, -0.425, -0.49, -0.494, -0.25, -0.494, 0.0]),
   },
-  // ---- monolith: walking bunker - a square block of slab armour, appliqué plates standing proud of every face,
-  //      diamond buttresses on the chamfered corners
+  // ---- monolith: walking bunker - a battered skirt flaring into four armoured horns round a pinched waist (with a
+  //      flying buttress on each flank), an arrow-nosed casemate, a stepped cupola plinth (matches the 3D hull)
   monolith: {
     hw: 0.5,
-    hull: () => sharpU([0.52, 0, 0.52, -0.27, 0.48, -0.29, 0.48, -0.33, 0.517, -0.417, 0.417, -0.517, 0.38, -0.48, 0.31, -0.48, 0.31, -0.52, 0.02, -0.52, 0.02, -0.48, -0.03, -0.48, -0.03, -0.52, -0.31, -0.52, -0.31, -0.48, -0.38, -0.48, -0.417, -0.517, -0.517, -0.417, -0.48, -0.38, -0.48, -0.36, -0.52, -0.36, -0.52, -0.11, -0.48, -0.11, -0.48, 0]),
+    hull: () => sharpU([0.5, 0.0, 0.479, -0.143, 0.307, -0.497, 0.193, -0.471, 0.064, -0.329, 0.029, -0.329, 0.029, -0.421, -0.091, -0.421, -0.091, -0.329, -0.129, -0.329, -0.257, -0.471, -0.364, -0.493, -0.457, -0.336, -0.5, -0.129, -0.5, 0.0]),
   },
   // ---- drone: tri-rotor recon probe - a plated sensor orb with a lens eye in a forward head housing, an offset
   //      sensor boom, two ducted fans swept forward on arms and a third on a tail boom
@@ -1042,25 +1043,37 @@ const DETAILS: Record<string, (k: K) => void> = {
   },
   citadel(k) {
     const S = k.S, g = k.g;
-    const yard = k.R(0, 0, 0.68, 0.68, 0.1);
+    // plans in cells of the 7 x 8 hull (same as titans-citadel.ts), mirrored
+    const half = (h: number[][], sc: number, du = 0) => h.flatMap(([u, v]) => [(u * sc) / 7 + du, (v * sc) / 8]);
+    const B = [[3.35, 0], [3.1, -1.2], [2.2, -2.5], [1.05, -2.5], [0.3, -2.0], [-1.0, -2.0], [-1.75, -2.5], [-2.85, -2.4], [-3.45, -1.3], [-3.45, 0]];
+    const yard = k.M(half(B, 0.86));
     k.recess(yard, shade(k.pal.deep, 0.1));
     g.save(); g.clip(yard); g.strokeStyle = 'rgba(255,255,255,0.05)'; g.lineWidth = k.o * 0.5; g.beginPath();
     for (let v = -0.34; v <= 0.34; v += 0.068) { g.moveTo(k.x(v), k.y(-0.34)); g.lineTo(k.x(v), k.y(0.34)); g.moveTo(k.x(-0.34), k.y(v)); g.lineTo(k.x(0.34), k.y(v)); }
     g.stroke(); g.restore();
     const mf = shade(k.pal.light, -0.12);
     const ml = (u0: number, v0: number, u1: number, v1: number, n: number) => merlons(g, k.x(u0), k.y(v0), k.x(u1), k.y(v1), n, 0.035 * S, 0.05 * S, mf, k.o);
-    ml(0.415, -0.27, 0.415, -0.15, 3); ml(0.415, 0.15, 0.415, 0.27, 3); ml(-0.415, -0.27, -0.415, 0.27, 9);
-    for (const s of [-1, 1]) ml(-0.27, s * 0.415, 0.27, s * 0.415, 9);
-    k.reactor(0.08, 0, 0.06 * S);
-    k.plate(k.R(-0.18, 0, 0.38, 0.4, 0.2), -0.37, -0.2, 0.01, 0.2, 0.04, 1.4);
-    k.plate(k.R(-0.175, 0, 0.27, 0.28, 0.15), -0.31, -0.14, -0.04, 0.14, 0.14, 1.4);
-    k.dark(k.R(0.43, 0, 0.1, 0.24, 0.08), 0.38, -0.12, 0.48, 0.12, 1.2);
-    k.glow([0.415, -0.085, 0.415, 0.085], k.o * 1.3);
+    ml(0.41, -0.06, 0.38, -0.13, 2); ml(0.41, 0.06, 0.38, 0.13, 2); ml(-0.42, -0.12, -0.42, 0.12, 4);
+    for (const s of [-1, 1]) ml(-0.12, s * 0.215, 0.03, s * 0.215, 4);
+    // inner terrace, then the keep's two octagonal stages
+    k.plate(k.M(half(B, 0.5, -0.05)), -0.29, -0.16, 0.19, 0.16, -0.02, 1.2);
+    k.reactor(0.107, 0, 0.06 * S);
+    k.plate(k.Oct(-0.164, 0, 1.33), -0.35, -0.19, 0.03, 0.19, 0.04, 1.6);
+    k.plate(k.Oct(-0.157, 0, 0.97), -0.29, -0.14, -0.02, 0.14, 0.14, 1.6);
+    k.dark(k.R(0.43, 0, 0.08, 0.2, 0.06), 0.39, -0.1, 0.47, 0.1, 1.2);
+    k.glow([0.44, -0.07, 0.44, 0.07], k.o * 1.3);
+    // ravelin bastions for the titan guns
+    for (const s of [-1, 1]) {
+      k.plate(k.Oct(0.235, s * 0.235, 0.95), 0.16, s * 0.235 - 0.12, 0.31, s * 0.235 + 0.12, 0.06, 1.5);
+      k.glow([0.06, s * 0.22, 0.13, s * 0.22], k.o);
+    }
+    // hourglass corner towers: flared bases, overhanging crowns
     for (const sx of [1, -1]) for (const sy of [-1, 1]) {
-      const bu = sx * 0.385, bv = sy * 0.385;
-      k.plate(k.Oct(bu, bv, 0.125 * S), bu - 0.1, bv - 0.1, bu + 0.1, bv + 0.1, 0.04, 1.5);
-      k.recess(k.Oct(bu, bv, 0.085 * S), shade(k.pal.deep, 0.15));
-      g.strokeStyle = rgba(k.E, 0.9); g.lineWidth = k.o; g.beginPath(); g.arc(k.x(bu), k.y(bv), 0.06 * S, 0, P2); g.stroke();
+      const bu = sx * 0.35, bv = sy * 0.356;
+      k.dark(k.Oct(bu, bv, 1.15), bu - 0.16, bv - 0.14, bu + 0.16, bv + 0.14, 1.1);
+      k.plate(k.Oct(bu, bv, 1.0), bu - 0.14, bv - 0.12, bu + 0.14, bv + 0.12, sx < 0 ? 0.1 : 0.04, 1.8);
+      k.recess(k.Oct(bu, bv, 0.66), shade(k.pal.deep, 0.15));
+      g.strokeStyle = rgba(k.E, 0.9); g.lineWidth = k.o; g.beginPath(); g.arc(k.x(bu), k.y(bv), 0.8, 0, P2); g.stroke();
     }
   },
   lance(k) {
@@ -1095,35 +1108,39 @@ const DETAILS: Record<string, (k: K) => void> = {
   },
   monolith(k) {
     const S = k.S, g = k.g;
-    // tier-1 roof inside the battered walls; the dark seam where the two slabs meet
-    const sq = (cu: number, h: number, c: number) => k.P([cu + h, -h + c, cu + h, h - c, cu + h - c, h, cu - h + c, h, cu - h, h - c, cu - h, -h + c, cu - h + c, -h, cu + h - c, -h]);
-    k.recess(sq(0, 0.46, 0.09), shade(k.pal.deep, 0.05));
-    k.plate(sq(0, 0.42, 0.085), -0.42, -0.42, 0.42, 0.42, -0.04, 0.9);
-    // appliqué slabs on every face (front glacis with tiny vision slits), diamond corner buttresses
-    k.plate(k.R(0.497, 0, 0.05, 0.56, 0.02), 0.47, -0.28, 0.52, 0.28, 0.1, 1.2);
-    for (const v of [-0.12, 0, 0.12]) k.glow([0.5, v - 0.03, 0.5, v + 0.03], k.o * 1.1);
-    k.haz(0.475, 0, 0.012 * k.X, 0.5 * k.Y, true);
+    // plans in cells of the 7 x 7 hull (same as titans-monolith.ts), mirrored, scaled about the hull centre
+    const half = (h: number[][], sc: number, du = 0) => h.flatMap(([u, v]) => [(u * sc) / 7 + du, (v * sc) / 7]);
+    const P1 = [[3.5, 0], [3.35, -1.0], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]];
+    const P2u = [[3.05, 0], [2.95, -0.55], [1.7, -2.15], [-1.5, -2.3], [-2.75, -1.6], [-2.75, 0]];
+    // skirt ledge (the battered skirt's top), its dark waist band, then the overhanging casemate and its roof
+    k.plate(k.M(half(P1, 0.8)), -0.4, -0.4, 0.4, 0.4, -0.05, 0.8);
+    k.recess(k.M(half(P2u, 1.04)), shade(k.pal.deep, 0.02));
+    k.plate(k.M(half(P2u, 1.0)), -0.39, -0.33, 0.44, 0.33, 0.06, 1.6);
+    k.plate(k.M(half(P2u, 0.76)), -0.3, -0.25, 0.33, 0.25, 0.14, 1.8);
     for (const s of [-1, 1]) {
-      k.plate(k.R(-0.497, s * 0.235, 0.05, 0.25, 0.02), -0.52, s * 0.11, -0.47, s * 0.36, 0.08, 1.2);
-      for (const u of [0.165, -0.17]) k.plate(k.R(u, s * 0.497, 0.29, 0.05, 0.02), u - 0.14, s * 0.47, u + 0.14, s * 0.52, 0.08, 1.2);
-      for (const su of [-1, 1]) k.plate(k.P([su * 0.517, s * 0.417, su * 0.417, s * 0.517, su * 0.317, s * 0.417, su * 0.417, s * 0.317]), su * 0.417 - 0.1, s * 0.417 - 0.1, su * 0.417 + 0.1, s * 0.417 + 0.1, su > 0 ? 0.06 : 0.0, 1.5);
-      k.stack(-0.35, s * 0.107, 0.05 * S);
-      k.lamp(0.5, s * 0.2, 0.014 * S);
+      // flying buttress across the waist, conduits, a glow line
+      k.plate(k.R(-0.031, s * 0.355, 0.1, 0.13, 0.02), -0.08, s * 0.29, 0.02, s * 0.42, 0.1, 1.3);
+      k.glow([-0.12, s * 0.3, 0.16, s * 0.3], k.o);
+      k.stripe([-0.2, s * 0.33, 0.24, s * 0.3], k.o * 1.6);
+      k.stack(-0.374, s * 0.103, 0.04 * S);
+      k.lamp(0.49, s * 0.17, 0.014 * S);
+      k.grille(-0.05, s * 0.23, 0.1 * k.X, 0.05 * k.Y, 3, 0.4);
     }
-    k.grille(-0.47, 0, 0.05 * k.X, 0.16 * k.Y, 4, 0.7);
-    // tier 2: the stepped roof block, accent bands on its flanks
-    k.recess(sq(0.014, 0.33, 0.13), shade(k.pal.deep, -0.05));
-    k.plate(sq(0.014, 0.3, 0.12), -0.29, -0.3, 0.31, 0.3, 0.16, 2.4);
-    for (const s of [-1, 1]) { k.stripe([-0.22, s * 0.285, 0.2, s * 0.285], k.o * 2.4); k.grille(-0.157, s * 0.15, 0.13 * k.X, 0.09 * k.Y, 4, 0.4); }
-    k.glow([0.3, -0.08, 0.3, 0.08], k.o);
-    // commander's block behind the cupola: periscope visor, sensor
-    k.plate(k.R(-0.18, 0, 0.16, 0.19, 0.08), -0.26, -0.095, -0.1, 0.095, 0.16, 1.4);
-    k.visor(-0.11, -0.05, -0.11, 0.05, 0.016 * S);
-    // roof cupola ring for the giant gun
-    k.metal(k.C(0.1, 0, 0.21 * S), 0.05, -0.05, 0.15, 0.05, 1.4);
-    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = k.o; g.beginPath(); g.arc(k.x(0.1), 0, 0.17 * S, 0, P2); g.stroke();
-    // rear-quarter casemate for the medium gun
-    k.plate(k.Ra(-0.32, 0.33, 0.13 * S, 0.13 * S, 0.1), -0.39, 0.26, -0.25, 0.4, 0.06, 1.5);
+    // prow: ram blade and hazard teeth, vision slits on the casemate nose
+    k.dark(k.R(0.49, 0, 0.04, 0.42, 0.02), 0.47, -0.21, 0.51, 0.21, 1.1);
+    k.haz(0.475, 0, 0.012 * k.X, 0.36 * k.Y, true);
+    for (const v of [-0.06, 0.06]) k.glow([0.41, v - 0.025, 0.41, v + 0.025], k.o * 1.1);
+    k.grille(-0.49, 0, 0.03 * k.X, 0.16 * k.Y, 4, 0.7);
+    // stepped octagonal plinth + the roof cupola ring for the giant gun
+    k.plate(k.Oct(0.093, 0, 0.2 * S), 0.0, -0.18, 0.2, 0.18, 0.2, 2.0);
+    k.metal(k.C(0.1, 0, 0.16 * S), 0.05, -0.05, 0.15, 0.05, 1.4);
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = k.o; g.beginPath(); g.arc(k.x(0.1), 0, 0.13 * S, 0, P2); g.stroke();
+    // commander's tower behind the cupola: periscope visor
+    k.plate(k.R(-0.21, 0, 0.15, 0.17, 0.06), -0.28, -0.085, -0.13, 0.085, 0.2, 1.6);
+    k.visor(-0.145, -0.045, -0.145, 0.045, 0.014 * S);
+    // rear-right corner gun tower for the medium gun
+    k.plate(k.Oct(-0.33, 0.33, 0.13 * S), -0.43, 0.23, -0.23, 0.43, 0.08, 1.8);
+    k.recess(k.Oct(-0.33, 0.33, 0.085 * S), shade(k.pal.deep, 0.12));
   },
 };
 
@@ -1702,10 +1719,10 @@ function footGiantLights(L: UnitLayout): GLight[] | null {
       break;
     case 'citadel':
       o.push({ x: 0.08 * X, y: 0, r: 0.06 * S, k: 'core' });
-      o.push({ x: 0.385 * X, y: 0.385 * Y, r: 0.17 * S, k: 'radar' });
-      for (const sx of [1, -1]) for (const sy of [-1, 1]) o.push({ x: sx * 0.385 * X, y: sy * 0.385 * Y, r: 0.08 * S, k: 'vent', ph: sx + sy * 2 });
-      o.push({ x: 0.415 * X, y: 0, r: 0.09 * S, k: 'visor' });
-      for (const s of [-1, 1]) nav(0.44, s * 0.13, s);
+      o.push({ x: 0.35 * X, y: 0.356 * Y, r: 0.15 * S, k: 'radar' });
+      for (const sx of [1, -1]) for (const sy of [-1, 1]) o.push({ x: sx * 0.35 * X, y: sy * 0.356 * Y, r: 0.08 * S, k: 'vent', ph: sx + sy * 2 });
+      o.push({ x: 0.44 * X, y: 0, r: 0.09 * S, k: 'visor' });
+      for (const s of [-1, 1]) nav(0.43, s * 0.09, s);
       break;
     case 'lance':
       o.push({ x: 0.49 * X, y: 0, r: 0.05 * S, k: 'core' });
@@ -1719,7 +1736,7 @@ function footGiantLights(L: UnitLayout): GLight[] | null {
     case 'monolith':
       o.push({ x: 0.5 * X, y: 0, r: 0.07 * S, k: 'visor' });
       o.push({ x: -0.47 * X, y: 0, r: 0.08 * S, k: 'vent' });
-      for (const s of [-1, 1]) { o.push({ x: -0.35 * X, y: s * 0.107 * Y, r: 0.04 * S, k: 'stack' }); nav(0.417, s * 0.417, s); }
+      for (const s of [-1, 1]) { o.push({ x: -0.374 * X, y: s * 0.103 * Y, r: 0.04 * S, k: 'stack' }); nav(0.3, s * 0.46, s); }
       break;
   }
   gl.set(key, o);
@@ -1739,9 +1756,9 @@ function footStrips(L: UnitLayout): number[] | null {
     colossal: [0.12, -0.05, 0.19, -0.15, 0.12, 0.05, 0.19, 0.15, 0.04, -0.44, 0.27, -0.44, 0.04, 0.44, 0.27, 0.44],
     broodmother: [-0.04, -0.22, -0.2, -0.29, -0.04, 0.22, -0.2, 0.29],
     arachne: [0.06, -0.27, -0.2, -0.35, 0.06, 0.27, -0.2, 0.35],
-    citadel: [-0.33, -0.345, 0.33, -0.345, -0.33, 0.345, 0.33, 0.345, -0.345, -0.25, -0.345, 0.25, 0.415, -0.085, 0.415, 0.085],
+    citadel: [-0.13, -0.215, 0.03, -0.215, -0.13, 0.215, 0.03, 0.215, -0.42, -0.12, -0.42, 0.12, 0.44, -0.07, 0.44, 0.07],
     lance: [0.12, 0, 0.47, 0, -0.32, -0.405, 0.16, -0.37, -0.32, 0.405, 0.16, 0.37],
-    monolith: [0.3, -0.08, 0.3, 0.08, -0.15, -0.46, 0.15, -0.46, -0.15, 0.46, 0.15, 0.46],
+    monolith: [0.41, -0.06, 0.41, 0.06, -0.12, -0.31, 0.05, -0.31, -0.12, 0.31, 0.05, 0.31],
   };
   const f = u[L.shape] ?? [];
   o = f.map((v, i) => (i % 2 ? v * L.Y : v * L.X));

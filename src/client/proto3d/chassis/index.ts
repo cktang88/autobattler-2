@@ -20,3 +20,4 @@ import '../mobility/titanlegs.ts';
 import './titans-citadel.ts';
 import './titans-arachne.ts';
 import './titans-lance.ts';
+import './titans-monolith.ts';
