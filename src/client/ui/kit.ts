@@ -26,8 +26,10 @@ let uid = 0;
 export function select<T extends string>(o: {
   value: T; options: KOption<T>[]; onChange: (v: T) => void;
   label?: string; prefix?: string; title?: string; className?: string; fk?: string; disabled?: boolean;
+  /** shown when `value` is none of the options (e.g. "Mixed" for a group whose members differ) */
+  placeholder?: string;
 }): HTMLButtonElement {
-  const cur = o.options.find((x) => x.value === o.value) ?? o.options[0];
+  const cur = o.options.find((x) => x.value === o.value) ?? (o.placeholder != null ? undefined : o.options[0]);
   const id = `k-list-${++uid}`;
   const btn = h('button.k-select', {
     type: 'button', role: 'combobox', 'aria-haspopup': 'listbox', 'aria-expanded': 'false', 'aria-controls': id,
@@ -35,7 +37,7 @@ export function select<T extends string>(o: {
   },
   o.prefix ? h('span.k-select-pre', null, o.prefix) : null,
   cur?.icon ? h('span.k-select-ico', null, cur.icon) : null,
-  h('span.k-select-v', null, cur?.label ?? ''),
+  h('span.k-select-v', null, cur?.label ?? o.placeholder ?? ''),
   chevron());
 
   let pop: HTMLElement | null = null;
@@ -186,9 +188,11 @@ export function segmented<T extends string | number>(o: {
 }
 
 /** On/off switch with an indicator lamp. */
-export function toggle(o: { label: string | Node; on: boolean; onChange: (v: boolean) => void; title?: string; className?: string; fk?: string; disabled?: boolean }): HTMLButtonElement {
+/** On/off switch. `mixed`: a group whose members differ (shown half-lit; a click turns it on for all). */
+export function toggle(o: { label: string | Node; on: boolean; onChange: (v: boolean) => void; title?: string; className?: string; fk?: string; disabled?: boolean; mixed?: boolean }): HTMLButtonElement {
+  const mixed = !!o.mixed && !o.on;
   return h('button.k-toggle', {
-    type: 'button', role: 'switch', 'aria-checked': String(o.on), class: [o.on ? 'on' : '', o.className ?? ''].join(' '),
+    type: 'button', role: mixed ? 'checkbox' : 'switch', 'aria-checked': mixed ? 'mixed' : String(o.on), class: [o.on ? 'on' : '', mixed ? 'mixed' : '', o.className ?? ''].join(' '),
     title: o.title ?? null, 'data-fk': o.fk ?? null, disabled: o.disabled || null,
     onclick: () => o.onChange(!o.on),
   }, h('span.k-lamp', { 'aria-hidden': 'true' }), h('span.k-toggle-l', null, o.label));

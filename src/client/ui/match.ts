@@ -14,7 +14,8 @@ import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent, type SimUnit } from '../../shared/sim/types.ts';
 import type { UnitFoot } from '../../shared/grid.ts';
 import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, SQUAD_LAYOUT, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
-import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
+import { bodyScale, hullK, mountOffsets } from '../../shared/mountgeo.ts';
+import { TILT_SIN, flyHeight, hullHeight } from '../render/tilt.ts';
 import { battleInputFor, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, levelMult } from '../../shared/stats.ts';
@@ -357,13 +358,27 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let liveTipT = 0;
   function liveUnitAt(px: number, rawY: number): SimUnit | null {
     if (!battle) return null;
-    let w: { x: number; y: number };
-    try { w = view.screenToWorld(px, rawY); } catch { return null; }
+    // the drawn hull: the sim's oriented box (hullK x footprint, body-scaled) plus a finger margin; long hulls are hit
+    // along their whole length. Tilted: a unit is drawn raised by its height (flyers by their altitude), so the
+    // pointer is also read on the plane of its top.
+    const probe = new Map<number, { x: number; y: number } | null>();
+    const at = (rise: number) => {
+      if (!probe.has(rise)) { try { probe.set(rise, view.screenToWorld(px, rawY + rise)); } catch { probe.set(rise, null); } }
+      return probe.get(rise)!;
+    };
     let best: SimUnit | null = null, bd = Infinity;
     for (const u of battle.units) {
       if (!u.alive) continue;
-      const r = 0.3 + 0.5 * u.stats.size * bodyScale(u.stats.size), d = Math.hypot(u.x - w.x, u.y - w.y);
-      if (d < r && d < bd) { bd = d; best = u; }
+      const S = u.stats.size, hk = hullK(S), cs = Math.cos(u.angle), sn = Math.sin(u.angle);
+      const tops = view.tilted ? [0, Math.round((u.flying ? flyHeight(S) : 0.6 * hullHeight(S)) * TILT_SIN * view.cam.k)] : [0];
+      for (const rise of tops) {
+        const w = at(rise);
+        if (!w) continue;
+        const dx = w.x - u.x, dy = w.y - u.y;
+        const out = Math.hypot(Math.max(0, Math.abs(dx * cs + dy * sn) - hk * u.stats.fh), Math.max(0, Math.abs(dy * cs - dx * sn) - hk * u.stats.fw));
+        const d = Math.hypot(dx, dy);
+        if (out < 0.3 && d < bd) { bd = d; best = u; }
+      }
     }
     return best;
   }
@@ -813,7 +828,15 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     hideTip();
     const lead = multi[0];
     const o = blockOrders(lead)!;
-    const anySquad = multi.some((sl) => { const p = blockSrc(sl); return !!p && squadOf(designOf(sl.side, p.designId)) > 1; });
+    const isSquad = (sl: NonNullable<Sel>) => { const p = blockSrc(sl); return !!p && squadOf(designOf(sl.side, p.designId)) > 1; };
+    const anySquad = multi.some(isSquad);
+    // orders the blocks disagree on show as mixed (Keep spread: among the squads only, single units have none)
+    const mixed = new Set<keyof Orders>();
+    for (const k of ['target', 'focus', 'stance', 'kite', 'hold', 'delay', 'retreat'] as const) {
+      const vals = new Set(multi.filter((sl) => k !== 'hold' || isSquad(sl)).map((sl) => blockOrders(sl)?.[k]));
+      if (vals.size > 1) mixed.add(k);
+    }
+    if (anySquad && !mixed.has('hold')) o.hold = !!blockOrders(multi.find(isSquad)!)?.hold;
     const counts = new Map<string, number>();
     for (const sl of multi) { const p = blockSrc(sl); const n = (p && designOf(sl.side, p.designId)?.name) ?? '?'; counts.set(n, (counts.get(n) ?? 0) + 1); }
     infoEl.replaceChildren(
@@ -822,8 +845,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         h('h3', { class: 'friendly' }, `${multi.length} blocks selected`),
         h('div.sc-sub', null, [...counts].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(' · ')),
       )),
-      h('p.muted', { style: { margin: '4px 0 0', fontSize: '0.85rem' } }, 'Order changes apply to every selected block (showing the first one\'s orders).'),
-      h('div.info-spacing', null, ordersControl(o, anySquad, (patch) => setGroupOrders(patch), { custom: false })),
+      h('p.muted', { style: { margin: '4px 0 0', fontSize: '0.85rem' } }, mixed.size ? 'Order changes apply to every selected block (half-lit / Mixed: the blocks differ).' : 'Order changes apply to every selected block.'),
+      h('div.info-spacing', null, ordersControl(o, anySquad, (patch) => setGroupOrders(patch), { custom: false, mixed })),
     );
     infoEl.classList.remove('hidden');
     infoEl.classList.remove('picking');
@@ -958,11 +981,17 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   function renderAll() {
+    // the info panel is rebuilt: keyboard focus on one of its controls moves to the control's replacement
+    const ae = document.activeElement as HTMLElement | null;
+    const fk = ae && infoEl.contains(ae) ? ae.getAttribute('data-fk') : null;
     renderTop();
     renderSide();
     renderHint();
     renderInfo();
     renderSpeed();
+    if (fk && !infoEl.contains(document.activeElement)) {
+      infoEl.querySelector<HTMLElement>(`[data-fk="${fk}"]`)?.focus({ preventScroll: true });
+    }
   }
 
   // ---------- deploy actions ----------
