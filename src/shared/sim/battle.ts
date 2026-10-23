@@ -61,6 +61,10 @@ const BOMB_ALT = 1.5; // cells: height bombs start falling from
 const BOMB_FALL = 0.5; // seconds a bomb takes to land
 /** jets keep at least this share of their combined radius apart (soft: JET_SEP_SOFT of the overlap per tick) */
 const JET_SEP = 0.55;
+/** ModuleDef.shieldMult by module id (looked up per hit) */
+const SHIELD_MULT = new Map([...MODULE_BY_ID.values()].filter((m) => m.shieldMult && m.shieldMult !== 1).map((m) => [m.id, m.shieldMult!]));
+/** cells: the closest two friendly units' centres get, even without keep spread (small squads used to pile into one blob) */
+const MIN_SEP = 0.75;
 const JET_SEP_SOFT = 0.5;
 /** a flyer releases bombs at a target inside this cone ahead of its nose (bombs keep the plane's forward speed, so
  *  they're dropped short of the target and carry on to it); straight overhead always counts */
@@ -117,7 +121,7 @@ const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are 
 export const MELEE_SPRINT = 1.35;
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
 const HOLD_BREAK_IDLE = 3 * TICK_RATE; // ticks a holdPos unit sits with no target in reach before chasing whoever is hitting it
-const HOLD_BREAK_HIT = 6 * TICK_RATE; // ...if it was hit this recently (long enough to span a slow gun's reload)
+const HOLD_BREAK_HIT = 12 * TICK_RATE; // ...if it was hit this recently (long enough to span a slow gun's reload)
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
 /** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
 const KITE_PAUSE = 0.15;
@@ -611,7 +615,7 @@ export class Battle {
         const defs = defaultOrders(d);
         for (const c of cs) {
           this.blockUnits[block].push(this.units.length);
-          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: !!p.hold && cs.length > 1, kite: typeof p.kite === 'boolean' ? p.kite : defs.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: typeof p.focus === 'boolean' ? p.focus : defs.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + Math.min(shape.fw, shape.fh) });
+          this.addUnit(s, p.uid, d, p.level, c.x, c.y, { block, prio, hold: p.hold !== false && cs.length > 1, kite: typeof p.kite === 'boolean' ? p.kite : defs.kite, kiteMount: typeof p.kiteMount === 'number' ? p.kiteMount : -1, focus: typeof p.focus === 'boolean' ? p.focus : defs.focus, stance, delay, retreat: !!p.retreat, offx: c.x - mx, offy: c.y - my, sepMin: sp + Math.min(shape.fw, shape.fh) });
         }
       }
     }
@@ -1917,17 +1921,19 @@ export class Battle {
     let dmg = raw;
     let dealt = 0;
     let shieldHit = false;
+    // lightning and the like overload shields: each point of the hit takes `sm` points of shield
+    const sm = SHIELD_MULT.get(moduleId) ?? 1;
     if (t.shield > 0) {
-      const a = Math.min(t.shield, dmg);
+      const a = Math.min(t.shield, dmg * sm);
       t.shield -= a;
-      dmg -= a;
+      dmg -= a / sm;
       dealt += a;
       shieldHit = true;
     }
     if (dmg > 0 && t.auraShield > 0) {
-      const a = Math.min(t.auraShield, dmg);
+      const a = Math.min(t.auraShield, dmg * sm);
       t.auraShield -= a;
-      dmg -= a;
+      dmg -= a / sm;
       dealt += a;
       shieldHit = true;
     }
@@ -2276,10 +2282,16 @@ export class Battle {
       if (E.alive) {
         const dE = Math.hypot(E.x - u.x, E.y - u.y);
         const thr = I.escThreat >= 0 && this.units[I.escThreat].alive ? this.units[I.escThreat] : null;
-        if (thr && dE <= ESCORT_LEASH) { goal = thr; escorting = true; }
+        const mine = this.myTarget(I);
+        if (this.outrun(I, E, dE)) {
+          // the charge is faster and has left us far behind (a jet, a gunship over the enemy lines): chasing it across
+          // the map helps no one, so fight our own fight until it comes back within reach
+        } else if (thr && dE <= ESCORT_LEASH) { goal = thr; escorting = true; }
+        else if (mine && dE <= ESCORT_LEASH) { goal = mine; escorting = true; } // shot at / in reach of something: answer it, don't turn our back on it
         else {
           if (dE <= ESCORT_NEAR) this.faceTarget(I);
-          else this.steer(I, E.x, E.y, ESCORT_NEAR - 0.4, E.id);
+          // an aircraft charge flies over things a ground escort has to go round: follow where it is headed, slower
+          else this.steer(I, E.x, E.y, (E.flying && !u.flying ? ESCORT_NEAR + 1 : ESCORT_NEAR) - 0.4, E.id);
           return;
         }
       }
@@ -2598,11 +2610,23 @@ export class Battle {
     return any;
   }
 
-  /** an escorting jet's charge, and whether to circle it (true) or to run at the threat near it (goal swapped in) */
+  /** the escort can't keep up: its charge is clearly faster and already well beyond the leash */
+  private outrun(I: Internal, E: SimUnit, dE: number): boolean {
+    return dE > ESCORT_LEASH * 1.6 && this.ints[E.id].speed > I.speed * 1.1;
+  }
+
+  /** an enemy one of our guns is laid on right now (-> fight it), else null */
+  private myTarget(I: Internal): SimUnit | null {
+    for (const m of I.u.mounts) if (m.target >= 0 && this.units[m.target].alive && this.units[m.target].side !== I.u.side) return this.units[m.target];
+    return null;
+  }
+
+  /** an escorting jet's charge, and whether to circle it (true) or to run at the threat near it (goal swapped in).
+   *  null: no escort, or a charge the jet can't stay with (faster and far away): then it flies its normal runs. */
   private jetEscort(I: Internal): { E: SimUnit; orbit: boolean; thr: SimUnit | null } | null {
     if (I.escortBlock < 0 || I.escUnit < 0 || I.stance === 'charge') return null;
     const E = this.units[I.escUnit], u = I.u;
-    if (!E.alive) return null;
+    if (!E.alive || this.outrun(I, E, Math.hypot(E.x - u.x, E.y - u.y))) return null;
     const thr = I.escThreat >= 0 && this.units[I.escThreat].alive ? this.units[I.escThreat] : null;
     // engage only threats close to the charge, and break off a run that has dragged the jet far from it
     const near = !!thr && Math.hypot(thr.x - E.x, thr.y - E.y) <= ESCORT_LEASH && Math.hypot(u.x - E.x, u.y - E.y) <= ESCORT_LEASH * 1.6;
@@ -2623,7 +2647,12 @@ export class Battle {
       // Steer along the circle's tangent, bending in or out to hold the orbit radius (never tighter than the jet can turn)
       const E = esc.E, R = Math.max(ESCORT_ORBIT, (1.25 * I.speed) / Math.max(0.5, I.turn));
       const dx = u.x - E.x, dy = u.y - E.y, d = Math.sqrt(dx * dx + dy * dy);
-      want = d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
+      if (this.ints[E.id].strafe) {
+        // escorting another jet: you can't circle something that flies as fast as you, so fly on its wing instead
+        // (aim for a slot just behind and beside it; once there, hold its heading)
+        const side = I.loopDir * 1.2, bx = E.x - Math.cos(E.angle) * 1.5 - Math.sin(E.angle) * side, by = E.y - Math.sin(E.angle) * 1.5 + Math.cos(E.angle) * side;
+        want = Math.hypot(bx - u.x, by - u.y) < 1 ? E.angle : Math.atan2(by - u.y, bx - u.x);
+      } else want = d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
       I.strafeT = 0;
     } else if (this.needsResupply(I)) {
       // bays empty: head home and circle over the own lines until rearmed
@@ -2826,7 +2855,7 @@ export class Battle {
       // a pair is never pushed when its centres are this far apart: no branch below separates beyond both reaches
       // (or A's hold-formation spacing). Units that could be that close now sit in hash cells within that reach + D
       // of `a`, so only those cells are walked; the window is recomputed whenever `a` or D moves.
-      const qi = sq[i], holdCap = A.hold ? Math.min(2.9, A.sepMin) * 0.95 : 0;
+      const qi = sq[i], holdCap = A.hold ? Math.min(2.9, A.sepMin) * 0.95 : MIN_SEP;
       const far0 = Math.max(qi + this.maxSepQ, holdCap) * (1 + 1e-9) + 1e-6;
       let far = far0 + D;
       let wy1 = Math.min(rowHi, clamp(Math.floor((py[i] + far) / CELL), 0, HROWS - 1));
@@ -2838,7 +2867,7 @@ export class Battle {
           if (head[c] < 0 || tail[c] <= i) continue;
           for (let j = head[c]; j >= 0; j = next[j]) {
             if (j <= i) continue;
-            const qx = px[j] - px[i], qy = py[j] - py[i], ql = Math.max(qi + sq[j], holdCap) * (1 + 1e-9);
+            const qx = px[j] - px[i], qy = py[j] - py[i], ql = Math.max(qi + sq[j], holdCap, MIN_SEP) * (1 + 1e-9);
             if (qx * qx + qy * qy >= ql * ql) continue;
             const b = units[j];
             if (!b.alive || b.flying !== a.flying) continue;
@@ -2877,6 +2906,7 @@ export class Battle {
               dx = cd.nx * cd.d; dy = cd.ny * cd.d; d2 = cd.d * cd.d;
             } else {
               if (A.hold && B.hold && A.block === B.block) rr = Math.max(rr, Math.min(2.9, A.sepMin) * 0.95);
+              else if (a.side === b.side) rr = Math.max(rr, MIN_SEP); // free-moving units still keep a little room
               if (d2 >= rr * rr) continue;
             }
             let d = Math.sqrt(d2);

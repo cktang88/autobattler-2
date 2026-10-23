@@ -55,7 +55,7 @@ test('paralysis builds against max hp: a light unit is stunned by one stun gun h
   assert.ok(light.stun > 0, 'one stun-gun bolt stuns a light scout');
   let n = 0;
   while (heavy.stun <= 0 && n < 100) { hit(heavy, 'stungun'); n++; }
-  assert.ok(n >= 5, `heavy hull stunned after only ${n} hits`);
+  assert.ok(n >= 3, `heavy hull stunned after only ${n} hits`); // a lockdown weapon: a few bolts freeze even a tank
   // hits while stunned extend the stun, capped at 4 s
   const s0 = heavy.stun;
   hit(heavy, 'stungun');

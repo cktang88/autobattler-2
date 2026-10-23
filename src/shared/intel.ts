@@ -29,7 +29,7 @@ export function dpsVs(d: Design, t: TargetType): number {
     if (t.air ? !m.targetsAir : !m.targetsGround) continue;
     const raw = m.damage * (t.air ? m.airBonus ?? 1 : 1);
     // shields soak each hit at full strength; armour takes a flat amount off every hull hit (never below 15%)
-    const eff = t.shield ? raw : Math.max(raw * 0.15, raw - t.armor * (1 - (m.ap ?? 0)));
+    const eff = t.shield ? raw * (m.shieldMult ?? 1) : Math.max(raw * 0.15, raw - t.armor * (1 - (m.ap ?? 0)));
     let w = weaponDps(m) * (eff / m.damage) * Math.min(1, hitFactor(m));
     if (t.squad && m.splash) w *= 1 + 0.8 * m.splash; // a blast catches several units of a packed squad
     if (t.squad && m.chain) w *= 1 + 0.5 * m.chain;

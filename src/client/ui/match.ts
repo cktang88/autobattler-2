@@ -918,7 +918,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const vals = new Set(multi.filter((sl) => k !== 'hold' || isSquad(sl)).map((sl) => blockOrders(sl)?.[k]));
       if (vals.size > 1) mixed.add(k);
     }
-    if (anySquad && !mixed.has('hold')) o.hold = !!blockOrders(multi.find(isSquad)!)?.hold;
+    if (anySquad && !mixed.has('hold')) o.hold = blockOrders(multi.find(isSquad)!)?.hold !== false;
     const counts = new Map<string, number>();
     for (const sl of multi) { const p = blockSrc(sl); const n = (p && designOf(sl.side, p.designId)?.name) ?? '?'; counts.set(n, (counts.get(n) ?? 0) + 1); }
     infoEl.replaceChildren(

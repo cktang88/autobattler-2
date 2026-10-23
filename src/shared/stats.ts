@@ -300,6 +300,7 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.stun) v += ((w.stun * shots) / cyc) * 22 * (1 + 0.8 * (w.splash ?? 0));
   if (w.slow) v += (w.slow / cyc) * 14;
   if (w.disarm) v += (w.disarm / cyc) * 28;
+  if (w.shieldMult && w.shieldMult > 1) v *= 1 + 0.15 * (w.shieldMult - 1); // only matters against shielded targets
   if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 6 * (1 + 0.6 * (w.splash ?? 0));
   v *= hitFactor(w);
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses

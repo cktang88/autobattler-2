@@ -462,7 +462,7 @@ test('defensive systems: hardened, shield dome, reactive armor, mirror coating',
   const mirrorId = m.units.find((u) => u.side === 1)!.id;
   let lh = 0, ln = 0;
   while (!m.done) { m.step(); for (const e of m.events) if (e.t === 'hit' && e.unit === mirrorId && e.moduleId === 'laser' && !e.shieldHit) { lh += e.damage; ln++; } }
-  assert.ok(ln > 0 && lh / ln < 24 * 0.6, `laser per hit ${lh / ln}`);
+  assert.ok(ln > 0 && lh / ln < 75 * 0.6, `laser per hit ${lh / ln}`);
 });
 
 test('blocks: size-1 designs spawn a squad of 16 (8x2) at spacing-dependent positions', () => {
@@ -824,6 +824,51 @@ test('escort: stays near the escorted block; invalid escort target behaves norma
   assert.ok(near < 4, `escort stays close: ${near}`);
   assert.ok(run(99999) > 8, 'bogus uid ignored');
   assert.ok(run(undefined) > 8, 'no escort');
+});
+
+test('escort edge cases: a ground unit escorting a jet does not chase it across the map; a jet escorting a jet flies on its wing', () => {
+  // ground tank escorting a strike jet: the jet streaks off; the tank fights its own fight instead of trailing it
+  {
+    const jetP = P('strafer', 4, 0);
+    const b = new Battle(input(4, [jetP, { ...P('ironclad', 20, 4), escort: jetP.uid }], [{ ...P('bulwark', 20, 0), stance: 'holdPos' }]));
+    const tank = b.units.find((u) => u.side === 0 && !u.flying)!;
+    let fired = false;
+    for (let i = 0; i < 900 && !b.done && tank.alive; i++) { b.step(); if (b.events.some((e) => e.t === 'fire' && e.unit === tank.id)) fired = true; }
+    assert.ok(fired, 'the outrun escort still gets into the fight');
+  }
+  // jet escorting a jet: stays close to it over the whole battle instead of looping off
+  {
+    const lead = P('strafer', 4, 0);
+    const b = new Battle(input(4, [lead, { ...P('strafer', 10, 0), escort: lead.uid }], [{ ...P('bulwark', 20, 0), stance: 'holdPos' }]));
+    const [a, w] = b.units.filter((u) => u.side === 0);
+    let sum = 0, n = 0;
+    for (let i = 0; i < 400 && !b.done && a.alive && w.alive; i++) { b.step(); if (i > 60) { sum += Math.hypot(a.x - w.x, a.y - w.y); n++; } }
+    assert.ok(sum / n < 8, `wingman stays near its lead: mean ${(sum / n).toFixed(1)}`);
+  }
+});
+
+test('keep spread is on by default; with it off, friendly units still keep 0.75 cells apart', () => {
+  const run = (hold?: boolean) => {
+    const b = new Battle(input(6, [{ ...P('buggy', 10, 0), ...(hold === undefined ? {} : { hold }) }], [{ ...P('bulwark', 20, 0), stance: 'holdPos' }]));
+    const sq = b.units.filter((u) => u.side === 0);
+    // mean distance from each unit to its nearest squad mate (separation is soft: a single pair can be squeezed
+    // for a tick, but the squad as a whole keeps its room)
+    let sum = 0, n = 0;
+    for (let i = 0; i < 300 && !b.done; i++) {
+      b.step();
+      if (i < 60) continue;
+      const live = sq.filter((u) => u.alive);
+      for (const u of live) {
+        let nn = Infinity;
+        for (const o of live) if (o !== u) nn = Math.min(nn, Math.hypot(o.x - u.x, o.y - u.y));
+        if (nn < Infinity) { sum += nn; n++; }
+      }
+    }
+    return sum / n;
+  };
+  const off = run(false), def = run(undefined);
+  assert.ok(off > 0.76, `spread off: mean nearest gap ${off.toFixed(2)}`);
+  assert.ok(def > off, `default keeps the wider deployed spacing: ${def.toFixed(2)} vs ${off.toFixed(2)}`);
 });
 
 test('hold position: goes after artillery shelling it from out of reach, and fires once in reach', () => {

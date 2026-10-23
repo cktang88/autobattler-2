@@ -99,7 +99,7 @@ export type Orders = {
   /** mount index kiting keeps range to; -1 = longest-range weapon (default) */
   kiteMount: number;
 };
-export const DEFAULT_ORDERS: Orders = { target: 'closest', focus: false, stance: 'advance', kite: false, hold: false, delay: 0, retreat: false, kiteMount: -1 };
+export const DEFAULT_ORDERS: Orders = { target: 'closest', focus: false, stance: 'advance', kite: false, hold: true, delay: 0, retreat: false, kiteMount: -1 };
 const NO_DEFAULTS: DefaultOrders = { kite: false, focus: false };
 /** Full orders from stored fields; kite / focus left unset fall back to the design's defaults (defaultOrders(design)). */
 export const ordersOf = (b: UnitBehavior | undefined, defs: DefaultOrders = NO_DEFAULTS): Orders => ({
@@ -107,7 +107,7 @@ export const ordersOf = (b: UnitBehavior | undefined, defs: DefaultOrders = NO_D
   focus: typeof b?.focus === 'boolean' ? b.focus : defs.focus,
   stance: b?.stance && STANCES.includes(b.stance) ? b.stance : 'advance',
   kite: typeof b?.kite === 'boolean' ? b.kite : defs.kite,
-  hold: !!b?.hold,
+  hold: b?.hold !== false, // keep spread is on unless switched off
   delay: (START_DELAYS as readonly number[]).includes(b?.delay ?? 0) ? (b?.delay ?? 0) : 0,
   retreat: !!b?.retreat,
   kiteMount: b?.kiteMount != null && b.kiteMount >= 0 ? b.kiteMount : -1,
@@ -122,7 +122,7 @@ export const orderFields = (o: Orders, defs: DefaultOrders = NO_DEFAULTS): UnitB
   ...(o.stance !== 'advance' ? { stance: o.stance } : {}),
   ...(o.kite !== defs.kite ? { kite: o.kite } : {}),
   ...(o.kite && o.kiteMount >= 0 ? { kiteMount: o.kiteMount } : {}),
-  ...(o.hold ? { hold: true } : {}),
+  ...(!o.hold ? { hold: false } : {}),
   ...(o.delay ? { delay: o.delay } : {}),
   ...(o.retreat ? { retreat: true } : {}),
 });

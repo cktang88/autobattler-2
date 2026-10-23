@@ -167,6 +167,8 @@ export interface ModuleDef {
   airBonus?: number;
   /** rail/gauss: hits every enemy along its path (once each) */
   pierce?: boolean;
+  /** damage multiplier against shields (each point of the hit drains this many shield points; default 1) */
+  shieldMult?: number;
   /** spinal weapon: fixed in the hull, aims only within this many radians of the hull's heading (the hull turns to aim) */
   spinal?: number;
   /** rail: half-width (m) of the slug's path, added to each hull's width when testing what it passes through (default 0.1) */
@@ -325,7 +327,7 @@ export interface Placement {
   rot?: boolean;
   /** targeting priority for every unit in the block (default 'closest'). Hidden from the opponent until the round resolves. */
   target?: TargetPriority;
-  /** squads: keep the deployed spacing while moving/fighting (true) or close in freely (false/absent). Hidden like `target`. */
+  /** squads: keep the deployed spacing while moving/fighting (true/absent) or close in freely (false). Hidden like `target`. */
   hold?: boolean;
   /** keep to the edge of own weapon range: close in until in range, back away from enemies that come closer.
    *  Unset = the design's default (defaultOrders in stats.ts). Hidden like `target`. */

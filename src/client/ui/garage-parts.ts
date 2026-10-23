@@ -188,6 +188,7 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.falloff != null && mod.falloff < 1) t.push('falloff');
   if (mod.spinUp) t.push(`spin-up ${n1(mod.spinUp)}s`);
   if (mod.ramp) t.push(`focus ×${n1(mod.ramp)}`);
+  if (mod.shieldMult && mod.shieldMult !== 1) t.push(`×${n1(mod.shieldMult)} vs shields`);
   if (mod.fireField) t.push(mod.fireField.rad ? `radiation ${n1(mod.fireField.duration)}s` : `fire field ${n1(mod.fireField.duration)}s`);
   if (mod.cluster) t.push(`cluster ×${mod.cluster.count}`);
   if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
@@ -452,6 +453,7 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.falloff != null && mod.falloff < 1) r.push(`Damage falls off with distance: ${Math.round(mod.falloff * 100)}% at max range.`);
     if (mod.airBonus && mod.airBonus !== 1) r.push(`Deals ×${mod.airBonus} damage to aircraft.`);
     if (mod.spinUp) r.push(`Spin-up: starts at a quarter of its fire rate and reaches full rate after ${n1(mod.spinUp)} s of firing; winds down when idle.`);
+    if (mod.shieldMult && mod.shieldMult !== 1) r.push(`Overloads shields: ×${n1(mod.shieldMult)} damage against shields.`);
     if (mod.ramp) r.push(`Focus: damage builds up to ×${n1(mod.ramp)} while it stays on one target; resets on a new target or a pause.`);
     if (mod.burn) r.push(`Sets the target burning: ${mod.burn.dps} dmg/s for ${mod.burn.duration} s (armor reduces it; shields and hardening block it).`);
     if (mod.fireField?.rad) r.push(`Leaves a radioactive zone ${m(mod.fireField.radius)} across for ${mod.fireField.duration} s: ${mod.fireField.dps} damage per second to every enemy inside, ground or air, ignoring armor.`);

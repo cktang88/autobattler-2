@@ -426,7 +426,8 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
   if (stance === 'charge') kite = false;
   // back-line shooters wait a moment so the tanks lead
   if (mobile && stance === 'advance' && p.range >= 7 && (p.role === 'artillery' || p.role === 'skirmisher' || p.role === 'antiArmor')) delay = rng() < 0.5 ? 3 : 6;
-  const hold = hasSpacing(p.stats) && spacing >= 2 && oppSplashShare > 0.2;
+  // keep spread by default (blasts punish clumps); a charging squad closes up
+  const hold = hasSpacing(p.stats) && stance !== 'charge';
   const focus = p.defaults.focus;
   const retreat = mobile && ctx.hasRepair && p.unitCost >= 20 && p.role !== 'support' && p.role !== 'artillery' && rng() < 0.7;
   if (stance === 'flankLeft' || stance === 'flankRight') ctx.flankCount++;
@@ -453,7 +454,7 @@ function withKiteMount(b: Behavior, d: Design): Behavior {
 function applyBehavior(pl: Placement | UnitConfig, b: Behavior, defs: DefaultOrders): void {
   if (b.kite && b.kiteMount !== undefined) pl.kiteMount = b.kiteMount;
   if (b.target !== 'closest') pl.target = b.target;
-  if (b.hold) pl.hold = true;
+  if (!b.hold) pl.hold = false; // unset = keep spread
   if (b.kite !== defs.kite) pl.kite = b.kite;
   if (b.focus !== defs.focus) pl.focus = b.focus;
   if (b.stance !== 'advance') pl.stance = b.stance;
@@ -668,7 +669,7 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
           if (u.escort === undefined) { const e = pickEscort(blocks, u.uid); if (e !== undefined) cfg.escort = e; }
         } else {
           if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
-          if (b.hold !== !!u.hold && hasSpacing(pr.stats)) cfg.hold = b.hold;
+          if (b.hold !== (u.hold !== false) && hasSpacing(pr.stats)) cfg.hold = b.hold;
           if (b.kite !== (u.kite ?? pr.defaults.kite)) cfg.kite = b.kite;
           if (b.kite && b.kiteMount !== undefined && b.kiteMount !== u.kiteMount) cfg.kiteMount = b.kiteMount;
           else if (!b.kite && u.kiteMount !== undefined) cfg.kiteMount = -1;
