@@ -1356,9 +1356,11 @@ function litOverlay(s: UnitSprites, b: number): HTMLCanvasElement {
   return c;
 }
 
-/** Contact edge under the unit: a faint 1 device-px dark line just outside the silhouette so the machine separates from
- *  bright ground at any zoom. No team colour and no heavy outline: team identity lives in the small painted / lit
- *  details, the ground ring at fit zoom and the far-zoom markers. */
+/** Contact edge under the unit: a dark 1 device-px line just outside the silhouette, plus a fainter second pixel, so the
+ *  machine separates from ground of its own tone (slate hull on the grey Frost Steppe, olive on the dust basin) at any
+ *  zoom (the old single faint line at alpha 0.36 left many airframes with most of their edge under 8 L* of contrast).
+ *  No team colour and no comic outline: team identity lives in the small painted / lit details, the ground ring
+ *  at fit zoom and the far-zoom markers. (The 3D view draws the same edge: render3d/outline3d.ts.) */
 function buildHalo(src: HTMLCanvasElement, sext: number, px: number, _pal: TeamPal): { c: HTMLCanvasElement; ext: number } {
   const t = makeCanvas(src.width, src.height);
   const tg = ctx2d(t);
@@ -1366,20 +1368,29 @@ function buildHalo(src: HTMLCanvasElement, sext: number, px: number, _pal: TeamP
   tg.globalCompositeOperation = 'source-in';
   tg.fillStyle = 'rgb(14,15,16)';
   tg.fillRect(0, 0, t.width, t.height);
-  const ow = 1;
-  const pad = ow + 1;
+  const pad = 3;
   const ext = sext + pad / px;
   const size = Math.ceil(2 * ext * px);
+  const ring = (ow: number): Uint8ClampedArray => {
+    const c = makeCanvas(size, size);
+    const g = ctx2d(c);
+    const off = (size - src.width) / 2;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      g.drawImage(t, off + Math.cos(a) * ow, off + Math.sin(a) * ow);
+    }
+    return g.getImageData(0, 0, size, size).data;
+  };
+  const r1 = ring(1), r2 = ring(2);
+  // hard rings, faint fringe dropped: the 1 px line strong, the 2 px one a soft step so it doesn't read as a cartoon line
   const c = makeCanvas(size, size);
   const g = ctx2d(c);
-  const off = (size - src.width) / 2;
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    g.drawImage(t, off + Math.cos(a) * ow, off + Math.sin(a) * ow);
+  const id = g.createImageData(size, size), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const a = r1[i + 3] >= 70 ? 168 : r2[i + 3] >= 70 ? 64 : 0;
+    if (!a) continue;
+    d[i] = 14; d[i + 1] = 15; d[i + 2] = 16; d[i + 3] = a;
   }
-  // keep it a hard, faint line: faint fringe dropped, the rest at a fixed low alpha
-  const id = g.getImageData(0, 0, size, size), d = id.data;
-  for (let i = 3; i < d.length; i += 4) d[i] = d[i] < 70 ? 0 : 92;
   g.putImageData(id, 0, 0);
   return { c, ext };
 }
@@ -1751,7 +1762,8 @@ export function drawUnitShadow(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs =
   }
   if (flying || leap > 0.02) {
     const off = 0.06 * L.S + alt * 0.75;
-    const a = flying ? (L.S >= 4 ? 0.3 : L.S >= 3 ? 0.26 : 0.22) : 0.3 - leap * 0.1;
+    // flyers: dark enough to read on mid-grey / sand ground (it is how an airframe of the ground's own tone is found)
+    const a = flying ? (L.S >= 4 ? 0.38 : L.S >= 3 ? 0.36 : 0.34) : 0.3 - leap * 0.1;
     g.globalAlpha = (p.alpha ?? 1) * a;
     const sc = flying ? (L.S >= 4 ? 0.97 : 0.88) : 1 - leap * 0.15;
     blit(g, softShadow(s, L.S), p.x + dirs.sx * off, p.y + dirs.sy * off, ang, s.ext, sc);
@@ -1778,9 +1790,10 @@ export function rotorBlur(g: Ctx, x: number, y: number, r: number, blades: numbe
   disc.addColorStop(1, 'rgba(225,235,245,0.10)');
   g.fillStyle = disc;
   g.beginPath(); g.arc(x, y, r, 0, P2); g.fill();
-  const lw = Math.max(1 / px, r * 0.03);
+  const lw = Math.max(1.4 / px, r * 0.035);
   g.lineWidth = lw;
-  g.strokeStyle = 'rgba(10,12,14,0.55)';
+  // dark outer rim: the pale disc is the heli's silhouette from above, and it must not melt into pale / grey ground
+  g.strokeStyle = 'rgba(10,12,14,0.78)';
   g.beginPath(); g.arc(x, y, r + lw, 0, P2); g.stroke();
   g.strokeStyle = 'rgba(235,242,250,0.6)';
   g.beginPath(); g.arc(x, y, r * 0.97, 0, P2); g.stroke();

@@ -13,7 +13,9 @@ import * as THREE from 'three';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
-import { aimTurret, buildUnit, recoilKick, recoilRelax, type Turret, type Unit3D } from '../proto3d/index.ts';
+import { flyHeight } from '../render/tilt.ts';
+import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, type Turret, type Unit3D } from '../proto3d/index.ts';
+import { OUTLINE_LAYER } from './outline3d.ts';
 
 export { buildTerrain, createRenderer, setupPost, setupStage, type Post, type Stage } from '../proto3d/index.ts';
 
@@ -256,6 +258,8 @@ class Pool {
       im.castShadow = !this.tpl.isBlob[j] && (this.look === 'normal' || this.look === 'wreck');
       im.receiveShadow = !this.tpl.isBlob[j];
       im.renderOrder = this.tpl.isBlob[j] ? 1 : 0;
+      // opaque parts of normal units get the dark contact edge (outline3d.ts); decals sit inside the silhouette anyway
+      if (this.look === 'normal' && !this.tpl.isBlob[j] && !((mat as THREE.Material).alphaTest > 0)) im.layers.enable(OUTLINE_LAYER);
       im.count = 0;
       this.group.add(im);
       this.meshes.push(im);
@@ -306,6 +310,18 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
   const unit = buildUnit(design, team);
   const root = unit.root;
   root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  // flyers: a soft contact blob on the ground right under the airframe (the rig flies at flyHeight + 0.4 above its root,
+  // see FieldView3D), so an aircraft over ground of its own tone still has a dark mark that says where it is, even when
+  // crowded views switch the sun shadows off. Ground units get theirs from buildUnit.
+  if (unit.flying) {
+    const bs = bodyScale(unit.S);
+    const blob = contactShadow(unit.L * 0.85, unit.W * 0.85);
+    // (+0.065: clear of the ground through the +-0.05 cruise bob)
+    blob.position.y = (0.065 - (flyHeight(unit.S) + 0.4)) / bs;
+    root.add(blob);
+    root.updateMatrixWorld(true);
+  }
   const nodes: TNode[] = [];
   const index = new Map<THREE.Object3D, number>();
   const meshes: THREE.Mesh[] = [];
@@ -364,7 +380,6 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
     const mod = mid ? MODULE_BY_ID.get(mid) : null;
     mountTurret.push(mod && offs[i] ? tn++ : -1);
   });
-  const box = new THREE.Box3().setFromObject(root);
   const isBlob = meshes.map((m) => (m.material as THREE.Material & { isMeshBasicMaterial?: boolean }).isMeshBasicMaterial === true);
   const tpl: Template = {
     key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, mountTurret,
