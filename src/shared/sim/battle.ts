@@ -773,6 +773,11 @@ export class Battle {
       u.moving = d > 0.002;
       u.odometer += d;
       if (u.moving) active = true;
+      // a gun holding a live target fires again once its cooldown runs out (a 20 s nuke reload is not a stalemate)
+      if (!active) for (let mi = 0; mi < I.wpns.length; mi++) {
+        const w = I.wpns[mi], tg = u.mounts[mi].target;
+        if (w && w.heal <= 0 && tg >= 0 && this.units[tg].alive) { active = true; break; }
+      }
       hpSum += u.hp;
     }
     if (hpSum !== this.hpSum) { this.hpSum = hpSum; active = true; }
@@ -897,8 +902,7 @@ export class Battle {
       const lim = I.pdRange + I.bound, lim2 = lim * lim;
       for (const p of this.projs) {
         if (p.dead || p.side === u.side) continue;
-        const k = p.kind;
-        if (k !== 'rocket' && k !== 'missile' && k !== 'shell' && k !== 'arc' && k !== 'orb') continue;
+        if (!this.interceptable(p.kind)) continue;
         const dx = p.x - u.x, dy = p.y - u.y;
         if (dx * dx + dy * dy > lim2) continue;
         const d = this.edgeC(I, p.x, p.y);
@@ -1340,6 +1344,17 @@ export class Battle {
     return Math.max(r * MIN_DMG_FRAC, r - t.stats.armor * (1 - ap));
   }
 
+  /** projectile kinds point defense shoots down (see pointDefense) */
+  private interceptable(k: string): boolean {
+    return k === 'rocket' || k === 'missile' || k === 'shell' || k === 'arc' || k === 'orb';
+  }
+
+  /** does `side` field a living point-defense unit? */
+  private sideHasPd(side: Side): boolean {
+    for (const P of this.pds) if (P.u.alive && P.u.side === side) return true;
+    return false;
+  }
+
   /** Rounds already in flight are expected to kill this unit. */
   private doomed(j: number): boolean {
     const inc = this.incoming[j];
@@ -1406,8 +1421,10 @@ export class Battle {
     const err = w.spread * Math.min(1.2, dist0 / Math.max(1, w.range)) * (t && this.ints[t.id].jammed ? 2 : 1);
     const speed = def.projectileSpeed ?? 15;
     const air = kind === 'arc' || kind === 'flame' ? false : t ? t.flying : !w.hitG;
-    // overkill bookkeeping: what one round is expected to deal to the target it was fired at
-    const est = t && kind !== 'flame'
+    // overkill bookkeeping: what one round is expected to deal to the target it was fired at. Rounds point defense can
+    // shoot down are not counted on while the target's side fields any: a squad holding fire for the one missile in
+    // the air let a single PD laser swat every shot, one at a time, for the rest of the battle
+    const est = t && kind !== 'flame' && !(this.interceptable(kind) && this.sideHasPd(t.side))
       ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : pellets > 1 || salvoN > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
       : 0;
     for (let k = 0; k < pellets; k++) {

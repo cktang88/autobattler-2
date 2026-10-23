@@ -321,3 +321,35 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   b.step();
   assert.equal(s.mounts[0].target, t.id, 'the flamer should target the citadel corner 0.8 x range away');
 });
+
+// ---------------------------------------------------------------- sim bug pass: quiet end vs long reloads, overkill vs PD
+
+test('a long reload is not a quiet stalemate: two nuke launchers trade shots past the first 20 s cooldown', () => {
+  // the quiet end (nothing moved, fired or got hurt for 10 s) cut the duel at ~20 s as a draw, while both 20 s-reload
+  // launchers still held a live target and were about to fire again
+  const nuker = D('nuker', 'titan', 'anchor', ['tactnuke', null, null, null, null]);
+  assert.deepEqual(validateDesign(nuker), []);
+  const { b } = duel([nuker], { designId: 'nuker' }, { designId: 'nuker' }, 30);
+  while (!b.done) b.step();
+  const s = b.summary();
+  assert.ok(s.ticks > 30 * TICK_RATE, `ended at ${s.ticks / TICK_RATE}s after one exchange`);
+  assert.ok(s.damageDealt[0] > 2 * 2190 && s.damageDealt[1] > 2 * 2190, `only ${s.damageDealt} damage traded`);
+  assert.notEqual(s.winner, -1);
+});
+
+test('overkill prevention does not let one point-defense laser swat a whole missile squad one shot at a time', () => {
+  // with the target "doomed" by the one missile in the air, all 16 launchers held fire; the PD shot each lone missile
+  // down, so the squad never finished a nearly dead target
+  const hunter = D('hunter', 'raider', 'legs', ['atgm', 'atgm']);
+  const fort = D('fort', 'bastion', 'anchor', ['pointdef', 'plateH', null]);
+  assert.deepEqual(validateDesign(hunter), []);
+  assert.deepEqual(validateDesign(fort), []);
+  for (const dx of [3, 9, 11]) {
+    const b = new Battle({ seed: 1, sides: [{ designs: [hunter, fort], units: [pl('hunter', { kite: false, stance: 'holdPos' })] }, { designs: [hunter, fort], units: [pl('fort')] }] });
+    const k = b.units[0], e = b.units[b.units.length - 1]; // squad of 16 hunters vs the fort
+    e.x = k.x + dx; e.y = k.y - 10; e.angle = Math.PI / 2;
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    for (let i = 0; i < 20 * TICK_RATE && !b.done; i++) b.step();
+    assert.equal(e.alive, false, `dx ${dx}: the PD fort survived 20 s of 16 ATGM launchers at ${e.hp.toFixed(1)} hp`);
+  }
+});
