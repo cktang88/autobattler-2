@@ -653,7 +653,7 @@
 /* phone: single column */
 @media (max-width: 760px) {
   .garage .g-top { gap: 10px; padding: calc(6px + var(--safe-t, 0px)) 10px 6px; }
-  .garage .g-title-k { font-size: 1.3rem; }
+  .garage .g-title-k { font-size: 1.15rem; letter-spacing: 0.08em; white-space: nowrap; }
   .garage .g-title-s, .garage .g-hazard { display: none; }
   .garage .g-deckchip { margin-left: auto; }
   .garage .g-body { display: block; overflow-y: auto; padding-bottom: var(--safe-b, 0px); }
@@ -817,7 +817,9 @@
   .garage .g-kstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .garage .g-baytools .k-seg.g-subtabs { overflow-x: auto; }
   /* stage toolbar: the zoom group + a labelled Ranges button ran off the right edge; Ranges goes icon-only */
-  .garage .g-stage-hud { right: 12px; }
+  /* top-aligned: the plate column wraps to 3-4 rows here, and centring the zoom bar against it dropped the bar onto
+     the sockets of tall hulls (it swallowed their taps) */
+  .garage .g-stage-hud { right: 12px; align-items: flex-start; }
   .garage .g-stage-hud .g-zoom { margin-right: 4px; }
   .garage .g-stagebtn { font-size: 0 !important; gap: 0 !important; padding: 0 8px !important; }
 }
