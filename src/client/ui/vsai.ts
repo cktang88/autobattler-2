@@ -46,7 +46,8 @@ const CAP_ICON: Record<Cap, string> = {
 };
 
 export function playerName(): string {
-  try { return currentSession()?.name || 'Commander'; } catch { return 'Commander'; }
+  // the placeholder account made for garage sync ("Pilot 1234") is not a callsign the player chose
+  try { const s = currentSession(); return (s && !s.auto && s.name) || 'Commander'; } catch { return 'Commander'; }
 }
 
 export function vsaiScreen(app: App): Screen {

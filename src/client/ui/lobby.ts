@@ -150,7 +150,8 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   // ---------------------------------------------------------------- data
 
   async function refresh(manual = false): Promise<void> {
-    if (!currentSession() || destroyed) return;
+    // a placeholder (garage sync) account has no matches: the lobby is asking for a callsign
+    if (!currentSession() || currentSession()!.auto || destroyed) return;
     refreshBtn.classList.add('lobby-spin');
     try {
       lastData = await listMatches();
@@ -170,7 +171,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   function render(): void {
     const s = currentSession();
     userBox.replaceChildren();
-    refreshBtn.classList.toggle('hidden', !s);
+    refreshBtn.classList.toggle('hidden', !s || !!s.auto);
     if (!s || s.auto) {
       document.title = baseTitle;
       body.replaceChildren(loginPanel());
@@ -387,7 +388,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   }, REFRESH_MS);
 
   render();
-  if (currentSession()) {
+  if (currentSession() && !currentSession()!.auto) {
     void refresh();
     // verify the stored token is still known to the server (e.g. after a data reset)
     getMe().catch((e) => { if (e instanceof NetError && e.status === 401) { app.toast('Session expired — enlist again.', 'error'); render(); } });
