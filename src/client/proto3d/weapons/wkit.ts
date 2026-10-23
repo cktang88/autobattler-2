@@ -73,23 +73,25 @@ export function barrel(C: WCtx, B: Bld, o: {
   const tp = o.taper ?? 0.82;
   const at: V3 = [x0, y, z];
   const brake = o.brake ?? 'none';
-  const bl = brake === 'none' ? 0 : brake === 'flash' ? R * 2.6 : R * 2.8;
+  const bl = brake === 'none' ? 0 : brake === 'flash' ? R * 2.6 : brake === 'slot' ? R * 3.2 : R * 2.8;
   const tubeEnd = L - bl * 0.85;
   // tube: thick root (collar), taper to the muzzle
   B.lathe(o.mat ?? kit.metal, [[0, 0], [R * 1.25, 0], [R * 1.25, L * 0.1], [R, L * 0.14], [R * tp, tubeEnd], [0, tubeEnd]], at, 'x', seg);
-  if (o.sleeve) B.lathe(kit.trim, [[0, L * 0.18], [R * 1.22, L * 0.18], [R * 1.3, L * 0.22], [R * 1.3, L * 0.5], [R * 1.12, L * 0.54], [0, L * 0.54]], at, 'x', seg);
-  if (o.evac) { const a = L * 0.62, e = L * 0.72; B.lathe(kit.metal, [[0, a], [R * 1.05, a], [R * 1.55, a + (e - a) * 0.3], [R * 1.55, e - (e - a) * 0.25], [R * 1.0, e], [0, e]], at, 'x', seg); }
+  // recoil / thermal sleeve over the breech end: reads as a stepped barrel, not a pipe
+  if (o.sleeve) B.lathe(kit.trim, [[0, L * 0.12], [R * 1.2, L * 0.12], [R * 1.28, L * 0.15], [R * 1.28, L * 0.4], [R * 1.08, L * 0.44], [0, L * 0.44]], at, 'x', seg);
+  // fume extractor: a short spindle-shaped bulge a little past mid-barrel
+  if (o.evac) { const a = L * 0.56, e = L * 0.68; B.lathe(kit.metal, [[0, a], [R * tp, a], [R * 1.42, a + (e - a) * 0.3], [R * 1.42, e - (e - a) * 0.3], [R * tp, e], [0, e]], at, 'x', seg); }
   const m0 = L - bl;
   if (brake === 'slot') {
-    // chunky double-baffle brake: two fat drums with a dark gap
-    const bR = R * 1.48;
-    B.lathe(kit.metal, [[0, m0], [bR, m0], [bR, m0 + bl * 0.4], [R * 1.1, m0 + bl * 0.4], [R * 1.1, m0 + bl * 0.55], [bR, m0 + bl * 0.55], [bR, L], [R * 0.6, L], [0, L - bl * 0.1]], at, 'x', seg);
+    // double-baffle muzzle brake: a slim core with two flat baffle plates wider than tall (reads as a cross-bar from above)
+    B.lathe(kit.metal, [[0, m0], [R * 1.12, m0], [R * 1.12, L], [R * 0.55, L], [0, L - bl * 0.1]], at, 'x', seg);
+    for (const f of [0.3, 0.8]) cbox(B, kit.metal, x0 + m0 + bl * f, y, z, bl * 0.24, R * 2.0, R * 3.0, R * 0.24);
   } else if (brake === 'block') {
-    cbox(B, kit.metal, x0 + m0 + bl / 2, y, z, bl, R * 2.2, R * 2.8, R * 0.4);
+    cbox(B, kit.metal, x0 + m0 + bl / 2, y, z, bl, R * 2.0, R * 2.6, R * 0.4);
   } else if (brake === 'cone' || brake === 'flash') {
-    // 'cone' = chunky muzzle can, 'flash' = short flared hider
-    if (brake === 'cone') B.lathe(kit.metal, [[0, m0], [R * 1.4, m0], [R * 1.5, m0 + bl * 0.15], [R * 1.5, L - bl * 0.15], [R * 1.3, L], [R * 0.6, L], [0, L - bl * 0.2]], at, 'x', seg);
-    else B.lathe(kit.metal, [[0, m0], [R * 1.05, m0], [R * 1.4, L], [R * 0.55, L], [0, L - bl * 0.3]], at, 'x', seg);
+    // 'cone' = muzzle can (slightly wider than the tube), 'flash' = short flared hider
+    if (brake === 'cone') B.lathe(kit.metal, [[0, m0], [R * 1.22, m0], [R * 1.32, m0 + bl * 0.15], [R * 1.32, L - bl * 0.15], [R * 1.18, L], [R * 0.6, L], [0, L - bl * 0.2]], at, 'x', seg);
+    else B.lathe(kit.metal, [[0, m0], [R * 1.0, m0], [R * 1.32, L], [R * 0.6, L], [0, L - bl * 0.3]], at, 'x', seg);
   }
   if (!o.noMuzzle) C.muzzle(x0 + L + R * 0.3, y, z);
   return L;

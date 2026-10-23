@@ -151,10 +151,13 @@ function samCells(C: WCtx) {
   C.t.pitch.rotation.z = 0.32;
   const ox = pl * 0.25;
   cbox(rc, kit.hull, ox, pw * 0.5, 0, pl, pw, pw, r * 0.06);
+  // dark face frame, four cell covers each with a frangible hazard cap
+  bx(rc, kit.trim, ox + pl / 2 + r * 0.01, pw * 0.5, 0, r * 0.03, pw * 0.94, pw * 0.94);
   for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
     const y = pw * 0.5 + (i - 0.5) * cell, z = (j - 0.5) * cell;
-    cbox(rc, (i + j) % 2 ? kit.hazard : kit.panel, ox + pl / 2 + r * 0.02, y, z, r * 0.05, cell * 0.82, cell * 0.82, r * 0.02);
-    C.muzzle(ox + pl / 2 + r * 0.06, y, z);
+    cbox(rc, kit.panel, ox + pl / 2 + r * 0.03, y, z, r * 0.05, cell * 0.8, cell * 0.8, r * 0.02);
+    cbox(rc, kit.hazard, ox + pl / 2 + r * 0.06, y, z, r * 0.03, cell * 0.44, cell * 0.44, r * 0.01);
+    C.muzzle(ox + pl / 2 + r * 0.08, y, z);
   }
   accent(C, ox - pl * 0.15, pw + 0.003, 0, pl * 0.4, pw * 0.35, undefined, rc);
   C.t.shot = 'rocket';
@@ -235,26 +238,28 @@ function mortar(C: WCtx) {
   C.t.rate = 1.4;
 }
 
-/** Howitzer family: open-topped gun-house, shielded cradle, long elevated barrel(s) with recoil cylinders. */
+/** Howitzer family: open-topped gun-house, shielded cradle, long slim elevated barrel(s): thick recoil sleeve at the
+ *  breech with recuperator cylinders above and below, bare tube, double-baffle muzzle brake. */
 function howitzer(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const n = Math.max(1, C.nb);
-  const R = C.bore, gap = R * 3.6;
+  const R = C.bore, gap = R * 4.2;
   const xl = C.tier >= 5;
   const h = r * 0.42;
-  const wid = Math.max(r * 0.75, n * gap / 2 + R * 3);
+  const wid = Math.max(r * 0.66, n * gap / 2 + R * 3);
   shell(b, kit.hull, [[-r * 1.0, wid * 0.82, wid * 0.7, h * 0.9], [r * 0.4, wid, wid * 0.85, h], [r * 0.85, wid * 0.7, wid * 0.55, h * 0.6]], y0);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.2, y0 + h + r * 0.12, s * (wid * 0.72), r * 0.75, r * 0.3, r * 0.1, r * 0.03, undefined, 0.75);
   cbox(b, kit.panel, -r * 0.8, y0 + h + r * 0.08, 0, r * 0.3, r * 0.16, wid * 0.9);
   accent(C, -r * 0.8, y0 + h + r * 0.165, 0, r * 0.22, wid * 0.6);
   C.t.pitch.position.set(-r * 0.05, y0 + h + r * 0.12, 0);
   C.t.pitch.rotation.z = n >= 3 ? 0.55 : 0.45;
-  cbox(p, kit.trim, 0, 0, 0, r * 0.4, R * 3.2, n * gap + R * 2.5, r * 0.05);
-  bx(p, kit.hull, r * 0.3, R * 0.4, 0, r * 0.08, Math.min(R * 3.4, r * 0.5), n * gap + R * 3);
-  const len = C.D * (n >= 3 ? 1.25 : xl ? 1.45 : 1.6);
+  cbox(p, kit.trim, 0, 0, 0, r * 0.4, R * 3.4, n * gap + R * 2.5, r * 0.05);
+  bx(p, kit.hull, r * 0.3, R * 0.4, 0, r * 0.08, Math.min(R * 3.6, r * 0.5), n * gap + R * 3);
+  const len = C.D * (n >= 3 ? 1.5 : xl ? 1.75 : 1.95);
   for (const z of Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap)) {
-    barrel(C, rc, { len, rad: R, x0: r * 0.1, z, seg: xl ? 10 : 8, sleeve: n < 3, brake: 'slot' });
-    if (n < 3) rc.cyl(kit.metal, R * 0.42, R * 0.42, len * 0.4, [r * 0.1, R * 1.45, z], 'x', 6);
+    barrel(C, rc, { len, rad: R, x0: r * 0.1, z, seg: xl ? 10 : 8, sleeve: true, brake: 'slot', taper: 0.9 });
+    // recuperator / recoil buffer cylinders hugging the sleeve
+    for (const y of n < 3 ? [R * 1.55, -R * 1.45] : [R * 1.5]) rc.cyl(kit.metal, R * 0.45, R * 0.45, len * 0.34, [r * 0.1, y, z], 'x', 6);
   }
   C.t.shot = 'shell';
   C.t.rate = xl ? 3 : 2.4;

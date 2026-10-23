@@ -28,11 +28,12 @@ export function buildEnergy(C: WCtx): void {
 const eggHousing = (C: WCtx, l = 0.95, w = 0.8, h = 0.42, x = -0.1, mat: MatLike = C.kit.hull) =>
   pod(C.b, mat, [C.r * x, C.y0 + C.r * h * 0.55, 0], C.r * l, C.r * h, C.r * w, 10, 6, 2.4, 0.6);
 
-/** stepped lens emitter along +X: body tube, wide lens housing, glass lens, glowing core. */
+/** stepped lens emitter along +X: breech collar, slim body with a stack of cooling fins, wide lens housing, glass lens,
+ *  glowing core (the fin stack + lens bell is the laser's silhouette; a plain fat tube reads as a gun). */
 function lensEmitter(C: WCtx, B: Bld, e: number, len: number, z = 0, core: MatLike = C.kit.rail) {
   const { kit } = C;
-  B.lathe(kit.metal, [[0, 0], [e * 0.85, 0], [e * 0.85, len * 0.55], [e * 1.35, len * 0.62], [e * 1.35, len * 0.95], [e * 1.15, len], [0, len]], [0, 0, z], 'x', 8);
-  band(B, kit.trim, len * 0.35, 0, z, e * 1.0, e * 0.5, 8);
+  B.lathe(kit.metal, [[0, 0], [e * 0.85, 0], [e * 0.85, len * 0.12], [e * 0.58, len * 0.16], [e * 0.58, len * 0.76], [e * 1.25, len * 0.8], [e * 1.25, len * 0.96], [e * 1.08, len], [0, len]], [0, 0, z], 'x', 8);
+  for (const f of [0.26, 0.38, 0.5, 0.62]) band(B, kit.trim, len * f, 0, z, e * 1.1, len * 0.045, 6);
   B.cyl(kit.glass, e * 1.0, e * 1.0, e * 0.12, [len, 0, z], 'x', 8);
   B.cyl(core, e * 0.45, e * 0.45, e * 0.14, [len + e * 0.02, 0, z], 'x', 6);
   C.muzzle(len + e * 0.4, 0, z);
@@ -43,7 +44,7 @@ function laser(C: WCtx) {
   ball(b, kit.hull, 0, y0 + r * 0.38, 0, r * 0.78, 0.6, 10);
   C.t.pitch.position.set(r * 0.4, y0 + r * 0.4, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
-  lensEmitter(C, rc, r * 0.17, C.D * 0.85);
+  lensEmitter(C, rc, r * 0.17, C.D * 1.05);
   accent(C, -r * 0.25, y0 + r * 0.85, 0, r * 0.35, r * 0.12);
   C.t.rate = 0.5;
 }
@@ -53,7 +54,7 @@ function twinLaser(C: WCtx) {
   eggHousing(C, 0.9, 0.62, 0.5);
   C.t.pitch.position.set(r * 0.25, y0 + r * 0.42, 0);
   for (const s of [-1, 1]) cbox(p, kit.trim, 0, 0, s * r * 0.55, r * 0.5, r * 0.32, r * 0.22);
-  for (const s of [-1, 1]) lensEmitter(C, rc, r * 0.15, C.D * 0.8, s * r * 0.55);
+  for (const s of [-1, 1]) lensEmitter(C, rc, r * 0.15, C.D * 1.0, s * r * 0.55);
   bx(b, kit.glass, r * 0.55, y0 + r * 0.55, 0, r * 0.12, r * 0.12, r * 0.3, [0, 0, -0.5]);
   accent(C, -r * 0.3, y0 + r * 0.66, 0, r * 0.4, r * 0.16);
   C.t.rate = 0.4;
@@ -83,14 +84,14 @@ function plasma(C: WCtx) {
   C.t.pitch.position.set(r * 0.35, y0 + r * (big ? 0.5 : 0.45), 0);
   const gap = r * 0.62;
   const cr = r * (lance ? 0.24 : 0.3);
-  const len = C.D * (lance ? 1.15 : 0.75);
+  const len = C.D * (lance ? 1.15 : 0.85);
   for (let i = 0; i < n; i++) {
     const z = n > 1 ? (i - 0.5) * gap : 0;
     // chamber
     ball(rc, kit.panel, r * 0.02, 0, z, cr, 1, 10, 'x');
     band(rc, kit.plasma, r * 0.02, 0, z, cr * 1.03, cr * 0.4, 10);
     // barrel with containment rings
-    const br = cr * (lance ? 0.45 : 0.62);
+    const br = cr * (lance ? 0.45 : 0.5);
     rc.lathe(kit.steel, [[0, 0], [br, 0], [br * 0.9, len], [0, len]], [cr * 0.6, 0, z], 'x', 8);
     const nr = lance ? 3 : 2;
     for (let k = 0; k < nr; k++) band(rc, k === nr - 1 ? kit.plasma : kit.trim, cr * 0.6 + len * (0.35 + (0.6 * k) / Math.max(1, nr - 1) * 0.95), 0, z, br * 1.7, br * 0.7, 8);
