@@ -2,12 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MODULE_BY_ID } from '../src/shared/parts.ts';
-import { MAX_ENERGY_RESIST, STACK_FALLOFF, computeStats, stackBonus, stackedBonuses } from '../src/shared/stats.ts';
+import { MAX_ENERGY_RESIST, computeStats, stackBonus, stackedBonuses } from '../src/shared/stats.ts';
 
-test('stackBonus: strongest copy full, then halving', () => {
+test('stackBonus: strongest copy full, then 80%, 60%, ...', () => {
   assert.equal(stackBonus([0.15]), 0.15);
-  assert.ok(Math.abs(stackBonus([0.15, 0.15]) - 0.15 * (1 + STACK_FALLOFF)) < 1e-12);
-  assert.ok(Math.abs(stackBonus([0.1, 0.3]) - (0.3 + 0.1 * STACK_FALLOFF)) < 1e-12, 'strongest first');
+  assert.ok(Math.abs(stackBonus([0.15, 0.15, 0.15]) - 0.15 * (1 + 0.8 + 0.6)) < 1e-12);
+  assert.ok(Math.abs(stackBonus([0.1, 0.3]) - (0.3 + 0.1 * 0.8)) < 1e-12, 'strongest first');
 });
 
 test('two targeting computers give less than double range; mirrors never pass the resistance cap', () => {

@@ -17,11 +17,12 @@ export function loadSpeedFactor(load: number): number {
   return Math.max(0.3, 1 - (load - 1) * 1.2);
 }
 
-/** Percentage modules stack with diminishing returns: the strongest copy counts fully, the 2nd at STACK_FALLOFF, the
- *  3rd at STACK_FALLOFF^2, ... (two targeting computers: +15% + 7.5% range, not +30%). */
-export const STACK_FALLOFF = 0.5;
+/** Percentage modules stack with diminishing returns: the strongest copy counts fully, the 2nd at 80%, the 3rd at
+ *  60%, then 40%, 20% (two targeting computers: +15% + 12% range, not +30%). */
+export const STACK_WEIGHTS = [1, 0.8, 0.6, 0.4, 0.2];
+export const stackWeight = (i: number) => STACK_WEIGHTS[i] ?? 0;
 export function stackBonus(vals: number[]): number {
-  return [...vals].filter((v) => v > 0).sort((a, b) => b - a).reduce((t, v, i) => t + v * STACK_FALLOFF ** i, 0);
+  return [...vals].filter((v) => v > 0).sort((a, b) => b - a).reduce((t, v, i) => t + v * stackWeight(i), 0);
 }
 /** most energy damage one unit can shrug off however many mirror coatings it carries */
 export const MAX_ENERGY_RESIST = 0.75;
@@ -252,6 +253,15 @@ export function squadFor(size: number, unitPrice: (squad: number) => number): nu
   return SQUAD_TIERS[SQUAD_TIERS.length - 1][1];
 }
 
+/** Share of a fight a weapon gets to fire in, next to the design's longest weapon (`longest`, cells): full within
+ *  ~2/3 of that reach (a 40 m and a 60 m gun weigh 50/50), fading to 0.4 at 1/5 of it or less (artillery + a machine
+ *  gun weigh ~70/30). Repair beams and non-weapons are unaffected. */
+export function engagementShare(w: ModuleDef, longest: number): number {
+  if (w.kind !== 'weapon' || w.heal || !(longest > 0)) return 1;
+  const q = (w.range ?? 0) / longest;
+  return q >= 0.66 ? 1 : q <= 0.2 ? 0.4 : 0.4 + (0.6 * (q - 0.2)) / 0.46;
+}
+
 export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
   const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / RANGE_REF, RANGE_EXP))); // reach decides most fights
@@ -346,7 +356,10 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
 
   // ---- cost model ----
   let offense = 0;
-  for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1);
+  // mixed-range loadouts: a weapon only fires once the enemy is inside its reach, and fights are mostly fought at
+  // the reach of the longest gun, so a short gun next to a much longer one counts for less (engagementShare)
+  const longest = Math.max(0, ...mods.filter((w) => w.kind === 'weapon' && !w.heal).map((w) => w.range ?? 0));
+  for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest);
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
   offense *= fireRate;
   let reactiveHp = 0;
@@ -361,7 +374,7 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
     const u = cal(mod.id); // empirical strength of the utility's effect (1 = analytic value)
     const eh = (mult: number) => 1 + (mult - 1) * u;
     // repeated percentage modules count with the same diminishing returns as in the sim (stackBonus)
-    const nth = (k: string) => { const n = copies.get(k) ?? 0; copies.set(k, n + 1); return STACK_FALLOFF ** n; };
+    const nth = (k: string) => { const n = copies.get(k) ?? 0; copies.set(k, n + 1); return stackWeight(n); };
     if (mod.reloadBonus) offense *= 1 + 0.25 * u * mod.reloadBonus * nth('reload') * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
     if (mod.shieldAura) support += mod.shieldAura.amount * 0.3 * auraReach(mod.shieldAura.radius, hullR) * (MODULE_CAL[mod.id + 'Aura'] ?? u);
     if (mod.fireRateAura) support += mod.fireRateAura.bonus * 300 * auraReach(mod.fireRateAura.radius, hullR) * u;
