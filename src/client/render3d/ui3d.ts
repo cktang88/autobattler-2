@@ -117,24 +117,24 @@ const shieldFS = /* glsl */ `
       if (hh.w >= 1.0) continue;
       float ang = acos(clamp(dot(p, hh.xyz), -1.0, 1.0));
       float k = 1.0 - hh.w;
-      float d = ang - hh.w * 2.3;
-      ring += (exp(-d * d * 60.0) + 0.45 * exp(-(d + 0.28) * (d + 0.28) * 90.0)) * k;
-      flash += exp(-ang * ang * 10.0) * k * k;
+      float d = ang - (0.08 + hh.w * 2.6);
+      ring += (exp(-d * d * 140.0) + 0.5 * exp(-(d + 0.3) * (d + 0.3) * 200.0)) * k;
+      flash += exp(-ang * ang * 40.0) * k * k;
       warp += sin(d * 26.0) * exp(-d * d * 12.0) * k;
     }
-    vec2 uv = vP.xz * 7.0 + vec2(sin(vP.z * 9.0 + uTime * 1.3), cos(vP.x * 8.0 - uTime * 1.1)) * 0.06 + p.xz * warp * 0.35;
+    vec2 uv = vP.xz * 3.6 + vec2(sin(vP.z * 9.0 + uTime * 1.3), cos(vP.x * 8.0 - uTime * 1.1)) * 0.06 + p.xz * warp * 0.35;
     vec4 hx = hexCell(uv);
     float hd = max(dot(abs(hx.xy), vec2(0.8660254, 0.5)), abs(hx.y));
-    float edge = smoothstep(0.4, 0.49, hd);
+    float edge = smoothstep(0.36, 0.48, hd);
     float rid = h21(hx.zw + uSeed);
     float shimmer = smoothstep(0.82, 1.0, sin(uTime * (1.2 + rid * 2.0) + rid * 40.0)) * 0.6;
     float fres = 1.0 - abs(dot(normalize(vN), normalize(vV)));
     float rim = pow(fres, 2.6);
     float ground = exp(-pow((vP.y + 0.42) * 10.0, 2.0));
     float face = gl_FrontFacing ? 1.0 : 0.35;
-    float a = uBase * (0.25 + 0.9 * rim + edge * (0.55 + 1.4 * rim) + shimmer * (1.0 - edge) * 0.25)
+    float a = uBase * (0.2 + 0.9 * rim + edge * (0.9 + 1.6 * rim) + shimmer * (1.0 - edge) * 0.3)
             + rim * 0.06 + ground * uBase * 2.2
-            + ring * (0.35 + edge * 1.6) + flash * 0.7;
+            + ring * (0.25 + edge * 1.6) + flash * 0.4;
     vec3 col = uCol * (1.0 + ring * 1.4 + flash) + vec3(0.6, 0.8, 1.0) * (ring * edge + flash * 0.6);
     gl_FragColor = vec4(col * a * face, 1.0);
   }`;
@@ -154,7 +154,7 @@ export class ShieldPool {
       const mat = new THREE.ShaderMaterial({
         vertexShader: shieldVS, fragmentShader: shieldFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
         uniforms: {
-          uBase: { value: 0.1 }, uTime: { value: 0 }, uCol: { value: new THREE.Color(0.32, 0.7, 1.25) }, uSeed: { value: Math.random() * 50 },
+          uBase: { value: 0.1 }, uTime: { value: 0 }, uCol: { value: new THREE.Color(0.3, 0.72, 1.7) }, uSeed: { value: Math.random() * 50 },
           uHits: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 1, 0, 1)) },
         },
       });

@@ -199,7 +199,7 @@ def fire_frame(i):
     dens = np.clip(d * 5, 0, 1) * window(P)
     sig = dens * (16 - 6 * t)
     # hot inside the big lobes, sooty in the creases between puffs; cools over time from the outside in
-    temp = core * 1.5 + (n2 - 0.5) * 0.9 + 0.35 + 0.6 * (1 - t) ** 3 - t * 1.3
+    temp = core * 1.3 + field * 0.35 + (n2 - 0.5) * 0.9 + 0.25 + 0.6 * (1 - t) ** 3 - t * 1.3
     temp = np.clip(temp, 0, 1)
     a, tv, tau = composite(sig, temp, DZ)
     nm = normals(tau, 1.0 / 32)

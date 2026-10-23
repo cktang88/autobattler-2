@@ -22,7 +22,7 @@ import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
 import { buildTerrain, createRenderer, setSurfaceDetail, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
-import { UnitLayer, templateKey, type Look, type Rig } from './units-adapter.ts';
+import { UnitLayer, teamHullRgb, templateKey, type Look, type Rig } from './units-adapter.ts';
 import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
@@ -680,7 +680,7 @@ export class FieldView3D implements BattleView {
   /** linear rgb of a side's team body paint (blown-up hull debris) */
   private paintOf(side: Side): [number, number, number] {
     const t = this.teamOf(side);
-    if (!this.paints[t]) { const c = new THREE.Color(TEAM_PAL[t].body); this.paints[t] = [c.r, c.g, c.b]; }
+    if (!this.paints[t]) this.paints[t] = teamHullRgb(t);
     return this.paints[t];
   }
   private clearBattle(): void {
@@ -1017,7 +1017,7 @@ export class FieldView3D implements BattleView {
     const hit = since < 0.55 ? 1 - since / 0.55 : 0;
     const frac = u.maxShield > 0 ? u.shield / u.maxShield : 0.5;
     const un = b.mat.uniforms;
-    un.uBase.value = (0.045 + 0.06 * frac) * clamp(0.6 + 0.4 * this.flashScale, 0, 1) + hit * 0.05;
+    un.uBase.value = (0.08 + 0.08 * frac) * clamp(0.6 + 0.4 * this.flashScale, 0, 1) + hit * 0.05;
     un.uTime.value = this.time;
     // the last 4 hits ripple at once; directions relative to the bubble's centre in its unit-sphere space
     const hs = un.uHits.value as THREE.Vector4[], cy = h + Hh * 0.42;

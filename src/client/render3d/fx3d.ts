@@ -1,6 +1,9 @@
-// Effects for the 3D battlefield: GPU-instanced billboard particles (additive fire / sparks / glows, alpha smoke / dust),
-// tumbling debris, ground shock rings, persistent scorch decals, additive beams (core + glow) with jagged lightning,
-// tracer / shell / rocket projectile pools. Everything is a handful of draw calls regardless of how much is going on.
+// Effects for the 3D battlefield: GPU-instanced billboard particles (additive glows and velocity-stretched spark streaks,
+// lobed flipbook fireballs that cool into soot, sun-lit flipbook smoke / dust with a soft fade against the ground),
+// chunky tumbling debris in the dead hull's paint, one crisp shock ring per blast, persistent soft scorch decals,
+// camera-facing soft ribbons for beams / lightning / tracers, shell / rocket projectile bodies. The flipbooks come from
+// public/assets/fx/fx_atlas.webp (scripts/gen-fx-atlas.py), loaded asynchronously; until then a procedural canvas atlas
+// keeps the older soft look. Everything is a handful of draw calls regardless of how much is going on.
 // Pure three.js: knows nothing about the sim. FieldView3D feeds it world positions (x, y = height, z).
 
 import * as THREE from 'three';
@@ -25,7 +28,7 @@ export const RAMPS = {
   smoke: [0.15, 0.14, 0.13, 0.5, 0.22, 0.2, 0.18, 0.36, 0.3, 0.28, 0.26, 0],
   smokeLight: [0.34, 0.33, 0.31, 0.32, 0.34, 0.33, 0.32, 0.2, 0.34, 0.34, 0.33, 0],
   /** flipbook fireball tint: the atlas carries the temperature, this sets the hue and brightness */
-  fireball: [2.6, 1.25, 0.4, 1, 2.2, 0.85, 0.22, 1, 1.4, 0.45, 0.12, 0],
+  fireball: [2.7, 1.15, 0.28, 1, 2.3, 0.75, 0.15, 1, 1.4, 0.38, 0.08, 0],
   /** explosion smoke: fades in while the fire burns, lingers grey-brown, lit by the sun */
   blastSmoke: [0.15, 0.14, 0.13, 0.05, 0.2, 0.185, 0.165, 0.8, 0.26, 0.24, 0.22, 0],
   heal: [0.7, 2.8, 1.1, 1, 0.3, 1.6, 0.6, 0.6, 0.1, 0.8, 0.3, 0],
@@ -1074,7 +1077,7 @@ export class Fx3D {
 
   /** shield hit: a cyan flare */
   shieldHit(x: number, y: number, z: number): void {
-    this.add.emit(x, y, z, 0, 0, 0, 0.18, 0.7, 1.2, 0, 0, 0, 0, RAMPS.shield, this.hdr);
+    this.add.emit(x, y, z, 0, 0, 0, 0.14, 0.4, 0.7, 0, 0, 0, 0, RAMPS.shield, this.hdr * 0.7);
     for (let i = 0; i < 4; i++) this.add.emit(x, y, z, R(-2.5, 2.5), R(0.4, 2.5), R(-2.5, 2.5), R(0.2, 0.4), 0.09, 0.03, 0, 1.5, -4, 3, RAMPS.shield, this.hdr);
   }
 
@@ -1097,7 +1100,7 @@ export class Fx3D {
         break;
       case 'missile': // guided missile: a white-hot exhaust point and a thin, long-lived white contrail
         if (Math.random() < 0.6) this.add.emit(x, y, z, 0, 0, 0, 0.08, 0.34 * size, 0.12, 0, 0, 0, 0, RAMPS.flash, this.hdr * 1.4);
-        this.alpha.emit(x, y, z, R(-0.05, 0.05) + WIND_X * 0.8, R(0.02, 0.12), R(-0.05, 0.05) + WIND_Z * 0.8, R(3.4, 5.0), 0.12 * size, 0.75 * size, R(-0.3, 0.3), 0.4, 0.01, pf, RAMPS.contrail);
+        this.alpha.emit(x, y, z, R(-0.05, 0.05) + WIND_X * 0.8, R(0.02, 0.12), R(-0.05, 0.05) + WIND_Z * 0.8, R(3.4, 5.0), 0.16 * size, 0.9 * size, R(-0.3, 0.3), 0.4, 0.01, pf, RAMPS.contrail);
         break;
       case 'bigMissile': // cruise / nuke: a roaring flame tongue and a heavy white plume
         this.add.emit(x, y, z, 0, 0, 0, 0.12, 0.5 * size, 0.2, 0, 0, 0, 0, RAMPS.flash, this.hdr);
@@ -1625,7 +1628,7 @@ export class Fx3D {
     for (let i = 0; i < nf; i++) {
       const a = Math.random() * 6.283, d = r * 0.38 * Math.sqrt(Math.random()), sp = r * R(0.5, 1.5);
       this.fire.emit(x + Math.cos(a) * d, cy + R(-0.15, 0.35) * r, z + Math.sin(a) * d, Math.cos(a) * sp * 0.5, R(0.3, 1.1) * r * 0.7 + 0.3, Math.sin(a) * sp * 0.5,
-        R(0.8, 1.25) * (0.85 + r * 0.08), r * R(0.7, 1.0), r * R(1.5, 2.1), R(-0.4, 0.4), 2.2, 0.35, 1 + (i & 1), fire, h * (0.6 + 0.4 * kq));
+        R(0.8, 1.25) * (0.85 + r * 0.08), r * R(0.9, 1.3), r * R(1.9, 2.6), R(-0.4, 0.4), 2.2, 0.35, 1 + (i & 1), fire, h * (0.6 + 0.4 * kq));
     }
     // smoke column: fades in as the fire dies, rises, spreads and drifts off with the breeze
     const ns = lodN(3 + Math.round(r * 2.2));
@@ -1700,7 +1703,7 @@ export class Fx3D {
       const a = Math.random() * 6.283, d = reach * Math.sqrt(Math.random()), s = size * R(0.35, 1);
       const melt = Math.random() < hot;
       const tone = melt ? R(0.45, 0.7) : R(0.05, 0.14);
-      const rgb = !melt && paint && Math.random() < 0.4 ? _scrapRgb.set(paint[0] * 0.38, paint[1] * 0.38, paint[2] * 0.38) : null;
+      const rgb = !melt && paint && Math.random() < 0.4 ? _scrapRgb.setRGB(paint[0] * 0.2 + 0.03, paint[1] * 0.2 + 0.03, paint[2] * 0.2 + 0.03) : null;
       this.scrap.add(x + R(-0.3, 0.3) * size, y + R(0.2, 0.6), z + R(-0.3, 0.3) * size, a, d, s, tone, Math.random() < 0.55, rgb);
       if (melt) this.add.emit(x, y + 0.3, z, Math.cos(a) * d * 1.4, R(3, 6), Math.sin(a) * d * 1.4, R(0.6, 1.2), 0.12 + s * 0.3, 0.03, 0, 0.6, -10, 3, RAMPS.ember, this.hdr);
     }

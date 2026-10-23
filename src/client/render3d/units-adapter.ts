@@ -18,6 +18,13 @@ import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withSurfa
 import { OUTLINE_LAYER } from './outline3d.ts';
 
 export { buildTerrain, createRenderer, setupPost, setupStage, setSurfaceDetail, type Post, type Stage } from '../proto3d/index.ts';
+import { TEAM_PAINT } from '../proto3d/materials.ts';
+
+/** linear rgb of a team's primary hull paint (debris of a blown-up hull is painted with it) */
+export function teamHullRgb(team: 0 | 1): [number, number, number] {
+  const c = new THREE.Color(TEAM_PAINT[team][0]);
+  return [c.r, c.g, c.b];
+}
 
 export type Look = 'normal' | 'ghost' | 'invalid' | 'wreck' | 'cloak';
 const LOOKS: Look[] = ['normal', 'ghost', 'invalid', 'wreck', 'cloak'];
@@ -42,10 +49,8 @@ float chN(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f)
   return mix(mix(mix(chH(i), chH(i + vec3(1, 0, 0)), f.x), mix(chH(i + vec3(0, 1, 0)), chH(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(chH(i + vec3(0, 0, 1)), chH(i + vec3(1, 0, 1)), f.x), mix(chH(i + vec3(0, 1, 1)), chH(i + vec3(1, 1, 1)), f.x), f.y), f.z); }`;
 const CHAR_COLOR = /* glsl */ `
-  #if defined( USE_COLOR_ALPHA )
+  #if defined( USE_COLOR_ALPHA ) || defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
     vec3 chK = vColor.rgb;
-  #elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
-    vec3 chK = vColor;
   #else
     vec3 chK = vec3(0.8, 0.0, 0.0);
   #endif
@@ -53,11 +58,11 @@ const CHAR_COLOR = /* glsl */ `
   float chNs = chN(chP) * 0.6 + chN(chP * 2.7) * 0.4;
   vec3 chWn = normalize(vChN);
   float chTop = smoothstep(-0.3, 0.9, chWn.y);
-  float chSoot = clamp(chK.r * (0.5 + 0.55 * chTop) + (chNs - 0.5) * 0.7 * chK.r, 0.0, 1.0);
+  float chSoot = clamp(chK.r * (0.62 + 0.4 * chTop) + (chNs - 0.5) * 0.9 * chK.r, 0.0, 1.0);
   float chL = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
   // paint survives faintly under the soot; burnt-through patches go black, the rest heat-tinted brown-grey metal
-  vec3 chC = mix(vec3(chL), diffuseColor.rgb, 0.5 - 0.3 * chK.r) * (1.0 - 0.72 * chSoot);
-  chC = mix(chC, vec3(0.05, 0.042, 0.036), smoothstep(0.62, 0.92, chSoot));
+  vec3 chC = mix(vec3(chL), diffuseColor.rgb, 0.55 - 0.25 * chK.r) * (1.0 - 0.82 * chSoot);
+  chC = mix(chC, vec3(0.03, 0.026, 0.022), smoothstep(0.6, 0.95, chSoot));
   chC = mix(chC, chC * vec3(1.12, 0.96, 0.82), 0.5 * chK.r);
   diffuseColor.rgb = chC;`;
 const CHAR_EMBER = /* glsl */ `
@@ -82,8 +87,8 @@ function charred(src: THREE.Material): THREE.Material | null {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>' + CHAR_FRAG_DECL)
       .replace('#include <color_fragment>', CHAR_COLOR)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.95, chSoot);')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor *= 1.0 - 0.6 * chSoot;')
+      // after the unit program's own per-row roughness / metalness (soot is matte)
+      .replace('#include <normal_fragment_begin>', '#if defined( STANDARD )\nroughnessFactor = mix(roughnessFactor, 0.95, chSoot);\nmetalnessFactor *= 1.0 - 0.6 * chSoot;\n#endif\n#include <normal_fragment_begin>')
       .replace('#include <lights_fragment_begin>', CHAR_EMBER);
   };
   m.customProgramCacheKey = () => key + '|char1';
