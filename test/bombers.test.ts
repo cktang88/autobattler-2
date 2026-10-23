@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Battle } from '../src/shared/sim/battle.ts';
+import { MODULES } from '../src/shared/parts.ts';
 import { DEPLOY_D, FIELD_H, METERS_PER_CELL } from '../src/shared/grid.ts';
 import { airRole, computeStats, validateDesign } from '../src/shared/stats.ts';
 import type { Design } from '../src/shared/types.ts';
@@ -66,4 +67,32 @@ test('fighters go for aircraft over nearer ground units; jets never stack on top
   }
   assert.ok(onHeli / ticks > 0.8, `fighters chased the helicopter ${Math.round((100 * onHeli) / ticks)}% of the time`);
   assert.ok(minD > 0.5, `two jets got ${minD.toFixed(2)} cells apart`);
+});
+
+test('bombs, artillery shells and their splash, bomblets and fire never hit aircraft', () => {
+  for (const m of MODULES) {
+    if (m.kind !== 'weapon' || (m.projectile !== 'arc' && !m.resupply)) continue;
+    assert.equal(!!m.targetsAir, false, `${m.id} targets aircraft`);
+  }
+  // a bomber pounding a tank that has an enemy helicopter hovering right over it: only the tank takes bomb damage
+  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'clusterbombs', 'heavybomb', null]);
+  const tank = D('tank', 'bastion', 'anchor', ['cannon', 'plateM', null]);
+  assert.deepEqual(validateDesign(tank), []);
+  const heli = D('heli', 'gunship', 'rotor', ['flak', null]);
+  const designs = [strato, tank, heli];
+  const b = new Battle({ seed: 7, sides: [
+    { designs, units: [{ uid: 1, designId: 'strato', x: 40, y: 4, level: 1, round: 1 }] },
+    { designs, units: [{ uid: 1, designId: 'tank', x: 44, y: 2, level: 1, round: 1 }, { uid: 2, designId: 'heli', x: 44, y: 2, level: 1, round: 1, stance: 'holdPos' as const }] },
+  ] });
+  const bombIds = new Set(['bombs', 'clusterbombs', 'heavybomb']);
+  let groundHits = 0;
+  for (let t = 0; t < 20 * 40 && !b.done; t++) {
+    b.step();
+    for (const e of b.events) {
+      if (e.t !== 'hit' || !bombIds.has(e.moduleId)) continue;
+      assert.equal(b.units[e.unit].flying, false, `${e.moduleId} hit an aircraft`);
+      groundHits++;
+    }
+  }
+  assert.ok(groundHits > 0, 'the bombs did hit the tank');
 });
