@@ -232,10 +232,10 @@ function warnOnce(...params2) {
   _cache[message] = true;
   warn(...params2);
 }
-function probeAsync(gl, sync, interval) {
+function probeAsync(gl, sync2, interval) {
   return new Promise(function(resolve, reject) {
     function probe() {
-      switch (gl.clientWaitSync(sync, gl.SYNC_FLUSH_COMMANDS_BIT, 0)) {
+      switch (gl.clientWaitSync(sync2, gl.SYNC_FLUSH_COMMANDS_BIT, 0)) {
         case gl.WAIT_FAILED:
           reject();
           break;
@@ -16166,15 +16166,15 @@ function locallyInside(a, b) {
 }
 function middleInside(a, b) {
   let p = a;
-  let inside = false;
+  let inside2 = false;
   const px2 = (a.x + b.x) / 2;
   const py2 = (a.y + b.y) / 2;
   do {
     if (p.y > py2 !== p.next.y > py2 && p.next.y !== p.y && px2 < (p.next.x - p.x) * (py2 - p.y) / (p.next.y - p.y) + p.x)
-      inside = !inside;
+      inside2 = !inside2;
     p = p.next;
   } while (p !== a);
-  return inside;
+  return inside2;
 }
 function splitPolygon(a, b) {
   const a2 = createNode(a.i, a.x, a.y), b2 = createNode(b.i, b.x, b.y), an = a.next, bp = b.prev;
@@ -18358,6 +18358,74 @@ var VectorKeyframeTrack = class extends KeyframeTrack {
   }
 };
 VectorKeyframeTrack.prototype.ValueTypeName = "vector";
+var Cache = {
+  /**
+   * Whether caching is enabled or not.
+   *
+   * @static
+   * @type {boolean}
+   * @default false
+   */
+  enabled: false,
+  /**
+   * A dictionary that holds cached files.
+   *
+   * @static
+   * @type {Object<string,Object>}
+   */
+  files: {},
+  /**
+   * Adds a cache entry with a key to reference the file. If this key already
+   * holds a file, it is overwritten.
+   *
+   * @static
+   * @param {string} key - The key to reference the cached file.
+   * @param {Object} file -  The file to be cached.
+   */
+  add: function(key, file) {
+    if (this.enabled === false) return;
+    if (isBlobURL(key)) return;
+    this.files[key] = file;
+  },
+  /**
+   * Gets the cached value for the given key.
+   *
+   * @static
+   * @param {string} key - The key to reference the cached file.
+   * @return {Object|undefined} The cached file. If the key does not exist `undefined` is returned.
+   */
+  get: function(key) {
+    if (this.enabled === false) return;
+    if (isBlobURL(key)) return;
+    return this.files[key];
+  },
+  /**
+   * Removes the cached file associated with the given key.
+   *
+   * @static
+   * @param {string} key - The key to reference the cached file.
+   */
+  remove: function(key) {
+    delete this.files[key];
+  },
+  /**
+   * Remove all values from the cache.
+   *
+   * @static
+   */
+  clear: function() {
+    this.files = {};
+  }
+};
+function isBlobURL(key) {
+  try {
+    const urlString = key.slice(key.indexOf(":") + 1);
+    const url = new URL(urlString);
+    return url.protocol === "blob:";
+  } catch (e) {
+    return false;
+  }
+}
 var LoadingManager = class {
   /**
    * Constructs a new loading manager.
@@ -18575,6 +18643,126 @@ var Loader = class {
   }
 };
 Loader.DEFAULT_MATERIAL_NAME = "__DEFAULT";
+var _loading = /* @__PURE__ */ new WeakMap();
+var ImageLoader = class extends Loader {
+  /**
+   * Constructs a new image loader.
+   *
+   * @param {LoadingManager} [manager] - The loading manager.
+   */
+  constructor(manager) {
+    super(manager);
+  }
+  /**
+   * Starts loading from the given URL and passes the loaded image
+   * to the `onLoad()` callback. The method also returns a new `Image` object which can
+   * directly be used for texture creation. If you do it this way, the texture
+   * may pop up in your scene once the respective loading process is finished.
+   *
+   * @param {string} url - The path/URL of the file to be loaded. This can also be a data URI.
+   * @param {function(Image)} onLoad - Executed when the loading process has been finished.
+   * @param {onProgressCallback} onProgress - Unsupported in this loader.
+   * @param {onErrorCallback} onError - Executed when errors occur.
+   * @return {Image} The image.
+   */
+  load(url, onLoad, onProgress, onError) {
+    if (this.path !== void 0) url = this.path + url;
+    url = this.manager.resolveURL(url);
+    const scope = this;
+    const cached = Cache.get(`image:${url}`);
+    if (cached !== void 0) {
+      if (cached.complete === true) {
+        scope.manager.itemStart(url);
+        setTimeout(function() {
+          if (onLoad) onLoad(cached);
+          scope.manager.itemEnd(url);
+        }, 0);
+      } else {
+        let arr = _loading.get(cached);
+        if (arr === void 0) {
+          arr = [];
+          _loading.set(cached, arr);
+        }
+        arr.push({ onLoad, onError });
+      }
+      return cached;
+    }
+    const image = createElementNS("img");
+    function onImageLoad() {
+      removeEventListeners();
+      if (onLoad) onLoad(this);
+      const callbacks = _loading.get(this) || [];
+      for (let i = 0; i < callbacks.length; i++) {
+        const callback = callbacks[i];
+        if (callback.onLoad) callback.onLoad(this);
+      }
+      _loading.delete(this);
+      scope.manager.itemEnd(url);
+    }
+    function onImageError(event) {
+      removeEventListeners();
+      if (onError) onError(event);
+      Cache.remove(`image:${url}`);
+      const callbacks = _loading.get(this) || [];
+      for (let i = 0; i < callbacks.length; i++) {
+        const callback = callbacks[i];
+        if (callback.onError) callback.onError(event);
+      }
+      _loading.delete(this);
+      scope.manager.itemError(url);
+      scope.manager.itemEnd(url);
+    }
+    function removeEventListeners() {
+      image.removeEventListener("load", onImageLoad, false);
+      image.removeEventListener("error", onImageError, false);
+    }
+    image.addEventListener("load", onImageLoad, false);
+    image.addEventListener("error", onImageError, false);
+    if (url.slice(0, 5) !== "data:") {
+      if (this.crossOrigin !== void 0) image.crossOrigin = this.crossOrigin;
+    }
+    Cache.add(`image:${url}`, image);
+    scope.manager.itemStart(url);
+    image.src = url;
+    return image;
+  }
+};
+var TextureLoader = class extends Loader {
+  /**
+   * Constructs a new texture loader.
+   *
+   * @param {LoadingManager} [manager] - The loading manager.
+   */
+  constructor(manager) {
+    super(manager);
+  }
+  /**
+   * Starts loading from the given URL and pass the fully loaded texture
+   * to the `onLoad()` callback. The method also returns a new texture object which can
+   * directly be used for material creation. If you do it this way, the texture
+   * may pop up in your scene once the respective loading process is finished.
+   *
+   * @param {string} url - The path/URL of the file to be loaded. This can also be a data URI.
+   * @param {function(Texture)} onLoad - Executed when the loading process has been finished.
+   * @param {onProgressCallback} onProgress - Unsupported in this loader.
+   * @param {onErrorCallback} onError - Executed when errors occur.
+   * @return {Texture} The texture.
+   */
+  load(url, onLoad, onProgress, onError) {
+    const texture = new Texture();
+    const loader = new ImageLoader(this.manager);
+    loader.setCrossOrigin(this.crossOrigin);
+    loader.setPath(this.path);
+    loader.load(url, function(image) {
+      texture.image = image;
+      texture.needsUpdate = true;
+      if (onLoad !== void 0) {
+        onLoad(texture);
+      }
+    }, onProgress, onError);
+    return texture;
+  }
+};
 var Light = class extends Object3D {
   /**
    * Constructs a new light.
@@ -31582,14 +31770,14 @@ var WebGLRenderer = class {
           _gl.bindBuffer(_gl.PIXEL_PACK_BUFFER, null);
           const currFramebuffer = _currentRenderTarget !== null ? properties.get(_currentRenderTarget).__webglFramebuffer : null;
           state.bindFramebuffer(_gl.FRAMEBUFFER, currFramebuffer);
-          const sync = _gl.fenceSync(_gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+          const sync2 = _gl.fenceSync(_gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
           _gl.flush();
-          await probeAsync(_gl, sync, 4);
+          await probeAsync(_gl, sync2, 4);
           _gl.bindBuffer(_gl.PIXEL_PACK_BUFFER, glBuffer);
           _gl.getBufferSubData(_gl.PIXEL_PACK_BUFFER, 0, buffer);
           _gl.bindBuffer(_gl.PIXEL_PACK_BUFFER, null);
           _gl.deleteBuffer(glBuffer);
-          _gl.deleteSync(sync);
+          _gl.deleteSync(sync2);
           return buffer;
         } else {
           throw new Error("THREE.WebGLRenderer.readRenderTargetPixelsAsync: requested read bounds are out of range.");
@@ -32770,12 +32958,12 @@ var CHASSIS = [
   { id: "bastion", name: "Bastion Hull", desc: "Massive armored hull. Slow, nearly unbreakable.", size: 3, hp: 1500, armor: 14, weight: 38, cost: 400, art: [2.65, 2.65], mounts: ["M", "M", "M"], agility: 0.8, roles: ["tank", "assault"], traits: [], shape: "fortress" },
   { id: "colossus", name: "Monarch Frame", desc: "Walking arsenal with four mounts.", size: 3, hp: 1250, armor: 10, weight: 34, cost: 405, footprint: [3, 4], mounts: ["M", "M", "M", "S"], agility: 0.85, roles: ["assault", "siege"], traits: [], shape: "titan" },
   // ---- Odd-shaped frames ----
-  { id: "mantis", name: "Needle Frame", desc: "Lanky light strider with twin blade-arm mounts.", size: 1, hp: 185, armor: 1, weight: 4, cost: 35, footprint: [1, 2], mounts: ["S", "S"], agility: 1.35, mobility: ["legs", "jumpjets", "spider", "hover"], roles: ["raider", "melee"], traits: [], shape: "mantis" },
+  { id: "mantis", name: "Needle Frame", desc: "Lanky light strider with twin blade-arm mounts.", size: 1, hp: 150, armor: 1, weight: 4, cost: 120, footprint: [1, 2], mounts: ["S", "S"], agility: 1.35, mobility: ["legs", "jumpjets", "spider", "hover"], roles: ["raider", "melee"], traits: [], shape: "mantis" },
   { id: "strider", name: "Strider Mech", desc: "Humanoid mech: arm guns and a shoulder mount. Needs legs.", size: 2, hp: 480, armor: 5, weight: 12, cost: 140, mounts: ["M", "S", "S"], agility: 1.05, mobility: ["legs", "jumpjets", "spider", "anchor"], roles: ["skirmisher"], traits: [], shape: "mech" },
   { id: "arachnid", name: "Orbwalker Core", desc: "Orb-bodied walker pod with twin dorsal mounts. Walks on multi-legs or jump legs.", size: 2, hp: 420, armor: 4, weight: 11, cost: 190, mounts: ["M", "M"], agility: 1.1, mobility: ["spider", "jumpjets", "anchor"], roles: ["skirmisher", "raider"], traits: [], shape: "arachnid" },
   { id: "crab", name: "Bunker Crawler", desc: "Wide, low, heavily plated mobile bunker with arm mounts.", size: 2, hp: 600, armor: 8, weight: 15, cost: 240, footprint: [3, 3], art: [3, 2], mounts: ["M", "M", "S"], agility: 0.85, mobility: ["spider", "halftrack", "treads", "hover", "anchor"], roles: ["riot", "tank"], traits: [], shape: "crab" },
   { id: "saucer", name: "Saucer Disc", desc: "Round disc hull with an all-round turret ring. Hovers or walks.", size: 2, hp: 400, armor: 4, weight: 10, cost: 210, art: [1.75, 1.75], mounts: ["M", "M", "S"], agility: 1.2, mobility: ["hover", "anchor", "spider"], roles: ["skirmisher", "antiair"], traits: [], shape: "saucer" },
-  { id: "deltawing", name: "Delta Wing", desc: "Triangular strike aircraft. Must fly.", size: 2, hp: 340, armor: 3, weight: 8, cost: 75, footprint: [2, 3], domain: "jet", mounts: ["M", "S", "S"], agility: 1.15, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "delta" },
+  { id: "deltawing", name: "Delta Wing", desc: "Triangular strike aircraft. Must fly.", size: 2, hp: 420, armor: 3, weight: 8, cost: 75, footprint: [2, 3], domain: "jet", mounts: ["M", "S", "S"], agility: 1.15, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "delta" },
   { id: "warlord", name: "Warlord Mech", desc: "Heavy humanoid mech with a shoulder cannon and arm weapons.", size: 3, hp: 1350, armor: 11, weight: 34, cost: 430, footprint: [4, 3], mounts: ["M", "M", "M", "S"], agility: 0.9, mobility: ["titanlegs", "spider", "anchor"], roles: ["assault"], traits: [], shape: "warlord" },
   { id: "scorpion", name: "Tailgun Crawler", desc: "Armored crawler with a crane-boom heavy weapon over its back and twin arm mounts.", size: 3, hp: 1200, armor: 12, weight: 32, cost: 260, footprint: [3, 5], art: [3, 4], mounts: ["M", "M", "M"], agility: 0.95, mobility: ["spider", "treads", "anchor"], roles: ["assault", "siege"], traits: [], shape: "scorpion" },
   { id: "centipede", name: "Landtrain Hull", desc: "Articulated multi-car land-train with four medium mounts down its spine.", size: 3, hp: 1300, armor: 9, weight: 33, cost: 525, footprint: [2, 5], art: [2, 4.75], mounts: ["M", "M", "M", "M"], agility: 0.8, mobility: ["spider", "halftrack", "treads"], roles: ["riot", "assault"], traits: [], shape: "centipede" },
@@ -32786,20 +32974,22 @@ var CHASSIS = [
   { id: "interceptor", name: "Interceptor", desc: "Light fighter airframe. Must fly.", size: 1, hp: 120, armor: 1, weight: 1.2, cost: 15, footprint: [1, 2], domain: "jet", mounts: ["S", "S"], agility: 1.3, roles: ["antiair", "flyer", "raider"], traits: ["airOnly"], shape: "interceptor" },
   { id: "siegeplat", name: "Siege Platform", desc: "Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.", size: 3, hp: 800, armor: 3, weight: 22, cost: 265, footprint: [2, 4], art: [1.7, 4], mounts: ["M", "M"], agility: 0.7, roles: ["artillery", "siege"], traits: [], shape: "siegeplat" },
   { id: "juggernaut", name: "Monolith Hull", desc: "A wall of armor with token weapons. Soaks fire for the army behind it.", size: 3, hp: 2100, armor: 18, weight: 40, cost: 250, footprint: [4, 3], mounts: ["M", "S"], agility: 0.75, roles: ["tank"], traits: [], shape: "juggernaut" },
-  { id: "bomberhull", name: "Heavy Bomber", desc: "Big flying bomb truck with three medium bays. Grav lifters or nothing.", size: 3, hp: 1170, armor: 5, weight: 24, cost: 200, footprint: [3, 4], domain: "heli", mounts: ["M", "M", "M"], agility: 0.7, roles: ["bomber", "flyer"], traits: ["airOnly"], shape: "bomber" },
+  { id: "bomberhull", name: "Heavy Bomber", desc: "Big flying bomb truck with three medium bays. Grav lifters or nothing.", size: 3, hp: 2200, armor: 7, weight: 24, cost: 200, footprint: [3, 4], domain: "heli", mounts: ["M", "M", "M"], agility: 0.7, roles: ["bomber", "flyer"], traits: ["airOnly"], shape: "bomber" },
   // ---- Aircraft ----
   { id: "strikejet", name: "Strike Jet", desc: "Multirole fighter-bomber with a centreline and two wing hardpoints.", size: 2, hp: 330, armor: 2, weight: 7, cost: 80, footprint: [2, 3], mounts: ["M", "S", "S"], agility: 1.2, domain: "jet", roles: ["flyer", "raider", "antiair"], traits: [], shape: "strikejet" },
-  { id: "stratobomber", name: "Strato Bomber", desc: "Long-range jet bomber with three bomb bays and a tail gun.", size: 3, hp: 900, armor: 4, weight: 18, cost: 300, footprint: [4, 4], mounts: ["M", "M", "M", "S"], agility: 0.8, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "stratobomber" },
-  { id: "heavyheli", name: "Heavy Helicopter", desc: "Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.", size: 3, hp: 1e3, armor: 6, weight: 20, cost: 280, footprint: [2, 4], art: [1.9, 3.65], mounts: ["M", "M", "S"], agility: 0.85, domain: "heli", roles: ["flyer", "assault"], traits: [], shape: "heavyheli" },
+  { id: "stratobomber", name: "Strato Bomber", desc: "Long-range jet bomber with three bomb bays and a tail gun.", size: 3, hp: 1600, armor: 6, weight: 18, cost: 300, footprint: [4, 4], mounts: ["M", "M", "M", "S"], agility: 0.8, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "stratobomber" },
+  { id: "heavyheli", name: "Heavy Helicopter", desc: "Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.", size: 3, hp: 1300, armor: 6, weight: 20, cost: 280, footprint: [2, 4], art: [1.9, 3.65], mounts: ["M", "M", "S"], agility: 0.85, domain: "heli", roles: ["flyer", "assault"], traits: [], shape: "heavyheli" },
   // ---- Giant class (size 4, 20 m) ----
   { id: "goliath", name: "Warhulk Frame", desc: "Giant assault frame: a giant-class mount backed by two heavies.", size: 4, hp: 4160, armor: 16, weight: 70, cost: 190, footprint: [4, 5], art: [4, 4.8], mounts: ["L", "M", "M", "M"], agility: 0.75, roles: ["assault"], traits: [], shape: "goliath" },
   { id: "leviathan", name: "Leviathan Hull", desc: "Giant battle hull with twin giant-class mounts.", size: 4, hp: 3800, armor: 20, weight: 82, cost: 725, footprint: [3, 6], art: [3, 5.6], mounts: ["L", "L", "M", "M"], agility: 0.65, roles: ["siege", "assault"], traits: [], shape: "leviathan" },
-  { id: "carrier", name: "Sky Carrier", desc: "Giant flying hull. Must fly on grav lifters.", size: 4, hp: 2100, armor: 10, weight: 50, cost: 1100, footprint: [6, 4], art: [5.8, 3], domain: "heli", mounts: ["L", "M", "M", "M"], agility: 0.8, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "carrier" },
+  { id: "carrier", name: "Sky Carrier", desc: "Giant flying hull. Must fly on grav lifters.", size: 4, hp: 4500, armor: 14, weight: 50, cost: 1100, footprint: [6, 4], art: [5.8, 3], domain: "heli", mounts: ["L", "M", "M", "M"], agility: 0.8, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "carrier" },
   { id: "broodmother", name: "Matriarch", desc: "Giant multi-legged walking fortress with a giant-class dorsal weapon and four more mounts.", size: 4, hp: 3e3, armor: 14, weight: 66, cost: 650, footprint: [7, 5], art: [4.9, 3.75], mounts: ["L", "M", "M", "M", "S"], agility: 0.85, mobility: ["spider", "anchor"], roles: ["riot", "assault"], traits: [], shape: "broodmother" },
   // ---- Titan class (size 5, 25 m) ----
-  { id: "titan", name: "Titan Walker", desc: "Titan-class war machine with a titan mount and a giant mount.", size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [7, 7], art: [6.75, 7], mounts: ["XL", "L", "M", "M", "M"], agility: 0.7, roles: ["assault", "siege"], traits: [], shape: "colossal" },
-  { id: "citadel", name: "Citadel Fortress", desc: "Mobile fortress with twin titan mounts. The biggest thing on the field.", size: 5, hp: 8e3, armor: 28, weight: 140, cost: 1915, footprint: [8, 7], art: [7.6, 6.75], mounts: ["XL", "XL", "L", "M", "M", "S"], agility: 0.55, roles: ["siege", "tank"], traits: [], shape: "citadel" },
-  { id: "arachne", name: "Weaver Titan", desc: "Titan-class walking fortress: a titan mount and twin giant mounts on many legs.", size: 5, hp: 7630, armor: 20, weight: 115, cost: 340, footprint: [10, 10], art: [7.1, 7.1], mounts: ["XL", "L", "L", "M"], agility: 0.75, mobility: ["spider", "anchor"], roles: ["assault"], traits: [], shape: "arachne" }
+  { id: "titan", name: "Titan Walker", desc: "The all-rounder titan: a titan mount, a giant mount and three mediums, and field workshops that repair nearby allies.", size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [7, 7], art: [6.75, 7], mounts: ["XL", "L", "M", "M", "M"], agility: 0.7, roles: ["assault", "siege"], traits: ["repairAura"], shape: "colossal" },
+  { id: "citadel", name: "Citadel Fortress", desc: "Mobile fortress with twin titan mounts and long-range fire control (+20% range). The biggest thing on the field, and the slowest to turn.", size: 5, hp: 8e3, armor: 28, weight: 140, cost: 1915, footprint: [8, 7], art: [7.6, 6.75], mounts: ["XL", "XL", "L", "M", "M", "S"], agility: 0.45, roles: ["siege", "tank"], traits: ["rangeBoost"], shape: "citadel" },
+  { id: "arachne", name: "Weaver Titan", desc: "The fast titan: a titan mount and twin giant mounts on many legs. Turns and strides quickly, but carries lighter armour.", size: 5, hp: 6800, armor: 16, weight: 115, cost: 340, footprint: [10, 10], art: [7.1, 7.1], mounts: ["XL", "L", "L", "M"], agility: 1.05, mobility: ["spider", "anchor"], roles: ["assault"], traits: [], shape: "arachne" },
+  { id: "lance", name: "Lance Dreadnought", desc: "A titan weapon on legs and little else: one titan mount and one medium. Lighter, quicker and cheaper than other titans, but nothing to fall back on if the big gun is the wrong tool.", size: 5, hp: 5e3, armor: 20, weight: 78, cost: 520, footprint: [4, 8], art: [4, 8], mounts: ["XL", "M"], agility: 0.95, roles: ["siege", "assault"], traits: [], shape: "lance" },
+  { id: "monolith", name: "Monolith", desc: "A walking bunker: enormous hit points and armour, but only a giant and a medium mount. Holds a line no one else can.", size: 5, hp: 13e3, armor: 32, weight: 150, cost: 900, footprint: [7, 7], art: [7, 7], mounts: ["L", "M"], agility: 0.5, roles: ["tank"], traits: [], shape: "monolith" }
 ];
 var MOBILITY = [
   { id: "wheels", name: "Wheels", desc: "Fast and cheap, but fragile and light-duty.", kind: "ground", sizes: [1, 2], speed: 3.2, turn: 4, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [], roles: ["raider", "scout"] },
@@ -32808,12 +32998,12 @@ var MOBILITY = [
   { id: "legs", name: "Bipedal Legs", desc: "Nimble walker. Fires while moving.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ["fireOnMove"], roles: ["skirmisher", "raider"] },
   { id: "spider", name: "Spider Legs", desc: "Six-legged stable walker. Better accuracy, carries heavy loads.", kind: "ground", sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ["stable"], roles: ["artillery", "riot", "skirmisher"] },
   { id: "jumpjets", name: "Jump Legs", desc: "Leaps over obstacles straight into the fight.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ["leap"], roles: ["raider", "melee"] },
-  { id: "hover", name: "Hover Skirt", desc: "Skims the ground. Very fast, hard to hit.", kind: "ground", sizes: [1, 2], speed: 3.6, turn: 2.2, capacity: [6, 17, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive"], roles: ["raider", "scout"] },
+  { id: "hover", name: "Hover Skirt", desc: "Skims the ground. Very fast, hard to hit.", kind: "ground", sizes: [1, 2], speed: 3.8, turn: 2.4, capacity: [7.5, 22, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive"], roles: ["raider", "scout"] },
   { id: "rotor", name: "Rotor", desc: "Helicopter rotors. Flies over ground units; only anti-air can hit it.", kind: "air", sizes: [1, 2, 3], speed: 2.8, turn: 3, capacity: [5, 17, 36, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "support"] },
-  { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3], speed: 4.6, turn: 1.6, capacity: [4, 14, 30, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["fireOnMove", "strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
+  { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3], speed: 7, turn: 1.6, capacity: [4, 14, 30, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["fireOnMove", "strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
   { id: "megatracks", name: "Colossal Tracks", desc: "Quad track assemblies for giant and titan hulls. Crushes anything underfoot.", kind: "ground", sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ["crush"], roles: ["tank", "assault"] },
   { id: "titanlegs", name: "Titan Legs", desc: "Towering walker legs. Fires on the move and stomps smaller units.", kind: "ground", sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ["fireOnMove", "crush"], roles: ["assault"] },
-  { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy and giant hulls fly.", kind: "air", sizes: [3, 4], speed: 1.6, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "bomber"] },
+  { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy and giant hulls fly.", kind: "air", sizes: [3, 4], speed: 2.4, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "bomber"] },
   { id: "anchor", name: "Anchor Mount", desc: "Immobile emplacement. Extra hp, armor and +15% range.", kind: "static", sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ["fortified"], roles: ["siege", "artillery", "antiair"] }
 ];
 var G = { targetsGround: true, targetsAir: false };
@@ -32828,27 +33018,27 @@ var MODULES = [
     id: "mg",
     name: "7.62mm Machine Gun",
     family: "7.62mm",
-    desc: "Cheap rapid-fire all-rounder: hits ground and air, shreds light units, bounces off armor.",
+    desc: "Cheap, accurate rapid fire for picking off light units and aircraft. Bounces off armor.",
     category: "machinegun",
     visual: "gun",
     caliber: 0.2,
     mount: "S",
     weight: 1,
     cost: 6,
-    damage: 9,
+    damage: 8,
     cooldown: 0.15,
-    range: 5.5,
+    range: 6,
     ...GA,
     projectile: "bullet",
     projectileSpeed: 22,
     ap: 0,
-    spread: 0.35
+    spread: 0.25
   }),
   wpn({
     id: "twinmg",
     name: "Suppressor MG",
     family: "Twin 7.62mm",
-    desc: "Suppressive fire: a hail of bullets that slows light units (speed and rate of fire) while it keeps hitting.",
+    desc: "Suppressive fire: a hail of bullets that pins whatever it keeps hitting, cutting its speed and rate of fire by up to 60%. Little damage of its own.",
     category: "machinegun",
     visual: "gun",
     barrels: 2,
@@ -32856,7 +33046,7 @@ var MODULES = [
     mount: "S",
     weight: 1.8,
     cost: 11,
-    damage: 9,
+    damage: 6,
     cooldown: 0.075,
     range: 5.5,
     ...GA,
@@ -32864,7 +33054,7 @@ var MODULES = [
     projectileSpeed: 22,
     ap: 0,
     spread: 0.45,
-    slow: 0.02
+    slow: 0.05
   }),
   wpn({
     id: "hmg",
@@ -32885,7 +33075,7 @@ var MODULES = [
     reload: 2.5,
     projectile: "bullet",
     projectileSpeed: 24,
-    ap: 0.45,
+    ap: 0.5,
     spread: 0.3
   }),
   wpn({
@@ -32914,23 +33104,24 @@ var MODULES = [
     id: "shotgun",
     name: "Scattergun",
     family: "Scatter",
-    desc: "Point-blank cone of 6 pellets: devastating up close, half damage at its (short) max range.",
+    desc: "Point-blank cone of 8 heavy pellets that knock light units back: shreds whatever is touching it, a quarter damage at its short max range. Useless at a distance.",
     category: "machinegun",
     visual: "shotgun",
     caliber: 0.5,
     mount: "S",
     weight: 1.4,
     cost: 9,
-    damage: 22,
-    pellets: 6,
-    cooldown: 1,
+    damage: 24,
+    pellets: 8,
+    cooldown: 1.2,
     range: 3.5,
     ...GA,
     projectile: "bullet",
     projectileSpeed: 20,
-    ap: 0.1,
+    ap: 0,
     spread: 0.9,
-    falloff: 0.5
+    falloff: 0.25,
+    impulse: 0.12
   }),
   wpn({
     id: "flechette",
@@ -32951,7 +33142,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 30,
     pierce: true,
-    ap: 0.35,
+    ap: 0.5,
     spread: 1
   }),
   // ---------------- Autocannons ----------------
@@ -32975,7 +33166,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 20,
     splash: 0.2,
-    ap: 0.2,
+    ap: 0,
     spread: 0.3
   }),
   wpn({
@@ -32998,7 +33189,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 18,
     splash: 0.3,
-    ap: 0.3,
+    ap: 0.5,
     spread: 0.3
   }),
   wpn({
@@ -33022,7 +33213,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 18,
     splash: 0.3,
-    ap: 0.3,
+    ap: 0.5,
     spread: 0.35
   }),
   wpn({
@@ -33045,7 +33236,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 20,
     splash: 0.5,
-    ap: 0.3,
+    ap: 0.5,
     spread: 0.3,
     airBonus: 1.3
   }),
@@ -33070,7 +33261,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 24,
     splash: 0.2,
-    ap: 0.2,
+    ap: 0,
     spread: 0.3,
     airBonus: 1.4
   }),
@@ -33095,7 +33286,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 20,
     splash: 0.3,
-    ap: 0.55,
+    ap: 0.5,
     spread: 0.2
   }),
   wpn({
@@ -33116,7 +33307,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 20,
     splash: 0.3,
-    ap: 0.7,
+    ap: 1,
     spread: 0.2
   }),
   wpn({
@@ -33138,7 +33329,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 20,
     splash: 1,
-    ap: 0.45,
+    ap: 0.5,
     spread: 0.25,
     impulse: 0.6
   }),
@@ -33153,14 +33344,14 @@ var MODULES = [
     mount: "M",
     weight: 10,
     cost: 75,
-    damage: 240,
-    cooldown: 2.6,
+    damage: 384,
+    cooldown: 4.16,
     range: 12,
     ...GA,
     projectile: "shell",
     projectileSpeed: 34,
     pierce: true,
-    ap: 0.8,
+    ap: 1,
     spread: 0.1,
     impulse: 0.8
   }),
@@ -33176,39 +33367,41 @@ var MODULES = [
     mount: "S",
     weight: 1.5,
     cost: 20,
-    damage: 140,
-    cooldown: 3.5,
+    damage: 224,
+    cooldown: 5.6,
     range: 14,
     ...G,
     projectile: "bullet",
     projectileSpeed: 60,
-    ap: 0.6,
+    ap: 0.5,
     spread: 0
   }),
   wpn({
     id: "lightrail",
     name: "Rail Rifle",
     family: "Light rail",
-    desc: "Hitscan rail: pierces every enemy in a line.",
+    desc: "Hitscan rail: a needle-thin slug that punches through the hulls in its exact line, losing punch with each.",
     category: "precision",
     visual: "rail",
     caliber: 0.5,
     mount: "M",
     weight: 4,
     cost: 40,
-    damage: 150,
-    cooldown: 3,
+    damage: 240,
+    cooldown: 4.8,
     range: 14,
     ...GA,
     projectile: "rail",
-    ap: 0.9,
-    pierce: true
+    ap: 1,
+    pierce: true,
+    beamWidth: 0.04,
+    pierceKeep: 0.5
   }),
   wpn({
     id: "railgun",
     name: "Railgun",
     family: "Heavy rail",
-    desc: "Heavy rail: pierces everything in a line at extreme range.",
+    desc: "Heavy rail: a thin slug at long range that punches through the hulls in its line. Slow to recharge.",
     category: "precision",
     visual: "rail",
     caliber: 0.9,
@@ -33216,12 +33409,14 @@ var MODULES = [
     weight: 9,
     cost: 75,
     damage: 320,
-    cooldown: 4.5,
-    range: 17,
+    cooldown: 5.5,
+    range: 16,
     ...GA,
     projectile: "rail",
     ap: 1,
-    pierce: true
+    pierce: true,
+    beamWidth: 0.12,
+    pierceKeep: 0.6
   }),
   // ---------------- Rockets ----------------
   wpn({
@@ -33236,15 +33431,15 @@ var MODULES = [
     mount: "S",
     weight: 1.5,
     cost: 12,
-    damage: 32,
+    damage: 64,
     burst: 2,
-    cooldown: 3,
+    cooldown: 6,
     range: 9,
     ...G,
     projectile: "rocket",
     projectileSpeed: 11,
     splash: 0.7,
-    ap: 0.2,
+    ap: 0,
     spread: 0.7
   }),
   wpn({
@@ -33259,22 +33454,22 @@ var MODULES = [
     mount: "M",
     weight: 3,
     cost: 30,
-    damage: 42,
+    damage: 84,
     burst: 4,
-    cooldown: 4,
+    cooldown: 8,
     range: 10,
     ...G,
     projectile: "rocket",
     projectileSpeed: 11,
     splash: 1,
-    ap: 0.2,
+    ap: 0,
     spread: 0.8
   }),
   wpn({
     id: "incendiary",
     name: "Incendiary Rockets",
     family: "Napalm 4-tube",
-    desc: "Rocket salvo that sets everything in the blasts burning and leaves the ground on fire for 4 s.",
+    desc: "Rocket salvo with light blasts that set everything caught burning for 9 s, and leave the ground on fire.",
     category: "rocket",
     visual: "rocketPod",
     barrels: 4,
@@ -33282,18 +33477,18 @@ var MODULES = [
     mount: "M",
     weight: 3.2,
     cost: 34,
-    damage: 38,
+    damage: 48,
     burst: 4,
-    cooldown: 4,
+    cooldown: 8,
     range: 10,
     ...G,
     projectile: "rocket",
     projectileSpeed: 11,
     splash: 1,
-    ap: 0.2,
+    ap: 0,
     spread: 0.8,
-    burn: { dps: 14, duration: 4 },
-    fireField: { radius: 1.1, duration: 4, dps: 10 }
+    burn: { dps: 16, duration: 9 },
+    fireField: { radius: 1.1, duration: 7, dps: 10 }
   }),
   wpn({
     id: "mlrs",
@@ -33307,16 +33502,16 @@ var MODULES = [
     mount: "M",
     weight: 10,
     cost: 70,
-    damage: 30,
+    damage: 66,
     burst: 12,
-    cooldown: 9,
+    cooldown: 16.2,
     range: 22,
     minRange: 6,
     ...G,
     projectile: "rocket",
     projectileSpeed: 12,
     splash: 1,
-    ap: 0.2,
+    ap: 0,
     spread: 1.6
   }),
   // ---------------- Missiles ----------------
@@ -33324,7 +33519,7 @@ var MODULES = [
     id: "atgm",
     name: "ATGM Launcher",
     family: "Anti-tank",
-    desc: "Wire-guided anti-tank missile: slow, homing, ignores most armor. Ground only.",
+    desc: "Wire-guided tandem warhead: one slow, homing, very heavy hit that ignores ALL armor. No blast, so it wastes itself on light units. Ground only.",
     category: "missile",
     visual: "missileRack",
     barrels: 1,
@@ -33332,20 +33527,19 @@ var MODULES = [
     mount: "S",
     weight: 1.6,
     cost: 18,
-    damage: 110,
-    cooldown: 4,
+    damage: 272,
+    cooldown: 8,
     range: 12,
     ...G,
     projectile: "missile",
     projectileSpeed: 9,
-    splash: 0.2,
-    ap: 0.8
+    ap: 1
   }),
   wpn({
     id: "guidedrocket",
     name: "Guided Rocket Launcher",
     family: "Dual-role",
-    desc: "Homing rocket that hits ground and air alike.",
+    desc: "Homing high-explosive rocket for ground and air: a wide blast that scatters light units, but no armor penetration.",
     category: "missile",
     visual: "missileRack",
     barrels: 1,
@@ -33353,14 +33547,14 @@ var MODULES = [
     mount: "S",
     weight: 1.3,
     cost: 16,
-    damage: 55,
-    cooldown: 3,
+    damage: 110,
+    cooldown: 6,
     range: 10,
     ...GA,
     projectile: "missile",
     projectileSpeed: 10,
-    splash: 0.3,
-    ap: 0.5
+    splash: 0.8,
+    ap: 0
   }),
   wpn({
     id: "aamissile",
@@ -33374,15 +33568,15 @@ var MODULES = [
     mount: "S",
     weight: 1.4,
     cost: 16,
-    damage: 60,
+    damage: 120,
     burst: 2,
-    cooldown: 3.5,
+    cooldown: 7,
     range: 13,
     ...A,
     projectile: "missile",
     projectileSpeed: 11,
-    splash: 0.3,
-    ap: 0.4,
+    splash: 0.5,
+    ap: 0,
     airBonus: 1.5
   }),
   wpn({
@@ -33397,21 +33591,21 @@ var MODULES = [
     mount: "M",
     weight: 3,
     cost: 34,
-    damage: 85,
-    cooldown: 3,
+    damage: 170,
+    cooldown: 6,
     range: 13,
     ...GA,
     projectile: "missile",
     projectileSpeed: 9,
-    splash: 0.4,
-    ap: 0.5,
+    splash: 0.6,
+    ap: 0,
     airBonus: 1.6
   }),
   wpn({
     id: "swarm",
     name: "Swarm Missiles",
     family: "Swarm",
-    desc: "Eight micro-missiles fan out, then all home in on one target.",
+    desc: "Eight micro-missiles fan out and spread over the targets: a cloud of small blasts for swarms and aircraft, no armor penetration.",
     category: "missile",
     visual: "missileRack",
     barrels: 8,
@@ -33419,15 +33613,15 @@ var MODULES = [
     mount: "M",
     weight: 3.5,
     cost: 40,
-    damage: 28,
+    damage: 56,
     burst: 8,
-    cooldown: 6,
+    cooldown: 12,
     range: 12,
     ...GA,
     projectile: "missile",
     projectileSpeed: 10,
-    splash: 0.4,
-    ap: 0.3,
+    splash: 0.6,
+    ap: 0,
     spread: 0.4
   }),
   wpn({
@@ -33449,7 +33643,7 @@ var MODULES = [
     projectile: "missile",
     projectileSpeed: 10,
     splash: 2.2,
-    ap: 0.6
+    ap: 0.5
   }),
   // ---------------- Artillery ----------------
   wpn({
@@ -33463,15 +33657,15 @@ var MODULES = [
     mount: "M",
     weight: 3.5,
     cost: 30,
-    damage: 60,
-    cooldown: 3,
+    damage: 108,
+    cooldown: 5.4,
     range: 20,
     minRange: 5,
     ...G,
     projectile: "arc",
     projectileSpeed: 8,
     splash: 1.2,
-    ap: 0.2,
+    ap: 0,
     spread: 0.8
   }),
   wpn({
@@ -33485,15 +33679,15 @@ var MODULES = [
     mount: "M",
     weight: 10,
     cost: 75,
-    damage: 80,
-    cooldown: 5,
+    damage: 144,
+    cooldown: 9,
     range: 30,
     minRange: 8,
     ...G,
     projectile: "arc",
     projectileSpeed: 12,
     splash: 2,
-    ap: 0.3,
+    ap: 0.5,
     spread: 1.2
   }),
   wpn({
@@ -33508,16 +33702,16 @@ var MODULES = [
     mount: "M",
     weight: 11,
     cost: 80,
-    damage: 28,
+    damage: 48,
     pellets: 6,
-    cooldown: 3.5,
+    cooldown: 5.95,
     range: 24,
     minRange: 6,
     ...G,
     projectile: "arc",
     projectileSpeed: 10,
     splash: 1,
-    ap: 0.1,
+    ap: 0,
     spread: 2
   }),
   wpn({
@@ -33539,7 +33733,7 @@ var MODULES = [
     projectile: "arc",
     projectileSpeed: 8,
     splash: 0.9,
-    ap: 0.2,
+    ap: 0,
     spread: 0.5
   }),
   wpn({
@@ -33553,15 +33747,15 @@ var MODULES = [
     mount: "M",
     weight: 4,
     cost: 34,
-    damage: 55,
-    cooldown: 4,
+    damage: 82,
+    cooldown: 6,
     range: 18,
     minRange: 5,
     ...G,
     projectile: "arc",
     projectileSpeed: 8,
     splash: 1,
-    ap: 0.3,
+    ap: 0.5,
     spread: 0.8,
     fireField: { radius: 1.8, duration: 6, dps: 30 }
   }),
@@ -33570,25 +33764,26 @@ var MODULES = [
     id: "laser",
     name: "Pulse Laser",
     family: "Pulse",
-    desc: "Hitscan pulse: never misses, some armor pierce.",
+    desc: "Heavy hitscan pulse at mid range: never misses, so it is the answer to fast raiders and jets that bullets keep missing. Slow to recharge; poor against swarms.",
     category: "energy",
     visual: "laser",
     caliber: 0.3,
     mount: "S",
     weight: 1.2,
     cost: 18,
-    damage: 24,
-    cooldown: 0.6,
-    range: 7,
+    damage: 75,
+    cooldown: 1.6,
+    range: 9,
     ...GA,
     projectile: "beam",
-    ap: 0.3
+    ap: 0.5,
+    airBonus: 1.6
   }),
   wpn({
     id: "twinlaser",
     name: "Focus Laser",
     family: "Focus beam",
-    desc: "Focusing beam: damage builds to 3x over 2.5 s on the same target, resets when it switches.",
+    desc: "Focusing beam that burns through ALL armor: damage builds to 5x over 2.5 s on the same target, resets when it switches. A tank killer that hates swarms.",
     category: "energy",
     visual: "laser",
     barrels: 2,
@@ -33596,19 +33791,19 @@ var MODULES = [
     mount: "M",
     weight: 2.6,
     cost: 34,
-    damage: 10,
+    damage: 6,
     cooldown: 0.15,
     range: 7,
     ...GA,
     projectile: "beam",
-    ap: 0.3,
-    ramp: 3
+    ap: 1,
+    ramp: 5
   }),
   wpn({
     id: "heatray",
     name: "Heat Ray",
     family: "Thermal",
-    desc: "Melts anything close, but fades to a quarter of its damage at max range.",
+    desc: "Knife-range armor melter: ignores ALL armor and fades to a quarter of its damage at max range. The flamethrower is for infantry; this is for tanks. Ground only.",
     category: "energy",
     visual: "heatray",
     caliber: 0.5,
@@ -33617,11 +33812,11 @@ var MODULES = [
     cost: 32,
     damage: 42,
     cooldown: 0.2,
-    range: 5.5,
-    ...GA,
+    range: 6.5,
+    ...G,
     projectile: "beam",
-    ap: 0.5,
-    falloff: 0.25
+    ap: 1,
+    falloff: 0.3
   }),
   wpn({
     id: "plasmaorb",
@@ -33634,15 +33829,93 @@ var MODULES = [
     mount: "M",
     weight: 4,
     cost: 36,
-    damage: 85,
+    damage: 100,
     cooldown: 2,
     range: 8,
     ...G,
     projectile: "orb",
-    projectileSpeed: 6,
-    splash: 1.1,
+    projectileSpeed: 8,
+    splash: 1.5,
     ap: 0.5,
     spread: 0.4
+  }),
+  wpn({
+    id: "leech",
+    name: "Leech Beam",
+    family: "Vampiric",
+    desc: "Vampiric beam: half of the damage it deals flows back into its own hull. A brawler that heals itself by fighting.",
+    category: "energy",
+    visual: "laser",
+    barrels: 2,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 34,
+    damage: 16,
+    cooldown: 0.2,
+    range: 6.5,
+    ...GA,
+    projectile: "beam",
+    ap: 0.5,
+    lifesteal: 0.5
+  }),
+  wpn({
+    id: "prism",
+    name: "Prism Array",
+    family: "Prism",
+    desc: "Every pulse splits into four beams that strike four different targets at once. Built for swarms and drone clouds; weak against one big hull.",
+    category: "energy",
+    visual: "laser",
+    barrels: 3,
+    caliber: 0.5,
+    mount: "M",
+    weight: 3.5,
+    cost: 34,
+    damage: 20,
+    cooldown: 0.9,
+    range: 7.5,
+    ...GA,
+    projectile: "beam",
+    ap: 0,
+    split: 4
+  }),
+  wpn({
+    id: "voidlance",
+    name: "Void Lance",
+    family: "Void",
+    desc: "Unmakes matter: each shot also strips 6% of the target's MAX hit points, ignoring armor. Pointless against scouts, terrifying against titans.",
+    category: "energy",
+    visual: "plasma",
+    caliber: 0.8,
+    mount: "M",
+    weight: 7,
+    cost: 60,
+    damage: 20,
+    cooldown: 2.5,
+    range: 10,
+    ...GA,
+    projectile: "beam",
+    ap: 1,
+    pctHp: 0.06
+  }),
+  wpn({
+    id: "entropy",
+    name: "Entropy Ray",
+    family: "Entropy",
+    desc: "Corrodes armor: every hit strips armor from the target (up to all of it) for as long as the ray keeps on it, so the rest of your army's guns stop bouncing off.",
+    category: "energy",
+    visual: "heatray",
+    caliber: 0.5,
+    mount: "M",
+    weight: 3,
+    cost: 30,
+    damage: 12,
+    cooldown: 0.25,
+    range: 7,
+    ...GA,
+    projectile: "beam",
+    ap: 0.5,
+    shred: 0.8
   }),
   wpn({
     id: "plasma",
@@ -33657,10 +33930,10 @@ var MODULES = [
     cost: 65,
     damage: 48,
     cooldown: 0.25,
-    range: 6.5,
+    range: 7.5,
     ...GA,
     projectile: "rail",
-    ap: 0.6,
+    ap: 0.5,
     pierce: true
   }),
   // ---------------- Flame ----------------
@@ -33668,52 +33941,52 @@ var MODULES = [
     id: "flamer",
     name: "Flamethrower",
     family: "Light flame",
-    desc: "Short cone of fire: ignores most armor, sets everything in it burning and scorches the ground briefly.",
+    desc: "Short cone of fire: little direct damage, but everything it touches keeps burning for 6 s, and the ground smoulders.",
     category: "flame",
     visual: "flamer",
     caliber: 0.3,
     mount: "S",
     weight: 1.5,
     cost: 14,
-    damage: 10,
+    damage: 5,
     cooldown: 0.1,
     range: 3.5,
     ...G,
     projectile: "flame",
     projectileSpeed: 9,
     splash: 0.8,
-    ap: 0.8,
-    burn: { dps: 6, duration: 2 },
+    ap: 1,
+    burn: { dps: 10, duration: 6 },
     fireField: { radius: 0.7, duration: 1.5, dps: 4 }
   }),
   wpn({
     id: "napalm",
     name: "Napalm Projector",
     family: "Napalm",
-    desc: "Sticky gel: wide flame cone, a long hot burn, and burning gel pools that last 4 s.",
+    desc: "Sticky gel: a wide cone that barely hurts on contact, but sticks and burns hot for 8 s, and leaves burning pools.",
     category: "flame",
     visual: "flamer",
     caliber: 0.6,
     mount: "M",
     weight: 3.2,
     cost: 30,
-    damage: 14,
+    damage: 6,
     cooldown: 0.15,
     range: 4.5,
     ...G,
     projectile: "flame",
     projectileSpeed: 8,
     splash: 1.2,
-    ap: 0.8,
-    burn: { dps: 15, duration: 3 },
-    fireField: { radius: 1.1, duration: 4, dps: 10 }
+    ap: 1,
+    burn: { dps: 20, duration: 8 },
+    fireField: { radius: 1.1, duration: 6, dps: 12 }
   }),
   // ---------------- Stun & disruption ----------------
   wpn({
     id: "tesla",
     name: "Tesla Coil",
     family: "Chain lightning",
-    desc: "Lightning that jumps between up to 4 nearby enemies.",
+    desc: "Lightning that jumps between up to 4 nearby enemies (aircraft too), jolts them, and overloads shields for triple damage. The shield breaker.",
     category: "disruption",
     visual: "tesla",
     caliber: 0.5,
@@ -33726,40 +33999,43 @@ var MODULES = [
     ...GA,
     projectile: "lightning",
     chain: 3,
-    ap: 0.4
+    ap: 0.5,
+    stun: 0.4,
+    shieldMult: 3
   }),
   wpn({
     id: "stungun",
     name: "Stun Gun",
     family: "Paralyzer",
-    desc: "Electric bolt: builds paralysis until the target freezes (bigger hulls take more hits).",
+    desc: "Lockdown bolt: freezes a light unit in one or two hits and a tank in a few; frozen units can't move or fire while your army kills them. Barely damages anything itself.",
     category: "disruption",
     visual: "emp",
     caliber: 0.3,
     mount: "S",
     weight: 1.2,
     cost: 18,
-    damage: 8,
+    damage: 10,
     cooldown: 1.5,
-    range: 6,
+    range: 7,
     ...GA,
     projectile: "lightning",
     chain: 0,
     ap: 1,
-    stun: 1.2
+    stun: 3.5,
+    shieldMult: 2
   }),
   wpn({
     id: "empcannon",
     name: "EMP Cannon",
     family: "EMP burst",
-    desc: "EMP orb: paralyses everything in the blast.",
+    desc: "EMP orb: paralyses everything in the blast and drains shields. A crowd-control opener, not a killer.",
     category: "disruption",
     visual: "emp",
     caliber: 0.6,
     mount: "M",
     weight: 3.5,
     cost: 38,
-    damage: 80,
+    damage: 50,
     cooldown: 2.5,
     range: 9,
     ...G,
@@ -33767,7 +34043,7 @@ var MODULES = [
     projectileSpeed: 7,
     splash: 1.2,
     ap: 1,
-    stun: 2,
+    stun: 3.5,
     spread: 0.3
   }),
   wpn({
@@ -33793,7 +34069,7 @@ var MODULES = [
     id: "arclance",
     name: "Arc Lance",
     family: "Storm",
-    desc: "Heavy lightning that chains through 6 enemies and jolts them.",
+    desc: "Heavy lightning that chains through 6 enemies, jolts them and overloads shields (3x).",
     category: "disruption",
     visual: "tesla",
     caliber: 0.9,
@@ -33807,26 +34083,27 @@ var MODULES = [
     projectile: "lightning",
     chain: 5,
     ap: 0.5,
-    stun: 0.3
+    stun: 0.4,
+    shieldMult: 3
   }),
   wpn({
     id: "disarm",
     name: "Disarm Ray",
     family: "Disarmer",
-    desc: "Scrambler beam: builds up until the target can still move but cannot fire.",
+    desc: "Scrambler beam: two or three hits silence a target's guns for seconds. Point it at the enemy's biggest gun.",
     category: "disruption",
     visual: "emp",
     caliber: 0.5,
     mount: "M",
     weight: 3,
     cost: 34,
-    damage: 35,
+    damage: 20,
     cooldown: 2.5,
     range: 8,
     ...GA,
     projectile: "beam",
     ap: 1,
-    disarm: 2
+    disarm: 4
   }),
   wpn({
     id: "sonic",
@@ -33846,7 +34123,7 @@ var MODULES = [
     projectile: "orb",
     projectileSpeed: 14,
     splash: 1,
-    ap: 0.3,
+    ap: 0.5,
     impulse: 1.6
   }),
   wpn({
@@ -33873,7 +34150,7 @@ var MODULES = [
     id: "bombs",
     name: "Bomb Bay",
     family: "Iron bombs",
-    desc: "Drops bombs on ground units directly below. Flying designs only.",
+    desc: "Two heavy bombs per pass, released just short of the target. Two passes per load, then the bomber flies home to rearm. Flying designs only.",
     category: "artillery",
     visual: "charge",
     caliber: 0.5,
@@ -33881,22 +34158,51 @@ var MODULES = [
     weight: 3.5,
     cost: 28,
     requires: "air",
-    damage: 110,
+    damage: 260,
     burst: 2,
-    cooldown: 3,
+    cooldown: 1.2,
+    magazine: 2,
+    reload: 5,
+    resupply: true,
     range: 1,
     ...G,
     projectile: "arc",
     projectileSpeed: 6,
-    splash: 1.2,
-    ap: 0.3,
+    splash: 1.6,
+    ap: 0.5,
     spread: 0.3
+  }),
+  wpn({
+    id: "heavybomb",
+    name: "Blockbuster Bomb",
+    family: "Heavy bomb",
+    desc: "One huge bomb per load that flattens a whole block, then back home to rearm. Flying designs only.",
+    category: "artillery",
+    visual: "charge",
+    caliber: 1,
+    mount: "M",
+    weight: 7,
+    cost: 60,
+    requires: "air",
+    damage: 950,
+    cooldown: 1,
+    magazine: 1,
+    reload: 6,
+    resupply: true,
+    range: 1,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 6,
+    splash: 2.4,
+    ap: 1,
+    spread: 0.3,
+    impulse: 1.5
   }),
   wpn({
     id: "clusterbombs",
     name: "Cluster Dispenser",
     family: "Cluster",
-    desc: "Scatters 8 bomblets over a wide area below. Flying designs only.",
+    desc: "Scatters 12 bomblets over a wide area per pass. Two passes per load, then the bomber flies home to rearm. Flying designs only.",
     category: "artillery",
     visual: "charge",
     barrels: 2,
@@ -33905,15 +34211,18 @@ var MODULES = [
     weight: 5,
     cost: 45,
     requires: "air",
-    damage: 55,
-    pellets: 8,
-    cooldown: 4,
+    damage: 75,
+    pellets: 12,
+    cooldown: 1.2,
+    magazine: 2,
+    reload: 5,
+    resupply: true,
     range: 1.5,
     ...G,
     projectile: "arc",
     projectileSpeed: 6,
-    splash: 0.9,
-    ap: 0.2,
+    splash: 1,
+    ap: 0,
     spread: 1.6
   }),
   // ---------------- Flak ----------------
@@ -33937,7 +34246,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 16,
     splash: 1.3,
-    ap: 0.2,
+    ap: 0,
     airBonus: 1.5
   }),
   wpn({
@@ -33960,7 +34269,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 18,
     splash: 1.8,
-    ap: 0.2,
+    ap: 0,
     airBonus: 1.5
   }),
   // ---------------- Melee ----------------
@@ -33979,7 +34288,7 @@ var MODULES = [
     cooldown: 0.25,
     range: 0.6,
     ...MELEE,
-    ap: 0.3
+    ap: 1
   }),
   wpn({
     id: "shockprod",
@@ -33996,7 +34305,7 @@ var MODULES = [
     cooldown: 1,
     range: 0.7,
     ...MELEE,
-    ap: 0.5,
+    ap: 1,
     stun: 0.8
   }),
   wpn({
@@ -34014,7 +34323,7 @@ var MODULES = [
     cooldown: 1.5,
     range: 0.4,
     ...MELEE,
-    ap: 0.5,
+    ap: 1,
     impulse: 1.2
   }),
   wpn({
@@ -34032,7 +34341,7 @@ var MODULES = [
     cooldown: 0.2,
     range: 0.7,
     ...MELEE,
-    ap: 0.4
+    ap: 1
   }),
   wpn({
     id: "claw",
@@ -34049,7 +34358,7 @@ var MODULES = [
     cooldown: 1,
     range: 0.8,
     ...MELEE,
-    ap: 0.7,
+    ap: 1,
     disarm: 1
   }),
   wpn({
@@ -34068,7 +34377,7 @@ var MODULES = [
     range: 0.9,
     ...MELEE,
     splash: 0.8,
-    ap: 0.8
+    ap: 1
   }),
   wpn({
     id: "hammer",
@@ -34086,7 +34395,7 @@ var MODULES = [
     range: 0.9,
     ...MELEE,
     splash: 1.3,
-    ap: 0.6,
+    ap: 1,
     impulse: 1
   }),
   wpn({
@@ -34173,7 +34482,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 18,
     splash: 0.8,
-    ap: 0.85,
+    ap: 1,
     spread: 0.2
   }),
   wpn({
@@ -34195,7 +34504,7 @@ var MODULES = [
     projectile: "bullet",
     projectileSpeed: 24,
     splash: 0.2,
-    ap: 0.45,
+    ap: 0.5,
     spread: 0.5,
     spinUp: 2
   }),
@@ -34211,9 +34520,9 @@ var MODULES = [
     mount: "L",
     weight: 17,
     cost: 120,
-    damage: 70,
+    damage: 140,
     burst: 16,
-    cooldown: 9,
+    cooldown: 16.2,
     range: 18,
     ...GA,
     projectile: "missile",
@@ -34225,7 +34534,7 @@ var MODULES = [
     id: "siegeplasma",
     name: "Plasma Siege Projector",
     family: "Siege plasma",
-    desc: "Lobs a sun-hot plasma mass that melts everything nearby.",
+    desc: "Lobs a sun-hot plasma mass that melts everything nearby and leaves a molten pool burning for 6 s.",
     category: "energy",
     visual: "plasma",
     caliber: 1,
@@ -34239,8 +34548,9 @@ var MODULES = [
     projectile: "orb",
     projectileSpeed: 7,
     splash: 2,
-    ap: 0.7,
-    spread: 0.4
+    ap: 1,
+    spread: 0.4,
+    fireField: { radius: 2, duration: 6, dps: 30 }
   }),
   wpn({
     id: "clusterhow",
@@ -34262,7 +34572,7 @@ var MODULES = [
     projectile: "arc",
     projectileSpeed: 12,
     splash: 1.2,
-    ap: 0.3,
+    ap: 0.5,
     spread: 1.2,
     cluster: { count: 10, radius: 2.6, damage: 60, splash: 0.9 }
   }),
@@ -34286,14 +34596,14 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 20,
     splash: 2.2,
-    ap: 0.3,
+    ap: 0.5,
     airBonus: 1.5
   }),
   wpn({
     id: "stormtower",
     name: "Storm Tower",
     family: "Giant tesla",
-    desc: "Lightning that chains through 8 enemies and jolts them.",
+    desc: "Lightning that chains through 8 enemies, jolts them and overloads shields (3x).",
     category: "disruption",
     visual: "tesla",
     caliber: 1,
@@ -34307,7 +34617,8 @@ var MODULES = [
     projectile: "lightning",
     chain: 7,
     ap: 0.5,
-    stun: 0.3
+    stun: 0.4,
+    shieldMult: 3
   }),
   wpn({
     id: "inferno",
@@ -34320,16 +34631,16 @@ var MODULES = [
     mount: "L",
     weight: 15,
     cost: 95,
-    damage: 22,
+    damage: 9,
     cooldown: 0.1,
     range: 5.5,
     ...G,
     projectile: "flame",
     projectileSpeed: 9,
     splash: 1.8,
-    ap: 0.9,
-    burn: { dps: 30, duration: 3 },
-    fireField: { radius: 1.6, duration: 3.5, dps: 18 }
+    ap: 1,
+    burn: { dps: 40, duration: 8 },
+    fireField: { radius: 1.6, duration: 6, dps: 22 }
   }),
   wpn({
     id: "grinder",
@@ -34347,7 +34658,7 @@ var MODULES = [
     range: 1,
     ...MELEE,
     splash: 1.2,
-    ap: 0.6
+    ap: 1
   }),
   util({ id: "bulwarkshield", name: "Bastion Shield Generator", family: "Giant shield", desc: "Personal barrier that absorbs 1800 damage.", category: "defense", visual: "shield", caliber: 1, mount: "L", weight: 12, cost: 90, shield: 1800 }),
   util(
@@ -34360,28 +34671,33 @@ var MODULES = [
     id: "massdriver",
     name: "Spinal Mass Driver",
     family: "Titan rail",
-    desc: "Hull-length railgun. Pierces an entire battle line at extreme range. Barely traverses: the hull must face the target.",
+    desc: "Hull-length railgun. A wide slug that ploughs through a battle line at extreme range, and its shockwave throws and stuns everything it passes. Takes ages to recharge. Barely traverses: the hull must face the target.",
     category: "precision",
     visual: "rail",
-    turretTurn: 0.5,
+    turretTurn: 0.05,
+    spinal: 0.05,
     barrels: 2,
     caliber: 1,
     mount: "XL",
     weight: 38,
     cost: 220,
     damage: 1700,
-    cooldown: 6,
-    range: 28,
+    cooldown: 9,
+    range: 26,
     ...GA,
     projectile: "rail",
     ap: 1,
-    pierce: true
+    pierce: true,
+    beamWidth: 0.45,
+    pierceKeep: 0.75,
+    impulse: 1.5,
+    stun: 0.6
   }),
   wpn({
     id: "doomsday",
     name: "Doomsday Howitzer",
     family: "Titan artillery",
-    desc: "Twin super-heavy howitzer. Craters half a company per salvo. Minimum range 50 m.",
+    desc: "Twin super-heavy howitzer: each shell blasts units off their feet and leaves a burning crater. Minimum range 50 m.",
     category: "artillery",
     visual: "artillery",
     barrels: 2,
@@ -34389,7 +34705,7 @@ var MODULES = [
     mount: "XL",
     weight: 40,
     cost: 230,
-    damage: 700,
+    damage: 560,
     cooldown: 8,
     range: 40,
     minRange: 10,
@@ -34398,13 +34714,15 @@ var MODULES = [
     projectileSpeed: 14,
     splash: 4,
     ap: 0.5,
-    spread: 1.5
+    spread: 1.5,
+    impulse: 1.2,
+    fireField: { radius: 2.5, duration: 8, dps: 25 }
   }),
   wpn({
     id: "annihilator",
     name: "Annihilator Beam",
     family: "Titan beam",
-    desc: "Continuous plasma beam that cuts through anything.",
+    desc: "Continuous plasma beam that focuses as it holds: starts weak, and after 2.5 s on one target burns at 4x, melting even titans. Switching targets resets it.",
     category: "energy",
     visual: "plasma",
     barrels: 2,
@@ -34412,25 +34730,26 @@ var MODULES = [
     mount: "XL",
     weight: 36,
     cost: 220,
-    damage: 140,
+    damage: 60,
     cooldown: 0.2,
     range: 11,
     ...GA,
     projectile: "beam",
-    ap: 0.8
+    ap: 1,
+    ramp: 4
   }),
   wpn({
     id: "tactnuke",
     name: "Tactical Nuke Launcher",
     family: "Titan strategic",
-    desc: "One slow missile, one enormous blast. Minimum range 50 m.",
+    desc: "One slow missile: an enormous blast whose shockwave hurls units away and knocks out their electronics, then a radioactive zone that eats through any armor for 15 s. Minimum range 50 m.",
     category: "missile",
     visual: "cruise",
     caliber: 1,
     mount: "XL",
     weight: 34,
     cost: 240,
-    damage: 2200,
+    damage: 1500,
     cooldown: 20,
     range: 40,
     minRange: 10,
@@ -34438,13 +34757,16 @@ var MODULES = [
     projectile: "missile",
     projectileSpeed: 7,
     splash: 5,
-    ap: 0.6
+    ap: 0.5,
+    impulse: 2.5,
+    stun: 1.5,
+    fireField: { radius: 5, duration: 15, dps: 60, rad: true }
   }),
   wpn({
     id: "titanfist",
     name: "Titan Fist",
     family: "Titan melee",
-    desc: "A wrecking fist the size of a tank. Shockwave hurls units away.",
+    desc: "A wrecking fist the size of a tank. The quake hurls units away and leaves them stunned.",
     category: "melee",
     visual: "hammer",
     caliber: 1,
@@ -34456,14 +34778,15 @@ var MODULES = [
     range: 1.2,
     ...MELEE,
     splash: 2,
-    ap: 0.8,
-    impulse: 2
+    ap: 1,
+    impulse: 2,
+    stun: 1.2
   }),
   wpn({
     id: "stormcore",
     name: "Tempest Core",
     family: "Titan tesla",
-    desc: "Storm reactor: lightning chains through 11 enemies and stuns them.",
+    desc: "Storm reactor: lightning chains through 11 enemies, stuns them and fries their weapons (can't fire for a while after).",
     category: "disruption",
     visual: "tesla",
     barrels: 3,
@@ -34477,8 +34800,10 @@ var MODULES = [
     ...GA,
     projectile: "lightning",
     chain: 10,
-    ap: 0.6,
-    stun: 0.5
+    ap: 0.5,
+    stun: 0.5,
+    disarm: 1.5,
+    shieldMult: 3
   }),
   util(
     { id: "aegisT", name: "Titan Aegis Field", family: "Titan shield", desc: "3000-point personal barrier plus a 700-point shield (at most half the ally's hp) on allies within 60 m. Domes don't stack.", category: "support", visual: "dome", caliber: 1, mount: "XL", weight: 30, cost: 200, shield: 3e3, shieldAura: { radius: 12, amount: 700 } }
@@ -34568,6 +34893,10 @@ var FOOT_MOUNTS = {
   hunter: [[0.12, 0], [-0.3, 0]],
   colossal: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
   citadel: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  // lance: the titan gun at the breech of the spinal accelerator (centreline, ahead of the bridge), the medium on the
+  // aft deck; monolith: the giant gun in the roof cupola, the medium in a rear-quarter casemate
+  lance: [[0.06, 0], [-0.36, 0]],
+  monolith: [[0.1, 0], [-0.33, 0.33]],
   pod: [[-0.04, 0]],
   box: [[0.06, -0.24], [0.06, 0.24]],
   hex: [[0.04, 0], [-0.24, 0]],
@@ -34623,6 +34952,103 @@ var TEAM_PAL = [
   { body: "#6a6a4e", light: "#99977a", dark: "#444530", deep: "#25261a", accent: "#ff5a26", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#7d7458" }
 ];
 var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
+
+// src/client/proto3d/surface3d.ts
+var base = "assets/tex/";
+function flat(r, g, b) {
+  const t = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+var surfaceUniforms = {
+  sdA: { value: flat(128, 128, 191) },
+  sdB: { value: flat(0, 0, 128) },
+  /** 1 when the maps are loaded and detail is enabled */
+  sdOn: { value: 0 },
+  /** texture tiles per object-space unit (1 unit = 1 cell = 5 m): one 1024 px tile spans ~1.6 cells */
+  sdScale: { value: 0.62 },
+  /** bump strength */
+  sdBump: { value: 0.9 }
+};
+var loaded = 0;
+var started = false;
+var wanted = true;
+var sync = () => {
+  surfaceUniforms.sdOn.value = loaded === 2 && wanted ? 1 : 0;
+};
+function loadSurfaceTextures() {
+  if (started || typeof document === "undefined" || typeof Image === "undefined") return;
+  started = true;
+  const ld = new TextureLoader();
+  const get = (file, key) => ld.load(base + file, (t) => {
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.colorSpace = NoColorSpace;
+    t.minFilter = LinearMipmapLinearFilter;
+    t.magFilter = LinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 8;
+    t.needsUpdate = true;
+    surfaceUniforms[key].value = t;
+    loaded++;
+    sync();
+  }, void 0, () => {
+  });
+  get("hull_detail.png", "sdA");
+  get("hull_wear.jpg", "sdB");
+}
+var SD_VERT_DECL = (
+  /* glsl */
+  `
+varying vec3 vSdP; varying vec3 vSdN; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;`
+);
+var SD_VERT_MAIN = (
+  /* glsl */
+  `
+  vSdP = position; vSdN = normal;
+  {
+    mat3 sdM = mat3(modelViewMatrix);
+    #ifdef USE_INSTANCING
+      sdM = sdM * mat3(instanceMatrix);
+    #endif
+    vSdAX = sdM[0]; vSdAY = sdM[1]; vSdAZ = sdM[2];
+  }`
+);
+var SD_FRAG_DECL = (
+  /* glsl */
+  `
+varying vec3 vSdP; varying vec3 vSdN; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;
+uniform sampler2D sdA; uniform sampler2D sdB; uniform float sdOn; uniform float sdScale; uniform float sdBump;`
+);
+var SD_FRAG_SAMPLE = (
+  /* glsl */
+  `
+  float sdCav = 1.0, sdWear = 0.0, sdGrime = 0.0, sdMot = 0.0;
+  vec3 sdGrad = vec3(0.0);
+  if (sdOn > 0.5) {
+    vec3 tw = pow(abs(normalize(vSdN)), vec3(6.0)); tw /= (tw.x + tw.y + tw.z);
+    vec3 p = vSdP * sdScale;
+    vec2 uX = p.zy + vec2(0.37, 0.11), uY = p.xz + vec2(0.71, 0.29), uZ = p.xy + vec2(0.13, 0.57);
+    vec3 aX = texture2D(sdA, uX).rgb, aY = texture2D(sdA, uY).rgb, aZ = texture2D(sdA, uZ).rgb;
+    vec3 bX = texture2D(sdB, uX).rgb, bY = texture2D(sdB, uY).rgb, bZ = texture2D(sdB, uZ).rgb;
+    vec3 a = aX * tw.x + aY * tw.y + aZ * tw.z;
+    vec3 b = bX * tw.x + bY * tw.y + bZ * tw.z;
+    sdCav = a.b / 0.75;
+    // one coarse, skewed planar fetch for large-scale weathering (patchy grime, uneven paint) that breaks up tiling
+    float macro = texture2D(sdB, (vSdP.xz + vSdP.yy * vec2(0.6, -0.4)) * 0.17 + vec2(0.5, 0.2)).g;
+    sdWear = b.r; sdGrime = b.g * (0.45 + 0.9 * macro); sdMot = b.b - 0.5 + (0.35 - macro) * 0.35;
+    vec2 sX = aX.rg - 0.5, sY = aY.rg - 0.5, sZ = aZ.rg - 0.5;
+    sdGrad = tw.x * vec3(0.0, sX.y, sX.x) + tw.y * vec3(sY.x, 0.0, sY.y) + tw.z * vec3(sZ.x, sZ.y, 0.0);
+  }`
+);
+var sdBumpGLSL = (g) => (
+  /* glsl */
+  `
+  if (sdOn > 0.5) {
+    vec3 sdG = (normalize(vSdAX) * (${g}).x + normalize(vSdAY) * (${g}).y + normalize(vSdAZ) * (${g}).z) * sdBump;
+    normal = normalize(normal - (sdG - normal * dot(normal, sdG)));
+  }`
+);
 
 // src/client/proto3d/materials.ts
 function rng(seed) {
@@ -34947,19 +35373,22 @@ function makeUber(rows) {
   for (let i = 0; i < N_ROWS; i++) {
     const r = rows[i] ?? rows[0];
     const c = new Color(r.color);
-    A2.push(new Vector4(c.r, c.g, c.b, 0));
-    B.push(new Vector4(r.bev ?? 1, r.rim ?? 1, 0, r.ao ?? 1));
+    const lit = (r.emI ?? 0) > 0 && r.color === "#000000";
+    A2.push(new Vector4(c.r, c.g, c.b, lit ? 0 : r.det ?? 1));
+    B.push(new Vector4(r.bev ?? 1, r.rim ?? 1, lit ? 0 : r.wear ?? 1, r.ao ?? 1));
     const e = new Color(r.em ?? "#000");
-    E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), 0));
+    E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), lit ? 0 : r.grime ?? 1));
   }
   const m = new MeshToonMaterial({ color: "#ffffff", gradientMap: celRamp() });
+  loadSurfaceTextures();
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uA = { value: A2 };
     sh.uniforms.uB = { value: B };
     sh.uniforms.uE = { value: E };
+    Object.assign(sh.uniforms, surfaceUniforms);
     sh.uniforms.rimCol = { value: new Color("#a9c8ff") };
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;").replace("#include <begin_vertex>", `#include <begin_vertex>
-        vMid = mid;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;" + SD_VERT_DECL).replace("#include <begin_vertex>", `#include <begin_vertex>
+        vMid = mid;${SD_VERT_MAIN}
         vec4 wpS = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
           wpS = instanceMatrix * wpS;
@@ -34967,7 +35396,7 @@ function makeUber(rows) {
         vWY = (modelMatrix * wpS).y;`).replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvWN = inverseTransformDirection(transformedNormal, viewMatrix);");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
 varying float vMid; varying vec3 vWN; varying float vWY;
-uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec3 rimCol;`).replace(
+uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec3 rimCol;${SD_FRAG_DECL}`).replace(
       "#include <map_fragment>",
       /* glsl */
       `
@@ -34982,13 +35411,28 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         base = mix(base, base * 1.2 + vec3(0.02), bev * rB.x);
         // soft ground-contact darkening
         base *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
+        // ---- surface detail (surface3d.ts) ----
+        ${SD_FRAG_SAMPLE}
+        float sdDet = rA.w, sdW = rB.z, sdGr = uE[mi].w;
+        // plate seams, rivets, hatches, stencil paint
+        base *= mix(1.0, sdCav, sdDet);
+        // fine mottling and patchy grime / drip streaks (darker, slightly warmer), more of it low on the hull
+        base *= 1.0 + sdMot * 0.32 * sdGr;
+        float low = 1.0 - smoothstep(0.05, 0.7, vWY);
+        float gr = clamp(sdGrime * (0.75 + 0.6 * low), 0.0, 1.0) * sdGr;
+        base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.7);
+        // chipped paint: bare metal flecks, concentrated on chamfer edges and upper surfaces
+        float wm = sdWear * sdW * (0.4 + 1.3 * bev + 0.2 * smoothstep(0.5, 1.0, wn.y));
+        wm = smoothstep(0.5, 0.75, wm);
+        base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
+        vec3 sdGradR = sdGrad * sdDet;
         diffuseColor.rgb = base;`
-    ).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+    ).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
         totalEmissiveRadiance = uE[mi].rgb;
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
         totalEmissiveRadiance += rimCol * fres * 0.16 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => "uberToon1";
+  m.customProgramCacheKey = () => "uberToon2";
   return m;
 }
 var TEAM_PAINT = [
@@ -35005,15 +35449,15 @@ function makeKit(team) {
   const tp = TEAM_PAINT[team];
   const rows = [
     { color: tp[0] },
-    { color: tp[1], bev: 0.6 },
+    { color: tp[1], bev: 0.6, det: 0.9 },
     { color: tp[2] },
-    { color: "#4b535b", bev: 0.8 },
-    { color: "#b3bcc3", bev: 0.6 },
-    { color: "#2b2d30", bev: 0.3, rim: 0.4 },
-    { color: "#1b3440", bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12 },
-    { color: tp[3] },
-    { color: "#e2b13a" },
-    { color: p.accent, bev: 0.6 },
+    { color: "#4b535b", bev: 0.8, det: 0.55, wear: 0.6 },
+    { color: "#b3bcc3", bev: 0.6, det: 0.2, wear: 0, grime: 0.6 },
+    { color: "#2b2d30", bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.2 },
+    { color: "#1b3440", bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.3 },
+    { color: tp[3], det: 0.12, wear: 0.2 },
+    { color: "#e2b13a", det: 0.6, wear: 1.3 },
+    { color: p.accent, bev: 0.6, det: 0.45, wear: 0.6, grime: 0.6 },
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.15 },
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#fff0d0", emI: 1.8 },
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ff7a2a", emI: 2.4 },
@@ -36440,19 +36884,19 @@ function plasma(C) {
   const { b, p, rc, kit, r, y0 } = C;
   const n = Math.min(2, Math.max(1, C.nb));
   const big = C.tier >= 4;
-  const lance = C.mod.projectile === "beam";
+  const lance2 = C.mod.projectile === "beam";
   eggHousing(C, 0.95, 0.85, big ? 0.5 : 0.46, -0.15);
   C.t.pitch.position.set(r * 0.35, y0 + r * (big ? 0.5 : 0.45), 0);
   const gap = r * 0.62;
-  const cr = r * (lance ? 0.24 : 0.3);
-  const len = C.D * (lance ? 1.15 : 0.85);
+  const cr = r * (lance2 ? 0.24 : 0.3);
+  const len = C.D * (lance2 ? 1.15 : 0.85);
   for (let i = 0; i < n; i++) {
     const z = n > 1 ? (i - 0.5) * gap : 0;
     ball(rc, kit.panel, r * 0.02, 0, z, cr, 1, 10, "x");
     band(rc, kit.plasma, r * 0.02, 0, z, cr * 1.03, cr * 0.4, 10);
-    const br = cr * (lance ? 0.45 : 0.5);
+    const br = cr * (lance2 ? 0.45 : 0.5);
     rc.lathe(kit.steel, [[0, 0], [br, 0], [br * 0.9, len], [0, len]], [cr * 0.6, 0, z], "x", 8);
-    const nr = lance ? 3 : 2;
+    const nr = lance2 ? 3 : 2;
     for (let k = 0; k < nr; k++) band(rc, k === nr - 1 ? kit.plasma : kit.trim, cr * 0.6 + len * (0.35 + 0.6 * k / Math.max(1, nr - 1) * 0.95), 0, z, br * 1.7, br * 0.7, 8);
     rc.cyl(kit.plasma, br * 0.7, br * 0.7, r * 0.02, [cr * 0.6 + len, 0, z], "x", 6);
     C.muzzle(cr * 0.6 + len + r * 0.08, 0, z);
@@ -36460,7 +36904,7 @@ function plasma(C) {
   if (n > 1) bx(p, kit.trim, -r * 0.05, 0, 0, r * 0.3, r * 0.25, gap);
   if (big) for (const s of [-1, 1]) capsule(b, kit.trim, -r * 0.55, y0 + r * 0.45, s * r * 0.62, r * 0.16, r * 0.6, "x", 8);
   accent(C, -r * 0.45, y0 + r * (big ? 0.97 : 0.89), 0, r * 0.3, r * 0.22);
-  C.t.shot = lance ? "beam" : "orb";
+  C.t.shot = lance2 ? "beam" : "orb";
   C.t.rate = 1.6;
 }
 function flamer(C) {
@@ -36799,11 +37243,11 @@ function buildUtility(C) {
       return radar(C);
   }
 }
-var base = (C, k = 0.62, h = 0.2) => C.b.lathe(C.kit.hull, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.6], [C.r * k * 0.78, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
+var base2 = (C, k = 0.62, h = 0.2) => C.b.lathe(C.kit.hull, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.6], [C.r * k * 0.78, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
 function repair(C) {
   const { b, p, kit, r, y0 } = C;
   const n = C.c > 0.5 ? 2 : 1;
-  base(C);
+  base2(C);
   cbox(b, kit.hazard, 0, y0 + r * 0.32, 0, r * 0.45, r * 0.24, r * 0.45, r * 0.04);
   b.cyl(kit.metal, r * 0.1, r * 0.09, r * 0.45, [0, y0 + r * 0.42, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.85, 0);
@@ -36822,7 +37266,7 @@ function shieldPylon(C) {
   const { b, kit, r, y0 } = C;
   const heavy = C.c > 0.7;
   const H = r * (heavy ? 1.35 : 1.1);
-  base(C, 0.66, 0.22);
+  base2(C, 0.66, 0.22);
   b.lathe(kit.panel, [[0, 0], [r * 0.26, 0], [r * 0.16, H * 0.8], [0, H * 0.8]], [0, y0 + r * 0.2, 0], "y", 8);
   for (const f of heavy ? [0.3, 0.55, 0.8] : [0.35, 0.7]) b.lathe(kit.glow, [[0, 0], [r * (0.38 - f * 0.18), 0], [r * (0.38 - f * 0.18), r * 0.05], [0, r * 0.05]], [0, y0 + r * 0.2 + H * f * 0.8, 0], "y", 10);
   b.lathe(kit.trim, [[0, 0], [r * 0.1, 0], [r * 0.4, r * 0.12], [r * 0.38, r * 0.17], [0, r * 0.1]], [0, y0 + r * 0.2 + H * 0.8, 0], "y", 10);
@@ -36847,7 +37291,7 @@ function domeProjector(C) {
 }
 function uplink(C) {
   const { b, kit, r, y0 } = C;
-  base(C);
+  base2(C);
   cbox(b, kit.trim, -r * 0.1, y0 + r * 0.32, 0, r * 0.5, r * 0.25, r * 0.5);
   b.lathe(kit.metal, [[0, 0], [r * 0.08, 0], [r * 0.04, r * 1.3], [0, r * 1.3]], [r * 0.05, y0 + r * 0.4, 0], "y", 6);
   for (const f of [0.3, 0.6]) bx(b, kit.panel, r * 0.05, y0 + r * 0.4 + r * 1.3 * f, 0, r * 0.05, r * 0.05, r * 0.5);
@@ -36858,7 +37302,7 @@ function uplink(C) {
 }
 function radar(C) {
   const { b, p, kit, r, y0 } = C;
-  base(C, 0.55);
+  base2(C, 0.55);
   b.cyl(kit.metal, r * 0.1, r * 0.08, r * 0.75, [0, y0 + r * 0.2, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 1, 0);
   C.t.pitch.rotation.z = 0.5;
@@ -36871,7 +37315,7 @@ function radar(C) {
 }
 function optics(C) {
   const { b, p, kit, r, y0 } = C;
-  base(C, 0.55);
+  base2(C, 0.55);
   b.cyl(kit.metal, r * 0.12, r * 0.12, r * 0.3, [0, y0 + r * 0.18, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.62, 0);
   cbox(p, kit.hull, -r * 0.05, 0, 0, r * 0.6, r * 0.38, r * 0.75, r * 0.07, void 0, 0.85);
@@ -36911,7 +37355,7 @@ function jammer(C) {
 }
 function smoke(C) {
   const { b, kit, r, y0 } = C;
-  base(C, 0.5, 0.16);
+  base2(C, 0.5, 0.16);
   for (const s of [-1, 1]) {
     cbox(b, kit.hull, 0, y0 + r * 0.26, s * r * 0.32, r * 0.5, r * 0.22, r * 0.3, r * 0.04);
     for (let i = 0; i < 3; i++) {
@@ -36994,7 +37438,7 @@ function turbo(C) {
 }
 function gyro(C) {
   const { b, kit, r, y0 } = C;
-  base(C, 0.55, 0.18);
+  base2(C, 0.55, 0.18);
   const c = y0 + r * 0.6, R = r * 0.42;
   b.lathe(kit.panel, [[R * 0.82, 0], [R, 0], [R, r * 0.08], [R * 0.82, r * 0.08]], [0, c - r * 0.04, 0], "y", 10);
   b.lathe(kit.steel, [[R * 0.72, 0], [R * 0.88, 0], [R * 0.88, r * 0.07], [R * 0.72, r * 0.07]], [-r * 0.035, c, 0], "x", 10);
@@ -37182,9 +37626,9 @@ function buildHull(b, kit, shape, L, W, yb, yt, Hd, wi, tracked) {
   return { lofts: [info2], top: Math.max(...rows.map((r) => r.y3)), L, W, yt, Hd };
 }
 function addCasemate(b, kit, hull, cx, hl, hw, hh) {
-  const base2 = deckAt(hull, cx, 0);
-  if (base2 < 0) return;
-  const y0 = base2 - 0.01;
+  const base3 = deckAt(hull, cx, 0);
+  if (base3 < 0) return;
+  const y0 = base3 - 0.01;
   const rows = [
     { x: cx - hl, wb: hw * 0.98, wm: hw, wt: hw * 0.78, y0, y1: y0 + hh * 0.05, y2: y0 + hh * 0.55, y3: y0 + hh * 0.82 },
     { x: cx - hl * 0.82, wb: hw * 0.98, wm: hw, wt: hw * 0.7, y0, y1: y0 + hh * 0.05, y2: y0 + hh * 0.6, y3: y0 + hh },
@@ -37198,7 +37642,7 @@ var dist = (a, c) => Math.hypot(a[0] - c[0], a[1] - c[1]);
 function greeble(b, kit, hull, S, rnd, mounts) {
   const { L, W } = hull;
   const free = (x, z, rad) => mounts.every((m) => dist([m.x, m.z], [x, z]) > m.r + rad);
-  const flat = (x, z, rad) => {
+  const flat2 = (x, z, rad) => {
     const t = deckAt(hull, x, z);
     return t >= 0 && [[rad, 0], [-rad, 0], [0, rad], [0, -rad]].every(([dx, dz]) => Math.abs(deckAt(hull, x + dx, z + dz) - t) < 0.012) ? t : -1;
   };
@@ -37209,7 +37653,7 @@ function greeble(b, kit, hull, S, rnd, mounts) {
   for (let i = 0; i < n * 3 && n > 0; i++) {
     const x = (rnd() - 0.5) * L * 0.84, z = (rnd() - 0.5) * W * 0.78;
     const rad = u * 2.4;
-    const top2 = flat(x, z, rad);
+    const top2 = flat2(x, z, rad);
     if (top2 < 0 || !free(x, z, rad)) continue;
     const kind = kinds[Math.floor(rnd() * kinds.length)];
     if (kind === "hatch") {
@@ -37248,7 +37692,7 @@ function greeble(b, kit, hull, S, rnd, mounts) {
     const wt = hull.lofts[0].pts[2].wt;
     for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) {
       const x = L * (-0.3 + i * 0.2) + (rnd() - 0.5) * 0.1, z = sg * wt * 0.9;
-      const top2 = flat(x, z, u * 1.6);
+      const top2 = flat2(x, z, u * 1.6);
       if (top2 < 0 || !free(x, z, u * 1.6)) continue;
       const k = (i + (sg > 0 ? 1 : 0)) % 3;
       if (k === 0) {
@@ -37284,10 +37728,10 @@ function greeble(b, kit, hull, S, rnd, mounts) {
   }
 }
 function addBridge(b, kit, hull, cx, S) {
-  const base2 = deckAt(hull, cx, 0);
-  if (base2 < 0) return;
+  const base3 = deckAt(hull, cx, 0);
+  if (base3 < 0) return;
   const u = 0.1 * S;
-  const y0 = base2;
+  const y0 = base3;
   b.loft(kit.hull, [
     sec8(cx - u * 1.5, u * 1.4, u * 1.5, u * 1, y0, y0 + u * 0.05, y0 + u * 0.7, y0 + u * 1),
     sec8(cx - u * 0.3, u * 1.6, u * 1.7, u * 1.2, y0, y0 + u * 0.05, y0 + u * 0.8, y0 + u * 1.2),
@@ -38041,11 +38485,11 @@ registerChassis("arachnid", orbwalker);
 var XBld = class extends Bld {
   base;
   T;
-  constructor(base2, T) {
+  constructor(base3, T) {
     super();
-    this.base = base2;
+    this.base = base3;
     this.T = T;
-    this.segK = base2.segK;
+    this.segK = base3.segK;
   }
   g(geo, matl, m) {
     this.base.g(geo, matl, m ? this.T.clone().multiply(m) : this.T);
@@ -38437,8 +38881,8 @@ function juggernaut(c) {
         collar(b, kit, m.x, keepY, m.z, m.r, keepY - 0.05 * k, 20);
         return { y: keepY, socket: true };
       }
-      const base2 = Math.max(0, deck(m.x, m.z)), y = base2 + 0.08 * k;
-      frustum(b, kit.hull, ngon(6, m.r * 1.5, m.r * 1.5, 0, m.x, m.z), base2 - 0.03 * k, y - base2 + 0.03 * k, { top: [0.86, 0.86], bev: 0.02 * k });
+      const base3 = Math.max(0, deck(m.x, m.z)), y = base3 + 0.08 * k;
+      frustum(b, kit.hull, ngon(6, m.r * 1.5, m.r * 1.5, 0, m.x, m.z), base3 - 0.03 * k, y - base3 + 0.03 * k, { top: [0.86, 0.86], bev: 0.02 * k });
       collar(b, kit, m.x, y, m.z, m.r, y - 0.04 * k, 14);
       return { y, socket: true };
     }
@@ -38474,17 +38918,6 @@ function inPoly(poly, x, z) {
     else if (s !== sgn) return false;
   }
   return true;
-}
-function tower(b, kit, x, y0, z, r, h, o = {}) {
-  const seg = o.seg ?? 12;
-  b.lathe(kit.hull, [[0, 0], [r * 1.12, 0], [r * 1.02, h * 0.3], [r, h * 0.82], [r * 1.16, h * 0.9], [r * 1.16, h], [0, h]], [x, y0, z], "y", seg);
-  if (o.band !== false) b.lathe(kit.trim, [[r * 0.995, 0], [r * 1.03, 0], [r * 1.03, h * 0.06], [r * 0.995, h * 0.06]], [x, y0 + h * 0.55, z], "y", seg);
-  const n = o.merlons ?? 8, top = y0 + h;
-  for (let i = 0; i < n; i++) {
-    const a = i / n * Math.PI * 2;
-    b.box(kit.panel, r * 0.34, r * 0.26, r * 0.22, x + Math.cos(a) * r * 1.02, top + r * 0.13, z + Math.sin(a) * r * 1.02, r * 0.05, [0, -a, 0]);
-  }
-  return top;
 }
 function mast(b, kit, x, y, z, h, r = 0.05) {
   b.cylb(kit.trim, r * 2.6, r * 2.2, r * 0.6, [x, y, z], "y", 8);
@@ -38527,9 +38960,9 @@ function glowGrille(b, kit, x, y, z, w, h, n, dir = 1) {
 }
 
 // src/client/proto3d/chassis/giants.ts
-function pedestal2(c, m, base2, y) {
+function pedestal2(c, m, base3, y) {
   const { b, kit } = c;
-  if (y - base2 > 0.06) block(b, kit.hull, m.x, base2 - 0.02, m.z, m.r * 2.5, m.r * 2.5, y - base2 + 0.02, { top: [0.84, 0.84], ch: m.r * 0.7, bev: 0.04 });
+  if (y - base3 > 0.06) block(b, kit.hull, m.x, base3 - 0.02, m.z, m.r * 2.5, m.r * 2.5, y - base3 + 0.02, { top: [0.84, 0.84], ch: m.r * 0.7, bev: 0.04 });
   collar(b, kit, m.x, y, m.z, m.r, y - 0.08, 18);
   return { y, socket: true };
 }
@@ -38935,21 +39368,21 @@ function buildGear(parent, mobId, L, W, S, kit, _legsOut = []) {
 
 // src/client/proto3d/mobility/generic.ts
 function genericStance(s) {
-  const base2 = { tracked: false, legs: null, thick: 0, hipY: 0 };
+  const base3 = { tracked: false, legs: null, thick: 0, hipY: 0 };
   switch (s.mobId) {
     case "wheels": {
       const wr = 0.1 + 0.08 * s.S, w = wr * 0.8;
-      return { ...base2, y0: wr * 1.15, yt: wr * 2, wi: s.W / 2 - w * 0.8 };
+      return { ...base3, y0: wr * 1.15, yt: wr * 2, wi: s.W / 2 - w * 0.8 };
     }
     case "anchor":
-      return { ...base2, y0: 0.14, yt: 0.2, wi: s.W * 0.4 };
+      return { ...base3, y0: 0.14, yt: 0.2, wi: s.W * 0.4 };
     case "rotor":
     case "gravlift":
     case "jet":
-      return { ...base2, y0: 0, yt: 0.1, wi: s.W * 0.4 };
+      return { ...base3, y0: 0, yt: 0.1, wi: s.W * 0.4 };
     default: {
       const hgt = 0.12 + 0.05 * s.S;
-      return { ...base2, y0: hgt * 0.9, yt: hgt * 1.4, wi: s.W * 0.4 };
+      return { ...base3, y0: hgt * 0.9, yt: hgt * 1.4, wi: s.W * 0.4 };
     }
   }
 }
@@ -39068,12 +39501,12 @@ function trackUnit(b, kit, L, h, w, z, side, o) {
     b.box(kit.hull, h * 0.5, h * 0.08, fw * 0.96, L / 2 - h * 0.42, h * 0.92, fz2, h * 0.03, [0, 0, -0.55]);
   }
 }
-function nring(x, cy, cz, ry, rz, n = 10, flat = 0.55) {
+function nring(x, cy, cz, ry, rz, n = 10, flat2 = 0.55) {
   const out2 = [];
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     let y = Math.sign(s) * Math.pow(Math.abs(s), 0.75) * ry;
-    if (y < 0) y *= 1 - flat;
+    if (y < 0) y *= 1 - flat2;
     out2.push([x, cy + y, cz + Math.sign(c) * Math.pow(Math.abs(c), 0.75) * rz]);
   }
   return out2;
@@ -39620,8 +40053,8 @@ registerMobility(["rotor", "jet", "gravlift"], {
     return buildLift(c.root, c.kit, ac.lift ?? defaultLift(c.mobId, c.L, c.W, c.S));
   }
 });
-function fuse(b, mat, st, n = 10, pw = 2.4, cz = 0, flat = 0) {
-  b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, cz, Math.max(2e-3, ry), Math.max(2e-3, rz), n, pw, flat)));
+function fuse(b, mat, st, n = 10, pw = 2.4, cz = 0, flat2 = 0) {
+  b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, cz, Math.max(2e-3, ry), Math.max(2e-3, rz), n, pw, flat2)));
 }
 
 // src/client/proto3d/chassis/air.ts
@@ -40060,8 +40493,8 @@ function hull8(c, mat, st, zc = 0) {
     return -1;
   };
 }
-function tube(b, mat, z, st, n = 8, pw = 2.6, flat = 0.3) {
-  b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, z, Math.max(3e-3, ry), Math.max(3e-3, rz), n, pw, flat)));
+function tube(b, mat, z, st, n = 8, pw = 2.6, flat2 = 0.3) {
+  b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, z, Math.max(3e-3, ry), Math.max(3e-3, rz), n, pw, flat2)));
 }
 function fin2(b, mat, prof, z, th, bev = 8e-3) {
   plate(b, mat, prof.map(([x, y]) => [x, -y]), 0, th, bev, [Math.PI / 2, 0, 0], [0, 0, z - th / 2]);
@@ -40242,10 +40675,10 @@ function hunter(c) {
     top: top + 0.06,
     custom: true,
     seat: (m) => {
-      const base2 = Math.max(deck(m.x, m.z), deck(m.x + m.r * 0.8, 0), deck(m.x - m.r * 0.8, 0));
-      const y = base2 + (m === front ? 0.05 : 0.03);
-      if (m === front) block(b, kit.hull, m.x, base2 - 0.04, m.z, m.r * 2.4, m.r * 2.2, y - base2 + 0.04, { top: [0.86, 0.86], ch: m.r * 0.6, bev: 0.012 });
-      collar(b, kit, m.x, y, m.z, m.r, base2 - 0.02, 14);
+      const base3 = Math.max(deck(m.x, m.z), deck(m.x + m.r * 0.8, 0), deck(m.x - m.r * 0.8, 0));
+      const y = base3 + (m === front ? 0.05 : 0.03);
+      if (m === front) block(b, kit.hull, m.x, base3 - 0.04, m.z, m.r * 2.4, m.r * 2.2, y - base3 + 0.04, { top: [0.86, 0.86], ch: m.r * 0.6, bev: 0.012 });
+      collar(b, kit, m.x, y, m.z, m.r, base3 - 0.02, 14);
       return { y, socket: true };
     }
   };
@@ -40406,8 +40839,8 @@ function aegis(c) {
         collar(b, kit, m.x, y2, m.z, m.r, y2 - 0.06 * u, 14);
         return { y: y2, socket: true };
       }
-      const base2 = Math.max(dome0(m.x, m.z), y0 + lo + 0.1 * u);
-      const y = Math.max(base2 + 0.1 * u, dy + 0.24 * u);
+      const base3 = Math.max(dome0(m.x, m.z), y0 + lo + 0.1 * u);
+      const y = Math.max(base3 + 0.1 * u, dy + 0.24 * u);
       block(b, kit.hull, m.x + 0.04 * u, y0 + lo + 0.1 * u, m.z, m.r * 2.6, m.r * 2.4, y - (y0 + lo + 0.1 * u), { top: [0.86, 0.9], ch: m.r * 0.6, bev: 0.015 });
       collar(b, kit, m.x, y, m.z, m.r, y - 0.05, 12);
       return { y, socket: true };
@@ -40784,99 +41217,291 @@ registerMobility("titanlegs", {
   }
 });
 
+// src/client/proto3d/chassis/titan-greebles.ts
+var V = (x, y, z) => new Vector3(x, y, z);
+var mirror3 = (half) => [...half, ...half.slice(1, -1).reverse().map(([x, z]) => [x, -z])];
+function inside(poly, x, z) {
+  let r = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if (zi > z !== zj > z && x < (xj - xi) * (z - zi) / (zj - zi || 1e-9) + xi) r = !r;
+  }
+  return r;
+}
+function wallFace(poly, i, lo, hi, at2 = [0, 0]) {
+  const p = poly[i], q = poly[(i + 1) % poly.length];
+  const P = (pt, [y, s]) => V(at2[0] + pt[0] * s, y, at2[1] + pt[1] * s);
+  const a0 = P(p, lo), b0 = P(q, lo), a1 = P(p, hi), b1 = P(q, hi);
+  const m0 = a0.clone().add(b0).multiplyScalar(0.5), m1 = a1.clone().add(b1).multiplyScalar(0.5);
+  const c = m0.clone().add(m1).multiplyScalar(0.5);
+  const u = b0.clone().sub(a0).normalize();
+  const v = m1.clone().sub(m0).normalize();
+  const n = new Vector3().crossVectors(u, v).normalize();
+  const out2 = V(c.x - at2[0], 0, c.z - at2[1]);
+  if (n.dot(out2) < 0) {
+    n.negate();
+  }
+  return { c, u, v, n, w: (a0.distanceTo(b0) + a1.distanceTo(b1)) / 2, h: m0.distanceTo(m1), wb: a0.distanceTo(b0), wt: a1.distanceTo(b1) };
+}
+function facePt(f, du, dv, off = 0) {
+  const p = f.c.clone().addScaledVector(f.u, du).addScaledVector(f.v, dv).addScaledVector(f.n, off);
+  return [p.x, p.y, p.z];
+}
+function faceMtx(f, du, dv, off, roll = 0) {
+  const z = new Vector3().crossVectors(f.u, f.n);
+  const p = facePt(f, du, dv, off);
+  const m = new Matrix4().makeBasis(f.u, f.n, z).setPosition(p[0], p[1], p[2]);
+  if (roll) m.multiply(new Matrix4().makeRotationY(roll));
+  return m;
+}
+function facePlate(b, mat, f, du, dv, w, d, t, off = 0, bev = Math.min(w, d, t) * 0.3) {
+  b.g(bevBox(w, t, d, bev), mat, faceMtx(f, du, dv, off + t / 2));
+}
+function faceBox(b, mat, f, du, dv, w, d, t, off = 0) {
+  b.g(new BoxGeometry(w, t, d), mat, faceMtx(f, du, dv, off + t / 2));
+}
+function faceRivets(b, mat, f, du0, du1, dv, n, r, off = 0) {
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    faceBox(b, mat, f, du0 + (du1 - du0) * t, dv, r, r, r * 0.7, off);
+  }
+}
+function armourPlate(b, kit, f, du, dv, w, d, t, mat = kit.panel, rivets = true) {
+  facePlate(b, kit.trim, f, du, dv, w * 1.04, d * 1.04, t * 0.5, 0, t * 0.15);
+  facePlate(b, mat, f, du, dv, w, d, t, t * 0.35, t * 0.35);
+  if (rivets) {
+    const n = Math.max(2, Math.round(w / (t * 3.2)));
+    const r = t * 0.55;
+    for (const e of [-1, 1]) faceRivets(b, kit.metal, f, du - w * 0.42, du + w * 0.42, dv + e * d * 0.4, n, r, t * 1.3);
+  }
+}
+function faceSlit(b, kit, f, du, dv, w, d, mat = kit.glow) {
+  faceBox(b, kit.trim, f, du, dv, w * 1.25, d * 2.2, d * 0.8, 0);
+  faceBox(b, mat, f, du, dv, w, d, d * 0.5, d * 0.6);
+}
+function faceVent(b, kit, f, du, dv, w, d, n = 4, mat = kit.metal) {
+  const t = Math.min(w, d) * 0.08;
+  faceBox(b, kit.trim, f, du, dv, w, d, t, 0);
+  for (let i = 0; i < n; i++) faceBox(b, mat, f, du, dv - d * 0.4 + d * 0.8 * i / Math.max(1, n - 1), w * 0.9, d / n * 0.45, t * 1.6, t * 0.5);
+}
+function faceLadder(b, kit, f, du, dv0, dv1, w) {
+  const r = w * 0.09, off = w * 0.12;
+  for (const e of [-1, 1]) faceBox(b, kit.metal, f, du + e * w / 2, (dv0 + dv1) / 2, r, Math.abs(dv1 - dv0), r, off);
+  const n = Math.max(2, Math.round(Math.abs(dv1 - dv0) / (w * 0.42)));
+  for (let i = 0; i <= n; i++) faceBox(b, kit.steel, f, du, dv0 + (dv1 - dv0) * i / n, w, r * 0.8, r * 0.8, off);
+}
+function pbox(b, mat, w, h, d, x, y, z, ry = 0) {
+  const m = new Matrix4().makeRotationY(ry).setPosition(x, y, z);
+  b.g(new BoxGeometry(w, h, d), mat, m);
+}
+function pipeRun(b, kit, pts, r, mat = kit.metal) {
+  for (let i = 0; i < pts.length - 1; i++) b.strut(mat, pts[i], pts[i + 1], r, r, 6);
+  for (const p of pts) pbox(b, kit.trim, r * 2.6, r * 2.6, r * 2.6, p[0], p[1], p[2]);
+}
+function hatch(b, kit, x, y, z, r) {
+  b.cylb(kit.trim, r * 1.15, r * 0.18, r * 0.06, [x, y, z], "y", 10);
+  b.cylb(kit.panel, r, r * 0.3, r * 0.1, [x, y + r * 0.05, z], "y", 10);
+  pbox(b, kit.metal, r * 0.9, r * 0.12, r * 0.14, x, y + r * 0.4, z);
+  pbox(b, kit.metal, r * 0.3, r * 0.2, r * 0.6, x - r * 1, y + r * 0.2, z);
+}
+function sensorDome(b, kit, x, y, z, r, mat = kit.panel) {
+  b.cylb(kit.trim, r * 1.15, r * 0.35, r * 0.08, [x, y, z], "y", 10);
+  b.lathe(mat, [[0, 0], [r, 0], [r * 0.92, r * 0.42], [r * 0.66, r * 0.78], [r * 0.3, r * 0.96], [0, r]], [x, y + r * 0.33, z], "y", 12);
+  b.cyl(kit.glow, r * 0.18, r * 0.18, r * 0.12, [x + r * 0.85, y + r * 0.62, z], "x", 6);
+}
+function whip(b, kit, x, y, z, h, r = h * 0.012) {
+  b.cylb(kit.trim, r * 3.5, r * 3, r, [x, y, z], "y", 6);
+  b.cyl(kit.steel, r, r * 0.5, h, [x, y, z], "y", 4);
+  pbox(b, kit.lamp, r * 2.2, r * 2.2, r * 2.2, x, y + h, z);
+}
+function lamp(b, kit, x, y, z, s, yaw = 0) {
+  pbox(b, kit.trim, s * 1.2, s, s, x, y, z, -yaw);
+  b.cyl(kit.lamp, s * 0.38, s * 0.38, s * 0.15, [x + Math.cos(yaw) * s * 0.6, y, z + Math.sin(yaw) * s * 0.6], "x", 8);
+}
+function boltRing(b, mat, x, y, z, r, n, s) {
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2;
+    pbox(b, mat, s, s * 0.6, s, x + Math.cos(a) * r, y + s * 0.3, z + Math.sin(a) * r, -a);
+  }
+}
+function rivetLine(b, mat, a, c, n, s) {
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    pbox(b, mat, s, s, s, a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t);
+  }
+}
+
 // src/client/proto3d/chassis/titans-citadel.ts
 function citadel(c) {
   const { b, kit, L, W, stance } = c;
   const kx = L / 7, kz = W / 8, k = Math.min(kx, kz);
   const legged = stance.legs !== null;
   const y0 = stance.y0;
-  const yt = legged ? y0 + 0.5 * k : Math.max(stance.yt, y0 + 0.4);
-  const deckY = yt + 1.15 * k;
-  const wi = Math.min(stance.wi, 2.2 * kz);
+  const yt = legged ? y0 + 0.4 * k : Math.max(stance.yt, y0 + 0.4);
+  const deckY = yt + 1.2 * k;
+  const u = 0.12 * k;
+  const sc2 = (pts) => pts.map(([x, z]) => [x * kx, z * kz]);
+  const scl = (pts, s) => pts.map(([x, z]) => [x * s, z * s]);
+  const wi = Math.min(stance.wi, 2.1 * kz);
   planLoft(b, kit.trim, [[3.1 * kx, -wi * 0.6], [3.1 * kx, wi * 0.6], [2.4 * kx, wi], [-2.4 * kx, wi], [-3.1 * kx, wi * 0.6], [-3.1 * kx, -wi * 0.6], [-2.4 * kx, -wi], [2.4 * kx, -wi]], [[y0, 0.94], [yt + 0.1, 1]]);
-  const oct2 = [[3.95 * kx, 0], [2.9 * kx, 1.6 * kz], [1.7 * kx, 3.3 * kz], [-1.7 * kx, 3.3 * kz], [-3 * kx, 2 * kz], [-3.55 * kx, 0], [-3 * kx, -2 * kz], [-1.7 * kx, -3.3 * kz], [1.7 * kx, -3.3 * kz], [2.9 * kx, -1.6 * kz]];
-  planLoft(b, kit.hull, oct2, [[yt - 0.05, 0.9], [yt + 0.35 * k, 1], [deckY - 0.12 * k, 0.97], [deckY, 0.94]]);
-  planLoft(b, kit.trim, oct2, [[yt + 0.3 * k, 1.005], [yt + 0.42 * k, 1.005]]);
+  const B = sc2(mirror3([[3.35, 0], [3.1, -1.2], [2.2, -2.5], [1.05, -2.5], [0.3, -2], [-1, -2], [-1.75, -2.5], [-2.85, -2.4], [-3.45, -1.3], [-3.45, 0]]));
+  const LB = [[yt - 0.05, 0.9], [yt + 0.3 * k, 1], [deckY - 0.1 * k, 0.88], [deckY, 0.86]];
+  planLoft(b, kit.hull, B, LB);
+  planLoft(b, kit.trim, B, [[yt + 0.25 * k, 1.012], [yt + 0.4 * k, 1.008]]);
+  const rimP = scl(B, 0.86);
+  for (let i = 0; i < B.length; i++) {
+    const f = wallFace(B, i, [yt + 0.42 * k, 0.985], [deckY - 0.12 * k, 0.885]);
+    if (f.w < 0.6 * k) continue;
+    const n = Math.max(1, Math.round(f.w / (1.25 * k)));
+    for (let j = 0; j < n; j++) {
+      const du = (j + 0.5 - n / 2) * (f.w / n);
+      armourPlate(b, kit, f, du, -f.h * 0.04, f.w / n * 0.8, f.h * 0.58, u * 0.8, j % 2 ? kit.panel : kit.hull);
+      faceSlit(b, kit, f, du, f.h * 0.36, f.w / n * 0.42, u * 0.38);
+    }
+    if (Math.abs(f.n.z) > 0.97 && Math.abs(f.c.x) < 1 * kx) {
+      faceLadder(b, kit, f, f.w * 0.38, -f.h * 0.48, f.h * 0.5, 0.28 * k);
+      faceVent(b, kit, f, -f.w * 0.05, -f.h * 0.05, f.w * 0.35, f.h * 0.4, 4);
+    } else faceRivets(b, kit.metal, f, -f.w * 0.45, f.w * 0.45, -f.h * 0.46, Math.max(3, Math.round(f.w / (0.32 * k))), u * 0.5);
+  }
   both((s) => {
-    glow(b, kit, 0, deckY - 0.35 * k, s * 3.22 * kz, 2.8 * kx, 0.06, 0.06);
-    skirt(b, kit, -1.5 * kx, 1.5 * kx, yt + 0.25 * k, s * 3.3 * kz, 0.5 * k, 0.1 * kz, 4, s);
+    const zc = s * 2.06 * kz, yc = yt + 0.45 * k;
+    pipeRun(b, kit, [[1.3 * kx, yc, zc * 1.12], [0.3 * kx, yc, zc * 1.02], [-1 * kx, yc, zc * 1.02], [-1.8 * kx, yc, zc * 1.15]], 0.07 * k);
+    skirt(b, kit, -0.9 * kx, 0.25 * kx, yt + 0.28 * k, s * 2.06 * kz, 0.5 * k, 0.1 * kz, 2, s);
+    glow(b, kit, -0.35 * kx, deckY - 0.3 * k, s * 1.8 * kz, 1.1 * kx, 0.05, 0.05);
   });
-  const rim = oct2.map(([x, z]) => [x * 0.94, z * 0.94]);
-  for (let i = 0; i < rim.length; i++) {
-    const [ax, az] = rim[i], [bx2, bz] = rim[(i + 1) % rim.length];
-    const len = Math.hypot(bx2 - ax, bz - az), n = Math.max(2, Math.round(len / (0.75 * k)));
+  for (let i = 0; i < rimP.length; i++) {
+    const [ax, az] = rimP[i], [bx2, bz] = rimP[(i + 1) % rimP.length];
+    const len = Math.hypot(bx2 - ax, bz - az), n = Math.max(2, Math.round(len / (0.62 * k)));
     const ang = Math.atan2(bz - az, bx2 - ax);
     for (let j = 0; j < n; j++) {
       const f = (j + 0.5) / n, x = ax + (bx2 - ax) * f, z = az + (bz - az) * f;
-      if (c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 1.6 + 0.2)) continue;
-      b.box(j % 2 ? kit.panel : kit.hull, len / n * 0.55, 0.26 * k, 0.24 * k, x, deckY + 0.11 * k, z, 0.04 * k, [0, -ang, 0]);
+      if (c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 1.7 + 0.25)) continue;
+      pbox(b, j % 2 ? kit.panel : kit.hull, len / n * 0.55, 0.3 * k, 0.22 * k, x, deckY + 0.13 * k, z, -ang);
     }
   }
   if (!legged) {
-    block(b, kit.metal, 3.15 * kx, 0.15, 0, 0.5 * kx, 2.6 * kz, yt - 0.1, { top: [0.4, 0.95], shift: [0.15 * kx, 0], ch: 0.15 * k, bev: 0.05 });
-    hazard(b, kit, 3.42 * kx, yt * 0.55, 0, 2.2 * kz, 0.3 * kx, 7, Math.PI / 2);
+    block(b, kit.metal, 3.2 * kx, 0.15, 0, 0.7 * kx, 2.4 * kz, yt - 0.05, { top: [0.4, 0.95], shift: [0.2 * kx, 0], ch: 0.15 * k, bev: 0.05 });
+    hazard(b, kit, 3.5 * kx, yt * 0.55, 0, 2 * kz, 0.3 * kx, 7, Math.PI / 2);
   }
-  const pa = Math.atan2(1.6 * kz, 1.05 * kx);
+  const pa = Math.atan2(1.3 * kz, 0.9 * kx);
   both((s) => {
-    const fx2 = 3.45 * kx, fz2 = s * 0.78 * kz;
-    for (let i = 0; i < 3; i++) glow(b, kit, fx2, yt + (0.45 + i * 0.22) * k, fz2, 0.06, 0.08 * k, 1.3 * kz, [0, s * (Math.PI / 2 - pa), 0]);
-    b.box(kit.lamp, 0.1, 0.16 * k, 0.3 * kz, fx2 + 0.12 * kx, yt + 0.15 * k, fz2 * 0.6, 0.02, [0, s * (Math.PI / 2 - pa), 0]);
+    const fx2 = 3.25 * kx, fz2 = s * 0.62 * kz;
+    for (let i = 0; i < 3; i++) glow(b, kit, fx2, yt + (0.5 + i * 0.22) * k, fz2, 0.06, 0.08 * k, 1 * kz, [0, s * (Math.PI / 2 - pa), 0]);
+    lamp(b, kit, fx2 + 0.1 * kx, yt + 0.2 * k, fz2 * 0.7, 0.16 * k, -s * 0.3);
   });
-  block(b, kit.panel, 3 * kx, deckY - 0.02, 0, 1.5 * kx, 1.7 * kz, 0.2 * k, { top: [0.5, 0.5], shift: [0.3 * kx, 0], ch: 0.6 * k, bev: 0.06 });
-  hazard(b, kit, 3.1 * kx, deckY + 0.19 * k, 0, 0.9 * kz, 0.22 * kx, 4, Math.PI / 2);
-  const tR = 0.9 * k, tTop = deckY + 1.5 * k;
+  block(b, kit.panel, 2.75 * kx, deckY - 0.02, 0, 1.3 * kx, 1.6 * kz, 0.22 * k, { top: [0.5, 0.5], shift: [0.3 * kx, 0], ch: 0.55 * k, bev: 0.06 });
+  hazard(b, kit, 2.95 * kx, deckY + 0.21 * k, 0, 0.8 * kz, 0.2 * kx, 4, Math.PI / 2);
+  const T = scl(B, 0.5).map(([x, z]) => [x - 0.35 * kx, z]);
+  const deck2 = deckY + 0.38 * k;
+  planLoft(b, kit.trim, T, [[deckY - 0.02, 1.06], [deckY + 0.08 * k, 1.06]]);
+  planLoft(b, kit.panel, T, [[deckY + 0.06 * k, 1.03], [deck2 - 0.06 * k, 1], [deck2, 0.97]]);
+  for (let i = 0; i < T.length; i++) {
+    const f = wallFace(T, i, [deckY + 0.1 * k, 1.03], [deck2 - 0.06 * k, 1]);
+    if (f.w > 0.5 * k) faceRivets(b, kit.metal, f, -f.w * 0.42, f.w * 0.42, 0, Math.max(2, Math.round(f.w / (0.3 * k))), u * 0.45);
+  }
+  const tR = 0.88 * k;
   const towers = [];
+  const tower = (tx, tz, base3, top) => {
+    const h = top - base3, r = tR;
+    b.lathe(kit.hull, [[0, 0], [r * 1.34, 0], [r * 1.26, h * 0.2], [r * 0.9, h * 0.48], [r * 0.86, h * 0.76], [r * 1.18, h * 0.84], [r * 1.18, h], [0, h]], [tx, base3, tz], "y", 12);
+    b.lathe(kit.trim, [[r * 0.95, 0], [r * 1, 0], [r * 0.98, h * 0.05], [r * 0.93, h * 0.05]], [tx, base3 + h * 0.5, tz], "y", 12);
+    b.lathe(kit.accent, [[r * 1.17, 0], [r * 1.2, 0], [r * 1.2, h * 0.04], [r * 1.17, h * 0.04]], [tx, base3 + h * 0.9, tz], "y", 12);
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2 + Math.PI / 12;
+      pbox(b, kit.trim, r * 0.3, h * 0.08, r * 0.16, tx + Math.cos(a) * r * 1, base3 + h * 0.8, tz + Math.sin(a) * r * 1, -a);
+      if (i % 2) pbox(b, kit.panel, r * 0.22, r * 0.28, r * 0.36, tx + Math.cos(a) * r * 1.06, top + r * 0.14, tz + Math.sin(a) * r * 1.06, -a);
+    }
+    const ao = Math.atan2(tz, tx);
+    for (const da of [-0.5, 0, 0.5]) {
+      const a = ao + da;
+      pbox(b, kit.glow, 0.05, 0.3 * k, 0.09 * k, tx + Math.cos(a) * r * 0.9, base3 + h * 0.64, tz + Math.sin(a) * r * 0.9, -a);
+    }
+    const ai = ao + Math.PI;
+    for (let i = 0; i < 6; i++) pbox(b, kit.steel, 0.05 * k, 0.03 * k, 0.32 * k, tx + Math.cos(ai) * r * 0.92, base3 + h * (0.5 + i * 0.05), tz + Math.sin(ai) * r * 0.92, -ai);
+    towers.push([tx, top, tz]);
+  };
+  const fTop = deckY + 1.35 * k, rTop = deckY + 1.95 * k;
   for (const sx of [1, -1]) for (const sz of [-1, 1]) {
-    const tx = sx * 2.45 * kx, tz = sz * 2.85 * kz;
-    const base2 = legged ? yt : Math.max(yt - 0.1, 1);
-    tower(b, kit, tx, base2, tz, tR, tTop - base2, { seg: 14, merlons: 8 });
-    glow(b, kit, tx + Math.cos(Math.atan2(tz, tx)) * tR * 1, deckY - 0.1, tz + Math.sin(Math.atan2(tz, tx)) * tR * 1, 0.05, 0.28 * k, 0.12, [0, -Math.atan2(tz, tx), 0]);
-    towers.push([tx, tTop, tz]);
+    const base3 = legged ? yt : Math.max(yt - 0.1, 1);
+    tower(sx * 2.45 * kx, sz * 2.85 * kz, base3, sx > 0 ? fTop : rTop);
   }
   const bast = (x, z, r) => {
-    b.lathe(kit.hull, [[0, 0], [r * 1.5, 0], [r * 1.42, 0.38 * k], [r * 1.3, 0.48 * k], [0, 0.48 * k]], [x, deckY - 0.02, z], "y", 20);
-    return deckY + 0.46 * k;
+    const R = Math.max(r * 1.25, 0.8 * k), h = 0.62 * k;
+    b.lathe(kit.hull, [[0, 0], [R * 1.2, 0], [R * 1.12, h * 0.7], [R * 1.02, h * 0.82], [R, h], [0, h]], [x, yt + 0.2 * k, z], "y", 18);
+    b.lathe(kit.hull, [[0, 0], [R * 1.12, 0], [R * 1, deckY + h - yt - 0.2 * k], [0, deckY + h - yt - 0.2 * k]], [x, yt + 0.2 * k, z], "y", 18);
+    b.lathe(kit.trim, [[R * 1, 0], [R * 1.06, 0], [R * 1.06, 0.1 * k], [R * 1, 0.1 * k]], [x, deckY + h - 0.25 * k, z], "y", 18);
+    boltRing(b, kit.metal, x, deckY + h, z, R * 0.9, 14, u * 0.5);
+    return deckY + h;
   };
   const kxC = -1.15 * kx;
-  const s1 = deckY + 1.3 * k, s2 = s1 + 1.1 * k;
-  planLoft(b, kit.hull, ngon2(8, 1.55 * kx, 1.65 * kz), [[deckY - 0.05, 1], [s1 - 0.1 * k, 0.96], [s1, 0.9]], [kxC, 0]);
-  planLoft(b, kit.panel, ngon2(8, 1.1 * kx, 1.2 * kz), [[s1 - 0.02, 1], [s2 - 0.1 * k, 0.94], [s2, 0.86]], [kxC + 0.05 * kx, 0]);
-  glow(b, kit, kxC + 1.43 * kx, deckY + 0.6 * k, 0, 0.05, 0.08 * k, 0.9 * kz);
-  b.box(kit.glass, 0.06, 0.14 * k, 0.8 * kz, kxC + 1.04 * kx, s1 + 0.45 * k, 0, 0.01);
+  const s1 = deck2 + 1 * k, s2 = s1 + 0.95 * k;
+  const K1 = ngon2(8, 1.55 * kx, 1.6 * kz), K2 = ngon2(8, 1.12 * kx, 1.18 * kz);
+  planLoft(b, kit.hull, K1, [[deck2 - 0.05, 1.04], [deck2 + 0.2 * k, 1], [s1 - 0.1 * k, 0.88], [s1, 0.84]], [kxC, 0]);
+  planLoft(b, kit.trim, K2, [[s1 - 0.02, 1.08], [s1 + 0.1 * k, 1.08]], [kxC + 0.05 * kx, 0]);
+  planLoft(b, kit.panel, K2, [[s1 + 0.08 * k, 1], [s2 - 0.1 * k, 0.9], [s2, 0.86]], [kxC + 0.05 * kx, 0]);
+  for (let i = 0; i < 8; i++) {
+    const f = wallFace(K1, i, [deck2 + 0.22 * k, 1], [s1 - 0.12 * k, 0.88], [kxC, 0]);
+    armourPlate(b, kit, f, 0, -f.h * 0.05, f.w * 0.72, f.h * 0.55, u * 0.75, i % 2 ? kit.panel : kit.hull);
+    if (f.n.x > -0.3) faceSlit(b, kit, f, 0, f.h * 0.36, f.w * 0.45, u * 0.38);
+    const g = wallFace(K2, i, [s1 + 0.12 * k, 1], [s2 - 0.12 * k, 0.9], [kxC + 0.05 * kx, 0]);
+    faceBox(b, kit.trim, g, 0, g.h * 0.1, g.w * 0.62, g.h * 0.22, u * 0.4);
+    if (g.n.x > 0.3) faceSlit(b, kit, g, 0, g.h * 0.1, g.w * 0.45, u * 0.35, kit.glass);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2, ca = Math.cos(a), sa = Math.sin(a);
+    const x = kxC + ca * 1.55 * kx, z = sa * 1.6 * kz;
+    if (c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 1.5 + 0.2)) continue;
+    b.loft(kit.panel, [
+      [[x - 0.2 * k, deck2, z], [x + 0.2 * k, deck2, z], [x + 0.2 * k, deck2 + 0.25 * k, z], [x - 0.2 * k, deck2 + 0.25 * k, z]].map(([px2, py2, pz2]) => [kxC + (px2 - kxC) * 1.12 + ca * 0.1, py2, pz2 * 1.12 + sa * 0.1]),
+      [[x - 0.16 * k, deck2, z], [x + 0.16 * k, deck2, z], [x + 0.16 * k, s1 - 0.05, z], [x - 0.16 * k, s1 - 0.05, z]].map(([px2, py2, pz2]) => [kxC + (px2 - kxC) * 0.86, py2, pz2 * 0.86])
+    ]);
+  }
   both((s) => {
-    vent(b, kit, kxC - 0.4 * kx, s1 + 0.01, s * 1.05 * kz, 0.6 * kx, 0.4 * kz, 3, "x");
-    glow(b, kit, kxC, s1 - 0.25 * k, s * 1.6 * kz, 1.4 * kx, 0.05, 0.05);
+    vent(b, kit, kxC - 0.45 * kx, s1 + 0.01, s * 1 * kz, 0.55 * kx, 0.36 * kz, 3, "x");
+    glow(b, kit, kxC, s1 - 0.3 * k, s * 1.5 * kz, 1.2 * kx, 0.05, 0.05);
   });
-  reactor(b, kit, [0.55 * kx, deckY - 0.02, 0], 0.62 * k, "y", 4);
-  const spX = kxC - 1.35 * kx, spH = 4.4 * k;
+  reactor(b, kit, [0.75 * kx, deck2 - 0.02, 0], 0.55 * k, "y", 4);
+  const spX = kxC - 1.45 * kx, spH = 4.6 * k;
   b.cylb(kit.trim, 0.42 * k, 0.4 * k, 0.06, [spX, deckY - 0.02, 0], "y", 12);
   b.cyl(kit.hull, 0.26 * k, 0.1 * k, spH, [spX, deckY, 0], "y", 10);
-  for (const [f, r] of [[0.55, 0.62], [0.78, 0.46]]) {
+  for (const [f, r] of [[0.5, 0.62], [0.72, 0.46], [0.88, 0.32]]) {
     const y = deckY + spH * f;
-    b.lathe(kit.glow, [[r * k, -0.04 * k], [(r + 0.08) * k, -0.04 * k], [(r + 0.08) * k, 0.04 * k], [r * k, 0.04 * k]], [spX, y, 0], "y", 18);
+    b.lathe(kit.glow, [[r * k, -0.04 * k], [(r + 0.08) * k, -0.04 * k], [(r + 0.08) * k, 0.04 * k], [r * k, 0.04 * k]], [spX, y, 0], "y", 16);
     for (let i = 0; i < 3; i++) {
       const a = i / 3 * Math.PI * 2;
       b.box(kit.metal, r * k, 0.05 * k, 0.05 * k, spX + Math.cos(a) * r * k * 0.5, y, Math.sin(a) * r * k * 0.5, 0.01, [0, -a, 0]);
     }
   }
   b.cyl(kit.lamp, 0.1 * k, 0.1 * k, 0.14 * k, [spX, deckY + spH, 0], "y", 8);
-  sensor(b, kit, kxC - 1 * kx, deckY + 0.25 * k, -1 * kz, 0.36 * k);
-  mast(b, kit, kxC - 1 * kx, deckY, 1 * kz, 2.2 * k, 0.05 * k);
-  both((s) => exhaust(b, kit, -2.9 * kx, deckY - 0.1, s * 1.2 * kz, 0.22 * k, 0.9 * k));
-  both((s) => banner(b, kit, -2.45 * kx - tR * 0.3, tTop, s * 2.85 * kz, 2.6 * k, 0.9 * k, s));
+  both((s) => {
+    hatch(b, kit, 2.05 * kx, deckY, s * 0.75 * kz, 0.22 * k);
+    hatch(b, kit, -2.85 * kx, deckY, s * 1.2 * kz, 0.2 * k);
+    vent(b, kit, 0.15 * kx, deckY, s * 1.75 * kz, 0.7 * kx, 0.36 * kz, 3, "x");
+    lamp(b, kit, 2.55 * kx, deckY + 0.08 * k, s * 1.5 * kz, 0.14 * k, s * 0.5);
+    whip(b, kit, -0.3 * kx, deck2, s * 1.25 * kz, 1.5 * k);
+    exhaust(b, kit, -3 * kx, deckY - 0.1, s * 0.75 * kz, 0.22 * k, 1.1 * k);
+  });
+  glowGrille(b, kit, -3.4 * kx, yt + 0.7 * k, 0, 1.3 * kz, 0.5 * k, 3, -1);
+  sensor(b, kit, kxC - 0.95 * kx, s1 + 0.2 * k, -0.6 * kz, 0.3 * k);
+  mast(b, kit, kxC - 0.6 * kx, s2 - 0.05, 0.5 * kz, 1.6 * k, 0.05 * k);
+  both((s) => banner(b, kit, -2.45 * kx - tR * 0.4, rTop, s * 2.85 * kz, 2.4 * k, 0.85 * k, s));
   const isTower = (m) => towers.find(([tx, , tz]) => Math.hypot(m.x - tx, m.z - tz) < tR * 1.1);
   for (const tw of towers) if (!c.mounts.some((m) => Math.hypot(m.x - tw[0], m.z - tw[2]) < tR * 1.1)) {
-    b.cylb(kit.trim, tR * 0.6, 0.2 * k, 0.04, [tw[0], tTop, tw[2]], "y", 12);
-    mast(b, kit, tw[0], tTop + 0.2 * k, tw[2], 1.4 * k, 0.05 * k);
-    b.lathe(kit.panel, [[0, 0], [tR * 0.55, 0.12 * k], [tR * 0.6, 0.18 * k], [0, 0.06 * k]], [tw[0], tTop + 0.9 * k, tw[2]], "y", 12, [0, 0, 0.5]);
+    sensorDome(b, kit, tw[0], tw[1], tw[2], 0.42 * k);
+    whip(b, kit, tw[0] - 0.3 * k, tw[1], tw[2] + 0.3 * k, 1.2 * k);
   }
+  const K2top = ngon2(8, 1.12 * kx * 0.86, 1.18 * kz * 0.86).map(([px2, pz2]) => [px2 + kxC + 0.05 * kx, pz2]);
   const deck = (x, z) => {
     for (const [tx, ty, tz] of towers) if (Math.hypot(x - tx, z - tz) < tR) return ty;
-    if (inPoly(ngon2(8, 1.1 * kx, 1.2 * kz).map(([px2, pz2]) => [px2 + kxC, pz2]), x, z)) return s2;
-    return inPoly(oct2, x, z) ? deckY : -1;
+    if (inPoly(K2top, x, z)) return s2;
+    if (inside(T, x, z)) return deck2;
+    return inside(rimP, x, z) ? deckY : -1;
   };
   let hips;
-  if (stance.legs === "biped") hips = [-1, 1].map((s) => ({ p: [-0.2 * kx, stance.hipY, s * 1.7 * kz], side: s, t: stance.thick, foot: [-0.2 * kx, 0, s * 2 * kz], phase: s > 0 ? Math.PI : 0 }));
+  if (stance.legs === "biped") {
+    hips = [-1, 1].map((s) => ({ p: [-0.2 * kx, stance.hipY, s * 1.7 * kz], side: s, t: stance.thick, foot: [-0.2 * kx, 0, s * 2 * kz], phase: s > 0 ? Math.PI : 0 }));
+    both((s) => block(b, kit.trim, -0.2 * kx, y0 - 0.3 * k, s * 1.7 * kz, 1.4 * kx, 0.9 * kz, 0.6 * k, { top: [0.8, 0.8], ch: 0.2 * k }));
+  }
   return {
     deckAt: deck,
     top: s2,
@@ -40898,10 +41523,10 @@ function citadel(c) {
         collar(b, kit, m.x, y, m.z, m.r, y - 0.1, 22);
         return { y, socket: true };
       }
-      const d = deck(m.x, m.z), base2 = d > 0 ? d : deckY;
-      if (base2 + 0.3 * k > deckY) block(b, kit.hull, m.x, base2 - 0.02, m.z, m.r * 2.6, m.r * 2.6, 0.3 * k, { top: [0.86, 0.86], ch: m.r * 0.7, bev: 0.04 });
-      collar(b, kit, m.x, base2 + 0.3 * k, m.z, m.r, base2 + 0.2 * k, 18);
-      return { y: base2 + 0.3 * k, socket: true };
+      const d = deck(m.x, m.z), base3 = d > 0 ? d : deckY;
+      block(b, kit.hull, m.x, base3 - 0.02, m.z, m.r * 2.6, m.r * 2.6, 0.3 * k, { top: [0.86, 0.86], ch: m.r * 0.7, bev: 0.04 });
+      collar(b, kit, m.x, base3 + 0.3 * k, m.z, m.r, base3 + 0.2 * k, 18);
+      return { y: base3 + 0.3 * k, socket: true };
     }
   };
 }
@@ -41011,6 +41636,306 @@ function arachne(c) {
 }
 registerChassis("arachne", arachne);
 
+// src/client/proto3d/chassis/titans-lance.ts
+function lance(c) {
+  const { b, kit, L, W, stance } = c;
+  const kx = L / 8, kz = W / 4, k = Math.min(kx, kz);
+  const legged = stance.legs !== null;
+  const tracked = stance.tracked;
+  const y0 = stance.y0;
+  const yt = legged ? y0 + 0.45 * k : Math.max(stance.yt, y0 + 0.4);
+  const deckY = yt + 0.85 * k;
+  const wi = Math.min(stance.wi, 1.25 * kz);
+  planLoft(b, kit.trim, [[3.3 * kx, 0], [2.7 * kx, wi], [-3.1 * kx, wi], [-3.6 * kx, 0], [-3.1 * kx, -wi], [2.7 * kx, -wi]], [[y0, 0.9], [yt + 0.1, 1]]);
+  const hp = mirror3([[4 * kx, 0], [3 * kx, -0.66 * kz], [1.35 * kx, -1.5 * kz], [-0.85 * kx, -1.36 * kz], [-2.25 * kx, -1.96 * kz], [-3.4 * kx, -1.96 * kz], [-3.95 * kx, -1 * kz], [-3.95 * kx, 0]]);
+  planLoft(b, kit.hull, hp, [[yt - 0.05, 0.88], [yt + 0.3 * k, 1], [deckY - 0.12 * k, 0.97], [deckY, 0.92]]);
+  planLoft(b, kit.trim, hp, [[yt + 0.26 * k, 1.006], [yt + 0.36 * k, 1.006]]);
+  const deckPoly = hp.map(([x, z]) => [x * 0.92, z * 0.92]);
+  both((s) => {
+    glow(b, kit, 0.2 * kx, deckY - 0.3 * k, s * 1.38 * kz, 2 * kx, 0.06, 0.06);
+    skirt(b, kit, -0.75 * kx, tracked ? 1.1 * kx : 1.25 * kx, yt + 0.28 * k, s * 1.46 * kz, 0.55 * k, 0.1 * kz, 3, s);
+    const pz2 = s * 1.72 * kz, py2 = deckY - 0.25 * k;
+    b.lathe(kit.hull, [[0, 0], [0.3 * k, 0], [0.36 * k, 0.4 * k], [0.36 * k, 1.1 * kx], [0.3 * k, 1.35 * kx], [0, 1.35 * kx]], [-2.15 * kx, py2, pz2], "-x", 10);
+    b.cylb(kit.trim, 0.3 * k, 0.25 * k, 0.03, [-3.5 * kx, py2, pz2], "-x", 10);
+    b.cyl(kit.hot, 0.22 * k, 0.2 * k, 0.04, [-3.5 * kx - 0.25 * k, py2, pz2], "-x", 10);
+    for (const f of [0.35, 0.7]) b.cylb(kit.trim, 0.38 * k, 0.06 * k, 0.01, [-2.15 * kx - f * 1.35 * kx, py2, pz2], "-x", 10);
+    block(b, kit.panel, -2.95 * kx, py2 + 0.25 * k, pz2, 1 * kx, 0.08 * kz, 0.55 * k, { top: [0.35, 1], shift: [-0.35 * kx, 0], ch: 0.02, bev: 0.02 });
+    lamp(b, kit, -2.1 * kx, py2, pz2 + s * 0.3 * k, 0.12 * k, s * Math.PI / 2);
+    pipeRun(b, kit, [[-0.4 * kx, deckY + 0.08 * k, s * 0.85 * kz], [1 * kx, deckY + 0.08 * k, s * 0.82 * kz], [2.6 * kx, deckY + 0.08 * k, s * 0.6 * kz]], 0.05 * k);
+  });
+  for (let i = 0; i < hp.length; i++) {
+    const f = wallFace(hp, i, [yt + 0.38 * k, 1], [deckY - 0.14 * k, 0.97]);
+    if (f.w < 0.6 * k) continue;
+    const n = Math.max(1, Math.round(f.w / (1.1 * k)));
+    for (let j = 0; j < n; j++) {
+      const du = (j + 0.5 - n / 2) * (f.w / n);
+      armourPlate(b, kit, f, du, 0, f.w / n * 0.82, f.h * 0.6, 0.08 * k, j % 2 ? kit.panel : kit.hull);
+      if (j % 2 === 0) faceSlit(b, kit, f, du, f.h * 0.38, f.w / n * 0.35, 0.04 * k);
+    }
+    faceRivets(b, kit.metal, f, -f.w * 0.45, f.w * 0.45, -f.h * 0.44, Math.max(3, Math.round(f.w / (0.3 * k))), 0.05 * k);
+  }
+  block(b, kit.metal, 3.55 * kx, Math.max(0.15, yt - 0.45 * k), 0, 1 * kx, 0.8 * kz, 0.6 * k, { top: [0.55, 0.8], shift: [0.25 * kx, 0], ch: 0.2 * kz, bev: 0.05 });
+  both((s) => {
+    hazard(b, kit, 2.15 * kx, deckY + 5e-3, s * 0.95 * kz, 0.9 * kx, 0.2 * kz, 4, -s * 0.5);
+    b.box(kit.lamp, 0.12, 0.12 * k, 0.22 * kz, 3.45 * kx, yt + 0.2 * k, s * 0.42 * kz, 0.02, [0, s * 0.6, 0]);
+  });
+  const sp0 = -0.55 * kx, sp1 = 3.65 * kx, spTop = deckY + 0.3 * k;
+  block(b, kit.hull, (sp0 + sp1) / 2, deckY - 0.02, 0, sp1 - sp0, 1.5 * kz, 0.32 * k, { top: [0.97, 0.78], ch: 0.3 * kz, bev: 0.06 });
+  const ry = spTop + 0.16 * k;
+  glow(b, kit, 2.2 * kx, spTop + 0.02, 0, 3.2 * kx, 0.05, 0.22 * kz);
+  both((s) => beam(b, kit.metal, [0.75 * kx, ry, s * 0.36 * kz], [3.95 * kx, ry - 0.04 * k, s * 0.3 * kz], 0.17 * kz, 0.32 * k));
+  for (let i = 0; i < 5; i++) {
+    const x = 1.25 * kx + i * 0.6 * kx, r = (0.6 - i * 0.02) * k;
+    b.lathe(kit.trim, [[r, 0], [r + 0.13 * k, 0], [r + 0.13 * k, 0.2 * k], [r, 0.2 * k]], [x, ry, 0], "x", 14);
+    b.lathe(kit.glow, [[r + 0.12 * k, 0.07 * k], [r + 0.15 * k, 0.07 * k], [r + 0.15 * k, 0.13 * k], [r + 0.12 * k, 0.13 * k]], [x, ry, 0], "x", 14);
+  }
+  b.cylb(kit.metal, 0.5 * k, 0.28 * k, 0.05, [3.68 * kx, ry, 0], "x", 16);
+  b.cyl(kit.glow, 0.3 * k, 0.26 * k, 0.05, [3.96 * kx, ry, 0], "x", 14);
+  const bx2 = -1.35 * kx, b1 = deckY + 0.95 * k, b2 = b1 + 0.6 * k;
+  block(b, kit.hull, bx2, deckY - 0.02, 0, 1.7 * kx, 1.9 * kz, b1 - deckY + 0.02, { top: [0.72, 0.7], shift: [-0.2 * kx, 0], ch: 0.35 * kz, bev: 0.06 });
+  block(b, kit.panel, bx2 - 0.25 * kx, b1 - 0.02, 0, 1 * kx, 1.1 * kz, b2 - b1, { top: [0.62, 0.78], shift: [-0.15 * kx, 0], ch: 0.25 * kz, bev: 0.05 });
+  b.box(kit.glass, 0.06, 0.12 * k, 0.9 * kz, bx2 + 0.18 * kx, b1 + 0.28 * k, 0, 0.01, [0, 0, -0.55]);
+  glow(b, kit, bx2 + 0.62 * kx, deckY + 0.5 * k, 0, 0.05, 0.07 * k, 1.1 * kz, [0, 0, -0.4]);
+  block(b, kit.accent, bx2 - 0.4 * kx, b2 - 0.02, 0, 0.8 * kx, 0.1 * kz, 0.3 * k, { top: [0.4, 1], shift: [-0.2 * kx, 0], ch: 0.03, bev: 0.02 });
+  sensor(b, kit, bx2 + 0.05 * kx, b2 + 0.05 * k, 0.3 * kz, 0.26 * k);
+  mast(b, kit, bx2 - 0.45 * kx, b2 - 0.05, -0.3 * kz, 2 * k, 0.05 * k);
+  sensorDome(b, kit, bx2 - 0.05 * kx, b1 - 0.02, -0.62 * kz, 0.2 * k);
+  whip(b, kit, bx2 - 0.9 * kx, b1 - 0.02, -0.5 * kz, 1.3 * k);
+  banner(b, kit, bx2 - 0.75 * kx, b1 - 0.1, 0.55 * kz, 2 * k, 0.65 * k, 1);
+  both((s) => {
+    exhaust(b, kit, -2.05 * kx, deckY - 0.05, s * 1.12 * kz, 0.17 * k, 0.75 * k);
+    vent(b, kit, -0.15 * kx, deckY, s * 1.12 * kz, 0.8 * kx, 0.45 * kz, 3, "x");
+  });
+  const ax = -2.9 * kx, aTop = deckY + 0.28 * k;
+  block(b, kit.hull, ax, deckY - 0.02, 0, 1.4 * kx, 1.7 * kz, aTop - deckY + 0.02, { top: [0.86, 0.84], ch: 0.3 * kz, bev: 0.05 });
+  both((s) => {
+    const nz = s * 0.9 * kz, ny = yt + 0.45 * k;
+    b.cylb(kit.trim, 0.42 * k, 0.5 * k, 0.05, [-3.45 * kx, ny, nz], "-x", 14);
+    b.cyl(kit.hot, 0.3 * k, 0.26 * k, 0.04, [-3.45 * kx - 0.5 * k, ny, nz], "-x", 12);
+    glowGrille(b, kit, -3.63 * kx, deckY - 0.1 * k, s * 0.3 * kz, 0.4 * kz, 0.3 * k, 2, -1);
+  });
+  let hips;
+  if (stance.legs === "biped") {
+    hips = [-1, 1].map((s) => ({ p: [-0.3 * kx, stance.hipY, s * 1.15 * kz], side: s, t: stance.thick, foot: [-0.3 * kx, 0, s * 1.4 * kz], phase: s > 0 ? Math.PI : 0 }));
+    both((s) => block(b, kit.trim, -0.3 * kx, y0 - 0.25 * k, s * 1.15 * kz, 1 * kx, 0.6 * kz, 0.5 * k, { top: [0.8, 0.8], ch: 0.15 * k }));
+  }
+  const deck = (x, z) => {
+    if (x > sp0 && x < sp1 && Math.abs(z) < 0.6 * kz) return spTop;
+    if (Math.abs(x - ax) < 0.6 * kx && Math.abs(z) < 0.7 * kz) return aTop;
+    return inside(deckPoly, x, z) ? deckY : -1;
+  };
+  return {
+    deckAt: deck,
+    top: b2,
+    custom: true,
+    hips,
+    seat: (m) => {
+      if (m.x > sp0 && m.x < sp1 && Math.abs(m.z) < 0.8 * kz) {
+        const y = spTop + 0.32 * k, R = m.r * 1.4;
+        b.lathe(kit.hull, [[0, 0], [R * 1.12, 0], [R * 1.05, 0.12 * k], [R, y - spTop], [0, y - spTop]], [m.x, spTop - 0.02, m.z], "y", 20);
+        b.lathe(kit.glow, [[R * 1.06, 0], [R * 1.1, 0], [R * 1.1, 0.06 * k], [R * 1.06, 0.06 * k]], [m.x, spTop + 0.08 * k, m.z], "y", 20);
+        collar(b, kit, m.x, y, m.z, m.r, y - 0.1, 20);
+        return { y, socket: true };
+      }
+      const d = deck(m.x, m.z), base3 = d > 0 ? d : deckY;
+      collar(b, kit, m.x, base3 + 0.12 * k, m.z, m.r, base3 - 0.02, 18);
+      return { y: base3 + 0.12 * k, socket: true };
+    }
+  };
+}
+registerChassis("lance", lance);
+
+// src/client/proto3d/chassis/titans-monolith.ts
+function monolith(c) {
+  const { b, kit, L, W, stance } = c;
+  const kx = L / 7, kz = W / 7, k = Math.min(kx, kz);
+  const legged = stance.legs !== null;
+  const y0 = stance.y0;
+  const yt = legged ? y0 + 0.3 * k : Math.max(stance.yt, y0 + 0.4);
+  const sc2 = (pts) => pts.map(([x, z]) => [x * kx, z * kz]);
+  const scl = (pts, s, dx = 0) => pts.map(([x, z]) => [x * s + dx, z * s]);
+  const wi = Math.min(stance.wi, 2.3 * kz);
+  planLoft(b, kit.trim, ngon2(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
+  const P1 = sc2(mirror3([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
+  const s1 = yt + 1.25 * k, sTop = 0.78;
+  const L1 = [[yt - 0.12, 0.9], [yt + 0.2 * k, 1], [s1, sTop]];
+  planLoft(b, kit.hull, P1, L1);
+  planLoft(b, kit.trim, P1, [[yt + 0.1 * k, 1.014], [yt + 0.26 * k, 1.014]]);
+  const P2u = sc2(mirror3([[3.05, 0], [2.95, -0.55], [1.7, -2.15], [-1.5, -2.3], [-2.75, -1.6], [-2.75, 0]]));
+  planLoft(b, kit.trim, P2u, [[s1 - 0.04, 0.84], [s1 + 0.42 * k, 0.86]]);
+  const t2 = s1 + 1.75 * k;
+  const L2 = [[s1 + 0.38 * k, 0.88], [s1 + 0.62 * k, 1], [s1 + 0.78 * k, 1], [t2 - 0.12 * k, 0.8], [t2, 0.76]];
+  planLoft(b, kit.hull, P2u, L2);
+  planLoft(b, kit.accent, P2u, [[s1 + 0.64 * k, 1.008], [s1 + 0.74 * k, 1.008]]);
+  const roof2 = scl(P2u, 0.76);
+  const cx3 = 0.65 * kx;
+  const P3 = ngon2(8, 1.5 * kx, 1.42 * kz);
+  const t3 = t2 + 0.5 * k;
+  const cbx = -1.45 * kx, cbT = t2 + 0.85 * k;
+  planLoft(b, kit.trim, P3, [[t2 - 0.04, 1.05], [t2 + 0.1 * k, 1.05]], [cx3, 0]);
+  planLoft(b, kit.panel, P3, [[t2 + 0.08 * k, 1], [t3 - 0.08 * k, 0.9], [t3, 0.86]], [cx3, 0]);
+  const u = 0.12 * k;
+  for (let i = 0; i < P1.length; i++) {
+    const f = wallFace(P1, i, [yt + 0.26 * k, 1], [s1 - 0.05, sTop + 0.012]);
+    if (f.w < 0.5 * k) continue;
+    const front = f.n.x > 0.85, rear = f.n.x < -0.85;
+    const n = Math.max(1, Math.round(f.w / (1.5 * k)));
+    for (let j = 0; j < n; j++) {
+      const du = (j + 0.5 - n / 2) * (f.w / n);
+      if (rear) continue;
+      armourPlate(b, kit, f, du, -f.h * 0.06, f.w / n * 0.84 - 0.05, f.h * 0.62, u * 0.9, j % 2 ? kit.panel : kit.hull);
+      if (front) for (let r = 0; r < 2; r++) for (let q = -1; q <= 1; q++) facePlate(b, q === 0 ? kit.trim : kit.panel, f, du + q * (f.w / n) * 0.27, -f.h * 0.2 + r * f.h * 0.3, f.w / n * 0.22, f.h * 0.2, u * 0.7, u * 1.25);
+    }
+    if (!front && !rear) faceRivets(b, kit.metal, f, -f.w * 0.45, f.w * 0.45, f.h * 0.42, Math.max(3, Math.round(f.w / (0.35 * k))), u * 0.55, 0);
+    if (rear) {
+      faceVent(b, kit, f, 0, 0, f.w * 0.62, f.h * 0.55, 5);
+      faceSlit(b, kit, f, 0, -f.h * 0.38, f.w * 0.5, u * 0.5, kit.hot);
+    }
+  }
+  for (let i = 0; i < P1.length; i++) {
+    const f = wallFace(P1, i, [yt + 0.26 * k, 1], [s1 - 0.05, sTop + 0.012]);
+    if (Math.abs(f.n.z) < 0.97 || Math.abs(f.c.x) > 1.2 * kx) continue;
+    faceLadder(b, kit, f, -f.w * 0.36, -f.h * 0.45, f.h * 0.48, 0.3 * k);
+    faceVent(b, kit, f, f.w * 0.12, f.h * 0.05, f.w * 0.3, f.h * 0.45, 4);
+  }
+  for (let i = 0; i < P2u.length; i++) {
+    const f = wallFace(P2u, i, [s1 + 0.8 * k, 1], [t2 - 0.14 * k, 0.8]);
+    if (f.w < 0.6 * k) continue;
+    const fwd = f.n.x > 0.3;
+    const n = Math.max(1, Math.round(f.w / (1.3 * k)));
+    for (let j = 0; j < n; j++) {
+      const du = (j + 0.5 - n / 2) * (f.w / n);
+      armourPlate(b, kit, f, du, f.h * 0.05, f.w / n * 0.82, f.h * 0.6, u * 0.75, j % 2 ? kit.hull : kit.panel);
+      if (fwd) faceSlit(b, kit, f, du, f.h * 0.42, f.w / n * 0.5, u * 0.4);
+    }
+  }
+  for (let i = 0; i < P2u.length; i++) {
+    const f = wallFace(P2u, i, [s1 + 0.38 * k, 0.88], [s1 + 0.62 * k, 1]);
+    if (f.w > 0.5 * k) faceRivets(b, kit.metal, f, -f.w * 0.44, f.w * 0.44, 0, Math.max(3, Math.round(f.w / (0.3 * k))), u * 0.5, 0);
+  }
+  both((s) => {
+    for (const bx2 of [-0.22]) {
+      const x = bx2 * kx, zi = s * 1.75 * kz, zo = s * 2.95 * kz;
+      const ring3 = (z, hw, lo, hi) => [
+        [x - hw, lo, z],
+        [x + hw, lo, z],
+        [x + hw, hi - hw * 0.6, z],
+        [x + hw * 0.35, hi, z],
+        [x - hw * 0.35, hi, z],
+        [x - hw, hi - hw * 0.6, z]
+      ];
+      b.loft(kit.hull, [ring3(zi, 0.42 * kx, s1 - 0.2 * k, t2 - 0.35 * k), ring3(zo, 0.32 * kx, yt - 0.1, yt + 0.5 * k)]);
+      const a = [x, t2 - 0.3 * k, zi], e = [x, yt + 0.55 * k, zo];
+      rivetLine(b, kit.metal, [a[0], a[1] + 0.03, a[2] + s * 0.2], [e[0], e[1] + 0.03, e[2] - s * 0.15], 7, u * 0.6);
+      b.strut(kit.trim, [x, a[1] - 0.02 * k, a[2]], [x, e[1] - 0.02 * k, e[2]], 0.12 * k, 0.1 * k, 6);
+      block(b, kit.trim, x, yt - 0.25 * k, zo - s * 0.1 * kz, 0.85 * kx, 0.5 * kz, 0.45 * k, { top: [0.8, 0.7], ch: 0.12 * k });
+    }
+    const zc = s * 2.18 * kz, yc = s1 + 0.12 * k;
+    pipeRun(b, kit, [[1.6 * kx, yc, zc * 1.02], [0.4 * kx, yc, zc], [-0.6 * kx, yc + 0.05, zc], [-1.7 * kx, yc, zc * 1.03]], 0.07 * k);
+    pipeRun(b, kit, [[1.4 * kx, yc + 0.18 * k, zc * 0.98], [-1.5 * kx, yc + 0.18 * k, zc * 0.98]], 0.05 * k, kit.steel);
+    glow(b, kit, 0.2 * kx, s1 + 0.3 * k, s * 2.06 * kz, 1.6 * kx, 0.05, 0.05);
+  });
+  block(b, kit.metal, 3.25 * kx, Math.max(0.12, yt - 0.55 * k), 0, 0.9 * kx, 3.2 * kz, 0.85 * k, { top: [0.45, 0.9], shift: [-0.2 * kx, 0], ch: 0.25 * k, bev: 0.06 });
+  for (let i = -3; i <= 3; i++) block(b, kit.steel, 3.62 * kx, Math.max(0.1, yt - 0.55 * k), i * 0.42 * kz, 0.3 * kx, 0.2 * kz, 0.3 * k, { top: [0.3, 0.6], shift: [0.08 * kx, 0], ch: 0.04 });
+  hazard(b, kit, 3.36 * kx, yt + 0.18 * k, 0, 2.6 * kz, 0.08 * kx, 9, Math.PI / 2);
+  both((s) => {
+    lamp(b, kit, 3.42 * kx, yt + 0.42 * k, s * 1.3 * kz, 0.18 * k);
+    lamp(b, kit, 3.42 * kx, yt + 0.42 * k, s * 0.95 * kz, 0.18 * k);
+  });
+  both((s) => {
+    hatch(b, kit, -1.55 * kx, t2, s * 1.2 * kz, 0.24 * k);
+    vent(b, kit, -0.35 * kx, t2, s * 1.6 * kz, 0.7 * kx, 0.38 * kz, 3, "x");
+    hazard(b, kit, 1.65 * kx, t2 + 0.01, s * 1 * kz, 0.7 * kx, 0.12 * kz, 4, s * 0.62);
+    lamp(b, kit, 1.75 * kx, t2 + 0.1 * k, s * 1.35 * kz, 0.14 * k, s * 0.5);
+  });
+  for (let i = 0; i < roof2.length; i++) {
+    const [ax, az] = roof2[i], [bx2, bz] = roof2[(i + 1) % roof2.length];
+    const len = Math.hypot(bx2 - ax, bz - az);
+    if (len < 0.7 * k) continue;
+    const ang = Math.atan2(bz - az, bx2 - ax), nx = -Math.sin(ang), nz = Math.cos(ang);
+    const n = Math.max(1, Math.round(len / (1.1 * k)));
+    for (let j = 0; j < n; j++) {
+      const f = (j + 0.5) / n;
+      let x = ax + (bx2 - ax) * f, z = az + (bz - az) * f;
+      const sg = nx * -x + nz * -z > 0 ? 1 : -1;
+      x += nx * sg * 0.32 * k;
+      z += nz * sg * 0.32 * k;
+      if (Math.hypot(x - cx3, z) < 1.65 * k || Math.abs(x - cbx) < 0.75 * kx && Math.abs(z) < 0.8 * kz) continue;
+      if (c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 2.2 + 0.3 * k)) continue;
+      b.box(j % 2 ? kit.panel : kit.hull, len / n * 0.84, 0.12 * k, 0.5 * k, x, t2 + 0.05 * k, z, 0.03 * k, [0, -ang, 0]);
+      b.box(kit.metal, len / n * 0.5, 0.04 * k, 0.06 * k, x, t2 + 0.12 * k, z, 0.01, [0, -ang, 0]);
+    }
+  }
+  boltRing(b, kit.metal, cx3, t3, 0, 1.15 * k, 16, u * 0.5);
+  block(b, kit.trim, cbx, t2 - 0.02, 0, 1.25 * kx, 1.35 * kz, 0.22 * k, { ch: 0.2 * k });
+  block(b, kit.hull, cbx, t2 + 0.15 * k, 0, 1.1 * kx, 1.2 * kz, cbT - t2 - 0.15 * k, { top: [0.7, 0.75], shift: [-0.12 * kx, 0], ch: 0.26 * k, bev: 0.06 });
+  glow(b, kit, cbx + 0.42 * kx, t2 + 0.55 * k, 0, 0.05, 0.06 * k, 0.65 * kz, [0, 0, -0.55]);
+  for (const z of [-0.3, 0.3]) pbox(b, kit.metal, 0.16 * k, 0.22 * k, 0.12 * k, cbx + 0.2 * kx, cbT + 0.1 * k, z * kz);
+  sensorDome(b, kit, cbx - 0.15 * kx, cbT - 0.02, 0, 0.3 * k);
+  whip(b, kit, cbx - 0.4 * kx, cbT - 0.02, -0.38 * kz, 1.7 * k);
+  mast(b, kit, cbx - 0.45 * kx, cbT - 0.05, 0.4 * kz, 1.3 * k, 0.045 * k);
+  both((s) => {
+    const x = -2.62 * kx, z = s * 0.72 * kz, yb = s1 - 0.1 * k, h = t2 + 1.25 * k - yb, r = 0.27 * k;
+    block(b, kit.trim, x, yb, z, 0.75 * kx, 0.72 * kz, 0.55 * k, { top: [0.85, 0.85], ch: 0.15 * k });
+    b.cylb(kit.metal, r, h, r * 0.15, [x, yb, z], "y", 12);
+    for (const f of [0.35, 0.6, 0.85]) b.cylb(kit.trim, r * 1.14, 0.07 * k, 0.01, [x, yb + h * f, z], "y", 12);
+    b.cyl(kit.trim, r * 0.8, r * 0.8, 0.04, [x, yb + h - 0.01, z], "y", 10);
+    b.cyl(kit.hot, r * 0.62, r * 0.62, 0.03, [x, yb + h + 0.01, z], "y", 10);
+    pbox(b, kit.metal, 0.5 * kx, 0.08 * k, 0.12 * kz, x + 0.3 * kx, yb + h * 0.6, z);
+  });
+  glowGrille(b, kit, -3.4 * kx, yt + 0.72 * k, 0, 1.2 * kz, 0.55 * k, 3, -1);
+  banner(b, kit, -2.25 * kx, t2 - 0.1, -1.55 * kz, 1.9 * k, 0.6 * k, -1);
+  const towers = /* @__PURE__ */ new Map();
+  const tt = t2 + 0.2 * k;
+  const gunTower = (x, z, r, top) => {
+    const P = ngon2(8, r, r);
+    planLoft(b, kit.hull, P, [[s1 - 0.45 * k, 1.22], [s1 + 0.1 * k, 1.14], [s1 + 0.9 * k, 0.86], [top - 0.4 * k, 0.86], [top - 0.3 * k, 1.08], [top - 0.05, 1.08], [top, 1]], [x, z]);
+    planLoft(b, kit.trim, P, [[s1 + 0.1 * k, 1.16], [s1 + 0.22 * k, 1.12]], [x, z]);
+    for (let i = 0; i < 8; i++) {
+      const f = wallFace(P, i, [s1 + 0.9 * k, 0.86], [top - 0.42 * k, 0.86], [x, z]);
+      if (f.n.x < -0.5 || i % 2 === 0) faceBox(b, kit.metal, f, 0, f.h * 0.35, f.w * 0.5, u * 0.5, u * 0.4);
+      if (f.n.x > 0.3) faceSlit(b, kit, f, 0, f.h * 0.1, f.w * 0.55, u * 0.38);
+    }
+  };
+  for (const m of c.mounts) {
+    if (Math.hypot(m.x - cx3, m.z) < 1 * k) continue;
+    gunTower(m.x, m.z, Math.max(0.85 * k, m.r * 1.7), tt);
+    towers.set(m, tt);
+  }
+  let hips;
+  if (stance.legs === "biped") {
+    hips = [-1, 1].map((s) => ({ p: [-0.2 * kx, stance.hipY, s * 1.85 * kz], side: s, t: stance.thick, foot: [-0.2 * kx, 0, s * 2.15 * kz], phase: s > 0 ? Math.PI : 0 }));
+    both((s) => block(b, kit.trim, -0.2 * kx, y0 - 0.3 * k, s * 1.85 * kz, 1.4 * kx, 0.9 * kz, 0.6 * k, { top: [0.8, 0.8], ch: 0.2 * k }));
+  }
+  const top3 = ngon2(8, 1.5 * kx * 0.86, 1.42 * kz * 0.86).map(([x, z]) => [x + cx3, z]);
+  const top1 = scl(P1, sTop);
+  const deck = (x, z) => {
+    if (Math.abs(x - cbx) < 0.4 * kx && Math.abs(z) < 0.45 * kz) return cbT;
+    if (inside(top3, x, z)) return t3;
+    if (inside(roof2, x, z)) return t2;
+    return inside(top1, x, z) ? s1 : -1;
+  };
+  return {
+    deckAt: deck,
+    top: t2 + 1.25 * k,
+    custom: true,
+    hips,
+    seat: (m) => {
+      const tw = towers.get(m);
+      if (tw !== void 0) {
+        collar(b, kit, m.x, tw, m.z, m.r, tw - 0.1, 18);
+        return { y: tw, socket: true };
+      }
+      const y = t3 + 0.32 * k, R = m.r * 1.35;
+      b.lathe(kit.hull, [[0, 0], [R * 1.2, 0], [R * 1.12, 0.1 * k], [R, y - t3], [0, y - t3]], [m.x, t3 - 0.02, m.z], "y", 22);
+      b.lathe(kit.trim, [[R * 1.18, 0], [R * 1.24, 0], [R * 1.24, 0.08 * k], [R * 1.18, 0.08 * k]], [m.x, t3 + 0.02, m.z], "y", 22);
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.1, 22);
+      return { y, socket: true };
+    }
+  };
+}
+registerChassis("monolith", monolith);
+
 // src/client/proto3d/air3d.ts
 function foil2(le, chordDir, thickDir, c, t) {
   const p = (a, b) => [le[0] + chordDir[0] * a * c + thickDir[0] * b * t, le[1] + chordDir[1] * a * c + thickDir[1] * b * t, le[2] + chordDir[2] * a * c + thickDir[2] * b * t];
@@ -41050,8 +41975,8 @@ function buildJet(b, kit, L, W, S) {
     b.box(kit.metal, 0.02, R * 0.46, R * 0.38, hl * 0.18 + L * 0.11 - 6e-3, -R * 0.1, sg * R * 1, 4e-3);
     const fin3 = [];
     for (const [f, lex, ch] of [[0, -hl * 0.7, L * 0.28], [1, -hl * 0.92, L * 0.12]]) {
-      const base2 = [lex, R * 0.5 + f * R * 3.6, sg * (R * 0.9 + f * R * 0.9)];
-      fin3.push(foil2(base2, [-1, 0, 0], [0, 0, 1], ch, R * 0.14 * (1 - f * 0.4)));
+      const base3 = [lex, R * 0.5 + f * R * 3.6, sg * (R * 0.9 + f * R * 0.9)];
+      fin3.push(foil2(base3, [-1, 0, 0], [0, 0, 1], ch, R * 0.14 * (1 - f * 0.4)));
     }
     b.loft(kit.hull, fin3);
     const tp = [];
@@ -41559,7 +42484,7 @@ function groundMaterial(map, bump) {
   m.customProgramCacheKey = () => "ground2";
   return m;
 }
-function rockGeometry(seed, flat) {
+function rockGeometry(seed, flat2) {
   const { fbm } = makeNoise(seed);
   let g = new IcosahedronGeometry(1, 4);
   g.deleteAttribute("uv");
@@ -41580,7 +42505,7 @@ function rockGeometry(seed, flat) {
       const k = v.dot(c);
       if (k > 0.55) d = Math.min(d, 0.92 / k * 0.82);
     }
-    pos.setXYZ(i, v.x * d * ax, Math.max(-0.25, v.y * d * flat), v.z * d * az);
+    pos.setXYZ(i, v.x * d * ax, Math.max(-0.25, v.y * d * flat2), v.z * d * az);
   }
   g.computeVertexNormals();
   return g;
