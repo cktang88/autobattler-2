@@ -4,7 +4,7 @@ import { PARA_PER_STUN, PHANTOM_FIRE_REVEAL, REGEN_DELAY, SHIELD_DELAY, SHIELD_R
 import { CLOAK_REVEAL } from '../../shared/types.ts';
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
-import { AP_TIERS, accuracyRating, apTier, damageKinds, firingStyle, turretTurnRate, weaponDps, type ApTier, type DamageKind } from '../../shared/stats.ts';
+import { AP_TIERS, MAX_ENERGY_RESIST, STACK_FALLOFF, accuracyRating, apTier, damageKinds, firingStyle, turretTurnRate, weaponDps, type ApTier, type DamageKind } from '../../shared/stats.ts';
 import { MELEE_SPRINT } from '../../shared/sim/battle.ts';
 import { MOUNT_LETTER, ROLES } from '../../shared/parts.ts';
 import type { ModuleDef, MoveKind, Role } from '../../shared/types.ts';
@@ -477,6 +477,8 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.gyro) r.push('Every weapon can fire while moving.');
     if (mod.reloadBonus) r.push(`Clip weapons reload ${Math.round(mod.reloadBonus * 100)}% faster.`);
     if (mod.fireRateBonus) r.push(`All weapons fire ${Math.round(mod.fireRateBonus * 100)}% faster.`);
+    if (mod.rangeBonus || mod.spreadMult || mod.speedBonus || mod.fireRateBonus || mod.reloadBonus || mod.energyResist || mod.regen)
+      r.push(`Stacks with diminishing returns: a 2nd copy adds ${Math.round(STACK_FALLOFF * 100)}% of its bonus, a 3rd ${Math.round(STACK_FALLOFF ** 2 * 100)}%${mod.energyResist ? ` (energy resistance tops out at ${Math.round(MAX_ENERGY_RESIST * 100)}%)` : mod.reloadBonus ? ' (reload time never drops below 20%)' : ''}.`);
     if (mod.deathBlast) r.push(`When destroyed, explodes for ${mod.deathBlast.damage} damage up to ${m(mod.deathBlast.radius)} beyond its hull.`);
     if (mod.armor) r.push(`+${mod.armor} armour: every hit that reaches the hull loses that much damage. Half-penetration weapons ignore half of it, full-penetration weapons all of it; shields are hit before armour.`);
     if (mod.hp) r.push(`+${mod.hp} hull HP.`);

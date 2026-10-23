@@ -6,7 +6,7 @@
 
 import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
-import { airRole, computeStats, damageKinds, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { airRole, computeStats, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -723,19 +723,18 @@ export class Battle {
       if (d.cloak && cloak !== 'phantom') cloak = d.cloak;
       if (d.detect) detect = Math.max(detect, d.detect);
       if (d.shieldAura) { domeR = Math.max(domeR, d.shieldAura.radius); domeAmt = Math.max(domeAmt, d.shieldAura.amount); }
-      regen += d.regen ?? 0;
-      fireRate += d.fireRateBonus ?? 0;
-      reloadBonus += d.reloadBonus ?? 0;
       if (d.fireRateAura && d.fireRateAura.bonus > uplinkBonus) { uplinkBonus = d.fireRateAura.bonus; uplinkR = d.fireRateAura.radius; }
       if (d.pointDefense && d.pointDefense.range > pdRange) { pdRange = d.pointDefense.range; pdCooldown = d.pointDefense.cooldown; pdModule = d.id; }
       if (d.jammer) jammer = Math.max(jammer, d.jammer);
       if (d.smoke) { smokeR = Math.max(smokeR, d.smoke.radius); smokeDur = Math.max(smokeDur, d.smoke.duration); }
       reactive += d.reactive ?? 0;
-      energyResist += d.energyResist ?? 0;
       if (d.hardened) hardened = true;
       if (d.heal || d.shieldAura || d.fireRateAura || d.jammer || d.detect) isSupport = true;
       if (d.deathBlast) { blastDmg += d.deathBlast.damage; blastR = Math.max(blastR, d.deathBlast.radius); blastModule = d.id; }
     }
+    // percentage modules stack with diminishing returns (stats.ts stackedBonuses; same numbers as the price)
+    const stack = stackedBonuses(design.mounts.map((mid) => (mid ? MODULE_BY_ID.get(mid) : undefined)).filter((d): d is ModuleDef => !!d));
+    regen = stack.regen; fireRate = 1 + stack.fireRate; reloadBonus = stack.reload; energyResist = stack.energyResist;
     const maxHp = stats.hp * lm;
     const u: SimUnit = {
       id, side, uid, design, stats, level, x: c.x, y: c.y, angle: heading, hp: maxHp, maxHp,

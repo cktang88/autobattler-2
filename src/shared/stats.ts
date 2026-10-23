@@ -17,6 +17,28 @@ export function loadSpeedFactor(load: number): number {
   return Math.max(0.3, 1 - (load - 1) * 1.2);
 }
 
+/** Percentage modules stack with diminishing returns: the strongest copy counts fully, the 2nd at STACK_FALLOFF, the
+ *  3rd at STACK_FALLOFF^2, ... (two targeting computers: +15% + 7.5% range, not +30%). */
+export const STACK_FALLOFF = 0.5;
+export function stackBonus(vals: number[]): number {
+  return [...vals].filter((v) => v > 0).sort((a, b) => b - a).reduce((t, v, i) => t + v * STACK_FALLOFF ** i, 0);
+}
+/** most energy damage one unit can shrug off however many mirror coatings it carries */
+export const MAX_ENERGY_RESIST = 0.75;
+/** Every percentage bonus of a loadout, stacked (shared by the price model and the sim so they agree). */
+export function stackedBonuses(mods: ModuleDef[]): { range: number; spreadCut: number; speed: number; fireRate: number; reload: number; energyResist: number; regen: number } {
+  const pick = (f: (m: ModuleDef) => number | undefined) => stackBonus(mods.map((m) => f(m) ?? 0));
+  return {
+    range: pick((m) => m.rangeBonus),
+    spreadCut: pick((m) => (m.spreadMult ? 1 - m.spreadMult : 0)),
+    speed: pick((m) => m.speedBonus),
+    fireRate: pick((m) => m.fireRateBonus),
+    reload: Math.min(0.8, pick((m) => m.reloadBonus)),
+    energyResist: Math.min(MAX_ENERGY_RESIST, pick((m) => m.energyResist)),
+    regen: pick((m) => m.regen),
+  };
+}
+
 export function designModules(d: Design): ModuleDef[] {
   const out: ModuleDef[] = [];
   for (const id of d.mounts) {
@@ -290,9 +312,11 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   let rangeMult = 1;
   if (traits.includes('rangeBoost')) rangeMult += 0.2;
   if (traits.includes('fortified')) rangeMult += 0.15;
-  let spreadMult = traits.includes('stable') ? 0.5 : 1;
-  let speedBonus = 0;
-  let fireRate = 1;
+  const stack = stackedBonuses(mods);
+  rangeMult += stack.range;
+  let spreadMult = (traits.includes('stable') ? 0.5 : 1) * (1 - stack.spreadCut);
+  const speedBonus = stack.speed;
+  const fireRate = 1 + stack.fireRate;
   for (const mod of mods) {
     hp += mod.hp ?? 0;
     armor += mod.armor ?? 0;
@@ -301,10 +325,6 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
     shield += mod.shield ?? 0;
     heal += mod.heal ?? 0;
     dps += weaponDps(mod);
-    rangeMult += mod.rangeBonus ?? 0;
-    if (mod.spreadMult) spreadMult *= mod.spreadMult;
-    speedBonus += mod.speedBonus ?? 0;
-    fireRate += mod.fireRateBonus ?? 0;
     if (mod.gyro && !traits.includes('fireOnMove')) traits.push('fireOnMove');
     if (mod.cloak && !traits.includes(mod.cloak)) traits.push(mod.cloak);
     if (mod.hardened && !traits.includes('hardened')) traits.push('hardened');
@@ -336,21 +356,24 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   const hullR = hullK(size) * Math.sqrt((c.footprint?.[0] ?? size) * (c.footprint?.[1] ?? size));
   let interceptors = 0; // not shared within a squad: every PD shoots down its own projectiles
   let support = traits.includes('repairAura') ? 25 * auraReach(REPAIR_AURA_RANGE, hullR) * cal('repairAura') : 0;
+  const copies = new Map<string, number>();
   for (const mod of mods) {
     const u = cal(mod.id); // empirical strength of the utility's effect (1 = analytic value)
     const eh = (mult: number) => 1 + (mult - 1) * u;
-    if (mod.reloadBonus) offense *= 1 + 0.25 * u * mod.reloadBonus * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
+    // repeated percentage modules count with the same diminishing returns as in the sim (stackBonus)
+    const nth = (k: string) => { const n = copies.get(k) ?? 0; copies.set(k, n + 1); return STACK_FALLOFF ** n; };
+    if (mod.reloadBonus) offense *= 1 + 0.25 * u * mod.reloadBonus * nth('reload') * mods.filter((w) => w.magazine).length / Math.max(1, mods.filter((w) => w.kind === 'weapon').length);
     if (mod.shieldAura) support += mod.shieldAura.amount * 0.3 * auraReach(mod.shieldAura.radius, hullR) * (MODULE_CAL[mod.id + 'Aura'] ?? u);
     if (mod.fireRateAura) support += mod.fireRateAura.bonus * 300 * auraReach(mod.fireRateAura.radius, hullR) * u;
     if (mod.detect) support += 12 * auraReach(mod.detect, hullR) * u;
     if (mod.jammer) support += 15 * auraReach(mod.jammer, hullR) * u; // covers its carrier too (counted in the reach)
     if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06 * u;
-    if (mod.regen) ehpMult *= eh(1 + mod.regen * 12);
+    if (mod.regen) ehpMult *= eh(1 + mod.regen * 12 * nth('regen'));
     // [aura balance] point defense: worth its intercept rate, whatever the hull (as an ehp multiplier a titan's PD cost ~300 supply)
     if (mod.pointDefense) interceptors += PD_PTS * (0.6 / mod.pointDefense.cooldown) * u;
     if (mod.smoke) ehpMult *= eh(1.12);
     if (mod.reactive) reactiveHp += mod.reactive * 60 * u;
-    if (mod.energyResist) ehpMult *= eh(1 + mod.energyResist * 0.4);
+    if (mod.energyResist) ehpMult *= eh(1 + mod.energyResist * 0.4 * nth('eres'));
     if (mod.hardened) ehpMult *= eh(1.08);
     if (mod.cloak === 'stealth') ehpMult *= eh(1.35);
     if (mod.cloak === 'phantom') ehpMult *= eh(1.5);
