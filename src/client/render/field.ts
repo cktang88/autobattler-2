@@ -29,6 +29,7 @@ import { CREATURE_SHAPES } from './creatures.ts';
 import { battleSfx, setPanFlip, setSfxView } from '../audio.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../../shared/grid.ts';
 import { moduleTier } from '../../shared/parts.ts';
+import { boreOf, calibreMm } from './weaponsize.ts';
 import { bodyScale } from '../../shared/mountgeo.ts';
 import { Camera, CameraControls } from './camera.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
@@ -125,6 +126,8 @@ interface PSnap {
 interface PTrack {
   sx: number;
   sy: number;
+  /** sim progress when first seen (flash rounds estimate where they end from it) */
+  k0?: number;
   /** barrel-tip offset at spawn, faded out over the first cells of flight */
   ox?: number;
   oy?: number;
@@ -770,7 +773,7 @@ export class FieldView {
         const src = p.src !== undefined ? this.units.get(p.src) : undefined;
         const bomblet = p.kind === 'arc' && !!modOf(p.moduleId)?.cluster && (!src || Math.hypot(src.x - p.x, src.y - p.y) > 6);
         const tip = !bomblet && p.src !== undefined && p.mount !== undefined && p.z <= 0.5 ? this.muzzleOf(p.src, p.mount) : null;
-        this.ptrack.set(p.id, { sx: p.x, sy: p.y, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x - this.liftVec(GUN_H).x : 0, oy: tip ? tip.y - p.y - this.liftVec(GUN_H).y : 0, bomblet });
+        this.ptrack.set(p.id, { sx: p.x, sy: p.y, k0: p.progress, lx: p.x, ly: p.y, kind: p.kind, moduleId: p.moduleId, side: p.side, born: this.time, ox: tip ? tip.x - p.x - this.liftVec(GUN_H).x : 0, oy: tip ? tip.y - p.y - this.liftVec(GUN_H).y : 0, bomblet });
         if ((p.kind === 'rocket' || p.kind === 'missile') && this.fx.busy < 0.8) {
           // every tube of a ripple-firing battery: its own ignition flash and a backblast puff thrown out behind
           const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
@@ -1406,13 +1409,25 @@ export class FieldView {
       }
       const glowC = mod ? moduleGlow(mod, TEAM_PAL[this.teamOf(p.side)]) : '#ffd27a';
       // dark soft backing (normal blend) so additive tracers/shells stay visible on any ground
-      if (kind === 'bullet' || kind === 'shell' || kind === 'rocket' || kind === 'missile' || kind === 'arc') {
-        const len = kind === 'bullet' ? 0.4 : kind === 'rocket' ? 0.3 : kind === 'missile' ? 0.35 : 0.2;
+      // drawn round diameter (cells): ~0.75 x the bore of the barrel that fires it
+      const rw = mod ? Math.max(0.012, 0.75 * boreOf(calibreMm(mod))) : 0.03;
+      // machine guns, rotaries and the sniper fire flash rounds (a thin line sweeping the path in a few frames)
+      const flash = kind === 'bullet' && !!mod && vis !== 'shotgun' && (mod.category === 'machinegun' || vis === 'gatling' || vis === 'sniper');
+      if (kind === 'bullet' && !flash) {
+        g.globalCompositeOperation = prevOp;
+        g.globalAlpha = 0.35;
+        g.strokeStyle = '#05070a';
+        g.lineCap = 'round';
+        g.lineWidth = Math.max(2.5 / this.px, rw * 2);
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * rw * 6, y - sn * rw * 6); g.stroke();
+        g.globalAlpha = 1;
+      } else if (kind === 'shell' || kind === 'rocket' || kind === 'missile' || kind === 'arc') {
+        const len = kind === 'shell' ? Math.min(0.2, rw * 4) : kind === 'rocket' ? 0.3 : kind === 'missile' ? 0.35 : 0.2;
         g.globalCompositeOperation = prevOp;
         g.globalAlpha = 0.5;
         g.strokeStyle = '#05070a';
         g.lineCap = 'round';
-        g.lineWidth = Math.max(4 / this.px, kind === 'arc' ? 0.28 : 0.12);
+        g.lineWidth = Math.max(4 / this.px, kind === 'arc' ? 0.28 : kind === 'shell' ? rw * 1.6 : 0.12);
         g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * len, y - sn * len); g.stroke();
         g.globalAlpha = 1;
       }
@@ -1446,72 +1461,89 @@ export class FieldView {
             }
             break;
           }
-          const big = mod ? (moduleTier(mod) === 2 ? 1.4 : moduleTier(mod) >= 3 ? 1.8 : 1) * (0.6 + cal) : 1;
           const rotary = vis === 'gatling', ac = mod?.category === 'autocannon';
           const apMg = mod?.category === 'machinegun' && (mod.ap ?? 0) >= 0.4;
-          const len = sniper ? 0.9 : (ac ? 0.16 : 0.22) + 0.2 * big;
-          const w = sniper ? 0.05 : (0.025 + 0.022 * big) * (ac ? 1.25 : 1);
-          // tracer colour by family: MG yellow, suppressor violet (slows), heavy MG white-hot (AP), rotary hot orange,
-          // autocannon orange HE slugs, sniper red
-          const col = sniper ? '#ff5050' : rotary ? (ac ? '#ff7a30' : '#ff9a48') : ac ? '#ffa040' : mod?.slow ? '#c8a8ff' : apMg ? '#fff4dc' : '#ffe27a';
-          // which rounds carry a bright tracer: every 4th (MG), every 3rd (rotary), every 2nd (heavy MG), all (HE autocannon)
+          // tracer colour by family: MG warm yellow-orange, suppressor violet (slows), heavy MG paler amber (AP), rotary
+          // hot orange, autocannon whiter, sniper white-blue
+          const col = sniper ? '#d8ecff' : rotary ? (ac ? '#ff9a50' : '#ff9a48') : ac ? '#ffe0b0' : mod?.slow ? '#c8a8ff' : apMg ? '#ffe2a8' : '#ffd070';
+          // which rounds carry a tracer: every 4th (MG), every 3rd (rotary), every 2nd (heavy MG), all (HE autocannon,
+          // sniper). Tracers are the same size as the ball rounds between them, just brighter.
           const tracer = sniper || (ac && !rotary) || (rotary ? p.id % 3 === 0 : apMg ? (p.id & 1) === 0 : (p.id & 3) === 0);
-          const L2 = tracer ? len * 1.7 : len * (rotary ? 1.1 : 0.75);
+          // width from the calibre (never under ~1.5 px), a short tail of a few widths
+          let hx = x, hy = y, tx: number, ty: number, fade = 1;
+          if (flash && t) {
+            // flash round: the head races from the muzzle to the target in FLASH_T, the line spans a chunk of the path
+            const kp = clamp(pos.progress, 0, 1), dk = kp - (t.k0 ?? 0);
+            const left = dk > 0.02 ? (1 - kp) * (Math.hypot(pos.x - t.sx, pos.y - t.sy) / dk) : (mod?.range ?? 8) * (1 - kp);
+            const lx = x - pos.x, ly = y - pos.y; // lift (tilt) offset
+            const sx0 = t.sx + (t.ox ?? 0) + lx, sy0 = t.sy + (t.oy ?? 0) + ly;
+            const ex = pos.x + cs * left + lx, ey = pos.y + sn * left + ly;
+            const L = Math.max(0.1, Math.hypot(ex - sx0, ey - sy0));
+            const th = (this.time - t.born) / 0.05, tt = th - clamp(0.4 * L, 0.6, 3.5) / L;
+            if (tt >= 1) break;
+            const a0 = Math.max(0, tt), a1 = Math.min(1, th);
+            hx = sx0 + (ex - sx0) * a1; hy = sy0 + (ey - sy0) * a1;
+            tx = sx0 + (ex - sx0) * a0; ty = sy0 + (ey - sy0) * a0;
+            fade = 1 - 0.5 * clamp(tt, 0, 1);
+          } else {
+            const L2 = rw * (ac ? (tracer ? 12 : 9) : 8);
+            tx = x - cs * L2; ty = y - sn * L2;
+          }
           g.strokeStyle = col;
-          g.globalAlpha = tracer ? 0.6 : rotary ? 0.5 : 0.32;
-          g.lineWidth = Math.max(minW * 2, w * (tracer ? 2.8 : 1.8));
           g.lineCap = 'round';
-          g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * L2, y - sn * L2); g.stroke();
-          g.globalAlpha = tracer ? 1 : rotary ? 0.85 : 0.6;
-          g.strokeStyle = '#fff8e0';
-          g.lineWidth = Math.max(minW, w * 0.8);
-          g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * L2 * 0.55, y - sn * L2 * 0.55); g.stroke();
-          if (tracer) { const hr = 0.07 + w * 2; g.globalAlpha = 0.8; g.drawImage(glowTex(col), x - hr, y - hr, hr * 2, hr * 2); }
+          g.globalAlpha = (tracer ? 0.75 : 0.35) * fade;
+          g.lineWidth = Math.max(minW, rw * 1.3);
+          g.beginPath(); g.moveTo(hx, hy); g.lineTo(tx, ty); g.stroke();
+          g.globalAlpha = (tracer ? 1 : 0.55) * fade;
+          g.strokeStyle = tracer ? '#fff8e0' : col;
+          g.lineWidth = Math.max(minW * 0.6, rw * 0.6);
+          g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + (tx - hx) * 0.6, hy + (ty - hy) * 0.6); g.stroke();
           break;
         }
         case 'shell': {
           if (vis === 'gauss') {
             g.strokeStyle = '#9fe8ff';
             g.globalAlpha = 0.45;
-            g.lineWidth = Math.max(minW * 3, 0.14);
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 1.6, y - sn * 1.6); g.stroke();
+            g.lineWidth = Math.max(minW * 1.5, rw * 1.2);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * rw * 14, y - sn * rw * 14); g.stroke();
             g.globalAlpha = 1;
             g.strokeStyle = '#ffffff';
-            g.lineWidth = Math.max(minW, 0.05);
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.9, y - sn * 0.9); g.stroke();
+            g.lineWidth = Math.max(minW, rw * 0.5);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * rw * 8, y - sn * rw * 8); g.stroke();
             if (t && Math.random() < dt * 30) this.fx.ring(x, y, 0.05, 0.4, '#40ffc0', 0.3, 0.5);
             // ionised wake: a fading cyan streak left along its line
             this.trail(p.id, x, y, 0.14, '#5fd8ff', 0.18, true);
           } else if (vis === 'flak') {
             const blink = 0.75 + 0.25 * Math.sin(this.time * 12 + p.id);
             g.globalAlpha = blink;
-            g.drawImage(softDot('#ffd080', 0.3), x - 0.12, y - 0.12, 0.24, 0.24);
+            const fr = Math.max(1.5 / this.px, rw * 1.5);
+            g.drawImage(softDot('#ffd080', 0.3), x - fr, y - fr, fr * 2, fr * 2);
           } else if (mod?.impulse) {
-            // HE shell: a fat orange-red round with a hot red nose and a smoky wake (vs the white AP needle)
-            const r = 0.1 + 0.08 * cal;
-            g.globalAlpha = 0.45;
+            // HE shell: an orange-red round the size of the bore with a hot nose and a smoky wake (vs the white AP needle)
+            const r = rw / 2;
+            g.globalAlpha = 0.5;
             g.strokeStyle = '#ff6a28';
             g.lineCap = 'round';
-            g.lineWidth = Math.max(minW * 2.5, r * 2.4);
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 5, y - sn * r * 5); g.stroke();
-            g.globalAlpha = 0.9;
+            g.lineWidth = Math.max(minW * 1.5, r * 2.4);
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 7, y - sn * r * 7); g.stroke();
+            g.globalAlpha = 0.8;
             g.drawImage(glowTex('#ff7a30'), x - r * 4, y - r * 4, r * 8, r * 8);
             g.globalAlpha = 1;
-            g.drawImage(glowTex('#ffd0a0'), x - r * 1.4, y - r * 1.4, r * 2.8, r * 2.8);
-            this.trail(p.id, x, y, 0.09, '#6e6860', 0.11, false, 1.0, 0.3);
+            g.drawImage(glowTex('#ffd0a0'), x - r * 1.6, y - r * 1.6, r * 3.2, r * 3.2);
+            this.trail(p.id, x, y, Math.max(0.04, r * 1.2), '#6e6860', 0.11, false, 1.0, 0.3);
           } else {
-            const r = 0.07 + 0.08 * cal * (mod && moduleTier(mod) === 3 ? 1.3 : 1);
-            // AP tracer: a long, thin white-hot needle with a hot tail and a small bright head
-            g.globalAlpha = 0.4;
+            const r = rw / 2;
+            // AP tracer: a slim white-hot penetrator with a short hot tail and a small bright head
+            g.globalAlpha = 0.45;
             g.strokeStyle = '#ff9a40';
             g.lineCap = 'round';
-            g.lineWidth = Math.max(minW * 2, r * 1.4);
+            g.lineWidth = Math.max(minW * 1.5, r * 1.8);
             g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 10, y - sn * r * 10); g.stroke();
             g.globalAlpha = 1;
-            g.drawImage(glowTex('#ffc080'), x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
+            g.drawImage(glowTex('#ffc080'), x - r * 2.6, y - r * 2.6, r * 5.2, r * 5.2);
             g.strokeStyle = '#ffffff';
             g.lineWidth = Math.max(minW, r * 0.9);
-            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 5, y - sn * r * 5); g.stroke();
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * r * 6, y - sn * r * 6); g.stroke();
             if (cal > 0.65) this.trail(p.id, x, y, 0.07 * cal, '#7a746c', 0.14, false, 0.8, 0.25);
           }
           break;

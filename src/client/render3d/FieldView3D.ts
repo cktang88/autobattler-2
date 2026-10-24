@@ -18,6 +18,7 @@ import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
 import { MAPS, type MapTheme } from '../render/ground.ts';
+import { boreOf, calibreMm } from '../render/weaponsize.ts';
 import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
@@ -41,6 +42,9 @@ const SHADOW_TIER = 2;
  *  barrel is a few px across there) and above which they switch back (hysteresis) */
 const LOD_FAR_K = 26;
 const LOD_NEAR_K = 30;
+/** mobility that does not touch the ground (no travel dust) */
+const NO_DUST = new Set(['hover', 'gravlift', 'anchor', 'rotor', 'jet']);
+const R2 = (a: number, b: number) => a + Math.random() * (b - a);
 const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
@@ -59,6 +63,8 @@ interface UView {
   posed: boolean;
   /** damage smoke emitters (hull-local points + look), built on first damage */
   dmg?: DmgPt[];
+  /** travel dust emission accumulator (heavy ground units) */
+  dustAcc?: number;
 }
 /** a damage smoke emitter on a hull: hull-local offset (x fwd, z right, y up; turret: rides that mount's turret ring),
  *  what leaks out of it, and per-emitter variation (rate, size), so units don't all smoke alike */
@@ -85,6 +91,8 @@ interface ProjRec {
   ox: number; oz: number;
   /** bright tracer round (every Nth round of a fast gun) and where the round started (streaks never reach behind it) */
   tracer: boolean; sx: number; sz: number; team: 0 | 1;
+  /** sim position and progress when first seen (to estimate where a round ends: flash rounds race ahead of the sim) */
+  fx0: number; fz0: number; k0: number;
 }
 
 /** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
@@ -122,6 +130,10 @@ interface WStyle {
   fam: Fam;
   /** effect size: ~0.25 light gun .. ~1.25 titan gun (mount class x calibre) */
   s: number;
+  /** drawn round diameter (cells): ~0.75 x the bore of the barrel that fires it (7.62 mm ~0.015 .. 240 mm ~0.14) */
+  rw: number;
+  /** linear rgb of the round's glow: by family, with a subtle per-module shift so similar guns differ a little */
+  tint: [number, number, number];
   def: ModuleDef | undefined;
   muzzle: MuzzleKind | null;
 }
@@ -180,7 +192,12 @@ function styleOf(id: string): WStyle {
     const def = MODULE_BY_ID.get(id);
     const fam = famOf(def);
     const s = (CLASS_S[def?.mount ?? 'M'] ?? 0.5) * (0.75 + 0.5 * (def?.caliber ?? 0.5));
-    st = { fam, s, def, muzzle: MUZZLE[fam] ?? null };
+    const rw = def ? Math.max(0.012, 0.75 * boreOf(calibreMm(def))) : 0.03;
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    const j = ((h % 1000) / 1000 - 0.5) * 0.12; // +-6% per module
+    const base = ROUND_TINT[fam] ?? [1, 0.75, 0.4];
+    st = { fam, s, rw, tint: [base[0], clamp(base[1] * (1 + j), 0, 1), clamp(base[2] * (1 - j), 0, 1)], def, muzzle: MUZZLE[fam] ?? null };
     STYLES.set(id, st);
   }
   return st;
@@ -206,8 +223,18 @@ function tracerEvery(def: ModuleDef | undefined): number {
   const per = cd / (def?.spinUp ? 1 : Math.min(2, br)); // seconds between rounds
   return per <= 0.05 ? 6 : per <= 0.1 ? 5 : per <= 0.18 ? 4 : per <= 0.3 ? 3 : 1;
 }
-/** linear rgb of tracer compound: the viewer's rounds burn classic yellow-orange, the enemy's red-orange */
-const TRACER: [number, number, number][] = [[1, 0.7, 0.28], [1, 0.36, 0.16]];
+/** linear rgb of a round's glow by family: MGs warm yellow-orange, heavy MG paler amber, rotaries hot orange, the
+ *  suppressor cold blue-white, autocannons whiter, the sniper white-blue. Enemy rounds burn a shade redder. */
+const ROUND_TINT: Partial<Record<Fam, [number, number, number]>> = {
+  mg: [1, 0.7, 0.3], hmg: [1, 0.8, 0.5], gatling: [1, 0.56, 0.22], twinmg: [0.72, 0.85, 1], shotgun: [1, 0.82, 0.52],
+  flechette: [0.72, 0.88, 1], ac: [1, 0.88, 0.7], sniper: [0.86, 0.94, 1], apc: [1, 0.36, 0.16], he: [1, 0.5, 0.18],
+  flak: [1, 0.62, 0.26], gauss: [0.45, 0.65, 1],
+};
+/** families whose rounds are drawn as near-instant flashes: a thin bright line that sweeps a chunk of the path to the
+ *  target in a frame or three and is gone (real bullets are far too fast to watch fly; the hit lands on the sim's time) */
+const FLASH = new Set<Fam>(['mg', 'hmg', 'gatling', 'twinmg', 'sniper']);
+/** seconds a flash round's head takes from the muzzle to the target */
+const FLASH_T = 0.05;
 
 /** families whose beam / bolt event draws its own impact (their 'hit' only flares a shield) */
 const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'leech', 'prism', 'void', 'entropy', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
@@ -1057,6 +1084,17 @@ export class FieldView3D implements BattleView {
     // (heavy guns rock the hull: Rig.update tilts the quaternion, so the full rotation is reset here every frame)
     rig.root.rotation.set(0, -ang, 0);
     rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt);
+    // heavy ground units (size >= 3, on tracks / wheels / legs) kick up a little sandy dust behind them while moving
+    if (rig.S >= 3 && !u.flying && dt > 1e-4 && dist > 1e-4 && !NO_DUST.has(u.design.mobility)) {
+      const k = clamp(dist / dt / 1.2, 0, 1); // heavies crawl: ~1.2 cells/s = full
+      v.dustAcc = (v.dustAcc ?? 0) + dt * (4 + 3 * rig.S) * k * this.fx.lod;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      while (v.dustAcc >= 1) {
+        v.dustAcc--;
+        const side = (Math.random() - 0.5) * rig.W * 0.8, back = rig.L * R2(0.45, 0.65);
+        this.fx.trackDust(x - ca * back - sa * side, y - sa * back + ca * side, -ca, -sa, rig.S, k);
+      }
+    }
     for (let i = 0; i < u.mounts.length; i++) rig.aim(i, normAng(mounts[i] - ang), dt);
 
     // status tint: hit flash, burning flicker, stun crackle
@@ -1379,6 +1417,7 @@ export class FieldView3D implements BattleView {
           y0, lastH: y0, px: pos.x + ox, py: pos.y + oz, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet,
           dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x + ox, ey: y0, ez: pos.y + oz, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
           ox, oz, tracer: every > 0 && shots % every === 0, sx: pos.x + ox, sz: pos.y + oz, team: this.teamOf(p.side),
+          fx0: pos.x, fz0: pos.y, k0: clamp(pos.progress, 0, 1),
         };
         seen.set(p.id, rec);
         // every rocket / missile leaves its own tube: a launch flash, a backblast jet and a smoke cloud behind the pod
@@ -1435,6 +1474,8 @@ export class FieldView3D implements BattleView {
       // streaks never reach back behind the barrel the round left
       const flown = Math.hypot(X - rec.sx, Z - rec.sz) + 0.05;
       const tracer = (len: number, w: number, r: number, g: number, b: number) => { len = Math.min(len, flown); proj.streak(bx(len), by(len), bz(len), X, H, Z, w, r, g, b); };
+      /** a calibre-sized round: a short soft streak `len` long behind the head, half-width w, colour as given */
+      const roundT = (len: number, w: number, r: number, g: number, b: number) => { len = Math.min(len, flown); proj.round(bx(len), by(len), bz(len), X, H, Z, w, r, g, b); };
       /** trail puffs laid every `sp` cells along the path since the last frame, from `back` cells behind the head */
       const trailAlong = (back: number, kind: TrailKind, size: number, sp: number) => {
         const tx = bx(back), ty = by(back), tz = bz(back);
@@ -1450,49 +1491,58 @@ export class FieldView3D implements BattleView {
       };
       switch (p.kind) {
         case 'bullet': {
-          // Rounds are fast: drawn as streaks a good deal longer than the round so the eye can follow them. Fast guns
-          // load a tracer every Nth round (by fire rate): those burn as long bright streaks in the side's tracer colour
-          // (the viewer's yellow-orange, the enemy's red-orange); the ball rounds between them are short and faint.
-          const tc = TRACER[rec.team], T = rec.tracer;
-          switch (st.fam) {
-            case 'gatling': { // rotary: dim at first, a hose of long bright tracers once spun up
-              const k = rec.k, f = 0.7 + sz;
-              if (T) tracer((1.0 + 1.4 * k) * f, (0.03 + 0.03 * k) * f, tc[0], tc[1] * (0.75 + 0.25 * k), tc[2]);
-              else tracer((0.35 + 0.35 * k) * f, 0.016 * f, 0.45, 0.36, 0.22);
-              break;
+          // Rounds are sized by the calibre of the gun that fires them (width ~ the barrel's bore) and carry only a short
+          // tail. Fast guns load a tracer every Nth round (by fire rate): same size as the ball rounds between them,
+          // just brighter. Machine guns / rotaries / the sniper fire FLASH rounds (see FLASH).
+          const T = rec.tracer, w = st.rw * 0.6, tn = st.tint;
+          const red = rec.team === 1 ? 0.85 : 1;
+          const gk = st.fam === 'gatling' ? 0.6 + 0.4 * rec.k : 1;
+          const lum = (T ? 1.7 : 0.75) * gk;
+          const r = tn[0] * lum, g = tn[1] * lum * red, bl = tn[2] * lum * red;
+          if (FLASH.has(st.fam)) {
+            // where the round ends: from the sim's progress since first seen (straight line, constant speed)
+            const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
+            const dk = kp - rec.k0;
+            const travelled = Math.hypot(pos.x - rec.fx0, pos.y - rec.fz0);
+            const left = dk > 0.02 ? (1 - kp) * (travelled / dk) : (st.def?.range ?? 8) * (1 - kp);
+            const ex = pos.x + ca * left, ez = pos.y + sa * left;
+            const sx = rec.sx, sy = rec.y0, sz0 = rec.sz;
+            const L = Math.max(0.1, Math.hypot(ex - sx, ez - sz0));
+            const chunk = clamp(0.4 * L, 0.6, 3.5) / L; // fraction of the path the flash spans
+            const th = age / FLASH_T, tt = th - chunk;
+            if (tt < 1) {
+              const a0 = Math.max(0, tt), a1 = Math.min(1, th);
+              const fade = 1 - 0.5 * clamp(tt, 0, 1);
+              proj.round(lerp(sx, ex, a0), lerp(sy, rec.hEnd, a0), lerp(sz0, ez, a0), lerp(sx, ex, a1), lerp(sy, rec.hEnd, a1), lerp(sz0, ez, a1),
+                w, r * fade, g * fade, bl * fade);
             }
-            case 'shotgun': tracer(0.3, 0.035 + sz * 0.03, 1, 0.85, 0.55); break; // a spray of short pellet dashes
-            case 'flechette': tracer(1.1, 0.018, 0.7, 0.88, 1); break; // long thin steel needles
-            case 'ac': // HE autocannon: every round a glowing shell, the tracers long and fat
-              if (T) tracer(1.3 + 0.8 * sz, 0.055 + 0.05 * sz, tc[0], tc[1] * 0.75, tc[2]);
-              else tracer(0.45 + 0.4 * sz, 0.04 + 0.04 * sz, 0.75, 0.35, 0.15);
-              break;
-            case 'sniper': tracer(3.6, 0.035, 0.8, 0.92, 1); break; // one long white-blue streak
-            case 'twinmg': // cold pale tracers (it slows)
-              if (T) tracer(1.5, 0.04, 0.7, 0.88, 1); else tracer(0.5, 0.016, 0.35, 0.42, 0.5);
-              break;
-            default: // mg / hmg: classic tracer lines with faint ball rounds between
-              if (T) tracer(1.4 + sz * 1.6, 0.035 + sz * 0.045, tc[0], tc[1], tc[2]);
-              else tracer(0.55 + sz * 0.5, 0.016 + sz * 0.012, 0.42, 0.34, 0.2);
-              break;
+            break;
+          }
+          switch (st.fam) {
+            case 'shotgun': roundT(st.rw * 3, w, r, g, bl); break; // a spray of short pellet dashes
+            case 'flechette': roundT(st.rw * 12, w * 0.5, r, g, bl); break; // thin steel needles
+            case 'ac': roundT(st.rw * (T ? 12 : 9), w, r, g * 0.9, bl * 0.8); break; // HE autocannon: every round a glowing slug
+            default: roundT(st.rw * 8, w, r, g, bl); break;
           }
           break;
         }
         case 'shell': {
-          if (st.fam === 'gauss') { // magnetic slug: a long blue streak, glowing head and an ionised sparkle trail
-            tracer(2.4, 0.08, 0.45, 0.65, 1);
-            this.fx.glow(X, H, Z, 0.35 + sz * 0.3, dt * 2.2, RAMPS.gauss);
+          // shells: a body the size of the bore (rw) and a short base-tracer streak behind it
+          const rw = st.rw;
+          if (st.fam === 'gauss') { // magnetic slug: a bright blue streak, glowing head and an ionised sparkle trail
+            roundT(rw * 14, rw * 0.6, 0.6, 0.85, 1.6);
+            this.fx.glow(X, H, Z, 0.2 + sz * 0.15, dt * 2.2, RAMPS.gauss);
             trailAlong(0.4, 'gauss', 0.8 + sz, 0.3);
           } else if (st.fam === 'flak') { // small dark shell with a fuse spark
-            proj.body(X, H, Z, dx, dy, dz, 0.18 + 0.2 * sz, 0.06 + 0.05 * sz, 0.25, 0.25, 0.22);
-            tracer(0.3, 0.03, 1, 0.6, 0.25);
-          } else if (st.fam === 'he') { // fat olive HE shell, short orange tracer, a smoke wisp
-            proj.body(X, H, Z, dx, dy, dz, 0.3 + 0.35 * sz, 0.1 + 0.1 * sz, 0.55, 0.55, 0.35);
-            proj.streak(bx(0.5), by(0.5), bz(0.5), X, H, Z, 0.06 + sz * 0.05, 1, 0.5, 0.15);
-            trailAlong(0, 'shell', 0.6 + sz, 0.35);
+            proj.body(X, H, Z, dx, dy, dz, rw * 3, rw, 0.25, 0.25, 0.22);
+            roundT(rw * 2.5, rw * 0.45, 1.6, 0.95, 0.4);
+          } else if (st.fam === 'he') { // olive HE shell, short orange tracer, a smoke wisp
+            proj.body(X, H, Z, dx, dy, dz, rw * 3.2, rw, 0.55, 0.55, 0.35);
+            roundT(rw * 4, rw * 0.45, 1.7, 0.85, 0.3);
+            trailAlong(0, 'shell', 0.4 + sz * 0.6, 0.35);
           } else { // AP shot: slim bright penetrator with a hot red tank tracer
-            proj.body(X, H, Z, dx, dy, dz, 0.3 + 0.35 * sz, 0.05 + 0.06 * sz, 0.9, 0.8, 0.55);
-            tracer(1.0 + sz * 0.6, 0.05 + 0.04 * sz, 1, 0.32, 0.14);
+            proj.body(X, H, Z, dx, dy, dz, rw * 3.5, rw * 0.8, 0.9, 0.8, 0.55);
+            roundT(rw * 5, rw * 0.45, 1.8, 0.6, 0.25);
           }
           break;
         }
@@ -1537,7 +1587,7 @@ export class FieldView3D implements BattleView {
           }
           break;
         }
-        case 'rocket': { // stubby rocket: a flickering flame tongue and a thick, curving, lingering smoke trail
+        case 'rocket': { // stubby rocket: a flickering flame tongue and a thin, fast-fading exhaust streak (by warhead size)
           const inc = st.fam === 'incend';
           const len = 0.36 + 0.22 * sz;
           proj.body(X, H, Z, dx, dy, dz, len, 0.07 + 0.06 * sz, 0.5, 0.5, 0.44);
@@ -1546,10 +1596,10 @@ export class FieldView3D implements BattleView {
           const t0 = len * 0.5, t1 = t0 + (0.22 + 0.2 * sz) * fl;
           proj.streak(bx(t1), by(t1), bz(t1), bx(t0), by(t0), bz(t0), (0.03 + sz * 0.025) * fl, 1, inc ? 0.3 : 0.5, 0.1);
           this.fx.glow(bx(t0 + 0.08), by(t0 + 0.08), bz(t0 + 0.08), (0.22 + 0.18 * sz) * fl, dt * 2.2, inc ? RAMPS.ember : RAMPS.exhaust);
-          trailAlong(t0 + 0.12, inc ? 'incend' : 'rocket', 0.8 + sz * 0.8, 0.16);
+          trailAlong(t0 + 0.12, inc ? 'incend' : 'rocket', 0.5 + warheadOf(st.def) * 0.8, 0.12);
           break;
         }
-        case 'missile': { // slim white missile: a white-hot exhaust plume (fierce in the boost) and a long contrail
+        case 'missile': { // slim white missile: a white-hot exhaust plume (fierce in the boost) and a thin exhaust streak (by warhead size)
           const big = st.fam === 'bigMissile';
           const len = (big ? 0.6 : 0.4) + 0.3 * sz;
           proj.body(X, H, Z, dx, dy, dz, len, (big ? 0.1 : 0.05) + 0.05 * sz, 0.95, 0.95, 0.92);
@@ -1558,7 +1608,7 @@ export class FieldView3D implements BattleView {
           const t0 = len * 0.5, t1 = t0 + (big ? 0.45 : 0.25) * (0.6 + sz) * fl;
           proj.streak(bx(t1), by(t1), bz(t1), bx(t0), by(t0), bz(t0), (0.025 + sz * 0.03) * fl * (big ? 1.6 : 1), 1, 0.9, 0.7);
           this.fx.glow(bx(t0 + 0.06), by(t0 + 0.06), bz(t0 + 0.06), (big ? 0.45 : 0.24) * (0.6 + sz) * fl, dt * 2.2, RAMPS.flash);
-          trailAlong(t0 + 0.08, big ? 'bigMissile' : 'missile', (0.8 + sz) * (1 + 0.6 * boost), big ? 0.2 : 0.14);
+          trailAlong(t0 + 0.08, big ? 'bigMissile' : 'missile', (0.5 + warheadOf(st.def) * 0.8) * (1 + 0.3 * boost), big ? 0.14 : 0.1);
           break;
         }
         case 'flame': // two puffs a frame: a dense, rolling jet
