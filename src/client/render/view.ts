@@ -17,7 +17,9 @@ export interface BattleView {
   alwaysShowHealth: boolean;
   /** camera state: k = CSS px per cell (1 cell = 5 m) */
   readonly cam: { readonly k: number; userAt: number };
-  readonly controls: { enabled: boolean; doubleClickZoom: boolean; readonly wasDrag: boolean };
+  readonly controls: { enabled: boolean; doubleClickZoom: boolean; rotate?: boolean; readonly wasDrag: boolean };
+  /** the view can draw a turned field (right-drag orbit, Q / E); only the 3D view */
+  readonly canRotate?: boolean;
   /** true if the pointer gesture that just ended was a pan/pinch */
   readonly wasDrag: boolean;
   /** ground foreshortening (cos of tilt; 1 = top-down) and whether the tilt is on */

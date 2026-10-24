@@ -26,6 +26,8 @@ import { UnitLayer, teamHullRgb, templateKey, type Look, type Rig } from './unit
 import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind, type WispKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
+import { SunShadow } from './shadow3d.ts';
+import { CameraShake, setActiveShake } from './shake3d.ts';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -45,7 +47,9 @@ function pitchAt(z: number): number {
 /** vertical field of view of the perspective camera (narrow: depth cue without a fish-eye look) */
 const FOV = 32;
 const GUN_H = 0.55;
-const SHAKE_CAP = 3;
+/** shadow-map caster tiers (UnitLayer.setShadowTier): a unit casts a sun shadow when its tier (size, +1 flying, +1 tall)
+ *  is at least the current minimum; smaller units keep only their soft contact blob */
+const SHADOW_TIER = 2;
 const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
@@ -218,6 +222,12 @@ const TRACER: [number, number, number][] = [[1, 0.7, 0.28], [1, 0.36, 0.16]];
 const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'leech', 'prism', 'void', 'entropy', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
 
 const _v3 = new THREE.Vector3();
+const CORNERS: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+/** shake per blast radius by explosion family (others 1): small-arms pops barely, flak bursts in the air, HE hits hard */
+const BLAST_SHAKE: Partial<Record<Fam, number>> = {
+  mg: 0.15, hmg: 0.15, gatling: 0.15, ac: 0.15, twinmg: 0.15, shotgun: 0.15, sniper: 0.15, apc: 0.15, grenade: 0.3, firebomb: 0.3, pd: 0,
+  he: 1.25, flak: 0.35, empOrb: 0.6, chain: 0.6, sonic: 0.8, cluster: 0.75, melee: 0.4,
+};
 const _col = new THREE.Color();
 const _c2 = new THREE.Color();
 
@@ -259,6 +269,17 @@ export class FieldView3D implements BattleView {
   muted = false;
   shakeScale = 1;
   flashScale = 1;
+  /** camera shake: `view.shake.add(x, z, power)`, or shakeAt() from shake3d.ts while this view draws */
+  readonly shake = new CameraShake();
+  /** this view can draw a turned field (Camera.yaw): screens enable right-drag orbit for it */
+  readonly canRotate = true;
+  /** sun shadow maps (off = soft contact blobs only); the quality level can still drop them */
+  private shadowsOn = true;
+  setShadows(on: boolean): void { this.shadowsOn = on; }
+  private sunShadow: SunShadow;
+  private shadowTier = SHADOW_TIER;
+  /** visible-region probe for the shadow fit (world x,y,z triplets) */
+  private shadowPts = new Float32Array(8 * 3);
   alwaysShowHealth = false;
   readonly cam = new Camera(FIELD_W, FIELD_H);
   readonly controls: CameraControls;
@@ -268,8 +289,8 @@ export class FieldView3D implements BattleView {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(FOV, 1, 1, 2000);
-  /** camera state the perspective camera was last placed for (cx, cy, k, w, h, tilt, side); NaN = re-place */
-  private camAt = [NaN, 0, 0, 0, 0, 0, 0];
+  /** camera state the perspective camera was last placed for (cx, cy, k, w, h, tilt, side, yaw); NaN = re-place */
+  private camAt = [NaN, 0, 0, 0, 0, 0, 0, 0];
   private readonly v3 = new THREE.Vector3();
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
@@ -349,7 +370,6 @@ export class FieldView3D implements BattleView {
   private fastT = 0;
   private dprNow = 1;
   private lastUnits = 0;
-  private lastShadowKey = '';
   private onKey: ((e: KeyboardEvent) => void) | null = null;
   private onBlur: (() => void) | null = null;
 
@@ -372,6 +392,11 @@ export class FieldView3D implements BattleView {
     const ss = viewerSide === 1 ? -1 : 1;
     this.stage = setupStage(this.renderer, this.scene, { fog: true, shadowRes: 2048, sun: [-ss * SUN[0], SUN[1], ss * SUN[2]] });
     this.sun = this.stage.sun;
+    // one shadow map, fitted every frame to the ground in view (shadow3d.ts); the light itself stays put in the world
+    this.sunShadow = new SunShadow(this.sun, [-ss * SUN[0], SUN[1], ss * SUN[2]], [FIELD_W / 2, 0, FIELD_H / 2]);
+    // the shadow map is drawn once per frame (render() asks for it): the AO / outline passes re-render the scene and
+    // must not redraw it each time
+    this.renderer.shadowMap.autoUpdate = false;
     this.post = setupPost(this.renderer, this.scene, this.camera, 512, 512, { ao: true, bloom: true, grade: true });
     this.outline.install(this.post.composer.passes, (p, i) => this.post.composer.insertPass(p, i));
     // AO must not treat billboards / beams / bubbles as geometry: hide the fx root during its normal pass
@@ -549,6 +574,8 @@ export class FieldView3D implements BattleView {
   frameDeploy(instant = false): void {
     this.checkSize();
     const c = this.cam;
+    c.tyaw = 0; // deploying is done on the unturned board
+    if (instant) c.yaw = 0;
     const rows = DEPLOY_D + 6;
     let k = Math.min(c.vw / FIELD_W, c.vh / (rows * c.ay));
     for (let i = 0; i < 3; i++) k = Math.min(c.vw / FIELD_W, c.vh / (rows * c.ayAt(k)));
@@ -593,8 +620,8 @@ export class FieldView3D implements BattleView {
   private placeCamera(): void {
     const c = this.cam, k = c.k;
     const a = this.camAt, tilt = this.tiltOn ? 1 : 0;
-    if (a[0] === c.cx && a[1] === c.cy && a[2] === k && a[3] === this.cssW && a[4] === this.cssH && a[5] === tilt && a[6] === this.viewerSide) return;
-    a[0] = c.cx; a[1] = c.cy; a[2] = k; a[3] = this.cssW; a[4] = this.cssH; a[5] = tilt; a[6] = this.viewerSide;
+    if (a[0] === c.cx && a[1] === c.cy && a[2] === k && a[3] === this.cssW && a[4] === this.cssH && a[5] === tilt && a[6] === this.viewerSide && a[7] === c.yaw) return;
+    a[0] = c.cx; a[1] = c.cy; a[2] = k; a[3] = this.cssW; a[4] = this.cssH; a[5] = tilt; a[6] = this.viewerSide; a[7] = c.yaw;
     const t = this.toVisual(c.cx, c.cy); // symmetric: visual centre -> world centre
     const e = this.tiltOn ? pitchAt(k / c.minK) : Math.PI / 2 - 1e-3;
     const s = this.viewerSide === 1 ? -1 : 1;
@@ -602,35 +629,61 @@ export class FieldView3D implements BattleView {
     this.camera.aspect = this.cssW / Math.max(1, this.cssH);
     this.camera.near = Math.max(0.5, D * 0.05);
     this.camera.far = D * 4 + 300;
-    this.camera.position.set(t.x, D * Math.sin(e), t.y + s * D * Math.cos(e));
-    this.camera.up.set(0, 0, -s);
+    // turned view (Camera.yaw): the camera orbits the look-at point; screen down is the visual (-sin, cos) direction,
+    // which the side-1 flip turns into s * that in the world
+    const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
+    this.camera.position.set(t.x - s * sy * D * Math.cos(e), D * Math.sin(e), t.y + s * cy * D * Math.cos(e));
+    this.camera.up.set(s * sy, 0, -s * cy);
     this.camera.lookAt(t.x, 0, t.y);
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
   }
 
-  /** photosensitivity-safe shake: nothing at the fit view, ramps in when zoomed close, hard-capped (CSS px) */
+  /** photosensitivity-safe shake (shake3d.ts): nothing at the fit view, strongest zoomed in, hard-capped (CSS px) */
   private shakeOffset(): { sx: number; sy: number } {
-    const tr = this.fx.trauma * this.fx.trauma;
-    if (tr <= 0.001 || this.shakeScale <= 0) return { sx: 0, sy: 0 };
-    const zf = clamp((this.cam.k / this.cam.minK - 1.6) / 2.4, 0, 1);
-    const amp = SHAKE_CAP * Math.min(1, tr) * zf * clamp(this.shakeScale, 0, 1);
-    if (amp <= 0.01) return { sx: 0, sy: 0 };
-    const t = this.time;
-    return {
-      sx: (Math.sin(t * 19.5) * 0.6 + Math.sin(t * 29.5 + 1.3) * 0.4) * amp,
-      sy: (Math.sin(t * 16.3 + 0.7) * 0.6 + Math.sin(t * 27 + 2.1) * 0.4) * amp,
-    };
+    this.shake.scale = this.shakeScale;
+    return this.shake.offset(this.time);
+  }
+
+  /** Camera shake for the booms in this frame's events: located, sized by the blast (see shake3d.ts). Kept apart from
+   *  the effects so the effect code stays free to change. */
+  private shakeFor(e: BattleEvent): void {
+    const sh = this.shake;
+    switch (e.t) {
+      case 'fire': {
+        // the biggest guns kick the camera a little where they fire
+        const def = MODULE_BY_ID.get(e.moduleId);
+        if ((def?.mount === 'XL' || def?.mount === 'L') && (def.category === 'cannon' || def.category === 'artillery')) sh.add(e.x, e.y, def.mount === 'XL' ? 1.1 : 0.45);
+        break;
+      }
+      case 'beam': {
+        const st = styleOf(e.moduleId);
+        if (st.fam === 'rail') sh.add(e.x2, e.y2, st.def?.mount === 'XL' ? 3.2 : 0.4 + st.s * 0.8);
+        break;
+      }
+      case 'explode': {
+        const st = styleOf(e.moduleId), r = Math.max(0.3, e.radius);
+        sh.add(e.x, e.y, r * (BLAST_SHAKE[st.fam] ?? 1) * (st.fam === 'cluster' && e.radius < 1.1 ? 0.55 : 1));
+        break;
+      }
+      case 'death': {
+        const lv = e.wreck, sz = e.size * (e.flying ? 0.7 : 1);
+        sh.add(e.x, e.y, lv === 0 ? 0.3 + sz * 0.3 : sz * (0.55 + 0.3 * lv));
+        // the giant hulls' delayed cook-off (fx bigExplosion) lands a second jolt
+        if (lv > 0 && e.size >= 4 && !e.flying) sh.add(e.x, e.y, sz * 0.9, 0.25 + Math.min(8, (sz + (lv - 1) * 0.6 - 1) * 2) * 0.17);
+        break;
+      }
+    }
   }
 
   /** place the three camera + sun shadow frustum from the Camera state */
   private syncCamera(): void {
     const c = this.cam, k = c.k;
     const t = this.toVisual(c.cx, c.cy);
-    const s = this.viewerSide === 1 ? -1 : 1;
     const sh = this.shakeOffset();
     this.camAt[0] = NaN; // re-place (a previous frame's shake moved the camera)
     this.placeCamera();
+    this.fitShadow(); // to the steady view, before any shake
     if (sh.sx || sh.sy) {
       this.camAt[0] = NaN; // shaken: the next mapping call re-places it
       const me = this.camera.matrixWorld.elements;
@@ -645,23 +698,35 @@ export class FieldView3D implements BattleView {
       const D = this.cssH / (2 * k * Math.tan((FOV * Math.PI) / 360));
       fog.near = D * 0.8; fog.far = D * 3.2;
     }
-    // shadow frustum follows the visible ground (snapped so shadows don't shimmer as the camera glides)
     const hw = this.cssW / (2 * k), hh = this.cssH / (2 * k * this.ayNow);
-    const radius = clamp(Math.ceil(Math.hypot(hw, hh) * 1.08 / 4) * 4, 16, 72);
-    const cx = Math.round(t.x * 2) / 2, cz = Math.round(t.y * 2) / 2;
-    const key = `${cx},${cz},${radius},${s}`;
-    if (key !== this.lastShadowKey) {
-      this.lastShadowKey = key;
-      this.stage.fitShadow(cx, cz, radius);
-      // keep the light up-left on screen whichever way the camera faces
-      this.sun.position.set(cx - s * SUN[0], SUN[1], cz + s * SUN[2]);
-      this.sun.target.updateMatrixWorld();
+    this.shake.setView(t.x, t.y, Math.hypot(hw, hh), k / c.minK);
+  }
+
+  /** Fit the sun's shadow map to what the (unshaken) camera sees: the ground and the unit tops standing on it, taken
+   *  where the four screen corners' rays meet the planes y = 0 and y = 2.2, kept to the field and its rim. */
+  private fitShadow(): void {
+    const cam = this.camera;
+    const pts = this.shadowPts;
+    let n = 0;
+    for (const [px, py] of CORNERS) {
+      this.ndc.set(px, py);
+      this.ray.setFromCamera(this.ndc, cam);
+      const o = this.ray.ray.origin, d = this.ray.ray.direction;
+      for (const h of [0, 2.2]) {
+        // rays above the horizon (never at these pitches) stop at the far haze
+        const t = d.y < -1e-3 ? Math.min((h - o.y) / d.y, cam.far) : cam.far;
+        pts[n++] = clamp(o.x + d.x * t, -20, FIELD_W + 20);
+        pts[n++] = h;
+        pts[n++] = clamp(o.z + d.z * t, -20, FIELD_H + 20);
+      }
     }
+    this.sunShadow.fit(pts);
   }
 
   /* ------------------------------------------------------------------------------------------ quality / render */
 
-  /** Frame-time driven level: 0 = AO + bloom + shadows, 1 = no AO, 2 = no bloom + 1x pixels, 3 = no shadows + direct render. */
+  /** Frame-time driven level: 0 = AO + bloom + shadows (a 4096 map where the GPU takes it), 1 = no AO, 2 = no bloom +
+   *  1x pixels + only the bigger units cast, 3 = no shadow maps (contact blobs only) + direct render. */
   private updateQuality(units: number, load: number): { ao: boolean; bloom: boolean; shadow: boolean; direct: boolean } {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const dtMs = this.lastRender ? now - this.lastRender : 16;
@@ -682,10 +747,20 @@ export class FieldView3D implements BattleView {
     const aoZoom = this.cam.k >= 9;
     const ao = L === 0 && aoZoom && load <= 120;
     this.fx.lod = L >= 2 ? 0.5 : units > 160 ? 0.6 : 1;
-    // very crowded zoomed-out views drop unit shadows first (they double the triangle load); wrecks are full hulls too,
-    // so they count, or shadows switch back on mid-battle as units die and the triangle load doubles
-    const shadow = L <= 2 && !(load > 250 && this.cam.k < 12);
+    // shadow casters: small units only ever get their contact blob; level 2 and very crowded zoomed-out views keep
+    // shadows for the bigger hulls and aircraft only (casters cost the shadow pass their triangles). Wrecks are full
+    // hulls too, so they count toward the crowding. The map itself stays on (switching it off recompiles every
+    // material: a hitch mid-battle) until level 3.
+    const shadow = this.shadowsOn && L <= 2;
+    const wide = this.cam.k < 12;
+    this.shadowTier = SHADOW_TIER + (L >= 2 ? 1 : 0) + (wide && load > 250 ? 1 : 0) + (wide && load > 420 ? 1 : 0);
+    this.layer.setShadowTier(shadow ? this.shadowTier : Infinity);
+    this.sunShadow.setMapSize(L === 0 && this.bigShadowOk() ? 4096 : 2048);
     return { ao, bloom: L <= 1, shadow, direct: L >= 3 };
+  }
+
+  private bigShadowOk(): boolean {
+    try { return this.renderer.capabilities.maxTextureSize >= 8192; } catch { return false; }
   }
 
   private render(units: number): void {
@@ -695,6 +770,7 @@ export class FieldView3D implements BattleView {
     this.syncCamera();
     this.sun.castShadow = q.shadow;
     this.renderer.shadowMap.enabled = q.shadow;
+    this.renderer.shadowMap.needsUpdate = q.shadow;
     const hdr = lerp(0.35, 1, clamp(this.flashScale, 0, 1));
     this.fx.hdr = hdr;
     this.renderer.toneMappingExposure = 1 + this.fx.flashA * 0.5 * clamp(this.flashScale, 0, 1);
@@ -743,6 +819,7 @@ export class FieldView3D implements BattleView {
     this.fallers = [];
     this.lastBarrel.clear(); this.shotN.clear();
     this.fx.clear();
+    this.shake.clear();
     this.projRec.clear();
     this.spin.clear(); this.ramp.clear(); this.clusterPts.length = 0;
     this.prevU.clear(); this.curU.clear(); this.prevP.clear(); this.curP.clear();
@@ -764,7 +841,9 @@ export class FieldView3D implements BattleView {
     this.fx.eye.copy(this.camera.position);
     this.fx.viewFrom(this.camera, this.renderer.domElement.height, this.sun);
     this.fx.update(dt);
-    this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
+    // shake comes from shake3d (located, sized jolts); the effects' own unlocated trauma is not used
+    this.fx.trauma = 0;
+    this.shake.update(dt);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
     (this.myZone.material as THREE.MeshBasicMaterial).opacity = overlay.showZone ? 0.055 : 0;
     this.grid.visible = !!overlay.showZone;
@@ -907,7 +986,8 @@ export class FieldView3D implements BattleView {
     this.hitBudget = 60;
     const events = newTicks ?? this.pending;
     if (events.length) {
-      for (const e of events) this.handleEvent(e, byId);
+      setActiveShake(this.shake);
+      for (const e of events) { this.shakeFor(e); this.handleEvent(e, byId); }
       this.shotFrom.clear(); this.lastBlast = null;
       if (!this.muted) try { battleSfx(events); } catch { /* audio optional */ }
       if (!newTicks) this.pending = [];
@@ -942,7 +1022,9 @@ export class FieldView3D implements BattleView {
     this.fx.eye.copy(this.camera.position);
     this.fx.viewFrom(this.camera, this.renderer.domElement.height, this.sun);
     this.fx.update(dt);
-    this.fx.trauma = Math.max(0, this.fx.trauma - dt * 1.6);
+    // shake comes from shake3d (located, sized jolts); the effects' own unlocated trauma is not used
+    this.fx.trauma = 0;
+    this.shake.update(dt);
     this.fx.flashA = Math.max(0, this.fx.flashA - dt * 3);
     this.render(alive);
   }
@@ -1159,7 +1241,7 @@ export class FieldView3D implements BattleView {
   }
 
   /** half height (cells) of the unit's rotated footprint on screen */
-  private halfY(rig: Rig, ang: number): number { return (Math.abs(Math.sin(ang)) * rig.L + Math.abs(Math.cos(ang)) * rig.W) / 2; }
+  private halfY(rig: Rig, ang: number): number { ang -= this.cam.yaw; return (Math.abs(Math.sin(ang)) * rig.L + Math.abs(Math.cos(ang)) * rig.W) / 2; }
 
   private drawBars(u: SimUnit, v: UView, x: number, h: number, y: number, ang: number, dt: number): void {
     const rig = v.rig, ui = this.ui, k = this.cam.k;

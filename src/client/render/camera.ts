@@ -7,6 +7,9 @@
 //   cx, cy = visual cell shown at the viewport center  (target: tcx, tcy)
 //   ay = vertical foreshortening of the ground plane (cos of the camera tilt; 1 = straight down). One cell is k px
 //   wide and k * ay px tall on screen.
+//   yaw = the view's turn about the look-at point (radians; 0 = the classic view, field rows run across the screen).
+//   Screen right is the visual direction (cos yaw, sin yaw), screen down (-sin yaw, cos yaw). Only views that can draw
+//   a turned field (the 3D view) ever set it; CameraControls.rotate gates the right-drag orbit.
 
 export const MAX_K = 80; // a size-1 unit (1 cell) is ~80 CSS px at full zoom
 /** cells the camera may travel past the top/bottom (Y) and side (X) edges of the field */
@@ -14,6 +17,8 @@ const EDGE_Y = 5;
 const EDGE_X = 2.5;
 
 const clampN = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** a - b wrapped into -PI..PI */
+export const angleDiff = (a: number, b: number) => { let d = (a - b) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI; return d; };
 
 export class Camera {
   cx: number;
@@ -22,6 +27,9 @@ export class Camera {
   tcx: number;
   tcy: number;
   tk = 1;
+  /** view turn about the look-at point (radians, eased toward tyaw) */
+  yaw = 0;
+  tyaw = 0;
   vw = 300;
   vh = 400;
   minK = 1;
@@ -86,8 +94,7 @@ export class Camera {
 
   /** `edge` = extra cells the view may travel past the field edge, so the board's edges (and the land around it)
    *  can be brought fully into view even when the whole field already fits on screen. */
-  private clampAxis(c: number, k: number, view: number, field: number, edge: number): number {
-    const half = view / (2 * k);
+  private clampAxis(c: number, half: number, field: number, edge: number): number {
     if (half * 2 >= field) {
       const slack = Math.max(0, edge - (half - field / 2));
       return clampN(c, field / 2 - slack, field / 2 + slack);
@@ -100,27 +107,78 @@ export class Camera {
     return clampN(c, lo, hi);
   }
 
+  /** half extents (cells) of the view along the visual x / y axes at scale k and turn yaw (the screen rect's bounds) */
+  private halves(k: number, yaw: number): [number, number] {
+    const hw = this.vw / (2 * k), hh = this.vh / (2 * k * this.ayAt(k));
+    if (!yaw) return [hw, hh];
+    const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+    return [c * hw + s * hh, s * hw + c * hh];
+  }
+
   private clampTarget(): void {
-    this.tcx = this.clampAxis(this.tcx, this.tk, this.vw, this.fw, EDGE_X);
-    this.tcy = this.clampAxis(this.tcy, this.tk * this.ayAt(this.tk), this.vh, this.fh, EDGE_Y);
+    const [hx, hy] = this.halves(this.tk, this.tyaw);
+    this.tcx = this.clampAxis(this.tcx, hx, this.fw, EDGE_X);
+    this.tcy = this.clampAxis(this.tcy, hy, this.fh, EDGE_Y);
   }
 
   private clampCurrent(): boolean {
-    const x = this.clampAxis(this.cx, this.k, this.vw, this.fw, EDGE_X);
-    const y = this.clampAxis(this.cy, this.k * this.ayAt(this.k), this.vh, this.fh, EDGE_Y);
+    const [hx, hy] = this.halves(this.k, this.yaw);
+    const x = this.clampAxis(this.cx, hx, this.fw, EDGE_X);
+    const y = this.clampAxis(this.cy, hy, this.fh, EDGE_Y);
     const hit = x !== this.cx || y !== this.cy;
     this.cx = x;
     this.cy = y;
     return hit;
   }
 
+  /** a screen-axis offset (cells along screen right / down) -> visual cells, at turn `yaw` */
+  private turn(u: number, v: number, yaw = this.yaw): { x: number; y: number } {
+    if (!yaw) return { x: u, y: v };
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    return { x: u * c - v * s, y: u * s + v * c };
+  }
+
+  /** screen offset from the viewport centre (CSS px) -> visual offset (cells) at scale k */
+  private screenDelta(dx: number, dy: number, k = this.k, yaw = this.yaw): { x: number; y: number } {
+    return this.turn(dx / k, dy / (k * this.ayAt(k)), yaw);
+  }
+
   /** visual cells -> screen CSS px */
   toScreen(vx: number, vy: number): { x: number; y: number } {
-    return { x: this.vw / 2 + (vx - this.cx) * this.k, y: this.vh / 2 + (vy - this.cy) * this.k * this.ayAt(this.k) };
+    const dx = vx - this.cx, dy = vy - this.cy, c = Math.cos(this.yaw), s = Math.sin(this.yaw);
+    return { x: this.vw / 2 + (dx * c + dy * s) * this.k, y: this.vh / 2 + (-dx * s + dy * c) * this.k * this.ayAt(this.k) };
   }
 
   fromScreen(sx: number, sy: number): { x: number; y: number } {
-    return { x: this.cx + (sx - this.vw / 2) / this.k, y: this.cy + (sy - this.vh / 2) / (this.k * this.ayAt(this.k)) };
+    const d = this.screenDelta(sx - this.vw / 2, sy - this.vh / 2);
+    return { x: this.cx + d.x, y: this.cy + d.y };
+  }
+
+  /** Direct manipulation: turn the view about its centre by `da` radians, immediately. */
+  rotateBy(da: number): void {
+    if (!da) return;
+    this.anchor = null;
+    this.yaw = angleDiff(this.yaw + da, 0);
+    this.tyaw = this.yaw;
+    this.clampCurrent();
+    this.tcx = this.cx;
+    this.tcy = this.cy;
+    this.tk = this.k;
+    this.still = 0;
+  }
+
+  /** Eased turn by `da` radians (keys). */
+  turnBy(da: number): void {
+    this.tyaw = angleDiff(this.tyaw + da, 0);
+    this.clampTarget();
+    this.still = 0;
+  }
+
+  /** Eased turn back to the classic (unturned) view. */
+  resetYaw(): void {
+    this.tyaw = 0;
+    this.clampTarget();
+    this.still = 0;
   }
 
   stopInertia(): void {
@@ -130,8 +188,9 @@ export class Camera {
   /** Direct manipulation: pan by a screen delta, immediately (no easing). */
   panByScreen(dx: number, dy: number): void {
     this.anchor = null;
-    this.cx -= dx / this.k;
-    this.cy -= dy / (this.k * this.ayAt(this.k));
+    const d = this.screenDelta(dx, dy);
+    this.cx -= d.x;
+    this.cy -= d.y;
     this.clampCurrent();
     this.tcx = this.cx;
     this.tcy = this.cy;
@@ -145,8 +204,9 @@ export class Camera {
     const w = this.fromScreen(sx, sy);
     const nk = clampN(this.k * f, this.minK, this.maxK);
     this.k = nk;
-    this.cx = w.x - (sx - this.vw / 2) / nk;
-    this.cy = w.y - (sy - this.vh / 2) / (nk * this.ayAt(nk));
+    const d = this.screenDelta(sx - this.vw / 2, sy - this.vh / 2, nk);
+    this.cx = w.x - d.x;
+    this.cy = w.y - d.y;
     this.clampCurrent();
     this.tcx = this.cx;
     this.tcy = this.cy;
@@ -162,8 +222,9 @@ export class Camera {
     const w = this.fromScreen(sx, sy);
     this.anchor = { sx, sy, vx: w.x, vy: w.y };
     this.tk = nk;
-    this.tcx = w.x - (sx - this.vw / 2) / nk;
-    this.tcy = w.y - (sy - this.vh / 2) / (nk * this.ayAt(nk));
+    const d = this.screenDelta(sx - this.vw / 2, sy - this.vh / 2, nk);
+    this.tcx = w.x - d.x;
+    this.tcy = w.y - d.y;
     this.clampTarget();
     this.stopInertia();
     this.still = 0;
@@ -173,7 +234,9 @@ export class Camera {
   /** Auto camera: ease toward framing a visual-space box (cells) with `margin` cells around it; the box is never
    *  treated as smaller than `minSize` cells, so the last few units of a fight fill the view without absurd zoom. */
   frameBox(x0: number, y0: number, x1: number, y1: number, margin = 6, minSize = 20): void {
-    const w = Math.max(minSize, x1 - x0 + 2 * margin), h = Math.max(minSize * 0.75, y1 - y0 + 2 * margin);
+    // a turned view frames the box's extent along the screen axes (the bounds of the turned rectangle)
+    const c = Math.abs(Math.cos(this.tyaw)), s = Math.abs(Math.sin(this.tyaw)), bw = x1 - x0, bh = y1 - y0;
+    const w = Math.max(minSize, c * bw + s * bh + 2 * margin), h = Math.max(minSize * 0.75, s * bw + c * bh + 2 * margin);
     let k = Math.min(this.vw / w, this.vh / (h * this.ay));
     // foreshortening depends on the zoom: refine (converges in a couple of steps, ay changes slowly with k)
     if (this.ayFn) for (let i = 0; i < 3; i++) k = Math.min(this.vw / w, this.vh / (h * this.ayAt(k)));
@@ -195,14 +258,18 @@ export class Camera {
     this.still = 0;
   }
 
+  /** the whole field, unturned (the fit view is fitted to the unturned field) */
   fit(instant = false): void {
+    this.tyaw = 0;
+    if (instant) this.yaw = 0;
     this.setTarget(this.fw / 2, this.fh / 2, this.minK, instant);
   }
 
   /** Fling after a drag; velocity in screen px / s. */
   fling(vxPx: number, vyPx: number): void {
-    this.velX = -vxPx / this.k;
-    this.velY = -vyPx / (this.k * this.ayAt(this.k));
+    const d = this.screenDelta(vxPx, vyPx);
+    this.velX = -d.x;
+    this.velY = -d.y;
   }
 
   /** Advance the animation. Returns true while the camera is moving. */
@@ -227,11 +294,17 @@ export class Camera {
     if (this.keyX || this.keyY) {
       const sp = 560 / this.k;
       this.anchor = null;
-      this.tcx += this.keyX * sp * dt;
-      this.tcy += (this.keyY * sp * dt) / this.ayAt(this.k);
+      const d = this.turn(this.keyX * sp * dt, (this.keyY * sp * dt) / this.ayAt(this.k));
+      this.tcx += d.x;
+      this.tcy += d.y;
       this.clampTarget();
       moving = true;
     }
+    const dy = angleDiff(this.tyaw, this.yaw);
+    if (Math.abs(dy) > 1e-4) {
+      this.yaw = angleDiff(this.yaw + dy * f, 0);
+      moving = true;
+    } else this.yaw = this.tyaw;
     const lk = Math.log(this.k), ltk = Math.log(this.tk);
     if (Math.abs(ltk - lk) > 0.0005) {
       this.k = Math.exp(lk + (ltk - lk) * f);
@@ -239,8 +312,9 @@ export class Camera {
     } else this.k = this.tk;
     if (this.anchor) {
       const a = this.anchor;
-      this.cx = a.vx - (a.sx - this.vw / 2) / this.k;
-      this.cy = a.vy - (a.sy - this.vh / 2) / (this.k * this.ayAt(this.k));
+      const d = this.screenDelta(a.sx - this.vw / 2, a.sy - this.vh / 2);
+      this.cx = a.vx - d.x;
+      this.cy = a.vy - d.y;
       if (this.k === this.tk) this.anchor = null;
     } else {
       const ex = this.tcx - this.cx, ey = this.tcy - this.cy;
@@ -272,6 +346,8 @@ interface Ptr {
 }
 
 const MOUSE_DRAG_PX = 6;
+/** right-drag orbit speed: a drag across ~800 px turns the view ~half way round */
+export const ORBIT_RAD_PER_PX = 0.004;
 const TOUCH_DRAG_PX = 8;
 
 /** Mouse / touch / keyboard handling for a Camera, attached to a canvas. */
@@ -279,6 +355,12 @@ export class CameraControls {
   private _enabled = true;
   /** double click / double tap zooms in on the point (or back to fit). Screens may switch this off temporarily. */
   doubleClickZoom = true;
+  /** right-drag (and a two-finger twist, and Q / E) turns the view about its centre instead of panning. Only for
+   *  views that can draw a turned field; screens switch it per phase (deploy keeps right-drag = pan). */
+  rotate = false;
+  private orbiting = false;
+  private twist = 0;
+  private pinchAng = 0;
   private ptrs = new Map<number, Ptr>();
   private panning = false;
   private pinching = false;
@@ -329,7 +411,7 @@ export class CameraControls {
       this.ptrs.clear();
       this.keys.clear();
       this.syncKeys();
-      this.panning = this.pinching = false;
+      this.panning = this.pinching = this.orbiting = false;
     }
     try { this.canvas.style.touchAction = v ? 'none' : ''; } catch { /* */ }
   }
@@ -362,6 +444,7 @@ export class CameraControls {
       this.dragged = false;
       this.panning = false;
       this.pinching = false;
+      this.orbiting = false;
       this.rightDragged = false;
       this.samples = [];
     }
@@ -370,6 +453,8 @@ export class CameraControls {
     this.cam.stopInertia();
     if (e.button === 1) e.preventDefault();
     if (this.ptrs.size === 2) this.startPinch();
+    // right-drag orbits (where the view can turn): turning alone leaves the auto camera framing the fight
+    else if (this.ptrs.size === 1 && e.button === 2 && this.rotate) { this.orbiting = true; this.dragged = true; }
     else if (this.ptrs.size === 1 && (e.button === 1 || e.button === 2)) { this.panning = true; this.dragged = true; this.cam.userAt = performance.now(); }
   }
 
@@ -377,7 +462,10 @@ export class CameraControls {
     const [a, b] = [...this.ptrs.values()];
     this.pinching = true;
     this.panning = false;
+    this.orbiting = false;
     this.dragged = true;
+    this.twist = 0;
+    this.pinchAng = Math.atan2(b.y - a.y, b.x - a.x);
     this.cam.userAt = performance.now();
     this.pinchDist = Math.max(8, Math.hypot(a.x - b.x, a.y - b.y));
     this.pinchMidX = (a.x + b.x) / 2;
@@ -397,6 +485,13 @@ export class CameraControls {
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       this.cam.panByScreen(mx - this.pinchMidX, my - this.pinchMidY);
       this.cam.zoomAtInstant(d / this.pinchDist, mx, my);
+      if (this.rotate) {
+        // two-finger twist turns the view about the pinch centre, once it is clearly a twist and not a wobbly pinch
+        const ang = Math.atan2(b.y - a.y, b.x - a.x), da = angleDiff(ang, this.pinchAng);
+        this.pinchAng = ang;
+        if (Math.abs(this.twist) < 0.15) this.twist += da;
+        else this.turnAbout(-da, mx, my);
+      }
       this.pinchDist = d;
       this.pinchMidX = mx;
       this.pinchMidY = my;
@@ -404,6 +499,11 @@ export class CameraControls {
       return;
     }
     if (this.ptrs.size !== 1) return;
+    if (this.orbiting) {
+      this.cam.rotateBy(dx * ORBIT_RAD_PER_PX);
+      if (q.button === 2) this.rightDragged = true;
+      return;
+    }
     if (!this.panning) {
       if (q.button !== 0) return;
       const thr = q.type === 'mouse' ? MOUSE_DRAG_PX : TOUCH_DRAG_PX;
@@ -434,6 +534,7 @@ export class CameraControls {
       return;
     }
     if (this.ptrs.size > 0) return;
+    if (this.orbiting) { this.orbiting = false; this.lastTap = null; return; }
     if (this.panning) {
       this.panning = false;
       if (!cancel) {
@@ -458,6 +559,14 @@ export class CameraControls {
       this.lastTap = null;
       if (this.doubleClickZoom) this.doubleTap(q.x, q.y);
     } else this.lastTap = { t: now, x: q.x, y: q.y };
+  }
+
+  /** turn the view by `da` keeping the ground under a screen point in place */
+  private turnAbout(da: number, sx: number, sy: number): void {
+    const c = this.cam, w = c.fromScreen(sx, sy);
+    c.rotateBy(da);
+    const p = c.toScreen(w.x, w.y);
+    c.panByScreen(sx - p.x, sy - p.y);
   }
 
   private doubleTap(sx: number, sy: number): void {
@@ -506,6 +615,9 @@ export class CameraControls {
       e.preventDefault();
     } else if (k === 'home' || k === 'f') {
       this.cam.fit();
+      e.preventDefault();
+    } else if (this.rotate && (k === 'q' || k === 'e')) {
+      this.cam.turnBy(k === 'q' ? -Math.PI / 8 : Math.PI / 8);
       e.preventDefault();
     }
   }

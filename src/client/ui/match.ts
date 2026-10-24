@@ -371,7 +371,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const zoomBar = h('div.zoombtns', null,
     h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1.5); } }, '+'),
     h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1 / 1.5); } }, '−'),
-    h('button.small', { title: 'Fit whole field (F)', 'aria-label': 'Fit whole field', onclick: () => { view.cam.userAt = performance.now(); view.fit(); } }, '⤢'),
+    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => { view.cam.userAt = performance.now(); view.fit(); } }, '⤢'),
   );
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
 
@@ -1950,6 +1950,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     view.controls.doubleClickZoom = phase !== 'deploy' || (selCard < 0 && !sel);
+    // watching (battle / result / replay): right-drag turns the 3D view; deploying keeps right-drag = pan
+    view.controls.rotate = !!view.canRotate && (phase === 'battle' || phase === 'result' || phase === 'over');
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     try {

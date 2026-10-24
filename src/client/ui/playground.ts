@@ -170,7 +170,7 @@ export function playgroundScreen(app: App): Screen {
   const zoomBar = h('div.zoombtns', null,
     h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => view.zoomBy(1.5) }, '+'),
     h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => view.zoomBy(1 / 1.5) }, '−'),
-    h('button.small', { title: 'Fit whole field (F)', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
+    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
   );
   const overlayEl = h('div');
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, overlayEl);
@@ -729,6 +729,7 @@ export function playgroundScreen(app: App): Screen {
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     view.controls.doubleClickZoom = phase !== 'edit' || (selCard < 0 && !sel);
+    view.controls.rotate = !!view.canRotate && phase !== 'edit'; // right-drag turns the 3D view while watching
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     try {
