@@ -110,7 +110,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     out = chassisBuilder(ch)({ b: hb, kit, design, ch, mob, L, W, S, stance, mounts: specs, rnd, body, root, updates });
     // hard-surface functional kit in the hull's named slots (chassis/hs-kit.ts) for hulls not dressed by hand
     const dress = AUTO_DRESS[ch.shape];
-    if (dress && !flying) autoDress({ b: hb, kit, L, W, S, mounts: specs }, out.deckAt, dress);
+    if (dress && !flying && !out.dressed) autoDress({ b: hb, kit, L, W, S, mounts: specs }, out.deckAt, dress);
     const mctx: MobilityCtx & { lift?: unknown } = { root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out.hips, lift: (out as { lift?: unknown }).lift };
     const upd = mb.build(mctx);
     if (upd) updates.push((t, _dt, mv) => upd(t, mv));
