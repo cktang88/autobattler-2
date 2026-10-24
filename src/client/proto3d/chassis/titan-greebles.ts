@@ -64,6 +64,9 @@ function faceMtx(f: Face, du: number, dv: number, off: number, roll = 0): THREE.
   return m;
 }
 
+/** local frame on the face (x along the edge, y = outward normal, z up/down the slope) at (du, dv), lifted by off */
+export const faceFrame = (f: Face, du: number, dv: number, off = 0): THREE.Matrix4 => faceMtx(f, du, dv, off);
+
 /** chamfered plate lying on the face: w along the edge, d up the slope, t thick (proud of the face by off) */
 export function facePlate(b: Bld, mat: MatLike, f: Face, du: number, dv: number, w: number, d: number, t: number, off = 0, bev = Math.min(w, d, t) * 0.3): void {
   b.g(bevBox(w, t, d, bev), mat, faceMtx(f, du, dv, off + t / 2));

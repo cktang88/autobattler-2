@@ -10,6 +10,7 @@ import { Bld, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
+import { armorPlate, cableBundle, frame, frameLimb, hose, jointDrum, piston, plateStack, rectP, trapP } from '../chassis/hs-kit.ts';
 
 export interface Leg { step(t: number, moving: number): void }
 
@@ -134,6 +135,57 @@ function foot(b: Bld, kit: Kit, t: number, spider: boolean, lite = false) {
   for (const sz of [-1, 1]) b.box(kit.trim, t * 0.9, t * 0.9, t * 0.26, 0, t * 0.85, sz * t * 0.62, t * 0.1);
 }
 
+// ---- hard-surface biped segments (chassis/hs-kit.ts): a dark twin-strut skeleton, separate armour shells on shadow
+// gaps (front plate stacks, side shells, knee cap), exposed joint drums with actuator rings, paired pistons on the back
+// of each bone, hose runs, armoured toe plates. Same local frames as the segment builders above.
+export function hsThigh(b: Bld, kit: Kit, l: number, t: number, fine: boolean, heavy = false) {
+  // heavy (titan) legs: a solid dark core inside the frame, so the leg reads load-bearing, plus a third plate layer
+  if (heavy) b.loft(kit.mech, [ring(t * 0.4, t * 0.6, t * 0.62), ring(l * 0.5, t * 0.58, t * 0.6), ring(l * 0.92, t * 0.5, t * 0.5)]);
+  jointDrum(b, kit, [0, 0, 0], t * 1.12, t * 1.9, 'x');
+  b.cyl(kit.mech, t * 1.26, t * 1.26, t * 0.34, [-t * 0.17, 0, 0], 'x', 12);
+  frameLimb(b, kit, [0, 0, t * 0.6], [0, 0, l * 0.96], t * 0.2, [t * 0.4, 0, 0]);
+  plateStack(b, kit, kit.armor2, frame([0, t * 0.16, l * 0.47], [0, 1, 0], [0, 0, 1]), trapP(l * 0.74, t * 1.4, t * 1.75, t * 0.16), [
+    { inset: 0, thick: t * 0.22, standoff: t * 0.26 },
+    { inset: t * 0.22, thick: t * 0.16, shift: [l * 0.1, 0], mat: kit.armor },
+    ...(heavy ? [{ inset: t * 0.3, thick: t * 0.12, shift: [l * 0.16, 0] as [number, number], mat: kit.armor2 }] : []),
+  ], { gap: t * 0.18 });
+  for (const sx of [-1, 1]) armorPlate(b, kit, kit.armor, frame([sx * t * 0.6, -t * 0.05, l * 0.36], [sx, 0, 0], [0, 0, 1]), rectP(l * 0.42, t * 0.95, t * 0.12), t * 0.13, { standoff: t * 0.06, gap: t * 0.12 });
+  for (const sx of [-1, 1]) piston(b, kit, [sx * t * 0.3, -t * 0.52, l * 0.14], [sx * t * 0.28, -t * 0.46, l * 0.86], t * 0.15, 0.55, fine);
+  jointDrum(b, kit, [0, 0, l], t * 0.8, t * 1.65, 'x');
+  if (fine) cableBundle(b, kit, [t * 0.62, -t * 0.32, l * 0.08], [t * 0.56, -t * 0.4, l * 0.9], t * 0.06, [0, 1, 0], 2, 0.04);
+}
+export function hsShin(b: Bld, kit: Kit, l: number, t: number, fine: boolean, heavy = false) {
+  if (heavy) b.loft(kit.mech, [ring(t * 0.3, t * 0.52, t * 0.55), ring(l * 0.9, t * 0.46, t * 0.48)]);
+  frameLimb(b, kit, [0, 0, t * 0.5], [0, 0, l * 0.92], t * 0.18, [t * 0.34, 0, 0]);
+  plateStack(b, kit, kit.armor2, frame([0, t * 0.12, l * 0.46], [0, 1, 0], [0, 0, 1]), trapP(l * 0.72, t * 1.05, t * 1.45, t * 0.14), [
+    { inset: 0, thick: t * 0.2, standoff: t * 0.26 },
+    { inset: t * 0.2, thick: t * 0.15, shift: [-l * 0.1, 0], mat: kit.shell },
+  ], { gap: t * 0.16 });
+  // knee cap overhanging the knee drum
+  armorPlate(b, kit, kit.armor, frame([0, t * 0.62, t * 0.05], [0, 0.85, -0.5], [1, 0, 0]), trapP(t * 1.35, t * 0.9, t * 0.7, t * 0.12), t * 0.2, { standoff: t * 0.08 });
+  for (const sx of [-1, 1]) piston(b, kit, [sx * t * 0.28, -t * 0.42, l * 0.1], [sx * t * 0.26, -t * 0.38, l * 0.78], t * 0.13, 0.55, fine);
+  jointDrum(b, kit, [0, 0, l], t * 0.6, t * 1.35, 'x');
+  if (heavy) for (const sx of [-1, 1]) armorPlate(b, kit, kit.armor, frame([sx * t * 0.56, 0, l * 0.5], [sx, 0, 0], [0, 0, 1]), rectP(l * 0.5, t * 0.8, t * 0.1), t * 0.12, { standoff: t * 0.05 });
+  if (fine) hose(b, kit, [-t * 0.55, -t * 0.25, l * 0.05], [-t * 0.5, -t * 0.3, l * 0.85], t * 0.06, 0.04, 4);
+}
+export function hsFoot(b: Bld, kit: Kit, t: number, fine: boolean, heavy = false) {
+  const L = t * (heavy ? 4.6 : 4.2), Wd = t * (heavy ? 3.0 : 2.5);
+  b.slab(kit.rubber, rectP(L * 0.92, Wd, t * 0.45), t * 0.2, t * 0.05, t * 0.3, 0, 0);
+  block(b, kit.mech, t * 0.05, t * 0.18, 0, L * 0.5, Wd * 0.66, t * 0.62, { top: [0.66, 0.74], shift: [-t * 0.15, 0], ch: t * 0.3, bev: t * 0.08 });
+  // instep armour, three armoured toes (each a core + a sloped plate), heel spur
+  armorPlate(b, kit, kit.armor2, frame([t * 0.55, t * 0.62, 0], [0.55, 1, 0], [0, 0, 1]), rectP(Wd * 0.62, t * 1.1, t * 0.12), t * 0.18, { standoff: t * 0.05 });
+  const toes: [number, number][] = heavy ? [[-1.05, -0.3], [-0.36, -0.1], [0.36, 0.1], [1.05, 0.3]] : [[-0.8, -0.24], [0, 0], [0.8, 0.24]];
+  for (const [dz, ry] of toes) {
+    const x = t * 1.55 + Math.cos(ry) * t * 0.4;
+    block(b, kit.joint, x, t * 0.12, dz * t, t * 1.3, t * 0.68, t * 0.38, { top: [0.6, 0.85], shift: [t * 0.2, 0], ch: t * 0.18, bev: t * 0.05 });
+    armorPlate(b, kit, kit.armor, frame([x + t * 0.05, t * 0.48, dz * t], [0.4, 1, 0], [Math.cos(ry), 0, Math.sin(ry)]), rectP(t * 1.05, t * 0.6, t * 0.08), t * 0.12, { standoff: t * 0.03, gap: t * 0.06 });
+  }
+  block(b, kit.joint, -t * 1.6, t * 0.1, 0, t * 0.9, t * 0.9, t * 0.4, { top: [0.6, 0.7], shift: [-t * 0.2, 0], ch: t * 0.25, bev: t * 0.06 });
+  // ankle yoke + ankle piston from the heel up to the shin
+  for (const sz of [-1, 1]) b.box(kit.mech, t * 0.9, t * 0.9, t * 0.24, 0, t * 0.85, sz * t * 0.66, t * 0.08);
+  piston(b, kit, [-t * 1.45, t * 0.5, 0], [-t * 0.45, t * 1.35, 0], t * 0.16, 0.55, fine);
+}
+
 export interface LegOpts {
   kind: 'biped' | 'spider'; stride: number; lift: number;
   /** cheap LOD (fewer drums / rams / toes) for small or many-legged units */
@@ -142,6 +194,10 @@ export interface LegOpts {
   reach?: number;
   /** biped knee direction: 'fwd' (human knee) or 'back' (reverse-jointed "chicken walker") */
   bend?: 'fwd' | 'back';
+  /** hard-surface segments (skeleton + armour shells + pistons) for bipeds */
+  hs?: boolean;
+  /** tertiary detail on hs segments */
+  fine?: boolean;
   /** extra geometry on the thigh / shin groups (same local frames as the segment builders) */
   extra?: { thigh?: (b: Bld, l: number, t: number) => void; shin?: (b: Bld, l: number, t: number) => void; foot?: (b: Bld, t: number) => void };
 }
@@ -156,9 +212,10 @@ export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg 
   const bendV = spider ? new THREE.Vector3(0, 1, hip.side * 0.3) : new THREE.Vector3(o.bend === 'back' ? -1 : 1, 0.12, 0);
   const lite = !!o.lite, ex = o.extra ?? {}, flip = o.bend === 'back';
   const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); if (lite) b.segK = 0.7; fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };
-  const upper = mk((b) => { thigh(b, kit, l1, t, spider, lite); ex.thigh?.(b, l1, t); });
-  const lower = mk((b) => { shin(b, kit, l2, t * (spider ? 0.95 : 0.92), spider, lite); ex.shin?.(b, l2, t * 0.92); });
-  const footG = mk((b) => { foot(b, kit, t * (spider ? 0.9 : 1), spider, lite); ex.foot?.(b, t); });
+  const hs = !!o.hs && !spider && !lite, fine = o.fine ?? true;
+  const upper = mk((b) => { if (hs) hsThigh(b, kit, l1, t, fine); else thigh(b, kit, l1, t, spider, lite); ex.thigh?.(b, l1, t); });
+  const lower = mk((b) => { if (hs) hsShin(b, kit, l2, t * 0.92, fine); else shin(b, kit, l2, t * (spider ? 0.95 : 0.92), spider, lite); ex.shin?.(b, l2, t * 0.92); });
+  const footG = mk((b) => { if (hs) hsFoot(b, kit, t, fine); else foot(b, kit, t * (spider ? 0.9 : 1), spider, lite); ex.foot?.(b, t); });
   if (spider) footG.matrixAutoUpdate = true;
   const f = new THREE.Vector3(), k = new THREE.Vector3(), dir = new THREE.Vector3(), perp = new THREE.Vector3(), tmp = new THREE.Vector3(), xa = new THREE.Vector3(), ya = new THREE.Vector3();
   const place = (a: THREE.Vector3, bb: THREE.Vector3, m: THREE.Object3D) => {
@@ -209,7 +266,7 @@ registerMobility(['legs', 'titanlegs', 'spider'], {
     const kind = st.legs ?? 'biped';
     const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * (kind === 'spider' ? 0.7 : 0.55));
     const lite = liteLegs(c.S, hips.length, kind);
-    const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === 'spider' ? 0.32 : 0.26), lite }));
+    const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === 'spider' ? 0.32 : 0.26), lite, hs: kind === 'biped', fine: c.S >= 2 }));
     return (t, mv) => { for (const l of legs) l.step(t, mv); };
   },
 });

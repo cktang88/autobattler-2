@@ -1,6 +1,6 @@
 // Tracked / heavy ground hulls. Each class has its own plan shape and height profile (no boxes):
-//   warden     'hex'        arrowhead-hex line tank: faceted hex glacis pyramid between rounded track nacelles, V ram
-//                            blade at the prow, hex turret plinths, angled cheek armour.
+//   warden     'hex'        hard-surface line tank (hs-kit): faceted sponson hull, two-plate glacis, V ram blade on rams,
+//                            smoke banks, caged lamps, offset hatch / exhaust / stowage, hs track system.
 //   bastion    'fortress'   star fort on four corner track pods: octagonal citadel, two round drum towers (crenellated)
 //                            for the rear guns, stepped octagonal keep for the front gun.
 //   longarm    'long'       long-necked artillery carriage: hunched rear gun body on a turntable, a long neck sloping
@@ -13,11 +13,17 @@
 //                            casemate, keep on top.
 // Running gear looks per shape live in mobility/tracks.ts (trackStyle). Shape helpers: chassis/tanks-kit.ts.
 
+import * as THREE from 'three';
 import { atlasUV } from '../materials.ts';
-import type { P2, V3 } from '../geo.ts';
+import { bevBox, type P2, type V3 } from '../geo.ts';
+import { HS_NARROW } from '../mobility/tracks.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
 import { block, both, collar, exhaust, glow, hazard, pod, sensor, vent, beam } from './shapes.ts';
 import { drum, frustum, inPlan, mirrorPlan, ngon, scalePlan, xLoft, xTop, type Sec } from './tanks-kit.ts';
+import {
+  antenna, armorPlate, cagedLamp, crewHatch, exhaustBox, fineFor, frame, hexSec, hose, jerryCans, piston, recessPanel, rectP,
+  smokeLaunchers, spareTrack, stowBox, sub, towHooks, trapP,
+} from './hs-kit.ts';
 
 const sc = (p: P2[], kx: number, kz: number): P2[] => p.map(([x, z]) => [x * kx, z * kz]);
 const biggest = (ms: MountSpec[]) => ms.reduce<MountSpec | undefined>((a, m) => (!a || m.r > a.r ? m : a), undefined);
@@ -25,42 +31,101 @@ const grounded = (c: ChassisCtx) => !c.stance.legs && c.mob.kind !== 'air';
 
 // ---------------------------------------------------------------------------------------------------------------------
 function warden(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, stance } = c;
-  const kx = L / 2, kz = W / 2, k = Math.min(kx, kz);
+  // Hard-surface line tank (chassis/hs-kit.ts): a low dark belly between the track systems, a faceted upper hull with
+  // sponsons over the tracks and a flat engine deck (elongated hex from above: chamfered nose and tail corners), a
+  // two-plate upper glacis standing proud on shadow gaps, a separate lower glacis plate, a thin V dozer/ram blade on
+  // push arms and two hydraulic rams (the warden's signature), smoke-grenade banks on the sponson fronts, caged
+  // headlamps. Asymmetric: driver's hatch + periscopes front-left, exhaust right rear, jerry cans + antenna left rear,
+  // tool bins and spare track on the right side only.
+  const { b, kit, L, W, stance, S } = c;
+  const kx = L / 2, kz = (W / 2) * (HS_NARROW.hex ?? 1), k = Math.min(L / 2, W / 2);
+  const fine = fineFor(S);
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.12 * k);
-  const wi = Math.min(stance.wi, 0.62 * kz);
-  // belly between the running gear
-  frustum(b, kit.trim, sc(mirrorPlan([[0.9, wi * 0.45], [0.62, wi], [-0.84, wi], [-0.95, wi * 0.8]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.02 });
-  // arrowhead-hex upper hull: a faceted pyramid frustum, every face sloped (reads as a hex from the top camera)
-  const up = sc(mirrorPlan([[1.1, 0.12], [0.22, 0.76], [-0.42, 0.76], [-1.0, 0.3]]), kx, kz);
-  const hU = 0.3 * k, uy = yt - 0.03 * k;
-  frustum(b, kit.hull, up, uy, hU, { top: [0.76, 0.66], shift: [-0.1 * kx, 0], bot: 0.03 * k, bev: 0.035 * k, mid: [[0.42, 0.95, 0.94]] });
-  const deckY = uy + hU;
-  const topP = scalePlan(up, 0.7, 0.6, -0.1 * kx, 0);
-  // lighter glacis plate on the front facets
-  frustum(b, kit.panel, sc(mirrorPlan([[0.94, 0.1], [0.62, 0.42], [0.46, 0.42], [0.66, 0.08]]), kx, kz), uy + hU * 0.36, 0.035 * k, { top: [0.9, 0.9], bev: 0.012 * k, shift: [-0.02 * kx, 0] });
-  // V ram blade across the prow
-  b.slab(kit.panel, sc([[1.07, 0], [0.74, 0.66], [0.6, 0.66], [0.93, 0], [0.6, -0.66], [0.74, -0.66]], kx, kz), (yt - y0) * 0.9, 0.02 * k, 0, y0 + 0.02 * k, 0);
-  hazard(b, kit, 0.9 * kx, y0 + (yt - y0) * 0.92 + 0.02 * k, 0, 0.14 * kx, 0.12 * kz, 2, 0);
+  const wi = Math.min(stance.wi, 0.66 * kz);
+  const ys = yt + 0.03 * k, deck = ys + 0.25 * k;
+  // ---- belly (dark structure between the tracks): lower glacis slope at the front, short rear slope
+  const belly: [number, number, number][] = [[1.02, ys - 0.06 * k, 0.55], [0.86, y0 + 0.04 * k, 1], [-0.9, y0, 1], [-1.0, y0 + 0.07 * k, 0.9]];
+  b.loft(kit.mech, belly.map(([x, yb, f]) => hexSec(x * kx, yb, wi * f * 0.9, wi * f, yb + 0.03 * k, ys - 0.01, wi * f, ys + 0.01)));
+  // ---- upper hull: faceted sponson hull (x, sponson half-width, side band height, deck half-width, top y)
+  const up: [number, number, number, number, number][] = [
+    [1.07, 0.42, 0.04, 0.3, ys + 0.06 * k], [0.86, 0.94, 0.07, 0.68, ys + 0.11 * k], [0.4, 1.0, 0.1, 0.72, deck],
+    [-0.74, 1.0, 0.1, 0.72, deck], [-0.95, 0.86, 0.1, 0.6, deck - 0.02 * k], [-1.0, 0.72, 0.09, 0.5, deck - 0.05 * k],
+  ];
+  b.loft(kit.armor, up.map(([x, ws, hs, wt, ytop]) => hexSec(x * kx, ys, ws * kz, ws * kz, ys, ys + hs * k, wt * kz, ytop)));
+  const T = 0.038 * k; // plate thickness
+  // ---- upper glacis: two-plate stack on the sloped front
+  const g0: V3 = [0.86 * kx, ys + 0.11 * k, 0], g1: V3 = [0.4 * kx, deck, 0];
+  const gl = Math.hypot(g1[0] - g0[0], g1[1] - g0[1]);
+  const GF = frame([(g0[0] + g1[0]) / 2, (g0[1] + g1[1]) / 2, 0], [g1[1] - g0[1], g0[0] - g1[0], 0], [0, 0, 1]);
+  armorPlate(b, kit, kit.armor, GF, trapP(1.36 * kz, gl * 0.9, gl * 0.9, 0.06 * k), T, { standoff: 0.012 * k, gap: 0.03 * k });
+  armorPlate(b, kit, kit.armor, sub(GF, 0, 0.012 * k + T, gl * 0.14), rectP(1.1 * kz, gl * 0.46, 0.05 * k), T * 0.9, { standoff: T * 0.45, gap: 0.03 * k });
+  // sloped side armour: two plates per shoulder (hull side above the sponson), shadow gap between them
+  const sh0 = ys + 0.1 * k;
   both((s) => {
-    // angled cheek armour on the flank facets, glow slit, lamps on the nose facets
-    block(b, kit.panel, -0.1 * kx, uy + 0.02 * k, s * 0.7 * kz, 0.56 * kx, 0.12 * kz, hU * 0.6, { top: [0.9, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.04 * k, bev: 0.02 * k });
-    glow(b, kit, -0.1 * kx, uy + hU * 0.42, s * 0.74 * kz, 0.4 * kx, 0.025 * k, 0.025 * k);
-    b.box(kit.lamp, 0.03 * k, 0.05 * k, 0.1 * k, 0.86 * kx, uy + hU * 0.3, s * 0.24 * kz, 0.01, [0, s * 0.9, 0]);
-    exhaust(b, kit, -0.72 * kx, deckY - 0.12 * k, s * 0.36 * kz, 0.06 * k, 0.14 * k);
+    const a: V3 = [0, sh0, s * 1.0 * kz], e: V3 = [0, deck, s * 0.72 * kz];
+    const sl = Math.hypot(e[1] - a[1], e[2] - a[2]);
+    const SF = frame([0, (a[1] + e[1]) / 2, (a[2] + e[2]) / 2], [0, Math.abs(e[2] - a[2]), s * (e[1] - a[1])], [1, 0, 0]);
+    for (const [x0, x1] of [[0.36, -0.2], [-0.24, -0.72]] as [number, number][]) {
+      armorPlate(b, kit, kit.armor2, sub(SF, ((x0 + x1) / 2) * kx, 0, 0), rectP((x0 - x1) * kx - 0.03 * k, sl * 0.8), T * 0.9, { standoff: 0.008 * k, gap: 0.02 * k });
+    }
   });
-  vent(b, kit, -0.62 * kx, deckY - 0.005, 0, 0.18 * kx, 0.4 * kz, 3, 'x');
-  b.decal(0.18 * k, 0.18 * k, 0.4 * kx, deckY + 0.003, -0.22 * kz, atlasUV(1), 0);
+  // spare track links clipped to the right half of the glacis (asymmetric stowage)
+  spareTrack(b, kit, sub(GF, 0.42 * kz, 0.012 * k + T * 2.3, gl * 0.12, 0, Math.PI / 2, 0), 3, 0.2 * k, 0.07 * k);
+  // ---- lower glacis plate on the belly front
+  const l0: V3 = [0.86 * kx, y0 + 0.04 * k, 0], l1: V3 = [1.02 * kx, ys - 0.06 * k, 0];
+  const ll = Math.hypot(l1[0] - l0[0], l1[1] - l0[1]);
+  const LF = frame([(l0[0] + l1[0]) / 2, (l0[1] + l1[1]) / 2, 0], [l1[1] - l0[1], l0[0] - l1[0], 0], [0, 0, 1]);
+  armorPlate(b, kit, kit.armor2, LF, rectP(wi * 1.7, ll * 0.86, 0.03 * k), T, { standoff: 0.01 * k });
+  // ---- dozer / ram blade: thin V on push arms and two hydraulic rams
+  const bh = ((ys - 0.06 * k) - 0.05 * k) * 0.62, by = 0.05 * k + bh / 2;
+  both((s) => {
+    const a: P2 = [1.2 * kx, 0], e: P2 = [1.06 * kx, s * 0.9 * kz];
+    const len = Math.hypot(e[0] - a[0], e[1] - a[1]), yaw = Math.atan2(-(e[1] - a[1]), e[0] - a[0]);
+    const m = new THREE.Matrix4().makeRotationY(yaw).setPosition((a[0] + e[0]) / 2, by, (a[1] + e[1]) / 2);
+    b.g(bevBox(len, bh, 0.035 * k, 0.008 * k), kit.armor2, m.clone().multiply(new THREE.Matrix4().makeRotationX(s * 0.18)));
+    b.g(new THREE.BoxGeometry(len * 0.98, 0.022 * k, 0.04 * k), kit.steel, m.clone().multiply(new THREE.Matrix4().makeTranslation(0, -bh / 2, 0)));
+    b.g(new THREE.BoxGeometry(len * 0.5, 0.02 * k, 0.045 * k), kit.hazard, m.clone().multiply(new THREE.Matrix4().makeTranslation(len * 0.2, bh / 2, -0.01 * k)));
+    // push arm from the blade back to the belly side, ram from the glacis foot to the blade top
+    beam(b, kit.mech, [1.08 * kx, by - bh * 0.1, s * 0.46 * kz], [0.74 * kx, y0 + 0.06 * k, s * wi * 0.92], 0.04 * k, 0.05 * k);
+    piston(b, kit, [0.94 * kx, ys - 0.04 * k, s * 0.32 * kz], [1.1 * kx, by + bh * 0.4, s * 0.3 * kz], 0.02 * k, 0.55, fine);
+  });
+  // ---- sponson fronts: smoke-grenade banks (fire forward-out), caged headlamps on the nose corners
+  both((s) => {
+    smokeLaunchers(b, kit, frame([0.52 * kx, sh0, s * 0.86 * kz], [0, 1, 0], [Math.cos(0.5), 0, s * Math.sin(0.5)]), 4, 0.026 * k);
+    cagedLamp(b, kit, frame([0.92 * kx, ys + 0.06 * k, s * 0.74 * kz], [0, 1, 0], [1, 0, 0]), 0.07 * k, fine);
+  });
+  // ---- driver's hatch with periscopes (front left)
+  const hx = 0.32 * kx, hz = -0.48 * kz;
+  crewHatch(b, kit, frame([hx, deck, hz], [0, 1, 0]), 0.075 * k, fine);
+  for (const dz of [-0.07, 0, 0.07]) b.g(new THREE.BoxGeometry(0.05 * k, 0.05 * k, 0.06 * k), kit.glass, new THREE.Matrix4().makeRotationY(dz * 3).setPosition(hx + 0.11 * k, deck + 0.025 * k, hz + dz * k));
+  // ---- shoulders: tool bins on the right, stowage strap rail + crowbar on the left
+  stowBox(b, kit, frame([-0.2 * kx, sh0 + 0.004, 0.93 * kz], [0, 1, 0]), 0.5 * kx, 0.07 * k, 0.1 * kz);
+  stowBox(b, kit, frame([-0.66 * kx, sh0 + 0.004, 0.93 * kz], [0, 1, 0]), 0.3 * kx, 0.09 * k, 0.1 * kz, kit.canvas);
+  b.g(new THREE.BoxGeometry(0.42 * kx, 0.018 * k, 0.04 * k), kit.steel, new THREE.Matrix4().makeTranslation(-0.3 * kx, deck + 0.012 * k, -0.62 * kz));
+  b.g(new THREE.BoxGeometry(0.12 * kx, 0.02 * k, 0.07 * k), kit.joint, new THREE.Matrix4().makeTranslation(-0.06 * kx, deck + 0.012 * k, -0.62 * kz));
+  // ---- engine deck: recessed louvred grille, exhaust (right rear only), jerry cans + antenna (left rear)
+  recessPanel(b, kit, frame([-0.86 * kx, deck, -0.08 * kz], [0, 1, 0]), 0.2 * kx, 0.56 * kz, 0.03 * k, { slats: 5, frame: kit.armor });
+  // engine access plates either side of the S turret (raised, on shadow gaps)
+  both((s) => armorPlate(b, kit, kit.armor, frame([-0.48 * kx, deck, s * 0.52 * kz], [0, 1, 0]), rectP(0.36 * kx, 0.22 * kz, 0.03 * k), 0.018 * k, { standoff: 0.006 * k, gap: 0.015 * k }));
+  exhaustBox(b, kit, frame([-0.86 * kx, deck, 0.5 * kz], [0, 1, 0], [0, 0, 1]), 0.055 * k, fine);
+  jerryCans(b, kit, frame([-0.88 * kx, deck - 0.004 * k, -0.52 * kz], [0, 1, 0]), 2, 0.085 * k);
+  antenna(b, kit, -0.7 * kx, deck, -0.64 * kz, 0.7 * k, 0.008 * k, [-0.15, 0, 0]);
+  // ---- rear plate: tow hooks and a tow cable looped across it
+  const rp: V3 = [-1.0 * kx - 0.004, (ys + deck - 0.06 * k) / 2, 0];
+  towHooks(b, kit, frame(rp, [-1, 0, 0], [0, 0, 1]), 0.9 * kz, 0.04 * k);
+  if (fine) hose(b, kit, [-1.01 * kx, deck - 0.08 * k, -0.45 * kz], [-1.01 * kx, deck - 0.08 * k, 0.45 * kz], 0.012 * k, 0.12, 6, kit.joint);
+  b.decal(0.12 * k, 0.12 * k, -0.18 * kx, deck + 0.003, 0.58 * kz, atlasUV(1), 0);
   const main = biggest(c.mounts);
-  const deck = (x: number, z: number) => (inPlan(topP, x, z) ? deckY : inPlan(up, x, z) ? uy + hU * 0.5 : -1);
+  const topP = sc(mirrorPlan([[0.4, 0.72], [-0.74, 0.72], [-0.95, 0.6], [-1.0, 0.5]]), kx, kz);
+  const outP = sc(mirrorPlan([[1.07, 0.4], [0.86, 0.94], [0.42, 1.0], [-0.72, 1.0], [-0.94, 0.86], [-1.0, 0.72]]), kx, kz);
+  const deckFn = (x: number, z: number) => (inPlan(topP, x, z) ? deck : inPlan(outP, x, z) ? ys + 0.07 * k : -1);
   return {
-    deckAt: deck, top: deckY + 0.1 * k, custom: true,
+    deckAt: deckFn, top: deck + 0.1 * k, custom: true,
     seat: (m) => {
-      // hex plinth (vertex forward, like the hull) under each turret ring
-      const big = m === main, ph = big ? 0.1 * k : 0.07 * k;
-      frustum(b, kit.hull, ngon(6, m.r * (big ? 1.6 : 1.45), m.r * (big ? 1.6 : 1.45), 0, m.x, m.z), deckY - 0.03 * k, ph + 0.03 * k, { top: [0.88, 0.88], bev: 0.02 * k });
-      const y = deckY + ph;
-      collar(b, kit, m.x, y, m.z, m.r, y - 0.03 * k, big ? 18 : 14);
+      // low armoured turret-ring guard flush on the deck (no plinth: the turret sits low, like a real MBT)
+      const big = m === main, y = deck + (big ? 0.03 : 0.04) * k;
+      b.lathe(kit.armor2, [[0, 0], [m.r * 1.32, 0], [m.r * 1.3, y - deck - 0.01 * k], [m.r * 1.18, y - deck], [0, y - deck]], [m.x, deck - 0.005, m.z], 'y', big ? 18 : 14);
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.02 * k, big ? 18 : 14);
       return { y, socket: true };
     },
   };
