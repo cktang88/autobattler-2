@@ -429,3 +429,25 @@ test('server input checks accept every legal design: the 10-mount superfortress,
   const upgrade = Array.from({ length: 120 }, (_, i) => 1 + (i % 60));
   assert.equal(sanitizeAction({ round: 3, place: [], upgrade }).upgrade.length, 120);
 });
+
+test('a jet on hold position circles over its post (it used to hang motionless in mid-air), and circling is no activity', () => {
+  const jet = D('jet', 'interceptor', 'jet', ['mg', 'mg']), tank = D('tank', 'warden', 'treads', ['autocannon', null]);
+  const arty = D('arty', 'longarm', 'halftrack', ['howitzer']);
+  // out of each other's reach: the jets circle their post, and the battle ends as a quiet standoff (not after 180 s)
+  const b = new Battle({ seed: 1, sides: [{ designs: [jet], units: [pl('jet', { x: 40, y: 10, stance: 'holdPos' })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10, stance: 'holdPos' })] }] });
+  const jets = b.units.filter((u) => u.side === 0), start = jets.map((u) => ({ x: u.x, y: u.y }));
+  let minStep = Infinity;
+  for (let t = 0; t < 5 * TICK_RATE; t++) {
+    const before = jets.map((u) => ({ x: u.x, y: u.y }));
+    b.step();
+    jets.forEach((u, i) => { minStep = Math.min(minStep, Math.hypot(u.x - before[i].x, u.y - before[i].y)); });
+  }
+  assert.ok(minStep > 0.05, `a holdPos jet stood still in the air (step ${minStep})`);
+  jets.forEach((u, i) => assert.ok(Math.hypot(u.x - start[i].x, u.y - start[i].y) < 12, 'a holdPos jet left its post'));
+  while (!b.done) b.step();
+  assert.ok(b.tick < 20 * TICK_RATE, `circling holdPos jets kept a dead standoff going (${b.tick / TICK_RATE}s)`);
+  // likewise jets circling the parked unit they escort
+  const e = new Battle({ seed: 1, sides: [{ designs: [jet, arty], units: [pl('arty', { x: 40, y: 18, stance: 'holdPos' }), pl('jet', { uid: 2, x: 10, y: 10, escort: 1 })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10, stance: 'holdPos' })] }] });
+  while (!e.done) e.step();
+  assert.ok(e.tick < 20 * TICK_RATE, `jets orbiting their charge kept a dead standoff going (${e.tick / TICK_RATE}s)`);
+});
