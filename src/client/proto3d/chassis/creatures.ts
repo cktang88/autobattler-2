@@ -297,7 +297,12 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
     const w = (0.62 + 0.24 * Math.sin(Math.min(1, f * 1.6) * Math.PI * 0.9) - Math.max(0, f - 0.6) * 0.7) * u;
     return [w, (0.2 + 0.1 * Math.sin(f * Math.PI)) * u, by + (0.22 + 0.08 * Math.sin(f * Math.PI)) * u];
   };
-  shingles(b, [kit.armor, kit.armor2], 1.3 * u, -1.95 * u, 5, 0.05 * u, prof, { cols: 5, pw: 2.4, drop: 0.3 * u, lift: 0.06 * u, overlap: 0.22 });
+  shingles(b, [kit.armor, kit.armor2], 1.3 * u, -1.95 * u, 5, 0.06 * u, prof, { cols: 4, pw: 1.5, drop: 0.24 * u, lift: 0.12 * u, overlap: 0.16 });
+  // dorsal ridge plate on every band (a darker spine stepping down the back, shadow line under each)
+  for (let i = 0; i < 5; i++) {
+    const f = (i + 0.5) / 5, x = (1.3 - 3.25 * f) * u, [w, h, y0] = prof(f);
+    armorPlate(b, kit, i % 2 ? kit.shell : kit.armor2, frame([x - 0.04 * u, y0 + h + 0.035 * u, 0], [0.12, 1, 0], [1, 0, 0]), trapP(0.5 * u, w * 0.34, w * 0.46, 0.05 * u), 0.04 * u, { standoff: 0.015 * u });
+  }
   for (let i = 1; i < 4; i++) {
     const x = (1.3 - (3.25 * i) / 5) * u, [w, , y0] = prof(i / 5);
     both((s) => glow(b, kit, x, y0 - 0.06 * u, s * w * 0.98, 0.04 * u, 0.04 * u, 0.04 * u));
