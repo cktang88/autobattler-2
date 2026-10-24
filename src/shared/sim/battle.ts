@@ -2331,7 +2331,10 @@ export class Battle {
     }
     // Movement precedence: delay gates everything at the start; then
     //   holdPos > retreat (while active) > charge > escort > kite > flank > advance.
-    if (this.tick < I.delayTicks) return;
+    if (this.tick < I.delayTicks) {
+      if (I.strafe) this.strafeMove(I, null, true); // a jet waiting out its start delay circles over its spot
+      return;
+    }
     let goal = I.goal >= 0 ? this.units[I.goal] : null;
     if (I.stance === 'holdPos') {
       // hold the spot, unless something keeps shooting us from out of reach: then go after it (sitting still while

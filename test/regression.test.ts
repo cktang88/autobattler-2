@@ -450,4 +450,9 @@ test('a jet on hold position circles over its post (it used to hang motionless i
   const e = new Battle({ seed: 1, sides: [{ designs: [jet, arty], units: [pl('arty', { x: 40, y: 18, stance: 'holdPos' }), pl('jet', { uid: 2, x: 10, y: 10, escort: 1 })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10, stance: 'holdPos' })] }] });
   while (!e.done) e.step();
   assert.ok(e.tick < 20 * TICK_RATE, `jets orbiting their charge kept a dead standoff going (${e.tick / TICK_RATE}s)`);
+  // a jet waiting out a start delay circles too
+  const d = new Battle({ seed: 1, sides: [{ designs: [jet], units: [pl('jet', { x: 40, y: 10, delay: 6 })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10 })] }] });
+  const dj = d.units[0], x0 = dj.x, y0 = dj.y;
+  for (let t = 0; t < 2 * TICK_RATE; t++) d.step();
+  assert.ok(Math.hypot(dj.x - x0, dj.y - y0) > 0.5 && dj.moving, 'a jet hung still in the air during its start delay');
 });
