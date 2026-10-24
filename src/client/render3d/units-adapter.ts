@@ -40,7 +40,10 @@ const lookMats: Record<Exclude<Look, 'normal'>, THREE.Material> = {
 // ---- charred wrecks: each unit material gets a wreck twin running the same program (team paint, plate detail, decals)
 // with a char pass on top: desaturated, darkened, soot-black on upper surfaces and in noisy burnt patches, lamps out,
 // and glowing ember cracks while the hull is hot. For the wreck look the per-instance colour is NOT a tint but data:
-//   r = char amount 0..1, g = heat 0..1 (ember glow), b = per-wreck seed 0..1.
+//   r = char amount 0..1, g = heat 0..1 (ember glow), b = (wreck level + seed) / 4 (level 0..3 in the integer part
+//   of 4b, a per-wreck seed in its fraction). On top of the char: blown-open holes (pitch-black interior, a scorched
+//   lip that glows while hot) and fissures in the plates, more of both the more broken the wreck, so even a whole
+//   (level 0) hull reads as dead at a glance.
 const CHAR_VERT_DECL = '\nvarying vec3 vChP; varying vec3 vChN;';
 const CHAR_FRAG_DECL = /* glsl */ `
 varying vec3 vChP; varying vec3 vChN;
@@ -64,11 +67,22 @@ const CHAR_COLOR = /* glsl */ `
   vec3 chC = mix(vec3(chL), diffuseColor.rgb, 0.55 - 0.25 * chK.r) * (1.0 - 0.82 * chSoot);
   chC = mix(chC, vec3(0.03, 0.026, 0.022), smoothstep(0.6, 0.95, chSoot));
   chC = mix(chC, chC * vec3(1.12, 0.96, 0.82), 0.5 * chK.r);
+  // holes and fissures (level-scaled; the seed moves the pattern per wreck)
+  float chLv = floor(chK.b * 4.0 + 1e-3), chSd = fract(chK.b * 4.0 + 1e-3);
+  vec3 chHp = vChP * 4.2 + chSd * 37.0;
+  float chHn = chN(chHp) * 0.72 + chN(chHp * 3.1 + 5.0) * 0.28;
+  float chThr = 0.66 - 0.04 * chLv;
+  float chHole = smoothstep(chThr, chThr + 0.03, chHn);
+  float chRim = smoothstep(chThr - 0.075, chThr, chHn) * (1.0 - chHole);
+  float chFr = 1.0 - abs(chN(vChP * 2.4 + chSd * 11.0) * 2.0 - 1.0);
+  float chFis = smoothstep(0.95 - 0.015 * chLv, 0.985, chFr) * (1.0 - chHole);
+  chC = mix(chC, vec3(0.03, 0.022, 0.016), chRim * 0.9);
+  chC = mix(chC, vec3(0.004, 0.0035, 0.003), max(chHole, chFis * 0.9));
   diffuseColor.rgb = chC;`;
 const CHAR_EMBER = /* glsl */ `
   totalEmissiveRadiance = vec3(0.0);
   float chCrack = smoothstep(0.58, 0.78, chN(vChP * 4.6 + chK.b * 41.0)) * smoothstep(0.35, 0.7, chSoot + 0.2);
-  totalEmissiveRadiance += vec3(2.4, 0.62, 0.1) * chK.g * chK.g * (chCrack * 1.8 + 0.08 * chSoot);
+  totalEmissiveRadiance += vec3(2.4, 0.62, 0.1) * chK.g * chK.g * (chCrack * 1.8 + 0.08 * chSoot + chRim * 2.6 + chFis * 2.0 + chHole * 0.35);
   #include <lights_fragment_begin>`;
 const charCache = new WeakMap<THREE.Material, THREE.Material>();
 function charred(src: THREE.Material): THREE.Material | null {
@@ -88,10 +102,10 @@ function charred(src: THREE.Material): THREE.Material | null {
       .replace('#include <common>', '#include <common>' + CHAR_FRAG_DECL)
       .replace('#include <color_fragment>', CHAR_COLOR)
       // after the unit program's own per-row roughness / metalness (soot is matte)
-      .replace('#include <normal_fragment_begin>', '#if defined( STANDARD )\nroughnessFactor = mix(roughnessFactor, 0.95, chSoot);\nmetalnessFactor *= 1.0 - 0.6 * chSoot;\n#endif\n#include <normal_fragment_begin>')
+      .replace('#include <normal_fragment_begin>', '#if defined( STANDARD )\nroughnessFactor = mix(roughnessFactor, 0.95, max(chSoot, chHole));\nmetalnessFactor *= 1.0 - 0.6 * max(chSoot, chHole);\n#endif\n#include <normal_fragment_begin>')
       .replace('#include <lights_fragment_begin>', CHAR_EMBER);
   };
-  m.customProgramCacheKey = () => key + '|char1';
+  m.customProgramCacheKey = () => key + '|char2';
   charCache.set(src, m);
   return m;
 }
@@ -165,6 +179,12 @@ export class Rig {
   private settle = 2;
   /** set once anything moved off the template's rest pose (gear animated, a turret aimed or kicked) */
   dirty = false;
+  /** per design mount: which barrel / tube fires next (multi-barrel guns and launchers take turns) */
+  private barrel: number[] = [];
+  /** per turret: recoil return rate (1/s); heavy guns run out slowly */
+  private relax: number[] = [];
+  /** hull rock from heavy guns: tilt vector (the top's displacement, radians, hull-local x fwd / z right) + velocity */
+  private rk = [0, 0, 0, 0];
 
   constructor(tpl: Template) {
     this.tpl = tpl;
@@ -225,7 +245,29 @@ export class Rig {
     this.dirty = true;
     aimTurret(tu, x0 + Math.cos(localAngle) * 10, z0 + Math.sin(localAngle) * 10, dt, 22);
   }
-  kick(i: number): void { const tu = this.turrets[i]; if (tu) { this.dirty = true; recoilKick(tu); } }
+  /** a shot from mount i: the barrel assembly slams back by k x the base recoil and runs out again at `rate` /s */
+  kick(i: number, k = 1, rate = 9): void {
+    const tu = this.turrets[i];
+    if (!tu) return;
+    this.dirty = true;
+    recoilKick(tu);
+    tu.recoil.position.x *= k;
+    this.relax[this.all.indexOf(tu)] = rate;
+  }
+  /** rock the hull away from a heavy shot: localAngle = firing direction in the hull frame, amt = impulse (rad/s) */
+  rock(localAngle: number, amt: number): void {
+    this.rk[2] -= Math.cos(localAngle) * amt; this.rk[3] -= Math.sin(localAngle) * amt;
+  }
+  /** number of barrel tips / tubes on mount i */
+  muzzleCount(mount: number): number { return this.turrets[mount]?.muzzles.length ?? 0; }
+  /** the barrel that fires next on mount i (then advances to the next one) */
+  nextBarrel(mount: number): number {
+    const n = this.muzzleCount(mount);
+    if (n <= 1) return 0;
+    const b = (this.barrel[mount] ?? 0) % n;
+    this.barrel[mount] = b + 1;
+    return b;
+  }
 
   /** Back to the template's rest pose: turrets facing forward, barrels home and not spinning, gear at its idle stance.
    *  Rigs are pooled per design, so without this a recycled rig kept the last pose of whatever unit used it before
@@ -242,6 +284,7 @@ export class Rig {
       if (n.manual) o.matrix.copy(n.src.matrix); else o.updateMatrix();
     });
     for (const tu of this.all) tu.spinV = tu.idleSpin;
+    this.barrel.length = 0; this.relax.length = 0; this.rk.fill(0);
     this.settle = 2;
     this.dirty = false;
   }
@@ -266,7 +309,24 @@ export class Rig {
   /** recompute transforms of the turret rigs / animated nodes after pose changes (root must already be positioned) */
   update(dt: number): void {
     if (this.frozen) return;
-    for (const tu of this.all) recoilRelax(tu, dt);
+    for (let i = 0; i < this.all.length; i++) {
+      const tu = this.all[i], x0 = tu.recoil.position.x, rate = this.relax[i];
+      recoilRelax(tu, dt);
+      if (rate !== undefined && rate !== 9) tu.recoil.position.x = x0 * Math.max(0, 1 - dt * rate);
+    }
+    // hull rock: a stiff, well damped spring back to level
+    const rk = this.rk;
+    if (rk[0] || rk[1] || rk[2] || rk[3]) {
+      const n = Math.min(4, Math.ceil(dt / 0.008));
+      for (let s = 0; s < n; s++) {
+        const h = dt / n;
+        rk[2] += (-140 * rk[0] - 11 * rk[2]) * h; rk[3] += (-140 * rk[1] - 11 * rk[3]) * h;
+        rk[0] += rk[2] * h; rk[1] += rk[3] * h;
+      }
+      const a = Math.hypot(rk[0], rk[1]);
+      if (a < 1e-4 && Math.abs(rk[2]) + Math.abs(rk[3]) < 1e-3) rk.fill(0);
+      else if (a > 1e-6) this.root.quaternion.multiply(_q.setFromAxisAngle(_tmpV.set(rk[1] / a, 0, -rk[0] / a), a));
+    }
     this.root.updateMatrix();
     const rm = this.root.matrix;
     const tpl = this.tpl;
@@ -281,8 +341,10 @@ export class Rig {
     }
   }
 
-  muzzleWorld(mount: number, out: THREE.Vector3): THREE.Vector3 | null {
-    const m = this.turrets[mount]?.muzzles[0];
+  /** world position of mount i's barrel tip (barrel `b` of a multi-barrel gun / launcher) */
+  muzzleWorld(mount: number, out: THREE.Vector3, b = 0): THREE.Vector3 | null {
+    const ms = this.turrets[mount]?.muzzles;
+    const m = ms?.[b % Math.max(1, ms.length)];
     if (!m) return null;
     return out.setFromMatrixPosition(m.matrixWorld);
   }

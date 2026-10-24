@@ -60,6 +60,16 @@ export const RAMPS = {
   /** barrel heat (spin-up guns): dull red to orange */
   heat: [1.6, 0.42, 0.08, 0.9, 1.4, 0.32, 0.05, 0.7, 0.8, 0.12, 0.02, 0],
   sonic: [1.4, 1.5, 1.3, 0.55, 0.9, 1.0, 0.9, 0.3, 0.3, 0.35, 0.3, 0],
+  /** damage wisps (thin, rising): coolant / hydraulic steam hissing out of a joint */
+  steam: [0.62, 0.63, 0.64, 0.16, 0.6, 0.61, 0.62, 0.12, 0.58, 0.59, 0.6, 0],
+  /** oily engine smoke: brown-black, a little denser */
+  oilSmoke: [0.09, 0.08, 0.07, 0.3, 0.13, 0.12, 0.1, 0.24, 0.2, 0.19, 0.17, 0],
+  /** thick black smoke of a critically damaged / burning hull */
+  blackSmoke: [0.05, 0.045, 0.04, 0.55, 0.08, 0.075, 0.07, 0.42, 0.15, 0.14, 0.13, 0],
+  /** electrical smoke off high-tech hulls: blue-grey */
+  elecSmoke: [0.32, 0.38, 0.48, 0.2, 0.3, 0.34, 0.42, 0.15, 0.3, 0.32, 0.36, 0],
+  /** hot shaped-charge jet: white core, blue-white edge */
+  jet: [4.0, 3.6, 3.0, 1, 2.6, 1.6, 0.7, 0.8, 0.8, 0.3, 0.08, 0],
 } as const satisfies Record<string, Ramp>;
 
 /* -------------------------------------------------------------------------------------------------- atlas */
@@ -635,7 +645,9 @@ class Ribbons {
           vec3 c = vCol.rgb * glow + mix(vCol.rgb, vec3(max(vCol.r, max(vCol.g, vCol.b))), 0.55) * core * 1.4;
           gl_FragColor = vec4(c * cap * k, 1.0);
         }`,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+      // the quad is turned toward the eye in the shader, so its winding depends on the segment's direction: without
+      // DoubleSide about half of all beams, bolts and tracers were back-face culled (invisible)
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide,
     });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false; this.mesh.renderOrder = order;
@@ -737,6 +749,10 @@ interface BoltFx {
   ax: number; ay: number; az: number; bx: number; by: number; bz: number;
   r: number; g: number; b: number; w: number;
   life: number; max: number; seed: number; roll: number; pts: number[]; wob: number;
+  /** beams: seconds the head takes to reach b (a pulse shooting out of the emitter); 0 = all at once */
+  grow?: number;
+  /** beams: core width (1 normal, larger = a fatter white-hot core) */
+  core?: number;
 }
 
 function mulberry(a: number) { return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -945,6 +961,7 @@ function paintChip(paint: readonly [number, number, number] | undefined, dirt: r
 
 /** muzzle flash families (Fx3D.muzzleFx) */
 export type TrailKind = 'rocket' | 'incend' | 'missile' | 'bigMissile' | 'shell' | 'heavyShell' | 'firebomb' | 'gauss' | 'spark' | 'orb' | 'flame' | 'bullet';
+export type WispKind = 'steam' | 'oil' | 'black' | 'elec' | 'dust';
 export type MuzzleKind = 'gun' | 'gatling' | 'blast' | 'darts' | 'cannon' | 'he' | 'gauss' | 'sniper' | 'rocket' | 'missile' | 'mortar' | 'flak' | 'ac';
 
 export interface GlowDef { x: number; y: number; z: number; size: number; life: number; ramp?: Ramp }
@@ -1059,7 +1076,7 @@ export class Fx3D {
   /** muzzle flash at a barrel tip: a hot core, a forward spike and (big guns) a puff of smoke */
   muzzle(x: number, y: number, z: number, dx: number, dz: number, cal: number): void {
     const s = 0.28 + cal * 0.75;
-    this.add.emit(x, y, z, 0, 0, 0, 0.07, s * 1.1, s * 0.6, 0, 0, 0, 0, RAMPS.flash, this.hdr);
+    this.add.emit(x, y, z, 0, 0, 0, 0.085, s * 1.25, s * 0.6, 0, 0, 0, 0, RAMPS.flash, this.hdr);
     const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l;
     this.add.emit(x + nx * s * 0.45, y, z + nz * s * 0.45, nx * 3, 0, nz * 3, 0.06, s * 0.7, s * 0.3, 0, 2, 0, 3, RAMPS.flash, this.hdr);
     if (cal > 0.55) {
@@ -1137,8 +1154,8 @@ export class Fx3D {
 
   /* ------------------------------------------------------------------------------------------ beams / bolts */
 
-  beam(ax: number, ay: number, az: number, bx: number, by: number, bz: number, color: THREE.Color, w: number, life = 0.12, wob = 0): void {
-    this.bolts.push({ kind: 'beam', ax, ay, az, bx, by, bz, r: color.r, g: color.g, b: color.b, w, life, max: life, seed: 0, roll: -1, pts: [], wob });
+  beam(ax: number, ay: number, az: number, bx: number, by: number, bz: number, color: THREE.Color, w: number, life = 0.12, wob = 0, grow = 0, core = 1.8): void {
+    this.bolts.push({ kind: 'beam', ax, ay, az, bx, by, bz, r: color.r, g: color.g, b: color.b, w, life, max: life, seed: 0, roll: -1, pts: [], wob, grow, core });
     if (this.bolts.length > 600) this.bolts.shift();
     // muzzle + impact flares
     this.add.emit(ax, ay, az, 0, 0, 0, life * 0.8, w * 5, w * 3, 0, 0, 0, 0, [color.r * 2.5, color.g * 2.5, color.b * 2.5, 1, color.r, color.g, color.b, 0.6, 0, 0, 0, 0], this.hdr);
@@ -1188,10 +1205,6 @@ export class Fx3D {
     if (prog > 0.55 && Math.random() < (napalm ? 0.45 : 0.25)) this.alpha.emit(x, y + 0.15, z, R(-0.2, 0.2), R(0.7, 1.3), R(-0.2, 0.2), R(0.9, 1.6), 0.25 * size, 0.9 * size, R(-1, 1), 0.8, 0.2, pf, RAMPS.smoke);
   }
 
-  wreckSmoke(x: number, z: number, S: number): void {
-    this.alpha.emit(x + R(-0.2, 0.2) * S, 0.35 + 0.1 * S, z + R(-0.2, 0.2) * S, R(-0.1, 0.1), R(0.7, 1.4), R(-0.1, 0.1), R(1.6, 2.8), 0.3 + S * 0.12, 0.9 + S * 0.35, R(-0.6, 0.6), 0.4, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.smoke);
-    if (Math.random() < 0.3) this.fire.emit(x + R(-0.15, 0.15) * S, 0.3, z + R(-0.15, 0.15) * S, 0, R(0.3, 0.8), 0, R(0.3, 0.5), 0.2 + S * 0.05, 0.1, 0, 0, 0, 1, RAMPS.flame, this.hdr);
-  }
   dustPuff(x: number, z: number, r: number): void {
     const n = this.lodN(4 + Math.round(r * 4));
     for (let i = 0; i < n; i++) {
@@ -1229,7 +1242,9 @@ export class Fx3D {
         break;
       }
       case 'cannon': case 'he': { // big flash, muzzle-brake side jets, a smoke ring and ground dust
-        this.add.emit(x, y, z, 0, 0, 0, 0.1, s * 2.0, s * 1.0, 0, 0, 0, 0, RAMPS.flash, h);
+        this.add.emit(x, y, z, 0, 0, 0, 0.12, s * 2.3, s * 1.0, 0, 0, 0, 0, RAMPS.flash, h);
+        // the flash lights up the ground around the gun for an instant
+        this.pools.add(x + nx * s * 0.5, z + nz * s * 0.5, 0.05, s * 1.6, s * 3.2, 0.16, 0.8 * h, 0.5 * h, 0.2 * h);
         this.add.emit(x + nx * s * 0.3, y, z + nz * s * 0.3, 0, 0, 0, 0.07, s * 2.6, s * 1.4, 0, 0, 0, 4, RAMPS.flash, h);
         this.add.emit(x + nx * s * 0.6, y, z + nz * s * 0.6, nx * 5, 0, nz * 5, 0.08, s * 1.3, s * 0.5, 0, 3, 0, 3, RAMPS.flash, h);
         for (const sd of [-1, 1]) this.add.emit(x + px * sd * s * 0.2, y, z + pz * sd * s * 0.2, px * sd * 4, 0, pz * sd * 4, 0.07, s * 0.8, s * 0.3, 0, 4, 0, 3, RAMPS.fire, h);
@@ -1607,6 +1622,109 @@ export class Fx3D {
     this.add.emit(x + Math.cos(a) * hx, y + R(-0.1, 0.2), z + Math.sin(a) * hz, R(-1, 1), R(0.5, 1.5), R(-1, 1), R(0.15, 0.3), 0.06, 0.02, 0, 1, -6, 3, RAMPS.emp, this.hdr);
   }
 
+  /* ----------------------------------------------------------------------------------- damage / crashes */
+
+  /** One wisp of damage smoke leaking out of a seam or joint (call at a rate set by the damage). Thin rising trails,
+   *  not puffs: steam = light coolant / hydraulic hiss, oil = brown-black engine smoke, black = the thick smoke of a
+   *  critically damaged hull, elec = blue-grey electrical smoke with the odd spark, dust = grit shaken loose.
+   *  k 0..1 scales size and density; (vx, vz): drift (a moving hull leaves its wisps behind). */
+  wisp(x: number, y: number, z: number, kind: WispKind, k: number, vx = 0, vz = 0): void {
+    const pf = 1 + (Math.random() < 0.5 ? 1 : 0);
+    const black = kind === 'black';
+    const ramp = kind === 'steam' ? RAMPS.steam : kind === 'oil' ? RAMPS.oilSmoke : black ? RAMPS.blackSmoke : kind === 'elec' ? RAMPS.elecSmoke : this.dust;
+    const s0 = 0.04 + 0.07 * k, s1 = black ? 0.45 + 0.75 * k : 0.22 + 0.38 * k;
+    const life = kind === 'steam' ? R(0.5, 0.9) : R(1.1, 2.0) * (0.75 + 0.45 * k);
+    const up = kind === 'steam' ? R(1.0, 1.7) : black ? R(0.8, 1.4) : R(0.55, 1.0);
+    this.alpha.emit(x, y, z, vx + R(-0.07, 0.07) + WIND_X * 0.7, up, vz + R(-0.07, 0.07) + WIND_Z * 0.7, life, s0, s1, R(-0.8, 0.8), 0.8, 0.12, pf, ramp);
+    if (kind === 'elec' && Math.random() < 0.3) this.add.emit(x, y, z, R(-1.5, 1.5), R(0.5, 2.2), R(-1.5, 1.5), R(0.12, 0.25), 0.05, 0.015, 0, 1.5, -9, 3, RAMPS.emp, this.hdr);
+  }
+
+  /** a short fizz of sparks out of a damaged joint (heavy / critical damage) */
+  damageSpark(x: number, y: number, z: number, elec = false): void {
+    const h = this.hdr, n = 2 + Math.floor(Math.random() * 3);
+    if (Math.random() < 0.5) this.add.emit(x, y, z, 0, 0, 0, 0.06, 0.16, 0.06, 0, 0, 0, 0, elec ? RAMPS.emp : RAMPS.flash, h * 0.8);
+    for (let i = 0; i < n; i++) this.add.emit(x, y, z, R(-2, 2), R(0.6, 2.8), R(-2, 2), R(0.15, 0.35), 0.045, 0.015, 0, 1.2, -11, 3, elec ? RAMPS.emp : RAMPS.spark, h);
+  }
+
+  /** a small fire licking out of a hole / hatch of a critically damaged hull: one flame tongue, now and then smoke */
+  smallFire(x: number, y: number, z: number, s: number): void {
+    const pf = 1 + (Math.random() < 0.5 ? 1 : 0), h = this.hdr;
+    const vy = R(0.9, 1.6);
+    this.fire.emit(x, y, z, R(-0.15, 0.15), vy, R(-0.15, 0.15), R(0.28, 0.45), s * R(0.8, 1.1), s * 0.25, R(-1, 1), 1.6, 1.2, pf, RAMPS.flame, h);
+    this.fire.emit(x, y + s * 0.4, z, R(-0.15, 0.15), vy * 1.4, R(-0.15, 0.15), R(0.18, 0.3), s * 0.5, s * 0.1, R(-1, 1), 1.6, 1.4, 3 - pf, RAMPS.flame, h);
+    if (Math.random() < 0.3) this.add.emit(x, y, z, 0, 0.6, 0, R(0.1, 0.2), s * 0.7, s * 0.2, 0, 1, 0, 0, RAMPS.flash, h * 0.55);
+  }
+
+  /** a burning aircraft falling: flames streaming off it and a black smoke trail; k 0..1 = how hard it burns */
+  crashTrail(x: number, y: number, z: number, s: number, k: number): void {
+    const pf = 1 + (Math.random() < 0.5 ? 1 : 0), h = this.hdr;
+    this.fire.emit(x + R(-0.15, 0.15) * s, y, z + R(-0.15, 0.15) * s, R(-0.3, 0.3), R(0.2, 0.8), R(-0.3, 0.3), R(0.25, 0.45), (0.3 + 0.25 * s) * (0.7 + 0.5 * k), 0.12 * s, R(-2, 2), 2, 0.5, pf, RAMPS.fireball, h);
+    this.alpha.emit(x, y + 0.1, z, R(-0.15, 0.15) + WIND_X, R(0.3, 0.8), R(-0.15, 0.15) + WIND_Z, R(1.6, 2.8), 0.15 + 0.15 * s, (0.7 + 0.5 * s) * (0.6 + 0.5 * k), R(-0.6, 0.6), 0.5, 0.05, 3 - pf, RAMPS.blackSmoke);
+    if (Math.random() < 0.25) this.add.emit(x, y, z, R(-2, 2), R(-0.5, 1.5), R(-2, 2), R(0.3, 0.6), 0.05, 0.02, 0, 0.6, -6, 3, RAMPS.ember, h);
+  }
+
+  /** Explosive warhead striking a hull that survives it (the kill gets its own, bigger blast): w = warhead size
+   *  ~0.2 (20 mm HE) .. 1.6 (heavy bomb), (dx, dz) = direction of travel.
+   *  heat: shaped charge / AT missile: a white-hot star, a jet of spall punching on through, molten spatter blown
+   *        back out of the hole, a tight fireball clinging to the plate and a puff of dark smoke.
+   *  he:   high-explosive shell / rocket: flash, a lobed fireball on the hull, a ring of sparks, grey-black smoke.
+   *  plasma / emp: a coloured burst of the same size. */
+  warheadHit(x: number, y: number, z: number, dx: number, dz: number, w: number, kind: 'heat' | 'he' | 'plasma' | 'emp'): void {
+    w = clamp(w, 0.15, 1.8);
+    const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l, h = this.hdr;
+    const kq = 1 / (1 + this.heat * 0.3);
+    this.heat += 0.4 + w * 0.3;
+    if (kind === 'plasma' || kind === 'emp') {
+      const rp = kind === 'plasma' ? RAMPS.plasma : RAMPS.emp;
+      this.add.emit(x, y, z, 0, 0, 0, 0.1, 0.5 + 1.3 * w, 0.3, 0, 0, 0, 4, rp, h * kq);
+      this.add.emit(x, y, z, 0, 0, 0, 0.2, 0.4 + 1.0 * w, 0.9 + 1.4 * w, 0, 0, 0, 0, rp, h * kq * 0.8);
+      const n = this.lodN(6 + Math.round(w * 8));
+      for (let i = 0; i < n; i++) this.add.emit(x, y, z, R(-3, 3), R(0.5, 3.5), R(-3, 3), R(0.2, 0.45), 0.07, 0.02, 0, 1.5, -9, 3, rp, h);
+      if (kind === 'emp') this.arcs(x, y, z, 0.25 + w * 0.4, 0.25 + w * 0.4);
+      return;
+    }
+    // flash: a hard star + a soft bloom
+    this.add.emit(x, y, z, 0, 0, 0, 0.07, (0.55 + 1.1 * w) * (kind === 'heat' ? 1.2 : 1), 0.25, 0, 0, 0, 4, kind === 'heat' ? RAMPS.jet : RAMPS.flash, h * kq);
+    this.add.emit(x, y, z, 0, 0, 0, 0.12, 0.6 + 1.3 * w, 0.3 + 0.6 * w, 0, 0, 0, 0, RAMPS.flash, h * kq * 0.8);
+    if (kind === 'heat') {
+      // the jet: hot spall streaking on through and out of the far side, in a narrow cone
+      const n = this.lodN(8 + Math.round(w * 12));
+      for (let i = 0; i < n; i++) {
+        const a = R(-0.3, 0.3), sp = R(9, 17), c = Math.cos(a), sn = Math.sin(a);
+        this.add.emit(x, y, z, (nx * c - nz * sn) * sp, R(-0.5, 2.5), (nz * c + nx * sn) * sp, R(0.12, 0.3), 0.07 + w * 0.04, 0.015, 0, 2, -6, 3, i & 1 ? RAMPS.jet : RAMPS.spark, h);
+      }
+      const nb = this.lodN(4 + Math.round(w * 3));
+      for (let i = 0; i < nb; i++) this.add.emit(x, y, z, -nx * R(1, 3.5) + R(-1.5, 1.5), R(1, 3.5), -nz * R(1, 3.5) + R(-1.5, 1.5), R(0.35, 0.7), 0.06, 0.02, 0, 0.8, -12, 3, RAMPS.molten, h);
+    } else {
+      const n = this.lodN(6 + Math.round(w * 10));
+      for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = R(3, 8) * (0.7 + w * 0.4); this.add.emit(x, y, z, Math.cos(a) * sp - nx * 1.5, R(1, 5), Math.sin(a) * sp - nz * 1.5, R(0.25, 0.5), 0.05 + w * 0.04, 0.02, 0, 1, -10, 3, RAMPS.spark, h); }
+    }
+    // fireball clinging to the plate (blown back off it a little), cooling to soot
+    const r = (kind === 'heat' ? 0.22 : 0.3) + (kind === 'heat' ? 0.3 : 0.5) * w;
+    const nf = this.lodN(2 + Math.round(w * 3));
+    for (let i = 0; i < nf; i++) {
+      const a = Math.random() * 6.283, sp = r * R(0.6, 1.6);
+      this.fire.emit(x - nx * r * 0.3 + Math.cos(a) * r * 0.2, y + r * 0.15, z - nz * r * 0.3 + Math.sin(a) * r * 0.2, Math.cos(a) * sp - nx * r, R(0.4, 1.2) * (0.6 + r), Math.sin(a) * sp - nz * r,
+        R(0.35, 0.55) * (0.85 + w * 0.2), r * R(0.6, 0.85), r * R(1.4, 1.9), R(-1, 1), 4, 0, 1 + (i & 1), RAMPS.fireball, h * (0.6 + 0.4 * kq));
+    }
+    const ns = this.lodN(1 + Math.round(w * 2));
+    for (let i = 0; i < ns; i++) this.alpha.emit(x - nx * r * 0.4, y + r * 0.3, z - nz * r * 0.4, R(-0.25, 0.25) - nx * 0.4 + WIND_X, R(0.5, 1.0), R(-0.25, 0.25) - nz * 0.4 + WIND_Z, R(1.2, 2.2), r * 0.6, r * 2.4, R(-0.4, 0.4), 1.1, 0, 1 + (i & 1), RAMPS.blastSmoke);
+    if (w > 0.7) this.rings.add(x, z, Math.max(0.06, y - 0.2), r * 0.4, r * 2.6, 0.22, 0.4 * h * kq, 0.36 * h * kq, 0.3 * h * kq);
+    this.trauma = Math.min(1, this.trauma + 0.01 + w * 0.05);
+  }
+
+  /** a heavy gun's muzzle blast slapping the ground under the barrel: a dust ring shoved out (mostly forward) and a
+   *  faint shock ring; s = gun size */
+  gunDust(x: number, z: number, nx: number, nz: number, s: number): void {
+    const n = this.lodN(6 + Math.round(s * 8));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + Math.random() * 0.4, c = Math.cos(a), sn = Math.sin(a);
+      const fw = 1 + 1.4 * Math.max(0, c * nx + sn * nz), sp = R(2.2, 4) * s * fw;
+      this.alpha.emit(x + c * s * 0.3, 0.1, z + sn * s * 0.3, c * sp, R(0.1, 0.5), sn * sp, R(0.6, 1.2), s * 0.35, s * 1.3, R(-1, 1), 3.4, 0, 1 + (i & 1), this.dust);
+    }
+    this.rings.add(x, z, 0.07, s * 0.3, s * 2.4, 0.25, 0.3 * this.hdr, 0.28 * this.hdr, 0.24 * this.hdr);
+  }
+
   /* ------------------------------------------------------------------------------------------- explosions */
 
   /** Explosion scaled by radius r (cells): a short white flash, a few big lobed flipbook fireballs that roll over into
@@ -1800,7 +1918,12 @@ export class Fx3D {
       if (f.kind === 'beam') {
         const w = f.w * (1 + (f.wob ? Math.sin(this.time * 55 + i) * f.wob : 0)) * (0.6 + 0.4 * a);
         const k = a * this.hdr;
-        this.beams.seg(f.ax, f.ay, f.az, f.bx, f.by, f.bz, w * 2.4, (0.3 + f.r * 1.5) * k, (0.3 + f.g * 1.5) * k, (0.3 + f.b * 1.5) * k, 0, 1.8);
+        // a pulse: the head shoots out to b, then the channel fades from the emitter end
+        const g = f.grow ? Math.min(1, (f.max - f.life) / f.grow) : 1;
+        const t0 = f.grow && g >= 1 ? Math.max(0, 1 - f.life / (f.max - f.grow)) * 0.85 : 0;
+        const ex = f.ax + (f.bx - f.ax) * g, ey = f.ay + (f.by - f.ay) * g, ez = f.az + (f.bz - f.az) * g;
+        const sx = f.ax + (f.bx - f.ax) * t0, sy = f.ay + (f.by - f.ay) * t0, sz = f.az + (f.bz - f.az) * t0;
+        this.beams.seg(sx, sy, sz, ex, ey, ez, w * 2.4, (0.12 + f.r * 1.7) * k, (0.12 + f.g * 1.7) * k, (0.12 + f.b * 1.7) * k, f.grow ? 1 : 0, f.core ?? 1.8);
       } else {
         const roll = Math.floor((f.max - f.life) / 0.045);
         if (roll !== f.roll) { f.roll = roll; jag(f, mulberry(f.seed + roll * 7919), f.pts); }
