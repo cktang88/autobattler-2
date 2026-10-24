@@ -414,3 +414,18 @@ test('blocks that escort each other (A -> B, B -> A) fight normally instead of h
   const s = b.summary();
   assert.ok(s.damageDealt[0] > 0, `the escort pair never engaged (battle ended at ${s.ticks / TICK_RATE}s)`);
 });
+
+// ---------------------------------------------------------------- bug-fix pass: sim / server / rules
+
+test('server input checks accept every legal design: the 10-mount superfortress, a full board of upgrades', async () => {
+  const { sanitizeDeck, sanitizeGarage, sanitizeAction } = await import('../src/server/validate.ts');
+  const sf = D('sf', 'superfortress', 'jet', ['bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg', null, null]);
+  assert.deepEqual(validateDesign(sf), []);
+  // the server used to cap mount lists at 8: a deck with one was a 400, and a garage with one failed to sync at all
+  assert.equal(sanitizeDeck([sf])[0].mounts.length, 10);
+  assert.deepEqual(sanitizeGarage({ designs: [sf], deck: ['sf'] }).deck, ['sf']);
+  assert.throws(() => sanitizeDeck([{ ...sf, mounts: [...sf.mounts, null] }]), /mounts/);
+  // validateDeploy takes a level-up for every block on the board in one turn (60 blocks x 2 levels)
+  const upgrade = Array.from({ length: 120 }, (_, i) => 1 + (i % 60));
+  assert.equal(sanitizeAction({ round: 3, place: [], upgrade }).upgrade.length, 120);
+});
