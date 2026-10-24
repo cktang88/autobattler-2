@@ -3,6 +3,7 @@
 // MAX_SIM_UNITS) and the usual placement rules (inside the deploy zone, no overlapping blocks).
 // The sim runs directly here (new Battle(...) stepped per frame), drawn with the same BattleView as a match.
 
+import { createMinimap, type MiniDot } from './minimap.ts';
 import { h, type App, type Screen } from '../app.ts';
 import { playMusic, sfx } from '../audio.ts';
 import { allDesigns } from '../collection.ts';
@@ -128,6 +129,12 @@ export function playgroundScreen(app: App): Screen {
   const canvas = h('canvas');
   const fieldwrap = h('div.fieldwrap', null, canvas);
   const view: BattleView = makeView(canvas, 0);
+  const minimap = createMinimap(fieldwrap, view, canvas);
+  /** minimap dots: live sim units in battle, placed blocks' units otherwise */
+  const miniDots = (): MiniDot[] => battle
+    ? battle.units.filter((u) => u.alive).map((u) => ({ x: u.x, y: u.y, side: u.side, size: u.stats.size, flying: u.flying }))
+    : boardUnits().filter((b) => !b.ghost).map((b) => ({ x: b.x, y: b.y, side: b.side, size: 1.5, flying: false }));
+
   applyViewSettings(view);
   const applyMap = () => { try { view.setMap(MAPS.find((m) => m.id === mapId) ?? MAPS[0]); } catch { /* */ } };
   applyMap();
@@ -746,6 +753,7 @@ export function playgroundScreen(app: App): Screen {
       } else {
         view.drawBoard(boardUnits(), { showZone: true, hover: outline() }, now / 1000);
       }
+      minimap.update(miniDots());
     } catch (e) {
       if (!drawErr) { drawErr = true; console.error('playground draw', e); }
     }
@@ -772,6 +780,7 @@ export function playgroundScreen(app: App): Screen {
       ro.disconnect();
       document.removeEventListener('keydown', onKey);
       try { view.destroy(); } catch { /* */ }
+      minimap.destroy();
     },
   };
 }

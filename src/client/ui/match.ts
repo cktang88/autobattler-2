@@ -2,6 +2,7 @@
 // round result, game over. Works with any MatchDriver (LocalDriver for AI, NetDriver for PvP).
 
 import { h, type App, type Route, type Screen } from '../app.ts';
+import { createMinimap, type MiniDot } from './minimap.ts';
 import { playMusic, sfx } from '../audio.ts';
 import { activeDeck } from '../collection.ts';
 import type { MatchDriver } from '../driver.ts';
@@ -241,6 +242,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const boxEl = h('div.box-select.hidden', { 'aria-hidden': 'true' });
   const fieldwrap = h('div.fieldwrap', null, canvas, ringCv, boxEl);
   const view: FieldWithEvents = makeView(canvas, side);
+  const minimap = createMinimap(fieldwrap, view, canvas);
+  /** minimap dots: live sim units in battle, placed blocks' units otherwise */
+  const miniDots = (): MiniDot[] => battle
+    ? battle.units.filter((u) => u.alive).map((u) => ({ x: u.x, y: u.y, side: u.side, size: u.stats.size, flying: u.flying }))
+    : boardUnits().filter((b) => !b.ghost).map((b) => ({ x: b.x, y: b.y, side: b.side, size: 1.5, flying: false }));
+
   applyViewSettings(view);
 
   const roundEl = h('div.round');
@@ -1983,6 +1990,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         drawRanges();
         dockInfo();
       }
+      minimap.update(miniDots());
     } catch (e) {
       if (!drawErr) { drawErr = true; console.error('field draw', e); }
     }
@@ -2022,6 +2030,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       unsub();
       driver.stop();
       try { view.destroy(); } catch { /* */ }
+      minimap.destroy();
     },
   };
 }

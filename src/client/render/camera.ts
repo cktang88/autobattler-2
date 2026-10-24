@@ -11,7 +11,7 @@
 //   Screen right is the visual direction (cos yaw, sin yaw), screen down (-sin yaw, cos yaw). Only views that can draw
 //   a turned field (the 3D view) ever set it; CameraControls.rotate gates the right-drag orbit.
 
-export const MAX_K = 80; // a size-1 unit (1 cell) is ~80 CSS px at full zoom
+export const MAX_K = 170; // a size-1 unit (1 cell) is ~170 CSS px at full zoom (close enough to read a scout's details)
 /** cells the camera may travel past the top/bottom (Y) and side (X) edges of the field */
 const EDGE_Y = 5;
 const EDGE_X = 2.5;
@@ -256,6 +256,12 @@ export class Camera {
       this.cy = this.tcy;
     }
     this.still = 0;
+  }
+
+  /** glide the view centre to a visual point, keeping zoom and turn (minimap clicks) */
+  centerOn(vx: number, vy: number): void {
+    this.setTarget(vx, vy, this.tk, false);
+    this.userAt = performance.now();
   }
 
   /** the whole field, unturned (the fit view is fitted to the unturned field) */

@@ -360,6 +360,7 @@ export class FieldView {
     return { k: this.k, ay: this.ay };
   }
 
+  centerOn(x: number, y: number): void { const v = this.toVisual(x, y); this.cam.centerOn(v.x, v.y); }
   frameWorldBox(x0: number, y0: number, x1: number, y1: number): void {
     const a = this.toVisual(x0, y0), b = this.toVisual(x1, y1);
     this.cam.frameBox(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));

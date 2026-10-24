@@ -39,6 +39,8 @@ export interface BattleView {
   scaleAt(x: number, y: number): { k: number; ay: number };
   /** auto camera: ease toward framing a world-space box (cells) */
   frameWorldBox(x0: number, y0: number, x1: number, y1: number): void;
+  /** glide the camera to centre on a world point (cells), keeping zoom and turn */
+  centerOn(x: number, y: number): void;
   /** queue a sim step's events (call after EVERY battle.step()) */
   pushEvents(events: BattleEvent[]): void;
   drawBoard(units: BoardUnit[], overlay: BoardOverlay, time: number): void;
