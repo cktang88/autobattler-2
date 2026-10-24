@@ -2141,6 +2141,15 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     dimLine(x, fx0, dy, fx0 + fw, dy, label(FW), false);
     const dx = Math.max(14, fx0 - Math.max(16, g.half - (FW / 2) * P + 12));
     dimLine(x, dx, fy0, dx, fy0 + fl, label(FL), true);
+    // FRONT: the hull faces up the bench; a chevron + label at the end of the top dimension line
+    {
+      const ax = fx0 + fw + 22, ay = dy;
+      x.fillStyle = 'rgba(255, 176, 0, 0.85)';
+      x.beginPath(); x.moveTo(ax, ay - 9); x.lineTo(ax + 8, ay + 3); x.lineTo(ax + 3, ay + 3); x.lineTo(ax + 3, ay + 9); x.lineTo(ax - 3, ay + 9); x.lineTo(ax - 3, ay + 3); x.lineTo(ax - 8, ay + 3); x.closePath(); x.fill();
+      x.textBaseline = 'middle';
+      x.fillText('FRONT', ax + 12, ay);
+      x.textBaseline = 'alphabetic';
+    }
     // range rings
     rings.forEach((o, i) => {
       const R = o.r * P;

@@ -378,7 +378,17 @@ export class UnitStage3D {
     const fg = new THREE.BufferGeometry().setFromPoints([[0, 0], [fw, 0], [fw, fl], [0, fl]].map(([a, b]) => new THREE.Vector3(x0 + a, 0.04, z0 + b)));
     const foot = new THREE.LineLoop(fg, new THREE.LineDashedMaterial({ color: '#ffb000', dashSize: 0.22, gapSize: 0.14, transparent: true, opacity: 0.75, depthWrite: false }));
     foot.computeLineDistances();
-    this.deco.add(grid, foot);
+    // FRONT: a chevron arrow on the ground just ahead of the footprint, pointing the way the hull faces (-z)
+    const s = Math.max(0.28, Math.min(1.2, Math.min(fw, fl) * 0.26)), az = z0 - 0.12 - s;
+    const arrow = new THREE.Shape([
+      [0, -s], [s * 0.9, 0], [s * 0.42, 0], [s * 0.42, s * 0.75], [-s * 0.42, s * 0.75], [-s * 0.42, 0], [-s * 0.9, 0],
+    ].map(([x, y]) => new THREE.Vector2(x, y)));
+    const ag = new THREE.ShapeGeometry(arrow);
+    ag.rotateX(Math.PI / 2); // shape y -> world z (tip at -z)
+    const am = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({ color: '#ffb000', transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+    am.position.set(0, 0.045, az);
+    am.renderOrder = 2;
+    this.deco.add(grid, foot, am);
   }
 
   /* ------------------------------------------------------------------------------------------------ input */
