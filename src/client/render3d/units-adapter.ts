@@ -428,11 +428,17 @@ class Pool {
     this.meshes.forEach((im, j) => { if (im) im.geometry = want ? lo![j] : this.tpl.meshes[j].geometry; });
   }
 
-  /** per-mesh castShadow under the layer's current minimum tier (wrecks count a tier lower: squashed and burnt out) */
+  /** per-mesh castShadow under the layer's current minimum tier (wrecks count a tier lower: squashed and burnt out).
+   *  A unit casting its sun shadow drops its soft contact blob: one shadow per unit, the detailed one when there is one
+   *  (an aircraft's blob sits straight under it while the sun shadow falls off to the side: two shadows) */
   applyShadow(minTier: number): void {
     const tier = this.tpl.shadowTier - (this.look === 'wreck' ? 1 : 0);
     const on = (this.look === 'normal' || this.look === 'wreck') && tier >= minTier;
-    this.meshes.forEach((im, j) => { if (im) im.castShadow = on && this.tpl.castOk[j]; });
+    this.meshes.forEach((im, j) => {
+      if (!im) return;
+      im.castShadow = on && this.tpl.castOk[j];
+      if (this.tpl.isBlob[j]) im.visible = !on;
+    });
   }
 
   private build(cap: number): void {
