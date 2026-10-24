@@ -29,6 +29,7 @@ import { playerName } from './vsai.ts';
 import { designInfo, type DesignInfo } from './deckstats.ts';
 import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
 import { openRoundStats } from './roundstats.ts';
+import { secondaryLeft } from '../render/camera.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 
@@ -379,7 +380,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const zoomBar = h('div.zoombtns', null,
     h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1.5); } }, '+'),
     h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1 / 1.5); } }, '−'),
-    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => { view.cam.userAt = performance.now(); view.fit(); } }, '⤢'),
+    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag (or Ctrl / Option + drag) turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => { view.cam.userAt = performance.now(); view.fit(); } }, '⤢'),
   );
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
 
@@ -870,7 +871,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(shapeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
-      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag to pan') : 'Pick a unit card, then tap your zone to deploy';
+      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag (or Ctrl / Option + drag) to pan') : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -1350,7 +1351,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     moveDrag = null;
     // box select: Shift / Box-select mode always; with a mouse, any left-drag that starts off your new blocks (those
     // drag-move). A click without dragging still selects normally (see pointerup). Right/middle-drag pans.
-    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0 && !secondaryLeft(e)
       && (e.shiftKey || boxMode || (e.pointerType === 'mouse' && !myPendingAt(local(e).px, local(e).rawY)))) {
       const { px, rawY } = local(e);
       boxSel = { x0: px, y0: rawY, x1: px, y1: rawY, add: e.shiftKey || boxMode };
@@ -1358,7 +1359,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       try { canvas.setPointerCapture(e.pointerId); } catch { /* */ }
       return;
     }
-    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0) {
+    if (phase === 'deploy' && selCard < 0 && !escortPick && e.button === 0 && !secondaryLeft(e)) {
       const { px, rawY } = local(e);
       const p = myPendingAt(px, rawY);
       const d = p && designOf(side, p.designId);
@@ -1472,7 +1473,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     }
     if (endMove(true)) return; // a drag-move, not a click
     if (lpDone) { lpDone = false; return; }
-    if (!start || e.button > 0) return;
+    if (!start || e.button > 0 || secondaryLeft(e)) return;
     if (view.wasDrag) { // end of a pan / pinch: not a click or tap
       if (e.pointerType === 'touch') { hover = null; renderHint(); }
       return;

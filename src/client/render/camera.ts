@@ -11,6 +11,10 @@
 //   Screen right is the visual direction (cos yaw, sin yaw), screen down (-sin yaw, cos yaw). Only views that can draw
 //   a turned field (the 3D view) ever set it; CameraControls.rotate gates the right-drag orbit.
 
+/** a left-button press with Ctrl or Option held: the Mac stand-in for a right-button press (macOS turns Ctrl+click into
+ *  a right-click, and trackpads / one-button mice have no other way to right-drag) */
+export const secondaryLeft = (e: { button: number; ctrlKey: boolean; altKey: boolean }): boolean => e.button === 0 && (e.ctrlKey || e.altKey);
+
 export const MAX_K = 170; // a size-1 unit (1 cell) is ~170 CSS px at full zoom (close enough to read a scout's details)
 /** cells the camera may travel past the top/bottom (Y) and side (X) edges of the field */
 const EDGE_Y = 5;
@@ -463,13 +467,15 @@ export class CameraControls {
       this.samples = [];
     }
     const p = this.pos(e);
-    this.ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, type: e.pointerType, button: e.button, t0: performance.now() });
+    // Ctrl / Option + left button stands in for the right button (Mac trackpads and one-button mice)
+    const button = secondaryLeft(e) ? 2 : e.button;
+    this.ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, type: e.pointerType, button, t0: performance.now() });
     this.cam.stopInertia();
     if (e.button === 1) e.preventDefault();
     if (this.ptrs.size === 2) this.startPinch();
     // right-drag orbits (where the view can turn): turning alone leaves the auto camera framing the fight
-    else if (this.ptrs.size === 1 && e.button === 2 && this.rotate) { this.orbiting = true; this.dragged = true; }
-    else if (this.ptrs.size === 1 && (e.button === 1 || e.button === 2)) { this.panning = true; this.dragged = true; this.cam.userAt = performance.now(); }
+    else if (this.ptrs.size === 1 && button === 2 && this.rotate) { this.orbiting = true; this.dragged = true; }
+    else if (this.ptrs.size === 1 && (button === 1 || button === 2)) { this.panning = true; this.dragged = true; this.cam.userAt = performance.now(); }
   }
 
   private startPinch(): void {

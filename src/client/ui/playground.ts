@@ -24,6 +24,7 @@ import type { Design, Placement, Side, UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
 import { kiteOptions, miniStats, orderFields, ordersControl, ordersOf, paintPreview, sizeLabel, statCard, type Orders } from './match-ui.ts';
 import { spacingControl, worldToLocalRect } from './match.ts';
+import { secondaryLeft } from '../render/camera.ts';
 
 type Phase = 'edit' | 'battle' | 'result';
 type PlaceSide = 'auto' | 0 | 1;
@@ -187,7 +188,7 @@ export function playgroundScreen(app: App): Screen {
   const zoomBar = h('div.zoombtns', null,
     h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => view.zoomBy(1.5) }, '+'),
     h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => view.zoomBy(1 / 1.5) }, '−'),
-    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
+    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag (or Ctrl / Option + drag) turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => view.fit() }, '⤢'),
   );
   const overlayEl = h('div');
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, overlayEl);
@@ -538,7 +539,7 @@ export function playgroundScreen(app: App): Screen {
   canvas.addEventListener('pointerdown', (e) => {
     downAt = { x: e.clientX, y: e.clientY };
     moveDrag = null;
-    if (phase === 'edit' && selCard < 0 && e.button === 0) {
+    if (phase === 'edit' && selCard < 0 && e.button === 0 && !secondaryLeft(e)) {
       const { px, rawY } = local(e);
       const hit = blockAt(px, rawY);
       const p = hit && find(hit);
@@ -608,7 +609,7 @@ export function playgroundScreen(app: App): Screen {
     const start = downAt;
     downAt = null;
     if (endMove(true)) return;
-    if (!start || e.button > 0 || view.wasDrag) return;
+    if (!start || e.button > 0 || secondaryLeft(e) || view.wasDrag) return;
     if (phase !== 'edit') return;
     const { px, py, rawY } = local(e);
     if (selCard >= 0) { placeAt(px, py); if (e.pointerType === 'touch') { hover = null; renderHint(); } return; }
