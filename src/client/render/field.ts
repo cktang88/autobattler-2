@@ -1035,6 +1035,18 @@ export class FieldView {
         const lv = this.liftVec(this.heightOf(p, layoutOf(u.design)) * 0.5);
         if (Math.random() < dt * (6 + 3 * S)) this.fx.burning(p.x + lv.x, p.y + lv.y, S);
       }
+      // damaged hulls leak smoke (thin grey wisps below 75 % hp, dark smoke below 50 %, flames and sparks below 25 %)
+      const hf = u.maxHp > 0 ? u.hp / u.maxHp : 1;
+      if (hf < 0.75 && list.length < 160) {
+        const S = layoutOf(u.design).S, lv = this.liftVec(this.heightOf(p, layoutOf(u.design)) * 0.7);
+        const ox = ((u.id * 0.618) % 1 - 0.5) * 0.4 * S, oy = ((u.id * 0.414) % 1 - 0.5) * 0.4 * S;
+        const hx = p.x + lv.x + ox, hy = p.y + lv.y + oy;
+        if (Math.random() < dt * (hf < 0.25 ? 6 : hf < 0.5 ? 4 : 2.2)) {
+          this.fx.smoke(hx, hy, (0.08 + (hf < 0.5 ? 0.1 : 0.04)) * (0.7 + 0.3 * S), 1.4, hf < 0.5 ? '#1c1a18' : '#9a9690', this.fx.wind.x * 0.5, -0.25, hf < 0.5 ? 0.45 : 0.28, 0.6);
+        }
+        if (hf < 0.25 && Math.random() < dt * 5) this.fx.fire(hx, hy, 0.07 + 0.03 * S, 0.35, 0, -0.3, 0.5);
+        if (hf < 0.5 && Math.random() < dt * 0.8) this.fx.sparks(hx, hy, 2, '#ffd890', 2.5, undefined, Math.PI, 0.2, true);
+      }
       if (u.stun > 0 || u.burning > 0 || u.slow > 0.01 || u.disarm > 0 || this.vis.get(u.id)?.spin) any = true;
     }
     if (!any) return;
@@ -2265,6 +2277,12 @@ export class FieldView {
           // armour-piercing: a hard white star and spall punching on through (small for the heavy MG / sniper)
           if (mod!.category === 'machinegun') { fx.armorHit(e.x, e.y, e.damage, '#fff0d0'); fx.sparks(e.x, e.y, 2, '#ffffff', 6, flew, 0.15, 0.12); }
           else fx.apHit(e.x, e.y, flew, e.damage);
+          break;
+        }
+        // explosive warheads with no blast radius (AT missiles) burst on the hull they hit (a kill adds its own blast)
+        if (mod && (mod.projectile === 'missile' || mod.projectile === 'rocket') && !mod.splash) {
+          fx.boom(e.x, e.y, 0.3 + Math.min(0.5, Math.sqrt(e.damage) * 0.025), 'fire', false);
+          fx.sparks(e.x, e.y, 6, '#fff0c0', 7, Number.isNaN(flew) ? undefined : flew, 0.5, 0.18, true);
           break;
         }
         const col = mod?.disarm ? '#ff7088' : mod?.slow ? '#d8c0ff' : mod?.category === 'energy' ? '#ffd8a0' : vis === 'tesla' || vis === 'emp' ? '#dfe8ff' : '#ffe0a0';

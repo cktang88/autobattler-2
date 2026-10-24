@@ -23,7 +23,7 @@ import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
 import { buildTerrain, createRenderer, setSurfaceDetail, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
 import { UnitLayer, teamHullRgb, templateKey, type Look, type Rig } from './units-adapter.ts';
-import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind } from './fx3d.ts';
+import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind, type WispKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
 import { SunShadow } from './shadow3d.ts';
@@ -66,15 +66,34 @@ interface UView {
   hits: number;
   /** rig transforms are current (posed last frame); culled / hidden rigs keep stale muzzle positions */
   posed: boolean;
+  /** damage smoke emitters (hull-local points + look), built on first damage */
+  dmg?: DmgPt[];
+}
+/** a damage smoke emitter on a hull: hull-local offset (x fwd, z right, y up; turret: rides that mount's turret ring),
+ *  what leaks out of it, and per-emitter variation (rate, size), so units don't all smoke alike */
+interface DmgPt { x: number; y: number; z: number; mount: number; kind: WispKind; rate: number; size: number; order: number }
+/** a burning aircraft falling out of the sky (the sim already removed it): flown by the view until it hits the ground */
+interface Faller {
+  rig: Rig; x: number; y: number; z: number; vx: number; vy: number; vz: number;
+  yaw: number; pitch: number; roll: number; wy: number; wp: number; wr: number;
+  heli: boolean; S: number; lv: WreckLevel; kind: DeathKind; t: number; g: number; fire: number; paint?: [number, number, number];
 }
 /** rig null: the unit was blown to smithereens, only scorch, scattered scrap and smoke remain. smoke / fire: seconds of
  *  smoke and flames left; heat 0..1: ember glow of a melted (energy) or freshly blasted hull, cooling; char: how burnt
  *  the hull looks 0..1; seed: varies the soot pattern (units-adapter wreck look) */
-interface Wreck { rig: Rig | null; x: number; z: number; smoke: number; S: number; fire: number; heat: number; char: number; seed: number; hx: number; hz: number; deck: number }
+interface Wreck {
+  rig: Rig | null; x: number; z: number; smoke: number; S: number; fire: number; heat: number; char: number; seed: number; hx: number; hz: number; deck: number;
+  /** wreck level, initial smoke seconds, hull heading (smoke comes out of holes / hatches / the engine deck) */
+  lv: WreckLevel; smoke0: number; ang: number;
+}
 interface ProjRec {
   y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean;
   /** smoothed 3D flight direction, the last trail emission point, launch time, wobble phase */
   dx: number; dy: number; dz: number; ex: number; ey: number; ez: number; born: number; seed: number;
+  /** offset from the sim's launch point to the barrel / tube tip it left (eased out over the first few frames) */
+  ox: number; oz: number;
+  /** bright tracer round (every Nth round of a fast gun) and where the round started (streaks never reach behind it) */
+  tracer: boolean; sx: number; sz: number; team: 0 | 1;
 }
 
 /** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
@@ -83,21 +102,22 @@ const airShot = (p: SimProjectile) => (p.kind === 'bullet' || p.kind === 'shell'
 /** beams / bolts: colour + width + life by module visual */
 function beamStyle(moduleId: string): { color: string; w: number; life: number; wob: number } {
   const def = MODULE_BY_ID.get(moduleId), v = def?.visual;
-  if (def?.disarm) return { color: '#ffb02a', w: 0.05, life: 0.2, wob: 0.15 }; // amber jamming beam
-  if (def?.lifesteal) return { color: '#ff2a5a', w: 0.08, life: 0.14, wob: 0.2 }; // leech: crimson
-  if (def?.split) return { color: '#b8f4ff', w: 0.04, life: 0.12, wob: 0 }; // prism: thin cyan-white
-  if (def?.pctHp) return { color: '#7a2aff', w: 0.2, life: 0.3, wob: 0.1 }; // void lance: fat violet
-  if (def?.shred) return { color: '#c8e83a', w: 0.07, life: 0.12, wob: 0.3 }; // entropy: corrosive yellow-green
-  if (v === 'gravity') return { color: '#9a5cff', w: 0.1, life: 0.14, wob: 0.45 };
+  if (def?.disarm) return { color: '#ffb02a', w: 0.07, life: 0.26, wob: 0.15 }; // amber jamming beam
+  if (def?.ramp) return { color: '#ff4a3a', w: 0.05, life: 0.15, wob: 0 }; // focusing twin laser: thin, fattens on target
+  if (def?.lifesteal) return { color: '#ff2a5a', w: 0.09, life: 0.18, wob: 0.2 }; // leech: crimson
+  if (def?.split) return { color: '#b8f4ff', w: 0.065, life: 0.18, wob: 0 }; // prism: thin cyan-white
+  if (def?.pctHp) return { color: '#7a2aff', w: 0.22, life: 0.36, wob: 0.1 }; // void lance: fat violet
+  if (def?.shred) return { color: '#c8e83a', w: 0.08, life: 0.16, wob: 0.3 }; // entropy: corrosive yellow-green
+  if (v === 'gravity') return { color: '#9a5cff', w: 0.11, life: 0.18, wob: 0.45 };
   switch (v) {
-    case 'laser': return { color: '#ff4a3a', w: 0.05, life: 0.1, wob: 0 };
-    case 'heatray': return { color: '#ff8a2a', w: 0.13, life: 0.12, wob: 0.25 };
-    case 'plasma': return { color: '#e070ff', w: 0.15, life: 0.12, wob: 0.2 };
-    case 'tesla': case 'emp': return { color: '#9fc8ff', w: 0.05, life: 0.2, wob: 0 };
-    case 'slowbeam': case 'sonic': return { color: '#5ec8ff', w: 0.09, life: 0.12, wob: 0.35 };
+    case 'laser': return { color: '#ff4a3a', w: 0.11, life: 0.3, wob: 0 };
+    case 'heatray': return { color: '#ff8a2a', w: 0.14, life: 0.16, wob: 0.25 };
+    case 'plasma': return { color: '#e070ff', w: 0.16, life: 0.18, wob: 0.2 };
+    case 'tesla': case 'emp': return { color: '#9fc8ff', w: 0.06, life: 0.22, wob: 0 };
+    case 'slowbeam': case 'sonic': return { color: '#5ec8ff', w: 0.1, life: 0.16, wob: 0.35 };
     case 'rail': case 'gauss': return { color: '#9fb8ff', w: 0.07, life: 0.24, wob: 0 };
-    case 'repair': case 'nanite': return { color: '#7dff9a', w: 0.06, life: 0.12, wob: 0.2 };
-    default: return { color: '#ffd890', w: 0.05, life: 0.1, wob: 0 };
+    case 'repair': case 'nanite': return { color: '#7dff9a', w: 0.06, life: 0.14, wob: 0.2 };
+    default: return { color: '#ffd890', w: 0.06, life: 0.14, wob: 0 };
   }
 }
 
@@ -174,6 +194,30 @@ function styleOf(id: string): WStyle {
   }
   return st;
 }
+/** Recoil per family: barrel kick (x the base), run-out rate (1/s), hull rock impulse (rad/s at s = 1) and whether
+ *  the muzzle blast kicks up dust off the ground (heavy guns). */
+const RECOIL: Partial<Record<Fam, [number, number, number, boolean]>> = {
+  mg: [0.6, 14, 0, false], twinmg: [0.6, 14, 0, false], hmg: [0.8, 12, 0, false], gatling: [0.5, 14, 0, false],
+  shotgun: [1, 10, 0, false], flechette: [1, 10, 0, false], ac: [1, 11, 0.05, false], flak: [1.2, 8, 0.15, false],
+  apc: [2.1, 4, 0.55, true], he: [2.3, 3.6, 0.7, true], gauss: [1.4, 4, 0.45, false], sniper: [1.3, 6, 0.05, false],
+  rail: [1.6, 3.5, 0.6, false], howitzer: [2.8, 2.4, 0.9, true], cluster: [2.6, 2.6, 0.85, true],
+  mortar: [1.6, 5, 0.35, true], firebomb: [1.6, 5, 0.35, true], grenade: [1.2, 8, 0.1, false],
+};
+/** Warhead size of an explosive round (~0.2 20 mm HE .. 1.6 heavy bomb), for the impact blast on the hull it struck */
+function warheadOf(def: ModuleDef | undefined): number {
+  return clamp(Math.sqrt(Math.max(1, def?.damage ?? 50) / 100) * 0.5, 0.18, 1.6);
+}
+/** explosive families: their hits blow up on the hull */
+const EXPLOSIVE = new Set<Fam>(['ac', 'apc', 'he', 'rocket', 'incend', 'missile', 'bigMissile', 'grenade', 'mortar', 'howitzer', 'cluster', 'bomb', 'flak', 'firebomb', 'plasmaOrb', 'empOrb']);
+/** tracer every Nth round, by fire rate (fast guns: most rounds are dim ball ammo between the tracers) */
+function tracerEvery(def: ModuleDef | undefined): number {
+  const cd = def?.cooldown ?? 0.3, br = Math.max(1, def?.barrels ?? 1);
+  const per = cd / (def?.spinUp ? 1 : Math.min(2, br)); // seconds between rounds
+  return per <= 0.05 ? 6 : per <= 0.1 ? 5 : per <= 0.18 ? 4 : per <= 0.3 ? 3 : 1;
+}
+/** linear rgb of tracer compound: the viewer's rounds burn classic yellow-orange, the enemy's red-orange */
+const TRACER: [number, number, number][] = [[1, 0.7, 0.28], [1, 0.36, 0.16]];
+
 /** families whose beam / bolt event draws its own impact (their 'hit' only flares a shield) */
 const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'leech', 'prism', 'void', 'entropy', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
 
@@ -306,6 +350,13 @@ export class FieldView3D implements BattleView {
   private ramp = new Map<number, { start: number; last: number; x: number; y: number }>();
   /** where cluster shells just burst (their bomblets are drawn as bomblets) */
   private clusterPts: { x: number; y: number; t: number }[] = [];
+  /** aircraft going down in flames */
+  private fallers: Faller[] = [];
+  /** per unit * 16 + mount: the barrel the last shot left (rounds / beams start at that tip) and rounds fired (tracer count) */
+  private lastBarrel = new Map<number, number>();
+  private shotN = new Map<number, number>();
+  /** damage-smoke emission scale this frame (crowded battles thin it out) */
+  private dmgK = 1;
   // quality
   /** 'auto' scales AO / bloom / shadows / resolution from frame time; a number pins the level (0 best) */
   quality: 'auto' | 0 | 1 | 2 | 3 = 'auto';
@@ -765,6 +816,9 @@ export class FieldView3D implements BattleView {
     this.bu.clear();
     for (const w of this.wrecks) if (w.rig) this.layer.release(w.rig);
     this.wrecks = [];
+    for (const f of this.fallers) this.layer.release(f.rig);
+    this.fallers = [];
+    this.lastBarrel.clear(); this.shotN.clear();
     this.fx.clear();
     this.shake.clear();
     this.projRec.clear();
@@ -946,10 +1000,14 @@ export class FieldView3D implements BattleView {
 
     // units
     let alive = 0;
+    for (const u of battle.units) if (u.alive) alive++;
+    // damage smoke: full rate up to ~90 units on the field, thinned out beyond (and with the effect LOD)
+    this.dmgK = Math.min(1, 90 / Math.max(1, alive)) * this.fx.lod;
+    alive = 0;
     for (const u of battle.units) {
       if (!u.alive) {
         const v = this.bu.get(u.id);
-        if (v && jump && !u.flying) this.toWreck(u.id, v, u.x, u.y, u.angle, 1, 'kinetic', true);
+        if (v && jump && !u.flying) this.toWreck(u.id, v.rig, u.x, u.y, u.angle, 1, 'kinetic', true);
         else if (v) { this.layer.release(v.rig); this.bu.delete(u.id); }
         continue;
       }
@@ -958,6 +1016,7 @@ export class FieldView3D implements BattleView {
       this.poseUnit(u, v, dt);
     }
     this.syncWrecks(dt);
+    this.syncFallers(dt);
     this.syncProjectiles(battle.projectiles, byId);
     this.shields.end();
     this.ui.end();
@@ -998,7 +1057,8 @@ export class FieldView3D implements BattleView {
     if (enemyCloak || this.offscreen(x, y, rig.radius + 5)) return;
     const h = u.flying ? flyHeight(rig.S) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * rig.S;
     rig.root.position.set(x, h, y);
-    rig.root.rotation.y = -ang;
+    // (heavy guns rock the hull: Rig.update tilts the quaternion, so the full rotation is reset here every frame)
+    rig.root.rotation.set(0, -ang, 0);
     rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt);
     for (let i = 0; i < u.mounts.length; i++) rig.aim(i, normAng(mounts[i] - ang), dt);
 
@@ -1011,6 +1071,12 @@ export class FieldView3D implements BattleView {
     const sk = u.slow > 0.02 ? clamp(u.slow / 0.6, 0.25, 1) : 0;
     if (sk) { tr *= 1 - 0.25 * sk; tg *= 1 + 0.05 * sk; tb += 0.7 * sk; }
     if (u.disarm > 0) { const f = 0.5 + 0.5 * Math.sin(this.time * 9 + u.id); tr += f * 0.45; tg += f * 0.28; }
+    // critically damaged: the hull darkens, with the odd flicker of fire light from inside
+    const hpF = u.maxHp > 0 ? u.hp / u.maxHp : 1;
+    if (hpF < 0.25) {
+      const fl = Math.max(0, Math.sin(this.time * 23 + u.id * 3.1) * Math.sin(this.time * 7.7 + u.id)) * 0.35;
+      tr *= 0.78 + fl; tg *= 0.74 + fl * 0.45; tb *= 0.72;
+    } else if (hpF < 0.5) { tr *= 0.9; tg *= 0.88; tb *= 0.86; }
     rig.tr = tr; rig.tg = tg; rig.tb = tb;
     rig.update(dt);
     v.posed = true;
@@ -1040,9 +1106,69 @@ export class FieldView3D implements BattleView {
       if (m) this.fx.jam(m.x, m.y, m.z); else this.fx.jam(x, h + rig.height * 0.8, y);
     }
     this.heat(u, rig);
+    if (hpF < 0.75) this.damageSmoke(u, v, x, h, y, ang, hpF, dt);
 
     this.drawShield(u, v, x, h, y);
     this.drawBars(u, v, x, h, y, ang, dt);
+  }
+
+  /** Emitter points for a unit's damage smoke: 2-4 seams / joints picked from its build (turret rings, the engine
+   *  deck, hips / track sprockets) with what leaks out of each (coolant steam, oily engine smoke, electrical smoke on
+   *  high-tech hulls, grit on brawlers), plus per-emitter variation. Deterministic per unit id. */
+  private dmgPoints(u: SimUnit, rig: Rig): DmgPt[] {
+    let sd = (u.id * 2654435761) >>> 0;
+    const rnd = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; };
+    const d = u.design, mob = d.mobility;
+    const legs = mob === 'legs' || mob === 'titanlegs' || mob === 'jumpjets' || mob === 'spider';
+    const tech = mob === 'hover' || mob === 'gravlift' || d.mounts.some((m) => { const c = m ? MODULE_BY_ID.get(m)?.category : undefined; return c === 'energy' || c === 'disruption'; });
+    const brawler = d.mounts.some((m) => (m ? MODULE_BY_ID.get(m)?.category === 'melee' : false));
+    const L = rig.L, W = rig.W, H = rig.height;
+    const pts: DmgPt[] = [];
+    const add = (x: number, y: number, z: number, mount: number, kind: WispKind) =>
+      pts.push({ x, y, z, mount, kind, rate: 0.75 + 0.5 * rnd(), size: 0.8 + 0.4 * rnd(), order: rnd() });
+    // the engine deck at the back: oily smoke (electrical on high-tech hulls)
+    add(-L * (0.28 + 0.1 * rnd()), H * 0.62, (rnd() - 0.5) * W * 0.4, -1, tech ? 'elec' : 'oil');
+    // the first turret's ring: coolant / hydraulics
+    if (rig.turrets.some((t) => t)) add(0, 0, 0, rig.turrets.findIndex((t) => t), tech ? 'elec' : 'steam');
+    // joints: hips (walkers) or a track sprocket / wheel hub (vehicles); brawlers shed grit
+    const sz = rnd() < 0.5 ? -1 : 1;
+    if (legs) add((rnd() - 0.5) * L * 0.3, H * 0.42, sz * W * 0.36, -1, tech ? 'elec' : 'steam');
+    else add(L * (0.15 + 0.25 * rnd()), H * 0.3, sz * W * 0.42, -1, brawler ? 'dust' : 'steam');
+    if (rig.S >= 3) add(L * (rnd() - 0.5) * 0.6, H * 0.7, -sz * W * 0.3, -1, tech ? 'elec' : 'oil');
+    pts.sort((a, b) => a.order - b.order);
+    return pts;
+  }
+
+  /** Damaged hulls leak smoke from their seams and joints: light damage (< 75 % hp) a thin wisp or two, heavy (< 50 %)
+   *  every joint smoking, darker, with sparks, critical (< 25 %) a fire licking out of one hole, thick black smoke off
+   *  the engine and sparks (the tint flickers in poseUnit). */
+  private damageSmoke(u: SimUnit, v: UView, x: number, h: number, y: number, ang: number, f: number, dt: number): void {
+    const rig = v.rig, pts = (v.dmg ??= this.dmgPoints(u, rig));
+    const stage = f < 0.25 ? 3 : f < 0.5 ? 2 : 1;
+    const ca = Math.cos(ang), sa = Math.sin(ang), K = this.dmgK, S = rig.S;
+    const sz = 0.55 + 0.25 * Math.min(4, S);
+    const n = stage === 1 ? Math.min(2, pts.length) : pts.length;
+    // the deck: where the first turret sits on the hull (the model's full height includes its turrets and antennae,
+    // so hull points placed by height alone ended up inside the hull, their smoke hidden)
+    const t0 = rig.turrets.findIndex((t) => t);
+    const deck = t0 >= 0 && rig.turretWorld(t0, _v3) ? Math.max(h + 0.15, _v3.y) : h + rig.height * 0.6;
+    // critical: the fire burns out of the engine deck
+    const fireAt = pts.find((q) => q.mount < 0 && (q.kind === 'oil' || q.kind === 'elec')) ?? pts[0];
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      let px: number, py: number, pz: number;
+      const tw = p.mount >= 0 ? rig.turretWorld(p.mount, _v3) : null;
+      if (tw) { px = tw.x; py = tw.y + 0.08; pz = tw.z; }
+      else { px = x + p.x * ca - p.z * sa; py = deck + 0.05; pz = y + p.x * sa + p.z * ca; }
+      let kind = p.kind;
+      // heavier damage: the engine's oil smoke goes black, steam turns to dirty smoke
+      if (stage >= 2 && kind === 'oil') kind = 'black';
+      if (stage === 3 && kind === 'steam' && i > 0) kind = 'oil';
+      const rate = (stage === 1 ? 6 : stage === 2 ? 9 : 11) * p.rate * K;
+      for (let r = rate * dt; r > 0; r--) if (Math.random() < r) this.fx.wisp(px, py, pz, kind, (stage === 1 ? 0.25 : stage === 2 ? 0.55 : 0.85) * p.size * sz);
+      if (stage >= 2 && Math.random() < (stage === 2 ? 0.35 : 0.8) * K * dt) this.fx.damageSpark(px, py, pz, p.kind === 'elec');
+      if (stage === 3 && p === fireAt && Math.random() < 14 * K * dt) this.fx.smallFire(px, py, pz, 0.2 + 0.08 * Math.min(4, S));
+    }
   }
 
   /** rotary guns that have been firing glow at the muzzle, brighter the further they have spun up */
@@ -1221,12 +1347,25 @@ export class FieldView3D implements BattleView {
       let rec = seen.get(p.id);
       const pos = this.projPos(p);
       if (!rec) {
-        // launch height: the barrel tip that fired it
-        let y0 = GUN_H;
-        if (p.src !== undefined && p.mount !== undefined) {
+        // launch point: the barrel tip that fired it (guns: the barrel the 'fire' event took; pods and racks: the next
+        // tube in turn, so a salvo ripples across the launcher face). The sim launches from the mount's muzzle reach,
+        // the view starts the round at the real tip and eases it onto the sim's path over the first frames.
+        let y0 = GUN_H, ox = 0, oz = 0;
+        const st0 = styleOf(p.moduleId);
+        const key = p.src !== undefined && p.mount !== undefined ? p.src * 16 + p.mount : -1;
+        if (key >= 0) {
           const rig = this.posedRig(p.src);
-          if (rig && rig.muzzleWorld(p.mount, _v3)) y0 = _v3.y;
+          const tube = p.kind === 'rocket' || p.kind === 'missile';
+          const bi = rig ? (tube ? rig.nextBarrel(p.mount!) : this.lastBarrel.get(key) ?? 0) : 0;
+          if (rig && rig.muzzleWorld(p.mount!, _v3, bi)) {
+            y0 = _v3.y;
+            const dx = _v3.x - pos.x, dz = _v3.z - pos.y;
+            if (dx * dx + dz * dz < 6) { ox = dx; oz = dz; }
+          }
         }
+        const shots = key >= 0 ? (this.shotN.get(key) ?? 0) + 1 : p.id;
+        if (key >= 0) this.shotN.set(key, shots);
+        const every = st0.fam === 'shotgun' || st0.fam === 'flechette' ? 0 : tracerEvery(st0.def);
         // straight rounds end at the body height of the first enemy along their path (aircraft fly well above the ground);
         // rounds fired at aircraft (the sim flies them at z = 1) climb to the first aircraft along their path
         const air = airShot(p);
@@ -1240,13 +1379,14 @@ export class FieldView3D implements BattleView {
         if (bomblet || st.fam === 'bomb') y0 = pos.z + 0.12;
         const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
         rec = {
-          y0, lastH: y0, px: pos.x, py: pos.y, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet,
-          dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x, ey: y0, ez: pos.y, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
+          y0, lastH: y0, px: pos.x + ox, py: pos.y + oz, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet,
+          dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x + ox, ey: y0, ez: pos.y + oz, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
+          ox, oz, tracer: every > 0 && shots % every === 0, sx: pos.x + ox, sz: pos.y + oz, team: this.teamOf(p.side),
         };
         seen.set(p.id, rec);
         // every rocket / missile leaves its own tube: a launch flash, a backblast jet and a smoke cloud behind the pod
         if ((p.kind === 'rocket' || p.kind === 'missile') && !this.offscreen(pos.x, pos.y, 3)) {
-          this.fx.launch(pos.x, y0, pos.y, ca, sa, st.s, p.kind === 'missile' ? (st.fam === 'bigMissile' ? 2 : 1) : 0);
+          this.fx.launch(pos.x + ox, y0, pos.y + oz, ca, sa, st.s, p.kind === 'missile' ? (st.fam === 'bigMissile' ? 2 : 1) : 0);
         }
       }
       if (this.offscreen(pos.x, pos.y, 4)) { rec.px = rec.ex = pos.x; rec.py = rec.ez = pos.y; continue; }
@@ -1262,7 +1402,9 @@ export class FieldView3D implements BattleView {
       if (rec.bomblet || st.fam === 'bomb') H = pos.z + 0.12;
       else if (lofts) H = lerp(rec.y0, 0.15, kp) + pos.z;
       else H = lerp(rec.y0, rec.hEnd, kp);
-      let X = pos.x, Z = pos.y;
+      // eased from the barrel tip onto the sim's path over the first ~0.15 s
+      const ease = age < 0.15 ? 1 - age / 0.15 : 0;
+      let X = pos.x + rec.ox * ease * ease, Z = pos.y + rec.oz * ease * ease;
       // rockets and swarm missiles don't fly on rails: a little corkscrew wobble round the true path (none at the ends)
       if (p.kind === 'rocket' || (p.kind === 'missile' && st.def?.id === 'swarm')) {
         const env = Math.sin(Math.PI * kp), ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
@@ -1293,7 +1435,9 @@ export class FieldView3D implements BattleView {
       const emit = Math.random() < Math.min(1, fdt * 60);
       /** point `b` cells behind the head along the flight direction */
       const bx = (b: number) => X - dx * b, by = (b: number) => H - dy * b, bz = (b: number) => Z - dz * b;
-      const tracer = (len: number, w: number, r: number, g: number, b: number) => proj.streak(bx(len), by(len), bz(len), X, H, Z, w, r, g, b);
+      // streaks never reach back behind the barrel the round left
+      const flown = Math.hypot(X - rec.sx, Z - rec.sz) + 0.05;
+      const tracer = (len: number, w: number, r: number, g: number, b: number) => { len = Math.min(len, flown); proj.streak(bx(len), by(len), bz(len), X, H, Z, w, r, g, b); };
       /** trail puffs laid every `sp` cells along the path since the last frame, from `back` cells behind the head */
       const trailAlong = (back: number, kind: TrailKind, size: number, sp: number) => {
         const tx = bx(back), ty = by(back), tz = bz(back);
@@ -1309,19 +1453,31 @@ export class FieldView3D implements BattleView {
       };
       switch (p.kind) {
         case 'bullet': {
+          // Rounds are fast: drawn as streaks a good deal longer than the round so the eye can follow them. Fast guns
+          // load a tracer every Nth round (by fire rate): those burn as long bright streaks in the side's tracer colour
+          // (the viewer's yellow-orange, the enemy's red-orange); the ball rounds between them are short and faint.
+          const tc = TRACER[rec.team], T = rec.tracer;
           switch (st.fam) {
-            case 'gatling': { // rotary: short dim tracers at first, a hose of long bright ones once spun up
+            case 'gatling': { // rotary: dim at first, a hose of long bright tracers once spun up
               const k = rec.k, f = 0.7 + sz;
-              tracer((0.3 + 0.9 * k) * f * (rec.bright ? 1.3 : 1), (0.022 + 0.03 * k) * f, 1, 0.5 + 0.35 * k, 0.15 + 0.35 * k);
+              if (T) tracer((1.0 + 1.4 * k) * f, (0.03 + 0.03 * k) * f, tc[0], tc[1] * (0.75 + 0.25 * k), tc[2]);
+              else tracer((0.35 + 0.35 * k) * f, 0.016 * f, 0.45, 0.36, 0.22);
               break;
             }
-            case 'shotgun': tracer(0.16, 0.04 + sz * 0.03, 1, 0.85, 0.55); break; // a spray of short pellet dots
-            case 'flechette': tracer(0.85, 0.018, 0.7, 0.88, 1); break; // long thin steel needles
-            case 'ac': tracer(0.35 + 0.4 * sz, 0.05 + 0.06 * sz, 1, 0.36, 0.12); break; // fat red-orange HE tracer
-            case 'hmg': tracer(0.9 + 0.4 * sz, 0.05, 1, 0.6, 0.22); break; // every round a heavy orange tracer
-            case 'sniper': tracer(3.2, 0.03, 0.8, 0.92, 1); break; // one long white-blue streak
-            case 'twinmg': tracer(rec.bright ? 0.9 : 0.45, 0.035, 0.7, 0.88, 1); break; // cold pale tracers (it slows)
-            default: tracer(rec.bright ? 0.9 + sz * 0.6 : 0.4 + sz * 0.3, 0.03 + sz * 0.05, 1, 0.8, 0.35); break;
+            case 'shotgun': tracer(0.3, 0.035 + sz * 0.03, 1, 0.85, 0.55); break; // a spray of short pellet dashes
+            case 'flechette': tracer(1.1, 0.018, 0.7, 0.88, 1); break; // long thin steel needles
+            case 'ac': // HE autocannon: every round a glowing shell, the tracers long and fat
+              if (T) tracer(1.3 + 0.8 * sz, 0.055 + 0.05 * sz, tc[0], tc[1] * 0.75, tc[2]);
+              else tracer(0.45 + 0.4 * sz, 0.04 + 0.04 * sz, 0.75, 0.35, 0.15);
+              break;
+            case 'sniper': tracer(3.6, 0.035, 0.8, 0.92, 1); break; // one long white-blue streak
+            case 'twinmg': // cold pale tracers (it slows)
+              if (T) tracer(1.5, 0.04, 0.7, 0.88, 1); else tracer(0.5, 0.016, 0.35, 0.42, 0.5);
+              break;
+            default: // mg / hmg: classic tracer lines with faint ball rounds between
+              if (T) tracer(1.4 + sz * 1.6, 0.035 + sz * 0.045, tc[0], tc[1], tc[2]);
+              else tracer(0.55 + sz * 0.5, 0.016 + sz * 0.012, 0.42, 0.34, 0.2);
+              break;
           }
           break;
         }
@@ -1448,11 +1604,111 @@ export class FieldView3D implements BattleView {
       if (this.offscreen(w.x, w.z, (w.rig?.radius ?? w.S) + 3)) continue;
       if (w.rig) {
         // the wreck look reads the instance colour as data: char amount, ember heat, soot-pattern seed
-        w.rig.tr = w.char; w.rig.tg = w.heat; w.rig.tb = w.seed;
+        w.rig.tr = w.char; w.rig.tg = w.heat; w.rig.tb = (w.lv + w.seed * 0.98) / 4;
         this.layer.submit(w.rig, 'wreck');
       }
-      if (w.smoke > 0 && Math.random() < dt * (2.5 + w.S) * this.fx.lod) this.fx.wreckSmoke(w.x, w.z, w.S);
+      if (w.smoke > 0) {
+        // thin columns out of two or three holes / hatches (seeded per wreck): black and oily while fresh, thinning to
+        // a grey wisp as it burns out
+        const k = w.smoke / Math.max(1, w.smoke0), n = w.lv === 0 ? 2 : 3;
+        const ca = Math.cos(w.ang), sa = Math.sin(w.ang);
+        for (let i = 0; i < n; i++) {
+          const r1 = (w.seed * 7.31 + i * 0.618) % 1, r2 = (w.seed * 3.17 + i * 0.382) % 1;
+          if (Math.random() > dt * (0.9 + 0.35 * w.S) * (0.4 + 0.6 * k) * (i === 0 ? 1.4 : 0.8) * this.fx.lod) continue;
+          const lx = (r1 - 0.5) * w.hx * 1.3, lz = (r2 - 0.5) * w.hz * 1.3;
+          this.fx.wisp(w.x + lx * ca - lz * sa, w.deck + 0.05, w.z + lx * sa + lz * ca, k > 0.55 ? 'black' : k > 0.25 ? 'oil' : 'steam', (0.4 + 0.6 * k) * (0.6 + 0.2 * Math.min(4, w.S)));
+        }
+      }
       if (w.fire > 0 && Math.random() < dt * (3 + w.hx * w.hz * 6) * this.fx.lod) this.fx.burning(w.x, w.deck, w.z, w.hx, w.hz);
+    }
+  }
+
+  /* ----------------------------------------------------------------------------------------- falling aircraft */
+
+  /** An aircraft killed short of being blown to bits: a burst at its altitude, then it keeps its momentum and falls
+   *  burning (jets glide on, nose dropping and rolling over; helicopters lose lift and spin down), trailing fire and
+   *  black smoke, and blows up again where it hits the ground, leaving a wreck. */
+  private startFall(e: Extract<BattleEvent, { t: 'death' }>, v: UView, du: SimUnit | undefined): void {
+    const rig = v.rig, fx = this.fx, lv = e.wreck;
+    const p = rig.root.position;
+    const heli = du ? du.design.mobility !== 'jet' : true;
+    const paint = du ? this.paintOf(du.side) : undefined;
+    // momentum: the drawn motion over the last snapshot pair, in cells per real second
+    const c = this.curU.get(e.unit), pr = this.prevU.get(e.unit);
+    let vx = 0, vz = 0;
+    if (c && pr && this.curTick > this.prevTick) {
+      const k = this.tickRate / (this.curTick - this.prevTick);
+      vx = (c.x - pr.x) * k; vz = (c.y - pr.y) * k;
+    }
+    const ang = du?.angle ?? -rig.root.rotation.y;
+    const sp = Math.hypot(vx, vz);
+    if (!heli && sp < 3) { vx = Math.cos(ang) * 4.5; vz = Math.sin(ang) * 4.5; }
+    if (heli) { vx *= 0.6; vz *= 0.6; }
+    // the hit that killed it: a burst at altitude (bigger the more it broke up)
+    const y = p.y + rig.midY;
+    if (lv === 0) { fx.warheadHit(p.x, y, p.z, vx, vz, 0.35 + rig.S * 0.15, 'he'); }
+    else fx.explosion(p.x, p.z, 0.45 + rig.S * (lv === 2 ? 0.45 : 0.3), 'fire', y - 0.1, true, lv === 2 ? 1 : 0.7, paint);
+    if (lv === 2) fx.scatter(p.x, p.z, y, Math.round(4 + rig.S * 2), rig.radius * 1.6 + 0.4, 0.12 + rig.S * 0.06, 0, paint);
+    const R0 = (a: number, b: number) => a + Math.random() * (b - a);
+    rig.root.rotation.order = 'YXZ';
+    this.fallers.push({
+      rig, x: p.x, y: p.y, z: p.z, vx, vy: heli ? R0(-0.3, 0.3) : R0(0.2, 0.8), vz,
+      yaw: ang, pitch: 0, roll: 0,
+      wy: heli ? R0(2.5, 4) * (Math.random() < 0.5 ? -1 : 1) : R0(-0.4, 0.4),
+      wp: heli ? R0(-0.3, 0.3) : -R0(0.5, 0.9), wr: heli ? R0(-0.6, 0.6) : R0(1.4, 3.2) * (Math.random() < 0.5 ? -1 : 1),
+      heli, S: rig.S, lv, kind: e.kind, t: 0, g: heli ? 5.5 : 3.6, fire: lv === 0 ? 0.6 : 1, paint,
+    });
+  }
+
+  private syncFallers(dt: number): void {
+    if (!this.fallers.length) return;
+    const fx = this.fx;
+    for (let i = this.fallers.length - 1; i >= 0; i--) {
+      const f = this.fallers[i], rig = f.rig;
+      f.t += dt;
+      // gravity (a jet's wings still give a little lift while it is level), air drag, tumbling
+      const lift = f.heli ? 0 : Math.max(0, Math.cos(f.pitch)) * Math.max(0, 1 - f.t * 0.5) * 0.45;
+      f.vy -= f.g * (1 - lift) * dt;
+      const drag = Math.max(0, 1 - dt * (f.heli ? 0.8 : 0.25));
+      f.vx *= drag; f.vz *= drag;
+      f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+      if (f.heli) f.wy *= 1 + dt * 0.9; // autorotating faster and faster
+      f.yaw += f.wy * dt; f.roll += f.wr * dt;
+      f.pitch = Math.max(-1.1, f.pitch + f.wp * dt);
+      f.fire = Math.min(1, f.fire + dt * 0.8);
+      const ground = 0.05;
+      if (f.y <= ground) {
+        // impact: a second, bigger blast, dirt thrown up, the wreck left nose-in where it came down
+        if (!this.offscreen(f.x, f.z, 4)) {
+          fx.explosion(f.x, f.z, 0.55 + f.S * 0.45, 'fire', 0, true, 1, f.paint);
+          fx.dirtGeyser(f.x, f.z, 0.5 + f.S * 0.3);
+          fx.shockwave(f.x, f.z, 0.4 + f.S * 0.25);
+          // the wreck slamming in is a second boom (the death event only shook for the burst at altitude)
+          this.shake.add(f.x, f.z, 0.7 + f.S * 0.4);
+        }
+        this.fallers.splice(i, 1);
+        const lv: WreckLevel = f.lv >= 2 ? 2 : 1;
+        const sp = Math.hypot(f.vx, f.vz);
+        // jets plough a little way on and dig their nose in; helicopters drop flat and break up
+        if (!f.heli && sp > 0.5) { f.x += (f.vx / sp) * 0.4; f.z += (f.vz / sp) * 0.4; }
+        fx.scorchMark(f.x, f.z, 0.5 + f.S * 0.35);
+        this.toWreck(-1, rig, f.x, f.z, f.yaw, lv, 'explosive', false, f.heli ? 0 : -0.22);
+        continue;
+      }
+      if (this.offscreen(f.x, f.z, rig.radius + 4)) continue;
+      rig.root.position.set(f.x, f.y, f.z);
+      rig.root.rotation.set(f.roll, -f.yaw, f.pitch);
+      rig.locomote(0, false, this.time, dt);
+      const fl = 0.25 * Math.max(0, Math.sin(this.time * 31 + i * 3));
+      rig.tr = 0.42 + fl; rig.tg = 0.36 + fl * 0.5; rig.tb = 0.33;
+      rig.update(dt);
+      this.layer.submit(rig, 'normal');
+      // fire and smoke streaming off it (laid along the path so a fast jet leaves a continuous trail)
+      const n = Math.min(4, Math.ceil(dt * 50 * this.fx.lod));
+      for (let k = 0; k < n; k++) {
+        const b = (k / n) * dt;
+        fx.crashTrail(f.x - f.vx * b, f.y + rig.midY - f.vy * b, f.z - f.vz * b, Math.min(2.5, f.S), f.fire);
+      }
     }
   }
 
@@ -1528,12 +1784,28 @@ export class FieldView3D implements BattleView {
         const st = styleOf(e.moduleId);
         // rotary guns track their spin even off screen (the tracers and barrel glow read it)
         const k = st.fam === 'gatling' ? this.spinShot(e.unit, e.mount, st.def?.spinUp ?? 1.5) : 1;
-        if (!v || this.offscreen(e.x, e.y, 3)) break;
-        v.rig.kick(e.mount);
+        if (!v) break;
+        // multi-barrel guns take turns (the round and the flash leave the barrel that fired); pods and racks pick
+        // their tube per round as the rounds appear
+        const key = e.unit * 16 + e.mount;
+        const launcher = st.fam === 'rocket' || st.fam === 'incend' || st.fam === 'missile' || st.fam === 'bigMissile';
+        this.lastBarrel.set(key, launcher ? 0 : v.rig.nextBarrel(e.mount));
+        if (this.offscreen(e.x, e.y, 3)) break;
+        // recoil: the barrel slams back and runs out (slowly on heavy guns), heavy guns rock the whole hull
+        const rc = RECOIL[st.fam] ?? [1, 9, 0, false];
+        v.rig.kick(e.mount, rc[0] * (0.8 + 0.4 * Math.min(1.2, st.s)), rc[1]);
+        const su = byId.get(e.unit);
+        if (rc[2] > 0 && su && !su.flying && v.posed) v.rig.rock(normAng(e.angle - su.angle), rc[2] * st.s * 1.5 / Math.sqrt(Math.max(1, v.rig.S)));
         if (!st.muzzle) break; // beams / bolts / flame / melee draw their own flare
-        const m = v.posed ? v.rig.muzzleWorld(e.mount, _v3) : null;
-        if (m) fx.muzzleFx(m.x, m.y, m.z, Math.cos(e.angle), Math.sin(e.angle), st.s, st.muzzle, k);
-        else fx.muzzleFx(e.x, GUN_H, e.y, Math.cos(e.angle), Math.sin(e.angle), st.s, st.muzzle, k);
+        const m = v.posed ? v.rig.muzzleWorld(e.mount, _v3, this.lastBarrel.get(key) ?? 0) : null;
+        const ca = Math.cos(e.angle), sa = Math.sin(e.angle);
+        if (m) fx.muzzleFx(m.x, m.y, m.z, ca, sa, st.s, st.muzzle, k);
+        else fx.muzzleFx(e.x, GUN_H, e.y, ca, sa, st.s, st.muzzle, k);
+        // heavy guns: the blast slaps the ground under the muzzle
+        if (rc[3] && st.s >= 0.45) {
+          const mx = m ? m.x : e.x, mz = m ? m.z : e.y, my = m ? m.y : GUN_H;
+          if (my < 2.6) fx.gunDust(mx + ca * 0.2, mz + sa * 0.2, ca, sa, st.s * (st.fam === 'mortar' || st.fam === 'firebomb' ? 0.6 : 1));
+        }
         break;
       }
       case 'beam': {
@@ -1541,7 +1813,7 @@ export class FieldView3D implements BattleView {
         const bs = beamStyle(e.moduleId);
         const rk = st.fam === 'focus' && e.unit !== undefined && e.mount !== undefined ? this.rampShot(e.unit, e.mount, e.x2, e.y2) : 0;
         const rig = this.posedRig(e.unit);
-        const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
+        const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3(), this.lastBarrel.get(e.unit! * 16 + e.mount) ?? 0) : null;
         if (!m && this.offscreen(e.x1, e.y1, 3) && this.offscreen(e.x2, e.y2, 3)) break;
         const ay = m ? m.y : GUN_H;
         const sx = m ? m.x : e.x1, sz = m ? m.z : e.y1;
@@ -1553,8 +1825,8 @@ export class FieldView3D implements BattleView {
         if (st.fam === 'focus') {
           // focusing: the beam fattens and burns from red to white-hot as it holds one target
           col.lerp(_c2.setRGB(1, 0.9, 0.75), rk * 0.8);
-          w *= 1 + 3.5 * rk;
-          life += 0.1 * rk;
+          w *= 1 + 1.4 * rk;
+          life += 0.05 * rk;
           if (rk > 0.4) fx.glow(sx, ay, sz, 0.2 + rk * 0.5, 0.14, RAMPS.molten);
         }
         const s = st.s;
@@ -1564,9 +1836,18 @@ export class FieldView3D implements BattleView {
           fx.railShot(sx, ay, sz, end.x, by, end.y, 0.3 + (def?.beamWidth ?? 0.1) * 2.2, def?.mount === 'XL'); // width follows the slug's hit width: rail rifle ~0.4, railgun ~0.55, mass driver ~1.3
           break;
         }
+        if (st.fam === 'laser') {
+          // pulse laser: one heavy, precise pulse (75 per shot every 1.6 s) -- a thick white-hot bolt that shoots out of
+          // the lens, flashes at both ends and leaves a glowing burn and spatter on the hull
+          fx.beam(sx, ay, sz, end.x, by, end.y, col, w, life, 0, 0.05, 3.2);
+          fx.glow(sx, ay, sz, 0.55 + s * 0.6, 0.16, RAMPS.flash);
+          fx.glow(end.x, by, end.y, 0.7 + s * 0.8, 0.22, RAMPS.flash);
+          fx.burnHit(end.x, by, end.y, s * 1.6, 2.4);
+          fx.warheadHit(end.x, by, end.y, end.x - sx, end.y - sz, 0.25, 'plasma');
+          break;
+        }
         fx.beam(sx, ay, sz, end.x, by, end.y, col, w, life, bs.wob);
         switch (st.fam) {
-          case 'laser': fx.burnHit(end.x, by, end.y, s, 0.8); break;
           case 'focus': fx.burnHit(end.x, by, end.y, s, 0.6 + 1.9 * rk); break;
           case 'heatray': fx.burnHit(end.x, by, end.y, s, 1.4); break;
           case 'slow': fx.beamMotes(sx, ay, sz, end.x, by, end.y, RAMPS.frost, 3); fx.frostHit(end.x, by, end.y, s); break;
@@ -1583,18 +1864,24 @@ export class FieldView3D implements BattleView {
         break;
       }
       case 'chain': {
-        const st = beamStyle(e.moduleId);
+        const st = beamStyle(e.moduleId), sty = styleOf(e.moduleId);
         const col = new THREE.Color(st.color);
         const rig = this.posedRig(e.unit);
-        const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3()) : null;
-        const w = 0.04 + styleOf(e.moduleId).s * 0.04;
+        const m = rig && e.mount !== undefined ? rig.muzzleWorld(e.mount, new THREE.Vector3(), this.lastBarrel.get(e.unit! * 16 + e.mount) ?? 0) : null;
+        if (!m && e.points.every((q) => this.offscreen(q.x, q.y, 3))) break;
+        // heavy arcs (arc lance, storm tower / core) are thick and doubled; every arc lingers long enough to see
+        const s = sty.s, heavy = (sty.def?.damage ?? 0) >= 100;
+        const w = 0.025 + s * 0.035 + (heavy ? 0.012 : 0), life = 0.24 + s * 0.12;
         let hPrev = GUN_H;
         for (let i = 1; i < e.points.length; i++) {
           const p0 = e.points[i - 1], p1 = e.points[i];
           const h1 = this.aimHeightAt(p1.x, p1.y, byId, e.side);
           const sx = i === 1 && m ? m.x : p0.x, sy = i === 1 && m ? m.y : hPrev, sz = i === 1 && m ? m.z : p0.y;
           const end = this.shotEnd(sx, sz, p1.x, p1.y, byId);
-          fx.lightning(sx, sy, sz, end.x, h1, end.y, col, w, 0.2);
+          fx.lightning(sx, sy, sz, end.x, h1, end.y, col, w, life);
+          if (heavy) fx.lightning(sx, sy, sz, end.x, h1, end.y, col, w * 0.55, life * 0.7);
+          fx.empHit(end.x, h1, end.y, s * (i === 1 ? 1 : 0.7));
+          if (i === 1) fx.glow(sx, sy, sz, 0.35 + s * 0.5, 0.18, RAMPS.bolt);
           hPrev = h1;
         }
         break;
@@ -1641,6 +1928,12 @@ export class FieldView3D implements BattleView {
         // knockback weapons shove the hull: dust kicked up under it
         if (st.def?.impulse && st.def.impulse > 0 && su && !su.flying && v && Math.random() < 0.7) fx.dustPuff(e.x, e.y, 0.3 + v.rig.S * 0.12);
         if (SELF_IMPACT.has(st.fam)) break;
+        // explosive rounds without a blast radius (AT missiles) burst on the plate they hit; AP shells punch in with a
+        // penetrator flash. (Rounds with a splash radius get theirs in 'explode', placed on the hull they struck.)
+        if (EXPLOSIVE.has(st.fam) && !(st.def?.splash && st.def.splash > 0) && su && !su.flying) {
+          fx.warheadHit(e.x, yh, e.y, tdx, tdz, warheadOf(st.def), st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' ? 'emp' : st.fam === 'missile' || st.fam === 'apc' ? 'heat' : 'he');
+          break;
+        }
         switch (st.fam) {
           case 'mg': case 'gatling': fx.impact(e.x, yh, e.y, 0.1 + s * 0.4, true); break;
           case 'twinmg': fx.impact(e.x, yh, e.y, 0.1 + s * 0.3, true); if (Math.random() < 0.35) fx.frostHit(e.x, yh, e.y, 0.15); break;
@@ -1680,6 +1973,27 @@ export class FieldView3D implements BattleView {
             if (d < bd) { bd = d; best = u.id; }
           }
           if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
+        }
+        // a round that burst on a ground unit's hull: the warhead's blast on the plate it hit (sized to the warhead, the
+        // ground blast below it a little smaller); a kill adds its own, bigger blast
+        if (!ey && EXPLOSIVE.has(st.fam) && st.fam !== 'flak') {
+          let hit: SimUnit | null = null, bd = Infinity;
+          for (const u of byId.values()) {
+            if (!u.alive || u.flying) continue;
+            const v = this.bu.get(u.id);
+            const d = Math.hypot(u.x - e.x, u.y - e.y);
+            if (v && d < Math.min(v.rig.L, v.rig.W) * 0.5 + 0.35 && d < bd) { bd = d; hit = u; }
+          }
+          if (hit) {
+            const v = this.bu.get(hit.id)!, c = this.drawnAt(hit);
+            const w = warheadOf(st.def) * (st.fam === 'cluster' && e.radius < 1.1 ? 0.6 : 1);
+            const yh = this.unitHeight(hit.id, byId);
+            // on the side facing where it came from (the hull centre if it came straight down)
+            const fr = st.fam === 'mortar' || st.fam === 'howitzer' || st.fam === 'bomb' || st.fam === 'cluster' || st.fam === 'grenade' || st.fam === 'firebomb';
+            const dx = e.x - c.x, dz = e.y - c.y, dl = Math.hypot(dx, dz), r = Math.min(v.rig.L, v.rig.W) * 0.35;
+            const hx = fr || dl < 0.05 ? c.x : c.x + (dx / dl) * r, hz = fr || dl < 0.05 ? c.y : c.y + (dz / dl) * r;
+            fx.warheadHit(hx, fr ? v.rig.height * 0.85 : yh, hz, dl > 0.05 ? -dx : 0, dl > 0.05 ? -dz : 0, w, st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' ? 'emp' : 'he');
+          }
         }
         // the area the blast actually damaged (the sim's splash radius), marked on the ground / at the burst height
         if (st.fam !== 'pd') fx.aoeRing(e.x, st.fam === 'flak' ? (ey > 0 ? ey : 1.3) : ey, e.y, e.radius, st.fam === 'plasmaOrb' || st.fam === 'plasma' || st.fam === 'empOrb' || st.fam === 'chain' || st.fam === 'sonic');
@@ -1723,6 +2037,12 @@ export class FieldView3D implements BattleView {
         // the hull's team paint: its debris and scrap show it
         const du = byId.get(e.unit);
         const paint = du ? this.paintOf(du.side) : undefined;
+        // aircraft not blown to bits catch fire and fall out of the sky (syncFallers flies them down)
+        if (e.flying && v && lv < 3 && vis && v.posed) {
+          this.bu.delete(e.unit);
+          this.startFall(e, v, du);
+          break;
+        }
         if (vis) {
           const y = e.flying ? (v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1) : 0;
           // the blast grows with the destruction: a perforated hull just coughs fire, a vaporised one goes up whole
@@ -1736,7 +2056,7 @@ export class FieldView3D implements BattleView {
           const r0 = v?.rig.radius ?? 0.3 + sz * 0.3;
           fx.scatter(e.x, e.y, e.flying ? 1.2 : 0.2, Math.round((lv === 3 ? 10 : 5) + sz * (lv === 3 ? 5 : 2.5)), r0 * (lv === 3 ? 3.2 : 2) + 0.4, 0.14 + sz * 0.07, e.kind === 'energy' ? 0.5 : 0, paint);
         }
-        if (v && !e.flying) this.toWreck(e.unit, v, e.x, e.y, byId.get(e.unit)?.angle ?? 0, lv, e.kind);
+        if (v && !e.flying) this.toWreck(e.unit, v.rig, e.x, e.y, byId.get(e.unit)?.angle ?? 0, lv, e.kind);
         else if (v) { this.layer.release(v.rig); this.bu.delete(e.unit); }
         break;
       }
@@ -1764,23 +2084,27 @@ export class FieldView3D implements BattleView {
   /** The hull stays as a wreck for the rest of the battle, as broken as the killing blow (sim WreckLevel): 0 a whole,
    *  perforated hull; 1 burnt, sagging, its main turret blown off; 2 crumpled and sunk with every turret thrown clear;
    *  3 nothing left but a scorch mark and the scrap scattered by the death blast. catchUp: found dead after a seek (no fresh smoke / fire). */
-  private toWreck(id: number, v: UView, x: number, y: number, angle: number, lv: WreckLevel, kind: DeathKind, catchUp = false): void {
+  private toWreck(id: number, rig: Rig, x: number, y: number, angle: number, lv: WreckLevel, kind: DeathKind, catchUp = false, nose = 0): void {
     this.bu.delete(id);
-    const rig = v.rig, S = rig.S, rnd = (k: number) => (Math.random() - 0.5) * k;
+    const S = rig.S, rnd = (k: number) => (Math.random() - 0.5) * k;
     const hx = rig.L * 0.5, hz = rig.W * 0.5;
     const fire = catchUp ? 0 : kind === 'fire' ? 5 + S * 2 : kind === 'explosive' && lv >= 1 ? 2 + S * lv : kind === 'energy' && lv >= 1 ? 1.5 + S : 0;
-    const smoke = catchUp ? 0 : (10 + S * 4) * (lv === 0 && kind === 'kinetic' ? 0.6 : lv === 3 ? 0.5 : 1);
+    // (a whole hull smokes too: a thin column out of its holes for a good while)
+    const smoke = catchUp ? 0 : (14 + S * 5) * (lv === 3 ? 0.5 : 1);
     if (lv === 3) {
       this.layer.release(rig);
       this.fx.scorchMark(x, y, 0.3 + rig.radius * 0.75);
-      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, char: 1, seed: 0, hx, hz, deck: 0.1 });
+      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, char: 1, seed: 0, hx, hz, deck: 0.1, lv, smoke0: smoke, ang: angle });
       return;
     }
     rig.look = 'wreck';
-    rig.root.position.set(x, -0.03 - (lv === 2 ? rig.height * 0.22 : lv === 1 ? 0.05 : 0) - (kind === 'energy' && lv ? rig.height * 0.08 : 0), y);
-    rig.root.rotation.y = -angle;
-    const tilt = lv === 0 ? 0.06 : lv === 1 ? 0.18 : 0.42;
-    rig.root.rotation.z = rnd(tilt); rig.root.rotation.x = rnd(tilt);
+    rig.root.rotation.order = 'XYZ';
+    // even a whole hull settles dead: sunk a little, slumped onto one side (a track / leg gave way), nose or tail down
+    rig.root.position.set(x, -0.05 - (lv === 2 ? rig.height * 0.22 : lv === 1 ? 0.07 : 0.02) - (kind === 'energy' && lv ? rig.height * 0.08 : 0), y);
+    rig.root.rotation.set(0, -angle, 0);
+    const tilt = lv === 0 ? 0.1 : lv === 1 ? 0.2 : 0.42;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    rig.root.rotation.x = side * tilt * (0.6 + 0.4 * Math.random()); rig.root.rotation.z = rnd(tilt) + nose;
     // crumpled: flattened and splayed
     if (lv === 2) rig.root.scale.set(rig.root.scale.x * 1.06, rig.root.scale.y * 0.62, rig.root.scale.z * 1.1);
     const L = rig.tpl.unit.L, W = rig.tpl.unit.W;
@@ -1789,16 +2113,20 @@ export class FieldView3D implements BattleView {
       if (!tu.fixed && (lv === 2 || (lv === 1 && i === 0))) {
         const a = Math.random() * 6.283, d = (lv === 2 ? 0.75 : 0.6) + Math.random() * 0.5;
         rig.dropTurret(i, Math.cos(a) * L * d, Math.sin(a) * W * d * 1.4, 0.5 + Math.random() * 1.1, Math.random() * 6.283);
-      } else if (!tu.fixed) tu.yaw.rotation.y += rnd(1.2);
+      } else if (!tu.fixed) {
+        // knocked askew on its ring, barrel drooping onto the deck
+        tu.yaw.rotation.y += (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.9);
+        tu.pitch.rotation.z = -(0.12 + Math.random() * 0.16); tu.pitch.updateMatrix();
+      }
       tu.yaw.updateMatrix(); tu.recoil.position.x = 0; tu.recoil.updateMatrix();
     });
     rig.update(0);
     rig.frozen = true;
-    // a bullet-riddled hull stays steel grey, burnt and blasted ones go black
-    const char = lv === 0 ? (kind === 'kinetic' || kind === 'crush' ? 0.42 : kind === 'fire' ? 0.85 : 0.6) : lv === 1 ? 0.85 : 0.97;
+    // a bullet-riddled hull stays steel grey (but soot-streaked and holed, unmistakably dead), burnt and blasted ones go black
+    const char = lv === 0 ? (kind === 'kinetic' || kind === 'crush' ? 0.6 : kind === 'fire' ? 0.88 : 0.72) : lv === 1 ? 0.88 : 0.97;
     // still glowing: melted (energy), blown up or burnt out hulls show ember cracks that cool over a few seconds
-    const heat = catchUp ? 0 : kind === 'energy' ? (lv ? 1 : 0.75) : kind === 'explosive' ? (lv ? 0.55 + 0.15 * lv : 0.3) : kind === 'fire' ? 0.6 : 0;
-    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, char, seed: Math.random(), hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)) });
+    const heat = catchUp ? 0 : kind === 'energy' ? (lv ? 1 : 0.75) : kind === 'explosive' ? (lv ? 0.55 + 0.15 * lv : 0.4) : kind === 'fire' ? 0.6 : 0.3;
+    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, char, seed: Math.random(), hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)), lv, smoke0: smoke, ang: angle });
   }
 
   destroy(): void {
