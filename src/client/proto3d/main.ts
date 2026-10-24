@@ -46,17 +46,18 @@ scene.add(buildTerrain(FX, FZ, { grid: has('grid', true), props: !lab, keepOut: 
 // ---- units -------------------------------------------------------------------------------------
 const byId = new Map<string, Design>(STARTER_DESIGNS.map((d) => [d.id, d]));
 interface Placement { id: string; x: number; z: number; team: 0 | 1; patrol?: number; alt?: number; orbit?: [number, number, number] }
-// ?lab=strider:legs,arachnid:spider,...  -> a lineup of chassis:mobility[:seed] designs (mounts auto-filled), for review
+// ?lab=strider:legs,arachnid:spider,...  -> a lineup of chassis:mobility[:seed[:m1|m2|-|..]] designs (mounts auto-filled
+// unless listed), for review
 const LAB: Placement[] = [];
 if (lab) {
   let z = 0;
   const items = lab.split(',');
   items.forEach((it, k) => {
-    const [cid, mid, seed] = it.split(':');
+    const [cid, mid, seed, fit] = it.split(':'); // fit: explicit mounts 'bombs|bombs|-|mg' ('-' = empty)
     const c = CHASSIS_BY_ID.get(cid);
     if (!c) return;
     const sd = Number(seed ?? k) || 0;
-    const mounts = params.get('empty') ? c.mounts.map(() => null) : c.mounts.map((slot, i) => { const fit = MODULES.filter((m) => m.kind === 'weapon' && m.mount === slot); return fit[(sd * 7 + i * 13) % fit.length]?.id ?? null; });
+    const mounts = fit ? c.mounts.map((_, i) => { const id = fit.split('|')[i]; return id && id !== '-' ? id : null; }) : params.get('empty') ? c.mounts.map(() => null) : c.mounts.map((slot, i) => { const opts = MODULES.filter((m) => m.kind === 'weapon' && m.mount === slot); return opts[(sd * 7 + i * 13) % opts.length]?.id ?? null; });
     const d: Design = { id: `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid ?? 'treads', mounts };
     byId.set(d.id, d);
     const w = c.footprint?.[0] ?? c.size;

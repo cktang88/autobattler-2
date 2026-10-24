@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Battle } from '../src/shared/sim/battle.ts';
 import { MODULES } from '../src/shared/parts.ts';
-import { DEPLOY_D, FIELD_H, METERS_PER_CELL } from '../src/shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL } from '../src/shared/grid.ts';
 import { airRole, computeStats, validateDesign } from '../src/shared/stats.ts';
 import type { Design } from '../src/shared/types.ts';
 
@@ -95,4 +95,88 @@ test('bombs, artillery shells and their splash, bomblets and fire never hit airc
     }
   }
   assert.ok(groundHits > 0, 'the bombs did hit the tank');
+});
+
+// ---- giant / titan bombers (strategic, superfortress, dreadnought airship) ----
+const STRAT = D('strat', 'strategic', 'jet', ['bombs', 'bombs', 'heavybomb', 'bombs', 'hmg', 'hmg']);
+const SFORT = D('sfort', 'superfortress', 'jet', ['heavybomb', 'bombs', 'bombs', 'heavybomb', 'clusterbombs', 'clusterbombs', 'twinmg', 'twinmg', 'hmg', 'hmg']);
+const DREAD = D('dread', 'dreadnought', 'gravlift', ['avenger', 'heavybomb', 'bombs', 'bombs', 'heavybomb', 'hmg', 'hmg']);
+const isBomb = (id: string | null) => !!id && !!MODULES.find((m) => m.id === id)?.resupply;
+
+test('giant and titan bombers: legal single-unit bombers, slower than the strato and too big to jink', () => {
+  const strato = computeStats(D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']));
+  for (const d of [STRAT, SFORT, DREAD]) {
+    assert.deepEqual(validateDesign(d), [], d.id);
+    const s = computeStats(d);
+    assert.equal(s.squad, 1, d.id);
+    assert.equal(airRole(d), 'bomber', d.id);
+    assert.ok(!s.traits.includes('evasive'), `${d.id} dodges`);
+    assert.ok(s.hp > strato.hp * 2 && s.cost > strato.cost * 2, `${d.id} hp ${s.hp} cost ${s.cost}`);
+  }
+  for (const d of [STRAT, SFORT]) {
+    const s = computeStats(d);
+    assert.ok(s.speed < strato.speed && s.speed * METERS_PER_CELL >= 20, `${d.id} ${s.speed * METERS_PER_CELL} m/s`);
+  }
+  // only grav lifters carry the airship; the jet bombers only fly on jets
+  assert.ok(validateDesign({ ...DREAD, mobility: 'rotor' }).length > 0);
+  assert.ok(validateDesign({ ...SFORT, mobility: 'gravlift' }).length > 0);
+});
+
+/** one bomber vs a row of tanks: bomb drops, home trips, ticks pinned at a field edge, and whether every bay was full
+ *  each time it left home */
+function sortie(d: Design, ticks: number, seed = 4) {
+  const tank = D('tank', 'warden', 'treads', ['autocannon', 'plateL']);
+  const designs = [d, tank];
+  const b = new Battle({ seed, sides: [
+    { designs, units: [{ uid: 1, designId: d.id, x: 40, y: 4, level: 1, round: 1 }] },
+    { designs, units: Array.from({ length: 8 }, (_, i) => ({ uid: i + 1, designId: 'tank', x: 6 + i * 11, y: 2, level: 1, round: 1, stance: 'holdPos' as const })) },
+  ] });
+  const u = b.units[0];
+  let drops = 0, trips = 0, edge = 0, wasHome = true;
+  const departures: boolean[] = [];
+  while (!b.done && b.tick < ticks) {
+    b.step();
+    for (const e of b.events) if (e.t === 'fire' && e.unit === 0 && isBomb(e.moduleId)) drops++;
+    const home = u.y >= FIELD_H - DEPLOY_D;
+    if (home && !wasHome) trips++;
+    if (!home && wasHome && b.tick > 40) departures.push(u.mounts.every((m, i) => !isBomb(d.mounts[i]) || !m.reloading));
+    wasHome = home;
+    if (u.x <= 0.6 || u.x >= FIELD_W - 0.6 || u.y <= 0.6 || u.y >= FIELD_H - 0.6) edge++;
+  }
+  return { drops, trips, edge, departures, b };
+}
+
+test('giant jet bombers fly their runs, go home to rearm, wait until every bay is full and never get stuck at the edge', () => {
+  for (const d of [STRAT, SFORT]) {
+    const r = sortie(d, 20 * 100);
+    const bays = d.mounts.filter(isBomb).length;
+    assert.ok(r.drops > bays, `${d.id} drops ${r.drops}`);
+    assert.ok(r.trips >= 1, `${d.id} home trips ${r.trips}`);
+    assert.ok(r.departures.every(Boolean), `${d.id} left home with empty bays`);
+    assert.ok(r.edge < 20 * 3, `${d.id} pinned at the field edge for ${(r.edge / 20).toFixed(1)} s`);
+    assert.ok(r.b.units.some((x) => x.side === 1 && !x.alive), `${d.id} killed nothing`);
+  }
+});
+
+test('a gun-armed hovering bomber flies over its target to bomb it instead of parking at machine-gun range', () => {
+  // (bombs + machine guns only: a heavy deck gun like the avenger kills the tanks before the bays get a look in)
+  const r = sortie(D('dreadb', 'dreadnought', 'gravlift', ['heavybomb', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg']), 20 * 100);
+  assert.ok(r.drops >= 4, `dreadnought drops ${r.drops}`);
+  assert.ok(r.b.units.some((x) => x.side === 1 && !x.alive), 'the dreadnought killed nothing');
+});
+
+test('two giant bombers never fly stacked on top of each other', () => {
+  const tank = D('t', 'warden', 'treads', ['autocannon', 'plateL']);
+  const designs = [STRAT, SFORT, tank];
+  const b = new Battle({ seed: 3, sides: [
+    { designs, units: [{ uid: 1, designId: 'strat', x: 30, y: 4, level: 1, round: 1 }, { uid: 2, designId: 'sfort', x: 38, y: 2, level: 1, round: 1 }] },
+    { designs, units: [{ uid: 1, designId: 't', x: 40, y: 2, level: 1, round: 1, stance: 'holdPos' as const }] },
+  ] });
+  let minD = Infinity;
+  for (let t = 0; t < 20 * 30 && !b.done; t++) {
+    b.step();
+    const [p, q] = [b.units[0], b.units[1]];
+    if (p.alive && q.alive && t > 20) minD = Math.min(minD, Math.hypot(p.x - q.x, p.y - q.y));
+  }
+  assert.ok(minD > 2.5, `two giant bombers got ${minD.toFixed(2)} cells apart`);
 });

@@ -1,4 +1,4 @@
-// node_modules/three/build/three.core.js
+// ../../../node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -20418,7 +20418,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// node_modules/three/build/three.module.js
+// ../../../node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -31916,7 +31916,7 @@ var WebGLRenderer = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
+// ../../../node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -32872,7 +32872,9 @@ var STARTER_DESIGNS = [
   // ---- giant (size 4): all-round assault walker ----
   { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "autocannon"] },
   // ---- titan (size 5): beam-armed war machine ----
-  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "autocannon"] }
+  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "autocannon"] },
+  // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
+  { id: "starter-thunderbird", name: "Thunderbird", chassis: "strategic", mobility: "jet", mounts: ["bombs", "bombs", "heavybomb", "bombs", "hmg", "hmg"] }
 ];
 
 // src/shared/parts.ts
@@ -32908,6 +32910,9 @@ var CHASSIS = [
   // ---- Aircraft ----
   { id: "strikejet", name: "Strike Jet", desc: "Multirole fighter-bomber with a centreline and two wing hardpoints.", size: 2, hp: 330, armor: 2, weight: 7, cost: 80, footprint: [2, 3], mounts: ["M", "S", "S"], agility: 1.2, domain: "jet", roles: ["flyer", "raider", "antiair"], traits: [], shape: "strikejet" },
   { id: "stratobomber", name: "Strato Bomber", desc: "Long-range jet bomber with three bomb bays and a tail gun.", size: 3, hp: 1600, armor: 6, weight: 18, cost: 300, footprint: [4, 4], mounts: ["M", "M", "M", "S"], agility: 0.8, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "stratobomber" },
+  // ---- Heavy bombers (giant / titan class aircraft) ----
+  { id: "strategic", name: "Strategic Bomber", desc: "Giant swept-wing jet bomber: four bomb bays down a long belly, chin and tail gun turrets, eight podded engines. Slower and wider-turning than the Strato, but hauls a far bigger load and soaks far more fire.", size: 4, hp: 3600, armor: 9, weight: 40, cost: 500, footprint: [6, 5], art: [6, 4.8], mounts: ["M", "M", "M", "M", "S", "S"], agility: 0.7, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "strategic" },
+  { id: "superfortress", name: "Superfortress", desc: "Titan-class flying fortress: a vast straight wing with ten engines, six bomb bays and four defensive gun blisters. Slow and wide in the turn, it lays carpets of bombs and takes a lot of flak to bring down.", size: 5, hp: 6500, armor: 12, weight: 70, cost: 900, footprint: [8, 6], art: [8, 5.8], mounts: ["M", "M", "M", "M", "M", "M", "S", "S", "S", "S"], agility: 0.6, domain: "jet", roles: ["bomber", "flyer"], traits: [], shape: "superfortress" },
   { id: "heavyheli", name: "Heavy Helicopter", desc: "Tandem-rotor heavy helicopter. Slow, tough, hauls big guns.", size: 3, hp: 1300, armor: 6, weight: 20, cost: 280, footprint: [2, 4], art: [1.9, 3.65], mounts: ["M", "M", "S"], agility: 0.85, domain: "heli", roles: ["flyer", "assault"], traits: [], shape: "heavyheli" },
   // ---- Giant class (size 4, 20 m) ----
   { id: "goliath", name: "Warhulk Frame", desc: "Giant assault frame: a giant-class mount backed by two heavies.", size: 4, hp: 4160, armor: 16, weight: 70, cost: 190, footprint: [4, 5], art: [4, 4.8], mounts: ["L", "M", "M", "M"], agility: 0.75, roles: ["assault"], traits: [], shape: "goliath" },
@@ -32915,6 +32920,7 @@ var CHASSIS = [
   { id: "carrier", name: "Sky Carrier", desc: "Giant flying hull. Must fly on grav lifters.", size: 4, hp: 4500, armor: 14, weight: 50, cost: 1100, footprint: [6, 4], art: [5.8, 3], domain: "heli", mounts: ["L", "M", "M", "M"], agility: 0.8, roles: ["flyer", "bomber"], traits: ["airOnly"], shape: "carrier" },
   { id: "broodmother", name: "Matriarch", desc: "Giant multi-legged walking fortress with a giant-class dorsal weapon and four more mounts.", size: 4, hp: 3e3, armor: 14, weight: 66, cost: 650, footprint: [7, 5], art: [4.9, 3.75], mounts: ["L", "M", "M", "M", "S"], agility: 0.85, mobility: ["spider", "anchor"], roles: ["riot", "assault"], traits: [], shape: "broodmother" },
   // ---- Titan class (size 5, 25 m) ----
+  { id: "dreadnought", name: "Dreadnought Airship", desc: "Titan-class twin-hull grav airship: a heavy bow mount, four keel bays (bombs drop from the keel, guns ride on top) and gun blisters on both gasbags. Very slow, enormously tough. Grav lifters only.", size: 5, hp: 9500, armor: 15, weight: 105, cost: 500, footprint: [5, 8], art: [4.8, 8], domain: "heli", mounts: ["L", "M", "M", "M", "M", "S", "S"], agility: 0.55, roles: ["bomber", "flyer"], traits: ["airOnly"], shape: "airship" },
   { id: "titan", name: "Titan Walker", desc: "The all-rounder titan: a titan mount, a giant mount and three mediums, and field workshops that repair nearby allies.", size: 5, hp: 6500, armor: 22, weight: 120, cost: 955, footprint: [7, 7], art: [6.75, 7], mounts: ["XL", "L", "M", "M", "M"], agility: 0.7, roles: ["assault", "siege"], traits: ["repairAura"], shape: "colossal" },
   { id: "citadel", name: "Citadel Fortress", desc: "Mobile fortress with twin titan mounts and long-range fire control (+20% range). The biggest thing on the field, and the slowest to turn.", size: 5, hp: 8e3, armor: 28, weight: 140, cost: 1915, footprint: [8, 7], art: [7.6, 6.75], mounts: ["XL", "XL", "L", "M", "M", "S"], agility: 0.45, roles: ["siege", "tank"], traits: ["rangeBoost"], shape: "citadel" },
   { id: "arachne", name: "Weaver Titan", desc: "The fast titan: a titan mount and twin giant mounts on many legs. Turns and strides quickly, but carries lighter armour.", size: 5, hp: 6800, armor: 16, weight: 115, cost: 340, footprint: [10, 10], art: [7.1, 7.1], mounts: ["XL", "L", "L", "M"], agility: 1.05, mobility: ["spider", "anchor"], roles: ["assault"], traits: [], shape: "arachne" },
@@ -32930,10 +32936,10 @@ var MOBILITY = [
   { id: "jumpjets", name: "Jump Legs", desc: "Leaps over obstacles straight into the fight.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ["leap"], roles: ["raider", "melee"] },
   { id: "hover", name: "Hover Skirt", desc: "Skims the ground. Very fast, hard to hit.", kind: "ground", sizes: [1, 2], speed: 3.8, turn: 2.4, capacity: [7.5, 22, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive"], roles: ["raider", "scout"] },
   { id: "rotor", name: "Rotor", desc: "Helicopter rotors. Flies over ground units; only anti-air can hit it.", kind: "air", sizes: [1, 2, 3], speed: 2.8, turn: 3, capacity: [5, 17, 36, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "support"] },
-  { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3], speed: 7, turn: 1.6, capacity: [4, 14, 30, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["fireOnMove", "strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
+  { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3, 4, 5], speed: 7, turn: 1.6, capacity: [4, 14, 30, 62, 112], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["fireOnMove", "strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
   { id: "megatracks", name: "Colossal Tracks", desc: "Quad track assemblies for giant and titan hulls. Crushes anything underfoot.", kind: "ground", sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ["crush"], roles: ["tank", "assault"] },
   { id: "titanlegs", name: "Titan Legs", desc: "Towering walker legs. Fires on the move and stomps smaller units.", kind: "ground", sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ["fireOnMove", "crush"], roles: ["assault"] },
-  { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy and giant hulls fly.", kind: "air", sizes: [3, 4], speed: 2.4, turn: 1.2, capacity: [0, 0, 50, 100, 0], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "bomber"] },
+  { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy, giant and titan hulls fly.", kind: "air", sizes: [3, 4, 5], speed: 2.4, turn: 1.2, capacity: [0, 0, 50, 100, 180], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: ["fireOnMove"], roles: ["flyer", "bomber"] },
   { id: "anchor", name: "Anchor Mount", desc: "Immobile emplacement. Extra hp, armor and +15% range.", kind: "static", sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ["fortified"], roles: ["siege", "artillery", "antiair"] }
 ];
 var G = { targetsGround: true, targetsAir: false };
@@ -34803,6 +34809,12 @@ var FOOT_MOUNTS = {
   interceptor: [[-0.06, -0.3], [-0.06, 0.3]],
   strikejet: [[0.06, 0], [-0.1, -0.33], [-0.1, 0.33]],
   stratobomber: [[0.28, 0], [0.08, 0], [-0.22, 0], [-0.46, 0]],
+  // giant / titan bombers: bays down the belly (bombs drop in a stick), defensive guns at nose, tail and waist
+  strategic: [[0.22, 0], [0.07, 0], [-0.08, 0], [-0.23, 0], [0.42, 0], [-0.47, 0]],
+  superfortress: [[0.25, 0], [0.09, 0], [-0.07, 0], [-0.23, 0], [0, -0.2], [0, 0.2], [0.44, 0], [-0.47, 0], [-0.14, -0.4], [-0.14, 0.4]],
+  // airship: the bow gun on the keel's nose, four keel bays clustered amidships (a hovering bomber drops from right
+  // over its target, so every bay must reach it from there), gun blisters on the two gasbags
+  airship: [[0.3, 0], [0.08, -0.1], [0.08, 0.1], [-0.08, -0.1], [-0.08, 0.1], [-0.28, -0.3], [-0.28, 0.3]],
   heavyheli: [[0.42, 0], [-0.02, 0.36], [-0.02, -0.36]],
   bomber: [[0.33, 0], [0, -0.3], [0, 0.3]],
   carrier: [[0.24, 0], [-0.2, 0], [-0.1, -0.33], [-0.1, 0.33]],
@@ -35680,7 +35692,7 @@ function weaponD(m, cls) {
 }
 var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
 
-// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -40615,6 +40627,280 @@ registerChassis("strikejet", strikejet);
 registerChassis("deltawing", deltawing);
 registerChassis("stratobomber", stratobomber);
 
+// src/client/proto3d/chassis/bombers.ts
+function fuseAt(st, x) {
+  let i = 0;
+  while (i < st.length - 2 && st[i + 1][0] > x) i++;
+  const p = st[i], q = st[i + 1];
+  const f = Math.max(0, Math.min(1, (p[0] - x) / (p[0] - q[0] || 1)));
+  const cy = p[1] + (q[1] - p[1]) * f, ry = p[2] + (q[2] - p[2]) * f, rz = p[3] + (q[3] - p[3]) * f;
+  return { top: cy + ry, bot: cy - ry, w: rz, cy };
+}
+function bayDoors(c, x0, x1, y, w, z = 0) {
+  const { b, kit } = c;
+  const l = Math.abs(x1 - x0), x = (x0 + x1) / 2, d = w * 1.1;
+  b.box(kit.trim, l, 0.03, w * 2, x, y + 0.012, z, 8e-3);
+  for (const s of [-1, 1]) b.box(kit.hull2, l * 0.96, 0.02, d, x, y - d * 0.42, z + s * (w + d * 0.12), 6e-3, [s * 1.15, 0, 0]);
+}
+function blister(c, x, y, z, r, dir) {
+  const { b, kit } = c;
+  b.lathe(kit.glass, [[0, 0], [r, 0], [r * 0.92, r * 0.42 * dir], [r * 0.6, r * 0.75 * dir], [0, r * 0.85 * dir]], [x, y, z], "y", 12);
+  b.cylb(kit.trim, r * 1.08, r * 0.14, r * 0.04, [x, y - r * 0.07, z], "y", 12);
+}
+function strategic(c) {
+  const { b, kit } = c;
+  const Y = c.stance.y0, cy = Y + 0.16;
+  const fs = [
+    [2.42, cy + 0, 0.03, 0.03],
+    [2.3, cy + 0.01, 0.13, 0.12],
+    [2.05, cy + 0.04, 0.24, 0.21],
+    [1.6, cy + 0.06, 0.3, 0.25],
+    [0.5, cy + 0.08, 0.32, 0.26],
+    [-0.8, cy + 0.08, 0.3, 0.25],
+    [-1.7, cy + 0.12, 0.21, 0.17],
+    [-2.2, cy + 0.16, 0.12, 0.1],
+    [-2.42, cy + 0.17, 0.05, 0.05]
+  ];
+  fuse(b, kit.hull, fs, 12, 2.4);
+  pod(b, kit.glass, [1.78, cy + 0.27, 0], 0.32, 0.12, 0.19, 10, 6, 2.2);
+  block(b, kit.panel, 1.42, cy + 0.27, 0, 0.5, 0.36, 0.11, { top: [0.7, 0.75], shift: [0.08, 0], ch: 0.08, bev: 0.025 });
+  block(b, kit.panel, -0.2, cy + 0.33, 0, 2.6, 0.24, 0.08, { top: [0.9, 0.6], ch: 0.08, bev: 0.025 });
+  b.box(kit.glow, 1.9, 0.015, 0.03, -0.2, cy + 0.415, 0, 4e-3);
+  const ws = [[1, cy + 0.22, 0.2, 1.45, 0.16], [0.12, cy + 0.2, 1.4, 0.92, 0.1], [-0.84, cy + 0.12, 2.95, 0.42, 0.045]];
+  const lift = [];
+  for (const s of [-1, 1]) {
+    wing(b, kit.hull, mirror2(ws, s));
+    for (const [z0, z1] of [[0.4, 1], [1.25, 1.8], [2.1, 2.85]]) {
+      const a = at(ws, z0), e = at(ws, z1);
+      b.loft(kit.panel, [[a[0] - 0.02, a[1] + a[3] * 0.55, s * z0], [e[0] - 0.02, e[1] + e[3] * 0.55, s * z1]].map(([x, y, z]) => [[x, y, z - 1e-3], [x - 0.12, y + 0.012, z], [x - 0.12, y - 0.01, z + 1e-3]]), true, true);
+    }
+    {
+      const t = at(ws, 2.55);
+      b.box(kit.accent, 0.3, 0.012, 0.16, t[0] - t[2] * 0.45, t[1] + t[3] * 0.62, s * 2.55, 4e-3, [0, s * 0.62, 0]);
+    }
+    {
+      const t = at(ws, 2.92);
+      pod(b, kit.panel, [t[0] - 0.22, t[1] - 0.02, s * 2.92], 0.32, 0.055, 0.055, 8, 5, 2.2);
+      navLights(b, kit, t[0] - 0.22, t[1] + 0.06, 2.92, 0.025);
+    }
+    for (const z of [1.1, 1.98]) {
+      const [lex, wy, ch] = at(ws, z);
+      const ny = wy - 0.24, nx = lex - 0.06;
+      b.box(kit.trim, 0.6, wy - ny - 0.04, 0.04, nx + 0, (wy + ny) / 2, s * z, 0.01);
+      for (const d of [-0.11, 0.11]) {
+        const zz = s * z + d;
+        pod(b, kit.panel, [nx, ny, zz], 0.5, 0.095, 0.095, 10, 6, 2.2);
+        b.cylb(kit.trim, 0.085, 0.05, 0.012, [nx + 0.43, ny, zz], "x", 10);
+        b.cyl(kit.accent, 0.097, 0.097, 0.07, [nx + 0.24, ny, zz], "x", 10);
+        lift.push({ kind: "jet", p: [nx - 0.5, ny, zz], r: 0.07, len: 0.11 });
+      }
+      void ch;
+    }
+    wing(b, kit.hull, mirror2([[-1.82, cy + 0.2, 0.08, 0.52, 0.05], [-2.22, cy + 0.2, 0.88, 0.22, 0.025]], s));
+  }
+  fin(b, kit.hull, [[-1.5, cy + 0.3, 0, 0.92, 0.07], [-2.16, cy + 1.28, 0, 0.42, 0.035]]);
+  b.box(kit.accent, 0.46, 0.12, 0.08, -2.25, cy + 1, 0, 0.01);
+  b.box(kit.glow, 0.04, 0.04, 0.05, -2.06, cy + 1.3, 0, 6e-3);
+  const belly = fuseAt(fs, 0).bot;
+  bayDoors(c, 1.42, -1.5, belly + 0.01, 0.15);
+  blister(c, 2.02, fuseAt(fs, 2.02).bot + 0.04, 0, 0.12, -1);
+  blister(c, -2.26, fuseAt(fs, -2.26).bot + 0.03, 0, 0.09, -1);
+  b.box(kit.lamp, 0.03, 0.03, 0.08, 2.4, cy + 0.02, 0, 6e-3);
+  b.decal(0.42, 0.42, -0.2, at(ws, 1.6)[1] + 0.06, 1.6, atlasUV(3), 0);
+  b.decal(0.42, 0.42, -0.2, at(ws, 1.6)[1] + 0.06, -1.6, atlasUV(3), 0);
+  return out(cy + 1.3, lift, (m) => {
+    const f = fuseAt(fs, m.x);
+    if (m.mod.resupply) return hang(c, m, f.bot + 0.02, 0.55);
+    return hang(c, m, f.bot - 0.06, 0.45);
+  });
+}
+function superfortress(c) {
+  const { b, kit } = c;
+  const Y = c.stance.y0, cy = Y + 0.24;
+  const fs = [
+    [2.9, cy + 0.05, 0.06, 0.06],
+    [2.78, cy + 0.05, 0.27, 0.27],
+    [2.45, cy + 0.06, 0.42, 0.41],
+    [1.8, cy + 0.08, 0.5, 0.46],
+    [0, cy + 0.1, 0.52, 0.47],
+    [-1.4, cy + 0.12, 0.44, 0.39],
+    [-2.3, cy + 0.18, 0.26, 0.22],
+    [-2.9, cy + 0.2, 0.1, 0.1]
+  ];
+  fuse(b, kit.hull, fs, 12, 2.3);
+  pod(b, kit.glass, [2.7, cy + 0.06, 0], 0.26, 0.27, 0.27, 12, 6, 2);
+  for (const x of [2.62, 2.74]) b.cylb(kit.trim, 0.29 - (x - 2.62) * 0.4, 0.02, 6e-3, [x, cy + 0.06, 0], "x", 12);
+  pod(b, kit.glass, [2.12, cy + 0.5, 0], 0.36, 0.13, 0.26, 10, 6, 2.2);
+  block(b, kit.panel, 1.72, cy + 0.5, 0, 0.5, 0.5, 0.1, { top: [0.7, 0.8], shift: [0.08, 0], ch: 0.1, bev: 0.03 });
+  block(b, kit.panel, -0.3, cy + 0.56, 0, 3, 0.36, 0.1, { top: [0.9, 0.6], ch: 0.1, bev: 0.03 });
+  b.box(kit.glow, 2.4, 0.015, 0.03, -0.3, cy + 0.665, 0, 4e-3);
+  const ws = [[1.1, cy + 0, 0.4, 2.28, 0.3], [0.6, cy + 0.06, 2.2, 1.6, 0.18], [0.33, cy + 0.12, 4, 0.66, 0.06]];
+  const lift = [];
+  for (const s of [-1, 1]) {
+    wing(b, kit.hull, mirror2(ws, s));
+    for (const [z0, z1] of [[0.55, 3.9]]) {
+      const a = at(ws, z0), e = at(ws, z1);
+      b.loft(kit.panel, [[a[0] - 0.01, a[1] + a[3] * 0.5, s * z0], [e[0] - 0.01, e[1] + e[3] * 0.5, s * z1]].map(([x, y, z]) => [[x, y, z - 1e-3], [x - 0.16, y + 0.02, z], [x - 0.16, y - 0.015, z + 1e-3]]), true, true);
+      b.loft(kit.trim, [[a[0] - a[2] * 0.82, a[1] + a[3] * 0.32, s * z0], [e[0] - e[2] * 0.82, e[1] + e[3] * 0.32, s * z1]].map(([x, y, z]) => [[x, y, z - 1e-3], [x - 0.04, y + 0.01, z], [x - 0.04, y - 4e-3, z + 1e-3]]), true, true);
+    }
+    {
+      const t = at(ws, 3.55);
+      b.box(kit.accent, 0.42, 0.014, 0.24, t[0] - t[2] * 0.45, t[1] + t[3] * 0.6, s * 3.55, 4e-3);
+    }
+    {
+      const t = at(ws, 3.98);
+      pod(b, kit.panel, [t[0] - 0.3, t[1], s * 3.98], 0.42, 0.07, 0.07, 8, 5, 2.2);
+      navLights(b, kit, t[0] - 0.3, t[1] + 0.08, 3.98, 0.03);
+    }
+    for (const z of [0.96, 1.76, 2.56]) {
+      const [lex, wy, ch] = at(ws, z);
+      const x0 = lex + 0.32, x1 = lex - ch - 0.42, nx = (x0 + x1) / 2, len = (x0 - x1) / 2, r = 0.19 - z * 0.012;
+      pod(b, kit.panel, [nx, wy - 0.02, s * z], len, r, r, 12, 7, 2.6);
+      b.cylb(kit.trim, r * 0.86, 0.05, 0.015, [x0 - 0.07, wy - 0.02, s * z], "x", 12);
+      b.cyl(kit.accent, r * 1.02, r * 1.02, 0.08, [x0 - 0.3, wy - 0.02, s * z], "x", 12);
+      b.box(kit.trim, 0.3, 0.05, 0.03, nx - 0.1, wy - 0.02 - r * 0.85, s * z, 8e-3);
+      lift.push({ kind: "jet", p: [x1 + 0.02, wy - 0.02, s * z], r: r * 0.62, len: 0.14 });
+    }
+    {
+      const z = 3.28, [lex, wy] = at(ws, z), ny = wy - 0.2, nx = lex - 0.12;
+      b.box(kit.trim, 0.5, wy - ny - 0.03, 0.04, nx, (wy + ny) / 2, s * z, 0.01);
+      for (const d of [-0.1, 0.1]) {
+        pod(b, kit.panel, [nx, ny, s * z + d], 0.42, 0.085, 0.085, 10, 6, 2.2);
+        b.cylb(kit.trim, 0.075, 0.04, 0.01, [nx + 0.36, ny, s * z + d], "x", 10);
+        lift.push({ kind: "jet", p: [nx - 0.42, ny, s * z + d], r: 0.06, len: 0.1 });
+      }
+    }
+    {
+      const [lex, wy, ch, t] = at(ws, 3.2);
+      block(b, kit.panel, -0.81, wy + t * 0.5, s * 3.2, 0.62, 0.42, 0.1, { top: [0.8, 0.8], ch: 0.1, bev: 0.03 });
+      void lex;
+      void ch;
+    }
+    {
+      const [, wy, , t] = at(ws, 1.6);
+      bayDoors(c, 0.32, -0.32, wy - t * 0.45, 0.14, s * 1.6);
+    }
+    wing(b, kit.hull, mirror2([[-1.9, cy + 0.26, 0.15, 0.78, 0.07], [-2.18, cy + 0.26, 1.78, 0.42, 0.04]], s));
+    fin(b, kit.hull, [[-1.98, cy + 0.2, s * 1.74, 0.62, 0.05], [-2.38, cy + 1.02, s * 1.78, 0.32, 0.03]]);
+    fin(b, kit.hull, [[-2, cy + 0.26, s * 1.74, 0.55, 0.045], [-2.2, cy - 0.12, s * 1.74, 0.3, 0.03]]);
+    b.box(kit.accent, 0.32, 0.12, 0.075, -2.44, cy + 0.72, s * 1.76, 0.01);
+    b.box(kit.glow, 0.04, 0.04, 0.05, -2.36, cy + 1.03, s * 1.78, 6e-3);
+  }
+  const belly = fuseAt(fs, 0).bot;
+  bayDoors(c, 1.86, -1.76, belly + 0.02, 0.2);
+  blister(c, 2.55, fuseAt(fs, 2.55).bot + 0.05, 0, 0.14, -1);
+  blister(c, -2.73, fuseAt(fs, -2.73).bot + 0.04, 0, 0.1, -1);
+  for (const s of [-1, 1]) b.box(kit.lamp, 0.03, 0.03, 0.06, 2.42, cy - 0.18, s * 0.3, 6e-3);
+  b.decal(0.6, 0.6, -0.2, at(ws, 2.3)[1] + at(ws, 2.3)[3] * 0.6 + 0.01, 2.3, atlasUV(3), 0);
+  b.decal(0.6, 0.6, -0.2, at(ws, 2.3)[1] + at(ws, 2.3)[3] * 0.6 + 0.01, -2.3, atlasUV(3), 0);
+  return out(cy + 1.1, lift, (m) => {
+    if (m.mod.resupply) {
+      if (Math.abs(m.z) > 0.6) {
+        const [, wy, , t] = at(ws, m.z);
+        return hang(c, m, wy - t * 0.45, 0.55);
+      }
+      return hang(c, m, fuseAt(fs, m.x).bot + 0.03, 0.55);
+    }
+    if (Math.abs(m.z) > 2) {
+      const [, wy, , t] = at(ws, m.z), y = wy + t * 0.5 + 0.1;
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.08, 14);
+      return { y, socket: true };
+    }
+    return hang(c, m, fuseAt(fs, m.x).bot - 0.08, 0.45);
+  });
+}
+function dreadnought(c) {
+  const { b, kit } = c;
+  const Y = c.stance.y0, cy = Y + 0.55;
+  const BZ = 1.44;
+  const gs = [
+    [3.92, cy + 0.12, 0.05, 0.05],
+    [3.75, cy + 0.12, 0.4, 0.4],
+    [3.35, cy + 0.12, 0.66, 0.65],
+    [2.6, cy + 0.12, 0.8, 0.78],
+    [0.5, cy + 0.12, 0.84, 0.82],
+    [-1.6, cy + 0.12, 0.8, 0.78],
+    [-2.8, cy + 0.12, 0.62, 0.6],
+    [-3.55, cy + 0.12, 0.34, 0.33],
+    [-3.85, cy + 0.12, 0.08, 0.08]
+  ];
+  const lift = [];
+  for (const s of [-1, 1]) {
+    const z = s * BZ;
+    fuse(b, kit.hull, gs, 14, 2, z);
+    for (const x of [2.9, 1.9, 0.9, -0.1, -1.1, -2.1, -3]) {
+      const f2 = fuseAt(gs, x);
+      b.cyl(kit.trim, f2.w + 0.018, f2.w + 0.018, 0.05, [x + 0.025, f2.cy, z], "-x", 16);
+    }
+    block(b, kit.panel, -0.2, fuseAt(gs, 0).top - 0.04, z, 5.4, 0.22, 0.07, { top: [0.96, 0.6], ch: 0.06, bev: 0.02 });
+    b.box(kit.glow, 4.2, 0.012, 0.03, -0.2, fuseAt(gs, 0).top + 0.035, z, 4e-3);
+    {
+      const r = fuseAt(gs, 3.4).w + 0.015;
+      b.cyl(kit.trim, r, r, 0.05, [3.4, cy + 0.12, z], "x", 16);
+    }
+    {
+      const r = fuseAt(gs, 2.95).w + 0.02;
+      b.cyl(kit.accent, r, r, 0.12, [2.95, cy + 0.12, z], "x", 16);
+    }
+    const tx = -2.95, f = fuseAt(gs, tx);
+    fin(b, kit.hull, [[tx + 0.2, f.top - 0.08, z, 0.95, 0.06], [tx - 0.55, f.top + 0.55, z, 0.5, 0.035]]);
+    fin(b, kit.hull, [[tx + 0.2, f.bot + 0.08, z, 0.95, 0.06], [tx - 0.4, f.bot - 0.4, z, 0.5, 0.035]]);
+    wing(b, kit.hull, [[tx + 0.2, f.cy, z + s * 0.5, 0.95, 0.06], [tx - 0.55, f.cy, z + s * 1.05, 0.5, 0.035]]);
+    b.box(kit.accent, 0.4, 0.1, 0.08, tx - 0.5, f.top + 0.36, z, 0.01);
+    for (const x of [1.6, -1.2]) {
+      const gy = fuseAt(gs, x).bot + 0.02;
+      b.box(kit.trim, 0.32, 0.18, 0.06, x, gy - 0.02, z + s * 0.42, 0.01);
+      pod(b, kit.panel, [x, gy - 0.12, z + s * 0.62], 0.36, 0.12, 0.12, 10, 6, 2.2);
+      b.cyl(kit.hot, 0.08, 0.06, 0.02, [x - 0.36, gy - 0.12, z + s * 0.62], "-x", 10);
+    }
+    b.box(kit.lamp, 0.03, 0.06, 0.06, 3.92, cy + 0.12, z, 8e-3);
+    navLights(b, kit, 2.6, fuseAt(gs, 2.6).top - 0.05, BZ + 0, 0.035);
+    lift.push({ kind: "duct", p: [-3.95, cy + 0.12, z], r: 0.36, blades: 7, dir: s, tilt: Math.PI / 2 });
+    for (const x of load(c) > 0.85 ? [2.6, 0.9, -0.8, -2.4] : [2.4, 0, -2.4]) lift.push({ kind: "grav", p: [x, fuseAt(gs, x).bot - 0.12, z], r: 0.3, len: 0.24, dir: s });
+  }
+  const ky0 = cy - 0.5, ky1 = cy - 0.12, ky2 = cy + 0.22;
+  stationHull(b, kit.hull2, [
+    [4, 0.12, ky0 + 0.22, ky1 + 0.05, ky2 - 0.12, 0.6],
+    [3.6, 0.42, ky0 + 0.06, ky1, ky2, 0.8],
+    [2.8, 0.56, ky0, ky1, ky2, 0.88],
+    [-2.8, 0.56, ky0, ky1, ky2, 0.88],
+    [-3.5, 0.44, ky0 + 0.1, ky1, ky2 - 0.04, 0.8],
+    [-3.9, 0.2, ky0 + 0.24, ky1 + 0.04, ky2 - 0.1, 0.6]
+  ], 0, 0.82);
+  block(b, kit.panel, 0.2, ky2 - 0.01, 0, 6.2, 0.86, 0.04, { ch: 0.1, bev: 0.015 });
+  b.box(kit.glow, 5, 0.012, 0.025, 0.2, ky2 + 0.035, 0, 4e-3);
+  for (const s of [-1, 1]) {
+    b.box(kit.trim, 6, 0.08, 0.04, 0, ky1 - 0.02, s * 0.57, 0.01);
+    b.box(kit.accent, 1, 0.05, 0.03, 3, ky1 + 0.12, s * 0.555, 8e-3, [0, s * 0.06, 0]);
+    for (const x of [2.9, 1.3, -0.6, -2.3]) b.box(kit.trim, 0.12, 0.1, BZ - 0.75, x, cy - 0.05, s * (0.55 + (BZ - 0.75) / 2), 0.015);
+  }
+  bayDoors(c, 1.1, -1.1, ky0 + 0.01, 0.36);
+  const bx2 = -2.4;
+  block(b, kit.hull, bx2, ky2, 0, 0.9, 0.7, 0.36, { top: [0.75, 0.75], shift: [-0.06, 0], ch: 0.12, bev: 0.04 });
+  b.box(kit.glass, 0.5, 0.08, 0.5, bx2 + 0.12, ky2 + 0.27, 0, 0.012);
+  block(b, kit.panel, bx2 - 0.06, ky2 + 0.36, 0, 0.5, 0.36, 0.14, { top: [0.8, 0.8], ch: 0.06 });
+  b.strut(kit.steel, [bx2 - 0.1, ky2 + 0.48, 0], [bx2 - 0.14, ky2 + 0.95, 0], 0.022, 0.012, 6);
+  b.box(kit.metal, 0.07, 0.08, 0.5, bx2 - 0.13, ky2 + 0.82, 0, 0.01);
+  b.box(kit.glow, 0.04, 0.04, 0.04, bx2 - 0.14, ky2 + 0.97, 0, 6e-3);
+  b.box(kit.hazard, 0.06, 0.12, 0.5, 3.62, ky1 + 0.04, 0, 0.01);
+  b.decal(0.55, 0.55, 0.6, fuseAt(gs, 0.6).top + 2e-3, BZ, atlasUV(3), 0);
+  b.decal(0.55, 0.55, 0.6, fuseAt(gs, 0.6).top + 2e-3, -BZ, atlasUV(3), 0);
+  return out(cy + 1.2, lift, (m) => {
+    if (m.mod.resupply) return hang(c, m, ky0 + 0.02, 0.55);
+    if (Math.abs(m.z) > 1) {
+      const y2 = fuseAt(gs, m.x).top + 0.02;
+      collar(b, kit, m.x, y2, m.z, m.r, y2 - 0.1, 14);
+      return { y: y2, socket: true };
+    }
+    const y = ky2 + 0.04;
+    collar(b, kit, m.x, y, m.z, m.r, y - 0.08, 16);
+    return { y, socket: true };
+  });
+}
+registerChassis("strategic", strategic);
+registerChassis("superfortress", superfortress);
+registerChassis("dreadnought", dreadnought);
+
 // src/client/proto3d/chassis/light.ts
 function cbox2(b, mat, w, h, d, x, y, z, _bev = 0, rot) {
   b.g(new BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
@@ -42876,7 +43162,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// node_modules/three/examples/jsm/shaders/CopyShader.js
+// ../../../node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -42916,7 +43202,7 @@ var CopyShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/Pass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -43007,7 +43293,7 @@ var FullScreenQuad = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -43072,7 +43358,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -43160,7 +43446,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// ../../../node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -43345,7 +43631,7 @@ var EffectComposer = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -43418,7 +43704,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// ../../../node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -43470,7 +43756,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -43809,7 +44095,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// node_modules/three/examples/jsm/shaders/GTAOShader.js
+// ../../../node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -44175,7 +44461,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// ../../../node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -44378,7 +44664,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// node_modules/three/examples/jsm/math/SimplexNoise.js
+// ../../../node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -44812,7 +45098,7 @@ var SimplexNoise = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -45239,7 +45525,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// node_modules/three/examples/jsm/shaders/OutputShader.js
+// ../../../node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -45327,7 +45613,7 @@ var OutputShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
@@ -45560,13 +45846,16 @@ if (lab) {
   let z = 0;
   const items = lab.split(",");
   items.forEach((it, k) => {
-    const [cid, mid2, seed] = it.split(":");
+    const [cid, mid2, seed, fit] = it.split(":");
     const c = CHASSIS_BY_ID.get(cid);
     if (!c) return;
     const sd = Number(seed ?? k) || 0;
-    const mounts = params.get("empty") ? c.mounts.map(() => null) : c.mounts.map((slot, i) => {
-      const fit = MODULES.filter((m) => m.kind === "weapon" && m.mount === slot);
-      return fit[(sd * 7 + i * 13) % fit.length]?.id ?? null;
+    const mounts = fit ? c.mounts.map((_, i) => {
+      const id = fit.split("|")[i];
+      return id && id !== "-" ? id : null;
+    }) : params.get("empty") ? c.mounts.map(() => null) : c.mounts.map((slot, i) => {
+      const opts = MODULES.filter((m) => m.kind === "weapon" && m.mount === slot);
+      return opts[(sd * 7 + i * 13) % opts.length]?.id ?? null;
     });
     const d = { id: `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid2 ?? "treads", mounts };
     byId2.set(d.id, d);

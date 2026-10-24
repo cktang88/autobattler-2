@@ -114,6 +114,11 @@ export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
 export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.17, hover: 0.98, jet: 0.7, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
+/** Jet price factor for giant / titan airframes, in place of MOBILITY_CAL.jet (fitted on fighters and the strato
+ *  bomber, which dodge and slip through the AA): the giant and titan bombers don't jink (no evasion), turn wide and
+ *  are big targets, but still fly their runs over everything on the ground. Fitted with `node scripts/op-check.ts`
+ *  (one or two of them plus a starter mix vs the mix, ~2x their price per side) and `node scripts/role-check.ts bomber`. */
+export const GIANT_JET_CAL: Record<number, number> = { 4: 1.05, 5: 1.17 };
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -121,6 +126,10 @@ const RANGE_EXP = 1.0;
  *  the reference moved with them so a gun's price is unchanged by the stretch. Repair beams kept their range, so
  *  their MODULE_CAL was scaled by 6.5 / 5 to keep their price; weapon MODULE_CAL re-fitted with fit_cal.py. */
 const RANGE_REF = 6.5;
+/** Share of a bomb bay's value on a hovering (rotor / grav-lift) bomber, next to a jet's: it rearms only over its own
+ *  lines and flies there and back at a crawl. Fitted with `node scripts/op-check.ts` / `role-check.ts bomber` (grav
+ *  bombers won 4-25% at equal supply at the jet price). */
+export const HOVER_BOMB_K = 0.5;
 /** Effective-hp floor for long-reach units (see computeStats): ramps in from SHELTER_FROM cells of reach to full
  *  at SHELTER_FROM + SHELTER_SPAN.  Fitted with `node scripts/duels.ts groups` (cheap mortar carts vs tanks). */
 export const SHELTER_EHP = 400;
@@ -339,7 +348,8 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   let shield = 0;
   let heal = 0;
   let dps = 0;
-  const traits: string[] = [...c.traits, ...m.traits];
+  // giant and titan jets are far too big to jink: no evasion (they are big, steady targets for flak)
+  const traits: string[] = [...c.traits, ...m.traits].filter((t) => t !== 'evasive' || m.kind !== 'air' || size < 4);
   let rangeMult = 1;
   if (traits.includes('rangeBoost')) rangeMult += 0.2;
   if (traits.includes('fortified')) rangeMult += 0.15;
@@ -364,9 +374,10 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   const load = weight / capacity;
   let range = 0;
   for (const mod of mods) if (mod.range && mod.kind === 'weapon') range = Math.max(range, mod.projectile === 'melee' ? mod.range : mod.range * rangeMult);
-  // jets barely slow with size (a strato bomber cruises nearly as fast as a fighter) and shrug off half the overload
+  // jets barely slow with size up to a strato bomber (it cruises nearly as fast as a fighter) and shrug off half the
+  // overload; the giant and titan bombers are clearly slower (they still outrun anything on the ground)
   const jet = d.mobility === 'jet';
-  const sizeSpeed = (jet ? [1, 1, 0.95, 0.9, 0.85] : [1, 0.95, 0.85, 0.75, 0.65])[size - 1];
+  const sizeSpeed = (jet ? [1, 1, 0.95, 0.8, 0.68] : [1, 0.95, 0.85, 0.75, 0.65])[size - 1];
   const loadF = jet && load > 1 ? Math.max(0.5, 1 - (load - 1) * 0.6) : loadSpeedFactor(load);
   const speed = m.kind === 'static' ? 0 : m.speed * loadF * sizeSpeed * (1 + speedBonus);
   // body turn rate: mobility base x hull agility x size inertia, slowed when overloaded (heavier armament = slower)
@@ -380,7 +391,10 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   // mixed-range loadouts: a weapon only fires once the enemy is inside its reach, and fights are mostly fought at
   // the reach of the longest gun, so a short gun next to a much longer one counts for less (engagementShare)
   const longest = Math.max(0, ...mods.filter((w) => w.kind === 'weapon' && !w.heal).map((w) => w.range ?? 0));
-  for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest);
+  // bomb bays rearm only over the own lines: a jet is back for its next run in seconds, a hovering bomber (rotor / grav
+  // lift) crawls home and back between loads, so its bays drop far fewer bombs per fight (HOVER_BOMB_K)
+  const bombK = flying && !jet ? HOVER_BOMB_K : 1;
+  for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
   offense *= fireRate;
   let reactiveHp = 0;
@@ -422,7 +436,7 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   ehp = Math.max(ehp, SHELTER_EHP * Math.min(1, Math.max(0, (range - SHELTER_FROM) / SHELTER_SPAN)));
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const classK = (SIZE_K[size - 1] ?? 1) * (MOBILITY_CAL[d.mobility] ?? 1);
+  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1);
   let base = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
   const extraFor = (sq: number) => SUPPORT_K * (support * auraSquadShare(sq) + interceptors);
   const unitRaw = (sq: number) => base * squadK(size, sq) + extraFor(sq);

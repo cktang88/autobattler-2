@@ -63,6 +63,12 @@ export const FOOT_MOUNTS: Record<string, Pt[]> = {
   interceptor: [[-0.06, -0.3], [-0.06, 0.3]],
   strikejet: [[0.06, 0], [-0.1, -0.33], [-0.1, 0.33]],
   stratobomber: [[0.28, 0], [0.08, 0], [-0.22, 0], [-0.46, 0]],
+  // giant / titan bombers: bays down the belly (bombs drop in a stick), defensive guns at nose, tail and waist
+  strategic: [[0.22, 0], [0.07, 0], [-0.08, 0], [-0.23, 0], [0.42, 0], [-0.47, 0]],
+  superfortress: [[0.25, 0], [0.09, 0], [-0.07, 0], [-0.23, 0], [0.0, -0.2], [0.0, 0.2], [0.44, 0], [-0.47, 0], [-0.14, -0.4], [-0.14, 0.4]],
+  // airship: the bow gun on the keel's nose, four keel bays clustered amidships (a hovering bomber drops from right
+  // over its target, so every bay must reach it from there), gun blisters on the two gasbags
+  airship: [[0.3, 0], [0.08, -0.1], [0.08, 0.1], [-0.08, -0.1], [-0.08, 0.1], [-0.28, -0.3], [-0.28, 0.3]],
   heavyheli: [[0.42, 0], [-0.02, 0.36], [-0.02, -0.36]],
   bomber: [[0.33, 0], [0.0, -0.3], [0.0, 0.3]],
   carrier: [[0.24, 0], [-0.2, 0.0], [-0.1, -0.33], [-0.1, 0.33]],

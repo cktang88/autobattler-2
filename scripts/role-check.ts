@@ -19,6 +19,16 @@ const only = process.argv.slice(4);
 const S = (id: string) => STARTER_DESIGNS.find((d) => d.id === `starter-${id}`)!;
 const mk = (mounts: (string | null)[], chassis = 'warden', mobility = 'halftrack'): Design => ({ id: mounts.filter(Boolean).join('+'), name: mounts.filter(Boolean).join('+'), chassis, mobility, mounts });
 const one = (w: string) => mk([w, null]);
+/** a named design (long loadouts don't fit the 24-character name) */
+const nm = (name: string, mounts: (string | null)[], chassis: string, mobility: string): Design => ({ ...mk(mounts, chassis, mobility), id: name, name });
+const BOMBERS = {
+  strato: nm('strato 3xbombs', ['bombs', 'bombs', 'bombs', 'mg'], 'stratobomber', 'jet'),
+  heavy: nm('heavy bomber', ['bombs', 'bombs', 'heavybomb'], 'bomberhull', 'gravlift'),
+  carrier: nm('sky carrier bombs', ['heavybomb', 'bombs', 'bombs', 'bombs'], 'carrier', 'gravlift'),
+  strategic: nm('strategic 4xbombs', ['bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg'], 'strategic', 'jet'),
+  superfort: nm('superfortress 6xbombs', ['bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg', 'mg', 'mg'], 'superfortress', 'jet'),
+  dread: nm('dreadnought bombs', ['heavybomb', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg'], 'dreadnought', 'gravlift'),
+};
 
 interface Role { key: string; job: string; weapon: Design; peers: Design[]; targets: Design[]; off?: Design[] }
 export const ROLES: Role[] = [
@@ -31,6 +41,15 @@ export const ROLES: Role[] = [
   { key: 'leech', job: 'sustained brawling vs mediums', weapon: one('leech'), peers: [one('autocannon'), one('minigun'), one('heatray')], targets: [S('bulwark'), S('stormcaller'), S('medic')], off: [S('buzzsaw'), S('thunderhead')] },
   { key: 'prism', job: 'swarms and drone clouds', weapon: one('prism'), peers: [one('minigun'), one('tesla'), one('flechette'), one('mg')], targets: [S('buzzsaw'), S('hornet'), S('torchbug')], off: [S('ironclad'), S('bulwark')] },
   { key: 'voidlance', job: 'giants and titans', weapon: one('voidlance'), peers: [one('cannon'), one('twinlaser'), one('railgun'), one('atgm')], targets: [S('juggernaut'), S('warlord'), S('behemoth')], off: [S('buzzsaw'), S('hornet')] },
+  // bombers: the giant / titan bomb trucks next to the strato / heavy bomber / sky carrier, vs ground armies; off-role
+  // = a dedicated AA screen (flak + quad 20 mm), which should shoot them down
+  { key: 'bomber', job: 'ground armies from the air (giant / titan bombers vs the smaller ones)', weapon: BOMBERS.strategic,
+    peers: [BOMBERS.strato, BOMBERS.heavy, BOMBERS.carrier, BOMBERS.superfort, BOMBERS.dread],
+    targets: [S('ironclad'), S('bulwark'), S('buzzsaw')], off: [nm('flak+quad20', ['flak', 'quad20', null], 'striker', 'halftrack'), S('skyguard')] },
+  // the same bombers flown into a dedicated AA screen: every row should come out clearly negative (shot down)
+  { key: 'bomberaa', job: 'bombers vs dedicated AA (should lose: negative)', weapon: BOMBERS.strategic,
+    peers: [BOMBERS.strato, BOMBERS.heavy, BOMBERS.carrier, BOMBERS.superfort, BOMBERS.dread],
+    targets: [nm('flak+quad20', ['flak', 'quad20', null], 'striker', 'halftrack'), S('skyguard'), nm('heavyflak+aamissile', ['heavyflak', 'aamissile'], 'warden', 'halftrack')] },
   { key: 'entropy', job: 'stripping armour for the guns beside it', weapon: mk(['entropy', 'hmg']), peers: [mk(['autocannon', 'hmg']), mk(['cannon75', 'hmg']), mk(['heatray', 'hmg'])], targets: [S('ironclad'), S('bulwark'), S('aegiswall')], off: [S('buzzsaw')] },
 ];
 

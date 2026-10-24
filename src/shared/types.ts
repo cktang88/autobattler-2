@@ -56,7 +56,7 @@ export interface ChassisDef {
     | 'goliath' | 'leviathan' | 'carrier' | 'colossal' | 'citadel'
     | 'mantis' | 'mech' | 'arachnid' | 'crab' | 'saucer' | 'delta' | 'warlord' | 'scorpion' | 'centipede' | 'broodmother' | 'arachne'
     | 'carriage' | 'siegeplat' | 'riot' | 'hunter' | 'juggernaut' | 'interceptor' | 'bomber'
-    | 'strikejet' | 'stratobomber' | 'heavyheli' | 'lance' | 'monolith';
+    | 'strikejet' | 'stratobomber' | 'heavyheli' | 'lance' | 'monolith' | 'strategic' | 'superfortress' | 'airship';
 }
 
 export interface MobilityDef {

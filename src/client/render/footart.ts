@@ -266,6 +266,30 @@ const SPECS: Record<string, Spec> = {
     hull: () => sharpU([0.5, 0, 0.46, -0.035, 0.38, -0.06, 0.2, -0.075, 0.12, -0.12, -0.12, -0.5, -0.21, -0.5, -0.12, -0.2, -0.18, -0.075, -0.34, -0.065, -0.4, -0.22, -0.49, -0.22, -0.47, -0.05, -0.5, -0.03, -0.5, 0]),
     nozzles: (X, Y, S) => [-1, 1].flatMap((s) => [{ x: -0.13 * X, y: s * 0.2 * Y, w: 0.06 * S }, { x: -0.2 * X, y: s * 0.32 * Y, w: 0.06 * S }]),
   },
+  // ---- strategic bomber: giant swept-wing jet bomber - long slender fuselage, shoulder wings swept to the corners,
+  //      four twin-engine pods, a tall fin and a small tailplane; bays down the belly, chin and tail guns
+  strategic: {
+    hw: 0.5, scale: [0.7, 0.7, 0.7, 0.7, 0.75, 0.75],
+    hull: () => sharpU([0.5, 0, 0.47, -0.03, 0.4, -0.05, 0.22, -0.055, 0.2, -0.075, -0.17, -0.49, -0.2, -0.5, -0.27, -0.5, -0.25, -0.44, -0.08, -0.075, -0.38, -0.05, -0.42, -0.17, -0.48, -0.17, -0.47, -0.05, -0.5, -0.03, -0.5, 0]),
+    nozzles: (X, Y, S) => [-1, 1].flatMap((s) => [0.165, 0.195, 0.315, 0.345].map((v, i) => ({ x: (i < 2 ? -0.04 : -0.17) * X, y: s * v * Y, w: 0.035 * S }))),
+  },
+  // ---- superfortress: titan flying fortress - a vast straight wing, a fat glazed-nose fuselage, six pusher nacelles
+  //      out of the trailing edge and twin jet pods outboard, an H-tail; bays in the belly and wing roots, gun blisters
+  superfortress: {
+    hw: 0.5, scale: [0.66, 0.66, 0.66, 0.66, 0.66, 0.66, 0.7, 0.7, 0.7, 0.7],
+    hull: () => sharpU([0.5, 0, 0.48, -0.04, 0.42, -0.07, 0.3, -0.08, 0.19, -0.08, 0.07, -0.48, 0.05, -0.5, -0.06, -0.5, -0.07, -0.47, -0.2, -0.08, -0.36, -0.075, -0.37, -0.2, -0.42, -0.22, -0.49, -0.22, -0.48, -0.06, -0.5, -0.04, -0.5, 0]),
+    nozzles: (X, Y, S) => [-1, 1].flatMap((s) => [[0.12, -0.27], [0.22, -0.25], [0.32, -0.23], [0.395, -0.17], [0.425, -0.17]].map(([v, u]) => ({ x: u * X, y: s * v * Y, w: (v > 0.39 ? 0.03 : 0.045) * S }))),
+  },
+  // ---- dreadnought airship: twin gasbags with a ribbed skin and cruciform tail fins, an armoured keel between them
+  //      carrying the bow gun and the bays, gun blisters on the bags
+  airship: {
+    hw: 0.5, scale: [0.85, 0.75, 0.75, 0.75, 0.75, 0.8, 0.8],
+    hull: () => union(
+      ellU(0.0, -0.3, 0.48, 0.19), ellU(0.0, 0.3, 0.48, 0.19),
+      smoothU([0.48, 0, 0.46, 0.06, 0.4, 0.11, 0.2, 0.13, -0.3, 0.13, -0.42, 0.1, -0.47, 0]),
+      sharpU([-0.33, -0.36, -0.42, -0.5, -0.49, -0.5, -0.47, -0.36]),
+    ),
+  },
   // ---- heavy helicopter: tandem-rotor hauler - long box fuselage, raised rotor pylons fore and aft, fuel sponsons
   heavyheli: {
     hw: 0.3, scale: [0.9, 0.85, 0.85],
@@ -717,6 +741,104 @@ const DETAILS: Record<string, (k: K) => void> = {
     k.canopy(0.4, 0, 0.07 * k.X, 0.07 * k.Y);
     k.fin(-0.42, 0, 0.14 * k.X, 0);
     k.plate(k.M([-0.43, -0.02, -0.46, -0.12, -0.49, -0.12, -0.49, -0.02]), -0.49, -0.12, -0.43, 0.12, 0.05, 0.8);
+  },
+  strategic(k) {
+    const S = k.S;
+    for (const s of [-1, 1]) {
+      // swept wing panels: flap line, spoilers, a leading-edge strip, tip pod with nav light
+      k.seam([0.18, s * 0.08, -0.17, s * 0.47]);
+      k.seam([-0.06, s * 0.1, -0.23, s * 0.44], k.o * 0.5, 'rgba(255,255,255,0.15)');
+      k.seam([-0.12, s * 0.22, -0.2, s * 0.36], k.o * 0.45);
+      k.stripe([-0.15, s * 0.44, -0.2, s * 0.5], k.o * 1.6);
+      k.pod(-0.27, -0.16, s * 0.49, 0.025 * S, -0.04);
+      // two twin-engine pods per wing, slung ahead of the leading edge
+      for (const [u, v] of [[0.06, 0.18], [-0.07, 0.33]]) {
+        for (const d of [-0.015, 0.015]) { k.pod(u - 0.13, u + 0.07, s * (v + d), 0.022 * S, -0.06); k.intake(u + 0.065, s * (v + d), 0.012 * k.X, 0.03 * S); }
+        k.seam([u - 0.02, s * (v - 0.035), u - 0.02, s * (v + 0.035)], k.o * 0.5);
+      }
+      // tailplane
+      k.seam([-0.43, s * 0.06, -0.46, s * 0.16]);
+    }
+    // long spine with the bomb bays, dorsal ECM fairing, glazed cockpit, tall fin
+    k.plate(k.M([0.47, 0, 0.42, -0.04, 0.2, -0.05, -0.4, -0.045, -0.49, 0]), -0.49, -0.05, 0.47, 0.05, 0.08, 1.1);
+    for (const u of [0.22, 0.07, -0.08, -0.23]) k.bay(u, 0, 0.11, 0.05);
+    k.haz(-0.3, 0, 0.03 * S, k.y(0.06), true);
+    k.canopy(0.38, 0, 0.08 * k.X, 0.05 * k.Y);
+    k.fin(-0.4, 0, 0.16 * k.X, 0);
+    k.glow([0.3, -0.03, -0.35, -0.03], k.o * 0.7, 0.7);
+  },
+  superfortress(k) {
+    const S = k.S;
+    for (const s of [-1, 1]) {
+      // the great wing: spar seams, flaps, ailerons, a leading-edge strip, tip pod
+      k.seam([0.16, s * 0.1, 0.06, s * 0.47]);
+      k.seam([-0.14, s * 0.1, -0.06, s * 0.46], k.o * 0.5, 'rgba(255,255,255,0.15)');
+      k.seam([-0.1, s * 0.1, -0.15, s * 0.3], k.o * 0.45);
+      k.stripe([0.06, s * 0.44, 0.04, s * 0.5], k.o * 1.8);
+      k.pod(-0.07, 0.07, s * 0.495, 0.03 * S, -0.04);
+      // three pusher nacelles through the wing, glowing out of the trailing edge
+      for (const v of [0.12, 0.22, 0.32]) {
+        const lead = 0.18 - (v - 0.08) * 0.28;
+        k.pod(-0.25 + v * 0.06, lead + 0.03, s * v, 0.036 * S, -0.04);
+        k.intake(lead + 0.025, s * v, 0.012 * k.X, 0.045 * S);
+        k.seam([lead - 0.08, s * (v - 0.03), lead - 0.08, s * (v + 0.03)], k.o * 0.5);
+      }
+      // outboard twin jet pod
+      for (const d of [-0.015, 0.015]) { k.pod(-0.17, 0.08, s * (0.41 + d), 0.022 * S, -0.06); k.intake(0.075, s * (0.41 + d), 0.01 * k.X, 0.03 * S); }
+      // waist gun blister ring (the turret sits on it) + wing-root bay doors
+      k.metal(k.C(-0.14, s * 0.4, 0.2 * S * 0.5), -0.19, s * 0.36, -0.09, s * 0.44, 1.1);
+      k.bay(0.0, s * 0.2, 0.12, 0.06);
+      // H-tail fins
+      k.fin(-0.44, s * 0.215, 0.12 * k.X, 0);
+      k.seam([-0.38, s * 0.08, -0.4, s * 0.2]);
+    }
+    // fat fuselage: plated spine, four belly bays, glazed greenhouse nose, flight-deck canopy
+    k.plate(k.M([0.48, 0, 0.44, -0.065, 0.3, -0.075, -0.36, -0.07, -0.49, -0.04, -0.5, 0]), -0.5, -0.075, 0.48, 0.075, 0.08, 1.3);
+    for (const u of [0.25, 0.09, -0.07, -0.23]) k.bay(u, 0, 0.12, 0.07);
+    k.dome(0.47, 0, 0.03 * k.X, 0.05 * k.Y);
+    k.canopy(0.38, 0, 0.07 * k.X, 0.07 * k.Y);
+    k.seam([0.33, -0.07, 0.33, 0.07]);
+    k.rivets(0.3, -0.06, -0.34, -0.06, 14);
+    k.rivets(0.3, 0.06, -0.34, 0.06, 14);
+    k.glow([0.31, 0, -0.36, 0], k.o * 0.7, 0.6);
+    k.haz(-0.4, 0, 0.03 * S, k.y(0.1), true);
+  },
+  airship(k) {
+    const S = k.S, g = k.g;
+    // the two gasbags: ribbed fabric skin over the hull paint, a dorsal walkway, glowing lift cells, tail fins
+    for (const s of [-1, 1]) {
+      const bag = new Path2D(); bag.ellipse(k.x(0), k.y(s * 0.3), 0.48 * k.X, 0.19 * k.Y, 0, 0, P2);
+      k.plate(bag, -0.48, s * 0.3 - 0.19, 0.48, s * 0.3 + 0.19, 0.06, 1.4);
+      g.save(); g.clip(bag);
+      g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = k.o * 0.7;
+      for (let u = -0.4; u <= 0.41; u += 0.08) { g.beginPath(); g.moveTo(k.x(u), k.y(s * 0.3 - 0.2)); g.lineTo(k.x(u), k.y(s * 0.3 + 0.2)); g.stroke(); }
+      g.strokeStyle = 'rgba(255,255,255,0.12)'; g.lineWidth = k.o * 0.5;
+      for (let u = -0.36; u <= 0.45; u += 0.08) { g.beginPath(); g.moveTo(k.x(u), k.y(s * 0.3 - 0.2)); g.lineTo(k.x(u), k.y(s * 0.3 + 0.2)); g.stroke(); }
+      g.restore();
+      k.dark(k.R(0.0, s * 0.3, 0.7, 0.035, 0.02), -0.35, s * 0.28, 0.35, s * 0.32, 1.1);
+      k.glow([0.3, s * 0.3, -0.3, s * 0.3], k.o * 0.6, 0.7);
+      for (const u of [0.2, -0.05]) k.grille(u, s * 0.4, 0.05 * k.X, 0.03 * k.Y, 4, 0.8);
+      k.fin(-0.42, s * 0.3, 0.12 * k.X, 0);
+      k.stripe([0.38, s * 0.43, 0.2, s * 0.47], k.o * 1.6);
+      // rear propulsor pods on outriggers
+      k.dark(k.R(-0.4, s * 0.15, 0.08, 0.04, 0.02), -0.44, s * 0.13, -0.36, s * 0.17, 1);
+      k.engine(-0.5, s * 0.15, 0.05 * k.X, 0.045 * S);
+      k.lamp(0.46, s * 0.3, 0.025 * S, s < 0 ? '#ff5050' : '#5aff9a');
+    }
+    // armoured keel between the bags: ram bow, a plated deck with the bow gun barbette and the bay well
+    k.plate(k.B([0.48, 0, 0.46, 0.06, 0.4, 0.11, 0.2, 0.12, -0.3, 0.12, -0.42, 0.09, -0.47, 0]), -0.47, -0.12, 0.48, 0.12, 0.02, 1.4);
+    k.metal(k.M([0.49, 0, 0.47, -0.05, 0.42, -0.08, 0.42, 0]), 0.42, -0.08, 0.49, 0.08, 1.2);
+    k.dark(k.Oct(0.3, 0, 0.1 * k.X), 0.24, -0.1, 0.36, 0.1, 1.2);
+    k.recess(k.R(0.0, 0, 0.28, 0.17, 0.03), shade(k.pal.deep, 0.1));
+    k.seam([0.14, 0, -0.14, 0], k.o * 0.6);
+    k.haz(-0.17, 0, 0.03 * S, k.y(0.18), true);
+    // bridge castle aft, with a glazed band and a radar mast
+    k.plate(k.R(-0.3, 0, 0.12, 0.16, 0.04), -0.36, -0.08, -0.24, 0.08, 0.12, 1.5);
+    k.visor(-0.245, -0.06, -0.245, 0.06, 0.016 * S);
+    k.metal(k.C(-0.33, 0, 0.035 * S), -0.36, -0.03, -0.3, 0.03, 1);
+    for (const u of [0.18, 0.06, -0.06, -0.18]) for (const s of [-1, 1]) k.rivets(u - 0.04, s * 0.115, u + 0.04, s * 0.115, 3);
+    // girders from the keel out to the bags
+    for (const u of [0.36, 0.16, -0.16, -0.38]) for (const s of [-1, 1]) k.dark(k.R(u, s * 0.14, 0.025, 0.05, 0.01), u - 0.02, s * 0.12, u + 0.02, s * 0.16, 0.8);
   },
   heavyheli(k) {
     const S = k.S;
@@ -1702,6 +1824,19 @@ function footGiantLights(L: UnitLayout): GLight[] | null {
       o.push({ x: 0.06 * X, y: -0.12 * Y, r: 0.07 * S, k: 'visor' });
       for (const s of [-1, 1]) { nav(-0.13, s * 0.49, s); for (const v of [0.07, 0.17]) o.push({ x: -0.47 * X, y: s * v * Y, r: 0.05 * S, k: 'engine', dir: Math.PI }); }
       break;
+    case 'strategic':
+      for (const s of [-1, 1]) nav(-0.22, s * 0.5, s);
+      o.push({ x: 0.38 * X, y: 0, r: 0.05 * S, k: 'visor' });
+      break;
+    case 'superfortress':
+      for (const s of [-1, 1]) nav(0.0, s * 0.5, s);
+      o.push({ x: 0.47 * X, y: 0, r: 0.06 * S, k: 'visor' });
+      break;
+    case 'airship':
+      for (const s of [-1, 1]) { nav(0.47, s * 0.3, s); o.push({ x: -0.5 * X, y: s * 0.15 * Y, r: 0.04 * S, k: 'engine', dir: Math.PI }); }
+      o.push({ x: -0.25 * X, y: 0, r: 0.05 * S, k: 'visor' });
+      o.push({ x: -0.33 * X, y: 0, r: 0.07 * S, k: 'radar' });
+      break;
     case 'colossal':
       o.push({ x: 0.03 * X, y: 0, r: 0.075 * S, k: 'core' });
       o.push({ x: 0.36 * X, y: 0, r: 0.1 * S, k: 'visor' });
@@ -1753,6 +1888,9 @@ function footStrips(L: UnitLayout): number[] | null {
     goliath: [0.22, -0.4, -0.06, -0.4, 0.22, 0.4, -0.06, 0.4],
     leviathan: [0.12, -0.39, -0.34, -0.39, 0.12, 0.39, -0.34, 0.39],
     carrier: [-0.16, -0.32, 0.0, -0.32, -0.16, 0.32, 0.0, 0.32],
+    strategic: [0.1, -0.12, -0.12, -0.38, 0.1, 0.12, -0.12, 0.38],
+    superfortress: [0.15, -0.14, 0.09, -0.36, 0.15, 0.14, 0.09, 0.36],
+    airship: [0.3, -0.3, -0.3, -0.3, 0.3, 0.3, -0.3, 0.3],
     colossal: [0.12, -0.05, 0.19, -0.15, 0.12, 0.05, 0.19, 0.15, 0.04, -0.44, 0.27, -0.44, 0.04, 0.44, 0.27, 0.44],
     broodmother: [-0.04, -0.22, -0.2, -0.29, -0.04, 0.22, -0.2, 0.29],
     arachne: [0.06, -0.27, -0.2, -0.35, 0.06, 0.27, -0.2, 0.35],

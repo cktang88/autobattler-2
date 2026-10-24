@@ -9,6 +9,7 @@ import '../mobility/tracks.ts';
 import '../mobility/legs.ts';
 import '../mobility/megatracks.ts';
 import './air.ts';
+import './bombers.ts';
 import '../mobility/air.ts';
 import './light.ts';
 import '../mobility/wheels.ts';

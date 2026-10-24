@@ -11,6 +11,7 @@
 //   strikejet    twin-boom fighter-bomber: bubble-canopy central pod, engines in the booms, high tail between fin tops
 //   deltawing    ogival tailless delta with one tall fin and twin buried engines
 //   stratobomber sawtooth flying wing with a cockpit hump, four engine humps and a tail stinger
+//   (the giant / titan bombers - strategic, superfortress, dreadnought airship - live in bombers.ts)
 //
 // Frame: belly reference y0 = stance.y0 (the render lifts the unit to cruise altitude). Weapons are fixed pods hung
 // from pylons under wings / fuselage at the exact mount points (seat() builds the pylon, socket = true); carrier deck
@@ -23,7 +24,7 @@ import { registerChassis, type ChassisCtx, type MountSpec, type Seat } from './r
 import { block, collar, pod } from './shapes.ts';
 import { fuse, type AirOut, type Lift } from '../mobility/air.ts';
 
-type Station = [number, number, number, number, number]; // [leading-edge x, y, z, chord, thickness]
+export type Station = [number, number, number, number, number]; // [leading-edge x, y, z, chord, thickness]
 
 /** aerofoil ring: leading edge at le, chord along -x, thickness along `up` ('y' wings, 'z' fins) */
 function foil(le: V3, c: number, t: number, up: 'y' | 'z' = 'y'): V3[] {
@@ -31,15 +32,15 @@ function foil(le: V3, c: number, t: number, up: 'y' | 'z' = 'y'): V3[] {
   return [p(0, 0), p(0.1, 0.55), p(0.4, 1), p(0.8, 0.55), p(1, 0), p(0.8, -0.35), p(0.4, -0.6), p(0.1, -0.4)];
 }
 /** wing / tailplane panel through spanwise stations */
-function wing(b: Bld, mat: MatLike, st: Station[]): void {
+export function wing(b: Bld, mat: MatLike, st: Station[]): void {
   b.loft(mat, st.map(([x, y, z, c, t]) => foil([x, y, z], c, t, 'y')));
 }
 /** fin through stations ordered root -> tip; each station [le x, y, z, chord, thickness] with thickness along z */
-function fin(b: Bld, mat: MatLike, st: Station[]): void {
+export function fin(b: Bld, mat: MatLike, st: Station[]): void {
   b.loft(mat, st.map(([x, y, z, c, t]) => foil([x, y, z], c, t, 'z')));
 }
 /** interpolate a station table at span coordinate z (abs) -> [lex, y, chord, thick] */
-function at(st: Station[], z: number): [number, number, number, number] {
+export function at(st: Station[], z: number): [number, number, number, number] {
   const a = Math.abs(z);
   let i = 0;
   while (i < st.length - 2 && Math.abs(st[i + 1][2]) < a) i++;
@@ -47,10 +48,10 @@ function at(st: Station[], z: number): [number, number, number, number] {
   const f = Math.max(0, Math.min(1, (a - Math.abs(p[2])) / (Math.abs(q[2]) - Math.abs(p[2]) || 1)));
   return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[3] + (q[3] - p[3]) * f, p[4] + (q[4] - p[4]) * f];
 }
-const mirror = (st: Station[], s: number): Station[] => st.map(([x, y, z, c, t]) => [x, y, z * s, c, t]);
+export const mirror = (st: Station[], s: number): Station[] => st.map(([x, y, z, c, t]) => [x, y, z * s, c, t]);
 
 /** fixed weapon pod hung below yUnder on a pylon at the mount point */
-function hang(c: ChassisCtx, m: MountSpec, yUnder: number, drop = 0.8): Seat {
+export function hang(c: ChassisCtx, m: MountSpec, yUnder: number, drop = 0.8): Seat {
   const { b, kit } = c;
   const d = m.r * drop;
   const y = yUnder - d;
@@ -60,17 +61,17 @@ function hang(c: ChassisCtx, m: MountSpec, yUnder: number, drop = 0.8): Seat {
   return { y, socket: true };
 }
 /** red/green-ish nav lights (team accent left, glow right) at a wingtip pair */
-function navLights(b: Bld, kit: Kit, x: number, y: number, z: number, s: number): void {
+export function navLights(b: Bld, kit: Kit, x: number, y: number, z: number, s: number): void {
   b.box(kit.accent, s * 1.6, s, s, x, y, -z, s * 0.3);
   b.box(kit.glow, s * 1.6, s, s, x, y, z, s * 0.3);
 }
 /** load ratio: (chassis + modules weight) / mobility capacity at this size */
-function load(c: ChassisCtx): number {
+export function load(c: ChassisCtx): number {
   const w = c.ch.weight + c.mounts.reduce((a, m) => a + (m.mod.weight ?? 0), 0);
   const cap = c.mob.capacity?.[c.S - 1] ?? 0;
   return cap > 0 ? w / cap : 0.6;
 }
-const out = (top: number, lift: Lift[], seat: (m: MountSpec) => Seat): AirOut => ({ deckAt: () => -1, top, custom: true, seat, lift });
+export const out = (top: number, lift: Lift[], seat: (m: MountSpec) => Seat): AirOut => ({ deckAt: () => -1, top, custom: true, seat, lift });
 
 // =====================================================================================================================
 function drone(c: ChassisCtx): AirOut {
