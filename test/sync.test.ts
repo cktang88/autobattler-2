@@ -166,3 +166,29 @@ test('sign in: a guest registering keeps its account; signing in to an existing 
   assert.equal(net.currentSession(), null);
   assert.deepEqual(ids(storage.loadDesigns()).sort(), ['g1', 'g2']);
 });
+
+test('a garage over the server cap syncs what fits (deck first) and reports it instead of failing silently', async () => {
+  const { MAX_SYNCED_DESIGNS, setSyncProblemHandler, syncProblem } = await import('../src/client/sync.ts');
+  const { MAX_GARAGE } = await import('../src/server/validate.ts');
+  assert.equal(MAX_SYNCED_DESIGNS, MAX_GARAGE);
+  const seen: (string | null)[] = [];
+  setSyncProblemHandler((m) => seen.push(m));
+  const many = Array.from({ length: MAX_GARAGE + 15 }, (_, i) => ({ ...D(`x${i}`), editedAt: 1000 + i }));
+  storage.saveDesigns(many);
+  storage.saveDeckIds(['x0', 'x1']); // the oldest two: kept because they are in the deck
+  await syncGarage();
+  const g = (await api('GET', '/api/garage')).garage;
+  assert.equal(g.designs.length, MAX_GARAGE);
+  assert.ok(ids(g.designs).includes('x0') && ids(g.designs).includes('x1'));
+  assert.ok(!ids(g.designs).includes('x2'), 'the oldest non-deck designs stay local');
+  assert.deepEqual(g.deck, ['x0', 'x1']);
+  assert.equal(storage.loadDesigns()!.length, MAX_GARAGE + 15, 'nothing is deleted locally');
+  assert.match(syncProblem() ?? '', /15 designs stay on this device/);
+  assert.ok(seen.some((m) => m && /at most/.test(m)));
+  // back under the cap: everything syncs and the warning clears
+  storage.saveDesigns(many.slice(0, 50));
+  await syncGarage();
+  assert.equal((await api('GET', '/api/garage')).garage.designs.length, 50);
+  assert.equal(syncProblem(), null);
+  setSyncProblemHandler(null);
+});

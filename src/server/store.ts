@@ -102,7 +102,9 @@ export class Store {
     for (const r of matches?.matches ?? []) {
       if (!r || !r.match || typeof r.match.id !== 'string') continue;
       // matches saved before the rules marker: rescale pre-price-/5 supply, stamp the version (see migrateMatch)
-      try { if (migrateMatch(r.match)) migrated++; } catch (e) { console.error(`[store] could not migrate match ${r.match.id}`, e); }
+      // a changed match gets a newer updatedAt: a client that kept the old copy open across the restart long-polls
+      // with since=<old updatedAt> and would otherwise be told "unchanged" (stale supply / board) until the next move
+      try { if (migrateMatch(r.match)) { migrated++; r.match.updatedAt = Math.max(Date.now(), (r.match.updatedAt || 0) + 1); } } catch (e) { console.error(`[store] could not migrate match ${r.match.id}`, e); }
       this.indexMatch(r);
     }
     if (migrated) { console.log(`[store] migrated ${migrated} match(es) to the current rules version`); this.save(); }

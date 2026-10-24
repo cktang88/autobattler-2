@@ -3,9 +3,11 @@
 
 import { DECK_SIZE } from '../shared/match.ts';
 import { STARTER_DESIGNS } from '../shared/starters.ts';
-import { validateDesign } from '../shared/stats.ts';
+import { MAX_LOAD, computeStats, slotError, validateDesign } from '../shared/stats.ts';
+import { CHASSIS_BY_ID, MODULE_BY_ID, pairingError } from '../shared/parts.ts';
 import type { Design } from '../shared/types.ts';
 import { loadDeckIds, loadDesigns, saveDeckIds, saveDesigns } from './storage.ts';
+import { firstLegalMobility } from './ui/garage-fit.ts';
 
 const clone = (d: Design): Design => ({
   id: d.id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts],
@@ -24,6 +26,48 @@ function sane(d: unknown): d is Design {
   } catch {
     return false;
   }
+}
+
+const NAME_MAX = 24;
+/** Make a saved design legal again after a rules change instead of dropping it (dropping is permanent: the cleaned list
+ *  is written back and synced). Keeps the id, name and orders; a drive the hull no longer takes becomes its first
+ *  legal one; unknown parts and parts that no longer fit their socket move to a free socket that takes them, else go
+ *  back to stores; an overloaded design sheds its heaviest parts. null when the entry is not a design at all (no id,
+ *  unknown hull) or nothing armed is left. Exported for tests. */
+export function repairDesign(raw: unknown): Design | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const x = raw as Partial<Design>;
+  if (typeof x.id !== 'string' || !x.id || x.id.length > 40) return null;
+  const c = typeof x.chassis === 'string' ? CHASSIS_BY_ID.get(x.chassis) : undefined;
+  if (!c) return null;
+  const name = (typeof x.name === 'string' ? x.name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trim() : '') || 'Untitled';
+  const mobility = typeof x.mobility === 'string' && !pairingError(c.id, x.mobility) ? x.mobility : firstLegalMobility(c.id);
+  const mounts: (string | null)[] = c.mounts.map(() => null);
+  const left: string[] = [];
+  (Array.isArray(x.mounts) ? x.mounts : []).forEach((id, i) => {
+    const mod = typeof id === 'string' ? MODULE_BY_ID.get(id) : undefined;
+    if (!mod) return;
+    if (i < mounts.length && !slotError(c, mobility, i, mod)) mounts[i] = mod.id;
+    else left.push(mod.id);
+  });
+  for (const id of left) {
+    const mod = MODULE_BY_ID.get(id)!;
+    const i = mounts.findIndex((m, k) => m === null && !slotError(c, mobility, k, mod));
+    if (i >= 0) mounts[i] = id;
+  }
+  const d: Design = {
+    id: x.id, name, chassis: c.id, mobility, mounts,
+    ...(x.behavior && typeof x.behavior === 'object' ? { behavior: { ...x.behavior } } : {}),
+    ...(typeof x.editedAt === 'number' && Number.isFinite(x.editedAt) ? { editedAt: x.editedAt } : {}),
+  };
+  const overloaded = () => { try { return computeStats(d).load > MAX_LOAD; } catch { return false; } };
+  while (overloaded()) {
+    let k = -1;
+    d.mounts.forEach((m, i) => { if (m && (k < 0 || MODULE_BY_ID.get(m)!.weight > MODULE_BY_ID.get(d.mounts[k]!)!.weight)) k = i; });
+    if (k < 0) break;
+    d.mounts[k] = null;
+  }
+  return sane(d) ? d : null;
 }
 
 /** Starter designs are read-only templates in the player's collection, shown as "Name (Standard)". Saving an edit
@@ -50,8 +94,16 @@ export function allDesigns(): Design[] {
   const out: Design[] = [];
   let changed = false;
   const deckMap = new Map<string, string>();
-  for (const d of raw) {
-    if (!sane(d) || seen.has(d.id)) { changed = true; continue; }
+  for (const entry of raw) {
+    let d = entry as Design;
+    if (!sane(d)) {
+      // illegal under the current rules (or hand-edited): repair what can be kept rather than delete it
+      changed = true;
+      const fixed = repairDesign(entry);
+      if (!fixed) continue;
+      d = fixed;
+    }
+    if (seen.has(d.id)) { changed = true; continue; }
     seen.add(d.id);
     const st = STARTER_BY_ID.get(d.id);
     if (st && d.editedAt != null) {

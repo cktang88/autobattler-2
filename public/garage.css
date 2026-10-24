@@ -896,9 +896,18 @@
 /* ---------- roster: labeled toolbar, group / sort controls, folder tree of compact rows ---------- */
 .garage .g-plate-h { flex-wrap: wrap; row-gap: 8px; }
 .garage .g-list-btns { flex: 1 0 100%; display: flex; gap: 4px; }
+/* the three roster buttons overflowed the 250 px roster column (1101-1360 px wide windows) and Delete was cut off */
+.garage .g-list-btns { min-width: 0; }
+.garage .g-list-btns .g-lbtn { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1360px) and (min-width: 1101px) {
+  .garage .g-list-btns .g-lbtn { padding: 0 5px; gap: 4px; letter-spacing: 0.02em; }
+}
 .garage .g-btn.g-lbtn { flex: 1 1 auto; min-width: 0; gap: 5px; padding: 0 8px; letter-spacing: 0.05em; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
 .garage .g-btn.g-lbtn .g-ico { width: 15px; height: 15px; color: var(--amber); }
 .garage .g-btn.g-ldel .g-ico { color: var(--dim); }
+.garage .g-btn.g-ldel.na { opacity: 0.45; }
+.garage .g-btn.g-ldel.na:hover { background: var(--plate3); }
+.garage .g-btn.g-ldel.na:hover .g-ico { color: var(--dim); }
 .garage .g-btn.g-ldel:hover:not(:disabled) { background: #6d1f1a; }
 .garage .g-btn.g-ldel:hover:not(:disabled) .g-ico { color: #fff; }
 .garage .g-list-tools { flex: 1 0 100%; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -1043,3 +1052,7 @@
   padding: 2px 8px 2px 10px; background: rgba(5, 7, 9, 0.9); border-left: 4px solid var(--rc, #fff);
   font: 700 14px "Barlow Condensed", system-ui, sans-serif; color: #f1ece0;
 }
+
+/* account sync problem (over the design cap / upload refused): hover for the reason */
+.garage .g-syncwarn { flex: none; padding: 4px 8px; font-family: var(--head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.06em; color: #ffd7d0; background: #6d1f1a; cursor: help; white-space: nowrap; }
+.garage .g-syncwarn[hidden] { display: none; }

@@ -66,9 +66,22 @@ export function applyViewSettings(view: { shakeScale?: number; flashScale?: numb
   view.setUnitTextures?.(s.unitTextures !== false);
   view.setShadows?.(s.shadows !== false);
 }
+/** Saved settings from any earlier build (or hand-edited storage): every field is type-checked and falls back to its
+ *  default, so a stale or corrupt value (a string volume, an unknown renderer, a non-object) can't reach the UI. */
 export const loadSettings = (): Settings => {
-  const s: Settings = { ...defaultSettings, ...read<Partial<Settings>>(KEY_SETTINGS, {}) };
-  if (!s.rendererChosen) s.renderer = defaultSettings.renderer;
+  const raw = read<unknown>(KEY_SETTINGS, {});
+  const o = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const s: Settings = { ...defaultSettings };
+  const unit = (k: 'master' | 'music' | 'sfx' | 'shake' | 'flashes') => {
+    const v = o[k];
+    if (typeof v === 'number' && Number.isFinite(v)) s[k] = Math.max(0, Math.min(1, v));
+  };
+  unit('master'); unit('music'); unit('sfx'); unit('shake'); unit('flashes');
+  if (typeof o.battleSpeed === 'number' && BATTLE_SPEEDS.includes(o.battleSpeed)) s.battleSpeed = o.battleSpeed;
+  for (const k of ['alwaysHealth', 'tilt', 'autoCam', 'unitTextures', 'shadows', 'rendererChosen'] as const) {
+    if (typeof o[k] === 'boolean') s[k] = o[k] as boolean;
+  }
+  if (s.rendererChosen && (o.renderer === '2d' || o.renderer === '3d')) s.renderer = o.renderer;
   return s;
 };
 export const saveSettings = (s: Settings) => write(KEY_SETTINGS, s);

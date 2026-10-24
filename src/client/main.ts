@@ -4,7 +4,7 @@ import { App } from './app.ts';
 import { setVolumes, unlockAudio } from './audio.ts';
 import { preload3d } from './render/viewfactory.ts';
 import { loadSettings } from './storage.ts';
-import { startGarageSync } from './sync.ts';
+import { setSyncProblemHandler, startGarageSync } from './sync.ts';
 import { currentSession, refreshSession } from './net.ts';
 import { menuScreen } from './ui/menu.ts';
 import { vsaiScreen } from './ui/vsai.ts';
@@ -24,6 +24,9 @@ app.register('settings', settingsScreen);
 app.register('garage', garageScreen);
 app.register('lobby', lobbyScreen);
 app.register('playground', playgroundScreen);
+
+// garage sync problems the player must know about (over the account's design cap, an upload the server refused)
+setSyncProblemHandler((msg) => { if (msg) app.toast(msg, 'error'); });
 
 const s = loadSettings();
 setVolumes({ master: s.master, music: s.music, sfx: s.sfx });

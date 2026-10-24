@@ -69,12 +69,22 @@ export function playgroundScreen(app: App): Screen {
     if (s?.v === 1 && Array.isArray(s.boards)) {
       for (const sd of [0, 1] as Side[]) {
         const keep: Placement[] = [];
-        for (const p of s.boards[sd] ?? []) {
-          const d = byId.get(p?.designId);
-          if (!d || !Number.isInteger(p.uid)) continue;
-          if (!blockInZone(p.x, p.y, shapeOf(d), p.spacing, p.rot)) continue;
-          if (keep.some((q) => blocksOverlap(p, shapeOf(d), q, shapeOf(byId.get(q.designId))))) continue;
+        let blocks = 0, units = 0;
+        const list: unknown = s.boards[sd];
+        for (const raw of Array.isArray(list) ? list as Placement[] : []) {
+          const d = raw && typeof raw === 'object' ? byId.get(raw.designId) : undefined;
+          if (!d || !Number.isInteger(raw.uid) || !Number.isInteger(raw.x) || !Number.isInteger(raw.y)) continue;
+          if (keep.some((q) => q.uid === raw.uid)) continue;
+          // a layout saved by an older build: stars and round within today's rules, unknown extras left to the sim
+          const lv = Number.isInteger(raw.level) ? Math.max(1, Math.min(MAX_LEVEL, raw.level)) : 1;
+          const p: Placement = { ...raw, level: lv, round: Number.isInteger(raw.round) ? raw.round : 1 };
+          const shape = shapeOf(d);
+          if (!blockInZone(p.x, p.y, shape, p.spacing, p.rot)) continue;
+          // the army caps may have tightened since the layout was saved
+          if (blocks + 1 > MAX_BLOCKS || units + shape.squad > MAX_SIM_UNITS) continue;
+          if (keep.some((q) => blocksOverlap(p, shape, q, shapeOf(byId.get(q.designId))))) continue;
           keep.push(p);
+          blocks++; units += shape.squad;
         }
         boards[sd] = keep;
       }

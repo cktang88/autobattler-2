@@ -29,6 +29,7 @@ import {
 } from './garage-parts.ts';
 import { firstLegalMobility, refitForClass, reqReason as reqReasonFor, reseat } from './garage-fit.ts';
 import { loadSettings } from '../storage.ts';
+import { MAX_SYNCED_DESIGNS, syncProblem } from '../sync.ts';
 import { webglAvailable } from '../render/viewfactory.ts';
 import { stageMode } from '../render3d/stage-math.ts';
 import type { HighlightTone, StageRing, UnitStage3D } from '../render3d/UnitStage3D.ts';
@@ -285,6 +286,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   // ---------------- static skeleton ----------------
   const deckChip = h('span.g-deckchip', { role: 'status', 'aria-live': 'polite' });
+  /** shown while the account sync has a problem the player can act on (sync.ts) */
+  const syncWarn = h('span.g-syncwarn', { role: 'status' });
   const listEl = h('div.g-items', { role: 'list' });
   const toolsEl = h('div.g-list-tools');
   const gridCv = h('canvas.g-grid', { 'aria-hidden': 'true' });
@@ -298,6 +301,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const nameInput = h('input.g-name', { type: 'text', maxlength: NAME_MAX, 'aria-label': 'Design name', spellcheck: 'false', autocomplete: 'off' });
   const rerollBtn = h('button.g-iconbtn', { type: 'button', title: 'Random name', 'aria-label': 'Pick a random name', onclick: () => reroll() }, svgIcon('<rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/>'));
   const saveBtn = h('button.g-btn.primary', { type: 'button', onclick: () => doSave() }, icon('save'), 'Save');
+  const delBtn = h('button.g-btn.small.g-lbtn.g-ldel', { type: 'button', title: 'Delete the selected design (asks first)', onclick: () => remove() }, icon('trash'), 'Delete');
   const revertBtn = h('button.g-btn', { type: 'button', title: 'Revert to saved', onclick: () => revert() }, icon('undo'), 'Revert');
   const errorsEl = h('ul.g-errors', { 'aria-live': 'polite' });
   const loadoutEl = h('div.g-loadout', { role: 'list', 'aria-label': 'Mount sockets' });
@@ -421,6 +425,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('button.g-btn.g-back', { type: 'button', onclick: () => leave() }, icon('back'), 'Menu'),
       h('h1.g-title', null, h('span.g-title-k', null, 'Unit Designer'), h('span.g-title-s', null, 'Hangar · design bureau')),
       h('span.g-hazard', { 'aria-hidden': 'true' }),
+      syncWarn,
       deckChip,
     ),
     h('div.g-body', null,
@@ -430,7 +435,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           h('div.g-list-btns', null,
             h('button.g-btn.small.g-lbtn', { type: 'button', title: 'New design: start a blank design of the current unit class', onclick: () => newDesign() }, icon('plus'), 'New'),
             h('button.g-btn.small.g-lbtn', { type: 'button', title: 'Duplicate: copy the selected design into a new one you can edit (the original stays as it is)', onclick: () => duplicate() }, icon('copy'), 'Duplicate'),
-            h('button.g-btn.small.g-lbtn.g-ldel', { type: 'button', title: 'Delete the selected design (asks first)', onclick: () => remove() }, icon('trash'), 'Delete'),
+            delBtn,
           ),
           toolsEl,
         ),
@@ -511,11 +516,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     // (an unsaved new design has no saved copy, so its draft is duplicated)
     const src = clone(saved ?? draft);
     sfx('click');
-    const base = stripStandard(src.name).replace(/\s+Mk\s*\d+$/i, '');
+    // room for " Mk99": a long name used to come out as "<name> Mk" (the number cut off) or skip Mk2
+    const base = stripStandard(src.name).replace(/\s+Mk\s*\d+$/i, '').slice(0, NAME_MAX - 5).trim() || 'Design';
     let n = 2;
     const names = new Set(designs.map((d) => d.name));
-    let name = `${base} Mk${n}`.slice(0, NAME_MAX);
-    while (names.has(name) && n < 99) name = `${base.slice(0, NAME_MAX - 5)} Mk${++n}`;
+    let name = `${base} Mk${n}`;
+    while (names.has(name) && n < 99) name = `${base} Mk${++n}`;
     const into = currentFolder();
     load(null, designDomain(src));
     pendingFolder = into;
@@ -531,6 +537,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       sfx('click');
       load(roster(null)[0] ?? designs[0] ?? null);
       return;
+    }
+    if (isStandard(saved)) {
+      // standards are read-only templates: deleting one lost it for good (nothing restores it)
+      sfx('error'); app.toast('Standard designs can\'t be deleted: use "Hide starters" to tuck them away', 'error'); return;
     }
     if (designs.length <= 1) { sfx('error'); app.toast('Keep at least one design', 'error'); return; }
     const r = await modal(el, 'Delete design?', `"${saved.name}" will be scrapped for good.`, [
@@ -556,6 +566,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (errs.length) { sfx('error'); app.toast(errs[0], 'error'); return false; }
     draft.name = draft.name.trim();
     const wasStandard = isStandard(draft), standardId = draft.id;
+    if ((wasStandard || !designs.some((d) => d.id === draft.id)) && designs.length >= MAX_SYNCED_DESIGNS) {
+      // the account keeps at most this many: one more would leave it on this device only (and used to stop syncing)
+      sfx('error');
+      app.toast(`Your collection is full (${MAX_SYNCED_DESIGNS} designs): delete one to save a new design`, 'error');
+      return false;
+    }
     const newId = saveDesign(draft);
     if (!newId) { sfx('error'); app.toast('Could not save design', 'error'); return false; }
     // a standard design is saved as your own copy: carry on editing the copy (same folder as the standard)
@@ -1010,6 +1026,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   function renderHeader() {
+    const sp = syncProblem();
+    syncWarn.hidden = !sp;
+    syncWarn.title = sp ?? '';
+    syncWarn.textContent = sp ? '⚠ Not all synced' : '';
     deckChip.replaceChildren(icon('deck'), 'Deck ', h('b', null, String(deck.length)), `/${DECK_SIZE}`);
     deckChip.classList.toggle('full', deck.length >= DECK_SIZE);
   }
@@ -1326,6 +1346,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const ss = saved && dirty() ? statsOf(saved) : null;
     const errs = validateDesign(draft);
     const isDirty = dirty();
+    const std = !!saved && selectedId !== null && isStandard(saved);
+    delBtn.setAttribute('aria-disabled', String(std));
+    delBtn.classList.toggle('na', std);
+    delBtn.title = std ? 'Standard designs are read-only templates and can\'t be deleted (use "Hide starters")' : 'Delete the selected design (asks first)';
     saveBtn.disabled = errs.length > 0 || !isDirty;
     saveBtn.title = errs.length ? errs[0] : isDirty ? 'Save design (Ctrl+S)' : 'No changes';
     revertBtn.hidden = !(saved && isDirty);

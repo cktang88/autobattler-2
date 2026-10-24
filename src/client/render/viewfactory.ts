@@ -10,11 +10,19 @@ type Ctor3D = new (canvas: HTMLCanvasElement, side: Side, opts?: { interactive?:
 let ctor3d: Ctor3D | null = null;
 let loading: Promise<void> | null = null;
 
+let webglOk: boolean | null = null;
+/** Whether WebGL works here. Probed once: each probe holds a real GL context until garbage collection, and the menu,
+ *  garage and settings ask on every visit, so uncached probes piled up towards the browser's context limit (where the
+ *  oldest live context, e.g. the battlefield's, gets dropped). The probe context is released right away. */
 export function webglAvailable(): boolean {
+  if (webglOk !== null) return webglOk;
   try {
     const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
-  } catch { return false; }
+    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
+    webglOk = !!gl;
+    try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* ignore */ }
+  } catch { webglOk = false; }
+  return webglOk;
 }
 
 /** Start loading the 3D renderer (idempotent). Resolves when ready or failed. */
