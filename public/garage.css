@@ -1025,3 +1025,21 @@
 .garage .g-idetails[open] > summary::before { content: '▾ '; }
 @media (max-width: 760px) { .garage .g-irow { grid-template-columns: 92px 1fr 52px 80px; font-size: 0.86rem; } }
 .garage .g-mverdict { margin: 0 0 2px; font-size: 0.92rem; color: var(--dim, #9aa7b4); } .garage .g-mverdict b { color: var(--txt, #e8edf2); }
+
+/* ---- 3D designer stage (render3d/UnitStage3D): the model on battlefield ground, sockets projected onto it ---- */
+.garage .g-preview3d { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.garage .g-stage.is3d .g-preview3d { display: block; }
+.garage .g-stage.is3d .g-preview, .garage .g-stage.is3d .g-grid { display: none; }
+.garage .g-stage.is3d { touch-action: none; }
+/* sockets the hull hides from this angle: still on top and usable, drawn dimmer with a dashed ring */
+.garage .g-stage.is3d .g-sock.occ { opacity: 0.6; }
+.garage .g-stage.is3d .g-sock.occ .g-sock-ring { border-style: dashed !important; }
+.garage.dragging .g-stage.is3d .g-sock.occ.can, .garage.picking .g-stage.is3d .g-sock.occ.can { opacity: 0.85; }
+.garage .g-stage.is3d .g-sock.occ:hover { opacity: 1; }
+.garage .g-ringlbls { position: absolute; inset: 0; pointer-events: none; z-index: 1; display: none; }
+.garage .g-stage.is3d.ranges .g-ringlbls { display: block; }
+.garage .g-ringlbl {
+  position: absolute; left: 0; top: 0; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  padding: 2px 8px 2px 10px; background: rgba(5, 7, 9, 0.9); border-left: 4px solid var(--rc, #fff);
+  font: 700 14px "Barlow Condensed", system-ui, sans-serif; color: #f1ece0;
+}

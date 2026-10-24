@@ -28,24 +28,11 @@ import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
 import { SunShadow } from './shadow3d.ts';
 import { CameraShake, setActiveShake } from './shake3d.ts';
+import { ELEV, FOV, SUN, pitchAt } from './view3d.ts';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-/** camera pitch at the fit (zoomed-out) view: steep, for readability of the whole board */
-const ELEV = (60 * Math.PI) / 180;
-/** camera pitch when zoomed in (k >= PITCH_Z x fit): lower, so unit flanks, legs and tracks show */
-const ELEV_CLOSE = (43 * Math.PI) / 180;
-const PITCH_Z = 3.5;
-/** sun offset from the view centre for the viewer at side 0 (x: left, y: up, z: toward the camera; negative = behind) */
-const SUN: [number, number, number] = [30, 40, -16];
-/** pitch for zoom z = k / minK: ELEV at the fit view easing down to ELEV_CLOSE (log-zoom smoothstep) */
-function pitchAt(z: number): number {
-  const t = clamp(Math.log(Math.max(1, z)) / Math.log(PITCH_Z), 0, 1);
-  return lerp(ELEV, ELEV_CLOSE, t * t * (3 - 2 * t));
-}
-/** vertical field of view of the perspective camera (narrow: depth cue without a fish-eye look) */
-const FOV = 32;
 const GUN_H = 0.55;
 /** shadow-map caster tiers (UnitLayer.setShadowTier): a unit casts a sun shadow when its tier (size, +1 flying, +1 tall)
  *  is at least the current minimum; smaller units keep only their soft contact blob */

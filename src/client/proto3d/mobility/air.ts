@@ -1,11 +1,13 @@
 // Flying mobility (rotor, jet, gravlift): renders the lift units an airframe asks for. Each air chassis builder
 // (chassis/air.ts) returns AirOut.lift, a list of lift points it placed for ITS mobility and load (how many rotors /
 // fans / nozzles / grav pods, where, how big); this module turns them into hardware on the unit root:
-//   rotor  open rotor head with chunky tapered blades (main rotors), spins about its local y
+//   rotor  open rotor head: thin twisted tapered blades with root cuffs and painted tips, hub + swashplate with
+//          pitch links (main rotors), spins about its local y
 //   coax   two counter-rotating rotor discs on one mast (no tail rotor needed)
 //   tail   small anti-torque rotor spinning about z
 //   duct   ducted fan: thick ring + many short blades + hub cone; tilt pitches the whole fan (tilt-rotor look)
-//   jet    engine nozzle facing -x with a hot core and a flickering afterburner cone
+//   jet    engine can + convergent nozzle petals facing -x, black liner, hot core and flame-holder ring, and a
+//          flickering afterburner cone
 //   grav   anti-grav pod: rounded can with a glowing emitter face downwards and a slowly orbiting fin ring
 // Spinning parts are separate groups (one mesh per material per group) driven by the returned updater.
 // Without a lift list (unregistered flyer) it falls back to a simple default per mobility id.
@@ -51,19 +53,21 @@ function blurDisc(R: number): THREE.Mesh {
   return m;
 }
 
-/** one chunky tapered blade along +z from the hub, chord along x, written into b with transform m */
-function blade(b: Bld, kit: Kit, R: number, chord: number, r0: number, m: THREE.Matrix4, pitch = 0.22) {
+/** one tapered, twisted blade along +z from the hub (chord along x), written into b with transform m: four lens sections
+ *  washing out from root pitch to a near-flat tip, a dark root cuff and a painted tip band */
+function blade(b: Bld, kit: Kit, R: number, chord: number, r0: number, m: THREE.Matrix4, pitch = 0.26) {
   const rings: V3[][] = [];
-  for (const f of [0, 0.55, 1]) {
-    const z = r0 + (R - r0) * f, c = chord * (1 - 0.35 * f), t = chord * 0.16 * (1 - 0.5 * f), a = pitch * (1 - 0.6 * f);
+  for (const f of [0, 0.3, 0.78, 1]) {
+    const z = r0 + (R - r0) * f, c = chord * (f < 0.3 ? 0.8 + f * 0.66 : 1 - 0.3 * (f - 0.3)), t = chord * 0.12 * (1 - 0.45 * f), a = pitch * (1 - 0.85 * f);
     const ca = Math.cos(a), sa = Math.sin(a);
-    // 6-point lens section, pitched about z
-    const pts: [number, number][] = [[c * 0.5, 0], [c * 0.2, t], [-c * 0.35, t * 0.6], [-c * 0.5, 0], [-c * 0.35, -t * 0.4], [c * 0.2, -t * 0.6]];
+    const pts: [number, number][] = [[c * 0.5, 0], [c * 0.2, t], [-c * 0.35, t * 0.55], [-c * 0.5, 0], [-c * 0.35, -t * 0.35], [c * 0.2, -t * 0.55]];
     rings.push(pts.map(([x, y]) => [x * ca - y * sa, x * sa + y * ca, z] as V3));
   }
   b.loft(kit.trim, rings, true, true, m);
+  // root cuff + grip
+  b.g(new THREE.BoxGeometry(chord * 0.75, chord * 0.32, (R - r0) * 0.1), kit.metal, m.clone().multiply(mtx([0, 0, r0 + (R - r0) * 0.03])));
   // painted tip band
-  b.g(new THREE.BoxGeometry(chord * 0.7, chord * 0.14, (R - r0) * 0.08), kit.hazard, m.clone().multiply(mtx([0, 0, R - (R - r0) * 0.06])));
+  b.g(new THREE.BoxGeometry(chord * 0.9, chord * 0.1, (R - r0) * 0.06), kit.hazard, m.clone().multiply(mtx([chord * 0.05, 0, R - (R - r0) * 0.04], [0, 0, pitch * 0.15])));
 }
 
 interface Spinner { g: THREE.Object3D; spd: number; axis: 'y' | 'z' }
@@ -72,10 +76,22 @@ function rotorHead(kit: Kit, R: number, n: number, spinners: Spinner[], parent: 
   const g = new THREE.Group();
   g.position.set(...at);
   const b = new Bld();
-  const chord = R * (tail ? 0.22 : 0.085) + 0.012;
-  for (let i = 0; i < n; i++) blade(b, kit, R, chord, R * 0.1, mtx([0, 0, 0], [0, (i / n) * Math.PI * 2, 0]));
-  b.lathe(kit.metal, [[0, -R * 0.05], [R * 0.11, -R * 0.05], [R * 0.13, 0], [R * 0.1, R * 0.05], [0, R * 0.07]], [0, 0, 0], 'y', 10);
-  b.cyl(kit.accent, R * 0.045, R * 0.02, R * 0.06, [0, R * 0.06, 0], 'y', 8);
+  const chord = R * (tail ? 0.18 : 0.062) + 0.01;
+  const r0 = R * 0.11;
+  for (let i = 0; i < n; i++) blade(b, kit, R, chord, r0, mtx([0, 0, 0], [0, (i / n) * Math.PI * 2, 0]));
+  // hub: blade grips on a dark yoke, a hub cap, and under it the swashplate (two plates) with a pitch link per blade
+  b.lathe(kit.metal, [[0, -R * 0.03], [R * 0.08, -R * 0.03], [R * 0.095, 0], [R * 0.075, R * 0.035], [0, R * 0.05]], [0, 0, 0], 'y', 8);
+  b.cyl(kit.trim, R * 0.03, R * 0.022, R * 0.05, [0, R * 0.04, 0], 'y', 6);
+  if (!tail) {
+    const sw = -R * 0.085;
+    b.cyl(kit.trim, R * 0.075, R * 0.075, R * 0.014, [0, sw, 0], 'y', 10);
+    b.cyl(kit.metal, R * 0.06, R * 0.06, R * 0.012, [0, sw + R * 0.016, 0], 'y', 10);
+    b.cyl(kit.metal, R * 0.022, R * 0.022, -sw, [0, sw, 0], 'y', 6);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + 0.35, ca = Math.cos(a), sa = Math.sin(a);
+      b.strut(kit.steel, [sa * R * 0.06, sw + R * 0.02, ca * R * 0.06], [sa * R * 0.085, -R * 0.01, ca * R * 0.085], R * 0.006, R * 0.006, 4);
+    }
+  }
   b.mount(g);
   g.add(blurDisc(R * 0.98));
   parent.add(g);
@@ -127,8 +143,10 @@ export function buildLift(root: THREE.Group, kit: Kit, lift: Lift[]): (t: number
         // thick ring (closed profile: inner wall, flat bottom, rounded outer skin, flared intake lip), accent band,
         // stator spokes and hub cone
         const sg = r < 0.16 ? 12 : 18;
-        fb.lathe(kit.hull, [[r * 1.02, h * 0.4], [r, h * 0.28], [r, -h * 0.5], [R1 * 0.96, -h * 0.5], [R1, -h * 0.1], [R1 * 0.98, h * 0.35], [r * 1.14, h * 0.55], [r * 1.02, h * 0.4]], [0, 0, 0], 'y', sg);
-        fb.lathe(kit.accent, [[R1 * 0.9, -h * 0.12], [R1 * 1.012, -h * 0.12], [R1 * 1.012, h * 0.06], [R1 * 0.9, h * 0.06]], [0, 0, 0], 'y', sg);
+        fb.lathe(kit.panel, [[r * 1.02, h * 0.4], [r, h * 0.28], [r, -h * 0.5], [R1 * 0.96, -h * 0.5], [R1, -h * 0.1], [R1 * 0.98, h * 0.35], [r * 1.14, h * 0.55], [r * 1.02, h * 0.4]], [0, 0, 0], 'y', sg);
+        fb.lathe(kit.hull, [[R1 * 0.9, -h * 0.12], [R1 * 1.012, -h * 0.12], [R1 * 1.012, h * 0.06], [R1 * 0.9, h * 0.06]], [0, 0, 0], 'y', sg);
+        // dark inner duct wall (inward-facing tube)
+        fb.lathe(kit.trim, [[r * 0.995, h * 0.26], [r * 0.995, -h * 0.48]], [0, 0, 0], 'y', sg);
         for (let i = 0; i < 3; i++) fb.g(new THREE.BoxGeometry(r * 0.08, h * 0.12, r * 1.95), kit.metal, mtx([0, -h * 0.32, 0], [0, (i / 3) * Math.PI, 0]));
         fb.lathe(kit.metal, [[0, -h * 0.75], [r * 0.2, -h * 0.4], [r * 0.24, h * 0.1], [0, h * 0.3]], [0, 0, 0], 'y', 8);
         fb.mount(frame);
@@ -147,10 +165,21 @@ export function buildLift(root: THREE.Group, kit: Kit, lift: Lift[]): (t: number
       }
       case 'jet': {
         const len = l.len ?? r * 1.6;
-        // nozzle petals (dark metal), steel ring, hot core facing -x
-        b.lathe(kit.metal, [[r * 1.08, 0], [r * 1.1, len * 0.45], [r * 0.92, len], [r * 0.78, len], [r * 0.82, len * 0.4], [0, len * 0.4]], [x + len, y, z], '-x', 12);
-        b.cylb(kit.steel, r * 1.14, len * 0.16, r * 0.04, [x + len * 0.92, y, z], '-x', 12);
-        b.cyl(kit.hot, r * 0.74, r * 0.6, len * 0.02, [x + len * 0.42, y, z], '-x', 10);
+        // engine can (dark), convergent nozzle petals (gunmetal) flaring out to the exit, black liner, turbine face
+        // with a hot core deep inside and a hot flame-holder ring
+        b.lathe(kit.trim, [[r * 1.02, 0], [r * 1.12, len * 0.5], [r * 1.12, len], [0, len]], [x + len, y, z], '-x', 12);
+        const np = r < 0.09 ? 10 : 14;
+        for (let i = 0; i < np; i++) {
+          const a = (i / np) * Math.PI * 2;
+          const m = new THREE.Matrix4().makeTranslation(x + len * 0.18, y, z)
+            .multiply(new THREE.Matrix4().makeRotationX(a))
+            .multiply(new THREE.Matrix4().makeTranslation(0, r * 0.98, 0))
+            .multiply(new THREE.Matrix4().makeRotationZ(0.1));
+          b.g(new THREE.BoxGeometry(len * 0.62, r * 0.07, ((Math.PI * 2 * r) / np) * 1.02), kit.metal, m);
+        }
+        b.lathe(kit.trim, [[r * 0.9, len * 0.85], [r * 0.9, -len * 0.02]], [x + len, y, z], '-x', 10);
+        b.cyl(kit.hot, r * 0.7, r * 0.55, len * 0.02, [x + len * 0.62, y, z], '-x', 10);
+        b.cylb(kit.hot, r * 0.42, len * 0.04, r * 0.01, [x + len * 0.45, y, z], '-x', 8);
         const fl = new THREE.Group();
         fl.position.set(x - len * 0.0, y, z);
         const fb = new Bld();
@@ -163,7 +192,7 @@ export function buildLift(root: THREE.Group, kit: Kit, lift: Lift[]): (t: number
       case 'grav': {
         const h = l.len ?? r * 0.7;
         // rounded can: hull shell, dark waist, glowing emitter dish facing down
-        b.lathe(kit.hull, [[0, h * 0.5], [r * 0.7, h * 0.5], [r * 0.95, h * 0.3], [r, 0], [r * 0.92, -h * 0.25], [r * 0.74, -h * 0.36], [0, -h * 0.36]], [x, y, z], 'y', 16);
+        b.lathe(kit.panel, [[0, h * 0.5], [r * 0.7, h * 0.5], [r * 0.95, h * 0.3], [r, 0], [r * 0.92, -h * 0.25], [r * 0.74, -h * 0.36], [0, -h * 0.36]], [x, y, z], 'y', 16);
         b.cylb(kit.trim, r * 1.03, h * 0.16, h * 0.04, [x, y - h * 0.12, z], 'y', 16);
         b.lathe(kit.glow, [[0, -h * 0.5], [r * 0.6, -h * 0.4], [r * 0.7, -h * 0.36], [0, -h * 0.36]], [x, y, z], 'y', 14);
         b.cyl(kit.metal, r * 0.22, r * 0.22, h * 0.12, [x, y + h * 0.5, z], 'y', 8);
@@ -174,7 +203,7 @@ export function buildLift(root: THREE.Group, kit: Kit, lift: Lift[]): (t: number
         const nf = 6;
         for (let i = 0; i < nf; i++) {
           const a = (i / nf) * Math.PI * 2, cx = Math.cos(a) * r * 1.22, cz = Math.sin(a) * r * 1.22;
-          rb.g(new THREE.BoxGeometry(r * 0.42, h * 0.12, r * 0.14), kit.panel, mtx([cx, 0, cz], [0, -a + Math.PI / 2, 0]));
+          rb.g(new THREE.BoxGeometry(r * 0.42, h * 0.12, r * 0.14), kit.trim, mtx([cx, 0, cz], [0, -a + Math.PI / 2, 0]));
           rb.g(new THREE.BoxGeometry(r * 0.08, h * 0.14, r * 0.08), kit.glow, mtx([cx, 0, cz], [0, -a, 0]));
         }
         rb.mount(ring);
