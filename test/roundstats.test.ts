@@ -30,6 +30,11 @@ test('unit tallies add up: dealt matches the block tally, every kill is a death 
       assert.ok(b.unitTally(t.killedBy).kills.includes(u.id));
     }
     for (const v of t.kills) { kills++; assert.equal(b.unitTally(v).killedBy, u.id); }
+    // the per-weapon split adds back up to the unit's totals
+    const ws = Object.values(t.byWeapon);
+    assert.ok(Math.abs(ws.reduce((x, w) => x + w.dealt, 0) - t.dealt) < 1e-6);
+    assert.ok(Math.abs(ws.reduce((x, w) => x + w.dealtAir, 0) - t.dealtAir) < 1e-6);
+    assert.equal(ws.reduce((x, w) => x + w.kills.length, 0), t.kills.length);
   }
   assert.ok(deaths > 0 && kills > 0 && kills <= deaths);
 });

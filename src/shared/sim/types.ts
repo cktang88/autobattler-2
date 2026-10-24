@@ -136,8 +136,9 @@ export type BattleEvent =
 
 /** A unit's combat record over one battle (accounting only: the fight never reads it). Damage counts shields too. */
 export interface UnitTally {
-  /** damage dealt to enemies */
+  /** damage dealt to enemies; dealtAir is the part dealt to flying ones */
   dealt: number;
+  dealtAir: number;
   /** damage taken from any source; shieldTaken is the part its own / dome shields soaked */
   taken: number;
   shieldTaken: number;
@@ -149,6 +150,9 @@ export interface UnitTally {
   killedBy: number;
   /** tick it died, or -1 while alive */
   deathTick: number;
+  /** dealt and kills split by the module that did it (weapon id; burns count for the igniting weapon, death blasts for
+   *  the blast module, 'crush' for running enemies over) */
+  byWeapon: Record<string, { dealt: number; dealtAir: number; kills: number[] }>;
 }
 
 export interface BattleSummary {

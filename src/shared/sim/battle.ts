@@ -779,7 +779,7 @@ export class Battle {
       cloaked: cloak !== null, reactive, auraShield: 0, maxAuraShield: 0,
     };
     this.units.push(u);
-    this.tallies.push({ dealt: 0, taken: 0, shieldTaken: 0, healed: 0, kills: [], killedBy: -1, deathTick: -1 });
+    this.tallies.push({ dealt: 0, dealtAir: 0, taken: 0, shieldTaken: 0, healed: 0, kills: [], killedBy: -1, deathTick: -1, byWeapon: {} });
     this.ints.push({
       u, wpns, radius: hk * Math.sqrt(stats.fw * stats.fh), elong: stats.fw !== stats.fh,
       hl: hk * stats.fh, hw: hk * stats.fw, capR: hk * Math.min(stats.fw, stats.fh), capS: hk * Math.abs(stats.fh - stats.fw),
@@ -2031,7 +2031,10 @@ export class Battle {
     if (srcU && srcU.side !== t.side) {
       const k = srcU.side * 1e6 + srcU.uid;
       this.blockDmg.set(k, (this.blockDmg.get(k) ?? 0) + dealt);
-      this.tallies[srcU.id].dealt += dealt;
+      const st = this.tallies[srcU.id], wt = (st.byWeapon[moduleId] ??= { dealt: 0, dealtAir: 0, kills: [] });
+      st.dealt += dealt;
+      wt.dealt += dealt;
+      if (t.flying) { st.dealtAir += dealt; wt.dealtAir += dealt; }
     }
     t.hitFlash = 1;
     T.sinceDamage = 0;
@@ -2051,7 +2054,7 @@ export class Battle {
       t.hp = 0;
       t.alive = false;
       tt.deathTick = this.tick;
-      if (srcU && srcU.side !== t.side) { tt.killedBy = srcU.id; this.tallies[srcU.id].kills.push(t.id); }
+      if (srcU && srcU.side !== t.side) { tt.killedBy = srcU.id; this.tallies[srcU.id].kills.push(t.id); this.tallies[srcU.id].byWeapon[moduleId].kills.push(t.id); }
       t.moving = false;
       t.leap = 0;
       t.cloaked = false;
