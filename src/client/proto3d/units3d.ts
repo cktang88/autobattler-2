@@ -16,6 +16,7 @@ import './chassis/index.ts';
 import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
 import { buildJet, buildRotor, type Air } from './air3d.ts';
 import { applySkin, pickSkin } from './skins.ts';
+import { pickFinish } from './finish3d.ts';
 
 export interface Unit3D {
   root: THREE.Group;
@@ -54,7 +55,6 @@ export function contactShadow(L: number, W: number): THREE.Mesh {
 export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const ch = CHASSIS_BY_ID.get(design.chassis)!;
   const mob = MOBILITY_BY_ID.get(design.mobility)!;
-  const kit = makeKit(team);
   const S = ch.size;
   const W = ch.footprint?.[0] ?? S, L = ch.footprint?.[1] ?? S;
   const rnd = rng([...design.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7));
@@ -70,6 +70,11 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   let out: ChassisOut | null = null;
 
   const mods = design.mounts.map((mid) => (mid ? MODULE_BY_ID.get(mid) ?? null : null));
+  // surface skin (skins.ts) and bare-metal finish of the mechanics (finish3d.ts): hull + running gear share one finish,
+  // each weapon may override it for its barrels / coils (all finishes are rows of the team's one shared material)
+  const skin = pickSkin(design, ch, mob, mods);
+  const fin = pickFinish(design, ch, mob, mods, skin);
+  const kit = makeKit(team, fin.hull);
   // a utility in a smaller hardpoint than its class is drawn at the slot's size (as the 2D art does)
   const slotCls = (mod: NonNullable<(typeof mods)[number]>, i: number) => { const sl = ch.mounts[i]; return sl && mod.kind !== 'weapon' && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : undefined; };
   // the unit's main gun (biggest cannon / autocannon housing on a ground unit) gets a hull-proportioned barrel: real
@@ -81,7 +86,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     if (main < 0 || weaponD(m) > weaponD(mods[main]!)) main = i;
   });
   const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
-  const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i), i === main ? mainL : 0) : null));
+  const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), i === main ? mainL : 0) : null));
   // calibre-true housings can outgrow tightly packed hardpoints (four M guns down a land-train spine, twin dorsal
   // mounts on a small pod): shrink both housings of an overlapping ground pair until their rings just clear (>= 72%)
   if (!flying) {
@@ -145,7 +150,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   }
   hb.mount(body, kit.decal);
   // surface skin by role / domain / scale (skins.ts); turrets keep their own per-weapon skin
-  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), kit.uber, pickSkin(design, ch, mob, mods), design.id);
+  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && !(me.material as THREE.MeshBasicMaterial).isMeshBasicMaterial) tris += (me.geometry.index ? me.geometry.index.count : me.geometry.attributes.position.count) / 3; });

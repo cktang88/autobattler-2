@@ -8,7 +8,8 @@
 //   * small parts use cbox (32 tris) or plain boxes (12 tris), never the extruded bevel box (60+ tris);
 //   * radial segments: 6-8 for barrels and small drums, 10-14 for big drums; one team accent per turret.
 //   * paint plan (materials.ts PAINT_PLAN): housings are light shell (kit.panel), side boxes / shields / pods carry the
-//     team colour (kit.hull), mantlets and receivers are dark (kit.trim), barrels gunmetal (kit.metal).
+//     team colour (kit.hull), mantlets and receivers are dark (kit.trim), barrels bare metal (kit.metal: gunmetal or the
+//     weapon's finish, finish3d.ts), breech rings / fume extractors kit.fitting.
 
 import * as THREE from 'three';
 import type { ModuleDef } from '../../../shared/types.ts';
@@ -85,7 +86,9 @@ export function barrel(C: WCtx, B: Bld, o: {
   // recoil / thermal sleeve over the breech end: reads as a stepped barrel, not a pipe
   if (o.sleeve) B.lathe(kit.trim, [[0, L * 0.12], [R * 1.2, L * 0.12], [R * 1.28, L * 0.15], [R * 1.28, L * 0.4], [R * 1.08, L * 0.44], [0, L * 0.44]], at, 'x', seg);
   // fume extractor: a short spindle-shaped bulge a little past mid-barrel
-  if (o.evac) { const a = L * 0.56, e = L * 0.68; B.lathe(kit.metal, [[0, a], [R * tp, a], [R * 1.42, a + (e - a) * 0.3], [R * 1.42, e - (e - a) * 0.3], [R * tp, e], [0, e]], at, 'x', seg); }
+  // breech rings: thin bands of the fitting finish (brass on artillery / siege guns) at the collar and sleeve end
+  if (kit.fitting !== kit.metal) for (const f of o.sleeve ? [0.135, 0.43] : [0.13]) band(B, kit.fitting, x0 + L * f, y, z, R * (o.sleeve && f > 0.2 ? 1.36 : 1.33), L * 0.026, seg);
+  if (o.evac) { const a = L * 0.56, e = L * 0.68; B.lathe(kit.fitting, [[0, a], [R * tp, a], [R * 1.42, a + (e - a) * 0.3], [R * 1.42, e - (e - a) * 0.3], [R * tp, e], [0, e]], at, 'x', seg); }
   const m0 = L - bl;
   if (brake === 'slot') {
     // double-baffle muzzle brake: a slim core with two flat baffle plates wider than tall (reads as a cross-bar from above)

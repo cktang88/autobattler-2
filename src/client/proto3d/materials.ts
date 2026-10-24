@@ -243,7 +243,7 @@ interface Row {
   rough?: number; metal?: number;
 }
 
-const N_ROWS = 16;
+const N_ROWS = 21; // 16 paint roles + 5 metal finishes (METAL_FINISH)
 
 function makeUber(rows: Row[]): THREE.MeshStandardMaterial {
   const A: THREE.Vector4[] = [], B: THREE.Vector4[] = [], E: THREE.Vector4[] = [], M: THREE.Vector4[] = [];
@@ -341,6 +341,10 @@ export interface Kit {
   mech: MatLike;
   /** gunmetal joints, pistons, barrels = metal */
   joint: MatLike;
+  /** small machined fittings on barrels (breech rings, fume extractors) = metal unless the finish sets one */
+  fitting: MatLike;
+  /** this kit's metal finish (see METAL_FINISH) */
+  finish: { joint: MetalFinish; fitting: MetalFinish };
   /** textured decals (separate alpha-tested material) */
   decal: THREE.Material;
   uber: THREE.Material;
@@ -354,12 +358,16 @@ export interface Kit {
  *   armor2 (kit.hull2)  darker team shade                       inner / lower faces of big plates, secondary plates
  *   shell  (kit.panel)  mid grey (faint team cast), matte       caps, skirts, cheek plates, leg covers, turret tops
  *   mech   (kit.trim)   near-black                              joints, track frames, recesses, vents, belly
- *   joint  (kit.metal)  dark gunmetal, metallic                 pistons, barrels, axles, hinges
+ *   joint  (kit.metal)  bare-metal FINISH, metallic             pistons, barrels, axles, hinges (default dark gunmetal;
+ *                       per unit / per weapon: dark chrome, blued steel, oiled bronze, copper, brass; see METAL_FINISH)
+ *   fitting             finish of small barrel fittings          breech rings, fume extractors (= joint by default)
  *   steel / rubber / glass / hazard                             bare steel, tyres, canopies, warning stripes
  *   accent                                                      FULL-CHROMA team colour: stripes, chevrons, roundels
  *   glow / lamp / hot / plasma / rail                           small bright emissive accents (eyes, cores, lights)
  * Neutral mid-to-dark mechanics dominate (55-70% of what is visible: trim, metal, shell, rubber), the team tint is a
- * low-chroma layer on top, and pure team chroma lives only on small markings and lights (<= ~15%). Team identity =
+ * low-chroma layer on top, and pure team chroma lives only on small markings and lights (<= ~15%). The bare-metal finish
+ * stays low-chroma and dark-to-mid value (a satin glint, not a colour), so it varies the mechanics without competing
+ * with team identity. Team identity =
  * the hue / temperature of armor (cool blue-grey vs warm red-brown) + accent markings + glow colour. Per-part value
  * jitter, a ground-up dust gradient and darker undersides (uber shader) keep plates from reading as moulded plastic.
  */
@@ -372,9 +380,51 @@ export const TEAM_PAINT: [string, string, string, string][] = [
   ['#34486f', '#253352', '#62686e', '#4a5258'],
   ['#7d3324', '#56231a', '#6b645d', '#5c5248'],
 ];
-const kits: (Kit | null)[] = [null, null];
+/**
+ * Bare-metal finishes for the joint / metal role (pistons, axles, hinges, barrels) as extra uber rows: every finish of
+ * a team lives in the same shared material (only the per-vertex row id differs), so a finish costs no draw calls or
+ * programs and instancing is untouched. Kept dark-to-mid and low-chroma so they read as machined metal, not paint:
+ *   gunmetal  dark grey-blue, semi-gloss (the default, most units)
+ *   chrome    dark chrome: cool, polished, mirror-ish (precision guns, energy emitters, aircraft oleos, support)
+ *   blued     blued steel: blue-black, satin (light scouts, artillery tubes)
+ *   bronze    oiled bronze: warm brown, satin (heavy industrial hydraulics, titans, creatures, flamers)
+ *   copper    dark copper: warm red-brown, glossy (coils on tesla / EMP / heat-ray weapons)
+ *   brass     dull brass: warm yellow, satin (artillery breech rings, sonic emitters)
+ * The finish of a unit / weapon is picked in finish3d.ts.
+ */
+export type MetalFinish = 'gunmetal' | 'chrome' | 'blued' | 'bronze' | 'copper' | 'brass';
+export const METAL_FINISH: Record<MetalFinish, number> = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20 };
+const FINISH_ROWS: Row[] = [
+  /* chrome */ { color: '#646b74', rough: 0.2, metal: 1, bev: 0.7, det: 0.22, wear: 0.1, grime: 0.45 },
+  /* blued  */ { color: '#2f3a4c', rough: 0.3, metal: 0.88, bev: 0.6, det: 0.35, wear: 0.3, grime: 0.6 },
+  /* bronze */ { color: '#6a5234', rough: 0.36, metal: 0.9, bev: 0.6, det: 0.4, wear: 0.25, grime: 0.75 },
+  /* copper */ { color: '#93553a', rough: 0.28, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.15, grime: 0.6 },
+  /* brass  */ { color: '#9b7f42', rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 },
+];
 
-export function makeKit(team: 0 | 1): Kit {
+export interface FinishSpec { joint?: MetalFinish; fitting?: MetalFinish }
+const kits: (Kit | null)[] = [null, null];
+const finKits = new Map<string, Kit>();
+
+/** Team kit; `fin` swaps the bare-metal finish of the joint / metal role (and barrel fittings). Variants share the
+ *  team's one uber material and decal material (cached per team + finish). */
+export function makeKit(team: 0 | 1, fin: FinishSpec = {}): Kit {
+  const base = baseKit(team);
+  const j = fin.joint ?? 'gunmetal', f = fin.fitting ?? j;
+  if (j === 'gunmetal' && f === 'gunmetal') return base;
+  const key = `${team}|${j}|${f}`;
+  let k = finKits.get(key);
+  if (!k) {
+    const rowMat = (fi: MetalFinish): UMat => ({ uid: METAL_FINISH[fi], base: base.uber });
+    const jm = j === 'gunmetal' ? base.metal : rowMat(j);
+    const fm = f === j ? jm : f === 'gunmetal' ? base.metal : rowMat(f);
+    k = { ...base, metal: jm, joint: jm, fitting: fm, finish: { joint: j, fitting: f } };
+    finKits.set(key, k);
+  }
+  return k;
+}
+
+function baseKit(team: 0 | 1): Kit {
   const hit = kits[team];
   if (hit) return hit;
   const p = TEAM_PAL[team];
@@ -397,6 +447,7 @@ export function makeKit(team: 0 | 1): Kit {
     /* plasma */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#79f0d6', emI: 2.0 },
     /* rail   */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#86adff', emI: 2.4 },
     /* hull2  */ { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
+    ...FINISH_ROWS, // 16..20: METAL_FINISH
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
@@ -406,6 +457,8 @@ export function makeKit(team: 0 | 1): Kit {
   };
   names.forEach((n, i) => { kit[n] = { uid: i, base: uber } as UMat; });
   for (const [role, slot] of Object.entries(PAINT_PLAN)) kit[role] = kit[slot];
+  kit.fitting = kit.metal;
+  kit.finish = { joint: 'gunmetal', fitting: 'gunmetal' };
   kits[team] = kit as unknown as Kit;
   return kits[team]!;
 }

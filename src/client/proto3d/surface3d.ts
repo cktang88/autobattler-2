@@ -170,7 +170,7 @@ float sdLayerFor(int mi, float wny) {
   sdRegion = floor(w / 32.0);
   float sec = mod(w, 32.0) - 1.0;
   sdGiant = sec >= 0.0 ? 1.0 : 0.0;
-  bool mech = mi == 3 || mi == 4;
+  bool mech = mi == 3 || mi == 4 || mi >= 16;              // gunmetal, steel, metal finishes (materials.ts METAL_FINISH)
   if (sdRegion > 1.5 && mech) return 13.0;               // running gear joints / hubs: machinery
   if (sec >= 0.0 && sdRegion < 0.5) {                     // giant hull: skin by part
     if (mi == 2) return sec;                              // superstructure panels

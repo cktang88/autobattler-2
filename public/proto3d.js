@@ -35368,7 +35368,7 @@ float sdLayerFor(int mi, float wny) {
   sdRegion = floor(w / 32.0);
   float sec = mod(w, 32.0) - 1.0;
   sdGiant = sec >= 0.0 ? 1.0 : 0.0;
-  bool mech = mi == 3 || mi == 4;
+  bool mech = mi == 3 || mi == 4 || mi >= 16;              // gunmetal, steel, metal finishes (materials.ts METAL_FINISH)
   if (sdRegion > 1.5 && mech) return 13.0;               // running gear joints / hubs: machinery
   if (sec >= 0.0 && sdRegion < 0.5) {                     // giant hull: skin by part
     if (mi == 2) return sec;                              // superstructure panels
@@ -35784,7 +35784,7 @@ function paint(color, o = {}) {
   cache.set(key, m);
   return m;
 }
-var N_ROWS = 16;
+var N_ROWS = 21;
 function makeUber(rows) {
   const A2 = [], B = [], E = [], M = [];
   for (let i = 0; i < N_ROWS; i++) {
@@ -35866,8 +35866,37 @@ var TEAM_PAINT = [
   ["#34486f", "#253352", "#62686e", "#4a5258"],
   ["#7d3324", "#56231a", "#6b645d", "#5c5248"]
 ];
+var METAL_FINISH = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20 };
+var FINISH_ROWS = [
+  /* chrome */
+  { color: "#646b74", rough: 0.2, metal: 1, bev: 0.7, det: 0.22, wear: 0.1, grime: 0.45 },
+  /* blued  */
+  { color: "#2f3a4c", rough: 0.3, metal: 0.88, bev: 0.6, det: 0.35, wear: 0.3, grime: 0.6 },
+  /* bronze */
+  { color: "#6a5234", rough: 0.36, metal: 0.9, bev: 0.6, det: 0.4, wear: 0.25, grime: 0.75 },
+  /* copper */
+  { color: "#93553a", rough: 0.28, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.15, grime: 0.6 },
+  /* brass  */
+  { color: "#9b7f42", rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 }
+];
 var kits = [null, null];
-function makeKit(team) {
+var finKits = /* @__PURE__ */ new Map();
+function makeKit(team, fin = {}) {
+  const base3 = baseKit(team);
+  const j = fin.joint ?? "gunmetal", f = fin.fitting ?? j;
+  if (j === "gunmetal" && f === "gunmetal") return base3;
+  const key = `${team}|${j}|${f}`;
+  let k = finKits.get(key);
+  if (!k) {
+    const rowMat = (fi) => ({ uid: METAL_FINISH[fi], base: base3.uber });
+    const jm = j === "gunmetal" ? base3.metal : rowMat(j);
+    const fm = f === j ? jm : f === "gunmetal" ? base3.metal : rowMat(f);
+    k = { ...base3, metal: jm, joint: jm, fitting: fm, finish: { joint: j, fitting: f } };
+    finKits.set(key, k);
+  }
+  return k;
+}
+function baseKit(team) {
   const hit = kits[team];
   if (hit) return hit;
   const p = TEAM_PAL[team];
@@ -35905,7 +35934,9 @@ function makeKit(team) {
     /* rail   */
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#86adff", emI: 2.4 },
     /* hull2  */
-    { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 }
+    { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
+    ...FINISH_ROWS
+    // 16..20: METAL_FINISH
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
@@ -35918,6 +35949,8 @@ function makeKit(team) {
     kit[n] = { uid: i, base: uber };
   });
   for (const [role, slot] of Object.entries(PAINT_PLAN)) kit[role] = kit[slot];
+  kit.fitting = kit.metal;
+  kit.finish = { joint: "gunmetal", fitting: "gunmetal" };
   kits[team] = kit;
   return kits[team];
 }
@@ -36992,9 +37025,10 @@ function barrel(C, B, o) {
   const tubeEnd = L - bl * 0.85;
   B.lathe(o.mat ?? kit.metal, [[0, 0], [R * 1.25, 0], [R * 1.25, L * 0.1], [R, L * 0.14], [R * tp, tubeEnd], [0, tubeEnd]], at2, "x", seg);
   if (o.sleeve) B.lathe(kit.trim, [[0, L * 0.12], [R * 1.2, L * 0.12], [R * 1.28, L * 0.15], [R * 1.28, L * 0.4], [R * 1.08, L * 0.44], [0, L * 0.44]], at2, "x", seg);
+  if (kit.fitting !== kit.metal) for (const f of o.sleeve ? [0.135, 0.43] : [0.13]) band(B, kit.fitting, x0 + L * f, y, z, R * (o.sleeve && f > 0.2 ? 1.36 : 1.33), L * 0.026, seg);
   if (o.evac) {
     const a = L * 0.56, e = L * 0.68;
-    B.lathe(kit.metal, [[0, a], [R * tp, a], [R * 1.42, a + (e - a) * 0.3], [R * 1.42, e - (e - a) * 0.3], [R * tp, e], [0, e]], at2, "x", seg);
+    B.lathe(kit.fitting, [[0, a], [R * tp, a], [R * 1.42, a + (e - a) * 0.3], [R * 1.42, e - (e - a) * 0.3], [R * tp, e], [0, e]], at2, "x", seg);
   }
   const m0 = L - bl;
   if (brake === "slot") {
@@ -44883,6 +44917,115 @@ function applySkin(root, body, turretRoots, uber, skin, designId) {
   for (const me of hullMeshes) setAttr(me.geometry, "sdb", [cx, cy, h, num]);
 }
 
+// src/client/proto3d/finish3d.ts
+var LEGGED = /* @__PURE__ */ new Set(["legs", "spider", "jumpjets", "titanlegs"]);
+function h01(s, salt) {
+  let h = (2166136261 ^ salt) >>> 0;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+  h ^= h >>> 15;
+  h = Math.imul(h, 739982445) >>> 0;
+  h ^= h >>> 12;
+  return (h >>> 0) / 4294967296;
+}
+function pick(u, opts) {
+  const tot = opts.reduce((a, o) => a + o[1], 0);
+  let x = u * tot;
+  for (const [f, w] of opts) {
+    if ((x -= w) < 0) return f;
+  }
+  return opts[opts.length - 1][0];
+}
+function hullFinish(design, mob, skin) {
+  const u = h01(design.id, 17);
+  let f;
+  switch (skin.hull) {
+    case "air":
+      f = "chrome";
+      break;
+    case "rotor":
+      f = pick(u, [["chrome", 3], ["gunmetal", 2]]);
+      break;
+    case "ceramic":
+      f = "chrome";
+      break;
+    case "support":
+      f = pick(u, [["chrome", 3], ["gunmetal", 1]]);
+      break;
+    case "carapace":
+      f = pick(u, [["bronze", 3], ["gunmetal", 2]]);
+      break;
+    case "stealth":
+      f = "gunmetal";
+      break;
+    case "titan":
+      f = pick(u, [["gunmetal", 2], ["bronze", 2], ["chrome", 1.5]]);
+      break;
+    case "arty":
+      f = pick(u, [["gunmetal", 3], ["blued", 2]]);
+      break;
+    case "brawler":
+      f = pick(u, [["gunmetal", 2], ["blued", 1], ["bronze", 1]]);
+      break;
+    case "slab":
+      f = pick(u, [["gunmetal", 5], ["chrome", 2], ["bronze", 1.5]]);
+      break;
+    case "cast":
+      f = pick(u, [["gunmetal", 5], ["blued", 2], ["chrome", 1.5]]);
+      break;
+    case "scout":
+      f = pick(u, [["blued", 4], ["gunmetal", 4], ["chrome", 1.5]]);
+      break;
+    default:
+      f = "gunmetal";
+  }
+  if (f === "gunmetal" && LEGGED.has(mob.id) && skin.hull !== "stealth" && h01(design.id, 29) < 0.5) f = "chrome";
+  return f;
+}
+var WARM = /* @__PURE__ */ new Set(["bronze", "copper", "brass"]);
+function weaponFinish(m, hull, design, i) {
+  const v = m.visual;
+  switch (v) {
+    case "gauss":
+    case "rail":
+    case "sniper":
+    case "laser":
+    case "plasma":
+    case "slowbeam":
+    case "gravity":
+    case "saw":
+    case "blade":
+    case "drill":
+    case "chainsaw":
+      return { joint: "chrome" };
+    case "tesla":
+    case "emp":
+    case "heatray":
+      return { joint: "copper" };
+    case "sonic":
+      return { joint: "brass" };
+    case "flamer":
+      return { joint: "bronze" };
+    case "artillery":
+    case "mortar":
+      return { joint: h01(design.id, 41 + i) < 0.5 ? "blued" : "gunmetal", fitting: "brass" };
+    case "gun":
+    case "cannon":
+    case "gatling":
+    case "shotgun":
+    case "flak":
+    case "pointdef": {
+      const j = WARM.has(hull) ? "gunmetal" : hull;
+      return { joint: j, fitting: v === "cannon" && (m.mount === "L" || m.mount === "XL") ? "brass" : j };
+    }
+    default:
+      return { joint: hull };
+  }
+}
+function pickFinish(design, ch, mob, mods, skin) {
+  const hull = hullFinish(design, mob, skin);
+  return { hull: { joint: hull }, turret: mods.map((m, i) => m ? weaponFinish(m, hull, design, i) : null) };
+}
+
 // src/client/proto3d/units3d.ts
 var blobTex = null;
 var blobMat = null;
@@ -44909,7 +45052,6 @@ function contactShadow(L, W) {
 function buildUnit(design, team) {
   const ch = CHASSIS_BY_ID.get(design.chassis);
   const mob = MOBILITY_BY_ID.get(design.mobility);
-  const kit = makeKit(team);
   const S = ch.size;
   const W = ch.footprint?.[0] ?? S, L = ch.footprint?.[1] ?? S;
   const rnd = rng([...design.id].reduce((a, c) => a * 31 + c.charCodeAt(0) >>> 0, 7));
@@ -44924,18 +45066,21 @@ function buildUnit(design, team) {
   let air = null;
   let out2 = null;
   const mods = design.mounts.map((mid) => mid ? MODULE_BY_ID.get(mid) ?? null : null);
+  const skin = pickSkin(design, ch, mob, mods);
+  const fin = pickFinish(design, ch, mob, mods, skin);
+  const kit = makeKit(team, fin.hull);
   const slotCls = (mod, i) => {
     const sl = ch.mounts[i];
     return sl && mod.kind !== "weapon" && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : void 0;
   };
-  const LEGGED = /* @__PURE__ */ new Set(["legs", "spider", "jumpjets", "titanlegs"]);
+  const LEGGED2 = /* @__PURE__ */ new Set(["legs", "spider", "jumpjets", "titanlegs"]);
   let main = -1;
   if (!flying) mods.forEach((m, i) => {
     if (!m || m.visual !== "cannon" && m.visual !== "gun" || slotCls(m, i)) return;
     if (main < 0 || weaponD(m) > weaponD(mods[main])) main = i;
   });
-  const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
-  const tur = mods.map((mod, i) => mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i), i === main ? mainL : 0) : null);
+  const mainL = L * (LEGGED2.has(mob.id) ? 0.62 : 1);
+  const tur = mods.map((mod, i) => mod ? buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), i === main ? mainL : 0) : null);
   if (!flying) {
     const sc2 = tur.map(() => 1);
     for (let i = 0; i < tur.length; i++) for (let j = i + 1; j < tur.length; j++) {
@@ -44999,7 +45144,7 @@ function buildUnit(design, team) {
     turrets.push(tu);
   }
   hb.mount(body, kit.decal);
-  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i].yaw, mount: m.i })), kit.uber, pickSkin(design, ch, mob, mods), design.id);
+  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i].yaw, mount: m.i })), kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => {
