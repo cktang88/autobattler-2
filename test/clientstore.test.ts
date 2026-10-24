@@ -108,3 +108,26 @@ test('settings from older builds or corrupt storage fall back per field', () => 
   mem.set('ab2.settings', JSON.stringify({ renderer: '2d' }));
   assert.equal(loadSettings().renderer, '3d');
 });
+
+test('a legal design on every hull passes the server garage / deck checks (sync must not reject the whole garage)', async () => {
+  const { sanitizeGarage, sanitizeDeck } = await import('../src/server/validate.ts');
+  const all: Design[] = [];
+  for (const c of CHASSIS) {
+    const mobility = firstLegalMobility(c.id);
+    const d: Design = { id: `gen-${c.id}`.slice(0, 40), name: 'Gen', chassis: c.id, mobility, mounts: c.mounts.map(() => null) };
+    for (let i = 0; i < c.mounts.length; i++) {
+      for (const m of MODULES.filter((m) => m.kind === 'weapon' && !slotError(c, mobility, i, m))) {
+        d.mounts[i] = m.id;
+        if (!validateDesign(d).some((e) => /Overload/.test(e))) break;
+        d.mounts[i] = null;
+      }
+    }
+    if (validateDesign(d).length === 0) all.push(d);
+  }
+  assert.ok(all.length >= CHASSIS.length - 2, 'a legal design for (nearly) every hull');
+  assert.ok(all.some((d) => d.mounts.length > 8), 'covers a hull with more than 8 sockets');
+  const g = sanitizeGarage({ designs: all, deck: all.slice(0, 9).map((d) => d.id) });
+  assert.equal(g.designs.length, all.length);
+  const most = [...all].sort((a, b) => b.mounts.length - a.mounts.length).slice(0, 9);
+  assert.equal(sanitizeDeck(most).length, most.length);
+});

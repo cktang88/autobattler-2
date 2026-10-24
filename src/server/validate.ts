@@ -3,6 +3,7 @@
 
 import { DECK_SIZE, validateDeck } from '../shared/match.ts';
 import { validateDesign } from '../shared/stats.ts';
+import { CHASSIS } from '../shared/parts.ts';
 import { STANCES, START_DELAYS, TARGET_PRIORITIES } from '../shared/types.ts';
 import type { DeployAction, Design, Placement, UnitBehavior, UnitConfig } from '../shared/types.ts';
 
@@ -112,12 +113,15 @@ export function sanitizeGarage(raw: unknown): { designs: Design[]; deck: string[
   return { designs, deck };
 }
 
+/** most sockets on any hull (the superfortress has 10): a fixed cap of 8 rejected every garage / deck holding one */
+const MAX_MOUNTS = Math.max(8, ...CHASSIS.map((c) => c.mounts.length));
+
 function readDesign(d: unknown, i: number): Design {
   if (!isObj(d)) bad(`Design ${i + 1} is not an object`);
   const o = d as Record<string, unknown>;
   const id = str(o.id, 40, `design id (#${i + 1})`);
   if (typeof o.name !== 'string' || o.name.length > 24) bad(`Invalid design name (#${i + 1})`);
-  if (!Array.isArray(o.mounts) || o.mounts.length > 8) bad(`Invalid mounts (#${i + 1})`);
+  if (!Array.isArray(o.mounts) || o.mounts.length > MAX_MOUNTS) bad(`Invalid mounts (#${i + 1})`);
   const mounts = (o.mounts as unknown[]).map((m) => {
     if (m === null) return null;
     return str(m, 40, `mount (#${i + 1})`);
