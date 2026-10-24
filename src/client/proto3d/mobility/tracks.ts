@@ -2,23 +2,22 @@
 // few oversized road wheels, dressed in one of several looks chosen from the hull shape so tanks do not all sit on the
 // same two long strips:
 //   skirt    armoured side skirts with a fender lip, nose-tapered (default for any hull)
-//   round    short rounded teardrop track nacelles set back under the hull (line tanks: warden 'hex')
-//   pods     four short armoured track pods at the corners, hull bridging them (fortress tanks: bastion)
+//   pods     four short track pods at the corners under faceted armour hoods (fortress tanks: bastion)
 //   exposed  carriage: bare tracks under the rear only, big dished road wheels, castor pair under the nose (longarm)
-//   wall     tall slab skirts reaching the ground, slanted, studded (wall-of-armour hulls: juggernaut)
+//   wall     heavy segmented plate skirts reaching the ground (wall-of-armour hulls: juggernaut)
 //   bogies   four short bare track bogies at the corners, toed out, on swing arms (siege platforms: siegeplat)
-//   twin     long inner tracks + short outer tracks in rounded nacelles (trimaran hulls: colossus 'titan')
+//   twin     long inner tracks + short skirted outer tracks under the side casemates (colossus 'titan')
 //   hs       hard-surface track system (chassis/hs-kit.ts trackSystem): narrow link belt, 5-7 road wheels on arms, return
 //            rollers, toothed sprocket, raised idler, segmented skirt (line tanks: warden 'hex')
 // treads / halftrack / megatracks. Exported trackStance / trackUnit / trackStyle are reused by other mobility files.
 
 import * as THREE from 'three';
-import { Bld, type P2, type V3 } from '../geo.ts';
+import { Bld, slabGeo, type P2, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerMobility, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
 import { place, XBld } from '../chassis/tanks-kit.ts';
-import { fineFor, trackSystem } from '../chassis/hs-kit.ts';
+import { armorPlate, cagedLamp, fineFor, frame, hexSec, rectP, skirtRun, trackSystem } from '../chassis/hs-kit.ts';
 
 export type TrackStyle = 'skirt' | 'round' | 'pods' | 'exposed' | 'wall' | 'twin' | 'bogies' | 'hs';
 const STYLE: Record<string, TrackStyle> = { hex: 'hs', fortress: 'pods', long: 'exposed', siegeplat: 'bogies', juggernaut: 'wall', titan: 'twin' };
@@ -198,28 +197,24 @@ export function trackNacelle(b: Bld, kit: Kit, L: number, h: number, w: number, 
   b.box(kit.lamp, h * 0.05, h * 0.08, w * 0.3, L * 0.5, cy, z + side * w * 0.04, h * 0.02);
 }
 
-/** Short armoured corner pod: track loop in a chamfered box housing with a sloped nose. */
+/** Short corner track pod: hs track system under a faceted armour hood (sloped at the outer end), a thick outer plate
+ *  on a shadow gap, a caged lamp on the front pods. */
 function cornerPod(b: Bld, kit: Kit, L: number, h: number, w: number, z: number, side: number, front: boolean) {
   trackUnit(b, kit, L, h, w, z, side, { skirt: false, noFender: true, cleatMaxY: h * 0.4 });
-  const hz = z + side * w * 0.04;
-  block(b, kit.trim, 0, h * 0.34, hz, L * 0.98, w * 1.22, h * 0.76, { ch: w * 0.3, bev: h * 0.12, bot: h * 0.06, top: [front ? 0.8 : 0.9, 0.82], shift: [front ? -L * 0.06 : L * 0.04, 0] });
-  // outer armour plate + hazard stripes facing out from the corner
-  block(b, kit.panel, front ? L * 0.06 : -L * 0.04, h * 0.48, z + side * w * 0.66, L * 0.66, w * 0.14, h * 0.46, { ch: w * 0.05, bev: w * 0.04, top: [0.88, 0.6] });
-  b.box(front ? kit.hazard : kit.trim, h * 0.1, h * 0.04, w * 0.8, (front ? 1 : -1) * L * 0.36, h * 1.1, hz, h * 0.01);
-  if (front) b.box(kit.lamp, h * 0.04, h * 0.08, w * 0.3, L * 0.48, h * 0.8, hz, h * 0.02);
+  const hz = z + side * w * 0.04, hw = w * 0.64, f = front ? 1 : -1;
+  const st: [number, number, number][] = [[-0.5, 0.78, 0.7], [-0.32, 1.0, 1.0], [0.32, 1.0, 1.0], [0.5, 0.78, 0.7]];
+  b.loft(kit.armor2, st.map(([x, k, kw]) => hexSec(f * x * L, h * 0.5, hw * 0.9 * kw, hw * kw, h * 0.5, h * (0.5 + 0.42 * k), hw * 0.78 * kw, h * (0.5 + 0.6 * k), hz)));
+  armorPlate(b, kit, kit.armor, frame([f * L * 0.04, h * 0.76, hz + side * hw], [0, 0, side], [1, 0, 0]), rectP(L * 0.62, h * 0.4, h * 0.05), h * 0.07, { standoff: h * 0.02, gap: h * 0.04 });
+  if (front) cagedLamp(b, kit, frame([L * 0.36, h * 1.08, hz], [0, 1, 0], [1, 0, 0]), h * 0.16, true);
 }
 
-/** Tall slab skirt that reaches almost to the ground, leaning in, studded with big plates. */
+/** Wall skirt: the track under a heavy segmented skirt of separate thick plates hung from a rail, reaching almost to the
+ *  ground and kicked out at the bottom, a flat fender over the top. */
 function wallSkirt(b: Bld, kit: Kit, L: number, h: number, w: number, z: number, side: number) {
   trackUnit(b, kit, L, h, w, z, side, { skirt: false, noFender: true, heavy: true, cleatMaxY: h * 0.25 });
-  const t = Math.max(0.05, w * 0.2), zs = z + side * (w / 2 + t * 0.4);
-  block(b, kit.trim, -L * 0.03, h * 0.12, zs, L * 0.96, t, h * 1.0, { ch: t * 0.45, bev: t * 0.35, top: [0.88, 0.7], shift: [-L * 0.02, -side * t * 0.35], bot: t * 0.2 });
-  const n = Math.max(3, Math.round(L / (h * 1.5)));
-  for (let i = 0; i < n; i++) {
-    const x = -L * 0.03 - L * 0.42 + (L * 0.84 * (i + 0.5)) / n;
-    block(b, i % 2 ? kit.panel : kit.hull2, x, h * 0.3, zs + side * t * 0.42, (L * 0.84) / n * 0.82, t * 0.5, h * 0.6, { ch: t * 0.15, bev: t * 0.12, top: [0.9, 0.6], shift: [0, -side * t * 0.12] });
-  }
-  b.box(kit.trim, L * 0.9, h * 0.08, w * 1.3, -L * 0.03, h * 1.1, z + side * t * 0.2, h * 0.03);
+  const t = Math.max(0.035, w * 0.13);
+  skirtRun(b, kit, { x0: -L * 0.48, x1: L * 0.46, yTop: h * 1.1, h: h * 0.9, z: z + side * (w / 2 + t * 0.6), side, n: Math.max(3, Math.round(L / (h * 1.1))), thick: t, fine: true, mat: kit.armor2, lean: 0.1 });
+  b.g(slabGeo(rectP(L * 0.96, w * 1.25 + t, h * 0.06), h * 0.05, h * 0.012), kit.armor2, new THREE.Matrix4().makeTranslation(-L * 0.01, h * 1.1, z + side * t * 0.5));
 }
 
 registerMobility(['treads', 'halftrack', 'megatracks'], {
@@ -266,7 +261,7 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
       const TL = c.L * 0.6, xo = -c.L * 0.19, xb = new XBld(b, place(xo, 0, 0));
       for (const z of zs) trackUnit(xb, k, TL, h, w, z, Math.sign(z), { skirt: false, bigWheels: true, noFender: true });
       for (const z of zs) {
-        b.box(k.hull, TL * 0.72, h * 0.05, w * 1.05, xo - TL * 0.03, h * 1.06, z, h * 0.02);
+        b.box(k.armor2, TL * 0.72, h * 0.05, w * 1.05, xo - TL * 0.03, h * 1.06, z, h * 0.02);
         for (const f of [-0.28, 0.2]) b.box(k.metal, h * 0.06, h * 0.12, h * 0.06, xo + TL * f, h * 0.98, z - Math.sign(z) * w * 0.4, h * 0.01);
       }
       const cx = c.L * 0.38, cr = h * 0.34, cz = Math.min(c.W * 0.2, 0.2);
@@ -284,7 +279,7 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
         trackUnit(xb, k, BL, h, w, 0, s, { skirt: false, bigWheels: true, noFender: true });
         // swing arm from the bogie hub up under the hull
         b.box(k.metal, BL * 0.5, h * 0.18, w * 0.5, x - f * BL * 0.1, h * 0.72, z - s * w * 0.6, h * 0.05, [0, toe, 0]);
-        block(xb, k.hull, -BL * 0.04, h * 0.98, 0, BL * 0.7, w * 1.08, h * 0.1, { ch: h * 0.05, bev: h * 0.03, top: [0.85, 0.9] });
+        armorPlate(xb, k, k.armor2, frame([-BL * 0.04, h * 0.98, 0], [0, 1, 0], [1, 0, 0]), rectP(BL * 0.7, w * 1.08, h * 0.08), h * 0.06, { standoff: h * 0.02, gap: h * 0.04 });
         b.box(f > 0 ? k.hazard : k.trim, h * 0.06, h * 0.05, w * 0.9, x + f * BL * 0.34, h * 1.06, z, h * 0.01, [0, toe, 0]);
       }
       for (const f of [-1, 1]) b.cyl(k.metal, h * 0.09, h * 0.09, c.W * 0.86, [f * c.L * 0.32, h * 0.5, -c.W * 0.43], 'z', 8);
@@ -297,8 +292,8 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
         const s = Math.sign(z);
         if (Math.abs(z) > c.W * 0.3) {
           const TL = c.L * 0.5;
-          trackUnit(b, k, TL, h, w, z, s, { skirt: false, noFender: true, heavy: true, cleatMaxY: h * 0.42 });
-          trackNacelle(b, k, TL, h, w, z, s);
+          // outer tracks: the hull's armoured side casemates cover the top run, segmented skirts below
+          trackUnit(b, k, TL, h, w, z, s, { skirt: true, noFender: true, heavy: true, cleatMaxY: h * 0.42 });
         } else trackUnit(new XBld(b, place(-c.L * 0.07, 0, 0)), k, c.L * 0.8, h, w, z, s, { skirt: false, heavy: true });
       }
     } else {
