@@ -41699,8 +41699,18 @@ registerMobility(["legs", "titanlegs", "spider"], {
   stance: legStance,
   build(c) {
     const st = c.stance;
-    const hips = c.hips && c.hips.length ? c.hips : defaultHips(st, c.L, c.W);
+    const own = !!(c.hips && c.hips.length);
+    const hips = own ? c.hips : defaultHips(st, c.L, c.W);
     const kind = st.legs ?? "biped";
+    if (!own) {
+      const b = new Bld();
+      for (const h of hips) {
+        const [x, y, z] = h.p, t = h.t * 1.2, inner = [x * 0.25, y + t * 0.2, z * 0.25];
+        b.g(strutGeo(inner, [x, y, z], t * 0.95, t * 0.8, 6), c.kit.mech);
+        b.g(strutGeo([inner[0], inner[1] + t * 0.7, inner[2]], [x * 0.92, y + t * 0.55, z * 0.92], t * 0.55, t * 0.45, 5), c.kit.armor);
+      }
+      b.mount(c.root);
+    }
     const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * (kind === "spider" ? 0.7 : 0.55));
     const lite = liteLegs(c.S, hips.length, kind);
     const style = legStyleFor(c.shape);
