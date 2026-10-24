@@ -990,6 +990,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   function onDragEnd(e: PointerEvent) {
     if (!drag || e.pointerId !== drag.pid) return;
     const d = drag;
+    // hit-test while the drag is still live: in the range view the sockets only count as targets during a drag
+    // (hitSocket checks `drag`), so testing after clearing it dropped everything "off the hull"
+    const to = d.started ? hitSocket(e.clientX, e.clientY) : null;
     drag = null;
     untrack?.();
     clearTimeout(d.timer);
@@ -998,7 +1001,6 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     setTimeout(() => { suppressClick = false; }, 0);
     clearDragUi(d.ghost);
     const mod = MODULE_BY_ID.get(d.src.mod)!;
-    const to = hitSocket(e.clientX, e.clientY);
     if (to === null) {
       if (d.src.from !== null) { equip(d.src.from, null); app.toast(`${mod.name} unmounted`); }
       return;
