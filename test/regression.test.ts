@@ -258,12 +258,15 @@ test('server store migrates stale matches on load and persists the marker', () =
   try {
     const m = oldMatch(PRICE_RESCALE_AT - 1000, 5000);
     m.status = 'deploy';
+    const before = m.updatedAt;
     fs.writeFileSync(path.join(dir, 'matches.json'), JSON.stringify({ version: 1, matches: [{ match: m, owners: ['p0', 'p1'], private: false, code: null }] }));
     const s = new Store(dir, 1);
     const log = console.log; console.log = () => {};
     try { s.load(); } finally { console.log = log; }
     const r = s.matches.get('old')!;
     assert.deepEqual([r.match.players[0].supply, r.match.rules], [1000, RULES_VERSION]);
+    // clients still holding the pre-migration copy must see a change on their next ?since= poll
+    assert.ok(r.match.updatedAt > before, 'a migrated match keeps its old updatedAt');
     s.flush();
     const saved = JSON.parse(fs.readFileSync(path.join(dir, 'matches.json'), 'utf8'));
     assert.deepEqual([saved.matches[0].match.players[0].supply, saved.matches[0].match.rules], [1000, RULES_VERSION]);
@@ -413,4 +416,87 @@ test('blocks that escort each other (A -> B, B -> A) fight normally instead of h
   while (!b.done) b.step();
   const s = b.summary();
   assert.ok(s.damageDealt[0] > 0, `the escort pair never engaged (battle ended at ${s.ticks / TICK_RATE}s)`);
+});
+
+// ---------------------------------------------------------------- bug-fix pass: sim / server / rules
+
+test('server input checks accept every legal design: the 10-mount superfortress, a full board of upgrades', async () => {
+  const { sanitizeDeck, sanitizeGarage, sanitizeAction } = await import('../src/server/validate.ts');
+  const sf = D('sf', 'superfortress', 'jet', ['bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg', null, null]);
+  assert.deepEqual(validateDesign(sf), []);
+  // the server used to cap mount lists at 8: a deck with one was a 400, and a garage with one failed to sync at all
+  assert.equal(sanitizeDeck([sf])[0].mounts.length, 10);
+  assert.deepEqual(sanitizeGarage({ designs: [sf], deck: ['sf'] }).deck, ['sf']);
+  assert.throws(() => sanitizeDeck([{ ...sf, mounts: [...sf.mounts, null] }]), /mounts/);
+  // validateDeploy takes a level-up for every block on the board in one turn (60 blocks x 2 levels)
+  const upgrade = Array.from({ length: 120 }, (_, i) => 1 + (i % 60));
+  assert.equal(sanitizeAction({ round: 3, place: [], upgrade }).upgrade.length, 120);
+});
+
+test('a jet on hold position circles over its post (it used to hang motionless in mid-air), and circling is no activity', () => {
+  const jet = D('jet', 'interceptor', 'jet', ['mg', 'mg']), tank = D('tank', 'warden', 'treads', ['autocannon', null]);
+  const arty = D('arty', 'longarm', 'halftrack', ['howitzer']);
+  // out of each other's reach: the jets circle their post, and the battle ends as a quiet standoff (not after 180 s)
+  const b = new Battle({ seed: 1, sides: [{ designs: [jet], units: [pl('jet', { x: 40, y: 10, stance: 'holdPos' })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10, stance: 'holdPos' })] }] });
+  const jets = b.units.filter((u) => u.side === 0), start = jets.map((u) => ({ x: u.x, y: u.y }));
+  let minStep = Infinity;
+  for (let t = 0; t < 5 * TICK_RATE; t++) {
+    const before = jets.map((u) => ({ x: u.x, y: u.y }));
+    b.step();
+    jets.forEach((u, i) => { minStep = Math.min(minStep, Math.hypot(u.x - before[i].x, u.y - before[i].y)); });
+  }
+  assert.ok(minStep > 0.05, `a holdPos jet stood still in the air (step ${minStep})`);
+  jets.forEach((u, i) => assert.ok(Math.hypot(u.x - start[i].x, u.y - start[i].y) < 12, 'a holdPos jet left its post'));
+  while (!b.done) b.step();
+  assert.ok(b.tick < 20 * TICK_RATE, `circling holdPos jets kept a dead standoff going (${b.tick / TICK_RATE}s)`);
+  // likewise jets circling the parked unit they escort
+  const e = new Battle({ seed: 1, sides: [{ designs: [jet, arty], units: [pl('arty', { x: 40, y: 18, stance: 'holdPos' }), pl('jet', { uid: 2, x: 10, y: 10, escort: 1 })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10, stance: 'holdPos' })] }] });
+  while (!e.done) e.step();
+  assert.ok(e.tick < 20 * TICK_RATE, `jets orbiting their charge kept a dead standoff going (${e.tick / TICK_RATE}s)`);
+  // a jet waiting out a start delay circles too
+  const d = new Battle({ seed: 1, sides: [{ designs: [jet], units: [pl('jet', { x: 40, y: 10, delay: 6 })] }, { designs: [tank], units: [pl('tank', { x: 50, y: 10 })] }] });
+  const dj = d.units[0], x0 = dj.x, y0 = dj.y;
+  for (let t = 0; t < 2 * TICK_RATE; t++) d.step();
+  assert.ok(Math.hypot(dj.x - x0, dj.y - y0) > 0.5 && dj.moving, 'a jet hung still in the air during its start delay');
+});
+
+test('a squad of long hulls holding formation keeps its deployed spacing in the fight, like round hulls', () => {
+  const needle = D('needle', 'mantis', 'legs', ['mg', 'mg']), wall = D('wall', 'bastion', 'anchor', ['plateH', 'plateH', 'repairM']);
+  assert.equal(computeStats(needle).squad, 4);
+  assert.notEqual(computeStats(needle).fw, computeStats(needle).fh);
+  const b = new Battle({ seed: 1, sides: [{ designs: [needle], units: [pl('needle', { y: 2, spacing: 2, hold: true })] }, { designs: [wall], units: [pl('wall', { y: 2 })] }] });
+  for (let t = 0; t < 30 * TICK_RATE && !b.done; t++) b.step();
+  const sq = b.units.filter((u) => u.side === 0 && u.alive);
+  let min = Infinity;
+  for (let i = 0; i < sq.length; i++) for (let j = i + 1; j < sq.length; j++) min = Math.min(min, Math.hypot(sq[i].x - sq[j].x, sq[i].y - sq[j].y));
+  // formation pitch 1 + 2 cells; separation keeps 95% of it (capped at 2.9) -- they used to close up to ~1 cell
+  assert.ok(sq.length === 4 && min > 2.5, `the holding squad closed up to ${min.toFixed(2)} cells`);
+});
+
+test('a slow titan deployed behind a long row of its own emplacements works its way round (no rocking in place)', () => {
+  const titan = D('titan', 'titan', 'megatracks', ['ac40', 'ac40', 'autocannon', 'autocannon', 'autocannon']);
+  const post = D('post', 'hunter', 'anchor', ['twinlaser', 'mg']), tank = D('tank', 'warden', 'treads', ['autocannon', null]);
+  const foe = D('foe', 'warden', 'treads', ['autocannon', null]);
+  // a 12-cell wall of emplacements right in front of a 7-cell titan, a tank behind it: it has to slide ~8 cells sideways,
+  // which takes longer than the 1.5 s the dodge used to keep its side before flipping (it rocked in place for a minute)
+  const posts = Array.from({ length: 6 }, (_, i) => pl('post', { uid: 10 + i, x: 64 + i * 2, y: 0 }));
+  const b = new Battle({ seed: 11, sides: [
+    { designs: [titan, post, tank], units: [pl('titan', { uid: 1, x: 67, y: 2 }), pl('tank', { uid: 2, x: 69, y: 10 }), ...posts] },
+    { designs: [foe], units: [pl('foe', { x: 40, y: 20, stance: 'holdPos' })] },
+  ] });
+  const t = b.units[0], rowY = b.units.find((u) => u.design.id === 'post')!.y;
+  let k = 0;
+  while (!b.done && t.y > rowY - 5 && k < 60 * TICK_RATE) { b.step(); k++; }
+  assert.ok(k < 35 * TICK_RATE, `the titan took ${k / TICK_RATE}s to get past its own emplacements`);
+});
+
+test('a charging unit with a gun and a melee weapon closes to contact and swings (not parked at 40% gun range)', () => {
+  const brute = D('brute', 'warlord', 'spider', ['mortar', 'buzzsaw', 'buzzsaw', null]), wall = D('wall', 'bastion', 'anchor', ['plateH', 'plateH', 'repairM']);
+  const b = new Battle({ seed: 1, sides: [{ designs: [brute], units: [pl('brute', { y: 2, stance: 'charge' })] }, { designs: [wall], units: [pl('wall', { y: 2 })] }] });
+  let swings = 0;
+  for (let t = 0; t < 60 * TICK_RATE && !b.done; t++) {
+    b.step();
+    for (const ev of b.events) if (ev.t === 'hit' && ev.moduleId === 'buzzsaw') swings++;
+  }
+  assert.ok(swings > 0, 'the charging brute never got its buzzsaws on the target');
 });

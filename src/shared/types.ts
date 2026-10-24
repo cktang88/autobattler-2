@@ -179,7 +179,7 @@ export interface ModuleDef {
   shieldMult?: number;
   /** spinal weapon: fixed in the hull, aims only within this many radians of the hull's heading (the hull turns to aim) */
   spinal?: number;
-  /** rail: half-width (m) of the slug's path, added to each hull's width when testing what it passes through (default 0.1) */
+  /** rail: half-width (cells) of the slug's path, added to each hull's width when testing what it passes through (default 0.1) */
   beamWidth?: number;
   /** rail: share of damage kept after each hull the slug passes through (default 0.6) */
   pierceKeep?: number;

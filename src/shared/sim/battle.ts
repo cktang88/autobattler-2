@@ -370,6 +370,12 @@ interface Internal {
   /** armour currently stripped by shredding hits (entropy ray), and s until it starts growing back */
   shred: number;
   shredT: number;
+  /** where the unit was deployed (cells): the spot a holdPos jet circles over (a jet can't hover in place) */
+  postX: number;
+  postY: number;
+  /** jet circling a post or an escorted unit this tick with nothing to fight: flying in circles is not activity for the
+   *  quiet-battle end (a holdPos / escorting jet otherwise kept a battle nobody could win going for the full 180 s) */
+  orbiting: boolean;
   /** escorted block index or -1 */
   escortBlock: number;
   escUnit: number;
@@ -789,7 +795,7 @@ export class Battle {
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
-      idleT: 0, bombGate: 0, shred: 0, shredT: 0, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      idleT: 0, bombGate: 0, shred: 0, shredT: 0, postX: c.x, postY: c.y, orbiting: false, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
@@ -935,7 +941,7 @@ export class Battle {
       // off every few ticks and the legs/treads of standing units snapped between stride and rest frames)
       u.moving = (I.lvx * I.lvx + I.lvy * I.lvy) * (DT * DT) > 0.002 * 0.002;
       u.odometer += d;
-      if (d > 0.002) active = true;
+      if (d > 0.002 && !I.orbiting) active = true;
       // a gun holding a live target fires again once its cooldown runs out (a 20 s nuke reload is not a stalemate)
       if (!active) for (let mi = 0; mi < I.wpns.length; mi++) {
         const w = I.wpns[mi], tg = u.mounts[mi].target;
@@ -2325,14 +2331,22 @@ export class Battle {
     }
     // Movement precedence: delay gates everything at the start; then
     //   holdPos > retreat (while active) > charge > escort > kite > flank > advance.
-    if (this.tick < I.delayTicks) return;
+    if (this.tick < I.delayTicks) {
+      if (I.strafe) this.strafeMove(I, null, true); // a jet waiting out its start delay circles over its spot
+      return;
+    }
     let goal = I.goal >= 0 ? this.units[I.goal] : null;
     if (I.stance === 'holdPos') {
       // hold the spot, unless something keeps shooting us from out of reach: then go after it (sitting still while
       // being picked apart helps nobody), and hold again wherever the guns can answer
       const a = this.blockAtk[I.block];
       const att = a >= 0 && this.tick - this.blockAtkT[I.block] <= HOLD_BREAK_HIT ? this.units[a] : null;
-      if (!att || !att.alive || I.idleT < HOLD_BREAK_IDLE || !I.hasWeapon || (att.flying ? !I.canHitA : !I.canHitG)) { this.faceTarget(I); return; }
+      if (!att || !att.alive || I.idleT < HOLD_BREAK_IDLE || !I.hasWeapon || (att.flying ? !I.canHitA : !I.canHitG)) {
+        // a jet can't stop in mid-air (it used to hang motionless over its deploy spot): it circles over its post
+        if (I.strafe) this.strafeMove(I, null, true);
+        else this.faceTarget(I);
+        return;
+      }
       goal = att;
     }
     if (I.strafe) { this.strafeMove(I, goal); return; }
@@ -2474,7 +2488,10 @@ export class Battle {
         gx = u.x + hx * lw;
         gy = u.y + hy;
         stopDist = 0;
-        if (charge) wantMove = I.meleeOnly || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
+        // charge closes in further than advance, never less: a melee weapon that can hit the goal takes it all the way
+        // to contact, and every gun that can hit it must have it in reach (a charger with a long gun and a buzzsaw used
+        // to park at 40% of the gun's range and never swing; one with a long and a short gun left the short one idle)
+        if (charge) wantMove = I.meleeOnly || relevantMelee || !engaged || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
         else if (kiteR <= 0.9) {
           // kiting: parked at our range edge. If the kite gun still has nothing to shoot (the hull came to rest
           // turned away, e.g. after backing off, leaving the mount out of reach) swing the hull back to face the goal.
@@ -2659,10 +2676,14 @@ export class Battle {
       if (sx < I.radius || sx > FIELD_W - I.radius || sy < I.radius || sy > FIELD_H - I.radius) I.avoidSide = -I.avoidSide;
       I.stuckT = 0;
     }
-    // making no headway around this obstacle: try the other way
-    if (I.vx * dirX + I.vy * dirY < I.speed * 0.15) {
+    // making no headway around this obstacle: try the other way. Sliding along it toward the side we dodge to counts as
+    // headway: a wide hull working its way round a long obstacle (a row of emplacements) makes no forward progress
+    // for a while, and flipping sides every 1.5 s left it rocking in place behind the row for good
+    const fwdV = I.vx * dirX + I.vy * dirY, sideV = (I.vy * dirX - I.vx * dirY) * I.avoidSide;
+    if (Math.max(fwdV, sideV) < I.speed * 0.15) {
       I.stuckT += DT;
-      if (I.stuckT > 1.5) { I.avoidSide = -I.avoidSide; I.stuckT = 0; }
+      // (a slow-turning hull needs time to swing its nose round before it can slide off at all)
+      if (I.stuckT > 1.5 + 1.2 / Math.max(0.2, I.turn)) { I.avoidSide = -I.avoidSide; I.stuckT = 0; }
     } else I.stuckT = 0;
     I.avoidT = 0.6;
     const strength = 1 - Math.abs(bestPerp) / bestClear; // 1 = dead ahead
@@ -2715,26 +2736,39 @@ export class Battle {
     return { E, orbit: !near, thr: near ? thr : null };
   }
 
-  private strafeMove(I: Internal, goal: SimUnit | null): void {
+  /** Heading that circles (cx, cy) at a radius the jet can hold (escort orbits, a holdPos jet over its post). */
+  private orbitHeading(I: Internal, cx: number, cy: number): number {
+    const u = I.u, R = Math.max(ESCORT_ORBIT, (1.25 * I.speed) / Math.max(0.5, I.turn));
+    const dx = u.x - cx, dy = u.y - cy, d = Math.sqrt(dx * dx + dy * dy);
+    return d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
+  }
+
+  /** `hold`: a holdPos jet with nothing to chase, circling over its post (guns fire at whatever comes in reach) */
+  private strafeMove(I: Internal, goal: SimUnit | null, hold = false): void {
     const u = I.u;
     let want: number;
-    const esc = this.jetEscort(I);
+    I.orbiting = false;
+    const esc = hold ? null : this.jetEscort(I);
     if (esc?.thr) goal = esc.thr;
     const margin = 1.5;
     if (u.x < margin || u.x > FIELD_W - margin || u.y < margin || u.y > FIELD_H - margin) {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);
       I.strafeT = Math.max(I.strafeT, 0.2);
+      I.orbiting = hold || !!esc?.orbit; // an orbit near the edge bounces off it: still just circling
+    } else if (hold) {
+      want = this.orbitHeading(I, I.postX, I.postY);
+      I.strafeT = 0;
+      I.orbiting = true;
     } else if (esc?.orbit) {
       // escorting with nothing near the charge to fight: circle the escorted unit instead of tearing across the map.
       // Steer along the circle's tangent, bending in or out to hold the orbit radius (never tighter than the jet can turn)
-      const E = esc.E, R = Math.max(ESCORT_ORBIT, (1.25 * I.speed) / Math.max(0.5, I.turn));
-      const dx = u.x - E.x, dy = u.y - E.y, d = Math.sqrt(dx * dx + dy * dy);
+      const E = esc.E;
       if (this.ints[E.id].strafe) {
         // escorting another jet: you can't circle something that flies as fast as you, so fly on its wing instead
         // (aim for a slot just behind and beside it; once there, hold its heading)
         const side = I.loopDir * 1.2, bx = E.x - Math.cos(E.angle) * 1.5 - Math.sin(E.angle) * side, by = E.y - Math.sin(E.angle) * 1.5 + Math.cos(E.angle) * side;
         want = Math.hypot(bx - u.x, by - u.y) < 1 ? E.angle : Math.atan2(by - u.y, bx - u.x);
-      } else want = d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
+      } else { want = this.orbitHeading(I, E.x, E.y); I.orbiting = true; }
       I.strafeT = 0;
     } else if (this.needsResupply(I)) {
       // bays empty: head home and circle over the own lines until rearmed. Circle only once deep enough into the
@@ -2983,13 +3017,18 @@ export class Battle {
             let rr = A.radius + B.radius;
             let d2 = dx * dx + dy * dy;
             if (A.elong || B.elong) {
-              // capsule vs capsule: separate along the closest points of the two core segments
-              const bb = A.bound + B.bound;
+              // capsule vs capsule: separate along the closest points of the two core segments; squadmates holding
+              // formation also keep the formation pitch between centres, like round hulls (long hulls used to close
+              // up to touching once in range, whatever spacing the block was deployed with)
+              const sp = A.hold && B.hold && A.block === B.block ? Math.min(2.9, A.sepMin) * 0.95 : 0;
+              const bb = Math.max(A.bound + B.bound, sp);
               if (d2 >= bb * bb) continue;
               const cd = this.capsuleSep(A, B, a, b);
-              if (cd.d >= A.capR + B.capR) continue;
-              rr = A.capR + B.capR;
-              dx = cd.nx * cd.d; dy = cd.ny * cd.d; d2 = cd.d * cd.d;
+              if (cd.d < A.capR + B.capR) {
+                rr = A.capR + B.capR;
+                dx = cd.nx * cd.d; dy = cd.ny * cd.d; d2 = cd.d * cd.d;
+              } else if (d2 < sp * sp) rr = sp; // apart along the centre line
+              else continue;
             } else {
               if (A.hold && B.hold && A.block === B.block) rr = Math.max(rr, Math.min(2.9, A.sepMin) * 0.95);
               else if (a.side === b.side) rr = Math.max(rr, MIN_SEP); // free-moving units still keep a little room

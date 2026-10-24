@@ -1,9 +1,9 @@
 // Input sanitizers: rebuild request payloads from known fields only, with strict type/size checks,
 // before handing them to the shared match rules.
 
-import { DECK_SIZE, validateDeck } from '../shared/match.ts';
-import { validateDesign } from '../shared/stats.ts';
+import { DECK_SIZE, MAX_BLOCKS, validateDeck } from '../shared/match.ts';
 import { CHASSIS } from '../shared/parts.ts';
+import { MAX_LEVEL, validateDesign } from '../shared/stats.ts';
 import { STANCES, START_DELAYS, TARGET_PRIORITIES } from '../shared/types.ts';
 import type { DeployAction, Design, Placement, UnitBehavior, UnitConfig } from '../shared/types.ts';
 
@@ -16,6 +16,10 @@ export class HttpError extends Error {
 }
 
 const bad = (msg: string): never => { throw new HttpError(400, msg); };
+/** most mount slots any chassis has (the superfortress has 10): a longer list can't be a legal design */
+const MAX_MOUNTS = Math.max(...CHASSIS.map((c) => c.mounts.length));
+/** a whole board's worth of upgrades fits in one action (every block up two levels), like validateDeploy allows */
+const MAX_UPGRADES = MAX_BLOCKS * (MAX_LEVEL - 1);
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
 /** Pick target/hold/kite/focus/stance/delay/retreat from a raw object (strictly typed), or bad() on invalid values. */
@@ -113,9 +117,6 @@ export function sanitizeGarage(raw: unknown): { designs: Design[]; deck: string[
   return { designs, deck };
 }
 
-/** most sockets on any hull (the superfortress has 10): a fixed cap of 8 rejected every garage / deck holding one */
-const MAX_MOUNTS = Math.max(8, ...CHASSIS.map((c) => c.mounts.length));
-
 function readDesign(d: unknown, i: number): Design {
   if (!isObj(d)) bad(`Design ${i + 1} is not an object`);
   const o = d as Record<string, unknown>;
@@ -147,7 +148,7 @@ export function sanitizeAction(raw: unknown): DeployAction {
   const placeRaw = a.place ?? [];
   const upRaw = a.upgrade ?? [];
   if (!Array.isArray(placeRaw) || placeRaw.length > 64) bad('action.place must be an array (max 64)');
-  if (!Array.isArray(upRaw) || upRaw.length > 64) bad('action.upgrade must be an array (max 64)');
+  if (!Array.isArray(upRaw) || upRaw.length > MAX_UPGRADES) bad(`action.upgrade must be an array (max ${MAX_UPGRADES})`);
   const place = (placeRaw as unknown[]).map((p): Placement => {
     if (!isObj(p)) bad('placement must be an object');
     const o = p as Record<string, unknown>;
