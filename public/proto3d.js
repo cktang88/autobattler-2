@@ -1,4 +1,4 @@
-// ../../../node_modules/three/build/three.core.js
+// node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -20498,7 +20498,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// ../../../node_modules/three/build/three.module.js
+// node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -31996,7 +31996,7 @@ var WebGLRenderer = class {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/controls/OrbitControls.js
+// node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -35728,7 +35728,7 @@ function makeKit(team) {
   return kits[team];
 }
 
-// ../../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -43819,7 +43819,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// ../../../node_modules/three/examples/jsm/shaders/CopyShader.js
+// node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -43859,7 +43859,7 @@ var CopyShader = {
   )
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/Pass.js
+// node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -43950,7 +43950,7 @@ var FullScreenQuad = class {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -44015,7 +44015,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -44103,7 +44103,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -44288,7 +44288,7 @@ var EffectComposer = class {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -44361,7 +44361,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -44413,7 +44413,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -44752,7 +44752,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// ../../../node_modules/three/examples/jsm/shaders/GTAOShader.js
+// node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -45118,7 +45118,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// ../../../node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -45321,7 +45321,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// ../../../node_modules/three/examples/jsm/math/SimplexNoise.js
+// node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -45755,7 +45755,7 @@ var SimplexNoise = class {
   }
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -46182,7 +46182,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// ../../../node_modules/three/examples/jsm/shaders/OutputShader.js
+// node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -46270,7 +46270,7 @@ var OutputShader = {
   )
 };
 
-// ../../../node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
