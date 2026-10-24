@@ -134,6 +134,23 @@ export type BattleEvent =
   | { t: 'fireField'; x: number; y: number; radius: number; duration: number; moduleId: string; rad?: boolean }
   | { t: 'end'; winner: Side | -1 };
 
+/** A unit's combat record over one battle (accounting only: the fight never reads it). Damage counts shields too. */
+export interface UnitTally {
+  /** damage dealt to enemies */
+  dealt: number;
+  /** damage taken from any source; shieldTaken is the part its own / dome shields soaked */
+  taken: number;
+  shieldTaken: number;
+  /** hp repaired on allies (repair beams, repair aura) */
+  healed: number;
+  /** SimUnit.ids of the enemies it landed the killing blow on */
+  kills: number[];
+  /** SimUnit.id of the enemy that killed it, or -1 */
+  killedBy: number;
+  /** tick it died, or -1 while alive */
+  deathTick: number;
+}
+
 export interface BattleSummary {
   winner: Side | -1;
   ticks: number;

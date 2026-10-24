@@ -51,6 +51,8 @@ export interface Settings {
   /** the player picked the renderer in Settings; until then the default (3D) applies, even over older saves that
    *  stored the then-default '2d' */
   rendererChosen?: boolean;
+  /** open the detailed round stats popup after every battle (it can always be opened from the result banner) */
+  roundStats?: boolean;
 }
 /** replay speeds offered in battle and settings (slow-mo included) */
 export const BATTLE_SPEEDS = [0.25, 0.5, 1, 2, 4];
@@ -78,7 +80,7 @@ export const loadSettings = (): Settings => {
   };
   unit('master'); unit('music'); unit('sfx'); unit('shake'); unit('flashes');
   if (typeof o.battleSpeed === 'number' && BATTLE_SPEEDS.includes(o.battleSpeed)) s.battleSpeed = o.battleSpeed;
-  for (const k of ['alwaysHealth', 'tilt', 'autoCam', 'unitTextures', 'shadows', 'rendererChosen'] as const) {
+  for (const k of ['alwaysHealth', 'tilt', 'autoCam', 'unitTextures', 'shadows', 'rendererChosen', 'roundStats'] as const) {
     if (typeof o[k] === 'boolean') s[k] = o[k] as boolean;
   }
   if (s.rendererChosen && (o.renderer === '2d' || o.renderer === '3d')) s.renderer = o.renderer;

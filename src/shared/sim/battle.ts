@@ -13,7 +13,7 @@ import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITI
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
 import type { AirRole } from '../stats.ts';
 import { DT, MAX_TICKS, TICK_RATE, wreckLevel } from './types.ts';
-import type { BattleEvent, BattleInput, BattleSummary, DeathKind, MountState, SimProjectile, SimUnit } from './types.ts';
+import type { BattleEvent, BattleInput, BattleSummary, DeathKind, MountState, SimProjectile, SimUnit, UnitTally } from './types.ts';
 
 // ---- tuning ----
 /** a turret only fires once its barrel is on target (~3.4°) — bursts included */
@@ -550,6 +550,8 @@ export class Battle {
   private dmgKind: DeathKind | null = null;
   /** damage dealt to enemies per block, keyed side * 1e6 + placement uid */
   private blockDmg = new Map<number, number>();
+  /** per-unit combat record, indexed by SimUnit.id (accounting only; never affects the fight) */
+  private tallies: UnitTally[] = [];
   private ints: Internal[] = [];
   private projs: Proj[] = [];
   private nextProjId = 1;
@@ -777,6 +779,7 @@ export class Battle {
       cloaked: cloak !== null, reactive, auraShield: 0, maxAuraShield: 0,
     };
     this.units.push(u);
+    this.tallies.push({ dealt: 0, taken: 0, shieldTaken: 0, healed: 0, kills: [], killedBy: -1, deathTick: -1 });
     this.ints.push({
       u, wpns, radius: hk * Math.sqrt(stats.fw * stats.fh), elong: stats.fw !== stats.fh,
       hl: hk * stats.fh, hw: hk * stats.fw, capR: hk * Math.min(stats.fw, stats.fh), capS: hk * Math.abs(stats.fh - stats.fw),
@@ -1899,6 +1902,7 @@ export class Battle {
     m.angle = turnToward(m.angle, Math.atan2(t.y - this.mpy, t.x - this.mpx), w.traverse * DT);
     const amt = Math.min(w.heal * DT, t.maxHp - t.hp);
     t.hp += amt;
+    this.tallies[u.id].healed += amt;
     w.healAcc += amt;
     m.flash = Math.max(m.flash, 0.5);
     w.healTimer -= DT;
@@ -1932,6 +1936,7 @@ export class Battle {
       mark[j] = this.tick;
       const amt = Math.min(o.maxHp * AURA_RATE * AURA_EVERY, o.maxHp - o.hp);
       o.hp += amt;
+      this.tallies[u.id].healed += amt;
       if (amt > 0.5) this.events.push({ t: 'heal', unit: o.id, amount: amt, from: u.id });
     }
   }
@@ -2012,15 +2017,21 @@ export class Battle {
       dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - (t.stats.armor - T.shred) * (1 - ap));
     }
     const hitDmg = dmg; // what reached the hull: the wreck's "hit size"
+    const shieldDealt = dealt;
     if (dmg > 0) {
       const a = Math.min(t.hp, dmg);
       t.hp -= dmg;
       dealt += a;
     }
     this.damageDealt[side] += dealt;
-    if (this.dmgSrc >= 0) {
-      const a = this.units[this.dmgSrc];
-      if (a && a.side !== t.side) { const k = a.side * 1e6 + a.uid; this.blockDmg.set(k, (this.blockDmg.get(k) ?? 0) + dealt); }
+    const tt = this.tallies[t.id];
+    tt.taken += dealt;
+    tt.shieldTaken += shieldDealt;
+    const srcU = this.dmgSrc >= 0 ? this.units[this.dmgSrc] : undefined;
+    if (srcU && srcU.side !== t.side) {
+      const k = srcU.side * 1e6 + srcU.uid;
+      this.blockDmg.set(k, (this.blockDmg.get(k) ?? 0) + dealt);
+      this.tallies[srcU.id].dealt += dealt;
     }
     t.hitFlash = 1;
     T.sinceDamage = 0;
@@ -2039,6 +2050,8 @@ export class Battle {
       const overkill = -t.hp / t.maxHp, hit = hitDmg / t.maxHp, [wk, heft] = deathKindOf(moduleId), kind = this.dmgKind ?? wk;
       t.hp = 0;
       t.alive = false;
+      tt.deathTick = this.tick;
+      if (srcU && srcU.side !== t.side) { tt.killedBy = srcU.id; this.tallies[srcU.id].kills.push(t.id); }
       t.moving = false;
       t.leap = 0;
       t.cloaked = false;
@@ -3098,6 +3111,11 @@ export class Battle {
       for (const w of I.wpns) if (w && w.heal <= 0 && this.findTarget(u, w) >= 0) return true;
     }
     return false;
+  }
+
+  /** One unit's combat record so far (SimUnit.id). */
+  unitTally(id: number): Readonly<UnitTally> {
+    return this.tallies[id];
   }
 
   /** Damage this block (all its squad units) has dealt to enemies so far, shields included. */

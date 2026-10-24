@@ -89,6 +89,15 @@ export function settingsScreen(app: App): Screen {
           h('div.setting.check', null, (() => {
             const host = h('span');
             const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Round stats after each battle', on: s.roundStats !== false,
+              onChange: (v) => { s.roundStats = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'Opens the detailed stats breakdown when a battle ends; off = open it from the result banner')),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
               label: 'Always show health bars', on: !!s.alwaysHealth,
               title: 'Otherwise bars show briefly after damage; hold Alt in battle',
               onChange: (v) => { s.alwaysHealth = v; saveSettings(s); sfx('click'); draw(); },

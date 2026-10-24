@@ -28,6 +28,7 @@ import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, orders
 import { playerName } from './vsai.ts';
 import { designInfo, type DesignInfo } from './deckstats.ts';
 import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
+import { openRoundStats } from './roundstats.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
 
@@ -1035,6 +1036,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const r = replay.result;
       const won = r.winner === side, lost = r.winner === opp;
       const cont = h('button.primary', { onclick: () => continueAfterResult() }, m.status === 'done' && !m.history.some((x) => x.round > replay!.round) ? 'See result' : 'Continue');
+      const statsBtn = battle?.done ? h('button', { onclick: () => { sfx('click'); showRoundStats(); } }, 'Detailed stats') : null;
       overlayEl.append(h('div.panel.banner', { class: won ? 'win' : lost ? 'lose' : 'draw' },
         h('h4', null, `Round ${replay.round}`),
         h('h1', null, won ? 'Round won' : lost ? 'Round lost' : 'Draw'),
@@ -1049,7 +1051,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           h('span', { title: 'Blocks with at least one unit left (a squad block counts once)' }, 'Your blocks left'), h('b', null, `${r.survivors[side].length} / ${replay.boards[side].length}`, unitsLeft(side)),
           h('span', { title: 'Blocks with at least one unit left (a squad block counts once)' }, 'Enemy blocks left'), h('b', null, `${r.survivors[opp].length} / ${replay.boards[opp].length}`, unitsLeft(opp)),
         ),
-        h('div.actions', null, cont),
+        h('div.actions', null, statsBtn, cont),
       ));
       setTimeout(() => cont.focus({ preventScroll: true }), 50);
     } else if (phase === 'over') {
@@ -1653,6 +1655,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     const r = replay.result;
     sfx(r.winner === side ? 'roundWin' : r.winner === opp ? 'roundLose' : 'click');
     setPhase('result');
+    if (loadSettings().roundStats !== false) showRoundStats();
+  }
+
+  function showRoundStats() {
+    if (!battle?.done || !replay || document.querySelector('.modal-back')) return;
+    openRoundStats(battle, replay.round, side, [m.players[0].name, m.players[1].name]);
   }
 
   function continueAfterResult() {

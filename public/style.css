@@ -131,6 +131,25 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-height: 28px; 
 .modal { width: min(520px, 100%); max-height: calc(100% - 32px); overflow-y: auto; }
 .modal h2 { margin-bottom: 10px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.modal.modal-wide { width: min(760px, 100%); }
+/* round stats popup (roundstats.ts) */
+.rstats-ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rstats-hint { margin: 6px 0 8px; font-size: 0.85rem; }
+.rstats-tot { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 8px; margin-bottom: 8px; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.rstats-tot b { font-family: var(--font-head); font-size: 1.5rem; }
+.rstats-tot .me { color: var(--friendly); } .rstats-tot .foe { color: var(--enemy); }
+.rstats-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.rstats-list li { display: grid; grid-template-columns: 2em minmax(0, 1.3fr) minmax(60px, 1fr) 5.5em; gap: 8px; align-items: center; padding: 4px 6px; background: var(--panel2); border-left: 3px solid var(--friendly); border-radius: 3px; }
+.rstats-list li.foe { border-left-color: var(--enemy); }
+.rstats-list .rk { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.rstats-list .nm { min-width: 0; display: flex; flex-direction: column; }
+.rstats-list .nm b, .rstats-list .nm small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rstats-list .nm small { color: var(--muted); font-size: 0.75rem; }
+.rstats-list .bar { height: 10px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
+.rstats-list .bar i { display: block; height: 100%; background: var(--friendly); }
+.rstats-list li.foe .bar i { background: var(--enemy); }
+.rstats-list .v { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .rstats-list li { grid-template-columns: 1.5em minmax(0, 1fr) 4.5em; } .rstats-list .bar { grid-column: 2 / 4; grid-row: 2; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- main menu ---------- */
