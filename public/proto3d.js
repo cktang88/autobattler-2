@@ -1,4 +1,4 @@
-// node_modules/three/build/three.core.js
+// ../../../node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -14200,29 +14200,29 @@ var PolyhedronGeometry = class _PolyhedronGeometry extends BufferGeometry {
    * @param {number} [radius=1] - The radius of the shape.
    * @param {number} [detail=0] - How many levels to subdivide the geometry. The more detail, the smoother the shape.
    */
-  constructor(vertices = [], indices = [], radius = 1, detail = 0) {
+  constructor(vertices = [], indices = [], radius = 1, detail2 = 0) {
     super();
     this.type = "PolyhedronGeometry";
     this.parameters = {
       vertices,
       indices,
       radius,
-      detail
+      detail: detail2
     };
     const vertexBuffer = [];
     const uvBuffer = [];
-    subdivide(detail);
+    subdivide(detail2);
     applyRadius(radius);
     generateUVs();
     this.setAttribute("position", new Float32BufferAttribute(vertexBuffer, 3));
     this.setAttribute("normal", new Float32BufferAttribute(vertexBuffer.slice(), 3));
     this.setAttribute("uv", new Float32BufferAttribute(uvBuffer, 2));
-    if (detail === 0) {
+    if (detail2 === 0) {
       this.computeVertexNormals();
     } else {
       this.normalizeNormals();
     }
-    function subdivide(detail2) {
+    function subdivide(detail3) {
       const a = new Vector3();
       const b = new Vector3();
       const c = new Vector3();
@@ -14230,11 +14230,11 @@ var PolyhedronGeometry = class _PolyhedronGeometry extends BufferGeometry {
         getVertexByIndex(indices[i + 0], a);
         getVertexByIndex(indices[i + 1], b);
         getVertexByIndex(indices[i + 2], c);
-        subdivideFace(a, b, c, detail2);
+        subdivideFace(a, b, c, detail3);
       }
     }
-    function subdivideFace(a, b, c, detail2) {
-      const cols = detail2 + 1;
+    function subdivideFace(a, b, c, detail3) {
+      const cols = detail3 + 1;
       const v = [];
       for (let i = 0; i <= cols; i++) {
         v[i] = [];
@@ -16757,7 +16757,7 @@ var IcosahedronGeometry = class _IcosahedronGeometry extends PolyhedronGeometry 
    * @param {number} [radius=1] - Radius of the icosahedron.
    * @param {number} [detail=0] - Setting this to a value greater than `0` adds vertices making it no longer a icosahedron.
    */
-  constructor(radius = 1, detail = 0) {
+  constructor(radius = 1, detail2 = 0) {
     const t = (1 + Math.sqrt(5)) / 2;
     const vertices = [
       -1,
@@ -16859,11 +16859,11 @@ var IcosahedronGeometry = class _IcosahedronGeometry extends PolyhedronGeometry 
       8,
       1
     ];
-    super(vertices, indices, radius, detail);
+    super(vertices, indices, radius, detail2);
     this.type = "IcosahedronGeometry";
     this.parameters = {
       radius,
-      detail
+      detail: detail2
     };
   }
   /**
@@ -16999,7 +16999,7 @@ var OctahedronGeometry = class _OctahedronGeometry extends PolyhedronGeometry {
    * @param {number} [radius=1] - Radius of the octahedron.
    * @param {number} [detail=0] - Setting this to a value greater than `0` adds vertices making it no longer a octahedron.
    */
-  constructor(radius = 1, detail = 0) {
+  constructor(radius = 1, detail2 = 0) {
     const vertices = [
       1,
       0,
@@ -17046,11 +17046,11 @@ var OctahedronGeometry = class _OctahedronGeometry extends PolyhedronGeometry {
       4,
       2
     ];
-    super(vertices, indices, radius, detail);
+    super(vertices, indices, radius, detail2);
     this.type = "OctahedronGeometry";
     this.parameters = {
       radius,
-      detail
+      detail: detail2
     };
   }
   /**
@@ -20685,7 +20685,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// node_modules/three/build/three.module.js
+// ../../../node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -32183,7 +32183,7 @@ var WebGLRenderer = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
+// ../../../node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -35915,7 +35915,7 @@ function makeKit(team) {
   return kits[team];
 }
 
-// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -36172,9 +36172,13 @@ function prep(g, keepUv = false) {
   if (!n.attributes.normal) n.computeVertexNormals();
   return n;
 }
+var detail = 1;
+function lodSeg(n) {
+  return detail >= 1 || n <= 6 ? n : Math.max(6, Math.round(n * detail));
+}
 function slabGeo(poly, h, b = 0.02) {
   const shape = new Shape(poly.map(([x, z]) => new Vector2(x, -z)));
-  b = Math.max(0, Math.min(b, h * 0.45));
+  b = detail < 1 ? 0 : Math.max(0, Math.min(b, h * 0.45));
   const g = new ExtrudeGeometry(shape, {
     depth: Math.max(1e-4, h - 2 * b),
     bevelEnabled: b > 5e-4,
@@ -36252,6 +36256,7 @@ function sec8(x, wb, wm, wt, y0, y1, y2, y3) {
 }
 function ellRing(x, cy, cz, ry, rz, n = 12, pw = 2.4, flatBottom = 0) {
   const out2 = [];
+  n = lodSeg(n);
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     const ex = 2 / pw;
@@ -36262,6 +36267,7 @@ function ellRing(x, cy, cz, ry, rz, n = 12, pw = 2.4, flatBottom = 0) {
   return out2;
 }
 function lathe(profile, seg = 16, smoothDeg = 38) {
+  seg = lodSeg(seg);
   const m = profile.length - 1;
   const sn = [];
   for (let i = 0; i < m; i++) {
@@ -45314,10 +45320,10 @@ function makeDetail() {
   return t;
 }
 function groundMaterial(map, bump) {
-  const detail = makeDetail();
+  const detail2 = makeDetail();
   const m = new MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.6, roughness: 1, metalness: 0, envMapIntensity: 0.5 });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.detailMap = { value: detail };
+    sh.uniforms.detailMap = { value: detail2 };
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vGP;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGP = position.xz;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vGP; uniform sampler2D detailMap;").replace("#include <map_fragment>", `#include <map_fragment>
         vec4 dt1 = texture2D(detailMap, vGP * 0.9); vec4 dt2 = texture2D(detailMap, vGP * 0.23 + 0.37);
@@ -45456,7 +45462,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// node_modules/three/examples/jsm/shaders/CopyShader.js
+// ../../../node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -45496,7 +45502,7 @@ var CopyShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/Pass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -45587,7 +45593,7 @@ var FullScreenQuad = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -45652,7 +45658,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -45740,7 +45746,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// ../../../node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -45925,7 +45931,7 @@ var EffectComposer = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -45998,7 +46004,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// ../../../node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -46050,7 +46056,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -46389,7 +46395,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// node_modules/three/examples/jsm/shaders/GTAOShader.js
+// ../../../node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -46755,7 +46761,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// ../../../node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -46958,7 +46964,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// node_modules/three/examples/jsm/math/SimplexNoise.js
+// ../../../node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -47392,7 +47398,7 @@ var SimplexNoise = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -47819,7 +47825,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// node_modules/three/examples/jsm/shaders/OutputShader.js
+// ../../../node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -47907,7 +47913,7 @@ var OutputShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
