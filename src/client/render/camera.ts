@@ -16,7 +16,7 @@
 export const secondaryLeft = (e: { button: number; ctrlKey: boolean; altKey: boolean }): boolean => e.button === 0 && (e.ctrlKey || e.altKey);
 
 export const MAX_K = 170; // a size-1 unit (1 cell) is ~170 CSS px at full zoom (close enough to read a scout's details)
-/** cells the camera may travel past the top/bottom (Y) and side (X) edges of the field */
+/** cells the view centre may travel past the top/bottom (Y) and side (X) edges of the field */
 const EDGE_Y = 5;
 const EDGE_X = 2.5;
 
@@ -98,17 +98,10 @@ export class Camera {
 
   /** `edge` = extra cells the view may travel past the field edge, so the board's edges (and the land around it)
    *  can be brought fully into view even when the whole field already fits on screen. */
-  private clampAxis(c: number, half: number, field: number, edge: number): number {
-    if (half * 2 >= field) {
-      const slack = Math.max(0, edge - (half - field / 2));
-      return clampN(c, field / 2 - slack, field / 2 + slack);
-    }
-    // the extra zoomed-in travel fades out as the view approaches the whole field, so the range meets the
-    // fitted case's `edge` slack continuously (a step there snapped the view by several cells when zooming out)
-    const pad = Math.min(half * 0.35, half * 0.08 * clampN((field / 2 - half) / (field * 0.1), 0, 1) + edge);
-    const lo = half - pad, hi = field - half + pad;
-    if (lo >= hi) return field / 2;
-    return clampN(c, lo, hi);
+  /** the view centre may travel to every edge of the field and a little past it, at any zoom, so an edge or corner
+   *  can be brought into the middle of the view */
+  private clampAxis(c: number, _half: number, field: number, edge: number): number {
+    return clampN(c, -edge, field + edge);
   }
 
   /** half extents (cells) of the view along the visual x / y axes at scale k and turn yaw (the screen rect's bounds) */
