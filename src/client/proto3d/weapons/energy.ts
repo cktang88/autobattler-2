@@ -94,7 +94,7 @@ function plasma(C: WCtx) {
     const br = cr * (lance ? 0.45 : 0.5);
     rc.lathe(kit.steel, [[0, 0], [br, 0], [br * 0.9, len], [0, len]], [cr * 0.6, 0, z], 'x', 8);
     const nr = lance ? 3 : 2;
-    for (let k = 0; k < nr; k++) band(rc, k === nr - 1 ? kit.plasma : kit.trim, cr * 0.6 + len * (0.35 + (0.6 * k) / Math.max(1, nr - 1) * 0.95), 0, z, br * 1.7, br * 0.7, 8);
+    for (let k = 0; k < nr; k++) band(rc, k === nr - 1 ? kit.plasma : kit.fitting, cr * 0.6 + len * (0.35 + (0.6 * k) / Math.max(1, nr - 1) * 0.95), 0, z, br * 1.7, br * 0.7, 8);
     rc.cyl(kit.plasma, br * 0.7, br * 0.7, r * 0.02, [cr * 0.6 + len, 0, z], 'x', 6);
     C.muzzle(cr * 0.6 + len + r * 0.08, 0, z);
   }
@@ -231,7 +231,7 @@ function empGun(C: WCtx) {
   band(rc, kit.rail, 0, 0, 0, r * 0.335, r * 0.1, 10);
   const R = r * 0.17, len = C.D * 0.62;
   barrel(C, rc, { len, rad: R, x0: r * 0.2, seg: 8, taper: 1, noMuzzle: true });
-  for (let k = 0; k < 3; k++) band(rc, k === 2 ? kit.rail : kit.trim, r * 0.2 + len * (0.4 + k * 0.25), 0, 0, R * 1.6, R * 0.6, 8);
+  for (let k = 0; k < 3; k++) band(rc, k === 2 ? kit.rail : kit.fitting, r * 0.2 + len * (0.4 + k * 0.25), 0, 0, R * 1.6, R * 0.6, 8);
   C.muzzle(r * 0.2 + len + r * 0.05, 0, 0);
   C.t.shot = 'orb';
   C.t.rate = 1.3;

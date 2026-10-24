@@ -13,7 +13,8 @@
 //   arty                    gunmetal or blued;    brawler   gunmetal, blued or bronze
 //   legged walkers: half the gunmetal ones get chrome pistons (exposed leg hydraulics catch the light)
 // Weapons (per turret) override for their barrels / coils / emitters:
-//   gauss / rail / sniper, laser / plasma / slowbeam / gravity     dark chrome (precision bores, polished emitters)
+//   gauss / rail / plasma                                          dark chrome bores, copper coil rings (kit.fitting)
+//   sniper, laser / slowbeam / gravity                             dark chrome (precision bores, polished emitters)
 //   tesla / emp / heat-ray                                         copper coils
 //   sonic                                                          brass;   flamer   oiled bronze nozzles
 //   howitzer / mortar                                              blued or gunmetal tube, brass breech rings
@@ -72,11 +73,12 @@ const WARM = new Set<MetalFinish>(['bronze', 'copper', 'brass']);
 function weaponFinish(m: ModuleDef, hull: MetalFinish, design: Design, i: number): FinishSpec {
   const v = m.visual;
   switch (v) {
-    case 'gauss': case 'rail': case 'sniper':
-    case 'laser': case 'plasma': case 'slowbeam': case 'gravity':
+    // coil guns: polished bores, copper coil rings round the barrel
+    case 'gauss': case 'rail': case 'plasma': return { joint: 'chrome', fitting: 'copper' };
+    case 'sniper': case 'laser': case 'slowbeam': case 'gravity':
     case 'saw': case 'blade': case 'drill': case 'chainsaw':
       return { joint: 'chrome' };
-    case 'tesla': case 'emp': case 'heatray': return { joint: 'copper' };
+    case 'tesla': case 'emp': case 'heatray': return { joint: 'copper', fitting: 'copper' };
     case 'sonic': return { joint: 'brass' };
     case 'flamer': return { joint: 'bronze' };
     case 'artillery': case 'mortar':
