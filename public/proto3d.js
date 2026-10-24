@@ -1,4 +1,4 @@
-// node_modules/three/build/three.core.js
+// ../../../node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -2573,10 +2573,10 @@ var Vector3 = class _Vector3 {
    */
   crossVectors(a, b) {
     const ax = a.x, ay = a.y, az = a.z;
-    const bx2 = b.x, by = b.y, bz = b.z;
+    const bx3 = b.x, by = b.y, bz = b.z;
     this.x = ay * bz - az * by;
-    this.y = az * bx2 - ax * bz;
-    this.z = ax * by - ay * bx2;
+    this.y = az * bx3 - ax * bz;
+    this.z = ax * by - ay * bx3;
     return this;
   }
   /**
@@ -12923,11 +12923,11 @@ var Ray = class {
     if (dkz === 0) return null;
     const sx = dkx / dkz, sy = dky / dkz, sz = 1 / dkz;
     const ax = akx - sx * akz, ay = aky - sy * akz;
-    const bx2 = bkx - sx * bkz, by = bky - sy * bkz;
+    const bx3 = bkx - sx * bkz, by = bky - sy * bkz;
     const cx = ckx - sx * ckz, cy = cky - sy * ckz;
-    const u = cx * by - cy * bx2;
+    const u = cx * by - cy * bx3;
     const v = ax * cy - ay * cx;
-    const w = bx2 * ay - by * ax;
+    const w = bx3 * ay - by * ax;
     if (backfaceCulling) {
       if (u < 0 || v < 0 || w < 0) return null;
     } else {
@@ -15903,11 +15903,11 @@ function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
 function isEar(ear) {
   const a = ear.prev, b = ear, c = ear.next;
   if (area(a, b, c) >= 0) return false;
-  const ax = a.x, bx2 = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
-  const x0 = Math.min(ax, bx2, cx), y0 = Math.min(ay, by, cy), x1 = Math.max(ax, bx2, cx), y1 = Math.max(ay, by, cy);
+  const ax = a.x, bx3 = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
+  const x0 = Math.min(ax, bx3, cx), y0 = Math.min(ay, by, cy), x1 = Math.max(ax, bx3, cx), y1 = Math.max(ay, by, cy);
   let p = c.next;
   while (p !== a) {
-    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && pointInTriangleExceptFirst(ax, ay, bx2, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && pointInTriangleExceptFirst(ax, ay, bx3, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
     p = p.next;
   }
   return true;
@@ -15915,22 +15915,22 @@ function isEar(ear) {
 function isEarHashed(ear, minX, minY, invSize) {
   const a = ear.prev, b = ear, c = ear.next;
   if (area(a, b, c) >= 0) return false;
-  const ax = a.x, bx2 = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
-  const x0 = Math.min(ax, bx2, cx), y0 = Math.min(ay, by, cy), x1 = Math.max(ax, bx2, cx), y1 = Math.max(ay, by, cy);
+  const ax = a.x, bx3 = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
+  const x0 = Math.min(ax, bx3, cx), y0 = Math.min(ay, by, cy), x1 = Math.max(ax, bx3, cx), y1 = Math.max(ay, by, cy);
   const minZ = zOrder(x0, y0, minX, minY, invSize), maxZ = zOrder(x1, y1, minX, minY, invSize);
   let p = ear.prevZ, n = ear.nextZ;
   while (p && p.z >= minZ && n && n.z <= maxZ) {
-    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c && pointInTriangleExceptFirst(ax, ay, bx2, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c && pointInTriangleExceptFirst(ax, ay, bx3, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
     p = p.prevZ;
-    if (n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1 && n !== a && n !== c && pointInTriangleExceptFirst(ax, ay, bx2, by, cx, cy, n.x, n.y) && area(n.prev, n, n.next) >= 0) return false;
+    if (n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1 && n !== a && n !== c && pointInTriangleExceptFirst(ax, ay, bx3, by, cx, cy, n.x, n.y) && area(n.prev, n, n.next) >= 0) return false;
     n = n.nextZ;
   }
   while (p && p.z >= minZ) {
-    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c && pointInTriangleExceptFirst(ax, ay, bx2, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c && pointInTriangleExceptFirst(ax, ay, bx3, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
     p = p.prevZ;
   }
   while (n && n.z <= maxZ) {
-    if (n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1 && n !== a && n !== c && pointInTriangleExceptFirst(ax, ay, bx2, by, cx, cy, n.x, n.y) && area(n.prev, n, n.next) >= 0) return false;
+    if (n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1 && n !== a && n !== c && pointInTriangleExceptFirst(ax, ay, bx3, by, cx, cy, n.x, n.y) && area(n.prev, n, n.next) >= 0) return false;
     n = n.nextZ;
   }
   return true;
@@ -16117,11 +16117,11 @@ function getLeftmost(start) {
   } while (p !== start);
   return leftmost;
 }
-function pointInTriangle(ax, ay, bx2, by, cx, cy, px2, py2) {
-  return (cx - px2) * (ay - py2) >= (ax - px2) * (cy - py2) && (ax - px2) * (by - py2) >= (bx2 - px2) * (ay - py2) && (bx2 - px2) * (cy - py2) >= (cx - px2) * (by - py2);
+function pointInTriangle(ax, ay, bx3, by, cx, cy, px2, py2) {
+  return (cx - px2) * (ay - py2) >= (ax - px2) * (cy - py2) && (ax - px2) * (by - py2) >= (bx3 - px2) * (ay - py2) && (bx3 - px2) * (cy - py2) >= (cx - px2) * (by - py2);
 }
-function pointInTriangleExceptFirst(ax, ay, bx2, by, cx, cy, px2, py2) {
-  return !(ax === px2 && ay === py2) && pointInTriangle(ax, ay, bx2, by, cx, cy, px2, py2);
+function pointInTriangleExceptFirst(ax, ay, bx3, by, cx, cy, px2, py2) {
+  return !(ax === px2 && ay === py2) && pointInTriangle(ax, ay, bx3, by, cx, cy, px2, py2);
 }
 function isValidDiagonal(a, b) {
   return a.next.i !== b.i && a.prev.i !== b.i && !intersectsPolygon(a, b) && // doesn't intersect other edges
@@ -20498,7 +20498,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// node_modules/three/build/three.module.js
+// ../../../node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -31996,7 +31996,7 @@ var WebGLRenderer = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
+// ../../../node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -35728,7 +35728,7 @@ function makeKit(team) {
   return kits[team];
 }
 
-// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -36399,12 +36399,12 @@ function trackSystem(b, kit, o) {
   const quad = (a, b2, c, d) => pos.push(...a, ...b2, ...c, ...a, ...c, ...d);
   for (let i = 0; i < nL; i++) {
     const j = (i + 1) % nL;
-    const [ax2, ay] = P[i], [bx2, by] = P[j];
+    const [ax2, ay] = P[i], [bx3, by] = P[j];
     const na = [T[i][1], -T[i][0]], nb = [T[j][1], -T[j][0]];
-    const ia = [ax2 - na[0] * t * 0.55, ay - na[1] * t * 0.55], ib = [bx2 - nb[0] * t * 0.55, by - nb[1] * t * 0.55];
-    quad([ax2, ay, z - hw], [bx2, by, z - hw], [bx2, by, z + hw], [ax2, ay, z + hw]);
-    quad([ax2, ay, z + hw], [bx2, by, z + hw], [ib[0], ib[1], z + hw], [ia[0], ia[1], z + hw]);
-    quad([ax2, ay, z - hw], [ia[0], ia[1], z - hw], [ib[0], ib[1], z - hw], [bx2, by, z - hw]);
+    const ia = [ax2 - na[0] * t * 0.55, ay - na[1] * t * 0.55], ib = [bx3 - nb[0] * t * 0.55, by - nb[1] * t * 0.55];
+    quad([ax2, ay, z - hw], [bx3, by, z - hw], [bx3, by, z + hw], [ax2, ay, z + hw]);
+    quad([ax2, ay, z + hw], [bx3, by, z + hw], [ib[0], ib[1], z + hw], [ia[0], ia[1], z + hw]);
+    quad([ax2, ay, z - hw], [ia[0], ia[1], z - hw], [ib[0], ib[1], z - hw], [bx3, by, z - hw]);
   }
   const band2 = new BufferGeometry();
   band2.setAttribute("position", new Float32BufferAttribute(pos, 3));
@@ -36785,14 +36785,14 @@ function band(B, mat, x, y, z, R, w, seg = 8) {
   B.lathe(mat, [[0, 0], [R, 0], [R, w], [0, w]], [x - w / 2, y, z], "x", seg);
 }
 function ball(B, mat, x, y, z, R, k = 1, seg = 10, axis = "y") {
-  const prof = [[0, -R * k], [R * 0.62, -R * k * 0.78], [R * 0.95, -R * k * 0.3], [R * 0.95, R * k * 0.3], [R * 0.62, R * k * 0.78], [0, R * k]];
-  B.lathe(mat, prof, [x, y, z], axis, seg);
+  const prof2 = [[0, -R * k], [R * 0.62, -R * k * 0.78], [R * 0.95, -R * k * 0.3], [R * 0.95, R * k * 0.3], [R * 0.62, R * k * 0.78], [0, R * k]];
+  B.lathe(mat, prof2, [x, y, z], axis, seg);
 }
 function capsule(B, mat, x, y, z, R, len, axis = "x", seg = 8) {
   const e = Math.min(R * 0.7, len * 0.3);
-  const prof = [[0, 0], [R * 0.6, e * 0.15], [R, e], [R, len - e], [R * 0.6, len - e * 0.15], [0, len]];
+  const prof2 = [[0, 0], [R * 0.6, e * 0.15], [R, e], [R, len - e], [R * 0.6, len - e * 0.15], [0, len]];
   const at2 = axis === "x" ? [x - len / 2, y, z] : axis === "y" ? [x, y - len / 2, z] : [x, y, z - len / 2];
-  B.lathe(mat, prof, at2, axis, seg);
+  B.lathe(mat, prof2, at2, axis, seg);
 }
 function deckRing(C, k = 0.95) {
   const { b, kit, r } = C;
@@ -37139,12 +37139,12 @@ function buildLauncher(C) {
   if (v === "artillery") return howitzer(C);
   return charge(C);
 }
-function missile(B, nose, body, fin3, x0, y, z, R, len, seg = 7) {
+function missile(B, nose, body, fin2, x0, y, z, R, len, seg = 7) {
   B.lathe(body, [[0, 0], [R * 0.8, 0], [R, R * 0.6], [R, len * 0.72], [0, len * 0.72]], [x0, y, z], "x", seg);
   B.lathe(nose, [[0, 0], [R, 0], [R * 0.75, len * 0.16], [R * 0.25, len * 0.26], [0, len * 0.28]], [x0 + len * 0.72, y, z], "x", seg);
   for (let i = 0; i < 4; i++) {
     const a = i / 4 * Math.PI * 2 + Math.PI / 4;
-    bx(B, fin3, x0 + len * 0.1, y + Math.sin(a) * R * 1.3, z + Math.cos(a) * R * 1.3, len * 0.16, R * 0.15, R * 1, [a, 0, 0]);
+    bx(B, fin2, x0 + len * 0.1, y + Math.sin(a) * R * 1.3, z + Math.cos(a) * R * 1.3, len * 0.16, R * 0.15, R * 1, [a, 0, 0]);
   }
 }
 var pedestal = (C, k = 0.6, h = 0.22) => {
@@ -37443,13 +37443,13 @@ function plate(b, mat, poly, y, h, bev = 0.02, rot, at2 = [0, 0, 0]) {
   b.slab(mat, poly, h, bev, at2[0], at2[1] + y, at2[2], rot);
 }
 function dome(b, mat, at2, r, h, seg = 12, rings = 3) {
-  const prof = [[0, 0], [r, 0]];
+  const prof2 = [[0, 0], [r, 0]];
   for (let i = 1; i <= rings; i++) {
     const a = i / (rings + 1) * Math.PI / 2;
-    prof.push([r * Math.cos(a), h * Math.sin(a)]);
+    prof2.push([r * Math.cos(a), h * Math.sin(a)]);
   }
-  prof.push([0, h]);
-  b.lathe(mat, prof, at2, "y", seg);
+  prof2.push([0, h]);
+  b.lathe(mat, prof2, at2, "y", seg);
 }
 function pod(b, mat, c, rx, ry, rz, n = 10, k = 6, pw = 2.2, flatBottom = 0) {
   const rings = [];
@@ -37631,13 +37631,13 @@ function flamer(C) {
   C.t.rate = 0.12;
 }
 function coilStack(B, mat, x, y, z, R, h, n, axis = "y", seg = 10) {
-  const prof = [[0, 0], [R * 0.55, 0]];
+  const prof2 = [[0, 0], [R * 0.55, 0]];
   for (let i = 0; i < n; i++) {
     const a = i / n * h, m = (i + 0.5) / n * h, k = 1 - i / n * 0.35;
-    prof.push([R * 0.55 * k, a + h * 0.04 / n], [R * k, m - h * 0.12 / n], [R * k, m + h * 0.12 / n], [R * 0.5 * k, a + h / n - h * 0.04 / n]);
+    prof2.push([R * 0.55 * k, a + h * 0.04 / n], [R * k, m - h * 0.12 / n], [R * k, m + h * 0.12 / n], [R * 0.5 * k, a + h / n - h * 0.04 / n]);
   }
-  prof.push([R * 0.4, h], [0, h]);
-  B.lathe(mat, prof, [x, y, z], axis, seg);
+  prof2.push([R * 0.4, h], [0, h]);
+  B.lathe(mat, prof2, [x, y, z], axis, seg);
 }
 function teslaCoil(C) {
   const { b, rc, kit, r, y0 } = C;
@@ -37864,14 +37864,14 @@ function drill(C, A2) {
   const R = r * 0.42, L = r * 1.4;
   rc.lathe(kit.panel, [[0, 0], [R * 0.9, 0], [R * 1.1, r * 0.15], [R * 1.1, r * 0.3], [0, r * 0.3]], [A2 - r * 0.1, 0, 0], "x", 10);
   C.spin("x", [A2 + r * 0.2, 0, 0]);
-  const prof = [[0, 0], [R, 0]];
+  const prof2 = [[0, 0], [R, 0]];
   const steps = 4;
   for (let i = 0; i < steps; i++) {
     const f0 = i / steps, f1 = (i + 1) / steps;
-    prof.push([R * (1 - f0) * 1, L * f0 + L * 0.02], [R * (1 - f1) + R * 0.12, L * f1 - L * 0.03]);
+    prof2.push([R * (1 - f0) * 1, L * f0 + L * 0.02], [R * (1 - f1) + R * 0.12, L * f1 - L * 0.03]);
   }
-  prof.push([0, L]);
-  sp.lathe(kit.metal, prof, [0, 0, 0], "x", 7);
+  prof2.push([0, L]);
+  sp.lathe(kit.metal, prof2, [0, 0, 0], "x", 7);
   for (let i = 0; i < 3; i++) {
     const a = i / 3 * Math.PI * 2;
     sp.strut(kit.metal, [L * 0.05, Math.sin(a) * R * 0.95, Math.cos(a) * R * 0.95], [L * 0.85, Math.sin(a + 1.6) * R * 0.18, Math.cos(a + 1.6) * R * 0.18], r * 0.05, r * 0.02, 4);
@@ -38551,20 +38551,20 @@ function genericHull(c) {
   }
   if (S >= 2) {
     const rcase = Math.min(S === 2 ? 0.16 * L : 0.12 * L, 0.5), hw = Math.min(W * (S === 2 ? 0.17 : 0.2), 0.22 * S);
-    let best = 0, bx2 = 0;
+    let best = 0, bx3 = 0;
     for (let k = 0; k < 24; k++) {
       const cx = -L * 0.42 + k * L * 0.026;
       if (S === 2 && cx > -L * 0.12) continue;
       const clear = Math.min(...mounts.map((m) => Math.max(Math.abs(m.x - cx) - rcase, Math.abs(m.z) - hw) - m.r * 0.95), 5);
       if (clear > best && deckAt(hull, cx - rcase, 0) > 0 && deckAt(hull, cx + rcase, 0) > 0) {
         best = clear;
-        bx2 = cx;
+        bx3 = cx;
       }
     }
     if (best > 0.02) {
-      addCasemate(b, kit, hull, bx2, rcase, hw, Hd * (S >= 3 ? 0.75 : 0.55));
-      mounts.push({ x: bx2, z: 0, r: Math.max(rcase, hw) * 1.1 });
-      if (S >= 4) addBridge(b, kit, hull, bx2 - rcase * 0.1, S * 0.55);
+      addCasemate(b, kit, hull, bx3, rcase, hw, Hd * (S >= 3 ? 0.75 : 0.55));
+      mounts.push({ x: bx3, z: 0, r: Math.max(rcase, hw) * 1.1 });
+      if (S >= 4) addBridge(b, kit, hull, bx3 - rcase * 0.1, S * 0.55);
     }
   }
   greeble(b, kit, hull, S, rnd, mounts);
@@ -39391,8 +39391,8 @@ function nring(x, cy, cz, ry, rz, n = 10, flat2 = 0.55) {
 function trackNacelle(b, kit, L, h, w, z, side) {
   const top = h * 1.08, bot = h * 0.34;
   const ry = (top - bot) / 1.45, cy = top - ry, rz = w * 0.66;
-  const prof = [[-0.5, 0.62, 0.78], [-0.46, 0.92, 0.94], [-0.3, 1, 1], [0.2, 1, 1], [0.38, 0.9, 0.92], [0.48, 0.62, 0.74], [0.515, 0.25, 0.4]];
-  b.loft(kit.hull2, prof.map(([f, sy, sz]) => nring(L * f, cy - (1 - sy) * ry * 0.25, z + side * w * 0.04, ry * sy, rz * sz)));
+  const prof2 = [[-0.5, 0.62, 0.78], [-0.46, 0.92, 0.94], [-0.3, 1, 1], [0.2, 1, 1], [0.38, 0.9, 0.92], [0.48, 0.62, 0.74], [0.515, 0.25, 0.4]];
+  b.loft(kit.hull2, prof2.map(([f, sy, sz]) => nring(L * f, cy - (1 - sy) * ry * 0.25, z + side * w * 0.04, ry * sy, rz * sz)));
   b.loft(kit.panel, [[-0.36, 0.9], [-0.28, 1], [0.18, 1], [0.32, 0.9]].map(([f, s]) => nring(L * f, cy + ry * 0.05, z + side * w * 0.08, ry * 0.42 * s, rz * 1.03 * s, 8, 0.2)));
   b.box(kit.glow, L * 0.32, h * 0.04, h * 0.04, -L * 0.04, cy + ry * 0.05, z + side * (rz * 1.06 + w * 0.08), h * 0.01);
   b.box(kit.lamp, h * 0.05, h * 0.08, w * 0.3, L * 0.5, cy, z + side * w * 0.04, h * 0.02);
@@ -39864,8 +39864,8 @@ function planLoft(b, mat, poly, levels, at2 = [0, 0]) {
 function inPoly(poly, x, z) {
   let sgn = 0;
   for (let i = 0; i < poly.length; i++) {
-    const [ax, az] = poly[i], [bx2, bz] = poly[(i + 1) % poly.length];
-    const c = (bx2 - ax) * (z - az) - (bz - az) * (x - ax);
+    const [ax, az] = poly[i], [bx3, bz] = poly[(i + 1) % poly.length];
+    const c = (bx3 - ax) * (z - az) - (bz - az) * (x - ax);
     if (Math.abs(c) < 1e-9) continue;
     const s = Math.sign(c);
     if (sgn === 0) sgn = s;
@@ -40049,23 +40049,23 @@ function leviathan(c) {
     return y - 0.04 + h;
   };
   const fwdY = bar(fwdX, 0.3 * v), aftY = bar(aftX, 0.42 * v);
-  const bx2 = -0.2 * kx, d0 = deck(bx2, 0);
+  const bx3 = -0.2 * kx, d0 = deck(bx3, 0);
   const t1 = d0 + 0.75 * v, t2 = t1 + 0.7 * v, t3 = t2 + 0.5 * v;
-  block(b, kit.hull, bx2, d0 - 0.04, 0, 1.6 * kx, 1 * kz, t1 - d0 + 0.04, { top: [0.9, 0.86], ch: 0.3 * k, bev: 0.05, bot: 0.04 });
-  block(b, kit.panel, bx2 - 0.05 * kx, t1 - 0.02, 0, 1.1 * kx, 0.8 * kz, t2 - t1 + 0.02, { top: [0.86, 0.84], shift: [-0.04 * kx, 0], ch: 0.24 * k, bev: 0.04 });
-  block(b, kit.hull, bx2 + 0.05 * kx, t2 - 0.02, 0, 0.8 * kx, 0.95 * kz, t3 - t2 + 0.02, { top: [0.8, 0.86], shift: [0.04 * kx, 0], ch: 0.22 * k, bev: 0.05 });
-  b.box(kit.glass, 0.05, 0.1 * v, 0.8 * kz, bx2 + 0.42 * kx, t2 + 0.18 * v, 0, 0.01, [0, 0, -0.5]);
-  glow(b, kit, bx2 + 0.44 * kx, t2 + 0.06 * v, 0, 0.04, 0.04, 0.74 * kz, [0, 0, -0.5]);
+  block(b, kit.hull, bx3, d0 - 0.04, 0, 1.6 * kx, 1 * kz, t1 - d0 + 0.04, { top: [0.9, 0.86], ch: 0.3 * k, bev: 0.05, bot: 0.04 });
+  block(b, kit.panel, bx3 - 0.05 * kx, t1 - 0.02, 0, 1.1 * kx, 0.8 * kz, t2 - t1 + 0.02, { top: [0.86, 0.84], shift: [-0.04 * kx, 0], ch: 0.24 * k, bev: 0.04 });
+  block(b, kit.hull, bx3 + 0.05 * kx, t2 - 0.02, 0, 0.8 * kx, 0.95 * kz, t3 - t2 + 0.02, { top: [0.8, 0.86], shift: [0.04 * kx, 0], ch: 0.22 * k, bev: 0.05 });
+  b.box(kit.glass, 0.05, 0.1 * v, 0.8 * kz, bx3 + 0.42 * kx, t2 + 0.18 * v, 0, 0.01, [0, 0, -0.5]);
+  glow(b, kit, bx3 + 0.44 * kx, t2 + 0.06 * v, 0, 0.04, 0.04, 0.74 * kz, [0, 0, -0.5]);
   both((s) => {
-    block(b, kit.hull, bx2 + 0.25 * kx, t2 + 0.1 * v, s * 0.62 * kz, 0.4 * kx, 0.42 * kz, 0.14 * v, { top: [0.8, 0.8], ch: 0.08 * k });
-    glow(b, kit, bx2 + 0.45 * kx, t2 + 0.17 * v, s * 0.62 * kz, 0.03, 0.04, 0.3 * kz);
+    block(b, kit.hull, bx3 + 0.25 * kx, t2 + 0.1 * v, s * 0.62 * kz, 0.4 * kx, 0.42 * kz, 0.14 * v, { top: [0.8, 0.8], ch: 0.08 * k });
+    glow(b, kit, bx3 + 0.45 * kx, t2 + 0.17 * v, s * 0.62 * kz, 0.03, 0.04, 0.3 * kz);
   });
-  mast(b, kit, bx2 - 0.1 * kx, t3, 0, 1.7 * v, 0.05);
-  b.box(kit.metal, 0.06, 0.06, 1.1 * kz, bx2 - 0.1 * kx, t3 + 1.1 * v, 0, 0.01);
-  b.box(kit.metal, 0.05, 0.05, 0.7 * kz, bx2 - 0.1 * kx, t3 + 1.4 * v, 0, 0.01);
-  b.lathe(kit.panel, [[0, 0], [0.3 * k, 0.1 * k], [0.34 * k, 0.16 * k], [0, 0.05 * k]], [bx2 + 0.15 * kx, t3 + 0.25 * v, 0.25 * kz], "y", 12, [0, 0, 0.6]);
-  b.cyl(kit.metal, 0.04, 0.04, 0.25 * v, [bx2 + 0.15 * kx, t3, 0.25 * kz], "y", 6);
-  sensor(b, kit, bx2 + 0.1 * kx, t3 + 0.08 * v, 0, 0.2 * k);
+  mast(b, kit, bx3 - 0.1 * kx, t3, 0, 1.7 * v, 0.05);
+  b.box(kit.metal, 0.06, 0.06, 1.1 * kz, bx3 - 0.1 * kx, t3 + 1.1 * v, 0, 0.01);
+  b.box(kit.metal, 0.05, 0.05, 0.7 * kz, bx3 - 0.1 * kx, t3 + 1.4 * v, 0, 0.01);
+  b.lathe(kit.panel, [[0, 0], [0.3 * k, 0.1 * k], [0.34 * k, 0.16 * k], [0, 0.05 * k]], [bx3 + 0.15 * kx, t3 + 0.25 * v, 0.25 * kz], "y", 12, [0, 0, 0.6]);
+  b.cyl(kit.metal, 0.04, 0.04, 0.25 * v, [bx3 + 0.15 * kx, t3, 0.25 * kz], "y", 6);
+  sensor(b, kit, bx3 + 0.1 * kx, t3 + 0.08 * v, 0, 0.2 * k);
   const fx2 = -0.95 * kx, fy = deck(fx2, 0);
   block(b, kit.trim, fx2, fy - 0.03, 0, 0.75 * kx, 0.66 * kz, 1.25 * v, { top: [0.8, 0.8], shift: [-0.12 * kx, 0], ch: 0.2 * k, bev: 0.04 });
   b.box(kit.hot, 0.4 * kx, 0.03, 0.34 * kz, fx2 - 0.12 * kx, fy + 1.22 * v, 0, 0.01);
@@ -40690,25 +40690,37 @@ function blurDisc(R) {
   m.renderOrder = 2;
   return m;
 }
-function blade2(b, kit, R, chord, r0, m, pitch = 0.22) {
+function blade2(b, kit, R, chord, r0, m, pitch = 0.26) {
   const rings = [];
-  for (const f of [0, 0.55, 1]) {
-    const z = r0 + (R - r0) * f, c = chord * (1 - 0.35 * f), t = chord * 0.16 * (1 - 0.5 * f), a = pitch * (1 - 0.6 * f);
+  for (const f of [0, 0.3, 0.78, 1]) {
+    const z = r0 + (R - r0) * f, c = chord * (f < 0.3 ? 0.8 + f * 0.66 : 1 - 0.3 * (f - 0.3)), t = chord * 0.12 * (1 - 0.45 * f), a = pitch * (1 - 0.85 * f);
     const ca = Math.cos(a), sa = Math.sin(a);
-    const pts = [[c * 0.5, 0], [c * 0.2, t], [-c * 0.35, t * 0.6], [-c * 0.5, 0], [-c * 0.35, -t * 0.4], [c * 0.2, -t * 0.6]];
+    const pts = [[c * 0.5, 0], [c * 0.2, t], [-c * 0.35, t * 0.55], [-c * 0.5, 0], [-c * 0.35, -t * 0.35], [c * 0.2, -t * 0.55]];
     rings.push(pts.map(([x, y]) => [x * ca - y * sa, x * sa + y * ca, z]));
   }
   b.loft(kit.trim, rings, true, true, m);
-  b.g(new BoxGeometry(chord * 0.7, chord * 0.14, (R - r0) * 0.08), kit.hazard, m.clone().multiply(mtx([0, 0, R - (R - r0) * 0.06])));
+  b.g(new BoxGeometry(chord * 0.75, chord * 0.32, (R - r0) * 0.1), kit.metal, m.clone().multiply(mtx([0, 0, r0 + (R - r0) * 0.03])));
+  b.g(new BoxGeometry(chord * 0.9, chord * 0.1, (R - r0) * 0.06), kit.hazard, m.clone().multiply(mtx([chord * 0.05, 0, R - (R - r0) * 0.04], [0, 0, pitch * 0.15])));
 }
 function rotorHead(kit, R, n, spinners, parent, at2, spd, tail = false) {
   const g = new Group();
   g.position.set(...at2);
   const b = new Bld();
-  const chord = R * (tail ? 0.22 : 0.085) + 0.012;
-  for (let i = 0; i < n; i++) blade2(b, kit, R, chord, R * 0.1, mtx([0, 0, 0], [0, i / n * Math.PI * 2, 0]));
-  b.lathe(kit.metal, [[0, -R * 0.05], [R * 0.11, -R * 0.05], [R * 0.13, 0], [R * 0.1, R * 0.05], [0, R * 0.07]], [0, 0, 0], "y", 10);
-  b.cyl(kit.accent, R * 0.045, R * 0.02, R * 0.06, [0, R * 0.06, 0], "y", 8);
+  const chord = R * (tail ? 0.18 : 0.062) + 0.01;
+  const r0 = R * 0.11;
+  for (let i = 0; i < n; i++) blade2(b, kit, R, chord, r0, mtx([0, 0, 0], [0, i / n * Math.PI * 2, 0]));
+  b.lathe(kit.metal, [[0, -R * 0.03], [R * 0.08, -R * 0.03], [R * 0.095, 0], [R * 0.075, R * 0.035], [0, R * 0.05]], [0, 0, 0], "y", 8);
+  b.cyl(kit.trim, R * 0.03, R * 0.022, R * 0.05, [0, R * 0.04, 0], "y", 6);
+  if (!tail) {
+    const sw = -R * 0.085;
+    b.cyl(kit.trim, R * 0.075, R * 0.075, R * 0.014, [0, sw, 0], "y", 10);
+    b.cyl(kit.metal, R * 0.06, R * 0.06, R * 0.012, [0, sw + R * 0.016, 0], "y", 10);
+    b.cyl(kit.metal, R * 0.022, R * 0.022, -sw, [0, sw, 0], "y", 6);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2 + 0.35, ca = Math.cos(a), sa = Math.sin(a);
+      b.strut(kit.steel, [sa * R * 0.06, sw + R * 0.02, ca * R * 0.06], [sa * R * 0.085, -R * 0.01, ca * R * 0.085], R * 6e-3, R * 6e-3, 4);
+    }
+  }
   b.mount(g);
   g.add(blurDisc(R * 0.98));
   parent.add(g);
@@ -40754,8 +40766,9 @@ function buildLift(root, kit, lift) {
         const fb = new Bld();
         const h = r * 0.5, R1 = r * 1.28;
         const sg = r < 0.16 ? 12 : 18;
-        fb.lathe(kit.hull, [[r * 1.02, h * 0.4], [r, h * 0.28], [r, -h * 0.5], [R1 * 0.96, -h * 0.5], [R1, -h * 0.1], [R1 * 0.98, h * 0.35], [r * 1.14, h * 0.55], [r * 1.02, h * 0.4]], [0, 0, 0], "y", sg);
-        fb.lathe(kit.accent, [[R1 * 0.9, -h * 0.12], [R1 * 1.012, -h * 0.12], [R1 * 1.012, h * 0.06], [R1 * 0.9, h * 0.06]], [0, 0, 0], "y", sg);
+        fb.lathe(kit.panel, [[r * 1.02, h * 0.4], [r, h * 0.28], [r, -h * 0.5], [R1 * 0.96, -h * 0.5], [R1, -h * 0.1], [R1 * 0.98, h * 0.35], [r * 1.14, h * 0.55], [r * 1.02, h * 0.4]], [0, 0, 0], "y", sg);
+        fb.lathe(kit.hull, [[R1 * 0.9, -h * 0.12], [R1 * 1.012, -h * 0.12], [R1 * 1.012, h * 0.06], [R1 * 0.9, h * 0.06]], [0, 0, 0], "y", sg);
+        fb.lathe(kit.trim, [[r * 0.995, h * 0.26], [r * 0.995, -h * 0.48]], [0, 0, 0], "y", sg);
         for (let i = 0; i < 3; i++) fb.g(new BoxGeometry(r * 0.08, h * 0.12, r * 1.95), kit.metal, mtx([0, -h * 0.32, 0], [0, i / 3 * Math.PI, 0]));
         fb.lathe(kit.metal, [[0, -h * 0.75], [r * 0.2, -h * 0.4], [r * 0.24, h * 0.1], [0, h * 0.3]], [0, 0, 0], "y", 8);
         fb.mount(frame3);
@@ -40774,9 +40787,16 @@ function buildLift(root, kit, lift) {
       }
       case "jet": {
         const len = l.len ?? r * 1.6;
-        b.lathe(kit.metal, [[r * 1.08, 0], [r * 1.1, len * 0.45], [r * 0.92, len], [r * 0.78, len], [r * 0.82, len * 0.4], [0, len * 0.4]], [x + len, y, z], "-x", 12);
-        b.cylb(kit.steel, r * 1.14, len * 0.16, r * 0.04, [x + len * 0.92, y, z], "-x", 12);
-        b.cyl(kit.hot, r * 0.74, r * 0.6, len * 0.02, [x + len * 0.42, y, z], "-x", 10);
+        b.lathe(kit.trim, [[r * 1.02, 0], [r * 1.12, len * 0.5], [r * 1.12, len], [0, len]], [x + len, y, z], "-x", 12);
+        const np = r < 0.09 ? 10 : 14;
+        for (let i = 0; i < np; i++) {
+          const a = i / np * Math.PI * 2;
+          const m = new Matrix4().makeTranslation(x + len * 0.18, y, z).multiply(new Matrix4().makeRotationX(a)).multiply(new Matrix4().makeTranslation(0, r * 0.98, 0)).multiply(new Matrix4().makeRotationZ(0.1));
+          b.g(new BoxGeometry(len * 0.62, r * 0.07, Math.PI * 2 * r / np * 1.02), kit.metal, m);
+        }
+        b.lathe(kit.trim, [[r * 0.9, len * 0.85], [r * 0.9, -len * 0.02]], [x + len, y, z], "-x", 10);
+        b.cyl(kit.hot, r * 0.7, r * 0.55, len * 0.02, [x + len * 0.62, y, z], "-x", 10);
+        b.cylb(kit.hot, r * 0.42, len * 0.04, r * 0.01, [x + len * 0.45, y, z], "-x", 8);
         const fl = new Group();
         fl.position.set(x - len * 0, y, z);
         const fb = new Bld();
@@ -40788,7 +40808,7 @@ function buildLift(root, kit, lift) {
       }
       case "grav": {
         const h = l.len ?? r * 0.7;
-        b.lathe(kit.hull, [[0, h * 0.5], [r * 0.7, h * 0.5], [r * 0.95, h * 0.3], [r, 0], [r * 0.92, -h * 0.25], [r * 0.74, -h * 0.36], [0, -h * 0.36]], [x, y, z], "y", 16);
+        b.lathe(kit.panel, [[0, h * 0.5], [r * 0.7, h * 0.5], [r * 0.95, h * 0.3], [r, 0], [r * 0.92, -h * 0.25], [r * 0.74, -h * 0.36], [0, -h * 0.36]], [x, y, z], "y", 16);
         b.cylb(kit.trim, r * 1.03, h * 0.16, h * 0.04, [x, y - h * 0.12, z], "y", 16);
         b.lathe(kit.glow, [[0, -h * 0.5], [r * 0.6, -h * 0.4], [r * 0.7, -h * 0.36], [0, -h * 0.36]], [x, y, z], "y", 14);
         b.cyl(kit.metal, r * 0.22, r * 0.22, h * 0.12, [x, y + h * 0.5, z], "y", 8);
@@ -40798,7 +40818,7 @@ function buildLift(root, kit, lift) {
         const nf = 6;
         for (let i = 0; i < nf; i++) {
           const a = i / nf * Math.PI * 2, cx = Math.cos(a) * r * 1.22, cz = Math.sin(a) * r * 1.22;
-          rb.g(new BoxGeometry(r * 0.42, h * 0.12, r * 0.14), kit.panel, mtx([cx, 0, cz], [0, -a + Math.PI / 2, 0]));
+          rb.g(new BoxGeometry(r * 0.42, h * 0.12, r * 0.14), kit.trim, mtx([cx, 0, cz], [0, -a + Math.PI / 2, 0]));
           rb.g(new BoxGeometry(r * 0.08, h * 0.14, r * 0.08), kit.glow, mtx([cx, 0, cz], [0, -a, 0]));
         }
         rb.mount(ring3);
@@ -40834,42 +40854,301 @@ registerMobility(["rotor", "jet", "gravlift"], {
     return buildLift(c.root, c.kit, ac.lift ?? defaultLift(c.mobId, c.L, c.W, c.S));
   }
 });
-function fuse(b, mat, st, n = 10, pw = 2.4, cz = 0, flat2 = 0) {
-  b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, cz, Math.max(2e-3, ry), Math.max(2e-3, rz), n, pw, flat2)));
-}
 
-// src/client/proto3d/chassis/air.ts
+// src/client/proto3d/chassis/aero-kit.ts
+function bx2(b, mat, w, h, d, x, y, z, rot) {
+  b.g(new BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
+}
+var SEC_JET = { kw: 0.3, lw: 0.74, ly: -0.7, chy: -0.08, sh: 0.82, shy: 0.52, tw: 0.4 };
+var SEC_BOX = { kw: 0.72, lw: 0.97, ly: -0.72, chy: 0.05, sh: 0.95, shy: 0.6, tw: 0.66 };
+var SEC_ROUND = { kw: 0.42, lw: 0.86, ly: -0.62, chy: 0, sh: 0.88, shy: 0.55, tw: 0.48 };
+function fRing(x, cy, ry, rz, cz = 0, k = SEC_JET) {
+  const kw = k.kw ?? 0.3, lw = k.lw ?? 0.74, ly = k.ly ?? -0.7, chy = k.chy ?? -0.08, sh = k.sh ?? 0.82, shy = k.shy ?? 0.52, tw = k.tw ?? 0.4;
+  const P = (z, y) => [x, cy + y * ry, cz + z * rz];
+  return [P(-kw, -1), P(kw, -1), P(lw, ly), P(1, chy), P(sh, shy), P(tw, 1), P(-tw, 1), P(-sh, shy), P(-1, chy), P(-lw, ly)];
+}
+var Fuse = class {
+  st;
+  cz;
+  k;
+  constructor(st, cz = 0, k = SEC_JET) {
+    this.st = st;
+    this.cz = cz;
+    this.k = k;
+  }
+  /** interpolated [cy, ry, rz] at x (clamped to the ends) */
+  at(x) {
+    const s = this.st;
+    if (x >= s[0][0]) return [s[0][1], s[0][2], s[0][3]];
+    if (x <= s[s.length - 1][0]) {
+      const e = s[s.length - 1];
+      return [e[1], e[2], e[3]];
+    }
+    let i = 0;
+    while (i < s.length - 2 && s[i + 1][0] > x) i++;
+    const p = s[i], q = s[i + 1], f = (p[0] - x) / (p[0] - q[0] || 1);
+    return [p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f, p[3] + (q[3] - p[3]) * f];
+  }
+  ring(x, off = 0) {
+    const [cy, ry, rz] = this.at(x);
+    return fRing(x, cy, Math.max(2e-3, ry + off), Math.max(2e-3, rz + off), this.cz, this.k);
+  }
+  top(x) {
+    const [cy, ry] = this.at(x);
+    return cy + ry;
+  }
+  bot(x) {
+    const [cy, ry] = this.at(x);
+    return cy - ry;
+  }
+  w(x) {
+    return this.at(x)[2];
+  }
+  cy(x) {
+    return this.at(x)[0];
+  }
+  /** half width of the flat spine at x */
+  spineW(x) {
+    return this.at(x)[2] * (this.k.tw ?? 0.4);
+  }
+  /** station xs strictly between x0 > x1 plus both ends (for lofting skin parts that follow the fuselage) */
+  xs(x0, x1) {
+    const hi = Math.max(x0, x1), lo = Math.min(x0, x1);
+    return [hi, ...this.st.map((s) => s[0]).filter((x) => x < hi - 1e-4 && x > lo + 1e-4), lo];
+  }
+};
+function fuselage(b, mat, F) {
+  b.loft(mat, F.st.map((s) => F.ring(s[0])));
+}
+function overSkin(b, mat, F, x0, x1, off = 3e-3) {
+  b.loft(mat, F.xs(x0, x1).map((x) => F.ring(x, off)));
+}
+function panelBreak(b, kit, F, x, w = 0.012, mat) {
+  const e = Math.max(25e-4, F.at(x)[1] * 0.025);
+  b.loft(mat ?? kit.mech, [F.ring(x + w / 2, e), F.ring(x - w / 2, e)]);
+}
+function skinPanel(b, mat, F, x0, x1, i0, i1, off = 4e-3, th = 6e-3) {
+  const idx = [];
+  for (let i = i0; ; i = (i + 1) % 10) {
+    idx.push(i);
+    if (i === i1) break;
+  }
+  const rings = F.xs(x0, x1).map((x) => {
+    const o = F.ring(x, off + th), n = F.ring(x, off);
+    return [...idx.map((i) => o[i]), ...idx.slice().reverse().map((i) => n[i])];
+  });
+  b.loft(mat, rings);
+}
+var spinePanel = (b, mat, F, x0, x1, off = 4e-3, th = 6e-3) => skinPanel(b, mat, F, x0, x1, 5, 6, off, th);
+function ribbon(b, mat, pts, w0, w1, th = 4e-3) {
+  const n = pts.length;
+  const rings = pts.map((p, i) => {
+    const q = pts[Math.min(n - 1, i + 1)], r = pts[Math.max(0, i - 1)];
+    const dx = q[0] - r[0], dz = q[2] - r[2], l = Math.hypot(dx, dz) || 1;
+    const nx = -dz / l, nz = dx / l, w = w0 + (w1 - w0) * (i / Math.max(1, n - 1));
+    return [[p[0] - nx * w, p[1], p[2] - nz * w], [p[0] + nx * w, p[1], p[2] + nz * w], [p[0] + nx * w, p[1] + th, p[2] + nz * w], [p[0] - nx * w, p[1] + th, p[2] - nz * w]];
+  });
+  b.loft(mat, rings);
+}
+function soot(b, kit, F, x0, x1, z, w) {
+  const xs = F.xs(x0, x1);
+  ribbon(b, kit.mech, xs.map((x) => [x, F.top(x) + 3e-3, z]), w, w * 0.25, 3e-3);
+}
+function canopy(b, kit, x0, x1, yb, w, h, o = {}) {
+  const L = x0 - x1, rake = o.rake ?? 0.32, cz = o.cz ?? 0;
+  const sec = (x, s, hh, ww = w) => [[x, yb, cz - ww], [x, yb, cz + ww], [x, yb + hh * 0.58, cz + ww * 0.86 * s + ww * (1 - s) * 0.5], [x, yb + hh, cz + ww * 0.42 * s], [x, yb + hh, cz - ww * 0.42 * s], [x, yb + hh * 0.58, cz - ww * 0.86 * s - ww * (1 - s) * 0.5]];
+  const prof2 = [[0, 0.05, 0.7], [rake, 1, 1], [0.62, 0.96, 1], [0.86, 0.7, 0.92], [1, 0.12, 0.8]];
+  b.loft(kit.glass, prof2.map(([f, hh, ww]) => sec(x0 - f * L, 1, h * hh, w * ww)));
+  const fm = o.frame ?? kit.shell;
+  const hoop = (f, hh, ww, t2) => {
+    const x = x0 - f * L;
+    b.loft(fm, [sec(x + t2 / 2, 1, h * hh + 6e-3, w * ww + 5e-3), sec(x - t2 / 2, 1, h * hh + 6e-3, w * ww + 5e-3)]);
+  };
+  const t = Math.max(8e-3, L * 0.035);
+  hoop(rake, 1, 1, t * 1.3);
+  const n = o.bows ?? 1;
+  for (let i = 1; i <= n; i++) {
+    const f = rake + (0.86 - rake) * i / (n + 1);
+    hoop(f, 0.98 - (f - 0.6) * 0.6 * +(f > 0.6), 1, t);
+  }
+  bx2(b, fm, L * (1 - rake) * 0.9, t * 0.6, t * 0.9, x0 - L * (rake + (1 - rake) * 0.45), yb + h + 4e-3, cz);
+  for (const s of [-1, 1]) bx2(b, fm, L * 1.02, t * 0.9, t * 1.1, x0 - L / 2, yb + t * 0.3, cz + s * (w * 0.9));
+}
+function intake(b, kit, x, y, z, w, h, len, o = {}) {
+  const mat = o.mat ?? kit.shell, ramp = o.ramp ?? 0.25, side = o.side ?? 0;
+  const r = h * ramp;
+  const sec = (xx, k, rk) => [[xx + rk, y - h / 2 * k, z - w / 2 * k], [xx + rk, y - h / 2 * k, z + w / 2 * k], [xx, y + h / 2 * k, z + w / 2 * k], [xx, y + h / 2 * k, z - w / 2 * k]];
+  b.loft(mat, [sec(x, 1, -r), sec(x - len * 0.5, 0.98, -r * 0.5), sec(x - len, 0.82, 0)]);
+  const t = Math.min(w, h) * 0.12;
+  bx2(b, kit.mech, t * 1.1, h * 0.84, w * 0.84, x - t * 1.4 - r * 0.5, y, z, [0, 0, Math.atan2(r, h)]);
+  for (const s of [-1, 1]) {
+    bx2(b, mat, t * 1.4, t, w + t * 0.4, x - (s < 0 ? r : 0) + t * 0.2, y + s * (h / 2 - t * 0.3), z);
+    bx2(b, mat, t * 1.4, h + t * 0.2, t, x - r * 0.5 + t * 0.2, y, z + s * (w / 2 - t * 0.3), [0, 0, Math.atan2(r, h)]);
+  }
+  if (side && o.splitter !== false) {
+    const pz2 = z + side * (w / 2 + t * 1.2);
+    bx2(b, kit.joint, len * 0.55, h * 1.06, t * 0.35, x - len * 0.2 + t, y, pz2);
+    for (const px2 of [x - len * 0.05, x - len * 0.38]) bx2(b, kit.mech, t * 0.8, t * 0.8, t * 1.4, px2, y, pz2 + side * t * 0.6);
+  }
+}
+function roundIntake(b, kit, x, y, z, r, lipMat) {
+  b.lathe(lipMat ?? kit.shell, [[r * 0.8, 0], [r, r * 0.12], [r * 1.02, r * 0.35], [r * 0.82, r * 0.38], [r * 0.78, r * 0.05]], [x - r * 0.3, y, z], "x", 12);
+  b.cyl(kit.mech, r * 0.8, r * 0.8, r * 0.04, [x - r * 0.42, y, z], "-x", 10);
+  b.lathe(kit.joint, [[0, 0], [r * 0.24, 0], [0, r * 0.3]], [x - r * 0.44, y, z], "x", 8);
+}
+function bladeAntenna(b, kit, x, y, z, h, down = false) {
+  const s = down ? -1 : 1;
+  b.loft(kit.mech, [
+    [[x + h * 0.35, y, z - h * 0.05], [x - h * 0.35, y, z - h * 0.05], [x - h * 0.35, y, z + h * 0.05], [x + h * 0.35, y, z + h * 0.05]],
+    [[x - h * 0.05, y + s * h, z - h * 0.03], [x - h * 0.35, y + s * h, z - h * 0.03], [x - h * 0.35, y + s * h, z + h * 0.03], [x - h * 0.05, y + s * h, z + h * 0.03]]
+  ]);
+}
+function pitot(b, kit, x, y, z, len, r) {
+  b.strut(kit.joint, [x, y, z], [x + len * 0.55, y, z], r * 1.6, r, 6);
+  b.strut(kit.steel, [x + len * 0.55, y, z], [x + len, y, z], r * 0.7, r * 0.5, 5);
+}
+function sensorBall(b, kit, x, y, z, r, down = true) {
+  const s = down ? -1 : 1;
+  const up = [[0, 0], [r, 0], [r * 0.92, r * 0.5], [r * 0.6, r * 0.88], [0, r]];
+  b.lathe(kit.mech, down ? up.map(([a, c]) => [a, -c]).reverse() : up, [x, y, z], "y", 10);
+  bx2(b, kit.glass, r * 0.3, r * 0.5, r * 0.9, x + r * 0.8, y + s * r * 0.45, z);
+}
+function gearDoors(b, kit, x, yb, z, l, w, mat) {
+  const t = Math.max(4e-3, w * 0.05);
+  bx2(b, kit.mech, l + t * 2, t * 0.8, w + t * 2, x, yb - t * 0.2, z);
+  for (const s of [-1, 1]) bx2(b, mat ?? kit.shell, l, t, w / 2 - t * 0.4, x, yb - t * 0.6, z + s * (w / 4 + t * 0.1));
+}
+var TOP = [[0, 0], [0.1, 0.55], [0.4, 1], [0.8, 0.55], [1, 0]];
+var BOT = [[0, 0], [0.1, -0.4], [0.4, -0.6], [0.8, -0.35], [1, 0]];
+function prof(p, f) {
+  let i = 0;
+  while (i < p.length - 2 && p[i + 1][0] < f) i++;
+  const a = p[i], c = p[i + 1], k = (f - a[0]) / (c[0] - a[0] || 1);
+  return a[1] + (c[1] - a[1]) * Math.max(0, Math.min(1, k));
+}
 function foil(le, c, t, up = "y") {
   const p = (a, b) => up === "y" ? [le[0] - a * c, le[1] + b * t, le[2]] : [le[0] - a * c, le[1], le[2] + b * t];
   return [p(0, 0), p(0.1, 0.55), p(0.4, 1), p(0.8, 0.55), p(1, 0), p(0.8, -0.35), p(0.4, -0.6), p(0.1, -0.4)];
 }
-function wing(b, mat, st) {
-  b.loft(mat, st.map(([x, y, z, c, t]) => foil([x, y, z], c, t, "y")));
-}
-function fin(b, mat, st) {
-  b.loft(mat, st.map(([x, y, z, c, t]) => foil([x, y, z], c, t, "z")));
-}
-function at(st, z) {
-  const a = Math.abs(z);
+function stAt(st, s, key = 2) {
+  const a = Math.abs(s);
+  const v = (q2) => Math.abs(q2[key]);
   let i = 0;
-  while (i < st.length - 2 && Math.abs(st[i + 1][2]) < a) i++;
+  while (i < st.length - 2 && v(st[i + 1]) < a) i++;
   const p = st[i], q = st[i + 1];
-  const f = Math.max(0, Math.min(1, (a - Math.abs(p[2])) / (Math.abs(q[2]) - Math.abs(p[2]) || 1)));
-  return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[3] + (q[3] - p[3]) * f, p[4] + (q[4] - p[4]) * f];
+  const f = Math.max(0, Math.min(1, (a - v(p)) / (v(q) - v(p) || 1)));
+  return p.map((pv, k) => pv + (q[k] - pv) * f);
 }
-var mirror2 = (st, s) => st.map(([x, y, z, c, t]) => [x, y, z * s, c, t]);
+function splitAt(st, z, key = 2) {
+  const m = stAt(st, z, key), a = Math.abs(z);
+  const inner = st.filter((q) => Math.abs(q[key]) < a - 1e-4), outer = st.filter((q) => Math.abs(q[key]) > a + 1e-4);
+  return [[...inner, m], [m, ...outer]];
+}
+function wingSkin(b, mat, st, z0, z1, f0, f1, o = {}) {
+  const up = o.up ?? "y", key = up === "y" ? 2 : 1;
+  const surf = o.bottom ? BOT : TOP, sg = o.bottom ? -1 : 1;
+  const fs = [f0, ...TOP.map((p) => p[0]).filter((f) => f > f0 + 1e-3 && f < f1 - 1e-3), f1];
+  const ring3 = (s) => {
+    const [lx, y, z, c, t] = stAt(st, s, key);
+    const e = o.e ?? Math.max(2e-3, t * 0.06), th = o.th ?? Math.max(3e-3, t * 0.08);
+    const pt = (f, d) => {
+      const n = prof(surf, f) * t + sg * d;
+      return up === "y" ? [lx - f * c, y + n, z] : [lx - f * c, y, z + n * (o.side ?? 1)];
+    };
+    return [...fs.map((f) => pt(f, e + th)), ...fs.slice().reverse().map((f) => pt(f, e))];
+  };
+  b.loft(mat, [ring3(z0), ring3(z1)]);
+}
+function aeroWing(b, kit, st, o = {}) {
+  const s = Math.sign(st[st.length - 1][2]) || 1, zt = Math.abs(st[st.length - 1][2]), zr = Math.abs(st[0][2]);
+  const mat = o.mat ?? kit.shell;
+  if (o.tip && o.tip < zt) {
+    const [inner, outer] = splitAt(st, s * o.tip);
+    b.loft(mat, inner.map(([x, y, z, c, t]) => foil([x, y, z], c, t)));
+    b.loft(o.tipMat ?? kit.armor, outer.map(([x, y, z, c, t]) => foil([x, y, z], c, t)));
+  } else b.loft(mat, st.map(([x, y, z, c, t]) => foil([x, y, z], c, t)));
+  const gap = (z0, z1, f0, f1) => wingSkin(b, kit.mech, st, s * z0, s * z1, f0, f1, { th: 2e-3 });
+  if (o.slat) {
+    gap(o.slat[0], o.slat[1], 0.13, 0.15);
+  }
+  for (const [z0, z1] of o.flaps ?? []) {
+    gap(z0, z1, 0.72, 0.745);
+    wingSkin(b, mat, st, s * (z0 + 0.01), s * (z1 - 0.01), 0.75, 0.99, {});
+    gap(z0, z0 + 0.012, 0.74, 1);
+    gap(z1 - 0.012, z1, 0.74, 1);
+  }
+  if (o.stripe) wingSkin(b, kit.accent, st, s * o.stripe[0], s * o.stripe[1], 0.04, 0.7, {});
+  if (o.walk) {
+    gap(zr + 0.01, o.walk, 0.2, 0.22);
+    gap(zr + 0.01, o.walk, 0.55, 0.57);
+  }
+  if (o.lights) {
+    const [lx, y, , c, t] = stAt(st, zt * 0.999);
+    tipLightsOne(b, kit, lx - c * 0.25, y + t * 0.2, s * zt, o.lights, s);
+  }
+}
+function tipLightsOne(b, kit, x, y, z, sz, s) {
+  bx2(b, s < 0 ? kit.accent : kit.glow, sz * 1.8, sz * 0.8, sz * 1, x + sz * 0.6, y, z);
+  bx2(b, kit.lamp, sz * 0.7, sz * 0.6, sz * 0.7, x - sz * 1.4, y, z);
+}
+function aeroFin(b, kit, st, o = {}) {
+  const mat = o.mat ?? kit.armor;
+  b.loft(mat, st.map(([x, y, z, c, t]) => foil([x, y, z], c, t, "z")));
+  const y0 = st[0][1], y1 = st[st.length - 1][1], hgt = y1 - y0;
+  for (const side of [-1, 1]) {
+    if (o.rudder) {
+      const [a, c] = o.rudder;
+      wingSkin(b, kit.mech, st, y0 + hgt * a, y0 + hgt * c, 0.7, 0.72, { up: "z", side, th: 2e-3 });
+    }
+    if (o.band) wingSkin(b, kit.accent, st, y0 + hgt * o.band[0], y0 + hgt * o.band[1], 0.08, 0.68, { up: "z", side });
+  }
+  if (o.beacon) {
+    const [lx, yy, z, c] = st[st.length - 1];
+    bx2(b, kit.lamp, o.beacon * 1.4, o.beacon, o.beacon, lx - c * 0.5, yy + o.beacon * 0.3, z);
+  }
+}
+function pylon(b, kit, x, yTop, yBot, z, l, t, mat) {
+  const h = yTop - yBot;
+  const sec = (y, c, xs) => [[xs + c * 0.5, y, z], [xs + c * 0.2, y, z + t / 2], [xs - c * 0.5, y, z + t * 0.3], [xs - c * 0.5, y, z - t * 0.3], [xs + c * 0.2, y, z - t / 2]];
+  b.loft(mat ?? kit.shell, [sec(yTop + 0.01, l, x), sec(yBot, l * 0.8, x - h * 0.15)]);
+  bx2(b, kit.joint, l * 0.62, t * 0.9, t * 1.8, x - h * 0.15, yBot - t * 0.3, z);
+  for (const s of [-1, 1]) bx2(b, kit.mech, t * 0.7, t * 0.9, t * 0.7, x - h * 0.15 + s * l * 0.26, yBot - t * 0.7, z);
+}
+function nacelle(b, kit, x0, x1, y, z, r, o = {}) {
+  const L = x0 - x1;
+  const F = new Fuse([[x0, y, r * 0.92, r * 0.92], [x0 - L * 0.12, y, r, r], [x0 - L * 0.7, y, r * 0.98, r * 0.98], [x1 + L * 0.06, y, r * 0.84, r * 0.84], [x1, y, r * 0.8, r * 0.8]], z, o.k ?? { kw: 0.42, lw: 0.86, ly: -0.62, chy: 0, sh: 0.86, shy: 0.6, tw: 0.42 });
+  fuselage(b, o.mat ?? kit.shell, F);
+  roundIntake(b, kit, x0 + r * 0.32, y, z, r * 0.9);
+  panelBreak(b, kit, F, x0 - L * 0.32, Math.max(8e-3, L * 0.02));
+  if (o.band !== null) skinPanel(b, o.band ?? kit.armor, F, x0 - L * 0.12, x0 - L * 0.28, 0, 9, 3e-3, 4e-3);
+  b.cyl(kit.mech, r * 0.84, r * 0.78, L * 0.08, [x1 + L * 0.06, y, z], "-x", 10);
+  return F;
+}
+var sides = (fn) => {
+  fn(-1);
+  fn(1);
+};
+var mirrorSt = (st, s) => st.map(([x, y, z, c, t]) => [x, y, z * s, c, t]);
+
+// src/client/proto3d/chassis/air.ts
+function at(st, z) {
+  const [x, y, , c, t] = stAt(st, z);
+  return [x, y, c, t];
+}
+var under = (st, z) => {
+  const [, y, , t] = at(st, z);
+  return y - t * 0.6;
+};
+var over = (st, z) => {
+  const [, y, , t] = at(st, z);
+  return y + t;
+};
 function hang(c, m, yUnder, drop = 0.8) {
   const { b, kit } = c;
   const d = m.r * drop;
   const y = yUnder - d;
-  const ph = yUnder - (y + d * 0.55) + 0.02;
-  b.box(kit.trim, Math.max(0.08, m.r * 1.3), ph, Math.max(0.025, m.r * 0.22), m.x - m.r * 0.05, yUnder - ph / 2 + 0.01, m.z, 8e-3);
-  b.box(kit.metal, Math.max(0.06, m.r * 0.9), 0.02 + m.r * 0.05, Math.max(0.03, m.r * 0.5), m.x, y + d * 0.55 + 5e-3, m.z, 5e-3);
+  pylon(b, kit, m.x - m.r * 0.05, yUnder, y + d * 0.55 + 0.012, m.z, Math.max(0.09, m.r * 1.4), Math.max(0.018, m.r * 0.2));
   return { y, socket: true };
-}
-function navLights(b, kit, x, y, z, s) {
-  b.box(kit.accent, s * 1.6, s, s, x, y, -z, s * 0.3);
-  b.box(kit.glow, s * 1.6, s, s, x, y, z, s * 0.3);
 }
 function load(c) {
   const w = c.ch.weight + c.mounts.reduce((a, m) => a + (m.mod.weight ?? 0), 0);
@@ -40877,75 +41156,98 @@ function load(c) {
   return cap > 0 ? w / cap : 0.6;
 }
 var out = (top, lift, seat) => ({ deckAt: () => -1, top, custom: true, seat, lift });
+var roundel = (b, s, x, y, z) => b.decal(s, s, x, y + 4e-3, z, atlasUV(3), 0);
+var chevron = (b, s, x, y, z) => b.decal(s, s, x, y + 4e-3, z, atlasUV(1), 0);
 function drone(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.12;
-  pod(b, kit.hull, [0, cy, 0], 0.2, 0.11, 0.15, 10, 6, 2.2, 0.2);
-  pod(b, kit.panel, [-0.04, cy + 0.06, 0], 0.15, 0.07, 0.12, 10, 5, 2.4);
-  b.cylb(kit.trim, 0.072, 0.04, 0.01, [0.15, cy + 0.01, 0], "x", 12);
-  b.cyl(kit.glow, 0.05, 0.045, 0.012, [0.19, cy + 0.01, 0], "x", 12);
-  b.cyl(kit.lamp, 0.016, 0.016, 6e-3, [0.2, cy + 0.025, 0.015], "x", 6);
-  b.strut(kit.steel, [-0.08, cy + 0.12, 0.05], [-0.16, cy + 0.3, 0.07], 7e-3, 4e-3, 5);
-  fin(b, kit.trim, [[-0.12, cy + 0.08, 0, 0.12, 0.02], [-0.19, cy + 0.17, 0, 0.06, 0.012]]);
+  const F = new Fuse([[0.21, cy - 0.01, 0.035, 0.07], [0.17, cy, 0.075, 0.12], [0.05, cy + 0.01, 0.09, 0.14], [-0.12, cy + 0.01, 0.085, 0.13], [-0.2, cy + 0.01, 0.06, 0.09]], 0, SEC_BOX);
+  fuselage(b, kit.armor, F);
+  spinePanel(b, kit.shell, F, 0.14, -0.17, 3e-3, 6e-3);
+  panelBreak(b, kit, F, 0.09, 8e-3);
+  panelBreak(b, kit, F, -0.08, 8e-3);
+  sensorBall(b, kit, 0.13, F.bot(0.13) + 0.01, 0, 0.045);
+  bx2(b, kit.mech, 0.07, 8e-3, 0.08, -0.04, F.top(-0.04) + 6e-3, 0);
+  b.cyl(kit.joint, 0.016, 0.016, 0.01, [0.06, F.top(0.06) + 4e-3, 0.05], "y", 8);
+  b.strut(kit.steel, [-0.1, F.top(-0.1), -0.05], [-0.16, F.top(-0.1) + 0.2, -0.065], 5e-3, 3e-3, 4);
+  aeroFin(b, kit, [[-0.13, F.top(-0.15) - 0.01, 0, 0.1, 0.014], [-0.19, F.top(-0.15) + 0.08, 0, 0.05, 8e-3]], { mat: kit.armor2 });
+  bx2(b, kit.lamp, 0.012, 0.012, 0.03, 0.2, cy + 0.02, 0);
   const lift = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const ex = sx * 0.27, ez = sz * 0.27;
-    block(b, kit.trim, sx * 0.05, cy - 0.02, sz * 0.05, 0.08, 0.08, 0.04, { ch: 0.02 });
-    b.strut(kit.trim, [sx * 0.08, cy + 0.02, sz * 0.08], [ex, cy + 0.06, ez], 0.026, 0.02, 6);
-    b.box(kit.accent, 0.05, 0.022, 0.022, sx * 0.16, cy + 0.065, sz * 0.16, 4e-3, [0, -Math.atan2(sz, sx), 0]);
-    b.strut(kit.metal, [ex * 0.5, cy - 0.03, ez * 0.5], [ex * 0.62, Y - 0.08, ez * 0.62], 0.012, 8e-3, 5);
+    const a = [sx * 0.07, cy + 0.02, sz * 0.08], e = [ex, cy + 0.05, ez];
+    b.strut(kit.shell, a, e, 0.017, 0.014, 4);
+    b.strut(kit.mech, [a[0], a[1] - 0.012, a[2]], [e[0] * 0.92, e[1] - 0.014, e[2] * 0.92], 8e-3, 8e-3, 4);
+    if (sx > 0) bx2(b, kit.accent, 0.04, 0.01, 0.02, sx * 0.17, cy + 0.054, sz * 0.17, [0, -Math.atan2(sz, sx), 0]);
+    b.strut(kit.joint, [ex * 0.42, cy - 0.04, ez * 0.42], [ex * 0.56, Y - 0.08, ez * 0.56], 7e-3, 5e-3, 4);
     lift.push({ kind: "duct", p: [ex, cy + 0.06, ez], r: 0.1, blades: 5, dir: sx * sz, roll: sz * 0.12, tilt: -sx * 0.08 });
   }
-  b.decal(0.08, 0.08, -0.06, cy + 0.135, 0, atlasUV(3), 0);
-  return out(cy + 0.2, lift, (m) => hang(c, m, cy - 0.08, 0.7));
+  for (const sz of [-1, 1]) b.strut(kit.joint, [0.15, Y - 0.08, sz * 0.15], [-0.15, Y - 0.08, sz * 0.15], 6e-3, 6e-3, 4);
+  roundel(b, 0.07, -0.05, F.top(-0.05) + 3e-3, 0);
+  return out(cy + 0.2, lift, (m) => hang(c, m, F.bot(m.x) + 0.02, 0.7));
 }
 function gunship(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.24;
-  fuse(b, kit.hull, [
-    [1.38, cy - 0.06, 0.04, 0.04],
-    [1.24, cy - 0.03, 0.15, 0.12],
-    [0.95, cy, 0.25, 0.19],
-    [0.45, cy + 0.02, 0.29, 0.22],
-    [-0.1, cy + 0.03, 0.29, 0.23],
-    [-0.5, cy + 0.05, 0.2, 0.16],
-    [-0.85, cy + 0.08, 0.1, 0.085],
-    [-1.32, cy + 0.1, 0.065, 0.055],
+  const F = new Fuse([
+    [1.36, cy - 0.08, 0.035, 0.04],
+    [1.24, cy - 0.04, 0.12, 0.1],
+    [0.95, cy, 0.22, 0.16],
+    [0.45, cy + 0.02, 0.26, 0.2],
+    [-0.1, cy + 0.03, 0.26, 0.21],
+    [-0.45, cy + 0.05, 0.17, 0.14],
+    [-0.8, cy + 0.08, 0.085, 0.07],
+    [-1.32, cy + 0.1, 0.06, 0.05],
     [-1.46, cy + 0.1, 0.04, 0.035]
-  ], 10, 2.6, 0, 0.15);
-  pod(b, kit.glass, [0.96, cy + 0.14, 0], 0.22, 0.12, 0.14, 10, 6, 2.2);
-  pod(b, kit.glass, [0.56, cy + 0.21, 0], 0.22, 0.12, 0.15, 10, 6, 2.2);
-  b.box(kit.trim, 0.03, 0.05, 0.3, 0.76, cy + 0.27, 0, 8e-3);
-  pod(b, kit.trim, [1.16, cy - 0.2, 0], 0.08, 0.08, 0.08, 8, 5);
-  b.cyl(kit.glow, 0.035, 0.035, 0.01, [1.235, cy - 0.2, 0], "x", 8);
-  for (const s of [-1, 1]) {
-    pod(b, kit.panel, [-0.12, cy + 0.24, s * 0.2], 0.36, 0.1, 0.09, 10, 6, 2.4);
-    b.cyl(kit.trim, 0.06, 0.06, 0.02, [0.23, cy + 0.24, s * 0.2], "x", 8);
-    b.cyl(kit.hot, 0.055, 0.05, 0.015, [-0.49, cy + 0.25, s * 0.21], "-x", 8);
-  }
-  const sw = [[0.36, cy - 0.04, 0.16, 0.46, 0.06], [0.32, cy - 0.1, 0.8, 0.32, 0.04]];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(sw, s));
-    b.box(kit.trim, 0.36, 0.08, 0.05, 0.18, cy - 0.1, s * 0.8, 0.01);
-    b.box(kit.accent, 0.08, 0.03, 0.055, 0.34, cy - 0.08, s * 0.8, 6e-3);
-  }
-  wing(b, kit.hull, [[-1.18, cy + 0.08, -0.4, 0.2, 0.03], [-1.12, cy + 0.08, 0, 0.26, 0.035], [-1.18, cy + 0.08, 0.4, 0.2, 0.03]]);
-  for (const s of [-1, 1]) {
-    fin(b, kit.hull, [[-1.14, cy + 0, s * 0.4, 0.24, 0.02], [-1.26, cy + 0.26, s * 0.44, 0.15, 0.016]]);
-    b.box(kit.glow, 0.05, 0.02, 0.02, -1.2, cy + 0.22, s * 0.445, 4e-3);
-  }
-  fin(b, kit.trim, [[-1.3, cy + 0.06, 0, 0.16, 0.02], [-1.38, cy - 0.12, 0, 0.1, 0.015]]);
-  pod(b, kit.trim, [0.05, cy + 0.33, 0], 0.2, 0.08, 0.1, 8, 5);
-  b.decal(0.16, 0.16, -0.25, cy + 0.315, 0, atlasUV(3), 0);
+  ], 0, SEC_BOX);
+  fuselage(b, kit.armor, F);
+  overSkin(b, kit.armor2, F, 1.36, 1.2, 3e-3);
+  for (const x of [1.18, 0.32, -0.38, -0.82, -1.15]) panelBreak(b, kit, F, x, 0.012);
+  canopy(b, kit, 1.18, 0.86, F.top(1) - 0.04, 0.12, 0.13, { bows: 1, frame: kit.armor2, rake: 0.4 });
+  canopy(b, kit, 0.8, 0.42, F.top(0.6) - 0.01, 0.13, 0.15, { bows: 1, frame: kit.armor2, rake: 0.4 });
+  sensorBall(b, kit, 1.18, F.bot(1.18) + 0.03, 0, 0.08);
+  pitot(b, kit, 1.3, cy - 0.02, 0.06, 0.14, 6e-3);
+  sides((s) => skinPanel(b, kit.armor2, F, 0.3, -0.25, s > 0 ? 2 : 8, s > 0 ? 3 : 9, 4e-3, 8e-3));
+  const lift = [];
+  sides((s) => {
+    const z = s * 0.19, ny = F.top(0) + 0.06;
+    const N = new Fuse([[0.26, ny, 0.06, 0.06], [0.2, ny, 0.085, 0.08], [-0.25, ny, 0.09, 0.085], [-0.46, ny + 0.01, 0.065, 0.06]], z, SEC_BOX);
+    fuselage(b, kit.shell, N);
+    panelBreak(b, kit, N, 0, 0.01);
+    bx2(b, kit.mech, 0.02, 0.1, 0.11, 0.265, ny, z);
+    bx2(b, kit.joint, 0.014, 0.07, 0.08, 0.275, ny, z);
+    b.cyl(kit.mech, 0.055, 0.05, 0.08, [-0.44, ny + 0.01, z], "-x", 8);
+    b.cyl(kit.hot, 0.04, 0.04, 0.01, [-0.52, ny + 0.01, z], "-x", 8);
+    soot(b, kit, F, -0.55, -1.1, s * 0.035, 0.03);
+  });
+  const sw = [[0.36, cy - 0.04, 0.16, 0.44, 0.055], [0.3, cy - 0.11, 0.8, 0.3, 0.035]];
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(sw, s), { mat: kit.armor, flaps: [[0.4, 0.7]], stripe: [0.58, 0.64] });
+    const t = at(sw, 0.8);
+    const P = new Fuse([[t[0] + 0.06, t[1] - 0.01, 0.025, 0.025], [t[0] - 0.02, t[1] - 0.01, 0.045, 0.04], [t[0] - 0.3, t[1] - 0.01, 0.04, 0.035]], s * 0.81, SEC_BOX);
+    fuselage(b, kit.shell, P);
+    bx2(b, kit.glow, 0.02, 0.016, 0.016, t[0] + 0.05, t[1] - 0.01, s * 0.81);
+  });
+  sides((s) => {
+    aeroWing(b, kit, [[-1.12, cy + 0.08, 0, 0.26, 0.035], [-1.18, cy + 0.08, s * 0.4, 0.2, 0.026]], { mat: kit.armor, flaps: [[0.06, 0.36]] });
+    aeroFin(b, kit, [[-1.12, cy - 0.01, s * 0.4, 0.25, 0.022], [-1.26, cy + 0.27, s * 0.44, 0.15, 0.016]], { mat: kit.armor2, rudder: [0.1, 0.9], band: [0.6, 0.78] });
+  });
+  aeroFin(b, kit, [[-1.3, cy + 0.06, 0, 0.16, 0.02], [-1.38, cy - 0.12, 0, 0.1, 0.015]], { mat: kit.armor2 });
+  bladeAntenna(b, kit, -0.6, F.top(-0.6) - 5e-3, 0, 0.07);
+  bladeAntenna(b, kit, 0.2, F.bot(0.2) + 5e-3, 0, 0.06, true);
+  const my = F.top(0.05) + 0.06;
+  b.lathe(kit.mech, [[0, -0.08], [0.11, -0.08], [0.09, 0.04], [0.05, 0.1], [0, 0.11]], [0.05, my, 0], "y", 8);
+  roundel(b, 0.14, -0.3, F.top(-0.3), 0);
+  chevron(b, 0.12, 0.25, F.top(0.25) + 2e-3, 0);
   const R = 1.12;
-  const lift = [{ kind: "coax", p: [0.05, cy + 0.46, 0], r: R, blades: load(c) > 0.7 ? 4 : 3 }];
-  return out(cy + 0.5, lift, (m) => hang(c, m, cy - 0.12));
+  lift.push({ kind: "coax", p: [0.05, cy + 0.46, 0], r: R, blades: load(c) > 0.7 ? 4 : 3 });
+  return out(cy + 0.5, lift, (m) => hang(c, m, under(sw, m.z) + 0.01));
 }
 function heavyheli(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.32;
   const grav = c.mob.id === "gravlift";
-  const st = [
+  const F = new Fuse([
     [1.98, cy - 0.16, 0.1, 0.14],
     [1.84, cy - 0.1, 0.24, 0.3],
     [1.55, cy - 0.03, 0.33, 0.37],
@@ -40953,56 +41255,80 @@ function heavyheli(c) {
     [-1.15, cy + 0.02, 0.37, 0.39],
     [-1.6, cy + 0.07, 0.3, 0.33],
     [-1.9, cy + 0.13, 0.17, 0.24]
-  ];
-  fuse(b, kit.hull, st, 12, 3.4, 0, 0.3);
-  pod(b, kit.glass, [1.7, cy + 0.02, 0], 0.26, 0.17, 0.3, 12, 6, 2.6);
-  b.box(kit.trim, 0.03, 0.04, 0.5, 1.64, cy + 0.17, 0, 8e-3);
-  block(b, kit.panel, -0.15, cy + 0.32, 0, 2.2, 0.3, 0.08, { top: [0.95, 0.7], ch: 0.1, bev: 0.03 });
-  b.box(kit.trim, 0.04, 0.3, 0.5, -1.93, cy + 0.08, 0, 0.01, [0, 0, -0.5]);
-  b.box(kit.hazard, 0.6, 0.03, 0.04, -0.4, cy - 0.06, 0.39, 6e-3);
-  b.box(kit.hazard, 0.6, 0.03, 0.04, -0.4, cy - 0.06, -0.39, 6e-3);
-  const sw = [[0.14, cy - 0.16, 0.42, 0.42, 0.06], [0.12, cy - 0.18, 0.78, 0.32, 0.045]];
-  for (const s of [-1, 1]) {
-    pod(b, kit.panel, [-0.15, cy - 0.17, s * 0.4], 0.75, 0.16, 0.13, 10, 6, 2.6);
-    wing(b, kit.hull, mirror2(sw, s));
-    b.box(kit.trim, 0.3, 0.06, 0.05, -0.04, cy - 0.19, s * 0.76, 0.01);
-    for (const x of [0.6, 0.15, -0.3]) b.cyl(kit.glass, 0.045, 0.045, 0.012, [x, cy + 0.12, s * 0.385], s > 0 ? "z" : "-z", 8);
-  }
-  b.box(kit.lamp, 0.03, 0.03, 0.08, 1.95, cy - 0.08, 0, 6e-3);
+  ], 0, SEC_BOX);
+  fuselage(b, kit.armor, F);
+  for (const x of [1.45, 0.75, 0.05, -0.65, -1.3]) panelBreak(b, kit, F, x, 0.016);
+  overSkin(b, kit.shell, F, 1.98, 1.86, 4e-3);
+  canopy(b, kit, 1.86, 1.48, F.top(1.7) - 0.12, 0.3, 0.14, { bows: 2, frame: kit.armor2, rake: 0.45 });
+  sides((s) => bx2(b, kit.glass, 0.16, 0.08, 0.02, 1.78, cy - 0.12, s * 0.27, [0, -s * 0.5, 0]));
+  skinPanel(b, kit.shell, F, 1.44, -1.88, 4, 7, 4e-3, 0.01);
+  ribbon(b, kit.mech, [[0.9, F.top(0.9) + 0.016, 0], [-0.9, F.top(-0.9) + 0.016, 0]], 0.07, 0.07, 4e-3);
+  sides((s) => bx2(b, kit.accent, 0.08, 8e-3, 0.2, 0.1, F.top(0.1) + 0.02, s * 0.2));
+  sides((s) => {
+    const P = new Fuse([[0.55, cy - 0.17, 0.06, 0.06], [0.35, cy - 0.17, 0.14, 0.11], [-0.6, cy - 0.17, 0.14, 0.11], [-0.85, cy - 0.17, 0.07, 0.06]], s * 0.4, SEC_BOX);
+    fuselage(b, kit.armor2, P);
+    panelBreak(b, kit, P, -0.15, 0.012);
+    aeroWing(b, kit, mirrorSt([[0.12, cy - 0.15, 0.48, 0.38, 0.05], [0.1, cy - 0.17, 0.78, 0.3, 0.04]], s), { mat: kit.armor });
+    for (const x of [0.6, 0.15, -0.3]) bx2(b, kit.glass, 0.09, 0.08, 0.012, x, cy + 0.12, s * (F.w(x) + 3e-3));
+    bx2(b, kit.mech, 0.3, 0.38, 8e-3, 1.1, cy - 0.02, s * (F.w(1.1) + 3e-3));
+    bx2(b, kit.hazard, 0.32, 0.03, 0.01, 1.1, cy + 0.19, s * (F.w(1.1) + 5e-3));
+    gearDoors(b, kit, -0.15, F.bot(-0.15) + 4e-3, s * 0.4, 0.4, 0.14);
+  });
+  bx2(b, kit.mech, 0.04, 0.3, 0.5, -1.93, cy + 0.08, 0, [0, 0, -0.5]);
+  bx2(b, kit.hazard, 0.05, 0.04, 0.46, -1.92, cy - 0.06, 0, [0, 0, -0.5]);
+  bx2(b, kit.lamp, 0.03, 0.03, 0.08, 1.96, cy - 0.12, 0);
+  bladeAntenna(b, kit, 0.4, F.bot(0.4) + 5e-3, 0, 0.1, true);
+  bladeAntenna(b, kit, -0.3, F.top(-0.3), 0.12, 0.1);
   const lift = [];
   if (!grav) {
-    block(b, kit.hull, 1.12, cy + 0.26, 0, 0.6, 0.36, 0.18, { top: [0.6, 0.6], ch: 0.1, bev: 0.04 });
-    block(b, kit.hull, -1.45, cy + 0.24, 0, 0.95, 0.46, 0.66, { top: [0.55, 0.42], shift: [-0.16, 0], ch: 0.13, bev: 0.05 });
-    for (const s of [-1, 1]) b.box(kit.glow, 0.3, 0.03, 0.02, -1.5, cy + 0.6, s * 0.15, 6e-3, [0, 0, 0.5]);
+    const fp = new Fuse([[1.45, F.top(1.12) - 0.02, 0.04, 0.12], [1.3, F.top(1.12) + 0.08, 0.12, 0.16], [0.9, F.top(1.12) + 0.08, 0.12, 0.16], [0.75, F.top(1.12) - 0.02, 0.04, 0.12]], 0, SEC_BOX);
+    fuselage(b, kit.armor, fp);
+    b.lathe(kit.mech, [[0, 0], [0.12, 0], [0.08, 0.1], [0, 0.12]], [1.12, F.top(1.12) + 0.18, 0], "y", 8);
+    const ty = F.top(-1.45);
+    const tp = new Fuse([[-0.95, ty - 0.02, 0.06, 0.2], [-1.15, ty + 0.25, 0.3, 0.25], [-1.7, ty + 0.3, 0.34, 0.22], [-1.95, ty + 0.15, 0.2, 0.16]], 0, SEC_BOX);
+    fuselage(b, kit.armor, tp);
+    panelBreak(b, kit, tp, -1.4, 0.014);
+    b.lathe(kit.mech, [[0, 0], [0.13, 0], [0.09, 0.12], [0, 0.14]], [-1.6, tp.top(-1.6) - 0.02, 0], "y", 8);
     for (const s of [-1, 1]) {
-      pod(b, kit.panel, [-1, cy + 0.42, s * 0.3], 0.42, 0.11, 0.11, 10, 6, 2.4);
-      b.cyl(kit.trim, 0.07, 0.07, 0.02, [-0.6, cy + 0.42, s * 0.3], "x", 10);
-      b.cyl(kit.hot, 0.065, 0.06, 0.015, [-1.42, cy + 0.43, s * 0.31], "-x", 10);
+      const z = s * 0.32, ny = cy + 0.42;
+      const N = new Fuse([[-0.58, ny, 0.07, 0.07], [-0.66, ny, 0.11, 0.11], [-1.25, ny, 0.11, 0.11], [-1.42, ny + 0.01, 0.075, 0.075]], z, SEC_BOX);
+      fuselage(b, kit.shell, N);
+      panelBreak(b, kit, N, -0.95, 0.014);
+      bx2(b, kit.mech, 0.02, 0.15, 0.15, -0.575, ny, z);
+      bx2(b, kit.joint, 0.012, 0.11, 0.11, -0.565, ny, z);
+      b.cyl(kit.mech, 0.07, 0.062, 0.06, [-1.42, ny + 0.01, z], "-x", 8);
+      b.cyl(kit.hot, 0.05, 0.05, 0.01, [-1.48, ny + 0.01, z], "-x", 8);
+      b.strut(kit.joint, [-0.9, ny - 0.09, z * 0.9], [-0.9, F.top(-0.9), z * 0.6], 0.016, 0.016, 4);
     }
     const n = load(c) > 0.75 ? 4 : 3;
     lift.push({ kind: "rotor", p: [1.12, cy + 0.52, 0], r: 1.25, blades: n, dir: 1 });
     lift.push({ kind: "rotor", p: [-1.6, cy + 0.98, 0], r: 1.25, blades: n, dir: -1 });
   } else {
-    block(b, kit.hull, -0.2, cy + 0.3, 0, 1.3, 0.62, 0.24, { top: [0.7, 0.6], ch: 0.18, bev: 0.04 });
+    const H = new Fuse([[0.45, cy + 0.33, 0.03, 0.2], [0.3, cy + 0.42, 0.12, 0.3], [-0.6, cy + 0.42, 0.12, 0.3], [-0.85, cy + 0.33, 0.03, 0.2]], 0, SEC_BOX);
+    fuselage(b, kit.armor2, H);
     for (const s of [-1, 1]) {
-      b.box(kit.glow, 0.7, 0.03, 0.03, -0.25, cy + 0.47, s * 0.13, 6e-3);
-      wing(b, kit.hull, mirror2([[-1.5, cy + 0.3, 0, 0.42, 0.04], [-1.6, cy + 0.32, 0.6, 0.3, 0.03]], s));
-      fin(b, kit.hull, [[-1.52, cy + 0.12, s * 0.6, 0.4, 0.035], [-1.72, cy + 0.6, s * 0.66, 0.24, 0.025]]);
-      b.box(kit.accent, 0.16, 0.1, 0.045, -1.66, cy + 0.48, s * 0.66, 8e-3);
+      for (let i = 0; i < 4; i++) bx2(b, kit.mech, 0.1, 0.012, 0.13, 0.15 - i * 0.18, H.top(0) + 4e-3, s * 0.14);
+      bx2(b, kit.glow, 0.6, 0.012, 0.02, -0.15, H.top(0) + 6e-3, s * 0.25);
+      aeroWing(b, kit, mirrorSt([[-1.5, cy + 0.3, 0, 0.42, 0.04], [-1.6, cy + 0.32, 0.6, 0.3, 0.03]], s), { mat: kit.armor, flaps: [[0.2, 0.55]] });
+      aeroFin(b, kit, [[-1.52, cy + 0.12, s * 0.6, 0.4, 0.035], [-1.72, cy + 0.6, s * 0.66, 0.24, 0.025]], { mat: kit.armor2, rudder: [0.1, 0.9], band: [0.55, 0.75], beacon: 0.025 });
     }
     const xs = load(c) > 0.7 ? [1.2, 0.5, -1.25] : [1.15, -1.25];
     for (const x of xs) for (const s of [-1, 1]) {
-      block(b, kit.trim, x, cy - 0.14, s * 0.52, 0.22, 0.36, 0.1, { ch: 0.05, bev: 0.02 });
+      bx2(b, kit.mech, 0.2, 0.08, 0.36, x, cy - 0.1, s * 0.52);
+      bx2(b, kit.joint, 0.12, 0.05, 0.3, x, cy - 0.04, s * 0.5);
       lift.push({ kind: "grav", p: [x, cy - 0.12, s * 0.74], r: 0.27, len: 0.24, dir: s });
     }
   }
-  b.decal(0.24, 0.24, 0.3, cy + 0.37, 0, atlasUV(3), 0);
-  return out(cy + 0.6, lift, (m) => m.x > 1.2 ? hang(c, m, cy - 0.22, 0.6) : hang(c, m, cy - 0.2));
+  roundel(b, 0.22, 0.4, F.top(0.4) + 0.014, 0.2);
+  roundel(b, 0.22, 0.4, F.top(0.4) + 0.014, -0.2);
+  if (grav) chevron(b, 0.2, 1.3, F.top(1.3) + 0.016, 0);
+  return out(cy + 0.6, lift, (m) => m.x > 1.2 ? hang(c, m, F.bot(m.x) + 0.02, 0.6) : hang(c, m, cy - 0.2));
 }
 function bomberhull(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.3;
   const grav = c.mob.id === "gravlift";
+  const LB = { kw: 0.45, lw: 0.8, ly: -0.75, chy: -0.36, sh: 0.74, shy: 0.56, tw: 0.32 };
   const body = [
     // [x, y bottom, height, half width]
     [1.98, cy - 0.12, 0.16, 0.16],
@@ -41013,25 +41339,31 @@ function bomberhull(c) {
     [-1.5, cy - 0.12, 0.5, 0.46],
     [-1.96, cy + 0.02, 0.4, 0.34]
   ];
-  b.loft(kit.hull, body.map(([x, y, h, w]) => [[x, y, -w * 0.45], [x, y, w * 0.45], [x, y + h * 0.32, w], [x, y + h * 0.78, w * 0.74], [x, y + h, w * 0.32], [x, y + h, -w * 0.32], [x, y + h * 0.78, -w * 0.74], [x, y + h * 0.32, -w]]));
-  for (const s of [-1, 1]) b.loft(kit.panel, [[1.5, 0.42], [0.2, 0.8], [-1.3, 0.52]].map(([x, w]) => [[x, cy - 0.12, s * (w - 0.02)], [x, cy - 0.1, s * (w + 0.06)], [x, cy - 0.06, s * (w - 0.02)]]), true, true);
-  b.loft(kit.glass, [[1.86, 0.2, 0.05], [1.72, 0.4, 0.14], [1.5, 0.48, 0.2]].map(([x, w, h]) => [[x, cy + 0.04, -w * 0.9], [x, cy + 0.04, w * 0.9], [x, cy + 0.04 + h, w * 0.6], [x, cy + 0.04 + h, -w * 0.6]]));
-  block(b, kit.panel, 1.34, cy + 0.2, 0, 0.5, 0.82, 0.12, { top: [0.7, 0.8], shift: [0.1, 0], ch: 0.14, bev: 0.03 });
-  block(b, kit.panel, -0.3, cy + 0.3, 0, 1.6, 0.4, 0.1, { top: [0.86, 0.6], ch: 0.1, bev: 0.03 });
-  b.box(kit.glow, 1, 0.02, 0.03, -0.3, cy + 0.405, 0, 5e-3);
-  for (const s of [-1, 1]) b.box(kit.trim, 1.3, 0.02, 0.26, 0.1, cy - 0.325, s * 0.15, 6e-3);
+  const F = new Fuse(body.map(([x, y, h, w]) => [x, y + h / 2, h / 2, w]), 0, LB);
+  fuselage(b, kit.armor, F);
+  for (const x of [1.45, 0.75, -0.1, -0.9, -1.55]) panelBreak(b, kit, F, x, 0.016);
+  sides((s) => skinPanel(b, kit.shell, F, 1.6, -1.7, s > 0 ? 2 : 8, s > 0 ? 3 : 9, 4e-3, 0.01));
+  skinPanel(b, kit.shell, F, 1.3, -1.85, 4, 7, 4e-3, 0.012);
+  ribbon(b, kit.mech, F.xs(0.9, -1.5).map((x) => [x, F.top(x) + 0.017, 0]), 0.05, 0.05, 3e-3);
+  for (const x of [0.55, 0.42]) bx2(b, kit.accent, 0.06, 8e-3, 0.36, x, F.top(x) + 0.02, 0);
+  canopy(b, kit, 1.88, 1.5, F.top(1.7) - 0.1, 0.24, 0.13, { bows: 2, frame: kit.armor2, rake: 0.5 });
+  const BR = new Fuse([[1.58, F.top(1.45) + 0, 0.03, 0.28], [1.45, F.top(1.45) + 0.06, 0.07, 0.36], [1.1, F.top(1.1) + 0.04, 0.06, 0.34], [0.95, F.top(0.95), 0.02, 0.3]], 0, SEC_BOX);
+  fuselage(b, kit.armor2, BR);
+  gearDoors(b, kit, 0.1, F.bot(0.1) + 4e-3, 0, 1.3, 0.5);
+  bx2(b, kit.lamp, 0.03, 0.035, 0.1, 1.95, cy - 0.04, 0);
+  bladeAntenna(b, kit, -0.5, F.top(-0.5) + 0.01, 0.25, 0.1);
+  bladeAntenna(b, kit, 0.6, F.bot(0.6), 0, 0.09, true);
   const mw = [[0.42, cy - 0.08, 0.55, 0.95, 0.1], [0.3, cy - 0.11, 1.04, 0.62, 0.06]];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(mw, s));
-    b.box(kit.accent, 0.16, 0.05, 0.08, 0.22, cy - 0.04, s * 1.04, 8e-3);
-    fin(b, kit.hull, [[-1.4, cy + 0.26, s * 0.22, 0.42, 0.04], [-1.7, cy + 0.62, s * 0.38, 0.22, 0.03]]);
-  }
-  b.box(kit.lamp, 0.03, 0.035, 0.1, 1.95, cy - 0.04, 0, 6e-3);
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(mw, s), { mat: kit.shell, tip: 0.94, flaps: [[0.62, 0.98]], slat: [0.6, 1], stripe: [0.78, 0.86] });
+    aeroFin(b, kit, [[-1.4, cy + 0.26, s * 0.22, 0.42, 0.04], [-1.7, cy + 0.62, s * 0.38, 0.22, 0.03]], { rudder: [0.1, 0.9], band: [0.6, 0.8], beacon: 0.025 });
+  });
   const lift = [];
   const front = [1, cy + 0.02, 1.08], rear = [-1.12, cy + 0.12, 1.1];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2([[1.12, cy, 0.5, 0.36, 0.06], [1.12, front[1] - 0.04, 0.8, 0.3, 0.05]], s));
-    wing(b, kit.hull, mirror2([[-0.88, cy + 0.08, 0.4, 0.5, 0.07], [-0.95, rear[1] - 0.04, 0.78, 0.36, 0.05]], s));
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt([[1.12, cy, 0.5, 0.36, 0.06], [1.12, front[1] - 0.04, 0.8, 0.3, 0.05]], s), { mat: kit.shell });
+    aeroWing(b, kit, mirrorSt([[-0.88, cy + 0.08, 0.4, 0.5, 0.07], [-0.95, rear[1] - 0.04, 0.78, 0.36, 0.05]], s), { mat: kit.shell, flaps: [[0.45, 0.75]] });
+    soot(b, kit, F, -1.3, -1.9, s * 0.2, 0.05);
     if (!grav) {
       lift.push({ kind: "duct", p: [front[0], front[1], s * front[2]], r: 0.29, blades: 7, dir: s, tilt: 0.14 });
       lift.push({ kind: "duct", p: [rear[0], rear[1], s * rear[2]], r: 0.31, blades: 7, dir: -s, tilt: 0.14 });
@@ -41040,9 +41372,10 @@ function bomberhull(c) {
       lift.push({ kind: "grav", p: [rear[0], rear[1] - 0.06, s * (rear[2] - 0.12)], r: 0.27, len: 0.22, dir: -s });
       if (load(c) > 0.75) lift.push({ kind: "grav", p: [-0.4, cy - 0.32, s * 0.42], r: 0.2, len: 0.16, dir: s });
     }
-  }
-  b.decal(0.3, 0.3, 0.2, cy - 0 + 0.06, 0.82, atlasUV(3), 0);
-  b.decal(0.3, 0.3, 0.2, cy - 0 + 0.06, -0.82, atlasUV(3), 0);
+  });
+  roundel(b, 0.28, 0.25, over(mw, 0.82), 0.82);
+  roundel(b, 0.28, 0.25, over(mw, 0.82), -0.82);
+  chevron(b, 0.26, 1.2, F.top(1.2) + 0.02, 0);
   return out(cy + 0.5, lift, (m) => m.x > 1 ? hang(c, m, cy - 0.3, 0.6) : hang(c, m, cy - 0.14));
 }
 function carrier(c) {
@@ -41056,43 +41389,44 @@ function carrier(c) {
     [-1.5, cy + 0.08, 0.4, 0.6],
     [-1.98, cy + 0.06, 0.24, 0.4]
   ];
-  fuse(b, kit.hull, keel2, 12, 2.8, 0, 0.35);
-  const deckY = (x) => {
-    let i = 0;
-    while (i < keel2.length - 2 && keel2[i + 1][0] > x) i++;
-    const p = keel2[i], q = keel2[i + 1];
-    const f = (p[0] - x) / (p[0] - q[0]);
-    return p[1] + p[2] + (q[1] + q[2] - p[1] - p[2]) * f;
-  };
-  block(b, kit.panel, -0.2, deckY(-0.2) - 0.06, 0, 3.2, 0.7, 0.08, { top: [0.96, 0.9], ch: 0.2, bev: 0.02 });
-  for (const x of [1.2, 0.6, 0, -0.6, -1.2]) b.box(kit.glow, 0.18, 0.012, 0.03, x, deckY(-0.2) + 0.022, 0, 4e-3);
-  b.box(kit.trim, 0.06, 0.2, 0.42, 1.86, cy + 0.02, 0, 0.01, [0, 0, 0.4]);
-  b.box(kit.lamp, 0.03, 0.03, 0.36, 1.9, cy + 0.14, 0, 6e-3, [0, 0, 0.4]);
+  const K = new Fuse(keel2, 0, { kw: 0.5, lw: 0.86, ly: -0.62, chy: 0, sh: 0.9, shy: 0.6, tw: 0.62 });
+  fuselage(b, kit.armor, K);
+  for (const x of [1.55, 0.9, 0.2, -0.5, -1.2, -1.75]) panelBreak(b, kit, K, x, 0.02);
+  const deckY = (x) => K.top(x);
+  spinePanel(b, kit.shell, K, 1.5, -1.85, 4e-3, 0.012);
+  ribbon(b, kit.mech, K.xs(1.4, -1).map((x) => [x, deckY(x) + 0.017, 0]), 0.12, 0.12, 3e-3);
+  for (const x of [1.2, 0.6, 0, -0.6]) bx2(b, kit.lamp, 0.1, 8e-3, 0.02, x, deckY(x) + 0.022, 0);
+  chevron(b, 0.36, 1.25, deckY(1.25) + 0.02, 0);
+  bx2(b, kit.hazard, 0.06, 8e-3, 0.6, -1.8, deckY(-1.8) + 0.02, 0);
+  bx2(b, kit.mech, 0.06, 0.2, 0.42, 1.86, cy + 0.02, 0, [0, 0, 0.4]);
+  bx2(b, kit.lamp, 0.03, 0.03, 0.36, 1.9, cy + 0.14, 0, [0, 0, 0.4]);
   const ws = [[1.1, cy - 0.06, 0.5, 2.6, 0.36], [0.2, cy - 0.02, 1.9, 1.62, 0.24], [-0.4, cy + 0.04, 2.7, 1.05, 0.18]];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    pod(b, kit.panel, [-0.75, cy + 0.04, s * 2.72], 0.75, 0.24, 0.22, 12, 6, 2.6);
-    b.cylb(kit.trim, 0.16, 0.04, 0.01, [-0.04, cy + 0.04, s * 2.72], "x", 12);
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(ws, s), { mat: kit.shell, tip: 2.3, slat: [0.9, 2.5], flaps: [[0.9, 1.6], [1.7, 2.45]], stripe: [2.05, 2.18], walk: 1.6 });
+    const N = nacelle(b, kit, 0, -1.5, cy + 0.04, s * 2.72, 0.22, { mat: kit.armor2 });
+    soot(b, kit, N, -1.25, -1.5, s * 2.72, 0.06);
     b.cyl(kit.hot, 0.14, 0.12, 0.015, [-1.5, cy + 0.04, s * 2.72], "-x", 12);
-    navLights(b, kit, -0.75, cy + 0.3, s * 2.72, 0.04);
-    fin(b, kit.hull, [[-0.8, cy + 0.12, s * 2.72, 0.7, 0.05], [-1.2, cy + 0.62, s * 2.86, 0.32, 0.03]]);
-    b.box(kit.accent, 0.2, 0.14, 0.06, -1.1, cy + 0.48, s * 2.83, 0.01, [s * 0.28, 0, 0]);
-    block(b, kit.hull, -0.3, cy + 0.12, s * 0.72, 2.4, 0.36, 0.3, { top: [0.86, 0.5], shift: [0, -s * 0.06], ch: 0.12, bev: 0.04 });
-    b.box(kit.glow, 1.6, 0.02, 0.03, -0.3, cy + 0.36, s * 0.62, 5e-3);
-    block(b, kit.trim, 0.3, cy + 0.1, s * 1, 1.2, 0.28, 0.09, { top: [0.8, 0.7], ch: 0.08, bev: 0.02 });
-    b.box(kit.accent, 0.5, 0.02, 0.12, -0.1, cy + 0.15, s * 2.25, 6e-3, [0, s * 0.5, 0]);
+    aeroFin(b, kit, [[-0.8, cy + 0.12, s * 2.72, 0.7, 0.05], [-1.2, cy + 0.62, s * 2.86, 0.32, 0.03]], { rudder: [0.1, 0.9], band: [0.55, 0.8], beacon: 0.035 });
+    const SR = new Fuse([[0.95, cy + 0.12, 0.02, 0.12], [0.75, cy + 0.27, 0.15, 0.17], [-1.35, cy + 0.27, 0.15, 0.17], [-1.55, cy + 0.15, 0.03, 0.12]], s * 0.72, SEC_BOX);
+    fuselage(b, kit.shell, SR);
+    for (const x of [0.3, -0.4, -1]) panelBreak(b, kit, SR, x, 0.016);
+    for (const x of [0.5, 0, -0.6]) bx2(b, kit.mech, 0.14, 0.01, 0.1, x, SR.top(x) + 4e-3, s * 0.72);
+    b.cyl(kit.mech, 0.13, 0.11, 0.06, [-1.95, cy + 0.04, s * 0.2], "-x", 10);
     b.cyl(kit.hot, 0.11, 0.09, 0.02, [-1.99, cy + 0.04, s * 0.2], "-x", 10);
-  }
+  });
+  b.cyl(kit.mech, 0.15, 0.12, 0.06, [-1.95, cy + 0.04, 0], "-x", 10);
   b.cyl(kit.hot, 0.13, 0.1, 0.02, [-1.99, cy + 0.04, 0], "-x", 10);
-  const tx = -1.2, tz = 0.56, ty = deckY(tx) - 0.06;
-  block(b, kit.hull, tx, ty, tz, 0.72, 0.36, 0.5, { top: [0.7, 0.7], shift: [-0.06, 0.02], ch: 0.1, bev: 0.04 });
-  b.box(kit.glass, 0.48, 0.07, 0.3, tx + 0.04, ty + 0.38, tz, 0.01);
-  block(b, kit.panel, tx - 0.04, ty + 0.5, tz, 0.42, 0.22, 0.12, { top: [0.8, 0.8], ch: 0.06 });
-  b.strut(kit.steel, [tx - 0.08, ty + 0.6, tz], [tx - 0.1, ty + 0.95, tz], 0.018, 0.01, 6);
-  b.box(kit.metal, 0.06, 0.08, 0.34, tx - 0.1, ty + 0.85, tz, 0.01);
-  b.box(kit.glow, 0.03, 0.03, 0.03, tx - 0.1, ty + 0.97, tz, 6e-3);
-  b.decal(0.5, 0.5, -0.1, cy + 0.16, 1.6, atlasUV(3), 0);
-  b.decal(0.5, 0.5, -0.1, cy + 0.16, -1.6, atlasUV(3), 0);
+  const tx = -1.2, tz = 0.56, ty = deckY(tx) - 0.02;
+  const T = new Fuse([[tx + 0.36, ty + 0.17, 0.17, 0.2], [tx + 0.2, ty + 0.2, 0.2, 0.25], [tx - 0.36, ty + 0.18, 0.18, 0.22]], tz, SEC_BOX);
+  fuselage(b, kit.armor2, T);
+  bx2(b, kit.glass, 0.06, 0.07, 0.36, tx + 0.36, ty + 0.3, tz, [0, 0, -0.3]);
+  bx2(b, kit.shell, 0.4, 0.2, 0.3, tx - 0.06, ty + 0.48, tz);
+  bx2(b, kit.glass, 0.04, 0.05, 0.24, tx + 0.15, ty + 0.5, tz);
+  b.strut(kit.joint, [tx - 0.1, ty + 0.58, tz], [tx - 0.12, ty + 0.95, tz], 0.016, 0.01, 6);
+  bx2(b, kit.joint, 0.05, 0.06, 0.34, tx - 0.12, ty + 0.85, tz);
+  bx2(b, kit.lamp, 0.03, 0.03, 0.03, tx - 0.12, ty + 0.97, tz);
+  roundel(b, 0.5, -0.1, over(ws, 1.6) + 0.01, 1.6);
+  roundel(b, 0.5, -0.1, over(ws, 1.6) + 0.01, -1.6);
   const lift = [];
   for (const s of [-1, 1]) {
     lift.push({ kind: "grav", p: [1.2, cy - 0.42, s * 0.7], r: 0.3, len: 0.24, dir: s });
@@ -41103,12 +41437,7 @@ function carrier(c) {
   return out(cy + 1, lift, (m) => {
     let y;
     if (Math.abs(m.z) < 0.5) y = deckY(m.x) + 0.03;
-    else {
-      const [lex, wy, ch, t] = at(ws, m.z);
-      void lex;
-      void ch;
-      y = wy + t + 0.04;
-    }
+    else y = over(ws, m.z) + 0.04;
     collar(b, kit, m.x, y, m.z, m.r, y - 0.1, 18);
     return { y, socket: true };
   });
@@ -41116,125 +41445,143 @@ function carrier(c) {
 function interceptor(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.1;
-  fuse(b, kit.hull, [
-    [1, cy - 0.01, 0.012, 0.012],
-    [0.85, cy, 0.05, 0.05],
-    [0.55, cy + 0.01, 0.09, 0.085],
-    [0.2, cy + 0.01, 0.11, 0.11],
-    [-0.3, cy, 0.105, 0.11],
-    [-0.75, cy, 0.085, 0.095],
-    [-0.9, cy, 0.078, 0.085]
-  ], 10, 2.4);
-  pod(b, kit.glass, [0.42, cy + 0.085, 0], 0.2, 0.07, 0.065, 10, 6, 2.2);
-  b.box(kit.trim, 0.2, 0.06, 0.1, 0.22, cy - 0.1, 0, 0.01);
-  b.box(kit.metal, 0.02, 0.05, 0.085, 0.32, cy - 0.1, 0, 4e-3);
-  b.strut(kit.steel, [0.98, cy - 0.01, 0], [1.1, cy - 0.01, 0], 6e-3, 3e-3, 5);
-  const ws = [[-0.25, cy - 0.02, 0.07, 0.48, 0.04], [0.15, cy + 0, 0.5, 0.18, 0.016]];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    b.box(kit.accent, 0.14, 0.02, 0.04, 0.08, cy + 3e-3, s * 0.5, 4e-3);
-    wing(b, kit.hull, mirror2([[0.5, cy + 0.02, 0.07, 0.2, 0.02], [0.4, cy + 0.03, 0.24, 0.08, 0.01]], s));
-    fin(b, kit.hull, [[-0.58, cy + 0.06, s * 0.06, 0.28, 0.02], [-0.78, cy + 0.26, s * 0.13, 0.12, 0.014]]);
-  }
-  navLights(b, kit, 0.12, cy + 0.01, 0.52, 0.016);
-  b.decal(0.08, 0.08, -0.1, cy + 0.03, 0.3, atlasUV(3), 0);
-  b.decal(0.08, 0.08, -0.1, cy + 0.03, -0.3, atlasUV(3), 0);
+  const F = new Fuse([
+    [1.02, cy - 5e-3, 0.01, 0.01],
+    [0.88, cy, 0.045, 0.045],
+    [0.62, cy + 0.012, 0.075, 0.072],
+    [0.38, cy + 0.02, 0.092, 0.09],
+    [0.1, cy + 0.015, 0.098, 0.12],
+    [-0.3, cy + 0.01, 0.096, 0.118],
+    [-0.72, cy, 0.084, 0.098],
+    [-0.9, cy, 0.078, 0.084]
+  ], 0, SEC_JET);
+  fuselage(b, kit.shell, F);
+  overSkin(b, kit.armor2, F, 1.02, 0.8, 2e-3);
+  for (const x of [0.5, 0.05, -0.4, -0.72]) panelBreak(b, kit, F, x, 8e-3);
+  canopy(b, kit, 0.68, 0.3, F.top(0.5) - 0.025, 0.05, 0.07, { bows: 1 });
+  pitot(b, kit, 1, cy - 5e-3, 0, 0.13, 4e-3);
+  sides((s) => intake(b, kit, 0.28, cy - 0.015, s * 0.15, 0.055, 0.08, 0.34, { side: -s }));
+  skinPanel(b, kit.joint, F, -0.66, -0.9, 3, 8, 2e-3, 3e-3);
+  const ws = [[-0.25, cy - 0.02, 0.07, 0.48, 0.036], [0.15, cy + 0, 0.5, 0.17, 0.014]];
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(ws, s), { tip: 0.42, flaps: [[0.13, 0.27], [0.28, 0.41]], stripe: [0.33, 0.37], lights: 0.012, slat: [0.12, 0.42] });
+    aeroWing(b, kit, mirrorSt([[0.52, cy + 0.025, 0.07, 0.2, 0.016], [0.45, cy + 0.035, 0.22, 0.08, 8e-3]], s), { mat: kit.shell });
+    aeroFin(b, kit, [[-0.56, cy + 0.07, s * 0.065, 0.3, 0.016], [-0.78, cy + 0.27, s * 0.13, 0.12, 0.01]], { rudder: [0.12, 0.88], band: [0.6, 0.8] });
+  });
+  bladeAntenna(b, kit, -0.15, F.top(-0.15), 0, 0.04);
+  gearDoors(b, kit, 0.1, F.bot(0.1) + 3e-3, 0, 0.3, 0.07);
+  roundel(b, 0.08, -0.08, over(ws, 0.3), 0.3);
+  roundel(b, 0.08, -0.08, over(ws, 0.3), -0.3);
+  chevron(b, 0.07, 0.15, F.top(0.15) + 2e-3, 0);
   const lift = [{ kind: "jet", p: [-0.95, cy, 0], r: 0.07, len: 0.12 }];
-  return out(cy + 0.25, lift, (m) => hang(c, m, at(ws, m.z)[1] - 0.02, 0.6));
+  return out(cy + 0.25, lift, (m) => hang(c, m, under(ws, m.z), 0.6));
 }
 function strikejet(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.12;
-  fuse(b, kit.hull, [
-    [1.4, cy - 0.02, 0.02, 0.02],
-    [1.2, cy, 0.12, 0.11],
-    [0.8, cy + 0.02, 0.21, 0.19],
-    [0.2, cy + 0.03, 0.24, 0.22],
-    [-0.4, cy + 0.02, 0.19, 0.18],
-    [-0.75, cy + 0.01, 0.08, 0.09],
-    [-0.86, cy, 0.035, 0.04]
-  ], 10, 2.4);
-  pod(b, kit.glass, [0.72, cy + 0.16, 0], 0.32, 0.12, 0.12, 10, 6, 2.2);
-  b.box(kit.trim, 0.03, 0.03, 0.18, 0.62, cy + 0.27, 0, 6e-3);
-  b.strut(kit.steel, [1.38, cy - 0.02, 0], [1.52, cy - 0.02, 0], 8e-3, 4e-3, 5);
-  const ws = [[0.36, cy - 0.02, 0.15, 0.85, 0.08], [0.06, cy + 0.03, 1, 0.46, 0.035]];
+  const F = new Fuse([
+    [1.42, cy - 0.02, 0.015, 0.015],
+    [1.22, cy, 0.1, 0.09],
+    [0.85, cy + 0.025, 0.17, 0.15],
+    [0.3, cy + 0.03, 0.19, 0.17],
+    [-0.3, cy + 0.02, 0.16, 0.15],
+    [-0.7, cy + 0.01, 0.08, 0.08],
+    [-0.84, cy, 0.03, 0.03]
+  ], 0, SEC_JET);
+  fuselage(b, kit.shell, F);
+  overSkin(b, kit.armor2, F, 1.42, 1.18, 3e-3);
+  for (const x of [1.1, 0.42, -0.2, -0.55]) panelBreak(b, kit, F, x, 0.01);
+  canopy(b, kit, 1, 0.48, F.top(0.75) - 0.035, 0.085, 0.1, { bows: 1 });
+  pitot(b, kit, 1.4, cy - 0.02, 0, 0.14, 5e-3);
+  sensorBall(b, kit, 1, F.bot(1) + 0.01, 0, 0.045);
+  bladeAntenna(b, kit, 0.1, F.top(0.1), 0, 0.05);
+  gearDoors(b, kit, 0.6, F.bot(0.6) + 4e-3, 0, 0.3, 0.1);
+  const ws = [[0.36, cy - 0.02, 0.12, 0.82, 0.07], [0.08, cy + 0.025, 1, 0.42, 0.03]];
   const bz = 0.45;
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    navLights(b, kit, -0.18, cy + 0.03, 1, 0.02);
-    b.box(kit.accent, 0.3, 0.015, 0.06, -0.08, cy + 0.055, s * 0.85, 4e-3, [0, 0, 0]);
-    fuse(b, kit.panel, [
-      [0.6, cy - 0.01, 0.05, 0.05],
-      [0.45, cy - 5e-3, 0.1, 0.095],
-      [0, cy, 0.11, 0.1],
-      [-0.6, cy + 0.01, 0.1, 0.09],
-      [-1.1, cy + 0.02, 0.075, 0.07],
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(ws, s), { tip: 0.88, slat: [0.54, 0.96], flaps: [[0.16, 0.37], [0.54, 0.86]], stripe: [0.72, 0.78], walk: 0.38, lights: 0.018 });
+    const B = new Fuse([
+      [0.6, cy - 0.01, 0.06, 0.055],
+      [0.48, cy - 5e-3, 0.095, 0.09],
+      [0, cy, 0.105, 0.098],
+      [-0.6, cy + 0.01, 0.09, 0.085],
+      [-1.1, cy + 0.02, 0.072, 0.067],
       [-1.42, cy + 0.02, 0.07, 0.065]
-    ], 10, 2.4, s * bz);
-    b.cylb(kit.trim, 0.055, 0.03, 8e-3, [0.6, cy - 0.01, s * bz], "x", 10);
-    fin(b, kit.hull, [[-1.08, cy + 0.06, s * bz, 0.34, 0.025], [-1.25, cy + 0.34, s * bz, 0.18, 0.018]]);
-    b.box(kit.glow, 0.04, 0.12, 0.02, -1.3, cy + 0.22, s * (bz + 0.01), 4e-3);
-  }
-  wing(b, kit.hull, [[-1.18, cy + 0.32, -bz, 0.18, 0.025], [-1.16, cy + 0.32, 0, 0.2, 0.025], [-1.18, cy + 0.32, bz, 0.18, 0.025]]);
-  b.decal(0.12, 0.12, -0.12, cy + 0.06, 0.72, atlasUV(3), 0);
-  b.decal(0.12, 0.12, -0.12, cy + 0.06, -0.72, atlasUV(3), 0);
+    ], s * bz, { kw: 0.42, lw: 0.86, ly: -0.62, chy: 0, sh: 0.86, shy: 0.58, tw: 0.42 });
+    fuselage(b, kit.shell, B);
+    b.lathe(kit.shell, [[0.04, 0], [0.058, 0.01], [0.06, 0.04], [0.045, 0.04]], [0.6, cy - 0.01, s * bz], "x", 10);
+    b.cyl(kit.mech, 0.046, 0.046, 0.01, [0.6, cy - 0.01, s * bz], "-x", 10);
+    for (const x of [0.2, -0.45, -0.95]) panelBreak(b, kit, B, x, 0.01);
+    skinPanel(b, kit.joint, B, -1.12, -1.42, 3, 8, 2e-3, 3e-3);
+    aeroFin(b, kit, [[-1.06, cy + 0.06, s * bz, 0.36, 0.024], [-1.26, cy + 0.36, s * bz, 0.18, 0.016]], { rudder: [0.12, 0.88], band: [0.55, 0.78] });
+    aeroWing(b, kit, [[-1.18, cy + 0.33, 0, 0.19, 0.024], [-1.2, cy + 0.33, s * bz, 0.17, 0.022]], { mat: kit.armor, flaps: [[0.03, bz - 0.03]] });
+  });
+  roundel(b, 0.12, -0.12, over(ws, 0.72), 0.72);
+  roundel(b, 0.12, -0.12, over(ws, 0.72), -0.72);
+  chevron(b, 0.12, 0.25, F.top(0.25) + 2e-3, 0);
   const lift = [-1, 1].map((s) => ({ kind: "jet", p: [-1.46, cy + 0.02, s * bz], r: 0.065, len: 0.12 }));
-  return out(cy + 0.4, lift, (m) => Math.abs(m.z) < 0.2 ? hang(c, m, cy - 0.18, 0.65) : hang(c, m, at(ws, m.z)[1] - 0.02, 0.6));
+  return out(cy + 0.4, lift, (m) => Math.abs(m.z) < 0.2 ? hang(c, m, F.bot(m.x) + 0.01, 0.65) : hang(c, m, under(ws, m.z), 0.6));
 }
 function deltawing(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.1;
-  const ws = [[1, cy, 0, 2.3, 0.13], [0.62, cy, 0.25, 1.9, 0.11], [0.12, cy + 0.01, 0.5, 1.37, 0.075], [-0.45, cy + 0.02, 0.78, 0.78, 0.04], [-0.95, cy + 0.03, 1, 0.3, 0.02]];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    b.box(kit.accent, 0.3, 0.012, 0.05, -0.9, cy + 0.04, s * 0.94, 4e-3, [0, s * -0, 0]);
-    b.box(kit.trim, 0.12, 0.015, 0.5, -1.26, cy + 0.02, s * 0.55, 4e-3);
-    navLights(b, kit, -1.12, cy + 0.03, 1, 0.018);
-  }
-  fuse(b, kit.panel, [
-    [1.5, cy, 0.02, 0.02],
-    [1.25, cy + 0.02, 0.09, 0.08],
-    [0.8, cy + 0.05, 0.14, 0.13],
-    [0, cy + 0.05, 0.16, 0.17],
-    [-1, cy + 0.03, 0.13, 0.2],
-    [-1.3, cy + 0.02, 0.11, 0.2]
-  ], 10, 2.4);
-  pod(b, kit.glass, [0.86, cy + 0.14, 0], 0.26, 0.09, 0.09, 10, 6, 2.2);
-  b.strut(kit.steel, [1.48, cy, 0], [1.62, cy, 0], 8e-3, 4e-3, 5);
-  block(b, kit.trim, 0.2, cy - 0.17, 0, 0.55, 0.22, 0.1, { top: [0.9, 1], shift: [-0.04, 0], ch: 0.04, bev: 0.02 });
-  fin(b, kit.hull, [[-0.55, cy + 0.12, 0, 0.75, 0.04], [-1.08, cy + 0.6, 0, 0.26, 0.022]]);
-  b.box(kit.accent, 0.18, 0.12, 0.05, -0.95, cy + 0.45, 0, 8e-3);
-  b.decal(0.2, 0.2, -0.45, cy + 0.065, 0.5, atlasUV(3), 0);
-  b.decal(0.2, 0.2, -0.45, cy + 0.065, -0.5, atlasUV(3), 0);
+  const ws = [[1, cy, 0, 2.3, 0.12], [0.62, cy, 0.25, 1.9, 0.1], [0.12, cy + 0.01, 0.5, 1.37, 0.07], [-0.45, cy + 0.02, 0.78, 0.78, 0.04], [-0.95, cy + 0.03, 1, 0.3, 0.018]];
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(ws, s), { tip: 0.86, slat: [0.3, 0.9], flaps: [[0.22, 0.52], [0.54, 0.84]], stripe: [0.66, 0.72], walk: 0.45, lights: 0.018 });
+  });
+  const F = new Fuse([
+    [1.5, cy, 0.015, 0.015],
+    [1.25, cy + 0.02, 0.08, 0.075],
+    [0.8, cy + 0.05, 0.13, 0.12],
+    [0, cy + 0.05, 0.15, 0.16],
+    [-1, cy + 0.03, 0.12, 0.19],
+    [-1.3, cy + 0.02, 0.1, 0.19]
+  ], 0, SEC_JET);
+  fuselage(b, kit.shell, F);
+  overSkin(b, kit.armor2, F, 1.5, 1.26, 3e-3);
+  for (const x of [1.15, 0.5, -0.2, -0.85]) panelBreak(b, kit, F, x, 0.01);
+  canopy(b, kit, 1.08, 0.64, F.top(0.86) - 0.03, 0.07, 0.09, { bows: 1 });
+  pitot(b, kit, 1.48, cy, 0, 0.14, 5e-3);
+  intake(b, kit, 0.55, cy - 0.13, 0, 0.24, 0.1, 0.7, { ramp: 0.5 });
+  gearDoors(b, kit, -0.25, cy - 0.11, 0, 0.4, 0.16);
+  skinPanel(b, kit.joint, F, -1.05, -1.3, 3, 8, 2e-3, 3e-3);
+  bladeAntenna(b, kit, 0.3, F.top(0.3), 0, 0.05);
+  aeroFin(b, kit, [[-0.5, cy + 0.13, 0, 0.78, 0.04], [-1.06, cy + 0.62, 0, 0.27, 0.022]], { rudder: [0.1, 0.86], band: [0.55, 0.8], beacon: 0.02 });
+  roundel(b, 0.2, -0.45, over(ws, 0.5), 0.5);
+  roundel(b, 0.2, -0.45, over(ws, 0.5), -0.5);
+  chevron(b, 0.14, 0.35, F.top(0.35) + 2e-3, 0);
   const lift = [-1, 1].map((s) => ({ kind: "jet", p: [-1.33, cy + 0.02, s * 0.12], r: 0.075, len: 0.12 }));
-  return out(cy + 0.6, lift, (m) => Math.abs(m.z) < 0.2 ? hang(c, m, cy - 0.17, 0.6) : hang(c, m, at(ws, m.z)[1] - at(ws, m.z)[3] * 0.4, 0.6));
+  return out(cy + 0.6, lift, (m) => Math.abs(m.z) < 0.2 ? hang(c, m, cy - 0.18, 0.6) : hang(c, m, under(ws, m.z), 0.6));
 }
 function stratobomber(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.12;
   const ws = [[1.75, cy, 0, 3.75, 0.42], [1.17, cy, 0.5, 2.5, 0.3], [0.62, cy + 0.01, 1, 2.32, 0.17], [0.07, cy + 0.02, 1.5, 1.22, 0.09], [-0.45, cy + 0.04, 1.98, 0.32, 0.035]];
-  for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    navLights(b, kit, -0.6, cy + 0.06, 1.98, 0.03);
-    b.box(kit.accent, 0.4, 0.015, 0.1, -0.45, cy + 0.07, s * 1.75, 5e-3, [0, s * 0.6, 0]);
-    for (const [x, z, k] of [[-0.15, 0.52, 1], [-0.35, 0.92, 0.82]]) {
-      pod(b, kit.panel, [x, cy + 0.1 * k + 0.04, s * z], 0.72 * k, 0.12 * k, 0.2 * k, 10, 6, 2.4);
-      b.box(kit.trim, 0.12, 0.05 * k, 0.26 * k, x + 0.42 * k, cy + 0.17 * k + 0.02, s * z, 0.01, [0, 0, -0.3]);
-    }
-  }
-  pod(b, kit.hull, [0.95, cy + 0.2, 0], 0.72, 0.16, 0.36, 12, 6, 2.6);
-  for (const s of [-1, 1]) b.box(kit.glass, 0.12, 0.03, 0.14, 1.28, cy + 0.33, s * 0.12, 6e-3, [s * 0.3, 0, -0.35]);
-  b.box(kit.glow, 0.9, 0.02, 0.03, 0.2, cy + 0.3, 0, 5e-3);
-  pod(b, kit.hull, [-1.82, cy - 0.02, 0], 0.32, 0.1, 0.13, 10, 6, 2.4);
-  for (const x of [1.12, 0.32, -0.88]) for (const s of [-1, 1]) b.box(kit.trim, 0.5, 0.02, 0.15, x, cy - 0.27, s * 0.085, 6e-3);
-  b.decal(0.35, 0.35, -0.4, cy + 0.1, 1.35, atlasUV(3), 0);
-  b.decal(0.35, 0.35, -0.4, cy + 0.1, -1.35, atlasUV(3), 0);
   const lift = [];
-  for (const s of [-1, 1]) {
-    lift.push({ kind: "jet", p: [-0.86, cy + 0.14, s * 0.52], r: 0.095, len: 0.1 });
-    lift.push({ kind: "jet", p: [-0.94, cy + 0.11, s * 0.92], r: 0.08, len: 0.1 });
+  sides((s) => {
+    aeroWing(b, kit, mirrorSt(ws, s), { tip: 1.8, flaps: [[0.56, 0.98], [1.04, 1.46], [1.54, 1.92]], stripe: [1.62, 1.7], walk: 1.2, lights: 0.03 });
+    for (const z of [0.5, 1, 1.5]) wingSkin(b, kit.mech, mirrorSt(ws, s), s * (z - 6e-3), s * (z + 6e-3), 0.03, 0.7, { th: 2e-3 });
+    for (const [x, z, k] of [[-0.15, 0.52, 1], [-0.35, 0.92, 0.82]]) {
+      const wy = over(ws, z) - 0.04;
+      const H = new Fuse([[x + 0.72 * k, wy, 0.01, 0.1 * k], [x + 0.5 * k, wy + 0.1 * k, 0.1 * k, 0.17 * k], [x - 0.3 * k, wy + 0.1 * k, 0.09 * k, 0.17 * k], [x - 0.7 * k, wy + 0.02 * k, 0.03 * k, 0.12 * k]], s * z, SEC_JET);
+      fuselage(b, kit.shell, H);
+      intake(b, kit, x + 0.48 * k, wy + 0.17 * k, s * z, 0.24 * k, 0.07 * k, 0.4 * k, { ramp: 0.6 });
+      ribbon(b, kit.joint, [[x - 0.66 * k, over(ws, z) + 2e-3, s * z], [x - 1.05 * k, over(ws, z) - 0.03, s * z]], 0.1 * k, 0.12 * k, 4e-3);
+      lift.push({ kind: "jet", p: [x - 0.72 * k, wy + 0.04 * k, s * z], r: 0.085 * k, len: 0.1 });
+    }
     if (load(c) > 0.85) lift.push({ kind: "jet", p: [-0.9, cy + 0.07, s * 1.3], r: 0.065, len: 0.1 });
-  }
+  });
+  const C = new Fuse([[1.75, cy + 0.02, 0.02, 0.06], [1.45, cy + 0.14, 0.13, 0.3], [1, cy + 0.17, 0.16, 0.36], [0.4, cy + 0.15, 0.12, 0.3], [-0.3, cy + 0.08, 0.05, 0.2]], 0, SEC_JET);
+  fuselage(b, kit.shell, C);
+  panelBreak(b, kit, C, 0.75, 0.014);
+  canopy(b, kit, 1.52, 1.18, C.top(1.35) - 0.06, 0.2, 0.08, { bows: 2, rake: 0.55 });
+  ribbon(b, kit.accent, [[0.6, C.top(0.6) + 2e-3, 0], [0, C.top(0) + 2e-3, 0]], 0.03, 0.03, 3e-3);
+  bladeAntenna(b, kit, 0.2, C.top(0.2), 0.15, 0.08);
+  const T = new Fuse([[-1.56, cy - 0.03, 0.06, 0.07], [-1.72, cy - 0.03, 0.1, 0.12], [-2.02, cy - 0.04, 0.06, 0.07], [-2.12, cy - 0.04, 0.02, 0.02]], 0, SEC_JET);
+  fuselage(b, kit.armor2, T);
+  for (const x of [1.12, 0.32, -0.88]) gearDoors(b, kit, x, cy - 0.255, 0, 0.55, 0.3);
+  roundel(b, 0.32, -0.4, over(ws, 1.32), 1.32);
+  roundel(b, 0.32, -0.4, over(ws, 1.32), -1.32);
   return out(cy + 0.4, lift, (m) => m.x < -1.5 ? hang(c, m, cy - 0.1, 0.55) : hang(c, m, cy - 0.27, 0.55));
 }
 registerChassis("drone", drone);
@@ -41248,29 +41595,25 @@ registerChassis("deltawing", deltawing);
 registerChassis("stratobomber", stratobomber);
 
 // src/client/proto3d/chassis/bombers.ts
-function fuseAt(st, x) {
-  let i = 0;
-  while (i < st.length - 2 && st[i + 1][0] > x) i++;
-  const p = st[i], q = st[i + 1];
-  const f = Math.max(0, Math.min(1, (p[0] - x) / (p[0] - q[0] || 1)));
-  const cy = p[1] + (q[1] - p[1]) * f, ry = p[2] + (q[2] - p[2]) * f, rz = p[3] + (q[3] - p[3]) * f;
-  return { top: cy + ry, bot: cy - ry, w: rz, cy };
-}
 function bayDoors(c, x0, x1, y, w, z = 0) {
   const { b, kit } = c;
   const l = Math.abs(x1 - x0), x = (x0 + x1) / 2, d = w * 1.1;
-  b.box(kit.trim, l, 0.03, w * 2, x, y + 0.012, z, 8e-3);
-  for (const s of [-1, 1]) b.box(kit.hull2, l * 0.96, 0.02, d, x, y - d * 0.42, z + s * (w + d * 0.12), 6e-3, [s * 1.15, 0, 0]);
+  b.box(kit.mech, l, 0.03, w * 2, x, y + 0.012, z, 8e-3);
+  for (const s of [-1, 1]) {
+    b.box(kit.shell, l * 0.96, 0.016, d, x, y - d * 0.42, z + s * (w + d * 0.12), 4e-3, [s * 1.15, 0, 0]);
+    for (const f of [-0.3, 0.3]) b.strut(kit.joint, [x + f * l, y, z + s * w * 0.8], [x + f * l, y - d * 0.55, z + s * (w + d * 0.2)], 8e-3, 8e-3, 4);
+  }
 }
 function blister(c, x, y, z, r, dir) {
   const { b, kit } = c;
   b.lathe(kit.glass, [[0, 0], [r, 0], [r * 0.92, r * 0.42 * dir], [r * 0.6, r * 0.75 * dir], [0, r * 0.85 * dir]], [x, y, z], "y", 12);
-  b.cylb(kit.trim, r * 1.08, r * 0.14, r * 0.04, [x, y - r * 0.07, z], "y", 12);
+  b.cylb(kit.mech, r * 1.08, r * 0.14, r * 0.04, [x, y - r * 0.07, z], "y", 12);
+  for (const a of [0, Math.PI / 2]) bx2(b, kit.shell, r * 1.7 * Math.abs(Math.cos(a)) + r * 0.05, r * 0.05, r * 1.7 * Math.abs(Math.sin(a)) + r * 0.05, x, y + r * 0.82 * dir, z);
 }
 function strategic(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.16;
-  const fs = [
+  const F = new Fuse([
     [2.42, cy + 0, 0.03, 0.03],
     [2.3, cy + 0.01, 0.13, 0.12],
     [2.05, cy + 0.04, 0.24, 0.21],
@@ -41280,64 +41623,66 @@ function strategic(c) {
     [-1.7, cy + 0.12, 0.21, 0.17],
     [-2.2, cy + 0.16, 0.12, 0.1],
     [-2.42, cy + 0.17, 0.05, 0.05]
-  ];
-  fuse(b, kit.hull, fs, 12, 2.4);
-  pod(b, kit.glass, [1.78, cy + 0.27, 0], 0.32, 0.12, 0.19, 10, 6, 2.2);
-  block(b, kit.panel, 1.42, cy + 0.27, 0, 0.5, 0.36, 0.11, { top: [0.7, 0.75], shift: [0.08, 0], ch: 0.08, bev: 0.025 });
-  block(b, kit.panel, -0.2, cy + 0.33, 0, 2.6, 0.24, 0.08, { top: [0.9, 0.6], ch: 0.08, bev: 0.025 });
-  b.box(kit.glow, 1.9, 0.015, 0.03, -0.2, cy + 0.415, 0, 4e-3);
+  ], 0, SEC_ROUND);
+  fuselage(b, kit.shell, F);
+  overSkin(b, kit.armor2, F, 2.42, 2.22, 4e-3);
+  for (const x of [2.15, 1.3, 0.6, -0.1, -0.9, -1.6, -2.1]) panelBreak(b, kit, F, x, 0.016);
+  canopy(b, kit, 2.06, 1.62, F.top(1.85) - 0.05, 0.19, 0.12, { bows: 2, rake: 0.42 });
+  pitot(b, kit, 2.36, cy + 0.04, 0.08, 0.16, 6e-3);
+  ribbon(b, kit.mech, F.xs(1.3, -1.5).map((x) => [x, F.top(x) + 3e-3, 0]), 0.05, 0.05, 4e-3);
+  ribbon(b, kit.accent, F.xs(-1.55, -1.75).map((x) => [x, F.top(x) + 3e-3, 0]), 0.12, 0.1, 4e-3);
+  bladeAntenna(b, kit, 0.9, F.top(0.9), 0, 0.1);
+  bladeAntenna(b, kit, -0.5, F.bot(-0.5), 0.12, 0.08, true);
   const ws = [[1, cy + 0.22, 0.2, 1.45, 0.16], [0.12, cy + 0.2, 1.4, 0.92, 0.1], [-0.84, cy + 0.12, 2.95, 0.42, 0.045]];
   const lift = [];
   for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    for (const [z0, z1] of [[0.4, 1], [1.25, 1.8], [2.1, 2.85]]) {
-      const a = at(ws, z0), e = at(ws, z1);
-      b.loft(kit.panel, [[a[0] - 0.02, a[1] + a[3] * 0.55, s * z0], [e[0] - 0.02, e[1] + e[3] * 0.55, s * z1]].map(([x, y, z]) => [[x, y, z - 1e-3], [x - 0.12, y + 0.012, z], [x - 0.12, y - 0.01, z + 1e-3]]), true, true);
-    }
+    aeroWing(b, kit, mirrorSt(ws, s), { tip: 2.6, slat: [0.45, 2.85], flaps: [[0.3, 1.2], [1.3, 2.05], [2.15, 2.8]], stripe: [2.32, 2.45], walk: 1 });
     {
-      const t = at(ws, 2.55);
-      b.box(kit.accent, 0.3, 0.012, 0.16, t[0] - t[2] * 0.45, t[1] + t[3] * 0.62, s * 2.55, 4e-3, [0, s * 0.62, 0]);
+      const t = at(ws, 2.92);
+      const P = new Fuse([[t[0] + 0.05, t[1] - 0.02, 0.02, 0.02], [t[0] - 0.05, t[1] - 0.02, 0.05, 0.05], [t[0] - 0.5, t[1] - 0.02, 0.045, 0.045], [t[0] - 0.58, t[1] - 0.02, 0.02, 0.02]], s * 2.94, SEC_ROUND);
+      fuselage(b, kit.armor, P);
     }
     {
       const t = at(ws, 2.92);
-      pod(b, kit.panel, [t[0] - 0.22, t[1] - 0.02, s * 2.92], 0.32, 0.055, 0.055, 8, 5, 2.2);
-      navLights(b, kit, t[0] - 0.22, t[1] + 0.06, 2.92, 0.025);
+      bx2(b, s < 0 ? kit.accent : kit.glow, 0.05, 0.03, 0.03, t[0] + 0.04, t[1] - 0.02, s * 2.94);
     }
     for (const z of [1.1, 1.98]) {
-      const [lex, wy, ch] = at(ws, z);
+      const [lex, wy] = at(ws, z);
       const ny = wy - 0.24, nx = lex - 0.06;
-      b.box(kit.trim, 0.6, wy - ny - 0.04, 0.04, nx + 0, (wy + ny) / 2, s * z, 0.01);
+      skinPylon(c, nx + 0.1, wy - 0.02, ny + 0.06, s * z, 0.62, 0.04);
       for (const d of [-0.11, 0.11]) {
         const zz = s * z + d;
-        pod(b, kit.panel, [nx, ny, zz], 0.5, 0.095, 0.095, 10, 6, 2.2);
-        b.cylb(kit.trim, 0.085, 0.05, 0.012, [nx + 0.43, ny, zz], "x", 10);
-        b.cyl(kit.accent, 0.097, 0.097, 0.07, [nx + 0.24, ny, zz], "x", 10);
+        const N = nacelle(b, kit, nx + 0.48, nx - 0.46, ny, zz, 0.09);
+        soot(b, kit, N, nx - 0.3, nx - 0.46, zz, 0.03);
         lift.push({ kind: "jet", p: [nx - 0.5, ny, zz], r: 0.07, len: 0.11 });
       }
-      void ch;
     }
-    wing(b, kit.hull, mirror2([[-1.82, cy + 0.2, 0.08, 0.52, 0.05], [-2.22, cy + 0.2, 0.88, 0.22, 0.025]], s));
+    aeroWing(b, kit, mirrorSt([[-1.82, cy + 0.2, 0.08, 0.52, 0.05], [-2.22, cy + 0.2, 0.88, 0.22, 0.025]], s), { tip: 0.7, flaps: [[0.15, 0.82]] });
   }
-  fin(b, kit.hull, [[-1.5, cy + 0.3, 0, 0.92, 0.07], [-2.16, cy + 1.28, 0, 0.42, 0.035]]);
-  b.box(kit.accent, 0.46, 0.12, 0.08, -2.25, cy + 1, 0, 0.01);
-  b.box(kit.glow, 0.04, 0.04, 0.05, -2.06, cy + 1.3, 0, 6e-3);
-  const belly = fuseAt(fs, 0).bot;
-  bayDoors(c, 1.42, -1.5, belly + 0.01, 0.15);
-  blister(c, 2.02, fuseAt(fs, 2.02).bot + 0.04, 0, 0.12, -1);
-  blister(c, -2.26, fuseAt(fs, -2.26).bot + 0.03, 0, 0.09, -1);
-  b.box(kit.lamp, 0.03, 0.03, 0.08, 2.4, cy + 0.02, 0, 6e-3);
-  b.decal(0.42, 0.42, -0.2, at(ws, 1.6)[1] + 0.06, 1.6, atlasUV(3), 0);
-  b.decal(0.42, 0.42, -0.2, at(ws, 1.6)[1] + 0.06, -1.6, atlasUV(3), 0);
+  aeroFin(b, kit, [[-1.5, cy + 0.3, 0, 0.92, 0.07], [-2.16, cy + 1.28, 0, 0.42, 0.035]], { rudder: [0.06, 0.94], band: [0.62, 0.8], beacon: 0.04 });
+  bayDoors(c, 1.42, -1.5, F.bot(0) + 0.01, 0.15);
+  gearDoors(b, kit, 1.8, F.bot(1.8) + 4e-3, 0, 0.3, 0.14);
+  blister(c, 2.02, F.bot(2.02) + 0.04, 0, 0.12, -1);
+  blister(c, -2.26, F.bot(-2.26) + 0.03, 0, 0.09, -1);
+  bx2(b, kit.lamp, 0.03, 0.03, 0.08, 2.4, cy + 0.02, 0);
+  b.decal(0.42, 0.42, -0.2, over(ws, 1.6) + 6e-3, 1.6, atlasUV(3), 0);
+  b.decal(0.42, 0.42, -0.2, over(ws, 1.6) + 6e-3, -1.6, atlasUV(3), 0);
+  b.decal(0.3, 0.3, 1.3, F.top(1.3) + 8e-3, 0, atlasUV(1), 0);
   return out(cy + 1.3, lift, (m) => {
-    const f = fuseAt(fs, m.x);
-    if (m.mod.resupply) return hang(c, m, f.bot + 0.02, 0.55);
-    return hang(c, m, f.bot - 0.06, 0.45);
+    if (m.mod.resupply) return hang(c, m, F.bot(m.x) + 0.02, 0.55);
+    return hang(c, m, F.bot(m.x) - 0.06, 0.45);
   });
+}
+function skinPylon(c, x, yTop, yBot, z, l, t) {
+  const { b, kit } = c;
+  const sec = (y, xs, cl) => [[xs + cl * 0.5, y, z], [xs + cl * 0.3, y, z + t / 2], [xs - cl * 0.5, y, z + t * 0.25], [xs - cl * 0.5, y, z - t * 0.25], [xs + cl * 0.3, y, z - t / 2]];
+  b.loft(kit.shell, [sec(yTop, x - 0.08, l * 0.8), sec(yBot, x, l)]);
+  bx2(b, kit.mech, l * 0.9, 8e-3, t * 1.1, x, (yTop + yBot) / 2, z);
 }
 function superfortress(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.24;
-  const fs = [
+  const F = new Fuse([
     [2.9, cy + 0.05, 0.06, 0.06],
     [2.78, cy + 0.05, 0.27, 0.27],
     [2.45, cy + 0.06, 0.42, 0.41],
@@ -41346,87 +41691,77 @@ function superfortress(c) {
     [-1.4, cy + 0.12, 0.44, 0.39],
     [-2.3, cy + 0.18, 0.26, 0.22],
     [-2.9, cy + 0.2, 0.1, 0.1]
-  ];
-  fuse(b, kit.hull, fs, 12, 2.3);
-  pod(b, kit.glass, [2.7, cy + 0.06, 0], 0.26, 0.27, 0.27, 12, 6, 2);
-  for (const x of [2.62, 2.74]) b.cylb(kit.trim, 0.29 - (x - 2.62) * 0.4, 0.02, 6e-3, [x, cy + 0.06, 0], "x", 12);
-  pod(b, kit.glass, [2.12, cy + 0.5, 0], 0.36, 0.13, 0.26, 10, 6, 2.2);
-  block(b, kit.panel, 1.72, cy + 0.5, 0, 0.5, 0.5, 0.1, { top: [0.7, 0.8], shift: [0.08, 0], ch: 0.1, bev: 0.03 });
-  block(b, kit.panel, -0.3, cy + 0.56, 0, 3, 0.36, 0.1, { top: [0.9, 0.6], ch: 0.1, bev: 0.03 });
-  b.box(kit.glow, 2.4, 0.015, 0.03, -0.3, cy + 0.665, 0, 4e-3);
+  ], 0, SEC_ROUND);
+  fuselage(b, kit.shell, F);
+  for (const x of [2.3, 1.6, 0.9, 0.2, -0.5, -1.2, -1.9, -2.5]) panelBreak(b, kit, F, x, 0.02);
+  overSkin(b, kit.glass, F, 2.9, 2.6, 4e-3);
+  for (const x of [2.83, 2.74, 2.64]) panelBreak(b, kit, F, x, 0.018, kit.shell);
+  canopy(b, kit, 2.32, 1.88, F.top(2.1) - 0.07, 0.24, 0.13, { bows: 2, rake: 0.42 });
+  ribbon(b, kit.mech, F.xs(1.6, -1.9).map((x) => [x, F.top(x) + 3e-3, 0]), 0.07, 0.07, 4e-3);
+  for (const x of [1, 0.86]) bx2(b, kit.accent, 0.08, 8e-3, 0.5, x, F.top(x) + 6e-3, 0);
+  bladeAntenna(b, kit, 0.4, F.top(0.4), 0.16, 0.12);
+  bladeAntenna(b, kit, -1, F.top(-1), -0.14, 0.1);
   const ws = [[1.1, cy + 0, 0.4, 2.28, 0.3], [0.6, cy + 0.06, 2.2, 1.6, 0.18], [0.33, cy + 0.12, 4, 0.66, 0.06]];
   const lift = [];
   for (const s of [-1, 1]) {
-    wing(b, kit.hull, mirror2(ws, s));
-    for (const [z0, z1] of [[0.55, 3.9]]) {
-      const a = at(ws, z0), e = at(ws, z1);
-      b.loft(kit.panel, [[a[0] - 0.01, a[1] + a[3] * 0.5, s * z0], [e[0] - 0.01, e[1] + e[3] * 0.5, s * z1]].map(([x, y, z]) => [[x, y, z - 1e-3], [x - 0.16, y + 0.02, z], [x - 0.16, y - 0.015, z + 1e-3]]), true, true);
-      b.loft(kit.trim, [[a[0] - a[2] * 0.82, a[1] + a[3] * 0.32, s * z0], [e[0] - e[2] * 0.82, e[1] + e[3] * 0.32, s * z1]].map(([x, y, z]) => [[x, y, z - 1e-3], [x - 0.04, y + 0.01, z], [x - 0.04, y - 4e-3, z + 1e-3]]), true, true);
-    }
-    {
-      const t = at(ws, 3.55);
-      b.box(kit.accent, 0.42, 0.014, 0.24, t[0] - t[2] * 0.45, t[1] + t[3] * 0.6, s * 3.55, 4e-3);
-    }
+    aeroWing(b, kit, mirrorSt(ws, s), { tip: 3.6, slat: [0.55, 3.9], flaps: [[0.55, 1.5], [1.55, 2.45], [2.6, 3.4], [3.45, 3.9]], stripe: [3.3, 3.45], walk: 2.6 });
     {
       const t = at(ws, 3.98);
-      pod(b, kit.panel, [t[0] - 0.3, t[1], s * 3.98], 0.42, 0.07, 0.07, 8, 5, 2.2);
-      navLights(b, kit, t[0] - 0.3, t[1] + 0.08, 3.98, 0.03);
+      const P = new Fuse([[t[0] - 0.02, t[1], 0.02, 0.02], [t[0] - 0.12, t[1], 0.07, 0.07], [t[0] - 0.62, t[1], 0.06, 0.06], [t[0] - 0.72, t[1], 0.02, 0.02]], s * 4, SEC_ROUND);
+      fuselage(b, kit.armor, P);
+      bx2(b, s < 0 ? kit.accent : kit.glow, 0.05, 0.035, 0.035, t[0] - 0.04, t[1], s * 4);
     }
     for (const z of [0.96, 1.76, 2.56]) {
       const [lex, wy, ch] = at(ws, z);
-      const x0 = lex + 0.32, x1 = lex - ch - 0.42, nx = (x0 + x1) / 2, len = (x0 - x1) / 2, r = 0.19 - z * 0.012;
-      pod(b, kit.panel, [nx, wy - 0.02, s * z], len, r, r, 12, 7, 2.6);
-      b.cylb(kit.trim, r * 0.86, 0.05, 0.015, [x0 - 0.07, wy - 0.02, s * z], "x", 12);
-      b.cyl(kit.accent, r * 1.02, r * 1.02, 0.08, [x0 - 0.3, wy - 0.02, s * z], "x", 12);
-      b.box(kit.trim, 0.3, 0.05, 0.03, nx - 0.1, wy - 0.02 - r * 0.85, s * z, 8e-3);
+      const x0 = lex + 0.32, x1 = lex - ch - 0.42, r = 0.19 - z * 0.012;
+      const N = nacelle(b, kit, x0, x1, wy - 0.02, s * z, r);
+      bx2(b, kit.mech, 0.3, 0.05, 0.03, (x0 + x1) / 2 - 0.1, wy - 0.02 - r * 0.85, s * z);
+      soot(b, kit, N, x1 + 0.3, x1, s * z, r * 0.3);
       lift.push({ kind: "jet", p: [x1 + 0.02, wy - 0.02, s * z], r: r * 0.62, len: 0.14 });
     }
     {
       const z = 3.28, [lex, wy] = at(ws, z), ny = wy - 0.2, nx = lex - 0.12;
-      b.box(kit.trim, 0.5, wy - ny - 0.03, 0.04, nx, (wy + ny) / 2, s * z, 0.01);
+      skinPylon(c, nx, wy - 0.02, ny + 0.05, s * z, 0.5, 0.04);
       for (const d of [-0.1, 0.1]) {
-        pod(b, kit.panel, [nx, ny, s * z + d], 0.42, 0.085, 0.085, 10, 6, 2.2);
-        b.cylb(kit.trim, 0.075, 0.04, 0.01, [nx + 0.36, ny, s * z + d], "x", 10);
+        nacelle(b, kit, nx + 0.42, nx - 0.4, ny, s * z + d, 0.085);
         lift.push({ kind: "jet", p: [nx - 0.42, ny, s * z + d], r: 0.06, len: 0.1 });
       }
     }
     {
-      const [lex, wy, ch, t] = at(ws, 3.2);
-      block(b, kit.panel, -0.81, wy + t * 0.5, s * 3.2, 0.62, 0.42, 0.1, { top: [0.8, 0.8], ch: 0.1, bev: 0.03 });
-      void lex;
-      void ch;
+      const [, wy, , t] = at(ws, 3.2);
+      const W = new Fuse([[-0.5, wy + t * 0.5, 0.02, 0.12], [-0.6, wy + t * 0.5 + 0.06, 0.08, 0.2], [-1, wy + t * 0.5 + 0.06, 0.08, 0.2], [-1.12, wy + t * 0.5, 0.02, 0.12]], s * 3.2, SEC_BOX);
+      fuselage(b, kit.shell, W);
     }
     {
       const [, wy, , t] = at(ws, 1.6);
       bayDoors(c, 0.32, -0.32, wy - t * 0.45, 0.14, s * 1.6);
     }
-    wing(b, kit.hull, mirror2([[-1.9, cy + 0.26, 0.15, 0.78, 0.07], [-2.18, cy + 0.26, 1.78, 0.42, 0.04]], s));
-    fin(b, kit.hull, [[-1.98, cy + 0.2, s * 1.74, 0.62, 0.05], [-2.38, cy + 1.02, s * 1.78, 0.32, 0.03]]);
-    fin(b, kit.hull, [[-2, cy + 0.26, s * 1.74, 0.55, 0.045], [-2.2, cy - 0.12, s * 1.74, 0.3, 0.03]]);
-    b.box(kit.accent, 0.32, 0.12, 0.075, -2.44, cy + 0.72, s * 1.76, 0.01);
-    b.box(kit.glow, 0.04, 0.04, 0.05, -2.36, cy + 1.03, s * 1.78, 6e-3);
+    aeroWing(b, kit, mirrorSt([[-1.9, cy + 0.26, 0.15, 0.78, 0.07], [-2.18, cy + 0.26, 1.78, 0.42, 0.04]], s), { tip: 1.5, flaps: [[0.3, 1.6]] });
+    aeroFin(b, kit, [[-1.98, cy + 0.2, s * 1.74, 0.62, 0.05], [-2.38, cy + 1.02, s * 1.78, 0.32, 0.03]], { rudder: [0.08, 0.92], band: [0.55, 0.75], beacon: 0.04 });
+    aeroFin(b, kit, [[-2, cy + 0.26, s * 1.74, 0.55, 0.045], [-2.2, cy - 0.12, s * 1.74, 0.3, 0.03]], {});
   }
-  const belly = fuseAt(fs, 0).bot;
-  bayDoors(c, 1.86, -1.76, belly + 0.02, 0.2);
-  blister(c, 2.55, fuseAt(fs, 2.55).bot + 0.05, 0, 0.14, -1);
-  blister(c, -2.73, fuseAt(fs, -2.73).bot + 0.04, 0, 0.1, -1);
-  for (const s of [-1, 1]) b.box(kit.lamp, 0.03, 0.03, 0.06, 2.42, cy - 0.18, s * 0.3, 6e-3);
-  b.decal(0.6, 0.6, -0.2, at(ws, 2.3)[1] + at(ws, 2.3)[3] * 0.6 + 0.01, 2.3, atlasUV(3), 0);
-  b.decal(0.6, 0.6, -0.2, at(ws, 2.3)[1] + at(ws, 2.3)[3] * 0.6 + 0.01, -2.3, atlasUV(3), 0);
+  bayDoors(c, 1.86, -1.76, F.bot(0) + 0.02, 0.2);
+  blister(c, 2.55, F.bot(2.55) + 0.05, 0, 0.14, -1);
+  blister(c, -2.73, F.bot(-2.73) + 0.04, 0, 0.1, -1);
+  gearDoors(b, kit, 2.15, F.bot(2.15) + 4e-3, 0, 0.36, 0.2);
+  for (const s of [-1, 1]) bx2(b, kit.lamp, 0.03, 0.03, 0.06, 2.42, cy - 0.18, s * 0.3);
+  b.decal(0.6, 0.6, -0.2, over(ws, 2.3) + 0.012, 2.3, atlasUV(3), 0);
+  b.decal(0.6, 0.6, -0.2, over(ws, 2.3) + 0.012, -2.3, atlasUV(3), 0);
+  b.decal(0.4, 0.4, 1.4, F.top(1.4) + 8e-3, 0, atlasUV(1), 0);
   return out(cy + 1.1, lift, (m) => {
     if (m.mod.resupply) {
       if (Math.abs(m.z) > 0.6) {
         const [, wy, , t] = at(ws, m.z);
         return hang(c, m, wy - t * 0.45, 0.55);
       }
-      return hang(c, m, fuseAt(fs, m.x).bot + 0.03, 0.55);
+      return hang(c, m, F.bot(m.x) + 0.03, 0.55);
     }
     if (Math.abs(m.z) > 2) {
       const [, wy, , t] = at(ws, m.z), y = wy + t * 0.5 + 0.1;
       collar(b, kit, m.x, y, m.z, m.r, y - 0.08, 14);
       return { y, socket: true };
     }
-    return hang(c, m, fuseAt(fs, m.x).bot - 0.08, 0.45);
+    return hang(c, m, F.bot(m.x) - 0.08, 0.45);
   });
 }
 function dreadnought(c) {
@@ -41444,42 +41779,37 @@ function dreadnought(c) {
     [-3.55, cy + 0.12, 0.34, 0.33],
     [-3.85, cy + 0.12, 0.08, 0.08]
   ];
+  const ENV = { kw: 0.4, lw: 0.82, ly: -0.66, chy: 0, sh: 0.86, shy: 0.6, tw: 0.42 };
   const lift = [];
   for (const s of [-1, 1]) {
     const z = s * BZ;
-    fuse(b, kit.hull, gs, 14, 2, z);
-    for (const x of [2.9, 1.9, 0.9, -0.1, -1.1, -2.1, -3]) {
-      const f2 = fuseAt(gs, x);
-      b.cyl(kit.trim, f2.w + 0.018, f2.w + 0.018, 0.05, [x + 0.025, f2.cy, z], "-x", 16);
-    }
-    block(b, kit.panel, -0.2, fuseAt(gs, 0).top - 0.04, z, 5.4, 0.22, 0.07, { top: [0.96, 0.6], ch: 0.06, bev: 0.02 });
-    b.box(kit.glow, 4.2, 0.012, 0.03, -0.2, fuseAt(gs, 0).top + 0.035, z, 4e-3);
-    {
-      const r = fuseAt(gs, 3.4).w + 0.015;
-      b.cyl(kit.trim, r, r, 0.05, [3.4, cy + 0.12, z], "x", 16);
-    }
-    {
-      const r = fuseAt(gs, 2.95).w + 0.02;
-      b.cyl(kit.accent, r, r, 0.12, [2.95, cy + 0.12, z], "x", 16);
-    }
-    const tx = -2.95, f = fuseAt(gs, tx);
-    fin(b, kit.hull, [[tx + 0.2, f.top - 0.08, z, 0.95, 0.06], [tx - 0.55, f.top + 0.55, z, 0.5, 0.035]]);
-    fin(b, kit.hull, [[tx + 0.2, f.bot + 0.08, z, 0.95, 0.06], [tx - 0.4, f.bot - 0.4, z, 0.5, 0.035]]);
-    wing(b, kit.hull, [[tx + 0.2, f.cy, z + s * 0.5, 0.95, 0.06], [tx - 0.55, f.cy, z + s * 1.05, 0.5, 0.035]]);
-    b.box(kit.accent, 0.4, 0.1, 0.08, tx - 0.5, f.top + 0.36, z, 0.01);
+    const G2 = new Fuse(gs, z, ENV);
+    fuselage(b, kit.shell, G2);
+    overSkin(b, kit.armor, G2, 3.92, 3.38, 6e-3);
+    overSkin(b, kit.armor, G2, -3, -3.85, 6e-3);
+    for (const x of [2.9, 2.2, 1.5, 0.8, 0.1, -0.6, -1.3, -2, -2.7]) panelBreak(b, kit, G2, x, 0.035);
+    ribbon(b, kit.mech, G2.xs(2.8, -2.8).map((x) => [x, G2.top(x) + 0.01, z]), 0.09, 0.09, 6e-3);
+    for (const x of [2.4, 1.2, 0, -1.2, -2.4]) bx2(b, kit.joint, 0.02, 0.06, 0.02, x, G2.top(x) + 0.04, z + 0.1);
+    skinPanel(b, kit.accent, G2, 3.25, 3.05, 4, 7, 8e-3, 8e-3);
+    const tx = -2.95;
+    aeroFin(b, kit, [[tx + 0.2, G2.top(tx) - 0.08, z, 0.95, 0.06], [tx - 0.55, G2.top(tx) + 0.55, z, 0.5, 0.035]], { rudder: [0.15, 0.9], band: [0.45, 0.7], beacon: 0.04 });
+    aeroFin(b, kit, [[tx + 0.2, G2.bot(tx) + 0.08, z, 0.95, 0.06], [tx - 0.4, G2.bot(tx) - 0.4, z, 0.5, 0.035]], { rudder: [0.15, 0.9] });
+    aeroWing(b, kit, [[tx + 0.2, G2.cy(tx), z + s * 0.5, 0.95, 0.06], [tx - 0.55, G2.cy(tx), z + s * 1.05, 0.5, 0.035]], { mat: kit.armor, flaps: [[0.55, 1]] });
     for (const x of [1.6, -1.2]) {
-      const gy = fuseAt(gs, x).bot + 0.02;
-      b.box(kit.trim, 0.32, 0.18, 0.06, x, gy - 0.02, z + s * 0.42, 0.01);
-      pod(b, kit.panel, [x, gy - 0.12, z + s * 0.62], 0.36, 0.12, 0.12, 10, 6, 2.2);
-      b.cyl(kit.hot, 0.08, 0.06, 0.02, [x - 0.36, gy - 0.12, z + s * 0.62], "-x", 10);
+      const gy = G2.bot(x) + 0.02;
+      b.strut(kit.mech, [x + 0.1, gy, z + s * 0.38], [x + 0.1, gy - 0.12, z + s * 0.55], 0.03, 0.03, 4);
+      b.strut(kit.mech, [x - 0.15, gy, z + s * 0.38], [x - 0.15, gy - 0.12, z + s * 0.55], 0.03, 0.03, 4);
+      const N = nacelle(b, kit, x + 0.36, x - 0.36, gy - 0.12, z + s * 0.62, 0.12, { mat: kit.armor2, band: null });
+      void N;
+      b.cyl(kit.hot, 0.08, 0.06, 0.02, [x - 0.37, gy - 0.12, z + s * 0.62], "-x", 10);
     }
-    b.box(kit.lamp, 0.03, 0.06, 0.06, 3.92, cy + 0.12, z, 8e-3);
-    navLights(b, kit, 2.6, fuseAt(gs, 2.6).top - 0.05, BZ + 0, 0.035);
+    bx2(b, kit.lamp, 0.03, 0.06, 0.06, 3.92, cy + 0.12, z);
+    bx2(b, s < 0 ? kit.accent : kit.glow, 0.06, 0.035, 0.035, 2.6, G2.top(2.6) - 0.05, z + s * 0.62);
     lift.push({ kind: "duct", p: [-3.95, cy + 0.12, z], r: 0.36, blades: 7, dir: s, tilt: Math.PI / 2 });
-    for (const x of load(c) > 0.85 ? [2.6, 0.9, -0.8, -2.4] : [2.4, 0, -2.4]) lift.push({ kind: "grav", p: [x, fuseAt(gs, x).bot - 0.12, z], r: 0.3, len: 0.24, dir: s });
+    for (const x of load(c) > 0.85 ? [2.6, 0.9, -0.8, -2.4] : [2.4, 0, -2.4]) lift.push({ kind: "grav", p: [x, G2.bot(x) - 0.12, z], r: 0.3, len: 0.24, dir: s });
   }
   const ky0 = cy - 0.5, ky1 = cy - 0.12, ky2 = cy + 0.22;
-  stationHull(b, kit.hull2, [
+  stationHull(b, kit.armor, [
     [4, 0.12, ky0 + 0.22, ky1 + 0.05, ky2 - 0.12, 0.6],
     [3.6, 0.42, ky0 + 0.06, ky1, ky2, 0.8],
     [2.8, 0.56, ky0, ky1, ky2, 0.88],
@@ -41487,28 +41817,36 @@ function dreadnought(c) {
     [-3.5, 0.44, ky0 + 0.1, ky1, ky2 - 0.04, 0.8],
     [-3.9, 0.2, ky0 + 0.24, ky1 + 0.04, ky2 - 0.1, 0.6]
   ], 0, 0.82);
-  block(b, kit.panel, 0.2, ky2 - 0.01, 0, 6.2, 0.86, 0.04, { ch: 0.1, bev: 0.015 });
-  b.box(kit.glow, 5, 0.012, 0.025, 0.2, ky2 + 0.035, 0, 4e-3);
+  b.box(kit.shell, 6.2, 0.04, 0.86, 0.2, ky2 + 0.015, 0, 0.012);
+  for (const x of [2.4, 1.4, 0.4, -0.6, -1.6]) bx2(b, kit.mech, 0.02, 8e-3, 0.84, x, ky2 + 0.037, 0);
+  b.decal(0.6, 0.6, 3, ky2 + 0.04, 0, atlasUV(1), 0);
   for (const s of [-1, 1]) {
-    b.box(kit.trim, 6, 0.08, 0.04, 0, ky1 - 0.02, s * 0.57, 0.01);
-    b.box(kit.accent, 1, 0.05, 0.03, 3, ky1 + 0.12, s * 0.555, 8e-3, [0, s * 0.06, 0]);
-    for (const x of [2.9, 1.3, -0.6, -2.3]) b.box(kit.trim, 0.12, 0.1, BZ - 0.75, x, cy - 0.05, s * (0.55 + (BZ - 0.75) / 2), 0.015);
+    b.box(kit.mech, 6, 0.08, 0.04, 0, ky1 - 0.02, s * 0.57, 0.01);
+    bx2(b, kit.accent, 1, 0.05, 0.03, 3, ky1 + 0.12, s * 0.555, [0, s * 0.06, 0]);
+    for (const x of [2.9, 1.3, -0.6, -2.3]) {
+      b.box(kit.armor2, 0.12, 0.1, BZ - 0.75, x, cy - 0.05, s * (0.55 + (BZ - 0.75) / 2), 0.015);
+      b.strut(kit.joint, [x, cy - 0.1, s * 0.56], [x, cy + 0.2, s * (BZ - 0.75)], 0.012, 0.012, 4);
+    }
   }
   bayDoors(c, 1.1, -1.1, ky0 + 0.01, 0.36);
-  const bx2 = -2.4;
-  block(b, kit.hull, bx2, ky2, 0, 0.9, 0.7, 0.36, { top: [0.75, 0.75], shift: [-0.06, 0], ch: 0.12, bev: 0.04 });
-  b.box(kit.glass, 0.5, 0.08, 0.5, bx2 + 0.12, ky2 + 0.27, 0, 0.012);
-  block(b, kit.panel, bx2 - 0.06, ky2 + 0.36, 0, 0.5, 0.36, 0.14, { top: [0.8, 0.8], ch: 0.06 });
-  b.strut(kit.steel, [bx2 - 0.1, ky2 + 0.48, 0], [bx2 - 0.14, ky2 + 0.95, 0], 0.022, 0.012, 6);
-  b.box(kit.metal, 0.07, 0.08, 0.5, bx2 - 0.13, ky2 + 0.82, 0, 0.01);
-  b.box(kit.glow, 0.04, 0.04, 0.04, bx2 - 0.14, ky2 + 0.97, 0, 6e-3);
-  b.box(kit.hazard, 0.06, 0.12, 0.5, 3.62, ky1 + 0.04, 0, 0.01);
-  b.decal(0.55, 0.55, 0.6, fuseAt(gs, 0.6).top + 2e-3, BZ, atlasUV(3), 0);
-  b.decal(0.55, 0.55, 0.6, fuseAt(gs, 0.6).top + 2e-3, -BZ, atlasUV(3), 0);
+  const bx0 = -2.4;
+  const T = new Fuse([[bx0 + 0.45, ky2 + 0.25, 0.25, 0.3], [bx0 + 0.3, ky2 + 0.3, 0.3, 0.36], [bx0 - 0.45, ky2 + 0.28, 0.28, 0.34]], 0, SEC_BOX);
+  fuselage(b, kit.armor2, T);
+  bx2(b, kit.glass, 0.08, 0.08, 0.5, bx0 + 0.45, ky2 + 0.36, 0, [0, 0, -0.3]);
+  b.box(kit.shell, 0.5, 0.18, 0.4, bx0 - 0.06, ky2 + 0.66, 0, 0.02);
+  bx2(b, kit.glass, 0.04, 0.05, 0.3, bx0 + 0.2, ky2 + 0.68, 0);
+  b.strut(kit.joint, [bx0 - 0.1, ky2 + 0.72, 0], [bx0 - 0.14, ky2 + 1.05, 0], 0.02, 0.012, 6);
+  bx2(b, kit.joint, 0.07, 0.08, 0.5, bx0 - 0.13, ky2 + 0.92, 0);
+  bx2(b, kit.lamp, 0.04, 0.04, 0.04, bx0 - 0.14, ky2 + 1.07, 0);
+  bladeAntenna(b, kit, bx0 - 0.3, ky2 + 0.75, 0.15, 0.12);
+  bx2(b, kit.hazard, 0.06, 0.12, 0.5, 3.62, ky1 + 0.04, 0);
+  b.decal(0.55, 0.55, 0.6, gs[4][1] + gs[4][2] + 0.02, BZ, atlasUV(3), 0);
+  b.decal(0.55, 0.55, 0.6, gs[4][1] + gs[4][2] + 0.02, -BZ, atlasUV(3), 0);
   return out(cy + 1.2, lift, (m) => {
     if (m.mod.resupply) return hang(c, m, ky0 + 0.02, 0.55);
     if (Math.abs(m.z) > 1) {
-      const y2 = fuseAt(gs, m.x).top + 0.02;
+      const G2 = new Fuse(gs, Math.sign(m.z) * BZ, ENV);
+      const y2 = G2.top(m.x) + 0.02;
       collar(b, kit, m.x, y2, m.z, m.r, y2 - 0.1, 14);
       return { y: y2, socket: true };
     }
@@ -41551,8 +41889,8 @@ function hull8(c, mat, st, zc = 0) {
 function tube(b, mat, z, st, n = 8, pw = 2.6, flat2 = 0.3) {
   b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, z, Math.max(3e-3, ry), Math.max(3e-3, rz), n, pw, flat2)));
 }
-function fin2(b, mat, prof, z, th, bev = 8e-3) {
-  plate(b, mat, prof.map(([x, y]) => [x, -y]), 0, th, bev, [Math.PI / 2, 0, 0], [0, 0, z - th / 2]);
+function fin(b, mat, prof2, z, th, bev = 8e-3) {
+  plate(b, mat, prof2.map(([x, y]) => [x, -y]), 0, th, bev, [Math.PI / 2, 0, 0], [0, 0, z - th / 2]);
 }
 function shield(b, mat, pts, y, h, th, lean, strips = []) {
   const cl = Math.cos(lean), sl = Math.sin(lean);
@@ -41714,8 +42052,8 @@ function hunter(c) {
   const front = sorted[0], rear = sorted[1];
   const fx0 = rear ? rear.x + rear.r * 1.3 : X(-0.4), fx1 = front ? front.x - front.r * 1.4 : X(-0.05);
   const fy = deck((fx0 + fx1) / 2, 0) - 0.02;
-  fin2(b, kit.hull, [[fx0 - 0.04, fy], [fx1 + 0.04, fy], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.05);
-  fin2(b, kit.accent, [[fx0 - 0.12, fy + 0.38], [fx0 + (fx1 - fx0) * 0.08, fy + 0.4], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.06);
+  fin(b, kit.hull, [[fx0 - 0.04, fy], [fx1 + 0.04, fy], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.05);
+  fin(b, kit.accent, [[fx0 - 0.12, fy + 0.38], [fx0 + (fx1 - fx0) * 0.08, fy + 0.4], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.06);
   glo(b, kit, (fx0 + fx1) / 2 - 0.02, fy + 0.12, 0, (fx1 - fx0) * 0.5, 0.015, 0.05, [0, 0, 0.9]);
   both((s) => {
     cbox2(b, kit.trim, X(0.3), 0.06, 0.03, X(0.2), y0 + 0.12, s * Z(0.37), 0.01, [0, s * 0.12, 0]);
@@ -41854,8 +42192,8 @@ function aegis(c) {
   b.lathe(kit.trim, [[0, 0], [Math.min(0.7 * u, stance.wi), 0], [Math.min(0.78 * u, stance.wi + 0.05), lo], [0, lo]], [cx, y0, 0], "y", 10);
   b.lathe(kit.panel, [[0, 0], [0.86 * u, 0], [0.96 * u, 0.04 * u], [0.96 * u, 0.1 * u], [0.88 * u, 0.13 * u], [0, 0.13 * u]], [cx, y0 + lo, 0], "y", 12);
   const dy = y0 + lo + 0.12 * u;
-  const prof = [[0, 0], [0.88 * u, 0], [0.82 * u, 0.12 * u], [0.66 * u, 0.26 * u], [0.42 * u, 0.36 * u], [0, 0.4 * u]];
-  b.lathe(kit.hull, prof, [cx, dy, 0], "y", 12);
+  const prof2 = [[0, 0], [0.88 * u, 0], [0.82 * u, 0.12 * u], [0.66 * u, 0.26 * u], [0.42 * u, 0.36 * u], [0, 0.4 * u]];
+  b.lathe(kit.hull, prof2, [cx, dy, 0], "y", 12);
   b.lathe(kit.glow, [[0.79 * u, 0.13 * u], [0.81 * u, 0.13 * u], [0.75 * u, 0.2 * u], [0.73 * u, 0.2 * u]], [cx, dy, 0], "y", 12);
   cbox2(b, kit.trim, 0.06 * u, 0.1 * u, 0.36 * u, cx + 0.74 * u, dy + 0.14 * u, 0, 0.015, [0, 0, -0.8]);
   cbox2(b, kit.glow, 0.03 * u, 0.03 * u, 0.28 * u, cx + 0.77 * u, dy + 0.15 * u, 0, 6e-3, [0, 0, -0.8]);
@@ -41877,8 +42215,8 @@ function aegis(c) {
   const dome0 = (x, z) => {
     const r = Math.hypot(x - cx, z);
     if (r > 0.96 * u) return -1;
-    for (let i = 0; i < prof.length - 1; i++) if (r >= prof[i + 1][0]) {
-      const [r0, h0] = prof[i + 1], [r1, h1] = prof[i];
+    for (let i = 0; i < prof2.length - 1; i++) if (r >= prof2[i + 1][0]) {
+      const [r0, h0] = prof2[i + 1], [r1, h1] = prof2[i];
       return dy + h0 + (h1 - h0) * (r - r0) / (r1 - r0 || 1);
     }
     return dy + 0.4 * u;
@@ -42274,7 +42612,7 @@ registerMobility("titanlegs", {
 
 // src/client/proto3d/chassis/titan-greebles.ts
 var V = (x, y, z) => new Vector3(x, y, z);
-var mirror3 = (half) => [...half, ...half.slice(1, -1).reverse().map(([x, z]) => [x, -z])];
+var mirror2 = (half) => [...half, ...half.slice(1, -1).reverse().map(([x, z]) => [x, -z])];
 function inside(poly, x, z) {
   let r = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -42394,7 +42732,7 @@ function citadel(c) {
   const scl = (pts, s) => pts.map(([x, z]) => [x * s, z * s]);
   const wi = Math.min(stance.wi, 2.1 * kz);
   planLoft(b, kit.trim, [[3.1 * kx, -wi * 0.6], [3.1 * kx, wi * 0.6], [2.4 * kx, wi], [-2.4 * kx, wi], [-3.1 * kx, wi * 0.6], [-3.1 * kx, -wi * 0.6], [-2.4 * kx, -wi], [2.4 * kx, -wi]], [[y0, 0.94], [yt + 0.1, 1]]);
-  const B = sc2(mirror3([[3.35, 0], [3.1, -1.2], [2.2, -2.5], [1.05, -2.5], [0.3, -2], [-1, -2], [-1.75, -2.5], [-2.85, -2.4], [-3.45, -1.3], [-3.45, 0]]));
+  const B = sc2(mirror2([[3.35, 0], [3.1, -1.2], [2.2, -2.5], [1.05, -2.5], [0.3, -2], [-1, -2], [-1.75, -2.5], [-2.85, -2.4], [-3.45, -1.3], [-3.45, 0]]));
   const LB = [[yt - 0.05, 0.9], [yt + 0.3 * k, 1], [deckY - 0.1 * k, 0.88], [deckY, 0.86]];
   planLoft(b, kit.hull, B, LB);
   planLoft(b, kit.trim, B, [[yt + 0.25 * k, 1.012], [yt + 0.4 * k, 1.008]]);
@@ -42420,11 +42758,11 @@ function citadel(c) {
     glow(b, kit, -0.35 * kx, deckY - 0.3 * k, s * 1.8 * kz, 1.1 * kx, 0.05, 0.05);
   });
   for (let i = 0; i < rimP.length; i++) {
-    const [ax, az] = rimP[i], [bx2, bz] = rimP[(i + 1) % rimP.length];
-    const len = Math.hypot(bx2 - ax, bz - az), n = Math.max(2, Math.round(len / (0.62 * k)));
-    const ang = Math.atan2(bz - az, bx2 - ax);
+    const [ax, az] = rimP[i], [bx3, bz] = rimP[(i + 1) % rimP.length];
+    const len = Math.hypot(bx3 - ax, bz - az), n = Math.max(2, Math.round(len / (0.62 * k)));
+    const ang = Math.atan2(bz - az, bx3 - ax);
     for (let j = 0; j < n; j++) {
-      const f = (j + 0.5) / n, x = ax + (bx2 - ax) * f, z = az + (bz - az) * f;
+      const f = (j + 0.5) / n, x = ax + (bx3 - ax) * f, z = az + (bz - az) * f;
       if (c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 1.7 + 0.25)) continue;
       pbox(b, j % 2 ? kit.panel : kit.hull, len / n * 0.55, 0.3 * k, 0.22 * k, x, deckY + 0.13 * k, z, -ang);
     }
@@ -42697,7 +43035,7 @@ function lance(c) {
   const deckY = yt + 0.85 * k;
   const wi = Math.min(stance.wi, 1.25 * kz);
   planLoft(b, kit.trim, [[3.3 * kx, 0], [2.7 * kx, wi], [-3.1 * kx, wi], [-3.6 * kx, 0], [-3.1 * kx, -wi], [2.7 * kx, -wi]], [[y0, 0.9], [yt + 0.1, 1]]);
-  const hp = mirror3([[4 * kx, 0], [3 * kx, -0.66 * kz], [1.35 * kx, -1.5 * kz], [-0.85 * kx, -1.36 * kz], [-2.25 * kx, -1.96 * kz], [-3.4 * kx, -1.96 * kz], [-3.95 * kx, -1 * kz], [-3.95 * kx, 0]]);
+  const hp = mirror2([[4 * kx, 0], [3 * kx, -0.66 * kz], [1.35 * kx, -1.5 * kz], [-0.85 * kx, -1.36 * kz], [-2.25 * kx, -1.96 * kz], [-3.4 * kx, -1.96 * kz], [-3.95 * kx, -1 * kz], [-3.95 * kx, 0]]);
   planLoft(b, kit.hull, hp, [[yt - 0.05, 0.88], [yt + 0.3 * k, 1], [deckY - 0.12 * k, 0.97], [deckY, 0.92]]);
   planLoft(b, kit.trim, hp, [[yt + 0.26 * k, 1.006], [yt + 0.36 * k, 1.006]]);
   const deckPoly = hp.map(([x, z]) => [x * 0.92, z * 0.92]);
@@ -42741,17 +43079,17 @@ function lance(c) {
   }
   b.cylb(kit.metal, 0.5 * k, 0.28 * k, 0.05, [3.68 * kx, ry, 0], "x", 16);
   b.cyl(kit.glow, 0.3 * k, 0.26 * k, 0.05, [3.96 * kx, ry, 0], "x", 14);
-  const bx2 = -1.35 * kx, b1 = deckY + 0.95 * k, b2 = b1 + 0.6 * k;
-  block(b, kit.hull, bx2, deckY - 0.02, 0, 1.7 * kx, 1.9 * kz, b1 - deckY + 0.02, { top: [0.72, 0.7], shift: [-0.2 * kx, 0], ch: 0.35 * kz, bev: 0.06 });
-  block(b, kit.panel, bx2 - 0.25 * kx, b1 - 0.02, 0, 1 * kx, 1.1 * kz, b2 - b1, { top: [0.62, 0.78], shift: [-0.15 * kx, 0], ch: 0.25 * kz, bev: 0.05 });
-  b.box(kit.glass, 0.06, 0.12 * k, 0.9 * kz, bx2 + 0.18 * kx, b1 + 0.28 * k, 0, 0.01, [0, 0, -0.55]);
-  glow(b, kit, bx2 + 0.62 * kx, deckY + 0.5 * k, 0, 0.05, 0.07 * k, 1.1 * kz, [0, 0, -0.4]);
-  block(b, kit.accent, bx2 - 0.4 * kx, b2 - 0.02, 0, 0.8 * kx, 0.1 * kz, 0.3 * k, { top: [0.4, 1], shift: [-0.2 * kx, 0], ch: 0.03, bev: 0.02 });
-  sensor(b, kit, bx2 + 0.05 * kx, b2 + 0.05 * k, 0.3 * kz, 0.26 * k);
-  mast(b, kit, bx2 - 0.45 * kx, b2 - 0.05, -0.3 * kz, 2 * k, 0.05 * k);
-  sensorDome(b, kit, bx2 - 0.05 * kx, b1 - 0.02, -0.62 * kz, 0.2 * k);
-  whip(b, kit, bx2 - 0.9 * kx, b1 - 0.02, -0.5 * kz, 1.3 * k);
-  banner(b, kit, bx2 - 0.75 * kx, b1 - 0.1, 0.55 * kz, 2 * k, 0.65 * k, 1);
+  const bx3 = -1.35 * kx, b1 = deckY + 0.95 * k, b2 = b1 + 0.6 * k;
+  block(b, kit.hull, bx3, deckY - 0.02, 0, 1.7 * kx, 1.9 * kz, b1 - deckY + 0.02, { top: [0.72, 0.7], shift: [-0.2 * kx, 0], ch: 0.35 * kz, bev: 0.06 });
+  block(b, kit.panel, bx3 - 0.25 * kx, b1 - 0.02, 0, 1 * kx, 1.1 * kz, b2 - b1, { top: [0.62, 0.78], shift: [-0.15 * kx, 0], ch: 0.25 * kz, bev: 0.05 });
+  b.box(kit.glass, 0.06, 0.12 * k, 0.9 * kz, bx3 + 0.18 * kx, b1 + 0.28 * k, 0, 0.01, [0, 0, -0.55]);
+  glow(b, kit, bx3 + 0.62 * kx, deckY + 0.5 * k, 0, 0.05, 0.07 * k, 1.1 * kz, [0, 0, -0.4]);
+  block(b, kit.accent, bx3 - 0.4 * kx, b2 - 0.02, 0, 0.8 * kx, 0.1 * kz, 0.3 * k, { top: [0.4, 1], shift: [-0.2 * kx, 0], ch: 0.03, bev: 0.02 });
+  sensor(b, kit, bx3 + 0.05 * kx, b2 + 0.05 * k, 0.3 * kz, 0.26 * k);
+  mast(b, kit, bx3 - 0.45 * kx, b2 - 0.05, -0.3 * kz, 2 * k, 0.05 * k);
+  sensorDome(b, kit, bx3 - 0.05 * kx, b1 - 0.02, -0.62 * kz, 0.2 * k);
+  whip(b, kit, bx3 - 0.9 * kx, b1 - 0.02, -0.5 * kz, 1.3 * k);
+  banner(b, kit, bx3 - 0.75 * kx, b1 - 0.1, 0.55 * kz, 2 * k, 0.65 * k, 1);
   both((s) => {
     exhaust(b, kit, -2.05 * kx, deckY - 0.05, s * 1.12 * kz, 0.17 * k, 0.75 * k);
     vent(b, kit, -0.15 * kx, deckY, s * 1.12 * kz, 0.8 * kx, 0.45 * kz, 3, "x");
@@ -42808,13 +43146,13 @@ function monolith(c) {
   const scl = (pts, s, dx = 0) => pts.map(([x, z]) => [x * s + dx, z * s]);
   const wi = Math.min(stance.wi, 2.3 * kz);
   planLoft(b, kit.trim, ngon2(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
-  const P1 = sc2(mirror3([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
+  const P1 = sc2(mirror2([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
   const s1 = yt + 1.25 * k, sTop = 0.84;
   const sh1 = s1 - 0.28 * k;
   const L12 = [[yt - 0.12, 0.9], [yt + 0.2 * k, 1], [sh1, 0.96], [s1, sTop]];
   planLoft(b, kit.hull, P1, L12);
   planLoft(b, kit.trim, P1, [[yt + 0.1 * k, 1.014], [yt + 0.26 * k, 1.014]]);
-  const P2u = sc2(mirror3([[3.05, 0], [2.95, -0.55], [1.7, -2.15], [-1.5, -2.3], [-2.75, -1.6], [-2.75, 0]]));
+  const P2u = sc2(mirror2([[3.05, 0], [2.95, -0.55], [1.7, -2.15], [-1.5, -2.3], [-2.75, -1.6], [-2.75, 0]]));
   planLoft(b, kit.trim, P2u, [[s1 - 0.04, 0.84], [s1 + 0.42 * k, 0.86]]);
   const t2 = s1 + 1.75 * k;
   const sh2 = t2 - 0.3 * k;
@@ -42875,8 +43213,8 @@ function monolith(c) {
     }
   }
   both((s) => {
-    for (const bx2 of [-0.22]) {
-      const x = bx2 * kx, zi = s * 1.75 * kz, zo = s * 2.95 * kz;
+    for (const bx3 of [-0.22]) {
+      const x = bx3 * kx, zi = s * 1.75 * kz, zo = s * 2.95 * kz;
       const ring3 = (z, hw, lo, hi) => [
         [x - hw, lo, z],
         [x + hw, lo, z],
@@ -42908,14 +43246,14 @@ function monolith(c) {
     cagedLamp(b, kit, frame([1.75 * kx, t2, s * 1.35 * kz], [0, 1, 0], [Math.cos(s * 0.5), 0, Math.sin(s * 0.5)]), 0.2 * k, fine);
   });
   for (let i = 0; i < roof2.length; i++) {
-    const [ax, az] = roof2[i], [bx2, bz] = roof2[(i + 1) % roof2.length];
-    const len = Math.hypot(bx2 - ax, bz - az);
+    const [ax, az] = roof2[i], [bx22, bz] = roof2[(i + 1) % roof2.length];
+    const len = Math.hypot(bx22 - ax, bz - az);
     if (len < 0.7 * k) continue;
-    const ang = Math.atan2(bz - az, bx2 - ax), nx = -Math.sin(ang), nz = Math.cos(ang);
+    const ang = Math.atan2(bz - az, bx22 - ax), nx = -Math.sin(ang), nz = Math.cos(ang);
     const n = Math.max(1, Math.round(len / (1.1 * k)));
     for (let j = 0; j < n; j++) {
       const f = (j + 0.5) / n;
-      let x = ax + (bx2 - ax) * f, z = az + (bz - az) * f;
+      let x = ax + (bx22 - ax) * f, z = az + (bz - az) * f;
       const sg = nx * -x + nz * -z > 0 ? 1 : -1;
       x += nx * sg * 0.32 * k;
       z += nz * sg * 0.32 * k;
@@ -42934,10 +43272,10 @@ function monolith(c) {
       run = [];
     };
     for (let i = 0; i < rail2.length; i++) {
-      const [ax, az] = rail2[i], [bx2, bz] = rail2[(i + 1) % rail2.length];
-      const n = Math.max(1, Math.round(Math.hypot(bx2 - ax, bz - az) / (0.7 * k)));
+      const [ax, az] = rail2[i], [bx3, bz] = rail2[(i + 1) % rail2.length];
+      const n = Math.max(1, Math.round(Math.hypot(bx3 - ax, bz - az) / (0.7 * k)));
       for (let j = 0; j <= n; j++) {
-        const x = ax + (bx2 - ax) * j / n, z = az + (bz - az) * j / n;
+        const x = ax + (bx3 - ax) * j / n, z = az + (bz - az) * j / n;
         if (blocked(x, z)) flush();
         else if (!run.length || Math.hypot(run[run.length - 1][0] - x, run[run.length - 1][2] - z) > 1e-4) run.push([x, ry, z]);
       }
@@ -43056,12 +43394,12 @@ function buildJet(b, kit, L, W, S) {
     b.decal(R * 1.1, R * 1.1, -hl * 0.38, wy + R * 0.3 + 4e-3, sg * span * 0.58, atlasUV(3), 0);
     b.box(kit.hull, L * 0.22, R * 0.6, R * 0.5, hl * 0.18, -R * 0.1, sg * R * 1, 0.012);
     b.box(kit.metal, 0.02, R * 0.46, R * 0.38, hl * 0.18 + L * 0.11 - 6e-3, -R * 0.1, sg * R * 1, 4e-3);
-    const fin3 = [];
+    const fin2 = [];
     for (const [f, lex, ch] of [[0, -hl * 0.7, L * 0.28], [1, -hl * 0.92, L * 0.12]]) {
       const base3 = [lex, R * 0.5 + f * R * 3.6, sg * (R * 0.9 + f * R * 0.9)];
-      fin3.push(foil2(base3, [-1, 0, 0], [0, 0, 1], ch, R * 0.14 * (1 - f * 0.4)));
+      fin2.push(foil2(base3, [-1, 0, 0], [0, 0, 1], ch, R * 0.14 * (1 - f * 0.4)));
     }
-    b.loft(kit.hull, fin3);
+    b.loft(kit.hull, fin2);
     const tp = [];
     for (const [f, lex, ch] of [[0, -hl * 0.82, L * 0.22], [1, -hl * 1, L * 0.1]])
       tp.push(foil2([lex, R * 0.1, sg * (R * 0.7 + f * R * 3)], [-1, 0, 0], [0, 1, 0], ch, R * 0.1));
@@ -43148,9 +43486,9 @@ function buildRotor(b, kit, parent, chassisId, L, W, S) {
   b.loft(kit.glass, [[0.5, 0.35, 0.4], [0.42, 0.7, 0.7], [0.3, 0.9, 0.88], [0.2, 0.7, 0.7]].map(([x, ry, rz]) => ellRing(x * L * 0.6 + 0.01, 0.42 + fh * 0.12, 0, fh * ry * 0.7, fw * rz * 0.96, 10, 2.2)));
   b.loft(kit.hull, [[-0.4, 0.5], [-0.9, 0.3], [-1.4, 0.18]].map(([x, s]) => ellRing(x * L * 0.5, 0.45 + (heavy ? 0.04 : 0.02), 0, fh * s * 0.7, fw * s * 0.7, 8, 2.4)));
   const tx = -L * 0.66;
-  const fin3 = [];
-  for (const [f, lex, ch] of [[0, tx, L * 0.16], [1, tx - L * 0.08, L * 0.07]]) fin3.push(foil2([lex, 0.46 + f * fh * 1.6, 0], [-1, 0, 0], [0, 0, 1], ch, 0.02));
-  b.loft(kit.hull, fin3);
+  const fin2 = [];
+  for (const [f, lex, ch] of [[0, tx, L * 0.16], [1, tx - L * 0.08, L * 0.07]]) fin2.push(foil2([lex, 0.46 + f * fh * 1.6, 0], [-1, 0, 0], [0, 0, 1], ch, 0.02));
+  b.loft(kit.hull, fin2);
   b.loft(kit.hull, [0, 1].map((f) => foil2([tx - L * 0.04, 0.5, (f ? 1 : -1) * fw * 0.9], [-1, 0, 0], [0, 1, 0], L * 0.11, 0.02)));
   mkRotor(tx - L * 0.02, 0.5 + fh * 0.5, fw * 0.12, fh * 0.9, 4, 1, 120, true);
   rotors[rotors.length - 1].g.rotation.x = Math.PI / 2;
@@ -43819,7 +44157,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// node_modules/three/examples/jsm/shaders/CopyShader.js
+// ../../../node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -43859,7 +44197,7 @@ var CopyShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/Pass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -43950,7 +44288,7 @@ var FullScreenQuad = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -44015,7 +44353,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -44103,7 +44441,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// ../../../node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -44288,7 +44626,7 @@ var EffectComposer = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -44361,7 +44699,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// ../../../node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -44413,7 +44751,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -44752,7 +45090,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// node_modules/three/examples/jsm/shaders/GTAOShader.js
+// ../../../node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -45118,7 +45456,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// ../../../node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -45321,7 +45659,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// node_modules/three/examples/jsm/math/SimplexNoise.js
+// ../../../node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -45755,7 +46093,7 @@ var SimplexNoise = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -46182,7 +46520,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// node_modules/three/examples/jsm/shaders/OutputShader.js
+// ../../../node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -46270,7 +46608,7 @@ var OutputShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
