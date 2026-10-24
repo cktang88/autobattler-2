@@ -32,8 +32,10 @@ export function createMinimap(host: HTMLElement, view: BattleView, canvasEl: HTM
 
   let dragging = false;
   const go = (e: PointerEvent) => {
+    // CSS may draw the map smaller than W x H (phones): map the pointer through the drawn size
     const r = cv.getBoundingClientRect();
-    const p = toWorld(Math.max(0, Math.min(W, e.clientX - r.left)), Math.max(0, Math.min(H, e.clientY - r.top)));
+    const mx = ((e.clientX - r.left) * W) / Math.max(1, r.width), my = ((e.clientY - r.top) * H) / Math.max(1, r.height);
+    const p = toWorld(Math.max(0, Math.min(W, mx)), Math.max(0, Math.min(H, my)));
     view.centerOn(p.x, p.y);
   };
   cv.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); dragging = true; cv.setPointerCapture(e.pointerId); go(e); });
