@@ -43,4 +43,6 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-juggernaut', name: 'Gargantua', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'autocannon'] },
   // ---- titan (size 5): beam-armed war machine ----
   { id: 'starter-warlord', name: 'Kronos', chassis: 'titan', mobility: 'megatracks', mounts: ['annihilator', 'siegeplasma', 'cannon', 'cannon', 'autocannon'] },
+  // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
+  { id: 'starter-thunderbird', name: 'Thunderbird', chassis: 'strategic', mobility: 'jet', mounts: ['bombs', 'bombs', 'heavybomb', 'bombs', 'hmg', 'hmg'] },
 ];

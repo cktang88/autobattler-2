@@ -2,7 +2,7 @@
 // readability row, a deploy-board view and a demo battle on a FieldView.
 // URL params: ?enemy=1 (red team), ?battle=1 (auto-start battle), ?speed=N, ?only=grid|modules|icons|small|field,
 // ?chassis=id,id (grid rows filter), ?big=1, ?zoom=N (grid cell scale), ?empty=1 (no turrets),
-// ?only=small&n=40&cell=48&rseed=N (sheet of random valid designs, labelled)
+// ?only=small&n=40&cell=48&rseed=N (sheet of random valid designs, labelled), ?only=bombers (heavy bombers)
 
 import { unlockAudio, playMusic } from './audio.ts';
 import { drawPartIcon, drawUnitPreview, FieldView, type BoardUnit } from './render/field.ts';
@@ -189,6 +189,10 @@ function giantDeck(): Design[] {
     mk('c1', 'citadel', 'megatracks', ['doomsday', 'tactnuke', 'siege240', 'twin30', 'quad20', 'mg']),
     mk('l1', 'leviathan', 'megatracks', ['siege240', 'inferno', 'cannon75', 'twin30']),
     mk('k1', 'carrier', 'gravlift', ['skyfortress', 'heavyflak', 'quad20', 'quad20']),
+    mk('b1', 'strategic', 'jet', ['bombs', 'bombs', 'heavybomb', 'bombs', 'hmg', 'hmg']),
+    mk('b2', 'superfortress', 'jet', ['heavybomb', 'bombs', 'bombs', 'heavybomb', 'clusterbombs', 'clusterbombs', 'twinmg', 'twinmg', 'hmg', 'hmg']),
+    mk('b3', 'dreadnought', 'gravlift', ['avenger', 'heavybomb', 'bombs', 'bombs', 'heavybomb', 'hmg', 'hmg']),
+    mk('b4', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']),
     mk('g1', 'goliath', 'titanlegs', ['stormtower', 'cannon', 'cannon', 'twin30']),
     mk('t2', 'titan', 'megatracks', ['stormcore', 'avenger', 'howitzer', 'cruise', 'autocannon']),
     mk('n1', 'lance', 'titanlegs', ['massdriver', 'twin30']),
@@ -460,6 +464,13 @@ function titansSection(): void {
   });
 }
 
+/** ?only=bombers: the giant / titan bombers next to the strato bomber, with bomb loadouts. ?px=N canvas size. */
+function bombersSection(): void {
+  const host = labSection('bombers', 'Heavy bombers');
+  const px = Number(params.get('px') ?? '460') || 460;
+  for (const d of giantDeck().filter((x) => x.id.startsWith('b'))) host.append(preview(d, px, d.chassis, `${d.mobility} · ${d.mounts.filter(Boolean).join(',')}`));
+}
+
 function main(): void {
   document.body.classList.toggle('enemy', side === 1);
   const show = (id: string) => !only || only === id;
@@ -473,6 +484,7 @@ function main(): void {
   if (only === 'calibre') calibreSection();
   if (only === 'classes') classesSection();
   if (only === 'titans') titansSection();
+  if (only === 'bombers') bombersSection();
   animate();
   addEventListener('pointerdown', () => unlockAudio(), { once: true });
 }

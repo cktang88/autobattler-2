@@ -77,7 +77,7 @@ const SHAPE_HW: Record<Shape, number> = {
   goliath: 0.36, leviathan: 0.3, carrier: 0.42, colossal: 0.27, citadel: 0.42,
   mantis: 0.14, mech: 0.28, arachnid: 0.22, crab: 0.4, saucer: 0.44, delta: 0.2, warlord: 0.28, scorpion: 0.22, centipede: 0.16, broodmother: 0.34, arachne: 0.33,
   carriage: 0.2, siegeplat: 0.33, riot: 0.36, hunter: 0.2, juggernaut: 0.44, interceptor: 0.12, bomber: 0.3,
-  strikejet: 0.16, stratobomber: 0.2, heavyheli: 0.2, lance: 0.2, monolith: 0.42,
+  strikejet: 0.16, stratobomber: 0.2, heavyheli: 0.2, lance: 0.2, monolith: 0.42, strategic: 0.2, superfortress: 0.24, airship: 0.44,
 };
 
 // hardpoint tables (MOUNT_PTS / footprint FOOT_MOUNTS), RANK, PART_SHAPES and the mount solver live in

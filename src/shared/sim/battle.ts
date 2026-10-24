@@ -61,6 +61,9 @@ const BOMB_ALT = 1.5; // cells: height bombs start falling from
 const BOMB_FALL = 0.5; // seconds a bomb takes to land
 /** jets keep at least this share of their combined radius apart (soft: JET_SEP_SOFT of the overlap per tick) */
 const JET_SEP = 0.55;
+/** ... and a giant / titan bomber (size 4+) keeps a wider berth: its wings reach far past its hit radius, and two of
+ *  them flying wing in wing at JET_SEP read as one plane stacked on another */
+const JET_SEP_BIG = 0.95;
 /** ModuleDef.lifesteal by module id: share of the damage a hit deals that heals the shooter */
 const LIFESTEAL = new Map([...MODULE_BY_ID.values()].filter((m) => m.lifesteal).map((m) => [m.id, m.lifesteal!]));
 /** armour shred (ModuleDef.shred) holds this long after the last shredding hit, then grows back at SHRED_REGEN / s */
@@ -295,6 +298,8 @@ interface Internal {
   strafeT: number;
   /** turn direction of a jet's loop back to its target (+1 / -1), flipped every pass (figure-eight runs) */
   loopDir: number;
+  /** bomber heading home to rearm: set once every bay is empty, cleared once every bay is full again */
+  rearming: boolean;
   crushCd: number;
   burnDps: number;
   /** accumulated slow / disarm damage (see SLOW_PER, DISARM_PER_S); u.slow / u.disarm are derived from them */
@@ -771,7 +776,7 @@ export class Battle {
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
-      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, crushCd: 0,
+      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, rearming: false, crushCd: 0,
       burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
@@ -2346,9 +2351,12 @@ export class Battle {
     // Until then keep closing (so a long-range gun alone doesn't park a brawler out of reach of its main guns);
     // after that, stop — there's no reason to close further unless melee or Charge.
     let engagedDps = 0, relevantDps = 0, relevantR = 0, relevantMelee = false;
+    // a hovering bomber with bombs aboard flies on over its ground goal: its guns are only for self-defence on the
+    // way (counting them parked a gun-armed grav bomber at machine-gun range, and its bays never got to drop)
+    const bombRun = I.airRole === 'bomber' && u.flying && !!goal && !goal.flying;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
-      if (!w || w.heal > 0) continue;
+      if (!w || w.heal > 0 || (bombRun && !w.resupply)) continue;
       const tg = u.mounts[mi].target;
       if (!goal || this.canHit(w, goal)) { relevantDps += w.dps; relevantR = Math.max(relevantR, w.range); if (w.melee) relevantMelee = true; }
       if (tg >= 0) engagedDps += w.dps;
@@ -2642,16 +2650,22 @@ export class Battle {
     return u.side === 0 ? u.y >= FIELD_H - DEPLOY_D : u.y <= DEPLOY_D;
   }
 
-  /** every bomb bay is empty: fly home to rearm before the next run */
+  /** every bomb bay is empty: fly home to rearm before the next run, and stay until every bay is full again (a big
+   *  bomber with bays of different reload times used to leave as soon as the quickest one was rearmed, and flew its
+   *  next runs with the slow bays still empty) */
   private needsResupply(I: Internal): boolean {
-    let any = false;
+    let any = false, empty = true, loading = false;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
       if (!w || !w.resupply) continue;
-      if (!I.u.mounts[mi].reloading) return false;
       any = true;
+      if (I.u.mounts[mi].reloading) loading = true;
+      else empty = false;
     }
-    return any;
+    if (!any) return false;
+    if (empty) I.rearming = true;
+    else if (!loading) I.rearming = false;
+    return I.rearming;
   }
 
   /** the escort can't keep up: its charge is clearly faster and already well beyond the leash */
@@ -2699,9 +2713,13 @@ export class Battle {
       } else want = d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
       I.strafeT = 0;
     } else if (this.needsResupply(I)) {
-      // bays empty: head home and circle over the own lines until rearmed
+      // bays empty: head home and circle over the own lines until rearmed. Circle only once deep enough into the
+      // zone that the loop (turning radius speed / turn) stays over it: a big, wide-turning bomber that started its
+      // loop at the zone's edge spent half of every circle outside, where the bays don't reload
       const hy = u.side === 0 ? FIELD_H - DEPLOY_D * 0.5 : DEPLOY_D * 0.5;
-      want = this.overHome(u) ? u.angle + 0.8 * I.loopDir : Math.atan2(hy - u.y, (u.x < FIELD_W / 2 ? FIELD_W * 0.35 : FIELD_W * 0.65) - u.x);
+      const depth = u.side === 0 ? u.y - (FIELD_H - DEPLOY_D) : DEPLOY_D - u.y;
+      const loopR = I.speed / Math.max(0.3, I.turn);
+      want = this.overHome(u) && depth >= Math.min(DEPLOY_D * 0.5, loopR) ? u.angle + 0.8 * I.loopDir : Math.atan2(hy - u.y, (u.x < FIELD_W / 2 ? FIELD_W * 0.35 : FIELD_W * 0.65) - u.x);
     } else if (I.strafeT > 0) {
       I.strafeT -= DT;
       want = u.angle;
@@ -2920,7 +2938,7 @@ export class Battle {
             if (A.strafe || B.strafe) {
               // jets fly past each other, but never stack in the same spot: a small soft keep-out (JET_SEP of the
               // combined radius) eases overlapping jets apart a little each tick without stopping them
-              const jr = JET_SEP * (A.radius + B.radius);
+              const jr = (a.stats.size >= 4 || b.stats.size >= 4 ? JET_SEP_BIG : JET_SEP) * (A.radius + B.radius);
               let jx = b.x - a.x, jy = b.y - a.y;
               const jd2 = jx * jx + jy * jy;
               if (jd2 >= jr * jr) continue;
