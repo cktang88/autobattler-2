@@ -3,17 +3,29 @@
 // waist; a dark recessed waist band; an arrow-nosed upper casemate whose lip OVERHANGS the waist before it batters
 // back in (so the side view is an hourglass); a stepped octagonal plinth carrying the giant gun in a heavy roof
 // cupola; flying buttresses down each flank; a commander's tower, two tall rear exhaust stacks, and a corner gun
-// tower on the rear-right quarter for the medium gun. Every wall carries layered, riveted appliqué plates; the glacis
-// has ERA tiles and vision slits; conduits, ladders, hatches, lamps and antennas everywhere. Very few guns.
+// tower on the rear-right quarter for the medium gun. Hard-surface pass (chassis/hs-kit.ts): steep faceted walls with
+// chamfered shoulders (no bell taper); every wall carries thick appliqué plates standing proud on shadow gaps, stacked
+// two deep with ERA bricks on the front arc only; recessed louvre grilles; caged searchlights; a railed walkway round
+// the roof with ladders down to the skirt (building-scale cues); coolant pipe runs from the stacks to the tower; rams
+// on the hip housings. Very few guns.
 
 import type { P2, V3 } from '../geo.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { block, both, collar, glow, hazard, vent } from './shapes.ts';
 import { banner, glowGrille, mast, ngon, planLoft } from './giants-kit.ts';
 import {
-  armourPlate, inside, boltRing, faceBox, faceLadder, facePlate, faceRivets, faceSlit, faceVent, hatch, lamp, mirror, pbox,
-  pipeRun, rivetLine, sensorDome, wallFace, whip,
+  inside, boltRing, faceBox, faceFrame, faceSlit, hatch, mirror, pbox, pipeRun, sensorDome, wallFace, whip, type Face,
 } from './titan-greebles.ts';
+import { armorPlate, cagedLamp, eraGrid, fineFor, frame, handrail, inset, ladder, piston, plateStack, recessPanel, rectP } from './hs-kit.ts';
+import type { Kit, MatLike } from '../materials.ts';
+import type { Bld } from '../geo.ts';
+
+/** hard-surface plate on a wall face (hs-kit armorPlate in face coordinates: thickness, bevel, shadow gap) */
+const facePlateHS = (b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number, d: number, t: number, mat: MatLike, so = t * 0.45) =>
+  armorPlate(b, kit, mat, faceFrame(f, du, dv, 0), rectP(w, d, Math.min(w, d) * 0.08), t, { standoff: so, gap: t * 1.1 });
+/** recessed louvre grille on a wall face */
+const faceGrille = (b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number, d: number, n: number) =>
+  recessPanel(b, kit, faceFrame(f, du, dv, 0), w, d, Math.min(w, d) * 0.12, { slats: n });
 
 function monolith(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
@@ -30,8 +42,9 @@ function monolith(c: ChassisCtx): ChassisOut {
 
   // ---- tier 1: the battered skirt. Hourglass plan: front shield horns, a pinched waist, rear engine horns.
   const P1 = sc(mirror([[3.5, 0], [3.35, -1.0], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
-  const s1 = yt + 1.25 * k, sTop = 0.78;
-  const L1: [number, number][] = [[yt - 0.12, 0.9], [yt + 0.2 * k, 1.0], [s1, sTop]];
+  const s1 = yt + 1.25 * k, sTop = 0.84;
+  const sh1 = s1 - 0.28 * k; // shoulder: the wall stands almost upright to here, then a sharp chamfer
+  const L1: [number, number][] = [[yt - 0.12, 0.9], [yt + 0.2 * k, 1.0], [sh1, 0.96], [s1, sTop]];
   planLoft(b, kit.hull, P1, L1);
   // plinth rim: a dark band and a team glow line around the skirt foot
   planLoft(b, kit.trim, P1, [[yt + 0.1 * k, 1.014], [yt + 0.26 * k, 1.014]]);
@@ -40,10 +53,11 @@ function monolith(c: ChassisCtx): ChassisOut {
   planLoft(b, kit.trim, P2u, [[s1 - 0.04, 0.84], [s1 + 0.42 * k, 0.86]]);
   // ---- tier 2: the upper casemate. Overhanging lip, then battered back in to the roof.
   const t2 = s1 + 1.75 * k;
-  const L2: [number, number][] = [[s1 + 0.38 * k, 0.88], [s1 + 0.62 * k, 1.0], [s1 + 0.78 * k, 1.0], [t2 - 0.12 * k, 0.8], [t2, 0.76]];
+  const sh2 = t2 - 0.3 * k;
+  const L2: [number, number][] = [[s1 + 0.38 * k, 0.88], [s1 + 0.62 * k, 1.0], [s1 + 0.78 * k, 1.0], [sh2, 0.95], [t2 - 0.06 * k, 0.8], [t2, 0.78]];
   planLoft(b, kit.hull, P2u, L2);
   planLoft(b, kit.accent, P2u, [[s1 + 0.64 * k, 1.008], [s1 + 0.74 * k, 1.008]]);
-  const roof2 = scl(P2u, 0.76);
+  const roof2 = scl(P2u, 0.78);
   // ---- tier 3: stepped octagonal plinth under the giant-gun cupola
   const cx3 = 0.65 * kx;
   const P3 = ngon(8, 1.5 * kx, 1.42 * kz);
@@ -52,50 +66,56 @@ function monolith(c: ChassisCtx): ChassisOut {
   planLoft(b, kit.trim, P3, [[t2 - 0.04, 1.05], [t2 + 0.1 * k, 1.05]], [cx3, 0]);
   planLoft(b, kit.panel, P3, [[t2 + 0.08 * k, 1.0], [t3 - 0.08 * k, 0.9], [t3, 0.86]], [cx3, 0]);
 
-  // ---- appliqué armour on every wall of the skirt and the casemate (layered plates, rivets), slits on the glacis
+  // ---- appliqué armour on every wall of the skirt and the casemate: thick plates on shadow gaps, stacked on the
+  // front arc with ERA bricks, louvre grilles at the rear, vision slits on the forward casemate faces
   const u = 0.12 * k; // greeble unit
+  const fine = fineFor(c.S);
   for (let i = 0; i < P1.length; i++) {
-    const f = wallFace(P1, i, [yt + 0.26 * k, 1.0], [s1 - 0.05, sTop + 0.012]);
+    const f = wallFace(P1, i, [yt + 0.26 * k, 1.0], [sh1, 0.96]);
     if (f.w < 0.5 * k) continue;
     const front = f.n.x > 0.85, rear = f.n.x < -0.85;
     const n = Math.max(1, Math.round(f.w / (1.5 * k)));
     for (let j = 0; j < n; j++) {
-      const du = (j + 0.5 - n / 2) * (f.w / n);
+      const du = (j + 0.5 - n / 2) * (f.w / n), pw = (f.w / n) * 0.86 - 0.05;
       if (rear) continue;
-      armourPlate(b, kit, f, du, -f.h * 0.06, (f.w / n) * 0.84 - 0.05, f.h * 0.62, u * 0.9, j % 2 ? kit.panel : kit.hull);
-      // ERA tiles on the glacis plates
-      if (front) for (let r = 0; r < 2; r++) for (let q = -1; q <= 1; q++) facePlate(b, q === 0 ? kit.trim : kit.panel, f, du + q * (f.w / n) * 0.27, -f.h * 0.2 + r * f.h * 0.3, (f.w / n) * 0.22, f.h * 0.2, u * 0.7, u * 1.25);
+      if (front) {
+        const top = plateStack(b, kit, kit.armor, faceFrame(f, du, -f.h * 0.04, 0), rectP(pw, f.h * 0.72, u), [
+          { inset: 0, thick: u * 1.2, standoff: u * 0.5 }, { inset: u * 1.4, thick: u * 0.9, mat: kit.armor2 },
+        ], { gap: u * 1.2 });
+        eraGrid(b, kit, faceFrame(f, du, -f.h * 0.04, top), 3, 4, pw * 0.2, f.h * 0.16, u * 0.55, kit.armor2);
+      } else facePlateHS(b, kit, f, du, -f.h * 0.04, pw, f.h * 0.66, u * 1.1, j % 2 ? kit.shell : kit.armor2);
     }
-    if (!front && !rear) faceRivets(b, kit.metal, f, -f.w * 0.45, f.w * 0.45, f.h * 0.42, Math.max(3, Math.round(f.w / (0.35 * k))), u * 0.55, 0);
     if (rear) {
-      // reactor grille + ladder on the rear plates
-      faceVent(b, kit, f, 0, 0, f.w * 0.62, f.h * 0.55, 5);
+      // reactor grille + exhaust slit on the rear plates
+      faceGrille(b, kit, f, 0, 0, f.w * 0.62, f.h * 0.55, 5);
       faceSlit(b, kit, f, 0, -f.h * 0.38, f.w * 0.5, u * 0.5, kit.hot);
     }
   }
-  // waist faces: conduit bundles, vents and a ladder on each pinch
+  // waist faces: a recessed grille on each pinch, a ladder from the skirt foot up onto the skirt top
   for (let i = 0; i < P1.length; i++) {
-    const f = wallFace(P1, i, [yt + 0.26 * k, 1.0], [s1 - 0.05, sTop + 0.012]);
+    const f = wallFace(P1, i, [yt + 0.26 * k, 1.0], [sh1, 0.96]);
     if (Math.abs(f.n.z) < 0.97 || Math.abs(f.c.x) > 1.2 * kx) continue;
-    faceLadder(b, kit, f, -f.w * 0.36, -f.h * 0.45, f.h * 0.48, 0.3 * k);
-    faceVent(b, kit, f, f.w * 0.12, f.h * 0.05, f.w * 0.3, f.h * 0.45, 4);
+    // (the flying buttress stands on the middle of this face: grille and ladder go either side of it)
+    const ub = (x: number) => (lbX(x) - f.c.x) / (f.u.x || 1e-6);
+    const lbX = (x: number) => x;
+    faceGrille(b, kit, f, ub(0.62 * kx), f.h * 0.05, 0.42 * kx, f.h * 0.45, 4);
+    const lb = wallFace(P1, i, [yt + 0.2 * k, 1.0], [s1, sTop]);
+    const lu = ub(-0.82 * kx);
+    const a = lb.c.clone().addScaledVector(lb.u, lu).addScaledVector(lb.v, -lb.h * 0.5);
+    const e = lb.c.clone().addScaledVector(lb.u, lu).addScaledVector(lb.v, lb.h * 0.5);
+    ladder(b, kit, [a.x, a.y, a.z], [e.x, e.y + 0.1 * k, e.z], 0.3 * k, [lb.u.x, lb.u.y, lb.u.z], [lb.n.x, lb.n.y, lb.n.z], 0.08 * k);
   }
-  // casemate walls: plates proud of the battered faces, slits in the forward faces
+  // casemate walls: plates proud of the walls, slits in the forward faces
   for (let i = 0; i < P2u.length; i++) {
-    const f = wallFace(P2u, i, [s1 + 0.8 * k, 1.0], [t2 - 0.14 * k, 0.8]);
+    const f = wallFace(P2u, i, [s1 + 0.8 * k, 1.0], [sh2, 0.95]);
     if (f.w < 0.6 * k) continue;
     const fwd = f.n.x > 0.3;
     const n = Math.max(1, Math.round(f.w / (1.3 * k)));
     for (let j = 0; j < n; j++) {
       const du = (j + 0.5 - n / 2) * (f.w / n);
-      armourPlate(b, kit, f, du, f.h * 0.05, (f.w / n) * 0.82, f.h * 0.6, u * 0.75, j % 2 ? kit.hull : kit.panel);
-      if (fwd) faceSlit(b, kit, f, du, f.h * 0.42, (f.w / n) * 0.5, u * 0.4);
+      facePlateHS(b, kit, f, du, -f.h * 0.06, (f.w / n) * 0.84, f.h * 0.62, u * 0.95, j % 2 ? kit.armor2 : kit.shell);
+      if (fwd) faceSlit(b, kit, f, du, f.h * 0.38, (f.w / n) * 0.5, u * 0.4);
     }
-  }
-  // lip rivets: a long bolt line under the casemate overhang
-  for (let i = 0; i < P2u.length; i++) {
-    const f = wallFace(P2u, i, [s1 + 0.38 * k, 0.88], [s1 + 0.62 * k, 1.0]);
-    if (f.w > 0.5 * k) faceRivets(b, kit.metal, f, -f.w * 0.44, f.w * 0.44, 0, Math.max(3, Math.round(f.w / (0.3 * k))), u * 0.5, 0);
   }
 
   // ---- flying buttresses down the flanks: from the casemate lip down to beyond the skirt foot
@@ -107,7 +127,6 @@ function monolith(c: ChassisCtx): ChassisOut {
       b.loft(kit.hull, [ring(zi, 0.42 * kx, s1 - 0.2 * k, t2 - 0.35 * k), ring(zo, 0.32 * kx, yt - 0.1, yt + 0.5 * k)]);
       // capping plate along the ridge + rivets
       const a: V3 = [x, t2 - 0.3 * k, zi], e: V3 = [x, yt + 0.55 * k, zo];
-      rivetLine(b, kit.metal, [a[0], a[1] + 0.03, a[2] + s * 0.2], [e[0], e[1] + 0.03, e[2] - s * 0.15], 7, u * 0.6);
       b.strut(kit.trim, [x, a[1] - 0.02 * k, a[2]], [x, e[1] - 0.02 * k, e[2]], 0.12 * k, 0.1 * k, 6);
       // foot pad where the buttress meets the ground line
       block(b, kit.trim, x, yt - 0.25 * k, zo - s * 0.1 * kz, 0.85 * kx, 0.5 * kz, 0.45 * k, { top: [0.8, 0.7], ch: 0.12 * k });
@@ -124,8 +143,7 @@ function monolith(c: ChassisCtx): ChassisOut {
   for (let i = -3; i <= 3; i++) block(b, kit.steel, 3.62 * kx, Math.max(0.1, yt - 0.55 * k), i * 0.42 * kz, 0.3 * kx, 0.2 * kz, 0.3 * k, { top: [0.3, 0.6], shift: [0.08 * kx, 0], ch: 0.04 });
   hazard(b, kit, 3.36 * kx, yt + 0.18 * k, 0, 2.6 * kz, 0.08 * kx, 9, Math.PI / 2);
   both((s) => {
-    lamp(b, kit, 3.42 * kx, yt + 0.42 * k, s * 1.3 * kz, 0.18 * k);
-    lamp(b, kit, 3.42 * kx, yt + 0.42 * k, s * 0.95 * kz, 0.18 * k);
+    for (const zz of [1.3, 0.95]) cagedLamp(b, kit, frame([3.38 * kx, yt + 0.3 * k, s * zz * kz], [0, 1, 0], [1, 0, 0]), 0.2 * k, fine);
   });
 
   // ---- roof (tier 2 top): hatches, vents, lamps, hazard edges, bolt rows
@@ -133,7 +151,7 @@ function monolith(c: ChassisCtx): ChassisOut {
     hatch(b, kit, -1.55 * kx, t2, s * 1.2 * kz, 0.24 * k);
     vent(b, kit, -0.35 * kx, t2, s * 1.6 * kz, 0.7 * kx, 0.38 * kz, 3, 'x');
     hazard(b, kit, 1.65 * kx, t2 + 0.01, s * 1.0 * kz, 0.7 * kx, 0.12 * kz, 4, s * 0.62);
-    lamp(b, kit, 1.75 * kx, t2 + 0.1 * k, s * 1.35 * kz, 0.14 * k, s * 0.5);
+    cagedLamp(b, kit, frame([1.75 * kx, t2, s * 1.35 * kz], [0, 1, 0], [Math.cos(s * 0.5), 0, Math.sin(s * 0.5)]), 0.2 * k, fine);
   });
   // roof armour: a ring of raised plates following the roof edge (breaks up the flat top), gaps between them
   for (let i = 0; i < roof2.length; i++) {
@@ -150,12 +168,30 @@ function monolith(c: ChassisCtx): ChassisOut {
       x += nx * sg * 0.32 * k; z += nz * sg * 0.32 * k;
       if (Math.hypot(x - cx3, z) < 1.65 * k || Math.abs(x - cbx) < 0.75 * kx && Math.abs(z) < 0.8 * kz) continue;
       if (c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 2.2 + 0.3 * k)) continue;
-      b.box(j % 2 ? kit.panel : kit.hull, (len / n) * 0.84, 0.12 * k, 0.5 * k, x, t2 + 0.05 * k, z, 0.03 * k, [0, -ang, 0]);
-      b.box(kit.metal, (len / n) * 0.5, 0.04 * k, 0.06 * k, x, t2 + 0.12 * k, z, 0.01, [0, -ang, 0]);
+      armorPlate(b, kit, j % 2 ? kit.armor2 : kit.armor, frame([x, t2 - 0.01, z], [0, 1, 0], [Math.cos(ang), 0, Math.sin(ang)]), rectP((len / n) * 0.84, 0.5 * k, 0.05 * k), 0.09 * k, { standoff: 0.04 * k, gap: 0.08 * k });
     }
   }
   // plinth: bolt ring and four short sensor posts
   boltRing(b, kit.metal, cx3, t3, 0, 1.15 * k, 16, u * 0.5);
+
+  // ---- railed walkway round the skirt-top ledge (crew-scale cue), broken where the casemate overhangs it and where
+  // the buttresses, the gun tower and the stacks stand
+  if (fine) {
+    const rail = inset(scl(P1, sTop), 0.2 * k), ry = s1 + 0.3 * k;
+    const blocked = (x: number, z: number) => inside(P2u, x, z) || Math.abs(x + 0.22 * kx) < 0.55 * kx || x < -2.3 * kx
+      || c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 2.2 + 0.9 * k);
+    let run: V3[] = [];
+    const flush = () => { if (run.length > 1) handrail(b, kit, run, 0.025 * k, 0.32 * k); run = []; };
+    for (let i = 0; i < rail.length; i++) {
+      const [ax, az] = rail[i], [bx, bz] = rail[(i + 1) % rail.length];
+      const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / (0.7 * k)));
+      for (let j = 0; j <= n; j++) {
+        const x = ax + ((bx - ax) * j) / n, z = az + ((bz - az) * j) / n;
+        if (blocked(x, z)) flush(); else if (!run.length || Math.hypot(run[run.length - 1][0] - x, run[run.length - 1][2] - z) > 1e-4) run.push([x, ry, z]);
+      }
+    }
+    flush();
+  }
 
   // ---- commander's tower behind the cupola: tapered, periscopes, sensor dome, antennas, banner
   block(b, kit.trim, cbx, t2 - 0.02, 0, 1.25 * kx, 1.35 * kz, 0.22 * k, { ch: 0.2 * k });
@@ -175,8 +211,13 @@ function monolith(c: ChassisCtx): ChassisOut {
     b.cyl(kit.trim, r * 0.8, r * 0.8, 0.04, [x, yb + h - 0.01, z], 'y', 10);
     b.cyl(kit.hot, r * 0.62, r * 0.62, 0.03, [x, yb + h + 0.01, z], 'y', 10);
     pbox(b, kit.metal, 0.5 * kx, 0.08 * k, 0.12 * kz, x + 0.3 * kx, yb + h * 0.6, z);
+    // coolant run from the stack base forward to the commander's tower (clamped to the roof)
+    pipeRun(b, kit, [[x + 0.35 * kx, yb + 0.5 * k, z], [x + 0.6 * kx, t2 + 0.12 * k, z * 0.9], [cbx - 0.62 * kx, t2 + 0.12 * k, z * 0.7]], 0.07 * k, kit.joint);
   });
   glowGrille(b, kit, -3.4 * kx, yt + 0.72 * k, 0, 1.2 * kz, 0.55 * k, 3, -1);
+  // crew access at the back: a ladder from the skirt-top ledge up the casemate wall, a rail along the roof's rear edge
+  ladder(b, kit, [-2.86 * kx, s1, -1.2 * kz], [-2.86 * kx, t2 + 0.12 * k, -1.2 * kz], 0.32 * k, [0, 0, 1], [-1, 0, 0], 0.03 * k);
+  if (fine) handrail(b, kit, [[-2.02 * kx, t2 + 0.3 * k, -1.25 * kz], [-2.02 * kx, t2 + 0.3 * k, -0.55 * kz], [-1.95 * kx, t2 + 0.3 * k, -0.35 * kz]], 0.025 * k, 0.3 * k);
   banner(b, kit, -2.25 * kx, t2 - 0.1, -1.55 * kz, 1.9 * k, 0.6 * k, -1);
 
   // ---- rear-right corner gun tower for the medium (built at the mount) + a plain sensor tower on the other side
@@ -202,7 +243,11 @@ function monolith(c: ChassisCtx): ChassisOut {
   let hips: Hip[] | undefined;
   if (stance.legs === 'biped') {
     hips = ([-1, 1] as const).map((s) => ({ p: [-0.2 * kx, stance.hipY, s * 1.85 * kz] as V3, side: s, t: stance.thick, foot: [-0.2 * kx, 0, s * 2.15 * kz] as V3, phase: s > 0 ? Math.PI : 0 }));
-    both((s) => block(b, kit.trim, -0.2 * kx, y0 - 0.3 * k, s * 1.85 * kz, 1.4 * kx, 0.9 * kz, 0.6 * k, { top: [0.8, 0.8], ch: 0.2 * k }));
+    both((s) => {
+      block(b, kit.mech, -0.2 * kx, y0 - 0.3 * k, s * 1.85 * kz, 1.4 * kx, 0.9 * kz, 0.6 * k, { top: [0.8, 0.8], ch: 0.2 * k });
+      // hip load rams: the housing hangs off the keel on two hydraulic rams
+      for (const dx of [-0.5, 0.5]) piston(b, kit, [-0.2 * kx + dx * kx, y0 - 0.05 * k, s * 1.85 * kz], [-0.2 * kx + dx * 1.6 * kx, yt - 0.05, s * 1.7 * kz], 0.1 * k, 0.55, fine);
+    });
   }
   const top3 = ngon(8, 1.5 * kx * 0.86, 1.42 * kz * 0.86).map(([x, z]) => [x + cx3, z] as P2);
   const top1 = scl(P1, sTop);

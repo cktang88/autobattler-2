@@ -8,6 +8,7 @@ import { CHASSIS_BY_ID, MODULE_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.
 import { mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
+import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
 import { buildTurret, type Turret } from './weapons3d.ts';
 import { CLASS_RANK } from '../render/weaponsize.ts';
 import { Bld } from './geo.ts';
@@ -98,6 +99,9 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const mb = mobilityBuilder(mob.id);
     const stance = mb.stance({ mobId: mob.id, L, W, S, shape: ch.shape });
     out = chassisBuilder(ch)({ b: hb, kit, design, ch, mob, L, W, S, stance, mounts: specs, rnd, body, root, updates });
+    // hard-surface functional kit in the hull's named slots (chassis/hs-kit.ts) for hulls not dressed by hand
+    const dress = AUTO_DRESS[ch.shape];
+    if (dress && !flying) autoDress({ b: hb, kit, L, W, S, mounts: specs }, out.deckAt, dress);
     const mctx: MobilityCtx & { lift?: unknown } = { root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out.hips, lift: (out as { lift?: unknown }).lift };
     const upd = mb.build(mctx);
     if (upd) updates.push((t, _dt, mv) => upd(t, mv));

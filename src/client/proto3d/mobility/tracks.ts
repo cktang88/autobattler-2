@@ -8,6 +8,8 @@
 //   wall     tall slab skirts reaching the ground, slanted, studded (wall-of-armour hulls: juggernaut)
 //   bogies   four short bare track bogies at the corners, toed out, on swing arms (siege platforms: siegeplat)
 //   twin     long inner tracks + short outer tracks in rounded nacelles (trimaran hulls: colossus 'titan')
+//   hs       hard-surface track system (chassis/hs-kit.ts trackSystem): narrow link belt, 5-7 road wheels on arms, return
+//            rollers, toothed sprocket, raised idler, segmented skirt (line tanks: warden 'hex')
 // treads / halftrack / megatracks. Exported trackStance / trackUnit / trackStyle are reused by other mobility files.
 
 import * as THREE from 'three';
@@ -16,9 +18,10 @@ import type { Kit } from '../materials.ts';
 import { registerMobility, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
 import { place, XBld } from '../chassis/tanks-kit.ts';
+import { fineFor, trackSystem } from '../chassis/hs-kit.ts';
 
-export type TrackStyle = 'skirt' | 'round' | 'pods' | 'exposed' | 'wall' | 'twin' | 'bogies';
-const STYLE: Record<string, TrackStyle> = { hex: 'round', fortress: 'pods', long: 'exposed', siegeplat: 'bogies', juggernaut: 'wall', titan: 'twin' };
+export type TrackStyle = 'skirt' | 'round' | 'pods' | 'exposed' | 'wall' | 'twin' | 'bogies' | 'hs';
+const STYLE: Record<string, TrackStyle> = { hex: 'hs', fortress: 'pods', long: 'exposed', siegeplat: 'bogies', juggernaut: 'wall', titan: 'twin' };
 export function trackStyle(shape: string, mobId = 'treads'): TrackStyle {
   if (mobId !== 'treads') return 'skirt';
   return STYLE[shape] ?? 'skirt';
@@ -31,19 +34,25 @@ function dims(s: StanceIn) {
   let w = mega ? s.W * 0.15 : Math.max(0.17, s.W * 0.22);
   if (style === 'exposed' || style === 'bogies') w = Math.max(0.15, Math.min(w, 0.2 + 0.06 * s.S));
   if (style === 'twin') w = s.W * 0.13;
+  if (style === 'hs') w = Math.max(0.15, s.W * 0.17);
+  if (style === 'skirt' && !mega && s.mobId === 'treads') w = Math.max(0.16, s.W * 0.19);
   if (style === 'wall') w = Math.min(w, 0.22 + 0.1 * s.S);
-  const edge = (k: number) => k * (s.W / 2 - w / 2 - 0.01);
+  // hs hulls may be built narrower than the footprint (a longer-than-wide tank read), tracks tuck in with them
+  const half = (s.W / 2) * (style === 'hs' ? HS_NARROW[s.shape] ?? 1 : 1);
+  const edge = (k: number) => k * (half - w / 2 - 0.01);
   const zs = mega ? [-0.425, -0.24, 0.24, 0.425].map((k) => k * s.W)
     : style === 'twin' ? [-1, -0.62, 0.62, 1].map((k) => edge(k))
     : [-1, 1].map(edge);
-  return { mega, style, h, w, zs };
+  return { mega, style, h, w, zs, half };
 }
+/** visual half-width factor of hs-style hulls (the chassis builder uses the same factor) */
+export const HS_NARROW: Record<string, number> = { hex: 0.86 };
 
 export function trackStance(s: StanceIn): Stance {
-  const { mega, style, h, w, zs } = dims(s);
-  const y0 = h * (mega ? 0.55 : style === 'exposed' || style === 'bogies' ? 0.5 : 0.42);
+  const { mega, style, h, w, zs, half } = dims(s);
+  const y0 = h * (mega ? 0.55 : style === 'exposed' || style === 'bogies' || style === 'hs' ? 0.48 : 0.42);
   const inner = Math.min(...zs.map(Math.abs));
-  const wi = style === 'twin' ? inner - w / 2 - 0.01 : s.W / 2 - w - 0.01;
+  const wi = style === 'twin' ? inner - w / 2 - 0.01 : half - w - 0.01;
   return { y0, yt: h * 0.98, wi: Math.max(0.2, wi), tracked: true, legs: null, thick: 0, hipY: 0 };
 }
 
@@ -68,10 +77,28 @@ export interface TrackOpts {
   cleatMaxY?: number;
   /** spoked, larger road wheels for exposed running gear */
   bigWheels?: boolean;
+  /** tertiary detail (bump stops, skirt bolts) */
+  fine?: boolean;
 }
 
-/** one track assembly centred at lateral z, outer side `side` (+1 right / -1 left) */
+/** one track assembly centred at lateral z, outer side `side` (+1 right / -1 left). Built with the hard-surface track
+ *  system (chassis/hs-kit.ts trackSystem: link belt, road wheels on arms, return rollers, toothed sprocket, idler,
+ *  segmented skirt, thin fender); the older single-slab loop is kept below as trackUnitLegacy. */
 export function trackUnit(b: Bld, kit: Kit, L: number, h: number, w: number, z: number, side: number, o: TrackOpts) {
+  const covered = !o.noFender || (o.cleatMaxY ?? 1e9) < h * 0.6;
+  const span = L / h;
+  trackSystem(b, kit, {
+    L, h, w, z, side,
+    skirt: o.skirt ? Math.max(3, Math.round(L / (h * 1.1))) : 0, skirtDrop: 0.4,
+    fender: !o.noFender, coverTop: covered, heavy: o.heavy, fine: o.fine ?? true,
+    wheels: o.bigWheels ? Math.max(2, Math.round(span * 0.95)) : undefined,
+    rollers: o.bigWheels || span < 2.4 ? 0 : span < 3.6 ? 2 : 3,
+    bigWheels: o.bigWheels,
+  });
+}
+
+/** the previous stylized loop (single extruded slab, blocky grousers, few big wheels); unused, kept for reference */
+export function trackUnitLegacy(b: Bld, kit: Kit, L: number, h: number, w: number, z: number, side: number, o: TrackOpts) {
   const pts = outline(L, h);
   // rubber loop as a solid slab (inside is hidden by wheels / skirt / hull)
   const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
@@ -215,6 +242,9 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
     } else if (mega) {
       for (const z of zs) trackUnit(b, k, c.L * 0.95, h, w, z, Math.sign(z), { skirt: Math.abs(z) > c.W * 0.3, heavy: true });
       block(b, k.trim, 0, h * 0.25, 0, c.L * 0.66, c.W * 0.56, h * 0.6, { ch: h * 0.2 });
+    } else if (style === 'hs') {
+      const TL = c.L * 0.93, fine = fineFor(c.S);
+      for (const z of zs) trackSystem(new XBld(b, place(-c.L * 0.02, 0, 0)), k, { L: TL, h, w, z, side: Math.sign(z), skirt: Math.max(3, Math.round(TL / (h * 1.05))), skirtDrop: 0.36, fine, coverTop: true });
     } else if (style === 'round') {
       for (const z of zs) {
         // short nacelles set back: the hull's prow runs out ahead of them
@@ -272,7 +302,7 @@ registerMobility(['treads', 'halftrack', 'megatracks'], {
         } else trackUnit(new XBld(b, place(-c.L * 0.07, 0, 0)), k, c.L * 0.8, h, w, z, s, { skirt: false, heavy: true });
       }
     } else {
-      for (const z of zs) trackUnit(b, k, c.L * 0.97, h, w, z, Math.sign(z), { skirt: c.S >= 2 });
+      for (const z of zs) trackUnit(b, k, c.L * 0.97, h, w, z, Math.sign(z), { skirt: c.S >= 2, fine: c.S >= 2 });
     }
     b.mount(c.root);
   },

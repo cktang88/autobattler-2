@@ -9,6 +9,7 @@ import { Bld, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
+import { hsFoot, hsShin, hsThigh } from './legs.ts';
 
 /** titan stance: tall hips (big units stride over the field), thick legs */
 export function titanStance(s: StanceIn): Stance {
@@ -71,16 +72,18 @@ function foot(b: Bld, kit: Kit, t: number) {
   for (const sz of [-1, 1]) b.box(kit.trim, t * 1.0, t * 1.0, t * 0.3, 0, t * 0.95, sz * t * 0.7, t * 0.1);
 }
 
-function makeTitanLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number) {
+function makeTitanLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number, hs = true) {
   const t = hip.t;
   const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
   const l1 = d0 * 0.6, l2 = d0 * 0.6;
   const bendV = new THREE.Vector3(1, 0.12, 0);
   const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };
-  const upper = mk((b) => thigh(b, kit, l1, t));
-  const lower = mk((b) => shin(b, kit, l2, t * 0.94));
-  const footG = mk((b) => foot(b, kit, t));
+  // hard-surface heavy segments (legs.ts hsThigh / hsShin / hsFoot): dark core + skeleton, stacked armour shells,
+  // exposed joint drums, paired rams and hose runs; the older moulded segments below stay for reference / fallback
+  const upper = mk((b) => (hs ? hsThigh(b, kit, l1, t, true, true) : thigh(b, kit, l1, t)));
+  const lower = mk((b) => (hs ? hsShin(b, kit, l2, t * 0.94, true, true) : shin(b, kit, l2, t * 0.94)));
+  const footG = mk((b) => (hs ? hsFoot(b, kit, t, true, true) : foot(b, kit, t)));
   const f = new THREE.Vector3(), k = new THREE.Vector3(), dir = new THREE.Vector3(), perp = new THREE.Vector3(), tmp = new THREE.Vector3(), xa = new THREE.Vector3(), ya = new THREE.Vector3();
   const place = (a: THREE.Vector3, bb: THREE.Vector3, m: THREE.Object3D) => {
     tmp.copy(bb).sub(a).normalize();
