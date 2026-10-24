@@ -37,7 +37,7 @@ const N_LAYERS = 14, TEX = 512;
 // per layer: what the skin's mask does and how strong its bump is
 //   L0 = (bump, mask darkens, mask = bare metal, mask = team accent paint)   L1 = (glow, dust, sheen, grime)
 const L0: Record<LayerName, [number, number, number, number]> = {
-  scout: [1.0, 0.14, 0, 0], cast: [1.2, 0.16, 0, 0], slab: [1.4, 0.14, 0, 0], titan: [1.1, 0.22, 0.3, 0],
+  scout: [1.0, 0.3, 0, 0], cast: [1.2, 0.4, 0, 0], slab: [1.4, 0.3, 0, 0], titan: [1.1, 0.5, 0.3, 0],
   air: [0.8, 0, 0, 0], rotor: [1.0, 0, 0, 0], arty: [1.0, 0, 0, 0], support: [0.7, 0, 0, 0.7],
   carapace: [0.9, 0, 0, 0], ceramic: [0.7, 0, 0, 0], brawler: [1.3, 0, 0.9, 0], stealth: [0.6, 0, 0, 0],
   grating: [1.3, 0, 0, 0], machinery: [1.2, 0, 0, 0],
@@ -234,28 +234,22 @@ export const SD_APPLY = /* glsl */ `
     // the skin's special mask: camo / pits / scorch darken, gouges = bare metal, role paint in the team accent,
     // dust, chitin sheen, soot / oil = grime, circuit glow
     float mk = sdMask * sdRowDet;
-    // (camo / pits / scorch: kept subtle -- strong blotches read from above as shadow patches lying on the unit)
     base *= 1.0 - mk * l0.y;
     float wearSrc = max(sdWear * up.x, sdMask * l0.z);
     base = mix(base, sdAccent * (0.85 + 0.2 * sdCav), mk * l0.w);
-    // dust (artillery skins): settles low on the hull and in crevices, faint up top -- big pale blotches across the
-    // deck read from the game camera as patches of light and shadow lying on the unit
-    base = mix(base, vec3(0.6, 0.53, 0.42), mk * l1.y * 0.3 * (1.0 - 0.8 * smoothstep(0.1, 0.6, vWY)));
+    base = mix(base, vec3(0.6, 0.53, 0.42), mk * l1.y * 0.55);
     base *= 1.0 + mk * l1.z * 0.35;
     float grimeSrc = max(sdGrime, sdMask * l1.w);
     sdGlow = mk * l1.x;
     // mottling and grime: low on the hull, underneath and in streaks down the sides; top faces stay clean
-    // (darkening only, and gentle: big pale blotches across a hull read from the game camera as cloud shadows
-    // lying on the unit)
-    base *= 1.0 + min(sdMot, 0.0) * 0.22 * sdRowGrime * up.z * (0.4 + 0.6 * fine);
+    base *= 1.0 + sdMot * 0.32 * sdRowGrime * up.z * (0.4 + 0.6 * fine);
     float low = 1.0 - smoothstep(0.05, 0.7, vWY);
     float topClean = mix(1.0, 0.3, smoothstep(0.5, 0.9, wn.y));
     float gr = clamp(grimeSrc * (0.6 + 0.6 * low) * topClean + sdGiant * 0.5 * smoothstep(-0.2, -0.7, wn.y), 0.0, 1.0) * sdGr;
     base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.65);
     // chipped paint: bare metal, concentrated on chamfer edges
-    // (edges only: chips spreading over flat faces made large grey patches that looked like shadows on the unit)
-    float wm = wearSrc * sdRowWear * (0.05 + 1.6 * bev);
-    wm = smoothstep(0.55, 0.8, wm);
+    float wm = wearSrc * sdRowWear * (0.15 + 1.5 * bev + 0.15 * smoothstep(0.5, 1.0, wn.y));
+    wm = smoothstep(0.5, 0.75, wm);
     base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
     sdMetal = wm; sdRough = mix(1.0 + gr * 0.3, 0.55, wm);
     if (sdOn > 0.5) {
