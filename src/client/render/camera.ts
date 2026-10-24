@@ -356,6 +356,14 @@ const MOUSE_DRAG_PX = 6;
 export const ORBIT_RAD_PER_PX = 0.004;
 const TOUCH_DRAG_PX = 8;
 
+/** Keys typed into a form control or an open dropdown are not camera keys: a focused input / select / textarea /
+ *  editable element or kit combobox (its type-ahead and arrows), an open kit dropdown popup (.k-pop) or a modal.
+ *  (Mirrors the guards of the match / playground key handlers.) */
+export function keyBlocked(t: { tagName?: string; isContentEditable?: boolean; getAttribute?(n: string): string | null } | null, open: (sel: string) => boolean): boolean {
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable || t.getAttribute?.('role') === 'combobox')) return true;
+  return open('.modal-back') || open('.k-pop');
+}
+
 /** Mouse / touch / keyboard handling for a Camera, attached to a canvas. */
 export class CameraControls {
   private _enabled = true;
@@ -599,10 +607,7 @@ export class CameraControls {
 
   private keyOk(e: KeyboardEvent): boolean {
     if (!this._enabled || e.ctrlKey || e.metaKey || e.altKey) return false;
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return false;
-    if (document.querySelector('.modal-back')) return false;
-    return true;
+    return !keyBlocked(e.target as HTMLElement | null, (sel) => document.querySelector(sel) !== null);
   }
 
   private keyDown(e: KeyboardEvent): void {

@@ -652,7 +652,7 @@ export function playgroundScreen(app: App): Screen {
     else if (phase === 'edit' && (e.key === 'Delete' || (e.key === 'Backspace' && sel))) { if (sel) { removeBlock(sel); e.preventDefault(); } }
     else if (phase === 'edit' && (e.key === 'Backspace' || (e.key === 'z' && (e.ctrlKey || e.metaKey)))) { undo(); e.preventDefault(); }
     else if (plain && e.key.toLowerCase() === 'p' && phase === 'battle') { paused = !paused; renderSpeed(); e.preventDefault(); }
-    else if (plain && e.key.toLowerCase() === 'f') { view.fit(); e.preventDefault(); }
+    // (F / Home = fit is the camera's own key: CameraControls handles it, so it isn't fitted twice here)
     else if (e.key === 'Escape') {
       if (phase !== 'edit') backToEdit();
       else if (selCard >= 0) { selCard = -1; hover = null; renderAll(); }

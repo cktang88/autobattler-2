@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Camera } from '../src/client/render/camera.ts';
+import { Camera, keyBlocked } from '../src/client/render/camera.ts';
 
 // zoom-dependent foreshortening (the 3D view lowers its pitch as you zoom in)
 const mk = () => {
@@ -133,4 +133,17 @@ test('yaw: keyboard pan moves along the screen axes', () => {
   c.keyX = 0;
   for (let i = 0; i < 60; i++) c.update(1 / 60);
   assert.ok(Math.abs(c.cx - x0) < 1e-6 && c.cy > y0, JSON.stringify([c.cx - x0, c.cy - y0]));
+});
+
+test('camera keys are ignored while typing in a control or with a dropdown / modal open', () => {
+  const none = () => false;
+  const el = (tagName: string, role: string | null = null, editable = false) => ({ tagName, isContentEditable: editable, getAttribute: (n: string) => (n === 'role' ? role : null) });
+  assert.equal(keyBlocked(null, none), false);
+  assert.equal(keyBlocked(el('CANVAS'), none), false);
+  assert.equal(keyBlocked(el('BODY'), none), false);
+  for (const t of ['INPUT', 'TEXTAREA', 'SELECT']) assert.equal(keyBlocked(el(t), none), true, t);
+  assert.equal(keyBlocked(el('DIV', null, true), none), true, 'contenteditable');
+  assert.equal(keyBlocked(el('BUTTON', 'combobox'), none), true, 'kit dropdown button (type-ahead)');
+  assert.equal(keyBlocked(el('BODY'), (s) => s === '.k-pop'), true, 'open dropdown popup');
+  assert.equal(keyBlocked(el('BODY'), (s) => s === '.modal-back'), true, 'modal');
 });
