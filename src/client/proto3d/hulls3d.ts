@@ -1,5 +1,6 @@
-// Hull modelling: cross-section lofts with sloped glacis, chamfered shoulders and stepped superstructures, plus the
-// deck furniture (hatches, louvres, stowage, drums, exhausts, antennas) and giant-class details.
+// Fallback hull modelling (chassis/generic.ts): faceted cross-section lofts with a flat deck, a short sharp shoulder
+// and a glacis break, stepped casemates, plus (legacy) random deck furniture and giant-class details. generic.ts now
+// dresses hulls by slot (hs-kit autoDress) instead of the random greeble scatter.
 
 import * as THREE from 'three';
 import { Bld, sec8, mtx, type V3 } from './geo.ts';
@@ -9,17 +10,19 @@ export interface LoftInfo { pts: { x: number; wm: number; wt: number; y2: number
 export interface Hull { lofts: LoftInfo[]; top: number; L: number; W: number; yt: number; Hd: number }
 
 /** [x (-1..1), half-width (frac of W/2), top width (frac of that), height (frac of deck height)] */
+// hard-surface recipes (chassis/hs-kit.ts style): flat decks through the middle, a short sharp shoulder (buildHull puts
+// the side-band top at 62% of the deck rise), one explicit glacis break at the nose and a short sloped rear plate
 const RECIPES: Record<string, [number, number, number, number][]> = {
-  wedge: [[-1, 0.8, 0.82, 0.8], [-0.9, 1, 0.86, 1.05], [-0.1, 1, 0.8, 1.05], [0.15, 1, 0.78, 0.85], [0.62, 0.9, 0.6, 0.6], [1, 0.52, 0.5, 0.3]],
-  box: [[-1, 0.9, 0.9, 0.85], [-0.92, 1, 0.92, 1.08], [-0.1, 1, 0.9, 1.08], [0.15, 1, 0.88, 0.9], [0.6, 1, 0.86, 0.9], [0.78, 0.95, 0.7, 0.68], [1, 0.78, 0.6, 0.42]],
-  hex: [[-1, 0.7, 0.8, 0.85], [-0.82, 0.96, 0.85, 1.12], [-0.2, 1, 0.82, 1.12], [0.05, 1, 0.8, 0.92], [0.45, 0.96, 0.7, 0.82], [1, 0.5, 0.5, 0.38]],
-  long: [[-1, 0.7, 0.8, 0.8], [-0.9, 0.95, 0.86, 0.95], [0.5, 0.98, 0.8, 1], [0.82, 0.85, 0.6, 0.75], [1, 0.55, 0.5, 0.4]],
-  cross: [[-1, 0.74, 0.8, 0.8], [-0.8, 0.9, 0.8, 0.95], [-0.3, 1, 0.8, 1], [0.3, 1, 0.8, 1], [0.6, 0.8, 0.7, 0.8], [1, 0.46, 0.5, 0.45]],
-  round: [[-1, 0.5, 0.7, 0.7], [-0.8, 0.9, 0.8, 0.95], [-0.4, 1, 0.8, 1], [0.4, 1, 0.8, 1], [0.8, 0.9, 0.7, 0.85], [1, 0.5, 0.6, 0.55]],
-  fortress: [[-1, 0.86, 0.9, 0.8], [-0.9, 1, 0.92, 1], [0.55, 1, 0.86, 1], [0.8, 0.94, 0.7, 0.75], [1, 0.74, 0.6, 0.5]],
-  titan: [[-1, 0.84, 0.88, 0.78], [-0.9, 1, 0.9, 1], [0.4, 1, 0.84, 1], [0.78, 0.92, 0.66, 0.72], [1, 0.62, 0.58, 0.42]],
-  goliath: [[-1, 0.88, 0.9, 0.85], [-0.9, 1, 0.92, 1], [0.45, 1, 0.86, 1], [0.8, 0.94, 0.66, 0.78], [1, 0.66, 0.6, 0.46]],
-  colossal: [[-1, 0.88, 0.9, 0.82], [-0.9, 1, 0.92, 1], [0.5, 1, 0.86, 1], [0.82, 0.94, 0.66, 0.76], [1, 0.68, 0.6, 0.44]],
+  wedge: [[-1, 0.84, 0.86, 0.82], [-0.86, 1, 0.88, 1], [0.05, 1, 0.86, 1], [0.6, 0.92, 0.72, 0.62], [1, 0.56, 0.5, 0.3]],
+  box: [[-1, 0.92, 0.9, 0.84], [-0.9, 1, 0.9, 1], [0.5, 1, 0.9, 1], [0.78, 0.96, 0.8, 0.66], [1, 0.82, 0.66, 0.42]],
+  hex: [[-1, 0.76, 0.84, 0.84], [-0.84, 0.98, 0.88, 1], [0.3, 1, 0.86, 1], [0.7, 0.9, 0.7, 0.62], [1, 0.54, 0.52, 0.36]],
+  long: [[-1, 0.76, 0.84, 0.8], [-0.9, 0.96, 0.88, 1], [0.55, 0.98, 0.86, 1], [0.84, 0.86, 0.66, 0.66], [1, 0.58, 0.52, 0.38]],
+  cross: [[-1, 0.78, 0.84, 0.8], [-0.82, 0.92, 0.86, 1], [0.4, 1, 0.86, 1], [0.7, 0.84, 0.72, 0.7], [1, 0.5, 0.52, 0.4]],
+  round: [[-1, 0.6, 0.76, 0.72], [-0.8, 0.92, 0.84, 1], [0.5, 1, 0.84, 1], [0.8, 0.88, 0.72, 0.76], [1, 0.58, 0.6, 0.5]],
+  fortress: [[-1, 0.88, 0.9, 0.8], [-0.9, 1, 0.92, 1], [0.55, 1, 0.9, 1], [0.8, 0.94, 0.76, 0.72], [1, 0.76, 0.62, 0.48]],
+  titan: [[-1, 0.86, 0.9, 0.78], [-0.9, 1, 0.92, 1], [0.45, 1, 0.88, 1], [0.78, 0.92, 0.7, 0.68], [1, 0.64, 0.58, 0.4]],
+  goliath: [[-1, 0.9, 0.9, 0.84], [-0.9, 1, 0.92, 1], [0.5, 1, 0.9, 1], [0.8, 0.94, 0.7, 0.74], [1, 0.68, 0.6, 0.44]],
+  colossal: [[-1, 0.9, 0.9, 0.82], [-0.9, 1, 0.92, 1], [0.55, 1, 0.9, 1], [0.82, 0.94, 0.7, 0.72], [1, 0.7, 0.6, 0.42]],
 };
 const ALIAS: Record<string, string> = {
   scout: 'wedge', mantis: 'wedge', hunter: 'wedge', interceptor: 'wedge', pod: 'round', carriage: 'box', riot: 'fortress', juggernaut: 'fortress', crab: 'fortress',
@@ -59,12 +62,12 @@ export function buildHull(b: Bld, kit: Kit, shape: string, L: number, W: number,
     const y3 = yt + hF * Hd;
     return {
       x: (x * L) / 2, wm, wt: wm * wtF, wb: tracked ? Math.min(wm * 0.92, wi) : wm * 0.7,
-      y0: yb, y1: yt, y2: yt + (y3 - yt) * 0.38, y3,
+      y0: yb, y1: yt, y2: yt + (y3 - yt) * 0.62, y3,
     };
   });
-  const info = addLoft(b, kit.hull, rows);
+  const info = addLoft(b, kit.armor, rows);
   // lower belly plate / skid strip and a rear plate in darker paint for contrast
-  b.box(kit.trim, L * 0.8, Math.max(0.03, (yt - yb) * 0.5), rows[2].wb * 2 * 0.98, 0, yb + Math.max(0.03, (yt - yb) * 0.5) / 2, 0, 0.01);
+  b.box(kit.mech, L * 0.8, Math.max(0.03, (yt - yb) * 0.5), rows[2].wb * 2 * 0.98, 0, yb + Math.max(0.03, (yt - yb) * 0.5) / 2, 0, 0.004);
   const rr = rows[0];
   b.box(kit.trim, 0.04, (rr.y3 - yb) * 0.55, rr.wm * 2 * 0.9, rr.x - 0.012, yb + (rr.y3 - yb) * 0.4, 0, 0.01);
   return { lofts: [info], top: Math.max(...rows.map((r) => r.y3)), L, W, yt, Hd };

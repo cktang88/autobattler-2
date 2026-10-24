@@ -23,7 +23,6 @@ import {
   antenna, armorPlate, cableBundle, cagedLamp, crewHatch, exhaustBox, fineFor, frame, frameLimb, hexSec, hose, inset, jointDrum, piston, plateStack, recessPanel,
   rectP, smokeLaunchers, stowBox, sub, trapP, visionBlocks,
 } from './hs-kit.ts';
-import { AUTO_DRESS } from './hs-kit.ts';
 import { boneFrame, claw, eyeCluster, limbSegs, limbShell, quadPlate, shellGeo, shingles } from './hs-kit-organic.ts';
 
 /** point a fraction f from a to c, plus an offset */
@@ -249,7 +248,7 @@ function bunkerCrawler(c: ChassisCtx): ChassisOut {
     return d < 1 ? by + 0.12 * u + (topY - by - 0.12 * u) * Math.max(0, 1 - d * 1.3) : -1;
   };
   return {
-    deckAt: deck, top: topY, hips, custom: true,
+    deckAt: deck, top: topY, hips, custom: true, dressed: true,
     seat: (m) => {
       const pt = podTop.get(m);
       if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r), socket: true };
@@ -359,7 +358,7 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
   const deckTop = by + 0.6 * u;
   const deck = (x: number, z: number) => (x > -2 * u && x < 1.6 * u && Math.abs(z) < 0.7 * u ? deckTop : -1);
   return {
-    deckAt: deck, top: elbow[1], hips, custom: true,
+    deckAt: deck, top: elbow[1], hips, custom: true, dressed: true,
     seat: (m) => {
       const pt = podTop.get(m);
       if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r), socket: true };
@@ -441,7 +440,7 @@ function saucerDisc(c: ChassisCtx): ChassisOut {
   }
   const deck = (x: number, z: number) => { const r = Math.hypot(x, z); return r < 0.6 * u ? deckY + 0.02 * u : r < 0.86 * u ? by + 0.1 * u : -1; };
   return {
-    deckAt: deck, top: deckY, hips, custom: true,
+    deckAt: deck, top: deckY, hips, custom: true, dressed: true,
     seat: (m) => { collar(b, kit, m.x, deckY + 0.02 * u, m.z, m.r, deckY - 0.04 * u, 14); return { y: deckY + 0.02 * u, socket: true }; },
   };
 }
@@ -545,7 +544,7 @@ function landtrain(c: ChassisCtx): ChassisOut {
   }
   const deck = (x: number, z: number) => (Math.abs(z) < carZ * 0.6 && xs.some((cx) => Math.abs(x - cx) < carX) ? topY : -1);
   return {
-    deckAt: deck, top: by + 0.7 * u, hips, custom: true,
+    deckAt: deck, top: by + 0.7 * u, hips, custom: true, dressed: true,
     seat: (m) => {
       if (!seated.has(m)) collar(b, kit, m.x, topY, m.z, m.r, topY - 0.1 * u, 14);
       return { y: topY, socket: true };
@@ -558,6 +557,3 @@ registerChassis('scorpion', tailgunCrawler);
 registerChassis('saucer', saucerDisc);
 registerChassis('centipede', landtrain);
 
-// these hulls are hand-dressed with the kit (functional parts in their own named slots): keep units3d's generic
-// autoDress pass (hs-kit AUTO_DRESS) off them
-for (const k of ['crab', 'scorpion', 'centipede']) delete AUTO_DRESS[k];

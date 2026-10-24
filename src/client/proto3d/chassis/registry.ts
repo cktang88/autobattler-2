@@ -113,6 +113,8 @@ export interface ChassisOut {
   hips?: Hip[];
   /** skip the generic deck clutter */
   custom?: boolean;
+  /** the builder placed the hard-surface functional kit itself: skip units3d's slot autoDress (hs-kit AUTO_DRESS) */
+  dressed?: boolean;
 }
 
 export type ChassisBuilder = (c: ChassisCtx) => ChassisOut;

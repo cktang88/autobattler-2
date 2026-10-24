@@ -17,7 +17,6 @@ import {
   armorPlate, cableBundle, cagedLamp, cupola, exhaustBox, fineFor, frame, frameLimb, handrail, inset, jointDrum, ladder, piston, plateStack,
   recessPanel, rectP, skirtRun, smokeLaunchers, stowBox, towHooks, trapP,
 } from './hs-kit.ts';
-import { AUTO_DRESS } from './hs-kit.ts';
 import { archShell, boneFrame, claw, deckFrame, eyeCluster, limbShell, quadPlate, shingles, spike, stationQuads } from './hs-kit-organic.ts';
 
 type St = [number, number, number, number, number, number][];
@@ -165,7 +164,7 @@ function goliath(c: ChassisCtx): ChassisOut {
     both((s) => b.cylb(kit.mech, stance.thick * 1.4, 0.5 * kz, 0.05, [-0.2 * kx, stance.hipY, s * 0.95 * kz - 0.25 * kz], 'z', 12));
   }
   return {
-    deckAt: deck, top, custom: true, hips,
+    deckAt: deck, top, custom: true, dressed: true, hips,
     seat: (m: MountSpec) => {
       const d = deck(m.x, m.z);
       if (Math.abs(m.z) < 0.5 * kz && m.x > -0.6 * kx && m.x < 1.6 * kx) {
@@ -305,7 +304,7 @@ function leviathan(c: ChassisCtx): ChassisOut {
     hips = ([-1, 1] as const).map((s) => ({ p: [-0.1 * kx, stance.hipY, s * 0.95 * kz] as V3, side: s, t: stance.thick, foot: [-0.1 * kx, 0, s * 1.1 * kz] as V3, phase: s > 0 ? Math.PI : 0 }));
   }
   return {
-    deckAt: deck, top: t3, custom: true, hips,
+    deckAt: deck, top: t3, custom: true, dressed: true, hips,
     seat: (m: MountSpec) => {
       if (Math.abs(m.z) < 0.3 * kz && Math.abs(m.x - fwdX) < 0.4 * kx) { collar(b, kit, m.x, fwdY, m.z, m.r, fwdY - 0.06, 20); return { y: fwdY, socket: true }; }
       if (Math.abs(m.z) < 0.3 * kz && Math.abs(m.x - aftX) < 0.4 * kx) { collar(b, kit, m.x, aftY, m.z, m.r, aftY - 0.06, 20); return { y: aftY, socket: true }; }
@@ -416,7 +415,7 @@ function broodmother(c: ChassisCtx): ChassisOut {
   }
   const deck = (x: number, z: number) => (inPoly(cp.map(([px, pz]) => [px * 0.6 + cx, pz * 0.6] as P2), x, z) ? capY : -1);
   return {
-    deckAt: deck, top: Math.max(capY, abTop), custom: true, hips,
+    deckAt: deck, top: Math.max(capY, abTop), custom: true, dressed: true, hips,
     seat: (m: MountSpec) => {
       if (m.x > 0.9 * kx) {
         // head turret between the eyes, on the brow shell
@@ -446,6 +445,3 @@ function broodmother(c: ChassisCtx): ChassisOut {
 registerChassis('broodmother', broodmother);
 void reactor; void glowGrille;
 
-// these hulls are hand-dressed with the kit (functional parts in their own named slots): keep units3d's generic
-// autoDress pass (hs-kit AUTO_DRESS) off them
-for (const k of ['goliath', 'leviathan']) delete AUTO_DRESS[k];

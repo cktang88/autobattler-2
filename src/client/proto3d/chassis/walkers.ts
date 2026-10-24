@@ -226,7 +226,7 @@ function orbwalker(c: ChassisCtx): ChassisOut {
   }
   const deck = (x: number, z: number) => (Math.abs(z) < 0.36 * u && x > ax - 0.36 * u && x < ax + 0.3 * u ? deckY : -1);
   return {
-    deckAt: deck, top: deckY, hips, custom: true,
+    deckAt: deck, top: deckY, hips, custom: true, dressed: true,
     seat: (m) => { collar(b, kit, m.x, deckY + 0.03 * u, m.z, m.r, deckY - 0.02, 12); return { y: deckY + 0.03 * u, socket: true }; },
   };
 }
@@ -449,7 +449,7 @@ function warlord(c: ChassisCtx): ChassisOut {
   })() : undefined;
   const deck = (x: number, z: number) => (Math.abs(z) < 0.6 * k && x > -0.7 * k && x < 0.4 * k ? ty1 : -1);
   return {
-    deckAt: deck, top: humpY, hips, custom: true,
+    deckAt: deck, top: humpY, hips, custom: true, dressed: true,
     seat: (m) => {
       const pt = podTop.get(m);
       if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r, 14), socket: true };

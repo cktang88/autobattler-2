@@ -1,88 +1,42 @@
-// Light / medium non-tank ground hulls. Each one breaks the box with its own plan + height profile and one big
-// signature feature (read from the ~58 deg RTS camera first, then the 3/4 view):
-//   scout    (wedge)    arrowhead dart buggy: needle nose, wide rear haunches, offset bubble canopy, whip antenna, spoiler
-//   raider   (box)      trident catamaran: two pointed gun nacelles flanking a low cockpit pod, rear wing joins the booms
-//   carriage (carriage) field-gun carriage: open cradle, notched gun shield wrapped round the front, splayed trail arms
-//   hunter   (hunter)   greyhound: long low needle nose, arched spine rising to a rear hump, swept dorsal sensor fin
-//   riot     (riot)     bulldozer brute: full-width curved riot plow with a glowing visor slit, twin armoured shoulders
-//   striker  (cross)    cross-plan gunship: spear fuselage with a chin gun, stubby wing spar carrying two sponson pods
-//   aegis    (round)    turtle medic: domed round shell on a bumper ring, side repair dish mast, glowing halo band
-// Hulls work on every mobility: lower hull is clamped inside the running gear (stance.wi) and the wide shoulders start at
+// Light / medium non-tank ground hulls, hard-surface style (chassis/hs-kit.ts + hs-kit-vehicles.ts): a dark structural
+// belly inside the running gear, a faceted armour hull on top (flat deck, sharp shoulders, sloped glacis), separate
+// thick plates on shadow gaps, functional parts in named slots and 2-3 one-sided features per hull. Size-1 hulls are
+// ~20 px in game, so they carry a strong silhouette and a few bold functional parts, no tertiary detail (fineFor).
+//   scout    (wedge)    recon car: low arrowhead hull on four wheels, telescopic sensor mast (right rear), driver's
+//                       visor + periscopes (left), whip antenna (left), spare wheel on the rear plate
+//   raider   (box)      armoured gun truck: raised fighting casemate carrying the twin guns, open cargo bed behind with
+//                       a roll bar, spare wheel, jerry cans and tarp, bull bar on the nose, exhaust stack (right)
+//   carriage (carriage) towed field gun: cradle on the axle, faceted gun shield (sight box left), split box trails
+//                       with recoil spades, equilibrator pistons, ammo box on the left trail
+//   hunter   (hunter)   long low 6-wheel tank hunter: shallow glacis with a folded trim vane, smoke banks, driver's
+//                       hatch + periscopes (left), remote weapon station on the engine deck, exhaust (right), bins
+//   riot     (riot)     dozer brute: full-width curved dozer blade on push arms + rams, twin guns on a raised rear
+//                       casemate, slat cage armour on the flanks, riot light bar, searchlight (right), antenna (left)
+//   striker  (cross)    sponson gun carrier: narrow central hull, two armoured side casemates carrying the guns, bow
+//                       ball mount on a stepped glacis, side doors, smoke banks, exhaust stacks (left)
+//   aegis    (round)    armoured recovery / repair vehicle: chamfered octagon hull, crane jib stowed along the left
+//                       deck with a hook block, comms dish mast (right), winch + tow bar on the nose, engineer crosses
+// Hulls work on every mobility: the lower hull is clamped inside the running gear (stance.wi), anything wider starts at
 // the fender line (stance.yt); legged stances get a hip keel under the belly.
 
 import * as THREE from 'three';
 import type { P2, V3 } from '../geo.ts';
-import { ellRing, mtx, sec8 } from '../geo.ts';
+import { bevBox, mtx, strutGeo } from '../geo.ts';
 import type { Bld } from '../geo.ts';
-import type { Kit, MatLike } from '../materials.ts';
+import { atlasUV, type Kit, type MatLike } from '../materials.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
-import { beam, block, both, collar, dome, hazard, plate, pod, sensor, vent } from './shapes.ts';
+import { beam, block, both } from './shapes.ts';
+import {
+  antenna, armorPlate, cagedLamp, crewHatch, exhaustBox, fineFor, frame, hose, jerryCans, piston, recessPanel, rectP, smokeLaunchers,
+  stowBox, sub, towHooks,
+} from './hs-kit.ts';
+import {
+  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, slatCage, spade, spareWheel, wheelArch, type FSt,
+} from './hs-kit-vehicles.ts';
 
 /** cheap unbevelled box (12 tris) for small parts: lamps, strips, accents, brackets */
 export function cbox(b: Bld, mat: MatLike, w: number, h: number, d: number, x: number, y: number, z: number, _bev = 0, rot?: V3): void {
   b.g(new THREE.BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
-}
-const glo = (b: Bld, kit: Kit, x: number, y: number, z: number, l: number, h: number, w: number, rot?: V3) => cbox(b, kit.glow, l, h, w, x, y, z, 0, rot);
-
-/** hull station: [x, yb, y1, y2, yt (heights above y0), wb, wm, wt (half widths)] */
-type St = [number, number, number, number, number, number, number, number];
-
-/** chamfered 8-point loft hull from stations; lower hull clamped inside the running gear */
-function hull8(c: ChassisCtx, mat: MatLike, st: St[], zc = 0): (x: number, z: number) => number {
-  const { b, stance } = c;
-  const y0 = stance.y0, wi = stance.wi;
-  const rows = st.map(([x, yb, y1, y2, yt, wb, wm, wt]) => {
-    let a1 = y0 + y1;
-    if (wm > wi + 0.02 && !stance.legs) a1 = Math.max(a1, stance.yt + 0.01);
-    const a2 = Math.max(y0 + y2, a1 + 0.01), at = Math.max(y0 + yt, a2 + 0.01);
-    return { x, yb: y0 + yb, y1: a1, y2: a2, yt: at, wb: Math.min(wb, wi), wm, wt };
-  });
-  b.loft(mat, rows.map((r) => sec8(r.x, r.wb, r.wm, r.wt, r.yb, r.y1, r.y2, r.yt).map(([x, y, z]) => [x, y, z + zc] as V3)));
-  return (x, z) => {
-    if (x < rows[0].x || x > rows[rows.length - 1].x) return -1;
-    let i = 0;
-    while (i < rows.length - 2 && rows[i + 1].x < x) i++;
-    const p = rows[i], q = rows[i + 1], f = (x - p.x) / (q.x - p.x || 1);
-    const wt = p.wt + (q.wt - p.wt) * f, wm = p.wm + (q.wm - p.wm) * f, yt = p.yt + (q.yt - p.yt) * f, y2 = p.y2 + (q.y2 - p.y2) * f;
-    const az = Math.abs(z - zc);
-    if (az <= wt) return yt;
-    if (az <= wm) return yt - ((yt - y2) * (az - wt)) / (wm - wt || 1);
-    return -1;
-  };
-}
-
-/** rounded tube along x through stations [x, cy, ry, rz] (superellipse rings) */
-function tube(b: Bld, mat: MatLike, z: number, st: [number, number, number, number][], n = 8, pw = 2.6, flat = 0.3): void {
-  b.loft(mat, st.map(([x, cy, ry, rz]) => ellRing(x, cy, z, Math.max(0.003, ry), Math.max(0.003, rz), n, pw, flat)));
-}
-
-/** vertical fin / plate in the XY plane from a side profile [x, y] (absolute), thickness th, centred on z */
-function fin(b: Bld, mat: MatLike, prof: P2[], z: number, th: number, bev = 0.008): void {
-  // plate() extrudes a plan polygon along +y; rotating +90 deg about x maps plan z -> -y and height -> +z
-  plate(b, mat, prof.map(([x, y]) => [x, -y] as P2), 0, th, bev, [Math.PI / 2, 0, 0], [0, 0, z - th / 2]);
-}
-
-/** strip laid on a shield panel: at height fraction f, size h, proud by d, length fraction lf */
-interface Strip { f: number; h: number; mat: MatLike; d: number; lf: number; panels?: number[] }
-
-/** curved armour shield from plan points (x, z) left->right: leaning panels of height h from y, lean (rad, + = back) */
-function shield(b: Bld, mat: MatLike, pts: P2[], y: number, h: number | number[], th: number, lean: number, strips: Strip[] = []): void {
-  const cl = Math.cos(lean), sl = Math.sin(lean);
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x0, z0] = pts[i], [x1, z1] = pts[i + 1];
-    const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz) || 1;
-    const nx = dz / len, nz = -dx / len; // outward normal (toward +x for a left->right run)
-    const yaw = Math.atan2(dx, dz);
-    const hh = Array.isArray(h) ? h[i] : h;
-    const at = (f: number, d: number): V3 => [(x0 + x1) / 2 - nx * (sl * hh * f - d), y + cl * hh * f, (z0 + z1) / 2 - nz * (sl * hh * f - d)];
-    const p = at(0.5, 0);
-    b.box(mat, th, hh, len * 1.04, p[0], p[1], p[2], Math.min(th, len) * 0.3, [0, yaw, lean]);
-    for (const s of strips) {
-      if (s.panels && !s.panels.includes(i)) continue;
-      const q = at(s.f, th * 0.5 + s.d);
-      cbox(b, s.mat, th * 0.5, s.h, len * s.lf, q[0], q[1], q[2], 0, [0, yaw, lean]);
-    }
-  }
 }
 
 /** hip keel for legged stances: armoured belly block reaching down to the hip drums */
@@ -95,96 +49,120 @@ function keel(c: ChassisCtx, l: number, x = 0): void {
 }
 
 const onGround = (c: ChassisCtx) => c.mob.id === 'wheels' || c.mob.id === 'halftrack' || c.mob.id === 'anchor' || c.mob.id === 'treads';
+const UP: V3 = [0, 1, 0], ZA: V3 = [0, 0, 1], XA: V3 = [1, 0, 0];
 
-// ---- scout: arrowhead dart buggy ------------------------------------------------------------------------------------
+/** wheel radius / track for the 'wheels' mobility (mirrors mobility/wheels.ts wheelDims) */
+const wheelR = (S: number) => 0.08 + 0.05 * S;
+/** the scout's front axle runs a narrower track (mobility/wheels.ts): the arrowhead plan reads even at 20 px */
+const WEDGE_FRONT_TRACK = 0.78;
+
+/** mudguards over the axles a 'wheels' mobility will put under this hull: a flat fender from the hull side out over
+ *  the tyre with a sloped front lip (plain boxes: these hulls are small) */
+function arches(c: ChassisCtx, xs: number[], mat?: MatLike, track: number[] = []): void {
+  if (c.mob.id !== 'wheels') return;
+  const wr = wheelR(c.S), w = wr * 0.68, th = Math.max(0.008, wr * 0.06);
+  const m = mat ?? c.kit.armor2;
+  xs.forEach((x, i) => both((s) => {
+    const zo = (c.W / 2 - w / 2) * (track[i] ?? 1);
+    const z0 = zo - w * 0.8, z1 = zo + w * 0.62, y = wr * 2 + th * 1.5;
+    c.b.g(new THREE.BoxGeometry(wr * 2.1, th, z1 - z0), m, mtx([x, y, s * (z0 + z1) / 2]));
+    c.b.g(new THREE.BoxGeometry(wr * 0.7, th, z1 - z0), m, mtx([x + wr * 1.3, y - wr * 0.22, s * (z0 + z1) / 2], [0, 0, -0.6]));
+    c.b.g(new THREE.BoxGeometry(wr * 0.5, th, z1 - z0), m, mtx([x - wr * 1.22, y - wr * 0.16, s * (z0 + z1) / 2], [0, 0, 0.6]));
+  }));
+}
+
+// ---- scout: recon car ------------------------------------------------------------------------------------------------
 function scout(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   const y0 = stance.y0;
   const X = (f: number) => f * L, Z = (f: number) => f * W;
-  const deck = hull8(c, kit.hull, [
-    [X(-0.47), 0.03, 0.06, 0.11, 0.16, Z(0.2), Z(0.3), Z(0.22)],
-    [X(-0.3), 0, 0.05, 0.12, 0.19, Z(0.24), Z(0.34), Z(0.25)],
-    [X(0.06), 0, 0.05, 0.1, 0.16, Z(0.18), Z(0.25), Z(0.15)],
-    [X(0.34), 0.03, 0.06, 0.08, 0.1, Z(0.08), Z(0.13), Z(0.07)],
-    [X(0.53), 0.06, 0.07, 0.075, 0.08, Z(0.015), Z(0.03), Z(0.012)],
-  ]);
   keel(c, L * 0.5, -L * 0.05);
-  const topY = y0 + 0.19;
-  // rear haunches: fat fender blisters over the drive wheels (the wide end of the arrowhead)
-  both((s) => {
-    pod(b, kit.hull, [X(-0.3), Math.max(stance.yt, y0 + 0.08) + 0.02, s * Z(0.36)], X(0.2), 0.075, Z(0.1), 8, 5, 2.4, 0.5);
-    cbox(b, kit.glow, X(0.02), 0.03, Z(0.08), X(-0.49), y0 + 0.12, s * Z(0.3), 0.006);
-  });
-  // gun hump: short armoured cowl under the single mount
-  const m = c.mounts[0];
-  const mx = m?.x ?? X(0.02), mr = m?.r ?? 0.1;
-  const humpY = y0 + 0.215;
-  block(b, kit.hull, mx - 0.02, y0 + 0.1, 0, mr * 2.6, mr * 2.3, humpY - y0 - 0.1, { top: [0.8, 0.85], shift: [-0.02, 0], ch: mr * 0.6, bev: 0.015 });
-  // offset bubble canopy (left) and a whip antenna (right): asymmetric toy read
-  const cx = X(-0.22), cz = -Z(0.14);
-  dome(b, kit.trim, [cx, topY - 0.02, cz], 0.1, 0.03, 8, 1);
-  dome(b, kit.glass, [cx, topY, cz], 0.085, 0.08, 8, 2);
-  b.strut(kit.metal, [X(-0.36), topY - 0.02, Z(0.16)], [X(-0.44), topY + 0.36, Z(0.17)], 0.008, 0.004, 4);
-  cbox(b, kit.accent, 0.07, 0.04, 0.006, X(-0.41), topY + 0.3, Z(0.17), 0.003);
-  // rear spoiler wing on two posts, team accent
-  both((s) => cbox(b, kit.trim, 0.03, 0.08, 0.025, X(-0.43), topY + 0.02, s * Z(0.17), 0.006));
-  b.box(kit.accent, X(0.1), 0.025, Z(0.52), X(-0.45), topY + 0.07, 0, 0.008, [0, 0, 0.18]);
-  // twin exhausts and a nose lamp bar
-  both((s) => b.cyl(kit.hot, 0.022, 0.022, 0.02, [X(-0.49), y0 + 0.08, s * Z(0.1)], 'x', 6));
-  both((s) => cbox(b, kit.lamp, 0.03, 0.025, 0.04, X(0.36), y0 + 0.095, s * Z(0.06), 0.006, [0, -s * 0.5, 0]));
-  glo(b, kit, X(0.18), y0 + 0.15, 0, X(0.24), 0.012, 0.03, [0, 0, -0.18]);
-  // trike: fork fairing over the single front wheel
-  if (c.mob.id === 'wheels') {
-    const wr = 0.11 + 0.06 * c.S;
-    pod(b, kit.hull, [X(0.32), wr * 2 + 0.02, 0], wr * 1.2, 0.045, Z(0.09), 8, 5, 2.4, 0.4);
-    both((s) => beam(b, kit.metal, [X(0.3), wr * 2, s * Z(0.07)], [X(0.32), wr, s * Z(0.07)], 0.025, 0.03));
-  }
+  // dark belly between the wheels, then the faceted armour hull: wide flat rear deck, shallow glacis, arrowhead nose
+  facetHull(c, kit.mech, [[X(-0.44), 0, 0.01, 0.05, 0.06, Z(0.204), Z(0.24), Z(0.24)], [X(0.46), 0.03, 0.035, 0.05, 0.06, Z(0.096), Z(0.132), Z(0.132)]]);
+  const st: FSt[] = [
+    [X(-0.48), 0.05, 0.05, 0.1, 0.13, Z(0.264), Z(0.324), Z(0.252)],
+    [X(-0.36), 0.045, 0.045, 0.11, 0.155, Z(0.312), Z(0.36), Z(0.276)],
+    [X(0.06), 0.045, 0.045, 0.11, 0.15, Z(0.312), Z(0.36), Z(0.264)],
+    [X(0.3), 0.05, 0.05, 0.08, 0.1, Z(0.2), Z(0.24), Z(0.15)],
+    [X(0.52), 0.05, 0.055, 0.06, 0.065, Z(0.084), Z(0.192), Z(0.06)],
+  ];
+  const H = facetHull(c, kit.armor, st);
+  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
+  // upper glacis plate on a shadow gap, driver's visor + two periscopes on its left half (asymmetric)
+  facePlate(b, kit, kit.armor2, [X(0.3), dk(X(0.3)), 0], [X(0.07), dk(X(0.07)), 0], ZA, Z(0.38), 0.012, UP, { standoff: 0.004, gap: 0.008, fill: 0.86 });
+  b.g(new THREE.BoxGeometry(0.05, 0.03, Z(0.12)), kit.armor2, mtx([X(0.16), dk(X(0.16)) + 0.012, -Z(0.12)], [0, 0, 0.2]));
+  periscopes(b, kit, X(0.185), dk(X(0.16)) + 0.012, -Z(0.12), 2, 0.022);
+  // engine louvres on the rear deck, spare wheel on the rear plate, tow eye
+  grille(b, kit, frame([X(-0.38), dk(X(-0.38)), Z(0.02)], UP), X(0.13), Z(0.22), 0.012, 3);
+  spareWheel(b, kit, [X(-0.48) - 0.028, y0 + 0.085, -Z(0.05)], '-x', 0.075, 0.045);
+  // recon signature: telescopic sensor mast (right rear) + whip antenna (left rear)
+  sensorMast(b, kit, [X(-0.28), dk(X(-0.28)), Z(0.16)], 0.3, 0.011, 0.2);
+  antenna(b, kit, X(-0.42), dk(X(-0.42)), -Z(0.18), 0.42, 0.0045, [-0.18, 0, 0]);
+  // headlamps in the nose corners, exhaust on the left flank
+  both((s) => cbox(b, kit.lamp, 0.02, 0.022, 0.035, X(0.43), y0 + 0.075, s * Z(0.08), 0, [0, -s * 0.5, 0]));
+  b.cyl(kit.joint, 0.012, 0.012, 0.06, [X(-0.4), y0 + 0.08, -Z(0.37)], 'x', 6);
+  cbox(b, kit.accent, X(0.1), 0.004, Z(0.04), X(-0.06), dk(X(-0.06), Z(0.19)) + 0.002, Z(0.19));
+  arches(c, [X(0.31), X(-0.31)], undefined, [WEDGE_FRONT_TRACK]);
   return {
-    deckAt: deck, top: humpY, custom: true,
-    seat: (mm) => { collar(b, kit, mm.x, humpY, mm.z, mm.r, humpY - 0.04, 12); return { y: humpY, socket: true }; },
+    deckAt: H.deck, top: dk(0) + 0.03, custom: true, dressed: true,
+    seat: (m) => ({ y: ringSeat(b, kit, m, dk(m.x, m.z), 0.022, 12), socket: true }),
   };
 }
 
-// ---- raider: trident catamaran ---------------------------------------------------------------------------------------
+// ---- raider: armoured gun truck ----------------------------------------------------------------------------------------
 function raider(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   const y0 = stance.y0;
   const X = (f: number) => f * L, Z = (f: number) => f * W;
-  const ny = Math.max(stance.yt + 0.05, y0 + 0.11); // nacelle centre line sits on the fender line
-  const nacTop = new Map<MountSpec, number>();
   keel(c, L * 0.5, -L * 0.05);
-  // centre cockpit pod: low, pointed, glass bubble
-  tube(b, kit.trim, 0, [[X(-0.42), y0 + 0.07, 0.04, Z(0.06)], [X(-0.3), y0 + 0.08, 0.07, Z(0.12)], [X(0.12), y0 + 0.08, 0.075, Z(0.12)], [X(0.4), y0 + 0.07, 0.05, Z(0.07)], [X(0.54), y0 + 0.06, 0.015, Z(0.02)]], 8, 2.4, 0.4);
-  pod(b, kit.glass, [X(0.02), y0 + 0.14, 0], X(0.16), 0.06, Z(0.08), 8, 5, 2.2, 0.6);
-  // gun nacelles: long pointed booms, mounts on their backs
-  both((s) => {
-    const m = c.mounts.find((q) => Math.sign(q.z) === s);
-    const z = m?.z ?? s * Z(0.24);
-    tube(b, kit.hull, z, [[X(-0.48), ny - 0.01, 0.045, Z(0.06)], [X(-0.36), ny, 0.085, Z(0.1)], [X(0.12), ny + 0.005, 0.09, Z(0.105)], [X(0.36), ny - 0.01, 0.065, Z(0.075)], [X(0.56), ny - 0.025, 0.012, Z(0.015)]], 8, 2.6, 0.3);
-    // panel cheek and accent tip
-    cbox(b, kit.panel, X(0.3), 0.04, 0.02, X(-0.12), ny + 0.01, z + s * Z(0.1), 0.008, [s * 0.25, 0, 0]);
-    cbox(b, kit.accent, X(0.08), 0.03, Z(0.06), X(0.42), ny + 0.035, z, 0.008, [0, 0, -0.25]);
-    b.cyl(kit.hot, 0.04, 0.04, 0.02, [X(-0.5), ny, z], 'x', 8);
-    cbox(b, kit.lamp, 0.02, 0.025, 0.035, X(0.45), ny - 0.01, z, 0.005);
-    if (m) nacTop.set(m, ny + 0.085);
-  });
-  // bridge spar between the booms and a rear wing joining their tails
-  block(b, kit.trim, X(-0.12), ny - 0.06, 0, X(0.26), Z(0.5), 0.06, { ch: 0.03, bev: 0.01 });
-  b.box(kit.hull, X(0.14), 0.025, Z(0.62), X(-0.42), ny + 0.12, 0, 0.008, [0, 0, 0.2]);
-  both((s) => cbox(b, kit.trim, 0.04, 0.09, 0.025, X(-0.42), ny + 0.07, s * Z(0.22), 0.006));
-  glo(b, kit, X(-0.42), ny + 0.135, 0, X(0.03), 0.01, Z(0.36));
-  const top = ny + 0.09;
+  facetHull(c, kit.mech, [[X(-0.46), 0, 0.01, 0.05, 0.06, Z(0.24), Z(0.288), Z(0.288)], [X(0.46), 0.02, 0.03, 0.05, 0.06, Z(0.192), Z(0.24), Z(0.24)]]);
+  // lower hull: boxy truck body with a low flat bed at the rear and a blunt bonnet at the nose
+  const H = facetHull(c, kit.armor2, [
+    [X(-0.49), 0.045, 0.045, 0.09, 0.11, Z(0.312), Z(0.36), Z(0.336)],
+    [X(0.36), 0.045, 0.045, 0.09, 0.11, Z(0.312), Z(0.36), Z(0.336)],
+    [X(0.5), 0.05, 0.05, 0.07, 0.085, Z(0.264), Z(0.324), Z(0.24)],
+  ]);
+  // fighting casemate carrying both guns: vertical lower band, sloped cheeks, sloped front plate down to the bonnet
+  const cy = y0 + 0.1;
+  const cs: FSt[] = [
+    [X(-0.17), 0.1, 0.1, 0.15, 0.2, Z(0.324), Z(0.36), Z(0.3)],
+    [X(0.26), 0.1, 0.1, 0.15, 0.2, Z(0.324), Z(0.36), Z(0.3)],
+    [X(0.4), 0.1, 0.1, 0.11, 0.125, Z(0.288), Z(0.336), Z(0.24)],
+  ];
+  const C = facetHull(c, kit.armor, cs, 0, false);
+  const roof = y0 + 0.2;
+  // front plate (driver's visor slit + periscopes on the left), side armour plates on the casemate flanks
+  facePlate(b, kit, kit.armor, [X(0.4), y0 + 0.125, 0], [X(0.26), roof, 0], ZA, Z(0.44), 0.011, XA, { standoff: 0.004, gap: 0.007, fill: 0.84 });
+  cbox(b, kit.mech, 0.012, 0.012, Z(0.14), X(0.335), y0 + 0.17, -Z(0.12), 0, [0, 0, 0.75]);
+  periscopes(b, kit, X(0.25), roof, -Z(0.12), 2, 0.02);
+  // flank plates (plain boxes on size 1: a shadow line under them, no bevel budget)
+  both((s) => { b.g(new THREE.BoxGeometry(X(0.36), 0.07, 0.01), kit.armor2, mtx([X(0.05), cy + 0.06, s * (Z(0.36) + 0.009)])); b.g(new THREE.BoxGeometry(X(0.34), 0.01, 0.006), kit.mech, mtx([X(0.05), cy + 0.022, s * (Z(0.36) + 0.004)])); });
+  // open cargo bed: side boards, roll bar, spare wheel lying in it, jerry cans, rolled tarp
+  const bed = H.deck(X(-0.3), 0);
+  both((s) => b.g(new THREE.BoxGeometry(X(0.32), 0.05, 0.012), kit.armor2, mtx([X(-0.33), bed + 0.025, s * Z(0.345)])));
+  b.g(new THREE.BoxGeometry(0.012, 0.05, Z(0.7)), kit.armor2, mtx([X(-0.49), bed + 0.025, 0]));
+  const rb = (s: number): V3 => [X(-0.2), bed, s * Z(0.27)];
+  both((s) => b.g(strutGeo(rb(s), [X(-0.22), bed + 0.15, s * Z(0.22)], 0.008, 0.008, 5), kit.joint));
+  b.g(strutGeo([X(-0.22), bed + 0.15, -Z(0.22)], [X(-0.22), bed + 0.15, Z(0.22)], 0.008, 0.008, 5), kit.joint);
+  spareWheel(b, kit, [X(-0.37), bed + 0.024, -Z(0.13)], 'y', 0.07, 0.042);
+  jerryCans(b, kit, frame([X(-0.3), bed, Z(0.15)], UP, ZA), 2, 0.062);
+  b.cyl(kit.canvas, 0.03, 0.03, Z(0.5), [X(-0.45), bed + 0.03, -Z(0.25)], 'z', 7);
+  // bull bar, headlamps, exhaust stack behind the casemate (right), antenna (left rear)
+  bullBar(b, kit, X(0.53), y0 + 0.01, 0, Z(0.5), 0.09, 0.007);
+  both((s) => cbox(b, kit.lamp, 0.016, 0.022, 0.035, X(0.505), y0 + 0.075, s * Z(0.17)));
+  b.cyl(kit.joint, 0.012, 0.012, 0.17, [X(-0.15), bed, Z(0.36)], 'y', 6);
+  b.cyl(kit.hot, 0.009, 0.009, 0.005, [X(-0.15), bed + 0.17, Z(0.36)], 'y', 6);
+  antenna(b, kit, X(-0.12), roof, -Z(0.22), 0.38, 0.0045, [-0.2, 0, 0]);
+  cbox(b, kit.accent, 0.004, 0.03, Z(0.1), X(0.405), y0 + 0.14, Z(0.14), 0, [0, 0, 0.75]);
+  arches(c, [X(0.31), X(-0.31)]);
+  const deck = (x: number, z: number) => Math.max(H.deck(x, z), C.deck(x, z));
   return {
-    deckAt: (x, z) => (Math.abs(x) < X(0.4) && Math.abs(Math.abs(z) - Z(0.24)) < Z(0.1) ? top : -1), top, custom: true,
-    seat: (m) => {
-      const y = nacTop.get(m) ?? top;
-      collar(b, kit, m.x, y + 0.01, m.z, m.r, y - 0.04, 12);
-      return { y: y + 0.01, socket: true };
-    },
+    deckAt: deck, top: roof + 0.03, custom: true, dressed: true,
+    seat: (m) => ({ y: ringSeat(b, kit, m, roof, 0.018, 9), socket: true }),
   };
 }
 
-// ---- carriage: field-gun carriage ---------------------------------------------------------------------------------------
+// ---- carriage: towed field gun ------------------------------------------------------------------------------------------
 function carriage(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   const y0 = stance.y0;
@@ -192,239 +170,311 @@ function carriage(c: ChassisCtx): ChassisOut {
   const m = c.mounts[0];
   const mr = m?.r ?? 0.16, mx = m?.x ?? 0;
   keel(c, L * 0.4);
-  // cradle: dark box between the wheels, lighter turntable deck on top
-  block(b, kit.trim, X(-0.04), y0, 0, X(0.46), Math.min(Z(0.36), stance.wi * 2), 0.1, { top: [0.9, 0.9], ch: 0.04, bev: 0.012 });
-  const deckY = y0 + 0.15;
-  b.cylb(kit.hull, mr * 1.35, deckY - y0 - 0.08, 0.015, [mx, y0 + 0.08, 0], 'y', 8);
-  // trail arms splayed back to spades (on the ground when the carriage is parked on wheels / anchored)
-  const ty = onGround(c) ? 0.03 : y0 - 0.01;
+  // cradle / saddle on the axle: dark core box, armour top carriage the turntable sits on
+  const cw = Math.min(Z(0.34), stance.wi * 2);
+  facetHull(c, kit.mech, [[X(-0.2), 0, 0.01, 0.06, 0.08, cw * 0.4, cw * 0.46, cw * 0.4], [X(0.2), 0.0, 0.01, 0.06, 0.08, cw * 0.4, cw * 0.46, cw * 0.4]]);
+  const deckY = y0 + 0.13;
+  facetHull(c, kit.armor2, [[mx - mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1.0, mr * 1.15, mr * 1.0], [mx + mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1.0, mr * 1.15, mr * 1.0]], 0, false);
+  // equilibrator pistons either side of the cradle (functional: they balance the barrel)
+  both((s) => piston(b, kit, [X(-0.17), y0 + 0.04, s * mr * 1.1], [mx + mr * 0.6, deckY - 0.01, s * mr * 1.1], 0.016, 0.55, false));
+  // split trails: box-section legs from the cradle back to recoil spades (dug in when parked on wheels / anchored)
+  const g = onGround(c);
+  const ty = g ? 0.02 : y0 - 0.02;
   both((s) => {
-    beam(b, kit.hull, [X(-0.16), y0 + 0.06, s * Z(0.09)], [X(-0.6), ty + 0.04, s * Z(0.3)], 0.05, 0.06);
-    block(b, kit.hazard, X(-0.62), ty, s * Z(0.31), 0.05, 0.1, 0.09, { top: [0.6, 1], shift: [-0.02, 0], ch: 0.012, bev: 0.008 });
-    cbox(b, kit.panel, 0.1, 0.05, 0.06, X(-0.38), y0 + 0.05 - (y0 + 0.02 - ty) * 0.5, s * Z(0.2), 0.01, [0, s * 0.45, 0]);
+    const a: V3 = [X(-0.14), y0 + 0.05, s * Z(0.08)], e: V3 = [X(-0.58), ty + 0.035, s * Z(0.3)];
+    beam(b, kit.armor2, a, e, 0.05, 0.055);
+    // lifting handle near the trail end
+    b.g(strutGeo([e[0] + 0.07, e[1] + 0.03, e[2] - s * 0.03], [e[0] + 0.07, e[1] + 0.085, e[2] + s * 0.02], 0.006, 0.006, 4), kit.joint);
+    const yaw = Math.atan2(e[2] - a[2], a[0] - e[0]);
+    spade(b, kit, new THREE.Matrix4().makeRotationY(-yaw + Math.PI / 2).setPosition(e[0] - 0.03, e[1] + 0.05, e[2]), 0.12, g ? 0.09 : 0.06, 0.012);
   });
-  // notched gun shield wrapped round the front: the carriage's whole silhouette
-  const R = Math.max(mr * 1.7, Z(0.32));
-  const pts: P2[] = [];
-  for (let i = 0; i <= 5; i++) { const a = -1.15 + (i / 5) * 2.3; pts.push([mx + Math.cos(a) * R * 0.85, Math.sin(a) * R]); }
-  shield(b, kit.panel, pts, y0 + 0.02, [0.36, 0.4, 0.22, 0.4, 0.36], 0.045, 0.2, [{ f: 0.95, h: 0.035, mat: kit.accent, d: 0, lf: 0.9, panels: [0, 1, 3, 4] }]);
-  sensor(b, kit, mx + R * 0.7, y0 + 0.27, -Z(0.2), 0.05, kit.lamp);
-  // ammo crate on the left trail
-  block(b, kit.canvas, X(-0.36), y0 + 0.02, -Z(0.13), 0.14, 0.1, 0.07, { ch: 0.02, bev: 0.01 });
+  // ammo box on the left trail (asymmetric)
+  stowBox(b, kit, frame([X(-0.38), y0 + 0.085, -Z(0.18)], UP, [Math.cos(0.5), 0, -Math.sin(0.5)]), 0.11, 0.055, 0.07, kit.canvas);
+  // gun shield: centre plate + two raked wings on a dark backing, notched top, sight box on the left wing
+  const R = Math.max(mr * 1.55, Z(0.3));
+  const sx = mx + R * 0.62, sh = 0.3;
+  const shieldPlate = (yaw: number, zc: number, w: number, h: number) => {
+    const F = new THREE.Matrix4().makeRotationY(yaw).multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 2 + 0.2)).setPosition(sx - Math.abs(zc) * Math.sin(Math.abs(yaw)) * 0.9, y0 + 0.03 + h / 2, zc);
+    // after rotZ the plate's local +y faces forward (+x), local x runs down -> poly in (x = height, z = width)
+    armorPlate(b, kit, kit.armor, F, [[-h / 2, -w / 2], [h / 2 - 0.03, -w / 2], [h / 2, -w / 2 + 0.03], [h / 2, w / 2 - 0.03], [h / 2 - 0.03, w / 2], [-h / 2, w / 2]], 0.014, { standoff: 0.004, gap: 0.01 });
+  };
+  shieldPlate(0, 0, R * 0.95, sh * 0.82);
+  both((s) => shieldPlate(-s * 0.55, s * R * 0.72, R * 0.6, sh));
+  b.g(bevBox(0.05, 0.035, 0.035, 0.006), kit.armor2, mtx([sx + 0.01, y0 + 0.03 + sh + 0.012, -R * 0.62]));
+  b.g(new THREE.BoxGeometry(0.008, 0.016, 0.022), kit.glass, mtx([sx + 0.036, y0 + 0.03 + sh + 0.014, -R * 0.62]));
+  cbox(b, kit.accent, 0.004, 0.02, R * 0.4, sx + 0.04, y0 + 0.03 + sh * 0.68, R * 0.22, 0, [0, 0, 0.2]);
   return {
-    deckAt: (x, z) => (Math.hypot(x - mx, z) < mr * 1.3 ? deckY : -1), top: deckY, custom: true,
-    seat: (mm) => { collar(b, kit, mm.x, deckY, mm.z, mm.r, deckY - 0.05, 12); return { y: deckY, socket: true }; },
+    deckAt: (x, z) => (Math.hypot(x - mx, z) < mr * 1.15 ? deckY : -1), top: deckY + 0.02, custom: true, dressed: true,
+    seat: (mm) => ({ y: ringSeat(b, kit, mm, deckY, 0.02, 12), socket: true }),
   };
 }
 
-// ---- hunter: greyhound ---------------------------------------------------------------------------------------------------
+// ---- hunter: long low 6-wheel tank hunter ----------------------------------------------------------------------------------
 function hunter(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, stance } = c;
+  const { b, kit, L, W, S, stance } = c;
   const y0 = stance.y0;
-  const X = (f: number) => f * L / 2, Z = (f: number) => f * W; // authored at L=2, W=1
-  const deck = hull8(c, kit.hull, [
-    [X(-0.96), 0.05, 0.1, 0.2, 0.28, Z(0.18), Z(0.28), Z(0.18)],
-    [X(-0.8), 0, 0.08, 0.22, 0.34, Z(0.26), Z(0.38), Z(0.26)],
-    [X(-0.4), 0, 0.07, 0.18, 0.27, Z(0.27), Z(0.39), Z(0.25)],
-    [X(0.1), 0, 0.06, 0.15, 0.23, Z(0.25), Z(0.36), Z(0.22)],
-    [X(0.55), 0.02, 0.06, 0.11, 0.15, Z(0.18), Z(0.27), Z(0.15)],
-    [X(0.88), 0.05, 0.07, 0.09, 0.105, Z(0.08), Z(0.14), Z(0.07)],
-    [X(1.02), 0.07, 0.075, 0.085, 0.09, Z(0.02), Z(0.04), Z(0.015)],
-  ]);
+  const X = (f: number) => (f * L) / 2, Z = (f: number) => f * W; // authored at L=2, W=1
+  const fine = fineFor(S);
   keel(c, L * 0.42, -L * 0.1);
-  const sorted = [...c.mounts].sort((a, q) => q.x - a.x);
-  const front = sorted[0], rear = sorted[1];
-  // swept dorsal sensor fin between the guns: the hunter's signature
-  const fx0 = (rear ? rear.x + rear.r * 1.3 : X(-0.4)), fx1 = (front ? front.x - front.r * 1.4 : X(-0.05));
-  const fy = deck((fx0 + fx1) / 2, 0) - 0.02;
-  fin(b, kit.hull, [[fx0 - 0.04, fy], [fx1 + 0.04, fy], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.05);
-  fin(b, kit.accent, [[fx0 - 0.12, fy + 0.38], [fx0 + (fx1 - fx0) * 0.08, fy + 0.4], [fx0 + (fx1 - fx0) * 0.05, fy + 0.46], [fx0 - 0.16, fy + 0.5]], 0, 0.06);
-  glo(b, kit, (fx0 + fx1) / 2 - 0.02, fy + 0.12, 0, (fx1 - fx0) * 0.5, 0.015, 0.05, [0, 0, 0.9]);
-  // cheek intakes and a long glow line down each flank; lamp eyes in the needle nose
+  facetHull(c, kit.mech, [[X(-0.95), 0, 0.01, 0.06, 0.07, Z(0.24), Z(0.288), Z(0.288)], [X(0.9), 0.04, 0.05, 0.07, 0.08, Z(0.144), Z(0.192), Z(0.192)]]);
+  const st: FSt[] = [
+    [X(-1.0), 0.05, 0.05, 0.17, 0.22, Z(0.288), Z(0.336), Z(0.264)],
+    [X(-0.86), 0.04, 0.04, 0.19, 0.27, Z(0.312), Z(0.36), Z(0.276)],
+    [X(0.42), 0.04, 0.04, 0.19, 0.27, Z(0.312), Z(0.36), Z(0.276)],
+    [X(0.9), 0.06, 0.06, 0.1, 0.12, Z(0.24), Z(0.312), Z(0.18)],
+    [X(1.02), 0.08, 0.08, 0.09, 0.095, Z(0.12), Z(0.216), Z(0.096)],
+  ];
+  const H = facetHull(c, kit.armor, st);
+  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
+  const T = 0.014;
+  // long shallow upper glacis: two-plate stack, folded trim vane on its lower half (the hunter's nose signature)
+  const g0: V3 = [X(0.9), dk(X(0.9)), 0], g1: V3 = [X(0.44), dk(X(0.44)), 0];
+  const GF = facePlate(b, kit, kit.armor, g0, g1, ZA, Z(0.44), T, UP, { standoff: 0.005, gap: 0.01, fill: 0.9 });
+  armorPlate(b, kit, kit.armor2, sub(GF, 0, 0.005 + T, 0), rectP(Z(0.4), 0.09, 0.02), T * 0.9, { standoff: 0.004, gap: 0.008 });
+  b.g(new THREE.CylinderGeometry(0.008, 0.008, Z(0.4), 6).rotateX(Math.PI / 2), kit.joint, mtx([X(0.86), dk(X(0.86)) + 0.03, 0]));
+  // shoulder plates, smoke banks on the nose corners, caged lamps
+  both((s) => facePlate(b, kit, kit.armor2, [0, y0 + 0.19, s * Z(0.36)], [0, y0 + 0.27, s * Z(0.276)], XA, X(0.9), 0.01, [0, 0.4, s], { shift: -X(0.16), standoff: 0.004, gap: 0.008 }));
   both((s) => {
-    cbox(b, kit.trim, X(0.3), 0.06, 0.03, X(0.2), y0 + 0.12, s * Z(0.37), 0.01, [0, s * 0.12, 0]);
-    glo(b, kit, X(-0.2), y0 + 0.17, s * Z(0.355), X(0.9), 0.014, 0.014, [s * 0.5, 0, 0]);
-    cbox(b, kit.lamp, 0.03, 0.02, 0.04, X(0.86), y0 + 0.1, s * Z(0.07), 0.005, [0, -s * 0.5, 0]);
-    b.cyl(kit.hot, 0.03, 0.03, 0.02, [X(-0.98), y0 + 0.17, s * Z(0.1)], 'x', 6);
+    smokeLaunchers(b, kit, frame([X(0.5), dk(X(0.5), s * Z(0.2)), s * Z(0.2)], UP, [Math.cos(0.6), 0, s * Math.sin(0.6)]), 3, 0.014);
+    cagedLamp(b, kit, frame([X(0.9), dk(X(0.9), s * Z(0.13)), s * Z(0.13)], UP, XA), 0.035, fine);
   });
-  vent(b, kit, X(-0.86), deck(X(-0.86), 0) - 0.005, 0, 0.1, Z(0.3), 2, 'x');
-  const top = deck(X(-0.8), 0);
+  // driver's hatch + periscopes (front left)
+  crewHatch(b, kit, frame([X(0.3), dk(X(0.3)), -Z(0.12)], UP), 0.04, fine);
+  periscopes(b, kit, X(0.37), dk(X(0.37)), -Z(0.12), 3, 0.02);
+  // engine deck: recessed louvred grille, exhaust (right rear), antenna pair (left rear), stowage bins (right flank)
+  grille(b, kit, frame([X(-0.86), dk(X(-0.86)), -Z(0.04)], UP), X(0.18), Z(0.3), 0.015, 4);
+  exhaustBox(b, kit, frame([X(-0.86), dk(X(-0.86)), Z(0.17)], UP, ZA), 0.026, fine);
+  antenna(b, kit, X(-0.72), dk(X(-0.72)), -Z(0.2), 0.62, 0.006, [-0.16, 0, 0]);
+  antenna(b, kit, X(-0.2), dk(X(-0.2)), -Z(0.21), 0.38, 0.005, [-0.12, 0, 0]);
+  stowBox(b, kit, frame([X(-0.1), y0 + 0.19, Z(0.36) + 0.01], [0, 0, 1], XA), X(0.42), 0.05, 0.04);
+  stowBox(b, kit, frame([X(0.18), y0 + 0.19, -Z(0.36) - 0.01], [0, 0, -1], XA), X(0.28), 0.045, 0.035, kit.canvas);
+  towHooks(b, kit, frame([X(-1.0) - 0.004, y0 + 0.11, 0], [-1, 0, 0], ZA), Z(0.3), 0.018);
+  b.decal(0.09, 0.09, X(-0.3), dk(X(-0.3)) + 0.003, Z(0.13), atlasUV(1), 0);
+  arches(c, [X(0.68), 0, X(-0.68)]);
+  const sorted = [...c.mounts].sort((a, q) => q.x - a.x);
+  const front = sorted[0];
   return {
-    deckAt: deck, top: top + 0.06, custom: true,
+    deckAt: H.deck, top: dk(0) + 0.06, custom: true, dressed: true,
     seat: (m) => {
-      const base = Math.max(deck(m.x, m.z), deck(m.x + m.r * 0.8, 0), deck(m.x - m.r * 0.8, 0));
-      const y = base + (m === front ? 0.05 : 0.03);
-      if (m === front) block(b, kit.hull, m.x, base - 0.04, m.z, m.r * 2.4, m.r * 2.2, y - base + 0.04, { top: [0.86, 0.86], ch: m.r * 0.6, bev: 0.012 });
-      collar(b, kit, m.x, y, m.z, m.r, base - 0.02, 14);
-      return { y, socket: true };
+      const base = dk(m.x, m.z);
+      if (m === front) return { y: ringSeat(b, kit, m, base, 0.022, 14), socket: true };
+      // rear remote weapon station on a short armoured pedestal
+      const y = base + 0.05;
+      b.g(new THREE.CylinderGeometry(m.r * 0.8, m.r * 1.0, 0.05, 8), kit.armor2, mtx([m.x, base + 0.025, m.z]));
+      return { y: ringSeat(b, kit, m, y, 0.012, 10, kit.mech), socket: true };
     },
   };
 }
 
-// ---- riot: bulldozer brute -----------------------------------------------------------------------------------------------
+// ---- riot: dozer brute -------------------------------------------------------------------------------------------------------
 function riot(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, stance } = c;
+  const { b, kit, L, W, S, stance } = c;
   const y0 = stance.y0;
-  const X = (f: number) => f * L / 2, Z = (f: number) => f * W / 3; // authored at L=2, W=3
-  const deck = hull8(c, kit.hull, [
-    [X(-0.98), 0.06, 0.1, 0.22, 0.3, Z(0.5), Z(0.62), Z(0.45)],
-    [X(-0.78), 0, 0.09, 0.26, 0.4, Z(0.8), Z(0.98), Z(0.72)],
-    [X(-0.2), 0, 0.09, 0.28, 0.44, Z(1.0), Z(1.22), Z(0.92)],
-    [X(0.6), 0.03, 0.1, 0.26, 0.38, Z(1.0), Z(1.3), Z(0.86)],
-  ]);
+  const X = (f: number) => (f * L) / 2, Z = (f: number) => (f * W) / 3; // authored at L=2, W=3
+  const fine = fineFor(S);
   keel(c, L * 0.5, -L * 0.1);
-  const topY = deck(0, 0);
-  // the plow: full-width curved riot shield leaning back, taller in the middle, a visor slit and hazard teeth
+  facetHull(c, kit.mech, [[X(-0.96), 0, 0.02, 0.1, 0.12, Z(0.85), Z(0.95), Z(0.95)], [X(0.9), 0.04, 0.06, 0.1, 0.12, Z(0.8), Z(0.9), Z(0.9)]]);
+  // wide low hull with sponsons over the tracks, sloped front plate
+  const st: FSt[] = [
+    [X(-1.0), 0.06, 0.06, 0.2, 0.28, Z(0.9), Z(1.36), Z(1.12)],
+    [X(-0.86), 0.04, 0.04, 0.22, 0.33, Z(0.92), Z(1.42), Z(1.2)],
+    [X(0.42), 0.04, 0.04, 0.22, 0.33, Z(0.92), Z(1.42), Z(1.2)],
+    [X(0.86), 0.06, 0.06, 0.18, 0.2, Z(0.9), Z(1.38), Z(1.12)],
+  ];
+  const H = facetHull(c, kit.armor, st);
+  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
+  const deckY = dk(0);
+  facePlate(b, kit, kit.armor2, [X(0.86), y0 + 0.2, 0], [X(0.42), deckY, 0], ZA, Z(2.2), 0.018, UP, { standoff: 0.006, gap: 0.014, fill: 0.86 });
+  // raised rear casemate carrying the twin guns: vertical band, sloped front, flat roof
+  const mz = Math.max(...c.mounts.map((m) => Math.abs(m.z)), Z(0.45));
+  const cw = mz + Z(0.32);
+  const C = facetHull(c, kit.armor, [
+    [X(-0.84), 0.32, 0.32, 0.39, 0.44, cw * 0.95, cw, cw * 0.92],
+    [X(-0.02), 0.32, 0.32, 0.39, 0.44, cw * 0.95, cw, cw * 0.92],
+    [X(0.2), 0.32, 0.32, 0.34, 0.36, cw * 0.9, cw * 0.95, cw * 0.82],
+  ], 0, false);
+  const roof = y0 + 0.44;
+  facePlate(b, kit, kit.armor2, [X(0.2), y0 + 0.36, 0], [X(-0.02), roof, 0], ZA, cw * 1.6, 0.014, [1, 0.6, 0], { standoff: 0.005, gap: 0.01, fill: 0.8 });
+  // riot light bar across the casemate front (four caged lamps)
+  for (const f of [-0.6, -0.2, 0.2, 0.6]) cagedLamp(b, kit, frame([X(0.06), roof, f * cw * 0.8], UP, XA), 0.045, fine);
+  // the dozer blade: full width, curved in plan, leaning back, steel cutting edge, ribs behind, push arms + rams
+  const half = Z(1.5), n = 6, bh = (y0 + 0.22) * 1.25;
   const pts: P2[] = [];
-  const n = 6, half = Z(1.5);
-  for (let i = 0; i <= n; i++) { const z = -half + (2 * half * i) / n; pts.push([X(1.0) - X(0.42) * (z / half) ** 2, z]); }
-  const ph = [0.62, 0.74, 0.82, 0.82, 0.74, 0.62];
-  shield(b, kit.panel, pts, y0 - 0.04, ph, 0.12, 0.3, [
-    { f: 0.97, h: 0.05, mat: kit.accent, d: 0, lf: 0.9 },
-    { f: 0.74, h: 0.08, mat: kit.trim, d: 0, lf: 0.98, panels: [1, 2, 3, 4] },
-    { f: 0.74, h: 0.028, mat: kit.glow, d: 0.012, lf: 0.86, panels: [1, 2, 3, 4] },
-    { f: 0.1, h: 0.07, mat: kit.hazard, d: 0, lf: 0.45 },
-    { f: 0.1, h: 0.069, mat: kit.trim, d: -0.002, lf: 0.98 },
-  ]);
-  // twin armoured shoulders under the guns (octagonal drums), a sunken spine between them, engine block behind
-  const shY = topY + 0.1;
-  for (const m of c.mounts) {
-    b.lathe(kit.hull, [[0, -0.12], [m.r * 1.65, -0.12], [m.r * 1.65, -0.03], [m.r * 1.38, 0.0], [0, 0.0]], [m.x, shY, m.z], 'y', 8);
-    cbox(b, kit.accent, m.r * 0.9, 0.02, 0.05, m.x - m.r * 1.1, shY - 0.04, m.z + Math.sign(m.z) * m.r * 1.55, 0.006, [0, Math.sign(m.z) * 0.35, 0]);
+  for (let i = 0; i <= n; i++) { const z = -half + (2 * half * i) / n; pts.push([X(1.12) - X(0.3) * (z / half) ** 2, z]); }
+  for (let i = 0; i < n; i++) {
+    const [x0, z0] = pts[i], [x1, z1] = pts[i + 1];
+    const len = Math.hypot(x1 - x0, z1 - z0), yaw = Math.atan2(x1 - x0, z1 - z0);
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const M = new THREE.Matrix4().makeRotationY(yaw).multiply(new THREE.Matrix4().makeRotationZ(0.22)).setPosition(cx, 0.03 + bh / 2, cz);
+    b.g(bevBox(0.035, bh, len * 1.02, 0.008), kit.armor2, M);
+    b.g(new THREE.BoxGeometry(0.03, 0.035, len * 1.0), kit.steel, M.clone().multiply(new THREE.Matrix4().makeTranslation(0.012, -bh / 2 + 0.01, 0)));
+    b.g(new THREE.BoxGeometry(0.045, bh * 0.8, 0.02), kit.mech, M.clone().multiply(new THREE.Matrix4().makeTranslation(-0.03, 0, len * 0.4)));
+    if (i === 1 || i === 4) b.g(new THREE.BoxGeometry(0.008, 0.04, len * 0.7), kit.hazard, M.clone().multiply(new THREE.Matrix4().makeTranslation(0.02, bh / 2 - 0.03, 0)));
   }
-  block(b, kit.trim, X(-0.86), topY - 0.04, 0, X(0.26), Z(0.9), 0.12, { top: [0.8, 0.9], ch: 0.06, bev: 0.02 });
-  vent(b, kit, X(-0.86), topY + 0.08, 0, X(0.18), Z(0.66), 3, 'x');
   both((s) => {
-    // side bumpers: fat rubber rams at the front corners
-    b.cylb(kit.rubber, 0.09, X(0.3), 0.03, [X(0.42), y0 + 0.16, s * Z(1.36)], 'x', 8);
-    cbox(b, kit.lamp, 0.03, 0.05, 0.07, X(0.62), y0 + 0.28, s * Z(1.0), 0.01);
-    b.cyl(kit.hot, 0.04, 0.04, 0.02, [X(-0.98), topY - 0.05, s * Z(0.3)], 'x', 8);
-    cbox(b, kit.glow, 0.02, 0.03, Z(0.3), X(-0.97), topY - 0.14, s * Z(0.8), 0.006);
+    beam(b, kit.mech, [X(1.0), 0.12, s * Z(0.75)], [X(0.4), y0 + 0.05, s * Z(0.9)], 0.06, 0.07);
+    piston(b, kit, [X(0.7), y0 + 0.2, s * Z(0.5)], [X(0.98), bh * 0.85, s * Z(0.5)], 0.024, 0.55, fine);
   });
+  // slat cage armour off the sponson flanks (the riot look at a distance), searchlight (right), antenna (left)
+  both((s) => slatCage(b, kit, frame([X(-0.2), y0 + 0.08, s * (Z(1.42) + 0.06)], [0, 0, s], XA), X(1.1), 0.2, 4, 0.007));
+  const sl: V3 = [X(-0.5), roof, cw * 0.7];
+  b.g(strutGeo(sl, [sl[0], sl[1] + 0.07, sl[2]], 0.012, 0.012, 6), kit.joint);
+  b.g(new THREE.CylinderGeometry(0.04, 0.035, 0.06, 8).rotateZ(-Math.PI / 2), kit.mech, mtx([sl[0], sl[1] + 0.1, sl[2]]));
+  b.g(new THREE.CylinderGeometry(0.033, 0.033, 0.01, 8).rotateZ(-Math.PI / 2), kit.lamp, mtx([sl[0] + 0.032, sl[1] + 0.1, sl[2]]));
+  antenna(b, kit, X(-0.7), roof, -cw * 0.75, 0.75, 0.007, [-0.15, 0, 0]);
+  crewHatch(b, kit, frame([X(-0.6), roof, 0], UP), 0.05, fine);
+  // engine deck behind the casemate: louvres, exhaust (right), jerry cans (left)
+  grille(b, kit, frame([X(-0.93), dk(X(-0.93)), 0], UP), X(0.1), Z(1.1), 0.015, 3);
+  exhaustBox(b, kit, frame([X(-0.92), dk(X(-0.92), Z(1.0)), Z(1.0)], UP, ZA), 0.03, fine);
+  jerryCans(b, kit, frame([X(-0.92), dk(X(-0.92), -Z(1.0)), -Z(1.0)], UP), 2, 0.06);
+  b.decal(0.16, 0.16, X(0.6), deckY + 0.003, -Z(0.8), atlasUV(1), 0);
+  const deck = (x: number, z: number) => Math.max(H.deck(x, z), C.deck(x, z));
   return {
-    deckAt: deck, top: shY, custom: true,
-    seat: (m) => { collar(b, kit, m.x, shY, m.z, m.r, shY - 0.05, 14); return { y: shY, socket: true }; },
+    deckAt: deck, top: roof + 0.04, custom: true, dressed: true,
+    seat: (m) => ({ y: ringSeat(b, kit, m, Math.max(roof, deck(m.x, m.z)), 0.025, 14), socket: true }),
   };
 }
 
-// ---- striker: cross-plan gunship ------------------------------------------------------------------------------------------
+// ---- striker: sponson gun carrier -----------------------------------------------------------------------------------------
 function striker(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, stance } = c;
+  const { b, kit, L, W, S, stance } = c;
   const y0 = stance.y0;
-  const X = (f: number) => f * L / 3, Z = (f: number) => f * W / 2; // authored at L=3, W=2
-  const deck = hull8(c, kit.hull, [
-    [X(-1.48), 0.06, 0.12, 0.24, 0.32, Z(0.24), Z(0.32), Z(0.22)],
-    [X(-1.2), 0, 0.1, 0.27, 0.4, Z(0.3), Z(0.4), Z(0.28)],
-    [X(0.25), 0, 0.1, 0.27, 0.42, Z(0.3), Z(0.4), Z(0.27)],
-    [X(0.95), 0.02, 0.1, 0.22, 0.32, Z(0.24), Z(0.34), Z(0.2)],
-    [X(1.35), 0.05, 0.1, 0.15, 0.19, Z(0.12), Z(0.19), Z(0.1)],
-    [X(1.55), 0.08, 0.1, 0.11, 0.12, Z(0.03), Z(0.05), Z(0.02)],
-  ]);
+  const X = (f: number) => (f * L) / 3, Z = (f: number) => (f * W) / 2; // authored at L=3, W=2
+  const fine = fineFor(S);
   keel(c, L * 0.4, -L * 0.05);
+  facetHull(c, kit.mech, [[X(-1.45), 0, 0.02, 0.1, 0.12, Z(0.32), Z(0.4), Z(0.4)], [X(1.4), 0.05, 0.06, 0.1, 0.12, Z(0.2), Z(0.26), Z(0.26)]]);
+  // narrow central hull: flat deck, stepped glacis to the bow mount, sloped rear plate
+  const st: FSt[] = [
+    [X(-1.5), 0.06, 0.06, 0.22, 0.27, Z(0.32), Z(0.38), Z(0.3)],
+    [X(-1.32), 0.04, 0.04, 0.24, 0.32, Z(0.36), Z(0.42), Z(0.33)],
+    [X(0.7), 0.04, 0.04, 0.24, 0.32, Z(0.36), Z(0.42), Z(0.33)],
+    [X(1.0), 0.05, 0.05, 0.2, 0.26, Z(0.32), Z(0.38), Z(0.27)],
+    [X(1.42), 0.08, 0.08, 0.13, 0.15, Z(0.18), Z(0.26), Z(0.14)],
+  ];
+  const H = facetHull(c, kit.armor, st);
+  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
+  facePlate(b, kit, kit.armor, [X(1.42), y0 + 0.15, 0], [X(1.0), y0 + 0.26, 0], ZA, Z(0.46), 0.014, UP, { standoff: 0.005, gap: 0.01, fill: 0.86 });
   const sorted = [...c.mounts].sort((a, q) => Math.abs(a.z) - Math.abs(q.z));
-  const nose = sorted[0]?.cls === 'S' || (sorted[0] && Math.abs(sorted[0].z) < 0.2) ? sorted[0] : undefined;
+  const nose = sorted[0] && Math.abs(sorted[0].z) < 0.25 ? sorted[0] : undefined;
   const side = c.mounts.filter((m) => m !== nose);
-  // wing spar + sponson pods: the cross arms, riding just above the fender line
-  const sy = Math.max(stance.yt + 0.1, y0 + 0.2);
+  // side casemates: faceted armoured sponsons overhanging the running gear, sloped fronts, gun on the roof
+  const sy0 = Math.max(stance.yt + 0.02, y0 + 0.14) - y0;
   const podTop = new Map<MountSpec, number>();
-  block(b, kit.trim, X(-0.05), sy - 0.07, 0, X(0.5), Z(1.3), 0.1, { top: [0.8, 0.96], ch: 0.06, bev: 0.02 });
   both((s) => {
     const m = side.find((q) => Math.sign(q.z) === s);
     const z = m?.z ?? s * Z(0.66), mx = m?.x ?? 0;
-    const ry = 0.13, rz = Z(0.17);
-    tube(b, kit.hull, z, [[mx - X(0.62), sy, 0.06, rz * 0.5], [mx - X(0.48), sy + 0.01, ry, rz], [mx + X(0.3), sy + 0.01, ry, rz], [mx + X(0.55), sy - 0.01, ry * 0.6, rz * 0.6], [mx + X(0.68), sy - 0.02, 0.02, 0.02]], 8, 2.6, 0.35);
-    cbox(b, kit.panel, X(0.5), 0.03, rz * 0.6, mx - X(0.1), sy + ry * 0.4, z + s * rz * 0.75, 0.008, [s * 0.6, 0, 0]);
-    b.cyl(kit.glow, 0.035, 0.035, 0.02, [mx + X(0.6), sy - 0.015, z], 'x', 8);
-    b.cyl(kit.hot, 0.045, 0.045, 0.02, [mx - X(0.64), sy, z], '-x', 8);
-    if (m) podTop.set(m, sy + ry + 0.005);
+    const hw = Math.max(Z(0.24), (m?.r ?? 0.12) * 1.5), inner = Math.abs(z) - hw;
+    const zc = s * (inner + hw);
+    const P = facetHull(c, kit.armor, [
+      [mx - X(0.55), sy0, sy0, sy0 + 0.14, sy0 + 0.2, hw * 0.92, hw, hw * 0.86],
+      [mx + X(0.3), sy0, sy0, sy0 + 0.14, sy0 + 0.2, hw * 0.92, hw, hw * 0.86],
+      [mx + X(0.55), sy0, sy0, sy0 + 0.06, sy0 + 0.08, hw * 0.8, hw * 0.88, hw * 0.7],
+    ], zc, false);
+    const top = y0 + sy0 + 0.2;
+    // sloped front plate, side door (recess) on the outer face, smoke bank on the front corner
+    facePlate(b, kit, kit.armor2, [mx + X(0.55), y0 + sy0 + 0.08, zc], [mx + X(0.3), top, zc], ZA, hw * 1.6, 0.012, [1, 0.5, 0], { standoff: 0.004, gap: 0.008, fill: 0.84 });
+    grille(b, kit, frame([mx - X(0.2), y0 + sy0 + 0.1, zc + s * hw], [0, 0, s], XA), X(0.24), 0.11, 0.012);
+    smokeLaunchers(b, kit, frame([mx + X(0.38), top, zc + s * hw * 0.55], UP, [Math.cos(0.5), 0, s * Math.sin(0.5)]), 3, 0.017);
+    // underside bracing back to the hull
+    beam(b, kit.mech, [mx - X(0.3), y0 + sy0, s * Z(0.36)], [mx - X(0.3), y0 + sy0 - 0.02, zc + s * hw * 0.5], 0.05, 0.04);
+    void P;
+    if (m) podTop.set(m, top);
   });
-  // chin gun cowl on the nose, offset canopy, mast, twin rear nozzles
+  // bow ball mount housing, driver's visor + hatch on the left of the bow, commander's hatch (right)
   const nx = nose?.x ?? X(0.9);
-  const ny = deck(nx, 0) + 0.04;
-  block(b, kit.hull, nx - 0.02, deck(nx, 0) - 0.05, 0, (nose?.r ?? 0.12) * 2.6, (nose?.r ?? 0.12) * 2.3, 0.09, { top: [0.82, 0.86], ch: 0.04, bev: 0.012 });
-  pod(b, kit.glass, [X(0.45), deck(X(0.45), 0) - 0.01, -Z(0.13)], X(0.26), 0.07, Z(0.1), 8, 5, 2.2, 0.6);
-  b.strut(kit.metal, [X(-0.9), deck(X(-0.9), 0), Z(0.18)], [X(-1.0), deck(X(-0.9), 0) + 0.45, Z(0.18)], 0.01, 0.005, 4);
-  both((s) => {
-    b.cylb(kit.metal, 0.07, 0.1, 0.015, [X(-1.5), y0 + 0.2, s * Z(0.13)], '-x', 8);
-    b.cyl(kit.hot, 0.05, 0.05, 0.01, [X(-1.6), y0 + 0.2, s * Z(0.13)], '-x', 8);
-    glo(b, kit, X(0.2), deck(X(0.2), 0) - 0.06, s * Z(0.36), X(0.9), 0.016, 0.016, [s * 0.5, 0, 0]);
-    cbox(b, kit.lamp, 0.02, 0.025, 0.05, X(1.36), y0 + 0.16, s * Z(0.11), 0.005, [0, -s * 0.5, 0]);
-  });
-  hazard(b, kit, X(1.15), deck(X(1.15), 0) + 0.005, 0, X(0.2), Z(0.12), 3);
-  vent(b, kit, X(-1.15), deck(X(-1.15), 0) - 0.005, 0, X(0.24), Z(0.36), 3, 'x');
+  const ny = dk(nx) + 0.01;
+  b.g(bevBox(0.12, 0.05, 0.12, 0.012), kit.armor2, mtx([nx, ny - 0.02, 0]));
+  periscopes(b, kit, X(0.78), dk(X(0.78)), -Z(0.2), 2, 0.024);
+  crewHatch(b, kit, frame([X(0.62), dk(X(0.62)), -Z(0.2)], UP), 0.045, fine);
+  crewHatch(b, kit, frame([X(-0.5), dk(X(-0.5)), Z(0.16)], UP), 0.045, fine);
+  // rear: twin exhaust stacks on the left, louvred grille, stowage rack, tow hooks
+  for (const dz of [0.0, 0.12]) {
+    const p: V3 = [X(-1.4), dk(X(-1.4)), -Z(0.18) + dz];
+    b.g(strutGeo(p, [p[0], p[1] + 0.16, p[2]], 0.018, 0.016, 7), kit.joint);
+    b.g(new THREE.CylinderGeometry(0.012, 0.012, 0.004, 7), kit.hot, mtx([p[0], p[1] + 0.162, p[2]]));
+  }
+  grille(b, kit, frame([X(-1.12), dk(X(-1.12)), Z(0.06)], UP), X(0.3), Z(0.4), 0.015, 4);
+  stowBox(b, kit, frame([X(-0.75), dk(X(-0.75)), Z(0.17)], UP, XA), X(0.26), 0.05, 0.08);
+  jerryCans(b, kit, frame([X(-0.75), dk(X(-0.75)), -Z(0.18)], UP, ZA), 2, 0.06);
+  antenna(b, kit, X(-1.2), dk(X(-1.2)), Z(0.28), 0.7, 0.007, [-0.15, 0, 0]);
+  towHooks(b, kit, frame([X(-1.5) - 0.004, y0 + 0.14, 0], [-1, 0, 0], ZA), Z(0.4), 0.022);
+  both((s) => cagedLamp(b, kit, frame([X(1.3), dk(X(1.3), s * Z(0.13)), s * Z(0.13)], UP, XA), 0.04, fine));
+  b.decal(0.13, 0.13, X(0.2), dk(X(0.2)) + 0.003, -Z(0.15), atlasUV(1), 0);
   return {
-    deckAt: deck, top: deck(0, 0), custom: true,
+    deckAt: (x, z) => {
+      const d = H.deck(x, z);
+      for (const [m, t] of podTop) if (Math.abs(x - m.x) < X(0.3) && Math.abs(z - m.z) < Z(0.22)) return Math.max(d, t);
+      return d;
+    },
+    top: dk(0) + 0.06, custom: true, dressed: true,
     seat: (m) => {
       const pt = podTop.get(m);
-      if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.06, 14); return { y: pt, socket: true }; }
-      collar(b, kit, m.x, ny, m.z, m.r, ny - 0.06, 12);
-      return { y: ny, socket: true };
+      if (pt !== undefined) return { y: ringSeat(b, kit, m, pt, 0.02, 14), socket: true };
+      return { y: ringSeat(b, kit, m, ny + 0.03, 0.012, 12, kit.mech), socket: true };
     },
   };
 }
 
-// ---- aegis: turtle medic --------------------------------------------------------------------------------------------------
+// ---- aegis: armoured recovery / repair vehicle -----------------------------------------------------------------------------
 function aegis(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, stance } = c;
+  const { b, kit, L, W, S, stance } = c;
   const y0 = stance.y0;
   const u = Math.min(L, W) / 2;
-  const cx = -0.08 * u;
-  const lo = Math.max(stance.yt - y0, 0.06 * u);
-  keel(c, L * 0.4, cx);
-  // lower body inside the gear, bumper ring at the fender line, then the shell dome
-  b.lathe(kit.trim, [[0, 0], [Math.min(0.7 * u, stance.wi), 0], [Math.min(0.78 * u, stance.wi + 0.05), lo], [0, lo]], [cx, y0, 0], 'y', 10);
-  b.lathe(kit.panel, [[0, 0], [0.86 * u, 0], [0.96 * u, 0.04 * u], [0.96 * u, 0.1 * u], [0.88 * u, 0.13 * u], [0, 0.13 * u]], [cx, y0 + lo, 0], 'y', 12);
-  const dy = y0 + lo + 0.12 * u;
-  const prof: P2[] = [[0, 0], [0.88 * u, 0], [0.82 * u, 0.12 * u], [0.66 * u, 0.26 * u], [0.42 * u, 0.36 * u], [0, 0.4 * u]];
-  b.lathe(kit.hull, prof, [cx, dy, 0], 'y', 12);
-  // glowing halo band around the shell (repair aura)
-  b.lathe(kit.glow, [[0.79 * u, 0.13 * u], [0.81 * u, 0.13 * u], [0.75 * u, 0.2 * u], [0.73 * u, 0.2 * u]], [cx, dy, 0], 'y', 12);
-  // sensor face on the front slope
-  cbox(b, kit.trim, 0.06 * u, 0.1 * u, 0.36 * u, cx + 0.74 * u, dy + 0.14 * u, 0, 0.015, [0, 0, -0.8]);
-  cbox(b, kit.glow, 0.03 * u, 0.03 * u, 0.28 * u, cx + 0.77 * u, dy + 0.15 * u, 0, 0.006, [0, 0, -0.8]);
-  both((s) => cbox(b, kit.lamp, 0.03, 0.04 * u, 0.07 * u, cx + 0.93 * u, y0 + lo + 0.07 * u, s * 0.42 * u, 0.006, [0, -s * 0.45, 0]));
-  // medic cross plates on both flanks
+  const fine = fineFor(S);
+  keel(c, L * 0.4, 0);
+  facetHull(c, kit.mech, [[-0.92 * u, 0, 0.02, 0.1, 0.12, 0.5 * u, 0.6 * u, 0.6 * u], [0.9 * u, 0.04, 0.06, 0.1, 0.12, 0.46 * u, 0.56 * u, 0.56 * u]]);
+  // chamfered octagon plan (the 'round' identity), sponsons over the tracks, flat deck, sloped nose and tail
+  const st: FSt[] = [
+    [-0.98 * u, 0.06, 0.06, 0.2, 0.26, 0.5 * u, 0.62 * u, 0.5 * u],
+    [-0.74 * u, 0.04, 0.04, 0.22, 0.32, 0.62 * u, 0.94 * u, 0.78 * u],
+    [0.5 * u, 0.04, 0.04, 0.22, 0.32, 0.62 * u, 0.94 * u, 0.78 * u],
+    [0.8 * u, 0.05, 0.05, 0.18, 0.24, 0.56 * u, 0.82 * u, 0.62 * u],
+    [0.98 * u, 0.07, 0.07, 0.12, 0.14, 0.42 * u, 0.6 * u, 0.4 * u],
+  ];
+  const H = facetHull(c, kit.armor, st);
+  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
+  const deckY = dk(0);
+  facePlate(b, kit, kit.armor2, [0.8 * u, y0 + 0.24, 0], [0.5 * u, deckY, 0], ZA, 1.1 * u, 0.016, UP, { standoff: 0.005, gap: 0.012, fill: 0.84 });
+  // engineer crosses on the side armour plates (role read), side plates on shadow gaps
   both((s) => {
-    const px = cx - 0.05 * u, pz = s * 0.68 * u, py = dy + 0.2 * u;
-    cbox(b, kit.panel, 0.26 * u, 0.04, 0.26 * u, px, py, pz, 0.01, [s * 0.6, 0, 0]);
-    cbox(b, kit.accent, 0.18 * u, 0.05, 0.06 * u, px, py + 0.01, pz + s * 0.006, 0.004, [s * 0.6, 0, 0]);
-    cbox(b, kit.accent, 0.06 * u, 0.05, 0.18 * u, px, py + 0.01, pz + s * 0.006, 0.004, [s * 0.6, 0, 0]);
+    const F = facePlate(b, kit, kit.armor2, [-0.1 * u, y0 + 0.22, s * 0.94 * u], [-0.1 * u, deckY, s * 0.78 * u], XA, 0.9 * u, 0.012, [0, 0.5, s], { standoff: 0.004, gap: 0.01, fill: 0.8 });
+    const C = sub(F, -0.18 * u, 0.02, 0);
+    b.g(new THREE.BoxGeometry(0.16 * u, 0.006, 0.045 * u), kit.accent, C);
+    b.g(new THREE.BoxGeometry(0.045 * u, 0.006, 0.16 * u), kit.accent, C);
   });
-  // repair dish mast, offset right: the support silhouette
-  const mx = cx - 0.3 * u, mz = 0.48 * u, my = dy + 0.28 * u;
-  b.cylb(kit.trim, 0.09 * u, 0.06 * u, 0.01, [mx, my - 0.04 * u, mz], 'y', 8);
-  b.strut(kit.metal, [mx, my, mz], [mx + 0.02 * u, my + 0.42 * u, mz], 0.03 * u, 0.025 * u, 6);
-  const da: V3 = [mx + 0.06 * u, my + 0.44 * u, mz];
-  b.lathe(kit.panel, [[0, -0.02 * u], [0.2 * u, 0.06 * u], [0.22 * u, 0.09 * u], [0.18 * u, 0.08 * u], [0, 0.0]], da, 'y', 10, [0, 0, -0.9]);
-  b.strut(kit.steel, da, [da[0] + 0.14 * u, da[1] + 0.11 * u, mz], 0.01 * u, 0.008 * u, 4);
-  b.cyl(kit.glow, 0.03 * u, 0.03 * u, 0.03 * u, [da[0] + 0.14 * u, da[1] + 0.1 * u, mz], 'y', 6);
-  // whip antennas
-  b.strut(kit.metal, [cx - 0.5 * u, dy + 0.2 * u, -0.4 * u], [cx - 0.62 * u, dy + 0.72 * u, -0.42 * u], 0.008, 0.004, 4);
-  const dome0 = (x: number, z: number) => {
-    const r = Math.hypot(x - cx, z);
-    if (r > 0.96 * u) return -1;
-    for (let i = 0; i < prof.length - 1; i++) if (r >= prof[i + 1][0]) {
-      const [r0, h0] = prof[i + 1], [r1, h1] = prof[i];
-      return dy + h0 + ((h1 - h0) * (r - r0)) / (r1 - r0 || 1);
-    }
-    return dy + 0.4 * u;
-  };
-  const sorted = [...c.mounts].sort((a, q) => q.x - a.x);
+  // crane jib stowed along the left deck edge: pivot post at the rear, boom forward to a rest on the nose, hook block
+  const jz = -0.55 * u, pv: V3 = [-0.72 * u, deckY, jz];
+  b.g(new THREE.CylinderGeometry(0.07 * u, 0.09 * u, 0.1 * u, 8), kit.armor2, mtx([pv[0], pv[1] + 0.05 * u, pv[2]]));
+  const jt: V3 = [0.82 * u, deckY + 0.12 * u, jz], jb: V3 = [pv[0], deckY + 0.12 * u, jz];
+  beam(b, kit.armor2, jb, jt, 0.06 * u, 0.07 * u);
+  b.g(new THREE.BoxGeometry(0.16 * u, 0.072 * u, 0.062 * u), kit.hazard, mtx([jt[0] - 0.08 * u, jt[1], jz]));
+  beam(b, kit.mech, [jb[0], jb[1] - 0.045 * u, jz], [jt[0] - 0.1 * u, jt[1] - 0.045 * u, jz], 0.04 * u, 0.02 * u);
+  piston(b, kit, [pv[0] + 0.12 * u, deckY + 0.02, jz + 0.06 * u], [pv[0] + 0.55 * u, jb[1] - 0.02, jz + 0.04 * u], 0.022 * u, 0.55, fine);
+  b.g(new THREE.BoxGeometry(0.06 * u, 0.1 * u, 0.04 * u), kit.mech, mtx([0.62 * u, deckY + 0.05 * u, jz]));
+  b.g(bevBox(0.06 * u, 0.07 * u, 0.05 * u, 0.008), kit.hazard, mtx([jt[0] + 0.02 * u, jt[1] - 0.09 * u, jz]));
+  b.g(new THREE.TorusGeometry(0.025 * u, 0.008 * u, 4, 8, Math.PI * 1.4), kit.steel, mtx([jt[0] + 0.02 * u, jt[1] - 0.15 * u, jz]));
+  // comms dish mast on the right rear (support role), whip antenna
+  const dp: V3 = [-0.7 * u, deckY, 0.55 * u];
+  b.g(strutGeo(dp, [dp[0], dp[1] + 0.32 * u, dp[2]], 0.025 * u, 0.02 * u, 6), kit.joint);
+  dish(b, kit, [dp[0], dp[1] + 0.3 * u, dp[2]], 0.17 * u, 0.4, 0.7, 0.08 * u);
+  antenna(b, kit, -0.86 * u, dk(-0.86 * u), 0.3 * u, 0.85 * u, 0.008, [-0.15, 0, 0]);
+  // nose: winch drum + cable, tow bar folded on the glacis, caged lamps
+  const wx = 0.9 * u, wy = y0 + 0.16;
+  b.lathe(kit.joint, [[0, -0.2 * u], [0.06 * u, -0.2 * u], [0.06 * u, 0.2 * u], [0, 0.2 * u]], [wx, wy, 0], 'z', 8);
+  b.lathe(kit.mech, [[0, -0.16 * u], [0.068 * u, -0.16 * u], [0.068 * u, 0.16 * u], [0, 0.16 * u]], [wx, wy, 0], 'z', 8);
+  both((s) => {
+    b.g(bevBox(0.1 * u, 0.12 * u, 0.04 * u, 0.008), kit.armor2, mtx([wx - 0.02 * u, wy, s * 0.22 * u]));
+    b.g(strutGeo([0.55 * u, deckY - 0.04 * u, s * 0.08 * u], [0.92 * u, wy + 0.08 * u, 0], 0.012 * u, 0.012 * u, 5), kit.joint);
+    cagedLamp(b, kit, frame([0.84 * u, dk(0.84 * u, s * 0.5 * u), s * 0.5 * u], UP, XA), 0.06 * u, fine);
+  });
+  // rear: spare road wheels on the tail plate, tool bins, exhaust (right)
+  for (const s of [-1, 1]) spareWheel(b, kit, [-0.99 * u - 0.03, y0 + 0.17, s * 0.2 * u], '-x', 0.09 * u, 0.05 * u);
+  stowBox(b, kit, frame([-0.2 * u, deckY, 0.62 * u], UP, XA), 0.5 * u, 0.06 * u, 0.12 * u);
+  exhaustBox(b, kit, frame([-0.9 * u, dk(-0.9 * u, 0.2 * u), 0.15 * u], UP, ZA), 0.035 * u, fine);
+  crewHatch(b, kit, frame([0.3 * u, deckY, 0.4 * u], UP), 0.06 * u, fine);
   return {
-    deckAt: (x, z) => (dome0(x, z) < 0 ? -1 : Math.max(dome0(x, z), y0 + lo)), top: dy + 0.4 * u, custom: true,
-    seat: (m) => {
-      if (m === sorted[0]) {
-        const y = dy + 0.41 * u;
-        collar(b, kit, m.x, y, m.z, m.r, y - 0.06 * u, 14);
-        return { y, socket: true };
-      }
-      // rear gun on a short armoured tower rising off the back of the shell
-      const base = Math.max(dome0(m.x, m.z), y0 + lo + 0.1 * u);
-      const y = Math.max(base + 0.1 * u, dy + 0.24 * u);
-      block(b, kit.hull, m.x + 0.04 * u, y0 + lo + 0.1 * u, m.z, m.r * 2.6, m.r * 2.4, y - (y0 + lo + 0.1 * u), { top: [0.86, 0.9], ch: m.r * 0.6, bev: 0.015 });
-      collar(b, kit, m.x, y, m.z, m.r, y - 0.05, 12);
-      return { y, socket: true };
-    },
+    deckAt: H.deck, top: deckY + 0.1, custom: true, dressed: true,
+    seat: (m) => ({ y: ringSeat(b, kit, m, dk(m.x, m.z), 0.024, 14), socket: true }),
   };
 }
 
@@ -435,3 +485,4 @@ registerChassis('hunter', hunter);
 registerChassis('riot', riot);
 registerChassis('cross', striker);
 registerChassis('round', aegis);
+void hose;
