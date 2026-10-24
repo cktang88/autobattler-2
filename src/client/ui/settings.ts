@@ -114,6 +114,16 @@ export function settingsScreen(app: App): Screen {
             draw();
             return host;
           })(), h('span.muted', null, 'Plate seams, rivets, chipped paint and grime on 3D units; off = plain paint (faster)')),
+          h('div.setting.check', null, (() => {
+            const host = h('span');
+            const draw = () => host.replaceChildren(kit.toggle({
+              label: 'Sun shadows (3D)', on: s.shadows !== false,
+              title: 'Real shadows cast by the bigger units, aircraft, wrecks and rocks; off = soft blobs under units (faster on weak GPUs)',
+              onChange: (v) => { s.shadows = v; saveSettings(s); sfx('click'); draw(); },
+            }));
+            draw();
+            return host;
+          })(), h('span.muted', null, 'Shadows cast by the bigger units, aircraft and wrecks; off = soft blobs only (faster). Slow devices drop them automatically')),
         ),
         h('div.panel', null,
           h('div.panel-title', null, 'Gameplay'),

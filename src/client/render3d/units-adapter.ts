@@ -124,6 +124,12 @@ interface Template {
   /** template mesh index -> node index */
   meshNode: number[];
   isBlob: boolean[];
+  /** template mesh may cast a sun shadow: not a contact blob, not a decal (alpha-tested, flush with a plate), not a
+   *  rivet-sized part (it would only add triangles to the shadow pass) */
+  castOk: boolean[];
+  /** shadow caster tier: size class, +1 flying (its shadow tells where it is), +1 tall (walkers, titans); the view
+   *  casts tiers >= its current minimum (UnitLayer.setShadowTier) */
+  shadowTier: number;
   mountTurret: number[];
   height: number;
   /** centre height of the model's bounding box above the unit root (aircraft hang their airframe above the root) */
@@ -312,6 +318,13 @@ class Pool {
   readonly tpl: Template; readonly look: Look; readonly group: THREE.Group;
   constructor(tpl: Template, look: Look, group: THREE.Group) { this.tpl = tpl; this.look = look; this.group = group; }
 
+  /** per-mesh castShadow under the layer's current minimum tier (wrecks count a tier lower: squashed and burnt out) */
+  applyShadow(minTier: number): void {
+    const tier = this.tpl.shadowTier - (this.look === 'wreck' ? 1 : 0);
+    const on = (this.look === 'normal' || this.look === 'wreck') && tier >= minTier;
+    this.meshes.forEach((im, j) => { if (im) im.castShadow = on && this.tpl.castOk[j]; });
+  }
+
   private build(cap: number): void {
     for (const m of this.meshes) if (m) { this.group.remove(m); m.dispose(); }
     this.meshes = [];
@@ -324,7 +337,7 @@ class Pool {
       im.setColorAt(0, new THREE.Color(1, 1, 1));
       im.instanceColor!.setUsage(THREE.DynamicDrawUsage);
       im.frustumCulled = false;
-      im.castShadow = !this.tpl.isBlob[j] && (this.look === 'normal' || this.look === 'wreck');
+      im.castShadow = false; // applyShadow() below
       im.receiveShadow = !this.tpl.isBlob[j];
       im.renderOrder = this.tpl.isBlob[j] ? 1 : 0;
       // opaque parts of normal units get the dark contact edge (outline3d.ts); decals sit inside the silhouette anyway
@@ -333,7 +346,10 @@ class Pool {
       this.group.add(im);
       this.meshes.push(im);
     });
+    this.applyShadow(this.minTier);
   }
+  /** the layer's current minimum caster tier (kept here so rebuilt pools pick it up) */
+  minTier = Infinity;
 
   flush(): void {
     const n = this.rigs.length;
@@ -450,8 +466,16 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
     mountTurret.push(mod && offs[i] ? tn++ : -1);
   });
   const isBlob = meshes.map((m) => (m.material as THREE.Material & { isMeshBasicMaterial?: boolean }).isMeshBasicMaterial === true);
+  const bs0 = bodyScale(unit.S);
+  const castOk = meshes.map((m, j) => {
+    if (isBlob[j] || (m.material as THREE.Material).alphaTest > 0 || (m.material as THREE.Material).transparent) return false;
+    if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+    const r = (m.geometry.boundingSphere?.radius ?? 1) * nodes[meshNode[j]].rel.getMaxScaleOnAxis() * bs0;
+    return r >= 0.05;
+  });
+  const shadowTier = unit.S + (unit.flying ? 1 : 0) + (box.max.y * bs0 >= 1.3 ? 1 : 0);
   const tpl: Template = {
-    key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, mountTurret,
+    key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, castOk, shadowTier, mountTurret,
     height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [],
   };
   return tpl;
@@ -465,6 +489,14 @@ export class UnitLayer {
   private pools = new Map<string, Pool>();
   /** distinct templates built / total instanced draw meshes currently shown (diagnostics) */
   stats = { templates: 0, tris: 0 };
+  private shadowMin = Infinity;
+
+  /** units of shadow tier >= `min` cast sun shadows (Infinity = none: contact blobs only) */
+  setShadowTier(min: number): void {
+    if (min === this.shadowMin) return;
+    this.shadowMin = min;
+    for (const p of this.pools.values()) { p.minTier = min; p.applyShadow(min); }
+  }
 
   constructor() { this.group.name = 'units'; }
 
@@ -493,7 +525,7 @@ export class UnitLayer {
   submit(r: Rig, look: Look): void {
     const li = LOOKS.indexOf(look);
     let p = r.tpl.pool[li];
-    if (!p) { p = new Pool(r.tpl, look, this.group); r.tpl.pool[li] = p; this.pools.set(r.tpl.key + '|' + look, p); }
+    if (!p) { p = new Pool(r.tpl, look, this.group); p.minTier = this.shadowMin; r.tpl.pool[li] = p; this.pools.set(r.tpl.key + '|' + look, p); }
     p.rigs.push(r);
   }
   /** write all queued instances; call once per frame after every submit() */
