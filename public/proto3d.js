@@ -1,4 +1,4 @@
-// node_modules/three/build/three.core.js
+// ../../../node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -20418,7 +20418,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// node_modules/three/build/three.module.js
+// ../../../node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -31916,7 +31916,7 @@ var WebGLRenderer = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
+// ../../../node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -34890,8 +34890,8 @@ function mountOffsets(d) {
 
 // src/client/render/palette.ts
 var TEAM_PAL = [
-  { body: "#2f5cba", light: "#5a86d6", dark: "#1d3b7c", deep: "#112245", accent: "#3fd2ff", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#26498f" },
-  { body: "#bd432d", light: "#dc6d50", dark: "#7d281b", deep: "#43150e", accent: "#ffb02a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#9a3423" }
+  { body: "#34486f", light: "#506690", dark: "#253352", deep: "#141c2e", accent: "#3d9bff", mark: "#2f6ae0", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#344670" },
+  { body: "#6c3227", light: "#8f4c3c", dark: "#4b221a", deep: "#28120e", accent: "#ff4a26", mark: "#d8402a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#662c22" }
 ];
 var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
 
@@ -35550,26 +35550,35 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         vec4 rA = uA[mi], rB = uB[mi], rM = uM[mi];
         vec3 wn = normalize(vWN);
         vec3 base = rA.rgb;
-        // painted top-light (subtle: the lighting does the form now)
-        base *= mix(0.9, 1.03, smoothstep(-0.7, 0.85, wn.y));
-        // bevel brightening on chamfers (normals between side and up)
+        // per-part value / hue jitter: Bld.g() writes a small per-call offset into the fraction of the row id, so
+        // neighbouring plates of the same role are not cast from one piece (+-6% value, a touch warmer / cooler)
+        float pj = clamp((vMid - float(mi)) * 5.0, -1.0, 1.0);
+        base *= 1.0 + pj * 0.06 * rB.w;
+        base += vec3(0.006, 0.0, -0.006) * pj * rB.w;
+        // painted top-light (subtle: the lighting does the form) + darker undersides (fake AO for faces looking down)
+        base *= mix(0.86, 1.02, smoothstep(-0.7, 0.85, wn.y));
+        base *= mix(1.0, mix(0.72, 1.0, smoothstep(-0.75, -0.05, wn.y)), rB.w);
+        // bevel brightening on chamfers (normals between side and up): barely there, real plates have sharp edges
         float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
-        base = mix(base, base * 1.12 + vec3(0.015), bev * rB.x);
-        // soft ground-contact darkening
-        base *= mix(1.0, mix(0.72, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
+        base = mix(base, base * 1.04 + vec3(0.004), bev * rB.x);
+        // grounded: dust settles from the ground up (lower ~0.5 cells: tracks, feet, skirts, lower hull), a little
+        // ground-contact darkening right at the bottom; flying units sit above it and stay clean
+        float dustK = (1.0 - smoothstep(0.0, 0.55, vWY)) * rB.w;
+        base *= mix(1.0, mix(0.8, 1.0, smoothstep(0.0, 0.18, vWY)), rB.w);
+        base = mix(base, vec3(0.43, 0.37, 0.28) * (0.75 + 0.5 * dot(base, vec3(0.33))), dustK * (0.28 + 0.2 * smoothstep(0.3, -0.3, wn.y)));
         // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
         float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
         ${SD_APPLY}
         diffuseColor.rgb = base;`
     ).replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
         // row roughness, scaled by the skin (grime roughens, chipped edges are bare satin metal)
-        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5), 0.08, 1.0);`).replace("#include <metalnessmap_fragment>", `#include <metalnessmap_fragment>
+        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5) + pj * 0.05 * rB.w + dustK * 0.15, 0.08, 1.0);`).replace("#include <metalnessmap_fragment>", `#include <metalnessmap_fragment>
         metalnessFactor = mix(rM.y, 0.8, sdMetal * 0.8);`).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
         totalEmissiveRadiance = uE[mi].rgb + uE[10].rgb * sdGlow * 0.5;
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
         totalEmissiveRadiance += rimCol * fres * 0.08 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => "uberPBR1";
+  m.customProgramCacheKey = () => "uberPBR2";
   return m;
 }
 var PAINT_PLAN = {
@@ -35580,8 +35589,8 @@ var PAINT_PLAN = {
   joint: "metal"
 };
 var TEAM_PAINT = [
-  ["#24499a", "#183064", "#d2d6d9", "#4f5a62"],
-  ["#a2321f", "#6a1f17", "#dad4ca", "#665c50"]
+  ["#34486f", "#253352", "#62686e", "#4a5258"],
+  ["#6c3227", "#4b221a", "#6b645d", "#5c5248"]
 ];
 var kits = [null, null];
 function makeKit(team) {
@@ -35592,13 +35601,13 @@ function makeKit(team) {
   const tp = TEAM_PAINT[team];
   const rows = [
     /* hull   */
-    { color: tp[0], rough: 0.36, metal: 0.18, det: 0.8, grime: 0.55, wear: 0.8 },
+    { color: tp[0], rough: 0.68, metal: 0.04, det: 0.85, grime: 0.8, wear: 0.85 },
     /* trim   */
-    { color: "#24272b", rough: 0.55, metal: 0.45, bev: 0.7, det: 0.7, grime: 0.8, wear: 0.5 },
+    { color: "#26292c", rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
     /* panel  */
-    { color: tp[2], rough: 0.42, metal: 0.05, det: 0.7, grime: 0.45, wear: 0.7 },
+    { color: tp[2], rough: 0.66, metal: 0.03, det: 0.75, grime: 0.75, wear: 0.75 },
     /* metal  */
-    { color: "#3a3f45", rough: 0.38, metal: 0.8, bev: 0.8, det: 0.45, wear: 0.4, grime: 0.6 },
+    { color: "#383d42", rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
     /* steel  */
     { color: "#b3bac0", rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
     /* rubber */
@@ -35608,13 +35617,13 @@ function makeKit(team) {
     /* canvas */
     { color: tp[3], rough: 0.85, metal: 0, det: 0.12, wear: 0.2 },
     /* hazard */
-    { color: "#e8b432", rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
+    { color: "#c99a32", rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
     /* accent */
-    { color: p.accent, rough: 0.35, metal: 0.1, bev: 0.6, det: 0.35, wear: 0.5, grime: 0.4 },
+    { color: p.accent, rough: 0.55, metal: 0.05, bev: 0.3, det: 0.35, wear: 0.6, grime: 0.4 },
     /* glow   */
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.6 },
     /* lamp   */
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#fff0d0", emI: 2 },
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ffe8c4", emI: 1.45 },
     /* hot    */
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ff7a2a", emI: 2.6 },
     /* plasma */
@@ -35622,12 +35631,12 @@ function makeKit(team) {
     /* rail   */
     { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#86adff", emI: 2.4 },
     /* hull2  */
-    { color: tp[1], rough: 0.4, metal: 0.2, det: 0.8, grime: 0.6, wear: 0.7 }
+    { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 }
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
   const kit = {
-    decal: new MeshStandardMaterial({ map: decalTex, roughness: 0.45, metalness: 0.05, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    decal: new MeshStandardMaterial({ map: decalTex, roughness: 0.68, metalness: 0.02, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     uber,
     pal: p
   };
@@ -35692,7 +35701,7 @@ function weaponD(m, cls) {
 }
 var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
 
-// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -36123,10 +36132,18 @@ function aim(at2, dir, up = [0, 1, 0]) {
   const x = new Vector3().crossVectors(y, z);
   return new Matrix4().makeBasis(x, y, z).setPosition(...at2);
 }
+function partJitter(n) {
+  let h = Math.imul(n + 1 ^ 2654435769, 2246822507);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489909);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296 * 2 - 1;
+}
 var Bld = class {
   m = /* @__PURE__ */ new Map();
   mids = /* @__PURE__ */ new Map();
   decals = [];
+  calls = 0;
   tris = 0;
   /** multiplies radial segment counts of cyl/cylb/lathe/strut (min 5): a cheap LOD knob for dense parts (turrets) */
   segK = 1;
@@ -36138,7 +36155,7 @@ var Bld = class {
     if (m) n.applyMatrix4(m);
     const u = matl.uid !== void 0 ? matl : null;
     const mat = u ? u.base : matl;
-    if (u) n.setAttribute("mid", new Float32BufferAttribute(new Float32Array(n.attributes.position.count).fill(u.uid), 1));
+    if (u) n.setAttribute("mid", new Float32BufferAttribute(new Float32Array(n.attributes.position.count).fill(u.uid + partJitter(this.calls++) * 0.2), 1));
     let l = this.m.get(mat);
     if (!l) this.m.set(mat, l = []);
     l.push(n);
@@ -36299,6 +36316,7 @@ function buildGun(C) {
   if (C.tier === 1) return calibreMm(C.mod) < 15 ? pintle(C) : ballMount(C);
   return wedgeAC(C);
 }
+var mainLen = (C, base3, k = 1, cap = 3) => C.mainL > 0 ? Math.max(base3, Math.min(C.mainL * k, C.D * cap)) : base3;
 var zs = (n, gap) => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap);
 function pintle(C) {
   const { b, p, rc, kit, r, y0, nb } = C;
@@ -36334,7 +36352,7 @@ function ballMount(C) {
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, "x");
   cbox(p, kit.metal, -r * 0.1, r * 0.32, -r * 0.22, r * 0.4, r * 0.2, r * 0.2);
   bx(p, kit.glass, r * 0.11, r * 0.32, -r * 0.22, r * 0.03, r * 0.12, r * 0.14);
-  barrel(C, rc, { len: C.D * 1.25, rad: R, x0: r * 0.1, seg: 7, sleeve: true, brake: "flash" });
+  barrel(C, rc, { len: mainLen(C, C.D * 1.25, 0.55, 2.4), rad: R, x0: r * 0.1, seg: 7, sleeve: true, brake: "flash" });
   accent(C, -r * 0.35, y0 + r * 0.92, 0, r * 0.4, r * 0.12);
   C.t.rate = 0.2;
 }
@@ -36346,7 +36364,7 @@ function wedgeAC(C) {
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.52, 0);
   const gap = R * 3.4;
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.62, nb > 1 ? gap * nb + R * 3 : R * 5.5);
-  const len = C.D * (1.1 + 0.35 * C.c), x0 = r * 0.1;
+  const len = mainLen(C, C.D * (1.1 + 0.35 * C.c), 0.62, 2.6), x0 = r * 0.1;
   const bofors = C.mod.id === "ac40";
   for (const z of zs(nb, gap)) {
     if (bofors) {
@@ -36480,41 +36498,44 @@ var tankCommon = (C, roofY, cx, cz) => {
 };
 function castDome(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.6;
-  b.lathe(kit.panel, [[0, 0], [r * 0.82, 0], [r * 0.86, h * 0.3], [r * 0.7, h * 0.75], [r * 0.38, h], [0, h]], [-r * 0.08, y0, 0], "y", 12);
-  cbox(b, kit.hull, -r * 0.88, y0 + h * 0.45, 0, r * 0.35, h * 0.5, r * 0.9);
+  const R = C.bore, h = r * 0.48;
+  b.lathe(kit.hull, [[0, 0], [r * 0.9, 0], [r * 0.94, h * 0.3], [r * 0.78, h * 0.78], [r * 0.42, h], [0, h]], [-r * 0.08, y0, 0], "y", 12);
+  cbox(b, kit.hull2, -r * 0.98, y0 + h * 0.5, 0, r * 0.5, h * 0.62, r * 1.05, r * 0.05);
+  cbox(b, kit.trim, -r * 1.2, y0 + h * 0.5, 0, r * 0.08, h * 0.5, r * 0.9, r * 0.02);
   tankCommon(C, y0 + h, -r * 0.3, -r * 0.3);
-  accent(C, -r * 0.88, y0 + h * 0.71, 0, r * 0.3, r * 0.6);
-  C.t.pitch.position.set(r * 0.62, y0 + h * 0.48, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.6, R * 5.5, r * 0.06, void 0, 0.8);
-  barrel(C, rc, { len: C.D * 1.45, rad: R, x0: r * 0.1, seg: 8, evac: true, brake: "slot" });
+  accent(C, -r * 0.95, y0 + h * 0.82, 0, r * 0.3, r * 0.6);
+  C.t.pitch.position.set(r * 0.72, y0 + h * 0.48, 0);
+  cbox(p, kit.hull2, 0, 0, 0, r * 0.34, h * 0.78, Math.max(R * 5.5, r * 0.62), r * 0.07, void 0, 0.78);
+  barrel(C, rc, { len: mainLen(C, C.D * 1.45, 0.72), rad: R, x0: r * 0.12, seg: 8, evac: true, brake: "slot" });
   C.t.shot = "shell";
   C.t.rate = 1;
 }
 function wedgeTank(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.5;
-  shell(b, kit.panel, [[-r * 1.05, r * 0.42, r * 0.32, h * 0.85], [-r * 0.7, r * 0.8, r * 0.6, h], [r * 0.3, r * 0.86, r * 0.62, h], [r * 0.75, r * 0.62, r * 0.42, h * 0.85], [r * 0.98, r * 0.3, r * 0.2, h * 0.6]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.3, y0 + h * 0.5, s * r * 0.9, r * 0.9, h * 0.55, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
+  const R = C.bore, h = r * 0.42;
+  shell(b, kit.hull, [[-r * 1.25, r * 0.5, r * 0.4, h * 0.85], [-r * 0.75, r * 0.92, r * 0.72, h], [r * 0.3, r * 0.96, r * 0.74, h], [r * 0.75, r * 0.7, r * 0.5, h * 0.85], [r * 1, r * 0.34, r * 0.22, h * 0.6]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull2, -r * 0.3, y0 + h * 0.5, s * r * 1, r * 0.95, h * 0.6, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
+  cbox(b, kit.trim, -r * 1.32, y0 + h * 0.55, 0, r * 0.14, h * 0.55, r * 0.9, r * 0.02);
   tankCommon(C, y0 + h, -r * 0.45, -r * 0.32);
   accent(C, -r * 0.2, y0 + h + 2e-3, r * 0.3, r * 0.6, r * 0.12);
-  C.t.pitch.position.set(r * 0.82, y0 + h * 0.52, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.35, h * 0.72, R * 6, r * 0.06, void 0, 0.8);
-  barrel(C, rc, { len: C.D * 1.6, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, taper: 0.88 });
-  cbox(rc, kit.trim, r * 0.12 + C.D * 1.55, R * 1.05, 0, R * 1.4, R * 0.5, R * 0.7, R * 0.1);
+  C.t.pitch.position.set(r * 0.86, y0 + h * 0.52, 0);
+  cbox(p, kit.hull2, 0, 0, 0, r * 0.36, h * 0.8, Math.max(R * 6, r * 0.66), r * 0.06, void 0, 0.8);
+  const len = mainLen(C, C.D * 1.6, 0.76);
+  barrel(C, rc, { len, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, taper: 0.88 });
+  cbox(rc, kit.trim, r * 0.12 + len * 0.97, R * 1.05, 0, R * 1.4, R * 0.5, R * 0.7, R * 0.1);
   C.t.shot = "shell";
   C.t.rate = 1.2;
 }
 function twinHex(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.46, gap = R * 3.6;
-  shell(b, kit.panel, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
+  const R = C.bore, h = r * 0.4, gap = Math.max(R * 3.6, r * 0.3);
+  shell(b, kit.hull, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
   tankCommon(C, y0 + h, -r * 0.5, r * 0.4);
   cbox(b, kit.hull, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
   accent(C, -r * 0.1, y0 + h + 2e-3, 0, r * 0.2, r * 0.9);
   C.t.pitch.position.set(r * 0.85, y0 + h * 0.5, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.7, gap + R * 6, r * 0.06, void 0, 0.85);
-  for (const z of zs(2, gap)) barrel(C, rc, { len: C.D * 1.4, rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: "slot" });
+  for (const z of zs(2, gap)) barrel(C, rc, { len: mainLen(C, C.D * 1.4, 0.68), rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: "slot" });
   C.t.shot = "shell";
   C.t.rate = 0.9;
 }
@@ -36529,7 +36550,7 @@ function siegeCasemate(C) {
   C.t.pitch.position.set(r * 0.55, y0 + h * 0.6, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.4, h * 0.85, R * 5, r * 0.07, void 0, 0.85);
   for (const s of [-1, 1]) p.cyl(kit.steel, R * 0.4, R * 0.4, C.D * 0.45, [r * 0.1, R * 1.5, s * R * 1.2], "x", 6);
-  barrel(C, rc, { len: C.D * 1.6, rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: "slot" });
+  barrel(C, rc, { len: mainLen(C, C.D * 1.6, 0.7, 2.6), rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: "slot" });
   C.t.shot = "shell";
   C.t.rate = 2.2;
 }
@@ -36570,7 +36591,7 @@ function sniper(C) {
 }
 function rail(C) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = Math.max(C.bore, r * 0.11), h = r * 0.46;
+  const R = Math.max(C.bore * 1.25, r * 0.11), h = r * 0.46;
   const xl = C.tier >= 5;
   shell(b, kit.panel, [[-r * 0.95, r * 0.55, r * 0.4, h * 0.9], [-r * 0.4, r * 0.82, r * 0.58, h], [r * 0.5, r * 0.7, r * 0.5, h], [r * 0.95, r * 0.32, r * 0.2, h * 0.65]], y0);
   cbox(b, kit.trim, -r * 0.55, y0 + h + r * 0.1, 0, r * 0.5, r * 0.2, r * 0.55);
@@ -37615,7 +37636,7 @@ var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mor
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
-function buildTurret(mod, S, kit, fixed = false, cls) {
+function buildTurret(mod, S, kit, fixed = false, cls, mainL = 0) {
   const kS = unitScale(S);
   const ov = cls && cls !== mod.mount ? cls : void 0;
   const D = weaponD(mod, ov) * kS;
@@ -37637,11 +37658,12 @@ function buildTurret(mod, S, kit, fixed = false, cls) {
     c: classPos(mod, ov),
     tier: ov ? CLASS_RANK[ov] : moduleTier(mod),
     nb: mod.barrels ?? 1,
-    // stylized but gun-like: barrel radius ~0.5 x the true bore width (long slim tubes read better than fat pipes at
-    // battle distance), never thinner than 9% of the housing radius so it survives a small screen
-    bore: Math.max(boreOf(calibreMm(mod)) * 0.5 * kS, r * 0.09),
+    // stylized but gun-like: barrel radius ~0.4 x the true bore width (long slim tubes read as machines, fat pipes as
+    // toys), never thinner than 7.5% of the housing radius so it survives a small screen
+    bore: Math.max(boreOf(calibreMm(mod)) * 0.4 * kS, r * 0.075),
     y0: fixed ? 0 : r * 0.1,
     fixed,
+    mainL,
     bv: Math.max(4e-3, r * 0.05),
     t,
     muzzle: (x, y, z) => {
@@ -37843,7 +37865,7 @@ function greeble(b, kit, hull, S, rnd, mounts) {
       }
     } else if (kind === "ant") {
       b.cylb(kit.trim, u * 0.4, u * 0.3, 4e-3, [x, top2, z], "y", 8);
-      b.strut(kit.steel, [x, top2 + u * 0.3, z], [x - u * 0.2, top2 + u * (3 + rnd() * 3), z], u * 0.08, u * 0.04, 4);
+      b.strut(kit.steel, [x, top2 + u * 0.3, z], [x - u * 0.25, top2 + u * (4.2 + rnd() * 4.2), z], u * 0.045, u * 0.018, 4);
     } else if (kind === "light") {
       b.box(kit.trim, u * 0.8, u * 0.5, u * 0.8, x, top2 + u * 0.25, z, 5e-3);
       b.cyl(kit.lamp, u * 0.3, u * 0.3, u * 0.12, [x + u * 0.4, top2 + u * 0.25, z], "x", 8);
@@ -39782,10 +39804,10 @@ function strideFor(mobId, S) {
 function legStance(s) {
   const m = Math.min(s.L, s.W);
   if (s.mobId === "spider") {
-    const hipY2 = 0.19 * m + 0.1, t2 = 0.05 * m + 0.035;
+    const hipY2 = 0.19 * m + 0.1, t2 = (0.05 * m + 0.035) * 0.88;
     return { y0: hipY2 - t2 * 1.3, yt: hipY2 + t2 * 0.4, wi: s.W * 0.34, tracked: false, legs: "spider", thick: t2, hipY: hipY2 };
   }
-  const hipY = 0.4 * m + 0.12, t = (0.062 * m + 0.04) * (s.mobId === "titanlegs" ? 1.2 : 1);
+  const hipY = 0.4 * m + 0.12, t = (0.062 * m + 0.04) * (s.mobId === "titanlegs" ? 1.2 : 1) * 0.88;
   return { y0: hipY - t * 0.5, yt: hipY + t * 0.6, wi: s.W * 0.34, tracked: false, legs: "biped", thick: t, hipY };
 }
 function defaultHips(st, L, W) {
@@ -42597,7 +42619,7 @@ function applySkin(root, body, turretRoots, uber, skin, designId) {
     box.union(me.geometry.boundingBox);
   }
   const size = box.getSize(new Vector3());
-  const h = Math.max(0.25, Math.min(size.y * 0.24, size.x * 0.09, 0.75));
+  const h = Math.max(0.11, Math.min(size.y * 0.1, size.x * 0.038, 0.3));
   let hash = 7;
   for (const c of designId) hash = hash * 31 + c.charCodeAt(0) >>> 0;
   const num = 10 + hash % 90;
@@ -42650,7 +42672,14 @@ function buildUnit(design, team) {
     const sl = ch.mounts[i];
     return sl && mod.kind !== "weapon" && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : void 0;
   };
-  const tur = mods.map((mod, i) => mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i)) : null);
+  const LEGGED = /* @__PURE__ */ new Set(["legs", "spider", "jumpjets", "titanlegs"]);
+  let main = -1;
+  if (!flying) mods.forEach((m, i) => {
+    if (!m || m.visual !== "cannon" && m.visual !== "gun" || slotCls(m, i)) return;
+    if (main < 0 || weaponD(m) > weaponD(mods[main])) main = i;
+  });
+  const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
+  const tur = mods.map((mod, i) => mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i), i === main ? mainL : 0) : null);
   if (!flying) {
     const sc2 = tur.map(() => 1);
     for (let i = 0; i < tur.length; i++) for (let j = i + 1; j < tur.length; j++) {
@@ -43162,7 +43191,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// node_modules/three/examples/jsm/shaders/CopyShader.js
+// ../../../node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -43202,7 +43231,7 @@ var CopyShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/Pass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -43293,7 +43322,7 @@ var FullScreenQuad = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -43358,7 +43387,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -43446,7 +43475,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// ../../../node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -43631,7 +43660,7 @@ var EffectComposer = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -43704,7 +43733,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// ../../../node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -43756,7 +43785,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -44095,7 +44124,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// node_modules/three/examples/jsm/shaders/GTAOShader.js
+// ../../../node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -44461,7 +44490,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// ../../../node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -44664,7 +44693,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// node_modules/three/examples/jsm/math/SimplexNoise.js
+// ../../../node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -45098,7 +45127,7 @@ var SimplexNoise = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -45525,7 +45554,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// node_modules/three/examples/jsm/shaders/OutputShader.js
+// ../../../node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -45613,7 +45642,7 @@ var OutputShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// ../../../node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
@@ -45769,10 +45798,9 @@ var GradeShader = {
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      // contrast S-curve + saturation boost (ACES eats saturation in the brights) + split tone (cool shadows, warm
-      // highlights): clean, saturated team paint
+      // gentle contrast S-curve + split tone (cool shadows, warm highlights). No saturation boost: the units wear
+      // muted military paint and only markings / lights carry full chroma (a boost turns the paint back into toy plastic)
       c = mix(c, c * c * (3.0 - 2.0 * c), 0.2);
-      c = max(mix(vec3(l), c, 1.1), 0.0);
       c += vec3(-0.008, 0.0, 0.012) * (1.0 - l) + vec3(0.016, 0.008, -0.006) * l;
       vec2 d = (vUv - 0.5) * vec2(1.0, 0.85);
       c *= 1.0 - vig * smoothstep(0.25, 0.85, length(d));

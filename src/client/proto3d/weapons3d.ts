@@ -57,7 +57,8 @@ const MELEE = new Set(['saw', 'chainsaw', 'hammer', 'claw', 'blade', 'drill', 'p
 export const unitScale = (S: number) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 
 /** `cls` overrides the size class (a utility shrunk to a smaller hardpoint, same rule as the 2D art's weaponsize). */
-export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, cls?: MountClass): Turret {
+/** `mainL` (cells) asks the unit's main gun for a hull-proportioned barrel (units3d picks the main gun). */
+export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, cls?: MountClass, mainL = 0): Turret {
   const kS = unitScale(S);
   const ov = cls && cls !== mod.mount ? cls : undefined;
   const D = weaponD(mod, ov) * kS;
@@ -69,10 +70,10 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   const C: WCtx = {
     b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
     c: classPos(mod, ov), tier: (ov ? CLASS_RANK[ov] : moduleTier(mod)) as WCtx['tier'], nb: mod.barrels ?? 1,
-    // stylized but gun-like: barrel radius ~0.5 x the true bore width (long slim tubes read better than fat pipes at
-    // battle distance), never thinner than 9% of the housing radius so it survives a small screen
-    bore: Math.max(boreOf(calibreMm(mod)) * 0.5 * kS, r * 0.09),
-    y0: fixed ? 0 : r * 0.1, fixed, bv: Math.max(0.004, r * 0.05), t,
+    // stylized but gun-like: barrel radius ~0.4 x the true bore width (long slim tubes read as machines, fat pipes as
+    // toys), never thinner than 7.5% of the housing radius so it survives a small screen
+    bore: Math.max(boreOf(calibreMm(mod)) * 0.4 * kS, r * 0.075),
+    y0: fixed ? 0 : r * 0.1, fixed, mainL, bv: Math.max(0.004, r * 0.05), t,
     muzzle: (x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); recoil.add(o); t.muzzles.push(o); },
     spin: (axis = 'x', at = [0, 0, 0]) => {
       spinG = new THREE.Group();

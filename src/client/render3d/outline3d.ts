@@ -3,10 +3,10 @@
 //  * Outline: the same separation edge the 2D sprites get (render/unitart.ts buildHalo), a thin dark line just OUTSIDE
 //    every unit silhouette, so units stay readable on ground of a similar tone and tiny units / aircraft don't
 //    dissolve into the terrain. Unit-over-unit edges get no line (both sides covered).
-//  * Edge light: hard-surface "worn bright edge" on every crease. The mask pass also stores view-space normals and view
-//    depth; inside a silhouette, a CONVEX normal discontinuity with a neighbour (the neighbour's normal leans toward
-//    it, at about the same depth) brightens the pixel, a concave one darkens it slightly (crevice). So every chamfer,
-//    plate edge and turret rim gets a crisp lit line at once, without per-chassis work.
+//  * Edge light: a subtle sun catch on creases. The mask pass also stores view-space normals and view depth; inside a
+//    silhouette, a CONVEX normal discontinuity with a neighbour (the neighbour's normal leans toward it, at about the
+//    same depth) brightens the pixel, but only where that face looks toward the sun (equal bright lines on every edge
+//    read as a CG / toy outline); a concave one darkens it (crevice / shadow gap).
 //
 //  * Unit meshes that should get both are put on OUTLINE_LAYER (units-adapter: normal look, opaque parts only).
 //  * Each frame the layer is drawn into the mask (one cheap geometry pass, no lighting / shadows): rgb = view normal,
@@ -26,18 +26,20 @@ const OutlineShader = {
     texel: { value: new THREE.Vector2(1 / 512, 1 / 512) },
     col: { value: new THREE.Color(14 / 255, 15 / 255, 17 / 255) },
     /** opacity of the inner (1 px) ring and of the soft outer (2 px) ring */
-    a1: { value: 0.72 },
-    a2: { value: 0.3 },
+    a1: { value: 0.5 },
+    a2: { value: 0.22 },
     /** edge light strength (0 = off) and crevice darkening */
-    edge: { value: 0.6 },
-    crease: { value: 0.22 },
+    edge: { value: 0.36 },
+    crease: { value: 0.3 },
+    /** sun direction in view space (set each frame from UnitOutline.sun) */
+    sunV: { value: new THREE.Vector3(0, 1, 0) },
     /** depth step (cells) above which two neighbouring pixels are different surfaces (no edge light between them) */
     dThr: { value: 0.3 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform sampler2D tMask; uniform vec2 texel; uniform vec3 col; uniform float a1; uniform float a2;
-    uniform float edge; uniform float crease; uniform float dThr;
+    uniform float edge; uniform float crease; uniform float dThr; uniform vec3 sunV;
     varying vec2 vUv;
     vec4 S(vec2 o){ return texture2D(tMask, vUv + o * texel); }
     float m(vec2 o){ return step(1e-4, S(o).a); }
@@ -55,8 +57,9 @@ const OutlineShader = {
             cv = max(cv, d); cc = max(cc, -d);
           }
         }
-        float k = smoothstep(0.35, 0.85, cv) * edge * (0.55 + 0.45 * clamp(s0.y + 0.4, 0.0, 1.0));
-        vec3 lit = c.rgb + k * (c.rgb * 0.75 + vec3(0.07));
+        float sunF = smoothstep(0.1, 0.75, dot(normalize(s0.xyz), sunV));
+        float k = smoothstep(0.35, 0.85, cv) * edge * sunF;
+        vec3 lit = c.rgb + k * (c.rgb * 0.6 + vec3(0.03));
         lit *= 1.0 - smoothstep(0.4, 1.0, cc) * crease;
         gl_FragColor = vec4(lit, c.a);
         return;
@@ -88,6 +91,8 @@ export class UnitOutline {
   private size = new THREE.Vector2();
   private black = new THREE.Color(0, 0, 0);
   private prevClear = new THREE.Color();
+  /** the key light: edge catches only on faces turned toward it */
+  sun: THREE.DirectionalLight | null = null;
 
   constructor() {
     this.rt = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: true, samples: 0, type: THREE.HalfFloatType });
@@ -132,6 +137,11 @@ export class UnitOutline {
     camera.layers.mask = layers;
     scene.overrideMaterial = ov;
     scene.background = bg;
+    // (after the render: the camera's view matrix is current now)
+    const sv = this.pass.uniforms.sunV.value as THREE.Vector3;
+    if (this.sun) sv.copy(this.sun.position).sub(this.sun.target.position);
+    else sv.set(-30, 40, 20);
+    sv.normalize().transformDirection(camera.matrixWorldInverse);
   }
 
   dispose(): void {

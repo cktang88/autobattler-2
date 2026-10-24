@@ -9,7 +9,7 @@ import { mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { buildTurret, type Turret } from './weapons3d.ts';
-import { CLASS_RANK } from '../render/weaponsize.ts';
+import { CLASS_RANK, weaponD } from '../render/weaponsize.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
 import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
@@ -71,7 +71,16 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const mods = design.mounts.map((mid) => (mid ? MODULE_BY_ID.get(mid) ?? null : null));
   // a utility in a smaller hardpoint than its class is drawn at the slot's size (as the 2D art does)
   const slotCls = (mod: NonNullable<(typeof mods)[number]>, i: number) => { const sl = ch.mounts[i]; return sl && mod.kind !== 'weapon' && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : undefined; };
-  const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i)) : null));
+  // the unit's main gun (biggest cannon / autocannon housing on a ground unit) gets a hull-proportioned barrel: real
+  // tank guns run ~0.75 x hull length; walkers carry theirs on an arm or shoulder, so shorter
+  const LEGGED = new Set(['legs', 'spider', 'jumpjets', 'titanlegs']);
+  let main = -1;
+  if (!flying) mods.forEach((m, i) => {
+    if (!m || (m.visual !== 'cannon' && m.visual !== 'gun') || slotCls(m, i)) return;
+    if (main < 0 || weaponD(m) > weaponD(mods[main]!)) main = i;
+  });
+  const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
+  const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, kit, flying, slotCls(mod, i), i === main ? mainL : 0) : null));
   // calibre-true housings can outgrow tightly packed hardpoints (four M guns down a land-train spine, twin dorsal
   // mounts on a small pod): shrink both housings of an overlapping ground pair until their rings just clear (>= 72%)
   if (!flying) {

@@ -35,7 +35,7 @@ export function palFromColor(color: string): TeamPal {
   const body = mix(TEAM_PAL[0].body, color, 0.12);
   return {
     body, light: shade(body, 0.3), dark: shade(body, -0.36), deep: shade(body, -0.64), camo: shade(body, -0.12),
-    accent: color, glow: shade(color, 0.5), glowRgb: '200,230,255', bar: color, rim: color,
+    accent: color, mark: color, glow: shade(color, 0.5), glowRgb: '200,230,255', bar: color, rim: color,
   };
 }
 

@@ -130,7 +130,8 @@ export function greeble(b: Bld, kit: Kit, hull: Hull, S: number, rnd: () => numb
       }
     } else if (kind === 'ant') {
       b.cylb(kit.trim, u * 0.4, u * 0.3, 0.004, [x, top, z], 'y', 8);
-      b.strut(kit.steel, [x, top + u * 0.3, z], [x - u * 0.2, top + u * (3 + rnd() * 3), z], u * 0.08, u * 0.04, 4);
+      // whip antenna: thin and tall (thin long parts read as machine, thick short ones as toy)
+      b.strut(kit.steel, [x, top + u * 0.3, z], [x - u * 0.25, top + u * (4.2 + rnd() * 4.2), z], u * 0.045, u * 0.018, 4);
     } else if (kind === 'light') {
       b.box(kit.trim, u * 0.8, u * 0.5, u * 0.8, x, top + u * 0.25, z, 0.005);
       b.cyl(kit.lamp, u * 0.3, u * 0.3, u * 0.12, [x + u * 0.4, top + u * 0.25, z], 'x', 8);

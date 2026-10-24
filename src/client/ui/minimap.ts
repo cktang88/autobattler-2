@@ -79,7 +79,7 @@ export function createMinimap(host: HTMLElement, view: BattleView, canvasEl: HTM
     for (const d of dots ?? []) {
       const p = toMap(d.x, d.y), mine = d.side === view.viewerSide;
       const r = Math.min(4, 0.9 + d.size * 0.55);
-      g.fillStyle = mine ? TEAM_PAL[0].light : TEAM_PAL[1].light;
+      g.fillStyle = mine ? TEAM_PAL[0].mark : TEAM_PAL[1].mark;
       g.strokeStyle = g.fillStyle;
       g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2);
       if (d.flying) { g.lineWidth = 1; g.stroke(); } else g.fill();

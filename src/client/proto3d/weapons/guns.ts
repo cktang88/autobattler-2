@@ -21,6 +21,11 @@ export function buildGun(C: WCtx): void {
   return wedgeAC(C);
 }
 
+/** Barrel length: the family default (`base`, housing-relative), or for the unit's main gun a hull-proportioned length
+ *  (C.mainL x k; tank cannons ~0.85 L, autocannons ~0.55 L), capped at `cap` x the housing so a gun never dwarfs its
+ *  own turret on a huge hull. */
+const mainLen = (C: WCtx, base: number, k = 1, cap = 3.0) => (C.mainL > 0 ? Math.max(base, Math.min(C.mainL * k, C.D * cap)) : base);
+
 const zs = (n: number, gap: number) => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap);
 
 /** MG nest: octagonal pedestal, receiver, slanted gun shield, ammo can. */
@@ -63,7 +68,7 @@ function ballMount(C: WCtx) {
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
   cbox(p, kit.metal, -r * 0.1, r * 0.32, -r * 0.22, r * 0.4, r * 0.2, r * 0.2);
   bx(p, kit.glass, r * 0.11, r * 0.32, -r * 0.22, r * 0.03, r * 0.12, r * 0.14);
-  barrel(C, rc, { len: C.D * 1.25, rad: R, x0: r * 0.1, seg: 7, sleeve: true, brake: 'flash' });
+  barrel(C, rc, { len: mainLen(C, C.D * 1.25, 0.55, 2.4), rad: R, x0: r * 0.1, seg: 7, sleeve: true, brake: 'flash' });
   accent(C, -r * 0.35, y0 + r * 0.92, 0, r * 0.4, r * 0.12);
   C.t.rate = 0.2;
 }
@@ -77,7 +82,7 @@ function wedgeAC(C: WCtx) {
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.52, 0);
   const gap = R * 3.4;
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.62, nb > 1 ? gap * nb + R * 3 : R * 5.5);
-  const len = C.D * (1.1 + 0.35 * C.c), x0 = r * 0.1;
+  const len = mainLen(C, C.D * (1.1 + 0.35 * C.c), 0.62, 2.6), x0 = r * 0.1;
   const bofors = C.mod.id === 'ac40';
   for (const z of zs(nb, gap)) {
     if (bofors) {
@@ -230,17 +235,20 @@ const tankCommon = (C: WCtx, roofY: number, cx: number, cz: number) => {
   bx(b, kit.glass, cx + r * 0.15, roofY + r * 0.05, cz, r * 0.03, r * 0.05, r * 0.12);
 };
 
-/** 75 mm class: rounded cast turret (squashed dome) with a bustle box and a long gun with a double-baffle brake. */
+/** 75 mm class: low, wide cast turret (flattened dome) with a rear bustle, cast mantlet and a long gun with a fume
+ *  extractor and a double-baffle brake. */
 function castDome(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.6;
-  b.lathe(kit.panel, [[0, 0], [r * 0.82, 0], [r * 0.86, h * 0.3], [r * 0.7, h * 0.75], [r * 0.38, h], [0, h]], [-r * 0.08, y0, 0], 'y', 12);
-  cbox(b, kit.hull, -r * 0.88, y0 + h * 0.45, 0, r * 0.35, h * 0.5, r * 0.9);
+  const R = C.bore, h = r * 0.48;
+  b.lathe(kit.hull, [[0, 0], [r * 0.9, 0], [r * 0.94, h * 0.3], [r * 0.78, h * 0.78], [r * 0.42, h], [0, h]], [-r * 0.08, y0, 0], 'y', 12);
+  // rear bustle overhanging the engine deck
+  cbox(b, kit.hull2, -r * 0.98, y0 + h * 0.5, 0, r * 0.5, h * 0.62, r * 1.05, r * 0.05);
+  cbox(b, kit.trim, -r * 1.2, y0 + h * 0.5, 0, r * 0.08, h * 0.5, r * 0.9, r * 0.02);
   tankCommon(C, y0 + h, -r * 0.3, -r * 0.3);
-  accent(C, -r * 0.88, y0 + h * 0.71, 0, r * 0.3, r * 0.6);
-  C.t.pitch.position.set(r * 0.62, y0 + h * 0.48, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.6, R * 5.5, r * 0.06, undefined, 0.8);
-  barrel(C, rc, { len: C.D * 1.45, rad: R, x0: r * 0.1, seg: 8, evac: true, brake: 'slot' });
+  accent(C, -r * 0.95, y0 + h * 0.82, 0, r * 0.3, r * 0.6);
+  C.t.pitch.position.set(r * 0.72, y0 + h * 0.48, 0);
+  cbox(p, kit.hull2, 0, 0, 0, r * 0.34, h * 0.78, Math.max(R * 5.5, r * 0.62), r * 0.07, undefined, 0.78);
+  barrel(C, rc, { len: mainLen(C, C.D * 1.45, 0.72), rad: R, x0: r * 0.12, seg: 8, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 1.0;
 }
@@ -249,16 +257,20 @@ function castDome(C: WCtx) {
  *  sleeve + fume extractor, no brake). */
 function wedgeTank(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.5;
-  shell(b, kit.panel, [[-r * 1.05, r * 0.42, r * 0.32, h * 0.85], [-r * 0.7, r * 0.8, r * 0.6, h], [r * 0.3, r * 0.86, r * 0.62, h], [r * 0.75, r * 0.62, r * 0.42, h * 0.85], [r * 0.98, r * 0.3, r * 0.2, h * 0.6]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.3, y0 + h * 0.5, s * r * 0.9, r * 0.9, h * 0.55, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
+  const R = C.bore, h = r * 0.42;
+  // wide, flat wedge: sharp cheeks forward, long bustle behind the ring
+  shell(b, kit.hull, [[-r * 1.25, r * 0.5, r * 0.4, h * 0.85], [-r * 0.75, r * 0.92, r * 0.72, h], [r * 0.3, r * 0.96, r * 0.74, h], [r * 0.75, r * 0.7, r * 0.5, h * 0.85], [r * 1.0, r * 0.34, r * 0.22, h * 0.6]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull2, -r * 0.3, y0 + h * 0.5, s * r * 1.0, r * 0.95, h * 0.6, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
+  // bustle stowage rack (dark frame) across the rear
+  cbox(b, kit.trim, -r * 1.32, y0 + h * 0.55, 0, r * 0.14, h * 0.55, r * 0.9, r * 0.02);
   tankCommon(C, y0 + h, -r * 0.45, -r * 0.32);
   accent(C, -r * 0.2, y0 + h + 0.002, r * 0.3, r * 0.6, r * 0.12);
-  C.t.pitch.position.set(r * 0.82, y0 + h * 0.52, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.35, h * 0.72, R * 6, r * 0.06, undefined, 0.8);
-  barrel(C, rc, { len: C.D * 1.6, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, taper: 0.88 });
+  C.t.pitch.position.set(r * 0.86, y0 + h * 0.52, 0);
+  cbox(p, kit.hull2, 0, 0, 0, r * 0.36, h * 0.8, Math.max(R * 6, r * 0.66), r * 0.06, undefined, 0.8);
+  const len = mainLen(C, C.D * 1.6, 0.76);
+  barrel(C, rc, { len, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, taper: 0.88 });
   // muzzle reference sensor: a small box on top of the muzzle
-  cbox(rc, kit.trim, r * 0.12 + C.D * 1.55, R * 1.05, 0, R * 1.4, R * 0.5, R * 0.7, R * 0.1);
+  cbox(rc, kit.trim, r * 0.12 + len * 0.97, R * 1.05, 0, R * 1.4, R * 0.5, R * 0.7, R * 0.1);
   C.t.shot = 'shell';
   C.t.rate = 1.2;
 }
@@ -266,14 +278,14 @@ function wedgeTank(C: WCtx) {
 /** Twin 120: wide flat hex turret, two barrels on one broad mantlet. */
 function twinHex(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.46, gap = R * 3.6;
-  shell(b, kit.panel, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
+  const R = C.bore, h = r * 0.4, gap = Math.max(R * 3.6, r * 0.3);
+  shell(b, kit.hull, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
   tankCommon(C, y0 + h, -r * 0.5, r * 0.4);
   cbox(b, kit.hull, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
   accent(C, -r * 0.1, y0 + h + 0.002, 0, r * 0.2, r * 0.9);
   C.t.pitch.position.set(r * 0.85, y0 + h * 0.5, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.7, gap + R * 6, r * 0.06, undefined, 0.85);
-  for (const z of zs(2, gap)) barrel(C, rc, { len: C.D * 1.4, rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: 'slot' });
+  for (const z of zs(2, gap)) barrel(C, rc, { len: mainLen(C, C.D * 1.4, 0.68), rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 0.9;
 }
@@ -290,7 +302,7 @@ function siegeCasemate(C: WCtx) {
   C.t.pitch.position.set(r * 0.55, y0 + h * 0.6, 0);
   cbox(p, kit.trim, 0, 0, 0, r * 0.4, h * 0.85, R * 5, r * 0.07, undefined, 0.85);
   for (const s of [-1, 1]) p.cyl(kit.steel, R * 0.4, R * 0.4, C.D * 0.45, [r * 0.1, R * 1.5, s * R * 1.2], 'x', 6);
-  barrel(C, rc, { len: C.D * 1.6, rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: 'slot' });
+  barrel(C, rc, { len: mainLen(C, C.D * 1.6, 0.7, 2.6), rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 2.2;
 }
@@ -337,7 +349,7 @@ function sniper(C: WCtx) {
 /** Rail: low wedge, twin steel prongs with a glowing channel and coil rings, rear capacitor block. */
 function rail(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  const R = Math.max(C.bore, r * 0.11), h = r * 0.46;
+  const R = Math.max(C.bore * 1.25, r * 0.11), h = r * 0.46;
   const xl = C.tier >= 5;
   shell(b, kit.panel, [[-r * 0.95, r * 0.55, r * 0.4, h * 0.9], [-r * 0.4, r * 0.82, r * 0.58, h], [r * 0.5, r * 0.7, r * 0.5, h], [r * 0.95, r * 0.32, r * 0.2, h * 0.65]], y0);
   cbox(b, kit.trim, -r * 0.55, y0 + h + r * 0.1, 0, r * 0.5, r * 0.2, r * 0.55);

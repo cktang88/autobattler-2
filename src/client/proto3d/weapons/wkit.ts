@@ -30,6 +30,9 @@ export interface WCtx {
   /** size tier 1..5 (S, M, M-heavy, L, XL) */ tier: number;
   nb: number;
   /** turret ring top (housings sit on this) */ y0: number;
+  /** main-gun barrel length wanted from the HULL (cells; 0 = not the unit's main gun / unknown): real tank guns are
+   *  ~0.85 x hull length, far longer than the housing-relative default (see mainLen in guns.ts) */
+  mainL: number;
   fixed: boolean;
   /** bevel size for small parts */ bv: number;
   t: Turret;

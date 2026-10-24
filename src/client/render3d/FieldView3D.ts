@@ -392,6 +392,7 @@ export class FieldView3D implements BattleView {
     const ss = viewerSide === 1 ? -1 : 1;
     this.stage = setupStage(this.renderer, this.scene, { fog: true, shadowRes: 2048, sun: [-ss * SUN[0], SUN[1], ss * SUN[2]] });
     this.sun = this.stage.sun;
+    this.outline.sun = this.sun;
     // one shadow map, fitted every frame to the ground in view (shadow3d.ts); the light itself stays put in the world
     this.sunShadow = new SunShadow(this.sun, [-ss * SUN[0], SUN[1], ss * SUN[2]], [FIELD_W / 2, 0, FIELD_H / 2]);
     // the shadow map is drawn once per frame (render() asks for it): the AO / outline passes re-render the scene and

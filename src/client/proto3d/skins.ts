@@ -110,7 +110,8 @@ export function applySkin(root: THREE.Object3D, body: THREE.Object3D, turretRoot
   const box = new THREE.Box3();
   for (const me of hullMeshes) { me.geometry.computeBoundingBox(); box.union(me.geometry.boundingBox!); }
   const size = box.getSize(new THREE.Vector3());
-  const h = Math.max(0.25, Math.min(size.y * 0.24, size.x * 0.09, 0.75));
+  // small stencilled numerals (~40% of the old poster-sized ones): big digits read as toy branding
+  const h = Math.max(0.11, Math.min(size.y * 0.1, size.x * 0.038, 0.3));
   let hash = 7;
   for (const c of designId) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
   const num = 10 + (hash % 90);

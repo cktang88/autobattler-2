@@ -282,20 +282,29 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         vec4 rA = uA[mi], rB = uB[mi], rM = uM[mi];
         vec3 wn = normalize(vWN);
         vec3 base = rA.rgb;
-        // painted top-light (subtle: the lighting does the form now)
-        base *= mix(0.9, 1.03, smoothstep(-0.7, 0.85, wn.y));
-        // bevel brightening on chamfers (normals between side and up)
+        // per-part value / hue jitter: Bld.g() writes a small per-call offset into the fraction of the row id, so
+        // neighbouring plates of the same role are not cast from one piece (+-6% value, a touch warmer / cooler)
+        float pj = clamp((vMid - float(mi)) * 5.0, -1.0, 1.0);
+        base *= 1.0 + pj * 0.06 * rB.w;
+        base += vec3(0.006, 0.0, -0.006) * pj * rB.w;
+        // painted top-light (subtle: the lighting does the form) + darker undersides (fake AO for faces looking down)
+        base *= mix(0.86, 1.02, smoothstep(-0.7, 0.85, wn.y));
+        base *= mix(1.0, mix(0.72, 1.0, smoothstep(-0.75, -0.05, wn.y)), rB.w);
+        // bevel brightening on chamfers (normals between side and up): barely there, real plates have sharp edges
         float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
-        base = mix(base, base * 1.12 + vec3(0.015), bev * rB.x);
-        // soft ground-contact darkening
-        base *= mix(1.0, mix(0.72, 1.0, smoothstep(0.0, 0.4, vWY)), rB.w);
+        base = mix(base, base * 1.04 + vec3(0.004), bev * rB.x);
+        // grounded: dust settles from the ground up (lower ~0.5 cells: tracks, feet, skirts, lower hull), a little
+        // ground-contact darkening right at the bottom; flying units sit above it and stay clean
+        float dustK = (1.0 - smoothstep(0.0, 0.55, vWY)) * rB.w;
+        base *= mix(1.0, mix(0.8, 1.0, smoothstep(0.0, 0.18, vWY)), rB.w);
+        base = mix(base, vec3(0.43, 0.37, 0.28) * (0.75 + 0.5 * dot(base, vec3(0.33))), dustK * (0.28 + 0.2 * smoothstep(0.3, -0.3, wn.y)));
         // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
         float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
         ${SD_APPLY}
         diffuseColor.rgb = base;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         // row roughness, scaled by the skin (grime roughens, chipped edges are bare satin metal)
-        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5), 0.08, 1.0);`)
+        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5) + pj * 0.05 * rB.w + dustK * 0.15, 0.08, 1.0);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         metalnessFactor = mix(rM.y, 0.8, sdMetal * 0.8);`)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + sdBumpGLSL('sdGradR'))
@@ -304,16 +313,16 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
         totalEmissiveRadiance += rimCol * fres * 0.08 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
   };
-  m.customProgramCacheKey = () => 'uberPBR1';
+  m.customProgramCacheKey = () => 'uberPBR2';
   return m;
 }
 
 export interface Kit {
-  /** primary hull paint: saturated TEAM colour on the big armour plates */
+  /** primary hull paint: muted military TEAM tint (matte) on the big armour plates */
   hull: MatLike;
   /** near-black mechanical parts: joints, track frames, recesses, barrels, vents, hatches */
   trim: MatLike;
-  /** light neutral (off-white / light grey) shell parts: caps, skirts, cheek plates, leg covers */
+  /** mid-grey shell parts (faintly team-tinted): caps, skirts, cheek plates, leg covers */
   panel: MatLike;
   metal: MatLike; steel: MatLike; rubber: MatLike; glass: MatLike;
   canvas: MatLike; hazard: MatLike;
@@ -321,7 +330,7 @@ export interface Kit {
   /** darker shade of the team colour (secondary armour plates, inner faces of big plates) */
   hull2: MatLike;
   // ---- paint-plan role aliases (same materials, named by what the part is; see PAINT_PLAN) ----
-  /** big armour plates (team colour) = hull */
+  /** big armour plates (muted team tint) = hull */
   armor: MatLike;
   /** secondary team plates = hull2 */
   armor2: MatLike;
@@ -338,16 +347,20 @@ export interface Kit {
 }
 
 /**
- * Paint plan (Mechabellum-style three-value colour blocking). Every chassis builder assigns parts by role:
- *   armor  (kit.hull)   saturated team colour, glossy paint     ~45% of the visible surface: the biggest plates
+ * Paint plan ("stylized realistic": Phantom Brigade / Iron Harvest / BattleTech value structure). Every chassis builder
+ * assigns parts by role:
+ *   armor  (kit.hull)   muted military team tint, matte paint   the biggest plates (slate blue-grey / oxide red-brown)
  *   armor2 (kit.hull2)  darker team shade                       inner / lower faces of big plates, secondary plates
- *   shell  (kit.panel)  off-white / light grey satin paint      ~25%: caps, skirts, cheek plates, leg covers, turret tops
- *   mech   (kit.trim)   near-black                              ~30%: joints, track frames, recesses, vents, belly
+ *   shell  (kit.panel)  mid grey (faint team cast), matte       caps, skirts, cheek plates, leg covers, turret tops
+ *   mech   (kit.trim)   near-black                              joints, track frames, recesses, vents, belly
  *   joint  (kit.metal)  dark gunmetal, metallic                 pistons, barrels, axles, hinges
- *   steel / rubber / glass / hazard / accent                    bare steel, tyres, canopies, warning stripes, team trim
+ *   steel / rubber / glass / hazard                             bare steel, tyres, canopies, warning stripes
+ *   accent                                                      FULL-CHROMA team colour: stripes, chevrons, roundels
  *   glow / lamp / hot / plasma / rail                           small bright emissive accents (eyes, cores, lights)
- * Team identity = the hue of armor/armor2 (blue vs red-orange, a colour-blind-safe pair that also differs in
- * luminance) + glow colour; shell and mech are shared by both teams so each unit keeps its internal contrast.
+ * Neutral mid-to-dark mechanics dominate (55-70% of what is visible: trim, metal, shell, rubber), the team tint is a
+ * low-chroma layer on top, and pure team chroma lives only on small markings and lights (<= ~15%). Team identity =
+ * the hue / temperature of armor (cool blue-grey vs warm red-brown) + accent markings + glow colour. Per-part value
+ * jitter, a ground-up dust gradient and darker undersides (uber shader) keep plates from reading as moulded plastic.
  */
 export const PAINT_PLAN = {
   armor: 'hull', armor2: 'hull2', shell: 'panel', mech: 'trim', joint: 'metal',
@@ -355,8 +368,8 @@ export const PAINT_PLAN = {
 
 /** team paint: [armor, armor2, shell, canvas]; matches render/palette.ts TEAM_PAL body / dark */
 export const TEAM_PAINT: [string, string, string, string][] = [
-  ['#24499a', '#183064', '#d2d6d9', '#4f5a62'],
-  ['#a2321f', '#6a1f17', '#dad4ca', '#665c50'],
+  ['#34486f', '#253352', '#62686e', '#4a5258'],
+  ['#6c3227', '#4b221a', '#6b645d', '#5c5248'],
 ];
 const kits: (Kit | null)[] = [null, null];
 
@@ -367,27 +380,27 @@ export function makeKit(team: 0 | 1): Kit {
   const names = ['hull', 'trim', 'panel', 'metal', 'steel', 'rubber', 'glass', 'canvas', 'hazard', 'accent', 'glow', 'lamp', 'hot', 'plasma', 'rail', 'hull2'] as const;
   const tp = TEAM_PAINT[team];
   const rows: Row[] = [
-    /* hull   */ { color: tp[0], rough: 0.36, metal: 0.18, det: 0.8, grime: 0.55, wear: 0.8 },
-    /* trim   */ { color: '#24272b', rough: 0.55, metal: 0.45, bev: 0.7, det: 0.7, grime: 0.8, wear: 0.5 },
-    /* panel  */ { color: tp[2], rough: 0.42, metal: 0.05, det: 0.7, grime: 0.45, wear: 0.7 },
-    /* metal  */ { color: '#3a3f45', rough: 0.38, metal: 0.8, bev: 0.8, det: 0.45, wear: 0.4, grime: 0.6 },
+    /* hull   */ { color: tp[0], rough: 0.68, metal: 0.04, det: 0.85, grime: 0.8, wear: 0.85 },
+    /* trim   */ { color: '#26292c', rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
+    /* panel  */ { color: tp[2], rough: 0.66, metal: 0.03, det: 0.75, grime: 0.75, wear: 0.75 },
+    /* metal  */ { color: '#383d42', rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
     /* steel  */ { color: '#b3bac0', rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
     /* rubber */ { color: '#1b1c1e', rough: 0.88, metal: 0, bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.1 },
     /* glass  */ { color: '#14262f', rough: 0.08, metal: 0.3, bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.2 },
     /* canvas */ { color: tp[3], rough: 0.85, metal: 0, det: 0.12, wear: 0.2 },
-    /* hazard */ { color: '#e8b432', rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
-    /* accent */ { color: p.accent, rough: 0.35, metal: 0.1, bev: 0.6, det: 0.35, wear: 0.5, grime: 0.4 },
+    /* hazard */ { color: '#c99a32', rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
+    /* accent */ { color: p.accent, rough: 0.55, metal: 0.05, bev: 0.3, det: 0.35, wear: 0.6, grime: 0.4 },
     /* glow   */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.6 },
-    /* lamp   */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#fff0d0', emI: 2.0 },
+    /* lamp   */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#ffe8c4', emI: 1.45 },
     /* hot    */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#ff7a2a', emI: 2.6 },
     /* plasma */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#79f0d6', emI: 2.0 },
     /* rail   */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#86adff', emI: 2.4 },
-    /* hull2  */ { color: tp[1], rough: 0.4, metal: 0.2, det: 0.8, grime: 0.6, wear: 0.7 },
+    /* hull2  */ { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
   const kit: Record<string, unknown> = {
-    decal: new THREE.MeshStandardMaterial({ map: decalTex, roughness: 0.45, metalness: 0.05, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    decal: new THREE.MeshStandardMaterial({ map: decalTex, roughness: 0.68, metalness: 0.02, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     uber, pal: p,
   };
   names.forEach((n, i) => { kit[n] = { uid: i, base: uber } as UMat; });

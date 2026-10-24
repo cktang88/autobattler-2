@@ -4,10 +4,12 @@
 export type Team = 0 | 1;
 
 /**
- * Per-team paint scheme. Both armies are built from the same hardware, colour-blocked in three values (see
- * proto3d/materials.ts PAINT_PLAN): the big armour plates carry a saturated team colour (body/light/dark/deep: royal
- * blue vs signal red-orange), shells are off-white and mechanics near-black. Lights, visors and sensors glow in the
- * team hue (glow), and the far-zoom markers / ground rings use rim.
+ * Per-team paint scheme ("stylized realistic", Phantom Brigade / Iron Harvest / BattleTech style). Both armies are built
+ * from the same hardware, colour-blocked in three values (see proto3d/materials.ts PAINT_PLAN): the big armour plates
+ * carry a MUTED military team tint (body/light/dark/deep: slate blue-grey vs oxide red-brown, low chroma, mid value),
+ * shells are mid grey and mechanics near-black. Full-chroma team colour is reserved for small things (<= ~15% of a
+ * unit): stripes / chevrons / roundels (accent), markers (mark, rim) and lights (glow), which is what keeps the two sides
+ * instantly readable at battle zoom without painting every plate in a toy primary.
  */
 export interface TeamPal {
   /** hull paint, mid tone */
@@ -18,8 +20,10 @@ export interface TeamPal {
   dark: string;
   /** deep recess / underside tone */
   deep: string;
-  /** team stripe / chevron / trim paint: small details only */
+  /** team stripe / chevron / trim paint: small details only (full chroma) */
   accent: string;
+  /** full-chroma team identity colour (markings, minimap dots, UI); the hull paint above is the muted military tint */
+  mark: string;
   /** emissive team light (running lights, visors, sensors) */
   glow: string;
   /** rgb triple of glow for rgba() strings */
@@ -31,12 +35,13 @@ export interface TeamPal {
   camo: string;
 }
 
-// Viewer = royal blue armour with cyan lights; enemy = red-orange armour with amber/orange lights. Blue vs red-orange
-// is the most separable hue pair (also for red-green colour-blind viewers, who still see blue vs yellow-brown), the
-// two differ in luminance too, and the far-zoom marker adds a shape cue (circle vs diamond).
+// Viewer = slate blue-grey armour with bright blue markings and cyan lights; enemy = oxide red-brown armour with
+// signal-red markings and amber/orange lights. Blue vs red is the most separable hue pair (red-green colour-blind viewers
+// still see blue vs yellow-brown); the armour tints differ in hue AND temperature, the markings and lights carry the
+// full chroma, and the far-zoom marker adds a shape cue (circle vs diamond).
 export const TEAM_PAL: [TeamPal, TeamPal] = [
-  { body: '#2f5cba', light: '#5a86d6', dark: '#1d3b7c', deep: '#112245', accent: '#3fd2ff', glow: '#8cf4ff', glowRgb: '140,244,255', bar: '#4fe3d0', rim: '#46dcff', camo: '#26498f' },
-  { body: '#bd432d', light: '#dc6d50', dark: '#7d281b', deep: '#43150e', accent: '#ffb02a', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#9a3423' },
+  { body: '#34486f', light: '#506690', dark: '#253352', deep: '#141c2e', accent: '#3d9bff', mark: '#2f6ae0', glow: '#8cf4ff', glowRgb: '140,244,255', bar: '#4fe3d0', rim: '#46dcff', camo: '#344670' },
+  { body: '#6c3227', light: '#8f4c3c', dark: '#4b221a', deep: '#28120e', accent: '#ff4a26', mark: '#d8402a', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#662c22' },
 ];
 
 /** Shared hardware materials: gunmetal running gear, rubber, bare steel, hazard paint, glass, soot and dust. */

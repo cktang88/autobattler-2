@@ -112,10 +112,9 @@ const GradeShader = {
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      // contrast S-curve + saturation boost (ACES eats saturation in the brights) + split tone (cool shadows, warm
-      // highlights): clean, saturated team paint
+      // gentle contrast S-curve + split tone (cool shadows, warm highlights). No saturation boost: the units wear
+      // muted military paint and only markings / lights carry full chroma (a boost turns the paint back into toy plastic)
       c = mix(c, c * c * (3.0 - 2.0 * c), 0.2);
-      c = max(mix(vec3(l), c, 1.1), 0.0);
       c += vec3(-0.008, 0.0, 0.012) * (1.0 - l) + vec3(0.016, 0.008, -0.006) * l;
       vec2 d = (vUv - 0.5) * vec2(1.0, 0.85);
       c *= 1.0 - vig * smoothstep(0.25, 0.85, length(d));

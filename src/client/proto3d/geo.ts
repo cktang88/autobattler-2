@@ -193,11 +193,19 @@ export function aim(at: V3, dir: V3, up: V3 = [0, 1, 0]): THREE.Matrix4 {
   return new THREE.Matrix4().makeBasis(x, y, z).setPosition(...at);
 }
 
+/** deterministic -1..1 jitter for the n-th part of a builder */
+function partJitter(n: number): number {
+  let h = Math.imul((n + 1) ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return ((h >>> 0) / 4294967296) * 2 - 1;
+}
+
 // ---- builder: collects geometry per material, merges, mounts -----------------------------------------------
 export class Bld {
   private m = new Map<THREE.Material, THREE.BufferGeometry[]>();
   private mids = new Map<THREE.Material, number>();
   private decals: THREE.BufferGeometry[] = [];
+  private calls = 0;
   tris = 0;
   /** multiplies radial segment counts of cyl/cylb/lathe/strut (min 5): a cheap LOD knob for dense parts (turrets) */
   segK = 1;
@@ -207,7 +215,9 @@ export class Bld {
     if (m) n.applyMatrix4(m);
     const u = (matl as UMat).uid !== undefined ? (matl as UMat) : null;
     const mat = u ? u.base : (matl as THREE.Material);
-    if (u) n.setAttribute('mid', new THREE.Float32BufferAttribute(new Float32Array(n.attributes.position.count).fill(u.uid), 1));
+    // row id + a small per-part jitter in its fraction (+-0.2, read back by the uber shader as a value / hue offset so
+    // neighbouring plates of one role differ slightly); deterministic: a hash of the call index
+    if (u) n.setAttribute('mid', new THREE.Float32BufferAttribute(new Float32Array(n.attributes.position.count).fill(u.uid + partJitter(this.calls++) * 0.2), 1));
     let l = this.m.get(mat);
     if (!l) this.m.set(mat, (l = []));
     l.push(n);
