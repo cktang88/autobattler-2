@@ -469,3 +469,31 @@ test('a squad of long hulls holding formation keeps its deployed spacing in the 
   // formation pitch 1 + 2 cells; separation keeps 95% of it (capped at 2.9) -- they used to close up to ~1 cell
   assert.ok(sq.length === 4 && min > 2.5, `the holding squad closed up to ${min.toFixed(2)} cells`);
 });
+
+test('a slow titan deployed behind a long row of its own emplacements works its way round (no rocking in place)', () => {
+  const titan = D('titan', 'titan', 'megatracks', ['ac40', 'ac40', 'autocannon', 'autocannon', 'autocannon']);
+  const post = D('post', 'hunter', 'anchor', ['twinlaser', 'mg']), tank = D('tank', 'warden', 'treads', ['autocannon', null]);
+  const foe = D('foe', 'warden', 'treads', ['autocannon', null]);
+  // a 12-cell wall of emplacements right in front of a 7-cell titan, a tank behind it: it has to slide ~8 cells sideways,
+  // which takes longer than the 1.5 s the dodge used to keep its side before flipping (it rocked in place for a minute)
+  const posts = Array.from({ length: 6 }, (_, i) => pl('post', { uid: 10 + i, x: 64 + i * 2, y: 0 }));
+  const b = new Battle({ seed: 11, sides: [
+    { designs: [titan, post, tank], units: [pl('titan', { uid: 1, x: 67, y: 2 }), pl('tank', { uid: 2, x: 69, y: 10 }), ...posts] },
+    { designs: [foe], units: [pl('foe', { x: 40, y: 20, stance: 'holdPos' })] },
+  ] });
+  const t = b.units[0], rowY = b.units.find((u) => u.design.id === 'post')!.y;
+  let k = 0;
+  while (!b.done && t.y > rowY - 5 && k < 60 * TICK_RATE) { b.step(); k++; }
+  assert.ok(k < 35 * TICK_RATE, `the titan took ${k / TICK_RATE}s to get past its own emplacements`);
+});
+
+test('a charging unit with a gun and a melee weapon closes to contact and swings (not parked at 40% gun range)', () => {
+  const brute = D('brute', 'warlord', 'spider', ['mortar', 'buzzsaw', 'buzzsaw', null]), wall = D('wall', 'bastion', 'anchor', ['plateH', 'plateH', 'repairM']);
+  const b = new Battle({ seed: 1, sides: [{ designs: [brute], units: [pl('brute', { y: 2, stance: 'charge' })] }, { designs: [wall], units: [pl('wall', { y: 2 })] }] });
+  let swings = 0;
+  for (let t = 0; t < 60 * TICK_RATE && !b.done; t++) {
+    b.step();
+    for (const ev of b.events) if (ev.t === 'hit' && ev.moduleId === 'buzzsaw') swings++;
+  }
+  assert.ok(swings > 0, 'the charging brute never got its buzzsaws on the target');
+});

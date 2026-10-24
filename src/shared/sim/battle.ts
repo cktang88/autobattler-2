@@ -2488,7 +2488,10 @@ export class Battle {
         gx = u.x + hx * lw;
         gy = u.y + hy;
         stopDist = 0;
-        if (charge) wantMove = I.meleeOnly || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
+        // charge closes in further than advance, never less: a melee weapon that can hit the goal takes it all the way
+        // to contact, and every gun that can hit it must have it in reach (a charger with a long gun and a buzzsaw used
+        // to park at 40% of the gun's range and never swing; one with a long and a short gun left the short one idle)
+        if (charge) wantMove = I.meleeOnly || relevantMelee || !engaged || this.edgeC(this.ints[goal.id], u.x, u.y) > CHARGE_GUN_FRAC * engageR;
         else if (kiteR <= 0.9) {
           // kiting: parked at our range edge. If the kite gun still has nothing to shoot (the hull came to rest
           // turned away, e.g. after backing off, leaving the mount out of reach) swing the hull back to face the goal.
@@ -2673,10 +2676,14 @@ export class Battle {
       if (sx < I.radius || sx > FIELD_W - I.radius || sy < I.radius || sy > FIELD_H - I.radius) I.avoidSide = -I.avoidSide;
       I.stuckT = 0;
     }
-    // making no headway around this obstacle: try the other way
-    if (I.vx * dirX + I.vy * dirY < I.speed * 0.15) {
+    // making no headway around this obstacle: try the other way. Sliding along it toward the side we dodge to counts as
+    // headway: a wide hull working its way round a long obstacle (a row of emplacements) makes no forward progress
+    // for a while, and flipping sides every 1.5 s left it rocking in place behind the row for good
+    const fwdV = I.vx * dirX + I.vy * dirY, sideV = (I.vy * dirX - I.vx * dirY) * I.avoidSide;
+    if (Math.max(fwdV, sideV) < I.speed * 0.15) {
       I.stuckT += DT;
-      if (I.stuckT > 1.5) { I.avoidSide = -I.avoidSide; I.stuckT = 0; }
+      // (a slow-turning hull needs time to swing its nose round before it can slide off at all)
+      if (I.stuckT > 1.5 + 1.2 / Math.max(0.2, I.turn)) { I.avoidSide = -I.avoidSide; I.stuckT = 0; }
     } else I.stuckT = 0;
     I.avoidT = 0.6;
     const strength = 1 - Math.abs(bestPerp) / bestClear; // 1 = dead ahead
