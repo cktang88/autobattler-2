@@ -725,6 +725,8 @@
 .garage .g-ptile-name { font-family: var(--head); font-weight: 700; font-size: 1rem; letter-spacing: 0.03em; line-height: 1.1; color: var(--txt); text-transform: uppercase;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .garage .g-ptile-sub { font-size: 0.92rem; color: var(--dim); margin-top: auto; }
+.garage .g-insp-h.trait h3, .garage .g-ptile.trait .g-ptile-name { color: var(--gold); text-shadow: 0 0 10px rgba(246, 207, 85, 0.35); }
+.garage .g-ptile-trait { font-family: var(--head); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); line-height: 1.1; }
 .garage .g-ptile.sel { background: #1d2d2b !important; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--teal); }
 .garage .g-ptile.sel::after { content: 'Fitted'; position: absolute; left: 6px; top: 5px; font-family: var(--head); font-weight: 700; font-size: 0.91rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); }
 .garage .g-ptile.pin { box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--amber), inset 0 -4px 0 var(--cat) !important; }

@@ -218,6 +218,9 @@ function svgIcon(paths: string): HTMLSpanElement {
   return s;
 }
 
+/** frame traits that only describe the hull (no bonus): not highlighted in gold */
+const PLAIN_TRAITS = new Set(['airOnly', 'compact']);
+
 type Inspect = { kind: 'chassis' | 'mobility' | 'module'; id: string };
 /** Where a drag started: the parts bay, or a mounted socket. */
 type DragSrc = { mod: string; from: number | null };
@@ -1581,19 +1584,28 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   function partTile(o: {
     kind: 'chassis' | 'mobility' | 'module'; id: string; name: string; sub: string; chip?: MountClass; cat?: string;
+    /** a special trait line (frames with a bonus: +20% range, repair aura...), shown in gold with the name */
+    trait?: string;
     cls: string; fk: string; title?: string; count?: number; onclick: () => void; ondblclick?: () => void; onkeydown?: (e: KeyboardEvent) => void;
   }): HTMLButtonElement {
     const t = h('button.g-ptile', {
-      type: 'button', class: o.cls, 'data-fk': o.fk, title: o.title ?? null, style: o.cat ? { '--cat': o.cat } : null,
+      type: 'button', class: [o.cls, o.trait ? 'trait' : ''].join(' ').trim() || null, 'data-fk': o.fk, title: o.title ?? null, style: o.cat ? { '--cat': o.cat } : null,
       onclick: () => { if (!suppressClick) o.onclick(); }, ondblclick: o.ondblclick ?? null, onkeydown: o.onkeydown ?? null,
     },
     h('span.g-ptile-well', null, partIcon(o.kind, o.id, 50, o.kind === 'module'), o.chip ? h('span.g-chip.mini', { class: `c${o.chip}`, title: sizeTip(o.chip) }, ML[o.chip]) : null),
     h('span.g-ptile-name', null, o.name),
+    o.trait ? h('span.g-ptile-trait', null, o.trait) : null,
     h('span.g-ptile-sub', null, o.sub),
     o.count ? h('span.g-tile-n', { title: `Mounted ${o.count}×` }, `×${o.count}`) : null,
     );
     hoverable(t, { kind: o.kind, id: o.id });
     return t;
+  }
+
+  /** the bonus traits a frame brings (not plain descriptors like "airframe" / "compact"), for the gold tile line */
+  function traitLine(traits: readonly string[]): string | undefined {
+    const bonus = traits.filter((t) => !PLAIN_TRAITS.has(t)).map((t) => TRAIT_LABEL[t] ?? t);
+    return bonus.length ? bonus.join(' · ') : undefined;
   }
 
   function renderHullTab(): HTMLElement[] {
@@ -1604,6 +1616,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       .sort((a, b) => a.size - b.size || a.weight - b.weight);
     const tiles = shown.map((c) => partTile({
       kind: 'chassis', id: c.id, name: c.name, sub: `${footDims(c)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')}`,
+      trait: traitLine(c.traits),
       cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `ch-${c.id}`,
       onclick: () => pickChassis(c.id),
     }));
@@ -1631,7 +1644,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const err = pairingError(draft.chassis, m.id);
       const res = err ? null : statsOf({ ...draft, mobility: m.id });
       return partTile({
-        kind: 'mobility', id: m.id, name: m.name,
+        kind: 'mobility', id: m.id, name: m.name, trait: traitLine(m.traits),
         sub: err ? 'Not for this hull' : m.kind === 'static' ? 'Static' : `${Math.round(res!.speed * METERS_PER_CELL)} m/s`,
         cls: [m.id === draft.mobility ? 'sel' : '', pinned.drive?.id === m.id ? 'pin' : '', err ? 'nofit' : ''].join(' '), fk: `mob-${m.id}`,
         title: err ?? undefined, onclick: () => pickMobility(m.id),
@@ -1819,7 +1832,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     // current loadout, not a fixed number per hull size
     const sq = statsOf(next ?? draft)?.squad ?? 1;
     return [
-      inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), sq > 1 ? h('span.g-plate.squad', { title: `With this loadout one purchase deploys a block of ${sq} of these (cheaper units come in bigger squads: light ×16, ×8 or ×4, medium ×4 or ×2)` }, `Squad ×${sq}`) : null, roleTags(c.roles, 2)]),
+      ((hd) => { if (traitLine(c.traits)) hd.classList.add('trait'); return hd; })(inspHead('chassis', c.id, c.name, [h('span.g-plate', null, footDims(c, true)), sq > 1 ? h('span.g-plate.squad', { title: `With this loadout one purchase deploys a block of ${sq} of these (cheaper units come in bigger squads: light ×16, ×8 or ×4, medium ×4 or ×2)` }, `Squad ×${sq}`) : null, roleTags(c.roles, 2)])),
       h('div.g-kstats', null,
         kstat(sq > 1 ? 'Hull each' : 'Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),
@@ -1845,7 +1858,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const next = err || cur ? null : { ...draft, mobility: m.id };
     const res = err ? null : statsOf({ ...draft, mobility: m.id });
     return [
-      inspHead('mobility', m.id, m.name, [h('span.g-plate', null, KIND_LABEL[m.kind]), roleTags(m.roles, 2)]),
+      ((hd) => { if (traitLine(m.traits)) hd.classList.add('trait'); return hd; })(inspHead('mobility', m.id, m.name, [h('span.g-plate', null, KIND_LABEL[m.kind]), roleTags(m.roles, 2)])),
       h('div.g-kstats', null,
         kstat('Speed', m.kind === 'static' ? '—' : String(Math.round((res?.speed ?? m.speed) * METERS_PER_CELL)), m.kind === 'static' ? '' : 'm/s'),
         kstat('Carries', m.capacity[c.size - 1] ? String(m.capacity[c.size - 1]) : 'n/a', 'wt'),
