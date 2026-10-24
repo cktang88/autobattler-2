@@ -37,6 +37,10 @@ const GUN_H = 0.55;
 /** shadow-map caster tiers (UnitLayer.setShadowTier): a unit casts a sun shadow when its tier (size, +1 flying, +1 tall)
  *  is at least the current minimum; smaller units keep only their soft contact blob */
 const SHADOW_TIER = 2;
+/** zoom (CSS px per cell) below which units switch to their low-detail build (fit views run ~8-25 px per cell; a 16-sided
+ *  barrel is a few px across there) and above which they switch back (hysteresis) */
+const LOD_FAR_K = 26;
+const LOD_NEAR_K = 30;
 const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerpAngle = (a: number, b: number, t: number) => a + normAng(b - a) * t;
 
@@ -473,7 +477,8 @@ export class FieldView3D implements BattleView {
   private setMapNow(map: MapTheme): void {
     this.map = map;
     if (this.terrain) this.scene.remove(this.terrain.group);
-    for (const r of this.rocks) { this.scene.remove(r); (r as THREE.InstancedMesh).geometry.dispose(); }
+    // (both rock meshes share one geometry and material; InstancedMesh.dispose frees the instance buffers)
+    for (const r of this.rocks) { const im = r as THREE.InstancedMesh; this.scene.remove(im); im.geometry.dispose(); (im.material as THREE.Material).dispose(); im.dispose(); }
     this.rocks = [];
     const built = terrainFor(map);
     // the cached build is shared between views (textures live as long as the cache entry): each view gets a cheap clone
@@ -752,8 +757,12 @@ export class FieldView3D implements BattleView {
     try { return this.renderer.capabilities.maxTextureSize >= 8192; } catch { return false; }
   }
 
+  /** units drawn with their far-view (low-detail) geometry: on below LOD_FAR_K px per cell, off again above LOD_NEAR_K */
+  private lodFar = false;
   private render(units: number): void {
     this.lastUnits = units;
+    this.lodFar = this.cam.k < (this.lodFar ? LOD_NEAR_K : LOD_FAR_K);
+    this.layer.setFar(this.lodFar);
     this.layer.flush();
     const q = this.updateQuality(units, units + this.wrecks.length);
     this.syncCamera();
@@ -785,7 +794,7 @@ export class FieldView3D implements BattleView {
     return {
       calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures,
       units: this.lastUnits, particles: this.fx.particleCount, level: this.level, frameMs: this.ema, templates: this.layer.stats.templates,
-      instancedMeshes: this.layer.liveMeshes, overlayQuads: this.ui.quads,
+      instancedMeshes: this.layer.liveMeshes, overlayQuads: this.ui.quads, lodFar: this.lodFar,
     };
   }
 

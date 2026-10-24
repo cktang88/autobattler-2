@@ -14,5 +14,5 @@ export { makeKit, paint, rng, atlasUV, type Kit, type MatLike, type UMat } from 
 export { setSurfaceDetail, withSurfaceDetail, loadSurfaceTextures, setSurfaceTextureBase } from './surface3d.ts';
 export { buildTerrain, type Terrain, type TerrainOpts } from './terrain3d.ts';
 export { createRenderer, setupStage, setupPost, type Stage, type Post } from './stage3d.ts';
-export { Bld, loft, lathe, slabGeo, bevBox, mtx } from './geo.ts';
+export { Bld, loft, lathe, slabGeo, bevBox, mtx, withDetail } from './geo.ts';
 export { registerChassis, registerMobility, registered, type ChassisBuilder, type ChassisCtx, type ChassisOut, type MobilityBuilder, type Stance, type Hip, type MountSpec } from './chassis/registry.ts';

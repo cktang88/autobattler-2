@@ -14,7 +14,7 @@ import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { flyHeight } from '../render/tilt.ts';
-import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withSurfaceDetail, type Turret, type Unit3D } from '../proto3d/index.ts';
+import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withDetail, withSurfaceDetail, type Turret, type Unit3D } from '../proto3d/index.ts';
 import { OUTLINE_LAYER } from './outline3d.ts';
 
 export { buildTerrain, createRenderer, setupPost, setupStage, setSurfaceDetail, type Post, type Stage } from '../proto3d/index.ts';
@@ -156,6 +156,42 @@ interface Template {
   animates: boolean;
   /** instanced pools by look (index into LOOKS) */
   pool: (Pool | undefined)[];
+  /** far-view geometry per template mesh (the same build at LOD_DETAIL: rounder parts with fewer segments, no plate
+   *  chamfers), built lazily the first time the view is zoomed out; null = the low build didn't match (keep full) */
+  lo?: THREE.BufferGeometry[] | null;
+  design: Design;
+  team: 0 | 1;
+}
+
+/** geometry detail of the far-view (fit zoom) templates; see geo.ts withDetail */
+export const LOD_DETAIL = 0.5;
+
+/** Mesh-by-mesh geometry of a low-detail build of the same design for the template meshes `hi` (same walk order).
+ *  Builders are deterministic per design, so the low build has the same nodes and meshes, only fewer triangles; any
+ *  difference in structure (mesh count, material, vertex attributes) returns null and the template stays full detail.
+ *  Template meshes past the low build's (the flyer's contact blob added after the build) keep their own geometry. */
+export function lodGeometries(hi: THREE.Mesh[], loRoot: THREE.Object3D): THREE.BufferGeometry[] | null {
+  const lo: THREE.Mesh[] = [];
+  const walk = (o: THREE.Object3D): void => { if ((o as THREE.Mesh).isMesh) lo.push(o as THREE.Mesh); for (const c of o.children) walk(c); };
+  walk(loRoot);
+  const fail = (): null => { for (const m of lo) m.geometry.dispose(); return null; };
+  if (lo.length > hi.length) return fail();
+  const out: THREE.BufferGeometry[] = [];
+  for (let j = 0; j < hi.length; j++) {
+    const h = hi[j], l = lo[j];
+    if (!l) { out.push(h.geometry); continue; }
+    const ha = Object.keys(h.geometry.attributes).sort().join(), la = Object.keys(l.geometry.attributes).sort().join();
+    if (l.material !== h.material || ha !== la || !!h.geometry.index !== !!l.geometry.index) return fail();
+    out.push(l.geometry);
+  }
+  return out;
+}
+
+function buildLo(t: Template): void {
+  try {
+    const u = withDetail(LOD_DETAIL, () => buildUnit(t.design, t.team));
+    t.lo = lodGeometries(t.meshes, u.root);
+  } catch { t.lo = null; }
 }
 
 const _m = new THREE.Matrix4();
@@ -379,7 +415,18 @@ class Pool {
   rigs: Rig[] = [];
   shown = false;
   readonly tpl: Template; readonly look: Look; readonly group: THREE.Group;
+  /** drawing the template's far-view geometry */
+  private far = false;
   constructor(tpl: Template, look: Look, group: THREE.Group) { this.tpl = tpl; this.look = look; this.group = group; }
+
+  /** switch between the full and the far-view geometry (only once the template's low build exists) */
+  setFar(on: boolean): void {
+    const lo = this.tpl.lo;
+    const want = on && !!lo;
+    if (want === this.far) return;
+    this.far = want;
+    this.meshes.forEach((im, j) => { if (im) im.geometry = want ? lo![j] : this.tpl.meshes[j].geometry; });
+  }
 
   /** per-mesh castShadow under the layer's current minimum tier (wrecks count a tier lower: squashed and burnt out) */
   applyShadow(minTier: number): void {
@@ -395,7 +442,7 @@ class Pool {
     this.tpl.meshes.forEach((src, j) => {
       if (this.look !== 'normal' && this.tpl.isBlob[j]) { this.meshes.push(null as unknown as THREE.InstancedMesh); return; }
       const mat = this.look === 'normal' ? (src.material as THREE.Material) : this.look === 'wreck' ? wreckMat(src.material as THREE.Material) : lookMats[this.look];
-      const im = new THREE.InstancedMesh(src.geometry, mat, cap);
+      const im = new THREE.InstancedMesh(this.far && this.tpl.lo ? this.tpl.lo[j] : src.geometry, mat, cap);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       im.setColorAt(0, new THREE.Color(1, 1, 1));
       im.instanceColor!.setUsage(THREE.DynamicDrawUsage);
@@ -539,7 +586,7 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
   const shadowTier = unit.S + (unit.flying ? 1 : 0) + (box.max.y * bs0 >= 1.3 ? 1 : 0);
   const tpl: Template = {
     key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, castOk, shadowTier, mountTurret,
-    height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [],
+    height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [], design, team,
   };
   return tpl;
 }
@@ -584,6 +631,11 @@ export class UnitLayer {
     l.push(r);
   }
 
+  /** far view (zoomed out): draw templates with their low-detail geometry. Low builds are made lazily, at most one
+   *  per frame, so zooming out (or a new design appearing) never stalls a frame with a batch of rebuilds. */
+  private far = false;
+  setFar(on: boolean): void { this.far = on; }
+
   /** queue a rig for drawing this frame (its transforms must be up to date) */
   submit(r: Rig, look: Look): void {
     const li = LOOKS.indexOf(look);
@@ -592,12 +644,21 @@ export class UnitLayer {
     p.rigs.push(r);
   }
   /** write all queued instances; call once per frame after every submit() */
-  flush(): void { for (const p of this.pools.values()) p.flush(); }
+  flush(): void {
+    if (this.far) {
+      for (const p of this.pools.values()) if (p.tpl.lo === undefined && p.rigs.length) { buildLo(p.tpl); break; }
+    }
+    for (const p of this.pools.values()) { p.setFar(this.far); p.flush(); }
+  }
 
   /** count of instanced meshes with live instances (for diagnostics) */
   get liveMeshes(): number { let n = 0; for (const p of this.pools.values()) if (p.shown) n += p.meshes.filter(Boolean).length; return n; }
 
-  dispose(): void { for (const p of this.pools.values()) p.dispose(); this.pools.clear(); }
+  dispose(): void {
+    for (const p of this.pools.values()) p.dispose();
+    this.pools.clear();
+    for (const t of this.templates.values()) if (t.lo) t.lo.forEach((g, j) => { if (g !== t.meshes[j].geometry) g.dispose(); });
+  }
 }
 
 export { LOOKS };

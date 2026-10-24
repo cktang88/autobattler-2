@@ -28,11 +28,26 @@ function prep(g: THREE.BufferGeometry, keepUv = false): THREE.BufferGeometry {
   return n;
 }
 
+// ---- level of detail ------------------------------------------------------------------------------------------
+/** Geometry detail for what is built inside withDetail(): 1 = full; below 1 round sections (lathes, cylinders,
+ *  struts, superellipse rings) get proportionally fewer radial segments (never under 6, and sections already at 6 or
+ *  fewer keep theirs, so hex / square profiles stay true) and slab / box chamfers are dropped (the plan outline stays).
+ *  The battlefield draws units at the fit view from a template built at low detail (render3d/units-adapter.ts). */
+let detail = 1;
+export function geoDetail(): number { return detail; }
+export function withDetail<T>(k: number, fn: () => T): T {
+  const was = detail;
+  detail = k;
+  try { return fn(); } finally { detail = was; }
+}
+/** radial segment count under the current detail */
+export function lodSeg(n: number): number { return detail >= 1 || n <= 6 ? n : Math.max(6, Math.round(n * detail)); }
+
 // ---- slabs / boxes ------------------------------------------------------------------------------
 /** Prism from a plan polygon (x, z), y from 0..h, with a flat chamfer b on the top/bottom edges. Outline stays exact. */
 export function slabGeo(poly: P2[], h: number, b = 0.02): THREE.BufferGeometry {
   const shape = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)));
-  b = Math.max(0, Math.min(b, h * 0.45));
+  b = detail < 1 ? 0 : Math.max(0, Math.min(b, h * 0.45));
   const g = new THREE.ExtrudeGeometry(shape, {
     depth: Math.max(0.0001, h - 2 * b), bevelEnabled: b > 0.0005, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 1, curveSegments: 6,
   });
@@ -100,6 +115,7 @@ export function sec8(x: number, wb: number, wm: number, wt: number, y0: number, 
 /** superellipse ring in the YZ plane (fuselages, nacelles) */
 export function ellRing(x: number, cy: number, cz: number, ry: number, rz: number, n = 12, pw = 2.4, flatBottom = 0): V3[] {
   const out: V3[] = [];
+  n = lodSeg(n);
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     const ex = 2 / pw;
@@ -114,6 +130,7 @@ export function ellRing(x: number, cy: number, cz: number, ry: number, rz: numbe
 /** Revolve a profile [r, y] about +Y. Outward normal of each segment is (dy, -dr): go bottom-centre -> out -> up -> top-centre.
  *  Segment joints sharper than smoothDeg keep a hard edge, gentler ones are smoothed. */
 export function lathe(profile: P2[], seg = 16, smoothDeg = 38): THREE.BufferGeometry {
+  seg = lodSeg(seg);
   const m = profile.length - 1;
   const sn: P2[] = [];
   for (let i = 0; i < m; i++) {

@@ -14,6 +14,30 @@ export interface MiniDot { x: number; y: number; side: Side; size: number; flyin
 const SHOW_BELOW = 0.6;
 const W = 168;
 
+type P = { x: number; y: number };
+/** Clip a convex polygon to an axis-aligned rectangle (Sutherland-Hodgman). Clamping each corner on its own (as this
+ *  used to) bent a turned view's footprint out of shape wherever a corner lay past the field edge. */
+export function clipRect(poly: P[], x0: number, y0: number, x1: number, y1: number): P[] {
+  let out = poly;
+  const edges: [(p: P) => number, (a: P, b: P) => P][] = [
+    [(p) => p.x - x0, (a, b) => ({ x: x0, y: a.y + ((b.y - a.y) * (x0 - a.x)) / (b.x - a.x) })],
+    [(p) => x1 - p.x, (a, b) => ({ x: x1, y: a.y + ((b.y - a.y) * (x1 - a.x)) / (b.x - a.x) })],
+    [(p) => p.y - y0, (a, b) => ({ x: a.x + ((b.x - a.x) * (y0 - a.y)) / (b.y - a.y), y: y0 })],
+    [(p) => y1 - p.y, (a, b) => ({ x: a.x + ((b.x - a.x) * (y1 - a.y)) / (b.y - a.y), y: y1 })],
+  ];
+  for (const [inside, cut] of edges) {
+    const src = out;
+    out = [];
+    for (let i = 0; i < src.length; i++) {
+      const a = src[i], b = src[(i + 1) % src.length], ia = inside(a) >= 0, ib = inside(b) >= 0;
+      if (ia) out.push(a);
+      if (ia !== ib) out.push(cut(a, b));
+    }
+    if (!out.length) break;
+  }
+  return out;
+}
+
 export function createMinimap(host: HTMLElement, view: BattleView, canvasEl: HTMLElement) {
   const H = Math.round((W * FIELD_H) / FIELD_W);
   const cv = h('canvas.minimap', { width: String(W * 2), height: String(H * 2), title: 'Click to move the camera there' }) as HTMLCanvasElement;
@@ -44,16 +68,16 @@ export function createMinimap(host: HTMLElement, view: BattleView, canvasEl: HTM
   cv.addEventListener('contextmenu', (e) => e.preventDefault());
   cv.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
 
-  /** the camera's footprint on the ground (world cells): the four screen corners projected, clamped to the field */
+  /** the camera's footprint on the ground (world cells): the four screen corners projected, clipped to the field */
   const footprint = () => {
     const w = canvasEl.clientWidth, hh = canvasEl.clientHeight;
     const pts = [[0, 0], [w, 0], [w, hh], [0, hh]].map(([px, py]) => {
       let p: { x: number; y: number };
       try { p = view.screenToWorld(px, py); } catch { p = { x: NaN, y: NaN }; }
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) p = { x: FIELD_W / 2, y: FIELD_H / 2 };
-      return { x: Math.max(-4, Math.min(FIELD_W + 4, p.x)), y: Math.max(-4, Math.min(FIELD_H + 4, p.y)) };
+      return p;
     });
-    return pts;
+    return clipRect(pts, -4, -4, FIELD_W + 4, FIELD_H + 4);
   };
   const area = (p: { x: number; y: number }[]) => {
     let a = 0;
