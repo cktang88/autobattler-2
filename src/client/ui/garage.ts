@@ -28,6 +28,14 @@ import {
   designSizeLabel, footprintLabel, CATEGORY_COLOR, roleTags, traverseDeg, SLOW_TURRET_DEG, SIZE_CLASSES,
 } from './garage-parts.ts';
 import { firstLegalMobility, refitForClass, reqReason as reqReasonFor, reseat } from './garage-fit.ts';
+import { loadSettings } from '../storage.ts';
+import { webglAvailable } from '../render/viewfactory.ts';
+import { stageMode } from '../render3d/stage-math.ts';
+import type { HighlightTone, StageRing, UnitStage3D } from '../render3d/UnitStage3D.ts';
+
+/** bench geometry: the 2D blueprint's (render/field.ts PreviewGeom) or the 3D stage's, whose sockets also say whether
+ *  the hull hides them from the current camera angle */
+type Geom = Omit<PreviewGeom, 'mounts'> & { mounts: { x: number; y: number; r: number; occ?: boolean }[] };
 
 const RANK: Record<MountClass, number> = MOUNT_RANK;
 const ML = MOUNT_LETTER;
@@ -263,8 +271,14 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const poke = () => { lastPoke = performance.now(); };
   const pan = { x: 0, y: 0 };
   const ZOOM_MIN = 0.5, ZOOM_MAX = 5;
+  /** target zoom of whichever view is showing */
+  const curZoom = () => stage3d ? stage3d.zoom : zoomT;
   let destroyed = false;
-  let geom: PreviewGeom | null = null;
+  let geom: Geom | null = null;
+  /** 3D designer stage (render3d/UnitStage3D, lazily loaded); null = the 2D blueprint */
+  let stage3d: UnitStage3D | null = null;
+  /** socket under the pointer (on the hull or in the loadout strip): its turret lights up in 3D */
+  let hoverSock: number | null = null;
 
   const dirty = () => !saved || !same(saved, draft);
   const chassis = () => CHASSIS_BY_ID.get(draft.chassis)!;
@@ -275,7 +289,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const toolsEl = h('div.g-list-tools');
   const gridCv = h('canvas.g-grid', { 'aria-hidden': 'true' });
   const preview = h('canvas.g-preview', { 'aria-label': 'Unit blueprint', role: 'img' });
+  const preview3d = h('canvas.g-preview3d', { 'aria-label': 'Unit model: drag to turn, wheel to zoom', role: 'img' });
   const socketsEl = h('div.g-sockets');
+  const ringLbls = h('div.g-ringlbls', { 'aria-hidden': 'true' });
   const stageTags = h('div.g-prev-tags');
   const stageCost = h('div.g-prev-cost');
   const stageHint = h('div.g-stage-hint');
@@ -305,12 +321,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const zoomLbl = h('span.g-zoomlbl', { 'aria-live': 'polite' }, '1×');
   const zbtn = (label: string, title: string, fn: () => void) => h('button.g-zoombtn', { type: 'button', title, 'aria-label': title, onclick: fn }, label);
   const zoomCtl = h('div.g-zoom', { role: 'group', 'aria-label': 'Blueprint zoom' },
-    zbtn('−', 'Zoom out (-)', () => setZoom(zoomT / 1.4)),
+    zbtn('−', 'Zoom out (-)', () => setZoom(curZoom() / 1.4)),
     zbtn('Fit', 'Fit the unit (0 / double-click)', () => resetView()),
-    zbtn('+', 'Zoom in (+)', () => setZoom(zoomT * 1.4)),
+    zbtn('+', 'Zoom in (+)', () => setZoom(curZoom() * 1.4)),
     zoomLbl);
   const stage = h('div.g-stage', null,
-    gridCv, preview, socketsEl,
+    gridCv, preview, preview3d, ringLbls, socketsEl,
     h('div.g-stage-hud', null, stageTags, h('span.spacer'), zoomCtl, rangeBtn),
     stageCost,
     stageHint,
@@ -318,27 +334,87 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   stage.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (stage3d) {
+      // the battle camera's wheel step (render/camera.ts CameraControls.wheel)
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      stage3d.zoomBy(Math.max(0.6, Math.min(1.7, Math.exp(-dy * (e.ctrlKey ? 0.011 : 0.0016)))));
+      zoomLbl.textContent = `${Math.round(stage3d.zoom * 10) / 10}×`;
+      return;
+    }
     const r = stage.getBoundingClientRect();
     setZoom(zoomT * Math.exp(-e.deltaY * 0.0015), { x: e.clientX - r.left, y: e.clientY - r.top });
   }, { passive: false });
-  // drag empty blueprint to pan (sockets and buttons keep their own handling)
+  // drag empty blueprint to pan (sockets and buttons keep their own handling). 3D: left drag orbits (turn + tilt), right /
+  // middle / shift drag pans, two fingers pinch-zoom and twist-turn.
   let panDrag: { x: number; y: number; px: number; py: number; id: number } | null = null;
+  const ptrs = new Map<number, { x: number; y: number; pan: boolean }>();
+  let pinch: { d: number; a: number } | null = null;
+  const pinchOf = () => {
+    const [a, b] = [...ptrs.values()];
+    return { d: Math.max(8, Math.hypot(a.x - b.x, a.y - b.y)), a: Math.atan2(b.y - a.y, b.x - a.x) };
+  };
   stage.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('button, .g-sock')) return;
+    if ((e.target as HTMLElement).closest('button, .g-sock')) return;
+    if (stage3d) {
+      if (e.button > 2) return;
+      stage3d.touched();
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey });
+      try { stage.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      stage.classList.add('panning');
+      pinch = ptrs.size === 2 ? pinchOf() : null;
+      return;
+    }
+    if (e.button !== 0) return;
     panDrag = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, id: e.pointerId };
     stage.setPointerCapture(e.pointerId);
     stage.classList.add('panning');
   });
   stage.addEventListener('pointermove', (e) => {
+    const p = ptrs.get(e.pointerId);
+    if (stage3d && p) {
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (ptrs.size >= 2) {
+        if (!pinch) { pinch = pinchOf(); return; }
+        const q = pinchOf();
+        stage3d.cam.zoomBy(q.d / pinch.d);
+        let da = q.a - pinch.a;
+        if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
+        stage3d.orbit(-da / 0.004, 0);
+        pinch = q;
+        zoomLbl.textContent = `${Math.round(stage3d.zoom * 10) / 10}×`;
+      } else if (p.pan) stage3d.pan(dx, dy);
+      else stage3d.orbit(dx, dy);
+      return;
+    }
     if (!panDrag || e.pointerId !== panDrag.id || !geom) return;
     pan.x = panDrag.px - (e.clientX - panDrag.x) / geom.px;
     pan.y = panDrag.py - (e.clientY - panDrag.y) / geom.px;
     poke();
   });
-  const endPan = () => { panDrag = null; stage.classList.remove('panning'); };
+  const endPan = (e: PointerEvent) => {
+    ptrs.delete(e.pointerId);
+    pinch = null;
+    if (ptrs.size) return;
+    panDrag = null; stage.classList.remove('panning');
+  };
   stage.addEventListener('pointerup', endPan);
   stage.addEventListener('pointercancel', endPan);
+  stage.addEventListener('contextmenu', (e) => { if (stage3d) e.preventDefault(); });
+  // the idle auto-turn pauses while the pointer is over the model (sockets must hold still under it)
+  let stageHover = false;
+  stage.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') stageHover = true; });
+  stage.addEventListener('pointerleave', () => { stageHover = false; });
   stage.addEventListener('dblclick', (e) => { if (!(e.target as HTMLElement).closest('button, .g-sock')) resetView(); });
+  // hovering a socket (on the hull or in the loadout strip) lights up its turret in the 3D view
+  const sockOver = (e: PointerEvent) => {
+    const n = (e.target as HTMLElement).closest<HTMLElement>('[data-sock]');
+    hoverSock = n ? Number(n.dataset.sock) : null;
+  };
+  for (const n of [socketsEl, loadoutEl]) {
+    n.addEventListener('pointerover', sockOver);
+    n.addEventListener('pointerout', (e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-sock]')) hoverSock = null; });
+  }
 
   const el = h('div.garage', null,
     h('header.g-top', null,
@@ -402,6 +478,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     delete pinned.weapons; delete pinned.systems;
     prunePins();
     pan.x = pan.y = 0; // new design: recentre (zoom level is kept)
+    stage3d?.cam.recentre();
     nameInput.value = draft.name;
     update();
     revealSelected();
@@ -706,6 +783,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   function setZoom(z: number, about?: { x: number; y: number }) {
+    if (stage3d) {
+      stage3d.touched();
+      stage3d.cam.setZoom(z);
+      zoomLbl.textContent = `${Math.round(stage3d.zoom * 10) / 10}×`;
+      return;
+    }
     const nz = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
     // keep the point under the cursor fixed while zooming
     if (about && geom) {
@@ -719,7 +802,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (zoomT <= 1.001) { pan.x = 0; pan.y = 0; }
     zoomLbl.textContent = `${Math.round(zoomT * 10) / 10}×`;
   }
-  function resetView() { zoomT = 1; pan.x = pan.y = 0; zoomLbl.textContent = '1×'; lastZoomAt = performance.now(); poke(); }
+  function resetView() {
+    if (stage3d) { stage3d.reset(); zoomLbl.textContent = '1×'; return; }
+    zoomT = 1; pan.x = pan.y = 0; zoomLbl.textContent = '1×'; lastZoomAt = performance.now(); poke(); }
 
   function toggleRanges() {
     rangesOn = !rangesOn;
@@ -1386,7 +1471,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return;
     }
     const W = socketsEl.clientWidth, H = socketsEl.clientHeight;
-    const key = `${W}x${H}|` + geom.mounts.map((m) => `${m.x.toFixed(1)},${m.y.toFixed(1)},${m.r.toFixed(1)}`).join('|');
+    const key = `${W}x${H}|` + geom.mounts.map((m) => `${m.x.toFixed(1)},${m.y.toFixed(1)},${m.r.toFixed(1)}${m.occ ? 'o' : ''}`).join('|');
     if (key === lastSockKey) return;
     lastSockKey = key;
     const ms = geom.mounts;
@@ -1405,6 +1490,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       n.style.setProperty('--r', `${r.toFixed(1)}px`);
       n.style.visibility = '';
       n.classList.toggle('off', off);
+      // 3D: the hull hides this socket from the current angle (still clickable and a drop target, drawn dimmer)
+      n.classList.toggle('occ', !!m.occ);
       if (off) n.style.setProperty('--off', `${(Math.atan2(m.y - y, m.x - x) * 180 / Math.PI).toFixed(0)}deg`);
     });
   }
@@ -2123,7 +2210,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     return true; // drawUnitPreview sizes the backing store itself (one formula, no per-frame reallocation)
   }
   /** The bench geometry for the current draft/zoom/pan without drawing (null while the stage has no size). */
-  function previewGeomNow(): PreviewGeom | null {
+  function previewGeomNow(): Geom | null {
+    if (stage3d) { stage3d.setDesign(draft); return stage3d.geom(); }
     if (preview.clientWidth < 2 || preview.clientHeight < 2) return null;
     try {
       return drawUnitPreview(preview, draft, { side: 0, angle: -Math.PI / 2, minExtent: viewExt, still: true, zoom, pan, measureOnly: true });
@@ -2145,7 +2233,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     if (drewLast) drawCost = drawCost * 0.7 + dt * 0.3;
     drewLast = false;
     try {
-      if (fit(preview)) {
+      if (stage3d) tick3d(now);
+      else if (fit(preview)) {
         const want = rangesOn ? rangeExtent() : MIN_VIEW_CELLS;
         const extMoving = Math.abs(want - viewExt) > 1e-6;
         viewExt += (want - viewExt) * (Math.abs(want - viewExt) < 0.01 ? 1 : 0.18);
@@ -2185,6 +2274,86 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     raf = requestAnimationFrame(tick);
   };
 
+  /** range rings of the draft (recomputed only when the design changes) */
+  let ringsOf3d: { d: Design; rings: StageRing[] } | null = null;
+  function tick3d(now: number) {
+    const s3 = stage3d!;
+    s3.setDesign(draft);
+    let rings: StageRing[] | null = null;
+    if (rangesOn) {
+      if (ringsOf3d?.d !== draft) ringsOf3d = { d: draft, rings: rangeRings() };
+      rings = ringsOf3d.rings;
+    }
+    // the model stands at battle scale (bodyScale): a slightly tighter minimum keeps a light unit as big as the 2D art
+    s3.minExtent = rings ? Math.max(MIN_VIEW_CELLS, ...rings.map((o) => o.r * 2.18 + 1)) : MIN_VIEW_CELLS * 0.78;
+    s3.setRings(rings);
+    s3.hold = stageHover || !!drag?.started;
+    // light up the socket being dropped on, else the one under the pointer, else the one being fitted
+    let hl: number | null = null, tone: HighlightTone = 'hover';
+    if (drag?.started) {
+      if (drag.hot !== null) { hl = drag.hot; tone = drag.hot !== drag.src.from && slotBlock(MODULE_BY_ID.get(drag.src.mod)!, drag.hot) ? 'bad' : 'hot'; }
+    } else if (hoverSock !== null) hl = hoverSock;
+    else if (activeSlot !== null) { hl = activeSlot; tone = 'active'; }
+    s3.setHighlight(hl !== null && hl < chassis().mounts.length ? hl : null, tone);
+    if (s3.frame(now)) {
+      geom = s3.geom();
+      placeSockets();
+      placeRingLabels(s3);
+    }
+  }
+  let ringLblKey = '';
+  function placeRingLabels(s3: UnitStage3D) {
+    const ls = rangesOn ? s3.ringLabels() : [];
+    const key = ls.map((o) => o.label).join('|');
+    if (key !== ringLblKey) {
+      ringLblKey = key;
+      ringLbls.replaceChildren(...ls.map((o) => h('span.g-ringlbl', { style: { '--rc': o.color } }, o.label)));
+    }
+    const W = ringLbls.clientWidth, H = ringLbls.clientHeight;
+    // keep the labels on screen and off each other (stacked rings share a side)
+    const boxes: { x0: number; x1: number; y: number }[] = [];
+    ls.forEach((o, i) => {
+      const n = ringLbls.children[i] as HTMLElement | undefined;
+      if (!n) return;
+      const hw = Math.min(W / 2, n.offsetWidth / 2 + 2);
+      const x = Math.max(hw, Math.min(W - hw, o.x));
+      let y = Math.max(14, Math.min(H - 14, o.y));
+      for (let k = 0; k < 8 && boxes.some((b) => b.x0 < x + hw && b.x1 > x - hw && Math.abs(b.y - y) < 24); k++) y += 24;
+      boxes.push({ x0: x - hw, x1: x + hw, y });
+      n.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+    });
+  }
+
+  /** Switch to the 3D stage when the renderer setting asks for it and WebGL works (else, or on failure, stay 2D). */
+  function start3d() {
+    const st = loadSettings();
+    if (stageMode(st.renderer, webglAvailable()) !== '3d') return;
+    import('../render3d/UnitStage3D.ts').then((m) => {
+      if (destroyed || stage3d) return;
+      try {
+        const s3 = new m.UnitStage3D(preview3d, { shadows: st.shadows !== false, textures: st.unitTextures !== false });
+        stage3d = s3;
+        s3.onLost = () => fallback2d('WebGL context lost');
+        stage.classList.add('is3d');
+        s3.setDesign(draft);
+        geom = s3.geom();
+        lastSockKey = '';
+        zoomLbl.textContent = '1×';
+        placeSockets();
+      } catch (e) { fallback2d(e); }
+    }).catch((e) => fallback2d(e));
+  }
+  function fallback2d(why: unknown) {
+    console.warn('3D unit stage unavailable, using the 2D blueprint', why);
+    const s3 = stage3d;
+    stage3d = null;
+    try { s3?.dispose(); } catch { /* ignore */ }
+    stage.classList.remove('is3d');
+    ringLbls.replaceChildren(); ringLblKey = '';
+    geom = null; drawn = null; lastSockKey = '';
+    zoomLbl.textContent = `${Math.round(zoomT * 10) / 10}×`;
+  }
+
   const typing = () => {
     const a = document.activeElement as HTMLElement | null;
     if (document.querySelector('.k-pop')) return true; // a kit dropdown is open: its type-ahead owns the keys
@@ -2204,8 +2373,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     }
     if (typing() || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key.toLowerCase() === 'v') { toggleRanges(); return; }
-    if (e.key === '+' || e.key === '=') { setZoom(zoomT * 1.4); return; }
-    if (e.key === '-' || e.key === '_') { setZoom(zoomT / 1.4); return; }
+    if (e.key === '+' || e.key === '=') { setZoom(curZoom() * 1.4); return; }
+    if (e.key === '-' || e.key === '_') { setZoom(curZoom() / 1.4); return; }
     if (e.key === '0') { resetView(); return; }
     const tk = TABS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
     if (tk) { setTab(tk.id); return; }
@@ -2224,6 +2393,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   renderTools();
   update();
   raf = requestAnimationFrame(tick);
+  start3d();
 
   return {
     el,
@@ -2231,6 +2401,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       destroyed = true;
       cancelDrag();
       cancelAnimationFrame(raf);
+      try { stage3d?.dispose(); } catch { /* ignore */ }
+      stage3d = null;
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('beforeunload', onUnload);

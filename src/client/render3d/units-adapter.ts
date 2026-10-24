@@ -18,6 +18,7 @@ import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withSurfa
 import { OUTLINE_LAYER } from './outline3d.ts';
 
 export { buildTerrain, createRenderer, setupPost, setupStage, setSurfaceDetail, type Post, type Stage } from '../proto3d/index.ts';
+export { surfaceDetailReady } from '../proto3d/surface3d.ts';
 import { TEAM_PAINT } from '../proto3d/materials.ts';
 
 /** linear rgb of a team's primary hull paint (debris of a blown-up hull is painted with it) */
