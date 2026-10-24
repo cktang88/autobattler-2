@@ -76,7 +76,7 @@ function spThigh(b: Bld, kit: Kit, l: number, t: number, style: LegStyle, fine: 
   if (lite) {
     // cheap: hip drum, one dark spar, one dorsal shell, knee drum
     b.cylb(kit.mech, t * 1.0, t * 1.5, t * 0.15, [-t * 0.75, 0, 0], 'x', 7);
-    b.g(strutGeo([0, 0, t * 0.4], [0, 0, l], t * 0.42, t * 0.32, 5), kit.mech);
+    b.g(strutGeo([0, 0, t * 0.4], [0, 0, l], t * 0.5, t * 0.4, 5), kit.mech);
     if (org) limbShell(b, kit.armor, l * 0.06, l * 0.94, t * 0.7, t * 0.32, t * 0.22, t * 0.2, { tp: 0.7, cols: 2 });
     else armorPlate(b, kit, kit.armor, frame([0, t * 0.3, l * 0.5], [0, 1, 0], [0, 0, 1]), trapP(l * 0.8, t * 0.95, t * 1.25, t * 0.14), t * 0.2, { standoff: t * 0.12, back: null });
     b.cylb(kit.joint, t * 0.62, t * 1.15, t * 0.1, [-t * 0.58, 0, l], 'x', 6);
@@ -106,7 +106,7 @@ function spThigh(b: Bld, kit: Kit, l: number, t: number, style: LegStyle, fine: 
 function spShin(b: Bld, kit: Kit, l: number, t: number, style: LegStyle, fine: boolean, lite: boolean) {
   const org = style === 'organic';
   if (lite) {
-    b.g(strutGeo([0, 0, t * 0.3], [0, 0, l * 0.96], t * 0.36, t * 0.12, 5), kit.mech);
+    b.g(strutGeo([0, 0, t * 0.3], [0, 0, l * 0.96], t * 0.44, t * 0.3, 5), kit.mech);
     if (org) limbShell(b, kit.armor2, l * 0.04, l * 0.6, t * 0.6, t * 0.26, t * 0.2, t * 0.18, { tp: 0.55, cols: 2 });
     else armorPlate(b, kit, kit.armor2, frame([0, t * 0.26, l * 0.32], [0, 1, 0], [0, 0, 1]), trapP(l * 0.5, t * 0.7, t * 1.05, t * 0.12), t * 0.18, { standoff: t * 0.1, back: null });
     return;
@@ -129,8 +129,8 @@ function spShin(b: Bld, kit: Kit, l: number, t: number, style: LegStyle, fine: b
   armorPlate(b, kit, kit.armor, frame([0, t * 0.58, t * 0.08], [0, 0.85, -0.5], [1, 0, 0]), trapP(t * 1.25, t * 0.85, t * 0.62, t * 0.12), t * 0.18, { standoff: t * 0.06 });
   piston(b, kit, [0, -t * 0.4, l * 0.08], [0, -t * 0.32, l * 0.7], t * 0.14, 0.55, fine);
   // lower leg: dark tapering strut to the foot pivot, a collar at the transition
-  b.g(strutGeo([0, 0, l * 0.8], [0, 0, l], t * 0.3, t * 0.2, 6), kit.mech);
-  b.cyl(kit.joint, t * 0.36, t * 0.36, t * 0.14, [0, 0, l * 0.8], 'z', 6);
+  b.g(strutGeo([0, 0, l * 0.8], [0, 0, l], t * 0.4, t * 0.32, 6), kit.mech);
+  b.cyl(kit.joint, t * 0.46, t * 0.46, t * 0.14, [0, 0, l * 0.8], 'z', 6);
 }
 
 function spFoot(b: Bld, kit: Kit, t: number, style: LegStyle, fine: boolean, lite: boolean) {
@@ -244,13 +244,17 @@ export interface LegOpts {
   extra?: { thigh?: (b: Bld, l: number, t: number) => void; shin?: (b: Bld, l: number, t: number) => void; foot?: (b: Bld, t: number) => void };
 }
 
+/** longest bone per unit of leg thickness: a leg has to look like it carries the hull above it, so however long a hull
+ *  makes its legs, they get at least this stout (spider legs splay wide and carry from the side: stouter still) */
+const MAX_SLENDER = { spider: 4.6, biped: 4.4 };
+
 export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg {
   const spider = o.kind === 'spider';
-  const t = hip.t;
   const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
   const rk = o.reach ?? 1;
   const l1 = d0 * (spider ? 0.7 : 0.6) * rk, l2 = d0 * (spider ? 0.84 : 0.6) * rk;
+  const t = Math.max(hip.t, Math.max(l1, l2) / MAX_SLENDER[o.kind]);
   const bendV = spider ? new THREE.Vector3(0, 1, hip.side * 0.3) : new THREE.Vector3(o.bend === 'back' ? -1 : 1, 0.12, 0);
   const lite = !!o.lite, ex = o.extra ?? {}, flip = o.bend === 'back';
   const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); if (lite) b.segK = 0.7; fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };

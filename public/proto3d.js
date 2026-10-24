@@ -41514,7 +41514,7 @@ function spThigh(b, kit, l, t, style, fine, lite) {
   const org = style === "organic";
   if (lite) {
     b.cylb(kit.mech, t * 1, t * 1.5, t * 0.15, [-t * 0.75, 0, 0], "x", 7);
-    b.g(strutGeo([0, 0, t * 0.4], [0, 0, l], t * 0.42, t * 0.32, 5), kit.mech);
+    b.g(strutGeo([0, 0, t * 0.4], [0, 0, l], t * 0.5, t * 0.4, 5), kit.mech);
     if (org) limbShell(b, kit.armor, l * 0.06, l * 0.94, t * 0.7, t * 0.32, t * 0.22, t * 0.2, { tp: 0.7, cols: 2 });
     else armorPlate(b, kit, kit.armor, frame([0, t * 0.3, l * 0.5], [0, 1, 0], [0, 0, 1]), trapP(l * 0.8, t * 0.95, t * 1.25, t * 0.14), t * 0.2, { standoff: t * 0.12, back: null });
     b.cylb(kit.joint, t * 0.62, t * 1.15, t * 0.1, [-t * 0.58, 0, l], "x", 6);
@@ -41541,7 +41541,7 @@ function spThigh(b, kit, l, t, style, fine, lite) {
 function spShin(b, kit, l, t, style, fine, lite) {
   const org = style === "organic";
   if (lite) {
-    b.g(strutGeo([0, 0, t * 0.3], [0, 0, l * 0.96], t * 0.36, t * 0.12, 5), kit.mech);
+    b.g(strutGeo([0, 0, t * 0.3], [0, 0, l * 0.96], t * 0.44, t * 0.3, 5), kit.mech);
     if (org) limbShell(b, kit.armor2, l * 0.04, l * 0.6, t * 0.6, t * 0.26, t * 0.2, t * 0.18, { tp: 0.55, cols: 2 });
     else armorPlate(b, kit, kit.armor2, frame([0, t * 0.26, l * 0.32], [0, 1, 0], [0, 0, 1]), trapP(l * 0.5, t * 0.7, t * 1.05, t * 0.12), t * 0.18, { standoff: t * 0.1, back: null });
     return;
@@ -41561,8 +41561,8 @@ function spShin(b, kit, l, t, style, fine, lite) {
   ], { gap: t * 0.14 });
   armorPlate(b, kit, kit.armor, frame([0, t * 0.58, t * 0.08], [0, 0.85, -0.5], [1, 0, 0]), trapP(t * 1.25, t * 0.85, t * 0.62, t * 0.12), t * 0.18, { standoff: t * 0.06 });
   piston(b, kit, [0, -t * 0.4, l * 0.08], [0, -t * 0.32, l * 0.7], t * 0.14, 0.55, fine);
-  b.g(strutGeo([0, 0, l * 0.8], [0, 0, l], t * 0.3, t * 0.2, 6), kit.mech);
-  b.cyl(kit.joint, t * 0.36, t * 0.36, t * 0.14, [0, 0, l * 0.8], "z", 6);
+  b.g(strutGeo([0, 0, l * 0.8], [0, 0, l], t * 0.4, t * 0.32, 6), kit.mech);
+  b.cyl(kit.joint, t * 0.46, t * 0.46, t * 0.14, [0, 0, l * 0.8], "z", 6);
 }
 function spFoot(b, kit, t, style, fine, lite) {
   if (style === "organic") {
@@ -41646,13 +41646,14 @@ function hsFoot(b, kit, t, fine, heavy = false) {
   for (const sz of [-1, 1]) b.box(kit.mech, t * 0.9, t * 0.9, t * 0.24, 0, t * 0.85, sz * t * 0.66, t * 0.08);
   piston(b, kit, [-t * 1.45, t * 0.5, 0], [-t * 0.45, t * 1.35, 0], t * 0.16, 0.55, fine);
 }
+var MAX_SLENDER = { spider: 4.6, biped: 4.4 };
 function makeLeg(g, kit, hip, o) {
   const spider = o.kind === "spider";
-  const t = hip.t;
   const hipV = new Vector3(...hip.p), footV = new Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
   const rk = o.reach ?? 1;
   const l1 = d0 * (spider ? 0.7 : 0.6) * rk, l2 = d0 * (spider ? 0.84 : 0.6) * rk;
+  const t = Math.max(hip.t, Math.max(l1, l2) / MAX_SLENDER[o.kind]);
   const bendV = spider ? new Vector3(0, 1, hip.side * 0.3) : new Vector3(o.bend === "back" ? -1 : 1, 0.12, 0);
   const lite = !!o.lite, ex = o.extra ?? {}, flip = o.bend === "back";
   const mk = (fn) => {
