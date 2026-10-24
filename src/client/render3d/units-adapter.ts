@@ -64,25 +64,25 @@ const CHAR_COLOR = /* glsl */ `
   float chSoot = clamp(chK.r * (0.62 + 0.4 * chTop) + (chNs - 0.5) * 0.9 * chK.r, 0.0, 1.0);
   float chL = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
   // paint survives faintly under the soot; burnt-through patches go black, the rest heat-tinted brown-grey metal
-  vec3 chC = mix(vec3(chL), diffuseColor.rgb, 0.55 - 0.25 * chK.r) * (1.0 - 0.82 * chSoot);
+  vec3 chC = mix(vec3(chL), diffuseColor.rgb, 0.42 - 0.25 * chK.r) * (1.0 - 0.82 * chSoot);
   chC = mix(chC, vec3(0.03, 0.026, 0.022), smoothstep(0.6, 0.95, chSoot));
   chC = mix(chC, chC * vec3(1.12, 0.96, 0.82), 0.5 * chK.r);
   // holes and fissures (level-scaled; the seed moves the pattern per wreck)
   float chLv = floor(chK.b * 4.0 + 1e-3), chSd = fract(chK.b * 4.0 + 1e-3);
-  vec3 chHp = vChP * 4.2 + chSd * 37.0;
+  vec3 chHp = vChP * 3.0 + chSd * 37.0;
   float chHn = chN(chHp) * 0.72 + chN(chHp * 3.1 + 5.0) * 0.28;
-  float chThr = 0.66 - 0.04 * chLv;
+  float chThr = 0.575 - 0.03 * chLv;
   float chHole = smoothstep(chThr, chThr + 0.03, chHn);
-  float chRim = smoothstep(chThr - 0.075, chThr, chHn) * (1.0 - chHole);
+  float chRim = smoothstep(chThr - 0.09, chThr, chHn) * (1.0 - chHole);
   float chFr = 1.0 - abs(chN(vChP * 2.4 + chSd * 11.0) * 2.0 - 1.0);
   float chFis = smoothstep(0.95 - 0.015 * chLv, 0.985, chFr) * (1.0 - chHole);
-  chC = mix(chC, vec3(0.03, 0.022, 0.016), chRim * 0.9);
+  chC = mix(chC, vec3(0.13, 0.055, 0.025), chRim * 0.9);
   chC = mix(chC, vec3(0.004, 0.0035, 0.003), max(chHole, chFis * 0.9));
   diffuseColor.rgb = chC;`;
 const CHAR_EMBER = /* glsl */ `
   totalEmissiveRadiance = vec3(0.0);
   float chCrack = smoothstep(0.58, 0.78, chN(vChP * 4.6 + chK.b * 41.0)) * smoothstep(0.35, 0.7, chSoot + 0.2);
-  totalEmissiveRadiance += vec3(2.4, 0.62, 0.1) * chK.g * chK.g * (chCrack * 1.8 + 0.08 * chSoot + chRim * 2.6 + chFis * 2.0 + chHole * 0.35);
+  totalEmissiveRadiance += vec3(2.4, 0.62, 0.1) * chK.g * chK.g * (chCrack * 1.8 + 0.08 * chSoot + chRim * 1.1 + chFis * 1.2 + chHole * 0.25);
   #include <lights_fragment_begin>`;
 const charCache = new WeakMap<THREE.Material, THREE.Material>();
 function charred(src: THREE.Material): THREE.Material | null {

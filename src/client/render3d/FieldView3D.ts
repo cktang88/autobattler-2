@@ -199,8 +199,8 @@ function styleOf(id: string): WStyle {
 const RECOIL: Partial<Record<Fam, [number, number, number, boolean]>> = {
   mg: [0.6, 14, 0, false], twinmg: [0.6, 14, 0, false], hmg: [0.8, 12, 0, false], gatling: [0.5, 14, 0, false],
   shotgun: [1, 10, 0, false], flechette: [1, 10, 0, false], ac: [1, 11, 0.05, false], flak: [1.2, 8, 0.15, false],
-  apc: [1.6, 4.5, 0.55, true], he: [1.8, 4, 0.7, true], gauss: [1.4, 4, 0.45, false], sniper: [1.3, 6, 0.05, false],
-  rail: [1.6, 3.5, 0.6, false], howitzer: [2.3, 2.6, 0.9, true], cluster: [2.2, 2.8, 0.85, true],
+  apc: [2.1, 4, 0.55, true], he: [2.3, 3.6, 0.7, true], gauss: [1.4, 4, 0.45, false], sniper: [1.3, 6, 0.05, false],
+  rail: [1.6, 3.5, 0.6, false], howitzer: [2.8, 2.4, 0.9, true], cluster: [2.6, 2.6, 0.85, true],
   mortar: [1.6, 5, 0.35, true], firebomb: [1.6, 5, 0.35, true], grenade: [1.2, 8, 0.1, false],
 };
 /** Warhead size of an explosive round (~0.2 20 mm HE .. 1.6 heavy bomb), for the impact blast on the hull it struck */
@@ -1147,20 +1147,26 @@ export class FieldView3D implements BattleView {
     const ca = Math.cos(ang), sa = Math.sin(ang), K = this.dmgK, S = rig.S;
     const sz = 0.55 + 0.25 * Math.min(4, S);
     const n = stage === 1 ? Math.min(2, pts.length) : pts.length;
+    // the deck: where the first turret sits on the hull (the model's full height includes its turrets and antennae,
+    // so hull points placed by height alone ended up inside the hull, their smoke hidden)
+    const t0 = rig.turrets.findIndex((t) => t);
+    const deck = t0 >= 0 && rig.turretWorld(t0, _v3) ? Math.max(h + 0.15, _v3.y) : h + rig.height * 0.6;
+    // critical: the fire burns out of the engine deck
+    const fireAt = pts.find((q) => q.mount < 0 && (q.kind === 'oil' || q.kind === 'elec')) ?? pts[0];
     for (let i = 0; i < n; i++) {
       const p = pts[i];
       let px: number, py: number, pz: number;
       const tw = p.mount >= 0 ? rig.turretWorld(p.mount, _v3) : null;
-      if (tw) { px = tw.x; py = tw.y + 0.05; pz = tw.z; }
-      else { px = x + p.x * ca - p.z * sa; py = h + p.y; pz = y + p.x * sa + p.z * ca; }
+      if (tw) { px = tw.x; py = tw.y + 0.08; pz = tw.z; }
+      else { px = x + p.x * ca - p.z * sa; py = deck + 0.05; pz = y + p.x * sa + p.z * ca; }
       let kind = p.kind;
       // heavier damage: the engine's oil smoke goes black, steam turns to dirty smoke
       if (stage >= 2 && kind === 'oil') kind = 'black';
       if (stage === 3 && kind === 'steam' && i > 0) kind = 'oil';
-      const rate = (stage === 1 ? 2.2 : stage === 2 ? 3.4 : 4.6) * p.rate * K;
-      if (Math.random() < rate * dt) this.fx.wisp(px, py, pz, kind, (stage === 1 ? 0.25 : stage === 2 ? 0.55 : 0.85) * p.size * sz);
+      const rate = (stage === 1 ? 6 : stage === 2 ? 9 : 11) * p.rate * K;
+      for (let r = rate * dt; r > 0; r--) if (Math.random() < r) this.fx.wisp(px, py, pz, kind, (stage === 1 ? 0.25 : stage === 2 ? 0.55 : 0.85) * p.size * sz);
       if (stage >= 2 && Math.random() < (stage === 2 ? 0.35 : 0.8) * K * dt) this.fx.damageSpark(px, py, pz, p.kind === 'elec');
-      if (stage === 3 && i === 0 && Math.random() < 9 * K * dt) this.fx.smallFire(px, py, pz, 0.14 + 0.06 * S);
+      if (stage === 3 && p === fireAt && Math.random() < 14 * K * dt) this.fx.smallFire(px, py, pz, 0.2 + 0.08 * Math.min(4, S));
     }
   }
 
@@ -1607,7 +1613,7 @@ export class FieldView3D implements BattleView {
         const ca = Math.cos(w.ang), sa = Math.sin(w.ang);
         for (let i = 0; i < n; i++) {
           const r1 = (w.seed * 7.31 + i * 0.618) % 1, r2 = (w.seed * 3.17 + i * 0.382) % 1;
-          if (Math.random() > dt * (1.2 + 0.5 * w.S) * (0.4 + 0.6 * k) * (i === 0 ? 1.4 : 0.8) * this.fx.lod) continue;
+          if (Math.random() > dt * (0.9 + 0.35 * w.S) * (0.4 + 0.6 * k) * (i === 0 ? 1.4 : 0.8) * this.fx.lod) continue;
           const lx = (r1 - 0.5) * w.hx * 1.3, lz = (r2 - 0.5) * w.hz * 1.3;
           this.fx.wisp(w.x + lx * ca - lz * sa, w.deck + 0.05, w.z + lx * sa + lz * ca, k > 0.55 ? 'black' : k > 0.25 ? 'oil' : 'steam', (0.4 + 0.6 * k) * (0.6 + 0.2 * Math.min(4, w.S)));
         }
@@ -1676,7 +1682,8 @@ export class FieldView3D implements BattleView {
           fx.explosion(f.x, f.z, 0.55 + f.S * 0.45, 'fire', 0, true, 1, f.paint);
           fx.dirtGeyser(f.x, f.z, 0.5 + f.S * 0.3);
           fx.shockwave(f.x, f.z, 0.4 + f.S * 0.25);
-          fx.trauma = Math.min(1, fx.trauma + 0.06 + f.S * 0.03);
+          // the wreck slamming in is a second boom (the death event only shook for the burst at altitude)
+          this.shake.add(f.x, f.z, 0.7 + f.S * 0.4);
         }
         this.fallers.splice(i, 1);
         const lv: WreckLevel = f.lv >= 2 ? 2 : 1;
@@ -1797,7 +1804,6 @@ export class FieldView3D implements BattleView {
         if (rc[3] && st.s >= 0.45) {
           const mx = m ? m.x : e.x, mz = m ? m.z : e.y, my = m ? m.y : GUN_H;
           if (my < 2.6) fx.gunDust(mx + ca * 0.2, mz + sa * 0.2, ca, sa, st.s * (st.fam === 'mortar' || st.fam === 'firebomb' ? 0.6 : 1));
-          fx.trauma = Math.min(1, fx.trauma + 0.015 + 0.04 * st.s);
         }
         break;
       }
@@ -1864,7 +1870,7 @@ export class FieldView3D implements BattleView {
         if (!m && e.points.every((q) => this.offscreen(q.x, q.y, 3))) break;
         // heavy arcs (arc lance, storm tower / core) are thick and doubled; every arc lingers long enough to see
         const s = sty.s, heavy = (sty.def?.damage ?? 0) >= 100;
-        const w = 0.05 + s * 0.07 + (heavy ? 0.03 : 0), life = 0.24 + s * 0.12;
+        const w = 0.025 + s * 0.035 + (heavy ? 0.012 : 0), life = 0.24 + s * 0.12;
         let hPrev = GUN_H;
         for (let i = 1; i < e.points.length; i++) {
           const p0 = e.points[i - 1], p1 = e.points[i];

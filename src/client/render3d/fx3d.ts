@@ -61,13 +61,13 @@ export const RAMPS = {
   heat: [1.6, 0.42, 0.08, 0.9, 1.4, 0.32, 0.05, 0.7, 0.8, 0.12, 0.02, 0],
   sonic: [1.4, 1.5, 1.3, 0.55, 0.9, 1.0, 0.9, 0.3, 0.3, 0.35, 0.3, 0],
   /** damage wisps (thin, rising): coolant / hydraulic steam hissing out of a joint */
-  steam: [0.62, 0.63, 0.64, 0.16, 0.6, 0.61, 0.62, 0.12, 0.58, 0.59, 0.6, 0],
+  steam: [0.7, 0.71, 0.72, 0.45, 0.64, 0.65, 0.66, 0.3, 0.6, 0.61, 0.62, 0],
   /** oily engine smoke: brown-black, a little denser */
-  oilSmoke: [0.09, 0.08, 0.07, 0.3, 0.13, 0.12, 0.1, 0.24, 0.2, 0.19, 0.17, 0],
+  oilSmoke: [0.09, 0.08, 0.07, 0.5, 0.13, 0.12, 0.1, 0.38, 0.2, 0.19, 0.17, 0],
   /** thick black smoke of a critically damaged / burning hull */
-  blackSmoke: [0.05, 0.045, 0.04, 0.55, 0.08, 0.075, 0.07, 0.42, 0.15, 0.14, 0.13, 0],
+  blackSmoke: [0.05, 0.045, 0.04, 0.42, 0.08, 0.075, 0.07, 0.32, 0.15, 0.14, 0.13, 0],
   /** electrical smoke off high-tech hulls: blue-grey */
-  elecSmoke: [0.32, 0.38, 0.48, 0.2, 0.3, 0.34, 0.42, 0.15, 0.3, 0.32, 0.36, 0],
+  elecSmoke: [0.32, 0.38, 0.5, 0.4, 0.3, 0.34, 0.44, 0.3, 0.3, 0.32, 0.36, 0],
   /** hot shaped-charge jet: white core, blue-white edge */
   jet: [4.0, 3.6, 3.0, 1, 2.6, 1.6, 0.7, 0.8, 0.8, 0.3, 0.08, 0],
 } as const satisfies Record<string, Ramp>;
@@ -1632,8 +1632,8 @@ export class Fx3D {
     const pf = 1 + (Math.random() < 0.5 ? 1 : 0);
     const black = kind === 'black';
     const ramp = kind === 'steam' ? RAMPS.steam : kind === 'oil' ? RAMPS.oilSmoke : black ? RAMPS.blackSmoke : kind === 'elec' ? RAMPS.elecSmoke : this.dust;
-    const s0 = 0.04 + 0.07 * k, s1 = black ? 0.45 + 0.75 * k : 0.22 + 0.38 * k;
-    const life = kind === 'steam' ? R(0.5, 0.9) : R(1.1, 2.0) * (0.75 + 0.45 * k);
+    const s0 = 0.05 + 0.07 * k, s1 = black ? 0.34 + 0.55 * k : 0.28 + 0.5 * k;
+    const life = kind === 'steam' ? R(0.7, 1.2) : R(1.3, 2.2) * (0.75 + 0.45 * k);
     const up = kind === 'steam' ? R(1.0, 1.7) : black ? R(0.8, 1.4) : R(0.55, 1.0);
     this.alpha.emit(x, y, z, vx + R(-0.07, 0.07) + WIND_X * 0.7, up, vz + R(-0.07, 0.07) + WIND_Z * 0.7, life, s0, s1, R(-0.8, 0.8), 0.8, 0.12, pf, ramp);
     if (kind === 'elec' && Math.random() < 0.3) this.add.emit(x, y, z, R(-1.5, 1.5), R(0.5, 2.2), R(-1.5, 1.5), R(0.12, 0.25), 0.05, 0.015, 0, 1.5, -9, 3, RAMPS.emp, this.hdr);
@@ -1650,9 +1650,9 @@ export class Fx3D {
   smallFire(x: number, y: number, z: number, s: number): void {
     const pf = 1 + (Math.random() < 0.5 ? 1 : 0), h = this.hdr;
     const vy = R(0.9, 1.6);
-    this.fire.emit(x, y, z, R(-0.15, 0.15), vy, R(-0.15, 0.15), R(0.28, 0.45), s * R(0.8, 1.1), s * 0.25, R(-1, 1), 1.6, 1.2, pf, RAMPS.flame, h);
-    this.fire.emit(x, y + s * 0.4, z, R(-0.15, 0.15), vy * 1.4, R(-0.15, 0.15), R(0.18, 0.3), s * 0.5, s * 0.1, R(-1, 1), 1.6, 1.4, 3 - pf, RAMPS.flame, h);
-    if (Math.random() < 0.3) this.add.emit(x, y, z, 0, 0.6, 0, R(0.1, 0.2), s * 0.7, s * 0.2, 0, 1, 0, 0, RAMPS.flash, h * 0.55);
+    this.fire.emit(x, y, z, R(-0.15, 0.15), vy, R(-0.15, 0.15), R(0.35, 0.55), s * R(1.1, 1.4), s * 0.5, R(-1, 1), 1.6, 1.2, pf, RAMPS.flame, h);
+    this.fire.emit(x, y + s * 0.4, z, R(-0.15, 0.15), vy * 1.4, R(-0.15, 0.15), R(0.22, 0.36), s * 0.75, s * 0.2, R(-1, 1), 1.6, 1.4, 3 - pf, RAMPS.flame, h);
+    if (Math.random() < 0.5) this.add.emit(x, y + 0.05, z, 0, 0.5, 0, R(0.12, 0.22), s * 1.4, s * 0.5, 0, 1, 0, 0, RAMPS.fire, h * 0.6);
   }
 
   /** a burning aircraft falling: flames streaming off it and a black smoke trail; k 0..1 = how hard it burns */
@@ -1684,8 +1684,9 @@ export class Fx3D {
       return;
     }
     // flash: a hard star + a soft bloom
-    this.add.emit(x, y, z, 0, 0, 0, 0.07, (0.55 + 1.1 * w) * (kind === 'heat' ? 1.2 : 1), 0.25, 0, 0, 0, 4, kind === 'heat' ? RAMPS.jet : RAMPS.flash, h * kq);
-    this.add.emit(x, y, z, 0, 0, 0, 0.12, 0.6 + 1.3 * w, 0.3 + 0.6 * w, 0, 0, 0, 0, RAMPS.flash, h * kq * 0.8);
+    this.add.emit(x, y, z, 0, 0, 0, 0.1, (0.7 + 1.3 * w) * (kind === 'heat' ? 1.2 : 1), 0.3, 0, 0, 0, 4, kind === 'heat' ? RAMPS.jet : RAMPS.flash, h * kq);
+    this.add.emit(x, y, z, 0, 0, 0, 0.16, 0.9 + 1.8 * w, 0.4 + 0.8 * w, 0, 0, 0, 0, RAMPS.flash, h * kq * 0.8);
+    this.pools.add(x, z, 0.05, 0.6 + w, 1.4 + 2 * w, 0.2, 0.7 * h * kq, 0.4 * h * kq, 0.15 * h * kq);
     if (kind === 'heat') {
       // the jet: hot spall streaking on through and out of the far side, in a narrow cone
       const n = this.lodN(8 + Math.round(w * 12));
@@ -1700,8 +1701,8 @@ export class Fx3D {
       for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = R(3, 8) * (0.7 + w * 0.4); this.add.emit(x, y, z, Math.cos(a) * sp - nx * 1.5, R(1, 5), Math.sin(a) * sp - nz * 1.5, R(0.25, 0.5), 0.05 + w * 0.04, 0.02, 0, 1, -10, 3, RAMPS.spark, h); }
     }
     // fireball clinging to the plate (blown back off it a little), cooling to soot
-    const r = (kind === 'heat' ? 0.22 : 0.3) + (kind === 'heat' ? 0.3 : 0.5) * w;
-    const nf = this.lodN(2 + Math.round(w * 3));
+    const r = (kind === 'heat' ? 0.3 : 0.32) + (kind === 'heat' ? 0.42 : 0.55) * w;
+    const nf = this.lodN(3 + Math.round(w * 3));
     for (let i = 0; i < nf; i++) {
       const a = Math.random() * 6.283, sp = r * R(0.6, 1.6);
       this.fire.emit(x - nx * r * 0.3 + Math.cos(a) * r * 0.2, y + r * 0.15, z - nz * r * 0.3 + Math.sin(a) * r * 0.2, Math.cos(a) * sp - nx * r, R(0.4, 1.2) * (0.6 + r), Math.sin(a) * sp - nz * r,
@@ -1710,7 +1711,6 @@ export class Fx3D {
     const ns = this.lodN(1 + Math.round(w * 2));
     for (let i = 0; i < ns; i++) this.alpha.emit(x - nx * r * 0.4, y + r * 0.3, z - nz * r * 0.4, R(-0.25, 0.25) - nx * 0.4 + WIND_X, R(0.5, 1.0), R(-0.25, 0.25) - nz * 0.4 + WIND_Z, R(1.2, 2.2), r * 0.6, r * 2.4, R(-0.4, 0.4), 1.1, 0, 1 + (i & 1), RAMPS.blastSmoke);
     if (w > 0.7) this.rings.add(x, z, Math.max(0.06, y - 0.2), r * 0.4, r * 2.6, 0.22, 0.4 * h * kq, 0.36 * h * kq, 0.3 * h * kq);
-    this.trauma = Math.min(1, this.trauma + 0.01 + w * 0.05);
   }
 
   /** a heavy gun's muzzle blast slapping the ground under the barrel: a dust ring shoved out (mostly forward) and a
@@ -1932,7 +1932,7 @@ export class Fx3D {
           const main = j < 16 * 6 && j / 6 < clamp(Math.round(Math.hypot(f.bx - f.ax, f.by - f.ay, f.bz - f.az) / 0.45), 4, 16);
           const w = main ? f.w : f.w * 0.6;
           const k = a * this.hdr;
-          this.beams.seg(p[j], p[j + 1], p[j + 2], p[j + 3], p[j + 4], p[j + 5], w * 2.6, (0.45 + f.r * 1.4) * k, (0.45 + f.g * 1.4) * k, (0.45 + f.b * 1.4) * k, 0, 1.8);
+          this.beams.seg(p[j], p[j + 1], p[j + 2], p[j + 3], p[j + 4], p[j + 5], w * 2.6, (0.2 + f.r * 1.6) * k, (0.2 + f.g * 1.6) * k, (0.2 + f.b * 1.6) * k, 0, 1.4);
         }
       }
     }
