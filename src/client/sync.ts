@@ -31,6 +31,30 @@ function saveBase(b: Base): void {
   try { localStorage.setItem(KEY, JSON.stringify(b)); } catch { /* storage unavailable */ }
 }
 
+/** Designs the server keeps per garage (server/validate.ts MAX_GARAGE): it rejects a bigger upload as a whole. */
+export const MAX_SYNCED_DESIGNS = 200;
+
+/** Problems the player should hear about (the garage is over the server's cap, the server refused an upload). Being
+ *  offline is not one: local play just carries on and the next write retries. */
+let onProblem: ((msg: string | null) => void) | null = null;
+let lastProblem: string | null = null;
+export const setSyncProblemHandler = (fn: ((msg: string | null) => void) | null) => { onProblem = fn; };
+export const syncProblem = () => lastProblem;
+function problem(msg: string | null): void {
+  if (msg === lastProblem) return;
+  lastProblem = msg;
+  onProblem?.(msg);
+}
+
+/** What fits the server's cap: deck designs first, then the most recently edited (exported for tests). */
+export function uploadable(g: Garage): Garage {
+  if (g.designs.length <= MAX_SYNCED_DESIGNS) return g;
+  const inDeck = new Set(g.deck);
+  const order = [...g.designs].sort((a, b) => Number(inDeck.has(b.id)) - Number(inDeck.has(a.id)) || (b.editedAt ?? 0) - (a.editedAt ?? 0));
+  const keep = new Set(order.slice(0, MAX_SYNCED_DESIGNS).map((d) => d.id));
+  return { designs: g.designs.filter((d) => keep.has(d.id)), deck: g.deck.filter((id) => keep.has(id)) };
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null;
 let running: Promise<void> | null = null;
 let again = false;
@@ -73,6 +97,8 @@ export function mergeGarage(base: Garage | null, mine: Garage, srv: Garage): Gar
   return { designs: out, deck: (mineChanged && mineDeck.length) || !srvDeck.length ? mineDeck : srvDeck };
 }
 
+const overMsg = (n: number) => `Your account keeps at most ${MAX_SYNCED_DESIGNS} designs: ${n} design${n === 1 ? ' stays' : 's stay'} on this device only (delete some to sync them)`;
+
 async function syncOnce(): Promise<void> {
   const owner = (await ensureSession()).playerId;
   let srv: GarageData | null = await getGarage();
@@ -94,11 +120,19 @@ async function syncOnce(): Promise<void> {
       base = theirs;
       mine = merged;
     }
-    if (base && same(base, mine)) return; // nothing to push
-    if (!mine.designs.length) return; // nothing to store yet (collection.ts seeds the starters on first read)
-    const r = await putGarage(mine.designs, mine.deck, base?.rev ?? 0);
+    // over the server's cap: sync what fits (the rest stays on this device only) and say so
+    const send = uploadable(mine);
+    const over = mine.designs.length - send.designs.length;
+    if (base && same(base, send)) { problem(over ? overMsg(over) : null); return; } // nothing to push
+    if (!send.designs.length) return; // nothing to store yet (collection.ts seeds the starters on first read)
+    let r: Awaited<ReturnType<typeof putGarage>>;
+    try { r = await putGarage(send.designs, send.deck, base?.rev ?? 0); } catch (e) {
+      // refused (not offline / signed out): the garage would silently never sync again
+      if (e instanceof NetError && e.status >= 400 && e.status !== 401) problem(`Your designs are not syncing to your account: ${e.message}`);
+      throw e;
+    }
     // the base is what was SENT: writes made while the request was out still differ from it and get pushed next
-    if (r.ok) { saveBase({ owner, rev: r.rev, designs: mine.designs, deck: mine.deck }); return; }
+    if (r.ok) { saveBase({ owner, rev: r.rev, designs: send.designs, deck: send.deck }); problem(over ? overMsg(over) : null); return; }
     srv = r.conflict;
   }
 }
