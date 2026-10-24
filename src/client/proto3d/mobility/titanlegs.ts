@@ -2,14 +2,16 @@
 // thigh wrapped in layered armour with a hydraulic ram, a big knee drum under a pointed knee guard with a team glow
 // lamp, a shin greave that flares toward the ankle, twin calf rams, and a broad four-toed stomper with a heel claw.
 // Same 2-bone IK, gait clock and stride convention as mobility/legs.ts (planted feet do not skate). Registered after
-// legs.ts (chassis/index.ts import order), so this builder owns 'titanlegs'.
+// legs.ts (chassis/index.ts import order), so this builder owns 'titanlegs'. The Weaver Titan ('arachne') also walks
+// on titan-scale hard-surface spider legs from here (see the end of the file).
 
 import * as THREE from 'three';
 import { Bld, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
-import { registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
+import { mobilityBuilder, registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
-import { hsFoot, hsShin, hsThigh } from './legs.ts';
+import { armorPlate, cableBundle, frame, jointDrum, piston, rectP, trapP } from '../chassis/hs-kit.ts';
+import { hsFoot, hsShin, hsThigh, strideFor } from './legs.ts';
 
 /** titan stance: tall hips (big units stride over the field), thick legs */
 export function titanStance(s: StanceIn): Stance {
@@ -122,6 +124,99 @@ registerMobility('titanlegs', {
     // same half-stride rule as legs.ts strideFor (render3d odometer clock), capped by hip height
     const stride = Math.min(0.2 + 0.2 * c.S, st.hipY * 0.55);
     const legs = hips.map((h) => makeTitanLeg(c.root, c.kit, h, stride, st.hipY * 0.22));
+    return (t, mv) => { for (const l of legs) l(t, mv); };
+  },
+});
+
+// ---- titan spider legs (Weaver Titan 'arachne'): the generic many-legged LOD (mobility/legs.ts, lite spider) reads
+// as smooth tubes at titan scale, so the S5 arachne walks on hard-surface legs instead: a faceted dark spar
+// (hexagonal section) carrying a long armour blade on its top (two overlapping plates on a shadow gap), exposed joint
+// drums at hip and knee, a hydraulic ram under the femur and one at the knee, a cable bundle down the femur, and a
+// faceted tibia that tapers into a claw spike on a splayed hoof. Same IK, gait clock and stride as legs.ts (spider:
+// the knee bends up; planted feet do not skate). Every other spider hull keeps the legs.ts builder.
+const hexR = (z: number, wx: number, wy: number, oy = 0): V3[] => [
+  [0, -wy + oy, z], [wx, -wy * 0.45 + oy, z], [wx, wy * 0.45 + oy, z], [0, wy + oy, z], [-wx, wy * 0.45 + oy, z], [-wx, -wy * 0.45 + oy, z],
+];
+function spiderFemur(b: Bld, kit: Kit, l: number, t: number) {
+  jointDrum(b, kit, [0, 0, 0], t * 0.95, t * 1.7, 'x');
+  b.loft(kit.mech, [hexR(t * 0.3, t * 0.55, t * 0.62), hexR(l * 0.5, t * 0.5, t * 0.58), hexR(l * 0.94, t * 0.4, t * 0.46)]);
+  // armour blade on top: a thick tapered plate + a shorter second plate stepped back
+  const so = t * 0.12;
+  armorPlate(b, kit, kit.armor, frame([0, t * 0.5, l * 0.47], [0, 1, 0], [0, 0, 1]), trapP(l * 0.86, t * 1.0, t * 1.45, t * 0.18), t * 0.22, { standoff: so, taper: 0.7 });
+  armorPlate(b, kit, kit.armor2, frame([0, t * 0.5 + so + t * 0.24, l * 0.36], [0, 1, 0], [0, 0, 1]), trapP(l * 0.48, t * 0.6, t * 0.95, t * 0.12), t * 0.12, { standoff: t * 0.05 });
+  // cheek plates near the hip
+  for (const sx of [-1, 1]) armorPlate(b, kit, kit.shell, frame([sx * t * 0.55, 0, l * 0.22], [sx, 0, 0], [0, 0, 1]), rectP(l * 0.3, t * 0.75, t * 0.1), t * 0.08, { standoff: t * 0.05 });
+  // ram under the femur, cable bundle along the side
+  piston(b, kit, [0, -t * 0.75, l * 0.1], [0, -t * 0.55, l * 0.72], t * 0.17, 0.55, true);
+  cableBundle(b, kit, [t * 0.6, t * 0.1, l * 0.12], [t * 0.45, t * 0.05, l * 0.85], t * 0.06, [0, 1, 0], 2, 0.04);
+  jointDrum(b, kit, [0, 0, l], t * 0.72, t * 1.4, 'x');
+}
+function spiderTibia(b: Bld, kit: Kit, l: number, t: number) {
+  b.loft(kit.armor2, [hexR(0, t * 0.48, t * 0.55), hexR(l * 0.4, t * 0.44, t * 0.5), hexR(l * 0.82, t * 0.26, t * 0.3), hexR(l, t * 0.1, t * 0.12)]);
+  // outer blade fin on the bend side (the leg's top / outer face), two plates
+  armorPlate(b, kit, kit.armor, frame([0, t * 0.5, l * 0.3], [0, 1, 0], [0, 0, 1]), trapP(l * 0.5, t * 0.6, t * 1.05, t * 0.12), t * 0.18, { standoff: t * 0.08, taper: 0.7 });
+  armorPlate(b, kit, kit.shell, frame([0, t * 0.36, l * 0.62], [0, 1, 0.12], [0, 0, 1]), trapP(l * 0.22, t * 0.3, t * 0.55, t * 0.08), t * 0.1, { standoff: t * 0.05 });
+  // knee ram on the inner side, dark joint band above the claw
+  piston(b, kit, [0, -t * 0.62, -t * 0.2], [0, -t * 0.42, l * 0.42], t * 0.13, 0.55, true);
+  b.loft(kit.mech, [hexR(l * 0.78, t * 0.31, t * 0.36), hexR(l * 0.84, t * 0.3, t * 0.34)]);
+}
+function spiderHoof(b: Bld, kit: Kit, t: number) {
+  b.cyl(kit.rubber, t * 0.85, t * 0.75, t * 0.16, [0, 0, 0], 'y', 6);
+  b.lathe(kit.mech, [[0, 0], [t * 0.85, 0], [t * 0.7, t * 0.3], [t * 0.3, t * 0.55], [0, t * 0.55]], [0, t * 0.14, 0], 'y', 6);
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2 + 0.5;
+    b.g(new THREE.BoxGeometry(t * 0.85, t * 0.22, t * 0.3), kit.joint, new THREE.Matrix4().makeRotationY(-a).setPosition(Math.cos(a) * t * 0.8, t * 0.11, Math.sin(a) * t * 0.8));
+  }
+}
+function makeTitanSpiderLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number) {
+  const t = hip.t;
+  const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
+  const d0 = hipV.distanceTo(footV);
+  const l1 = d0 * 0.7, l2 = d0 * 0.84;
+  const bendV = new THREE.Vector3(0, 1, hip.side * 0.3);
+  const mk = (fn: (b: Bld) => void) => { const grp = new THREE.Group(); const b = new Bld(); fn(b); b.mount(grp); grp.matrixAutoUpdate = false; g.add(grp); return grp; };
+  const upper = mk((b) => spiderFemur(b, kit, l1, t));
+  const lower = mk((b) => spiderTibia(b, kit, l2, t * 0.95));
+  const footG = mk((b) => spiderHoof(b, kit, t * 0.85));
+  footG.matrixAutoUpdate = true;
+  const f = new THREE.Vector3(), k = new THREE.Vector3(), dir = new THREE.Vector3(), perp = new THREE.Vector3(), tmp = new THREE.Vector3(), xa = new THREE.Vector3(), ya = new THREE.Vector3();
+  const place = (a: THREE.Vector3, bb: THREE.Vector3, m: THREE.Object3D) => {
+    tmp.copy(bb).sub(a).normalize();
+    ya.copy(perp).addScaledVector(tmp, -perp.dot(tmp)).normalize();
+    xa.crossVectors(ya, tmp);
+    m.matrix.makeBasis(xa, ya, tmp).setPosition(a);
+    m.matrixWorldNeedsUpdate = true;
+  };
+  const step = (time: number, moving: number) => {
+    const ph = time * 3.2 + hip.phase;
+    f.copy(footV);
+    f.x += -Math.sin(ph) * stride * moving;
+    const up = Math.max(0, Math.cos(ph));
+    f.y += up * up * lift * moving;
+    dir.copy(f).sub(hipV);
+    const d = Math.min(dir.length(), (l1 + l2) * 0.999);
+    dir.normalize();
+    const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    perp.copy(bendV).addScaledVector(dir, -bendV.dot(dir)).normalize();
+    k.copy(hipV).addScaledVector(dir, a).addScaledVector(perp, h);
+    place(hipV, k, upper);
+    place(k, f, lower);
+    footG.position.copy(f); footG.updateMatrix();
+  };
+  step(0, 0);
+  return step;
+}
+// wrap the generic spider builder (registered by legs.ts, which chassis/index.ts imports before this file): the titan
+// arachne gets the hard-surface legs above, every other spider hull is delegated unchanged
+const baseSpider = mobilityBuilder('spider');
+registerMobility('spider', {
+  stance: (s) => baseSpider.stance(s),
+  build(c) {
+    if (!(c.S >= 5 && c.shape === 'arachne' && c.hips && c.hips.length)) return baseSpider.build(c);
+    const st = c.stance;
+    const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * 0.7);
+    const legs = c.hips.map((h) => makeTitanSpiderLeg(c.root, c.kit, h, stride, st.hipY * 0.32));
     return (t, mv) => { for (const l of legs) l(t, mv); };
   },
 });

@@ -2,11 +2,13 @@
 // on one wall of a planLoft (u = along the edge, v = up the slope, n = outward normal); plates, rivet rows, slits,
 // vents and ladders are placed in face coordinates so they sit flush on battered / overhanging walls. Everything goes
 // into the unit's Bld (merged per material, so detail costs triangles, not draw calls); tiny repeated parts (rivets,
-// rungs, brackets) use plain 12-triangle boxes.
+// rungs, brackets) use plain 12-triangle boxes. Plates and vents follow the hard-surface kit (hs-kit.ts: plate
+// thickness, shadow gaps, recessed grilles); titan-scale assemblies built from these live in hs-kit-titan.ts.
 
 import * as THREE from 'three';
 import { bevBox, type Bld, type MatLike, type P2, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
+import { armorPlate, recessPanel, rectP } from './hs-kit.ts';
 
 export interface Face {
   /** centre of the wall quad */
@@ -85,14 +87,14 @@ export function faceRivets(b: Bld, mat: MatLike, f: Face, du0: number, du1: numb
   }
 }
 
-/** layered armour plate: dark backing, raised plate, rivets along its top and bottom edges */
-export function armourPlate(b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number, d: number, t: number, mat: MatLike = kit.panel, rivets = true): void {
-  facePlate(b, kit.trim, f, du, dv, w * 1.04, d * 1.04, t * 0.5, 0, t * 0.15);
-  facePlate(b, mat, f, du, dv, w, d, t, t * 0.35, t * 0.35);
+/** layered armour plate (hard-surface: real thickness, standing proud on a dark inset backing so a shadow gap shows
+ *  under every edge; see hs-kit armorPlate); bolt heads along its top and bottom edges when `rivets` */
+export function armourPlate(b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number, d: number, t: number, mat: MatLike = kit.shell, rivets = false): void {
+  armorPlate(b, kit, mat, faceFrame(f, du, dv, 0), rectP(w, d, Math.min(w, d) * 0.08), t, { standoff: t * 0.45, gap: t * 1.1 });
   if (rivets) {
     const n = Math.max(2, Math.round(w / (t * 3.2)));
-    const r = t * 0.55;
-    for (const e of [-1, 1]) faceRivets(b, kit.metal, f, du - w * 0.42, du + w * 0.42, dv + e * d * 0.4, n, r, t * 1.3);
+    const r = t * 0.45;
+    for (const e of [-1, 1]) faceRivets(b, kit.joint, f, du - w * 0.4, du + w * 0.4, dv + e * d * 0.38, n, r, t * 1.45);
   }
 }
 
@@ -102,11 +104,9 @@ export function faceSlit(b: Bld, kit: Kit, f: Face, du: number, dv: number, w: n
   faceBox(b, mat, f, du, dv, w, d, d * 0.5, d * 0.6);
 }
 
-/** louvred vent on the face (slats across the slope) */
-export function faceVent(b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number, d: number, n = 4, mat: MatLike = kit.metal): void {
-  const t = Math.min(w, d) * 0.08;
-  faceBox(b, kit.trim, f, du, dv, w, d, t, 0);
-  for (let i = 0; i < n; i++) faceBox(b, mat, f, du, dv - d * 0.4 + (d * 0.8 * i) / Math.max(1, n - 1), w * 0.9, d / n * 0.45, t * 1.6, t * 0.5);
+/** louvred vent on the face: a recessed grille (raised frame round a dark floor, angled slats) */
+export function faceVent(b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number, d: number, n = 4, mat: MatLike = kit.joint): void {
+  recessPanel(b, kit, faceFrame(f, du, dv, 0), w, d, Math.min(w, d) * 0.12, { slats: n, slatMat: mat });
 }
 
 /** ladder on the face, from dv0 to dv1 */
