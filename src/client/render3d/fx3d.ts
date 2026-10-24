@@ -1923,7 +1923,7 @@ export class Fx3D {
         const t0 = f.grow && g >= 1 ? Math.max(0, 1 - f.life / (f.max - f.grow)) * 0.85 : 0;
         const ex = f.ax + (f.bx - f.ax) * g, ey = f.ay + (f.by - f.ay) * g, ez = f.az + (f.bz - f.az) * g;
         const sx = f.ax + (f.bx - f.ax) * t0, sy = f.ay + (f.by - f.ay) * t0, sz = f.az + (f.bz - f.az) * t0;
-        this.beams.seg(sx, sy, sz, ex, ey, ez, w * 2.4, (0.12 + f.r * 1.7) * k, (0.12 + f.g * 1.7) * k, (0.12 + f.b * 1.7) * k, f.grow ? 1 : 0, f.core ?? 1.8);
+        this.beams.seg(sx, sy, sz, ex, ey, ez, w * 2.4, (0.04 + f.r * 1.2) * k, (0.04 + f.g * 1.2) * k, (0.04 + f.b * 1.2) * k, f.grow ? 1 : 0, f.core ?? 1.8);
       } else {
         const roll = Math.floor((f.max - f.life) / 0.045);
         if (roll !== f.roll) { f.roll = roll; jag(f, mulberry(f.seed + roll * 7919), f.pts); }
