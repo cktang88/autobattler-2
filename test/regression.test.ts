@@ -258,12 +258,15 @@ test('server store migrates stale matches on load and persists the marker', () =
   try {
     const m = oldMatch(PRICE_RESCALE_AT - 1000, 5000);
     m.status = 'deploy';
+    const before = m.updatedAt;
     fs.writeFileSync(path.join(dir, 'matches.json'), JSON.stringify({ version: 1, matches: [{ match: m, owners: ['p0', 'p1'], private: false, code: null }] }));
     const s = new Store(dir, 1);
     const log = console.log; console.log = () => {};
     try { s.load(); } finally { console.log = log; }
     const r = s.matches.get('old')!;
     assert.deepEqual([r.match.players[0].supply, r.match.rules], [1000, RULES_VERSION]);
+    // clients still holding the pre-migration copy must see a change on their next ?since= poll
+    assert.ok(r.match.updatedAt > before, 'a migrated match keeps its old updatedAt');
     s.flush();
     const saved = JSON.parse(fs.readFileSync(path.join(dir, 'matches.json'), 'utf8'));
     assert.deepEqual([saved.matches[0].match.players[0].supply, saved.matches[0].match.rules], [1000, RULES_VERSION]);
