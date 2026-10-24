@@ -456,3 +456,16 @@ test('a jet on hold position circles over its post (it used to hang motionless i
   for (let t = 0; t < 2 * TICK_RATE; t++) d.step();
   assert.ok(Math.hypot(dj.x - x0, dj.y - y0) > 0.5 && dj.moving, 'a jet hung still in the air during its start delay');
 });
+
+test('a squad of long hulls holding formation keeps its deployed spacing in the fight, like round hulls', () => {
+  const needle = D('needle', 'mantis', 'legs', ['mg', 'mg']), wall = D('wall', 'bastion', 'anchor', ['plateH', 'plateH', 'repairM']);
+  assert.equal(computeStats(needle).squad, 4);
+  assert.notEqual(computeStats(needle).fw, computeStats(needle).fh);
+  const b = new Battle({ seed: 1, sides: [{ designs: [needle], units: [pl('needle', { y: 2, spacing: 2, hold: true })] }, { designs: [wall], units: [pl('wall', { y: 2 })] }] });
+  for (let t = 0; t < 30 * TICK_RATE && !b.done; t++) b.step();
+  const sq = b.units.filter((u) => u.side === 0 && u.alive);
+  let min = Infinity;
+  for (let i = 0; i < sq.length; i++) for (let j = i + 1; j < sq.length; j++) min = Math.min(min, Math.hypot(sq[i].x - sq[j].x, sq[i].y - sq[j].y));
+  // formation pitch 1 + 2 cells; separation keeps 95% of it (capped at 2.9) -- they used to close up to ~1 cell
+  assert.ok(sq.length === 4 && min > 2.5, `the holding squad closed up to ${min.toFixed(2)} cells`);
+});

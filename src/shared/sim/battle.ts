@@ -3010,13 +3010,18 @@ export class Battle {
             let rr = A.radius + B.radius;
             let d2 = dx * dx + dy * dy;
             if (A.elong || B.elong) {
-              // capsule vs capsule: separate along the closest points of the two core segments
-              const bb = A.bound + B.bound;
+              // capsule vs capsule: separate along the closest points of the two core segments; squadmates holding
+              // formation also keep the formation pitch between centres, like round hulls (long hulls used to close
+              // up to touching once in range, whatever spacing the block was deployed with)
+              const sp = A.hold && B.hold && A.block === B.block ? Math.min(2.9, A.sepMin) * 0.95 : 0;
+              const bb = Math.max(A.bound + B.bound, sp);
               if (d2 >= bb * bb) continue;
               const cd = this.capsuleSep(A, B, a, b);
-              if (cd.d >= A.capR + B.capR) continue;
-              rr = A.capR + B.capR;
-              dx = cd.nx * cd.d; dy = cd.ny * cd.d; d2 = cd.d * cd.d;
+              if (cd.d < A.capR + B.capR) {
+                rr = A.capR + B.capR;
+                dx = cd.nx * cd.d; dy = cd.ny * cd.d; d2 = cd.d * cd.d;
+              } else if (d2 < sp * sp) rr = sp; // apart along the centre line
+              else continue;
             } else {
               if (A.hold && B.hold && A.block === B.block) rr = Math.max(rr, Math.min(2.9, A.sepMin) * 0.95);
               else if (a.side === b.side) rr = Math.max(rr, MIN_SEP); // free-moving units still keep a little room
