@@ -248,7 +248,7 @@ export const SD_APPLY = /* glsl */ `
     // (darkening only, and gentle: big pale blotches across a hull read from the game camera as cloud shadows
     // lying on the unit)
     base *= 1.0 + min(sdMot, 0.0) * 0.22 * sdRowGrime * up.z * (0.4 + 0.6 * fine);
-    float low = 1.0 - smoothstep(0.05, 0.7, vWY);
+    float low = 1.0 - smoothstep(0.02, 0.22, vWY); // (thin band: low hulls must not be grimed all over)
     float topClean = mix(1.0, 0.3, smoothstep(0.5, 0.9, wn.y));
     float gr = clamp(grimeSrc * (0.6 + 0.6 * low) * topClean + sdGiant * 0.5 * smoothstep(-0.2, -0.7, wn.y), 0.0, 1.0) * sdGr;
     base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.65);

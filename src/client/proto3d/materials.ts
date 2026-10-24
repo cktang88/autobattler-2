@@ -293,9 +293,10 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         // bevel brightening on chamfers (normals between side and up): barely there, real plates have sharp edges
         float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
         base = mix(base, base * 1.04 + vec3(0.004), bev * rB.x);
-        // grounded: dust settles from the ground up (lower ~0.5 cells: tracks, feet, skirts, lower hull), a little
-        // ground-contact darkening right at the bottom; flying units sit above it and stay clean
-        float dustK = (1.0 - smoothstep(0.0, 0.55, vWY)) * rB.w;
+        // grounded: dust on the running gear right at the ground (wheels, track bottoms, feet), a little ground-contact
+        // darkening; a fixed band, so it must stay thin: a 0.5-cell band covered whole low hulls (wheeled / half-track
+        // scouts and raiders came out sand-washed head to toe while walkers above it stayed clean)
+        float dustK = (1.0 - smoothstep(0.0, 0.14, vWY)) * rB.w * 0.6;
         base *= mix(1.0, mix(0.8, 1.0, smoothstep(0.0, 0.18, vWY)), rB.w);
         base = mix(base, vec3(0.43, 0.37, 0.28) * (0.75 + 0.5 * dot(base, vec3(0.33))), dustK * (0.28 + 0.2 * smoothstep(0.3, -0.3, wn.y)));
         // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
