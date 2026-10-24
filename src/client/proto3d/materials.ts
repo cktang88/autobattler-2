@@ -369,7 +369,7 @@ export const PAINT_PLAN = {
 /** team paint: [armor, armor2, shell, canvas]; matches render/palette.ts TEAM_PAL body / dark */
 export const TEAM_PAINT: [string, string, string, string][] = [
   ['#34486f', '#253352', '#62686e', '#4a5258'],
-  ['#6c3227', '#4b221a', '#6b645d', '#5c5248'],
+  ['#7d3324', '#56231a', '#6b645d', '#5c5248'],
 ];
 const kits: (Kit | null)[] = [null, null];
 

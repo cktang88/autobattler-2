@@ -41,7 +41,7 @@ export interface TeamPal {
 // full chroma, and the far-zoom marker adds a shape cue (circle vs diamond).
 export const TEAM_PAL: [TeamPal, TeamPal] = [
   { body: '#34486f', light: '#506690', dark: '#253352', deep: '#141c2e', accent: '#3d9bff', mark: '#2f6ae0', glow: '#8cf4ff', glowRgb: '140,244,255', bar: '#4fe3d0', rim: '#46dcff', camo: '#344670' },
-  { body: '#6c3227', light: '#8f4c3c', dark: '#4b221a', deep: '#28120e', accent: '#ff4a26', mark: '#d8402a', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#662c22' },
+  { body: '#7d3324', light: '#a04c3a', dark: '#56231a', deep: '#2c120d', accent: '#ff4a26', mark: '#d8402a', glow: '#ffa266', glowRgb: '255,162,102', bar: '#ff5a3a', rim: '#ff4a22', camo: '#662c22' },
 ];
 
 /** Shared hardware materials: gunmetal running gear, rubber, bare steel, hazard paint, glass, soot and dust. */

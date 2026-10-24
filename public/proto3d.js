@@ -34971,7 +34971,7 @@ function mountOffsets(d) {
 // src/client/render/palette.ts
 var TEAM_PAL = [
   { body: "#34486f", light: "#506690", dark: "#253352", deep: "#141c2e", accent: "#3d9bff", mark: "#2f6ae0", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#344670" },
-  { body: "#6c3227", light: "#8f4c3c", dark: "#4b221a", deep: "#28120e", accent: "#ff4a26", mark: "#d8402a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#662c22" }
+  { body: "#7d3324", light: "#a04c3a", dark: "#56231a", deep: "#2c120d", accent: "#ff4a26", mark: "#d8402a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#662c22" }
 ];
 var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
 
@@ -35670,7 +35670,7 @@ var PAINT_PLAN = {
 };
 var TEAM_PAINT = [
   ["#34486f", "#253352", "#62686e", "#4a5258"],
-  ["#6c3227", "#4b221a", "#6b645d", "#5c5248"]
+  ["#7d3324", "#56231a", "#6b645d", "#5c5248"]
 ];
 var kits = [null, null];
 function makeKit(team) {
