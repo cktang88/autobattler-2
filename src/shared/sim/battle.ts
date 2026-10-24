@@ -128,6 +128,8 @@ const ESCORT_THREAT = 12; // cells: threats this close to the escorted unit are 
  *  of guns that reach 20+ m is what made brawlers useless) */
 export const MELEE_SPRINT = 1.35;
 const CHARGE_GUN_FRAC = 0.4; // guns on a charge keep closing until within this fraction of their range
+/** ticks between bomb releases of one aircraft: its bays drop a stick, one bomb after another, not all at once */
+const BOMB_STAGGER = Math.round(0.22 * TICK_RATE);
 const HOLD_BREAK_IDLE = 3 * TICK_RATE; // ticks a holdPos unit sits with no target in reach before chasing whoever is hitting it
 const HOLD_BREAK_HIT = 12 * TICK_RATE; // ...if it was hit this recently (long enough to span a slow gun's reload)
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
@@ -363,6 +365,8 @@ interface Internal {
   flankDone: boolean;
   /** ticks since any of this unit's weapons last held a target (hold position breaks if shot at while idle) */
   idleT: number;
+  /** bomb bays: tick before which no bay may release (a stick of bombs walks along the run, one after another) */
+  bombGate: number;
   /** armour currently stripped by shredding hits (entropy ray), and s until it starts growing back */
   shred: number;
   shredT: number;
@@ -785,7 +789,7 @@ export class Battle {
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
-      idleT: 0, shred: 0, shredT: 0, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
+      idleT: 0, bombGate: 0, shred: 0, shredT: 0, escortBlock: -1, escUnit: -1, escThreat: -1, isSupport, airRole: airRole(design), valueVal: stats.unitCost * lm, swarmKey: stats.size * 1e5 + stats.unitCost,
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
@@ -1450,6 +1454,12 @@ export class Battle {
         w.burstTimer -= DT * (1 - u.slow) * (I.fireRate + I.rateAura);
         // follow-up rounds wait for the barrel too (a target that moves out of the arc pauses the burst)
         if (w.burstTimer <= 0 && (!t || onTarget)) {
+          // bombs: the rest of the load also respects the stick spacing and the overkill tally (hold it while the
+          // bombs already falling will finish this target; the run carries the plane onto the next one)
+          if (w.bomb && this.tick < I.bombGate) continue;
+          // the bombs already falling will finish this one: put the rest of the stick on another target along the run
+          if (w.bomb && t && this.doomed(t.id) && this.bombRetarget(I, w, m, t)) continue;
+          if (w.bomb) I.bombGate = this.tick + BOMB_STAGGER;
           w.burstLeft--;
           w.burstTimer = BURST_GAP;
           if (t) { w.aimX = ax; w.aimY = ay; }
@@ -1470,16 +1480,20 @@ export class Battle {
         }
         continue;
       }
-      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && onTarget && I.leapT < 0) {
+      if (t && m.cooldown <= 1e-9 && u.disarm <= 0 && onTarget && I.leapT < 0 && !(w.bomb && this.tick < I.bombGate)) {
         // overkill: rounds already in flight are expected to finish this target -- switch to another one, or hold
         // the shot until they land (the target dies, or survives and incoming drops so we fire after all)
-        if (this.doomed(t.id) && this.tick >= w.okHold) {
+        // bombs: a doomed target hands the stick to another one along the run; with none, drop anyway (the blast
+        // still catches what's around it, and bays held back would keep a bomber circling under the guns)
+        if (w.bomb && this.doomed(t.id) && this.bombRetarget(I, w, m, t)) continue;
+        if (!w.bomb && this.doomed(t.id) && this.tick >= w.okHold) {
           w.okHold = this.tick + Math.round(OVERKILL_RECHECK * TICK_RATE);
           const c = this.pickTarget(I, w, 1);
           if (c !== m.target) { m.target = c; w.retarget = RETARGET_EVERY; }
           continue;
         }
-        if (this.doomed(t.id)) continue;
+        if (!w.bomb && this.doomed(t.id)) continue;
+        if (w.bomb) I.bombGate = this.tick + BOMB_STAGGER;
         w.aimX = ax; w.aimY = ay;
         m.cooldown = Math.max(m.cooldown, -DT) + (w.def.cooldown ?? 1); // carry sub-tick remainder
         if (m.ammo !== undefined) {
@@ -1550,6 +1564,16 @@ export class Battle {
     this.curSrc = this.dmgSrc = I.u.id;
     this.fireImpl(I, mi, w, t, ax, ay, salvoK, salvoN);
     this.curSrc = this.dmgSrc = -1;
+  }
+
+  /** A bomb bay laid on a doomed target: switch it to another target it can take on this run (true), or keep it
+   *  (false: nothing else around, so the bomb goes on the doomed one anyway). */
+  private bombRetarget(I: Internal, w: Wpn, m: MountState, t: SimUnit): boolean {
+    const c = this.pickTarget(I, w, 1);
+    if (c < 0 || c === t.id) return false;
+    m.target = c;
+    w.retarget = RETARGET_EVERY;
+    return true;
   }
 
   /** Damage one round is expected to deal to `t` after armour (shields count as hp, see doomed). */

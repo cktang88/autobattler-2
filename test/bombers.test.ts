@@ -180,3 +180,25 @@ test('two giant bombers never fly stacked on top of each other', () => {
   }
   assert.ok(minD > 2.5, `two giant bombers got ${minD.toFixed(2)} cells apart`);
 });
+
+test('bomb bays drop a stick, one after another, and stop when the bombs already falling will finish the target', () => {
+  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']);
+  const lone = D('lone', 'warden', 'treads', ['autocannon', null]);
+  const designs = [strato, lone];
+  const b = new Battle({ seed: 2, sides: [
+    { designs, units: [{ uid: 1, designId: 'strato', x: 40, y: 4, level: 1, round: 1 }] },
+    { designs, units: [{ uid: 1, designId: 'lone', x: 40, y: 2, level: 1, round: 1, stance: 'holdPos' as const }] },
+  ] });
+  const target = b.units.find((u) => u.side === 1)!;
+  const ticks: number[] = [];
+  while (!b.done && target.alive && b.tick < 20 * 60) {
+    b.step();
+    for (const e of b.events) if (e.t === 'fire' && e.unit === 0 && e.moduleId === 'bombs') ticks.push(b.tick);
+  }
+  assert.ok(!target.alive, 'the target died');
+  // no two bombs leave on the same tick: a stick, not a dump
+  assert.equal(new Set(ticks).size, ticks.length, `release ticks ${ticks}`);
+  // a 620-hp tank needs ~3 iron bombs (260 each, minus armour); the full 6-bomb load would be overkill
+  const need = Math.ceil(target.maxHp / 200) + 1;
+  assert.ok(ticks.length <= need, `dropped ${ticks.length} bombs on a target that needed ~${need - 1}`);
+});
