@@ -1246,9 +1246,10 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   // ---------- field input ----------
   const local = (e: PointerEvent) => {
     const r = canvas.getBoundingClientRect();
-    // lift the ghost above a finger so it stays visible
-    const lift = e.pointerType === 'touch' ? 44 : 0;
-    return { px: e.clientX - r.left, py: e.clientY - r.top - lift, rawY: e.clientY - r.top };
+    // the ghost goes exactly where the finger / pointer is (an offset above the finger, to keep the ghost visible,
+    // made touch placement land somewhere other than where you tapped)
+    const y = e.clientY - r.top;
+    return { px: e.clientX - r.left, py: y, rawY: y };
   };
 
   function unitAt(px: number, py: number): Sel {
