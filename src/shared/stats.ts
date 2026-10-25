@@ -177,6 +177,12 @@ export const SIZE_K: number[] = [0.97, 1.04, 0.92, 1.13, 1.35];
 // toward the starter field (balance.ts army 6 starter: rms 20.9 pts vs 21.3 before; wheels kept low enough that the
 // Buzzsaw stays a 16-squad); air drives unchanged.
 export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.25, hover: 0.93, jet: 0.7, jumpjets: 0.96, legs: 1.0, megatracks: 1.14, rotor: 1.18, spider: 0.97, titanlegs: 0.92, treads: 1.12, wheels: 0.94 };
+/** Extra air-drive price factor on small airframes, by chassis size 1 / 2 (x MOBILITY_CAL): light rotor drones and
+ *  gunships, light jets. They pick their fights, dodge, and only anti-air answers them, which the per-drive factor
+ *  (fitted on all airframes) under-rates on the small, cheap ones. Fitted with balance.ts army on drone / gunship
+ *  rotor designs and interceptor / delta-wing / strike-jet designs (supplies 1000 / 1200 / 1400, 4 seeds): gunships
+ *  ~85% -> ~65%, drones ~70% -> ~55%, light jets ~75% -> ~65%; laser-armed flyers still ~80-90%. */
+export const SMALL_AIR_CAL: Record<string, number[]> = { rotor: [1.1, 1.3], jet: [1, 1.1] };
 /** Share of the speed term (mobilityF) lost per unit of reverse penalty (reverse 0.5 -> speed worth 0.5 x REVERSE_W less) */
 const REVERSE_W = 0.3;
 /** mobilityF bonus of an omnidirectional ('omni') walker */
@@ -733,7 +739,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   // speed is worth a little on top (strafing / kiting without turning)
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed * (1 - REVERSE_W * (1 - reverse)) + (traits.includes('leap') ? 0.05 : 0) + (traits.includes('omni') ? OMNI_F : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1);
+  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1) * (SMALL_AIR_CAL[d.mobility]?.[size - 1] ?? 1);
   const rawBase = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
   // team value (see TEAM_FIT): features from the analytic numbers, then the monotone floor over every sub-design
   const u0 = rawBase / PRICE_DIV;

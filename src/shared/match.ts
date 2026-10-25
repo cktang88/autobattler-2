@@ -13,7 +13,7 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { ARMOR_PRICE, GIANT_JET_CAL, SIZE_K, analyticStats, clearPriceCache, computeStats, dropExtraWeapons, replaceRetiredModules, levelMult, MAX_LEVEL, MOBILITY_CAL, MODULE_CAL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
+import { ARMOR_PRICE, GIANT_JET_CAL, SIZE_K, SMALL_AIR_CAL, analyticStats, clearPriceCache, computeStats, dropExtraWeapons, replaceRetiredModules, levelMult, MAX_LEVEL, MOBILITY_CAL, MODULE_CAL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
 import type { BlockShape } from './grid.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadLayout } from './grid.ts';
 import { mixSeed } from './rng.ts';
@@ -331,6 +331,8 @@ const RULES6_CAL: Record<string, number> = {
 const RULES6_SIZEK = [0.85, 1.11, 1.19, 1.37, 1.34];
 /** the giant / titan jet price factors (stats.ts GIANT_JET_CAL) before rules 7 */
 const RULES6_GIANT_JET: Record<number, number> = { 4: 1.05, 5: 1.17 };
+/** the small-airframe drive factors (stats.ts SMALL_AIR_CAL) before rules 7: none */
+const RULES6_SMALL_AIR: Record<string, number[]> = { rotor: [1, 1], jet: [1, 1] };
 // WEAPONS_TABLE_END
 
 /** Rules 7 added the weapon cap (parts.ts weaponCap): deck designs over it drop their weakest extra weapons
@@ -346,7 +348,7 @@ export function capDeckWeapons(p: PlayerState): Set<string> {
  *  with it their squad, moved. Returns the ids of the deck designs whose squad differs from their rules-6 one (their
  *  blocks get re-checked by relegalizeBoard); every other block keeps its exact shape and place. (The price model's
  *  new flight-time / falloff / traverse terms are not replayed: they move prices by a few percent at most; the convex
- *  armour term, SIZE_K and GIANT_JET_CAL are.) */
+ *  armour term, SIZE_K, GIANT_JET_CAL and SMALL_AIR_CAL are.) */
 export function weaponsReshaped(p: PlayerState): Set<string> {
   const out = new Set<string>();
   // (every deck design: the size-class factors and the convex armour term reach designs without a changed part)
@@ -357,7 +359,7 @@ export function weaponsReshaped(p: PlayerState): Set<string> {
   const saved: [Record<string, unknown>, Record<string, unknown>][] = [];
   const savedCal: Record<string, number | undefined> = {};
   const savedSize: number[] = [];
-  let savedArmorK: number | undefined, savedJet: Record<number, number> | undefined;
+  let savedArmorK: number | undefined, savedJet: Record<number, number> | undefined, savedAir: Record<string, number[]> | undefined;
   try {
     for (const [id, old] of Object.entries(RULES6_WEAPONS)) {
       const m = MODULE_BY_ID.get(id) as unknown as Record<string, unknown> | undefined;
@@ -373,6 +375,8 @@ export function weaponsReshaped(p: PlayerState): Set<string> {
     ARMOR_PRICE.k = 0; // rules 6 had no convex armour term
     savedJet = { ...GIANT_JET_CAL };
     Object.assign(GIANT_JET_CAL, RULES6_GIANT_JET);
+    savedAir = { ...SMALL_AIR_CAL };
+    Object.assign(SMALL_AIR_CAL, RULES6_SMALL_AIR);
     clearPriceCache();
     for (const d of touched) {
       try { const was = analyticStats(d).squad, n = now.get(d.id); if (n && was !== n) out.add(d.id); } catch { /* unpriceable */ }
@@ -383,6 +387,7 @@ export function weaponsReshaped(p: PlayerState): Set<string> {
     if (savedSize.length) SIZE_K.splice(0, savedSize.length, ...savedSize);
     if (savedArmorK !== undefined) ARMOR_PRICE.k = savedArmorK;
     if (savedJet) Object.assign(GIANT_JET_CAL, savedJet);
+    if (savedAir) Object.assign(SMALL_AIR_CAL, savedAir);
     clearPriceCache();
   }
   return out;
