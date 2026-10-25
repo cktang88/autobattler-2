@@ -166,7 +166,9 @@ const FROZEN: Record<string, number> | null = process.env.BAL_FROZEN ? JSON.pars
 const mixCost = (d: Design) => FROZEN?.[d.id] ?? rawCost(d);
 function mixSpecs(S: number, k: number): { specs: Spec[]; spend: number } {
   const n = new Map<Design, number>();
-  let left = S, spend = 0, i = (k * 5) % MIX_POOL.length, misses = 0;
+  // (start stride 7: coprime with the ~20-design pool, so every mix index starts somewhere new; a stride of 5 gave
+  // only 4 distinct mixes and pinned many designs at exactly 25 / 50 / 75%)
+  let left = S, spend = 0, i = (k * 7) % MIX_POOL.length, misses = 0;
   // every smart army brings chaff clear (riot: blast, flame, pellets, chain, hoses): ~20% of the budget first, so the
   // enemy's chaff screen isn't unrealistically strong (BAL_DEPLOY=naive keeps the old pure round-robin)
   if (DEPLOY === 'smart' && RIOT_POOL.length) {

@@ -183,6 +183,12 @@ export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.
  *  rotor designs and interceptor / delta-wing / strike-jet designs (supplies 1000 / 1200 / 1400, 4 seeds): gunships
  *  ~85% -> ~65%, drones ~70% -> ~55%, light jets ~75% -> ~65%; laser-armed flyers still ~80-90%. */
 export const SMALL_AIR_CAL: Record<string, number[]> = { rotor: [1.1, 1.3], jet: [1, 1.1] };
+/** Hover brawlers: a hovering drive is fast, floats over burning ground and can't be crushed, which is worth far more
+ *  to a hull that must close to knife range (melee, flamers, shotguns: reach <= HOVER_BRAWL.reach cells) than to a
+ *  gun platform. Price factor 1 + k x (offense share of such weapons) on hover designs. Fitted with balance.ts army:
+ *  mantis / scout hover saw, prod and flamer designs won ~80-85% (ranged hover designs ~30-50%); k = 0.45 brings the
+ *  hover Gnasher to ~50%. */
+export const HOVER_BRAWL = { k: 0.45, reach: 5 };
 /** Share of the speed term (mobilityF) lost per unit of reverse penalty (reverse 0.5 -> speed worth 0.5 x REVERSE_W less) */
 const REVERSE_W = 0.3;
 /** mobilityF bonus of an omnidirectional ('omni') walker */
@@ -346,12 +352,12 @@ export const MODULE_CAL: Record<string, number> = {
   //      fights, the Longarm ~65%; 2.4 is the most that keeps the Tankbuster a 2-squad). A cannon on a thick hull
   //      still wins ~70-80% at any cannon price tried (up to 6: dearer cannons also thin the cannons out of the
   //      opposing field), so the Ironclad keeps its autocannons.
-  //   4. cannon75 2.951 -> 5.5 (balance.ts, frozen mix: a 75 mm on a warden or bastion won 75-85%; at 5.5 the Aegis
-  //      Wall sits near 45%).
+  //   4. cannon75 2.951 -> 6.5 (balance.ts, frozen mix: a 75 mm on a warden or bastion won 75-85%; at 6.5 the Aegis
+  //      Wall sits near 50%).
   leech: 2.905, prism: 3.272, voidlance: 3.725, entropy: 2.41,
   aamissile: 1.086, ac20: 2.067, ac40: 5.353, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 8.757,
   autocannon: 4.001, autoloader: 2.89, avenger: 1.216, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
-  cannon: 2.4, cannon75: 5.5, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
+  cannon: 2.4, cannon75: 6.5, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
   dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.7, gauss: 11.118,
   gravity: 6.197, grinder: 0.398, guidedrocket: 7.551, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
   heavyflak: 1.094, hmg: 3.498, howitzer: 2.271, incendiary: 0.843, inferno: 0.609, jammer: 0.25, laser: 6.042,
@@ -668,7 +674,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   // bomb bays rearm only over the own lines: a jet is back for its next run in seconds, a hovering bomber (rotor / grav
   // lift) crawls home and back between loads, so its bays drop far fewer bombs per fight (HOVER_BOMB_K)
   const bombK = flying && !jet ? HOVER_BOMB_K : 1;
-  let splashW = 0, airW = 0, airOnlyW = 0, meleeW = 0, apW = 0; // offense-weighted weapon traits (team-value features)
+  let splashW = 0, airW = 0, airOnlyW = 0, meleeW = 0, apW = 0, shortW = 0; // offense-weighted weapon traits (team-value features)
   for (const mod of mods) {
     const wv = weaponValue(tunedWeapon(mod, tune), rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
     offense += wv;
@@ -678,6 +684,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     if (mod.targetsAir && !mod.targetsGround) airOnlyW += wv;
     apW += wv * (mod.ap ?? 0);
     if (mod.projectile === 'melee') meleeW += wv;
+    if ((mod.range ?? 0) <= HOVER_BRAWL.reach) shortW += wv;
   }
   const weaponW = Math.max(1e-9, offense);
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
@@ -741,7 +748,8 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   // speed is worth a little on top (strafing / kiting without turning)
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed * (1 - REVERSE_W * (1 - reverse)) + (traits.includes('leap') ? 0.05 : 0) + (traits.includes('omni') ? OMNI_F : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
-  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1) * (SMALL_AIR_CAL[d.mobility]?.[size - 1] ?? 1);
+  const brawlK = traits.includes('hover') ? 1 + HOVER_BRAWL.k * (shortW / weaponW) : 1;
+  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1) * (SMALL_AIR_CAL[d.mobility]?.[size - 1] ?? 1) * brawlK;
   const rawBase = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
   // team value (see TEAM_FIT): features from the analytic numbers, then the monotone floor over every sub-design
   const u0 = rawBase / PRICE_DIV;

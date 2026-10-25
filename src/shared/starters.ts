@@ -18,12 +18,12 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-skyguard', name: 'Skyguard', chassis: 'warden', mobility: 'halftrack', mounts: ['ac40', 'ac20'] },
   // ---- artillery ----
   { id: 'starter-thunderhead', name: 'Thunderhead', chassis: 'longarm', mobility: 'spider', mounts: ['howitzer'] },
-  { id: 'starter-firestorm', name: 'Firestorm', chassis: 'striker', mobility: 'spider', mounts: ['mortar', 'mortar', 'targeting'] },
+  { id: 'starter-firestorm', name: 'Firestorm', chassis: 'striker', mobility: 'spider', mounts: ['mortar', 'mortar', null] },
   // ---- flyers ----
   { id: 'starter-hornet', name: 'Hornet', chassis: 'drone', mobility: 'rotor', mounts: ['twinmg'] },
   { id: 'starter-strafer', name: 'Strafer', chassis: 'strikejet', mobility: 'jet', mounts: ['rockets', 'guidedrocket', 'targeting'] },
   // ---- support ----
-  { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['hmg', 'repair'] },
+  { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['autocannon', 'repair'] },
   // ---- brawler ----
   { id: 'starter-stormcaller', name: 'Voltrider', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'targeting'] },
   // ---- size-3 heavies ----
@@ -31,8 +31,8 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-ironclad', name: 'Ironclad', chassis: 'bastion', mobility: 'treads', mounts: ['autocannon', 'plateM', 'autocannon'] },
   // ---- emplacement ----
   { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'spider', mounts: ['guidedrocket', 'hmg'] },
-  // ---- melee: legged brawler pack that wades into the line ----
-  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'legs', mounts: ['buzzsaw', 'buzzsaw'] },
+  // ---- melee: fast hover brawler that dives into the line ----
+  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'hover', mounts: ['buzzsaw', 'shockprod'] },
   // ---- stealth: cloaked sniper platform ----
   { id: 'starter-shade', name: 'Shade', chassis: 'striker', mobility: 'halftrack', mounts: ['lightrail', 'stealth', 'sniper'] },
   // ---- shield wall: barrier-heavy anchor of the line ----
