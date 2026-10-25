@@ -199,9 +199,11 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.cluster) t.push(`cluster ×${mod.cluster.count}`);
   if (mod.proximity) t.push('proximity fuse');
   if (mod.dodge) t.push(`dodge ≤${Math.round(mod.dodge * 100)}%`);
+  if (mod.dodgeBullets) t.push(`bullets ×${mod.dodgeBullets}`);
   if (mod.deflect) t.push(`deflect ${mod.deflect}/hit`);
   if (mod.pack) t.push(`+${Math.round(mod.pack.per * 100)}%/ally (≤${Math.round(mod.pack.cap * 100)}%)`);
   if (mod.deathBlast?.stun) t.push('EMP on death');
+  if (mod.deathBlast?.slow) t.push('slows on death');
   if ((mod.splashEdge ?? 0) >= 0.5) t.push('flat blast');
   if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
   if (mod.rangeBonus) t.push(`+${Math.round(mod.rangeBonus * 100)}% unit range`);
@@ -552,7 +554,7 @@ export function moduleRules(mod: ModuleDef): string[] {
     if (mod.fireRateBonus) r.push(`All weapons fire ${Math.round(mod.fireRateBonus * 100)}% faster.`);
     if (mod.rangeBonus || mod.spreadMult || mod.speedBonus || mod.fireRateBonus || mod.reloadBonus || mod.energyResist || mod.regen)
       r.push(`Stacks with diminishing returns: a 2nd copy adds ${Math.round(stackWeight(1) * 100)}% of its bonus, a 3rd ${Math.round(stackWeight(2) * 100)}%${mod.energyResist ? ` (energy resistance tops out at ${Math.round(MAX_ENERGY_RESIST * 100)}%)` : mod.reloadBonus ? ' (reload time never drops below 20%)' : ''}.`);
-    if (mod.deathBlast) r.push(`When destroyed, explodes for ${mod.deathBlast.damage} damage up to ${m(mod.deathBlast.radius)} beyond its hull.`);
+    if (mod.deathBlast) r.push(`When destroyed, explodes for ${mod.deathBlast.damage} damage up to ${m(mod.deathBlast.radius)} beyond its hull${mod.deathBlast.stun ? ', stunning what it hits' : mod.deathBlast.slow ? ', slowing what it hits' : ''}.`);
     if (mod.armor) r.push(`+${mod.armor} armour: every hit that reaches the hull loses that much damage. Half-penetration weapons ignore half of it, full-penetration weapons all of it; shields are hit before armour.`);
     if (mod.hp) r.push(`+${mod.hp} hull HP.`);
   }

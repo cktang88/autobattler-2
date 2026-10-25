@@ -725,10 +725,11 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     if (mod.cloakDamage) offense *= 1 - 0.5 * mod.cloakDamage;
     if (mod.overheat) ehpMult *= Math.max(0.5, 1 - mod.overheat * 15);
     // small-hull utilities: their value tracks what makes them good (light fast hulls, numbers, small hits)
-    if (mod.dodge) ehpMult *= 1 + dodgeChance(mod.dodge, size, speed) * 0.7 * u;
+    if (mod.dodge) ehpMult *= 1 + dodgeChance(mod.dodge, size, speed) * (0.7 + 0.4 * (mod.dodgeBullets ?? 0)) * u; // bullets: ~40% of the hits a light hull takes
     if (mod.deflect) ehpMult *= 1 + mod.deflect * 0.03 * u; // most of the hits a unit takes are small ones
     if (mod.pack) offense *= 1 + Math.min(mod.pack.cap, mod.pack.per * (size === 1 ? 4 : size === 2 ? 1.5 : 0.5)) * 0.6 * u; // same-design neighbours: light squads run in packs
     if (mod.deathBlast?.stun) offense += mod.deathBlast.stun * 25 * u;
+    if (mod.deathBlast?.slow) offense += mod.deathBlast.slow * 15 * u;
     // pure tuning (range, damage, hull...) is priced through the tuned stats above; its MODULE_CAL is a lever on top
     if (mod.tune && !mod.berserk && !mod.paint) offense *= 1 + (u - 1) * 0.3;
   }

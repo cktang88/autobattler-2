@@ -27,6 +27,8 @@ if (process.env.BAL_CAL) Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CA
 if (process.env.BAL_MOBCAL) Object.assign(MOBILITY_CAL, JSON.parse(process.env.BAL_MOBCAL));
 // BAL_CHASSIS = {chassisId: {hp, cost, armor, weight, agility}}: trial hull numbers (fit_cal.py fits hp/cost; copy into parts.ts)
 if (process.env.BAL_CHASSIS) for (const [id, patch] of Object.entries(JSON.parse(process.env.BAL_CHASSIS) as Record<string, Record<string, number>>)) { const c = CHASSIS_BY_ID.get(id); if (c) Object.assign(c, patch); }
+// BAL_PARTS = {moduleId: {field: value}}: trial module numbers (e.g. '{"scrapmine":{"deathBlast":{"damage":150,"radius":2}}}')
+if (process.env.BAL_PARTS) for (const [id, patch] of Object.entries(JSON.parse(process.env.BAL_PARTS) as Record<string, object>)) { const m = MODULES.find((x) => x.id === id); if (m) Object.assign(m, patch); }
 if (process.env.BAL_APK) AP_VALUE.k = Number(process.env.BAL_APK);
 // QM_SET='{"ARMOR_PRICE":{"k":4},"SIZE_K":[..]}': patch any mutable stats.ts export (objects merged, arrays replaced)
 if (process.env.QM_SET) for (const [k, v] of Object.entries(JSON.parse(process.env.QM_SET) as Record<string, unknown>)) {

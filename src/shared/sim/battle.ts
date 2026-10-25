@@ -388,11 +388,15 @@ interface Internal {
   // ---- small-hull utilities ----
   /** chance to dodge a shell / rocket / orb on contact (evasion thrusters; stats.ts dodgeChance) */
   dodge: number;
+  /** chance to dodge a bullet on contact (dodge x the module's dodgeBullets share) */
+  dodgeB: number;
   /** flat damage every hull hit loses first (deflector) */
   deflect: number;
   packPer: number; packCap: number; packR: number;
   /** death blast stun (EMP pop) */
   blastStun: number;
+  /** death blast slow (scrap mine shrapnel) */
+  blastSlow: number;
   blastR: number;
   blastModule: string;
   /** no weapons and no healing: advances as a blocker */
@@ -813,7 +817,7 @@ export class Battle {
     let uplinkR = 0, uplinkBonus = 0, pdRange = 0, pdCooldown = 0, pdModule = '', jammer = 0, smokeR = 0, smokeDur = 0;
     let isSupport = traits.includes('repairAura') || hasHeal;
     let reactive = 0, energyResist = 0, hardened = traits.includes('hardened'), blastDmg = 0, blastR = 0, blastModule = '', blastFriendly = false;
-    let dodge = 0, deflect = 0, packPer = 0, packCap = 0, packR = 0, blastStun = 0;
+    let dodge = 0, dodgeBullets = 0, deflect = 0, packPer = 0, packCap = 0, packR = 0, blastStun = 0, blastSlow = 0;
     let berserkBelow = 0, berserkDmg = 0, paintB = 0, paintDur = 0, ocMult = 0, ocIdle = 0, rushSpeed = 0, rushRate = 0, rushDur = 0, overheat = 0, cloakDmg = 0;
     for (const mid of design.mounts) {
       const d = mid ? MODULE_BY_ID.get(mid) : undefined;
@@ -836,9 +840,11 @@ export class Battle {
       if (d.killRush && d.killRush.fireRate > rushRate) { rushRate = d.killRush.fireRate; rushSpeed = d.killRush.speed; rushDur = d.killRush.duration; }
       overheat += d.overheat ?? 0;
       dodge = Math.max(dodge, d.dodge ?? 0);
+      dodgeBullets = Math.max(dodgeBullets, d.dodgeBullets ?? 0);
       deflect = Math.max(deflect, d.deflect ?? 0);
       if (d.pack && d.pack.per > packPer) { packPer = d.pack.per; packCap = d.pack.cap; packR = d.pack.radius; }
       blastStun = Math.max(blastStun, d.deathBlast?.stun ?? 0);
+      blastSlow = Math.max(blastSlow, d.deathBlast?.slow ?? 0);
       cloakDmg = Math.max(cloakDmg, d.cloakDamage ?? 0);
     }
     // percentage modules stack with diminishing returns (stats.ts stackedBonuses; same numbers as the price)
@@ -872,7 +878,8 @@ export class Battle {
       blastDmg: blastDmg * lm, blastR, blastModule, blastFriendly, blocker: !hasWeapon && !hasHeal,
       berserkBelow, berserkDmg, paintB, paintDur, ocMult, ocIdle, rushSpeed, rushRate, rushDur, rushT: -1, overheat, cloakDmg,
       baseSpeed: stats.speed, baseFireRate: fireRate, paintedT: -1, paintedSide: -1, paintedB: 0,
-      dodge: dodge > 0 ? dodgeChance(dodge, stats.size, stats.speed) : 0, deflect, packPer, packCap, packR, blastStun,
+      dodge: dodge > 0 ? dodgeChance(dodge, stats.size, stats.speed) : 0, dodgeB: dodge > 0 ? dodgeChance(dodge, stats.size, stats.speed) * dodgeBullets : 0,
+      deflect, packPer, packCap, packR, blastStun, blastSlow,
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
@@ -1179,7 +1186,7 @@ export class Battle {
       const u = I.u;
       this.dmgSrc = u.id;
       this.dmgKind = 'explosive';
-      this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true, I.blastStun > 0 ? ({ stun: I.blastStun } as ModuleDef) : null); // [aura balance] radius beyond the hull (EMP pop: the burst stuns)
+      this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true, I.blastStun > 0 || I.blastSlow > 0 ? ({ stun: I.blastStun || undefined, slow: I.blastSlow || undefined } as ModuleDef) : null); // [aura balance] radius beyond the hull (EMP pop: the burst stuns; scrap mine: shrapnel slows)
       // an ammo rack cooking off hurts its own side too (at 60%: the hulls around it are braced for it)
       if (I.blastFriendly) this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg * 0.6, 0.3, 1, (1 - u.side) as Side, false, I.blastModule, -1, false);
       this.dmgSrc = -1;
@@ -2277,7 +2284,7 @@ export class Battle {
       if (hitId >= 0) {
         const t = this.units[hitId];
         const T = this.ints[hitId];
-        if ((T.evasive && this.rng() < EVADE_CHANCE) || (T.dodge > 0 && (p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb') && this.rng() < T.dodge)) {
+        if ((T.evasive && this.rng() < EVADE_CHANCE) || (T.dodge > 0 && (p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb') && this.rng() < T.dodge) || (T.dodgeB > 0 && p.kind === 'bullet' && this.rng() < T.dodgeB)) {
           p.ignore = hitId;
         } else {
           if (p.splash > 0) this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, hitId, p.kind !== 'flame', p.fx, p.fxMult, p.cls);
