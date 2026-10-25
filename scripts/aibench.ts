@@ -5,6 +5,7 @@
 //
 // Players
 //   new-normal / new-hard   src/shared/ai.ts (aiDeck + aiDeploy)
+//   prev-normal / prev-hard  the current AI with AI_KNOBS off (no smart formation / chaff-clear mix)
 //   old-normal / old-hard   scripts/ai-baseline.ts (frozen copy of the AI before the curated pool / adaptive deploy)
 //   greedy                  the default player deck (first DECK_SIZE starters); every round buys the most expensive
 //                           affordable design, front-to-back by range, spends the rest on upgrades
@@ -14,7 +15,7 @@
 // average rounds and the slowest single decision of each side.
 
 import { fork } from 'node:child_process';
-import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
+import { AI_KNOBS, aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import * as OLD from './ai-baseline.ts';
 import { DECK_SIZE, applyDeploy, designCost, newMatch, newPlayer, redactFor, resolveRound, upgradeCost, validateDeploy } from '../src/shared/match.ts';
 import { DEPLOY_D, DEPLOY_W, blockDims, blockInZone, normSpacing, hasSpacing, rectsOverlap } from '../src/shared/grid.ts';
@@ -32,7 +33,7 @@ const THEMES: Record<string, Design[]> = {
     D('p-gunship', 'Gunship', 'gunship', 'rotor', ['autocannon', 'rockets']),
     D('p-dart', 'Dart', 'interceptor', 'jet', ['laser', 'mg']),
     D('p-airraider', 'Air Raider', 'gunship', 'rotor', ['lightrail', 'hmg']),
-    D('p-jetwing', 'Jetwing', 'deltawing', 'jet', ['swarm', 'laser', 'mg'])],
+    D('p-jetwing', 'Jetwing', 'deltawing', 'jet', ['swarm', 'laser', null])],
   swarm: [S('buzzsaw'), S('torchbug'), S('ripper'), S('hornet'), S('bulwark'),
     D('p-pepper', 'Pepper', 'scout', 'wheels', ['ac20']),
     D('p-skimmer', 'Skimmer', 'scout', 'hover', ['flamer']),
@@ -83,7 +84,16 @@ function greedyDeploy(m: MatchState, side: Side): DeployAction {
   return a;
 }
 
+/** run f with the smart formation / chaff-clear mix off (the AI as it was before them) */
+function prev<T>(f: () => T): T {
+  const k = { ...AI_KNOBS };
+  AI_KNOBS.smartDeploy = false; AI_KNOBS.riotMix = false;
+  try { return f(); } finally { Object.assign(AI_KNOBS, k); }
+}
+
 export const PLAYERS: Record<string, Player> = {
+  'prev-normal': { deck: (s) => prev(() => aiDeck(s, 'normal')), deploy: (m, side) => prev(() => aiDeploy(m, side, 'normal')) },
+  'prev-hard': { deck: (s, opp) => prev(() => aiDeck(s, 'hard', undefined, opp)), deploy: (m, side) => prev(() => aiDeploy(m, side, 'hard')) },
   'new-easy': { deck: (s) => aiDeck(s, 'easy'), deploy: (m, side) => aiDeploy(m, side, 'easy') },
   'new-normal': { deck: (s) => aiDeck(s, 'normal'), deploy: (m, side) => aiDeploy(m, side, 'normal') },
   'new-hard': { deck: (s, opp) => aiDeck(s, 'hard', undefined, opp), deploy: (m, side) => aiDeploy(m, side, 'hard') },
@@ -94,6 +104,8 @@ export const PLAYERS: Record<string, Player> = {
 };
 
 export const DEFAULT_PAIRINGS: [string, string][] = [
+  ['new-normal', 'prev-normal'],
+  ['new-hard', 'prev-hard'],
   ['old-hard', 'old-normal'],
   ['new-normal', 'old-normal'],
   ['new-normal', 'old-hard'],

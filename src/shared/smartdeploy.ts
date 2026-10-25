@@ -9,7 +9,7 @@
 //                  ── fast / fragile ranged units and support behind the armour (escorting it)
 //   back           ── artillery and long guns spread out against splash; aircraft held back (6 s delay) so they come in
 //                     after the ground lines engage instead of meeting fresh anti-air first
-import { blockDims, blockInZone, blocksOverlap, DEPLOY_D, DEPLOY_W, hasSpacing, type BlockShape } from './grid.ts';
+import { blockDims, blockInZone, blocksOverlap, DEPLOY_D, DEPLOY_W, hasSpacing, MAX_SPACING, type BlockShape } from './grid.ts';
 import { MODULE_BY_ID } from './parts.ts';
 import { computeStats, weaponDps } from './stats.ts';
 import type { Design, ModuleDef, Placement } from './types.ts';
@@ -45,82 +45,153 @@ export function deployRole(d: Design): DeployRole {
 
 export interface DeploySpec { d: Design; n: number }
 
+/** One block to lay out: its design, and optionally the uid and squad spacing it must keep. */
+export interface DeployBlock { d: Design; uid?: number; spacing?: number }
+
+export interface DeployOpts {
+  /** blocks already on the board (earlier rounds): kept where they are, the new blocks form up around them */
+  existing?: { d: Design; p: Placement }[];
+  /** first uid for blocks without one */
+  uid0?: number;
+  /** round written on the placements */
+  round?: number;
+  /** lateral centre of the formation (default: the middle of the zone, or the existing armour line's middle) */
+  centre?: number;
+}
+
 /** Lay out `specs` (each n blocks of a design) for one side in local deploy-zone coordinates (y = 0 is the front).
  *  Every block gets the role's spot, spacing and orders; blocks that fit nowhere are left out. */
 export function smartDeploy(specs: DeploySpec[], uid0 = 1): Placement[] {
-  const occ: { x: number; y: number; spacing?: number; shape: BlockShape }[] = [];
+  return smartDeployBlocks(specs.flatMap((s) => Array.from({ length: s.n }, () => ({ d: s.d }))), { uid0 });
+}
+
+/** The formation's orders for a role: lines hold their spread, melee waits a moment, aircraft wait until the ground
+ *  lines have met (ranged / support escorts are assigned by smartDeployBlocks, which knows the armour blocks). */
+export function roleOrders(role: DeployRole): Partial<Placement> {
+  if (role === 'armor' || role === 'chaff') return { hold: true };
+  if (role === 'melee') return { delay: 3 };
+  if (role === 'air') return { delay: 6 };
+  return {};
+}
+
+/** smartDeploy for single blocks, optionally around blocks already on the board (incremental per-round deploys):
+ *  existing blocks keep their spots and anchor the lines (the armour line's row and centre, the riot / melee sides
+ *  already taken, the artillery already in the back row). Returns the placed new blocks; unplaceable ones are left out. */
+export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Placement[] {
+  type B = { d: Design; role: DeployRole; shape: BlockShape; uid?: number; sp?: number };
+  const occ: { x: number; y: number; spacing?: number; rot?: boolean; shape: BlockShape; role: DeployRole; uid: number }[] = [];
   const out: Placement[] = [];
-  let uid = uid0;
-  const blocks: { d: Design; role: DeployRole; shape: BlockShape }[] = [];
-  for (const s of specs) {
-    const role = deployRole(s.d), shape = computeStats(s.d);
-    for (let k = 0; k < s.n; k++) blocks.push({ d: s.d, role, shape });
-  }
+  let uid = o.uid0 ?? 1;
+  const round = o.round ?? 1;
+  const roleCache = new Map<Design, DeployRole>();
+  const roleOfD = (d: Design) => { let r = roleCache.get(d); if (!r) roleCache.set(d, (r = deployRole(d))); return r; };
+  for (const e of o.existing ?? []) occ.push({ x: e.p.x, y: e.p.y, spacing: e.p.spacing, rot: e.p.rot, shape: computeStats(e.d), role: roleOfD(e.d), uid: e.p.uid });
+  const blocks: B[] = input.map((b) => ({ d: b.d, role: roleOfD(b.d), shape: computeStats(b.d), uid: b.uid, sp: b.spacing }));
+  const spOf = (b: B, def: number) => (hasSpacing(b.shape) ? Math.max(0, Math.min(MAX_SPACING, Math.round(b.sp ?? def))) : 0);
   const fits = (x: number, y: number, shape: BlockShape, spacing: number) =>
-    blockInZone(x, y, shape, spacing) && !occ.some((o) => blocksOverlap({ x, y, spacing }, shape, o, o.shape));
-  /** place at the free spot nearest (x, y) (rows first: keeps a line a line) */
-  const put = (b: { d: Design; shape: BlockShape }, x: number, y: number, extra: Partial<Placement>, spacing: number): Placement | null => {
-    const sp = hasSpacing(b.shape) ? spacing : 0;
+    blockInZone(x, y, shape, spacing) && !occ.some((q) => blocksOverlap({ x, y, spacing }, shape, q, q.shape));
+  /** place at the free spot nearest (x, y); rowW weighs rows against columns (higher keeps a line a line) */
+  const put = (b: B, x: number, y: number, extra: Partial<Placement>, spacing: number, rowW = 2.5): Placement | null => {
+    const sp = spOf(b, spacing);
     const { w, h } = blockDims(b.shape, sp);
     const x0 = Math.round(Math.min(DEPLOY_W - w, Math.max(0, x))), y0 = Math.round(Math.min(DEPLOY_D - h, Math.max(0, y)));
     let best: { x: number; y: number } | null = null, bd = Infinity;
     for (let yy = 0; yy + h <= DEPLOY_D; yy++) for (let xx = 0; xx + w <= DEPLOY_W; xx++) {
-      const dd = Math.abs(xx - x0) + 2.5 * Math.abs(yy - y0);
+      const dd = Math.abs(xx - x0) + rowW * Math.abs(yy - y0);
       if (dd < bd && fits(xx, yy, b.shape, sp)) { bd = dd; best = { x: xx, y: yy }; }
     }
     if (!best) return null;
-    occ.push({ ...best, spacing: sp, shape: b.shape });
-    const p: Placement = { uid: uid++, designId: b.d.id, x: best.x, y: best.y, level: 1, round: 1, spacing: sp, ...extra };
+    const id = b.uid ?? uid++;
+    occ.push({ ...best, spacing: sp, shape: b.shape, role: b.role, uid: id });
+    const p: Placement = { uid: id, designId: b.d.id, x: best.x, y: best.y, level: 1, round, ...extra };
+    if (hasSpacing(b.shape)) p.spacing = sp;
     out.push(p);
     return p;
   };
   const of = (r: DeployRole) => blocks.filter((b) => b.role === r);
-  const width = (bs: typeof blocks, sp: number, gap: number) => bs.reduce((a, b) => a + blockDims(b.shape, hasSpacing(b.shape) ? sp : 0).w + gap, 0);
+  const ex = (r: DeployRole) => occ.filter((q) => q.role === r);
+  const dimsOf = (b: B, sp: number) => blockDims(b.shape, spOf(b, sp));
+  const width = (bs: B[], sp: number, gap: number) => bs.reduce((a, b) => a + dimsOf(b, sp).w + gap, 0);
   /** a centred line of blocks at row y */
-  const line = (bs: typeof blocks, y: number, sp: number, gap: number, extra: (b: (typeof blocks)[number]) => Partial<Placement>, centre = DEPLOY_W / 2) => {
+  const line = (bs: B[], y: number, sp: number, gap: number, extra: (b: B) => Partial<Placement>, centre: number, rowW = 2.5) => {
     let x = centre - width(bs, sp, gap) / 2;
     const placed: Placement[] = [];
     for (const b of bs) {
-      const w = blockDims(b.shape, hasSpacing(b.shape) ? sp : 0).w;
-      const p = put(b, x, y, extra(b), sp);
+      const p = put(b, x, y, extra(b), sp, rowW);
       if (p) placed.push(p);
-      x += w + gap;
+      x += dimsOf(b, sp).w + gap;
     }
     return placed;
   };
-  const depth = (bs: typeof blocks, sp: number) => Math.max(0, ...bs.map((b) => blockDims(b.shape, hasSpacing(b.shape) ? sp : 0).h));
+  const depth = (bs: B[], sp: number) => Math.max(0, ...bs.map((b) => dimsOf(b, sp).h));
+  const exDepth = (qs: typeof occ) => Math.max(0, ...qs.map((q) => blockDims(q.shape, q.spacing, q.rot).h));
 
   const chaff = of('chaff'), armor = of('armor'), riot = of('riot'), melee = of('melee');
   const ranged = of('ranged'), support = of('support'), arty = of('artillery'), air = of('air');
-  // rows, front to back
-  const chaffY = 0, gapAhead = chaff.length ? 2 : 0;
-  const armorY = chaff.length ? depth(chaff, 1) + gapAhead : 0;
-  const armorLine = line(armor, armorY, 0, 1, () => ({ hold: true }));
-  const armorW = Math.max(16, width(armor, 0, 1));
+  const exArmor = ex('armor'), exChaff = ex('chaff');
+  const anyChaff = chaff.length + exChaff.length > 0;
+  // rows, front to back (an armour line already on the board keeps its row)
+  const chaffDepth = Math.max(depth(chaff, 1), exDepth(exChaff));
+  const armorY = exArmor.length ? Math.min(...exArmor.map((q) => q.y)) : anyChaff ? chaffDepth + 2 : 0;
+  // armour: the existing line's centre, new armour extends it sideways (alternating ends)
+  let centre = o.centre ?? DEPLOY_W / 2;
+  const extent = () => {
+    const as = occ.filter((q) => q.role === 'armor');
+    if (!as.length) return null;
+    return { l: Math.min(...as.map((q) => q.x)), r: Math.max(...as.map((q) => q.x + blockDims(q.shape, q.spacing, q.rot).w)) };
+  };
+  const e0 = extent();
+  if (e0) centre = (e0.l + e0.r) / 2;
+  if (!e0) line(armor, armorY, 0, 1, () => ({ hold: true }), centre, 6);
+  else armor.forEach((b, i) => {
+    const e = extent()!, w = dimsOf(b, 0).w;
+    put(b, i % 2 === 0 ? e.r + 1 : e.l - 1 - w, armorY, { hold: true }, 0, 6);
+  });
+  const armorUids = occ.filter((q) => q.role === 'armor').map((q) => q.uid);
+  const ext = extent();
+  if (ext) centre = (ext.l + ext.r) / 2;
+  const armorW = Math.max(16, ext ? ext.r - ext.l : 0);
+  const armorDepth = exDepth(occ.filter((q) => q.role === 'armor'));
   // the chaff screen: directly in front of the armour, at least as wide as the armour line
   const chaffGap = chaff.length > 1 ? Math.max(1, (armorW - width(chaff, 1, 0)) / (chaff.length - 1)) : 1;
-  line(chaff, chaffY, 1, Math.min(4, chaffGap), () => ({ hold: true }));
+  line(chaff, 0, 1, Math.min(4, chaffGap), () => ({ hold: true }), centre, 6);
   // chaff clear: level with the armour line's ends, then right behind it
-  const behindArmor = armorY + Math.max(2, depth(armor, 0)) + 1;
-  riot.forEach((b, i) => {
-    const side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
-    if (k === 0 && armor.length) put(b, DEPLOY_W / 2 + side * (armorW / 2 + 1) - (side < 0 ? blockDims(b.shape, 1).w : 0), armorY, {}, 1);
-    else put(b, DEPLOY_W / 2 + side * 4 * k, armor.length ? behindArmor : armorY, {}, 1);
+  const hasArmor = armorUids.length > 0;
+  const behindArmor = armorY + Math.max(2, armorDepth) + 1;
+  const riot0 = ex('riot').length;
+  riot.forEach((b, j) => {
+    const i = j + riot0, side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
+    if (k === 0 && hasArmor) put(b, centre + side * (armorW / 2 + 1) - (side < 0 ? dimsOf(b, 1).w : 0), armorY, {}, 1);
+    else put(b, centre + side * 4 * k, hasArmor ? behindArmor : armorY, {}, 1);
   });
   // melee on the flanks, held a moment so the armour engages first
-  melee.forEach((b, i) => {
-    const side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
-    put(b, side < 0 ? 2 + 6 * k : DEPLOY_W - 2 - blockDims(b.shape, 1).w - 6 * k, armorY, { delay: 3 }, 1);
+  const melee0 = ex('melee').length;
+  melee.forEach((b, j) => {
+    const i = j + melee0, side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
+    put(b, side < 0 ? 2 + 6 * k : DEPLOY_W - 2 - dimsOf(b, 1).w - 6 * k, armorY, { delay: 3 }, 1);
   });
   // fast / fragile ranged units and support behind the armour, escorting it
-  const escortOf = (i: number) => (armorLine.length ? { escort: armorLine[i % armorLine.length].uid } : { delay: 3 });
-  const rangedY = (armor.length ? behindArmor : armorY) + (riot.length > 2 ? 3 : 0);
-  line(ranged, rangedY, 1, 1, () => ({}));
-  out.filter((p) => ranged.some((b) => b.d.id === p.designId)).forEach((p, i) => Object.assign(p, escortOf(i)));
-  line(support, rangedY + depth(ranged, 1) + 1, 0, 2, () => (armorLine.length ? { escort: armorLine[0].uid } : {}));
+  let esc = ex('ranged').length;
+  const escort = (): Partial<Placement> => (armorUids.length ? { escort: armorUids[esc++ % armorUids.length] } : { delay: 3 });
+  const rangedY = (hasArmor ? behindArmor : armorY) + (riot.length + riot0 > 2 ? 3 : 0);
+  line(ranged, rangedY, 1, 1, escort, centre);
+  line(support, rangedY + depth(ranged, 1) + 1, 0, 2, () => (armorUids.length ? { escort: armorUids[0] } : {}), centre);
   // artillery spread across the back (gaps against splash), aircraft held back behind it
-  const backY = DEPLOY_D - Math.max(2, depth(arty, 1));
-  line(arty, backY, 1, Math.max(2, Math.min(8, (DEPLOY_W - width(arty, 1, 0)) / Math.max(1, arty.length + 1))), () => ({}));
-  line(air, Math.max(0, backY - depth(air, 1) - 1), 1, 2, () => ({ delay: 6 }));
+  const backY = DEPLOY_D - Math.max(2, depth(arty, 1), exDepth(ex('artillery')));
+  const exArty = ex('artillery');
+  if (!exArty.length) line(arty, backY, 1, Math.max(2, Math.min(8, (DEPLOY_W - width(arty, 1, 0)) / Math.max(1, arty.length + 1))), () => ({}), DEPLOY_W / 2);
+  else for (const b of arty) {
+    // the back-row spot farthest from the other guns (splash), near the middle
+    const sp = spOf(b, 1), { w, h } = blockDims(b.shape, sp);
+    let bx = -1, by = backY, bs = -Infinity;
+    for (let yy = Math.max(0, backY - 3); yy + h <= DEPLOY_D; yy++) for (let xx = 0; xx + w <= DEPLOY_W; xx++) {
+      if (!fits(xx, yy, b.shape, sp)) continue;
+      const gap = Math.min(12, ...occ.filter((q) => q.role === 'artillery').map((q) => Math.abs(q.x + blockDims(q.shape, q.spacing, q.rot).w / 2 - xx - w / 2)));
+      const s = gap - 0.08 * Math.abs(xx + w / 2 - DEPLOY_W / 2) - 1.5 * Math.abs(yy - backY);
+      if (s > bs) { bs = s; bx = xx; by = yy; }
+    }
+    if (bx >= 0) put(b, bx, by, {}, sp);
+  }
+  line(air, Math.max(0, backY - depth(air, 1) - 1), 1, 2, () => ({ delay: 6 }), DEPLOY_W / 2);
   return out;
 }

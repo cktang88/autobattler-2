@@ -35,11 +35,28 @@ import { STARTER_DESIGNS } from './starters.ts';
 import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, battleInputFor, newMatch, newPlayer, designCost, placementValue, sellValue, redactFor, roundDamage, supplyForRound, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
 import { designKey, isHealer, profile, weaponDps, type Profile, type Role } from './aiprofile.ts';
 import { defaultPool, drawDeck, type AiPool } from './aipool.ts';
+import { deployRole, roleOrders, smartDeployBlocks, type DeployRole } from './smartdeploy.ts';
 import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, Stance, TargetPriority, UnitConfig } from './types.ts';
 
 export { profile, classify, type Profile, type Role } from './aiprofile.ts';
 
 export type AiDifficulty = 'easy' | 'normal' | 'hard';
+
+/** Normal / hard formation and composition (scripts/aibench.ts turns them off to measure the previous AI; game code
+ *  never changes them). smartDeploy: lay every round's buys out in the smartdeploy.ts formation around the blocks
+ *  already on the board (chaff screen, armour front-centre, riot at its ends, melee flanks, escorts, artillery spread
+ *  at the back, aircraft delayed); riotMix: keep ~15-25% of the army's value in chaff clear and draw a chaff-clear
+ *  design into the deck when the pool has one. */
+export const AI_KNOBS = { smartDeploy: true, riotMix: true };
+
+const deployRoleCache = new Map<string, DeployRole>();
+/** smartdeploy.ts deployRole, cached by design key */
+function roleOfDesign(d: Design): DeployRole {
+  const k = designKey(d);
+  let r = deployRoleCache.get(k);
+  if (!r) deployRoleCache.set(k, (r = deployRole(d)));
+  return r;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Design profiling
@@ -172,7 +189,7 @@ const DECK_ROLES: Role[] = ['frontline', 'antiArmor', 'antiAir', 'artillery', 'f
 export function aiDeck(seed: number, difficulty: AiDifficulty, pool?: AiPool, oppDeck?: Design[]): Design[] {
   if (difficulty !== 'easy') {
     const P = pool ?? defaultPool();
-    const deck = drawDeck(P, mixSeed(seed >>> 0, 0x40a1), DECK_SIZE, 1.5);
+    const deck = drawDeck(P, mixSeed(seed >>> 0, 0x40a1), DECK_SIZE, 1.5, undefined, AI_KNOBS.riotMix);
     const opp = (oppDeck ?? []).filter((d) => { try { return isValidDesign(d); } catch { return false; } });
     if (difficulty === 'hard' && opp.length && deck.length >= 6) return draftDeck(P, seed, deck, opp);
     if (deck.length >= 6) return deck;
@@ -190,7 +207,7 @@ const DRAFT_TICKS = 1200;
 function draftDeck(pool: AiPool, seed: number, first: Design[], opp: Design[]): Design[] {
   let best = first, bestScore = -Infinity;
   for (let k = 0; k < DRAFT_DECKS; k++) {
-    const deck = k === 0 ? first : drawDeck(pool, mixSeed(seed >>> 0, 0x40a1 + 7919 * k), DECK_SIZE, 1.5);
+    const deck = k === 0 ? first : drawDeck(pool, mixSeed(seed >>> 0, 0x40a1 + 7919 * k), DECK_SIZE, 1.5, undefined, AI_KNOBS.riotMix);
     if (deck.length < 6) continue;
     let score = -1e9;
     try {
@@ -1010,7 +1027,7 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
   let simUnits = board.reduce((n, u) => n + (byId.get(u.designId) ? profile(byId.get(u.designId)!).stats.squad : 1), 0);
   let blocks = board.length;
   // our army so far, by value
-  const army = { total: 0, front: 0, long: 0, air: 0, aa: 0, support: 0 };
+  const army = { total: 0, front: 0, long: 0, air: 0, aa: 0, support: 0, riot: 0 };
   const perDesign = new Map<string, number>();
   const roleN = new Map<Role, number>();
   const count = (p: Profile, d: Design, value: number) => {
@@ -1020,6 +1037,7 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
     if (p.flying) army.air += value;
     if (p.aaDps > p.groundDps * 0.6) army.aa += value;
     if (isHealer(p) || p.dome) army.support++;
+    if (roleOfDesign(d) === 'riot') army.riot += value;
     perDesign.set(d.id, (perDesign.get(d.id) ?? 0) + 1);
     roleN.set(p.role, (roleN.get(p.role) ?? 0) + 1);
   };
@@ -1037,6 +1055,12 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
     if ((isHealer(p) || p.dome) && (blocks < 5 || army.support >= 1 + blocks / 8)) s *= 0.3;
     if (p.groundDps < 0.5 * p.aaDps && it.air < 0.05) s *= 0.5;
     if (it.air > 0.25 && p.aaDps > 0 && army.aa / T < it.air * 0.6) s *= 1.15;
+    // chaff clear: ~15-25% of the army (against chaff screens and swarms)
+    if (AI_KNOBS.riotMix && roleOfDesign(d) === 'riot') {
+      const riotShare = army.riot / T;
+      if (riotShare < 0.15) s *= 1.25 + (it.swarm > 0.25 ? 0.25 : 0);
+      else if (riotShare > 0.25) s *= 0.7;
+    }
     s /= 1 + PLAN_TUNING.divSame * (perDesign.get(d.id) ?? 0) + PLAN_TUNING.divRole * (roleN.get(p.role) ?? 0);
     // late game the sim-unit cap is the scarce resource: big squads of cheap units crowd out better blocks
     const pressure = simUnits / MAX_SIM_UNITS;
@@ -1108,6 +1132,8 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
     count(p, buy!, p.cost);
   }
 
+  if (AI_KNOBS.smartDeploy && action.place.length) formUp(action, board, byId, o.flank);
+
   // --- escorts, and every block's orders re-tuned against the enemy we see now ---
   const all = [
     ...board.map((u) => ({ uid: u.uid, p: byId.has(u.designId) ? profile(byId.get(u.designId)!) : null, level: levels.get(u.uid) ?? u.level })),
@@ -1117,7 +1143,7 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
     const pr = profile(byId.get(pl.designId)!);
     if (!isHealer(pr)) continue;
     const e = pickEscort(all, pl.uid);
-    if (e !== undefined) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kiteMount; if (pr.defaults.kite) pl.kite = false; else delete pl.kite; }
+    if (e !== undefined && (!AI_KNOBS.smartDeploy || pl.escort === undefined)) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kiteMount; if (pr.defaults.kite) pl.kite = false; else delete pl.kite; }
   }
   if (view.round >= 2) {
     for (const u of board) {
@@ -1142,11 +1168,56 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
         if (b.stance !== (u.stance ?? 'advance')) cfg.stance = b.stance;
         if (b.delay !== (u.delay ?? 0)) cfg.delay = b.delay;
         if (b.retreat !== !!u.retreat) cfg.retreat = b.retreat;
+        // the formation's timing stays: aircraft never make first contact, melee waits for the armour
+        if (AI_KNOBS.smartDeploy) {
+          const want = roleOrders(roleOfDesign(d)).delay;
+          if (want !== undefined) { if ((u.delay ?? 0) === want) delete cfg.delay; else cfg.delay = want; }
+        }
       }
       if (Object.keys(cfg).length > 1) (action.configure ??= []).push(cfg);
     }
   }
   return action;
+}
+
+/** Re-lay this round's buys (action.place, in buy order) in the smartdeploy.ts formation around the blocks already
+ *  on the board: spots and spacing from the formation (keeping the planner's spacing vs splash), orders from the
+ *  planner (targets, kiting...) with the formation's on top (holds, melee / aircraft delays, escorts of the armour).
+ *  A block the formation can't fit keeps the planner's spot when that is still free, else is dropped. */
+function formUp(action: DeployAction, board: Placement[], byId: Map<string, Design>, flank: number): void {
+  const existing = board.flatMap((p) => { const d = byId.get(p.designId); return d ? [{ d, p }] : []; });
+  const laid = smartDeployBlocks(action.place.map((pl) => ({ d: byId.get(pl.designId)!, uid: pl.uid, spacing: pl.spacing ?? 0 })),
+    { existing, round: action.round, centre: DEPLOY_W / 2 + flank });
+  const at = new Map(laid.map((p) => [p.uid, p] as const));
+  const foot = (p: Placement) => ({ x: p.x, y: p.y, ...blockDims(profile(byId.get(p.designId)!).stats, p.spacing, !!p.rot) });
+  const occ: Foot[] = [...board.filter((p) => byId.has(p.designId)).map(foot), ...laid.map(foot)];
+  const keep: Placement[] = [];
+  for (const pl of action.place) {
+    const f = at.get(pl.uid);
+    if (!f) {
+      const ft = foot(pl);
+      if (!fits(ft.x, ft.y, ft.w, ft.h, occ)) continue;
+      occ.push(ft);
+      keep.push(pl);
+      continue;
+    }
+    const role = roleOfDesign(byId.get(pl.designId)!);
+    pl.x = f.x; pl.y = f.y;
+    if (f.spacing !== undefined) pl.spacing = f.spacing;
+    if (f.hold) delete pl.hold;
+    if (f.delay !== undefined) pl.delay = f.delay;
+    if (f.escort !== undefined) {
+      pl.escort = f.escort;
+      delete pl.delay;
+      if (pl.stance === 'flankLeft' || pl.stance === 'flankRight') delete pl.stance;
+    }
+    if (role === 'air' && pl.stance === 'charge') delete pl.stance;
+    keep.push(pl);
+  }
+  // escorts of a dropped block fall back to their own orders
+  const kept = new Set(keep.map((p) => p.uid));
+  for (const pl of keep) if (pl.escort !== undefined && pl.escort >= action.place[0].uid && !kept.has(pl.escort)) delete pl.escort;
+  action.place = keep;
 }
 
 /** Target / stance tweaks from the intel: anti-air hunts aircraft only when there are some, long guns go for the

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
-import { deployRole, isChaffClear, smartDeploy } from '../src/shared/smartdeploy.ts';
+import { deployRole, isChaffClear, smartDeploy, smartDeployBlocks } from '../src/shared/smartdeploy.ts';
 import { MODULE_BY_ID } from '../src/shared/parts.ts';
 import { computeStats } from '../src/shared/stats.ts';
 import { blockInZone, blocksOverlap } from '../src/shared/grid.ts';
@@ -46,4 +46,22 @@ test('smart layout: chaff screen ahead of the armour, artillery at the back, air
   for (let i = 0; i < place.length; i++) for (let j = i + 1; j < place.length; j++) {
     assert.ok(!blocksOverlap(place[i], shape(place[i]), place[j], shape(place[j])), `${place[i].designId} / ${place[j].designId}`);
   }
+});
+
+test('incremental layout: new blocks form up around the board, armour line extended, existing spots kept', () => {
+  const ds: Design[] = ['buzzsaw', 'bulwark', 'firestorm', 'hornet', 'lancer'].map(S);
+  const first = smartDeploy(ds.map((d) => ({ d, n: 1 })));
+  const existing = first.map((p) => ({ d: ds.find((d) => d.id === p.designId)!, p }));
+  const more = smartDeployBlocks(ds.map((d, i) => ({ d, uid: 100 + i })), { existing, round: 2 });
+  assert.equal(more.length, ds.length, 'every new block placed');
+  assert.ok(more.every((p) => p.round === 2 && p.uid >= 100));
+  const shape = (p: { designId: string }) => computeStats(ds.find((d) => d.id === p.designId)!);
+  const all = [...first, ...more];
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) assert.ok(!blocksOverlap(all[i], shape(all[i]), all[j], shape(all[j])));
+  const armour = all.filter((p) => p.designId === 'starter-bulwark');
+  assert.equal(armour[0].y, armour[1].y, 'new armour extends the existing line');
+  const newChaff = more.find((p) => p.designId === 'starter-buzzsaw')!;
+  assert.ok(newChaff.y < armour[0].y, 'new chaff in front of the armour');
+  assert.ok(more.find((p) => p.designId === 'starter-hornet')!.delay! >= 6, 'aircraft delayed');
+  assert.ok(armour.map((p) => p.uid).includes(more.find((p) => p.designId === 'starter-lancer')!.escort!), 'ranged escorts the armour');
 });

@@ -18,6 +18,7 @@ import { dropExtraWeapons, isValidDesign, MAX_LEVEL, replaceRetiredModules, slot
 import { DECK_SIZE, battleInputFor, placementValue } from './match.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { Battle } from './sim/battle.ts';
+import { deployRole } from './smartdeploy.ts';
 import type { Design, MatchState, ModuleDef, RoundRecord, Side } from './types.ts';
 import type { BattleSummary } from './sim/types.ts';
 
@@ -270,8 +271,9 @@ export const CANDIDATE_SLOTS = [1, 2] as const;
 /** Draw `size` distinct designs from the pool (seeded): one tested design per DECK_TAGS tag first (coverage), then
  *  1-2 candidates on trial (so they get played and measured), then tested designs by weight. Weights favour
  *  higher-scoring entries (score^sharp), spread the deck over roles and allow at most one giant. `bias` (optional)
- *  multiplies an entry's weight. */
-export function drawDeck(pool: AiPool, seed: number, size = DECK_SIZE, sharp = 2, bias?: (d: Design) => number): Design[] {
+ *  multiplies an entry's weight. `chaffClear`: also guarantee one chaff-clear design (smartdeploy.ts 'riot') when the
+ *  pool has one. */
+export function drawDeck(pool: AiPool, seed: number, size = DECK_SIZE, sharp = 2, bias?: (d: Design) => number, chaffClear = false): Design[] {
   const rng = makeRng(mixSeed(seed >>> 0, 0x9001));
   const tested = pool.entries.filter((e) => validEntryDesign(e.design));
   const trial = (pool.candidates ?? []).filter((e) => validEntryDesign(e.design));
@@ -288,6 +290,11 @@ export function drawDeck(pool: AiPool, seed: number, size = DECK_SIZE, sharp = 2
   for (const t of shuffle(rng, DECK_TAGS)) {
     if (has(t) || deck.length >= size) continue;
     const e = weighted(rng, tested.filter((x) => ok(x) && designTags(x.design).has(t)), weight);
+    if (e) take(e);
+  }
+  // a chaff-clear (riot) design, when the pool has one: the army keeps ~15-25% of its value in it (ai.ts)
+  if (chaffClear && deck.length < size && !deck.some((e) => deployRole(e.design) === 'riot')) {
+    const e = weighted(rng, tested.filter((x) => ok(x) && deployRole(x.design) === 'riot'), weight);
     if (e) take(e);
   }
   const trialSlots = trial.length ? CANDIDATE_SLOTS[Math.floor(rng() * CANDIDATE_SLOTS.length)] : 0;

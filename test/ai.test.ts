@@ -5,6 +5,7 @@ import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateD
 import { DEPLOY_D, DEPLOY_W, blockDims, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
 import { computeStats, defaultOrders } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
+import { deployRole } from '../src/shared/smartdeploy.ts';
 
 test('aiDeck is valid, deterministic and covers roles', () => {
   for (const diff of ['easy', 'normal', 'hard'] as AiDifficulty[]) {
@@ -120,7 +121,9 @@ test('AI uses the new battle settings sensibly and keeps them valid', () => {
         if (p.escort !== undefined) {
           seen.escort++;
           assert.ok(uids.has(p.escort) && p.escort !== p.uid, 'escort references another own block');
-          assert.ok(profile(byId.get(p.designId)!).heal > 0 || computeStats(byId.get(p.designId)!).traits.includes('repairAura'), 'only healers escort');
+          // healers escort; in the smart formation (smartdeploy.ts) ranged units escort the armour too
+          const escorted = r.boards[side].find((q) => q.uid === p.escort)!;
+          assert.ok(profile(byId.get(p.designId)!).heal > 0 || computeStats(byId.get(p.designId)!).traits.includes('repairAura') || deployRole(byId.get(escorted.designId)!) === 'armor', 'only healers and armour escorts');
         }
         // artillery that holds position never also kites
         if (p.stance === 'holdPos') assert.ok(!(p.kite ?? defs.kite));
@@ -177,4 +180,21 @@ test('hard AI mid-match decision with big armies stays under 1.5s', () => {
   const ms = performance.now() - t;
   assert.equal(validateDeploy(m, 0, act), null);
   assert.ok(ms < 1500, `took ${ms}ms`);
+});
+
+test('normal / hard AI: decks carry chaff clear; every round lays out in the smart formation', () => {
+  let riotDecks = 0;
+  for (let seed = 1; seed <= 20; seed++) if (aiDeck(seed, 'normal').some((d) => deployRole(d) === 'riot')) riotDecks++;
+  assert.ok(riotDecks >= 18, `chaff clear in ${riotDecks}/20 decks`);
+  for (const seed of [3, 7]) {
+    const m = playMatch(seed, 'normal', 'normal');
+    for (const rec of m.history) for (const side of [0, 1] as const) {
+      const deck = m.players[side].deck, byId = new Map(deck.map((d) => [d.id, d] as const));
+      const board = rec.boards[side];
+      const role = (p: Placement) => deployRole(byId.get(p.designId)!);
+      for (const p of board.filter((q) => role(q) === 'air')) assert.ok((p.delay ?? 0) >= 6, `aircraft delayed (seed ${seed} r${rec.round})`);
+      const armour = board.filter((q) => role(q) === 'armor'), arty = board.filter((q) => role(q) === 'artillery');
+      if (armour.length && arty.length) assert.ok(Math.max(...arty.map((q) => q.y)) > Math.min(...armour.map((q) => q.y)), 'artillery behind the armour');
+    }
+  }
 });
