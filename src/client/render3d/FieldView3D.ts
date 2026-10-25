@@ -93,6 +93,49 @@ interface ProjRec {
   tracer: boolean; sx: number; sz: number; team: 0 | 1;
   /** sim position and progress when first seen (to estimate where a round ends: flash rounds race ahead of the sim) */
   fx0: number; fz0: number; k0: number;
+  /** the round's module, side and sim kind (to match it to the 'explode' / 'hit' that ends it) */
+  mod: string; side: Side; kind: SimProjectile['kind'];
+  /** where the drawn round went into an enemy hull's hit box (it is no longer drawn from then on) */
+  hit?: Impact;
+  /** the impact point worked out for the event that ended it (null: it burst on the ground), shared by its explode / hit */
+  imp?: Impact | null;
+}
+
+/** Rough hit box of a drawn unit (hullBox): a rotated box a little inside its solid parts and the sim's footprint.
+ *  x, z: drawn centre; ca, sa: facing; cx, cz: box centre offset (unit-local, x forward); hx, hz: half extents; y0, y1: base
+ *  and top heights (world). */
+interface HullBox { x: number; z: number; ca: number; sa: number; cx: number; cz: number; hx: number; hz: number; y0: number; y1: number }
+/** where a round struck a hull (world x, height y, world z), its travel direction on the ground (nx, nz) and the unit;
+ *  top: it came down on the roof */
+interface Impact { x: number; y: number; z: number; nx: number; nz: number; unit: number; top: boolean }
+/** sim round kinds that burst on (or stop at) the first enemy hull they reach, as the sim's contact sweep has them */
+const HULL_KINDS = new Set<SimProjectile['kind']>(['shell', 'rocket', 'missile', 'arc', 'orb']);
+/** the sim's ROCKET_OVERFLY: a rocket lofted higher than this flies over ground units */
+const ROCKET_OVERFLY = 1;
+/** rayBox's answer: the line's entry and exit parameters and the axis it enters through (0 x, 1 y = roof / floor, 2 z) */
+const RB = { t0: 0, t1: 0, ax: 0 };
+/** Does the line p + d t meet the box? Fills RB (t over the whole line, so t0 < 0 when p is inside or past it). */
+function rayBox(b: HullBox, px: number, py: number, pz: number, dx: number, dy: number, dz: number): boolean {
+  const ox = px - b.x, oz = pz - b.z;
+  const o = [ox * b.ca + oz * b.sa - b.cx, py, -ox * b.sa + oz * b.ca - b.cz];
+  const d = [dx * b.ca + dz * b.sa, dy, -dx * b.sa + dz * b.ca];
+  const lo = [-b.hx, b.y0, -b.hz], hi = [b.hx, b.y1, b.hz];
+  let t0 = -Infinity, t1 = Infinity, ax = 0;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(d[i]) < 1e-9) { if (o[i] < lo[i] || o[i] > hi[i]) return false; continue; }
+    let a = (lo[i] - o[i]) / d[i], c = (hi[i] - o[i]) / d[i];
+    if (a > c) { const q = a; a = c; c = q; }
+    if (a > t0) { t0 = a; ax = i; }
+    if (c < t1) t1 = c;
+    if (t0 > t1) return false;
+  }
+  RB.t0 = t0; RB.t1 = t1; RB.ax = ax;
+  return true;
+}
+/** is the ground point (x, z) over the box's footprint, grown by pad? */
+function inBox(b: HullBox, x: number, z: number, pad: number): boolean {
+  const ox = x - b.x, oz = z - b.z;
+  return Math.abs(ox * b.ca + oz * b.sa - b.cx) <= b.hx + pad && Math.abs(-ox * b.sa + oz * b.ca - b.cz) <= b.hz + pad;
 }
 
 /** straight round fired at an aircraft: the sim flies those at z = 1 (arcing shells and missiles have their own z) */
@@ -353,6 +396,8 @@ export class FieldView3D implements BattleView {
   private prevP = new Map<number, PSnap>();
   private curP = new Map<number, PSnap>();
   private projRec = new Map<number, ProjRec>();
+  /** this frame's hull hit boxes by unit id (null: not drawn) */
+  private boxes = new Map<number, HullBox | null>();
   private pending: BattleEvent[] = [];
   private usePush = false;
   private time = 0;
@@ -1001,6 +1046,7 @@ export class FieldView3D implements BattleView {
     this.rt += (target - this.rt) * 0.05;
     this.rt = clamp(this.rt, this.prevTick, this.curTick);
     this.alpha = this.curTick > this.prevTick ? (this.rt - this.prevTick) / (this.curTick - this.prevTick) : 1;
+    this.boxes.clear();
 
     const byId = new Map<number, SimUnit>();
     for (const u of battle.units) byId.set(u.id, u);
@@ -1417,7 +1463,7 @@ export class FieldView3D implements BattleView {
           y0, lastH: y0, px: pos.x + ox, py: pos.y + oz, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet,
           dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x + ox, ey: y0, ez: pos.y + oz, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
           ox, oz, tracer: every > 0 && shots % every === 0, sx: pos.x + ox, sz: pos.y + oz, team: this.teamOf(p.side),
-          fx0: pos.x, fz0: pos.y, k0: clamp(pos.progress, 0, 1),
+          fx0: pos.x, fz0: pos.y, k0: clamp(pos.progress, 0, 1), mod: p.moduleId, side: p.side, kind: p.kind,
         };
         seen.set(p.id, rec);
         // every rocket / missile leaves its own tube: a launch flash, a backblast jet and a smoke cloud behind the pod
@@ -1425,18 +1471,21 @@ export class FieldView3D implements BattleView {
           this.fx.launch(pos.x + ox, y0, pos.y + oz, ca, sa, st.s, p.kind === 'missile' ? (st.fam === 'bigMissile' ? 2 : 1) : 0);
         }
       }
+      if (rec.hit) continue; // burst on a hull (drawn by the event that ends it in the sim)
       if (this.offscreen(pos.x, pos.y, 4)) { rec.px = rec.ex = pos.x; rec.py = rec.ez = pos.y; continue; }
-      // homing anti-air missiles turn onto their target after launch: keep re-reading its height along the heading
-      if (rec.air && p.kind === 'missile' && byId) rec.hEnd = this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, rec.hEnd, true);
+      // homing missiles turn onto their target after launch: keep re-reading its body height along the heading (they
+      // dive into the hull at that height, not at its feet: a titan stands several cells tall)
+      if (p.kind === 'missile' && byId) rec.hEnd = this.aimHeightAlong(pos.x, pos.y, pos.angle, byId, p.side, rec.hEnd, rec.air);
       const st = rec.st, sz = st.s;
       const kp = clamp(pos.progress, 0, 1);
       const age = this.time - rec.born;
       // height (from the interpolated snapshot: the sim's own z / progress are a tick ahead of x, y). Lofted rounds
       // (shells, rockets, missiles) ride their sim altitude on top of the line from the barrel down to the ground
+      // (missiles: down to their target's body height)
       const lofts = !rec.air && (p.kind === 'arc' || p.kind === 'rocket' || p.kind === 'missile');
       let H: number;
       if (rec.bomblet || st.fam === 'bomb') H = pos.z + 0.12;
-      else if (lofts) H = lerp(rec.y0, 0.15, kp) + pos.z;
+      else if (lofts) H = lerp(rec.y0, p.kind === 'missile' ? rec.hEnd : 0.15, kp) + pos.z;
       else H = lerp(rec.y0, rec.hEnd, kp);
       // eased from the barrel tip onto the sim's path over the first ~0.15 s
       const ease = age < 0.15 ? 1 - age / 0.15 : 0;
@@ -1448,6 +1497,14 @@ export class FieldView3D implements BattleView {
         const ph = age * 19 + rec.seed;
         X += -sa * Math.sin(ph) * w; Z += ca * Math.sin(ph) * w;
         H += Math.cos(ph * 0.83) * w * 0.7;
+      }
+      // a round that reaches an enemy hull's hit box stops there: it doesn't fly on through the model (the sim's contact
+      // test has already burst it, or will within a tick)
+      if (byId && age > 0.05 && this.stopsOnHulls(p, rec, kp, pos.z)) {
+        // arcing rounds fly a straight ground track to their aim point: extrapolated from where they were first seen
+        const f = p.kind === 'arc' && kp - rec.k0 > 0.05 ? (1 - rec.k0) / (kp - rec.k0) : NaN;
+        const hit = this.boxHit(rec, X, H, Z, byId, rec.fx0 + (pos.x - rec.fx0) * f, rec.fz0 + (pos.y - rec.fz0) * f);
+        if (hit) { rec.hit = hit; continue; }
       }
       // orientation: along the round's actual 3D velocity (smoothed), so lofted rounds pitch up, over and down. The
       // heading is the sim's; climb and sideways drift come from the motion since the last frame, measured only while it
@@ -1767,6 +1824,129 @@ export class FieldView3D implements BattleView {
     return su.flying ? flyHeight(v.rig.S) + 0.4 + v.rig.midY : Math.min(v.rig.height * 0.6, Math.max(0.7, v.rig.height * 0.35));
   }
 
+  /** A drawn unit's rough hit box for rounds (cached per frame): a rotated rectangle inside both its solid parts (80%)
+   *  and the sim's footprint box (hullK x footprint), from the ground (aircraft: 15% up the airframe) to 85% of its
+   *  height. Where it is drawn this frame (interpolated), like the model. */
+  private hullBox(u: SimUnit): HullBox | null {
+    let b = this.boxes.get(u.id);
+    if (b !== undefined) return b;
+    const v = this.bu.get(u.id);
+    b = null;
+    if (v) {
+      const rig = v.rig, c = this.curU.get(u.id), pr = this.prevU.get(u.id) ?? c;
+      let x = u.x, y = u.y, ang = u.angle;
+      if (c && pr) {
+        const a = this.alpha;
+        if (Math.hypot(c.x - pr.x, c.y - pr.y) > 3) { x = c.x; y = c.y; } else { x = lerp(pr.x, c.x, a); y = lerp(pr.y, c.y, a); }
+        ang = lerpAngle(pr.angle, c.angle, a);
+      }
+      const [x0, x1, y0, y1, z0, z1] = rig.hull;
+      const base = u.flying ? flyHeight(rig.S) + 0.4 : u.leap * 1.8 * rig.S;
+      const lo = u.flying ? y0 : Math.max(0, y0), h = Math.max(0.3, y1 - lo);
+      b = {
+        x, z: y, ca: Math.cos(ang), sa: Math.sin(ang),
+        cx: clamp((x0 + x1) / 2, -0.1 * rig.L, 0.1 * rig.L), cz: clamp((z0 + z1) / 2, -0.1 * rig.W, 0.1 * rig.W),
+        hx: Math.max(0.15, Math.min(0.4 * (x1 - x0), 0.45 * rig.L)), hz: Math.max(0.15, Math.min(0.4 * (z1 - z0), 0.45 * rig.W)),
+        y0: base + lo + (u.flying ? 0.15 * h : 0), y1: base + lo + 0.85 * h,
+      };
+    }
+    this.boxes.set(u.id, b);
+    return b;
+  }
+
+  /** which drawn rounds stop at an enemy hull they fly into, by the sim's contact rules: missiles, shells and orbs at
+   *  any (not piercing ones), rockets once down low enough to touch (ROCKET_OVERFLY), arcing shells and bombs only on
+   *  their way down onto the hull they land on */
+  private stopsOnHulls(p: SimProjectile, rec: ProjRec, k: number, z: number): boolean {
+    if (!HULL_KINDS.has(p.kind) || rec.st.def?.pierce) return false;
+    if (p.kind === 'rocket') return z <= ROCKET_OVERFLY && k > 0.3;
+    if (p.kind === 'arc') return rec.bomblet || rec.st.fam === 'bomb' || k > 0.5;
+    return true;
+  }
+
+  /** The enemy hull hit box (of the round's layer) the drawn round's last step (from where it was drawn last frame to
+   *  X, H, Z) went into, and where. Arcing rounds only count the hull they land on (the sim bursts them at the aim
+   *  point, estimated from their straight ground track). */
+  private boxHit(rec: ProjRec, X: number, H: number, Z: number, byId: Map<number, SimUnit>, lx = NaN, lz = NaN): Impact | null {
+    const px = rec.px, py = rec.lastH, pz = rec.py, dx = X - px, dy = H - py, dz = Z - pz;
+    let best: Impact | null = null, bt = Infinity;
+    for (const u of byId.values()) {
+      if (!u.alive || u.side === rec.side || u.flying !== rec.air) continue;
+      const v = this.bu.get(u.id);
+      if (!v) continue;
+      const reach = Math.max(v.rig.L, v.rig.W) * 0.75 + 1.5;
+      if ((u.x - X) ** 2 + (u.y - Z) ** 2 > reach * reach) continue;
+      const b = this.hullBox(u);
+      if (!b || !rayBox(b, px, py, pz, dx, dy, dz) || RB.t1 < 0 || RB.t0 > 1) continue;
+      if (!Number.isNaN(lx) && !inBox(b, lx, lz, 0.5)) continue;
+      const t = Math.max(0, RB.t0), ex = px + dx * t, ez = pz + dz * t;
+      // square hulls are a circle to the sim (hullK x size): a round clipping a box corner flies on past
+      const sr = v.rig.L === v.rig.W ? 0.5 * v.rig.L : Infinity;
+      if (t < bt && (ex - b.x) ** 2 + (ez - b.z) ** 2 <= sr * sr) {
+        bt = t;
+        const gl = Math.hypot(dx, dz) || 1;
+        best = { x: ex, y: py + dy * t, z: ez, nx: dx / gl, nz: dz / gl, unit: u.id, top: RB.ax === 1 && dy < 0 };
+      }
+    }
+    return best;
+  }
+
+  /** Where a shell / rocket / missile / orb that the sim burst at (x, y) struck a hull, on that hull's hit box: where its
+   *  drawn flight (the round's record, gone from the sim this tick) enters the box, else the burst point brought onto the
+   *  box. null: no such round, or it burst on open ground. `unit`: the unit a 'hit' event names (only that hull, and
+   *  only with the round's record). The answer is kept on the record, so a round's 'explode' and 'hit' agree. */
+  private impactFor(x: number, y: number, moduleId: string, byId: Map<number, SimUnit>, unit = -1): Impact | null {
+    const kind = MODULE_BY_ID.get(moduleId)?.projectile as SimProjectile['kind'] | undefined;
+    if (!kind || !HULL_KINDS.has(kind)) return null;
+    const hv = unit >= 0 ? this.bu.get(unit) : undefined;
+    const lim = 3.5 + (hv ? Math.max(hv.rig.L, hv.rig.W) * 0.5 : 0);
+    let rec: ProjRec | null = null, bd = lim * lim;
+    for (const [id, r] of this.projRec) {
+      if (r.mod !== moduleId || this.curP.has(id)) continue;
+      const qx = r.hit ? r.hit.x : r.px, qz = r.hit ? r.hit.z : r.py;
+      const d = (qx - x) ** 2 + (qz - y) ** 2;
+      if (d < bd) { bd = d; rec = r; }
+    }
+    if (rec && rec.imp !== undefined) return unit < 0 || rec.imp?.unit === unit ? rec.imp : null;
+    if (!rec && unit >= 0) return null;
+    // the struck hull: the burst point (sim) on its box (drawn a moment behind), a little padded
+    let su: SimUnit | null = null, sb: HullBox | null = null, sd = Infinity;
+    const air = rec ? rec.air : false;
+    for (const u of unit >= 0 ? [byId.get(unit)!] : byId.values()) {
+      const uv = u && this.bu.get(u.id);
+      if (!u || !uv || (rec && u.side === rec.side) || (unit < 0 && u.flying !== air)) continue;
+      const reach = Math.max(uv.rig.L, uv.rig.W) + 1;
+      if ((u.x - x) ** 2 + (u.y - y) ** 2 > reach * reach) continue;
+      const b = this.hullBox(u);
+      if (!b) continue;
+      const qx = x + b.x - u.x, qz = y + b.z - u.y;
+      if (!inBox(b, qx, qz, unit >= 0 ? 0.8 : 0.35)) continue;
+      const d = (qx - b.x) ** 2 + (qz - b.z) ** 2;
+      if (d < sd) { sd = d; su = u; sb = b; }
+    }
+    let imp: Impact | null = null;
+    if (su && sb) {
+      const b = sb;
+      if (rec?.hit && rec.hit.unit === su.id) imp = rec.hit;
+      else if (rec && rayBox(b, rec.px, rec.lastH, rec.py, rec.dx, rec.dy, rec.dz) && RB.t0 > -6 && RB.t0 < 6) {
+        // on along the drawn flight from where the round was last drawn (or back along it, if it was drawn inside)
+        const gl = Math.hypot(rec.dx, rec.dz) || 1;
+        imp = { x: rec.px + rec.dx * RB.t0, y: rec.lastH + rec.dy * RB.t0, z: rec.py + rec.dz * RB.t0, nx: rec.dx / gl, nz: rec.dz / gl, unit: su.id, top: RB.ax === 1 && rec.dy < 0 };
+      } else {
+        // no drawn flight to follow: the burst point brought onto the box -- the roof for rounds coming down, else its
+        // side at the round's height (or 60% up)
+        const top = kind === 'arc' && (!rec || rec.dy < -0.3);
+        const ox = x - su.x, oz = y - su.y; // the burst point relative to the hull (sim), applied to the drawn box
+        const lx = clamp(ox * b.ca + oz * b.sa - b.cx, -b.hx * 0.9, b.hx * 0.9) + b.cx, lz = clamp(-ox * b.sa + oz * b.ca - b.cz, -b.hz * 0.9, b.hz * 0.9) + b.cz;
+        const gx = lx * b.ca - lz * b.sa, gz = lx * b.sa + lz * b.ca, gl = Math.hypot(gx, gz) || 1;
+        const hy = top ? b.y1 : clamp(rec ? rec.lastH : b.y0 + 0.6 * (b.y1 - b.y0), b.y0 + 0.25 * (b.y1 - b.y0), b.y1);
+        imp = { x: b.x + gx, y: hy, z: b.z + gz, nx: rec ? rec.dx : -gx / gl, nz: rec ? rec.dz : -gz / gl, unit: su.id, top };
+      }
+    }
+    if (rec) rec.imp = imp;
+    return imp;
+  }
+
   /** body height of the first enemy (of a shooter on `side`) whose hull lies across a ray from (x, y) at `ang`; only
    *  units of the round's own layer (the sim's air rounds only hit aircraft, ground rounds only ground units) */
   private aimHeightAlong(x: number, y: number, ang: number, byId: Map<number, SimUnit>, side: Side, fallback: number, air: boolean): number {
@@ -1935,12 +2115,17 @@ export class FieldView3D implements BattleView {
       }
       case 'hit': {
         const v = this.bu.get(e.unit);
-        const yh = this.unitHeight(e.unit, byId);
+        let yh = this.unitHeight(e.unit, byId);
         const su = byId.get(e.unit);
         const d0 = v && su ? Math.hypot(e.x - su.x, e.y - su.y) : 0;
         // direction the shot was travelling when it struck (AP sparks and darts carry on along it)
         let tdx = 0, tdz = 0;
-        if (v && su) {
+        // shells, rockets, missiles: on the hull's hit box, where the drawn round flew into it
+        const imp = v && su && !e.shieldHit ? this.impactFor(e.x, e.y, e.moduleId, byId, e.unit) : null;
+        if (imp) {
+          e = { ...e, x: imp.x, y: imp.z };
+          yh = imp.y; tdx = imp.nx; tdz = imp.nz;
+        } else if (v && su) {
           // hits reported at (about) the centre (beams, arcs, splash) go to the hull side facing the shot or blast;
           // shield hits always flare on the bubble, not inside it
           const lb = this.lastBlast;
@@ -2010,9 +2195,18 @@ export class FieldView3D implements BattleView {
         const st = styleOf(e.moduleId), r = Math.max(0.3, e.radius);
         if (st.fam === 'cluster' && e.radius >= 1.1) this.clusterPts.push({ x: e.x, y: e.y, t: this.time });
         if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
-        // air bursts and missiles striking an aircraft go off at its altitude, not on the ground below (as in 2D)
-        let ey = 0;
-        if (st.def?.targetsAir) {
+        // a round that burst on a hull goes off where its drawn flight met the hull's hit box (the side it flew into, or
+        // the roof it came down on), not on the ground at the sim's burst point inside / under the model: the warhead's
+        // blast on the plate and the fireball around it. (The cargo shell of a cluster round splits in the air.)
+        let ex = e.x, ez = e.y, ey = 0;
+        const imp = EXPLOSIVE.has(st.fam) && st.fam !== 'flak' && !(st.fam === 'cluster' && e.radius >= 1.1) ? this.impactFor(e.x, e.y, e.moduleId, byId) : null;
+        if (imp) {
+          const w = warheadOf(st.def) * (st.fam === 'cluster' ? 0.6 : 1);
+          fx.warheadHit(imp.x, imp.y, imp.z, imp.nx, imp.nz, w, st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' ? 'emp' : 'he');
+          ex = imp.x; ez = imp.z;
+          ey = Math.max(0, imp.y - 0.1 - (imp.top ? 0 : 0.3 * r));
+        } else if (st.def?.targetsAir) {
+          // air bursts and missiles striking an aircraft go off at its altitude, not on the ground below (as in 2D)
           let bd = 1.2 * 1.2, best = -1;
           for (const u of byId.values()) {
             if (!u.flying || !this.bu.has(u.id)) continue;
@@ -2021,47 +2215,27 @@ export class FieldView3D implements BattleView {
           }
           if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
         }
-        // a round that burst on a ground unit's hull: the warhead's blast on the plate it hit (sized to the warhead, the
-        // ground blast below it a little smaller); a kill adds its own, bigger blast
-        if (!ey && EXPLOSIVE.has(st.fam) && st.fam !== 'flak') {
-          let hit: SimUnit | null = null, bd = Infinity;
-          for (const u of byId.values()) {
-            if (!u.alive || u.flying) continue;
-            const v = this.bu.get(u.id);
-            const d = Math.hypot(u.x - e.x, u.y - e.y);
-            if (v && d < Math.min(v.rig.L, v.rig.W) * 0.5 + 0.35 && d < bd) { bd = d; hit = u; }
-          }
-          if (hit) {
-            const v = this.bu.get(hit.id)!, c = this.drawnAt(hit);
-            const w = warheadOf(st.def) * (st.fam === 'cluster' && e.radius < 1.1 ? 0.6 : 1);
-            const yh = this.unitHeight(hit.id, byId);
-            // on the side facing where it came from (the hull centre if it came straight down)
-            const fr = st.fam === 'mortar' || st.fam === 'howitzer' || st.fam === 'bomb' || st.fam === 'cluster' || st.fam === 'grenade' || st.fam === 'firebomb';
-            const dx = e.x - c.x, dz = e.y - c.y, dl = Math.hypot(dx, dz), r = Math.min(v.rig.L, v.rig.W) * 0.35;
-            const hx = fr || dl < 0.05 ? c.x : c.x + (dx / dl) * r, hz = fr || dl < 0.05 ? c.y : c.y + (dz / dl) * r;
-            fx.warheadHit(hx, fr ? v.rig.height * 0.85 : yh, hz, dl > 0.05 ? -dx : 0, dl > 0.05 ? -dz : 0, w, st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' ? 'emp' : 'he');
-          }
-        }
         // the area the blast actually damaged (the sim's splash radius), marked on the ground / at the burst height
-        if (st.fam !== 'pd') fx.aoeRing(e.x, st.fam === 'flak' ? (ey > 0 ? ey : 1.3) : ey, e.y, e.radius, st.fam === 'plasmaOrb' || st.fam === 'plasma' || st.fam === 'empOrb' || st.fam === 'chain' || st.fam === 'sonic');
+        const ringY = imp && !byId.get(imp.unit)?.flying ? 0 : ey;
+        if (st.fam !== 'pd') fx.aoeRing(e.x, st.fam === 'flak' ? (ringY > 0 ? ringY : 1.3) : ringY, e.y, e.radius, st.fam === 'plasmaOrb' || st.fam === 'plasma' || st.fam === 'empOrb' || st.fam === 'chain' || st.fam === 'sonic');
         switch (st.fam) {
           case 'mg': case 'hmg': case 'gatling': case 'ac': case 'twinmg': case 'shotgun': case 'sniper':
-            fx.pop(e.x, ey, e.y, r * 0.8); break; // autocannon HE round: a sharp little pop
-          case 'apc': fx.pop(e.x, ey, e.y, r * 0.7); break; // AP shell's small bursting charge (the hit throws the AP sparks)
-          case 'he': fx.explosion(e.x, e.y, r * 1.25, 'fire', ey); fx.shockwave(e.x, e.y, r * 1.1); break; // HE: big blast + knockback dust
-          case 'grenade': fx.pop(e.x, ey, e.y, r * 0.65); fx.dirtGeyser(e.x, e.y, r * 0.45); break;
-          case 'mortar': case 'howitzer': case 'bomb': fx.explosion(e.x, e.y, r, 'fire', ey); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.7); break;
+            fx.pop(ex, ey, ez, r * 0.8); break; // autocannon HE round: a sharp little pop
+          case 'apc': fx.pop(ex, ey, ez, r * 0.7); break; // AP shell's small bursting charge (the hit throws the AP sparks)
+          case 'he': fx.explosion(ex, ez, r * 1.25, 'fire', ey); fx.shockwave(e.x, e.y, r * 1.1); break; // HE: big blast + knockback dust
+          case 'grenade': fx.pop(ex, ey, ez, r * 0.65); fx.dirtGeyser(e.x, e.y, r * 0.45); break;
+          case 'mortar': case 'howitzer': case 'bomb': fx.explosion(ex, ez, r, 'fire', ey); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.7); break;
           case 'cluster':
             if (e.radius >= 1.1) { fx.clusterBurst(e.x, e.y, r); fx.explosion(e.x, e.y, r * 0.75, 'fire', 0, false, 0.6); } // the cargo shell splits
-            else { fx.explosion(e.x, e.y, r * 0.8, 'fire', 0, false, 0.4); fx.dirtGeyser(e.x, e.y, r * 0.35); } // one of the bomblet carpet
+            else { fx.explosion(ex, ez, r * 0.8, 'fire', ey, false, 0.4); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.35); } // one of the bomblet carpet
             break;
-          case 'firebomb': fx.pop(e.x, ey, e.y, r * 0.8, RAMPS.ember); break; // the burning patch ('fireField') follows
-          case 'incend': fx.explosion(e.x, e.y, r, 'fire', ey); fx.fireSplash(e.x, e.y, r * 0.8); break;
+          case 'firebomb': fx.pop(ex, ey, ez, r * 0.8, RAMPS.ember); break; // the burning patch ('fireField') follows
+          case 'incend': fx.explosion(ex, ez, r, 'fire', ey); fx.fireSplash(e.x, e.y, r * 0.8); break;
           case 'flak': fx.airBurst(e.x, ey > 0 ? ey : 1.3, e.y, r * 0.75); break;
-          case 'plasmaOrb': case 'plasma': fx.explosion(e.x, e.y, r, 'plasma', ey); break;
+          case 'plasmaOrb': case 'plasma': fx.explosion(ex, ez, r, 'plasma', ey); break;
           case 'empOrb': case 'chain': {
-            fx.explosion(e.x, e.y, r, 'emp', ey, false, 0.7);
-            for (let i = 0; i < 4; i++) fx.arcs(e.x, ey + 0.3, e.y, r * 0.8, r * 0.8);
+            fx.explosion(ex, ez, r, 'emp', ey, false, 0.7);
+            for (let i = 0; i < 4; i++) fx.arcs(ex, ey + 0.3, ez, r * 0.8, r * 0.8);
             break;
           }
           case 'sonic': fx.shockwave(e.x, e.y, r); fx.sonicPulse(e.x, 0.4, e.y, r * 1.4); break;

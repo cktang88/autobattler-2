@@ -149,6 +149,9 @@ interface Template {
   height: number;
   /** centre height of the model's bounding box above the unit root (aircraft hang their airframe above the root) */
   midY: number;
+  /** bounds of the model's solid parts at rest (no contact blobs or decals), model units, unit-local: x0, x1 (x = forward),
+   *  y0, y1, z0, z1 -- the view's rough hit box (FieldView3D.hullBox) */
+  hull: readonly [number, number, number, number, number, number];
   /** a turret node -> template turret index */
   turretNodes: Map<number, number>;
   /** how far (cells of body travel) one unit of animate()-time is, per mobility, so feet/wheels don't skate */
@@ -212,6 +215,8 @@ export class Rig {
   readonly height: number;
   readonly midY: number;
   readonly radius: number;
+  /** Template.hull in world units (body scale applied), unit-local */
+  readonly hull: readonly [number, number, number, number, number, number];
   /** locomotion state */
   mv = 0;
   odo = 0;
@@ -236,6 +241,7 @@ export class Rig {
     const bs = bodyScale(u.S);
     this.root.scale.setScalar(bs);
     this.L = u.L * bs; this.W = u.W * bs; this.S = u.S; this.flying = u.flying; this.height = tpl.height * bs; this.midY = tpl.midY * bs; this.radius = u.radius * bs;
+    this.hull = tpl.hull.map((v) => v * bs) as unknown as Rig['hull'];
     this.objs = tpl.nodes.map((n) => {
       if (!n.dyn) return null;
       const o = new THREE.Group();
@@ -590,9 +596,19 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
     return r >= 0.05;
   });
   const shadowTier = unit.S + (unit.flying ? 1 : 0) + (box.max.y * bs0 >= 1.3 ? 1 : 0);
+  // solid-part bounds (the full box also holds the flat contact blob, which is wider than many hulls)
+  const hb = new THREE.Box3(), mb = new THREE.Box3();
+  meshes.forEach((m, j) => {
+    const mat = m.material as THREE.Material;
+    if (isBlob[j] || mat.alphaTest > 0 || mat.transparent) return;
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    hb.union(mb.copy(m.geometry.boundingBox!).applyMatrix4(nodes[meshNode[j]].rel));
+  });
+  if (hb.isEmpty()) hb.copy(box);
   const tpl: Template = {
     key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, castOk, shadowTier, mountTurret,
-    height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2), turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [], design, team,
+    height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2),
+    hull: [hb.min.x, hb.max.x, hb.min.y, hb.max.y, hb.min.z, hb.max.z], turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [], design, team,
   };
   return tpl;
 }
