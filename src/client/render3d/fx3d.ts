@@ -832,11 +832,201 @@ function jag(f: BoltFx, rnd: () => number, out: number[]): void {
 
 const _shadowRamp = [0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, 0, 0, 0];
 
+/** Paint scheme of a big shell (per instance): how its band colour is laid over the body. */
+export const SHELL_PAT = { plain: 0, hazard: 1, driving: 2, pulse: 3, rings: 4, rad: 5, molten: 6 } as const;
+/** A big round's look: body paint, band paint + scheme, glow colour (base tracer, and the nose with `heat` > 0). Linear rgb;
+ *  band / glow may exceed 1 (they're emissive). Shared constants: no per-shell allocation. */
+export interface ShellLook {
+  readonly body: readonly [number, number, number];
+  readonly band: readonly [number, number, number];
+  readonly pat: number;
+  readonly glow: readonly [number, number, number];
+  /** 0..1: how hot the nose glows (siege / doomsday shells) */
+  readonly heat: number;
+}
+export type ShellShape = 'ogive' | 'bomb' | 'rocket';
+
+/** lathe profile [axis 0..1 from tail to nose, radius (0.5 = full calibre)] turned so the round points down +x, centred */
+function latheX(profile: readonly (readonly [number, number])[], seg: number): THREE.BufferGeometry {
+  const g = new THREE.LatheGeometry(profile.map(([a, r]) => new THREE.Vector2(r, a - 0.5)), seg).rotateZ(-Math.PI / 2);
+  g.deleteAttribute('uv');
+  return g;
+}
+/** four thin fins at the tail: x0..x1 along the axis, radially r0..r1 */
+function fins(x0: number, x1: number, r0: number, r1: number, t: number): THREE.BufferGeometry[] {
+  const out: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 4; k++) {
+    const b = new THREE.BoxGeometry(x1 - x0, r1 - r0, t).translate((x0 + x1) / 2, (r0 + r1) / 2, 0).rotateX((k * Math.PI) / 2 + Math.PI / 4);
+    b.deleteAttribute('uv');
+    out.push(b.toNonIndexed());
+  }
+  return out;
+}
+/** merge body + fins into one geometry with a per-vertex `part` (0 body, 1 fin) the shell shader paints by */
+function withParts(body: THREE.BufferGeometry, fin: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const parts = [body.index ? body.toNonIndexed() : body, ...fin];
+  let n = 0;
+  for (const g of parts) n += g.getAttribute('position').count;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), part = new Float32Array(n);
+  let o = 0;
+  parts.forEach((g, i) => {
+    const c = g.getAttribute('position').count;
+    pos.set(g.getAttribute('position').array as Float32Array, o * 3);
+    nor.set(g.getAttribute('normal').array as Float32Array, o * 3);
+    part.fill(i ? 1 : 0, o, o + c);
+    o += c;
+  });
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('part', new THREE.BufferAttribute(part, 1));
+  return out;
+}
+/** artillery / siege shell: boat tail, driving band, long body, pointed ogive nose */
+function ogiveGeometry(): THREE.BufferGeometry {
+  const p: [number, number][] = [[0, 0], [0, 0.34], [0.06, 0.43], [0.1, 0.48], [0.13, 0.5], [0.58, 0.5]];
+  for (let i = 1; i <= 7; i++) { const t = i / 7; p.push([0.58 + 0.42 * t, 0.5 * Math.sqrt(Math.max(0, 1 - t * t)) * (1 - 0.1 * t) + (i === 7 ? 0.018 : 0)]); }
+  p.push([1, 0]);
+  return withParts(latheX(p, 14), []);
+}
+/** mortar bomb / aerial bomb: a teardrop with a tail boom and four fins */
+function bombGeometry(): THREE.BufferGeometry {
+  const p: [number, number][] = [[0, 0], [0, 0.13], [0.3, 0.13], [0.46, 0.36], [0.62, 0.5], [0.76, 0.48], [0.88, 0.4], [0.96, 0.25], [1, 0]];
+  return withParts(latheX(p, 12), fins(-0.5, -0.17, 0.06, 0.52, 0.035));
+}
+/** rocket / big missile: slim tube, cone nose, nozzle and four wide tail fins */
+function rocketGeometry(): THREE.BufferGeometry {
+  const p: [number, number][] = [[0, 0], [0, 0.4], [0.03, 0.5], [0.74, 0.5], [0.86, 0.38], [0.95, 0.18], [1, 0]];
+  return withParts(latheX(p, 10), fins(-0.5, -0.24, 0.3, 0.95, 0.06));
+}
+
+/** shared material for the big shells: standard lit metal, painted per instance (band scheme + colour, base tracer,
+ *  heat-glow nose, pulsing energy band) in the shader from the round's local position. One program for all shapes. */
+function shellMaterial(uTime: { value: number }): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.48, metalness: 0.5 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = uTime;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute vec4 iBand; attribute vec4 iGlow; attribute float part;
+varying vec4 vBand; varying vec4 vGlow; varying vec3 vLoc; varying float vPart; varying float vSeed;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vBand = iBand; vGlow = iGlow; vLoc = position; vPart = part; vSeed = float(gl_InstanceID);`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uTime;
+varying vec4 vBand; varying vec4 vGlow; varying vec3 vLoc; varying float vPart; varying float vSeed;
+float sBand(float x, float c, float w) { return 1.0 - smoothstep(w * 0.75, w, abs(x - c)); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+float shX = vLoc.x, shA = atan(vLoc.z, vLoc.y);
+int shPat = int(vBand.w + 0.5);
+float shFin = step(0.5, vPart);
+float shBody = (1.0 - shFin) * smoothstep(-0.42, -0.38, shX) * (1.0 - smoothstep(0.1, 0.14, shX));
+float shM = 0.0, shE = 0.0, shDark = 0.0;
+if (shPat == 1) { // hazard: diagonal black / yellow stripes wound round the body, yellow fins
+  shM = shBody * step(0.5, fract(shX * 4.5 + shA * 0.3183)) + shFin;
+} else if (shPat == 2) { // driving bands: two bright copper-orange rings at the base, a thin one under the nose
+  shM = (sBand(shX, -0.34, 0.05) + sBand(shX, -0.24, 0.03) + sBand(shX, 0.12, 0.02)) * (1.0 - shFin);
+  shE = shM * 0.45;
+} else if (shPat == 3) { // pulsing energy band round the waist (and glowing fin edges)
+  float pu = 0.55 + 0.45 * sin(uTime * 15.0 + vSeed * 1.7);
+  shM = sBand(shX, 0.08, 0.09) * (1.0 - shFin) + shFin * step(0.42, length(vLoc.yz));
+  shE = shM * (0.6 + 2.2 * pu);
+} else if (shPat == 4) { // hazard rings: two bands under the nose, one at the base, painted fins
+  shM = (sBand(shX, 0.16, 0.035) + sBand(shX, 0.06, 0.025) + sBand(shX, -0.32, 0.035)) * (1.0 - shFin) + shFin;
+} else if (shPat == 5) { // radiation: a yellow waist band with black trefoil blades, yellow fins
+  float wb = sBand(shX, -0.02, 0.17) * (1.0 - shFin);
+  float blade = wb * step(0.45, cos(3.0 * shA)) * step(0.035, abs(shX + 0.02)) * step(abs(shX + 0.02), 0.13);
+  float hub = wb * step(abs(shX + 0.02), 0.022);
+  shM = wb + shFin; shDark = max(blade, hub);
+} else if (shPat == 6) { // molten: the whole casing flickers with licking flame
+  float fl = 0.5 + 0.5 * sin(shX * 26.0 + shA * 3.0 + uTime * 21.0 + vSeed * 2.3) * sin(shX * 11.0 - shA * 2.0 - uTime * 13.0);
+  shM = fl * (1.0 - shFin * 0.5); shE = shM * 1.6 + 0.15;
+}
+shM = clamp(shM, 0.0, 1.0);
+diffuseColor.rgb = mix(diffuseColor.rgb, vBand.rgb, shM) * (1.0 - 0.9 * shDark);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+float shTail = (1.0 - shFin) * (1.0 - smoothstep(-0.5, -0.43, shX));
+float shNose = vGlow.w * smoothstep(0.22, 0.5, shX) * (1.0 - shFin);
+totalEmissiveRadiance += vBand.rgb * shE * (1.0 - shDark) + vGlow.rgb * (shTail * 1.6 + shNose * (1.3 + 0.3 * sin(uTime * 9.0 + vSeed)));`);
+  };
+  m.customProgramCacheKey = () => 'shell3d';
+  return m;
+}
+
+/** an instanced set of one big-round shape with its per-instance paint attributes */
+class ShellSet {
+  readonly mesh: THREE.InstancedMesh;
+  n = 0;
+  private band: THREE.InstancedBufferAttribute; private glow: THREE.InstancedBufferAttribute;
+  readonly cap: number;
+  constructor(geo: THREE.BufferGeometry, mat: THREE.Material, cap: number) {
+    this.cap = cap;
+    const mk = () => { const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4); a.setUsage(THREE.DynamicDrawUsage); return a; };
+    this.band = mk(); this.glow = mk();
+    geo.setAttribute('iBand', this.band); geo.setAttribute('iGlow', this.glow);
+    this.mesh = new THREE.InstancedMesh(geo, mat, cap);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
+    this.mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.frustumCulled = false; this.mesh.count = 0;
+  }
+  add(m: THREE.Matrix4, L: ShellLook, tint: number): void {
+    if (this.n >= this.cap) return;
+    const i = this.n++;
+    m.toArray(this.mesh.instanceMatrix.array as unknown as number[], i * 16);
+    const c = this.mesh.instanceColor!.array as Float32Array;
+    c[i * 3] = L.body[0] * tint; c[i * 3 + 1] = L.body[1] * tint; c[i * 3 + 2] = L.body[2] * tint;
+    const b = this.band.array as Float32Array, g = this.glow.array as Float32Array;
+    b[i * 4] = L.band[0]; b[i * 4 + 1] = L.band[1]; b[i * 4 + 2] = L.band[2]; b[i * 4 + 3] = L.pat;
+    g[i * 4] = L.glow[0]; g[i * 4 + 1] = L.glow[1]; g[i * 4 + 2] = L.glow[2]; g[i * 4 + 3] = L.heat;
+  }
+  end(): void {
+    this.mesh.count = this.n;
+    this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor!.needsUpdate = true;
+    this.band.needsUpdate = true; this.glow.needsUpdate = true;
+    this.n = 0;
+  }
+}
+
+/** energy ball: additive fresnel sphere, a white-hot core in a rim of the instance colour, its surface shimmering */
+function orbMaterial(uTime: { value: number }): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime },
+    vertexShader: /* glsl */ `
+      varying vec3 vN; varying vec3 vV; varying vec3 vCol; varying vec3 vP; varying float vSeed;
+      void main() {
+        vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vN = normalize(mat3(modelMatrix * instanceMatrix) * normal);
+        vV = cameraPosition - wp.xyz;
+        vCol = instanceColor; vP = position; vSeed = float(gl_InstanceID);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      varying vec3 vN; varying vec3 vV; varying vec3 vCol; varying vec3 vP; varying float vSeed;
+      void main() {
+        float f = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+        float t = uTime * 1.0 + vSeed * 3.1;
+        float sw = 0.5 + 0.5 * sin(vP.x * 9.0 + t * 11.0) * sin(vP.y * 8.0 - t * 9.0 + vP.z * 7.0);
+        vec3 rim = vCol * pow(1.0 - f, 1.4) * 1.3;
+        vec3 core = mix(vCol, vec3(1.0), 0.45) * pow(f, 4.0) * 1.3;
+        gl_FragColor = vec4(rim + core + vCol * (0.25 + 0.5 * sw) * f, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+}
+
 export class ProjLayer {
   readonly group = new THREE.Group();
   private streaks = new Ribbons(2400, 9);
   private bodies: THREE.InstancedMesh;
   private nb = 0;
+  /** seconds, for the shells' pulsing / flickering paint and the orbs' shimmer */
+  private readonly uTime = { value: 0 };
+  private readonly shells: Record<ShellShape, ShellSet>;
+  private orbs: THREE.InstancedMesh;
+  private no = 0;
   constructor() {
     this.bodies = new THREE.InstancedMesh(
       new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1).rotateZ(Math.PI / 2),
@@ -845,9 +1035,16 @@ export class ProjLayer {
     this.bodies.setColorAt(0, new THREE.Color(1, 1, 1));
     this.bodies.instanceColor!.setUsage(THREE.DynamicDrawUsage);
     this.bodies.frustumCulled = false; this.bodies.count = 0;
-    this.group.add(this.bodies, this.streaks.mesh);
+    const mat = shellMaterial(this.uTime);
+    this.shells = { ogive: new ShellSet(ogiveGeometry(), mat, 600), bomb: new ShellSet(bombGeometry(), mat, 600), rocket: new ShellSet(rocketGeometry(), mat, 800) };
+    this.orbs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 2), orbMaterial(this.uTime), 300);
+    this.orbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.orbs.setColorAt(0, new THREE.Color(1, 1, 1));
+    this.orbs.instanceColor!.setUsage(THREE.DynamicDrawUsage);
+    this.orbs.frustumCulled = false; this.orbs.count = 0; this.orbs.renderOrder = 8;
+    this.group.add(this.bodies, this.shells.ogive.mesh, this.shells.bomb.mesh, this.shells.rocket.mesh, this.orbs, this.streaks.mesh);
   }
-  begin(): void { this.streaks.begin(); this.nb = 0; }
+  begin(time?: number): void { this.streaks.begin(); this.nb = 0; this.no = 0; if (time !== undefined) this.uTime.value = time; }
   /** bright streak (tracer round / energy bolt) from tail to head */
   streak(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, r: number, g: number, b: number): void {
     // one soft ribbon: a white-hot core in a coloured glow, brightest at the head
@@ -858,23 +1055,50 @@ export class ProjLayer {
   round(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, r: number, g: number, b: number): void {
     this.streaks.seg(ax, ay, az, bx, by, bz, w, 2 * r, 2 * g, 2 * b, 1, 1.4);
   }
-  /** solid body (shell / rocket) centred at c, pointing along (dx,dy,dz) */
-  body(cx: number, cy: number, cz: number, dx: number, dy: number, dz: number, len: number, d: number, r: number, g: number, b: number): void {
-    if (this.nb >= 1200) return;
+  /** basis for a round centred at c pointing along d (len along it, diameter dia), rolled `roll` rad about its axis */
+  private basis(cx: number, cy: number, cz: number, dx: number, dy: number, dz: number, len: number, dia: number, roll: number): THREE.Matrix4 {
     const l = Math.hypot(dx, dy, dz) || 1;
     _x.set(dx / l, dy / l, dz / l);
     _z.crossVectors(_x, Math.abs(_x.y) > 0.98 ? _mid.set(1, 0, 0) : _up).normalize();
     _y.crossVectors(_z, _x);
-    _bm.makeBasis(_x.multiplyScalar(len), _y.multiplyScalar(d), _z.multiplyScalar(d)).setPosition(cx, cy, cz);
-    _bm.toArray(this.bodies.instanceMatrix.array as unknown as number[], this.nb * 16);
+    if (roll) {
+      const c = Math.cos(roll), s = Math.sin(roll);
+      _mid.copy(_y).multiplyScalar(c).addScaledVector(_z, s);
+      _z.multiplyScalar(c).addScaledVector(_y, -s);
+      _y.copy(_mid);
+    }
+    return _bm.makeBasis(_x.multiplyScalar(len), _y.multiplyScalar(dia), _z.multiplyScalar(dia)).setPosition(cx, cy, cz);
+  }
+  /** solid body (shell / rocket) centred at c, pointing along (dx,dy,dz) */
+  body(cx: number, cy: number, cz: number, dx: number, dy: number, dz: number, len: number, d: number, r: number, g: number, b: number): void {
+    if (this.nb >= 1200) return;
+    this.basis(cx, cy, cz, dx, dy, dz, len, d, 0).toArray(this.bodies.instanceMatrix.array as unknown as number[], this.nb * 16);
     const c = this.bodies.instanceColor!.array as Float32Array;
     c[this.nb * 3] = r; c[this.nb * 3 + 1] = g; c[this.nb * 3 + 2] = b;
     this.nb++;
+  }
+  /** a big painted round (artillery / siege shell, finned bomb, rocket) centred at c, pointing along (dx,dy,dz), spun
+   *  `roll` rad about its axis; `tint` darkens / brightens the body paint (team shade) */
+  shell(shape: ShellShape, cx: number, cy: number, cz: number, dx: number, dy: number, dz: number, len: number, d: number, roll: number, look: ShellLook, tint = 1): void {
+    this.shells[shape].add(this.basis(cx, cy, cz, dx, dy, dz, len, d, roll), look, tint);
+  }
+  /** an energy ball of radius rad: white-hot core, rim of the given linear colour (may exceed 1), shimmering surface */
+  orb(cx: number, cy: number, cz: number, rad: number, r: number, g: number, b: number): void {
+    if (this.no >= 300) return;
+    const d = rad * 2;
+    _bm.makeScale(d, d, d).setPosition(cx, cy, cz);
+    _bm.toArray(this.orbs.instanceMatrix.array as unknown as number[], this.no * 16);
+    const c = this.orbs.instanceColor!.array as Float32Array;
+    c[this.no * 3] = r; c[this.no * 3 + 1] = g; c[this.no * 3 + 2] = b;
+    this.no++;
   }
   end(): void {
     this.streaks.end();
     this.bodies.count = this.nb;
     this.bodies.instanceMatrix.needsUpdate = true; this.bodies.instanceColor!.needsUpdate = true;
+    this.shells.ogive.end(); this.shells.bomb.end(); this.shells.rocket.end();
+    this.orbs.count = this.no;
+    this.orbs.instanceMatrix.needsUpdate = true; this.orbs.instanceColor!.needsUpdate = true;
   }
 }
 

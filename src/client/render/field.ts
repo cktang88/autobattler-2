@@ -48,6 +48,19 @@ import { TILT_COS, TILT_TAN, flyHeight, hullHeight } from './tilt.ts';
 const P2 = Math.PI * 2;
 /** cells of flight over which a round's drawn position slides from the barrel tip onto its simulated path */
 const MUZZLE_BLEND = 2.5;
+/** Paint of the big rounds seen from above (matches the 3D shells): body, band colour + scheme, base / nose glow, fins */
+interface Shell2D { body: string; band: string; pat: 'rings' | 'driving' | 'hazard' | 'pulse'; glow?: string; nose?: string; fins?: boolean }
+const SHELL2D = {
+  longTom: { body: '#3a4420', band: '#f0c020', pat: 'rings', glow: '#ff9a40' },
+  barrage: { body: '#80868e', band: '#ff8420', pat: 'driving', glow: '#ffb060' },
+  shock: { body: '#2a3038', band: '#6ad0ff', pat: 'pulse', fins: true },
+  mortar: { body: '#3a4426', band: '#e8c040', pat: 'rings', fins: true },
+  cluster: { body: '#4c4e48', band: '#e8c040', pat: 'rings', glow: '#ffb060' },
+  siege: { body: '#161616', band: '#f0c020', pat: 'hazard', glow: '#ff7a30', nose: '#ff8a40' },
+  bomb: { body: '#3b4526', band: '#e8c040', pat: 'rings', fins: true },
+  bigBomb: { body: '#151515', band: '#f0c020', pat: 'hazard', fins: true },
+  stunBomb: { body: '#93a8be', band: '#7fd8ff', pat: 'pulse', fins: true },
+} as const satisfies Record<string, Shell2D>;
 import {
   drawUnit, drawUnitShadow, layoutOf, mountPoints, muzzlePos, unitSprites, silhouette, wreckSprite, wreckHotspots,
   type MountPose, type UnitLayout, type UnitPose, type ViewDirs,
@@ -1518,6 +1531,16 @@ export class FieldView {
             g.globalAlpha = blink;
             const fr = Math.max(1.5 / this.px, rw * 1.5);
             g.drawImage(softDot('#ffd080', 0.3), x - fr, y - fr, fr * 2, fr * 2);
+          } else if (mod?.id === 'siege240') {
+            // 240 mm siege shell: black with yellow hazard stripes, a hot nose and a short orange tracer
+            g.globalAlpha = 0.5;
+            g.strokeStyle = '#ff7a30';
+            g.lineCap = 'round';
+            g.lineWidth = Math.max(minW * 1.5, rw * 0.9);
+            g.beginPath(); g.moveTo(x - cs * rw * 2, y - sn * rw * 2); g.lineTo(x - cs * rw * 8, y - sn * rw * 8); g.stroke();
+            g.globalAlpha = 1;
+            this.bigShell(g, prevOp, x, y, cs, sn, Math.max(rw * 4.2, 6 / this.px), Math.max(rw * 1.1, 2.5 / this.px), SHELL2D.siege, p.id);
+            this.trail(p.id, x, y, 0.07 * cal, '#7a746c', 0.14, false, 0.8, 0.25);
           } else if (mod?.impulse) {
             // HE shell: an orange-red round the size of the bore with a hot nose and a smoky wake (vs the white AP needle)
             const r = rw / 2;
@@ -1558,10 +1581,15 @@ export class FieldView {
             g.drawImage(softDot('rgba(0,0,0,0.9)', 0.3), pos.x + this.dirs.sx * so - 0.12, pos.y + this.dirs.sy * so - 0.12, 0.24, 0.24);
             g.globalAlpha = 1;
           }
-          g.strokeStyle = '#d8d4c8';
+          // body paint by type (as in 3D): olive with a yellow nose band, MLRS grey with red, incendiary red-orange
+          const mlrs = mod?.id === 'mlrs';
+          g.strokeStyle = incend ? '#c8582a' : mlrs ? '#8a918c' : '#a8ac80';
           g.lineWidth = Math.max(minW * 1.5, 0.06);
           g.lineCap = 'round';
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * 0.22, y - sn * 0.22); g.stroke();
+          g.strokeStyle = incend ? '#ffb040' : mlrs ? '#d83020' : '#e8c040';
+          g.lineCap = 'butt';
+          g.beginPath(); g.moveTo(x - cs * 0.02, y - sn * 0.02); g.lineTo(x - cs * 0.06, y - sn * 0.06); g.stroke();
           g.globalCompositeOperation = 'lighter';
           // the motor roars hardest early in the burn and flickers every frame
           const fl = (0.11 + Math.random() * 0.07) * (1.25 - 0.4 * clamp(pos.progress, 0, 1));
@@ -1601,6 +1629,19 @@ export class FieldView {
           g.strokeStyle = cruise ? '#c0392b' : '#ff6a3a';
           g.lineWidth = Math.max(minW, sz * 0.2);
           g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * sz * 0.2, y - sn * sz * 0.2); g.stroke();
+          if (nuke) {
+            // radiation-yellow waist band with a black trefoil hint
+            g.strokeStyle = '#f0c818';
+            g.lineCap = 'butt';
+            g.lineWidth = Math.max(minW * 1.5, sz * 0.28);
+            g.beginPath(); g.moveTo(x - cs * sz * 0.38, y - sn * sz * 0.38); g.lineTo(x - cs * sz * 0.62, y - sn * sz * 0.62); g.stroke();
+            g.fillStyle = '#141414';
+            const mx = x - cs * sz * 0.5, my = y - sn * sz * 0.5;
+            for (let k = 0; k < 3; k++) {
+              const a = pos.angle + k * 2.094;
+              g.beginPath(); g.moveTo(mx, my); g.arc(mx, my, sz * 0.12, a - 0.5, a + 0.5); g.closePath(); g.fill();
+            }
+          }
           g.globalCompositeOperation = 'lighter';
           // boost: a fierce plume while the motor accelerates the missile off the rail, settling to a cruise flame
           const boost = t ? Math.max(0, 1 - (this.time - t.born) / (cruise || nuke || mod?.id === 'missilebattery' ? 0.9 : 0.6)) : 0;
@@ -1679,21 +1720,43 @@ export class FieldView {
             break;
           }
           const r = (0.09 + 0.07 * cal) * sc * (mod?.cluster ? 1.25 : 1);
-          g.globalCompositeOperation = prevOp;
-          g.fillStyle = '#2a2a28';
-          g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-          g.fillStyle = '#9a9a90';
-          g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.4, 0, Math.PI * 2); g.fill();
-          if (mod?.cluster) {
-            // cluster carrier: a yellow band round the body (sub-munitions inside)
-            g.strokeStyle = '#e8c040';
-            g.lineWidth = Math.max(minW, r * 0.35);
-            g.beginPath(); g.arc(x, y, r * 0.8, 0, Math.PI * 2); g.stroke();
+          // each family its own paint on a nose-first body: Long Tom olive with yellow bands, barrage grey steel with orange
+          // driving bands, the shock mortar a finned bomb with a pulsing blue band, doomsday black-and-yellow with a hot
+          // nose, bombs finned (stun / EMP bombs pale blue), the cluster canister grey with yellow bands
+          const air = mod?.requires === 'air', stun = !!mod?.stun;
+          const sch: Shell2D = air ? (stun ? SHELL2D.stunBomb : (mod?.damage ?? 0) >= 600 ? SHELL2D.bigBomb : SHELL2D.bomb)
+            : vis === 'mortar' ? (stun ? SHELL2D.shock : SHELL2D.mortar)
+            : mod?.cluster ? SHELL2D.cluster : mod?.mount === 'XL' ? SHELL2D.siege : (mod?.pellets ?? 1) > 1 ? SHELL2D.barrage : SHELL2D.longTom;
+          const fat = air || vis === 'mortar';
+          const L = r * (fat ? 2.3 : mod?.mount === 'XL' ? 2.8 : 2.5), W = r * (fat ? 1.35 : 1.15);
+          const split = mod?.cluster ? clamp((pos.progress - 0.72) / 0.28, 0, 1) : 0;
+          if (split > 0) {
+            // the cargo canister splits open on the way down: its halves peel apart and the bomblets spill out between them
+            const o = split * (0.12 + 0.4 * split);
+            for (let s2 = -1; s2 <= 1; s2 += 2) {
+              const a = pos.angle + s2 * split * 0.7;
+              this.bigShell(g, prevOp, x - sn * s2 * o, y + cs * s2 * o, Math.cos(a), Math.sin(a), L, W * 0.6, sch, p.id);
+            }
+            g.globalCompositeOperation = prevOp;
+            g.fillStyle = '#26241f';
+            for (let i = 0; i < 6; i++) {
+              const a = p.id + i * 1.047 + this.time * 3, rr = o * (0.4 + 0.15 * (i % 3));
+              g.beginPath(); g.arc(x + Math.cos(a) * rr, y + Math.sin(a) * rr, r * 0.28, 0, P2); g.fill();
+            }
+            g.globalCompositeOperation = 'lighter';
+          } else this.bigShell(g, prevOp, x, y, cs, sn, L, W, sch, p.id);
+          if (stun && Math.random() < dt * 8) {
+            // stun / shock rounds crackle
+            g.strokeStyle = '#dff0ff'; g.lineWidth = Math.max(minW, 0.015); g.globalAlpha = 0.8;
+            const a0 = Math.random() * P2;
+            g.beginPath(); g.moveTo(x + Math.cos(a0) * W, y + Math.sin(a0) * W);
+            g.lineTo(x + Math.cos(a0 + 0.7) * W * 1.9, y + Math.sin(a0 + 0.7) * W * 1.9);
+            g.lineTo(x + Math.cos(a0 + 1.3) * W * 1.4, y + Math.sin(a0 + 1.3) * W * 1.4); g.stroke();
+            g.globalAlpha = 1;
           }
-          g.globalCompositeOperation = 'lighter';
-          g.globalAlpha = 0.6;
-          g.drawImage(glowTex('#ffb060'), x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
-          this.trail(p.id, x, y, 0.08 * sc, '#6a655d', 0.09, false, 1.6, 0.3, 0.05);
+          g.globalAlpha = 0.45;
+          g.drawImage(glowTex(stun ? '#8fd0ff' : '#ffb060'), x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+          this.trail(p.id, x - cs * L * 0.5, y - sn * L * 0.5, 0.08 * sc, '#6a655d', 0.09, false, 1.6, 0.3, 0.05);
           break;
         }
         case 'orb': {
@@ -1726,6 +1789,22 @@ export class FieldView {
               g.stroke();
             }
           } else {
+            if (mod?.id === 'siegeplasma') {
+              // siege plasma mass: a big cyan energy ball in a cyan halo (as in 3D), shimmering, with a short shimmering wake
+              const r = 0.17 * (1 + 0.08 * Math.sin(this.time * 31 + p.id));
+              const tl = r * 6, sh = 0.75 + 0.25 * Math.sin(this.time * 43 + p.id);
+              const gr = g.createLinearGradient(x, y, x - cs * tl, y - sn * tl);
+              gr.addColorStop(0, rgba('#60e0ff', 0.5 * sh));
+              gr.addColorStop(1, rgba('#60e0ff', 0));
+              g.strokeStyle = gr; g.lineCap = 'round'; g.lineWidth = r * 1.4;
+              g.beginPath(); g.moveTo(x, y); g.lineTo(x - cs * tl, y - sn * tl); g.stroke();
+              g.globalAlpha = 0.7;
+              g.drawImage(glowTex('#38b8ff'), x - r * 3, y - r * 3, r * 6, r * 6);
+              g.globalAlpha = 1;
+              g.drawImage(glowTex('#60e8ff'), x - r * 1.5, y - r * 1.5, r * 3, r * 3);
+              g.drawImage(glowTex('#ffffff'), x - r * 0.6, y - r * 0.6, r * 1.2, r * 1.2);
+              break;
+            }
             // plasma bolt: a short elongated slug of white-hot gas in a violet sheath, with a fading wake
             const big = mod && moduleTier(mod) >= 3 ? 1.8 : 1;
             const r = (0.07 + 0.05 * cal) * big;
@@ -1754,6 +1833,60 @@ export class FieldView {
       g.globalAlpha = 1;
     }
     g.globalCompositeOperation = prevOp;
+  }
+
+  /** A big round seen from above, nose first along (cs, sn): a body with a rounded tail and an ogive nose, its band
+   *  scheme clipped to the body, tail fins on bombs, a glowing base tracer / hot nose. Leaves the 'lighter' blend on. */
+  private bigShell(g: Ctx, prevOp: GlobalCompositeOperation, x: number, y: number, cs: number, sn: number, len: number, wid: number, s: Shell2D, seed: number): void {
+    const tr = g.getTransform();
+    g.transform(cs, sn, -sn, cs, x, y);
+    const h = len / 2, r = wid / 2;
+    g.globalCompositeOperation = prevOp;
+    g.globalAlpha = 1;
+    if (s.fins) {
+      g.fillStyle = s.pat === 'pulse' ? s.body : s.band;
+      g.beginPath(); g.moveTo(-h * 0.45, 0); g.lineTo(-h * 1.05, -r * 1.25); g.lineTo(-h * 1.05, r * 1.25); g.closePath(); g.fill();
+    }
+    g.save();
+    g.beginPath();
+    g.moveTo(h, 0);
+    g.quadraticCurveTo(h * 0.5, -r * 1.1, h * 0.05, -r);
+    g.lineTo(-h + r * 0.6, -r);
+    g.quadraticCurveTo(-h, -r, -h, 0);
+    g.quadraticCurveTo(-h, r, -h + r * 0.6, r);
+    g.lineTo(h * 0.05, r);
+    g.quadraticCurveTo(h * 0.5, r * 1.1, h, 0);
+    g.closePath();
+    g.fillStyle = s.body;
+    g.fill();
+    g.clip();
+    g.fillStyle = s.band;
+    switch (s.pat) {
+      case 'rings': g.fillRect(h * 0.02, -r, h * 0.16, r * 2); g.fillRect(-h * 0.24, -r, h * 0.1, r * 2); g.fillRect(-h * 0.8, -r, h * 0.14, r * 2); break;
+      case 'driving': g.fillRect(-h * 0.78, -r, h * 0.16, r * 2); g.fillRect(-h * 0.54, -r, h * 0.08, r * 2); break;
+      case 'hazard':
+        for (let k = -3; k <= 3; k += 2) {
+          const c = k * r * 0.9;
+          g.beginPath(); g.moveTo(c - r * 0.45, -r); g.lineTo(c + r * 0.45, -r); g.lineTo(c - r * 0.45, r); g.lineTo(c - r * 1.35, r); g.closePath(); g.fill();
+        }
+        break;
+      case 'pulse': {
+        g.globalAlpha = 0.6 + 0.4 * Math.sin(this.time * 15 + seed * 1.7);
+        g.fillRect(-h * 0.08, -r, h * 0.3, r * 2);
+        break;
+      }
+    }
+    g.restore();
+    // shading: a soft highlight along the lit side
+    g.globalAlpha = 0.25;
+    g.fillStyle = '#ffffff';
+    g.fillRect(-h * 0.6, -r * 0.62, h * 1.1, r * 0.28);
+    g.globalCompositeOperation = 'lighter';
+    if (s.glow) { g.globalAlpha = 0.9; g.drawImage(glowTex(s.glow), -h - r * 1.6, -r * 1.6, r * 3.2, r * 3.2); }
+    if (s.nose) { g.globalAlpha = 0.6 + 0.2 * Math.sin(this.time * 9 + seed); g.drawImage(glowTex(s.nose), h * 0.6 - r * 1.3, -r * 1.3, r * 2.6, r * 2.6); }
+    if (s.pat === 'pulse') { g.globalAlpha = 0.5 + 0.4 * Math.sin(this.time * 15 + seed * 1.7); g.drawImage(glowTex(s.band), h * 0.07 - r * 1.6, -r * 1.6, r * 3.2, r * 3.2); }
+    g.globalAlpha = 1;
+    g.setTransform(tr);
   }
 
   /** Emit trail particles along a projectile's path since it was last drawn. */
@@ -2342,7 +2475,7 @@ export class FieldView {
           if (best) { const al = this.airLift(best); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
         }
         // the area the blast actually damaged: a ring at exactly the sim's splash radius
-        if (mod?.projectile !== 'flame' && vis !== 'pointdef') fx.aoe(e.x, e.y, r, vis === 'emp' || vis === 'plasma' || vis === 'sonic' ? '#8fd0ff' : '#ffb060');
+        if (mod?.projectile !== 'flame' && vis !== 'pointdef') fx.aoe(e.x, e.y, r, vis === 'emp' || vis === 'plasma' || vis === 'sonic' || (mod?.stun && mod.requires === 'air') ? '#8fd0ff' : '#ffb060');
         if (mod?.projectile === 'flame') {
           // a flame jet's splash: the jet itself, its hits and the burning ground carry the look; a blast flash per
           // round (10 a second per flamer) only blew a dozen jets on one target out to a white ball
@@ -2369,7 +2502,7 @@ export class FieldView {
         } else if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
         else if (mod?.id === 'doomsday') { fx.boom(e.x, e.y, r * 0.8, 'big'); fx.shake(0.45); }
         else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.6, r * 0.9), 'flak', false);
-        else if (vis === 'emp') fx.boom(e.x, e.y, Math.max(0.4, r), 'emp');
+        else if (vis === 'emp' || (mod?.stun && mod.requires === 'air')) fx.boom(e.x, e.y, Math.max(0.4, r), 'emp'); // EMP orbs, stun / EMP bombs
         else if (vis === 'plasma') fx.boom(e.x, e.y, Math.max(0.4, r * 0.8), 'plasma');
         else if (vis === 'sonic') fx.boom(e.x, e.y, Math.max(0.5, r), 'sonic');
         else if (vis === 'pointdef') fx.boom(e.x, e.y, 0.25, 'flak', false);

@@ -24,7 +24,7 @@ import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
 import { buildTerrain, createRenderer, setSurfaceDetail, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
 import { UnitLayer, teamHullRgb, templateKey, type Look, type Rig } from './units-adapter.ts';
-import { Fx3D, RAMPS, type MuzzleKind, type Ramp, type TrailKind, type WispKind } from './fx3d.ts';
+import { Fx3D, RAMPS, SHELL_PAT, type MuzzleKind, type Ramp, type ShellLook, type TrailKind, type WispKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
 import { SunShadow } from './shadow3d.ts';
@@ -275,6 +275,45 @@ const ROUND_TINT: Partial<Record<Fam, [number, number, number]>> = {
   flechette: [0.72, 0.88, 1], ac: [1, 0.88, 0.7], sniper: [0.86, 0.94, 1], apc: [1, 0.36, 0.16], he: [1, 0.5, 0.18],
   flak: [1, 0.62, 0.26], gauss: [0.45, 0.65, 1],
 };
+/** Big rounds' paint (linear rgb: body, band + scheme, base-tracer / hot-nose glow): every artillery, siege, bomb and
+ *  rocket family gets its own colours on its own silhouette, so you can tell what's incoming. */
+const look = (body: [number, number, number], band: [number, number, number], pat: number, glow: [number, number, number] = [0, 0, 0], heat = 0): ShellLook => ({ body, band, pat, glow, heat });
+/** energy-ball halos tinted to the ball (the stock plasma ramp is near white-hot, which washed the balls out) */
+const ORB_HALO: Record<'plasma' | 'siege' | 'emp', Ramp> = {
+  plasma: [1.7, 0.3, 2.0, 0.85, 1.0, 0.12, 1.3, 0.6, 0.25, 0.02, 0.4, 0],
+  siege: [0.35, 1.6, 2.0, 0.8, 0.12, 0.9, 1.3, 0.6, 0.02, 0.25, 0.45, 0],
+  emp: [0.9, 1.5, 2.4, 0.8, 0.4, 0.8, 1.6, 0.6, 0.05, 0.2, 0.5, 0],
+};
+/** energy-ball colours (linear, HDR): EMP pale blue, plasma cannon magenta, siege projector cyan */
+const ORB_COL = { emp: [0.45, 0.8, 1.7], plasma: [1.4, 0.2, 1.5], siege: [0.2, 1.25, 1.6] } as const;
+const LOOK = {
+  /** Long Tom 155 mm: olive drab, yellow hazard bands, a hot base tracer */
+  longTom: look([0.13, 0.15, 0.07], [1, 0.7, 0.04], SHELL_PAT.rings, [2.4, 0.95, 0.25]),
+  /** barrage: grey steel with bright copper-orange driving bands */
+  barrage: look([0.4, 0.42, 0.46], [1.5, 0.5, 0.08], SHELL_PAT.driving, [1.8, 0.7, 0.2]),
+  /** shock mortar: gunmetal finned bomb with a pulsing electric-blue band */
+  shock: look([0.13, 0.15, 0.18], [0.3, 0.75, 2.4], SHELL_PAT.pulse),
+  mortar: look([0.2, 0.23, 0.13], [0.95, 0.72, 0.08], SHELL_PAT.rings),
+  /** firebomb: a casing already alight, flickering orange-red */
+  fire: look([0.3, 0.05, 0.02], [2.4, 0.8, 0.12], SHELL_PAT.molten, [2.6, 0.9, 0.2]),
+  /** cluster cargo shell: dull grey canister, yellow bands */
+  cluster: look([0.24, 0.25, 0.22], [1, 0.78, 0.08], SHELL_PAT.rings, [1.6, 0.6, 0.15]),
+  /** 240 mm siege / doomsday: black with yellow hazard stripes and a heat-glow nose */
+  siege: look([0.03, 0.03, 0.03], [1, 0.76, 0.03], SHELL_PAT.hazard, [2.6, 0.75, 0.12], 0.75),
+  doom: look([0.025, 0.025, 0.025], [1, 0.68, 0.02], SHELL_PAT.hazard, [3.2, 0.9, 0.15], 1),
+  /** tactical nuke: white warhead, radiation-yellow band with a black trefoil, yellow fins */
+  nuke: look([0.9, 0.9, 0.84], [1, 0.8, 0.04], SHELL_PAT.rad),
+  cruise: look([0.62, 0.64, 0.66], [0.75, 0.1, 0.06], SHELL_PAT.rings),
+  /** rockets: olive with a yellow band; MLRS dark grey with red; incendiary flickering red-orange */
+  rocket: look([0.3, 0.33, 0.2], [0.95, 0.72, 0.1], SHELL_PAT.rings),
+  mlrs: look([0.18, 0.2, 0.19], [0.85, 0.1, 0.05], SHELL_PAT.rings),
+  incend: look([0.4, 0.08, 0.03], [2, 0.6, 0.1], SHELL_PAT.molten),
+  /** aerial bombs: olive iron bomb with yellow nose bands and fins; blockbuster black-and-yellow; stun / EMP pale blue */
+  bomb: look([0.2, 0.23, 0.13], [0.95, 0.75, 0.1], SHELL_PAT.rings),
+  bigBomb: look([0.05, 0.05, 0.05], [1, 0.74, 0.04], SHELL_PAT.hazard),
+  stunBomb: look([0.5, 0.6, 0.72], [0.45, 0.95, 2.6], SHELL_PAT.pulse),
+} as const;
+
 /** families whose rounds are drawn as near-instant flashes: a thin bright line that sweeps a chunk of the path to the
  *  target in a frame or three and is gone (real bullets are far too fast to watch fly; the hit lands on the sim's time) */
 const FLASH = new Set<Fam>(['mg', 'hmg', 'gatling', 'twinmg', 'sniper']);
@@ -1423,7 +1462,7 @@ export class FieldView3D implements BattleView {
 
   private syncProjectiles(list: SimProjectile[], byId?: Map<number, SimUnit>): void {
     const proj = this.fx.proj;
-    proj.begin();
+    proj.begin(this.time);
     const seen = this.projRec;
     const alive = new Set<number>();
     const dt = 1 / 60;
@@ -1603,6 +1642,10 @@ export class FieldView3D implements BattleView {
             proj.body(X, H, Z, dx, dy, dz, rw * 3.2, rw, 0.55, 0.55, 0.35);
             roundT(rw * 4, rw * 0.45, 1.7, 0.85, 0.3);
             trailAlong(0, 'shell', 0.4 + sz * 0.6, 0.35);
+          } else if (st.def?.id === 'siege240') { // 240 mm siege shell: black with yellow hazard stripes, a heat-glow nose, hot tracer
+            proj.shell('ogive', X, H, Z, dx, dy, dz, rw * 4.2, rw, 0, LOOK.siege);
+            roundT(rw * 7, rw * 0.5, 1.9, 0.65, 0.2);
+            trailAlong(rw * 2, 'shell', 0.5 + sz * 0.5, 0.35);
           } else { // AP shot: slim bright penetrator with a hot red tank tracer
             proj.body(X, H, Z, dx, dy, dz, rw * 3.5, rw * 0.8, 0.9, 0.8, 0.55);
             roundT(rw * 5, rw * 0.45, 1.8, 0.6, 0.25);
@@ -1617,43 +1660,83 @@ export class FieldView3D implements BattleView {
               trailAlong(0, 'spark', 0.8, 0.25);
               break;
             }
-            case 'firebomb': // incendiary shell glowing and trailing flame
-              proj.body(X, H, Z, dx, dy, dz, 0.24, 0.14, 0.7, 0.35, 0.15);
-              this.fx.glow(X, H, Z, 0.4, dt * 2.2, RAMPS.ember);
-              trailAlong(0, 'firebomb', 1, 0.2);
+            case 'firebomb': { // incendiary bomb already alight: a flickering orange-red casing, a flame tongue off the tail, embers
+              const d = Math.max(0.13, st.rw * 2), len = d * 2.6;
+              proj.shell('bomb', X, H, Z, dx, dy, dz, len, d, age * 6 + rec.seed, LOOK.fire);
+              const fl = 0.7 + 0.6 * Math.random(), t0 = len * 0.4, t1 = t0 + 0.3 * fl;
+              proj.streak(bx(t1), by(t1), bz(t1), bx(t0), by(t0), bz(t0), d * 0.3 * fl, 1.2, 0.32, 0.05);
+              this.fx.glow(bx(len * 0.6), by(len * 0.6), bz(len * 0.6), 0.32, dt * 2.2, RAMPS.ember);
+              trailAlong(len * 0.8, 'firebomb', 0.85, 0.2);
+              if (emit && Math.random() < 0.6 * lod) this.fx.trail(bx(len * 0.5), by(len * 0.5), bz(len * 0.5), 'spark', 1.3);
               break;
-            case 'bomb': // dropped bomb: dark, nose tipping down as it falls, no trail
-              proj.body(X, H, Z, dx, dy, dz, 0.3, 0.13, 0.3, 0.32, 0.3);
+            }
+            case 'bomb': { // dropped bomb, nose tipping down as it falls, its fins turning it slowly; stun / EMP bombs crackle
+              const stun = !!st.def?.stun, wh = warheadOf(st.def);
+              const d = 0.08 + 0.07 * wh * (st.def?.pellets ? 0.5 : 1), len = d * 3;
+              proj.shell('bomb', X, H, Z, dx, dy, dz, len, d, age * 3 + rec.seed, stun ? LOOK.stunBomb : wh > 1.2 ? LOOK.bigBomb : LOOK.bomb);
+              if (stun) {
+                this.fx.glow(X, H, Z, d * 3, dt * 2.2, ORB_HALO.emp);
+                if (Math.random() < fdt * (st.def?.pellets ? 2 : 6)) this.fx.arcs(X, H, Z, d * 1.4, d * 1.4);
+              }
               break;
+            }
             case 'cluster':
               if (rec.bomblet) { // bomblet: a tiny dark pellet tumbling, with a spark trail
                 const a = age * 20 + rec.seed, c = Math.cos(a);
                 proj.body(X, H, Z, dx * c, Math.sin(a), dz * c, 0.1, 0.08, 0.3, 0.3, 0.28);
                 trailAlong(0, 'spark', 0.9, 0.25);
-              } else { // big yellow-banded cargo shell with a faint tracer and a smoke streamer
-                proj.body(X, H, Z, dx, dy, dz, 0.4 + 0.4 * sz, 0.12 + 0.1 * sz, 0.8, 0.7, 0.3);
-                proj.streak(bx(0.7 + sz * 0.4), by(0.7 + sz * 0.4), bz(0.7 + sz * 0.4), bx(0.15), by(0.15), bz(0.15), 0.05 + sz * 0.04, 0.9, 0.45, 0.12);
+              } else { // grey yellow-banded cargo canister with a faint tracer and a smoke streamer: it splits open on the way down
+                const d = st.rw * 1.35, len = d * 4.2;
+                const split = clamp((kp - 0.72) / 0.28, 0, 1);
+                if (split <= 0) {
+                  proj.shell('ogive', X, H, Z, dx, dy, dz, len, d, 0, LOOK.cluster);
+                  proj.streak(bx(len * 0.5 + 0.5 + sz * 0.4), by(len * 0.5 + 0.5 + sz * 0.4), bz(len * 0.5 + 0.5 + sz * 0.4), bx(len * 0.45), by(len * 0.45), bz(len * 0.45), 0.05 + sz * 0.04, 0.9, 0.45, 0.12);
+                } else {
+                  // the casing halves peel apart sideways, the bomblets spill out and fan between them (the sim scatters
+                  // the real bomblets where the cargo shell lands)
+                  const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle), o = split * (0.15 + 0.6 * split);
+                  for (let s = -1; s <= 1; s += 2) {
+                    proj.shell('ogive', X - sa * s * o, H + 0.1 * split, Z + ca * s * o, dx - sa * s * split * 0.9, dy + 0.3 * split, dz + ca * s * split * 0.9, len, d * 0.75, s * split * 2, LOOK.cluster);
+                  }
+                  for (let i = 0; i < 6; i++) {
+                    const a = rec.seed + i * 1.047 + age * 3, r = o * (0.5 + 0.12 * (i % 3)), b = (i - 2.5) * 0.06 * split;
+                    const c = Math.cos(a), sn = Math.sin(a);
+                    const t = age * 18 + i;
+                    proj.body(X - sa * c * r - dx * b, H + sn * r * 0.7 - dy * b, Z + ca * c * r - dz * b, Math.cos(t), Math.sin(t), 0.4, 0.08, 0.06, 0.26, 0.26, 0.22);
+                  }
+                  this.fx.glow(X, H, Z, 0.3 + 0.4 * (1 - split), dt * 2.2, RAMPS.flash);
+                }
                 trailAlong(0.2, 'heavyShell', 0.8 + sz, 0.3);
               }
               break;
-            case 'mortar': // finned bomb lobbed high: a glowing fuse tail and a thin smoke line
-              proj.body(X, H, Z, dx, dy, dz, 0.32 + 0.2 * sz, 0.13 + 0.06 * sz, 0.4, 0.43, 0.36);
-              proj.streak(bx(0.55), by(0.55), bz(0.55), bx(0.12), by(0.12), bz(0.12), 0.045 + sz * 0.03, 1, 0.45, 0.12);
-              this.fx.glow(bx(0.14), by(0.14), bz(0.14), 0.22 + 0.1 * sz, dt * 2.2, RAMPS.exhaust);
-              trailAlong(0.15, 'heavyShell', 0.55 + sz, 0.2);
+            case 'mortar': { // stubby finned bomb lobbed high, turning on its fins; the shock mortar's waist band pulses electric blue
+              const shock = !!st.def?.stun;
+              const d = Math.max(0.09, st.rw * 1.45), len = d * 2.7;
+              proj.shell('bomb', X, H, Z, dx, dy, dz, len, d, age * 8 + rec.seed, shock ? LOOK.shock : LOOK.mortar);
+              if (shock) {
+                this.fx.glow(X, H, Z, 0.2 + 0.1 * sz, dt * 2.2, ORB_HALO.emp);
+                if (Math.random() < fdt * 3) this.fx.arcs(X, H, Z, d * 1.2, d * 1.2);
+              } else this.fx.glow(bx(len * 0.5), by(len * 0.5), bz(len * 0.5), 0.18 + 0.1 * sz, dt * 2.2, RAMPS.exhaust);
+              trailAlong(len * 0.5, 'heavyShell', 0.55 + sz, 0.2);
               break;
-            default: // howitzer / barrage: heavy shell, a glowing base-bleed tracer and a lazy grey streamer
-              proj.body(X, H, Z, dx, dy, dz, 0.35 + 0.4 * sz, 0.1 + 0.1 * sz, 0.62, 0.6, 0.52);
-              proj.streak(bx(0.9 + sz * 0.5), by(0.9 + sz * 0.5), bz(0.9 + sz * 0.5), bx(0.18), by(0.18), bz(0.18), 0.05 + sz * 0.05, 1, 0.5, 0.15);
-              trailAlong(0.2, 'heavyShell', 0.8 + sz, 0.2);
+            }
+            default: { // howitzer / barrage / doomsday: a big painted shell, a glowing base-bleed tracer and a lazy grey streamer
+              const doom = st.def?.mount === 'XL', bar = (st.def?.pellets ?? 1) > 1;
+              const d = st.rw * (bar ? 1.2 : 1.3), len = d * (doom ? 4.4 : bar ? 3.6 : 5);
+              proj.shell('ogive', X, H, Z, dx, dy, dz, len, d, 0, doom ? LOOK.doom : bar ? LOOK.barrage : LOOK.longTom);
+              const t0 = len * 0.45, t1 = t0 + (bar ? 0.35 : 0.7 + sz * 0.5);
+              proj.round(bx(t1), by(t1), bz(t1), bx(t0), by(t0), bz(t0), d * (bar ? 0.4 : 0.45), 1.7, bar ? 0.75 : 0.6, 0.14);
+              if (doom) this.fx.glow(bx(len * 0.55), by(len * 0.55), bz(len * 0.55), d * 2.4, dt * 2.2, RAMPS.ember); // its incendiary fill burning at the base
+              trailAlong(len * 0.5, 'heavyShell', (bar ? 0.6 : 0.8) + sz, 0.2);
               break;
+            }
           }
           break;
         }
         case 'rocket': { // stubby rocket: a flickering flame tongue and a thin, fast-fading exhaust streak (by warhead size)
           const inc = st.fam === 'incend';
           const len = 0.36 + 0.22 * sz;
-          proj.body(X, H, Z, dx, dy, dz, len, 0.07 + 0.06 * sz, 0.5, 0.5, 0.44);
+          proj.shell('rocket', X, H, Z, dx, dy, dz, len, 0.07 + 0.06 * sz, age * 7 + rec.seed, inc ? LOOK.incend : st.def?.id === 'mlrs' ? LOOK.mlrs : LOOK.rocket);
           // burn: the motor roars hardest early on, the flame tongue flickers every frame
           const fl = (0.7 + 0.6 * Math.random()) * (1.2 - 0.35 * kp);
           const t0 = len * 0.5, t1 = t0 + (0.22 + 0.2 * sz) * fl;
@@ -1663,9 +1746,13 @@ export class FieldView3D implements BattleView {
           break;
         }
         case 'missile': { // slim white missile: a white-hot exhaust plume (fierce in the boost) and a thin exhaust streak (by warhead size)
-          const big = st.fam === 'bigMissile';
-          const len = (big ? 0.6 : 0.4) + 0.3 * sz;
-          proj.body(X, H, Z, dx, dy, dz, len, (big ? 0.1 : 0.05) + 0.05 * sz, 0.95, 0.95, 0.92);
+          const big = st.fam === 'bigMissile', nuke = st.def?.id === 'tactnuke';
+          const len = ((big ? 0.6 : 0.4) + 0.3 * sz) * (nuke ? 1.15 : 1);
+          const md = ((big ? 0.1 : 0.05) + 0.05 * sz) * (nuke ? 1.5 : 1);
+          if (big) { // cruise missile / tactical nuke: a finned body in its own paint (the nuke wrapped in a sickly glow)
+            proj.shell('rocket', X, H, Z, dx, dy, dz, len, md, nuke ? age * 1.5 : 0, nuke ? LOOK.nuke : LOOK.cruise);
+            if (nuke) this.fx.glow(X, H, Z, len * (1 + 0.15 * Math.sin(age * 6)), dt * 2.2, RAMPS.rad);
+          } else proj.body(X, H, Z, dx, dy, dz, len, md, 0.95, 0.95, 0.92);
           const boost = Math.max(0, 1 - age / (big ? 0.9 : 0.6));
           const fl = (0.8 + 0.4 * Math.random()) * (1 + 0.9 * boost);
           const t0 = len * 0.5, t1 = t0 + (big ? 0.45 : 0.25) * (0.6 + sz) * fl;
@@ -1684,9 +1771,18 @@ export class FieldView3D implements BattleView {
             if (Math.random() < fdt * 9) this.fx.sonicPulse(X, H, Z, 0.6 + sz);
             break;
           }
-          const ramp: Ramp = st.fam === 'empOrb' ? RAMPS.emp : RAMPS.plasma;
-          this.fx.glow(X, H, Z, 0.4 + sz * 0.7, dt * 2.2, ramp);
-          if (emit) this.fx.trail(X, H, Z, 'orb', 0.5 + sz * 0.6, ramp);
+          // the energy ball itself (white-hot core, shimmering rim) in a halo of its own hue and a short shimmering wake:
+          // EMP pale blue (crackling), the plasma cannon magenta, the siege projector a big cyan mass
+          const emp = st.fam === 'empOrb', siege = !emp && st.def?.mount !== 'M' && st.def?.mount !== 'S';
+          const ramp: Ramp = emp ? ORB_HALO.emp : siege ? ORB_HALO.siege : ORB_HALO.plasma;
+          const orr = (emp ? 0.07 : 0.08) + sz * (siege ? 0.14 : 0.08);
+          const oc = emp ? ORB_COL.emp : siege ? ORB_COL.siege : ORB_COL.plasma;
+          proj.orb(X, H, Z, orr * (1 + 0.08 * Math.sin(age * 31 + rec.seed)), oc[0], oc[1], oc[2]);
+          const sh = 0.75 + 0.25 * Math.sin(age * 43 + rec.seed), tl = orr * (siege ? 6 : 5);
+          proj.round(bx(tl), by(tl), bz(tl), bx(orr * 0.5), by(orr * 0.5), bz(orr * 0.5), orr * 0.7 * sh, oc[0] * 0.45, oc[1] * 0.45, oc[2] * 0.45);
+          // the halo: kept a little wider than the ball, so the coloured energy ball itself stays readable
+          this.fx.glow(X, H, Z, orr * (siege ? 3.6 : 2.6) + 0.1, dt * 2.2, ramp);
+          if (emit) this.fx.trail(bx(orr * 2), by(orr * 2), bz(orr * 2), 'orb', 0.35 + sz * 0.4, ramp);
           if (st.fam === 'empOrb' && Math.random() < fdt * 10) this.fx.arcs(X, H, Z, 0.25 + sz * 0.3, 0.25 + sz * 0.3);
           break;
         }
@@ -2208,7 +2304,7 @@ export class FieldView3D implements BattleView {
         const imp = EXPLOSIVE.has(st.fam) && st.fam !== 'flak' && !(st.fam === 'cluster' && e.radius >= 1.1) ? this.impactFor(e.x, e.y, e.moduleId, byId) : null;
         if (imp) {
           const w = warheadOf(st.def) * (st.fam === 'cluster' ? 0.6 : 1);
-          fx.warheadHit(imp.x, imp.y, imp.z, imp.nx, imp.nz, w, st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' ? 'emp' : 'he');
+          fx.warheadHit(imp.x, imp.y, imp.z, imp.nx, imp.nz, w, st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' || (st.fam === 'bomb' && st.def?.stun) ? 'emp' : 'he');
           ex = imp.x; ez = imp.z;
           ey = Math.max(0, imp.y - 0.1 - (imp.top ? 0 : 0.3 * r));
         } else if (st.def?.targetsAir) {
@@ -2230,7 +2326,14 @@ export class FieldView3D implements BattleView {
           case 'apc': fx.pop(ex, ey, ez, r * 0.7); break; // AP shell's small bursting charge (the hit throws the AP sparks)
           case 'he': fx.explosion(ex, ez, r * 1.25, 'fire', ey); fx.shockwave(e.x, e.y, r * 1.1); break; // HE: big blast + knockback dust
           case 'grenade': fx.pop(ex, ey, ez, r * 0.65); fx.dirtGeyser(e.x, e.y, r * 0.45); break;
-          case 'mortar': case 'howitzer': case 'bomb': fx.explosion(ex, ez, r, 'fire', ey); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.7); break;
+          case 'mortar': case 'howitzer': case 'bomb':
+            if (st.def?.stun && st.fam === 'bomb') {
+              // stun / EMP bombs: an electric burst crawling with arcs instead of a fireball
+              fx.explosion(ex, ez, r * (st.def.pellets ? 0.8 : 1), 'emp', ey, false, st.def.pellets ? 0.4 : 0.8);
+              for (let i = 0; i < (st.def.pellets ? 1 : 4); i++) fx.arcs(ex, ey + 0.3, ez, r * 0.8, r * 0.8);
+              break;
+            }
+            fx.explosion(ex, ez, r, 'fire', ey); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.7); break;
           case 'cluster':
             if (e.radius >= 1.1) { fx.clusterBurst(e.x, e.y, r); fx.explosion(e.x, e.y, r * 0.75, 'fire', 0, false, 0.6); } // the cargo shell splits
             else { fx.explosion(ex, ez, r * 0.8, 'fire', ey, false, 0.4); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.35); } // one of the bomblet carpet
