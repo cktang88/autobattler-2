@@ -6,8 +6,8 @@
 //                       visor + periscopes (left), whip antenna (left), spare wheel on the rear plate
 //   raider   (box)      armoured gun truck: raised fighting casemate carrying the twin guns, open cargo bed behind with
 //                       a roll bar, spare wheel, jerry cans and tarp, bull bar on the nose, exhaust stack (right)
-//   carriage (carriage) towed field gun: cradle on the axle, faceted gun shield (sight box left), split box trails
-//                       with recoil spades, equilibrator pistons, ammo box on the left trail
+//   carriage (carriage) self-propelled field gun: cradle on the axle, faceted gun shield (sight box left), equilibrator
+//                       pistons, a short spine back to an armoured counterweight bustle with the ammo box on its left
 //   hunter   (hunter)   long low 6-wheel tank hunter: shallow glacis with a folded trim vane, smoke banks, driver's
 //                       hatch + periscopes (left), remote weapon station on the engine deck, exhaust (right), bins
 //   riot     (riot)     dozer brute: full-width curved dozer blade on push arms + rams, twin guns on a raised rear
@@ -31,7 +31,7 @@ import {
   stowBox, sub, towHooks,
 } from './hs-kit.ts';
 import {
-  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, slatCage, spade, spareWheel, wheelArch, type FSt,
+  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, slatCage, spareWheel, wheelArch, type FSt,
 } from './hs-kit-vehicles.ts';
 
 /** cheap unbevelled box (12 tris) for small parts: lamps, strips, accents, brackets */
@@ -48,7 +48,6 @@ function keel(c: ChassisCtx, l: number, x = 0): void {
   block(b, kit.trim, x, stance.hipY - t * 0.9, 0, l, w, stance.y0 - stance.hipY + t * 0.95, { top: [1.06, 1.08], ch: t * 0.5, bev: t * 0.12, bot: t * 0.25 });
 }
 
-const onGround = (c: ChassisCtx) => c.mob.id === 'wheels' || c.mob.id === 'halftrack' || c.mob.id === 'anchor' || c.mob.id === 'treads';
 const UP: V3 = [0, 1, 0], ZA: V3 = [0, 0, 1], XA: V3 = [1, 0, 0];
 
 /** wheel radius / track for the 'wheels' mobility (mirrors mobility/wheels.ts wheelDims) */
@@ -162,7 +161,7 @@ function raider(c: ChassisCtx): ChassisOut {
   };
 }
 
-// ---- carriage: towed field gun ------------------------------------------------------------------------------------------
+// ---- carriage: self-propelled field gun ------------------------------------------------------------------------------------------
 function carriage(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
   const y0 = stance.y0;
@@ -177,19 +176,13 @@ function carriage(c: ChassisCtx): ChassisOut {
   facetHull(c, kit.armor2, [[mx - mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1.0, mr * 1.15, mr * 1.0], [mx + mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1.0, mr * 1.15, mr * 1.0]], 0, false);
   // equilibrator pistons either side of the cradle (functional: they balance the barrel)
   both((s) => piston(b, kit, [X(-0.17), y0 + 0.04, s * mr * 1.1], [mx + mr * 0.6, deckY - 0.01, s * mr * 1.1], 0.016, 0.55, false));
-  // split trails: box-section legs from the cradle back to recoil spades (dug in when parked on wheels / anchored)
-  const g = onGround(c);
-  const ty = g ? 0.02 : y0 - 0.02;
-  both((s) => {
-    const a: V3 = [X(-0.14), y0 + 0.05, s * Z(0.08)], e: V3 = [X(-0.58), ty + 0.035, s * Z(0.3)];
-    beam(b, kit.armor2, a, e, 0.05, 0.055);
-    // lifting handle near the trail end
-    b.g(strutGeo([e[0] + 0.07, e[1] + 0.03, e[2] - s * 0.03], [e[0] + 0.07, e[1] + 0.085, e[2] + s * 0.02], 0.006, 0.006, 4), kit.joint);
-    const yaw = Math.atan2(e[2] - a[2], a[0] - e[0]);
-    spade(b, kit, new THREE.Matrix4().makeRotationY(-yaw + Math.PI / 2).setPosition(e[0] - 0.03, e[1] + 0.05, e[2]), 0.12, g ? 0.09 : 0.06, 0.012);
-  });
-  // ammo box on the left trail (asymmetric)
-  stowBox(b, kit, frame([X(-0.38), y0 + 0.085, -Z(0.18)], UP, [Math.cos(0.5), 0, -Math.sin(0.5)]), 0.11, 0.055, 0.07, kit.canvas);
+  // self-propelled mount, not a towed gun: no trails or spades. A short box-section spine runs back from the cradle to
+  // an armoured counterweight bustle (balances the barrel), with the ready-ammo box strapped to its left side
+  beam(b, kit.armor2, [X(-0.12), y0 + 0.06, 0], [X(-0.36), y0 + 0.06, 0], Z(0.16), 0.06);
+  const bx = X(-0.42), bw = Math.min(Z(0.4), stance.wi * 2.2);
+  b.g(bevBox(X(0.16), 0.1, bw, 0.012), kit.armor2, mtx([bx, y0 + 0.08, 0]));
+  b.g(bevBox(X(0.1), 0.02, bw * 0.8, 0.006), kit.mech, mtx([bx, y0 + 0.14, 0]));
+  stowBox(b, kit, frame([bx + X(0.02), y0 + 0.08, -bw / 2 - 0.03], UP, XA), 0.09, 0.06, 0.05, kit.canvas);
   // gun shield: centre plate + two raked wings on a dark backing, notched top, sight box on the left wing
   const R = Math.max(mr * 1.55, Z(0.3));
   const sx = mx + R * 0.62, sh = 0.3;

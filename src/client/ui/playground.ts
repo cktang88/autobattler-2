@@ -22,7 +22,7 @@ import {
   placementUnitCenters, type BlockShape,
 } from '../../shared/grid.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS } from '../../shared/match.ts';
-import { CHASSIS_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { MAX_LEVEL, computeStats, defaultOrders, fmtUnitPrice } from '../../shared/stats.ts';
 import type { Design, Placement, Side, UnitStats } from '../../shared/types.ts';
 import * as kit from './kit.ts';
@@ -197,6 +197,27 @@ export function playgroundScreen(app: App): Screen {
   /** design indices currently shown, in order (keys 1-9 pick from this) */
   let visibleCards: number[] = [];
   const filterEl = h('div.card-filter-wrap');
+  // search by design name, hull, drive or any mounted module (all words must match)
+  let query = '';
+  const searchText = new Map<string, string>();
+  const textOf = (d: Design) => {
+    let t = searchText.get(d.id);
+    if (t === undefined) {
+      t = [d.name, CHASSIS_BY_ID.get(d.chassis)?.name, MOBILITY_BY_ID.get(d.mobility)?.name, ...d.mounts.map((m) => m && MODULE_BY_ID.get(m)?.name)]
+        .filter(Boolean).join(' ').toLowerCase();
+      searchText.set(d.id, t);
+    }
+    return t;
+  };
+  const matchesQuery = (d: Design) => !query || query.split(/\s+/).every((w) => textOf(d).includes(w));
+  const searchInput = h('input.pg-search-in', {
+    type: 'search', placeholder: 'Search units, hulls, weapons', 'aria-label': 'Search units',
+    oninput: (e: Event) => { query = (e.target as HTMLInputElement).value.trim().toLowerCase(); renderCards(); },
+    onkeydown: (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); const el = e.target as HTMLInputElement; if (el.value) { el.value = ''; query = ''; renderCards(); } else el.blur(); }
+    },
+  }) as HTMLInputElement;
+  const searchEl = h('label.pg-search', null, svgIcon('search', 14), searchInput);
   function renderFilter() {
     filterEl.replaceChildren(kit.segmented<CardFilter>({
       value: cardFilter, label: 'Filter cards', className: 'card-filter',
@@ -219,6 +240,7 @@ export function playgroundScreen(app: App): Screen {
   const sideEl = h('div.side.pg-side', null,
     h('div.side-top', null, h('div.pg-head', null, h('b', null, 'Playground'), h('span.muted', null, 'Free placement on both sides')), capEl),
     h('div.pg-opts', null, sideSel, levelSel, mapSel),
+    searchEl,
     filterEl,
     cardsEl,
     h('div.side-actions', null,
@@ -465,7 +487,7 @@ export function playgroundScreen(app: App): Screen {
     designs.forEach((d, i) => {
       const inf = infoOf(d);
       // the selected card stays visible even if the filter would hide it
-      const show = i === selCard || (inf ? flt.test(inf) : cardFilter === 'all');
+      const show = i === selCard || ((inf ? flt.test(inf) : cardFilter === 'all') && matchesQuery(d));
       cardEls[i].hidden = !show;
       if (show) visibleCards.push(i);
     });

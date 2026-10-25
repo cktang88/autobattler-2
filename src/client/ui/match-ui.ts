@@ -279,6 +279,7 @@ export function dpsSplit(d: Design, _st: UnitStats, level = 1): { ground: number
 }
 
 const ICON_PATHS: Record<string, string> = {
+  search: '<circle cx="10.5" cy="10.5" r="6.500"/><path d="M15.500 15.500L21 21"/>',
   select: '<rect x="3" y="3" width="14" height="12" stroke-dasharray="3 2.5"/><path d="M13 11l7 3-3 1.200L15.800 18.500z" fill="currentColor"/>',
   hp: '<path d="M12 20.500S3.500 15.500 3 9.500C2.800 6.500 5 4.500 7.500 4.500c1.900 0 3.400 1 4.500 2.600 1.100-1.600 2.600-2.600 4.500-2.600 2.500 0 4.700 2 4.500 5-.500 6-9 11-9 11z" fill="currentColor" stroke="none"/>',
   armor: '<path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z" fill="currentColor" fill-opacity=".25"/><path d="M12 3v18"/>',
