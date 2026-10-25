@@ -134,8 +134,11 @@ export const roleOf = (d: Design): Role => profile(d).role;
 // ---------------------------------------------------------------------------------------------
 // Stored pool
 
-/** 2: the pool is global (server-side); per-browser v1 pools from before are discarded. */
-export const POOL_VERSION = 2;
+/** 2: the pool is global (server-side); per-browser v1 pools from before are discarded.
+ *  3: two tiers: `entries` (tested) and `candidates`; v2 pools migrate (their entries become the tested tier). */
+export const POOL_VERSION = 3;
+/** One verdict of a design in one AI match (match id, did well / did badly). */
+export interface Verdict { m: string; good: boolean }
 export interface PoolEntry {
   design: Design;
   /** running effectiveness (decayed average; 1 = an average design in the matches it played) */
@@ -146,11 +149,42 @@ export interface PoolEntry {
   learned?: boolean;
   /** a tweaked variant of an ineffective AI design (mutateWeak) */
   mutant?: boolean;
+  /** its clear verdicts in its last AI matches (distinct match ids, newest last, at most VERDICT_WINDOW) */
+  rec?: Verdict[];
+  /** when it entered the candidate tier (ms) */
+  addedAt?: number;
+  /** when it was promoted to the tested tier (ms) */
+  promotedAt?: number;
+  /** where it came from (absent = curated default) */
+  origin?: 'curated' | 'adopted' | 'mutant';
+  /** adopted: the reporting player's display name ('guest' when not signed in) */
+  creator?: string;
+  /** mutant: the parent design's name */
+  parent?: string;
 }
-export interface AiPool { v: typeof POOL_VERSION; entries: PoolEntry[]; matches: number }
+
+/** Something that happened to a pool entry (foldMatch reports them; the server time-stamps and logs them). */
+export interface PoolEvent {
+  kind: 'joined' | 'promoted' | 'demoted' | 'kicked' | 'mutated' | 'pruned' | 'replaced' | 'dropped';
+  /** the design's poolKey and name */
+  key: string;
+  name: string;
+  /** tier it was in (kicked / dropped / pruned / replaced: the tier it left) */
+  tier: 'tested' | 'candidate';
+  /** human-readable reason / detail */
+  detail?: string;
+}
+/** entries: the tested tier (proven designs, at most POOL_CAP); candidates: designs on trial (at most MAX_CANDIDATES),
+ *  dealt into decks a slot or two at a time until they graduate or get kicked out. */
+export interface AiPool { v: typeof POOL_VERSION; entries: PoolEntry[]; candidates: PoolEntry[]; matches: number }
+
+/** most designs on trial at once (the oldest / weakest drop out first) */
+export const MAX_CANDIDATES = 30;
+/** verdicts remembered per design */
+export const VERDICT_WINDOW = 6;
 
 export function defaultPool(): AiPool {
-  return { v: POOL_VERSION, entries: AI_POOL.map((d) => ({ design: cleanDesign(d), score: POOL_PRIOR[d.id] ?? 1, games: 0 })), matches: 0 };
+  return { v: POOL_VERSION, entries: AI_POOL.map((d) => ({ design: cleanDesign(d), score: POOL_PRIOR[d.id] ?? 1, games: 0 })), candidates: [], matches: 0 };
 }
 
 function cleanDesign(d: Design): Design {
@@ -165,27 +199,53 @@ export function validEntryDesign(d: unknown): d is Design {
   try { return isValidDesign(x); } catch { return false; }
 }
 
-/** A stored pool, validated: unknown / corrupt data, a wrong version, invalid designs or a pool that no longer covers
- *  every deck tag fall back to the curated default. Invalid entries are dropped, duplicates merged. */
+function cleanEntry(e: unknown, keys: Set<string>, slots: Set<string>): PoolEntry | null {
+  if (!e || typeof e !== 'object') return null;
+  const x = e as Partial<PoolEntry>;
+  if (!validEntryDesign(x.design)) return null;
+  const d = cleanDesign(x.design);
+  if (keys.has(poolKey(d)) || slots.has(slotKey(d))) return null;
+  keys.add(poolKey(d)); slots.add(slotKey(d));
+  const pe: PoolEntry = {
+    design: d,
+    score: typeof x.score === 'number' && Number.isFinite(x.score) ? Math.max(0, Math.min(5, x.score)) : 1,
+    games: typeof x.games === 'number' && Number.isInteger(x.games) && x.games >= 0 ? x.games : 0,
+  };
+  if (x.learned) pe.learned = true;
+  if (x.mutant) pe.mutant = true;
+  if (Array.isArray(x.rec)) {
+    const rec = x.rec.filter((v): v is Verdict => !!v && typeof v === 'object' && typeof v.m === 'string' && v.m.length <= 80 && typeof v.good === 'boolean').map((v) => ({ m: v.m, good: v.good })).slice(-VERDICT_WINDOW);
+    if (rec.length) pe.rec = rec;
+  }
+  if (typeof x.addedAt === 'number' && Number.isFinite(x.addedAt)) pe.addedAt = x.addedAt;
+  if (typeof x.promotedAt === 'number' && Number.isFinite(x.promotedAt)) pe.promotedAt = x.promotedAt;
+  if (x.origin === 'adopted' || x.origin === 'mutant' || x.origin === 'curated') pe.origin = x.origin;
+  else if (x.mutant) pe.origin = 'mutant';
+  else if (x.learned) pe.origin = 'adopted';
+  if (typeof x.creator === 'string') pe.creator = x.creator.slice(0, 24);
+  if (typeof x.parent === 'string') pe.parent = x.parent.slice(0, 40);
+  return pe;
+}
+
+/** One stored entry, validated (null when invalid). */
+export const sanitizeEntry = (raw: unknown): PoolEntry | null => cleanEntry(raw, new Set(), new Set());
+
+/** A stored pool, validated: unknown / corrupt data, an unknown version, invalid designs or a tested tier that no longer
+ *  covers every deck tag fall back to the curated default; a v2 pool migrates (its entries become the tested tier).
+ *  Invalid entries are dropped; duplicates (in or across the tiers) merged away. */
 export function sanitizePool(raw: unknown): AiPool {
   if (!raw || typeof raw !== 'object') return defaultPool();
-  const r = raw as Partial<AiPool>;
-  if (r.v !== POOL_VERSION || !Array.isArray(r.entries)) return defaultPool();
-  const entries: PoolEntry[] = [];
+  const r = raw as { v?: unknown; entries?: unknown; candidates?: unknown; matches?: unknown };
+  if ((r.v !== POOL_VERSION && r.v !== 2) || !Array.isArray(r.entries)) return defaultPool();
   const keys = new Set<string>(), slots = new Set<string>();
-  for (const e of r.entries.slice(0, POOL_CAP * 2)) {
-    if (!e || typeof e !== 'object' || !validEntryDesign(e.design)) continue;
-    const score = Number.isFinite(e.score) ? Math.max(0, Math.min(5, e.score)) : 1;
-    const games = Number.isInteger(e.games) && e.games >= 0 ? e.games : 0;
-    const d = cleanDesign(e.design);
-    if (keys.has(poolKey(d)) || slots.has(slotKey(d))) continue;
-    keys.add(poolKey(d)); slots.add(slotKey(d));
-    const pe: PoolEntry = { design: d, score, games };
-    if (e.learned) pe.learned = true;
-    if (e.mutant) pe.mutant = true;
-    entries.push(pe);
+  const entries: PoolEntry[] = [];
+  for (const e of r.entries.slice(0, POOL_CAP * 2)) { const c = cleanEntry(e, keys, slots); if (c) entries.push(c); }
+  const candidates: PoolEntry[] = [];
+  if (r.v === POOL_VERSION && Array.isArray(r.candidates)) {
+    for (const e of r.candidates.slice(0, MAX_CANDIDATES * 2)) { const c = cleanEntry(e, keys, slots); if (c) candidates.push(c); }
   }
-  const pool: AiPool = { v: POOL_VERSION, entries: entries.slice(0, POOL_CAP), matches: Number.isInteger(r.matches) && r.matches! >= 0 ? r.matches! : 0 };
+  const matches = typeof r.matches === 'number' && Number.isInteger(r.matches) && r.matches >= 0 ? r.matches : 0;
+  const pool: AiPool = { v: POOL_VERSION, entries: entries.slice(0, POOL_CAP), candidates: candidates.slice(0, MAX_CANDIDATES), matches };
   if (!DECK_TAGS.every((t) => pool.entries.some((e) => designTags(e.design).has(t))) || pool.entries.length < DECK_SIZE) return defaultPool();
   return pool;
 }
@@ -193,12 +253,17 @@ export function sanitizePool(raw: unknown): AiPool {
 // ---------------------------------------------------------------------------------------------
 // Deck draw
 
-/** Draw `size` distinct designs from the pool (seeded): first one per DECK_TAGS tag, then by weight; weights favour
+/** Candidate slots per deck: one, sometimes two (when the candidate tier has designs). */
+export const CANDIDATE_SLOTS = [1, 2] as const;
+
+/** Draw `size` distinct designs from the pool (seeded): one tested design per DECK_TAGS tag first (coverage), then
+ *  1-2 candidates on trial (so they get played and measured), then tested designs by weight. Weights favour
  *  higher-scoring entries (score^sharp), spread the deck over roles and allow at most one giant. `bias` (optional)
- *  multiplies an entry's weight (e.g. its matchup against the opponent's deck). */
+ *  multiplies an entry's weight. */
 export function drawDeck(pool: AiPool, seed: number, size = DECK_SIZE, sharp = 2, bias?: (d: Design) => number): Design[] {
   const rng = makeRng(mixSeed(seed >>> 0, 0x9001));
-  const entries = pool.entries.filter((e) => validEntryDesign(e.design));
+  const tested = pool.entries.filter((e) => validEntryDesign(e.design));
+  const trial = (pool.candidates ?? []).filter((e) => validEntryDesign(e.design));
   const deck: PoolEntry[] = [];
   const keys = new Set<string>(), slots = new Set<string>();
   const roleN = new Map<Role, number>();
@@ -211,11 +276,17 @@ export function drawDeck(pool: AiPool, seed: number, size = DECK_SIZE, sharp = 2
   };
   for (const t of shuffle(rng, DECK_TAGS)) {
     if (has(t) || deck.length >= size) continue;
-    const e = weighted(rng, entries.filter((x) => ok(x) && designTags(x.design).has(t)), weight);
+    const e = weighted(rng, tested.filter((x) => ok(x) && designTags(x.design).has(t)), weight);
+    if (e) take(e);
+  }
+  const trialSlots = trial.length ? CANDIDATE_SLOTS[Math.floor(rng() * CANDIDATE_SLOTS.length)] : 0;
+  for (let k = 0; k < trialSlots && deck.length < size; k++) {
+    // candidates are drawn evenly (their scores are unproven), least-played first
+    const e = weighted(rng, trial.filter(ok), (x) => 1 / (1 + x.games));
     if (e) take(e);
   }
   while (deck.length < size) {
-    const e = weighted(rng, entries.filter(ok), weight);
+    const e = weighted(rng, tested.filter(ok), weight);
     if (!e) break;
     take(e);
   }
@@ -390,7 +461,7 @@ export function playerCandidates(entries: PoolEntry[], m: MatchState, aiSide: Si
 /** 3. Put a design into the pool (in place): merge into an identical entry; keep the better of a near-duplicate pair;
  *  else grow (role ceiling and POOL_CAP permitting) or replace the weakest entry that may go and scores below it.
  *  Returns what happened. */
-export function insertEntry(entries: PoolEntry[], fresh: PoolEntry, eff = fresh.score): 'merged' | 'slot' | 'added' | 'replaced' | 'rejected' {
+export function insertEntry(entries: PoolEntry[], fresh: PoolEntry, eff = fresh.score, removed?: PoolEntry[]): 'merged' | 'slot' | 'added' | 'replaced' | 'rejected' {
   const d = fresh.design;
   const same = findByKey(entries, d);
   if (same) { blendScore(same, eff); return 'merged'; }
@@ -407,17 +478,19 @@ export function insertEntry(entries: PoolEntry[], fresh: PoolEntry, eff = fresh.
     .filter((e) => (roleN >= ROLE_MAX[role] ? roleOf(e.design) === role : true) && e.score < fresh.score && removable(entries, e, d))
     .sort((a, b) => a.score - b.score || (poolKey(a.design) < poolKey(b.design) ? -1 : 1));
   if (!victims.length) return 'rejected';
+  removed?.push(victims[0]);
   entries[entries.indexOf(victims[0])] = fresh;
   return 'replaced';
 }
 
-/** 4. Prune one entry that has clearly fallen behind its role (in place). */
-export function pruneWeakest(entries: PoolEntry[]): void {
+/** 4. Prune one entry that has clearly fallen behind its role (in place). Returns it, if any. */
+export function pruneWeakest(entries: PoolEntry[]): PoolEntry | null {
   const medians = new Map(ROLES.map((r) => [r, median(entries.filter((e) => roleOf(e.design) === r).map((e) => e.score))] as const));
   const weak = entries
     .filter((e) => e.games >= PRUNE_GAMES && e.score < PRUNE_RATIO * medians.get(roleOf(e.design))! && removable(entries, e))
     .sort((a, b) => a.score / medians.get(roleOf(a.design))! - b.score / medians.get(roleOf(b.design))!);
-  if (weak.length) entries.splice(entries.indexOf(weak[0]), 1);
+  if (weak.length) { entries.splice(entries.indexOf(weak[0]), 1); return weak[0]; }
+  return null;
 }
 
 // ---- mutation: the AI's clearly ineffective designs spawn slightly tweaked variants ----
@@ -488,10 +561,14 @@ export function mutateDesign(d: Design, rng: Rng, id: string): Design | null {
   return null;
 }
 
-/** 5. Mutate the AI's clearly ineffective fielded designs (in place): up to `max` new, deduped variants with a modest
- *  prior, while the pool holds fewer than MAX_UNPROVEN_MUTANTS unproven mutants. Seeded by `seed` (e.g. the match id),
- *  so a re-run gives the same mutants. The parents stay (they decay and get pruned normally). Returns the mutants. */
-export function mutateWeak(entries: PoolEntry[], m: MatchState, aiSide: Side, scores: DesignPerf[], seed: number, max = MUTANTS_PER_MATCH): Design[] {
+/** Both tiers' entries, for lookups and dedupe. */
+const allEntries = (pool: AiPool) => [...pool.entries, ...pool.candidates];
+
+/** 5. Mutate the AI's clearly ineffective fielded designs (in place): up to `max` new, deduped variants (across both
+ *  tiers) enter the candidate tier with a modest prior, while it holds fewer than MAX_UNPROVEN_MUTANTS mutants.
+ *  Seeded by `seed` (e.g. the match id), so a re-run gives the same mutants. Returns the mutants. */
+export function mutateWeak(pool: AiPool, m: MatchState, aiSide: Side, scores: DesignPerf[], seed: number, max = MUTANTS_PER_MATCH, now = 0, events?: PoolEvent[]): Design[] {
+  const all = allEntries(pool);
   const fielded = aiFielded(m, aiSide, scores);
   const byRole = new Map<Role, number[]>();
   for (const f of fielded) byRole.set(roleOf(f.d), [...(byRole.get(roleOf(f.d)) ?? []), f.s.eff]);
@@ -499,7 +576,7 @@ export function mutateWeak(entries: PoolEntry[], m: MatchState, aiSide: Side, sc
     .filter((f) => {
       const peers = byRole.get(roleOf(f.d))!;
       const ref = peers.length > 1 ? median(peers) : 1;
-      return f.s.eff < MUTATE_REL * ref && f.s.eff < MUTATE_ABS && findByKey(entries, f.d) !== undefined;
+      return f.s.eff < MUTATE_REL * ref && f.s.eff < MUTATE_ABS && findByKey(all, f.d) !== undefined;
     })
     .sort((a, b) => a.s.eff - b.s.eff || (a.d.id < b.d.id ? -1 : 1))
     .slice(0, 2);
@@ -507,40 +584,158 @@ export function mutateWeak(entries: PoolEntry[], m: MatchState, aiSide: Side, sc
   const made: Design[] = [];
   for (const w of weak) {
     if (made.length >= max) break;
-    if (entries.filter((e) => e.mutant && e.games < PRUNE_GAMES).length >= MAX_UNPROVEN_MUTANTS) break;
-    const parent = findByKey(entries, w.d)!.design;
+    if (pool.candidates.filter((e) => e.mutant).length >= MAX_UNPROVEN_MUTANTS) break;
+    const parent = findByKey(all, w.d)!.design;
     const mk = mutateDesign(parent, rng, 'tmp');
     if (!mk) continue;
     const h = hash(poolKey(mk));
     const child: Design = { ...mk, id: `mut-${h.toString(36)}`, name: `${parent.name.replace(/ Mk\d+$/, '').slice(0, 18)} Mk${2 + (h % 7)}` };
-    if (findByKey(entries, child) || findBySlot(entries, child)) continue;
-    const res = insertEntry(entries, { design: child, score: MUTANT_PRIOR, games: 0, mutant: true }, MUTANT_PRIOR);
-    if (res === 'added' || res === 'replaced') made.push(child);
+    if (findByKey(allEntries(pool), child) || findBySlot(allEntries(pool), child)) continue;
+    const dropped = addCandidate(pool, { design: child, score: MUTANT_PRIOR, games: 0, mutant: true, origin: 'mutant', parent: parent.name, addedAt: now });
+    if (dropped) events?.push(ev('dropped', dropped, 'candidate', 'candidate tier full'));
+    if (dropped?.design === child) continue;
+    events?.push(ev('mutated', { design: child } as PoolEntry, 'candidate', `mutant of ${parent.name}`));
+    made.push(child);
   }
   return made;
 }
 
-/** Fold a match into the pool locally (tools / tests; the game itself reports matches to the server's global pool):
- *  score the AI's designs, adopt the player's best designs when they earned it (immediately: the server needs
- *  several reporters), mutate the AI's clearly ineffective designs, prune the weakest. Pure: returns a new pool.
- *  `aiSide` = the AI's side (localdriver: 1); `perf` = scoreMatch(m) when already computed. Never adds a duplicate
- *  (same key or slot), never takes a role / tag below its floor, never exceeds POOL_CAP. */
+/** Put a design on trial (in place). At MAX_CANDIDATES the weakest, then oldest, candidate drops out (returned). */
+export function addCandidate(pool: AiPool, e: PoolEntry): PoolEntry | null {
+  pool.candidates.push(e);
+  if (pool.candidates.length <= MAX_CANDIDATES) return null;
+  const out = [...pool.candidates].sort((a, b) => a.score - b.score || (a.addedAt ?? 0) - (b.addedAt ?? 0) || (poolKey(a.design) < poolKey(b.design) ? -1 : 1))[0];
+  pool.candidates.splice(pool.candidates.indexOf(out), 1);
+  return out;
+}
+
+/** A design's verdict in one AI match: clearly bad below BAD_REL x the median effectiveness of the AI's designs of
+ *  its role in that match (1 when alone) and below BAD_ABS; good at or above GOOD_REL x that median and GOOD_ABS. */
+export const BAD_REL = 0.5;
+export const BAD_ABS = 0.6;
+export const GOOD_REL = 1;
+export const GOOD_ABS = 0.9;
+/** a candidate graduates after this many good games (distinct matches) with more good than bad verdicts */
+export const PROMOTE_GOOD = 2;
+/** any design with this many bad games (distinct matches) among its last VERDICT_WINDOW, and no more good than bad
+ *  ones there, is kicked out (a tested design that a role floor protects is demoted in score instead) */
+export const KICK_BAD = 2;
+/** score multiplier for a protected design that earned a kick */
+export const DEMOTE = 0.5;
+
+function addVerdict(e: PoolEntry, matchId: string, good: boolean): void {
+  const rec = (e.rec ??= []);
+  if (rec.some((v) => v.m === matchId)) return;
+  rec.push({ m: matchId, good });
+  if (rec.length > VERDICT_WINDOW) rec.splice(0, rec.length - VERDICT_WINDOW);
+}
+const count = (e: PoolEntry, good: boolean) => (e.rec ?? []).filter((v) => v.good === good).length;
+
+const ev = (kind: PoolEvent['kind'], e: Pick<PoolEntry, 'design'>, tier: PoolEvent['tier'], detail?: string): PoolEvent =>
+  ({ kind, key: poolKey(e.design), name: e.design.name, tier, ...(detail ? { detail } : {}) });
+
+/** Per-match options of foldMatch. */
+export interface FoldOpts {
+  /** the match id (verdicts are per distinct match) */
+  matchId: string;
+  /** weight of this match in running scores */
+  alpha?: number;
+  /** may this report add another candidate (e.g. per-reporter daily cap)? Called before each addition. */
+  mayAddCandidate?: () => boolean;
+  /** the clock for addedAt (server: Date.now(); tests: fixed) */
+  now?: number;
+  /** mutation seed (default: hash of the match id) */
+  seed?: number;
+  /** display name credited for adopted designs ('guest' when not signed in) */
+  creator?: string;
+}
+
+/** What a match changed (for tests / logs). */
+export interface FoldResult { candidates: Design[]; promoted: Design[]; kicked: Design[]; demoted: Design[]; mutants: Design[]; events: PoolEvent[] }
+
+/** Fold one scored AI match into a pool (in place):
+ *  1. every AI design fielded gets a score update and, if clear, a good / bad verdict for this match;
+ *  2. candidates with PROMOTE_GOOD good games (and more good than bad) graduate to the tested tier (quotas permitting);
+ *     any design with KICK_BAD bad games in its window (and no more good) is kicked (a tested design a floor protects
+ *     is demoted instead);
+ *  3. the player's best designs that did well (won, or ADOPT_RATIO x the AI's own of their role) go on trial in the
+ *     candidate tier straight away (deduped across both tiers; mayAddCandidate gates each);
+ *  4. the AI's clearly ineffective designs spawn a mutant candidate;
+ *  5. the weakest tested design may be pruned. */
+export function foldMatch(pool: AiPool, m: MatchState, aiSide: Side, scores: DesignPerf[], o: FoldOpts): FoldResult {
+  const res: FoldResult = { candidates: [], promoted: [], kicked: [], demoted: [], mutants: [], events: [] };
+  const E = res.events;
+  const alpha = o.alpha ?? SCORE_ALPHA;
+  const now = o.now ?? 0;
+  // 1. verdicts
+  const fielded = aiFielded(m, aiSide, scores);
+  const byRole = new Map<Role, number[]>();
+  for (const f of fielded) byRole.set(roleOf(f.d), [...(byRole.get(roleOf(f.d)) ?? []), f.s.eff]);
+  const touched = new Set<PoolEntry>();
+  for (const f of fielded) {
+    const e = findByKey(allEntries(pool), f.d) ?? findBySlot(allEntries(pool), f.d);
+    if (!e || touched.has(e)) continue;
+    touched.add(e);
+    blendScore(e, f.s.eff, alpha);
+    const peers = byRole.get(roleOf(f.d))!;
+    const ref = peers.length > 1 ? median(peers) : 1;
+    if (f.s.eff < BAD_REL * ref && f.s.eff < BAD_ABS) addVerdict(e, o.matchId, false);
+    else if (f.s.eff >= GOOD_REL * ref && f.s.eff >= GOOD_ABS) addVerdict(e, o.matchId, true);
+  }
+  // 2. promotion and kicks
+  for (const e of [...touched]) {
+    const good = count(e, true), bad = count(e, false);
+    const isCand = pool.candidates.includes(e);
+    if (bad >= KICK_BAD && good <= bad) {
+      const why = `${bad} bad games of its last ${(e.rec ?? []).length}`;
+      if (isCand) { pool.candidates.splice(pool.candidates.indexOf(e), 1); res.kicked.push(e.design); E.push(ev('kicked', e, 'candidate', why)); }
+      else if (removable(pool.entries, e)) { pool.entries.splice(pool.entries.indexOf(e), 1); res.kicked.push(e.design); E.push(ev('kicked', e, 'tested', why)); }
+      else { e.score *= DEMOTE; e.rec = []; res.demoted.push(e.design); E.push(ev('demoted', e, 'tested', `${why}; kept for role coverage, score halved`)); }
+      continue;
+    }
+    if (isCand && good >= PROMOTE_GOOD && good > bad) {
+      const removed: PoolEntry[] = [];
+      const r = insertEntry(pool.entries, { ...e, promotedAt: now }, e.score, removed);
+      if (r === 'added' || r === 'replaced' || r === 'slot' || r === 'merged') {
+        pool.candidates.splice(pool.candidates.indexOf(e), 1);
+        res.promoted.push(e.design);
+        E.push(ev('promoted', e, 'candidate', `${good} good games`));
+        for (const x of removed) E.push(ev('replaced', x, 'tested', `made room for ${e.design.name}`));
+      }
+    }
+  }
+  // 3. the player's designs that did well go on trial
+  for (const c of playerCandidates(allEntries(pool), m, aiSide, scores)) {
+    const known = findByKey(allEntries(pool), c.design) ?? findBySlot(allEntries(pool), c.design);
+    if (known) { blendScore(known, c.eff, alpha); continue; }
+    if (o.mayAddCandidate && !o.mayAddCandidate()) continue;
+    const fresh: PoolEntry = { design: c.design, score: Math.max(0.5, Math.min(3, c.eff)), games: 0, learned: true, origin: 'adopted', creator: o.creator ?? 'guest', addedAt: now };
+    const dropped = addCandidate(pool, fresh);
+    if (dropped) E.push(ev('dropped', dropped, 'candidate', 'candidate tier full'));
+    if (dropped !== fresh) { res.candidates.push(c.design); E.push(ev('joined', fresh, 'candidate', `adopted from ${fresh.creator}`)); }
+  }
+  // 4. mutants of the clearly ineffective; 5. prune
+  res.mutants = mutateWeak(pool, m, aiSide, scores, o.seed ?? hash(o.matchId), MUTANTS_PER_MATCH, now, E);
+  const pruned = pruneWeakest(pool.entries);
+  if (pruned) { res.kicked.push(pruned.design); E.push(ev('pruned', pruned, 'tested', `score ${pruned.score.toFixed(2)} fell well below its role`)); }
+  pool.matches++;
+  return res;
+}
+
+/** Fold a match into a pool locally (tools / tests; the game reports matches to the server's global pool, which
+ *  runs foldMatch after re-simulating them). Pure: returns a new pool. `aiSide` = the AI's side (localdriver: 1);
+ *  `perf` = scoreMatch(m) when already computed. */
 export function evolvePool(pool: AiPool, m: MatchState, aiSide: Side = 1, perf?: DesignPerf[]): AiPool {
-  const base = sanitizePool(pool);
-  const entries: PoolEntry[] = base.entries.map((e) => ({ ...e, design: cleanDesign(e.design) }));
-  const out: AiPool = { v: POOL_VERSION, entries, matches: base.matches + 1 };
-  if (!m || !Array.isArray(m.history) || !m.history.length || !m.players?.[0] || !m.players?.[1]) return out;
+  const out = structuredClone(sanitizePool(pool));
+  if (!m || !Array.isArray(m.history) || !m.history.length || !m.players?.[0] || !m.players?.[1]) { out.matches++; return out; }
   let scores: DesignPerf[];
-  try { scores = perf ?? scoreMatch(m); } catch { return out; }
-  updateAiScores(entries, m, aiSide, scores);
-  for (const c of playerCandidates(entries, m, aiSide, scores)) insertEntry(entries, { design: c.design, score: Math.max(0.5, Math.min(3, c.eff)), games: 1, learned: true }, c.eff);
-  mutateWeak(entries, m, aiSide, scores, hash(String(m.id)));
-  pruneWeakest(entries);
+  try { scores = perf ?? scoreMatch(m); } catch { out.matches++; return out; }
+  foldMatch(out, m, aiSide, scores, { matchId: String(m.id) });
   return out;
 }
 
 /** Roles present in a pool (for tests / tooling). */
-export function roleCounts(pool: AiPool): Record<Role, number> {
+export function roleCounts(pool: Pick<AiPool, 'entries'>): Record<Role, number> {
   const c = Object.fromEntries(ROLES.map((r) => [r, 0])) as Record<Role, number>;
   for (const e of pool.entries) c[roleOf(e.design)]++;
   return c;

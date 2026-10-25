@@ -55,6 +55,8 @@ export function serveStatic(root: string, req: IncomingMessage, res: ServerRespo
   }
   let file = resolveStatic(root, pathname);
   if (!file) { notFound(res, 400, 'Bad Request'); return; }
+  // extensionless page routes (e.g. /aipool -> aipool.html, the hidden AI pool page)
+  if (!path.extname(file) && !fs.existsSync(file) && fs.existsSync(file + '.html')) file += '.html';
   let st: fs.Stats;
   try {
     st = fs.statSync(file);

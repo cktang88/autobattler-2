@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>AI Design Pool</title>
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { margin: 0; background: var(--bg); color: #d6e0ea; font: 14px/1.35 'Barlow', system-ui, sans-serif; overflow: auto; }
+    .ap { max-width: 1200px; margin: 0 auto; padding: 12px; }
+    .ap h1 { font: 700 24px 'Barlow Condensed', sans-serif; letter-spacing: .04em; margin: 4px 0 2px; color: var(--accent); }
+    .ap h2 { font: 600 16px 'Barlow Condensed', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8fa3b5; margin: 18px 0 6px; }
+    .ap .sum { color: #8fa3b5; font-size: 13px; }
+    .ap .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+    .ap select, .ap button { background: var(--panel2); color: #e6eef5; border: 1px solid var(--panel3); border-radius: 6px; padding: 5px 8px; font: inherit; }
+    .ap .list { display: flex; flex-direction: column; gap: 4px; }
+    .ap .row { display: grid; grid-template-columns: 52px minmax(120px, 1.3fr) minmax(140px, 2fr) 92px 120px 110px 110px; gap: 8px; align-items: center;
+      background: var(--panel); border: 1px solid var(--panel2); border-radius: 8px; padding: 4px 8px; cursor: pointer; }
+    .ap .row:hover { border-color: var(--panel3); }
+    .ap .row.head { background: none; border: none; cursor: default; color: #7f93a6; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .ap canvas { width: 48px; height: 48px; display: block; background: var(--bg2); border-radius: 6px; }
+    .ap .nm { font-weight: 600; }
+    .ap .dim { color: #7f93a6; font-size: 12px; }
+    .ap .tier { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 12px; background: var(--panel3); }
+    .ap .tier.tested { background: #1f4f45; } .ap .tier.candidate { background: #4f451f; } .ap .tier.gone { background: #4f1f26; }
+    .ap .num { font-variant-numeric: tabular-nums; }
+    .ap .good { color: #6fdc8c; } .ap .bad { color: #ff7b7b; }
+    .ap .detail { grid-column: 1 / -1; background: var(--bg2); border-radius: 6px; padding: 8px; display: flex; flex-wrap: wrap; gap: 14px; cursor: default; }
+    .ap .detail canvas { width: 160px; height: 160px; }
+    .ap .detail table { border-collapse: collapse; font-size: 13px; }
+    .ap .detail td { padding: 1px 8px 1px 0; }
+    .ap .ev { display: grid; grid-template-columns: 130px 80px 1fr; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--panel); font-size: 13px; }
+    @media (max-width: 760px) {
+      .ap .row { grid-template-columns: 52px 1fr 1fr; }
+      .ap .row.head { display: none; }
+      .ap .ev { grid-template-columns: 1fr; gap: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="ap"></div>
+  <script type="module" src="aipool.js"></script>
+</body>
+</html>

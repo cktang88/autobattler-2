@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   AI_POOL, DECK_TAGS, POOL_CAP, ROLE_MAX, ROLE_MIN, TAG_MIN, defaultPool, designTags, drawDeck, evolvePool, poolKey, roleOf,
   sanitizePool, scoreMatch, slotKey, type AiPool, type DesignPerf,
-  MAX_UNPROVEN_MUTANTS, MUTANT_PRIOR, mutateDesign, mutateWeak,
+  MAX_UNPROVEN_MUTANTS, MUTANT_PRIOR, mutateDesign, mutateWeak, MAX_CANDIDATES, addCandidate, foldMatch, PROMOTE_GOOD, KICK_BAD,
+  type PoolEntry,
 } from '../src/shared/aipool.ts';
 import { aiDeck, aiDeploy, generateDesign, type Role } from '../src/shared/ai.ts';
 import { ROLES } from '../src/shared/aiprofile.ts';
@@ -24,7 +25,11 @@ function floorsHold(pool: AiPool) {
   }
   for (const [t, min] of Object.entries(TAG_MIN)) assert.ok(ds.filter((d) => designTags(d).has(t as never)).length >= min!, `tag ${t}`);
   assert.ok(pool.entries.length <= POOL_CAP);
-  assert.equal(new Set(ds.map(poolKey)).size, ds.length, 'no duplicate designs');
+  assert.ok(pool.candidates.length <= MAX_CANDIDATES);
+  // dedupe holds across both tiers
+  const both = [...ds, ...pool.candidates.map((e) => e.design)];
+  assert.equal(new Set(both.map(poolKey)).size, both.length, 'no duplicate designs across the tiers');
+  assert.equal(new Set(both.map(slotKey)).size, both.length, 'no near-duplicates across the tiers');
   assert.equal(new Set(ds.map(slotKey)).size, ds.length, 'no near-duplicate designs');
   for (const d of ds) assert.ok(isValidDesign(d), d.id);
 }
@@ -88,101 +93,168 @@ test('drawDeck favours higher-scoring entries', () => {
   assert.ok(boosted > base, `${boosted} > ${base}`);
 });
 
-test('evolvePool adopts a clearly better player design into its role, and grows', () => {
+test('one good report puts a player design on trial in the candidate tier', () => {
   const hunter = starter('hunter'); // raider/legs [atgm, atgm]
   const m = oneRound([hunter, starter('buzzsaw')]);
   const pool = defaultPool();
   const aiIds = m.players[1].deck.map((d) => d.id);
-  // player lost, but its design did 2.5x the AI's designs of the same role
-  const rows: [0 | 1, string, number][] = [[0, hunter.id, 2.5], [0, 'starter-buzzsaw', 0.4], ...aiIds.map((id) => [1, id, 1] as [1, string, number])];
-  const next = evolvePool(pool, { ...m, status: 'done', winner: 1 }, 1, perf(m, rows));
-  assert.equal(next.entries.length, pool.entries.length + 1);
-  const adopted = next.entries.find((e) => e.learned)!;
-  assert.equal(poolKey(adopted.design), poolKey(hunter));
-  assert.equal(roleOf(adopted.design), roleOf(hunter));
-  assert.notEqual(adopted.design.name, hunter.name, 'gets an AI name');
-  assert.ok(isValidDesign(adopted.design));
+  const ai = (eff: number) => aiIds.map((id) => [1, id, eff] as [1, string, number]);
+  // lost, but did 2.5x the AI's designs of its role: on trial straight away (not in the tested tier)
+  const next = evolvePool(pool, { ...m, status: 'done', winner: 1 }, 1, perf(m, [[0, hunter.id, 2.5], [0, 'starter-buzzsaw', 0.4], ...ai(1)]));
+  assert.equal(next.entries.length, pool.entries.length);
+  assert.equal(next.candidates.length, 1);
+  const c = next.candidates[0];
+  assert.equal(poolKey(c.design), poolKey(hunter));
+  assert.equal(roleOf(c.design), roleOf(hunter));
+  assert.ok(c.learned && c.origin === 'adopted' && c.creator === 'guest');
+  assert.notEqual(c.design.name, hunter.name, 'gets an AI name');
   floorsHold(next);
-  // the weak one is not adopted (lost, and not better than the AI's)
-  assert.ok(!next.entries.some((e) => poolKey(e.design) === poolKey(starter('buzzsaw'))));
-  // not clearly better and the player lost: no adoption
-  const meh = evolvePool(pool, { ...m, status: 'done', winner: 1 }, 1, perf(m, [[0, hunter.id, 1.1], ...aiIds.map((id) => [1, id, 1] as [1, string, number])]));
-  assert.equal(meh.entries.length, pool.entries.length);
-  // the player won: its best designs are adopted
-  const won = evolvePool(pool, { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, hunter.id, 1.1], ...aiIds.map((id) => [1, id, 1] as [1, string, number])]));
-  assert.equal(won.entries.length, pool.entries.length + 1);
+  // not clearly better and lost: nothing
+  assert.equal(evolvePool(pool, { ...m, status: 'done', winner: 1 }, 1, perf(m, [[0, hunter.id, 1.1], ...ai(1)])).candidates.length, 0);
+  // won: its best designs go on trial
+  assert.equal(evolvePool(pool, { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, hunter.id, 1.1], ...ai(1)])).candidates.length, 1);
+  // a per-reporter cap can refuse it
+  const capped = structuredClone(pool);
+  foldMatch(capped, { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, hunter.id, 2], ...ai(1)]), { matchId: 'x', mayAddCandidate: () => false });
+  assert.equal(capped.candidates.length, 0);
 });
 
-test('evolvePool dedupes: a pooled design (in any mount order) merges instead of growing', () => {
+test('dedupe across both tiers: a pooled design (any mount order) or a near-duplicate never goes on trial', () => {
   const pooled = AI_POOL.find((d) => d.id === 'pool-railstrider')!; // striker/spider [lightrail, lightrail, targeting]
-  const same: Design = { id: 'mine', name: 'My Rails', chassis: pooled.chassis, mobility: pooled.mobility, mounts: [...pooled.mounts] };
-  const reordered: Design = { ...same, id: 'mine2', name: 'Reordered', mounts: ['lightrail', 'lightrail', 'targeting'] };
-  for (const d of [same, reordered]) {
-    const m = oneRound([d]);
-    const pool = defaultPool();
-    const next = evolvePool(pool, { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, d.id, 2]]));
-    assert.equal(next.entries.length, pool.entries.length, `${d.id} does not grow the pool`);
-    const e = next.entries.find((x) => poolKey(x.design) === poolKey(pooled))!;
-    assert.ok(e.score > 1 && e.games === 1, 'merged into the existing entry');
-  }
-  // near-duplicate: same hull, drive and weapons, a different utility -> same slot, no growth
+  const reordered: Design = { id: 'mine2', name: 'Reordered', chassis: pooled.chassis, mobility: pooled.mobility, mounts: ['lightrail', 'targeting', 'lightrail'] };
   const near: Design = { id: 'near', name: 'Near', chassis: 'striker', mobility: 'spider', mounts: ['lightrail', 'lightrail', 'gyro'] };
-  assert.ok(isValidDesign(near));
-  const m = oneRound([near]);
-  const next = evolvePool(defaultPool(), { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, near.id, 3]]));
-  assert.equal(next.entries.length, AI_POOL.length);
-  assert.equal(next.entries.filter((e) => slotKey(e.design) === slotKey(near)).length, 1);
-  assert.ok(next.entries.some((e) => poolKey(e.design) === poolKey(near)), 'the clearly better variant takes the slot');
+  for (const d of [{ ...pooled, id: 'mine', name: 'Mine' }, reordered, near]) {
+    if (!isValidDesign(d)) continue;
+    const m = oneRound([d]);
+    const next = evolvePool(defaultPool(), { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, d.id, 2]]));
+    assert.equal(next.entries.length, AI_POOL.length, d.id);
+    assert.equal(next.candidates.length, 0, `${d.id} is not a new candidate`);
+    floorsHold(next);
+  }
+  // and a design already on trial is not added twice
+  const hunter = starter('hunter');
+  const m = oneRound([hunter]);
+  let pool = evolvePool(defaultPool(), { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, hunter.id, 2]]));
+  pool = evolvePool(pool, { ...m, id: 'again', status: 'done', winner: 0 }, 1, perf(m, [[0, hunter.id, 2]]));
+  assert.equal(pool.candidates.length, 1);
 });
 
-test('evolvePool keeps role / tag floors, caps the pool and prunes the weakest when full', () => {
+/** A pool whose candidate tier holds the AI deck's first design (moved out of the tested tier). */
+function withCandidate(m: MatchState): { pool: AiPool; cand: Design } {
+  const pool = defaultPool();
+  const d = m.players[1].deck[0];
+  const e = pool.entries.find((x) => poolKey(x.design) === poolKey(d))!;
+  pool.entries.splice(pool.entries.indexOf(e), 1);
+  pool.candidates.push({ ...e, origin: 'mutant', parent: 'X', addedAt: 1 });
+  return { pool, cand: d };
+}
+
+test('candidates graduate after good games in different matches; two bad games kick a design out', () => {
+  const m = oneRound([starter('hunter')]);
+  const ids = m.players[1].deck.map((d) => d.id);
+  const rows = (first: number) => ids.map((id, i) => [1, id, i === 0 ? first : 1] as [1, string, number]);
+  // promotion: PROMOTE_GOOD good games in distinct matches (the same match twice counts once)
+  const { pool, cand } = withCandidate(m);
+  foldMatch(pool, m, 1, perf(m, rows(1.5)), { matchId: 'g1', now: 10 });
+  foldMatch(pool, m, 1, perf(m, rows(1.5)), { matchId: 'g1', now: 11 });
+  assert.ok(pool.candidates.some((e) => poolKey(e.design) === poolKey(cand)), 'one distinct good game is not enough');
+  const r = foldMatch(pool, m, 1, perf(m, rows(1.5)), { matchId: 'g2', now: 12 });
+  assert.equal(PROMOTE_GOOD, 2);
+  assert.ok(r.promoted.some((d) => poolKey(d) === poolKey(cand)));
+  const promoted = pool.entries.find((e) => poolKey(e.design) === poolKey(cand))!;
+  assert.ok(promoted && promoted.promotedAt === 12 && !pool.candidates.some((e) => poolKey(e.design) === poolKey(cand)));
+  assert.ok(r.events.some((e) => e.kind === 'promoted'));
+  // a candidate with KICK_BAD bad games is kicked
+  const k = withCandidate(m);
+  foldMatch(k.pool, m, 1, perf(m, rows(0.05)), { matchId: 'b1' });
+  assert.ok(k.pool.candidates.some((e) => poolKey(e.design) === poolKey(k.cand)));
+  const kr = foldMatch(k.pool, m, 1, perf(m, rows(0.05)), { matchId: 'b2' });
+  assert.equal(KICK_BAD, 2);
+  assert.ok(!k.pool.candidates.some((e) => poolKey(e.design) === poolKey(k.cand)) && kr.kicked.length >= 1);
+  // a tested design with two bad games is kicked too (one that no role / tag floor protects)
+  const t = defaultPool();
+  const ds = t.entries.map((e) => e.design);
+  const free = m.players[1].deck.findIndex((d) => ds.filter((x) => roleOf(x) === roleOf(d)).length > ROLE_MIN[roleOf(d)]
+    && [...designTags(d)].every((tag) => ds.filter((x) => designTags(x).has(tag)).length > (TAG_MIN[tag] ?? 0)));
+  assert.ok(free >= 0);
+  const td = m.players[1].deck[free];
+  const rowsT = ids.map((id, i) => [1, id, i === free ? 0.05 : 1] as [1, string, number]);
+  foldMatch(t, m, 1, perf(m, rowsT), { matchId: 'b1' });
+  foldMatch(t, m, 1, perf(m, rowsT), { matchId: 'b2' });
+  assert.ok(!t.entries.some((e) => poolKey(e.design) === poolKey(td)), 'tested design kicked');
+  floorsHold(t);
+});
+
+test('a kick that would break a role floor demotes instead', () => {
+  const m = oneRound([starter('hunter')]);
+  const d = m.players[1].deck[0];
+  const role = roleOf(d);
+  const pool = defaultPool();
+  // leave exactly ROLE_MIN designs of its role (it among them)
+  const same = pool.entries.filter((e) => roleOf(e.design) === role && poolKey(e.design) !== poolKey(d));
+  const keep = Math.max(0, ROLE_MIN[role] - 1);
+  for (const e of same.slice(keep)) pool.entries.splice(pool.entries.indexOf(e), 1);
+  if (ROLE_MIN[role] === 0) return; // nothing protects this role: covered by the kick test
+  const rows = m.players[1].deck.map((x, i) => [1, x.id, i === 0 ? 0.05 : 1] as [1, string, number]);
+  const before = pool.entries.find((e) => poolKey(e.design) === poolKey(d))!.score;
+  foldMatch(pool, m, 1, perf(m, rows), { matchId: 'b1' });
+  const r = foldMatch(pool, m, 1, perf(m, rows), { matchId: 'b2' });
+  const e = pool.entries.find((x) => poolKey(x.design) === poolKey(d));
+  assert.ok(e, 'kept for role coverage');
+  assert.ok(e!.score < before * 0.7, 'demoted');
+  assert.ok(r.demoted.length === 1 && r.events.some((x) => x.kind === 'demoted'));
+  assert.equal(pool.entries.filter((x) => roleOf(x.design) === role).length, ROLE_MIN[role]);
+});
+
+test('the candidate tier is capped: the weakest, then oldest, drop out', () => {
+  const pool = defaultPool();
+  const rng = makeRng(5);
+  const roles: Role[] = ['swarm', 'frontline', 'antiArmor', 'antiAir', 'artillery', 'flyer', 'skirmisher'];
+  let dropped: PoolEntry | null = null;
+  for (let i = 0; i < 400 && pool.candidates.length < MAX_CANDIDATES + 5; i++) {
+    const g = generateDesign(rng, roles[i % roles.length], `c${i}`);
+    if (!g || [...pool.entries, ...pool.candidates].some((e) => slotKey(e.design) === slotKey(g))) continue;
+    const out = addCandidate(pool, { design: g, score: i === 0 ? 0.1 : 1, games: 0, addedAt: i });
+    if (out) { dropped ??= out; }
+    assert.ok(pool.candidates.length <= MAX_CANDIDATES);
+  }
+  assert.equal(pool.candidates.length, MAX_CANDIDATES);
+  assert.equal(dropped!.score, 0.1, 'the weakest went first');
+});
+
+test('decks deal 1-2 candidates on trial and still cover every role', () => {
+  const m = oneRound([starter('hunter')]);
+  const { pool, cand } = withCandidate(m);
+  let dealt = 0;
+  for (let seed = 1; seed <= 30; seed++) {
+    const deck = drawDeck(pool, seed);
+    assert.equal(deck.length, DECK_SIZE);
+    assert.equal(new Set(deck.map(poolKey)).size, DECK_SIZE);
+    for (const t of DECK_TAGS) assert.ok(deck.some((d) => designTags(d).has(t)), t);
+    if (deck.some((d) => poolKey(d) === poolKey(cand))) dealt++;
+  }
+  assert.ok(dealt >= 25, `the only candidate is dealt in most decks (${dealt}/30)`);
+});
+
+test('evolvePool keeps role / tag floors and caps under heavy churn', () => {
   const rng = makeRng(42);
   const roles: Role[] = ['swarm', 'frontline', 'antiArmor', 'antiAir', 'artillery', 'flyer', 'skirmisher', 'support'];
   let pool = defaultPool();
-  let grew = false;
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0; i < 120; i++) {
     const g = generateDesign(rng, roles[i % roles.length], `g${i}`);
     if (!g) continue;
-    const m = oneRound([g]);
-    const aiIds = m.players[1].deck.map((d) => d.id);
-    // the AI's own designs do badly, the player's do well: heavy churn
-    const rows: [0 | 1, string, number][] = [[0, g.id, 1.5 + rng()], ...aiIds.map((id) => [1, id, 0.2 + rng() * 0.3] as [1, string, number])];
-    const before = pool.entries.length;
+    const m = { ...oneRound([g]), id: `churn${i}` };
+    const rows: [0 | 1, string, number][] = [[0, g.id, 1.5 + rng()], ...m.players[1].deck.map((d) => [1, d.id, rng() * 1.6] as [1, string, number])];
     pool = evolvePool(pool, { ...m, status: 'done', winner: 0 }, 1, perf(m, rows));
-    if (pool.entries.length > before) grew = true;
     floorsHold(pool);
   }
-  assert.ok(grew);
-  assert.ok(pool.entries.length >= 40 && pool.entries.length <= POOL_CAP, `size ${pool.entries.length}`);
-  // full pool: a strong newcomer replaces the weakest replaceable entry, size unchanged
-  const full: AiPool = structuredClone(pool);
-  for (let k = 0; full.entries.length < POOL_CAP && k < 3000; k++) {
-    const g = generateDesign(rng, roles[k % roles.length], `f${k}`);
-    if (!g || full.entries.some((e) => slotKey(e.design) === slotKey(g))) continue;
-    const r = roleOf(g);
-    if (full.entries.filter((e) => roleOf(e.design) === r).length >= ROLE_MAX[r]) continue;
-    full.entries.push({ design: g, score: 1, games: 1 });
-  }
-  let newcomer: Design | null = null;
-  for (let k = 0; k < 400 && !newcomer; k++) {
-    const g = generateDesign(rng, roles[k % roles.length], `n${k}`);
-    if (g && !full.entries.some((e) => slotKey(e.design) === slotKey(g))) newcomer = g;
-  }
-  assert.ok(newcomer);
-  for (const e of full.entries) e.score = 1;
-  // the weakest entry of the newcomer's role (one the floors let go: a learned one)
-  const weakest = full.entries.find((e) => e.learned && roleOf(e.design) === roleOf(newcomer!)) ?? full.entries.find((e) => e.learned)!;
-  weakest.score = 0.01;
-  const m = oneRound([newcomer!]);
-  assert.equal(full.entries.length, POOL_CAP);
-  const next = evolvePool(full, { ...m, status: 'done', winner: 0 }, 1, perf(m, [[0, newcomer!.id, 2]]));
-  assert.equal(next.entries.length, POOL_CAP);
-  assert.ok(next.entries.some((e) => poolKey(e.design) === poolKey(newcomer!)), 'newcomer adopted');
-  assert.ok(!next.entries.some((e) => poolKey(e.design) === poolKey(weakest.design)), 'weakest replaced');
-  floorsHold(next);
+  assert.ok(pool.candidates.length > 0);
 });
 
 test('evolvePool and sanitizePool handle bad input', () => {
+  // a v2 pool (one tier) migrates: its entries become the tested tier
+  const v2 = sanitizePool({ v: 2, entries: defaultPool().entries, matches: 7 });
+  assert.equal(v2.v, 3); assert.equal(v2.entries.length, AI_POOL.length); assert.equal(v2.matches, 7); assert.deepEqual(v2.candidates, []);
   for (const junk of [null, undefined, 42, 'x', [], {}, { v: 99, entries: [] }, { v: 1, entries: 'no' }, { v: 1, entries: [{ design: { id: 'x' } }] }]) {
     const p = sanitizePool(junk);
     assert.equal(p.entries.length, AI_POOL.length);
@@ -240,7 +312,7 @@ test('mutateWeak: an ineffective AI design yields one deterministic, deduped mut
   const rows: [0 | 1, string, number][] = aiDeck.map((d) => [1, d.id, d.id === weakId ? 0.05 : 1.2] as [1, string, number]);
   const run = (seed: number) => {
     const pool = defaultPool();
-    const made = mutateWeak(pool.entries, m, 1, perf(m, rows), seed);
+    const made = mutateWeak(pool, m, 1, perf(m, rows), seed);
     return { pool, made };
   };
   const a = run(77), b = run(77);
@@ -249,20 +321,20 @@ test('mutateWeak: an ineffective AI design yields one deterministic, deduped mut
   const mut = a.made[0];
   assert.equal(roleOf(mut), roleOf(aiDeck[0]));
   assert.ok(isValidDesign(mut));
-  const e = a.pool.entries.find((x) => poolKey(x.design) === poolKey(mut))!;
-  assert.ok(e.mutant && e.score === MUTANT_PRIOR && e.games === 0);
+  const e = a.pool.candidates.find((x) => poolKey(x.design) === poolKey(mut))!;
+  assert.ok(e.mutant && e.origin === 'mutant' && e.parent && e.score === MUTANT_PRIOR && e.games === 0, 'mutants start in the candidate tier');
   assert.ok(a.pool.entries.some((x) => poolKey(x.design) === poolKey(aiDeck[0])), 'the parent stays');
   floorsHold(a.pool);
   // nothing weak -> no mutant
-  assert.equal(mutateWeak(defaultPool().entries, m, 1, perf(m, aiDeck.map((d) => [1, d.id, 1] as [1, string, number])), 77).length, 0);
+  assert.equal(mutateWeak(defaultPool(), m, 1, perf(m, aiDeck.map((d) => [1, d.id, 1] as [1, string, number])), 77).length, 0);
   // the pool already holds the maximum of unproven mutants -> no more
   const full = defaultPool();
   let k = 0;
   for (const d of AI_POOL) {
-    if (full.entries.filter((x) => x.mutant).length >= MAX_UNPROVEN_MUTANTS) break;
+    if (full.candidates.filter((x) => x.mutant).length >= MAX_UNPROVEN_MUTANTS) break;
     const v = mutateDesign(d, makeRng(k++), `cap${k}`);
-    if (v && !full.entries.some((x) => slotKey(x.design) === slotKey(v))) full.entries.push({ design: v, score: MUTANT_PRIOR, games: 0, mutant: true });
+    if (v && ![...full.entries, ...full.candidates].some((x) => slotKey(x.design) === slotKey(v))) full.candidates.push({ design: v, score: MUTANT_PRIOR, games: 0, mutant: true });
   }
-  assert.equal(full.entries.filter((x) => x.mutant).length, MAX_UNPROVEN_MUTANTS);
-  assert.equal(mutateWeak(full.entries, m, 1, perf(m, rows), 77).length, 0);
+  assert.equal(full.candidates.filter((x) => x.mutant).length, MAX_UNPROVEN_MUTANTS);
+  assert.equal(mutateWeak(full, m, 1, perf(m, rows), 77).length, 0);
 });

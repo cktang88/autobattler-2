@@ -8,7 +8,7 @@ import {
 } from '../shared/match.ts';
 import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
-import { GlobalAiPool, REPORT_BODY_LIMIT, validateReport } from './aipool.ts';
+import { GlobalAiPool, REPORT_BODY_LIMIT, poolLog, validateReport } from './aipool.ts';
 import { hashToken, nameKey, type MatchRecord, type PasswordHash, type PlayerRecord, type Store } from './store.ts';
 import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
 
@@ -139,6 +139,7 @@ export class Api {
     if (a === 'aipool') {
       if (!b && M === 'GET') { c.cache = 60; return { pool: this.aiPool.pool(), reports: this.store.aiPool.reports }; }
       if (b === 'report' && !d && M === 'POST') return this.reportAiMatch(c);
+      if (b === 'log' && !d && M === 'GET') { c.cache = 30; return poolLog(this.store.aiPool); }
     }
     if (a === 'garage' && !b) {
       if (M === 'GET') return this.getGarage(c);
@@ -555,7 +556,7 @@ export class Api {
   }
 
   /** A finished vs-AI match for the global AI pool: validated now, re-simulated and scored in the background. The
-   *  reporter is the signed-in account (any session), else the IP; adoption needs several distinct reporters. */
+   *  reporter is the signed-in account (any session), else the IP: it is rate-limited and capped in new candidates per day. */
   private reportAiMatch(c: Ctx) {
     const auth = bearer(c.req);
     const p = auth ? this.store.playersByToken.get(hashToken(auth)) : undefined;
@@ -563,7 +564,8 @@ export class Api {
     if (!this.reportLimiter.take(reporter)) throw new HttpError(429, 'Too many reports — try again later');
     const match = validateReport(c.body);
     const reporterKey = crypto.createHash('sha256').update(reporter).digest('hex').slice(0, 24);
-    return { ok: true, ...this.aiPool.submit(match, reporterKey) };
+    // adopted designs credit a registered account's name; anyone else is "guest" (no IPs or hashes are ever shown)
+    return { ok: true, ...this.aiPool.submit(match, reporterKey, p?.pw ? p.name : 'guest') };
   }
 
   private clientIp(req: IncomingMessage): string {

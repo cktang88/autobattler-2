@@ -559,9 +559,10 @@ test('accounts: register, sign in again from a new device, wrong password, uniqu
 
 import { aiDeck, aiDeploy } from '../src/shared/ai.ts';
 import { applyDeploy as applyD, newMatch as newM, newPlayer as newP, resolveRound as resolveR } from '../src/shared/match.ts';
-import { poolKey } from '../src/shared/aipool.ts';
+import { defaultPool, poolKey } from '../src/shared/aipool.ts';
+const aiDeckPoolEntries = () => defaultPool().entries;
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
-import { ADOPT_REPORTERS } from '../src/server/aipool.ts';
+import { CANDIDATES_PER_REPORTER_DAY, sanitizeState } from '../src/server/aipool.ts';
 
 /** A finished vs-AI match (side 1 = an easy AI) that the "player" (side 0, starter designs played by the normal AI) won. */
 function wonAiMatch(): MatchState {
@@ -588,16 +589,24 @@ test('AI pool: GET serves the global pool (cacheable)', async () => {
   assert.match(r.headers.get('cache-control') ?? '', /max-age=\d+/);
   const body = await r.json() as any;
   assert.ok(Array.isArray(body.pool.entries) && body.pool.entries.length >= 18);
-  assert.equal(body.pool.v, 2);
+  assert.equal(body.pool.v, 3);
+  assert.ok(Array.isArray(body.pool.candidates));
+  // the hidden page: /aipool serves aipool.html (extensionless page route)
+  fs.writeFileSync(path.join(publicDir, 'aipool.html'), '<!doctype html><title>pool</title>');
+  const page = await fetch(base + '/aipool');
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /<title>pool<\/title>/);
 });
 
-test('AI pool: reports are validated, deduped, re-simulated; adoption needs distinct reporters', async () => {
+test('AI pool: reports are validated, deduped, re-simulated; one good report puts designs on trial; per-reporter cap', async () => {
   const m = aiMatch;
-  const tokens = await Promise.all(Array.from({ length: ADOPT_REPORTERS }, (_, i) => login(`Reporter ${i}`)));
+  const reg = await api('POST', '/api/login', undefined, { name: 'Reporter A', password: 'pw-reporter' });
+  assert.equal(reg.status, 200);
+  const A = reg.body as { playerId: string; token: string };
+  const B = await login('Reporter B');
   const before = srv.store.aiPool.reports;
   const send = (match: unknown, token?: string) => api('POST', '/api/aipool/report', token, { match });
-  // bad reports
-  // (bad reports from a guest IP: each report takes from the reporter's rate limit, valid or not)
+  // bad reports (from a guest IP: each report takes from the reporter's rate limit, valid or not)
   assert.equal((await send(undefined)).status, 400);
   assert.equal((await send({ ...m, status: 'deploy' })).status, 400);
   assert.equal((await send({ ...m, mode: 'pvp' })).status, 400);
@@ -607,40 +616,61 @@ test('AI pool: reports are validated, deduped, re-simulated; adoption needs dist
   assert.equal((await send({ ...m, id: 'local-test-spam' })).status, 429, 'rate-limited per reporter');
   const big = await fetch(base + '/api/aipool/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: m, pad: 'x'.repeat(1_200_000) }) });
   assert.equal(big.status, 413);
-  // a valid report is accepted; the same match id again is a duplicate
-  assert.equal((await send(m, tokens[0].token)).status, 200);
-  assert.equal((await send(m, tokens[1].token)).status, 409);
+  const playerKeys = new Set(m.players[0].deck.map((d) => poolKey(d)));
+  const onTrial = () => srv.store.aiPool.pool.candidates.filter((e) => playerKeys.has(poolKey(e.design)));
+  // B has used up today's new candidates: its valid report is re-scored but adds none
+  const day = Math.floor(Date.now() / 86_400_000);
+  srv.store.aiPool.adds[crypto.createHash('sha256').update(`p:${B.playerId}`).digest('hex').slice(0, 24)] = { day, n: CANDIDATES_PER_REPORTER_DAY };
+  assert.equal((await send({ ...m, id: 'local-test-b' }, B.token)).status, 200);
   await srv.api.aiPool.drain();
   assert.equal(srv.store.aiPool.reports, before + 1, 're-scored on the server');
-  const playerKeys = new Set(m.players[0].deck.map((d) => poolKey(d)));
-  const pooled = () => srv.store.aiPool.pool.entries.filter((e) => playerKeys.has(poolKey(e.design))).length;
-  assert.equal(pooled(), 0, 'one report never adopts');
-  const cands = srv.store.aiPool.candidates.filter((c) => playerKeys.has(c.key));
-  assert.ok(cands.length >= 1 && cands.every((c) => c.reporters.length === 1));
-  // the same reporter again (new match id) still counts once
-  assert.equal((await send({ ...m, id: 'local-test-again' }, tokens[0].token)).status, 200);
+  assert.equal(onTrial().length, 0, 'per-reporter daily cap');
+  // A's valid report puts the player's best designs on trial at once; the same match id again is a duplicate
+  assert.equal((await send(m, A.token)).status, 200);
+  assert.equal((await send(m, B.token)).status, 409);
   await srv.api.aiPool.drain();
-  assert.equal(pooled(), 0);
+  assert.ok(onTrial().length >= 1, 'on trial after one report');
+  assert.ok(onTrial().every((e) => e.origin === 'adopted' && e.creator === 'Reporter A' && !STARTER_DESIGNS.some((d) => d.name === e.design.name)));
+  assert.equal(srv.store.aiPool.pool.entries.filter((e) => playerKeys.has(poolKey(e.design))).length, 0, 'not in the tested tier yet');
   // a tampered result fails re-simulation: rejected, nothing learned
   const fake = structuredClone(m);
   fake.id = 'local-test-fake';
   const loser = fake.history[0].result.winner === 0 ? 1 : 0;
   fake.history[0].result.damage[loser] += 1;
   const rejected = srv.store.aiPool.rejected;
-  assert.equal((await send(fake, tokens[1].token)).status, 200);
+  assert.equal((await send(fake, A.token)).status, 200);
   await srv.api.aiPool.drain();
   assert.equal(srv.store.aiPool.rejected, rejected + 1);
-  // distinct reporters: adopted at the ADOPT_REPORTERS-th
-  for (let i = 1; i < ADOPT_REPORTERS; i++) {
-    assert.equal((await send({ ...m, id: `local-test-r${i}` }, tokens[i].token)).status, 200);
-    await srv.api.aiPool.drain();
-  }
-  assert.ok(pooled() >= 1, 'adopted after enough distinct reporters');
-  const adopted = srv.store.aiPool.pool.entries.find((e) => playerKeys.has(poolKey(e.design)))!;
-  assert.ok(adopted.learned && !STARTER_DESIGNS.some((d) => d.name === adopted.design.name), 'adopted with an AI name');
+  // the public log: tiers, origins, events; nothing about reporters
+  const lr = await fetch(base + '/api/aipool/log');
+  assert.equal(lr.status, 200);
+  assert.match(lr.headers.get('cache-control') ?? '', /max-age=\d+/);
+  const text = await lr.text();
+  const log = JSON.parse(text);
+  assert.ok(log.tested.length >= 18 && log.candidates.length >= 1);
+  assert.ok(log.candidates.some((r: any) => r.creator === 'Reporter A' && r.origin === 'adopted' && r.tier === 'candidate' && typeof r.addedAt === 'number'));
+  assert.ok(log.tested.every((r: any) => typeof r.score === 'number' && typeof r.games === 'number' && typeof r.good === 'number' && typeof r.bad === 'number'));
+  assert.ok(log.events.some((e: any) => e.kind === 'joined' && typeof e.t === 'number'));
+  for (const k of Object.keys(srv.store.aiPool.adds)) assert.ok(!text.includes(k), 'no reporter hashes');
+  assert.ok(!text.includes('127.0.0.1') && !text.includes(A.playerId) && !text.includes(A.token) && !/reporter|"ip"|token/i.test(text.replace(/Reporter [AB]/g, '')), 'no private fields');
   // persisted
   srv.store.flush();
   const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'aipool.json'), 'utf8'));
+  assert.equal(saved.version, 2);
+  assert.equal(saved.pool.v, 3);
   assert.equal(saved.reports, srv.store.aiPool.reports);
   assert.ok(saved.seen.includes(m.id));
+});
+
+test('AI pool: a version-1 state (one tier + reporter candidates) migrates to two tiers', () => {
+  const d = { id: 'lrn-x', name: 'Mimichawk', chassis: 'raider', mobility: 'legs', mounts: ['atgm', 'atgm'] };
+  const s = sanitizeState({ version: 1, pool: { v: 2, entries: aiDeckPoolEntries(), matches: 4 }, candidates: [{ design: d, key: 'k', reporters: ['h1', 'h2'], effSum: 3, n: 2, lastSeen: 5 }], seen: ['a'], reports: 4, rejected: 1 });
+  assert.equal(s.version, 2);
+  assert.equal(s.pool.v, 3);
+  assert.equal(s.pool.matches, 4);
+  assert.equal(s.pool.candidates.length, 1);
+  assert.equal(s.pool.candidates[0].score, 1.5);
+  assert.equal(s.pool.candidates[0].origin, 'adopted');
+  assert.equal(JSON.stringify(s).includes('h1'), false, 'old reporter hashes are dropped');
+  assert.deepEqual(s.seen, ['a']);
 });

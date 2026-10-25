@@ -13,3 +13,4 @@ public/chunks/
 assets-src/*
 !assets-src/LICENSES.md
 public/assetlab.js*
+public/aipool.js
