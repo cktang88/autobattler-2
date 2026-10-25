@@ -1455,7 +1455,7 @@ export class Fx {
     for (const b of this.beams) {
       if (b.kind === 'ion' || b.kind === 'lightning') continue;
       const t = b.life / b.max;
-      stroke(g, b.pts, '#05070a', Math.max(minW * 5, b.width * 5.5), 0.3 * Math.pow(t, 1.5));
+      softStroke(g, b.pts, '#05070a', Math.max(minW * 5, b.width * 5.5), 0.3 * Math.pow(t, 1.5));
     }
     g.globalCompositeOperation = add;
     const LG = this.lightGain, time = this.time;
@@ -1572,8 +1572,9 @@ export class Fx {
           // instant, hard, bright: a white-blue line that collapses fast
           const f2 = t * t;
           const w = b.width * (0.25 + 0.75 * f2);
-          stroke(g, p, b.color, Math.max(minW * 3, w * 4), 0.2 * f2);
-          stroke(g, p, mixHex(b.color, '#ffffff', 0.5), Math.max(minW * 1.6, w * 1.6), 0.75 * f2);
+          // the wide sheath fades out across its width (stacked strokes), not a hard-edged band
+          softStroke(g, p, b.color, Math.max(minW * 3, w * 5), 0.22 * f2);
+          softStroke(g, p, mixHex(b.color, '#ffffff', 0.5), Math.max(minW * 1.6, w * 1.6), 0.75 * f2, 3);
           stroke(g, p, '#ffffff', Math.max(minW * 0.9, w * 0.7), Math.min(1, f2 * 1.6));
           this.bloom(g, x1, y1, 0.15 + b.width * 2.5, '#ffffff', 0.8 * f2);
           this.bloom(g, x1, y1, 0.3 + b.width * 4, b.color, 0.4 * f2);
@@ -1584,8 +1585,8 @@ export class Fx {
         case 'ion': {
           // fading ionised trail: soft glow, sparkling motes and thin rings of displaced air along the path
           const w = b.width;
-          stroke(g, p, b.color, Math.max(minW * 3, w * 3), 0.1 * t);
-          stroke(g, p, mixHex(b.color, '#ffffff', 0.4), Math.max(minW * 1.5, w * 1.2), 0.3 * t * t);
+          softStroke(g, p, b.color, Math.max(minW * 3, w * 3), 0.1 * t);
+          softStroke(g, p, mixHex(b.color, '#ffffff', 0.4), Math.max(minW * 1.5, w * 1.2), 0.3 * t * t, 3);
           const nm = Math.min(24, Math.ceil(len * 2.5));
           g.fillStyle = '#d8f6ff';
           for (let i = 0; i < nm; i++) {
@@ -1664,6 +1665,14 @@ function stroke(g: Ctx, pts: number[], color: string, w: number, a: number): voi
   g.moveTo(pts[0], pts[1]);
   for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
   g.stroke();
+}
+
+/** A stroke whose edges fade out: n nested strokes narrowing toward the centre line, each at the alpha that makes the
+ *  middle come out at `a`, so wide glows and backings fall off across their width instead of ending in a hard band. */
+function softStroke(g: Ctx, pts: number[], color: string, w: number, a: number, n = 4): void {
+  if (a <= 0.01) return;
+  const ai = 1 - Math.pow(1 - clamp(a, 0, 0.99), 1 / n);
+  for (let i = 0; i < n; i++) stroke(g, pts, color, w * (1 - (i / n) * 0.8), ai);
 }
 
 function strokeStyle(g: Ctx, pts: number[], style: CanvasGradient, w: number): void {

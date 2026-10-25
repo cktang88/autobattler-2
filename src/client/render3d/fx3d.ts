@@ -643,7 +643,9 @@ class Ribbons {
         varying float vV; varying float vAlong; varying float vLen; varying float vW; varying vec4 vCol; varying float vHead; varying float vCore;
         void main() {
           float e = max(-vAlong, vAlong - vLen) / vW;
-          float cap = exp(-max(e, 0.0) * max(e, 0.0) * 3.0);
+          // the gaussians are still a few % at the quad's border: window them to exactly 0 there (bright, wide bolts such
+          // as the rail crackle otherwise show a faint hard-edged box)
+          float cap = exp(-max(e, 0.0) * max(e, 0.0) * 3.0) * smoothstep(1.0, 0.6, e) * smoothstep(1.0, 0.6, abs(vV));
           float v2 = vV * vV;
           float core = exp(-v2 * 22.0 / max(0.15, vCore)), glow = exp(-v2 * 3.5) * 0.55;
           float x = clamp(vAlong / vLen, 0.0, 1.0);
@@ -674,37 +676,64 @@ class Ribbons {
 }
 
 /** Railgun beams: camera-facing ribbons with one smooth glow (white-hot core fading through blue to nothing across
- *  the width), soft tapered ends, and a decay pass: after the shot the ionised channel breaks up from the muzzle
- *  forward, the line wisps sideways in drifting noise and the glow thins out until the air is clear again. */
-const RAIL_VERT = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+ *  the width), soft round caps, and a decay pass: after the shot the ionised channel breaks up from the muzzle
+ *  forward, the line wisps sideways in drifting noise and the glow thins out until the air is clear again.
+ *  The quad is built in the vertex shader: turned toward the eye per vertex (so it never shows its edge at the far end
+ *  of a long beam under a close camera) and stretched past both ends so the glow ends in a soft rounded cap instead
+ *  of a square cut. Every term is windowed to exactly zero at the quad's edge (the drifting wisps and the wide halo
+ *  used to reach it, which showed as a hard-edged rectangle on the mass driver), and it fades into the ground instead
+ *  of being clipped by it in a straight line. */
+const RAIL_VERT = `
+uniform vec3 uA, uB; uniform float uHW;
+varying float vAl, vV, vY;
+void main() {
+  vec3 d = uB - uA; float L = max(1e-3, length(d)); d /= L;
+  // caps: a little past the muzzle (it sits in the barrel), a full half-width past the impact
+  float s = mix(-0.6 * uHW, L + uHW, uv.x), v = uv.y * 2.0 - 1.0;
+  vec3 P = uA + d * s;
+  vec3 side = normalize(cross(d, cameraPosition - P) + vec3(1e-5, 0.0, 0.0));
+  P += side * v * uHW;
+  vAl = s; vV = v; vY = P.y;
+  gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
+}`;
 const RAIL_FRAG = `
-varying vec2 vUv;
-uniform vec3 uColor; uniform float uT, uLen, uSeed, uHdr, uAge;
+varying float vAl, vV, vY;
+uniform vec3 uColor; uniform float uT, uLen, uSeed, uHdr, uAge, uHW;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
 void main() {
-  float u = vUv.x, v = vUv.y * 2.0 - 1.0, t = uT;
-  float ends = smoothstep(0.0, min(0.5, 0.7 / uLen), u) * smoothstep(0.0, min(0.5, 0.45 / uLen), 1.0 - u);
+  float u = clamp(vAl / uLen, 0.0, 1.0), v = vV, t = uT;
+  // distance past either end, in half-widths: the glow rounds off over the caps
+  float e = max(0.0, max(-vAl, vAl - uLen) / uHW);
+  float r2 = e * e + v * v;
+  // window: 1 on the axis, smoothly 0 at the quad's edge and the cap's rim (no term can reach the border)
+  float win = max(0.0, 1.0 - r2); win *= win;
+  float capFall = exp(-e * e * 2.5);
+  // the white-hot core tapers to a point at the muzzle and the impact
+  float ends = smoothstep(0.0, min(0.5, 0.7 / uLen), u) * smoothstep(0.0, min(0.5, 0.45 / uLen), 1.0 - u) * step(e, 0.0);
   // the channel deionises from the muzzle forward, with a ragged noisy front
   float front = smoothstep(0.2, 1.0, t) * 1.2 - 0.1 + (vnoise(vec2(u * uLen * 0.8, uSeed)) - 0.5) * 0.25 * t;
   float lit = smoothstep(front - 0.02, front + 0.18, u);
-  // wisping: the line drifts and frays sideways more as it decays
+  // wisping: the line drifts and frays sideways more as it decays (kept inside the window)
   float n1 = vnoise(vec2(u * uLen * 1.3 - uAge * 1.5, uSeed + uAge * 2.0));
   float n2 = vnoise(vec2(u * uLen * 3.1 + uAge * 2.5, uSeed * 1.7 - uAge * 3.0));
-  float vv = v + (n1 - 0.5) * 1.1 * t;
-  float core = exp(-vv * vv * 160.0) * (1.0 - t);
+  float vv = v + (n1 - 0.5) * 0.8 * t;
+  float core = exp(-vv * vv * 160.0) * (1.0 - t) * ends;
   float glow = exp(-vv * vv * 14.0) * (0.95 - 0.5 * t);
-  float halo = exp(-vv * vv * 2.5) * 0.35 * (1.0 - t * 0.8);
-  float wisp = exp(-vv * vv * 3.0) * smoothstep(0.45, 0.85, n2) * t * 0.8;
-  float a = (core * 1.6 + glow + halo + wisp) * ends * mix(1.0, lit, 0.85) * (1.0 - smoothstep(0.75, 1.0, t));
+  float halo = exp(-v * v * 4.0) * 0.35 * (1.0 - t * 0.8);
+  float wisp = exp(-vv * vv * 5.0) * smoothstep(0.45, 0.85, n2) * t * 0.8;
+  // soft against the ground: fade out as the ribbon dips toward y = 0 instead of being cut off by the depth test
+  float ground = smoothstep(0.0, clamp(uHW * 0.5, 0.12, 0.7), vY);
+  float a = (core * 1.6 + (glow + halo + wisp) * capFall) * win * ground * mix(1.0, lit, 0.85) * (1.0 - smoothstep(0.75, 1.0, t));
   vec3 col = mix(uColor, vec3(1.0), clamp(core * 1.3, 0.0, 1.0));
   gl_FragColor = vec4(col * a * uHdr, 1.0);
 }`;
 class RailBeams {
   readonly group = new THREE.Group();
-  private pool: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; ax: number; ay: number; az: number; bx: number; by: number; bz: number; w: number; age: number; life: number; on: boolean }[] = [];
-  private geo = new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0);
+  private pool: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; age: number; life: number; on: boolean }[] = [];
+  /** unit quad (u along the beam, v across); the vertex shader places it */
+  private geo = new THREE.PlaneGeometry(1, 1);
   add(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, life: number, color: THREE.Color, hdr: number): void {
     let b = this.pool.find((x) => !x.on);
     if (!b) {
@@ -712,38 +741,37 @@ class RailBeams {
       else {
         const mat = new THREE.ShaderMaterial({
           vertexShader: RAIL_VERT, fragmentShader: RAIL_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide,
-          uniforms: { uColor: { value: new THREE.Color() }, uT: { value: 0 }, uLen: { value: 1 }, uSeed: { value: 0 }, uHdr: { value: 1 }, uAge: { value: 0 } },
+          uniforms: {
+            uColor: { value: new THREE.Color() }, uT: { value: 0 }, uLen: { value: 1 }, uSeed: { value: 0 }, uHdr: { value: 1 }, uAge: { value: 0 },
+            uA: { value: new THREE.Vector3() }, uB: { value: new THREE.Vector3() }, uHW: { value: 0.5 },
+          },
         });
         const mesh = new THREE.Mesh(this.geo, mat);
         mesh.frustumCulled = false; mesh.renderOrder = 10;
+        mesh.matrixAutoUpdate = false;
         this.group.add(mesh);
-        b = { mesh, mat, ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, w: 0, age: 0, life: 1, on: false };
+        b = { mesh, mat, age: 0, life: 1, on: false };
         this.pool.push(b);
       }
     }
-    Object.assign(b, { ax, ay, az, bx, by, bz, w, age: 0, life, on: true });
-    b.mat.uniforms.uColor.value.copy(color);
-    b.mat.uniforms.uSeed.value = Math.random() * 100;
-    b.mat.uniforms.uHdr.value = hdr;
-    b.mat.uniforms.uLen.value = Math.max(0.5, Math.hypot(bx - ax, by - ay, bz - az));
+    b.age = 0; b.life = life; b.on = true;
+    const U = b.mat.uniforms;
+    U.uColor.value.copy(color);
+    U.uSeed.value = Math.random() * 100;
+    U.uHdr.value = hdr;
+    U.uA.value.set(ax, ay, az);
+    U.uB.value.set(bx, by, bz);
+    U.uHW.value = w / 2;
+    U.uLen.value = Math.max(0.5, Math.hypot(bx - ax, by - ay, bz - az));
+    U.uT.value = 0; U.uAge.value = 0;
     b.mesh.visible = true;
   }
-  /** advance and face every beam toward the camera (its width axis is perpendicular to the beam and the view) */
-  update(dt: number, eye: THREE.Vector3): void {
+  /** advance every beam (each one faces the camera in its vertex shader) */
+  update(dt: number): void {
     for (const b of this.pool) {
       if (!b.on) continue;
       b.age += dt;
       if (b.age >= b.life) { b.on = false; b.mesh.visible = false; continue; }
-      _x.set(b.bx - b.ax, b.by - b.ay, b.bz - b.az);
-      const len = _x.length() || 1e-3;
-      _x.multiplyScalar(1 / len);
-      _mid.set((b.ax + b.bx) / 2 - eye.x, (b.ay + b.by) / 2 - eye.y, (b.az + b.bz) / 2 - eye.z);
-      _y.crossVectors(_x, _mid).normalize();
-      _z.crossVectors(_x, _y);
-      _bm.makeBasis(_x.multiplyScalar(len), _y.multiplyScalar(b.w), _z);
-      _bm.setPosition(b.ax, b.ay, b.az);
-      b.mesh.matrixAutoUpdate = false;
-      b.mesh.matrix.copy(_bm);
       b.mat.uniforms.uT.value = b.age / b.life;
       b.mat.uniforms.uAge.value = b.age;
     }
@@ -1937,7 +1965,7 @@ export class Fx3D {
     this.pools.update(dt);
     this.debris.update(dt);
     this.scrap.update(dt);
-    this.rails.update(dt, this.eye);
+    this.rails.update(dt);
     // bolts: rebuilt each frame; lightning re-rolls its jag every 45 ms
     this.beams.begin();
     const tmp: number[] = [];
