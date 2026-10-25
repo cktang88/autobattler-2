@@ -14,6 +14,7 @@ import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import { applyDeploy, newMatch, newPlayer, resolveRound, validateDeploy } from '../src/shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MODULES, MOUNT_RANK, pairingError, weaponCap } from '../src/shared/parts.ts';
 import { AP_VALUE, TOUGH, MOBILITY_CAL, MODULE_CAL, SIZE_K, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
+import * as statsMod from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
 import { deployRole, smartDeploy } from '../src/shared/smartdeploy.ts';
@@ -27,6 +28,13 @@ if (process.env.BAL_MOBCAL) Object.assign(MOBILITY_CAL, JSON.parse(process.env.B
 // BAL_CHASSIS = {chassisId: {hp, cost, armor, weight, agility}}: trial hull numbers (fit_cal.py fits hp/cost; copy into parts.ts)
 if (process.env.BAL_CHASSIS) for (const [id, patch] of Object.entries(JSON.parse(process.env.BAL_CHASSIS) as Record<string, Record<string, number>>)) { const c = CHASSIS_BY_ID.get(id); if (c) Object.assign(c, patch); }
 if (process.env.BAL_APK) AP_VALUE.k = Number(process.env.BAL_APK);
+// QM_SET='{"ARMOR_PRICE":{"k":4},"SIZE_K":[..]}': patch any mutable stats.ts export (objects merged, arrays replaced)
+if (process.env.QM_SET) for (const [k, v] of Object.entries(JSON.parse(process.env.QM_SET) as Record<string, unknown>)) {
+  const t = (statsMod as unknown as Record<string, unknown>)[k];
+  if (Array.isArray(t)) t.splice(0, t.length, ...(v as unknown[]));
+  else if (t && typeof t === 'object') Object.assign(t, v);
+  else throw new Error(`QM_SET: no mutable export ${k}`);
+}
 if (process.env.TV_TOUGH) { Object.assign(TOUGH, JSON.parse(process.env.TV_TOUGH)); clearPriceCache(); }
 if (process.env.BAL_SIZEK) SIZE_K.splice(0, 5, ...(JSON.parse(process.env.BAL_SIZEK) as number[]));
 // TV_BASE=1: analytic prices only (stats.ts TEAM_FIT zeroed); TV_FIT=<json>: turn the team-value correction on with a trial fit (scripts/teamvalue.ts)
@@ -340,16 +348,24 @@ function runShard(pool: Design[], seeds: number, shard: number): Result[] {
 
 function buildPool(filter: string): { tests: TestDesign[]; pool: Design[] } {
   const tests = moduleDesigns();
+  // BAL_DESIGNS=<json [{id, chassis, mobility, mounts}]>: extra designs to test (ids should start with 'x-')
+  if (process.env.BAL_DESIGNS) for (const x of JSON.parse(process.env.BAL_DESIGNS) as Design[]) {
+    const d = { ...x, name: x.name ?? x.id.slice(0, 24) };
+    if (validateDesign(d).length === 0) tests.push({ d, module: null, base: false, carrier: '' });
+    else console.error(`BAL_DESIGNS: ${d.id} is not legal: ${validateDesign(d).join('; ')}`);
+  }
+  // filter: substrings of a design id / a category / a module id, '|'-separated alternatives
+  const alts = filter ? filter.split('|') : [];
   const fits = (t: TestDesign) => {
     if (!filter) return true;
     const cat = t.module ? MODULES.find((m) => m.id === t.module)!.category : '';
-    return t.d.id.includes(filter) || cat === filter || t.module === filter;
+    return alts.some((f) => t.d.id.includes(f) || cat === f || t.module === f);
   };
   // keep base rows whose carrier is used by a kept test design
   const kept = tests.filter((t) => !t.base && fits(t));
   const carriers = new Set(kept.map((t) => t.carrier).filter(Boolean));
   const baseKept = tests.filter((t) => t.base && (!filter || carriers.has(t.carrier)));
-  const starters = STARTER_DESIGNS.filter((d) => !filter || d.id.includes(filter));
+  const starters = STARTER_DESIGNS.filter((d) => !filter || alts.some((f) => d.id.includes(f)));
   const all = [...kept, ...baseKept];
   return { tests: all, pool: [...starters, ...all.map((t) => t.d)] };
 }

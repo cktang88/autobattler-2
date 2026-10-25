@@ -165,7 +165,9 @@ export const POWER_K = 0.36;
 // titans went down to 1.37 / 1.34 (from 1.49) to stay ~50% vs mixed armies.
 // Rules 7: fitted together with MODULE_CAL against smart-deployed mixed armies (see there); light squads are worth
 // more as a chaff screen (0.85 -> 0.97), heavies less (1.19 -> 0.92), titans more (1.34 -> 1.68).
-export const SIZE_K: number[] = [0.97, 1.04, 0.92, 1.32, 1.68];
+// The convex armour term (ARMOR_PRICE) and the dearer cannon raised giant and titan prices ~17% / ~25%: giants
+// 1.32 -> 1.13 and titans 1.68 -> 1.35 hand it back (both already sat at or below 50%).
+export const SIZE_K: number[] = [0.97, 1.04, 0.92, 1.13, 1.35];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
@@ -185,7 +187,33 @@ const HOVER_EHP = 1.06;
  *  bomber, which dodge and slip through the AA): the giant and titan bombers don't jink (no evasion), turn wide and
  *  are big targets, but still fly their runs over everything on the ground. Fitted with `node scripts/op-check.ts`
  *  (one or two of them plus a starter mix vs the mix, ~2x their price per side) and `node scripts/role-check.ts bomber`. */
-export const GIANT_JET_CAL: Record<number, number> = { 4: 1.05, 5: 1.17 };
+// (x SIZE_K: 1.05 / 1.17 -> 1.2 / 1.4 when SIZE_K for giants / titans came down with the convex armour term, so the
+// bombers' prices hold)
+export const GIANT_JET_CAL: Record<number, number> = { 4: 1.2, 5: 1.4 };
+/** Convex armour value (rules 7). Flat armour takes a fixed amount off every hit, so a thick hull shrugs off whole
+ *  classes of guns (an Ironclad is all but immune to machine guns), while sqrt(offense x ehp) with a linear armour
+ *  factor priced that like any other hit points (an armour-stacked bastion with a token gun won ~80% of mixed-army fights).
+ *  The hull's ehp is multiplied by 1 + k x max(0, negated - n0)^p, where negated is the share of the field's typical
+ *  damage the armour takes off (armorNegation, against REF_HITS): nothing up to ~8 armour (n0), then convex, so the
+ *  last points of a thick hull are worth more than the first (armour 13: x1.02, 24: x1.2, 33: x1.5 ehp). Fitted with
+ *  balance.ts army (frozen mix, supplies 1000 / 1200 / 1400) on bastion plate stacks and the Ironclad: k = 15 brings
+ *  them from ~80% to ~50% (k = 40 overshot to ~10%); SIZE_K for giants and titans scaled back so their prices hold. Mutable for trial runs (QM_SET); k = 0 is the rules-6 price (match.ts). */
+export const ARMOR_PRICE = { k: 15, n0: 0.15, p: 2 };
+/** The field's typical hits as [damage per hit, armour penetration, share of the field's weapon value]: the starter
+ *  weapons (sizes 1-3), each starter weighted equally and split over its guns by weapon value (rules-7 numbers). */
+const REF_HITS: readonly (readonly [number, number, number])[] = [
+  [3.5, 0, 5], [5, 1, 5], [8, 0, 5.7], [16, 0.5, 3.4], [22, 0, 0.5], [30, 1, 2.6], [32, 0.5, 22.6], [36, 1, 2.4],
+  [70, 0.5, 4.5], [70, 0, 5], [75, 0.5, 5], [84, 0, 1.5], [110, 0, 6.8], [110, 0.5, 5], [190, 1, 5.2], [224, 0.5, 1.1],
+  [240, 1, 3.9], [272, 1, 5], [420, 1, 4.8], [480, 0.5, 5],
+];
+const REF_HITS_W = REF_HITS.reduce((t, h) => t + h[2], 0);
+/** Share of the field's typical damage (REF_HITS) that flat armour takes off (sim: never more than 85% of a hit). */
+export function armorNegation(armor: number): number {
+  if (armor <= 0) return 0;
+  return REF_HITS.reduce((t, [dmg, ap, w]) => t + w * Math.min(0.85, (armor * (1 - ap)) / dmg), 0) / REF_HITS_W;
+}
+/** ehp multiplier of the convex armour term (ARMOR_PRICE) */
+export const armorConvexF = (armor: number) => 1 + ARMOR_PRICE.k * Math.max(0, armorNegation(armor) - ARMOR_PRICE.n0) ** ARMOR_PRICE.p;
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
@@ -308,10 +336,14 @@ export const MODULE_CAL: Record<string, number> = {
   //   AA weapons (flak, heavyflak, skyfortress, aamissile, quad20) and the hand-set auras are held at their
   //   price-neutral floor (the ground-army fit can't see their job and drove them near free).
   //   Result (balance.ts army 3, smart): module rms 18.3 (HEAD 19.8), starter rms 15.9 / mean 0.55 (HEAD 20.7).
+  //   3. with the convex armour term (ARMOR_PRICE): cannon 1.487 -> 2.4 (a 120 mm on a cheap warden won ~80% of mixed
+  //      fights, the Longarm ~65%; 2.4 is the most that keeps the Tankbuster a 2-squad). A cannon on a thick hull
+  //      still wins ~70-80% at any cannon price tried (up to 6: dearer cannons also thin the cannons out of the
+  //      opposing field), so the Ironclad keeps its autocannons.
   leech: 2.905, prism: 3.272, voidlance: 3.725, entropy: 2.41,
   aamissile: 1.086, ac20: 2.067, ac40: 5.353, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 8.757,
   autocannon: 4.001, autoloader: 2.89, avenger: 1.216, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
-  cannon: 1.487, cannon75: 2.951, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
+  cannon: 2.4, cannon75: 2.951, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
   dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.7, gauss: 11.118,
   gravity: 6.197, grinder: 0.398, guidedrocket: 7.551, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
   heavyflak: 1.094, hmg: 3.498, howitzer: 2.271, incendiary: 0.843, inferno: 0.609, jammer: 0.25, laser: 6.042,
@@ -688,7 +720,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   offense = Math.max(offense, 5);
   // shields soak hits at full strength (armour doesn't help them); armour multiplies only the hull's worth
   // raw toughness (hull, armour, shields): what the toughness floor (TOUGH) prices
-  const hullEhp = (hp + reactiveHp) * (1 + armor / 15) + 1.2 * shield * shieldCal;
+  const hullEhp = (hp + reactiveHp) * (1 + armor / 15) * armorConvexF(armor) + 1.2 * shield * shieldCal;
   let ehp = hullEhp * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   // floating over the ground: no burning ground, no crush, half damage from ground-burst splash
