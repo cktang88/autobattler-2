@@ -1,6 +1,7 @@
 // Local persistence of the player's garage (designs) and active deck.
 
 import type { Design } from '../shared/types.ts';
+import { sanitizePool, type AiPool } from '../shared/aipool.ts';
 
 const KEY_DESIGNS = 'ab2.designs';
 const KEY_DECK = 'ab2.deck';
@@ -87,3 +88,9 @@ export const loadSettings = (): Settings => {
   return s;
 };
 export const saveSettings = (s: Settings) => write(KEY_SETTINGS, s);
+
+// ---- the AI's learned design pool (shared/aipool.ts), per browser ----
+const KEY_AI_POOL = 'ab2.aiPool';
+/** The stored AI pool, validated (corrupt / old-version / invalid data falls back to the curated default). */
+export const loadAiPool = (): AiPool => sanitizePool(read<unknown>(KEY_AI_POOL, null));
+export const saveAiPool = (p: AiPool) => write(KEY_AI_POOL, p);

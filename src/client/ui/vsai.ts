@@ -20,8 +20,8 @@ const DRAG_MIME = 'application/x-design-id';
 
 const DIFFS: { id: AiDifficulty; name: string; desc: string }[] = [
   { id: 'easy', name: 'Easy', desc: 'Scrappy builds, loose placement. Learn the ropes.' },
-  { id: 'normal', name: 'Normal', desc: 'Solid designs and sensible formations.' },
-  { id: 'hard', name: 'Hard', desc: 'Counters your army and spends every credit.' },
+  { id: 'normal', name: 'Normal', desc: 'A rotating deck of tuned designs that adapts to your army every round.' },
+  { id: 'hard', name: 'Hard', desc: 'Simulates its options against your army and picks the best. Learns from your designs.' },
 ];
 
 type Sort = 'edited' | 'size' | 'cost' | 'costDesc' | 'name' | 'range' | 'speed' | 'dps';

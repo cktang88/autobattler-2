@@ -4,11 +4,15 @@
 import { aiDeck, aiDeploy, type AiDifficulty } from '../shared/ai.ts';
 import { applyDeploy, migrateMatch, newMatch, newPlayer, redactFor, resolveRound, validateDeploy } from '../shared/match.ts';
 import { isValidDesign } from '../shared/stats.ts';
+import { combinePerf, evolvePool, scoreRound, type RoundTally } from '../shared/aipool.ts';
+import { loadAiPool, saveAiPool } from './storage.ts';
 import type { DeployAction, Design, MatchMode, MatchState, Side } from '../shared/types.ts';
 import type { MatchDriver } from './driver.ts';
 
 const KEY_LOCAL = 'ab2.localMatch';
 const WATCH_PREFIX = 'ab2.watched.';
+/** id of the last finished match the AI pool learned from (so a reload never learns twice) */
+const KEY_LEARNED = 'ab2.aiPool.learned';
 
 interface SavedLocal { v: 1; difficulty: AiDifficulty; match: MatchState }
 
@@ -53,7 +57,7 @@ export class LocalDriver implements MatchDriver {
     const seed = randomSeed();
     const id = 'local-' + Date.now().toString(36) + '-' + (seed % 46656).toString(36);
     const you = newPlayer(playerName, deck.map((d) => structuredClone(d)));
-    const ai = newPlayer(AI_NAMES[difficulty], aiDeck(seed ^ 0x5bd1e995, difficulty), true);
+    const ai = newPlayer(AI_NAMES[difficulty], aiDeck(seed ^ 0x5bd1e995, difficulty, loadAiPool(), you.deck), true);
     const m = newMatch(id, 'ai', seed, you, ai, Date.now());
     LocalDriver.clearSaved();
     const d = new LocalDriver(m, difficulty);
@@ -145,10 +149,30 @@ export class LocalDriver implements MatchDriver {
       throw e;
     }
     this.save();
+    if (m.status === 'done') this.learn();
     const view = this.state();
     for (const cb of [...this.subs]) {
       try { cb(view); } catch (e) { console.error(e); }
     }
+  }
+
+  /** Fold the finished match into the browser's AI design pool (shared/aipool.ts evolvePool): re-simulates one round
+   *  per macrotask so the UI stays responsive, then stores the evolved pool. Runs once per match. */
+  private learn(): void {
+    const m = structuredClone(this.match);
+    try {
+      if (localStorage.getItem(KEY_LEARNED) === m.id) return;
+      localStorage.setItem(KEY_LEARNED, m.id);
+    } catch { return; }
+    const rounds: RoundTally[] = [];
+    let i = 0;
+    const step = () => {
+      try {
+        if (i < m.history.length) { rounds.push(scoreRound(m, m.history[i++])); setTimeout(step, 0); return; }
+        saveAiPool(evolvePool(loadAiPool(), m, 1, combinePerf(rounds)));
+      } catch (e) { console.warn('AI pool learning failed', e); }
+    };
+    setTimeout(step, 50);
   }
 
   subscribe(cb: (m: MatchState) => void): () => void {

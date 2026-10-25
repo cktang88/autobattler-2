@@ -1,115 +1,48 @@
-// AI opponent: deck building + per-round deployment. Pure & deterministic (seeded by match seed,
-// round and side), so the server and the client produce the same decisions.
+// AI opponent: deck building + per-round deployment. Pure & deterministic (seeded by match seed, round and side).
 //
 // Approach
-//  - Every design is profiled from the part catalog (no hard-coded module ids): anti-air,
-//    anti-armor, splash, artillery, frontline toughness, flyer, swarm, support.
-//  - aiDeck: starters + procedurally generated designs, picked to cover every role.
-//  - aiDeploy: works only from redactFor(m, side) (no peeking). Scores each deck design against
-//    the opponent's visible board (counter bonuses) and our own composition, greedily buys units
-//    and upgrades, and places them by role (tanks front, artillery back, spread horizontally).
-//  - 'hard' builds several candidate deployments and simulates each with runBattle against the
-//    opponent's visible board plus a predicted deployment of their estimated unspent supply,
-//    keeping the best. 'easy' buys randomly and places randomly.
-//  - The result is always checked with validateDeploy; on failure it degrades (drop units) down to
-//    an empty action, which is always legal while the side may deploy.
+//  - Designs are profiled from the part catalog (aiprofile.ts): roles (swarm, frontline, anti-armour, anti-air,
+//    artillery, flyer, support, skirmisher), weapons, armour / shields / cloaks.
+//  - aiDeck: 'easy' mixes starters with procedurally generated designs (legacyDeck). 'normal' / 'hard' draw 9 distinct
+//    designs from the AI design pool (aipool.ts: ~25 curated, cost-efficient designs that grows with designs learned
+//    from players), seeded per match, always covering ground anti-air, flyers, long range, frontline, anti-armour and
+//    a cheap swarm.
+//  - aiDeploy works only from redactFor(m, side) (no peeking: the opponent's board as it last fought, their deck).
+//    'easy' buys randomly (legacy planner). 'normal' (smartPlan) reads the opponent's army (readIntel) and scores
+//    every deck design by its Lanchester matchup against it (kill rate x survival per supply, through the sim's
+//    armour / shield / splash / cloak / smoke / ECM / reach rules), weighted by what our army still needs (a front
+//    line before artillery, anti-air vs air...). It interleaves buys with upgrades of the blocks that did the most
+//    damage per supply last round (re-simulated from the round history), spends all its supply (except when saving
+//    for its giant), places by role (tanks front facing the enemy's mass, artillery back, AA covering, flankers wide)
+//    and re-tunes orders (targets, stances, spacing) against what the opponent fields.
+//  - 'hard' drafts its deck: 5 seeded pool draws, each tried in one simulated battle against an army of the opponent's
+//    deck (public in the match), keeping the best. Each round it re-simulates the last battle for per-design damage
+//    (its own designs' observed efficiency corrects the matchup model; the enemy designs that hurt most weigh more),
+//    rarely upgrades (per supply a new block is worth more than a level: measured), sells dead weight, predicts the
+//    opponent's additions (our planner from their side with their estimated supply; plus a noisier second guess),
+//    builds up to 10 candidate plans (flanks, spread, role-favoured, upgrade-heavier...) and simulates them against
+//    the predictions within a deterministic time budget (estimated from unit counts x battle length, ~1 s on a
+//    laptop), keeping the best (a candidate must beat the base plan by a margin).
+//  - The result is always checked with validateDeploy; on failure it degrades (drop upgrades, then units) down to an
+//    empty action, which is always legal while the side may deploy.
 
-import { CHASSIS, MOBILITY, MODULES, fitsMount, pairingError } from './parts.ts';
-import { computeStats, defaultOrders, designModules, MAX_LEVEL, slotError, validateDesign, type DefaultOrders } from './stats.ts';
+import { CHASSIS, MOBILITY, MODULES, pairingError } from './parts.ts';
+import { isValidDesign, levelMult, MAX_LEVEL, slotError, validateDesign, type DefaultOrders } from './stats.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
-import { runBattle } from './sim/battle.ts';
+import { Battle, runBattle } from './sim/battle.ts';
 import { STARTER_DESIGNS } from './starters.ts';
-import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, designCost, redactFor, roundDamage, supplyForRound, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
-import type { Size, DeployAction, Design, MatchState, ModuleDef, Placement, Side, Stance, TargetPriority, UnitConfig, UnitStats } from './types.ts';
+import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, battleInputFor, newMatch, newPlayer, designCost, placementValue, sellValue, redactFor, roundDamage, supplyForRound, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
+import { designKey, isHealer, profile, weaponDps, type Profile, type Role } from './aiprofile.ts';
+import { defaultPool, drawDeck, type AiPool } from './aipool.ts';
+import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, Stance, TargetPriority, UnitConfig } from './types.ts';
+
+export { profile, classify, type Profile, type Role } from './aiprofile.ts';
 
 export type AiDifficulty = 'easy' | 'normal' | 'hard';
 
 // ---------------------------------------------------------------------------------------------
 // Design profiling
-
-export interface Profile {
-  stats: UnitStats;
-  /** price of one block */
-  cost: number;
-  /** model value of one unit */
-  unitCost: number;
-  /** splash radius of the largest splash weapon (cells) */
-  splashRadius: number;
-  melee: boolean;
-  size: number;
-  /** dps usable vs air */
-  aaDps: number;
-  /** dps usable vs ground */
-  groundDps: number;
-  /** dps-weighted armor pierce of ground weapons (0..1) */
-  ap: number;
-  /** dps from splash/chain weapons */
-  splashDps: number;
-  minRange: number;
-  range: number;
-  /** effective toughness rating per cost */
-  toughPerCost: number;
-  ehp: number;
-  flying: boolean;
-  isStatic: boolean;
-  heal: number;
-  role: Role;
-  /** the design's default kite / focus orders (shared with the sim and client) */
-  defaults: DefaultOrders;
-}
-
-export type Role = 'swarm' | 'frontline' | 'antiArmor' | 'antiAir' | 'artillery' | 'flyer' | 'support' | 'skirmisher';
-
-const profileCache = new Map<string, Profile>();
-const designKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.join(',')}`;
-
-export function profile(d: Design): Profile {
-  const key = designKey(d);
-  const hit = profileCache.get(key);
-  if (hit) return hit;
-  const s = computeStats(d);
-  const mods = designModules(d);
-  let aaDps = 0, groundDps = 0, apSum = 0, splashDps = 0, minRange = 0, splashRadius = 0, melee = false;
-  for (const m of mods) {
-    if (m.kind !== 'weapon') continue;
-    const dps = weaponDps(m);
-    if (m.targetsAir) aaDps += dps * (m.airBonus ?? 1);
-    if (m.targetsGround !== false) {
-      groundDps += dps;
-      apSum += dps * (m.ap ?? 0);
-    }
-    if ((m.splash ?? 0) >= 0.8 || (m.chain ?? 0) > 0 || m.pierce) splashDps += dps * (1 + (m.splash ?? 0) + (m.chain ?? 0) * 0.5);
-    if ((m.splash ?? 0) >= 0.8 || m.category === 'flame' || m.category === 'artillery') splashRadius = Math.max(splashRadius, m.splash ?? 1);
-    if (m.projectile === 'melee') melee = true;
-    if (m.minRange) minRange = Math.max(minRange, m.minRange);
-  }
-  const ehp = (s.hp + s.shield) * (1 + s.armor / 12) * (s.traits.includes('evasive') ? 1.3 : 1);
-  const p: Profile = {
-    stats: s, cost: s.cost, unitCost: s.unitCost, splashRadius, melee, size: s.size, aaDps, groundDps, ap: groundDps > 0 ? apSum / groundDps : 0,
-    splashDps, minRange, range: s.range, toughPerCost: ehp / Math.max(1, s.unitCost), ehp,
-    flying: s.flying, isStatic: s.isStatic, heal: s.heal, role: 'skirmisher', defaults: defaultOrders(d),
-  };
-  p.role = classify(p);
-  profileCache.set(key, p);
-  return p;
-}
-
-function weaponDps(w: ModuleDef): number {
-  if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
-  return (w.damage * (w.burst ?? 1) * (w.pellets ?? 1)) / w.cooldown;
-}
-
-function classify(p: Profile): Role {
-  if (p.flying) return 'flyer';
-  if (p.heal > 0) return 'support';
-  if (p.range >= 9 && (p.minRange > 0 || p.groundDps === 0 || p.aaDps < p.groundDps * 0.5)) return 'artillery';
-  if (p.aaDps > 0 && (p.groundDps === 0 || p.aaDps >= p.groundDps * 1.4)) return 'antiAir';
-  if (p.ap >= 0.55 && p.groundDps > 0) return 'antiArmor';
-  if (p.unitCost <= 15) return 'swarm';
-  if (p.size >= 2 && p.toughPerCost >= 17.5) return 'frontline';
-  return 'skirmisher';
-}
 
 // ---------------------------------------------------------------------------------------------
 // Procedural designs
@@ -195,7 +128,6 @@ export function generateDesign(rng: Rng, role: Role, id: string, giant = false):
       if (pairingError(c.id, mb.id)) return false;
       if (role === 'flyer') return mb.kind === 'air';
       if (mb.kind === 'air') return role === 'antiArmor' ? false : rng() < 0.15;
-      if (mb.kind === 'static') return role === 'artillery' || role === 'antiAir' ? rng() < 0.35 : false;
       return true;
     });
     if (!mobPool.length) continue;
@@ -216,7 +148,7 @@ export function generateDesign(rng: Rng, role: Role, id: string, giant = false):
 function acceptableGiant(d: Design): boolean {
   if (validateDesign(d).length) return false;
   const p = profile(d);
-  return p.stats.load <= 1.1 && p.groundDps > 0 && !p.isStatic && p.heal <= 0;
+  return p.stats.load <= 1.1 && p.groundDps > 0 && p.heal <= 0;
 }
 
 function acceptable(d: Design, role: Role): boolean {
@@ -234,8 +166,51 @@ function acceptable(d: Design, role: Role): boolean {
 
 const DECK_ROLES: Role[] = ['frontline', 'antiArmor', 'antiAir', 'artillery', 'flyer', 'swarm', 'support', 'skirmisher', 'flyer'];
 
-/** Build an AI deck of up to DECK_SIZE valid designs (deterministic for a seed). */
-export function aiDeck(seed: number, difficulty: AiDifficulty): Design[] {
+/** Build an AI deck of up to DECK_SIZE valid designs (deterministic for a seed). 'normal' / 'hard' draw from `pool`
+ *  (the browser's learned pool; default: the curated pool). */
+export function aiDeck(seed: number, difficulty: AiDifficulty, pool?: AiPool, oppDeck?: Design[]): Design[] {
+  if (difficulty !== 'easy') {
+    const P = pool ?? defaultPool();
+    const deck = drawDeck(P, mixSeed(seed >>> 0, 0x40a1), DECK_SIZE, 1.5);
+    const opp = (oppDeck ?? []).filter((d) => { try { return isValidDesign(d); } catch { return false; } });
+    if (difficulty === 'hard' && opp.length && deck.length >= 6) return draftDeck(P, seed, deck, opp);
+    if (deck.length >= 6) return deck;
+  }
+  return legacyDeck(seed, difficulty);
+}
+
+/** Hard drafts: draw DRAFT_DECKS candidate decks and keep the one whose army does best against an army of the
+ *  opponent's deck (each side planned by smartPlan with DRAFT_SUPPLY, countering the other's deck; one battle). The
+ *  opponent's deck is public in the match anyway. Well under 1 s, once per match. */
+const DRAFT_DECKS = 5;
+const DRAFT_SUPPLY = 900;
+/** draft battles stop after 60 s of battle time (bounds the cost: ~0.1-0.3 s per deck on a laptop) */
+const DRAFT_TICKS = 1200;
+function draftDeck(pool: AiPool, seed: number, first: Design[], opp: Design[]): Design[] {
+  let best = first, bestScore = -Infinity;
+  for (let k = 0; k < DRAFT_DECKS; k++) {
+    const deck = k === 0 ? first : drawDeck(pool, mixSeed(seed >>> 0, 0x40a1 + 7919 * k), DECK_SIZE, 1.5);
+    if (deck.length < 6) continue;
+    let score = -1e9;
+    try {
+      const m = newMatch('draft', 'ai', mixSeed(seed >>> 0, 0xd4a), newPlayer('ai', deck, true), newPlayer('opp', opp.map((d) => ({ ...d, mounts: [...d.mounts] })), true));
+      m.players[0].supply = m.players[1].supply = DRAFT_SUPPLY;
+      const opts = (r: number): SmartOpts => ({ rng: makeRng(mixSeed(seed >>> 0, r)), hard: false, upgradeBias: 0.1, flank: 0, jitter: 0, spread: 0 });
+      const a0 = sanitize(m, 0, smartPlan(redactFor(m, 0), 0, [], m.players[1].deck, opts(11)));
+      const a1 = sanitize(m, 1, smartPlan(redactFor(m, 1), 1, [], m.players[0].deck, opts(12)));
+      // a capped battle (the first minute decides most fights): damage dealt minus taken, both in supply terms
+      const b = new Battle({ seed: mixSeed(seed >>> 0, 13), sides: [{ designs: m.players[0].deck, units: applyToBoard([], a0) }, { designs: m.players[1].deck, units: applyToBoard([], a1) }] });
+      while (!b.done && b.tick < DRAFT_TICKS) b.step();
+      const dealt = b.summary().damageDealt;
+      score = (dealt[0] - dealt[1]) / Math.max(1, dealt[0] + dealt[1]);
+    } catch { /* keep the others */ }
+    if (score > bestScore) { bestScore = score; best = deck; }
+  }
+  return best;
+}
+
+/** The original deck builder: starters + procedurally generated designs, picked to cover every role. */
+function legacyDeck(seed: number, difficulty: AiDifficulty): Design[] {
   const rng = makeRng(mixSeed(seed >>> 0, 0xdec4));
   const starters = shuffled(rng, STARTER_DESIGNS.filter((d) => validateDesign(d).length === 0));
   const deck: Design[] = [];
@@ -410,7 +385,7 @@ export function chooseBehavior(p: Profile, spacing: number, oppSplashShare: numb
     case 'swarm': target = rng() < 0.4 ? 'swarm' : 'closest'; break;
     default: target = 'closest';
   }
-  const mobile = !p.isStatic && !p.flying;
+  const mobile = !p.flying;
   // kite / focus follow the design defaults (the same rule the sim and the garage use)
   let kite = p.defaults.kite;
   if (p.role === 'artillery' && mobile && !p.melee) {
@@ -467,14 +442,13 @@ function applyBehavior(pl: Placement | UnitConfig, b: Behavior, defs: DefaultOrd
 function pickEscort(blocks: { uid: number; p: Profile; level: number }[], selfUid: number): number | undefined {
   let best: number | undefined, bestV = -1;
   for (const b of blocks) {
-    if (b.uid === selfUid || b.p.flying || b.p.isStatic || b.p.heal > 0 || b.p.groundDps <= 0) continue;
+    if (b.uid === selfUid || b.p.flying || b.p.heal > 0 || b.p.groundDps <= 0) continue;
     const v = b.p.cost * (1 + 0.5 * (b.level - 1)) * (b.p.role === 'frontline' ? 1.5 : 1);
     if (v > bestV) { bestV = v; best = b.uid; }
   }
   return best;
 }
 
-const isHealer = (p: Profile) => p.heal > 0 || p.stats.traits.includes('repairAura');
 
 interface Foot { x: number; y: number; w: number; h: number }
 
@@ -700,12 +674,504 @@ function plan(m: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[
   return action;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Normal / hard: intel on the opponent
+
+/** One kind of enemy unit the planner expects to fight, with its share of the enemy army's value. */
+interface Foe {
+  p: Profile;
+  /** level multiplier (hp and damage) */
+  lm: number;
+  /** share of the enemy army's value (0..1) */
+  share: number;
+  /** supply value of ONE unit of it (block value / squad) */
+  unitValue: number;
+}
+
+export interface Intel {
+  foes: Foe[];
+  /** the visible board was empty: foes are the opponent's deck, evenly weighted */
+  guess: boolean;
+  /** value-weighted shares of the enemy army */
+  air: number;
+  heavy: number;
+  swarm: number;
+  splash: number;
+  longRange: number;
+  fast: number;
+  cloaked: number;
+  /** the enemy can see cloaked units (sensor masts) */
+  detect: boolean;
+  /** value-weighted reach of the enemy's ground-hitting guns, and its average speed */
+  groundRange: number;
+  speed: number;
+  /** enemy ground mass centre in OUR local x (cells), or null */
+  centreX: number | null;
+}
+
+/** Visible enemy board (+ a share of their deck for what they may still add) as foes. */
+export function readIntel(board: Placement[], deck: Design[], threat?: Map<string, number>): Intel {
+  const byId = new Map(deck.map((d) => [d.id, d] as const));
+  const raw: { p: Profile; lm: number; value: number; x: number; w: number }[] = [];
+  // designs that did a lot of damage per supply last round count for more (what hurts us gets countered first)
+  const tw = (id: string) => (threat?.has(id) ? Math.sqrt(Math.max(0.3, Math.min(3, threat.get(id)!))) : 1);
+  for (const u of board) {
+    const d = byId.get(u.designId);
+    if (!d || !isValidDesign(d)) continue;
+    const p = profile(d);
+    const lv = Math.max(1, Math.min(MAX_LEVEL, u.level));
+    const { w } = blockDims(p.stats, u.spacing ?? 0, !!u.rot);
+    raw.push({ p, lm: levelMult(lv), value: placementValue(d, lv) * tw(d.id), x: DEPLOY_W - u.x - w + w / 2, w });
+  }
+  const guess = raw.length === 0;
+  const valid = deck.filter((d) => isValidDesign(d));
+  // the deck: everything if the board is unknown, else a 20% hedge on what they could add
+  const boardValue = raw.reduce((t, r) => t + r.value, 0);
+  const hedge = guess ? 1 : boardValue * PLAN_TUNING.hedge;
+  for (const d of valid) raw.push({ p: profile(d), lm: 1, value: hedge / valid.length, x: NaN, w: 0 });
+  const total = raw.reduce((t, r) => t + r.value, 0) || 1;
+  const merged = new Map<string, Foe>();
+  const it: Intel = { foes: [], guess, air: 0, heavy: 0, swarm: 0, splash: 0, longRange: 0, fast: 0, cloaked: 0, detect: false, groundRange: 6, speed: 2, centreX: null };
+  let rangeW = 0, rangeSum = 0, speedSum = 0, cx = 0, cw = 0;
+  for (const r of raw) {
+    const share = r.value / total;
+    const key = `${designKeyOf(r.p)}|${r.lm}`;
+    const f = merged.get(key);
+    if (f) f.share += share;
+    else merged.set(key, { p: r.p, lm: r.lm, share, unitValue: Math.max(1, r.p.unitCost * (1 + (r.lm - 1) * 1.67)) });
+    const p = r.p;
+    if (p.flying) it.air += share;
+    if (!p.flying && p.stats.armor >= 9) it.heavy += share;
+    if (p.stats.squad >= 8) it.swarm += share;
+    if (p.splashRadius > 0 || p.splashDps > p.groundDps * 0.5) it.splash += share;
+    if (!p.flying && p.range >= 12) it.longRange += share;
+    if (p.stats.speed >= 3 || p.flying) it.fast += share;
+    if (p.cloak) it.cloaked += share;
+    if (p.detect) it.detect = true;
+    if (p.groundDps > 0) { rangeW += share; rangeSum += share * p.range; }
+    speedSum += share * p.stats.speed;
+    if (!p.flying && Number.isFinite(r.x)) { cx += r.x * r.value; cw += r.value; }
+  }
+  it.foes = [...merged.values()];
+  if (rangeW > 0) it.groundRange = rangeSum / rangeW;
+  it.speed = speedSum;
+  it.centreX = cw > 0 ? cx / cw : null;
+  return it;
+}
+
+const designKeyOf = (p: Profile) => `${p.stats.size}|${p.cost}|${p.stats.hp}|${p.range}|${p.groundDps}|${p.aaDps}`;
+
+/** Share of one `b` unit destroyed per second by one `a` unit (levels as multipliers): the armour / shield / cloak /
+ *  splash maths of the sim, roughly. `detect` = a's side reveals cloaks. */
+function killRate(a: Profile, la: number, b: Profile, lb: number, detect: boolean): number {
+  let raw = 0, arm = 0, hitWeight = 0;
+  const armor = b.stats.armor;
+  const evasive = b.stats.traits.includes('evasive');
+  const sq = b.stats.squad;
+  for (const w of a.weapons) {
+    if (w.dps <= 0 || (b.flying ? !w.air : !w.ground)) continue;
+    let dps = w.dps * la * (evasive ? 0.75 + 0.25 * w.acc : w.acc);
+    if (w.splash > 0 && sq >= 4) dps *= 1 + Math.min(2, w.splash * (sq >= 8 ? 1.1 : 0.55));
+    if (b.cloak && !detect) dps *= b.cloak === 'phantom' ? 0.45 : w.range > 3 ? 0.55 : 0.9;
+    if (b.smoke && w.range > 4) dps *= 0.9;
+    if (b.jammer) dps *= w.missile ? 0.5 : 0.85;
+    if (b.reactive > 0 && w.explosive) dps *= 0.8;
+    if (b.energyResist > 0 && w.energy) dps *= 1 - b.energyResist;
+    if (w.melee && !b.flying) dps *= a.stats.speed >= 2.5 ? 0.8 : 0.6; // brawlers have to get there
+    if (w.minRange > 0 && (b.stats.speed >= 3 || b.melee)) dps *= 0.75;
+    const hit = Math.max(1, w.hit * la);
+    hitWeight += dps * hit;
+    raw += dps;
+    arm += dps * Math.max(0.15, (hit - armor * (1 - w.ap)) / hit);
+  }
+  if (arm <= 0) return 0;
+  // reach: a target that out-ranges and out-paces (kites) a ground unit is rarely caught
+  if (!a.flying && !b.flying && b.range > a.range + 2) {
+    if (b.defaults.kite && b.stats.speed >= a.stats.speed * 0.85) { raw *= 0.45; arm *= 0.45; }
+  }
+  // overkill: a big single hit on a small unit wastes the rest
+  const pool = (b.stats.shield + b.stats.hp) * lb;
+  const over = raw > 0 && hitWeight > 0 ? Math.min(1, 0.4 + 0.6 * pool / (hitWeight / raw)) : 1;
+  return over / ((b.stats.shield * lb) / raw + (b.stats.hp * lb) / arm);
+}
+
+interface Merit { kill: number; loss: number }
+
+/** Lanchester matchup of one design against the expected enemy army, per supply: kill = enemy value destroyed per
+ *  second per supply of it, loss = its value lost per second per enemy supply. */
+function matchup(p: Profile, it: Intel, myDetect: boolean): Merit {
+  let kill = 0, loss = 0;
+  for (const f of it.foes) {
+    kill += f.share * killRate(p, 1, f.p, f.lm, myDetect) * f.unitValue;
+    loss += f.share * killRate(f.p, f.lm, p, 1, it.detect) / f.unitValue;
+  }
+  kill /= Math.max(1, p.unitCost);
+  loss *= Math.max(1, p.unitCost);
+  // reach: out-ranging a slow army is free damage; walking a short gun into long guns costs
+  if (!p.flying && p.groundDps > 0) {
+    const gap = p.range - it.groundRange;
+    if (gap > 3) kill *= 1 + Math.min(0.35, gap / 30) * (it.speed < 2.6 ? 1 : 0.4);
+    else if (gap < -3 && p.stats.speed < 2.2) loss *= 1.15;
+  }
+  return { kill, loss };
+}
+
+/** Relative merit (mean 1 over `designs`) of each design against the intel. */
+export function merits(designs: Design[], it: Intel, myDetect: boolean): Map<string, number> {
+  const ms = designs.map((d) => matchup(profile(d), it, myDetect));
+  const losses = ms.map((m) => m.loss).filter((x) => x > 0).sort((a, b) => a - b);
+  const floor = (losses[Math.floor(losses.length / 2)] ?? 1) * 0.2 || 1e-9;
+  const raw = ms.map((m) => Math.sqrt(m.kill / Math.max(floor, m.loss)));
+  const mean = raw.reduce((a, b) => a + b, 0) / Math.max(1, raw.length) || 1;
+  return new Map(designs.map((d, i) => [d.id, Math.max(0.02, raw[i] / mean)] as const));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Normal / hard: last round's performance
+
+/** What last round taught us. Values are relative (1 = that side's average per supply). */
+export interface RoundPerf {
+  /** our blocks: damage dealt per supply */
+  block: Map<number, number>;
+  /** our designs: damage dealt per supply */
+  mine: Map<string, number>;
+  /** the enemy's designs: damage they dealt per supply (what hurts us) */
+  threat: Map<string, number>;
+}
+const noPerf = (): RoundPerf => ({ block: new Map(), mine: new Map(), threat: new Map() });
+
+function relative<K>(rows: { k: K; v: number; w: number }[]): Map<K, number> {
+  const acc = new Map<K, { v: number; w: number }>();
+  for (const r of rows) { const a = acc.get(r.k) ?? { v: 0, w: 0 }; a.v += r.v; a.w += r.w; acc.set(r.k, a); }
+  let tv = 0, tw = 0;
+  for (const a of acc.values()) { tv += a.v; tw += a.w; }
+  const mean = tw > 0 ? tv / tw : 0;
+  const out = new Map<K, number>();
+  for (const [k, a] of acc) out.set(k, mean > 0 && a.w > 0 ? a.v / a.w / mean : 1);
+  return out;
+}
+
+/** Re-simulate the last recorded round (deterministic; both boards are public once fought): damage per supply of every
+ *  block and design on both sides. */
+function lastRoundPerf(view: MatchState, side: Side): RoundPerf {
+  const rec = view.history[view.history.length - 1];
+  if (!rec) return noPerf();
+  try {
+    const b = new Battle(battleInputFor(view, rec));
+    while (!b.done) b.step();
+    const rows = (s: Side) => {
+      const byId = new Map(view.players[s].deck.map((d) => [d.id, d] as const));
+      return rec.boards[s].flatMap((u) => {
+        const d = byId.get(u.designId);
+        return d && !isHealer(profile(d)) ? [{ uid: u.uid, k: d.id, v: b.blockDamage(s, u.uid), w: Math.max(1, placementValue(d, u.level)) }] : [];
+      });
+    };
+    const mine = rows(side), theirs = rows(side === 0 ? 1 : 0);
+    return { block: relative(mine.map((r) => ({ k: r.uid, v: r.v, w: r.w }))), mine: relative(mine), threat: relative(theirs) };
+  } catch { return noPerf(); }
+}
+
+/** Cheap stand-in for lastRoundPerf: survival of each block / design last round (wiped 0.75 .. intact 1.3). */
+function survivalPerf(view: MatchState, side: Side): RoundPerf {
+  const rec = view.history[view.history.length - 1];
+  if (!rec) return noPerf();
+  const rows = (s: Side) => {
+    const alive = new Set(rec.result.survivors[s]);
+    return rec.boards[s].map((u) => ({ uid: u.uid, k: u.designId, v: alive.has(u.uid) ? 1.3 : 0.75, w: 1 }));
+  };
+  const mine = rows(side), theirs = rows(side === 0 ? 1 : 0);
+  const block = new Map(mine.map((r) => [r.uid, r.v] as const));
+  const avg = (rs: { k: string; v: number }[]) => {
+    const m = new Map<string, number[]>();
+    for (const r of rs) m.set(r.k, [...(m.get(r.k) ?? []), r.v]);
+    return new Map([...m].map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length] as const));
+  };
+  return { block, mine: avg(mine), threat: avg(theirs) };
+}
+
+/** Estimated ms of one battle on a laptop: ~1.1 us per unit per tick (fitted on mid-game AI armies). */
+const MS_PER_UNIT_TICK = 0.0011;
+function unitCount(pl: Placement[], deck: Design[]): number {
+  const byId = new Map(deck.map((d) => [d.id, d] as const));
+  return pl.reduce((k, u) => { const d = byId.get(u.designId); return k + (d && isValidDesign(d) ? profile(d).stats.squad : 1); }, 0);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Normal / hard: the planner
+
+/** Planner tuning (defaults = the shipped values; scripts/aibench.ts experiments override them). */
+export const PLAN_TUNING = { divSame: 0.12, divRole: 0.04, meritPow: 1, frontBoost: 1.15, hedge: 0.2 };
+
+/** A block whose design's matchup merit (mean 1) falls below this, and below 40% of the best buy, is sold. */
+const SELL_MERIT = 0.6;
+
+export interface SmartOpts {
+  rng: Rng;
+  hard: boolean;
+  /** multiplier on the value of upgrades vs new units */
+  upgradeBias: number;
+  /** extra weight for designs with this role (candidate variety) */
+  favor?: Role;
+  /** lateral shift of the whole formation (cells) */
+  flank: number;
+  /** random jitter on design scores (0 = deterministic best) */
+  jitter: number;
+  /** extra squad spacing (vs splash) */
+  spread: number;
+  /** the opponent's estimated supply this round (prediction of the opponent; unused for our own plans) */
+  skipGiantSave?: boolean;
+  /** sell dead-weight blocks */
+  sell?: boolean;
+  /** what last round showed (lastRoundPerf / survivalPerf) */
+  perf?: RoundPerf;
+}
+
+/** Row a role prefers (0 = front of the zone). */
+function smartRow(p: Profile, h: number, it: Intel): number {
+  const back = DEPLOY_D - h;
+  if (p.flying) return Math.max(0, back - 2);
+  if (isHealer(p) || p.dome) return Math.min(back, 4);
+  if (p.range >= 12 || p.minRange > 0) return back;
+  if (p.role === 'antiAir') return Math.min(back, it.air > 0.15 ? 5 : 8);
+  if (p.melee || p.role === 'frontline' || p.role === 'swarm' || p.range <= 5) return 0;
+  if (p.range >= 9) return Math.min(back, 6);
+  if (p.range >= 7) return Math.min(back, 3);
+  return Math.min(back, 1);
+}
+
+function smartSpot(p: Profile, w: number, h: number, occ: Foot[], rng: Rng, targetX: number, it: Intel): { x: number; y: number } | null {
+  const prefY = smartRow(p, h, it);
+  let best: { x: number; y: number } | null = null;
+  let bestScore = -Infinity;
+  for (let y = 0; y + h <= DEPLOY_D; y++) {
+    for (let x = 0; x + w <= DEPLOY_W; x++) {
+      if (!fits(x, y, w, h, occ)) continue;
+      const cx = x + w / 2, cy = y + h / 2;
+      let nearest = 99, crowd = 0;
+      for (const o of occ) {
+        const dx = Math.abs(o.x + o.w / 2 - cx), dy = Math.abs(o.y + o.h / 2 - cy);
+        nearest = Math.min(nearest, Math.max(dx - (w + o.w) / 2, dy - (h + o.h) / 2));
+        if (dy < 1.5) crowd += Math.max(0, 1 - dx / 8);
+      }
+      const gapWant = it.splash > 0.25 ? 3 : 1.5;
+      const score = -1.6 * Math.abs(y - prefY) + Math.min(gapWant, nearest) * 0.8 - crowd * 0.15 - 0.07 * Math.abs(cx - targetX) + rng() * 0.5;
+      if (score > bestScore) { bestScore = score; best = { x, y }; }
+    }
+  }
+  return best;
+}
+
+/** Lateral aim of a block: brawlers and tanks face the enemy's ground mass; fast flankers go wide of it; the rest
+ *  stay around the centre of the line. */
+function aimX(p: Profile, it: Intel, flank: number): number {
+  const c = DEPLOY_W / 2 + flank;
+  if (it.centreX === null) return c;
+  const mass = Math.max(10, Math.min(DEPLOY_W - 10, it.centreX));
+  if (p.flying) return c;
+  if (p.role === 'frontline' || p.melee || p.role === 'antiArmor') return (mass * 2 + c) / 3;
+  if (p.stats.speed >= 3 && p.range <= 8) return mass < DEPLOY_W / 2 ? Math.min(DEPLOY_W - 8, mass + 30) : Math.max(8, mass - 30);
+  return (mass + c * 2) / 3;
+}
+
+/** Normal / hard deployment: buy the designs with the best matchup against the opponent's army (Lanchester merit x
+ *  army-composition needs), interleaved with upgrades of the blocks that performed, spending all supply; place by role;
+ *  adapt every block's orders to the opponent. */
+function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck: Design[], o: SmartOpts): DeployAction {
+  const me = view.players[side];
+  const action: DeployAction = { round: view.round, place: [], upgrade: [] };
+  const deck = me.deck.filter((d) => isValidDesign(d));
+  if (!deck.length) return action;
+  const byId = new Map(me.deck.map((d) => [d.id, d] as const));
+  const perf = o.perf ?? noPerf();
+  const it = readIntel(oppBoard, oppDeck, perf.threat);
+  const myDetect = deck.some((d) => profile(d).detect) && me.board.some((u) => { const d = byId.get(u.designId); return !!d && profile(d).detect; });
+  const merit = merits(deck, it, myDetect || deck.some((d) => profile(d).detect && it.cloaked > 0.1));
+  // what we saw our own designs do last round corrects the model
+  for (const d of deck) if (perf.mine.has(d.id)) merit.set(d.id, merit.get(d.id)! * Math.sqrt(Math.max(0.35, Math.min(1.8, perf.mine.get(d.id)!))));
+  let budget = me.supply;
+  // sell blocks that have become dead weight against this enemy (e.g. anti-air when it has no aircraft left) when
+  // there is something clearly better to buy: 75% back
+  const sold = new Set<number>();
+  if (o.sell && view.round >= 2) {
+    const bestBuy = Math.max(...deck.map((d) => merit.get(d.id) ?? 0));
+    const dead = me.board
+      .map((u) => ({ u, d: byId.get(u.designId) }))
+      .filter((x): x is { u: Placement; d: Design } => !!x.d && !isHealer(profile(x.d)) && (merit.get(x.d.id) ?? 1) < Math.min(SELL_MERIT, 0.4 * bestBuy))
+      .sort((x, y) => (merit.get(x.d.id) ?? 1) - (merit.get(y.d.id) ?? 1) || x.u.uid - y.u.uid);
+    for (const x of dead.slice(0, 4)) { sold.add(x.u.uid); budget += sellValue(x.d, x.u.level); }
+    if (sold.size) action.sell = [...sold];
+  }
+  const board = me.board.filter((u) => !sold.has(u.uid));
+  const occ: Foot[] = board.map((u) => {
+    const pd = byId.get(u.designId);
+    return { x: u.x, y: u.y, ...blockDims(pd ? profile(pd).stats : { size: 2, squad: 1 }, u.spacing, !!u.rot) };
+  });
+  let simUnits = board.reduce((n, u) => n + (byId.get(u.designId) ? profile(byId.get(u.designId)!).stats.squad : 1), 0);
+  let blocks = board.length;
+  // our army so far, by value
+  const army = { total: 0, front: 0, long: 0, air: 0, aa: 0, support: 0 };
+  const perDesign = new Map<string, number>();
+  const roleN = new Map<Role, number>();
+  const count = (p: Profile, d: Design, value: number) => {
+    army.total += value;
+    if (!p.flying && (p.role === 'frontline' || p.melee || (p.size >= 2 && p.toughPerCost >= 14 && p.range <= 9) || p.size >= 4)) army.front += value;
+    if (!p.flying && p.range >= 12) army.long += value;
+    if (p.flying) army.air += value;
+    if (p.aaDps > p.groundDps * 0.6) army.aa += value;
+    if (isHealer(p) || p.dome) army.support++;
+    perDesign.set(d.id, (perDesign.get(d.id) ?? 0) + 1);
+    roleN.set(p.role, (roleN.get(p.role) ?? 0) + 1);
+  };
+  for (const u of board) { const d = byId.get(u.designId); if (d) count(profile(d), d, placementValue(d, u.level)); }
+
+  /** score of one more block of d (value per supply, ~1 = an average design) */
+  const buyScore = (d: Design): number => {
+    const p = profile(d);
+    let s = Math.pow(merit.get(d.id) ?? 0.02, PLAN_TUNING.meritPow);
+    const T = army.total + 1;
+    const frontShare = army.front / T;
+    const isFront = !p.flying && (p.role === 'frontline' || p.melee || (p.size >= 2 && p.toughPerCost >= 14 && p.range <= 9) || p.size >= 4);
+    if (isFront && frontShare < 0.25 && it.air < 0.6) s *= PLAN_TUNING.frontBoost + (0.25 - frontShare);
+    if (!p.flying && p.range >= 12 && frontShare < 0.15 && blocks + action.place.length > 0) s *= 0.75;
+    if ((isHealer(p) || p.dome) && (blocks < 5 || army.support >= 1 + blocks / 8)) s *= 0.3;
+    if (p.groundDps < 0.5 * p.aaDps && it.air < 0.05) s *= 0.5;
+    if (it.air > 0.25 && p.aaDps > 0 && army.aa / T < it.air * 0.6) s *= 1.15;
+    s /= 1 + PLAN_TUNING.divSame * (perDesign.get(d.id) ?? 0) + PLAN_TUNING.divRole * (roleN.get(p.role) ?? 0);
+    // late game the sim-unit cap is the scarce resource: big squads of cheap units crowd out better blocks
+    const pressure = simUnits / MAX_SIM_UNITS;
+    if (pressure > 0.35) s *= 1 - Math.min(0.75, (pressure - 0.35) * 1.6 * (p.stats.squad / 16));
+    if (o.favor && p.role === o.favor) s *= 1.6;
+    if (view.round <= 1 && p.cost > supplyForRound(1) * 0.5) s *= 0.6;
+    if (o.jitter > 0) s *= 1 - o.jitter / 2 + o.rng() * o.jitter;
+    return s;
+  };
+
+  // --- save for the deck's giant when it is in reach next round ---
+  const giantD = deck.filter((d) => profile(d).size >= 4).sort((a, b) => designCost(a) - designCost(b))[0];
+  const ownsGiant = !!giantD && board.some((u) => u.designId === giantD.id);
+  let reserve = 0;
+  if (giantD && !ownsGiant && !o.skipGiantSave && view.round >= 2 && view.round <= 11 && board.length >= 3 && (merit.get(giantD.id) ?? 0) >= 0.8) {
+    const gc = designCost(giantD);
+    if (budget < gc && budget + supplyForRound(view.round + 1) >= gc) reserve = budget;
+  }
+
+  // --- interleaved buys and upgrades ---
+  const levels = new Map(board.map((u) => [u.uid, u.level] as const));
+  const ctx: BehaviorCtx = { hasRepair: deck.some((d) => isHealer(profile(d))), flankCount: o.flank > 0 ? 1 : 0 };
+  const removed = new Set<string>();
+  for (let guard = 0; guard < 120; guard++) {
+    const spend = budget - reserve;
+    if (spend <= 0) break;
+    const crowded = blocks >= MAX_BLOCKS - 2 || simUnits >= MAX_SIM_UNITS - 8;
+    // best purchase
+    let buy: Design | null = null, buyV = 0;
+    if (!crowded) for (const d of deck) {
+      if (removed.has(d.id) || designCost(d) > spend || simUnits + profile(d).stats.squad > MAX_SIM_UNITS) continue;
+      const v = buyScore(d) * (giantD && d === giantD && !ownsGiant ? 1.6 : 1);
+      if (v > buyV) { buyV = v; buy = d; }
+    }
+    // best upgrade
+    let up: Placement | null = null, upV = 0;
+    if (view.round >= 2) for (const u of board) {
+      const d = byId.get(u.designId);
+      const lv = levels.get(u.uid) ?? u.level;
+      if (!d || lv >= MAX_LEVEL || upgradeCost(d, lv) > spend) continue;
+      const pf = Math.max(0.6, Math.min(1.6, perf.block.get(u.uid) ?? 1));
+      const v = Math.pow(merit.get(d.id) ?? 0.02, PLAN_TUNING.meritPow) * Math.sqrt(pf) * (lv === 1 ? 0.62 : 0.5) * Math.max(0.01, o.upgradeBias) * (crowded ? 3 : 1) * (isHealer(profile(d)) ? 0.6 : 1);
+      if (v > upV) { upV = v; up = u; }
+    }
+    if (!buy && !up) break;
+    if (up && (!buy || upV > buyV)) {
+      const d = byId.get(up.designId)!;
+      const lv = levels.get(up.uid) ?? up.level;
+      action.upgrade.push(up.uid);
+      levels.set(up.uid, lv + 1);
+      budget -= upgradeCost(d, lv);
+      continue;
+    }
+    const p = profile(buy!);
+    let sp = normSpacing(p.stats, Math.min(MAX_SPACING, chooseSpacing(p, it.splash) + o.spread));
+    let foot = blockDims(p.stats, sp);
+    const tx = aimX(p, it, o.flank);
+    let spot = smartSpot(p, foot.w, foot.h, occ, o.rng, tx, it);
+    while (!spot && sp > 0) { sp--; foot = blockDims(p.stats, sp); spot = smartSpot(p, foot.w, foot.h, occ, o.rng, tx, it); }
+    if (!spot || !blockInZone(spot.x, spot.y, p.stats, sp)) { removed.add(buy!.id); continue; }
+    occ.push({ x: spot.x, y: spot.y, ...foot });
+    const pl: Placement = { uid: me.nextUid + action.place.length, designId: buy!.id, x: spot.x, y: spot.y, level: 1, round: view.round };
+    if (hasSpacing(p.stats)) pl.spacing = sp;
+    applyBehavior(pl, withKiteMount(adaptBehavior(chooseBehavior(p, sp, it.splash, o.rng, ctx), p, it), buy!), p.defaults);
+    action.place.push(pl);
+    simUnits += p.stats.squad;
+    blocks++;
+    budget -= p.cost;
+    count(p, buy!, p.cost);
+  }
+
+  // --- escorts, and every block's orders re-tuned against the enemy we see now ---
+  const all = [
+    ...board.map((u) => ({ uid: u.uid, p: byId.has(u.designId) ? profile(byId.get(u.designId)!) : null, level: levels.get(u.uid) ?? u.level })),
+    ...action.place.map((u) => ({ uid: u.uid, p: profile(byId.get(u.designId)!), level: 1 })),
+  ].filter((x): x is { uid: number; p: Profile; level: number } => !!x.p);
+  for (const pl of action.place) {
+    const pr = profile(byId.get(pl.designId)!);
+    if (!isHealer(pr)) continue;
+    const e = pickEscort(all, pl.uid);
+    if (e !== undefined) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kiteMount; if (pr.defaults.kite) pl.kite = false; else delete pl.kite; }
+  }
+  if (view.round >= 2) {
+    for (const u of board) {
+      const d = byId.get(u.designId);
+      if (!d) continue;
+      const pr = profile(d);
+      const cfg: UnitConfig = { uid: u.uid };
+      if (isHealer(pr)) {
+        if (u.escort === undefined) { const e = pickEscort(all, u.uid); if (e !== undefined) cfg.escort = e; }
+      } else {
+        // keep what worked; re-roll the orders of blocks that underperformed (and sometimes the rest)
+        const pf = perf.block.get(u.uid) ?? 1;
+        const want = adaptBehavior(chooseBehavior(pr, u.spacing ?? 0, it.splash, o.rng, ctx), pr, it);
+        const reroll = pf < 0.7 ? o.rng() < 0.8 : o.rng() < 0.15;
+        const b = withKiteMount(reroll ? want : { ...want, stance: u.stance ?? 'advance', delay: u.delay ?? 0, kite: u.kite ?? pr.defaults.kite, retreat: !!u.retreat, hold: u.hold !== false }, d);
+        if (b.target !== (u.target ?? 'closest')) cfg.target = b.target;
+        if (b.hold !== (u.hold !== false) && hasSpacing(pr.stats)) cfg.hold = b.hold;
+        if (b.kite !== (u.kite ?? pr.defaults.kite)) cfg.kite = b.kite;
+        if (b.kite && b.kiteMount !== undefined && b.kiteMount !== u.kiteMount) cfg.kiteMount = b.kiteMount;
+        else if (!b.kite && u.kiteMount !== undefined) cfg.kiteMount = -1;
+        if (b.focus !== (u.focus ?? pr.defaults.focus)) cfg.focus = b.focus;
+        if (b.stance !== (u.stance ?? 'advance')) cfg.stance = b.stance;
+        if (b.delay !== (u.delay ?? 0)) cfg.delay = b.delay;
+        if (b.retreat !== !!u.retreat) cfg.retreat = b.retreat;
+      }
+      if (Object.keys(cfg).length > 1) (action.configure ??= []).push(cfg);
+    }
+  }
+  return action;
+}
+
+/** Target / stance tweaks from the intel: anti-air hunts aircraft only when there are some, long guns go for the
+ *  enemy's artillery when it has any, flankers flank away from the enemy's mass. */
+function adaptBehavior(b: Behavior, p: Profile, it: Intel): Behavior {
+  if (p.aaDps > 0 && p.role === 'antiAir') b.target = it.air > 0.02 ? 'aircraft' : 'closest';
+  else if (b.target === 'aircraft' && it.air <= 0.02) b.target = 'closest';
+  if (!p.flying && p.range >= 12 && it.longRange > 0.2 && b.target !== 'aircraft') b.target = 'longestRange';
+  if (p.ap >= 0.6 && it.heavy > 0.25 && p.role !== 'antiAir') b.target = 'armored';
+  if (p.splashRadius > 0 && it.swarm > 0.35 && !p.flying && p.role !== 'antiAir') b.target = 'swarm';
+  if ((b.stance === 'flankLeft' || b.stance === 'flankRight') && it.centreX !== null) b.stance = it.centreX < DEPLOY_W / 2 ? 'flankRight' : 'flankLeft';
+  return b;
+}
+
 /** Make sure the action is legal; strip parts until it is. */
 function sanitize(m: MatchState, side: Side, a: DeployAction): DeployAction {
   if (validateDeploy(m, side, a) === null) return a;
-  const b: DeployAction = { round: m.round, place: [...a.place], upgrade: [] };
+  const b: DeployAction = { round: m.round, place: [...a.place], upgrade: [...a.upgrade] };
+  if (a.sell?.length) b.sell = [...a.sell];
   if (a.configure) { b.configure = a.configure; if (validateDeploy(m, side, b) !== null) delete b.configure; }
-  while (b.place.length && validateDeploy(m, side, b) !== null) b.place.pop();
+  while (b.upgrade.length && validateDeploy(m, side, b) !== null) b.upgrade.pop();
+  while (b.place.length && validateDeploy(m, side, b) !== null) {
+    const gone = b.place.pop()!;
+    if (b.configure) for (const c of b.configure) if (c.escort === gone.uid) delete c.escort;
+    for (const p of b.place) if (p.escort === gone.uid) delete p.escort;
+  }
   if (validateDeploy(m, side, b) === null) return b;
   return { round: m.round, place: [], upgrade: [] };
 }
@@ -721,14 +1187,14 @@ function estimateOppSupply(view: MatchState, oppSide: Side): number {
   for (const u of opp.board) {
     const d = byId.get(u.designId);
     if (!d) continue;
-    spent += designCost(d);
-    for (let l = 1; l < u.level; l++) spent += upgradeCost(d, l);
+    spent += placementValue(d, u.level);
   }
   return Math.max(0, totalSupplyThrough(view.round) - spent);
 }
 
 function applyToBoard(board: Placement[], a: DeployAction): Placement[] {
-  const out = board.map((u) => ({ ...u }));
+  const sold = new Set(a.sell ?? []);
+  const out = board.filter((u) => !sold.has(u.uid)).map((u) => ({ ...u }));
   for (const uid of a.upgrade) {
     const u = out.find((x) => x.uid === uid);
     if (u) u.level = Math.min(MAX_LEVEL, u.level + 1);
@@ -750,7 +1216,7 @@ function applyToBoard(board: Placement[], a: DeployAction): Placement[] {
   return out;
 }
 
-function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: Placement[], seed: number): number {
+function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: Placement[], seed: number): { score: number; ticks: number } {
   const oppSide: Side = side === 0 ? 1 : 0;
   const sides: [{ designs: Design[]; units: Placement[] }, { designs: Design[]; units: Placement[] }] = side === 0
     ? [{ designs: view.players[0].deck, units: myBoard }, { designs: view.players[1].deck, units: oppBoard }]
@@ -758,11 +1224,21 @@ function evaluate(view: MatchState, side: Side, myBoard: Placement[], oppBoard: 
   const sum = runBattle({ seed, sides });
   const boards: [Placement[], Placement[]] = [sides[0].units, sides[1].units];
   const dmg = roundDamage(view, view.round, sum.winner, sum.survivors, boards, sum.aliveFraction);
-  // Positive is good for us: damage dealt minus damage taken, plus a small bonus for winning outright.
-  return dmg[oppSide] - dmg[side] + (sum.winner === side ? 5 : sum.winner === oppSide ? -5 : 0);
+  // positive is good for us: damage dealt minus damage taken, plus a bonus for winning outright
+  return { score: dmg[oppSide] - dmg[side] + (sum.winner === side ? 5 : sum.winner === oppSide ? -5 : 0), ticks: sum.ticks };
 }
 
-const HARD_CANDIDATES = 5;
+/** Simulation budget of one hard decision, in estimated laptop ms (MS_PER_UNIT_TICK): last-round analysis + candidate
+ *  battles. Plans themselves cost a few ms each on top. */
+export const HARD_MS_BUDGET = 900;
+const HARD_MAX_CANDIDATES = 10;
+/** Hard tuning, found with scripts/aibench.ts (mirrored matches vs normal). Exported so experiments can override it;
+ *  game code never changes it. sell: sell dead-weight blocks; predictMerit: score designs against the predicted
+ *  rather than the visible enemy board (0 none / 1 half the candidates / 2 all: measured worse); search: simulate
+ *  candidates; second: also score each against a second, noisier guess of the opponent; perfSim: re-simulate last
+ *  round for per-design damage; j0 / flank0 / ub0: base plan's jitter, random flank, upgrade bias; margin: hp a
+ *  candidate must beat the base plan by. */
+export const HARD_KNOBS = { sell: true, predictMerit: 0, search: true, second: true, jitter: 1, perfSim: true, j0: 0, flank0: 0, ub0: 0.1, margin: 2 };
 
 /** Decide the AI's deployment for the current round. Must pass validateDeploy. */
 export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): DeployAction {
@@ -774,65 +1250,101 @@ export function aiDeploy(m: MatchState, side: Side, difficulty: AiDifficulty): D
   const baseSeed = mixSeed(mixSeed(m.seed, m.round * 2 + side), 0xa1);
   const rng = makeRng(baseSeed);
 
-  if (difficulty !== 'hard') {
-    const a = plan(view, side, opp.board, opp.deck, {
-      rng, difficulty, upgradeBias: difficulty === 'normal' ? 1 : 0, save: difficulty === 'easy' ? 0.25 : 0,
-      flank: (rng() - 0.5) * 6,
-    });
+  if (difficulty === 'easy') {
+    const a = plan(view, side, opp.board, opp.deck, { rng, difficulty, upgradeBias: 0, save: 0.25, flank: (rng() - 0.5) * 6 });
+    return sanitize(m, side, a);
+  }
+  const last = view.history[view.history.length - 1];
+  const lastMs = last ? (unitCount(last.boards[0], view.players[0].deck) + unitCount(last.boards[1], view.players[1].deck)) * last.result.ticks * MS_PER_UNIT_TICK : 0;
+  // hard re-simulates last round for per-block damage when that is cheap; normal uses survival
+  const perfSim = HARD_KNOBS.perfSim && difficulty === 'hard' && last !== undefined && lastMs <= 250;
+  const perf = perfSim ? lastRoundPerf(view, side) : survivalPerf(view, side);
+  if (difficulty === 'normal') {
+    const a = smartPlan(view, side, opp.board, opp.deck, { rng, hard: false, upgradeBias: 1, flank: (rng() - 0.5) * 8, jitter: 0.25, spread: 0, perf });
     return sanitize(m, side, a);
   }
 
-  // Predict what the opponent adds this round: a 'normal' plan with their estimated supply.
+  // Hard: predict what the opponent adds this round (our normal planner with their estimated supply, countering our
+  // visible board), then simulate candidate plans against that and keep the best.
   const oppView: MatchState = structuredClone(view);
   oppView.players[oppSide].supply = estimateOppSupply(view, oppSide);
   oppView.players[oppSide].ready = false;
   const myVisible = view.history.length ? view.players[side].board.filter((u) => u.round < view.round) : [];
   let predicted = opp.board;
   try {
-    const guess = plan(oppView, oppSide, myVisible, view.players[side].deck, {
-      rng: makeRng(mixSeed(baseSeed, 77)), difficulty: 'normal', upgradeBias: 1, save: 0, flank: 0,
+    const guess = smartPlan(oppView, oppSide, myVisible, view.players[side].deck, {
+      rng: makeRng(mixSeed(baseSeed, 77)), hard: false, upgradeBias: 1, flank: 0, jitter: 0, spread: 0, skipGiantSave: true,
     });
     predicted = applyToBoard(opp.board, guess);
-  } catch { /* fall back to visible board */ }
+  } catch { /* fall back to the visible board */ }
+  // a second, noisier guess (another way they might spend) makes the comparison of candidates more robust
+  let predicted2: Placement[] | null = null;
+  if (HARD_KNOBS.second) try {
+    const r2 = makeRng(mixSeed(baseSeed, 78));
+    const guess2 = smartPlan(oppView, oppSide, myVisible, view.players[side].deck, {
+      rng: r2, hard: false, upgradeBias: 1, flank: (r2() - 0.5) * 16, jitter: 0.4, spread: 0, skipGiantSave: true,
+    });
+    predicted2 = applyToBoard(opp.board, guess2);
+  } catch { /* one guess only */ }
 
-  const variants: Partial<PlanOpts>[] = [
-    { upgradeBias: 1 },
-    { upgradeBias: 0 },
-    { upgradeBias: 2.2 },
-    { upgradeBias: 0.5, favor: 'frontline' },
-    { upgradeBias: 0.5, favor: 'antiAir' },
-    { upgradeBias: 0.5, favor: 'antiArmor' },
-    { upgradeBias: 0.5, favor: 'flyer' },
-    { upgradeBias: 0.5, favor: 'artillery' },
-    { upgradeBias: 0.5, favor: 'swarm' },
+  // upgrades are worth less than new blocks per supply (a level is +30% hp and damage for 50-60% of the price, a new
+  // block +100% for 100%): hard upgrades mainly when it runs out of room (measured with scripts/aibench.ts)
+  const variants: Omit<SmartOpts, 'rng' | 'hard' | 'perf'>[] = [
+    { upgradeBias: HARD_KNOBS.ub0, flank: HARD_KNOBS.flank0 ? (rng() - 0.5) * 8 : 0, jitter: HARD_KNOBS.j0, spread: 0 },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 0 },
+    { upgradeBias: 0.4, flank: 0, jitter: 0.1, spread: 0 },
+    { upgradeBias: 0.1, flank: -12, jitter: 0.15, spread: 1 },
+    { upgradeBias: 0.1, flank: 12, jitter: 0.15, spread: 0 },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 0, favor: 'frontline' },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 0, favor: 'antiAir' },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 0, favor: 'antiArmor' },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 0, favor: 'flyer' },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 1, favor: 'artillery' },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.15, spread: 0, favor: 'swarm' },
+    { upgradeBias: 0.1, flank: 0, jitter: 0.3, spread: 0, skipGiantSave: true },
   ];
-  let best: DeployAction | null = null;
-  let bestScore = -Infinity;
-  // battles cost ~ units^1.3: fewer candidates once both armies are big (keeps the decision under ~1.2 s)
-  const countUnits = (pl: Placement[], deck: Design[]) => pl.reduce((k, u) => { const d = deck.find((x) => x.id === u.designId); return k + (d ? profile(d).stats.squad : 1); }, 0);
-  // and ~ battle length: a long last round (squads of static turrets, stand-offs up to the 180 s cap) predicts long
-  // evaluations, so it counts as a bigger army
-  const lastTicks = view.history[view.history.length - 1]?.result.ticks ?? 0;
-  const bigArmies = (countUnits(view.players[side].board, view.players[side].deck) + countUnits(opp.board, opp.deck)) * Math.max(1, lastTicks / 1500);
-  const secondEval = bigArmies <= 100;
-  const n = Math.min(variants.length, bigArmies > 300 ? 2 : bigArmies > 160 ? 3 : HARD_CANDIDATES);
-  // a second (visible-board-only) evaluation per candidate doubles the cost: only while the armies are small
-  // Always include the first three (core) variants; pick the rest by seed.
-  const order = [0, 1, 2, ...shuffled(rng, [3, 4, 5, 6, 7, 8])].slice(0, n);
-  for (let i = 0; i < order.length; i++) {
-    const v = variants[order[i]];
-    const cand = sanitize(m, side, plan(view, side, opp.board, opp.deck, {
-      rng: makeRng(mixSeed(baseSeed, 1000 + i)), difficulty: 'hard', upgradeBias: v.upgradeBias ?? 1, save: 0,
-      favor: v.favor, flank: (i % 3 - 1) * 3,
-    }));
-    const myBoard = applyToBoard(view.players[side].board, cand);
-    let score = 0;
-    try {
-      score = evaluate(view, side, myBoard, predicted, mixSeed(baseSeed, 5000 + i));
-      if (predicted !== opp.board && opp.board.length && secondEval) score = score * 0.7 + 0.3 * evaluate(view, side, myBoard, opp.board, mixSeed(baseSeed, 6000 + i));
-    } catch { score = 0; }
-    if (score > bestScore) { bestScore = score; best = cand; }
+  const order = [0, 1, 2, ...shuffled(rng, variants.map((_, i) => i).slice(3))];
+  const cands: DeployAction[] = [];
+  const seen = new Set<string>();
+  for (const i of order) {
+    if (cands.length >= HARD_MAX_CANDIDATES) break;
+    const usePred = HARD_KNOBS.predictMerit === 2 || (HARD_KNOBS.predictMerit === 1 && cands.length % 2 === 1);
+    const v = variants[i];
+    const c = sanitize(m, side, smartPlan(view, side, usePred ? predicted : opp.board, opp.deck, { ...v, sell: HARD_KNOBS.sell, jitter: v.jitter * HARD_KNOBS.jitter, rng: makeRng(mixSeed(baseSeed, 1000 + i)), hard: true, perf }));
+    const key = JSON.stringify([c.place.map((p) => [p.designId, p.x, p.y, p.spacing]), c.upgrade]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cands.push(c);
   }
-  return sanitize(m, side, best ?? empty);
+  if (cands.length === 1 || !HARD_KNOBS.search) return cands[0];
+  // budget: one battle per candidate vs the prediction (+ one vs the visible board while cheap). Battle length is
+  // estimated from last round, then from the battles already run (all deterministic: no wall clock).
+  let spent = perfSim ? lastMs : 0;
+  let ticksEst = Math.max(600, (last?.result.ticks ?? 1200) * 1.2);
+  const oppUnits = unitCount(predicted, opp.deck);
+  // two guesses per candidate while at least 5 candidates still fit the budget that way
+  const est0 = (unitCount(applyToBoard(view.players[side].board, cands[0]), view.players[side].deck) + oppUnits) * ticksEst * MS_PER_UNIT_TICK;
+  const second = !!predicted2 && spent + est0 * 2 * Math.min(5, cands.length) <= HARD_MS_BUDGET;
+  let best = cands[0], bestScore = -Infinity;
+  for (let i = 0; i < cands.length; i++) {
+    const myBoard = applyToBoard(view.players[side].board, cands[i]);
+    const units = unitCount(myBoard, view.players[side].deck);
+    const est = (units + oppUnits) * ticksEst * MS_PER_UNIT_TICK;
+    if (i >= 2 && spent + est * (second ? 2 : 1) > HARD_MS_BUDGET) break;
+    let score: number;
+    try {
+      const ev = evaluate(view, side, myBoard, predicted, mixSeed(baseSeed, 5000 + i));
+      spent += (units + oppUnits) * ev.ticks * MS_PER_UNIT_TICK;
+      ticksEst = Math.max(ticksEst * 0.5, ev.ticks * 1.1);
+      score = ev.score;
+      if (second) {
+        const ev2 = evaluate(view, side, myBoard, predicted2!, mixSeed(baseSeed, 6000 + i));
+        spent += (units + oppUnits) * ev2.ticks * MS_PER_UNIT_TICK;
+        score = (score + ev2.score) / 2;
+      }
+    } catch { score = -1e9; }
+    // the base plan (candidate 0) is the default: another must beat it by a margin (one battle is a noisy estimate)
+    if (score > bestScore + (i > 0 ? HARD_KNOBS.margin : 0)) { bestScore = score; best = cands[i]; }
+  }
+  return best;
 }
-
