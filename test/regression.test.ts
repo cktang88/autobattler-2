@@ -368,11 +368,13 @@ test('a fire-on-move walker with a gun and a melee weapon closes to contact and 
   const wall = D('sawwall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back
   assert.deepEqual(validateDesign(walker, true), []);
   assert.deepEqual(validateDesign(wall, true), []);
-  const { b, k } = duel([walker, wall], { designId: 'sawwalker', kite: false }, { designId: 'sawwall' }, 20);
+  const { b } = duel([walker, wall], { designId: 'sawwalker', kite: false }, { designId: 'sawwall' }, 20);
   let swings = 0;
-  for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
+  // (the walker comes as a pair, so the wall is parked in its own deploy zone; bipedal legs walk ~1.4 cells/s since the
+  // drive rework, 2 before: 80 s to cross the field and swing, and either walker of the pair may land the first one)
+  for (let i = 0; i < 80 * TICK_RATE && !b.done; i++) {
     b.step();
-    for (const ev of b.events) if (ev.t === 'fire' && ev.unit === k.id && ev.mount === 1) swings++;
+    for (const ev of b.events) if (ev.t === 'fire' && b.units[ev.unit].side === 0 && ev.mount === 1) swings++;
   }
   assert.ok(swings > 0, 'the buzzsaw never swung');
 });

@@ -13,7 +13,7 @@ import { block } from '../chassis/shapes.ts';
 import { armorPlate, cableBundle, frame, frameLimb, hose, jointDrum, piston, plateStack, rectP, trapP } from '../chassis/hs-kit.ts';
 import { claw, limbSegs, limbShell, spike } from '../chassis/hs-kit-organic.ts';
 
-export interface Leg { step(t: number, moving: number): void }
+export interface Leg { step(t: number, moving: number, dir?: number): void }
 
 /** half-stride (cells) that keeps planted feet from skating under render3d's odometer clock (units-adapter phaseFor) */
 export function strideFor(mobId: string, S: number): number {
@@ -282,10 +282,13 @@ export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg 
     m.matrix.makeBasis(xa, ya, tmp).setPosition(a);
     m.matrixWorldNeedsUpdate = true;
   };
-  const step = (time: number, moving: number) => {
+  /** way: travel direction in the hull frame (0 = forward): the feet stride that way (backing up, a spider strafing) */
+  const step = (time: number, moving: number, way = 0) => {
     const ph = time * 3.2 + hip.phase;
     f.copy(footV);
-    f.x += -Math.sin(ph) * o.stride * moving;
+    const sw = -Math.sin(ph) * o.stride * moving;
+    f.x += sw * Math.cos(way);
+    f.z += sw * Math.sin(way);
     const up = Math.max(0, Math.cos(ph));
     f.y += up * up * o.lift * moving;
     dir.copy(f).sub(hipV);
@@ -343,6 +346,6 @@ registerMobility(['legs', 'titanlegs', 'spider'], {
     // spider legs come four to eight at a time: tertiary detail (pin caps, clevis eyes, second cables) from heavy up
     const fine = kind === 'spider' ? c.S >= 3 : c.S >= 2;
     const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === 'spider' ? 0.32 : 0.26), lite, hs: kind === 'biped', fine, style }));
-    return (t, mv) => { for (const l of legs) l.step(t, mv); };
+    return (t, mv, dir) => { for (const l of legs) l.step(t, mv, dir); };
   },
 });

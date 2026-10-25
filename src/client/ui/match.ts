@@ -896,7 +896,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       blockHead(s, p, d, st, lv, ups, prev),
       s.pending ? '' : (ensureLastDamage(), damageLine(s.side, s.uid) ?? ''),
       statCard({ design: d, st, level: lv, spacing: sp, rot: !!p.rot, upgraded: ups > 0, onRing: onRingHi }),
-      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)), defaults: defsOf(s.side, p.designId) } : { defaults: defsOf(s.side, p.designId) })) : '',
+      mine && blockOrders(s) ? h('div.info-spacing', null, ordersControl(blockOrders(s)!, squad > 1, (patch) => { if (phase === 'deploy') setBlockOrders(s, patch); }, phase === 'deploy' ? { escort: escortUi(s), kiteOptions: kiteOptions(designOf(s.side, p.designId)), defaults: defsOf(s.side, p.designId), design: designOf(s.side, p.designId) } : { defaults: defsOf(s.side, p.designId), design: designOf(s.side, p.designId) })) : '',
       squad > 1 ? h('div.info-spacing', null, spacingControl(sp, mine && phase === 'deploy' && s.pending ? (v) => setPendingSpacing(p.uid, v) : null, shapeOf(d), !!p.rot)) : '',
       blockParts(d),
       actions.length ? h('div.actions', null, ...actions) : '',

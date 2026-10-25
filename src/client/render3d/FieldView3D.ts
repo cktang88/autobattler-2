@@ -54,6 +54,8 @@ interface PSnap { x: number; y: number; z: number; angle: number; progress: numb
 interface UView {
   rig: Rig;
   lx: number; ly: number; seen: boolean;
+  /** heading drawn last frame (gear animation: walkers step round while turning on the spot) */
+  la?: number;
   dmgT: number; healT: number; hpLast: number; shLast: number; hpShown: number;
   shT: number; hx: number; hy: number; hz: number;
   /** last 4 shield-bubble hits (x, y, z, time) and the ring index, for the dome ripples */
@@ -1121,7 +1123,11 @@ export class FieldView3D implements BattleView {
     const ext = u as SimUnit & { cloaked?: boolean };
     const enemyCloak = !!ext.cloaked && u.side !== this.viewerSide;
     const dist = v.seen ? Math.min(2, Math.hypot(x - v.lx, y - v.ly)) : 0;
-    v.lx = x; v.ly = y; v.seen = true;
+    // travel this frame in the hull frame (forward / toward local +z = the field's +90 deg side): walkers stride the
+    // way they move (a spider strafing, legs backing up), wheels roll backwards in reverse
+    const mdx = dist > 0 ? x - v.lx : 0, mdy = dist > 0 ? y - v.ly : 0, ca0 = Math.cos(ang), sa0 = Math.sin(ang);
+    const turn = v.seen && v.la !== undefined ? Math.atan2(Math.sin(ang - v.la), Math.cos(ang - v.la)) : 0;
+    v.lx = x; v.ly = y; v.la = ang; v.seen = true;
     this.trackVis(u, v);
     v.posed = false;
     if (enemyCloak || this.offscreen(x, y, rig.radius + 5)) return;
@@ -1129,7 +1135,7 @@ export class FieldView3D implements BattleView {
     rig.root.position.set(x, h, y);
     // (heavy guns rock the hull: Rig.update tilts the quaternion, so the full rotation is reset here every frame)
     rig.root.rotation.set(0, -ang, 0);
-    rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt);
+    rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt, mdx * ca0 + mdy * sa0, -mdx * sa0 + mdy * ca0, Math.abs(turn) < 0.5 ? turn : 0);
     // heavy ground units (size >= 3, on tracks / wheels / legs) kick up a little sandy dust behind them while moving
     if (rig.S >= 3 && !u.flying && dt > 1e-4 && dist > 1e-4 && !NO_DUST.has(u.design.mobility)) {
       const k = clamp(dist / dt / 1.2, 0, 1); // heavies crawl: ~1.2 cells/s = full

@@ -154,6 +154,8 @@ interface Template {
   hull: readonly [number, number, number, number, number, number];
   /** a turret node -> template turret index */
   turretNodes: Map<number, number>;
+  /** legged drive: strides the way it travels, clocked by the unsigned distance (Rig.locomote) */
+  walks: boolean;
   /** how far (cells of body travel) one unit of animate()-time is, per mobility, so feet/wheels don't skate */
   phaseK: number;
   animates: boolean;
@@ -219,9 +221,12 @@ export class Rig {
   readonly radius: number;
   /** Template.hull in world units (body scale applied), unit-local */
   readonly hull: readonly [number, number, number, number, number, number];
-  /** locomotion state */
+  /** locomotion state: odo = distance travelled (cells), sodo = the same signed along the hull's facing (a wheel
+   *  spins backwards while backing up), way = travel direction in the hull frame (rad, 0 = forward; smoothed) */
   mv = 0;
   odo = 0;
+  sodo = 0;
+  way = 0;
   /** tint multiplier (hit flash etc.) */
   tr = 1; tg = 1; tb = 1;
   /** true for rigs that never move again (wrecks): transforms are not recomputed */
@@ -264,10 +269,10 @@ export class Rig {
   }
 
   /** Advance gear animation (legs / wheels / rotors). t is the unit's own phase clock, moving 0..1. */
-  animate(t: number, dt: number, moving: number): void {
+  animate(t: number, dt: number, moving: number, way = 0): void {
     const tpl = this.tpl;
     this.dirty = true;
-    tpl.unit.animate(t, dt, moving);
+    tpl.unit.animate(t, dt, moving, way);
     for (const k of tpl.animated) {
       const s = tpl.nodes[k], d = this.objs[k]!;
       if (s.manual) d.matrix.copy(s.src.matrix);
@@ -275,17 +280,27 @@ export class Rig {
     }
   }
 
-  /** locomotion: call once per frame with the distance travelled this frame and whether the sim says it's moving */
-  locomote(dist: number, moving: boolean, t: number, dt: number): void {
+  /** locomotion: call once per frame with the distance travelled this frame, whether the sim says it's moving, and
+   *  (ground units) the travel this frame in the hull frame: fwd along the facing, lat toward local +z. Walkers
+   *  stride the way they travel (a spider strafing, legs backing up); wheels roll by the signed distance (backwards
+   *  in reverse). `turn` (rad this frame): walkers step round while turning on the spot. */
+  locomote(dist: number, moving: boolean, t: number, dt: number, fwd = dist, lat = 0, turn = 0): void {
     const tpl = this.tpl;
+    if (tpl.walks && dist < 1e-4 && Math.abs(turn) > 1e-4) { dist = Math.abs(turn) * this.radius * 0.5; moving = true; }
     const target = moving ? 1 : 0;
     this.mv += (target - this.mv) * Math.min(1, dt * 7);
     if (this.mv < 0.01) this.mv = 0;
     this.odo += dist;
+    this.sodo += Math.abs(fwd) > 1e-6 ? Math.sign(fwd) * dist : 0;
+    if (Math.abs(fwd) + Math.abs(lat) > 1e-4) {
+      const d = Math.atan2(lat, fwd) - this.way, k = Math.min(1, dt * 8);
+      this.way += Math.atan2(Math.sin(d), Math.cos(d)) * k;
+    }
     if (!tpl.animates) return;
     if (this.flying) { this.animate(t, dt, 1); return; }
-    if (this.mv > 0) { this.settle = 2; this.animate(this.odo * tpl.phaseK, dt, this.mv); }
-    else if (this.settle > 0) { this.settle--; this.animate(this.odo * tpl.phaseK, dt, 0); }
+    const clock = (tpl.walks ? this.odo : this.sodo) * tpl.phaseK, way = tpl.walks ? this.way : 0;
+    if (this.mv > 0) { this.settle = 2; this.animate(clock, dt, this.mv, way); }
+    else if (this.settle > 0) { this.settle--; this.animate(clock, dt, 0, way); }
   }
 
   /** Point turret i at a direction in the unit's local frame (angle 0 = forward, +ve toward +z/right) */
@@ -505,6 +520,9 @@ class Pool {
 const sig = (d: Design, team: number) => `${team}|${d.id}|${d.chassis}|${d.mobility}|${d.mounts.join(',')}`;
 export const templateKey = sig;
 
+/** legged drives: their feet stride the way the hull travels (Template.walks) */
+const WALKERS = new Set(['legs', 'titanlegs', 'jumpjets', 'spider']);
+
 /** rough body-travel -> animation-clock factor so legs / wheels roll with the ground instead of skating */
 function phaseFor(mobility: string, S: number): number {
   switch (mobility) {
@@ -560,8 +578,8 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
   unit.animate(0, 0, 0);
   const rest = snap();
   const animated = new Set<number>();
-  for (const [t, mv] of [[0.83, 1], [1.9, 1], [3.1, 0.6]] as [number, number][]) {
-    unit.animate(t, 0.016, mv);
+  for (const [t, mv, way] of [[0.83, 1, 0], [1.9, 1, 0], [3.1, 0.6, 1.3]] as [number, number, number][]) {
+    unit.animate(t, 0.016, mv, way);
     snap().forEach((e, i) => {
       if (i === 0) return;
       const r = rest[i];
@@ -610,7 +628,7 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
   const tpl: Template = {
     key: sig(design, team), unit, nodes, dynOrder, animated: [...animated], meshes, meshNode, isBlob, castOk, shadowTier, mountTurret,
     height: Math.max(0.4, box.max.y), midY: Math.max(0.2, (box.min.y + box.max.y) / 2),
-    hull: [hb.min.x, hb.max.x, hb.min.y, hb.max.y, hb.min.z, hb.max.z], turretNodes, phaseK: phaseFor(design.mobility, unit.S), animates: animated.size > 0, pool: [], design, team,
+    hull: [hb.min.x, hb.max.x, hb.min.y, hb.max.y, hb.min.z, hb.max.z], turretNodes, phaseK: phaseFor(design.mobility, unit.S), walks: WALKERS.has(design.mobility), animates: animated.size > 0, pool: [], design, team,
   };
   return tpl;
 }
@@ -645,7 +663,7 @@ export class UnitLayer {
     const t = this.template(design, team);
     const r = this.free.get(t.key)?.pop() ?? new Rig(t);
     if (r.dirty) r.restPose();
-    r.look = 'normal'; r.frozen = false; r.mv = 0; r.odo = 0; r.tr = r.tg = r.tb = 1;
+    r.look = 'normal'; r.frozen = false; r.mv = 0; r.odo = 0; r.sodo = 0; r.way = 0; r.tr = r.tg = r.tb = 1;
     r.root.position.set(0, 0, 0); r.root.rotation.set(0, 0, 0); r.root.scale.setScalar(bodyScale(t.unit.S)); // wrecks squash it
     return r;
   }

@@ -113,7 +113,18 @@ export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
-export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.17, hover: 0.98, jet: 0.7, jumpjets: 0.93, legs: 1.01, megatracks: 1.14, rotor: 1.18, spider: 1.12, titanlegs: 1.09, treads: 1.14, wheels: 0.96 };
+// Ground drives refitted for the drive rework (rules 6: wheels fast / arc-turning / slow reverse, treads slow and
+// pivoting, legs slow, spider omni, hover floating): fit_cal.py (FIT_ONLY_CHASSIS=1, 10 iterations, mean of the last
+// 4) for the within-hull contrast, then treads / legs / spider / halftrack / megatracks / titanlegs / wheels nudged
+// toward the starter field (balance.ts army 6 starter: rms 20.9 pts vs 21.3 before; wheels kept low enough that the
+// Buzzsaw stays a 16-squad); air drives unchanged.
+export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.45, halftrack: 1.25, hover: 0.93, jet: 0.7, jumpjets: 0.96, legs: 1.0, megatracks: 1.14, rotor: 1.18, spider: 0.97, titanlegs: 0.92, treads: 1.12, wheels: 0.94 };
+/** Share of the speed term (mobilityF) lost per unit of reverse penalty (reverse 0.5 -> speed worth 0.5 x REVERSE_W less) */
+const REVERSE_W = 0.3;
+/** mobilityF bonus of an omnidirectional ('omni') walker */
+const OMNI_F = 0.04;
+/** ehp factor of a hovering ('hover') drive: burning ground and crush immunity, half damage from ground-burst splash */
+const HOVER_EHP = 1.06;
 /** Jet price factor for giant / titan airframes, in place of MOBILITY_CAL.jet (fitted on fighters and the strato
  *  bomber, which dodge and slip through the AA): the giant and titan bombers don't jink (no evasion), turn wide and
  *  are big targets, but still fly their runs over everything on the ground. Fitted with `node scripts/op-check.ts`
@@ -497,6 +508,8 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const sizeTurn = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
   const turn = m.turn * c.agility * sizeTurn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
   const flying = m.kind === 'air';
+  // backing-up speed factor: omni walkers and flyers have no reverse; ground drives back up at MobilityDef.reverse
+  const reverse = flying || traits.includes('omni') ? 1 : m.reverse ?? 1;
   const isStatic = m.kind === 'static';
 
   // ---- cost model ----
@@ -556,11 +569,15 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const hullEhp = (hp + reactiveHp) * (1 + armor / 15) + 1.2 * shield * shieldCal;
   let ehp = hullEhp * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
+  // floating over the ground: no burning ground, no crush, half damage from ground-burst splash
+  if (traits.includes('hover')) ehp *= HOVER_EHP;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   // long reach shelters a fragile hull: artillery behind a front line is rarely shot, so a paper-thin carriage with a
   // mortar is priced as if it were at least moderately tough (sturdy hulls are already above the floor: no change)
   ehp = Math.max(ehp, SHELTER_EHP * Math.min(1, Math.max(0, (range - SHELTER_FROM) / SHELTER_SPAN)));
-  const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('leap') ? 0.05 : 0);
+  // speed is worth less on a drive that crawls in reverse (kiting backs away from the enemy); walking any way at full
+  // speed is worth a little on top (strafing / kiting without turning)
+  const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed * (1 - REVERSE_W * (1 - reverse)) + (traits.includes('leap') ? 0.05 : 0) + (traits.includes('omni') ? OMNI_F : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
   const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1);
   const rawBase = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
@@ -602,7 +619,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
 
   return {
     size, fw: c.footprint?.[0] ?? size, fh: c.footprint?.[1] ?? size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
-    speed: Math.round(speed * 100) / 100, turn, cost, unitCost: cost / squad, squad,
+    speed: Math.round(speed * 100) / 100, turn, reverse, cost, unitCost: cost / squad, squad,
     priceParts, pricePower: base / PRICE_DIV - priceParts, priceSupport: extra / PRICE_DIV,
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
@@ -741,6 +758,52 @@ export function airRole(d: Design): AirRole | null {
   } catch { /* unknown parts */ }
   airRoleCache.set(key, out);
   return out;
+}
+
+/** A jet carrying at least this share of its ground-weapon dps in standoff guns (a minimum range, or a reach of
+ *  STANDOFF_REACH cells or more) circles its target at standoff range instead of making strafing passes. */
+export const STANDOFF_SHARE = 0.5;
+export const STANDOFF_REACH = 12;
+/** Orbit radius as a share of the standoff guns' reach (sim: never tighter than the jet's turn or the guns' minimum) */
+export const STANDOFF_ORBIT = 0.75;
+const standoffCache = new Map<string, { range: number; minRange: number } | null>();
+/** Standoff guns of a jet design (harassers only: bombers keep their bomb runs, fighters their dogfights): the reach
+ *  (effective range, cells) that covers at least half their dps, and the largest minimum range among the guns with
+ *  that reach. null: not a standoff jet (it strafes). The sim turns this into an orbit (see Battle.strafeMove). */
+export function jetStandoff(d: Design): { range: number; minRange: number } | null {
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.join(',')}`;
+  if (standoffCache.has(key)) return standoffCache.get(key)!;
+  let out: { range: number; minRange: number } | null = null;
+  try {
+    if (d.mobility === 'jet' && airRole(d) === 'harasser') {
+      const s = computeStats(d);
+      const ws = designModules(d).filter((m) => m.kind === 'weapon' && !m.heal && m.targetsGround !== false && m.projectile !== 'melee');
+      const total = ws.reduce((a, m) => a + weaponDps(m), 0);
+      const far = ws.filter((m) => (m.minRange ?? 0) > 0 || (m.range ?? 0) * s.rangeMult >= STANDOFF_REACH).sort((a, b) => (b.range ?? 0) - (a.range ?? 0));
+      const farDps = far.reduce((a, m) => a + weaponDps(m), 0);
+      if (total > 0 && farDps >= STANDOFF_SHARE * total) {
+        let acc = 0, range = 0;
+        for (const m of far) { acc += weaponDps(m); range = (m.range ?? 0) * s.rangeMult; if (acc >= 0.5 * farDps) break; }
+        const minRange = Math.max(0, ...far.filter((m) => (m.range ?? 0) * s.rangeMult >= range).map((m) => m.minRange ?? 0));
+        out = { range, minRange };
+      }
+    }
+  } catch { /* unknown parts */ }
+  standoffCache.set(key, out);
+  return out;
+}
+
+/** Orbit radius (cells) a standoff jet circles its ground goal at (0: it strafes after all): STANDOFF_ORBIT of the
+ *  guns' reach, clear of their minimum range plus half the jet's turning circle, never tighter than it can turn
+ *  (1.25 x speed / turn, at least 2.5); a jet that would have to circle beyond 90% of the reach keeps strafing.
+ *  `speed` / `turn` default to the design's stats (the sim passes its own, identical numbers). */
+export function standoffOrbit(d: Design, speed?: number, turn?: number): number {
+  const so = jetStandoff(d);
+  if (!so) return 0;
+  if (speed === undefined || turn === undefined) { const s = computeStats(d); speed = s.speed; turn = s.turn; }
+  const turnR = Math.max(2.5, (1.25 * speed) / Math.max(0.5, turn));
+  const R = Math.max(STANDOFF_ORBIT * so.range, so.minRange + 0.5 * turnR + 1, turnR);
+  return R <= 0.9 * so.range ? R : 0;
 }
 
 export interface DefaultOrders { kite: boolean; focus: boolean }

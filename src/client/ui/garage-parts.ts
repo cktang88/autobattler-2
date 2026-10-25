@@ -95,6 +95,9 @@ export const TRAIT_LABEL: Record<string, string> = {
   stable: 'Stable aim',
   strafe: 'Strafing runs',
   crush: 'Crush',
+  omni: 'Walks any way',
+  pivot: 'Pivots on the spot',
+  hover: 'Floats',
 };
 
 export const KIND_LABEL: Record<MoveKind, string> = { ground: 'Ground', air: 'Air', static: 'Static' };

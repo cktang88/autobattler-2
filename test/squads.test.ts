@@ -213,3 +213,29 @@ test('migrating a rules-3 match sells back medium single blocks of designs that 
   assert.equal(m.players[0].supply, 100 + paid);
   assert.equal(migrateMatch(m), false, 'idempotent');
 });
+
+test('rules 6 migration: only blocks whose squad the drive rework changed are re-checked; prices just update', async () => {
+  const { AI_POOL } = await import('../src/shared/aipool.ts');
+  const { STARTER_DESIGNS } = await import('../src/shared/starters.ts');
+  const { RULES_VERSION, drivesReshaped, migrateMatch, newMatch, newPlayer, shapeOf } = await import('../src/shared/match.ts');
+  const disc = AI_POOL.find((d) => d.id === 'pool-flakdisc')!; // hover flak disc: 1 -> 2 to a block
+  const bulwark = STARTER_DESIGNS.find((d) => d.id === 'starter-bulwark')!, buzz = STARTER_DESIGNS.find((d) => d.id === 'starter-buzzsaw')!;
+  const deck = [disc, bulwark, buzz];
+  assert.equal(RULES_VERSION, 6);
+  const m = newMatch('r5', 'ai', 1, newPlayer('A', deck), newPlayer('B', deck, true), 0);
+  m.rules = 5; m.status = 'deploy'; m.round = 2;
+  assert.deepEqual([...drivesReshaped(m.players[0])], ['pool-flakdisc']);
+  // the disc's (now wider) block was placed right next to the bulwark; the buzzsaw sits elsewhere
+  m.players[0].board = [
+    { uid: 1, designId: disc.id, x: 10, y: 2, level: 1, round: 1 },
+    { uid: 2, designId: bulwark.id, x: 10 + 2, y: 2, level: 1, round: 1 },
+    { uid: 3, designId: buzz.id, x: 40, y: 2, level: 1, round: 1 },
+  ];
+  assert.equal(shapeOf(disc).squad, 2);
+  assert.equal(migrateMatch(m), true);
+  assert.equal(m.rules, 6);
+  const at = (uid: number) => m.players[0].board.find((u) => u.uid === uid)!;
+  assert.deepEqual([at(2).x, at(2).y, at(3).x, at(3).y], [12, 2, 40, 2], 'untouched blocks keep their place');
+  const d = at(1);
+  assert.ok(d && !(d.x === 10 && d.y === 2), `the reshaped disc block moved off the bulwark: ${d?.x},${d?.y}`);
+});

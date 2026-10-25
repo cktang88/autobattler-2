@@ -45,7 +45,7 @@ test('toughness floor (wall tax): weaponless walls pay for their hull; ordinary 
   const twin = D('m1', 'monolith', 'titanlegs', ['twinmg', null]);
   const smoke = D('m3', 'monolith', 'titanlegs', ['smoke', null]);
   const hull = D('j1', 'juggernaut', 'treads', ['plateH', 'smoke']);
-  assert.equal(analyticStats(wall).cost, 180);
+  assert.equal(analyticStats(wall).cost, 160); // 180 before the drive rework (spider legs slower and repriced)
   assert.ok(computeStats(wall).cost >= 400, `the player's shield + point-defense wall: ${computeStats(wall).cost}`);
   assert.ok(computeStats(twin).cost >= 400 && computeStats(smoke).cost >= 350, `${computeStats(twin).cost} / ${computeStats(smoke).cost}`);
   assert.ok(computeStats(hull).cost >= 2 * analyticStats(hull).cost, `Monolith Hull plate + smoke ${analyticStats(hull).cost} -> ${computeStats(hull).cost}`);

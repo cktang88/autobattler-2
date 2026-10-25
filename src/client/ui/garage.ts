@@ -17,7 +17,7 @@ import { slotError } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, TEAM_VALUE, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { AIR_ROLE_INFO, MAX_LOAD, standoffOrbit, PARTS_WEIGHT, POWER_K, PRICE_DIV, TEAM_VALUE, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { TARGETS, THREATS, intelNumbers, percentile, referenceMeans, runMatchups, type IntelNumbers, type Matchup } from '../../shared/intel.ts';
@@ -1367,6 +1367,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       s && s.squad > 1 ? h('span.g-plate.squad', { title: `One purchase deploys a block of ${s.squad} units with adjustable spacing` }, `Squad ×${s.squad}`) : null,
       s?.flying ? h('span.g-plate.air', null, icon('air'), 'Flying') : null,
       (() => { const r = s?.flying ? airRole(draft) : null; return r ? h('span.g-plate.air', { title: AIR_ROLE_INFO[r].desc }, AIR_ROLE_INFO[r].label) : null; })(),
+      (() => { const r = s?.flying ? standoffOrbit(draft) : 0; return r > 0 ? h('span.g-plate.air', { title: `Keeps standoff range: its guns are mostly artillery or long-range, so instead of strafing passes it circles its ground target at ~${fmtMeters(r)} and keeps firing` }, 'Standoff') : null; })(),
       s?.isStatic ? h('span.g-plate.static', null, icon('static'), 'Static') : null,
       isDirty ? h('span.g-plate.warn', null, selectedId ? 'Modified' : 'Unsaved') : null,
     ].filter((x): x is HTMLSpanElement => !!x));
@@ -1871,6 +1872,10 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         : h('button.g-btn.primary', { type: 'button', disabled: !!err, onclick: () => pickMobility(m.id) }, 'Use this drive')),
       ...details([
         row('Weight', String(m.weight * c.size)),
+        ...(m.kind === 'ground' ? [
+          row('Reverse', m.traits.includes('omni') || (m.reverse ?? 1) >= 1 ? 'full speed' : `${Math.round((m.reverse ?? 1) * 100)}% speed`),
+          row('Turning', m.traits.includes('omni') ? 'walks any way, no need to turn' : m.traits.includes('pivot') ? 'stops and pivots on the spot' : m.arc ? 'turns while rolling (slow standing still)' : m.traits.includes('hover') ? 'slow, drifts through turns' : 'turns on the spot'),
+        ] : []),
         row('Hull bonus', `+${m.hp * c.size} hp${m.armor ? ` · +${m.armor} arm` : ''}`),
         complexityRow(m.cost * c.size),
       ], [m.traits.length ? h('div.g-fxs', null, ...m.traits.map((t) => h('span.g-fx', null, TRAIT_LABEL[t] ?? t))) : null]),
@@ -1954,7 +1959,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         draft = Object.keys(b).length ? { ...rest, behavior: b } : rest;
         sfx('click');
         update();
-      }, { custom: false, kiteOptions: ko, defaults: defs }));
+      }, { custom: false, kiteOptions: ko, defaults: defs, design: draft }));
   }
 
   /** Intel: what the design beats, what it's good at killing, how long it lasts and how it reaches, all at equal

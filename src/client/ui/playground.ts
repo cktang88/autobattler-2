@@ -710,7 +710,7 @@ export function playgroundScreen(app: App): Screen {
         onChange: (v) => editBlock(s, (q) => ({ ...q, level: v })),
       })),
       statCard({ design: d, st, level: p.level, spacing: normSpacing(st, p.spacing), rot: !!p.rot, onRing: onRingHi }),
-      h('div.info-spacing', null, ordersControl(ordersOf(p, defs), squad, (patch) => setOrders(s, patch), { escort: escortUi(s), kiteOptions: kiteOptions(d), defaults: defs })),
+      h('div.info-spacing', null, ordersControl(ordersOf(p, defs), squad, (patch) => setOrders(s, patch), { escort: escortUi(s), kiteOptions: kiteOptions(d), defaults: defs, design: d })),
       squad ? h('div.info-spacing', null, spacingControl(normSpacing(st, p.spacing), (v) => setSpacing(s, v), shapeOf(d), !!p.rot)) : '',
       blockParts(d),
       h('div.actions', null,

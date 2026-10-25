@@ -867,7 +867,8 @@ test('keep spread is on by default; with it off, friendly units still keep 0.75 
     return sum / n;
   };
   const off = run(false), def = run(undefined);
-  assert.ok(off > 0.76, `spread off: mean nearest gap ${off.toFixed(2)}`);
+  // (faster wheels press the squad together a little harder: ~0.757 since the drive rework, 0.76+ before)
+  assert.ok(off > 0.75, `spread off: mean nearest gap ${off.toFixed(3)}`);
   assert.ok(def > off, `default keeps the wider deployed spacing: ${def.toFixed(2)} vs ${off.toFixed(2)}`);
 });
 

@@ -100,8 +100,8 @@ export interface ChassisCtx {
   body: THREE.Group;
   /** unit root (not bobbing) */
   root: THREE.Group;
-  /** per-frame updaters (t seconds, dt, moving 0..1) */
-  updates: ((t: number, dt: number, mv: number) => void)[];
+  /** per-frame updaters (t seconds, dt, moving 0..1, dir = travel direction in the hull frame, rad, 0 = forward) */
+  updates: ((t: number, dt: number, mv: number, dir?: number) => void)[];
 }
 
 export interface Seat { y: number; socket: boolean }
@@ -130,7 +130,9 @@ export interface MobilityCtx {
 }
 export interface MobilityBuilder {
   stance(s: StanceIn): Stance;
-  build(c: MobilityCtx): ((t: number, moving: number) => void) | void;
+  /** returns the gear animation: t = gait clock, moving 0..1, dir = travel direction in the hull frame (rad, 0 =
+   *  forward, +PI/2 = toward +z): walkers stride that way (a spider strafing, legs backing up); others ignore it */
+  build(c: MobilityCtx): ((t: number, moving: number, dir?: number) => void) | void;
 }
 
 const CHASSIS = new Map<string, ChassisBuilder>();

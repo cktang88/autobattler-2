@@ -5,7 +5,7 @@ import { h } from '../app.ts';
 import * as kit from './kit.ts';
 import { sfx } from '../audio.ts';
 import { drawPartIcon, drawUnitPreview } from '../render/field.ts';
-import { apTier, computeStats, damageKinds, levelMult, type DefaultOrders } from '../../shared/stats.ts';
+import { apTier, computeStats, damageKinds, levelMult, standoffOrbit, type DefaultOrders } from '../../shared/stats.ts';
 import { firingText } from './garage-parts.ts';
 import { fireMods, mountDps, unitDps } from './deckstats.ts';
 import { blockDims, fmtMeters, fmtSpeed } from '../../shared/grid.ts';
@@ -142,11 +142,18 @@ export function kiteOptions(d: Design | undefined): KiteOption[] {
   return new Set(out.map((o) => Math.round(o.range * 100))).size >= 2 ? out : [];
 }
 
+/** "Keeps standoff range" line for a standoff jet (stats.ts standoffOrbit), else null */
+export function standoffNote(d: Design | undefined): HTMLElement | null {
+  let r = 0;
+  try { r = d ? standoffOrbit(d) : 0; } catch { r = 0; }
+  return r > 0 ? h('div.ord-row.ord-note', { title: 'Its guns are mostly artillery or long-range: instead of strafing passes it circles its ground target inside their reach and keeps firing' }, `Keeps standoff range: circles its target at ~${fmtMeters(r)}`) : null;
+}
+
 export interface EscortUi { label: string | null; picking: boolean; onPick(): void; onClear(): void }
 
 /** Compact battle-AI panel. Targeting (priority + focus fire) / Movement (stance, kite, keep spread, delay, retreat, escort). */
 export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Orders>) => void,
-  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[]; defaults?: DefaultOrders; mixed?: ReadonlySet<keyof Orders> } = {}): HTMLElement {
+  opts: { custom?: boolean; escort?: EscortUi; kiteOptions?: KiteOption[]; defaults?: DefaultOrders; mixed?: ReadonlySet<keyof Orders>; design?: Design } = {}): HTMLElement {
   // every control carries a focus key (data-fk): the panel is rebuilt on each change and the caller refocuses it
   const mx = (k: keyof Orders) => !!opts.mixed?.has(k);
   const chip = (label: string, tip: string, v: boolean, key: keyof Orders) =>
@@ -184,6 +191,7 @@ export function ordersControl(o: Orders, squad: boolean, on: (patch: Partial<Ord
         chip('Retreat', 'Below 30% HP fall back toward your lines or repair; return above 70%', o.retreat, 'retreat'),
       ),
       kiteSel,
+      standoffNote(opts.design),
       h('div.hold-row', null,
         h('span', { title: 'Wait before moving; weapons still fire at anything in range' }, 'Start delay'),
         kit.segmented({ value: mx('delay') ? -1 : o.delay, label: 'Start delay', className: 'full', fk: 'ord-delay', options: START_DELAYS.map((d) => ({ value: d, label: d ? `${d}s` : 'None' })), onChange: (d) => on({ delay: d }) }),

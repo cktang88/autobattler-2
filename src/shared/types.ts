@@ -23,7 +23,10 @@ export const CLOAK_REVEAL = 2.5;
  *  carriers project further and big allies are easy to cover. Auras never stack: each unit takes the single strongest
  *  source of each effect. Radius (cells, edge to edge) of the chassis 'repairAura' trait. */
 export const REPAIR_AURA_RANGE = 6;
-export type MobilityTrait = 'evasive' | 'leap' | 'fortified' | 'stable' | 'strafe' | 'crush';
+/** Drive traits. Movement ones (see sim steer): 'omni' walks any direction at full speed without facing its move;
+ *  'pivot' stops and turns on the spot before it drives on; 'hover' floats: immune to burning ground and being crushed,
+ *  half damage from ground-burst splash (artillery, mortar and bomb blasts; direct hits are unchanged). */
+export type MobilityTrait = 'evasive' | 'leap' | 'fortified' | 'stable' | 'strafe' | 'crush' | 'omni' | 'pivot' | 'hover';
 
 export interface ChassisDef {
   id: string;
@@ -69,6 +72,11 @@ export interface MobilityDef {
   speed: number;
   /** radians / second body turn rate */
   turn: number;
+  /** speed factor when backing up (move direction more than ~100 deg off the facing); default 1 (no penalty) */
+  reverse?: number;
+  /** wheeled steering: turns at full rate only while rolling; standing still it turns at ARC_STILL_TURN of its rate
+   *  (a small turning circle instead of an on-the-spot turn) */
+  arc?: boolean;
   /** Max weight carried at full speed, per chassis size (index 0 = size 1 ... index 4 = size 5). 0 means unsupported. */
   capacity: [number, number, number, number, number];
   /** weight per size unit (total = weight * size) */
@@ -284,6 +292,8 @@ export interface UnitStats {
   load: number;
   speed: number;
   turn: number;
+  /** speed factor when backing up (MobilityDef.reverse; 1 = no penalty, omni drives and flyers) */
+  reverse: number;
   /** supply price of one BLOCK (squad units), rounded via roundCost — what the player pays */
   cost: number;
   /** one unit's share of the block price: cost / squad (not rounded; show it with stats.ts fmtUnitPrice) */

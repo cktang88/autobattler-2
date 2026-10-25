@@ -33195,17 +33195,17 @@ var CHASSIS = [
   { id: "monolith", name: "Monolith", desc: "A walking bunker: enormous hit points and armour, but only a giant and a medium mount. Holds a line no one else can.", size: 5, hp: 13e3, armor: 32, weight: 150, cost: 900, footprint: [7, 7], art: [7, 7], mounts: ["L", "M"], agility: 0.5, roles: ["tank"], traits: [], shape: "monolith" }
 ];
 var MOBILITY = [
-  { id: "wheels", name: "Wheels", desc: "Fast and cheap, but fragile and light-duty.", kind: "ground", sizes: [1, 2], speed: 3.2, turn: 4, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [], roles: ["raider", "scout"] },
-  { id: "halftrack", name: "Half-Track", desc: "Wheels up front, treads behind. Balanced all-rounder.", kind: "ground", sizes: [1, 2, 3], speed: 2.3, turn: 2.6, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [], roles: ["skirmisher", "assault"] },
-  { id: "treads", name: "Tank Treads", desc: "Heavy-duty treads. Slow, tough, carries anything.", kind: "ground", sizes: [2, 3, 4], speed: 1.6, turn: 1.8, capacity: [0, 32, 66, 125, 0], weight: 4, hp: 60, armor: 3, cost: 22, traits: ["crush"], roles: ["tank", "assault"] },
-  { id: "legs", name: "Bipedal Legs", desc: "Nimble walker.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3.5, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: [], roles: ["skirmisher", "raider"] },
-  { id: "spider", name: "Spider Legs", desc: "Six-legged stable walker. Better accuracy, carries heavy loads.", kind: "ground", sizes: [1, 2, 3, 4, 5], speed: 1.6, turn: 3, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ["stable"], roles: ["artillery", "riot", "skirmisher"] },
-  { id: "jumpjets", name: "Jump Legs", desc: "Leaps over obstacles straight into the fight.", kind: "ground", sizes: [1, 2], speed: 2, turn: 3, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ["leap"], roles: ["raider", "melee"] },
-  { id: "hover", name: "Hover Skirt", desc: "Skims the ground. Very fast, hard to hit.", kind: "ground", sizes: [1, 2], speed: 3.8, turn: 2.4, capacity: [7.5, 22, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive"], roles: ["raider", "scout"] },
+  { id: "wheels", name: "Wheels", desc: "Fastest on the ground and the sharpest turns, but it must roll to turn. Fragile, light loads only, slow in reverse.", kind: "ground", sizes: [1, 2], speed: 4.2, turn: 6, reverse: 0.5, arc: true, capacity: [8, 24, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 8, traits: [], roles: ["raider", "scout"] },
+  { id: "halftrack", name: "Half-Track", desc: "Wheels up front, treads behind. The all-rounder: medium speed, medium turning, fair reverse.", kind: "ground", sizes: [1, 2, 3], speed: 2.5, turn: 2.6, reverse: 0.6, arc: true, capacity: [9, 27, 52, 0, 0], weight: 2.5, hp: 30, armor: 1, cost: 14, traits: [], roles: ["skirmisher", "assault"] },
+  { id: "treads", name: "Tank Treads", desc: "The toughest drive and carries anything. Slow, very slow to turn, but pivots on the spot. Crushes smaller units.", kind: "ground", sizes: [2, 3, 4], speed: 1.5, turn: 1, reverse: 0.6, capacity: [0, 34, 70, 130, 0], weight: 4, hp: 80, armor: 4, cost: 22, traits: ["crush", "pivot"], roles: ["tank", "assault"] },
+  { id: "legs", name: "Bipedal Legs", desc: "Slow walker with quick on-the-spot turns and a steady aim. Backs up nearly at full pace.", kind: "ground", sizes: [1, 2], speed: 1.4, turn: 4.2, reverse: 0.8, capacity: [9, 24, 0, 0, 0], weight: 2, hp: 20, armor: 0, cost: 14, traits: ["stable"], roles: ["skirmisher", "raider"] },
+  { id: "spider", name: "Spider Legs", desc: "Six-legged walker: the slowest, but walks any direction at full speed without turning, so it kites and strafes freely. Steady aim, carries heavy loads.", kind: "ground", sizes: [1, 2, 3, 4, 5], speed: 1.25, turn: 3.2, capacity: [10, 29, 58, 110, 210], weight: 3.5, hp: 40, armor: 2, cost: 22, traits: ["stable", "omni"], roles: ["artillery", "riot", "skirmisher"] },
+  { id: "jumpjets", name: "Jump Legs", desc: "Walks like legs, but leaps over obstacles straight into the fight.", kind: "ground", sizes: [1, 2], speed: 1.4, turn: 4.2, reverse: 0.8, capacity: [8, 21, 0, 0, 0], weight: 2.5, hp: 10, armor: 0, cost: 22, traits: ["leap"], roles: ["raider", "melee"] },
+  { id: "hover", name: "Hover Skirt", desc: "Very fast and hard to hit, but turns slowly and drifts. Floats over burning ground, can't be crushed, half damage from ground blasts; slides backwards at full speed.", kind: "ground", sizes: [1, 2], speed: 3.8, turn: 1.6, capacity: [7.5, 22, 0, 0, 0], weight: 1.5, hp: 0, armor: 0, cost: 18, traits: ["evasive", "hover"], roles: ["raider", "scout"] },
   { id: "rotor", name: "Rotor", desc: "Helicopter rotors. Flies over ground units; only anti-air can hit it.", kind: "air", sizes: [1, 2, 3], speed: 2.8, turn: 3, capacity: [5, 17, 36, 0, 0], weight: 2, hp: 0, armor: 0, cost: 28, domain: "heli", traits: [], roles: ["flyer", "support"] },
   { id: "jet", name: "Jet Thrusters", desc: "Very fast strafing flyer. Fires on the pass.", kind: "air", sizes: [1, 2, 3, 4, 5], speed: 7, turn: 1.6, capacity: [4, 14, 30, 62, 112], weight: 1.5, hp: 0, armor: 0, cost: 32, domain: "jet", traits: ["strafe", "evasive"], roles: ["flyer", "raider", "bomber"] },
-  { id: "megatracks", name: "Colossal Tracks", desc: "Quad track assemblies for giant and titan hulls. Crushes anything underfoot.", kind: "ground", sizes: [4, 5], speed: 1.25, turn: 1.2, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ["crush"], roles: ["tank", "assault"] },
-  { id: "titanlegs", name: "Titan Legs", desc: "Towering walker legs. Stomps smaller units.", kind: "ground", sizes: [3, 4, 5], speed: 1.4, turn: 1.6, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ["crush"], roles: ["assault"] },
+  { id: "megatracks", name: "Colossal Tracks", desc: "Quad track assemblies for giant and titan hulls. Slow, pivots on the spot. Crushes anything underfoot.", kind: "ground", sizes: [4, 5], speed: 1.2, turn: 0.8, reverse: 0.6, capacity: [0, 0, 0, 140, 245], weight: 6, hp: 120, armor: 5, cost: 30, traits: ["crush", "pivot"], roles: ["tank", "assault"] },
+  { id: "titanlegs", name: "Titan Legs", desc: "Towering walker legs: slow, but step round on the spot. Stomps smaller units.", kind: "ground", sizes: [3, 4, 5], speed: 1.3, turn: 1.6, reverse: 0.8, capacity: [0, 0, 62, 122, 220], weight: 5, hp: 80, armor: 3, cost: 30, traits: ["crush"], roles: ["assault"] },
   { id: "gravlift", name: "Grav Lifters", desc: "Anti-gravity lifters that make heavy, giant and titan hulls fly.", kind: "air", sizes: [3, 4, 5], speed: 2.4, turn: 1.2, capacity: [0, 0, 50, 100, 180], weight: 4, hp: 0, armor: 0, cost: 50, domain: "heli", traits: [], roles: ["flyer", "bomber"] },
   { id: "anchor", name: "Anchor Mount", desc: "Immobile emplacement. Extra hp, armor and +15% range.", kind: "static", retired: true, sizes: [1, 2, 3, 4, 5], speed: 0, turn: 2.5, capacity: [14, 40, 80, 150, 260], weight: 0, hp: 100, armor: 4, cost: 0, traits: ["fortified"], roles: ["siege", "artillery", "antiair"] }
 ];
@@ -41705,10 +41705,12 @@ function makeLeg(g, kit, hip, o) {
     m.matrix.makeBasis(xa, ya, tmp4).setPosition(a);
     m.matrixWorldNeedsUpdate = true;
   };
-  const step = (time, moving) => {
+  const step = (time, moving, way = 0) => {
     const ph = time * 3.2 + hip.phase;
     f.copy(footV);
-    f.x += -Math.sin(ph) * o.stride * moving;
+    const sw = -Math.sin(ph) * o.stride * moving;
+    f.x += sw * Math.cos(way);
+    f.z += sw * Math.sin(way);
     const up = Math.max(0, Math.cos(ph));
     f.y += up * up * o.lift * moving;
     dir.copy(f).sub(hipV);
@@ -41757,8 +41759,8 @@ registerMobility(["legs", "titanlegs", "spider"], {
     const style = legStyleFor(c.shape);
     const fine = kind === "spider" ? c.S >= 3 : c.S >= 2;
     const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === "spider" ? 0.32 : 0.26), lite, hs: kind === "biped", fine, style }));
-    return (t, mv) => {
-      for (const l of legs) l.step(t, mv);
+    return (t, mv, dir) => {
+      for (const l of legs) l.step(t, mv, dir);
     };
   }
 });
@@ -43705,8 +43707,8 @@ registerMobility("jumpjets", {
       }
     }
     b.mount(c.root);
-    return (t, mv) => {
-      for (const l of legs) l.step(t, mv);
+    return (t, mv, dir) => {
+      for (const l of legs) l.step(t, mv, dir);
     };
   }
 });
@@ -43789,10 +43791,12 @@ function makeTitanLeg(g, kit, hip, stride, lift, hs = true) {
     m.matrix.makeBasis(xa, ya, tmp4).setPosition(a);
     m.matrixWorldNeedsUpdate = true;
   };
-  const step = (time, moving) => {
+  const step = (time, moving, way = 0) => {
     const ph = time * 3.2 + hip.phase;
     f.copy(footV);
-    f.x += -Math.sin(ph) * stride * moving;
+    const sw = -Math.sin(ph) * stride * moving;
+    f.x += sw * Math.cos(way);
+    f.z += sw * Math.sin(way);
     const up = Math.max(0, Math.cos(ph));
     f.y += up * up * lift * moving;
     dir.copy(f).sub(hipV);
@@ -43817,8 +43821,8 @@ registerMobility("titanlegs", {
     const hips = c.hips && c.hips.length ? c.hips : [-1, 1].map((side) => ({ p: [-0.02 * c.L, st.hipY, side * c.W * 0.27], side, t: st.thick, foot: [-0.02 * c.L, 0, side * c.W * 0.31], phase: side > 0 ? Math.PI : 0 }));
     const stride = Math.min(0.2 + 0.2 * c.S, st.hipY * 0.55);
     const legs = hips.map((h) => makeTitanLeg(c.root, c.kit, h, stride, st.hipY * 0.22));
-    return (t, mv) => {
-      for (const l of legs) l(t, mv);
+    return (t, mv, dir) => {
+      for (const l of legs) l(t, mv, dir);
     };
   }
 });
@@ -43883,10 +43887,12 @@ function makeTitanSpiderLeg(g, kit, hip, stride, lift) {
     m.matrix.makeBasis(xa, ya, tmp4).setPosition(a);
     m.matrixWorldNeedsUpdate = true;
   };
-  const step = (time, moving) => {
+  const step = (time, moving, way = 0) => {
     const ph = time * 3.2 + hip.phase;
     f.copy(footV);
-    f.x += -Math.sin(ph) * stride * moving;
+    const sw = -Math.sin(ph) * stride * moving;
+    f.x += sw * Math.cos(way);
+    f.z += sw * Math.sin(way);
     const up = Math.max(0, Math.cos(ph));
     f.y += up * up * lift * moving;
     dir.copy(f).sub(hipV);
@@ -43912,8 +43918,8 @@ registerMobility("spider", {
     const st = c.stance;
     const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * 0.7);
     const legs = c.hips.map((h) => makeTitanSpiderLeg(c.root, c.kit, h, stride, st.hipY * 0.32));
-    return (t, mv) => {
-      for (const l of legs) l(t, mv);
+    return (t, mv, dir) => {
+      for (const l of legs) l(t, mv, dir);
     };
   }
 });
@@ -45119,7 +45125,7 @@ function buildUnit(design, team) {
     if (dress && !flying && !out2.dressed) autoDress({ b: hb, kit, L, W, S, mounts: specs }, out2.deckAt, dress);
     const mctx = { root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out2.hips, lift: out2.lift };
     const upd = mb.build(mctx);
-    if (upd) updates.push((t, _dt, mv) => upd(t, mv));
+    if (upd) updates.push((t, _dt, mv, dir) => upd(t, mv, dir));
   }
   for (const m of specs) {
     const tu = tur[m.i];
@@ -45164,8 +45170,8 @@ function buildUnit(design, team) {
     flying,
     radius: Math.max(L, W) / 2,
     tris,
-    animate(t, dt, moving) {
-      for (const u of updates) u(t, dt, moving);
+    animate(t, dt, moving, dir = 0) {
+      for (const u of updates) u(t, dt, moving, dir);
       if (!flying) body.position.y = Math.sin(t * 38 + L) * 35e-4 * (0.6 + moving) * Math.min(S, 3);
     }
   };

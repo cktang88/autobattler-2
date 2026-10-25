@@ -25,8 +25,8 @@ export interface Unit3D {
   turrets: Turret[];
   L: number; W: number; S: number;
   flying: boolean;
-  /** per-frame idle/locomotion animation (t = seconds, moving 0..1) */
-  animate(t: number, dt: number, moving: number): void;
+  /** per-frame idle/locomotion animation (t = seconds, moving 0..1, dir = travel direction in the hull frame, rad) */
+  animate(t: number, dt: number, moving: number, dir?: number): void;
   radius: number;
   /** static triangle count of this unit */
   tris: number;
@@ -63,7 +63,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   root.add(body);
   const flying = (ch.domain ?? 'ground') !== 'ground' || mob.kind === 'air';
   const turrets: Turret[] = [];
-  const updates: ((t: number, dt: number, mv: number) => void)[] = [];
+  const updates: ((t: number, dt: number, mv: number, dir?: number) => void)[] = [];
   const offs = mountOffsets(design);
   const hb = new Bld();
   let air: Air | null = null;
@@ -118,7 +118,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     if (dress && !flying && !out.dressed) autoDress({ b: hb, kit, L, W, S, mounts: specs }, out.deckAt, dress);
     const mctx: MobilityCtx & { lift?: unknown } = { root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out.hips, lift: (out as { lift?: unknown }).lift };
     const upd = mb.build(mctx);
-    if (upd) updates.push((t, _dt, mv) => upd(t, mv));
+    if (upd) updates.push((t, _dt, mv, dir) => upd(t, mv, dir));
   }
 
   // ---- turrets -------------------------------------------------------------------------------------
@@ -157,8 +157,8 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
 
   return {
     root, design, team, turrets, L, W, S, flying, radius: Math.max(L, W) / 2, tris,
-    animate(t, dt, moving) {
-      for (const u of updates) u(t, dt, moving);
+    animate(t, dt, moving, dir = 0) {
+      for (const u of updates) u(t, dt, moving, dir);
       if (!flying) body.position.y = Math.sin(t * 38 + L) * 0.0035 * (0.6 + moving) * Math.min(S, 3);
     },
   };

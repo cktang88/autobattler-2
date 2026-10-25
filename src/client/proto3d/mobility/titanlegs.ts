@@ -94,10 +94,12 @@ function makeTitanLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lif
     m.matrix.makeBasis(xa, ya, tmp).setPosition(a);
     m.matrixWorldNeedsUpdate = true;
   };
-  const step = (time: number, moving: number) => {
+  const step = (time: number, moving: number, way = 0) => {
     const ph = time * 3.2 + hip.phase;
     f.copy(footV);
-    f.x += -Math.sin(ph) * stride * moving;
+    const sw = -Math.sin(ph) * stride * moving;
+    f.x += sw * Math.cos(way);
+    f.z += sw * Math.sin(way);
     const up = Math.max(0, Math.cos(ph));
     f.y += up * up * lift * moving;
     dir.copy(f).sub(hipV);
@@ -124,7 +126,7 @@ registerMobility('titanlegs', {
     // same half-stride rule as legs.ts strideFor (render3d odometer clock), capped by hip height
     const stride = Math.min(0.2 + 0.2 * c.S, st.hipY * 0.55);
     const legs = hips.map((h) => makeTitanLeg(c.root, c.kit, h, stride, st.hipY * 0.22));
-    return (t, mv) => { for (const l of legs) l(t, mv); };
+    return (t, mv, dir) => { for (const l of legs) l(t, mv, dir); };
   },
 });
 
@@ -187,10 +189,12 @@ function makeTitanSpiderLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: numbe
     m.matrix.makeBasis(xa, ya, tmp).setPosition(a);
     m.matrixWorldNeedsUpdate = true;
   };
-  const step = (time: number, moving: number) => {
+  const step = (time: number, moving: number, way = 0) => {
     const ph = time * 3.2 + hip.phase;
     f.copy(footV);
-    f.x += -Math.sin(ph) * stride * moving;
+    const sw = -Math.sin(ph) * stride * moving;
+    f.x += sw * Math.cos(way);
+    f.z += sw * Math.sin(way);
     const up = Math.max(0, Math.cos(ph));
     f.y += up * up * lift * moving;
     dir.copy(f).sub(hipV);
@@ -217,6 +221,6 @@ registerMobility('spider', {
     const st = c.stance;
     const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * 0.7);
     const legs = c.hips.map((h) => makeTitanSpiderLeg(c.root, c.kit, h, stride, st.hipY * 0.32));
-    return (t, mv) => { for (const l of legs) l(t, mv); };
+    return (t, mv, dir) => { for (const l of legs) l(t, mv, dir); };
   },
 });

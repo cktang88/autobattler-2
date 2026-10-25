@@ -4,9 +4,9 @@
 // Each tick: weapons (targeting, turrets, firing) -> movement -> spatial hash -> separation/crush ->
 // auras -> projectiles -> bookkeeping -> end check.
 
-import { CHASSIS, CHASSIS_BY_ID, MODULE_BY_ID } from '../parts.ts';
+import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
-import { airRole, computeStats, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { airRole, computeStats, standoffOrbit, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -78,6 +78,24 @@ const JET_SEP_SOFT = 0.5;
  *  they're dropped short of the target and carry on to it); straight overhead always counts */
 const BOMB_CONE = 0.6; // rad
 const CRUSH_DMG = 14; // per size of the crusher, per contact pulse
+/** Drive handling (see steer). A ground unit whose move points more than REVERSE_ANGLE off its facing backs up (at
+ *  stats.reverse x speed) when the move is short (<= REVERSE_DIST cells: a kiting step, a nudge into place); on a
+ *  longer move it turns round and drives there nose first. */
+const REVERSE_ANGLE = (100 * Math.PI) / 180;
+const REVERSE_DIST = 4;
+/** wheeled ('arc' MobilityDef) drives turn at this share of their rate when standing still, and keep rolling at
+ *  least ARC_ROLL of their speed through a sharp turn (a small turning circle instead of an on-the-spot pivot) */
+const ARC_STILL_TURN = 0.5;
+const ARC_ROLL = 0.5;
+/** 'pivot' drives (treads) stop and turn on the spot until their heading is within this angle of the move, then
+ *  drive on (smoothly: full speed straight on, none at PIVOT_GO off) */
+const PIVOT_GO = Math.PI / 4;
+const COS_PIVOT_GO = Math.cos(PIVOT_GO);
+/** 'hover' drives slide: each second the actual velocity closes this share (per s) of the gap to the wanted one */
+const HOVER_GRIP = 3;
+/** 'hover' drives take this share of ground-burst splash (shells, bombs and rockets bursting on the ground); direct
+ *  hits are unchanged */
+export const HOVER_SPLASH = 0.5;
 const RANGE_KEEP = 1.08; // hysteresis: a held target stays valid out to range * this
 const STALL_CHECK_EVERY = 20; // ticks
 /** A battle where nothing at all happens for this long (no unit moves, no shot, hit or heal, no projectile or smoke
@@ -174,6 +192,8 @@ function turnToward(a: number, b: number, max: number): number {
   return b;
 }
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+/** turn rate (rad/s) of a ground unit turning where it stands: a wheeled drive needs to roll to turn properly */
+const spinRate = (I: { turn: number; arc: boolean }) => (I.arc ? I.turn * ARC_STILL_TURN : I.turn);
 /** Exactly `Math.hypot(dx, dy) > r`, but only pays for the (slow) hypot call when the squared distance is within
  *  rounding of r^2; anything clearly inside or outside is decided by the cheap comparison. */
 const hypotGt = (dx: number, dy: number, r: number): boolean => {
@@ -270,6 +290,15 @@ interface Internal {
   canLeap: boolean;
   crush: boolean;
   aura: boolean;
+  /** drive handling (see steer): backing-up speed factor, walks any way ('omni'), stops to turn ('pivot'), must roll
+   *  to turn (MobilityDef.arc), floats and slides ('hover') */
+  reverse: number;
+  /** standoff jet (stats.ts jetStandoff): radius (cells) it circles its ground goal at instead of strafing; 0 = strafes */
+  standoff: number;
+  omni: boolean;
+  pivot: boolean;
+  arc: boolean;
+  hover: boolean;
   isStatic: boolean;
   hasWeapon: boolean;
   hasHeal: boolean;
@@ -543,6 +572,9 @@ export class Battle {
   private curSrc = -1;
   /** SimUnit.id credited with damage for the per-block tally (accounting only; never affects the fight) */
   private dmgSrc = -1;
+  /** set while a round bursts on the ground (shells, bombs, rockets at the end of their flight): hovercraft take
+   *  HOVER_SPLASH of its splash */
+  private groundBurst = false;
   /** overrides the killing weapon's DeathKind while a burn tick / death blast deals its damage */
   private dmgKind: DeathKind | null = null;
   /** damage dealt to enemies per block, keyed side * 1e6 + placement uid */
@@ -716,8 +748,11 @@ export class Battle {
       if (!def || (def.kind === 'armor') || (def.kind === 'utility' && !def.heal)) { wpns.push(null); continue; }
       const isWeapon = def.kind === 'weapon';
       const melee = def.projectile === 'melee';
-      // bombs from a flyer: released short of the target and thrown on by the plane's speed, so they reach further
-      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult) + (isWeapon && def.projectile === 'arc' && stats.flying ? stats.speed * BOMB_FALL : 0);
+      // bomb bays (resupplied arc weapons on a flyer): released short of the target and thrown on by the plane's speed,
+      // so they reach further. Artillery carried by an aircraft (no resupply) is lobbed from its turret like on the
+      // ground: aimed by the turret, real flight time, its own range (a standoff jet circles and keeps firing it)
+      const bombBay = isWeapon && def.projectile === 'arc' && stats.flying && !!def.resupply;
+      const range = (def.range ?? 0) * (melee ? 1 : stats.rangeMult) + (bombBay ? stats.speed * BOMB_FALL : 0);
       const w: Wpn = {
         def, heal: def.heal ?? 0, range, minRange: def.minRange ?? 0,
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
@@ -725,7 +760,7 @@ export class Battle {
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
         salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], split: [],
         okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
-        bomb: isWeapon && def.projectile === 'arc' && stats.flying, resupply: isWeapon && !!def.resupply,
+        bomb: bombBay, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
         dps: isWeapon ? Math.max(1e-3, weaponDps(def)) : 0,
@@ -784,6 +819,8 @@ export class Battle {
       speed: stats.speed, turn: stats.turn,
       strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
+      reverse: stats.reverse ?? 1, standoff: 0, omni: traits.includes('omni'), pivot: traits.includes('pivot'), arc: !stats.flying && !!MOBILITY_BY_ID.get(design.mobility)?.arc,
+      hover: traits.includes('hover'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, rearming: false, crushCd: 0,
@@ -799,6 +836,8 @@ export class Battle {
       block: cfg.block, offx: cfg.offx, offy: cfg.offy, sepMin: cfg.sepMin,
       dpsVal: stats.dps * lm, mainW: wpns.reduce<Wpn | null>((b, w) => (w && w.heal <= 0 && w.range > 0 && (!b || w.range > b.range) ? w : b), null),
     });
+    // standoff jet: circles its ground goal inside its guns' reach, clear of their minimum range (stats.ts)
+    if (traits.includes('strafe')) this.ints[this.ints.length - 1].standoff = standoffOrbit(design, stats.speed, stats.turn);
     if (cfg.hold) this.anyHold = true;
     this.maxDelay = Math.max(this.maxDelay, Math.round(cfg.delay * TICK_RATE));
   }
@@ -1541,7 +1580,7 @@ export class Battle {
     if (vx * vx + vy * vy < 1e-4) return p;
     const u = I.u;
     let tof: number;
-    if (kind === 'arc' && u.flying) tof = BOMB_FALL; // bombs fall a fixed time
+    if (w.bomb) tof = BOMB_FALL; // bombs fall a fixed time
     else {
       // |d + v t| = s t  ->  (v.v - s^2) t^2 + 2 (d.v) t + d.d = 0
       const s = w.def.projectileSpeed ?? 15;
@@ -1774,7 +1813,7 @@ export class Battle {
         ty = ay + c * e1 + s * e2;
       }
       // bombs: dropped from the flyer's own position, falling from its altitude in ~0.5s
-      const bomb = kind === 'arc' && u.flying;
+      const bomb = w.bomb;
       const ox = bomb ? u.x : mx, oy = bomb ? u.y : my;
       const total = Math.max(0.3, Math.hypot(tx - ox, ty - oy));
       let ang = Math.atan2(ty - oy, tx - ox);
@@ -1782,7 +1821,7 @@ export class Battle {
       if (salvoN > 1 && kind === 'missile') ang += ((salvoK + 0.5) / salvoN - 0.5) * 1.2 + (this.rng() - 0.5) * 0.35;
       const pierce = !!def.pierce;
       const p: Proj = {
-        id: this.nextProjId++, side: u.side, moduleId: def.id, kind: kind as Proj['kind'], x: ox, y: oy, z: bomb ? BOMB_ALT : 0, z0: bomb ? BOMB_ALT : 0, src: u.id, angle: ang, progress: 0,
+        id: this.nextProjId++, side: u.side, moduleId: def.id, kind: kind as Proj['kind'], x: ox, y: oy, z: bomb || (u.flying && kind === 'arc') ? BOMB_ALT : 0, z0: bomb || (u.flying && kind === 'arc') ? BOMB_ALT : 0, src: u.id, angle: ang, progress: 0,
         vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed: bomb ? total / BOMB_FALL : speed, dmg: raw, ap, splash: def.splash ?? 0, airBonus, air,
         target: kind === 'missile' && t ? t.id : -1, tx, ty, sx: ox, sy: oy, total, traveled: 0,
         maxDist: kind === 'flame' ? total : kind === 'missile' ? w.range * 1.8 : pierce ? w.range + 1 : total + 2,
@@ -2074,7 +2113,9 @@ export class Battle {
       if (!o.alive || o.side === side || o.flying !== air) continue;
       const d = this.edgeC(this.ints[id], x, y);
       if (d > R && id !== direct) continue;
-      const f = id === direct ? 1 : 1 - (1 - SPLASH_EDGE) * Math.max(0, d) / R;
+      let f = id === direct ? 1 : 1 - (1 - SPLASH_EDGE) * Math.max(0, d) / R;
+      // a hovercraft rides over a burst on the ground (its own direct hit is not reduced)
+      if (this.groundBurst && id !== direct && this.ints[id].hover) f *= HOVER_SPLASH;
       this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult, ox, oy, cls);
     }
   }
@@ -2094,7 +2135,9 @@ export class Battle {
         p.y = p.sy + (p.ty - p.sy) * k;
         p.z = 4 * p.arcH * k * (1 - k) + p.z0 * (1 - k);
         if (k >= 1) {
+          this.groundBurst = true;
           this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, false, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
+          this.groundBurst = false;
           p.dead = true;
           this.dropFire(p, p.tx, p.ty);
           if (p.cl) this.releaseCluster(p);
@@ -2161,13 +2204,17 @@ export class Battle {
       if (p.kind === 'missile') {
         const dx = p.tx - p.x, dy = p.ty - p.y;
         if (p.target < 0 && dx * dx + dy * dy < step * step) {
+          this.groundBurst = !p.air;
           this.splash(p.tx, p.ty, Math.max(0.4, p.splash), p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
+          this.groundBurst = false;
           this.dropFire(p, p.tx, p.ty);
           p.dead = true;
           continue;
         }
       } else if (p.splash > 0 && p.kind !== 'flame' && !p.pierce && p.traveled >= p.total) {
+        this.groundBurst = !p.air;
         this.splash(p.tx, p.ty, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
+        this.groundBurst = false;
         this.dropFire(p, p.tx, p.ty);
         p.dead = true;
         continue;
@@ -2241,7 +2288,8 @@ export class Battle {
         for (let q = 0; q < cnt; q++) {
           const id = this.scratch[q];
           const o = this.units[id];
-          if (!o.alive || o.side === f.side || (o.flying && !f.rad)) continue;
+          // flyers and hovercraft float over burning ground (fallout still reaches them)
+          if (!o.alive || o.side === f.side || ((o.flying || this.ints[id].hover) && !f.rad)) continue;
           if (this.edgeC(this.ints[id], f.x, f.y) > f.r) continue;
           if (f.rad) {
             // fallout: a pulse of damage that ignores armor (shields still soak it), fading as the zone decays
@@ -2504,7 +2552,7 @@ export class Battle {
         else if (kiteR <= 0.9) {
           // kiting: parked at our range edge. If the kite gun still has nothing to shoot (the hull came to rest
           // turned away, e.g. after backing off, leaving the mount out of reach) swing the hull back to face the goal.
-          if (u.mounts[kiteMi].target < 0 && u.stun <= 0) u.angle = turnToward(u.angle, Math.atan2(dy, dx), I.turn * DT);
+          if (u.mounts[kiteMi].target < 0 && u.stun <= 0) u.angle = turnToward(u.angle, Math.atan2(dy, dx), spinRate(I) * DT);
           else this.faceTarget(I);
           return;
         }
@@ -2523,7 +2571,7 @@ export class Battle {
           let bw: Wpn | null = null;
           for (const w of I.wpns) if (w && w.heal <= 0 && !w.melee && w.minRange < d && this.canHit(w, goal) && (!bw || w.range > bw.range)) bw = w;
           if (bw && bw.ox * bw.ox + bw.oy * bw.oy > 0.09) {
-            u.angle = turnToward(u.angle, Math.atan2(dy, dx) - Math.atan2(bw.oy, bw.ox), I.turn * DT);
+            u.angle = turnToward(u.angle, Math.atan2(dy, dx) - Math.atan2(bw.oy, bw.ox), spinRate(I) * DT);
             return;
           }
         }
@@ -2572,7 +2620,7 @@ export class Battle {
     const t = this.units[m.target];
     const want = Math.atan2(t.y - u.y, t.x - u.x);
     const prev = u.angle;
-    u.angle = turnToward(u.angle, want, I.turn * DT * 0.5);
+    u.angle = turnToward(u.angle, want, spinRate(I) * DT * 0.5);
     // the slow mount rides the hull round (never past its target)
     m.angle = turnToward(m.angle, want, Math.abs(angDiff(prev, u.angle)));
   }
@@ -2590,28 +2638,69 @@ export class Battle {
     else this.steer(I, u.x, u.side === 0 ? FIELD_H - I.radius - 0.6 : I.radius + 0.6, 0.1, -1);
   }
 
-  /** Common locomotion: head for (gx, gy), stopping within stopDist. */
+  /** Common locomotion: head for (gx, gy), stopping within stopDist. Flyers slide straight there; ground drives
+   *  handle by their traits (see REVERSE_ANGLE ... HOVER_GRIP):
+   *  - a short move (<= REVERSE_DIST) well behind the facing is backed up at stats.reverse x speed, nose kept on the
+   *    enemy (kiting); a longer one is driven nose first after turning round;
+   *  - 'omni' walkers move any way at full speed, the hull turning to face the goal (or, with none, a long move);
+   *  - 'pivot' drives stop and turn on the spot, 'arc' (wheeled) drives keep rolling through the turn, walkers slow
+   *    down in the turn; 'hover' drives slide, their velocity catching up with the wanted one at HOVER_GRIP. */
   private steer(I: Internal, gx: number, gy: number, stopDist: number, goalId: number): void {
     const u = I.u;
     const dx = gx - u.x, dy = gy - u.y;
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d <= Math.max(stopDist, 0.05)) return;
     const want = Math.atan2(dy, dx) + this.avoid(I, dx / d, dy / d, goalId);
-    u.angle = turnToward(u.angle, want, I.turn * DT);
-    const diff = Math.abs(angDiff(u.angle, want));
-    let f = diff >= Math.PI / 2 ? 0 : Math.cos(diff);
-    if (u.flying) f = Math.max(f, 0.3); // rotors can drift sideways
     const sprint = I.meleeOnly && goalId >= 0 && this.units[goalId].side !== u.side ? MELEE_SPRINT : 1;
-    const sp = Math.min(I.speed * sprint * (1 - u.slow) * f * DT, d - stopDist * 0.5);
-    if (sp <= 0) return;
+    const vmax = I.speed * sprint * (1 - u.slow);
+    const left = d - stopDist * 0.5;
     if (u.flying) {
+      u.angle = turnToward(u.angle, want, I.turn * DT);
+      const diff = Math.abs(angDiff(u.angle, want));
+      // rotors can drift sideways
+      const sp = Math.min(vmax * Math.max(diff >= Math.PI / 2 ? 0 : Math.cos(diff), 0.3) * DT, left);
+      if (sp <= 0) return;
       // rotors slide toward the goal directly; body heading follows
       u.x += (dx / d) * sp;
       u.y += (dy / d) * sp;
-    } else {
-      u.x += Math.cos(u.angle) * sp;
-      u.y += Math.sin(u.angle) * sp;
+      return;
     }
+    const long = d - stopDist > REVERSE_DIST;
+    let mx: number, my: number;
+    if (I.omni) {
+      // walks the wanted way at full speed; the hull faces the enemy it is moving against, else (on a long move) the way
+      const g = goalId >= 0 ? this.units[goalId] : null;
+      const face = g && g.side !== u.side ? Math.atan2(g.y - u.y, g.x - u.x) : long ? want : u.angle;
+      u.angle = turnToward(u.angle, face, I.turn * DT);
+      const sp = Math.min(vmax * DT, left);
+      if (sp <= 0) return;
+      mx = Math.cos(want) * sp; my = Math.sin(want) * sp;
+    } else {
+      // short move behind us: back up (nose kept where it is pointing); long move: turn round and drive
+      const back = !long && Math.abs(angDiff(u.angle, want)) > REVERSE_ANGLE;
+      const head = back ? want + (want > 0 ? -Math.PI : Math.PI) : want;
+      u.angle = turnToward(u.angle, head, I.turn * DT);
+      const diff = Math.abs(angDiff(u.angle, head));
+      const c = Math.cos(diff);
+      let f: number;
+      if (I.pivot) f = c > COS_PIVOT_GO ? (c - COS_PIVOT_GO) / (1 - COS_PIVOT_GO) : 0; // stop, pivot, then go
+      else if (I.arc || I.hover) f = Math.max(ARC_ROLL, c); // keeps rolling / sliding through the turn
+      else f = diff >= Math.PI / 2 ? 0 : c; // walkers: slow down into the turn
+      const sp = Math.min(vmax * (back ? I.reverse : 1) * f * DT, left);
+      if (sp <= 0 && !I.hover) return;
+      const v = back ? -Math.max(0, sp) : Math.max(0, sp);
+      mx = Math.cos(u.angle) * v; my = Math.sin(u.angle) * v;
+    }
+    if (I.hover) {
+      // momentum: the velocity swings round toward the wanted one instead of snapping to it (drifts through turns)
+      const k = Math.min(1, HOVER_GRIP * DT);
+      mx = I.lvx * DT + (mx - I.lvx * DT) * k;
+      my = I.lvy * DT + (my - I.lvy * DT) * k;
+      const m = Math.sqrt(mx * mx + my * my), cap = Math.min(vmax * DT, left);
+      if (m > cap) { mx *= cap / m; my *= cap / m; }
+    }
+    u.x += mx;
+    u.y += my;
   }
 
   /** Steering offset (radians) to slip around allies (or emplacements) that block the way ahead. */
@@ -2739,9 +2828,10 @@ export class Battle {
     return { E, orbit: !near, thr: near ? thr : null };
   }
 
-  /** Heading that circles (cx, cy) at a radius the jet can hold (escort orbits, a holdPos jet over its post). */
-  private orbitHeading(I: Internal, cx: number, cy: number): number {
-    const u = I.u, R = Math.max(ESCORT_ORBIT, (1.25 * I.speed) / Math.max(0.5, I.turn));
+  /** Heading that circles (cx, cy) at radius `r` or the tightest one the jet can hold, whichever is wider (escort
+   *  orbits, a holdPos jet over its post, a standoff jet round its target). */
+  private orbitHeading(I: Internal, cx: number, cy: number, r = 0): number {
+    const u = I.u, R = Math.max(r, ESCORT_ORBIT, (1.25 * I.speed) / Math.max(0.5, I.turn));
     const dx = u.x - cx, dy = u.y - cy, d = Math.sqrt(dx * dx + dy * dy);
     return d > 2.2 * R ? Math.atan2(-dy, -dx) : Math.atan2(dy, dx) + I.loopDir * (Math.PI / 2 + clamp((d - R) / R, -0.8, 1.1));
   }
@@ -2781,6 +2871,11 @@ export class Battle {
       const depth = u.side === 0 ? u.y - (FIELD_H - DEPLOY_D) : DEPLOY_D - u.y;
       const loopR = I.speed / Math.max(0.3, I.turn);
       want = this.overHome(u) && depth >= Math.min(DEPLOY_D * 0.5, loopR) ? u.angle + 0.8 * I.loopDir : Math.atan2(hy - u.y, (u.x < FIELD_W / 2 ? FIELD_W * 0.35 : FIELD_W * 0.65) - u.x);
+    } else if (goal && I.standoff > 0 && !goal.flying) {
+      // standoff jet: circle the ground goal inside its guns' reach (artillery, long guns) instead of strafing passes
+      // that spend only moments between their minimum and maximum range
+      want = this.orbitHeading(I, goal.x, goal.y, I.standoff);
+      I.strafeT = 0;
     } else if (I.strafeT > 0) {
       I.strafeT -= DT;
       want = u.angle;
@@ -3055,12 +3150,12 @@ export class Battle {
             wx0 = Math.max(colLo, clamp(Math.floor((px[i] - far) / CELL), 0, HCOLS - 1));
             wx1 = Math.min(colHi, clamp(Math.floor((px[i] + far) / CELL), 0, HCOLS - 1));
             if (a.side !== b.side && !a.flying) {
-              if (A.crush && A.crushCd <= 0 && b.stats.size < a.stats.size) {
+              if (A.crush && A.crushCd <= 0 && b.stats.size < a.stats.size && !B.hover) {
                 A.crushCd = CRUSH_EVERY;
                 this.dmgSrc = a.id;
                 this.damage(b, CRUSH_DMG * a.stats.size, 0.5, 1, a.side, 'crush', b.x, b.y);
                 this.dmgSrc = -1;
-              } else if (B.crush && B.crushCd <= 0 && a.stats.size < b.stats.size) {
+              } else if (B.crush && B.crushCd <= 0 && a.stats.size < b.stats.size && !A.hover) {
                 B.crushCd = CRUSH_EVERY;
                 this.dmgSrc = b.id;
                 this.damage(a, CRUSH_DMG * b.stats.size, 0.5, 1, b.side, 'crush', a.x, a.y);

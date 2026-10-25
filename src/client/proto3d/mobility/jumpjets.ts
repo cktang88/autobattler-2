@@ -74,6 +74,6 @@ registerMobility('jumpjets', {
       }
     }
     b.mount(c.root);
-    return (t, mv) => { for (const l of legs) l.step(t, mv); };
+    return (t, mv, dir) => { for (const l of legs) l.step(t, mv, dir); };
   },
 });
