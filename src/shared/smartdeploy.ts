@@ -1,18 +1,24 @@
 // Smart deployment: how a sensible human lays out a mixed army (Mechabellum-style), used by the balance tooling on
 // both sides so prices are measured against smart play, not naive placement.
 //
-//   front (y = 0)  ── chaff screen: cheap swarms spread wide, a short gap ahead of the armour (soaks the first volleys,
-//                     snipers and splash meant for the armour)
+// Timed against the clash (clashPoint: where and when our armour line meets the enemy front), so every role spends as
+// little time under fire and as much time firing as it can:
+//
+//   front (y = 0)  ── chaff screen: cheap swarms spread wide just ahead of the armour, ESCORTING it (chaff is fast:
+//                     left to itself it ran across alone and died before the armour arrived); it keeps by the armour
+//                     and goes for whatever the armour is about to fight, so both hit the enemy as one wave
 //                  ── armour line, front and centre; chaff-clear (riot) units level with its ends and right behind it,
-//                     in reach of the enemy screen when the lines meet; melee on the flanks (held 3 s, so they close in
-//                     after the armour engages)
+//                     escorting it too, so they reach the enemy chaff when the lines meet; melee on the flanks, held
+//                     until they would arrive just after the armour engages
 //                  ── fast / fragile ranged units and support behind the armour (escorting it)
-//   back           ── artillery and long guns spread out against splash; aircraft held back (6 s delay) so they come in
-//                     after the ground lines engage instead of meeting fresh anti-air first
+//   back           ── artillery as far back as it can sit and still reach the enemy front at the clash (walking up in
+//                     time if it moves), spread against splash; aircraft at the back, held so they come in just after
+//                     the ground lines engage instead of meeting fresh anti-air first
 import { blockDims, blockInZone, blocksOverlap, DEPLOY_D, DEPLOY_W, hasSpacing, MAX_SPACING, type BlockShape } from './grid.ts';
 import { MODULE_BY_ID } from './parts.ts';
 import { computeStats, weaponDps } from './stats.ts';
-import type { Design, ModuleDef, Placement } from './types.ts';
+import type { Design, ModuleDef, Placement, UnitStats } from './types.ts';
+import { START_DELAYS } from './types.ts';
 
 export type DeployRole = 'chaff' | 'armor' | 'riot' | 'melee' | 'ranged' | 'support' | 'artillery' | 'air';
 
@@ -57,6 +63,60 @@ export interface DeployOpts {
   round?: number;
   /** lateral centre of the formation (default: the middle of the zone, or the existing armour line's middle) */
   centre?: number;
+  /** what is known of the enemy front (speed, row in its zone, gun reach); default: a mirror of our armour line */
+  foe?: { speed?: number; row?: number; range?: number };
+}
+
+/** rows of no man's land between the two deploy zones (FIELD_H - 2 * DEPLOY_D) */
+const NO_MANS = 44;
+/** the start delay (START_DELAYS) nearest to `t` seconds */
+export function nearestDelay(t: number): number {
+  let best = 0;
+  for (const d of START_DELAYS) if (Math.abs(d - t) < Math.abs(best - t)) best = d;
+  return best;
+}
+
+/** When and where the front lines meet, in this side's local rows (y = 0 our zone's front, negative = no man's land
+ *  toward the enemy, whose zone front is at y = -NO_MANS): our armour line (row `armorY`, speed `va`, guns reaching
+ *  `r`) walks toward an enemy front assumed to mirror it (same speed, row and reach) unless told otherwise. */
+export interface Clash { t: number; enemyY: number }
+export function clashPoint(armorY: number, va: number, r: number, foe: { speed?: number; row?: number; range?: number } = {}): Clash {
+  const vb = foe.speed ?? va, eRow = foe.row ?? armorY, reach = Math.max(r, foe.range ?? r);
+  const gap = NO_MANS + armorY + eRow;
+  const t = Math.max(0, gap - reach) / Math.max(0.3, va + vb);
+  return { t, enemyY: -NO_MANS - eRow + vb * t };
+}
+
+/** The formation's clock: the clash (clashPoint) of an armour line at row `armorY` (its slowest hull sets the pace,
+ *  its median gun the reach; no armour: the other ground blocks lead), and `arrive`, the start delay that brings a
+ *  unit of speed v from row y to the enemy front `lag` s after the lines meet. */
+export function formationClock(armour: UnitStats[], others: UnitStats[], armorY: number, foe?: DeployOpts['foe']) {
+  const front = armour.length ? armour : others.filter((x) => !x.flying && !x.isStatic);
+  // the line moves at its slowest hull, ~20% slower in practice with its escorts crowding round it
+  const va = 0.8 * (front.length ? Math.min(...front.map((x) => x.speed)) : 1.4);
+  const ranges = front.map((x) => x.range).sort((a, b) => a - b);
+  const clash = clashPoint(armorY, va, Math.min(14, ranges.length ? ranges[Math.floor(ranges.length / 2)] : 8), foe?.speed !== undefined ? { ...foe, speed: 0.8 * foe.speed } : foe);
+  const arrive = (v: number, y: number, lag: number) => nearestDelay(clash.t + lag - Math.max(0, y - clash.enemyY) / Math.max(0.3, v));
+  return { clash, arrive };
+}
+
+/** aircraft reach the enemy front this long after the lines meet (not into fresh anti-air); melee a moment after the
+ *  armour engages */
+export const AIR_LAG = 6, MELEE_LAG = 1;
+
+/** Re-time the formation's start delays for a whole board (the armour line may have grown or slowed since a block
+ *  was placed): uid -> delay for every aircraft and melee block. */
+export function formationDelays(board: { d: Design; p: Placement }[], foe?: DeployOpts['foe']): Map<number, number> {
+  const out = new Map<number, number>();
+  const roles = board.map((b) => deployRole(b.d)), st = board.map((b) => computeStats(b.d));
+  const arm = board.filter((_, i) => roles[i] === 'armor');
+  const armorY = arm.length ? Math.min(...arm.map((b) => b.p.y)) : 0;
+  const { arrive } = formationClock(st.filter((_, i) => roles[i] === 'armor'), st.filter((_, i) => roles[i] !== 'air' && roles[i] !== 'artillery' && roles[i] !== 'support'), armorY, foe);
+  board.forEach((b, i) => {
+    if (roles[i] === 'air') out.set(b.p.uid, arrive(st[i].speed, b.p.y, AIR_LAG));
+    else if (roles[i] === 'melee') out.set(b.p.uid, arrive(st[i].speed, armorY, MELEE_LAG));
+  });
+  return out;
 }
 
 /** Lay out `specs` (each n blocks of a design) for one side in local deploy-zone coordinates (y = 0 is the front).
@@ -65,21 +125,13 @@ export function smartDeploy(specs: DeploySpec[], uid0 = 1): Placement[] {
   return smartDeployBlocks(specs.flatMap((s) => Array.from({ length: s.n }, () => ({ d: s.d }))), { uid0 });
 }
 
-/** The formation's orders for a role: lines hold their spread, melee waits a moment, aircraft wait until the ground
- *  lines have met (ranged / support escorts are assigned by smartDeployBlocks, which knows the armour blocks). */
-export function roleOrders(role: DeployRole): Partial<Placement> {
-  if (role === 'armor' || role === 'chaff') return { hold: true };
-  if (role === 'melee') return { delay: 3 };
-  if (role === 'air') return { delay: 6 };
-  return {};
-}
-
 /** smartDeploy for single blocks, optionally around blocks already on the board (incremental per-round deploys):
  *  existing blocks keep their spots and anchor the lines (the armour line's row and centre, the riot / melee sides
- *  already taken, the artillery already in the back row). Returns the placed new blocks; unplaceable ones are left out. */
+ *  already taken, the other guns new artillery spreads away from). Returns the placed new blocks; unplaceable ones are
+ *  left out. */
 export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Placement[] {
-  type B = { d: Design; role: DeployRole; shape: BlockShape; uid?: number; sp?: number };
-  const occ: { x: number; y: number; spacing?: number; rot?: boolean; shape: BlockShape; role: DeployRole; uid: number }[] = [];
+  type B = { d: Design; role: DeployRole; shape: UnitStats; uid?: number; sp?: number };
+  const occ: { x: number; y: number; spacing?: number; rot?: boolean; shape: UnitStats; role: DeployRole; uid: number }[] = [];
   const out: Placement[] = [];
   let uid = o.uid0 ?? 1;
   const round = o.round ?? 1;
@@ -152,23 +204,37 @@ export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Pla
   if (ext) centre = (ext.l + ext.r) / 2;
   const armorW = Math.max(16, ext ? ext.r - ext.l : 0);
   const armorDepth = exDepth(occ.filter((q) => q.role === 'armor'));
-  // the chaff screen: directly in front of the armour, at least as wide as the armour line
-  const chaffGap = chaff.length > 1 ? Math.max(1, (armorW - width(chaff, 1, 0)) / (chaff.length - 1)) : 1;
-  line(chaff, 0, 1, Math.min(4, chaffGap), () => ({ hold: true }), centre, 6);
-  // chaff clear: level with the armour line's ends, then right behind it
   const hasArmor = armorUids.length > 0;
+  // timing: when / where our armour line meets the enemy front (clashPoint; a mirror enemy unless o.foe says otherwise)
+  const { clash, arrive } = formationClock(occ.filter((q) => q.role === 'armor').map((q) => q.shape),
+    [...occ, ...blocks].filter((q) => q.role !== 'air' && q.role !== 'artillery' && q.role !== 'support').map((q) => q.shape), armorY, o.foe);
+  /** the armour block nearest x (escort target) */
+  const nearArmor = (x: number) => {
+    let best = -1, bd = Infinity;
+    for (const q of occ) if (q.role === 'armor') { const dd = Math.abs(q.x + blockDims(q.shape, q.spacing, q.rot).w / 2 - x); if (dd < bd) { bd = dd; best = q.uid; } }
+    return best;
+  };
+  // the chaff screen: directly in front of the armour, at least as wide as the armour line. Chaff is fast: it escorts
+  // the armour (keeps by it and goes for whatever the armour is about to fight), so it meets the enemy just ahead of
+  // the armour instead of running across alone and dying before the armour gets there
+  const chaffGap = chaff.length > 1 ? Math.max(1, (armorW - width(chaff, 1, 0)) / (chaff.length - 1)) : 1;
+  const chaffP = line(chaff, 0, 1, Math.min(4, chaffGap), () => ({ hold: true }), centre, 6);
+  if (hasArmor) for (const p of chaffP) p.escort = nearArmor(p.x + 1);
+  // chaff clear: level with the armour line's ends, then right behind it, escorting the armour (they reach the enemy
+  // chaff when the lines meet, not ahead of the armour)
   const behindArmor = armorY + Math.max(2, armorDepth) + 1;
   const riot0 = ex('riot').length;
   riot.forEach((b, j) => {
     const i = j + riot0, side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
-    if (k === 0 && hasArmor) put(b, centre + side * (armorW / 2 + 1) - (side < 0 ? dimsOf(b, 1).w : 0), armorY, {}, 1);
-    else put(b, centre + side * 4 * k, hasArmor ? behindArmor : armorY, {}, 1);
+    const p = k === 0 && hasArmor ? put(b, centre + side * (armorW / 2 + 1) - (side < 0 ? dimsOf(b, 1).w : 0), armorY, {}, 1)
+      : put(b, centre + side * 4 * k, hasArmor ? behindArmor : armorY, {}, 1);
+    if (p && hasArmor) p.escort = nearArmor(p.x);
   });
   // melee on the flanks, held a moment so the armour engages first
   const melee0 = ex('melee').length;
   melee.forEach((b, j) => {
     const i = j + melee0, side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
-    put(b, side < 0 ? 2 + 6 * k : DEPLOY_W - 2 - dimsOf(b, 1).w - 6 * k, armorY, { delay: 3 }, 1);
+    put(b, side < 0 ? 2 + 6 * k : DEPLOY_W - 2 - dimsOf(b, 1).w - 6 * k, armorY, { delay: arrive(b.shape.speed, armorY, MELEE_LAG) }, 1);
   });
   // fast / fragile ranged units and support behind the armour, escorting it
   let esc = ex('ranged').length;
@@ -176,22 +242,30 @@ export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Pla
   const rangedY = (hasArmor ? behindArmor : armorY) + (riot.length + riot0 > 2 ? 3 : 0);
   line(ranged, rangedY, 1, 1, escort, centre);
   line(support, rangedY + depth(ranged, 1) + 1, 0, 2, () => (armorUids.length ? { escort: armorUids[0] } : {}), centre);
-  // artillery spread across the back (gaps against splash), aircraft held back behind it
+  // artillery: as far back as it can stay while still reaching the enemy front when the lines meet (a mover walks up
+  // until its guns reach and parks there, so it only needs to get there in time; an emplacement must already reach,
+  // clear of its minimum range), always behind the armour; guns spread apart against splash. Aircraft at the back.
   const backY = DEPLOY_D - Math.max(2, depth(arty, 1), exDepth(ex('artillery')));
-  const exArty = ex('artillery');
-  if (!exArty.length) line(arty, backY, 1, Math.max(2, Math.min(8, (DEPLOY_W - width(arty, 1, 0)) / Math.max(1, arty.length + 1))), () => ({}), DEPLOY_W / 2);
-  else for (const b of arty) {
-    // the back-row spot farthest from the other guns (splash), near the middle
-    const sp = spOf(b, 1), { w, h } = blockDims(b.shape, sp);
-    let bx = -1, by = backY, bs = -Infinity;
-    for (let yy = Math.max(0, backY - 3); yy + h <= DEPLOY_D; yy++) for (let xx = 0; xx + w <= DEPLOY_W; xx++) {
+  const artyY = (b: B) => {
+    const R = b.shape.range - 1.5, mv = b.shape.isStatic ? 0 : b.shape.speed;
+    const minR = Math.max(0, ...b.d.mounts.map((id) => (id ? MODULE_BY_ID.get(id)?.minRange ?? 0 : 0)));
+    const h = dimsOf(b, 1).h;
+    let y = Math.floor(clash.enemyY + R + mv * clash.t);
+    if (mv === 0) y = Math.max(y, Math.ceil(clash.enemyY + minR + 1));
+    return Math.max(Math.min(DEPLOY_D - h, hasArmor ? behindArmor : armorY + 3), Math.min(DEPLOY_D - h, y));
+  };
+  for (const b of arty) {
+    const ty = artyY(b), sp = spOf(b, 1), { w, h } = blockDims(b.shape, sp);
+    let bx = -1, by = ty, bs = -Infinity;
+    for (let yy = ty; yy + h <= DEPLOY_D; yy++) for (let xx = 0; xx + w <= DEPLOY_W; xx++) {
       if (!fits(xx, yy, b.shape, sp)) continue;
-      const gap = Math.min(12, ...occ.filter((q) => q.role === 'artillery').map((q) => Math.abs(q.x + blockDims(q.shape, q.spacing, q.rot).w / 2 - xx - w / 2)));
-      const s = gap - 0.08 * Math.abs(xx + w / 2 - DEPLOY_W / 2) - 1.5 * Math.abs(yy - backY);
+      const gap = Math.min(12, ...occ.filter((q) => q.role === 'artillery').map((q) => Math.hypot(q.x + blockDims(q.shape, q.spacing, q.rot).w / 2 - xx - w / 2, 0.5 * (q.y - yy))));
+      const s = gap - 0.08 * Math.abs(xx + w / 2 - DEPLOY_W / 2) - 1.5 * (yy - ty);
       if (s > bs) { bs = s; bx = xx; by = yy; }
     }
     if (bx >= 0) put(b, bx, by, {}, sp);
   }
-  line(air, Math.max(0, backY - depth(air, 1) - 1), 1, 2, () => ({ delay: 6 }), DEPLOY_W / 2);
+  const airY = Math.max(0, backY - depth(air, 1) - 1);
+  line(air, airY, 1, 2, (b) => ({ delay: arrive(b.shape.speed, airY, AIR_LAG) }), DEPLOY_W / 2);
   return out;
 }

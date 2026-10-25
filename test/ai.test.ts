@@ -5,7 +5,8 @@ import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateD
 import { DEPLOY_D, DEPLOY_W, blockDims, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
 import { computeStats, defaultOrders } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
-import { deployRole } from '../src/shared/smartdeploy.ts';
+import { deployRole, formationDelays } from '../src/shared/smartdeploy.ts';
+import { START_DELAYS } from '../src/shared/types.ts';
 
 test('aiDeck is valid, deterministic and covers roles', () => {
   for (const diff of ['easy', 'normal', 'hard'] as AiDifficulty[]) {
@@ -192,7 +193,18 @@ test('normal / hard AI: decks carry chaff clear; every round lays out in the sma
       const deck = m.players[side].deck, byId = new Map(deck.map((d) => [d.id, d] as const));
       const board = rec.boards[side];
       const role = (p: Placement) => deployRole(byId.get(p.designId)!);
-      for (const p of board.filter((q) => role(q) === 'air')) assert.ok((p.delay ?? 0) >= 6, `aircraft delayed (seed ${seed} r${rec.round})`);
+      // aircraft / melee held until just after the clash (smartdeploy.ts formationDelays). Later rounds also time
+      // against the enemy front the AI can see, so only round 1 (nothing seen yet) is checked against the mirror clock
+      const timed = formationDelays(board.map((p) => ({ d: byId.get(p.designId)!, p })));
+      for (const p of board.filter((q) => role(q) === 'air' || role(q) === 'melee')) {
+        assert.ok((START_DELAYS as readonly number[]).includes(p.delay ?? 0), 'legal delay');
+        if (rec.round === 1) assert.ok(Math.abs(START_DELAYS.indexOf((p.delay ?? 0) as never) - START_DELAYS.indexOf(timed.get(p.uid) as never)) <= 1, `aircraft / melee timed to the clash (seed ${seed})`);
+      }
+      // chaff and riot escort the armour when there is some
+      if (board.some((q) => role(q) === 'armor')) for (const p of board.filter((q) => role(q) === 'chaff' || role(q) === 'riot')) {
+        const e = board.find((q) => q.uid === p.escort);
+        assert.ok(e && role(e) === 'armor', `chaff / riot escorts the armour (seed ${seed} r${rec.round})`);
+      }
       const armour = board.filter((q) => role(q) === 'armor'), arty = board.filter((q) => role(q) === 'artillery');
       if (armour.length && arty.length) assert.ok(Math.max(...arty.map((q) => q.y)) > Math.min(...armour.map((q) => q.y)), 'artillery behind the armour');
     }
