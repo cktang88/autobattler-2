@@ -170,18 +170,27 @@ test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone
   }
 });
 
-test('hard AI mid-match decision with big armies stays under 1.5s', () => {
+test('hard AI mid-match decision with big armies stays under 1.5s (on a laptop)', () => {
   const m = newMatch('h', 'ai', 77, newPlayer('A', aiDeck(77, 'hard'), true), newPlayer('B', aiDeck(78, 'hard'), true));
+  // machine speed: the hard AI's search budget is in laptop ms (~1.1 us per sim unit per tick), so a slower or busy
+  // machine (CI containers run ~2x slower) gets a proportionally longer limit; never a shorter one
+  let simMs = 0, unitTicks = 0;
   for (let r = 0; r < 4 && m.status === 'deploy'; r++) {
     for (const side of [0, 1] as const) applyDeploy(m, side, aiDeploy(m, side, 'normal'));
+    const sides = ([0, 1] as const).map((s) => ({ designs: m.players[s].deck, units: m.players[s].board }));
+    const n = sides.reduce((a, sd) => a + sd.units.reduce((b, u) => b + computeStats(sd.designs.find((d) => d.id === u.designId)!).squad, 0), 0);
+    const t0 = performance.now();
     resolveRound(m);
+    simMs += performance.now() - t0;
+    unitTicks += n * (m.history.at(-1)?.result.ticks ?? 0);
   }
   if (m.status !== 'deploy') return;
+  const slow = unitTicks ? Math.max(1, simMs / unitTicks / 0.0011) : 1;
   const t = performance.now();
   const act = aiDeploy(m, 0, 'hard');
   const ms = performance.now() - t;
   assert.equal(validateDeploy(m, 0, act), null);
-  assert.ok(ms < 1500, `took ${ms}ms`);
+  assert.ok(ms < 1500 * slow, `took ${ms}ms (machine ${slow.toFixed(2)}x a laptop)`);
 });
 
 test('normal / hard AI: decks carry chaff clear; every round lays out in the smart formation', () => {
