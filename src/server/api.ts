@@ -8,6 +8,7 @@ import {
 } from '../shared/match.ts';
 import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
+import { ChatHub } from './chat.ts';
 import { GlobalAiPool, REPORT_BODY_LIMIT, poolLog, validateReport } from './aipool.ts';
 import { hashToken, nameKey, type MatchRecord, type PasswordHash, type PlayerRecord, type Store } from './store.ts';
 import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
@@ -90,6 +91,8 @@ export class Api {
   readonly aiPool: GlobalAiPool;
   /** long-poll waiters per match id, woken whenever that match changes */
   private readonly waiters = new Map<string, Set<() => void>>();
+  /** in-match chat (server/chat.ts): in memory only */
+  readonly chat = new ChatHub();
 
   constructor(store: Store, opts: ApiOptions = {}) {
     this.store = store;
@@ -156,6 +159,8 @@ export class Api {
         if (d === 'join' && M === 'POST') return this.join(c, b);
         if (d === 'deploy' && M === 'POST') return this.deploy(c, b);
         if (d === 'forfeit' && M === 'POST') return this.forfeit(c, b);
+        if (d === 'chat' && M === 'GET') return this.getChat(c, b);
+        if (d === 'chat' && M === 'POST') return this.postChat(c, b);
       }
     }
     throw new HttpError(404, 'Not found');
@@ -446,12 +451,44 @@ export class Api {
     if (r.match.status === 'waiting') {
       this.store.removeMatch(r);
       this.wake(r.match.id);
+      this.chat.wake(r.match.id);
       return { ok: true, cancelled: true };
     }
     forfeitSide(r, side);
     this.store.save();
     this.wake(r.match.id);
     return { ok: true, side, match: redactFor(r.match, side), summary: summarize(r, side) };
+  }
+
+  // ---------------------------------------------------------------- chat (only the two players of a match)
+
+  /** The match and the caller's side in it; anyone else (or a match that is gone) gets a 404, like get(). */
+  private chatMatch(c: Ctx, id: string): { r: MatchRecord; side: Side; p: PlayerRecord } {
+    const p = this.auth(c);
+    const r = this.store.matches.get(id);
+    const side = r ? sideOf(r, p.id) : null;
+    if (!r || side == null) throw new HttpError(404, 'No such match');
+    return { r, side, p };
+  }
+
+  /** ?since=<last id seen>&wait=ms long-polls for newer messages; without since, all kept messages at once. */
+  private async getChat(c: Ctx, id: string) {
+    this.chatMatch(c, id);
+    const since = c.query.has('since') ? Number(c.query.get('since')) : undefined;
+    const out = await this.chat.poll(id, since, Number(c.query.get('wait')) || 0, (fn) => {
+      c.req.once('close', fn);
+      return () => c.req.off('close', fn);
+    });
+    // the match may have been removed while we waited
+    if (!this.store.matches.has(id)) throw new HttpError(404, 'No such match');
+    return out;
+  }
+
+  private postChat(c: Ctx, id: string) {
+    const { r, side, p } = this.chatMatch(c, id);
+    if (r.owners[1] == null) throw new HttpError(409, 'No opponent to chat with yet');
+    const msg = this.chat.post(id, p.id, side, obj(c.body).text);
+    return { ok: true, msg };
   }
 
   // ---------------------------------------------------------------- helpers
@@ -584,6 +621,7 @@ export class Api {
     this.loginLimiter.prune();
     this.failLimiter.prune();
     this.reportLimiter.prune();
+    this.chat.prune((id) => this.store.matches.has(id));
   }
 }
 

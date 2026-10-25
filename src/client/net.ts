@@ -356,3 +356,20 @@ export async function reportAiMatch(match: MatchState): Promise<boolean> {
     return st === 400 || st === 409 || st === 413;
   }
 }
+
+// ---- in-match chat (server: src/server/chat.ts) ----
+
+/** Mirrors ChatMessage in src/server/chat.ts. */
+export interface ChatMessage { id: number; side: Side; text: string; at: number }
+
+/** Post a chat line to a PvP match (the server trims / cleans it and caps it at 140 characters). */
+export async function postChat(matchId: string, text: string): Promise<ChatMessage> {
+  return (await call<{ msg: ChatMessage }>('POST', `/matches/${encodeURIComponent(matchId)}/chat`, { text })).msg;
+}
+
+/** Chat lines newer than `since` (all kept ones when null). With `wait` the server holds the request until one
+ *  arrives (or ~20 s pass). `last` is the id to pass as `since` next time. */
+export async function pollChat(matchId: string, since: number | null, wait: number, signal?: AbortSignal): Promise<{ msgs: ChatMessage[]; last: number }> {
+  const q = since == null ? '' : `?since=${since}&wait=${wait}`;
+  return call('GET', `/matches/${encodeURIComponent(matchId)}/chat${q}`, undefined, signal);
+}

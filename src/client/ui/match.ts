@@ -28,6 +28,7 @@ import { playerName } from './vsai.ts';
 import { designInfo, type DesignInfo } from './deckstats.ts';
 import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
 import { openRoundStats } from './roundstats.ts';
+import { mountChat } from './chat.ts';
 import { secondaryLeft } from '../render/camera.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
@@ -360,6 +361,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const overlayEl = h('div');
   const zoomBar = zoomButtons(view);
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
+  // online PvP only (null vs the AI): chat with the opponent, bottom left above the range / speed bars
+  const chat = mountChat(driver, fieldwrap, [rangeBar, speedbar]);
 
   const el = h('div.screen.match', null, topbar, h('div.mbody', null, fieldwrap, sideEl));
   // a button clicked with the mouse must not keep keyboard focus: Space / Enter would then re-press it (deselecting
@@ -1750,6 +1753,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       hideTip();
       fieldwrap.removeEventListener('wheel', onWheel, true);
       unsub();
+      chat?.destroy();
       driver.stop();
       try { view.destroy(); } catch { /* */ }
       minimap.destroy();
