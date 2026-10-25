@@ -1058,3 +1058,22 @@
 /* account sync problem (over the design cap / upload refused): hover for the reason */
 .garage .g-syncwarn { flex: none; padding: 4px 8px; font-family: var(--head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.06em; color: #ffd7d0; background: #6d1f1a; cursor: help; white-space: nowrap; }
 .garage .g-syncwarn[hidden] { display: none; }
+
+/* ---- weapon cap: "Weapons 2/2" counter, utility-only sockets, dimmed weapon tiles at the cap ---- */
+.garage .g-wcount { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: var(--plate);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); font-size: 13px; letter-spacing: 0.02em; align-self: stretch; }
+.garage .g-wcount b { font-size: 16px; color: var(--teal); font-variant-numeric: tabular-nums; }
+.garage .g-wcount.full { box-shadow: inset 0 0 0 2px var(--amber); }
+.garage .g-wcount.full b { color: var(--amber); }
+.garage .g-wcount-note { font-size: 11px; color: var(--amber); text-transform: uppercase; letter-spacing: 0.06em; }
+.garage .g-lslot.utilonly .g-lslot-name { color: var(--amber); font-style: italic; }
+.garage .g-sock.utilonly { opacity: 0.75; }
+.garage .g-sock.utilonly .g-sock-plus { color: var(--amber); }
+.garage .g-ptile.atcap { opacity: 0.45; filter: saturate(0.4); }
+.garage .g-ptile.atcap:hover, .garage .g-ptile.atcap.pin { opacity: 0.8; }
+.garage .g-ptile-cap { display: block; font-size: 10px; color: var(--amber); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ---- trade-off modules: explicit gains (green) and costs (red) on every module card ---- */
+.garage .g-tr { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin: 2px 4px 0 0; font-weight: 600; }
+.garage .g-tr.plus { color: #7ee08a; background: rgba(80, 200, 100, 0.12); }
+.garage .g-tr.minus { color: #ff7a6e; background: rgba(240, 80, 70, 0.12); }

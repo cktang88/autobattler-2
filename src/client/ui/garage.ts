@@ -13,11 +13,11 @@ import { drawUnitPreview, type PreviewGeom } from '../render/field.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
 import { randomDesignName } from '../../shared/names.ts';
 import { DECK_SIZE } from '../../shared/match.ts';
-import { slotError } from '../../shared/stats.ts';
+import { slotError, weaponCount } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles, weaponCap } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { AIR_ROLE_INFO, MAX_LOAD, standoffOrbit, PARTS_WEIGHT, POWER_K, PRICE_DIV, TEAM_VALUE, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { AIR_ROLE_INFO, MAX_LOAD, standoffOrbit, PARTS_WEIGHT, POWER_K, PRICE_DIV, TEAM_VALUE, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, loadTurnFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { TARGETS, THREATS, intelNumbers, percentile, referenceMeans, runMatchups, type IntelNumbers, type Matchup } from '../../shared/intel.ts';
@@ -721,8 +721,18 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const cls = chassis().mounts[i];
     if (!cls) return 'No such socket';
     if (!fitsMount(cls, mod.mount)) return `Needs a size ${ML[mod.mount]} socket (this is ${ML[cls]})`;
-    return slotError(chassis(), draft.mobility, i, mod);
+    const se = slotError(chassis(), draft.mobility, i, mod);
+    if (se) return se;
+    // the hull's weapon cap: a weapon may replace a weapon, but not take a utility / empty socket once the cap is reached
+    const here = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
+    if (mod.kind === 'weapon' && here?.kind !== 'weapon' && atWeaponCap()) {
+      const cap = weaponCap(chassis());
+      return `Weapon limit reached (${cap}/${cap}): the ${chassis().name} carries at most ${cap} weapons — this socket takes utilities only`;
+    }
+    return null;
   }
+  /** the draft already carries as many weapons as its hull allows */
+  const atWeaponCap = () => weaponCount(draft) >= weaponCap(chassis());
 
   /** why `mod` fits no socket of the current chassis + mobility (null = it fits somewhere) */
   function noFitReason(mod: ModuleDef): string | null {
@@ -1406,10 +1416,12 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const zone = s.load > MAX_LOAD ? 'red' : s.load > 1 ? 'amber' : 'green';
     const f = loadSpeedFactor(s.load);
     const spd = Math.round((f - 1) * 100);
+    const trn = Math.round((loadTurnFactor(s.load) - 1) * 100);
     const mob = MOBILITY_BY_ID.get(draft.mobility);
+    const sg = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
     const speedNote = s.isStatic ? 'Immobile emplacement'
       : s.load > MAX_LOAD ? 'Overloaded — illegal'
-      : spd >= 0 ? `+${spd}% speed` : `${spd}% speed`;
+      : `${sg(spd)}% speed · ${sg(trn)}% turn`;
     loadEl.className = `g-load ${zone}`;
     loadEl.style.setProperty('--z1', `${(100 / BAR_MAX).toFixed(2)}%`);
     loadEl.style.setProperty('--z2', `${(MAX_LOAD * 100 / BAR_MAX).toFixed(2)}%`);
@@ -1430,11 +1442,18 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   /** Socket strip under the stage: a big, list-shaped twin of the on-hull sockets (also a drop target). */
   function renderLoadout() {
     const c = chassis();
-    loadoutEl.replaceChildren(...c.mounts.map((cls, i) => {
+    const nw = weaponCount(draft), cap = weaponCap(c), full = nw >= cap;
+    // the weapon cap, at a glance: "Weapons 2/2" next to the sockets (amber when full: the rest take utilities only)
+    const counter = h('div.g-wcount', {
+      role: 'status', class: full ? 'full' : null, 'data-fk': 'wcount',
+      title: `The ${c.name} carries at most ${cap} weapons; its other sockets take utilities, armour and shields`,
+    }, icon('target'), h('span', null, 'Weapons '), h('b', null, `${nw}/${cap}`), full ? h('span.g-wcount-note', null, 'limit reached') : null);
+    loadoutEl.replaceChildren(counter, ...c.mounts.map((cls, i) => {
       const cur = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
+      const utilOnly = !cur && full;
       const card = h('div.g-lslot', {
         role: 'listitem', 'data-sock': String(i),
-        class: [cur ? `k-${cur.kind}` : 'empty', activeSlot === i ? 'active' : '', isEdge(i) ? 'edge' : ''].join(' '),
+        class: [cur ? `k-${cur.kind}` : 'empty', utilOnly ? 'utilonly' : '', activeSlot === i ? 'active' : '', isEdge(i) ? 'edge' : ''].join(' '),
         style: cur ? { '--cat': moduleCategoryColor(cur.id) } : null,
       },
       h('button.g-lslot-main', {
@@ -1446,7 +1465,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('span.g-sockno', null, String(i + 1)),
       h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls]),
       cur ? partIcon('module', cur.id, 30, true) : h('span.g-lslot-empty', null, icon('plus')),
-      h('span.g-lslot-name', null, cur ? cur.name : 'Empty'),
+      h('span.g-lslot-name', null, cur ? cur.name : utilOnly ? 'Utility only' : 'Empty'),
       isEdge(i) ? h('span.g-lslot-edge', { title: 'Edge mount: fits melee weapons' }, '\u2694 edge') : null,
       ),
       cur ? h('button.g-lslot-x', { type: 'button', title: `Unmount ${cur.name}`, 'aria-label': `Unmount ${cur.name} from socket ${i + 1}`, 'data-fk': `unmount-${i}`, onclick: () => equip(i, null) }, icon('x')) : null,
@@ -1463,9 +1482,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       const cur = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
       const b = h('button.g-sock', {
         type: 'button', 'data-sock': String(i), tabindex: '-1',
-        class: [cur ? 'full' : 'empty', `c${cls}`, activeSlot === i ? 'active' : '', isEdge(i) ? 'edge' : ''].join(' '),
+        class: [cur ? 'full' : 'empty', !cur && atWeaponCap() ? 'utilonly' : '', `c${cls}`, activeSlot === i ? 'active' : '', isEdge(i) ? 'edge' : ''].join(' '),
         style: cur ? { '--cat': moduleCategoryColor(cur.id) } : null,
-        title: (cur ? `Socket ${i + 1} (size ${ML[cls]}): ${cur.name}` : `Socket ${i + 1}: empty size ${ML[cls]} socket`) + (isEdge(i) ? ' — Edge mount: fits melee weapons' : ''),
+        title: (cur ? `Socket ${i + 1} (size ${ML[cls]}): ${cur.name}` : `Socket ${i + 1}: empty size ${ML[cls]} socket${atWeaponCap() ? ' — weapon limit reached: utility only' : ''}`) + (isEdge(i) ? ' — Edge mount: fits melee weapons' : ''),
         'aria-label': cur ? `Socket ${i + 1}, ${cur.name}` : `Socket ${i + 1}, empty size ${ML[cls]}`,
         // the 2nd click of a double-click must not toggle the socket straight back off
         onclick: (e: MouseEvent) => { if (!suppressClick && e.detail < 2) focusSlot(i); },
@@ -1616,7 +1635,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const shown = pool.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
       .sort((a, b) => a.size - b.size || a.weight - b.weight);
     const tiles = shown.map((c) => partTile({
-      kind: 'chassis', id: c.id, name: c.name, sub: `${footDims(c)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')}`,
+      kind: 'chassis', id: c.id, name: c.name, sub: `${footDims(c)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')} · ${weaponCap(c)} weapons`,
       trait: traitLine(c.traits),
       cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `ch-${c.id}`,
       onclick: () => pickChassis(c.id),
@@ -1683,16 +1702,19 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const tile = (m: ModuleDef) => {
       const fitsActive = activeSlot !== null && !slotBlock(m, activeSlot);
       const fh = fitsHull(m);
+      // weapon limit reached: weapon tiles dim (they can still replace a mounted weapon)
+      const capped = m.kind === 'weapon' && atWeaponCap();
       const t = partTile({
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
-        cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
-        fk: `mod-${m.id}`, title: fh ? (m.category === 'melee' ? 'Melee: fits edge mounts only' : undefined) : noFitReason(m) ?? undefined,
+        cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', capped ? 'atcap' : '', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
+        fk: `mod-${m.id}`, title: !fh ? noFitReason(m) ?? undefined : capped ? `Weapon limit reached (${weaponCap(chassis())}/${weaponCap(chassis())}): it can only replace a mounted weapon` : m.category === 'melee' ? 'Melee: fits edge mounts only' : undefined,
         onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
         ondblclick: () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
       });
       // penetration + damage type at a glance on weapon tiles
       if (m.kind === 'weapon') t.querySelector('.g-ptile-sub')?.append(' ', apBadge(m), ' ', damageKindBadges(m));
+      if (capped) t.append(h('span.g-ptile-cap', null, 'weapon limit reached'));
       if (fh) armDrag(t, () => ({ mod: m.id, from: null }));
       return t;
     };
@@ -1700,7 +1722,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     let hiddenN = 0;
     for (const catId of cats) {
       const def = CATEGORIES.find((k) => k.id === catId);
-      const mods = MODULES.filter((m) => m.category === catId && ((!q && counts.has(m.id)) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
+      const mods = MODULES.filter((m) => m.category === catId && (!m.retired || counts.has(m.id)) && ((!q && counts.has(m.id)) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
         .sort((a, b) => a.weight - b.weight || a.cost - b.cost);
       if (!mods.length) continue;
       const ok = mods.filter(fitsHull), no = mods.filter((m) => !fitsHull(m));
@@ -1837,7 +1859,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('div.g-kstats', null,
         kstat(sq > 1 ? 'Hull each' : 'Hull', String(c.hp), 'hp'),
         kstat('Armor', String(c.armor)),
-        kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}`, title: sizeTip(m) }, ML[m]))))),
+        kstat('Sockets', h('span.g-chips', null, ...c.mounts.map((m) => h('span.g-chip', { class: `c${m}`, title: sizeTip(m) }, ML[m])))),
+        kstat('Weapons', String(weaponCap(c)), 'max')),
       h('p.g-insp-desc', null, c.desc),
       next ? compare(next, 'If you switch') : null,
       h('div.g-insp-act', null, cur

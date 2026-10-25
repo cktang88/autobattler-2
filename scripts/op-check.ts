@@ -6,6 +6,7 @@
 //      OP_DESIGNS='[{"id":"x","chassis":"..","mobility":"..","mounts":[..]}]' adds designs.
 import { readFileSync } from 'node:fs';
 import { Battle } from '../src/shared/sim/battle.ts';
+import { smartDeploy } from '../src/shared/smartdeploy.ts';
 import { AP_VALUE, MODULE_CAL, TOUGH, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { blockDims, DEPLOY_W, DEPLOY_D, rectsOverlap } from '../src/shared/grid.ts';
@@ -24,12 +25,12 @@ export const CANDIDATES: Design[] = [
   D('swarmies', 'interceptor', 'jet', ['twinmg', 'mg']),
   D('hornet', 'gunship', 'rotor', ['sam', 'swarm']),
   D('pokiesA', 'mantis', 'legs', ['atgm', 'aamissile']),
-  D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']),
-  D('deltabomb', 'deltawing', 'jet', ['bombs', 'mg', 'mg']),
-  D('heavybomber', 'bomberhull', 'gravlift', ['bombs', 'bombs', 'heavybomb']),
-  D('clusterjet', 'stratobomber', 'jet', ['clusterbombs', 'clusterbombs', 'heavybomb', 'mg']),
-  D('fighterjet', 'strikejet', 'jet', ['aamissile', 'aamissile', 'mg']),
-  D('harasserjet', 'deltawing', 'jet', ['rockets', 'mg', 'mg']),
+  D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'plateM', 'shieldL']),
+  D('deltabomb', 'deltawing', 'jet', ['bombs', 'mg', 'shieldL']),
+  D('heavybomber', 'bomberhull', 'gravlift', ['bombs', 'heavybomb', 'plateM']),
+  D('clusterjet', 'stratobomber', 'jet', ['clusterbombs', 'heavybomb', 'plateM', 'shieldL']),
+  D('fighterjet', 'strikejet', 'jet', ['aamissile', 'aamissile', 'targeting']),
+  D('harasserjet', 'deltawing', 'jet', ['rockets', 'mg', 'targeting']),
   ...(process.env.OP_DESIGNS ? (JSON.parse(process.env.OP_DESIGNS) as Design[]).map((d) => ({ name: d.id, ...d })) : []),
 ];
 
@@ -51,9 +52,17 @@ export function army(budget: number, pool: Design[], seed: number): Design[] {
   for (let g = 0; g < 600; g++) { const d = pool[i++ % pool.length]; const c = computeStats(d).cost; if (c <= left) { out.push(d); left -= c; } if (left < 40) break; }
   return out;
 }
+/** OP_DEPLOY=smart (default): both sides deploy like a sensible player (shared/smartdeploy.ts); naive: packed rows */
+const DEPLOY = process.env.OP_DEPLOY ?? 'smart';
+const deploy = (list: Design[]): Placement[] => {
+  if (DEPLOY !== 'smart') return pack(list);
+  const n = new Map<Design, number>();
+  for (const d of list) n.set(d, (n.get(d) ?? 0) + 1);
+  return smartDeploy([...n].map(([d, k]) => ({ d, n: k })));
+};
 function fight(a: Design[], b: Design[], seed: number): number {
   const designs = [...new Map([...a, ...b].map((d) => [d.id, d])).values()];
-  const r = new Battle({ seed, sides: [{ designs, units: pack(a) }, { designs, units: pack(b) }] });
+  const r = new Battle({ seed, sides: [{ designs, units: deploy(a) }, { designs, units: deploy(b) }] });
   while (!r.done) r.step();
   return r.winner;
 }

@@ -14,7 +14,7 @@
 
 import { classify, profile, ROLES, type Role } from './aiprofile.ts';
 import { CHASSIS, MOBILITY, MODULES, MODULE_BY_ID, pairingError } from './parts.ts';
-import { isValidDesign, MAX_LEVEL, slotError } from './stats.ts';
+import { dropExtraWeapons, isValidDesign, MAX_LEVEL, replaceRetiredModules, slotError } from './stats.ts';
 import { DECK_SIZE, battleInputFor, placementValue } from './match.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { Battle } from './sim/battle.ts';
@@ -40,8 +40,8 @@ export const AI_POOL: Design[] = [
   D('pool-ghosthunter', 'Ghost Hunter', 'hunter', 'hover', ['stealth', 'atgm']), //     cloaked ATGM raider
   D('pool-gausslance', 'Gauss Lance', 'longarm', 'spider', ['gauss']), //               long-range anti-armour, hits air
   // ---- anti-air ----
-  D('pool-flakdisc', 'Flak Disc', 'saucer', 'hover', ['flak', 'flak', 'hmg']), //       ground AA: twin flak
-  D('pool-skyspear', 'Skyspear', 'strider', 'legs', ['sam', 'aamissile', 'aamissile']), // ground AA: SAM walker
+  D('pool-flakdisc', 'Flak Disc', 'saucer', 'hover', ['flak', 'flak', 'shieldL']), // ground AA: twin flak
+  D('pool-skyspear', 'Skyspear', 'strider', 'legs', ['sam', 'aamissile', 'targeting']), // ground AA: SAM walker
   D('pool-interceptor', 'Talon', 'interceptor', 'jet', ['aamissile', 'aamissile']), //  interceptor flyers (air superiority)
   // ---- artillery / long range ----
   D('pool-cruisewalker', 'Cruise Walker', 'longarm', 'spider', ['cruise']), //          cruise-missile carrier, ~170 m reach
@@ -51,7 +51,11 @@ export const AI_POOL: Design[] = [
   D('pool-siegebattery', 'Siege Battery', 'siegeplat', 'spider', ['barrage', 'mortar']), // barrage + mortar artillery
   // ---- flyers ----
   D('pool-laserdrone', 'Laser Drone', 'drone', 'rotor', ['laser']), //                  laser drones (4)
-  D('pool-clusterdart', 'Cluster Dart', 'deltawing', 'jet', ['clusterbombs', 'hmg', 'hmg']), // cluster-bomb jets
+  D('pool-clusterdart', 'Cluster Dart', 'deltawing', 'jet', ['clusterbombs', 'hmg', 'shieldL']), // cluster-bomb jets
+  D('pool-painter', 'Spotter', 'raider', 'halftrack', ['laser', 'painter']), //         laser spotter: marks targets for the army
+  D('pool-berserker', 'Ravager', 'mantis', 'legs', ['buzzsaw', 'berserker']), //       melee berserker: hits hardest when hurt
+  D('pool-longgun', 'Long Gun', 'warden', 'spider', ['cannon', 'longbarrel']), //      long-barrel tank killer
+  D('pool-stundart', 'Stun Dart', 'deltawing', 'jet', ['stuncluster', 'hmg', 'shieldL']), // stun-cluster jets: lock down swarms ahead of the push
   D('pool-stormcopter', 'Stormcopter', 'gunship', 'rotor', ['tesla', 'heatray']), //    tesla / heat-ray gunship
   // ---- support / stealth / giant ----
   D('pool-domecar', 'Dome Car', 'striker', 'halftrack', ['dome', 'uplink', 'hmg']), //  shield dome + fire-rate uplink
@@ -63,7 +67,7 @@ export const AI_POOL: Design[] = [
  *  (5 seeds; 50% = priced right). The match-by-match scores take over from there. */
 export const POOL_PRIOR: Record<string, number> = {
   'pool-lasertick': 1.1, 'pool-hailrunner': 1.1, 'pool-chatterbug': 1.1, 'pool-pyrewall': 1.1, 'pool-flakdisc': 1.1, 'pool-laserdrone': 1.1,
-  'pool-skyspear': 1.09, 'pool-jamstrider': 1.09, 'pool-arcwarden': 1.07, 'pool-clusterdart': 1.07, 'pool-infernohulk': 1.07,
+  'pool-skyspear': 1.09, 'pool-jamstrider': 1.09, 'pool-arcwarden': 1.07, 'pool-clusterdart': 1.07, 'pool-stundart': 1, 'pool-painter': 1, 'pool-berserker': 1, 'pool-longgun': 1, 'pool-infernohulk': 1.07,
   'pool-interceptor': 1.03, 'pool-stormcopter': 1.03, 'pool-ghosthunter': 0.97, 'pool-domecar': 0.97, 'pool-shieldwarden': 0.96,
   'pool-smokecrab': 0.96, 'pool-gunsled': 0.95, 'pool-cruisewalker': 0.95, 'pool-rocketcart': 0.95, 'pool-railstrider': 0.94,
   'pool-gausslance': 0.94, 'pool-shade': 0.94, 'pool-bastion': 0.92, 'pool-siegebattery': 0.83,
@@ -201,7 +205,14 @@ export function validEntryDesign(d: unknown): d is Design {
 
 function cleanEntry(e: unknown, keys: Set<string>, slots: Set<string>): PoolEntry | null {
   if (!e || typeof e !== 'object') return null;
-  const x = e as Partial<PoolEntry>;
+  const x0 = e as Partial<PoolEntry>;
+  // stored before the weapon cap (rules 7): the weakest extra weapons leave instead of the whole entry being dropped
+  let design: unknown = x0.design;
+  if (design && typeof design === 'object' && Array.isArray((design as Design).mounts)) {
+    const capped = { ...(design as Design), mounts: [...(design as Design).mounts] };
+    if (replaceRetiredModules(capped).length + dropExtraWeapons(capped).length) design = capped;
+  }
+  const x: Partial<PoolEntry> = { ...x0, design: design as Design };
   if (!validEntryDesign(x.design)) return null;
   const d = cleanDesign(x.design);
   if (keys.has(poolKey(d)) || slots.has(slotKey(d))) return null;
@@ -526,14 +537,14 @@ export function mutateDesign(d: Design, rng: Rng, id: string): Design | null {
       const slots = out.mounts.map((m, i) => ({ m: MODULE_BY_ID.get(m ?? ''), i })).filter((x) => x.m && isWeapon(x.m));
       if (!slots.length) continue;
       const s = slots[Math.floor(rng() * slots.length)];
-      const opts = MODULES.filter((m) => isWeapon(m) && m.id !== s.m!.id && sameFamily(m, s.m!) && !slotError(c, out.mobility, s.i, m));
+      const opts = MODULES.filter((m) => isWeapon(m) && !m.retired && m.id !== s.m!.id && sameFamily(m, s.m!) && !slotError(c, out.mobility, s.i, m));
       if (!opts.length) continue;
       out.mounts[s.i] = opts[Math.floor(rng() * opts.length)].id;
     } else if (r < 0.7) {
       const slots = out.mounts.map((m, i) => ({ m: m ? MODULE_BY_ID.get(m) : undefined, i })).filter((x) => !x.m || !isWeapon(x.m));
       if (!slots.length) continue;
       const s = slots[Math.floor(rng() * slots.length)];
-      const opts = MODULES.filter((m) => !isWeapon(m) && m.id !== s.m?.id && !slotError(c, out.mobility, s.i, m));
+      const opts = MODULES.filter((m) => !isWeapon(m) && !m.retired && m.id !== s.m?.id && !slotError(c, out.mobility, s.i, m));
       if (!opts.length) continue;
       out.mounts[s.i] = opts[Math.floor(rng() * opts.length)].id;
     } else if (r < 0.9) {

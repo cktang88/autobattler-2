@@ -10,13 +10,13 @@ import type { Design } from '../src/shared/types.ts';
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 
 test('jet bombers are fast: a loaded strato bomber cruises at 30+ m/s', () => {
-  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']);
+  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', null, 'shieldL']);
   assert.deepEqual(validateDesign(strato, true), []);
   assert.ok(computeStats(strato).speed * METERS_PER_CELL >= 30, `${computeStats(strato).speed * METERS_PER_CELL} m/s`);
 });
 
 test('a bomber that empties its bays flies home, rearms and comes back for more runs', () => {
-  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']);
+  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', null, 'shieldL']);
   const tank = D('tank', 'warden', 'treads', ['autocannon', 'plateL']);
   const designs = [strato, tank];
   const b = new Battle({ seed: 4, sides: [
@@ -39,16 +39,16 @@ test('a bomber that empties its bays flies home, rearms and comes back for more 
 });
 
 test('air roles: bomb bays make a bomber, AA jets a fighter, gun jets a harasser, hovering flyers a gunship', () => {
-  assert.equal(airRole(D('b', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg'])), 'bomber');
-  assert.equal(airRole(D('f', 'strikejet', 'jet', ['aamissile', 'aamissile', 'mg'])), 'fighter');
+  assert.equal(airRole(D('b', 'stratobomber', 'jet', ['bombs', 'bombs', null, 'shieldL'])), 'bomber');
+  assert.equal(airRole(D('f', 'strikejet', 'jet', ['aamissile', 'aamissile', 'targeting'])), 'fighter');
   assert.equal(airRole(D('i', 'interceptor', 'jet', ['twinmg', 'mg'])), 'fighter');
-  assert.equal(airRole(D('h', 'deltawing', 'jet', ['rockets', 'mg', 'mg'])), 'harasser');
+  assert.equal(airRole(D('h', 'deltawing', 'jet', ['rockets', 'mg', 'targeting'])), 'harasser');
   assert.equal(airRole(D('g', 'gunship', 'rotor', ['autocannon', 'autocannon'])), 'gunship');
   assert.equal(airRole(D('t', 'warden', 'treads', ['autocannon', 'plateL'])), null);
 });
 
 test('fighters go for aircraft over nearer ground units; jets never stack on top of each other', () => {
-  const fighter = D('fighter', 'strikejet', 'jet', ['aamissile', 'aamissile', 'mg']);
+  const fighter = D('fighter', 'strikejet', 'jet', ['aamissile', 'aamissile', 'targeting']);
   const tank = D('tank', 'warden', 'treads', ['autocannon', 'plateL']);
   const heli = D('heli', 'gunship', 'rotor', ['autocannon', 'autocannon']);
   const designs = [fighter, tank, heli];
@@ -75,7 +75,7 @@ test('bombs, artillery shells and their splash, bomblets and fire never hit airc
     assert.equal(!!m.targetsAir, false, `${m.id} targets aircraft`);
   }
   // a bomber pounding a tank that has an enemy helicopter hovering right over it: only the tank takes bomb damage
-  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'clusterbombs', 'heavybomb', null]);
+  const strato = D('strato', 'stratobomber', 'jet', ['heavybomb', 'clusterbombs', null, null]);
   const tank = D('tank', 'bastion', 'anchor', ['cannon', 'plateM', null]);
   assert.deepEqual(validateDesign(tank, true), []);
   const heli = D('heli', 'gunship', 'rotor', ['flak', null]);
@@ -98,13 +98,13 @@ test('bombs, artillery shells and their splash, bomblets and fire never hit airc
 });
 
 // ---- giant / titan bombers (strategic, superfortress, dreadnought airship) ----
-const STRAT = D('strat', 'strategic', 'jet', ['bombs', 'bombs', 'heavybomb', 'bombs', 'hmg', 'hmg']);
-const SFORT = D('sfort', 'superfortress', 'jet', ['heavybomb', 'bombs', 'bombs', 'heavybomb', 'clusterbombs', 'clusterbombs', 'twinmg', 'twinmg', 'hmg', 'hmg']);
-const DREAD = D('dread', 'dreadnought', 'gravlift', ['avenger', 'heavybomb', 'bombs', 'bombs', 'heavybomb', 'hmg', 'hmg']);
+const STRAT = D('strat', 'strategic', 'jet', ['bombs', 'bombs', 'heavybomb', 'plateM', 'pointdef', 'shieldL']);
+const SFORT = D('sfort', 'superfortress', 'jet', ['heavybomb', 'bombs', 'bombs', 'heavybomb', 'plateM', null, 'pointdef', 'shieldL', null, null]);
+const DREAD = D('dread', 'dreadnought', 'gravlift', ['avenger', 'heavybomb', 'bombs', 'bombs', 'plateM', 'shieldL', 'pointdef']);
 const isBomb = (id: string | null) => !!id && !!MODULES.find((m) => m.id === id)?.resupply;
 
 test('giant and titan bombers: legal single-unit bombers, slower than the strato and too big to jink', () => {
-  const strato = computeStats(D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']));
+  const strato = computeStats(D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', null, 'shieldL']));
   for (const d of [STRAT, SFORT, DREAD]) {
     assert.deepEqual(validateDesign(d, true), [], d.id);
     const s = computeStats(d);
@@ -160,7 +160,7 @@ test('giant jet bombers fly their runs, go home to rearm, wait until every bay i
 
 test('a gun-armed hovering bomber flies over its target to bomb it instead of parking at machine-gun range', () => {
   // (bombs + machine guns only: a heavy deck gun like the avenger kills the tanks before the bays get a look in)
-  const r = sortie(D('dreadb', 'dreadnought', 'gravlift', ['heavybomb', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg']), 20 * 100);
+  const r = sortie(D('dreadb', 'dreadnought', 'gravlift', ['heavybomb', 'bombs', 'bombs', 'bombs', 'plateM', 'shieldL', 'pointdef']), 20 * 100);
   assert.ok(r.drops >= 4, `dreadnought drops ${r.drops}`);
   assert.ok(r.b.units.some((x) => x.side === 1 && !x.alive), 'the dreadnought killed nothing');
 });
@@ -182,8 +182,8 @@ test('two giant bombers never fly stacked on top of each other', () => {
 });
 
 test('bomb bays drop a stick, one after another, and stop when the bombs already falling will finish the target', () => {
-  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']);
-  const lone = D('lone', 'warden', 'treads', ['autocannon', null]);
+  const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', null, 'shieldL']);
+  const lone = D('lone', 'bastion', 'treads', ['plateH', 'plateM', 'autocannon']); // size 3: always a single unit
   const designs = [strato, lone];
   const b = new Battle({ seed: 2, sides: [
     { designs, units: [{ uid: 1, designId: 'strato', x: 40, y: 4, level: 1, round: 1 }] },

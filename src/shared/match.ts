@@ -13,7 +13,7 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { analyticStats, computeStats, levelMult, MAX_LEVEL, MOBILITY_CAL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
+import { SIZE_K, analyticStats, clearPriceCache, computeStats, dropExtraWeapons, replaceRetiredModules, levelMult, MAX_LEVEL, MOBILITY_CAL, MODULE_CAL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
 import type { BlockShape } from './grid.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadLayout } from './grid.ts';
 import { mixSeed } from './rng.ts';
@@ -43,8 +43,11 @@ export const MAX_PLAYER_NAME = 24;
  *  5: the Anchor Mount is retired (decks repaired, retireParts) and prices are monotone (adding a part never makes a
  *     design cheaper; stats.ts). Squad sizes come from the analytic price, so repricing never reshapes a block.
  *  6: drives got distinct identities (speed, turning, reverse, pivot / omni / hover; parts.ts) and the drive price
- *     factors were refitted: the analytic price moved, so some designs' squads (block shapes) changed. */
-export const RULES_VERSION = 6;
+ *     factors were refitted: the analytic price moved, so some designs' squads (block shapes) changed.
+ *  7: the weapon pass: weapon numbers and their price calibrations (MODULE_CAL) changed, and the price model learned
+ *     shell flight time, splash falloff, minimum-range share and turret traverse; some designs' squads changed. Hulls
+ *     carry at most 2 weapons (giants 3, titans 4): decks over the cap drop their weakest extra weapons. */
+export const RULES_VERSION = 7;
 /** First rules version on the / 5 price scale. */
 const RESCALED_RULES = 2;
 /** Units per light block before rules 3. */
@@ -55,6 +58,8 @@ const MEDIUM_SQUAD_RULES = 4;
 const TEAM_VALUE_RULES = 5;
 /** First rules version with the reworked drives (new analytic prices, so possibly new squad sizes). */
 const DRIVES_RULES = 6;
+/** First rules version after the weapon pass (new weapon numbers and prices, so possibly new squad sizes). */
+const WEAPONS_RULES = 7;
 /** When the price / 5 rescale shipped (commit 4a9c201). An unmarked match created before it ran on 5x supply. */
 export const PRICE_RESCALE_AT = Date.UTC(2026, 9, 14, 2, 48, 53);
 const OLD_PRICE_DIV = 5;
@@ -141,6 +146,9 @@ export function isPreRescaleMatch(m: MatchState): boolean {
  *    changed with the analytic price (drivesReshaped: squad under the rules-5 drive table vs now) are re-checked by
  *    relegalizeBoard (kept where they are if they still fit, else moved to the nearest free spot, else sold back at
  *    their full value); every other block stays exactly as it was.
+ *  - Rules 7 (the weapon pass) changed weapon numbers and prices, and added the weapon cap: deck designs over the cap
+ *    drop their weakest extra weapons (capDeckWeapons), and those plus the designs whose squad moved
+ *    (weaponsReshaped: squad under the rules-6 weapon numbers and calibrations vs now) get the same re-check.
  *  Past rounds' records are left as they were. */
 export function migrateMatch(m: MatchState): boolean {
   if (m.rules !== undefined && m.rules >= RULES_VERSION) return false;
@@ -151,6 +159,12 @@ export function migrateMatch(m: MatchState): boolean {
     if (from < MEDIUM_SQUAD_RULES) refundMediumSingles(p);
     if (from < TEAM_VALUE_RULES) relegalizeBoard(p, retireParts(p));
     if (from < DRIVES_RULES) relegalizeBoard(p, drivesReshaped(p));
+    if (from < WEAPONS_RULES) {
+      // the weapon cap: deck designs over their hull's cap lose their weakest extra weapons (their blocks are re-checked,
+      // their shape may have changed); then every block whose squad the weapon pass moved
+      const capped = capDeckWeapons(p);
+      relegalizeBoard(p, new Set([...capped, ...weaponsReshaped(p)]));
+    }
   }
   m.rules = RULES_VERSION;
   return true;
@@ -240,6 +254,126 @@ export function drivesReshaped(p: PlayerState): Set<string> {
       MOBILITY_CAL[m.id] = cal;
     }
     if (was && now && was !== now) out.add(d.id);
+  }
+  return out;
+}
+
+// WEAPONS_TABLE_START (generated from the rules-6 parts.ts / MODULE_CAL: the old value of every weapon field the weapon
+// pass changed, null = the field was absent)
+const RULES6_WEAPONS: Record<string, Record<string, unknown>> = {
+  mg: { range: 6, projectileSpeed: 22, spread: 0.25 },
+  twinmg: { damage: 6, slow: 0.05 },
+  hmg: { cooldown: 0.22, range: 6.5, magazine: 25, reload: 2.5 },
+  shotgun: { range: 3.5, falloff: 0.25, impulse: 0.12 },
+  flechette: { range: 6, spread: 1 },
+  ac20: { damage: 18, cooldown: 0.2, magazine: 10, reload: 2, splash: 0.2 },
+  autocannon: { cooldown: 0.3, magazine: 6, reload: 2 },
+  twin30: { reload: 4.5 },
+  ac40: { damage: 55, cooldown: 0.5, range: 9, reload: 2.5, splash: 0.5, proximity: null },
+  cannon75: { damage: 95, cooldown: 0.7, reload: 4, projectileSpeed: 20 },
+  cannon: { range: 9 },
+  twin120: { ap: 0.5 },
+  lightrail: { airBonus: null, dmgKind: null },
+  railgun: { damage: 320, cooldown: 5.5, range: 16, turretTurn: null, airBonus: null, dmgKind: null },
+  gauss: { dmgKind: null },
+  massdriver: { dmgKind: null },
+  rocketL: { damage: 64, cooldown: 6, range: 9, splash: 0.7 },
+  mlrs: { range: 22 },
+  aamissile: { damage: 120, cooldown: 7, splash: 0.5, airBonus: 1.5 },
+  sam: { range: 13 },
+  swarm: { range: 12 },
+  cruise: { range: 28 },
+  mortar: { damage: 108, cooldown: 5.4, range: 20, minRange: 5, splash: 1.2, stun: null },
+  howitzer: { damage: 144, cooldown: 9, range: 30, minRange: 8, projectileSpeed: 12, splash: 2, spread: 1.2, splashEdge: null, spinal: null },
+  barrage: { damage: 48, cooldown: 5.95, range: 24, minRange: 6, projectileSpeed: 10, spread: 2, turretTurn: null },
+  grenade: { damage: 45, cooldown: 2, range: 8, minRange: 2, projectileSpeed: 8, splash: 0.9, magazine: null, reload: null },
+  firebomb: { fireField: { radius: 1.8, duration: 6, dps: 30 } },
+  laser: { airBonus: 1.6 },
+  twinlaser: { damage: 6 },
+  flamer: { range: 3.5, burn: { dps: 10, duration: 6 } },
+  napalm: { range: 4.5 },
+  tesla: { range: 4.5 },
+  sonic: { range: 4 },
+  flak: { cooldown: 0.45, range: 10, reload: 2.5, splash: 1.3, proximity: null, turretTurn: null },
+  heavyflak: { range: 14, splash: 1.8, proximity: null, turretTurn: null },
+  ram: { damage: 130, stun: null },
+  chainsaw: { ap: 1 },
+  plasmablade: { ap: 1 },
+  hammer: { stun: null },
+  drill: { shred: null },
+  skyfortress: { range: 18, proximity: null },
+  // the utility remake (rules 7): the strongest utilities got a downside and lost weight
+  shieldH: { weight: 6, cost: 60, tune: null },
+  bulwarkshield: { weight: 12, cost: 90, tune: null },
+  stealth: { weight: 2, cloakDamage: null },
+  phantom: { weight: 4, tune: null },
+  overclock: { weight: 2, overheat: null },
+  plateH: { weight: 12, tune: null },
+  mirror: { deflect: null },
+};
+const RULES6_CAL: Record<string, number> = {
+  mg: 3, twinmg: 0.811, hmg: 1.67, minigun: 0.8, shotgun: 1, flechette: 7.48, ac20: 2.83, autocannon: 2.29,
+  twin30: 1.99, ac40: 5.01, quad20: 0.66, cannon75: 1.49, cannon: 0.88, twin120: 1.05, gauss: 4.58, sniper: 16.11,
+  lightrail: 12, railgun: 20, rocketL: 1.16, rockets: 1.67, incendiary: 0.35, mlrs: 6.73, atgm: 8.11,
+  guidedrocket: 3.35, aamissile: 1.26, sam: 4.55, swarm: 3, cruise: 7.74, mortar: 10.84, howitzer: 22.16,
+  barrage: 8.26, grenade: 2.46, firebomb: 2.27, laser: 2.3, twinlaser: 2.23, heatray: 1.32, plasmaorb: 0.868,
+  leech: 1.16, prism: 5.18, voidlance: 1.49, entropy: 1, plasma: 3.4, flamer: 0.61, napalm: 0.12, tesla: 0.534,
+  stungun: 0.705, empcannon: 0.53, slowbeam: 4.95, arclance: 2.95, disarm: 0.416, sonic: 0.38, gravity: 3.14,
+  bombs: 8.69, heavybomb: 6.05, clusterbombs: 14, flak: 0.31, heavyflak: 1.19, buzzsaw: 0.27, shockprod: 0.52,
+  ram: 0.86, chainsaw: 0.6, claw: 0.56, plasmablade: 0.69, hammer: 1.46, drill: 0.81, repair: 12.45, uplink: 0.34,
+  shield: 0.81, shieldL: 1.32, shieldH: 1.05, pointdef: 4, smoke: 4, reactive: 0.78, mirror: 0.5, hardened: 0.1,
+  nanite: 0.14, stealth: 0.44, phantom: 0.16, targeting: 4, turbo: 0.14, overclock: 0.21, selfdestruct: 7,
+  siege240: 1.53, avenger: 3.1, missilebattery: 4.99, siegeplasma: 0.85, clusterhow: 3.48, skyfortress: 0.62,
+  stormtower: 2.55, inferno: 0.4, grinder: 3.99, bulwarkshield: 1.48, massdriver: 0.75, doomsday: 4.66,
+  annihilator: 2.22, tactnuke: 3.2, titanfist: 1.8, stormcore: 0.91,
+};
+/** the size-class price factors (stats.ts SIZE_K) before the rules-7 re-fit */
+const RULES6_SIZEK = [0.85, 1.11, 1.19, 1.37, 1.34];
+// WEAPONS_TABLE_END
+
+/** Rules 7 added the weapon cap (parts.ts weaponCap): deck designs over it drop their weakest extra weapons
+ *  (stats.ts dropExtraWeapons), so the saved deck stays legal. Returns the ids of the designs changed. */
+export function capDeckWeapons(p: PlayerState): Set<string> {
+  const changed = new Set<string>();
+  // (retired parts -- the Autoloader and the Gyro -- swap for their replacement first)
+  for (const d of p.deck) if (d && Array.isArray(d.mounts) && replaceRetiredModules(d).length + dropExtraWeapons(d).length) changed.add(d.id);
+  return changed;
+}
+
+/** Rules 7 (the weapon pass) changed weapon numbers and their price calibrations: some designs' analytic price, and
+ *  with it their squad, moved. Returns the ids of the deck designs whose squad differs from their rules-6 one (their
+ *  blocks get re-checked by relegalizeBoard); every other block keeps its exact shape and place. (The price model's
+ *  new flight-time / falloff / traverse terms are not replayed: they move prices by a few percent at most.) */
+export function weaponsReshaped(p: PlayerState): Set<string> {
+  const out = new Set<string>();
+  const ids = new Set(Object.keys(RULES6_WEAPONS).concat(Object.keys(RULES6_CAL)));
+  const touched = p.deck.filter((d) => d && Array.isArray(d.mounts) && d.mounts.some((m) => m && ids.has(m)));
+  if (!touched.length) return out;
+  const now = new Map<string, number>();
+  for (const d of touched) { try { now.set(d.id, analyticStats(d).squad); } catch { /* unpriceable: leave it */ } }
+  const saved: [Record<string, unknown>, Record<string, unknown>][] = [];
+  const savedCal: Record<string, number | undefined> = {};
+  const savedSize: number[] = [];
+  try {
+    for (const [id, old] of Object.entries(RULES6_WEAPONS)) {
+      const m = MODULE_BY_ID.get(id) as unknown as Record<string, unknown> | undefined;
+      if (!m) continue;
+      const keep: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(old)) { keep[k] = m[k]; if (v === null) delete m[k]; else m[k] = v; }
+      saved.push([m, keep]);
+    }
+    for (const [id, c] of Object.entries(RULES6_CAL)) { savedCal[id] = MODULE_CAL[id]; MODULE_CAL[id] = c; }
+    savedSize.push(...SIZE_K);
+    SIZE_K.splice(0, RULES6_SIZEK.length, ...RULES6_SIZEK);
+    clearPriceCache();
+    for (const d of touched) {
+      try { const was = analyticStats(d).squad, n = now.get(d.id); if (n && was !== n) out.add(d.id); } catch { /* unpriceable */ }
+    }
+  } finally {
+    for (const [m, keep] of saved) for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete m[k]; else m[k] = v; }
+    for (const [id, c] of Object.entries(savedCal)) { if (c === undefined) delete MODULE_CAL[id]; else MODULE_CAL[id] = c; }
+    if (savedSize.length) SIZE_K.splice(0, savedSize.length, ...savedSize);
+    clearPriceCache();
   }
   return out;
 }

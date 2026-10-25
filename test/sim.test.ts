@@ -17,7 +17,7 @@ SQUAD_TIERS[2] = [[Infinity, 1]];
 
 const DESIGNS: Design[] = [
   D('buggy', 'scout', 'wheels', ['mg']),
-  D('torch', 'scout', 'halftrack', ['flamer']),
+  D('torch', 'scout', 'wheels', ['flamer']), // a 16-unit squad at the rules-7 prices (on halftracks it's 8)
   D('lancer', 'raider', 'legs', ['laser', 'laser']),
   D('bulwark', 'warden', 'treads', ['autocannon', 'plateL']),
   D('buster', 'longarm', 'halftrack', ['cannon']),
@@ -26,7 +26,7 @@ const DESIGNS: Design[] = [
   D('hornet', 'drone', 'rotor', ['mg']),
   D('strafer', 'strikejet', 'jet', ['rockets', null, null]),
   D('medic', 'aegis', 'halftrack', ['autocannon', 'repair']),
-  D('storm', 'striker', 'halftrack', ['tesla', 'autocannon', 'mg']),
+  D('storm', 'striker', 'halftrack', ['tesla', 'autocannon', 'shieldL']),
   D('ironclad', 'bastion', 'treads', ['cannon', 'plateM', 'autocannon']),
   D('spire', 'warden', 'anchor', ['sam', 'mg']),
   D('hopper', 'raider', 'jumpjets', ['flamer', 'flamer']),
@@ -41,12 +41,13 @@ const DESIGNS: Design[] = [
   D('sonic', 'warden', 'halftrack', ['sonic', null]),
   D('disarmer', 'warden', 'halftrack', ['disarm', null]),
   D('pulse', 'warden', 'halftrack', ['autocannon', null]),
+  D('clipper', 'warden', 'halftrack', ['cannon75', null]),
   D('focus', 'warden', 'halftrack', ['twinlaser', null]),
   D('firebomber', 'warden', 'halftrack', ['firebomb', null]),
   D('clusterarty', 'goliath', 'megatracks', ['clusterhow', 'plateH', 'plateH', 'plateH']),
   D('flechetter', 'warden', 'halftrack', ['flechette', null]),
   D('brawler', 'mantis', 'legs', ['buzzsaw', 'buzzsaw']),
-  D('runner', 'scout', 'wheels', ['mg']),
+  D('runner', 'scout', 'wheels', ['flamer']), // fast and cheap: a 16-unit squad
   D('mortartruck', 'warden', 'halftrack', ['mortar', null]),
   D('ghost', 'striker', 'halftrack', ['stealth', 'autocannon', 'mg']),
   D('spotter', 'raider', 'halftrack', ['sensor', 'mg']),
@@ -192,7 +193,7 @@ test('invalid / unknown placements are skipped; empty side loses', () => {
   const bad: Design = D('bad', 'scout', 'treads', ['mg']);
   const inp: BattleInput = { seed: 1, sides: [{ designs: [...DESIGNS, bad], units: [P('bad', 0, 0), P('nope', 4, 0)] }, { designs: DESIGNS, units: [P('buggy', 4, 0)] }] };
   const b = new Battle(inp);
-  assert.equal(b.units.length, 16); // the squad of 16
+  assert.equal(b.units.length, computeStats(DESIGNS.find((d) => d.id === 'buggy')!).squad); // just the buggy squad
   b.step();
   assert.ok(b.done);
   assert.equal(b.winner, 1);
@@ -250,14 +251,14 @@ function fireLog(b: Battle) {
 }
 
 test('magazines pause for reload', () => {
-  const b = new Battle(input(1, [P('pulse', 10, 0)], [P('fortress', 9, 0)]));
+  const b = new Battle(input(1, [P('clipper', 10, 0)], [P('fortress', 9, 0)]));
   const { fires } = fireLog(b);
   const ticks = fires.filter((f) => f.unit === 0).map((f) => f.tick);
-  assert.ok(ticks.length > 12);
+  assert.ok(ticks.length > 6);
   const gaps = ticks.slice(1).map((t, i) => (t - ticks[i]) / 20);
-  // 6-shot magazine at 0.3s, then a 2s reload
-  assert.ok(gaps.slice(0, 5).every((g) => g < 0.4), `gaps ${gaps.slice(0, 8)}`);
-  assert.ok(gaps[5] >= 1.9, `reload gap ${gaps[5]}`);
+  // 75 mm autoloader: 3-shell magazine at 0.35 s, then a 5 s reload
+  assert.ok(gaps.slice(0, 2).every((g) => g < 0.5), `gaps ${gaps.slice(0, 6)}`);
+  assert.ok(gaps[2] >= 4.9, `reload gap ${gaps[2]}`);
 });
 
 test('accuracy: sniper is pinpoint, minigun sprays', () => {
@@ -324,8 +325,12 @@ test('arc shells lead their target: a fast mover on a steady course is hit about
     }
     return { per: dmg / Math.max(1, shots), shots };
   };
-  const parked = perShot('dummy');
-  const fast = perShot('runner');
+  // (the shock mortar's stun is taken off for this test: a runner it paralyses stops dead under the shells already led
+  // ahead of it, which is the stun working, not the lead failing)
+  const mortar = MODULE_BY_ID.get('mortar')!, stun = mortar.stun;
+  delete mortar.stun;
+  let parked: ReturnType<typeof perShot>, fast: ReturnType<typeof perShot>;
+  try { parked = perShot('dummy'); fast = perShot('runner'); } finally { mortar.stun = stun; }
   assert.ok(fast.shots > 0 && parked.shots > 0);
   assert.ok(parked.per > 20, `parked ${parked.per}`);
   // artillery solves for the intercept point, so running in a straight line no longer dodges it
@@ -447,9 +452,9 @@ test('defensive systems: hardened, shield dome, reactive armor, mirror coating',
   const tank = h.units.find((u) => u.side === 1)!;
   while (!h.done) { h.step(); assert.equal(tank.stun, 0); }
   // dome: neighbours start with projected shield, the dome itself doesn't
-  const d = new Battle(input(1, [P('domer', 10, 0), P('buggy', 9, 0), P('buggy', 14, 1)], [P('buggy', 10, 0)]));
+  const d = new Battle(input(1, [P('domer', 10, 0), P('torch', 9, 0), P('torch', 14, 1)], [P('buggy', 10, 0)]));
   d.step();
-  assert.ok(d.units[1].auraShield > 0 && d.units[17].auraShield > 0); // first unit of each buggy squad
+  assert.ok(d.units[1].auraShield > 0 && d.units[17].auraShield > 0); // first unit of each 16-unit torch squad
   assert.equal(d.units[0].maxAuraShield, 0);
   // reactive: charges are consumed by explosive hits and blunt them
   const r = new Battle(input(1, [P('buster', 10, 0)], [P('era', 10, 0)]));
@@ -466,10 +471,11 @@ test('defensive systems: hardened, shield dome, reactive armor, mirror coating',
 });
 
 test('blocks: size-1 designs spawn a squad of 16 (8x2) at spacing-dependent positions', () => {
-  const tight = new Battle(input(1, [P('buggy', 10, 0)], []));
+  // (the torch scout: a cheap flamer scout that stays a 16-unit squad)
+  const tight = new Battle(input(1, [P('torch', 10, 0)], []));
   assert.equal(tight.units.length, 16);
   assert.ok(tight.units.every((u) => u.uid === tight.units[0].uid));
-  const wide = new Battle(input(1, [{ ...P('buggy', 10, 0), spacing: 2 }], []));
+  const wide = new Battle(input(1, [{ ...P('torch', 10, 0), spacing: 2 }], []));
   assert.equal(wide.units.length, 16);
   const ext = (b: Battle, k: 'x' | 'y') => Math.max(...b.units.map((u) => u[k])) - Math.min(...b.units.map((u) => u[k]));
   assert.equal(ext(tight, 'x'), 7);
@@ -484,7 +490,7 @@ test('blocks: size-1 designs spawn a squad of 16 (8x2) at spacing-dependent posi
 
 test('side 1 is mirrored: squads and formations are rotated 180 degrees about the field centre', () => {
   for (const spacing of [0, 1, 2]) {
-    const p0 = { ...P('buggy', 5, 1), spacing };
+    const p0 = { ...P('torch', 5, 1), spacing }; // a 16-unit squad
     const a = new SimBattle({ seed: 1, sides: [{ designs: DESIGNS, units: [p0] }, { designs: DESIGNS, units: [{ ...p0 }] }] }); // raw spawn positions
     const s0 = a.units.filter((u) => u.side === 0), s1 = a.units.filter((u) => u.side === 1);
     assert.equal(s0.length, 16);
@@ -497,7 +503,7 @@ test('side 1 is mirrored: squads and formations are rotated 180 degrees about th
 });
 
 test('summary: a placement survives while any unit lives; aliveFraction reports the share', () => {
-  const b = new Battle(input(1, [P('buggy', 10, 0), P('bulwark', 20, 0)], [P('buggy', 10, 0)]));
+  const b = new Battle(input(1, [P('torch', 10, 0), P('bulwark', 20, 0)], [P('torch', 10, 0)])); // 16-unit squads
   b.step();
   const uid0 = b.units[0].uid;
   for (let i = 0; i < 8; i++) b.units[i].alive = false;
@@ -591,7 +597,7 @@ test('target priority: threat retaliates against a long-range attacker, else clo
 
 test('hold keeps squad spacing while advancing; no hold lets squads bunch up', () => {
   const run = (hold: boolean) => {
-    const b = new Battle(input(3, [{ ...P('buggy', 10, 0), spacing: 2, hold }], [P('ironclad', 10, 0)]));
+    const b = new Battle(input(3, [{ ...P('torch', 10, 0), spacing: 2, hold }], [P('ironclad', 10, 0)])); // a 16-unit squad
     let minD = 99;
     for (let i = 0; i < 160 && !b.done; i++) {
       b.step();
@@ -873,8 +879,9 @@ test('keep spread is on by default; with it off, friendly units still keep 0.75 
 });
 
 test('hold position: goes after artillery shelling it from out of reach, and fires once in reach', () => {
-  // shelled by a howitzer it can't reach: stops holding and closes in
-  const b = new Battle(input(5, [{ ...P('pulse', 10, 0), stance: 'holdPos' }], [P('arty', 10, 0)]));
+  // shelled by a mortar it can't reach: stops holding and closes in (the howitzer's 480-damage shells now kill it on
+  // the way in, so the mortar truck plays the out-of-reach artillery)
+  const b = new Battle(input(5, [{ ...P('pulse', 10, 0), stance: 'holdPos' }], [P('mortartruck', 10, 0)]));
   const me = b.units.find((u) => u.side === 0)!, y0 = me.y;
   let fired = false;
   for (let i = 0; i < 1600 && !b.done && me.alive; i++) { b.step(); if (b.events.some((e) => e.t === 'fire' && e.unit === me.id)) fired = true; }
@@ -925,8 +932,8 @@ test('stances + priorities: 120v120 stays fast and deterministic', () => {
 });
 
 test('titan battle: giants/titans fight, crush smaller units, stay deterministic and fast', () => {
-  const titan = D('titanw', 'titan', 'megatracks', ['stormcore', 'siege240', 'cannon', 'cannon', 'autocannon']);
-  const giant = D('giantw', 'goliath', 'titanlegs', ['siege240', 'cannon', 'cannon', 'autocannon']);
+  const titan = D('titanw', 'titan', 'megatracks', ['stormcore', 'siege240', 'cannon', 'cannon', 'plateM']);
+  const giant = D('giantw', 'goliath', 'titanlegs', ['siege240', 'cannon', 'cannon', 'plateM']);
   const designs = [...DESIGNS, titan, giant];
   for (const d of [titan, giant]) assert.deepEqual(validateDesign(d, true), [], d.id);
   const mk = (): BattleInput => {
@@ -1001,7 +1008,8 @@ test('default orders: kite / focus derived from the design; unset placements use
   const want: Record<string, [boolean, boolean]> = {
     sniperw: [true, true], arty: [true, true], mortartruck: [true, true], // long guns: kite + focus
     bulwark: [false, true], gunner: [false, true], buggy: [false, true], // frontline-range guns: focus only
-    torch: [false, false], brawler: [false, false], sonic: [false, false], // flamers / melee / short range: neither
+    brawler: [false, false], // melee: neither
+    torch: [false, true], sonic: [false, true], // the flamer (5 cells) and sonic pulser (5.5) now reach focus range: focus only
     spire: [false, true], hornet: [false, true], // static / flying: never kite by default
   };
   for (const [id, [kite, focus]] of Object.entries(want)) assert.deepEqual(defaultOrders(des(id)), { kite, focus }, id);
@@ -1100,7 +1108,9 @@ test('hold: outer squad members whose formation slot lies beyond their range sti
   ] });
   const fired = new Set<number>();
   for (let i = 0; i < 20 * 45 && !b.done; i++) { b.step(); for (const e of b.events) if (e.t === 'fire' && b.units[e.unit].side === 0) fired.add(e.unit); }
-  assert.equal(fired.size, 16, `${fired.size}/16 squad members ever fired`);
+  const n = computeStats(designs[0]).squad;
+  assert.ok(n >= 8);
+  assert.equal(fired.size, n, `${fired.size}/${n} squad members ever fired`);
 });
 
 test('fire-on-move units close to the range of the guns that can hit the goal, not an air-only long gun', () => {

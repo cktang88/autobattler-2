@@ -1165,7 +1165,13 @@ function drawFamily(g: Ctx, m: ModuleDef, pal: TeamPal, r: number, c: number, n:
       shape(g, '#5a4a2a', o, () => roundRect(g, -r * 0.8, -r * 0.6, r * 1.6, r * 1.2, r * 0.15));
       for (const x of [-0.45, 0, 0.45]) shape(g, '#8a6a3a', o * 0.5, () => roundRect(g, x * r - r * 0.18, -r * 0.5, r * 0.36, r, r * 0.12));
       g.strokeStyle = '#c0392b'; lw(g, r * 0.06); g.beginPath(); g.moveTo(-r * 0.7, 0); g.bezierCurveTo(-r * 0.2, -r * 0.6, r * 0.2, r * 0.6, r * 0.7, 0); g.stroke();
-      glowDot(g, r * 0.6, -r * 0.45, r * 0.06, '#ff3030');
+      glowDot(g, r * 0.6, -r * 0.45, r * 0.06, m.stun ? '#7fc8ff' : '#ff3030');
+      if (m.stun) {
+        // stun / EMP bombs: electric-blue bands round the casings and a crackling arc instead of the red fuse
+        g.strokeStyle = '#86adff'; lw(g, r * 0.08);
+        for (const x of [-0.45, 0, 0.45]) { g.beginPath(); g.moveTo(x * r - r * 0.18, 0); g.lineTo(x * r + r * 0.18, 0); g.stroke(); }
+        glowDot(g, 0, 0, r * 0.12, '#a8d8ff');
+      }
       break;
     }
     case 'gyro': {

@@ -51,6 +51,9 @@ export interface ChassisDef {
   art?: [number, number];
   /** if set, only these mobility ids fit this chassis (e.g. mechs need legs) */
   mobility?: string[];
+  /** most weapon modules this hull may carry (default by size: parts.ts maxWeaponsFor); the other sockets take
+   *  utilities, armour, shields and other non-weapons only */
+  maxWeapons?: number;
   /** roles this hull is built for */
   roles: Role[];
   traits: ChassisTrait[];
@@ -162,8 +165,17 @@ export interface ModuleDef {
   projectile?: ProjectileKind;
   /** cells / second; ignored for hitscan (beam, lightning, rail) */
   projectileSpeed?: number;
+  /** damage kind override (stats.ts damageKinds), e.g. a gauss slug flies as a 'shell' but is a solid kinetic round:
+   *  reactive armour doesn't blunt it and point defense can't shoot it down */
+  dmgKind?: 'kinetic' | 'explosive' | 'energy';
   /** splash radius in cells (0 = single target) */
   splash?: number;
+  /** share of the centre damage dealt at the blast's rim (linear falloff in between; default SPLASH_EDGE 0.3): high =
+   *  a flat lethal radius (heavy shells), low = a sharp point blast */
+  splashEdge?: number;
+  /** proximity fuse radius (cells): an anti-air shell bursts as soon as an enemy aircraft comes this close, so jinking
+   *  or evasive flyers can't slip the airburst */
+  proximity?: number;
   /** armour penetration tier: 0 (none), 0.5 (half: ignores half the target's armour) or 1 (full: ignores all of it).
    *  Only these three values are used (see AP_TIERS / apTier in stats.ts); shields ignore penetration entirely. */
   ap?: number;
@@ -258,11 +270,41 @@ export interface ModuleDef {
   energyResist?: number;
   /** immune to stun, slow, disarm, burn and knockback */
   hardened?: boolean;
-  /** explodes on death (radius beyond the carrier's hull) */
-  deathBlast?: { damage: number; radius: number };
+  /** explodes on death (radius beyond the carrier's hull); `friendly`: the blast also hurts allies (an ammo rack cooking off) */
+  deathBlast?: { damage: number; radius: number; friendly?: boolean; stun?: number };
+  // ---- small-hull utilities: worth most on light, fast or numerous units ----
+  /** evasion thrusters: chance to dodge slow projectiles (shells, rockets, lobbed rounds, orbs); scaled down by hull size
+   *  and up by speed (stats.ts dodgeChance) */
+  dodge?: number;
+  /** deflector: every hit on the hull loses this much damage first (never below 10% of it): shrugs off MG / flak swarms */
+  deflect?: number;
+  /** pack link: +`per` damage for each ally of the same design within `radius` cells, up to +`cap` */
+  pack?: { per: number; cap: number; radius: number };
+  // ---- trade-off utilities (the weapon cap leaves sockets for these; each is a net gain with a real cost) ----
+  /** signed tuning of the whole unit (fractions, except `ap` and `splash` which add penetration tiers / blast cells):
+   *  positives and negatives of the same key each stack with diminishing returns (stats.ts tuneOf) */
+  tune?: Partial<Record<TuneKey, number>>;
+  /** berserker: +`damage` (fraction) to every hit while the unit is below `below` of its max hp */
+  berserk?: { below: number; damage: number };
+  /** target painter: every hit marks the target for `duration` s; the whole side deals +`bonus` (fraction) to it */
+  paint?: { bonus: number; duration: number };
+  /** overcharge: a weapon's first volley after `idle` s without firing deals +`mult` (fraction) */
+  overcharge?: { mult: number; idle: number };
+  /** kill rush: after each kill, +`speed` and +`fireRate` (fractions) for `duration` s */
+  killRush?: { speed: number; fireRate: number; duration: number };
+  /** overheat: the hull loses this share of its max hp per second while its guns are firing (never below 25%) */
+  overheat?: number;
+  /** damage lost (fraction) on shots fired while still cloaked: the cloak field bleeds the guns' power */
+  cloakDamage?: number;
+  /** no longer buildable: kept so old records still simulate; saved designs swap it for `replacedBy` (else drop it) */
+  retired?: boolean;
+  replacedBy?: string;
   /** grants fire-on-move to the whole unit */
   gyro?: boolean;
 }
+
+/** keys of ModuleDef.tune */
+export type TuneKey = 'damage' | 'range' | 'fireRate' | 'speed' | 'turn' | 'hp' | 'weight' | 'ap' | 'splash' | 'projSpeed' | 'traverse';
 
 /** A player-authored unit blueprint. */
 export interface Design {
@@ -318,6 +360,9 @@ export interface UnitStats {
   rangeMult: number;
   /** spread multiplier from traits/modules (stable, targeting computer) */
   spreadMult: number;
+  /** net trade-off tuning of the loadout (stats.ts tuneOf): the sim applies the per-weapon parts (damage, ap, splash,
+   *  shell speed, traverse) through stats.ts tunedWeapon, the same numbers the price uses */
+  tune: Partial<Record<TuneKey, number>>;
   // ---- cost model breakdown (see stats.ts) ----
   /** sum of the parts' base complexity costs */
   partsCost: number;

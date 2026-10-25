@@ -51,10 +51,16 @@ ETA = {k: v * ETA_SCALE for k, v in {'w': 0.3, 'u': 0.3, 's': 0.2, 'm': 0.25}.it
 # mixed-army test), so the whole price level is pulled toward "fair vs the starters" instead of only the spread
 # between test designs. Without it every row is centred on the mean of all rows and the level can drift.
 CENTER = os.environ.get('FIT_CENTER', 'all')
+# FIT_CALBASE=<cal json> with FIT_BOUND=<factor>: a trust region; every fitted calibration stays within [base/factor,
+# base*factor] of the price model's own value (the fit corrects the model, it doesn't replace it), and the per-step
+# shrink pulls toward the base instead of toward 1
+CALBASE = json.load(open(os.environ['FIT_CALBASE'])) if os.environ.get('FIT_CALBASE') else None
+BOUND = float(os.environ.get('FIT_BOUND', '0'))
 # FIT_AVG=k: also write the geometric mean of the last k iterations' tables to *_avg.json (averages out the
 # iteration-to-iteration noise of a small-seed fit)
 AVG = int(os.environ.get('FIT_AVG', '0'))
 hist = []
+RIOT_IDS = set(os.environ.get('FIT_RIOT', 'starter-stormcaller,starter-skyguard').split(','))
 STEP_S = float(os.environ.get('FIT_STEP_S', '0.12'))
 
 
@@ -71,7 +77,14 @@ for it in range(iters):
         rows = [r for r in rows if r['id'].startswith('f-')]
     baserate = {r['carrier']: r['rate'] for r in rows if r['base']}
     srows = [r for r in rows if r['id'].startswith('starter-') and r['id'] not in IGNORE]
-    cen = (sum(lg(r['rate']) for r in srows) / len(srows)) if CENTER == 'starters' and srows else sum(lg(r['rate']) for r in rows) / len(rows)
+    # FIT_CENTER=abs: logits measured against 50% itself (no re-centring), so the common level is pulled to "fair vs
+    # the reference mix" too -- needed when the mix is made of the very designs being fitted (smart-deploy runs, where
+    # re-centring let the whole field drift to ~60%)
+    # FIT_CENTER=mix: the supply-weighted mean logit of the starters the reference mix is made of (size <= 3; the riot
+    # designs every smart mix reserves ~20% of its budget for count ~2.4x): the mix itself scores 50% by construction,
+    # so this is the level that doesn't chase its own tail when the mix's starters are repriced
+    mixw = [(r, r['cost'] * (2.4 if r['id'] in RIOT_IDS else 1.0)) for r in srows if r['size'] <= 3]
+    cen = (sum(lg(r['rate']) * w for r, w in mixw) / sum(w for _, w in mixw)) if CENTER == 'mix' and mixw else 0.0 if CENTER == 'abs' else (sum(lg(r['rate']) for r in srows) / len(srows)) if CENTER == 'starters' and srows else sum(lg(r['rate']) for r in rows) / len(rows)
     acc = collections.defaultdict(lambda: [0.0, 0.0])
     sacc = collections.defaultdict(lambda: [0.0, 0.0])
     for r in rows:
@@ -102,7 +115,13 @@ for it in range(iters):
         t = 'u' if MODS.get(k) == 'util' else 'w'
         step = max(-CLAMP, min(CLAMP, ETA[t] * s / (w + 0.5)))
         v = cal.get(k, 1.0) * math.exp(step)
-        v = v ** 0.99
+        b = (CALBASE or {}).get(k)
+        if b:
+            v = b * (v / b) ** 0.99
+            if BOUND > 1:
+                v = min(b * BOUND, max(b / BOUND, v))
+        else:
+            v = v ** 0.99
         if t == 'u':
             v = min(4.0, max(0.1, v))
         cal[k] = v

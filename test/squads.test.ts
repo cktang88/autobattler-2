@@ -15,10 +15,10 @@ import type { Design, Placement } from '../src/shared/types.ts';
 
 const S = (id: string) => STARTER_DESIGNS.find((d) => d.id === id)!;
 /** a 2 x 2 medium hull cheap enough for blocks of 4 (the Missile Spire used to be; reprices moved it to 2) */
-const SPIRE4: Design = { id: 'spire4', name: 'Spire4', chassis: 'warden', mobility: 'anchor', mounts: ['hmg', null] };
+const SPIRE4: Design = { id: 'spire4', name: 'Spire4', chassis: 'warden', mobility: 'spider', mounts: ['minigun', null] };
 /** an 8-unit light block at current prices (the tests below were written around Tank Hunter, which reprices move
  *  between tiers); asserted in the first test so a price change that moves it fails loudly here */
-const EIGHT: Design = { id: 'eight', name: 'Eight', chassis: 'raider', mobility: 'legs', mounts: ['hmg', null] };
+const EIGHT: Design = { id: 'eight', name: 'Eight', chassis: 'raider', mobility: 'legs', mounts: ['twinmg', null] };
 
 test('squad tiers: cheap light units 16 to a block, pricier ones 8 or 4; medium 4, 2 or 1; bigger hulls single units', () => {
   assert.deepEqual(SQUAD_TIERS[1].map((t) => t[1]), [16, 8, 4]);
@@ -30,8 +30,8 @@ test('squad tiers: cheap light units 16 to a block, pricier ones 8 or 4; medium 
   for (const size of [3, 4, 5]) assert.equal(squadFor(size, () => 1), 1);
   // the starters
   const sq = Object.fromEntries(STARTER_DESIGNS.map((d) => [d.name, computeStats(d).squad]));
-  assert.deepEqual([sq['Buzzsaw'], sq['Torchbug'], sq['Gnasher'], sq['Tank Hunter'], sq['Lancer'], sq['Hornet']], [16, 16, 8, 4, 4, 16]);
-  assert.deepEqual([sq['Missile Spire'], sq['Strafer'], sq['Tankbuster'], sq['Bulwark'], sq['Skyguard']], [1, 2, 2, 1, 1]); // (Spire: spider legs since the anchor was retired)
+  assert.deepEqual([sq['Buzzsaw'], sq['Torchbug'], sq['Gnasher'], sq['Tank Hunter'], sq['Lancer'], sq['Hornet']], [8, 8, 8, 4, 4, 8]); // rules 7: light squads repriced up (SIZE_K 0.85 -> 0.97), none is a 16 any more
+  assert.deepEqual([sq['Missile Spire'], sq['Strafer'], sq['Tankbuster'], sq['Bulwark'], sq['Skyguard']], [1, 1, 2, 1, 1]); // (Spire: spider legs since the anchor was retired)
   assert.equal(computeStats(EIGHT).squad, 8, 'test design EIGHT');
   for (const d of STARTER_DESIGNS) if (computeStats(d).size > 2) assert.equal(computeStats(d).squad, 1, d.name);
   // a squad's unit price (one decimal shown) sits in its tier -- the analytic price: the team-value correction (stats.ts
@@ -107,7 +107,8 @@ test('rules: zone, overlap and the sim-unit cap use the real squad', () => {
 });
 
 test('migrating a rules-2 match splits old 16-unit blocks into blocks of the new squad on the same unit positions', () => {
-  const lancer = S('starter-lancer'), hunter = EIGHT, buzz = S('starter-buzzsaw');
+  // buzz: a light design that is a 16-unit squad at the current prices (no starter is since rules 7)
+  const lancer = S('starter-lancer'), hunter = EIGHT, buzz: Design = { id: 'buzz16', name: 'Buzz16', chassis: 'scout', mobility: 'wheels', mounts: ['shotgun'] };
   const deck = [lancer, hunter, buzz];
   const m = newMatch('old', 'ai', 1, newPlayer('A', deck), newPlayer('B', deck, true), 0);
   m.rules = 2;
@@ -214,28 +215,93 @@ test('migrating a rules-3 match sells back medium single blocks of designs that 
   assert.equal(migrateMatch(m), false, 'idempotent');
 });
 
+/** a broad set of plain designs (every hull x drive, one of a few guns in its first socket that takes it): the migration
+ *  tests look for designs a rules change actually reshaped, instead of pinning ones that later repricing moves */
+async function generated(): Promise<Design[]> {
+  const { CHASSIS, MOBILITY, MODULE_BY_ID, pairingError } = await import('../src/shared/parts.ts');
+  const { slotError, validateDesign } = await import('../src/shared/stats.ts');
+  const out: Design[] = [];
+  for (const c of CHASSIS) for (const mob of MOBILITY) {
+    if (pairingError(c.id, mob.id) || mob.retired || c.size > 2) continue;
+    for (const w of ['mg', 'twinmg', 'hmg', 'ac20', 'autocannon', 'flak', 'laser', 'grenade', 'rocketL', 'cannon75']) {
+      const mod = MODULE_BY_ID.get(w)!;
+      const i = c.mounts.findIndex((_, k) => !slotError(c, mob.id, k, mod));
+      if (i < 0) continue;
+      const d: Design = { id: `g-${c.id}-${mob.id}-${w}`.slice(0, 40), name: 'gen', chassis: c.id, mobility: mob.id, mounts: c.mounts.map((_, k) => (k === i ? w : null)) };
+      if (!validateDesign(d).length) out.push(d);
+    }
+  }
+  return out;
+}
+
+/** board legality after a migration: untouched blocks kept their place, and no two blocks overlap */
+async function checkBoard(m: import('../src/shared/types.ts').MatchState, untouched: Record<number, [number, number]>) {
+  const { shapeOf } = await import('../src/shared/match.ts');
+  const { blocksOverlap } = await import('../src/shared/grid.ts');
+  const p = m.players[0];
+  const design = (id: string) => p.deck.find((d) => d.id === id);
+  for (const [uid, [x, y]] of Object.entries(untouched)) {
+    const u = p.board.find((b) => b.uid === Number(uid))!;
+    assert.deepEqual([u.x, u.y], [x, y], `untouched block ${uid} keeps its place`);
+  }
+  for (let a = 0; a < p.board.length; a++) for (let b = a + 1; b < p.board.length; b++) {
+    const A = p.board[a], B = p.board[b];
+    assert.ok(!blocksOverlap(A, shapeOf(design(A.designId)), B, shapeOf(design(B.designId))), `blocks ${A.uid} and ${B.uid} overlap`);
+  }
+}
+
 test('rules 6 migration: only blocks whose squad the drive rework changed are re-checked; prices just update', async () => {
-  const { AI_POOL } = await import('../src/shared/aipool.ts');
   const { STARTER_DESIGNS } = await import('../src/shared/starters.ts');
   const { RULES_VERSION, drivesReshaped, migrateMatch, newMatch, newPlayer, shapeOf } = await import('../src/shared/match.ts');
-  const disc = AI_POOL.find((d) => d.id === 'pool-flakdisc')!; // hover flak disc: 1 -> 2 to a block
-  const bulwark = STARTER_DESIGNS.find((d) => d.id === 'starter-bulwark')!, buzz = STARTER_DESIGNS.find((d) => d.id === 'starter-buzzsaw')!;
-  const deck = [disc, bulwark, buzz];
-  assert.equal(RULES_VERSION, 6);
+  const gen = await generated();
+  const moved = drivesReshaped(newPlayer('A', gen));
+  assert.ok(moved.size > 0, 'the drive rework reshaped some designs');
+  const re = gen.find((d) => moved.has(d.id) && shapeOf(d).squad > 1) ?? gen.find((d) => moved.has(d.id))!;
+  const bulwark = STARTER_DESIGNS.find((d) => d.id === 'starter-bulwark')!, torch = STARTER_DESIGNS.find((d) => d.id === 'starter-torchbug')!;
+  assert.ok(!drivesReshaped(newPlayer('A', [bulwark, torch])).size, 'the fixtures around it are untouched');
+  const deck = [re, bulwark, torch];
+  assert.ok(RULES_VERSION >= 6);
   const m = newMatch('r5', 'ai', 1, newPlayer('A', deck), newPlayer('B', deck, true), 0);
   m.rules = 5; m.status = 'deploy'; m.round = 2;
-  assert.deepEqual([...drivesReshaped(m.players[0])], ['pool-flakdisc']);
-  // the disc's (now wider) block was placed right next to the bulwark; the buzzsaw sits elsewhere
+  // the reshaped block was placed right up against the bulwark; the torch squad sits elsewhere
   m.players[0].board = [
-    { uid: 1, designId: disc.id, x: 10, y: 2, level: 1, round: 1 },
-    { uid: 2, designId: bulwark.id, x: 10 + 2, y: 2, level: 1, round: 1 },
-    { uid: 3, designId: buzz.id, x: 40, y: 2, level: 1, round: 1 },
+    { uid: 1, designId: re.id, x: 10, y: 2, level: 1, round: 1 },
+    { uid: 2, designId: bulwark.id, x: 10 + shapeOf(re).squad, y: 2, level: 1, round: 1 },
+    { uid: 3, designId: torch.id, x: 40, y: 2, level: 1, round: 1 },
   ];
-  assert.equal(shapeOf(disc).squad, 2);
+  const supply0 = m.players[0].supply;
   assert.equal(migrateMatch(m), true);
-  assert.equal(m.rules, 6);
-  const at = (uid: number) => m.players[0].board.find((u) => u.uid === uid)!;
-  assert.deepEqual([at(2).x, at(2).y, at(3).x, at(3).y], [12, 2, 40, 2], 'untouched blocks keep their place');
-  const d = at(1);
-  assert.ok(d && !(d.x === 10 && d.y === 2), `the reshaped disc block moved off the bulwark: ${d?.x},${d?.y}`);
+  assert.equal(m.rules, RULES_VERSION);
+  await checkBoard(m, { 2: [10 + shapeOf(re).squad, 2], 3: [40, 2] });
+  assert.ok(m.players[0].board.some((u) => u.uid === 1) || m.players[0].supply > supply0, 'the reshaped block is kept (moved if needed) or sold back');
+});
+
+test('rules 7 migration (weapon pass): designs whose squad the weapon numbers changed are re-checked, others untouched', async () => {
+  const { STARTER_DESIGNS } = await import('../src/shared/starters.ts');
+  const { MODULE_BY_ID } = await import('../src/shared/parts.ts');
+  const { RULES_VERSION, migrateMatch, newMatch, newPlayer, weaponsReshaped } = await import('../src/shared/match.ts');
+  assert.equal(RULES_VERSION, 7);
+  const gen = await generated();
+  const snap = () => JSON.stringify([...MODULE_BY_ID.values()].map((m) => Object.fromEntries(Object.entries(m).sort())));
+  const before = snap();
+  const moved = weaponsReshaped(newPlayer('A', gen));
+  assert.equal(snap(), before, 'the current numbers are swapped back in full');
+  assert.ok(moved.size > 0 && moved.size < gen.length, `reshaped ${moved.size}/${gen.length}`);
+  // a design carrying only weapons the pass left alone is never re-checked
+  const hunter = STARTER_DESIGNS.find((d) => d.id === 'starter-hunter')!;
+  assert.ok(!weaponsReshaped(newPlayer('A', [hunter])).size, 'ATGM raiders: untouched');
+  const re = gen.find((d) => moved.has(d.id))!;
+  const deck = [re, hunter];
+  const m = newMatch('r6', 'ai', 1, newPlayer('A', deck), newPlayer('B', deck, true), 0);
+  m.rules = 6; m.status = 'deploy'; m.round = 2;
+  m.players[0].board = [
+    { uid: 1, designId: hunter.id, x: 30, y: 2, level: 1, round: 1 },
+    { uid: 2, designId: re.id, x: 2, y: 2, level: 1, round: 1 },
+  ];
+  const supply0 = m.players[0].supply;
+  assert.equal(migrateMatch(m), true);
+  assert.equal(m.rules, 7);
+  await checkBoard(m, { 1: [30, 2] });
+  assert.ok(m.players[0].board.some((u) => u.uid === 2) || m.players[0].supply > supply0, 'the reshaped block is kept (moved if needed) or sold back');
+  assert.equal(migrateMatch(m), false, 'idempotent');
 });

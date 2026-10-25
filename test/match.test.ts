@@ -28,8 +28,9 @@ test('starter designs are valid, unique and cover sizes/flyers/healers', () => {
   assert.ok(stats.some((s) => s.cost <= supplyForRound(1) / 4));
 });
 
-const deck = STARTER_DESIGNS.slice(0, DECK_SIZE);
-const cheap = STARTER_DESIGNS.find((d) => computeStats(d).size === 1)!;
+// a 16-unit light squad (no starter is cheap enough for 16 since the rules-7 prices: a shotgun scout is)
+const cheap: Design = { id: 'cheap16', name: 'Shotgun Scout', chassis: 'scout', mobility: 'wheels', mounts: ['shotgun'] };
+const deck = [cheap, ...STARTER_DESIGNS].slice(0, DECK_SIZE);
 const big = STARTER_DESIGNS.find((d) => computeStats(d).size === 3)!;
 /** block shapes: a 16-unit light squad (8 x 2) and a single 2x2 unit */
 const SQ16: BlockShape = { size: 1, squad: 16 }, ONE2: BlockShape = { size: 2, squad: 1 };

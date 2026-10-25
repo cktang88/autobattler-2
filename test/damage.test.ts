@@ -6,12 +6,15 @@ import { apTier, damageKinds } from '../src/shared/stats.ts';
 import { Battle } from '../src/shared/sim/battle.ts';
 import type { Design } from '../src/shared/types.ts';
 
-test('armour penetration uses only the three tiers; every melee weapon has full penetration', () => {
+test('armour penetration uses only the three tiers; melee weapons pierce at least half the armour', () => {
   for (const m of MODULES) {
     if (m.kind !== 'weapon') continue;
     assert.ok([0, 0.5, 1].includes(m.ap ?? 0), `${m.id}: ap ${m.ap}`);
-    if (m.projectile === 'melee') assert.equal(apTier(m), 'full', m.id);
+    // the light cutters (chainsaw, plasma blade) are half-pierce shredders; the claw, drill, hammer, ... pierce it all
+    if (m.projectile === 'melee') assert.notEqual(apTier(m), 'none', m.id);
   }
+  for (const id of ['chainsaw', 'plasmablade']) assert.equal(apTier(MODULES.find((m) => m.id === id)!), 'half', id);
+  for (const id of ['claw', 'drill', 'hammer', 'buzzsaw', 'ram']) assert.equal(apTier(MODULES.find((m) => m.id === id)!), 'full', id);
   assert.deepEqual(damageKinds({ projectile: 'rocket', category: 'rocket' }), ['explosive']);
   assert.deepEqual(damageKinds({ projectile: 'beam', category: 'energy' }), ['energy']);
   assert.deepEqual(damageKinds({ projectile: 'bullet', category: 'machinegun' }), ['kinetic']);

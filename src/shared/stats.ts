@@ -1,9 +1,9 @@
 // Design -> UnitStats, plus design validation.
 
-import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError } from './parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, fitsMount, moduleTier, pairingError, weaponCap } from './parts.ts';
 import { hullK, meleeSlots } from './mountgeo.ts';
 import { REPAIR_AURA_RANGE } from './types.ts';
-import type { ChassisDef, Design, ModuleDef, UnitStats } from './types.ts';
+import type { ChassisDef, Design, ModuleDef, TuneKey, UnitStats } from './types.ts';
 
 /** Above this load (weight / capacity) a design is illegal. */
 export const MAX_LOAD = 1.5;
@@ -16,6 +16,13 @@ export function loadSpeedFactor(load: number): number {
   if (load <= 1) return 1 + 0.25 * (1 - load);
   return Math.max(0.3, 1 - (load - 1) * 1.2);
 }
+/** Turn-rate multiplier from load, the same shape as loadSpeedFactor: a light build pivots up to +22% faster, a build at
+ *  capacity turns at the drive's base rate, and an overloaded one swings clearly slower (x0.4 at the 1.5 legal cap).
+ *  Shared by computeStats (sim) and the designer's Turning row. */
+export function loadTurnFactor(load: number): number {
+  if (load <= 1) return 1 + 0.22 * (1 - load);
+  return Math.max(0.4, 1 - (load - 1) * 1.2);
+}
 
 /** Percentage modules stack with diminishing returns: the strongest copy counts fully, the 2nd at 80%, the 3rd at
  *  60%, then 40%, 20% (two targeting computers: +15% + 12% range, not +30%). */
@@ -26,14 +33,51 @@ export function stackBonus(vals: number[]): number {
 }
 /** most energy damage one unit can shrug off however many mirror coatings it carries */
 export const MAX_ENERGY_RESIST = 0.75;
+/** Signed stacking: gains and losses of the same kind each stack with diminishing returns (two Short-Barrel Kits:
+ *  +25% + 20% damage, -15% - 12% range), then net out. */
+export function signedStack(vals: number[]): number {
+  return stackBonus(vals.filter((v) => v > 0)) - stackBonus(vals.filter((v) => v < 0).map((v) => -v));
+}
+/** keys of ModuleDef.tune that stackedBonuses folds into the matching legacy bonus (rangeBonus, speedBonus, fireRateBonus) */
+const STACKED_TUNE = new Set<TuneKey>(['range', 'speed', 'fireRate']);
+/** Net trade-off tuning of a loadout (ModuleDef.tune), every key but range / speed / fire rate (see stackedBonuses). */
+export function tuneOf(mods: ModuleDef[]): Partial<Record<TuneKey, number>> {
+  const out: Partial<Record<TuneKey, number>> = {};
+  for (const m of mods) for (const k of Object.keys(m.tune ?? {}) as TuneKey[]) {
+    if (STACKED_TUNE.has(k) || k in out) continue;
+    const v = signedStack(mods.map((x) => x.tune?.[k] ?? 0));
+    if (v) out[k] = v;
+  }
+  return out;
+}
+/** A weapon as a tuned loadout fires it (shared by the sim and the price, so they agree): damage scaled, armour
+ *  penetration moved by whole half-tiers (0 / 0.5 / 1), blast radius widened on projectile weapons that already burst or
+ *  hit as solid rounds (not beams, lightning, rails, flame or melee), shells sped up / slowed, turret traverse scaled.
+ *  The module itself is returned untouched when nothing applies. */
+export function tunedWeapon(w: ModuleDef, t: Partial<Record<TuneKey, number>> | undefined): ModuleDef {
+  if (!t || w.kind !== 'weapon' || w.heal) return w;
+  const { damage = 0, ap = 0, splash = 0, projSpeed = 0, traverse = 0 } = t;
+  if (!damage && !ap && !splash && !projSpeed && !traverse) return w;
+  const p = w.projectile;
+  const solid = p !== 'beam' && p !== 'lightning' && p !== 'rail' && p !== 'flame' && p !== 'melee';
+  const out: ModuleDef = { ...w };
+  if (damage && w.damage) out.damage = w.damage * Math.max(0.2, 1 + damage);
+  if (ap) out.ap = Math.min(1, Math.max(0, Math.round(((w.ap ?? 0) + ap) * 2) / 2));
+  if (splash && solid) out.splash = Math.max(0, (w.splash ?? 0) + splash);
+  if (projSpeed && w.projectileSpeed) out.projectileSpeed = w.projectileSpeed * Math.max(0.3, 1 + projSpeed);
+  if (traverse && w.spinal == null) out.turretTurn = turretTurnRate(w) * Math.max(0.2, 1 + traverse);
+  return out;
+}
+
 /** Every percentage bonus of a loadout, stacked (shared by the price model and the sim so they agree). */
 export function stackedBonuses(mods: ModuleDef[]): { range: number; spreadCut: number; speed: number; fireRate: number; reload: number; energyResist: number; regen: number } {
   const pick = (f: (m: ModuleDef) => number | undefined) => stackBonus(mods.map((m) => f(m) ?? 0));
+  const signed = (f: (m: ModuleDef) => number) => signedStack(mods.map(f));
   return {
-    range: pick((m) => m.rangeBonus),
+    range: signed((m) => (m.rangeBonus ?? 0) + (m.tune?.range ?? 0)),
     spreadCut: pick((m) => (m.spreadMult ? 1 - m.spreadMult : 0)),
-    speed: pick((m) => m.speedBonus),
-    fireRate: pick((m) => m.fireRateBonus),
+    speed: signed((m) => (m.speedBonus ?? 0) + (m.tune?.speed ?? 0)),
+    fireRate: signed((m) => (m.fireRateBonus ?? 0) + (m.tune?.fireRate ?? 0)),
     reload: Math.min(0.8, pick((m) => m.reloadBonus)),
     energyResist: Math.min(MAX_ENERGY_RESIST, pick((m) => m.energyResist)),
     regen: pick((m) => m.regen),
@@ -64,6 +108,16 @@ export function cycleTime(w: ModuleDef): number {
   const cd = w.cooldown ?? 1;
   if (!w.magazine || !w.reload) return cd;
   return (cd * (w.magazine - 1) + w.reload + (w.resupply ? RESUPPLY_TRIP : 0)) / w.magazine;
+}
+
+/** Alpha of a weapon: damage of one full magazine (clip weapons) or one volley (everything else), vs 0 armor, and the
+ *  seconds it takes to deliver it (0 for a single volley). Clip weapons trade sustained dps for this burst. */
+export function burstOf(w: ModuleDef): { damage: number; time: number; reload: number } {
+  const cl = w.cluster ? w.cluster.count * w.cluster.damage : 0;
+  const volley = ((w.damage ?? 0) + cl) * (w.burst ?? 1) * (w.pellets ?? 1);
+  const burstT = ((w.burst ?? 1) - 1) * 0.1; // follow-up rounds of a burst go out BURST_GAP (0.1 s) apart
+  if (w.magazine && w.reload) return { damage: volley * w.magazine, time: (w.magazine - 1) * (w.cooldown ?? 1) + burstT, reload: w.reload };
+  return { damage: volley, time: burstT, reload: w.cooldown ?? 1 };
 }
 
 /** Firing pattern label for UI. */
@@ -109,7 +163,9 @@ export const POWER_K = 0.36;
 // were scaled down (mountgeo bodyScale: light troopers 0.7, the rest 0.78): size-1 armies fell to ~20% vs size 2.
 // Dynamic squads (16 / 8 / 4 by unit price) made mixed armies stronger (their light blocks fight better): giants and
 // titans went down to 1.37 / 1.34 (from 1.49) to stay ~50% vs mixed armies.
-export const SIZE_K: number[] = [0.85, 1.11, 1.19, 1.37, 1.34];
+// Rules 7: fitted together with MODULE_CAL against smart-deployed mixed armies (see there); light squads are worth
+// more as a chaff screen (0.85 -> 0.97), heavies less (1.19 -> 0.92), titans more (1.34 -> 1.68).
+export const SIZE_K: number[] = [0.97, 1.04, 0.92, 1.32, 1.68];
 /** Per-mobility price factor on the whole unit cost (fitted with scripts/fit_cal.py on plain frames; 1 = analytic).
  *  Soaks up what the analytic mobility term cannot see: how well a drive keeps a hull in the fight (leapers waste
  *  time, anchors and big tracks never leave the front, flyers dodge half the field). */
@@ -175,7 +231,8 @@ export function apTier(mod: Pick<ModuleDef, 'ap'>): ApTier {
 }
 export type DamageKind = 'kinetic' | 'explosive' | 'energy';
 /** Damage types of a weapon (plasma orbs are both explosive and energy). */
-export function damageKinds(mod: Pick<ModuleDef, 'projectile' | 'category'>): DamageKind[] {
+export function damageKinds(mod: Pick<ModuleDef, 'projectile' | 'category' | 'dmgKind'>): DamageKind[] {
+  if (mod.dmgKind) return [mod.dmgKind];
   const k = mod.projectile;
   if (k === 'shell' || k === 'rocket' || k === 'missile' || k === 'arc') return ['explosive'];
   if (k === 'orb') return mod.category === 'energy' ? ['energy', 'explosive'] : ['explosive'];
@@ -194,14 +251,45 @@ export function armorEfficiency(damage: number, ap: number): number {
 /** Expected fraction of shots that connect with a (mostly engaged, slowly moving) target. Hitscan, homing and
  *  melee never miss; unguided projectiles lose to spread, and a little to flight time: the sim leads moving targets
  *  (constant-velocity intercept), so only targets that turn or stop mid-flight dodge. MODULE_CAL was rescaled when
- *  this went from 0.25 to 0.04 per second of flight, keeping every price unchanged. */
+ *  this went from 0.25 to 0.04 per second of flight, keeping every price unchanged. Lobbed shells and unguided rockets
+ *  weigh their flight time FLIGHT_SLOW per second instead: the sim showed a slow howitzer shell (speed 9) losing about
+ *  half its value against fast movers next to a quick one (speed 16), which 0.04 / s priced at ~3%. */
+export const FLIGHT_FAST = 0.04;
+export const FLIGHT_SLOW = 0.15;
 export function hitFactor(w: ModuleDef): number {
   const p = w.projectile;
   if (p === 'beam' || p === 'lightning' || p === 'rail' || p === 'melee' || (p === 'missile' && !w.spread)) return 1;
   const spread = (w.spread ?? 0) * 0.7;
   const flight = w.projectileSpeed ? (w.range ?? 5) / w.projectileSpeed : 0;
-  const target = 0.45 + 0.6 * (w.splash ?? 0);
-  return target / (target + spread + 0.04 * flight) / 0.7;
+  // a proximity fuse bursts beside whatever it passes near: it widens the target as far as the fuse reaches
+  const target = 0.45 + 0.6 * (w.splash ?? 0) + 1.5 * (w.proximity ?? 0);
+  return target / (target + spread + (p === 'arc' || p === 'rocket' ? FLIGHT_SLOW : FLIGHT_FAST) * flight) / 0.7;
+}
+
+/** Damage at the rim of a blast, as a share of the centre hit (sim: linear falloff to this at the splash radius). */
+export const SPLASH_EDGE = 0.3;
+/** Mean damage over a blast's area relative to the default falloff: a flat lethal radius (edge 1) is worth ~1.9x a
+ *  sharp centre (edge 0) per unit of splash. Area-weighted mean of a linear falloff = 1/3 + 2 edge / 3. */
+export function splashEdgeK(w: Pick<ModuleDef, 'splashEdge'>): number {
+  const e = w.splashEdge ?? SPLASH_EDGE;
+  return (1 / 3 + (2 * e) / 3) / (1 / 3 + (2 * SPLASH_EDGE) / 3);
+}
+
+/** Aiming freedom: a fast turret is rated 1. A slow turret (the sim no longer swings the hull to help it) and a spinal
+ *  (fixed-arc) gun, which the whole vehicle must turn to bring on, lose a little: in equal-supply fights the enemy mostly
+ *  comes head-on, so a narrow arc only costs against flankers (a spinal and a turreted howitzer scored the same against
+ *  hover raiders charging the line). The rest of the trade is left to MODULE_CAL. */
+export function traverseFactor(w: ModuleDef): number {
+  if (w.projectile === 'melee' || w.heal) return 1;
+  if (w.spinal != null) return 0.9 + 0.1 * Math.min(1, w.spinal / 0.6);
+  return 0.95 + 0.05 * Math.min(1, turretTurnRate(w) / 1.5);
+}
+
+/** Value lost to a minimum range: the share of the reach a weapon can't use, weighted (a dead zone of a third of the
+ *  reach costs ~13%, the old flat 10% at a quarter). */
+export function minRangeFactor(w: Pick<ModuleDef, 'minRange' | 'range'>): number {
+  const q = (w.minRange ?? 0) / Math.max(1, w.range ?? 1);
+  return 1 - 0.4 * Math.min(1, q);
 }
 
 /** Empirical calibration, fitted with `node scripts/balance.ts` (equal-supply armies of every module vs a reference
@@ -211,22 +299,31 @@ export function hitFactor(w: ModuleDef): number {
  *  in computeStats (1 = analytic value; low values mean the effect is worth little in mass battles). Re-fit after
  *  changing the sim or the part numbers. */
 export const MODULE_CAL: Record<string, number> = {
-  leech: 1.16, prism: 5.18, voidlance: 1.49, entropy: 1,
-  aamissile: 1.26, ac20: 2.83, ac40: 5.01, aegisT: 1.10, annihilator: 2.22, arclance: 2.95, atgm: 8.11,
-  autocannon: 2.29, autoloader: 2.89, avenger: 3.10, barrage: 8.26, bombs: 8.69, bulwarkshield: 1.48, buzzsaw: 0.27,
-  cannon: 0.88, cannon75: 1.49, chainsaw: 0.60, claw: 0.56, clusterbombs: 14.00, heavybomb: 6.05, cruise: 7.74, disarm: 0.416,
-  dome: 1.0, domeG: 1.0, doomsday: 4.66, drill: 0.81, empcannon: 0.53, flak: 0.31, flamer: 0.61, gauss: 4.58,
-  gravity: 3.14, grinder: 3.99, guidedrocket: 3.35, gyro: 0.11, hammer: 1.46, hardened: 0.10, heatray: 1.32,
-  heavyflak: 1.19, hmg: 1.67, howitzer: 22.16, incendiary: 0.35, inferno: 0.4, jammer: 0.25, laser: 2.3,
-  lightrail: 12, massdriver: 0.75, mg: 3, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
-  mortar: 10.84, nanite: 0.14, napalm: 0.12, overclock: 0.21, phantom: 0.16, plasma: 3.4, plasmablade: 0.69,
-  plasmaorb: 0.868, pointdef: 4.00, quad20: 0.66, railgun: 20, ram: 0.86, reactive: 0.78, repair: 12.45,
-  repairM: 4.00, rocketL: 1.16, rockets: 1.67, sam: 4.55, selfdestruct: 7, sensor: 1.0, shield: 0.81,
-  shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 1, siege240: 1.53, siegeplasma: 0.85, skyfortress: 0.62,
-  slowbeam: 4.95, smoke: 4.00, sniper: 16.11, sonic: 0.38, stealth: 0.44, stormcore: 0.91, stormtower: 2.55,
-  stungun: 0.705, swarm: 3, tactnuke: 3.2, targeting: 4.00, tesla: 0.534, titanfist: 1.8, turbo: 0.14,
-  twin120: 1.05, twin30: 1.99, twinlaser: 2.23, twinmg: 0.811, uplink: 0.34,
-  clusterhow: 3.48, firebomb: 2.27, flechette: 7.48, grenade: 2.46,
+  // [rules 7: weapon pass, weapon cap, utility remake] re-fitted against SMART-deployed mixed armies on both sides
+  // (shared/smartdeploy.ts; balance.ts reserves ~20% of every reference mix for chaff clear):
+  //   1. `python3 scripts/fit_cal.py` with BAL_FROZEN (reference mix bought at frozen prices) + FIT_CENTER=abs, then
+  //      unfrozen with FIT_CENTER=starters and a trust region (FIT_CALBASE = the price-neutral values, FIT_BOUND=2.5:
+  //      the fit corrects the analytic price, it never replaces it); SIZE_K fitted alongside, MOBILITY_CAL held
+  //   2. a few starter-targeted nudges (6-seed starter-only runs) to centre the starters near 50%
+  //   AA weapons (flak, heavyflak, skyfortress, aamissile, quad20) and the hand-set auras are held at their
+  //   price-neutral floor (the ground-army fit can't see their job and drove them near free).
+  //   Result (balance.ts army 3, smart): module rms 18.3 (HEAD 19.8), starter rms 15.9 / mean 0.55 (HEAD 20.7).
+  leech: 2.905, prism: 3.272, voidlance: 3.725, entropy: 2.41,
+  aamissile: 1.086, ac20: 2.067, ac40: 5.353, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 8.757,
+  autocannon: 4.001, autoloader: 2.89, avenger: 1.216, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
+  cannon: 1.487, cannon75: 2.951, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
+  dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.7, gauss: 11.118,
+  gravity: 6.197, grinder: 0.398, guidedrocket: 7.551, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
+  heavyflak: 1.094, hmg: 3.498, howitzer: 2.271, incendiary: 0.843, inferno: 0.609, jammer: 0.25, laser: 6.042,
+  lightrail: 13.806, massdriver: 0.396, mg: 3.044, minigun: 0.885, mirror: 1.18, missilebattery: 1.979, mlrs: 6.561,
+  mortar: 4.078, nanite: 0.417, napalm: 0.214, overclock: 0.775, phantom: 0.476, plasma: 3.815, plasmablade: 1.719,
+  plasmaorb: 2.49, pointdef: 4.171, quad20: 0.693, railgun: 12.612, ram: 0.32, reactive: 1.574, repair: 13.628,
+  repairM: 4, rocketL: 2.387, rockets: 4.04, sam: 8.339, selfdestruct: 2.695, sensor: 1, shield: 2.269,
+  shieldH: 2.222, shieldL: 3.093, shockprod: 0.348, shotgun: 0.461, siege240: 1.887, siegeplasma: 0.523, skyfortress: 0.614,
+  slowbeam: 6.666, smoke: 3.573, sniper: 10.425, sonic: 0.594, stealth: 1.91, stormcore: 0.539, stormtower: 1.218,
+  stungun: 0.89, swarm: 5.064, tactnuke: 3.025, targeting: 5.464, tesla: 0.92, titanfist: 0.711, turbo: 0.315,
+  twin120: 2.649, twin30: 3.25, twinlaser: 3.018, twinmg: 2.675, uplink: 0.511,
+  clusterhow: 4.798, firebomb: 2.462, flechette: 7.073, grenade: 2.728,
   // [aura balance] aura strengths (uplink, dome, domeG, jammer, sensor above and these two) were set by hand after the
   // radius rework: `node scripts/balance.ts army 3 <id>` (every unit carries the aura -> heavy overlap) lands at a
   // delta of -7..+2, i.e. a little overpriced when massed, and `node scripts/auras.ts field` (ONE carrier escorting a
@@ -236,6 +333,10 @@ export const MODULE_CAL: Record<string, number> = {
   // selfdestruct was 0.14 (fitted on lone carriers, where one 300-damage blast barely matters): a 16-cart block of
   // bare self-destruct carriages cost 70 and won ~90% of equal-supply fights (`node scripts/teamvalue.ts walls`).
   // At 7 such swarms land near 50% (and come 8 to a block).
+  // [weapon pass] new bomb bays (stun / EMP control bombs)
+  stunbomb: 20.296, empbomb: 22.443, stuncluster: 12.827,
+  // [weapon pass] new modules
+  shortbarrel: 0.118, longbarrel: 1.754, herounds: 0.745, optics: 1.828, reinforced: 0.67, lightframe: 0.835, berserker: 0.794, ammorack: 0.146, overcharge: 1.75, killrush: 1.518, evasion: 0.9, scrapmine: 1.5, emppop: 0.7, packlink: 2.935, heavyrounds: 0.889, afterburner: 1.248, painter: 1.563, deflector: 1.98,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
@@ -311,7 +412,8 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   const cl = w.cluster;
   const cyc = cycleTime(w);
   let v = (weaponDps(w) - (cl ? (cl.count * cl.damage * shots) / cyc : 0)) * armorEfficiency(w.damage, w.ap ?? 0);
-  v *= 1 + 0.6 * (w.splash ?? 0);
+  const edgeK = splashEdgeK(w);
+  v *= 1 + 0.6 * (w.splash ?? 0) * edgeK;
   // cluster bomblets: scatter widely, so only part of them land on something
   if (cl) v += ((cl.count * cl.damage * shots) / cyc) * armorEfficiency(cl.damage, w.ap ?? 0) * (1 + 0.6 * cl.splash) * 0.6;
   v *= 1 + 0.45 * (w.chain ?? 0);
@@ -337,7 +439,8 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   v *= hitFactor(w);
   v *= 1 + AP_VALUE.k * (w.ap ?? 0); // armour penetration vs real front-line armour (see AP_VALUE)
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
-  if (w.minRange) v *= 0.9;
+  if (w.minRange) v *= minRangeFactor(w);
+  v *= traverseFactor(w);
   // versatility costs: a gun that hits both ground and air pays a premium; ground-only or air-only guns get more
   // dps per supply (air-only: x its anti-air bonus, since its dps is counted against ground armour)
   const coverage = w.targetsGround && w.targetsAir ? 1.5 : w.targetsGround ? 0.65 : 1.05 * (w.airBonus ?? 1);
@@ -481,7 +584,8 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   rangeMult += stack.range;
   let spreadMult = (traits.includes('stable') ? 0.5 : 1) * (1 - stack.spreadCut);
   const speedBonus = stack.speed;
-  const fireRate = 1 + stack.fireRate;
+  const fireRate = Math.max(0.3, 1 + stack.fireRate);
+  const tune = tuneOf(mods);
   for (const mod of mods) {
     hp += mod.hp ?? 0;
     armor += mod.armor ?? 0;
@@ -489,10 +593,13 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     partsCost += mod.cost;
     shield += mod.shield ?? 0;
     heal += mod.heal ?? 0;
-    dps += weaponDps(mod);
+    dps += weaponDps(tunedWeapon(mod, tune));
     if (mod.cloak && !traits.includes(mod.cloak)) traits.push(mod.cloak);
     if (mod.hardened && !traits.includes('hardened')) traits.push('hardened');
   }
+  // trade-off frames: a reinforced frame adds hull, a light frame sheds weight (and hull)
+  if (tune.hp) hp *= Math.max(0.3, 1 + tune.hp);
+  if (tune.weight) weight *= Math.max(0.3, 1 + tune.weight);
   const capacity = m.capacity[size - 1] || 1;
   const load = weight / capacity;
   let range = 0;
@@ -506,7 +613,8 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const speed = m.kind === 'static' ? 0 : m.speed * loadF * sizeSpeed * (1 + speedBonus) * (c.traits.includes('swift') ? 1.2 : 1);
   // body turn rate: mobility base x hull agility x size inertia, slowed when overloaded (heavier armament = slower)
   const sizeTurn = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
-  const turn = m.turn * c.agility * sizeTurn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
+  // (jets keep their old curve, only an overload slows the turn: their bombing / strafing runs are tuned to it)
+  const turn = m.turn * c.agility * sizeTurn * (jet ? (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1) : loadTurnFactor(load)) * Math.max(0.3, 1 + (tune.turn ?? 0));
   const flying = m.kind === 'air';
   // backing-up speed factor: omni walkers and flyers have no reverse; ground drives back up at MobilityDef.reverse
   const reverse = flying || traits.includes('omni') ? 1 : m.reverse ?? 1;
@@ -522,7 +630,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const bombK = flying && !jet ? HOVER_BOMB_K : 1;
   let splashW = 0, airW = 0, airOnlyW = 0, meleeW = 0, apW = 0; // offense-weighted weapon traits (team-value features)
   for (const mod of mods) {
-    const wv = weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
+    const wv = weaponValue(tunedWeapon(mod, tune), rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
     offense += wv;
     if (mod.kind !== 'weapon' || mod.heal) continue;
     splashW += wv * Math.min(2, mod.splash ?? 0);
@@ -552,7 +660,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     if (mod.fireRateAura) support += mod.fireRateAura.bonus * 300 * auraReach(mod.fireRateAura.radius, hullR) * u;
     if (mod.detect) support += 12 * auraReach(mod.detect, hullR) * u;
     if (mod.jammer) support += 15 * auraReach(mod.jammer, hullR) * u; // covers its carrier too (counted in the reach)
-    if (mod.deathBlast) offense += mod.deathBlast.damage * 0.06 * u;
+    if (mod.deathBlast) offense += mod.deathBlast.damage * (mod.deathBlast.friendly ? 0.03 : 0.06) * u; // (one that hurts allies too is worth half)
     if (mod.regen) ehpMult *= eh(1 + mod.regen * 12 * nth('regen'));
     // [aura balance] point defense: worth its intercept rate, whatever the hull (as an ehp multiplier a titan's PD cost ~300 supply)
     if (mod.pointDefense) interceptors += PD_PTS * (0.6 / mod.pointDefense.cooldown) * u;
@@ -562,6 +670,20 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     if (mod.hardened) ehpMult *= eh(1.08);
     if (mod.cloak === 'stealth') ehpMult *= eh(1.35);
     if (mod.cloak === 'phantom') ehpMult *= eh(1.5);
+    // trade-off utilities: conditional gains priced at their typical share of a fight (MODULE_CAL scales each)
+    if (mod.berserk) offense *= 1 + 0.45 * mod.berserk.damage * u;
+    if (mod.paint) offense *= 1 + 0.9 * mod.paint.bonus * u; // the whole side hits marked targets harder
+    if (mod.overcharge) offense *= 1 + 0.15 * mod.overcharge.mult * u;
+    if (mod.killRush) offense *= 1 + 0.3 * mod.killRush.fireRate * u;
+    if (mod.cloakDamage) offense *= 1 - 0.5 * mod.cloakDamage;
+    if (mod.overheat) ehpMult *= Math.max(0.5, 1 - mod.overheat * 15);
+    // small-hull utilities: their value tracks what makes them good (light fast hulls, numbers, small hits)
+    if (mod.dodge) ehpMult *= 1 + dodgeChance(mod.dodge, size, speed) * 0.7 * u;
+    if (mod.deflect) ehpMult *= 1 + mod.deflect * 0.03 * u; // most of the hits a unit takes are small ones
+    if (mod.pack) offense *= 1 + Math.min(mod.pack.cap, mod.pack.per * (size === 1 ? 4 : size === 2 ? 1.5 : 0.5)) * 0.6 * u; // same-design neighbours: light squads run in packs
+    if (mod.deathBlast?.stun) offense += mod.deathBlast.stun * 25 * u;
+    // pure tuning (range, damage, hull...) is priced through the tuned stats above; its MODULE_CAL is a lever on top
+    if (mod.tune && !mod.berserk && !mod.paint) offense *= 1 + (u - 1) * 0.3;
   }
   offense = Math.max(offense, 5);
   // shields soak hits at full strength (armour doesn't help them); armour multiplies only the hull's worth
@@ -622,7 +744,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     speed: Math.round(speed * 100) / 100, turn, reverse, cost, unitCost: cost / squad, squad,
     priceParts, pricePower: base / PRICE_DIV - priceParts, priceSupport: extra / PRICE_DIV,
     flying, isStatic, range: Math.round(range * 10) / 10,
-    dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
+    dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult, tune,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
     teamMult: teamBase / rawBase, teamFeatures: features, toughTax: toughRaw / PRICE_DIV, _teamBase: teamBase, _rawBase: rawBase,
   };
@@ -697,11 +819,14 @@ export function validateDesign(d: Design, allowRetired = false): string[] {
     if (id == null) return;
     const mod = MODULE_BY_ID.get(id);
     if (!mod) { errs.push(`Unknown module ${id}`); return; }
+    if (mod.retired && !allowRetired) errs.push(`${mod.name} is no longer available`);
     const why = slotError(c, d.mobility, i, mod);
     if (why) errs.push(why);
     if (mod.kind === 'weapon' || mod.kind === 'utility') weapons++;
   });
   if (weapons === 0) errs.push('Needs at least one weapon or utility module');
+  const nw = weaponCount(d), cap = weaponCap(c);
+  if (nw > cap) errs.push(`Too many weapons: ${nw}/${cap}. This hull carries at most ${cap} weapons; use the other sockets for utilities.`);
   if (errs.length) return errs;
   const s = computeStats(d);
   if (s.load > MAX_LOAD) errs.push(`Overloaded: ${s.weight} / ${s.capacity} weight (max ${Math.round(MAX_LOAD * 100)}%)`);
@@ -709,6 +834,50 @@ export function validateDesign(d: Design, allowRetired = false): string[] {
 }
 
 export const isValidDesign = (d: Design) => validateDesign(d, true).length === 0;
+
+/** Swap retired modules (ModuleDef.retired) in place for their replacement (ModuleDef.replacedBy) where it fits the
+ *  socket, else empty the socket. Returns the ids replaced or removed. Used to repair saved designs, match decks
+ *  (rules 7) and AI-pool entries. */
+export function replaceRetiredModules(d: Design): string[] {
+  const c = CHASSIS_BY_ID.get(d.chassis);
+  if (!c || !Array.isArray(d.mounts)) return [];
+  const out: string[] = [];
+  d.mounts.forEach((id, i) => {
+    const mod = id ? MODULE_BY_ID.get(id) : undefined;
+    if (!mod?.retired) return;
+    out.push(mod.id);
+    const rep = mod.replacedBy ? MODULE_BY_ID.get(mod.replacedBy) : undefined;
+    d.mounts[i] = rep && !rep.retired && !slotError(c, d.mobility, i, rep) ? rep.id : null;
+  });
+  return out;
+}
+
+/** Evasion thrusters' dodge chance on a hull: full on a light hull at 2.5 cells/s, less on bigger or slower ones
+ *  (titans get almost nothing). */
+export function dodgeChance(base: number, size: number, speed: number): number {
+  const sizeF = [1, 0.65, 0.35, 0.12, 0.04][size - 1] ?? 0.04;
+  return Math.min(0.6, base * sizeF * Math.min(1.5, speed / 2.5));
+}
+
+/** Weapon modules (kind 'weapon': guns, launchers, bomb bays, melee) a design carries; repair beams are utilities. */
+export function weaponCount(d: Pick<Design, 'mounts'>): number {
+  return (d.mounts ?? []).filter((id) => id && MODULE_BY_ID.get(id)?.kind === 'weapon').length;
+}
+/** Enforce the hull's weapon cap in place: the lowest-value weapons beyond it (weaponValue, i.e. what they add to the
+ *  price) leave their sockets. Returns the ids removed (empty when the design was within the cap or the hull is unknown).
+ *  Used to repair saved designs, match decks (rules 7) and AI-pool entries. */
+export function dropExtraWeapons(d: Design): string[] {
+  const c = CHASSIS_BY_ID.get(d.chassis);
+  if (!c || !Array.isArray(d.mounts)) return [];
+  const ws = d.mounts.map((id, i) => ({ i, m: id ? MODULE_BY_ID.get(id) : undefined })).filter((x) => x.m?.kind === 'weapon');
+  const over = ws.length - weaponCap(c);
+  if (over <= 0) return [];
+  const worth = (m: ModuleDef) => { try { return weaponValue(m); } catch { return 0; } };
+  ws.sort((a, b) => worth(a.m!) - worth(b.m!) || b.i - a.i);
+  const out: string[] = [];
+  for (const x of ws.slice(0, over)) { out.push(d.mounts[x.i]!); d.mounts[x.i] = null; }
+  return out;
+}
 
 /** Units bought per block of a design (computeStats().squad; 1 for a design that can't be priced). */
 export function squadOf(d: Design): number {

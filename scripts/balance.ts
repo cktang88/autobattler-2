@@ -12,10 +12,11 @@
 
 import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import { applyDeploy, newMatch, newPlayer, resolveRound, validateDeploy } from '../src/shared/match.ts';
-import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
+import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MODULES, MOUNT_RANK, pairingError, weaponCap } from '../src/shared/parts.ts';
 import { AP_VALUE, TOUGH, MOBILITY_CAL, MODULE_CAL, SIZE_K, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
+import { deployRole, smartDeploy } from '../src/shared/smartdeploy.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fork } from 'node:child_process';
 import type { Design, Placement } from '../src/shared/types.ts';
@@ -85,6 +86,8 @@ const MIX_SHARE = Number(process.env.BAL_MIX_SHARE ?? 0.6);
 const MIX_PER_SEED = Number(process.env.BAL_MIX_PER_SEED ?? 4);
 /** reference mix pool: every starter up to size 3 (ground, air, anti-air, artillery, support) */
 const MIX_POOL: Design[] = STARTER_DESIGNS.filter((d) => computeStats(d).size <= 3);
+/** the mix pool's chaff-clear (riot) designs (shared/smartdeploy.ts deployRole) */
+const RIOT_POOL: Design[] = MIX_POOL.filter((d) => deployRole(d) === 'riot');
 
 /** Fillers that top up a giant/titan army (bought in equal supply shares): a balanced, cheap-ish mix. */
 const FILLER_IDS = ['starter-bulwark', 'starter-buzzsaw', 'starter-tankbuster', 'starter-skyguard'];
@@ -123,9 +126,14 @@ function plan(d: Design, S: number): { specs: Spec[]; spend: number } {
   return { specs, spend };
 }
 
-/** Place the specs on `side` with the normal AI's formation logic, one design at a time. */
+/** BAL_DEPLOY=smart (default): both sides deploy like a sensible player (shared/smartdeploy.ts: chaff screen ahead of
+ *  the armour, riot level with it, melee on the flanks, ranged behind, artillery at the back, aircraft held back).
+ *  BAL_DEPLOY=naive: the old per-design normal-AI placement, for comparison. */
+const DEPLOY = process.env.BAL_DEPLOY ?? 'smart';
+/** Place the specs on `side`: smart deploy (default), or the normal AI's formation logic one design at a time. */
 function army(specs: Spec[], side: 0 | 1, seed: number): { place: Placement[]; designs: Design[] } {
   const designs = specs.map((s, i) => ({ ...s.d, id: `x${i}` }));
+  if (DEPLOY === 'smart') return { place: smartDeploy(specs.map((s, i) => ({ d: designs[i], n: s.n }))), designs };
   const m = newMatch('a', 'ai', seed, newPlayer('a', designs.slice(0, 1), true), newPlayer('b', designs.slice(0, 1), true));
   const me = m.players[side];
   const place: Placement[] = [];
@@ -143,12 +151,27 @@ function army(specs: Spec[], side: 0 | 1, seed: number): { place: Placement[]; d
 
 /** A reference mix worth ~S: starters bought round-robin from a seed-dependent starting point (seed k's mix is the
  *  same for the tested side's top-up and the opponent's army). */
+/** BAL_FROZEN=<json file {designId: raw block cost}>: the reference mixes are bought at these frozen prices, so a
+ *  calibration run (fit_cal.py) measures every design against the same opponent armies while it reprices the starters
+ *  the mix is made of (otherwise pricing the mix's own designs up weakens the mix and the whole field drifts). */
+const FROZEN: Record<string, number> | null = process.env.BAL_FROZEN ? JSON.parse(readFileSync(process.env.BAL_FROZEN, 'utf8')) : null;
+const mixCost = (d: Design) => FROZEN?.[d.id] ?? rawCost(d);
 function mixSpecs(S: number, k: number): { specs: Spec[]; spend: number } {
   const n = new Map<Design, number>();
   let left = S, spend = 0, i = (k * 5) % MIX_POOL.length, misses = 0;
+  // every smart army brings chaff clear (riot: blast, flame, pellets, chain, hoses): ~20% of the budget first, so the
+  // enemy's chaff screen isn't unrealistically strong (BAL_DEPLOY=naive keeps the old pure round-robin)
+  if (DEPLOY === 'smart' && RIOT_POOL.length) {
+    let r = Math.round(S * 0.2), j = k % RIOT_POOL.length, rm = 0;
+    while (rm < RIOT_POOL.length) {
+      const d = RIOT_POOL[j++ % RIOT_POOL.length];
+      const c = mixCost(d);
+      if (c <= r) { n.set(d, (n.get(d) ?? 0) + 1); r -= c; left -= c; spend += c; rm = 0; } else rm++;
+    }
+  }
   while (misses < MIX_POOL.length) {
     const d = MIX_POOL[i++ % MIX_POOL.length];
-    const c = rawCost(d);
+    const c = mixCost(d);
     if (c <= left) { n.set(d, (n.get(d) ?? 0) + 1); left -= c; spend += c; misses = 0; } else misses++;
   }
   return { specs: [...n].map(([d, c]) => ({ d, n: c })), spend };
@@ -167,6 +190,7 @@ function moduleDesigns(): TestDesign[] {
   const seenBase = new Set<string>();
   for (const mod of MODULES) {
     const m = mod.id;
+    if (mod.retired) continue;
     if (mod.kind === 'weapon') {
       const melee = mod.projectile === 'melee';
       const f = (x: string | null) => (mod.targetsGround === false ? null : x); // anti-air-only designs stay anti-air-only
@@ -194,13 +218,13 @@ function moduleDesigns(): TestDesign[] {
         add(`t-${m}-b`, m, false, '', 'striker', melee ? 'jumpjets' : 'halftrack', [m, m, null]);
         add(`t-${m}-c`, m, false, '', melee ? 'striker' : 'gunship', melee ? 'treads' : 'rotor', melee ? [m, 'plateM', 'plateL'] : [m, null]);
       } else if (mod.mount === 'L') {
-        add(`t-${m}-a`, m, false, '', 'goliath', 'megatracks', melee ? [m, 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), f('autocannon')]);
-        add(`t-${m}-b`, m, false, '', 'leviathan', 'megatracks', melee ? [m, m, 'plateM', 'plateM'] : [m, m, f('autocannon'), f('autocannon')]);
+        add(`t-${m}-a`, m, false, '', 'goliath', 'megatracks', melee ? [m, 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), 'plateM']); // 3 weapons: the giant cap
+        add(`t-${m}-b`, m, false, '', 'leviathan', 'megatracks', melee ? [m, m, 'plateM', 'plateM'] : [m, m, f('autocannon'), 'plateM']);
         add(`t-${m}-c`, m, false, '', 'goliath', 'spider', [m, null, null, null]);
         add(`t-${m}-d`, m, false, '', 'carrier', 'gravlift', [m, null, null, null]);
       } else {
-        add(`t-${m}-a`, m, false, '', 'titan', 'megatracks', melee ? [m, 'plateG', 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), f('cannon'), f('autocannon')]);
-        add(`t-${m}-b`, m, false, '', 'citadel', 'megatracks', melee ? [m, m, 'plateG', 'plateM', 'plateM', 'plateL'] : [m, m, f('cannon'), f('autocannon'), f('autocannon'), f('laser')]);
+        add(`t-${m}-a`, m, false, '', 'titan', 'megatracks', melee ? [m, 'plateG', 'plateH', 'plateH', 'plateM'] : [m, f('cannon'), f('cannon'), f('cannon'), 'plateM']); // 4 weapons: the titan cap
+        add(`t-${m}-b`, m, false, '', 'citadel', 'megatracks', melee ? [m, m, 'plateG', 'plateM', 'plateM', 'plateL'] : [m, m, f('cannon'), f('autocannon'), 'plateM', 'plateL']);
         add(`t-${m}-c`, m, false, '', 'titan', 'titanlegs', [m, null, null, null, null]);
       }
     } else {
@@ -209,7 +233,7 @@ function moduleDesigns(): TestDesign[] {
         mod.mount === 'S' ? [['warden', 'halftrack', ['autocannon', 'U'], 1], ['raider', 'legs', ['laser', 'U'], 1], ['striker', 'treads', ['cannon75', 'autocannon', 'U'], 2]]
         : mod.mount === 'M' ? [['striker', 'halftrack', ['autocannon', 'U', 'hmg'], 1], ['warden', 'treads', ['U', 'hmg'], 0], ['striker', 'spider', ['cannon75', 'U', 'laser'], 1]]
         : mod.mount === 'L' ? [['goliath', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon'], 0], ['leviathan', 'megatracks', ['U', 'cannon', 'autocannon', 'autocannon'], 0], ['goliath', 'titanlegs', ['U', 'hmg', 'cannon', 'autocannon'], 0]]
-        : [['titan', 'megatracks', ['U', 'cannon', 'cannon', 'cannon', 'autocannon'], 0], ['citadel', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon', 'autocannon', 'laser'], 0], ['titan', 'titanlegs', ['U', 'cannon', 'cannon', 'hmg', 'autocannon'], 0]];
+        : [['titan', 'megatracks', ['U', 'cannon', 'cannon', 'cannon', 'autocannon'], 0], ['citadel', 'megatracks', ['U', 'cannon', 'cannon', 'autocannon', 'autocannon', null], 0], ['titan', 'titanlegs', ['U', 'cannon', 'cannon', 'hmg', 'autocannon'], 0]];
       carriers.forEach(([ch, mob, mounts], i) => {
         const key = `${ch}/${mob}/${mounts.join(',')}`;
         add(`t-${m}-${i}`, m, false, key, ch, mob, mounts.map((x) => (x === 'U' ? m : x)));
@@ -225,7 +249,9 @@ function moduleDesigns(): TestDesign[] {
   for (const c of CHASSIS) {
     for (const mob of MOBILITY) {
       if (pairingError(c.id, mob.id)) continue;
-      add(`f-${c.id}-${mob.id}`, null, false, '', c.id, mob.id, c.mounts.map((mc) => (c.traits.includes('airOnly') && mc === 'M' ? 'autocannon' : FILL[mc])));
+      // the hull's biggest sockets get guns, up to its weapon cap; the rest stay empty
+      const order = c.mounts.map((mc, i) => ({ mc, i })).sort((a, b) => MOUNT_RANK[b.mc] - MOUNT_RANK[a.mc] || a.i - b.i).slice(0, weaponCap(c)).map((x) => x.i);
+      add(`f-${c.id}-${mob.id}`, null, false, '', c.id, mob.id, c.mounts.map((mc, i) => (!order.includes(i) ? null : c.traits.includes('airOnly') && mc === 'M' ? 'autocannon' : FILL[mc])));
     }
   }
   return out;

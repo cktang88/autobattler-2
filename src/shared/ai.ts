@@ -27,7 +27,7 @@
 //    empty action, which is always legal while the side may deploy.
 
 import { CHASSIS, MOBILITY, MODULES, pairingError } from './parts.ts';
-import { isValidDesign, levelMult, MAX_LEVEL, slotError, validateDesign, type DefaultOrders } from './stats.ts';
+import { dropExtraWeapons, isValidDesign, levelMult, MAX_LEVEL, slotError, validateDesign, type DefaultOrders } from './stats.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockDims, blockInZone, hasSpacing, normSpacing, rectsOverlap } from './grid.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { Battle, runBattle } from './sim/battle.ts';
@@ -133,12 +133,13 @@ export function generateDesign(rng: Rng, role: Role, id: string, giant = false):
     if (!mobPool.length) continue;
     const mob = pick(rng, mobPool);
     const mounts: (string | null)[] = c.mounts.map((slot, i) => {
-      const cands = MODULES.filter((m) => !slotError(c, mob.id, i, m))
+      const cands = MODULES.filter((m) => !m.retired && !slotError(c, mob.id, i, m))
         .map((m) => ({ item: m.id, w: moduleWeight(m, role, i === 0) * (m.mount === slot ? 1.6 : 0.6) }));
       return weightedPick(rng, cands);
     });
     // Leave trailing slots empty sometimes to save weight.
     const d: Design = { id, name: `${pick(rng, DESIGN_NAMES_A)}${pick(rng, DESIGN_NAMES_B)}`, chassis: c.id, mobility: mob.id, mounts };
+    dropExtraWeapons(d); // the hull's weapon cap: the weakest extra weapons leave (their sockets stay free for utilities)
     for (let k = mounts.length - 1; k > 0 && !(giant ? acceptableGiant(d) : acceptable(d, role)); k--) d.mounts[k] = null;
     if (giant ? acceptableGiant(d) : acceptable(d, role)) return d;
   }

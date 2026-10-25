@@ -22,12 +22,12 @@ const one = (w: string) => mk([w, null]);
 /** a named design (long loadouts don't fit the 24-character name) */
 const nm = (name: string, mounts: (string | null)[], chassis: string, mobility: string): Design => ({ ...mk(mounts, chassis, mobility), id: name, name });
 const BOMBERS = {
-  strato: nm('strato 3xbombs', ['bombs', 'bombs', 'bombs', 'mg'], 'stratobomber', 'jet'),
-  heavy: nm('heavy bomber', ['bombs', 'bombs', 'heavybomb'], 'bomberhull', 'gravlift'),
-  carrier: nm('sky carrier bombs', ['heavybomb', 'bombs', 'bombs', 'bombs'], 'carrier', 'gravlift'),
-  strategic: nm('strategic 4xbombs', ['bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg'], 'strategic', 'jet'),
-  superfort: nm('superfortress 6xbombs', ['bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg', 'mg', 'mg'], 'superfortress', 'jet'),
-  dread: nm('dreadnought bombs', ['heavybomb', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg'], 'dreadnought', 'gravlift'),
+  strato: nm('strato 2xbombs', ['bombs', 'bombs', 'plateM', 'shieldL'], 'stratobomber', 'jet'),
+  heavy: nm('heavy bomber', ['bombs', 'heavybomb', 'plateM'], 'bomberhull', 'gravlift'),
+  carrier: nm('sky carrier bombs', ['heavybomb', 'bombs', 'bombs', 'plateM'], 'carrier', 'gravlift'),
+  strategic: nm('strategic 3xbombs', ['bombs', 'bombs', 'bombs', 'plateM', 'pointdef', 'shieldL'], 'strategic', 'jet'),
+  superfort: nm('superfortress 4xbombs', ['bombs', 'bombs', 'bombs', 'bombs', 'plateM', 'plateM', 'pointdef', 'shieldL', null, null], 'superfortress', 'jet'),
+  dread: nm('dreadnought bombs', ['heavybomb', 'bombs', 'bombs', 'bombs', 'plateM', 'pointdef', 'shieldL'], 'dreadnought', 'gravlift'),
 };
 
 interface Role { key: string; job: string; weapon: Design; peers: Design[]; targets: Design[]; off?: Design[] }
@@ -50,6 +50,11 @@ export const ROLES: Role[] = [
   { key: 'bomberaa', job: 'bombers vs dedicated AA (should lose: negative)', weapon: BOMBERS.strategic,
     peers: [BOMBERS.strato, BOMBERS.heavy, BOMBERS.carrier, BOMBERS.superfort, BOMBERS.dread],
     targets: [nm('flak+quad20', ['flak', 'quad20', null], 'striker', 'halftrack'), S('skyguard'), nm('heavyflak+aamissile', ['heavyflak', 'aamissile'], 'warden', 'halftrack')] },
+  // small-hull utilities (evasion, deflector, on-death, pack link) next to plain plating / a small shield on the same light
+  // raider: each should be a reasonable pick (near its peers) on a light hull against the usual light / medium targets
+  { key: 'smallutil', job: 'light-hull utilities (vs plain plating / a small shield)', weapon: mk(['hmg', 'evasion'], 'raider', 'halftrack'),
+    peers: [mk(['hmg', 'deflector'], 'raider', 'halftrack'), mk(['hmg', 'scrapmine'], 'raider', 'halftrack'), mk(['hmg', 'emppop'], 'raider', 'halftrack'), mk(['hmg', 'packlink'], 'raider', 'halftrack'), mk(['hmg', 'plateL'], 'raider', 'halftrack'), mk(['hmg', 'shieldL'], 'raider', 'halftrack'), mk(['hmg', null], 'raider', 'halftrack')],
+    targets: [S('buzzsaw'), S('bulwark'), S('lancer'), S('firestorm')] },
   { key: 'entropy', job: 'stripping armour for the guns beside it', weapon: mk(['entropy', 'hmg']), peers: [mk(['autocannon', 'hmg']), mk(['cannon75', 'hmg']), mk(['heatray', 'hmg'])], targets: [S('ironclad'), S('bulwark'), S('aegiswall')], off: [S('buzzsaw')] },
 ];
 

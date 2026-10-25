@@ -281,13 +281,19 @@ function charge(C: WCtx) {
   }
   const yb = C.fixed ? -r * 0.32 : y0 + r * 0.32;
   cbox(b, kit.trim, 0, C.fixed ? -r * 0.06 : y0 + r * 0.7, 0, r * 1.3, r * 0.12, r * 0.9);
-  if (id === 'clusterbombs') {
+  if (id === 'clusterbombs' || id === 'stuncluster') {
     for (const s of [-1, 1]) {
       capsule(b, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, 'x', 8);
       for (let i = 0; i < 3; i++) b.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], 'y', 5);
     }
   } else {
     for (const z of [-r * 0.45, 0, r * 0.45]) missile(b, kit.canvas, kit.canvas, kit.trim, -r * 0.65, yb, z, r * 0.2, r * 1.35, 8);
+  }
+  // stun / EMP bombs: the same racks, banded in electric blue (glowing coil rings round each casing)
+  if (C.mod.stun) {
+    const zs = id === 'stuncluster' ? [-r * 0.3, r * 0.3] : [-r * 0.45, 0, r * 0.45];
+    const rr = id === 'stuncluster' ? r * 0.27 : r * 0.21;
+    for (const z of zs) for (const x of [-r * 0.35, r * 0.1]) b.cyl(kit.rail, rr, rr, r * 0.05, [x, yb, z], 'x', 8);
   }
   accent(C, 0, (C.fixed ? -r * 0.06 : y0 + r * 0.7) + r * 0.065, 0, r * 0.5, r * 0.4);
   C.t.shot = 'none';

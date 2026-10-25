@@ -1,4 +1,4 @@
-// ../../../../../../home/user/autobattler-2/node_modules/three/build/three.core.js
+// node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -20685,7 +20685,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/build/three.module.js
+// node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -32183,7 +32183,7 @@ var WebGLRenderer = class {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/controls/OrbitControls.js
+// node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -33118,18 +33118,18 @@ var STARTER_DESIGNS = [
   { id: "starter-firestorm", name: "Firestorm", chassis: "striker", mobility: "spider", mounts: ["mortar", "mortar", null] },
   // ---- flyers ----
   { id: "starter-hornet", name: "Hornet", chassis: "drone", mobility: "rotor", mounts: ["twinmg"] },
-  { id: "starter-strafer", name: "Strafer", chassis: "strikejet", mobility: "jet", mounts: ["rockets", "guidedrocket", "hmg"] },
+  { id: "starter-strafer", name: "Strafer", chassis: "strikejet", mobility: "jet", mounts: ["rockets", "guidedrocket", "targeting"] },
   // ---- support ----
   { id: "starter-medic", name: "Field Medic", chassis: "aegis", mobility: "halftrack", mounts: ["autocannon", "repair"] },
   // ---- brawler ----
-  { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "shotgun"] },
+  { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "targeting"] },
   // ---- size-3 heavies ----
-  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "twin30", "hmg"] },
-  { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["cannon", "plateM", "autocannon"] },
+  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "reinforced", "longbarrel"] },
+  { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["autocannon", "plateM", "autocannon"] },
   // ---- emplacement ----
   { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "spider", mounts: ["guidedrocket", "hmg"] },
   // ---- melee: fast hover brawler that dives into the line ----
-  { id: "starter-ripper", name: "Gnasher", chassis: "mantis", mobility: "legs", mounts: ["buzzsaw", "shockprod"] },
+  { id: "starter-ripper", name: "Gnasher", chassis: "mantis", mobility: "hover", mounts: ["buzzsaw", "shockprod"] },
   // ---- stealth: cloaked sniper platform ----
   { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
   // ---- shield wall: barrier-heavy anchor of the line ----
@@ -33137,11 +33137,11 @@ var STARTER_DESIGNS = [
   // ---- support aura: command vehicle that speeds up and repairs its escorts ----
   { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "twin30", "hmg"] },
   // ---- giant (size 4): all-round assault walker ----
-  { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "autocannon"] },
+  { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "reinforced"] },
   // ---- titan (size 5): beam-armed war machine ----
-  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "autocannon"] },
+  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "plateM"] },
   // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
-  { id: "starter-thunderbird", name: "Thunderbird", chassis: "strategic", mobility: "jet", mounts: ["bombs", "bombs", "heavybomb", "bombs", "hmg", "hmg"] }
+  { id: "starter-thunderbird", name: "Thunderbird", chassis: "strategic", mobility: "jet", mounts: ["bombs", "bombs", "heavybomb", "plateM", "pointdef", "shieldL"] }
 ];
 
 // src/shared/parts.ts
@@ -33221,7 +33221,7 @@ var MODULES = [
     id: "mg",
     name: "7.62mm Machine Gun",
     family: "7.62mm",
-    desc: "Cheap, accurate rapid fire for picking off light units and aircraft. Bounces off armor.",
+    desc: "Cheap, long-reach, accurate rapid fire: picks off light units and aircraft at 7.5 cells. Bounces off armor.",
     category: "machinegun",
     visual: "gun",
     caliber: 0.2,
@@ -33230,18 +33230,18 @@ var MODULES = [
     cost: 6,
     damage: 8,
     cooldown: 0.15,
-    range: 6,
+    range: 7.5,
     ...GA,
     projectile: "bullet",
-    projectileSpeed: 22,
+    projectileSpeed: 28,
     ap: 0,
-    spread: 0.25
+    spread: 0.15
   }),
   wpn({
     id: "twinmg",
     name: "Suppressor MG",
     family: "Twin 7.62mm",
-    desc: "Suppressive fire: a hail of bullets that pins whatever it keeps hitting, cutting its speed and rate of fire by up to 60%. Little damage of its own.",
+    desc: "Suppressor: pins and slows at close range, little damage. Each hit cuts the target's speed and rate of fire, up to 60%. Pair it with real guns.",
     category: "machinegun",
     visual: "gun",
     barrels: 2,
@@ -33249,7 +33249,7 @@ var MODULES = [
     mount: "S",
     weight: 1.8,
     cost: 11,
-    damage: 6,
+    damage: 3.5,
     cooldown: 0.075,
     range: 5.5,
     ...GA,
@@ -33257,13 +33257,13 @@ var MODULES = [
     projectileSpeed: 22,
     ap: 0,
     spread: 0.45,
-    slow: 0.05
+    slow: 0.06
   }),
   wpn({
     id: "hmg",
     name: "12.7mm Heavy MG",
     family: "12.7mm",
-    desc: "Armor-piercing 12.7mm belts: the light gun that still hurts tanks, and reaches a little further.",
+    desc: "Belt-fed armor-piercing 12.7mm: steady sustained fire, the light gun that still hurts tanks.",
     category: "machinegun",
     visual: "gun",
     caliber: 0.4,
@@ -33271,11 +33271,9 @@ var MODULES = [
     weight: 1.6,
     cost: 10,
     damage: 16,
-    cooldown: 0.22,
-    range: 6.5,
+    cooldown: 0.3,
+    range: 7,
     ...GA,
-    magazine: 25,
-    reload: 2.5,
     projectile: "bullet",
     projectileSpeed: 24,
     ap: 0.5,
@@ -33307,7 +33305,7 @@ var MODULES = [
     id: "shotgun",
     name: "Scattergun",
     family: "Scatter",
-    desc: "Point-blank cone of 8 heavy pellets that knock light units back: shreds whatever is touching it, a quarter damage at its short max range. Useless at a distance.",
+    desc: "Doorkicker: a point-blank cone of 8 pellets that shreds and knocks back rushers and low aircraft. Fades to 40% at its short reach.",
     category: "machinegun",
     visual: "shotgun",
     caliber: 0.5,
@@ -33317,20 +33315,20 @@ var MODULES = [
     damage: 24,
     pellets: 8,
     cooldown: 1.2,
-    range: 3.5,
+    range: 4.5,
     ...GA,
     projectile: "bullet",
     projectileSpeed: 20,
     ap: 0,
     spread: 0.9,
-    falloff: 0.25,
-    impulse: 0.12
+    falloff: 0.4,
+    impulse: 0.3
   }),
   wpn({
     id: "flechette",
     name: "Flechette Cannon",
     family: "Flechette",
-    desc: "Cone of 8 steel darts that punch through every unit they hit: shreds packed squads up close.",
+    desc: "Cone of 8 steel darts that punch through every unit they hit: shreds packed squads and columns.",
     category: "machinegun",
     visual: "shotgun",
     caliber: 0.8,
@@ -33340,35 +33338,35 @@ var MODULES = [
     damage: 20,
     pellets: 8,
     cooldown: 1.5,
-    range: 6,
+    range: 7,
     ...GA,
     projectile: "bullet",
     projectileSpeed: 30,
     pierce: true,
     ap: 0.5,
-    spread: 1
+    spread: 0.6
   }),
   // ---------------- Autocannons ----------------
   wpn({
     id: "ac20",
     name: "20mm Autocannon",
     family: "20mm",
-    desc: "Explosive 20mm clip: small blasts splash packed light units; hits air too.",
+    desc: "Clip gun: dumps 8 explosive 20mm rounds in under a second (enough to pop a scout), then a 3.5 s reload. Hits air too.",
     category: "autocannon",
     visual: "gun",
     caliber: 0.55,
     mount: "S",
     weight: 1.8,
     cost: 14,
-    damage: 18,
-    cooldown: 0.2,
+    damage: 22,
+    cooldown: 0.1,
     range: 7,
     ...GA,
-    magazine: 10,
-    reload: 2,
+    magazine: 8,
+    reload: 3.5,
     projectile: "bullet",
     projectileSpeed: 20,
-    splash: 0.2,
+    splash: 0.35,
     ap: 0,
     spread: 0.3
   }),
@@ -33376,7 +33374,7 @@ var MODULES = [
     id: "autocannon",
     name: "30mm Autocannon",
     family: "30mm",
-    desc: "Workhorse 30mm: explosive clip rounds, hits ground and air.",
+    desc: "Continuous 30mm workhorse: steady explosive fire at ground and air, no reload.",
     category: "autocannon",
     visual: "gun",
     caliber: 0.5,
@@ -33384,11 +33382,9 @@ var MODULES = [
     weight: 3,
     cost: 22,
     damage: 32,
-    cooldown: 0.3,
+    cooldown: 0.55,
     range: 7.5,
     ...GA,
-    magazine: 6,
-    reload: 2,
     projectile: "bullet",
     projectileSpeed: 18,
     splash: 0.3,
@@ -33399,7 +33395,7 @@ var MODULES = [
     id: "twin30",
     name: "Twin 30mm Burst Gun",
     family: "Twin 30mm",
-    desc: "Alpha strike: dumps a 16-round burst in about a second, then a long reload.",
+    desc: "Alpha strike: dumps a 16-round burst in about a second, then a long 6 s reload.",
     category: "autocannon",
     visual: "gun",
     barrels: 2,
@@ -33412,7 +33408,7 @@ var MODULES = [
     range: 7.5,
     ...GA,
     magazine: 16,
-    reload: 4.5,
+    reload: 6,
     projectile: "bullet",
     projectileSpeed: 18,
     splash: 0.3,
@@ -33423,31 +33419,32 @@ var MODULES = [
     id: "ac40",
     name: "40mm Bofors",
     family: "40mm",
-    desc: "Proximity-fused 40mm: long reach, wide blasts, bonus vs aircraft.",
+    desc: "Proximity-fused 40mm clip: four wide, long-reach blasts in a second, then a 4 s reload. Best against aircraft.",
     category: "autocannon",
     visual: "gun",
     caliber: 0.8,
     mount: "M",
     weight: 4,
     cost: 28,
-    damage: 55,
-    cooldown: 0.5,
-    range: 9,
+    damage: 70,
+    cooldown: 0.35,
+    range: 10,
     ...GA,
     magazine: 4,
-    reload: 2.5,
+    reload: 4,
     projectile: "bullet",
     projectileSpeed: 20,
-    splash: 0.5,
+    splash: 0.8,
     ap: 0.5,
     spread: 0.3,
-    airBonus: 1.3
+    airBonus: 1.3,
+    proximity: 0.5
   }),
   wpn({
     id: "quad20",
     name: "Quad 20mm AA",
     family: "Quad 20mm",
-    desc: "Air only: four-barrel 20mm hose with a big bonus vs aircraft.",
+    desc: "Air only: four-barrel 20mm hose. Shreds single fast aircraft that duck missiles; small bursts, so flak handles swarms better.",
     category: "autocannon",
     visual: "gun",
     barrels: 4,
@@ -33473,21 +33470,21 @@ var MODULES = [
     id: "cannon75",
     name: "75mm Gun",
     family: "75mm",
-    desc: "Autoloader: three quick armor-piercing shells, then a long reload.",
+    desc: "Fast autoloader: three high-velocity armor-piercing shells in under a second, then a 5 s reload. Hits movers the big guns miss.",
     category: "cannon",
     visual: "cannon",
     caliber: 0.5,
     mount: "M",
     weight: 5,
     cost: 32,
-    damage: 95,
-    cooldown: 0.7,
+    damage: 110,
+    cooldown: 0.35,
     range: 8.5,
     ...G,
     magazine: 3,
-    reload: 4,
+    reload: 5,
     projectile: "shell",
-    projectileSpeed: 20,
+    projectileSpeed: 28,
     splash: 0.3,
     ap: 0.5,
     spread: 0.2
@@ -33496,7 +33493,7 @@ var MODULES = [
     id: "cannon",
     name: "120mm Heavy Cannon",
     family: "120mm",
-    desc: "Heavy armor-piercing shell: the tank killer, slow to load. Ground only.",
+    desc: "Heavy armor-piercing shell that ignores ALL armor: the tank killer, slow to load. Ground only.",
     category: "cannon",
     visual: "cannon",
     caliber: 0.8,
@@ -33505,7 +33502,7 @@ var MODULES = [
     cost: 50,
     damage: 190,
     cooldown: 2.2,
-    range: 9,
+    range: 10,
     ...G,
     projectile: "shell",
     projectileSpeed: 20,
@@ -33517,7 +33514,7 @@ var MODULES = [
     id: "twin120",
     name: "Twin 120mm HE Cannon",
     family: "Twin 120mm HE",
-    desc: "High-explosive shells: wide blasts that knock units back, but weaker vs heavy armor.",
+    desc: "High-explosive shells: wide blasts that knock light and medium units back, but no armor penetration.",
     category: "cannon",
     visual: "cannon",
     barrels: 2,
@@ -33532,7 +33529,7 @@ var MODULES = [
     projectile: "shell",
     projectileSpeed: 20,
     splash: 1,
-    ap: 0.5,
+    ap: 0,
     spread: 0.25,
     impulse: 0.6
   }),
@@ -33556,7 +33553,8 @@ var MODULES = [
     pierce: true,
     ap: 1,
     spread: 0.1,
-    impulse: 0.8
+    impulse: 0.8,
+    dmgKind: "kinetic"
   }),
   // ---------------- Sniper & rail ----------------
   wpn({
@@ -33583,7 +33581,7 @@ var MODULES = [
     id: "lightrail",
     name: "Rail Rifle",
     family: "Light rail",
-    desc: "Hitscan rail: a needle-thin slug that punches through the hulls in its exact line, losing punch with each.",
+    desc: "Hitscan rail: a needle-thin slug that punches through the hulls in its exact line, losing punch with each. Half damage vs aircraft (it punches straight through light airframes).",
     category: "precision",
     visual: "rail",
     caliber: 0.5,
@@ -33598,35 +33596,40 @@ var MODULES = [
     ap: 1,
     pierce: true,
     beamWidth: 0.04,
-    pierceKeep: 0.5
+    pierceKeep: 0.5,
+    airBonus: 0.5,
+    dmgKind: "kinetic"
   }),
   wpn({
     id: "railgun",
     name: "Railgun",
     family: "Heavy rail",
-    desc: "Heavy rail: a thin slug at long range that punches through the hulls in its line. Slow to recharge.",
+    desc: "Rail artillery: a hitscan slug at long range that never misses and punches through the hulls in its line. Slow to recharge and to traverse; half damage vs aircraft.",
     category: "precision",
     visual: "rail",
     caliber: 0.9,
     mount: "M",
     weight: 9,
     cost: 75,
-    damage: 320,
-    cooldown: 5.5,
-    range: 16,
+    damage: 420,
+    cooldown: 7,
+    range: 22,
     ...GA,
     projectile: "rail",
     ap: 1,
     pierce: true,
     beamWidth: 0.12,
-    pierceKeep: 0.6
+    pierceKeep: 0.6,
+    turretTurn: 0.4,
+    airBonus: 0.5,
+    dmgKind: "kinetic"
   }),
   // ---------------- Rockets ----------------
   wpn({
     id: "rocketL",
     name: "Light Rocket Rack",
     family: "2-tube",
-    desc: "Two-rocket salvo that lands as a pair of separate blasts.",
+    desc: "Cheapest mid-range alpha: a pair of HE rockets that kills a scout outright, then a long reload. Ground only.",
     category: "rocket",
     visual: "rocketPod",
     barrels: 2,
@@ -33634,14 +33637,14 @@ var MODULES = [
     mount: "S",
     weight: 1.5,
     cost: 12,
-    damage: 64,
+    damage: 75,
     burst: 2,
-    cooldown: 6,
-    range: 9,
+    cooldown: 7,
+    range: 10,
     ...G,
     projectile: "rocket",
     projectileSpeed: 11,
-    splash: 0.7,
+    splash: 0.8,
     ap: 0,
     spread: 0.7
   }),
@@ -33697,7 +33700,7 @@ var MODULES = [
     id: "mlrs",
     name: "MLRS Battery",
     family: "12-tube",
-    desc: "Ripple-fires 12 rockets across a huge area. Minimum range 30 m.",
+    desc: "Ripple-fires 12 rockets across a huge area in one salvo, then a very long reload. Minimum range 30 m.",
     category: "rocket",
     visual: "rocketPod",
     barrels: 12,
@@ -33708,7 +33711,7 @@ var MODULES = [
     damage: 66,
     burst: 12,
     cooldown: 16.2,
-    range: 22,
+    range: 26,
     minRange: 6,
     ...G,
     projectile: "rocket",
@@ -33763,7 +33766,7 @@ var MODULES = [
     id: "aamissile",
     name: "AA Missile Pod",
     family: "Anti-air",
-    desc: "Twin heat-seekers: air only, big bonus vs aircraft.",
+    desc: "Heavy heat-seekers: two big homing hits that bring down bombers and gunships, but overkill and reload slowly against swarms. Point defense can shoot them down. Air only.",
     category: "missile",
     visual: "missileRack",
     barrels: 2,
@@ -33771,22 +33774,21 @@ var MODULES = [
     mount: "S",
     weight: 1.4,
     cost: 16,
-    damage: 120,
+    damage: 170,
     burst: 2,
-    cooldown: 7,
+    cooldown: 10,
     range: 13,
     ...A,
     projectile: "missile",
     projectileSpeed: 11,
-    splash: 0.5,
     ap: 0,
-    airBonus: 1.5
+    airBonus: 1.8
   }),
   wpn({
     id: "sam",
     name: "Missile Rack",
     family: "Multi-role",
-    desc: "Homing missiles with long reach and a bonus vs aircraft.",
+    desc: "Long-range homing SAM: reaches aircraft beyond any gun, with a big bonus vs air; hits ground too.",
     category: "missile",
     visual: "missileRack",
     barrels: 4,
@@ -33796,7 +33798,7 @@ var MODULES = [
     cost: 34,
     damage: 170,
     cooldown: 6,
-    range: 13,
+    range: 16,
     ...GA,
     projectile: "missile",
     projectileSpeed: 9,
@@ -33808,7 +33810,7 @@ var MODULES = [
     id: "swarm",
     name: "Swarm Missiles",
     family: "Swarm",
-    desc: "Eight micro-missiles fan out and spread over the targets: a cloud of small blasts for swarms and aircraft, no armor penetration.",
+    desc: "Eight micro-missiles at close range: a cloud of small homing blasts for swarms and drones, no armor penetration.",
     category: "missile",
     visual: "missileRack",
     barrels: 8,
@@ -33819,7 +33821,7 @@ var MODULES = [
     damage: 56,
     burst: 8,
     cooldown: 12,
-    range: 12,
+    range: 9,
     ...GA,
     projectile: "missile",
     projectileSpeed: 10,
@@ -33831,7 +33833,7 @@ var MODULES = [
     id: "cruise",
     name: "Cruise Missile",
     family: "Strategic",
-    desc: "One huge homing warhead with a vast blast. Very slow to reload, minimum range 40 m.",
+    desc: "One huge homing warhead with a vast blast: precise at extreme range, but point defense can shoot it down. Very slow to reload, minimum range 40 m.",
     category: "missile",
     visual: "cruise",
     caliber: 0.9,
@@ -33840,7 +33842,7 @@ var MODULES = [
     cost: 80,
     damage: 300,
     cooldown: 10,
-    range: 28,
+    range: 32,
     minRange: 8,
     ...G,
     projectile: "missile",
@@ -33853,51 +33855,54 @@ var MODULES = [
     id: "mortar",
     name: "Mortar",
     family: "81mm",
-    desc: "Lobbed shells arc over the front line onto groups. Minimum range 25 m.",
+    desc: "Shock mortar: rapid, steep-lobbed shells whose blasts stun light units. Short reach for artillery, minimum range 15 m.",
     category: "artillery",
     visual: "mortar",
     caliber: 0.5,
     mount: "M",
     weight: 3.5,
     cost: 30,
-    damage: 108,
-    cooldown: 5.4,
-    range: 20,
-    minRange: 5,
+    damage: 70,
+    cooldown: 3.6,
+    range: 16,
+    minRange: 3,
     ...G,
     projectile: "arc",
     projectileSpeed: 8,
-    splash: 1.2,
+    splash: 1.4,
     ap: 0,
-    spread: 0.8
+    spread: 0.8,
+    stun: 0.5
   }),
   wpn({
     id: "howitzer",
     name: "Howitzer",
     family: "155mm",
-    desc: "Long-range shell with a huge blast. Minimum range 40 m.",
+    desc: "Long Tom: the longest-reaching shell in its class, one enormous blast with a flat lethal radius. Slow shells that fast units dodge; fixed in the hull, so the vehicle must turn to aim. Minimum range 60 m.",
     category: "artillery",
     visual: "artillery",
     caliber: 0.9,
     mount: "M",
     weight: 10,
     cost: 75,
-    damage: 144,
-    cooldown: 9,
-    range: 30,
-    minRange: 8,
+    damage: 480,
+    cooldown: 11,
+    range: 36,
+    minRange: 12,
     ...G,
     projectile: "arc",
-    projectileSpeed: 12,
-    splash: 2,
+    projectileSpeed: 9,
+    splash: 2.6,
     ap: 0.5,
-    spread: 1.2
+    spread: 0.8,
+    splashEdge: 0.6,
+    spinal: 0.35
   }),
   wpn({
     id: "barrage",
     name: "Barrage Cannon",
     family: "Scatter artillery",
-    desc: "Six shells at once that blanket a wide area. Minimum range 30 m.",
+    desc: "Rapid barrage: six shells every 4.5 s blanket a wide area. Quick-turning, shorter reach; built for swarms. Minimum range 25 m.",
     category: "artillery",
     visual: "artillery",
     barrels: 3,
@@ -33905,45 +33910,48 @@ var MODULES = [
     mount: "M",
     weight: 11,
     cost: 80,
-    damage: 48,
+    damage: 44,
     pellets: 6,
-    cooldown: 5.95,
-    range: 24,
-    minRange: 6,
+    cooldown: 4.5,
+    range: 20,
+    minRange: 5,
     ...G,
     projectile: "arc",
-    projectileSpeed: 10,
+    projectileSpeed: 12,
     splash: 1,
     ap: 0,
-    spread: 2
+    spread: 2.2,
+    turretTurn: 1.6
   }),
   wpn({
     id: "grenade",
     name: "Grenade Launcher",
     family: "40mm grenade",
-    desc: "Lobs grenades over the units in front onto whoever is behind: small blasts, short reach. Minimum range 10 m.",
+    desc: "Clip of 4 lobbed grenades in about a second: wide blasts that wreck a packed light cluster, then a 4.5 s reload. Minimum range 15 m.",
     category: "artillery",
     visual: "mortar",
     caliber: 0.3,
     mount: "S",
     weight: 1.6,
     cost: 14,
-    damage: 45,
-    cooldown: 2,
-    range: 8,
-    minRange: 2,
+    damage: 55,
+    cooldown: 0.45,
+    range: 10,
+    minRange: 3,
     ...G,
     projectile: "arc",
-    projectileSpeed: 8,
-    splash: 0.9,
+    projectileSpeed: 10,
+    splash: 1.1,
     ap: 0,
-    spread: 0.5
+    spread: 0.5,
+    magazine: 4,
+    reload: 4.5
   }),
   wpn({
     id: "firebomb",
     name: "Firebomb Mortar",
     family: "Incendiary mortar",
-    desc: "Lobbed firebombs leave a burning patch for 6 s: anything standing in it or driving through catches fire. Minimum range 25 m.",
+    desc: "Incendiary area denial: lobbed firebombs leave a burning patch for 10 s that anything standing in or driving through catches fire from. Minimum range 25 m.",
     category: "flame",
     visual: "mortar",
     caliber: 0.6,
@@ -33960,14 +33968,14 @@ var MODULES = [
     splash: 1,
     ap: 0.5,
     spread: 0.8,
-    fireField: { radius: 1.8, duration: 6, dps: 30 }
+    fireField: { radius: 1.8, duration: 10, dps: 25 }
   }),
   // ---------------- Energy ----------------
   wpn({
     id: "laser",
     name: "Pulse Laser",
     family: "Pulse",
-    desc: "Heavy hitscan pulse at mid range: never misses, so it is the answer to fast raiders and jets that bullets keep missing. Slow to recharge; poor against swarms.",
+    desc: "Heavy hitscan pulse at mid range: never misses, so it is the answer to fast raiders that bullets keep missing, and it can swat aircraft. Slow to recharge; poor against swarms.",
     category: "energy",
     visual: "laser",
     caliber: 0.3,
@@ -33980,7 +33988,7 @@ var MODULES = [
     ...GA,
     projectile: "beam",
     ap: 0.5,
-    airBonus: 1.6
+    airBonus: 1.2
   }),
   wpn({
     id: "twinlaser",
@@ -33994,7 +34002,7 @@ var MODULES = [
     mount: "M",
     weight: 2.6,
     cost: 34,
-    damage: 6,
+    damage: 8,
     cooldown: 0.15,
     range: 7,
     ...GA,
@@ -34144,7 +34152,7 @@ var MODULES = [
     id: "flamer",
     name: "Flamethrower",
     family: "Light flame",
-    desc: "Short cone of fire: little direct damage, but everything it touches keeps burning for 6 s, and the ground smoulders.",
+    desc: "Light burner: a short cone that ignores armor and sets everything it touches burning for 6 s.",
     category: "flame",
     visual: "flamer",
     caliber: 0.3,
@@ -34153,13 +34161,13 @@ var MODULES = [
     cost: 14,
     damage: 5,
     cooldown: 0.1,
-    range: 3.5,
+    range: 5,
     ...G,
     projectile: "flame",
     projectileSpeed: 9,
     splash: 0.8,
     ap: 1,
-    burn: { dps: 10, duration: 6 },
+    burn: { dps: 14, duration: 6 },
     fireField: { radius: 0.7, duration: 1.5, dps: 4 }
   }),
   wpn({
@@ -34175,7 +34183,7 @@ var MODULES = [
     cost: 30,
     damage: 6,
     cooldown: 0.15,
-    range: 4.5,
+    range: 6,
     ...G,
     projectile: "flame",
     projectileSpeed: 8,
@@ -34198,7 +34206,7 @@ var MODULES = [
     cost: 32,
     damage: 48,
     cooldown: 1.2,
-    range: 4.5,
+    range: 6,
     ...GA,
     projectile: "lightning",
     chain: 3,
@@ -34312,7 +34320,7 @@ var MODULES = [
     id: "sonic",
     name: "Sonic Pulser",
     family: "Riot",
-    desc: "Concussive blast that hurls light units backwards.",
+    desc: "Concussive blast that hurls rushers and light units backwards: the anti-charge gun.",
     category: "disruption",
     visual: "sonic",
     caliber: 0.5,
@@ -34321,7 +34329,7 @@ var MODULES = [
     cost: 30,
     damage: 50,
     cooldown: 1.4,
-    range: 4,
+    range: 5.5,
     ...G,
     projectile: "orb",
     projectileSpeed: 14,
@@ -34428,12 +34436,93 @@ var MODULES = [
     ap: 0,
     spread: 1.6
   }),
+  wpn({
+    id: "stunbomb",
+    name: "Stun Bomb",
+    family: "Paralysis bomb",
+    desc: "Control, not damage: one paralysis bomb per load whose wide burst freezes a light squad for a few seconds (tanks only shudder). Then back home to rearm. Flying designs only.",
+    category: "artillery",
+    visual: "charge",
+    caliber: 0.7,
+    mount: "M",
+    weight: 4,
+    cost: 40,
+    requires: "air",
+    damage: 60,
+    cooldown: 1,
+    magazine: 1,
+    reload: 6,
+    resupply: true,
+    range: 1,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 6,
+    splash: 2.2,
+    ap: 0,
+    spread: 0.3,
+    stun: 3
+  }),
+  wpn({
+    id: "stuncluster",
+    name: "Cluster Stun Dispenser",
+    family: "Stun cluster",
+    desc: "Scatters 12 stun bomblets over a wide area per pass: two bomblets lock down a light unit, so a pass stops a swarm's push. Two passes per load, then home to rearm. Flying designs only.",
+    category: "artillery",
+    visual: "charge",
+    barrels: 2,
+    caliber: 0.8,
+    mount: "M",
+    weight: 5,
+    cost: 45,
+    requires: "air",
+    damage: 20,
+    pellets: 12,
+    cooldown: 1.2,
+    magazine: 2,
+    reload: 5,
+    resupply: true,
+    range: 1.5,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 6,
+    splash: 0.8,
+    ap: 0,
+    spread: 1.6,
+    stun: 0.8
+  }),
+  wpn({
+    id: "empbomb",
+    name: "EMP Bomb",
+    family: "EMP bomb",
+    desc: "Electromagnetic bomb: a huge burst that drains shields at 4x and jolts everything unshielded. Opens shielded walls for the strike behind it. One per load, then home to rearm. Flying designs only.",
+    category: "artillery",
+    visual: "charge",
+    caliber: 0.7,
+    mount: "M",
+    weight: 4,
+    cost: 40,
+    requires: "air",
+    damage: 40,
+    cooldown: 1,
+    magazine: 1,
+    reload: 6,
+    resupply: true,
+    range: 1,
+    ...G,
+    projectile: "arc",
+    projectileSpeed: 6,
+    splash: 2.6,
+    ap: 0,
+    spread: 0.3,
+    stun: 1.5,
+    shieldMult: 4
+  }),
   // ---------------- Flak ----------------
   wpn({
     id: "flak",
     name: "Flak Cannon",
     family: "Light flak",
-    desc: "Air only: bursting shells that splash whole groups of aircraft.",
+    desc: "Long-range area air denial: proximity-fused shells reach 70 m, far past any machine gun or laser, and burst beside drones, helis and jinking jets alike, thinning air waves before they reach your lines. Slow to traverse; a clip of five, then a 4 s reload. Air only.",
     category: "antiair",
     visual: "flak",
     caliber: 0.5,
@@ -34441,22 +34530,24 @@ var MODULES = [
     weight: 3,
     cost: 24,
     damage: 45,
-    cooldown: 0.45,
-    range: 10,
+    cooldown: 0.3,
+    range: 14,
     ...A,
     magazine: 5,
-    reload: 2.5,
+    reload: 4,
     projectile: "shell",
     projectileSpeed: 16,
-    splash: 1.3,
+    splash: 2,
     ap: 0,
-    airBonus: 1.5
+    airBonus: 1.5,
+    proximity: 1,
+    turretTurn: 0.9
   }),
   wpn({
     id: "heavyflak",
     name: "Heavy Flak Battery",
     family: "Heavy flak",
-    desc: "Air only: three-gun battery with long reach and huge bursts.",
+    desc: "The widest AA umbrella: three proximity-fused heavy bursts per volley out to 90 m, covering every ally under it from bombers and drone clouds. Slow to traverse. Air only.",
     category: "antiair",
     visual: "flak",
     barrels: 3,
@@ -34467,13 +34558,15 @@ var MODULES = [
     damage: 70,
     burst: 3,
     cooldown: 2.2,
-    range: 14,
+    range: 18,
     ...A,
     projectile: "shell",
     projectileSpeed: 18,
-    splash: 1.8,
+    splash: 2.2,
     ap: 0,
-    airBonus: 1.5
+    airBonus: 1.5,
+    proximity: 1,
+    turretTurn: 0.6
   }),
   // ---------------- Melee ----------------
   wpn({
@@ -34515,25 +34608,26 @@ var MODULES = [
     id: "ram",
     name: "Spike Ram",
     family: "Ram",
-    desc: "Contact ram: one huge blow that batters targets backwards.",
+    desc: "Contact ram: one huge blow that dazes the target and batters it backwards. The anti-armor hit of the light melee kit.",
     category: "melee",
     visual: "ram",
     caliber: 0.5,
     mount: "S",
     weight: 2,
     cost: 10,
-    damage: 130,
+    damage: 180,
     cooldown: 1.5,
     range: 0.4,
     ...MELEE,
     ap: 1,
-    impulse: 1.2
+    impulse: 1.2,
+    stun: 0.3
   }),
   wpn({
     id: "chainsaw",
     name: "Chainsaw Arm",
     family: "Chainsaw",
-    desc: "Relentless teeth: steady damage while locked on.",
+    desc: "Relentless teeth: the fastest melee cutter, steady damage while locked on. Half armor pierce, so it shreds light units best.",
     category: "melee",
     visual: "chainsaw",
     caliber: 0.6,
@@ -34544,7 +34638,7 @@ var MODULES = [
     cooldown: 0.2,
     range: 0.7,
     ...MELEE,
-    ap: 1
+    ap: 0.5
   }),
   wpn({
     id: "claw",
@@ -34568,7 +34662,7 @@ var MODULES = [
     id: "plasmablade",
     name: "Plasma Blade",
     family: "Energy blade",
-    desc: "Sweeping blade that cuts every enemy around its target.",
+    desc: "Sweeping blade that cuts every enemy around its target: melee for swarms. Half armor pierce.",
     category: "melee",
     visual: "blade",
     caliber: 0.6,
@@ -34580,13 +34674,13 @@ var MODULES = [
     range: 0.9,
     ...MELEE,
     splash: 0.8,
-    ap: 1
+    ap: 0.5
   }),
   wpn({
     id: "hammer",
     name: "Siege Hammer",
     family: "Ground pound",
-    desc: "Colossal hammer: shockwave hits and knocks back everything nearby.",
+    desc: "Colossal hammer: the shockwave hits, dazes and knocks back everything nearby.",
     category: "melee",
     visual: "hammer",
     caliber: 0.9,
@@ -34599,13 +34693,14 @@ var MODULES = [
     ...MELEE,
     splash: 1.3,
     ap: 1,
-    impulse: 1
+    impulse: 1,
+    stun: 0.4
   }),
   wpn({
     id: "drill",
     name: "Drill Lance",
     family: "Bore drill",
-    desc: "Armor-boring drill: ignores all armor.",
+    desc: "Armor-boring drill: ignores all armor and strips it as it bores, so the rest of your army stops bouncing off.",
     category: "melee",
     visual: "drill",
     caliber: 0.9,
@@ -34616,7 +34711,8 @@ var MODULES = [
     cooldown: 0.15,
     range: 0.8,
     ...MELEE,
-    ap: 1
+    ap: 1,
+    shred: 0.5
   }),
   // ---------------- Support (allies) ----------------
   util(
@@ -34642,19 +34738,19 @@ var MODULES = [
   // ---------------- Defense ----------------
   util({ id: "shield", name: "Shield Projector", family: "Energy shield", desc: "Personal energy shield that absorbs 260 damage and regenerates.", category: "defense", visual: "shield", caliber: 0.5, mount: "M", weight: 2.5, cost: 32, shield: 260 }),
   util({ id: "shieldL", name: "Shield Emitter", family: "Light shield", desc: "Small personal shield: absorbs 100 damage, regenerates.", category: "defense", visual: "shield", caliber: 0.25, mount: "S", weight: 1, cost: 14, shield: 100 }),
-  util({ id: "shieldH", name: "Aegis Barrier", family: "Heavy shield", desc: "Massive personal barrier: absorbs 700 damage.", category: "defense", visual: "shield", caliber: 0.9, mount: "M", weight: 6, cost: 60, shield: 700 }),
+  util({ id: "shieldH", name: "Aegis Barrier", family: "Heavy shield", desc: "Massive personal barrier: absorbs 700 damage. +700 shield \xB7 \u221210% speed (the generator drags on the drive).", category: "defense", visual: "shield", caliber: 0.9, mount: "M", weight: 4.5, cost: 50, shield: 700, tune: { speed: -0.1 } }),
   util(
     { id: "pointdef", name: "Point Defense Laser", family: "APS", desc: "Zaps incoming rockets, missiles and shells within 20 m of its hull, aimed at it or at nearby allies.", category: "defense", visual: "pointdef", caliber: 0.4, mount: "S", weight: 1.2, cost: 24, pointDefense: { range: 4, cooldown: 0.6 } }
     /* [aura balance] 2.5 from the centre -> 4 from the hull edge */
   ),
   util({ id: "smoke", name: "Smoke Launchers", family: "Obscurant", desc: "Below 60% hp, pops a smoke screen 10 m around its hull: nothing more than 12 m away can target units inside for 5s.", category: "defense", visual: "smoke", caliber: 0.3, mount: "S", weight: 0.8, cost: 12, smoke: { radius: 2, duration: 5 } }),
   util({ id: "reactive", name: "Reactive Armor", family: "ERA", desc: "Explosive tiles: the next 6 shell/rocket/missile hits deal 75% less damage.", category: "defense", visual: "plate", caliber: 0.5, mount: "M", weight: 3, cost: 22, reactive: 6, armor: 1 }),
-  util({ id: "mirror", name: "Mirror Coating", family: "Reflective", desc: "Takes 45% less damage from beams, lightning, rails, plasma and flame.", category: "defense", visual: "plate", caliber: 0.4, mount: "S", weight: 1, cost: 8, energyResist: 0.45 }),
+  util({ id: "mirror", name: "Mirror Coating", family: "Reflective", desc: "Takes 45% less damage from beams, lightning, plasma and flame, and every hit loses 2 damage (a light-hull pick too).", category: "defense", visual: "plate", caliber: 0.4, mount: "S", weight: 1, cost: 8, energyResist: 0.45, deflect: 2 }),
   util({ id: "hardened", name: "Hardened Systems", family: "EMP shielding", desc: "Immune to stun, slow, disarm, burning and knockback.", category: "defense", visual: "coolant", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, hardened: true }),
   util({ id: "nanite", name: "Nanite Hull", family: "Self-repair", desc: "Regenerates 2.5% max hp per second when out of combat for 2s.", category: "defense", visual: "nanite", caliber: 0.4, mount: "S", weight: 1, cost: 3, regen: 0.025 }),
   // ---------------- Stealth & ECM ----------------
-  util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Optical cloak: enemies can't target it from range. It shows up while any enemy is within 12.5 m of its hull, for 1.5 s after each shot it fires, and inside enemy sensor range.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 2, cost: 15, cloak: "stealth" }),
-  util({ id: "phantom", name: "Phase Veil", family: "Phase cloak", desc: "Phase cloak: enemies can't target it even point-blank. It shows up only for 3 s after each shot it fires, and inside enemy sensor range. Heavier and pricier than the Stealth Cloak.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "M", weight: 4, cost: 20, cloak: "phantom" }),
+  util({ id: "stealth", name: "Stealth Cloak", family: "Optical cloak", desc: "Optical cloak: enemies can't target it from range; its first shots from cloak hit 30% softer (the field bleeds the guns). It shows up while any enemy is within 12.5 m of its hull, for 1.5 s after each shot it fires, and inside enemy sensor range.", category: "stealth", visual: "cloak", caliber: 0.5, mount: "M", weight: 1.5, cost: 15, cloak: "stealth", cloakDamage: 0.3 }),
+  util({ id: "phantom", name: "Phase Veil", family: "Phase cloak", desc: "Phase cloak: enemies can't target it even point-blank. It shows up only for 3 s after each shot it fires, and inside enemy sensor range. Phase-shifted rounds: \u221220% damage. Heavier and pricier than the Stealth Cloak.", category: "stealth", visual: "cloak", caliber: 0.8, mount: "M", weight: 3, cost: 20, cloak: "phantom", tune: { damage: -0.2 } }),
   util(
     { id: "jammer", name: "ECM Jammer", family: "Jammer", desc: "Enemy missiles lose lock on it and allies within 40 m; enemy guns are half as accurate against them. Jammers don't stack.", category: "stealth", visual: "jammer", caliber: 0.5, mount: "M", weight: 2, cost: 5, jammer: 8 }
     /* [aura balance] 3 -> 8, edge to edge */
@@ -34662,9 +34758,30 @@ var MODULES = [
   // ---------------- Systems ----------------
   util({ id: "targeting", name: "Targeting Computer", family: "Fire control", desc: "+15% range for all weapons and tighter spread.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.8, cost: 8, rangeBonus: 0.15, spreadMult: 0.6 }),
   util({ id: "turbo", name: "Turbo Engine", family: "Engine", desc: "+20% move speed.", category: "systems", visual: "engine", caliber: 0.4, mount: "S", weight: 1.2, cost: 3, speedBonus: 0.2 }),
-  util({ id: "gyro", name: "Gyro Stabilizer", family: "Stabilizer", desc: "Steadies the guns: tighter spread.", category: "systems", visual: "gyro", caliber: 0.3, mount: "S", weight: 1, cost: 3, gyro: true, spreadMult: 0.85 }),
-  util({ id: "autoloader", name: "Autoloader", family: "Ammo feed", desc: "Clip weapons reload 40% faster.", category: "systems", visual: "coolant", caliber: 0.3, mount: "S", weight: 1, cost: 14, reloadBonus: 0.4 }),
-  util({ id: "overclock", name: "Overclocked Core", family: "Overclock", desc: "All weapons fire 20% faster.", category: "systems", visual: "coolant", caliber: 0.5, mount: "M", weight: 2, cost: 5, fireRateBonus: 0.2 }),
+  util({ id: "gyro", name: "Gyro Stabilizer", family: "Stabilizer", desc: "Retired: replaced by Precision Optics.", category: "systems", visual: "gyro", caliber: 0.3, mount: "S", weight: 1, cost: 3, gyro: true, spreadMult: 0.85, retired: true, replacedBy: "optics" }),
+  util({ id: "autoloader", name: "Autoloader", family: "Ammo feed", desc: "Retired: replaced by the Overcharge Capacitor.", category: "systems", visual: "coolant", caliber: 0.3, mount: "S", weight: 1, cost: 14, reloadBonus: 0.4, retired: true, replacedBy: "overcharge" }),
+  util({ id: "overclock", name: "Overclocked Core", family: "Overclock", desc: "All weapons fire 20% faster, but the core runs hot: +20% fire rate \xB7 \u22121% hp per second while firing (never below 25%).", category: "systems", visual: "coolant", caliber: 0.5, mount: "M", weight: 1.5, cost: 5, fireRateBonus: 0.2, overheat: 0.01 }),
+  // ---- trade-off utilities: with at most 2 weapons a hull (giants 3, titans 4), the other sockets take these. Each is
+  // a net gain with a real cost (stats.ts tuneOf / tunedWeapon; the same numbers drive the sim and the price) ----
+  util({ id: "shortbarrel", name: "Short-Barrel Kit", family: "Barrel", desc: "Cut-down barrels: harder hits at shorter reach. +25% damage \xB7 \u221215% range.", category: "systems", visual: "gyro", caliber: 0.3, mount: "S", weight: 0.6, cost: 8, tune: { damage: 0.25, range: -0.15 } }),
+  util({ id: "longbarrel", name: "Long Barrel", family: "Barrel", desc: "Extended barrels: more reach, slower handling. +20% range \xB7 \u221215% fire rate.", category: "systems", visual: "sensor", caliber: 0.4, mount: "S", weight: 1, cost: 8, tune: { range: 0.2, fireRate: -0.15 } }),
+  util({ id: "heavyrounds", name: "Heavy Rounds", family: "Ammunition", desc: "Dense penetrators: half a penetration tier more on every gun, but slower shells and feed. +\xBD AP tier \xB7 \u221225% shell speed \xB7 \u221210% fire rate.", category: "systems", visual: "coolant", caliber: 0.3, mount: "S", weight: 1, cost: 10, tune: { ap: 0.5, projSpeed: -0.25, fireRate: -0.1 } }),
+  util({ id: "herounds", name: "HE Rounds", family: "Ammunition", desc: "High-explosive filler: shells and bullets burst wider, but punch less armour. +0.4 cell blast \xB7 \u2212\xBD AP tier.", category: "systems", visual: "coolant", caliber: 0.3, mount: "S", weight: 0.8, cost: 10, tune: { splash: 0.4, ap: -0.5 } }),
+  util({ id: "optics", name: "Precision Optics", family: "Fire control", desc: "Long-focus sights: much tighter spread and a little more reach, but the turret slews slower. \u221250% spread \xB7 +10% range \xB7 \u221240% traverse.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.6, cost: 8, spreadMult: 0.5, tune: { range: 0.1, traverse: -0.4 } }),
+  util({ id: "reinforced", name: "Reinforced Frame", family: "Frame", desc: "Bolted-on bracing: a tougher hull that moves slower. +25% hull hp \xB7 \u221215% speed.", category: "armor", visual: "plate", caliber: 0.6, mount: "M", weight: 3, cost: 10, tune: { hp: 0.25, speed: -0.15 } }),
+  util({ id: "afterburner", name: "Afterburner", family: "Engine", desc: "Strips plating for raw thrust. +30% speed \xB7 \u22123 armor.", category: "systems", visual: "engine", caliber: 0.4, mount: "S", weight: 1, cost: 4, armor: -3, tune: { speed: 0.3 } }),
+  util({ id: "lightframe", name: "Light Frame", family: "Frame", desc: "Drilled-out spars: carries more, lasts less. \u221220% total weight \xB7 \u221215% hull hp.", category: "armor", visual: "plate", caliber: 0.3, mount: "S", weight: 0.3, cost: 6, tune: { weight: -0.2, hp: -0.15 } }),
+  util({ id: "berserker", name: "Berserker Core", family: "Combat AI", desc: "Fights harder when it is losing. +35% damage below half hp \xB7 \u221210% hull hp.", category: "systems", visual: "charge", caliber: 0.4, mount: "S", weight: 1, cost: 8, berserk: { below: 0.5, damage: 0.35 }, tune: { hp: -0.1 } }),
+  util({ id: "ammorack", name: "Ammo Rack", family: "Ammunition", desc: "Extra hot ammunition stowed on deck. +15% damage \xB7 cooks off on death: 160 damage around it, allies included.", category: "systems", visual: "charge", caliber: 0.4, mount: "S", weight: 1.5, cost: 6, tune: { damage: 0.15 }, deathBlast: { damage: 160, radius: 2.5, friendly: true } }),
+  util({ id: "painter", name: "Target Painter", family: "Designator", desc: "Laser designator: every hit marks the target for 3 s and your whole army deals +15% to it. +15% army damage on marked targets \xB7 \u221215% own fire rate.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.8, cost: 10, paint: { bonus: 0.15, duration: 3 }, tune: { fireRate: -0.15 } }),
+  util({ id: "overcharge", name: "Overcharge Capacitor", family: "Capacitor", desc: "Banks power between engagements: the first volley after 3 s without firing hits twice as hard. +100% first-volley damage.", category: "systems", visual: "coolant", caliber: 0.4, mount: "S", weight: 1, cost: 10, overcharge: { mult: 1, idle: 3 } }),
+  util({ id: "killrush", name: "Kill Rush Injector", family: "Stim", desc: "Combat stims on every kill: +30% speed and +30% fire rate for 4 s after each kill.", category: "systems", visual: "nanite", caliber: 0.3, mount: "S", weight: 0.8, cost: 10, killRush: { speed: 0.3, fireRate: 0.3, duration: 4 } }),
+  // ---- small-hull utilities: worth most on light, fast or numerous units (the % modules above favour big hp pools) ----
+  util({ id: "evasion", name: "Evasion Thrusters", family: "Thrusters", desc: "Side thrusters jink away from incoming fire: up to a 35% chance to dodge shells, rockets and orbs on a light hull at speed. Less on bigger or slower hulls; titans get almost nothing.", category: "defense", visual: "engine", caliber: 0.3, mount: "S", weight: 0.8, cost: 6, dodge: 0.35 }),
+  util({ id: "deflector", name: "Deflector Grid", family: "Deflector", desc: "Ignores the first 6 damage of every hit on the hull: shrugs off machine-gun and flak swarms, does nothing against big guns.", category: "defense", visual: "shield", caliber: 0.3, mount: "S", weight: 0.8, cost: 6, deflect: 6 }),
+  util({ id: "scrapmine", name: "Scrap Mine", family: "On death", desc: "The wreck blows up: 90 damage to enemies within 7.5 m of the hull. Worth most on a numerous squad.", category: "systems", visual: "charge", caliber: 0.3, mount: "S", weight: 0.8, cost: 4, deathBlast: { damage: 90, radius: 1.5 } }),
+  util({ id: "emppop", name: "EMP Pop", family: "On death", desc: "The wreck lets off an EMP burst: stuns enemies within 12.5 m of the hull and drains their shields. Worth most on a numerous squad.", category: "systems", visual: "nanite", caliber: 0.3, mount: "S", weight: 0.8, cost: 5, deathBlast: { damage: 20, radius: 2.5, stun: 1.5 } }),
+  util({ id: "packlink", name: "Pack Link", family: "Swarm net", desc: "Swarm networking: +6% damage for each ally of the same design within 20 m, up to +30%. Made for big light squads.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.5, cost: 6, pack: { per: 0.06, cap: 0.3, radius: 4 } }),
   util({ id: "selfdestruct", name: "Self-Destruct Charge", family: "Demolition", desc: "Detonates on death for 300 damage up to 10 m beyond its hull.", category: "systems", visual: "charge", caliber: 0.4, mount: "S", weight: 1.5, cost: 3, deathBlast: { damage: 300, radius: 2 } }),
   // ---------------- Giant class (G mounts, size-4 chassis) ----------------
   wpn({
@@ -34783,7 +34900,7 @@ var MODULES = [
     id: "skyfortress",
     name: "Flak Fortress",
     family: "Giant flak",
-    desc: "Air only: quad heavy flak turret. A no-fly zone on legs.",
+    desc: "Air only: quad heavy flak turret with proximity fuses. A no-fly zone on legs.",
     category: "antiair",
     visual: "flak",
     barrels: 4,
@@ -34794,13 +34911,14 @@ var MODULES = [
     damage: 90,
     burst: 4,
     cooldown: 2,
-    range: 18,
+    range: 20,
     ...A,
     projectile: "shell",
     projectileSpeed: 20,
     splash: 2.2,
     ap: 0.5,
-    airBonus: 1.5
+    airBonus: 1.5,
+    proximity: 1
   }),
   wpn({
     id: "stormtower",
@@ -34863,7 +34981,7 @@ var MODULES = [
     splash: 1.2,
     ap: 1
   }),
-  util({ id: "bulwarkshield", name: "Bastion Shield Generator", family: "Giant shield", desc: "Personal barrier that absorbs 1800 damage.", category: "defense", visual: "shield", caliber: 1, mount: "L", weight: 12, cost: 90, shield: 1800 }),
+  util({ id: "bulwarkshield", name: "Bastion Shield Generator", family: "Giant shield", desc: "Personal barrier that absorbs 1800 damage. +1800 shield \xB7 \u221210% speed.", category: "defense", visual: "shield", caliber: 1, mount: "L", weight: 9, cost: 80, shield: 1800, tune: { speed: -0.1 } }),
   util(
     { id: "domeG", name: "Fortress Dome", family: "Giant dome", desc: "Projects a 400-point shield (at most half the ally's hp) onto every ally within 45 m. Domes don't stack.", category: "support", visual: "dome", caliber: 1, mount: "L", weight: 14, cost: 110, shieldAura: { radius: 9, amount: 400 } }
     /* [aura balance] 5 -> 9 */
@@ -34894,7 +35012,8 @@ var MODULES = [
     beamWidth: 0.45,
     pierceKeep: 0.75,
     impulse: 1.5,
-    stun: 0.6
+    stun: 0.6,
+    dmgKind: "kinetic"
   }),
   wpn({
     id: "doomsday",
@@ -35016,7 +35135,7 @@ var MODULES = [
   // ---------------- Armor ----------------
   { id: "plateL", name: "Armor Plate", family: "Light plate", desc: "+3 armor, +60 hp.", category: "armor", visual: "plate", caliber: 0.3, mount: "S", kind: "armor", weight: 2, cost: 8, armor: 3, hp: 60 },
   { id: "plateM", name: "Composite Armor", family: "Composite", desc: "+6 armor, +150 hp.", category: "armor", visual: "plate", caliber: 0.6, mount: "M", kind: "armor", weight: 5, cost: 12, armor: 6, hp: 150 },
-  { id: "plateH", name: "Heavy Armor", family: "Heavy plate", desc: "+10 armor, +400 hp.", category: "armor", visual: "plate", caliber: 0.9, mount: "M", kind: "armor", weight: 12, cost: 15, armor: 10, hp: 400 }
+  { id: "plateH", name: "Heavy Armor", family: "Heavy plate", desc: "+10 armor, +400 hp \xB7 \u221215% turn rate.", category: "armor", visual: "plate", caliber: 0.9, mount: "M", kind: "armor", weight: 10, cost: 15, armor: 10, hp: 400, tune: { turn: -0.15 } }
 ];
 var byId = (list) => new Map(list.map((p) => [p.id, p]));
 var CHASSIS_BY_ID = byId(CHASSIS);
@@ -35955,7 +36074,7 @@ function baseKit(team) {
   return kits[team];
 }
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -37635,13 +37754,18 @@ function charge(C) {
   }
   const yb = C.fixed ? -r * 0.32 : y0 + r * 0.32;
   cbox(b, kit.trim, 0, C.fixed ? -r * 0.06 : y0 + r * 0.7, 0, r * 1.3, r * 0.12, r * 0.9);
-  if (id === "clusterbombs") {
+  if (id === "clusterbombs" || id === "stuncluster") {
     for (const s of [-1, 1]) {
       capsule(b, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, "x", 8);
       for (let i = 0; i < 3; i++) b.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], "y", 5);
     }
   } else {
     for (const z of [-r * 0.45, 0, r * 0.45]) missile(b, kit.canvas, kit.canvas, kit.trim, -r * 0.65, yb, z, r * 0.2, r * 1.35, 8);
+  }
+  if (C.mod.stun) {
+    const zs2 = id === "stuncluster" ? [-r * 0.3, r * 0.3] : [-r * 0.45, 0, r * 0.45];
+    const rr = id === "stuncluster" ? r * 0.27 : r * 0.21;
+    for (const z of zs2) for (const x of [-r * 0.35, r * 0.1]) b.cyl(kit.rail, rr, rr, r * 0.05, [x, yb, z], "x", 8);
   }
   accent(C, 0, (C.fixed ? -r * 0.06 : y0 + r * 0.7) + r * 0.065, 0, r * 0.5, r * 0.4);
   C.t.shot = "none";
@@ -45602,7 +45726,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/CopyShader.js
+// node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -45642,7 +45766,7 @@ var CopyShader = {
   )
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/Pass.js
+// node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -45733,7 +45857,7 @@ var FullScreenQuad = class {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -45798,7 +45922,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -45886,7 +46010,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -46071,7 +46195,7 @@ var EffectComposer = class {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -46144,7 +46268,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -46196,7 +46320,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -46535,7 +46659,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/GTAOShader.js
+// node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -46901,7 +47025,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -47104,7 +47228,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/math/SimplexNoise.js
+// node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -47538,7 +47662,7 @@ var SimplexNoise = class {
   }
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -47965,7 +48089,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/OutputShader.js
+// node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -48053,7 +48177,7 @@ var OutputShader = {
   )
 };
 
-// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.

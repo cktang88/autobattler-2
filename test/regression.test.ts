@@ -125,7 +125,7 @@ test('prices are raw cost / 5: supply, upgrades and unit costs share one scale',
   // the starter titan fits a few rounds of income, as at the old scale (it would be ~5x supply if prices regressed)
   assert.ok(maxCost > 300 && maxCost <= totalSupplyThrough(4), `starter titan ${maxCost}`);
   // the biggest titans are ~2000, not 10 000
-  const big = D('bigt', 'citadel', 'megatracks', ['doomsday', 'doomsday', 'annihilator', 'cannon', 'cannon', 'hmg']);
+  const big = D('bigt', 'citadel', 'megatracks', ['doomsday', 'doomsday', 'annihilator', 'cannon', 'plateM', 'targeting']);
   if (validateDesign(big).length === 0) assert.ok(designCost(big) < 4000, `citadel ${designCost(big)}`);
 });
 
@@ -164,6 +164,7 @@ test('every chassis / mobility / module the designer allows validates and has fi
     if (m.retired) continue; // not offered in the designer
     if (pairingError(c.id, m.id)) continue;
     for (let i = 0; i < c.mounts.length; i++) for (const mod of MODULES) {
+      if (mod.retired) continue; // not offered in the designer either
       if (slotError(c, m.id, i, mod)) continue;
       const mounts = c.mounts.map(() => null as string | null);
       mounts[i] = mod.id;
@@ -316,6 +317,7 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   type W = { range: number; ox: number; oy: number };
   const I = (b as unknown as { ints: { wpns: (W | null)[]; hl: number; hw: number }[] }).ints;
   const w = I[0].wpns[0]!, T = I[t.id];
+  w.range = 3.5; // the flamer's old reach: the corner geometry below needs a short gun next to the 8 x 7 box
   // mount world position at the shooter's facing; put the citadel's corner 0.8 x range away, diagonally
   const mx = s.x + Math.cos(s.angle) * w.ox - Math.sin(s.angle) * w.oy, my = s.y + Math.sin(s.angle) * w.ox + Math.cos(s.angle) * w.oy;
   t.angle = Math.PI / 2; // long axis (hl) along y, hw across x
@@ -382,7 +384,7 @@ test('a fire-on-move walker with a gun and a melee weapon closes to contact and 
 test('a fire-on-move titan whose guns sit behind its centre keeps closing until one reaches (no park with nothing in range)', () => {
   // the 70% stop is measured from the hull centre, ranges from the mounts: this layout puts the laser 2.5 cells aft,
   // so the walker parked at 70% of the laser's range with every gun out of reach and never fired
-  const titan = D('reartitan', 'titan', 'titanlegs', ['shotgun', 'twinmg', 'shotgun', 'laser', 'mg']);
+  const titan = D('reartitan', 'titan', 'titanlegs', ['shotgun', 'twinmg', 'shotgun', 'laser', null]); // 4 weapons: the titan cap
   const wall = D('rearwall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back
   assert.deepEqual(validateDesign(titan, true), []);
   const { b, k, e } = duel([titan, wall], { designId: 'reartitan', kite: false }, { designId: 'rearwall' }, 25);
@@ -425,7 +427,7 @@ test('blocks that escort each other (A -> B, B -> A) fight normally instead of h
 
 test('server input checks accept every legal design: the 10-mount superfortress, a full board of upgrades', async () => {
   const { sanitizeDeck, sanitizeGarage, sanitizeAction } = await import('../src/server/validate.ts');
-  const sf = D('sf', 'superfortress', 'jet', ['bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg', null, null]);
+  const sf = D('sf', 'superfortress', 'jet', ['bombs', 'bombs', 'bombs', 'bombs', 'plateM', null, 'pointdef', 'shieldL', null, null]); // 4 bays: the titan weapon cap
   assert.deepEqual(validateDesign(sf, true), []);
   // the server used to cap mount lists at 8: a deck with one was a 400, and a garage with one failed to sync at all
   assert.equal(sanitizeDeck([sf])[0].mounts.length, 10);
@@ -477,7 +479,7 @@ test('a squad of long hulls holding formation keeps its deployed spacing in the 
 });
 
 test('a slow titan deployed behind a long row of its own emplacements works its way round (no rocking in place)', () => {
-  const titan = D('titan', 'titan', 'megatracks', ['ac40', 'ac40', 'autocannon', 'autocannon', 'autocannon']);
+  const titan = D('titan', 'titan', 'megatracks', ['ac40', 'ac40', 'autocannon', 'autocannon', null]);
   const post = D('post', 'hunter', 'anchor', ['twinlaser', 'mg']), tank = D('tank', 'warden', 'treads', ['autocannon', null]);
   const foe = D('foe', 'warden', 'treads', ['autocannon', null]);
   // a 12-cell wall of emplacements right in front of a 7-cell titan, a tank behind it: it has to slide ~8 cells sideways,
@@ -494,7 +496,7 @@ test('a slow titan deployed behind a long row of its own emplacements works its 
 });
 
 test('a charging unit with a gun and a melee weapon closes to contact and swings (not parked at 40% gun range)', () => {
-  const brute = D('brute', 'warlord', 'spider', ['mortar', 'buzzsaw', 'buzzsaw', null]), wall = D('wall', 'bastion', 'anchor', ['plateH', 'plateH', 'repairM']);
+  const brute = D('brute', 'warlord', 'spider', ['mortar', 'buzzsaw', null, null]), wall = D('wall', 'bastion', 'anchor', ['plateH', 'plateH', 'repairM']); // one gun + one melee weapon: the 2-weapon cap
   const b = new Battle({ seed: 1, sides: [{ designs: [brute], units: [pl('brute', { y: 2, stance: 'charge' })] }, { designs: [wall], units: [pl('wall', { y: 2 })] }] });
   let swings = 0;
   for (let t = 0; t < 60 * TICK_RATE && !b.done; t++) {

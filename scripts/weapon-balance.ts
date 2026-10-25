@@ -36,21 +36,23 @@ export interface Group { size: Size; name: string; ids: string[]; air?: boolean 
  *  (and against the common reference army), so each group should hold weapons that do the same job. */
 export const GROUPS: Group[] = [
   // ---- S (light mounts) ----
-  { size: 'S', name: 'riot (short-range)', ids: ['mg', 'twinmg', 'shotgun', 'flamer'] },
-  { size: 'S', name: 'sustained mid-range', ids: ['hmg', 'ac20', 'laser', 'rocketL', 'guidedrocket', 'grenade'] },
+  { size: 'S', name: 'close-range', ids: ['twinmg', 'shotgun', 'flamer'] },
+  { size: 'S', name: 'sustained', ids: ['mg', 'hmg', 'laser'] },
+  { size: 'S', name: 'clip & salvo (alpha)', ids: ['ac20', 'rocketL', 'guidedrocket', 'grenade'] },
   { size: 'S', name: 'precision (single target)', ids: ['sniper', 'atgm'] },
   { size: 'S', name: 'melee', ids: ['ram', 'buzzsaw', 'shockprod'] },
   { size: 'S', name: 'disruption', ids: ['stungun'] },
   { size: 'S', name: 'anti-air', ids: ['aamissile'], air: true },
   // ---- M (medium + heavy mounts) ----
   { size: 'M', name: 'riot (short-range)', ids: ['minigun', 'napalm', 'heatray', 'tesla', 'plasma', 'flechette'] },
-  { size: 'M', name: 'sustained mid-range', ids: ['autocannon', 'twin30', 'ac40', 'twinlaser', 'rockets', 'swarm', 'sam', 'plasmaorb', 'incendiary'] },
-  { size: 'M', name: 'precision (single target)', ids: ['cannon75', 'cannon', 'twin120', 'gauss', 'lightrail', 'railgun'] },
+  { size: 'M', name: 'sustained mid-range', ids: ['autocannon', 'twinlaser', 'plasmaorb', 'leech', 'prism'] },
+  { size: 'M', name: 'clip & salvo (alpha)', ids: ['twin30', 'ac40', 'cannon75', 'rockets', 'incendiary', 'swarm', 'sam'] },
+  { size: 'M', name: 'precision (single target)', ids: ['cannon', 'twin120', 'gauss', 'lightrail', 'railgun', 'voidlance'] },
   { size: 'M', name: 'long-range artillery', ids: ['mortar', 'howitzer', 'barrage', 'mlrs', 'cruise', 'firebomb'] },
   { size: 'M', name: 'melee', ids: ['claw', 'hammer', 'drill', 'chainsaw', 'plasmablade'] },
-  { size: 'M', name: 'disruption', ids: ['sonic', 'disarm', 'gravity', 'slowbeam', 'empcannon', 'arclance'] },
+  { size: 'M', name: 'disruption', ids: ['sonic', 'disarm', 'gravity', 'slowbeam', 'empcannon', 'arclance', 'entropy'] },
   { size: 'M', name: 'anti-air', ids: ['flak', 'heavyflak', 'quad20'], air: true },
-  { size: 'M', name: 'bombs (air carrier)', ids: ['bombs', 'clusterbombs'] },
+  { size: 'M', name: 'bombs (air carrier)', ids: ['bombs', 'heavybomb', 'clusterbombs', 'stunbomb', 'stuncluster', 'empbomb'] },
   // ---- L (giant mounts) ----
   { size: 'L', name: 'riot (short-range)', ids: ['avenger', 'inferno', 'stormtower', 'grinder'] },
   { size: 'L', name: 'long-range / siege', ids: ['siege240', 'siegeplasma', 'missilebattery', 'clusterhow'] },

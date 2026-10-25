@@ -30,7 +30,13 @@ test('the energy test designs are legal', () => {
 
 test('leech beam heals its own hull from the damage it deals', () => {
   let healed = 0;
-  fight('leech', 'tank', 1200, (b) => { for (const e of b.events) if (e.t === 'heal' && b.units[e.unit].design.id === 'leech') healed += e.amount; });
+  // the leech starts half dead and closes in on a plated wall that can't shoot back (air-only flak): every point it heals
+  // comes from its own beam (every gun now outranges the 6.5-cell beam, so a held leech facing a tank never reached it)
+  const wall = D('wall', 'bastion', 'treads', ['plateH', 'plateM', 'flak']);
+  const ds = [...designs, wall];
+  const b = new Battle({ seed: 3, sides: [{ designs: ds, units: [pl('leech', 1, 40)] }, { designs: ds, units: [pl('wall', 2, 40, { stance: 'holdPos' })] }] });
+  b.units[0].hp = b.units[0].maxHp * 0.5;
+  for (let i = 0; i < 1200 && !b.done; i++) { b.step(); for (const e of b.events) if (e.t === 'heal' && b.units[e.unit].design.id === 'leech') healed += e.amount; }
   assert.ok(healed > 50, `leech healed ${healed.toFixed(0)} hp`);
 });
 

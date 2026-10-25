@@ -122,7 +122,7 @@ test('one good report puts a player design on trial in the candidate tier', () =
 test('dedupe across both tiers: a pooled design (any mount order) or a near-duplicate never goes on trial', () => {
   const pooled = AI_POOL.find((d) => d.id === 'pool-railstrider')!; // striker/spider [lightrail, lightrail, targeting]
   const reordered: Design = { id: 'mine2', name: 'Reordered', chassis: pooled.chassis, mobility: pooled.mobility, mounts: ['lightrail', 'targeting', 'lightrail'] };
-  const near: Design = { id: 'near', name: 'Near', chassis: 'striker', mobility: 'spider', mounts: ['lightrail', 'lightrail', 'gyro'] };
+  const near: Design = { id: 'near', name: 'Near', chassis: 'striker', mobility: 'spider', mounts: ['lightrail', 'lightrail', 'optics'] };
   for (const d of [{ ...pooled, id: 'mine', name: 'Mine' }, reordered, near]) {
     if (!isValidDesign(d)) continue;
     const m = oneRound([d]);

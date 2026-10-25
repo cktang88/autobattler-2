@@ -157,7 +157,7 @@ function variantDesigns(spec: string): Design[] {
     const v: [string, (string | null)[]][] = [
       ['bare', c.mounts.map(() => null)], ['armed', weapons], ['max armour', plates],
       ['shield', fill(['shieldH', 'shield', 'shieldL', 'bulwarkshield'])], ['stealth', fill(['phantom', 'stealth'])],
-      ['mirror+hardened', fill(['mirror', 'hardened', 'reactive'])], ['turbo+gyro+sensor', fill(['turbo', 'gyro', 'sensor', 'targeting'])],
+      ['mirror+hardened', fill(['mirror', 'hardened', 'reactive'])], ['turbo+optics+sensor', fill(['turbo', 'optics', 'sensor', 'targeting'])],
       ['nanite+overclock+selfdestruct', fill(['nanite', 'overclock', 'selfdestruct'])],
     ];
     for (const [name, mounts] of v) out.push({ id: `v_${cid}_${name}`, name, chassis: c.id, mobility: mob, mounts });

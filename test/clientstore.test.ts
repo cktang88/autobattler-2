@@ -15,8 +15,8 @@ const mem = new Map<string, string>();
 const { allDesigns, activeDeck, repairDesign } = await import('../src/client/collection.ts');
 const { defaultSettings, loadSettings } = await import('../src/client/storage.ts');
 const { validateDesign, computeStats, MAX_LOAD } = await import('../src/shared/stats.ts');
-const { CHASSIS, CHASSIS_BY_ID, MODULES } = await import('../src/shared/parts.ts');
-const { slotError } = await import('../src/shared/stats.ts');
+const { CHASSIS, CHASSIS_BY_ID, MODULES, weaponCap } = await import('../src/shared/parts.ts');
+const { slotError, weaponCount } = await import('../src/shared/stats.ts');
 const { firstLegalMobility } = await import('../src/client/ui/garage-fit.ts');
 type Design = import('../src/shared/types.ts').Design;
 const { STARTER_DESIGNS } = await import('../src/shared/starters.ts');
@@ -115,7 +115,7 @@ test('a legal design on every hull passes the server garage / deck checks (sync 
   for (const c of CHASSIS) {
     const mobility = firstLegalMobility(c.id);
     const d: Design = { id: `gen-${c.id}`.slice(0, 40), name: 'Gen', chassis: c.id, mobility, mounts: c.mounts.map(() => null) };
-    for (let i = 0; i < c.mounts.length; i++) {
+    for (let i = 0; i < c.mounts.length && weaponCount(d) < weaponCap(c); i++) { // up to the hull's weapon cap
       for (const m of MODULES.filter((m) => m.kind === 'weapon' && !slotError(c, mobility, i, m))) {
         d.mounts[i] = m.id;
         if (!validateDesign(d).some((e) => /Overload/.test(e))) break;

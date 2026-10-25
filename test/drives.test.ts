@@ -139,11 +139,11 @@ test('hover floats over burning ground and takes half damage from ground bursts 
 test('standoff jet: an artillery jet circles its ground target inside its guns\' reach and keeps firing', async () => {
   const { TICK_RATE } = await import('../src/shared/sim/types.ts');
   const { jetStandoff, standoffOrbit } = await import('../src/shared/stats.ts');
-  const sf: Design = { id: 'sf', name: 'sf', chassis: 'superfortress', mobility: 'jet', mounts: ['barrage', 'barrage', 'barrage', 'barrage', 'barrage', 'mlrs', 'mirror', 'pointdef', 'sniper', null] };
+  const sf: Design = { id: 'sf', name: 'sf', chassis: 'superfortress', mobility: 'jet', mounts: ['barrage', 'barrage', 'barrage', 'mlrs', null, null, 'mirror', 'pointdef', null, null] }; // 4 weapons: the titan cap
   const wall: Design = { id: 'wall', name: 'wall', chassis: 'bastion', mobility: 'treads', mounts: ['plateH', 'plateM', 'cannon'] }; // (ground-only gun: can't shoot back)
-  assert.deepEqual(jetStandoff(sf), { range: 24, minRange: 6 });
+  assert.deepEqual(jetStandoff(sf), { range: 20, minRange: 6 }); // the barrage's 20-cell reach (MLRS min range 6)
   const R = standoffOrbit(sf);
-  assert.ok(R > 6 && R < 24 * 0.9, `orbit ${R}`);
+  assert.ok(R > 6 && R < 20 * 0.9, `orbit ${R}`);
   // bombers keep their bomb runs, fighters their dogfights, gun jets their strafing passes
   for (const mounts of [['bombs', 'bombs', 'bombs', 'mg'], ['aamissile', 'aamissile', 'aamissile', 'mg'], ['autocannon', 'autocannon', 'mg', 'mg']]) {
     assert.equal(standoffOrbit({ id: 'x', name: 'x', chassis: 'stratobomber', mobility: 'jet', mounts }), 0, mounts.join(','));
@@ -159,7 +159,7 @@ test('standoff jet: an artillery jet circles its ground target inside its guns\'
     for (const e of b.events) if (e.t === 'fire' && e.unit === me.id && e.mount === 0) { salvos++; if (t0 < 0) t0 = i; }
     if (t0 >= 0) near = Math.min(near, Math.hypot(me.x - tgt.x, me.y - tgt.y));
   }
-  // strafing passes managed 1-2 barrage salvos in 30 s (mostly spent looping round outside its 6-24 cell band)
+  // strafing passes managed 1-2 barrage salvos in 30 s (mostly spent looping round outside its 6-20 cell band)
   assert.ok(salvos >= 4, `barrage salvos in 30 s: ${salvos}`);
   assert.ok(near > 6, `stayed outside the minimum range once firing: ${near.toFixed(1)}`);
 });

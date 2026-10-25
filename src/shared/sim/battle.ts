@@ -6,7 +6,7 @@
 
 import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
-import { airRole, computeStats, standoffOrbit, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
+import { SPLASH_EDGE, dodgeChance, tunedWeapon, airRole, computeStats, standoffOrbit, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
@@ -21,6 +21,8 @@ const AIM_TOLERANCE = 0.06; // rad
 const RETARGET_EVERY = 0.3; // s
 const GOAL_EVERY = 0.4; // s
 const BURST_GAP = 0.1; // s
+/** seconds without any target after which a partly spent magazine reloads (tactical reload) */
+const TACTICAL_RELOAD = 1;
 /** salvo impact cloud: best-of-N candidate points per round (blue-noise scatter: random, but no two rounds stack) */
 const SALVO_CANDIDATES = 4;
 /** salvo cloud: stretched this much along the line of fire (rockets scatter most in range) */
@@ -45,7 +47,6 @@ export const SHIELD_DELAY = 3; // s
 export const SHIELD_REGEN = 0.05; // fraction of max per s
 const EVADE_CHANCE = 0.2;
 const MIN_DMG_FRAC = 0.15;
-const SPLASH_EDGE = 0.3;
 const CHAIN_JUMP = 2.5; // cells
 const CHAIN_FALLOFF = 0.8;
 const LEAP_COOLDOWN = 6;
@@ -204,6 +205,9 @@ const hypotGt = (dx: number, dy: number, r: number): boolean => {
 };
 
 interface Wpn {
+  /** tick of this gun's last volley, and of its last overcharged one (ModuleDef.overcharge) */
+  lastFire: number;
+  ocShot: number;
   def: ModuleDef;
   /** turret traverse rad/s */
   traverse: number;
@@ -369,6 +373,26 @@ interface Internal {
   energyResist: number;
   hardened: boolean;
   blastDmg: number;
+  /** death blast also hurts allies (ammo rack) */
+  blastFriendly: boolean;
+  // ---- trade-off utilities (ModuleDef berserk / paint / overcharge / killRush / overheat / cloakDamage) ----
+  berserkBelow: number; berserkDmg: number;
+  paintB: number; paintDur: number;
+  ocMult: number; ocIdle: number;
+  rushSpeed: number; rushRate: number; rushDur: number; rushT: number;
+  overheat: number; cloakDmg: number;
+  /** speed / fire rate before a kill rush */
+  baseSpeed: number; baseFireRate: number;
+  /** marked by an enemy target painter: until this tick, the painting side deals +paintedB to it */
+  paintedT: number; paintedSide: number; paintedB: number;
+  // ---- small-hull utilities ----
+  /** chance to dodge a shell / rocket / orb on contact (evasion thrusters; stats.ts dodgeChance) */
+  dodge: number;
+  /** flat damage every hull hit loses first (deflector) */
+  deflect: number;
+  packPer: number; packCap: number; packR: number;
+  /** death blast stun (EMP pop) */
+  blastStun: number;
   blastR: number;
   blastModule: string;
   /** no weapons and no healing: advances as a blocker */
@@ -472,6 +496,8 @@ function deathKindOf(moduleId: string): [DeathKind, number] {
 }
 
 interface Proj extends SimProjectile {
+  /** proximity fuse (flak): bursts as soon as an enemy aircraft is within this many cells of the shell (0 = none) */
+  prox?: number;
   /** SimUnit.id of the shooter */
   src: number;
   /** starting altitude of a bomb dropped from a flyer (falls to 0 over the flight) */
@@ -743,9 +769,11 @@ export class Battle {
     const hullS = (CHASSIS_BY_ID.get(design.chassis) ?? CHASSIS_BY_ID.get('scout')!).size;
     const bs = bodyScale(stats.size), hk = hullK(stats.size);
         for (const mid of design.mounts) {
-      const def = mid ? MODULE_BY_ID.get(mid) ?? null : null;
+      const def0 = mid ? MODULE_BY_ID.get(mid) ?? null : null;
       mounts.push({ moduleId: mid ?? null, angle: heading, cooldown: 0, flash: 0, target: -1 });
-      if (!def || (def.kind === 'armor') || (def.kind === 'utility' && !def.heal)) { wpns.push(null); continue; }
+      if (!def0 || (def0.kind === 'armor') || (def0.kind === 'utility' && !def0.heal)) { wpns.push(null); continue; }
+      // trade-off utilities retune the guns (damage, penetration, blast, shell speed, traverse): the same numbers the price uses
+      const def = tunedWeapon(def0, stats.tune);
       const isWeapon = def.kind === 'weapon';
       const melee = def.projectile === 'melee';
       // bomb bays (resupplied arc weapons on a flyer): released short of the target and thrown on by the plane's speed,
@@ -759,7 +787,7 @@ export class Battle {
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
         salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], split: [],
-        okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0,
+        okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0, lastFire: -1e9, ocShot: -1,
         bomb: bombBay, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
@@ -784,7 +812,9 @@ export class Battle {
     let cloak: 'stealth' | 'phantom' | null = null, detect = 0, domeR = 0, domeAmt = 0, regen = 0, fireRate = 1, reloadBonus = 0;
     let uplinkR = 0, uplinkBonus = 0, pdRange = 0, pdCooldown = 0, pdModule = '', jammer = 0, smokeR = 0, smokeDur = 0;
     let isSupport = traits.includes('repairAura') || hasHeal;
-    let reactive = 0, energyResist = 0, hardened = traits.includes('hardened'), blastDmg = 0, blastR = 0, blastModule = '';
+    let reactive = 0, energyResist = 0, hardened = traits.includes('hardened'), blastDmg = 0, blastR = 0, blastModule = '', blastFriendly = false;
+    let dodge = 0, deflect = 0, packPer = 0, packCap = 0, packR = 0, blastStun = 0;
+    let berserkBelow = 0, berserkDmg = 0, paintB = 0, paintDur = 0, ocMult = 0, ocIdle = 0, rushSpeed = 0, rushRate = 0, rushDur = 0, overheat = 0, cloakDmg = 0;
     for (const mid of design.mounts) {
       const d = mid ? MODULE_BY_ID.get(mid) : undefined;
       if (!d) continue;
@@ -798,7 +828,18 @@ export class Battle {
       reactive += d.reactive ?? 0;
       if (d.hardened) hardened = true;
       if (d.heal || d.shieldAura || d.fireRateAura || d.jammer || d.detect) isSupport = true;
-      if (d.deathBlast) { blastDmg += d.deathBlast.damage; blastR = Math.max(blastR, d.deathBlast.radius); blastModule = d.id; }
+      if (d.deathBlast) { blastDmg += d.deathBlast.damage; blastR = Math.max(blastR, d.deathBlast.radius); blastModule = d.id; if (d.deathBlast.friendly) blastFriendly = true; }
+      // trade-off utilities: repeated copies don't stack (the strongest applies), except overheat, which adds up
+      if (d.berserk && d.berserk.damage > berserkDmg) { berserkDmg = d.berserk.damage; berserkBelow = d.berserk.below; }
+      if (d.paint && d.paint.bonus > paintB) { paintB = d.paint.bonus; paintDur = d.paint.duration; }
+      if (d.overcharge && d.overcharge.mult > ocMult) { ocMult = d.overcharge.mult; ocIdle = d.overcharge.idle; }
+      if (d.killRush && d.killRush.fireRate > rushRate) { rushRate = d.killRush.fireRate; rushSpeed = d.killRush.speed; rushDur = d.killRush.duration; }
+      overheat += d.overheat ?? 0;
+      dodge = Math.max(dodge, d.dodge ?? 0);
+      deflect = Math.max(deflect, d.deflect ?? 0);
+      if (d.pack && d.pack.per > packPer) { packPer = d.pack.per; packCap = d.pack.cap; packR = d.pack.radius; }
+      blastStun = Math.max(blastStun, d.deathBlast?.stun ?? 0);
+      cloakDmg = Math.max(cloakDmg, d.cloakDamage ?? 0);
     }
     // percentage modules stack with diminishing returns (stats.ts stackedBonuses; same numbers as the price)
     const stack = stackedBonuses(design.mounts.map((mid) => (mid ? MODULE_BY_ID.get(mid) : undefined)).filter((d): d is ModuleDef => !!d));
@@ -828,7 +869,10 @@ export class Battle {
       cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
-      blastDmg: blastDmg * lm, blastR, blastModule, blocker: !hasWeapon && !hasHeal,
+      blastDmg: blastDmg * lm, blastR, blastModule, blastFriendly, blocker: !hasWeapon && !hasHeal,
+      berserkBelow, berserkDmg, paintB, paintDur, ocMult, ocIdle, rushSpeed, rushRate, rushDur, rushT: -1, overheat, cloakDmg,
+      baseSpeed: stats.speed, baseFireRate: fireRate, paintedT: -1, paintedSide: -1, paintedB: 0,
+      dodge: dodge > 0 ? dodgeChance(dodge, stats.size, stats.speed) : 0, deflect, packPer, packCap, packR, blastStun,
       meleeOnly: hasWeapon && wpns.every((w) => !w || w.heal > 0 || w.melee), avoidSide: 0, avoidT: 0, stuckT: 0, trigA: NaN, cosA: 1, sinA: 0,
       prio: cfg.prio, hold: cfg.hold, kite: cfg.kite && !stats.isStatic, kiteMi: kiteMountOf(wpns, cfg.kiteMount), focus: cfg.focus, stance: cfg.stance,
       delayTicks: Math.round(cfg.delay * TICK_RATE), retreatOn: cfg.retreat && !stats.isStatic, retreating: false, flankDone: false,
@@ -857,6 +901,10 @@ export class Battle {
       u.hitFlash = Math.max(0, u.hitFlash - DT * 4);
       I.sinceDamage += DT;
       I.sinceFire += DT;
+      // overheat: hot guns cook the hull while they fire (never below a quarter of its hp)
+      if (I.overheat > 0 && I.sinceFire < 0.5 && u.hp > u.maxHp * 0.25) u.hp = Math.max(u.maxHp * 0.25, u.hp - u.maxHp * I.overheat * DT);
+      // kill rush wears off
+      if (I.rushT >= 0 && this.tick >= I.rushT) { I.rushT = -1; I.speed = I.baseSpeed; I.fireRate = I.baseFireRate; }
       if (I.sinceDamage > SHIELD_DELAY) {
         if (u.shield < u.maxShield) u.shield = Math.min(u.maxShield, u.shield + u.maxShield * SHIELD_REGEN * DT);
         if (u.auraShield < u.maxAuraShield) u.auraShield = Math.min(u.maxAuraShield, u.auraShield + u.maxAuraShield * SHIELD_REGEN * DT);
@@ -1110,7 +1158,7 @@ export class Battle {
       const lim = I.pdRange + I.bound, lim2 = lim * lim;
       for (const p of this.projs) {
         if (p.dead || p.side === u.side) continue;
-        if (!this.interceptable(p.kind)) continue;
+        if (!this.interceptable(p.kind, p.moduleId)) continue;
         const dx = p.x - u.x, dy = p.y - u.y;
         if (dx * dx + dy * dy > lim2) continue;
         const d = this.edgeC(I, p.x, p.y);
@@ -1131,7 +1179,9 @@ export class Battle {
       const u = I.u;
       this.dmgSrc = u.id;
       this.dmgKind = 'explosive';
-      this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true); // [aura balance] radius beyond the hull
+      this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg, 0.3, 1, u.side, false, I.blastModule, -1, true, I.blastStun > 0 ? ({ stun: I.blastStun } as ModuleDef) : null); // [aura balance] radius beyond the hull (EMP pop: the burst stuns)
+      // an ammo rack cooking off hurts its own side too (at 60%: the hulls around it are braced for it)
+      if (I.blastFriendly) this.splash(u.x, u.y, I.blastR + I.radius, I.blastDmg * 0.6, 0.3, 1, (1 - u.side) as Side, false, I.blastModule, -1, false);
       this.dmgSrc = -1;
       this.dmgKind = null;
     }
@@ -1436,6 +1486,9 @@ export class Battle {
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
       if (m.cooldown > -DT && !(w.resupply && m.reloading && !this.overHome(u))) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
       if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
+      // tactical reload: a partly spent clip refills once the unit has had nothing to shoot for TACTICAL_RELOAD s, so
+      // every engagement opens with the full burst (bomb bays still rearm only over home, see needsResupply)
+      if (!m.reloading && m.ammo !== undefined && w.def.magazine && m.ammo < w.def.magazine && !w.def.resupply && I.idleT > TACTICAL_RELOAD * TICK_RATE && w.burstLeft <= 0) { m.reloading = true; m.cooldown = Math.max(m.cooldown, (w.def.reload ?? 0) * I.reloadMult); }
 
       if (w.heal > 0) {
         this.updateHeal(I, w, m);
@@ -1629,7 +1682,10 @@ export class Battle {
   }
 
   /** projectile kinds point defense shoots down (see pointDefense) */
-  private interceptable(k: string): boolean {
+  /** point defense can shoot it down: rockets, missiles, shells, lobbed rounds and orbs -- not solid kinetic slugs
+   *  (ModuleDef.dmgKind 'kinetic': the gauss cannon's shell-like round) */
+  private interceptable(k: string, moduleId?: string): boolean {
+    if (moduleId && MODULE_BY_ID.get(moduleId)?.dmgKind === 'kinetic') return false;
     return k === 'rocket' || k === 'missile' || k === 'shell' || k === 'arc' || k === 'orb';
   }
 
@@ -1688,6 +1744,11 @@ export class Battle {
       if (nt && nt !== t) { t = nt; ax = nt.x; ay = nt.y; }
     }
     m.flash = 1;
+    // overcharge: the first volley after a pause carries the capacitor's charge (read before the timer resets)
+    const overcharged = I.ocMult > 0 && w.lastFire < this.tick - I.ocIdle * TICK_RATE && salvoK === 0;
+    if (salvoK === 0) w.lastFire = this.tick;
+    if (overcharged) w.ocShot = this.tick;
+    const cloakedShot = u.cloaked && I.cloakDmg > 0;
     I.sinceFire = 0;
     // [mount origins] shots leave the muzzle: mount point + barrel direction * muzzle reach
     this.mountAt(I, w);
@@ -1704,6 +1765,10 @@ export class Battle {
     }
     const dist0 = Math.hypot(ax - px, ay - py);
     let raw = (def.damage ?? 0) * I.dmgMult;
+    if (I.berserkDmg > 0 && u.hp < u.maxHp * I.berserkBelow) raw *= 1 + I.berserkDmg; // berserker core
+    if (w.ocShot === this.tick || (salvoK > 0 && w.ocShot >= this.tick - 2 * TICK_RATE && w.ocShot === w.lastFire)) raw *= 1 + I.ocMult; // the charged volley
+    if (cloakedShot) raw *= 1 - I.cloakDmg; // the cloak field bleeds the guns' power
+    if (I.packPer > 0) raw *= 1 + this.packBonus(I); // pack link: stronger among its own kind
     if (def.falloff != null && def.falloff !== 1 && w.range > 0) raw *= 1 + (def.falloff - 1) * Math.min(1, dist0 / w.range);
     if (def.ramp && def.ramp > 1) {
       // focusing beam: power builds while it stays on one target
@@ -1771,7 +1836,7 @@ export class Battle {
     // overkill bookkeeping: what one round is expected to deal to the target it was fired at. Rounds point defense can
     // shoot down are not counted on while the target's side fields any: a squad holding fire for the one missile in
     // the air let a single PD laser swat every shot, one at a time, for the rest of the battle
-    const est = t && kind !== 'flame' && !(this.interceptable(kind) && this.sideHasPd(t.side))
+    const est = t && kind !== 'flame' && !(this.interceptable(kind, def.id) && this.sideHasPd(t.side))
       ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : pellets > 1 || salvoN > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
       : 0;
     if (guidedVolley && t) {
@@ -1829,7 +1894,7 @@ export class Battle {
         ignore: -1, arcH: kind === 'arc' && !bomb ? 1 + total * (def.visual === 'mortar' ? 0.38 : 0.2) : 0, dead: false,
         pierce, hits: [], fx, fxMult: lm, cls, mount: mi,
         aimT: est > 0 && t ? t.id : -1, est,
-        ff: air ? null : def.fireField ?? null, cl: kind === 'arc' ? def.cluster ?? null : null,
+        ff: air ? null : def.fireField ?? null, cl: kind === 'arc' ? def.cluster ?? null : null, prox: air ? def.proximity ?? 0 : 0,
         age: 0, tof: 0, v0: speed, vmax: speed, boost: 0, bow: 0, loft: 0, lofted: false,
       };
       if (kind === 'rocket') {
@@ -1983,6 +2048,12 @@ export class Battle {
     if (!t.alive) return;
     const T = this.ints[t.id];
     if (this.curSrc >= 0 && this.units[this.curSrc].side !== t.side) { this.blockAtk[T.block] = this.curSrc; this.blockAtkT[T.block] = this.tick; }
+    // target painter: a marked target takes more from the painting side; a painter's hit (re)marks it
+    if (T.paintedT > this.tick && side === T.paintedSide) raw *= 1 + T.paintedB;
+    if (this.dmgSrc >= 0 && this.units[this.dmgSrc].side !== t.side) {
+      const P = this.ints[this.dmgSrc];
+      if (P.paintB > 0) { T.paintedT = this.tick + Math.round(P.paintDur * TICK_RATE); T.paintedSide = P.u.side; T.paintedB = P.paintB; }
+    }
     // an up shield stops the shot before it touches the hull: no status effects; paralysis drains the shield instead
     const shielded = t.shield > 0 || t.auraShield > 0;
     if (fx && !T.hardened && shielded && fx.stun) {
@@ -2050,6 +2121,7 @@ export class Battle {
     if (dmg > 0) {
       if ((cls & CLS_ENERGY) && T.energyResist > 0) dmg *= 1 - T.energyResist;
       if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { dmg *= REACTIVE_MULT; t.reactive--; }
+      if (T.deflect > 0) dmg = Math.max(dmg * 0.1, dmg - T.deflect); // deflector: small hits lose most of their bite
       dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - (t.stats.armor - T.shred) * (1 - ap));
     }
     const hitDmg = dmg; // what reached the hull: the wreck's "hit size"
@@ -2091,6 +2163,11 @@ export class Battle {
       t.alive = false;
       tt.deathTick = this.tick;
       if (srcU && srcU.side !== t.side) { tt.killedBy = srcU.id; this.tallies[srcU.id].kills.push(t.id); this.tallies[srcU.id].byWeapon[moduleId].kills.push(t.id); }
+      // kill rush: the killer surges (speed and rate of fire) for a few seconds
+      if (srcU && srcU.side !== t.side && srcU.alive) {
+        const K = this.ints[srcU.id];
+        if (K.rushRate > 0) { K.rushT = this.tick + Math.round(K.rushDur * TICK_RATE); K.speed = K.baseSpeed * (1 + K.rushSpeed); K.fireRate = K.baseFireRate + K.rushRate; }
+      }
       t.moving = false;
       t.leap = 0;
       t.cloaked = false;
@@ -2106,6 +2183,7 @@ export class Battle {
 
   private splash(x: number, y: number, R: number, raw: number, ap: number, airBonus: number, side: Side, air: boolean, moduleId: string, direct: number, emit: boolean, fx: ModuleDef | null = null, fxMult = 1, cls = 0, ox = x, oy = y): void {
     if (emit) this.events.push({ t: 'explode', x, y, radius: R, moduleId });
+    const edge = MODULE_BY_ID.get(moduleId)?.splashEdge ?? SPLASH_EDGE; // per-weapon falloff (heavy shells: a flat lethal radius)
     const cnt = this.gather(x, y, R + MAX_RADIUS);
     for (let q = 0; q < cnt; q++) {
       const id = this.scratch[q];
@@ -2113,7 +2191,7 @@ export class Battle {
       if (!o.alive || o.side === side || o.flying !== air) continue;
       const d = this.edgeC(this.ints[id], x, y);
       if (d > R && id !== direct) continue;
-      let f = id === direct ? 1 : 1 - (1 - SPLASH_EDGE) * Math.max(0, d) / R;
+      let f = id === direct ? 1 : 1 - (1 - edge) * Math.max(0, d) / R;
       // a hovercraft rides over a burst on the ground (its own direct hit is not reduced)
       if (this.groundBurst && id !== direct && this.ints[id].hover) f *= HOVER_SPLASH;
       this.damage(o, raw * f, ap, airBonus, side, moduleId, o.x, o.y, fx, fxMult, ox, oy, cls);
@@ -2187,12 +2265,19 @@ export class Battle {
         const k = Math.min(1, p.traveled / Math.max(1, p.total));
         p.z = p.air ? 1 : p.loft * (p.lofted ? (k < 0.3 ? Math.sin(k / 0.3 * Math.PI / 2) : k < 0.65 ? 1 : Math.cos((k - 0.65) / 0.35 * Math.PI / 2)) : Math.sin(Math.PI * k));
       }
+      // proximity fuse (flak): the shell bursts beside the first enemy aircraft it passes near, so a jet that jinks out
+      // of the lead point or an evasive flyer still gets caught in the airburst
+      if (p.prox && p.traveled > 1 && this.proxBurst(p)) {
+        this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, true, p.moduleId, -1, true, p.fx, p.fxMult, p.cls);
+        p.dead = true;
+        continue;
+      }
       // contact (a rocket lofted high overflies the ground units under it)
       const hitId = p.kind === 'rocket' && p.z > ROCKET_OVERFLY ? -1 : this.sweep(p, ox, oy);
       if (hitId >= 0) {
         const t = this.units[hitId];
         const T = this.ints[hitId];
-        if (T.evasive && this.rng() < EVADE_CHANCE) {
+        if ((T.evasive && this.rng() < EVADE_CHANCE) || (T.dodge > 0 && (p.kind === 'shell' || p.kind === 'rocket' || p.kind === 'orb') && this.rng() < T.dodge)) {
           p.ignore = hitId;
         } else {
           if (p.splash > 0) this.splash(p.x, p.y, p.splash, p.dmg, p.ap, p.airBonus, p.side, p.air, p.moduleId, hitId, p.kind !== 'flame', p.fx, p.fxMult, p.cls);
@@ -2312,6 +2397,29 @@ export class Battle {
     const d = dps * (10 / (10 + t.stats.armor - T.shred));
     if (t.burning <= 0 || d >= T.burnDps) { T.burnDps = d; T.burnSide = side; T.burnSrc = src; T.burnModule = moduleId; }
     t.burning = Math.max(t.burning, duration);
+  }
+
+  /** pack link: +packPer per ally of the same design within packR cells (centre to centre), capped at packCap */
+  private packBonus(I: Internal): number {
+    const u = I.u, r = I.packR;
+    const cnt = this.gather(u.x, u.y, r);
+    let n = 0;
+    for (let q = 0; q < cnt; q++) {
+      const o = this.units[this.scratch[q]];
+      if (o !== u && o.alive && o.side === u.side && o.design.id === u.design.id && (o.x - u.x) ** 2 + (o.y - u.y) ** 2 <= r * r) n++;
+    }
+    return Math.min(I.packCap, n * I.packPer);
+  }
+
+  /** proximity fuse: is an enemy aircraft within the shell's fuse radius (edge to edge)? */
+  private proxBurst(p: Proj): boolean {
+    const r = p.prox ?? 0;
+    const cnt = this.gather(p.x, p.y, r + MAX_RADIUS);
+    for (let q = 0; q < cnt; q++) {
+      const o = this.units[this.scratch[q]];
+      if (o.alive && o.flying && o.side !== p.side && this.edgeC(this.ints[o.id], p.x, p.y) <= r) return true;
+    }
+    return false;
   }
 
   /** First enemy (of the projectile's layer) whose circle the segment (ox,oy)->(p.x,p.y) touches. */
@@ -2559,7 +2667,7 @@ export class Battle {
         else if (engaged && !I.meleeOnly) wantMove = false; // every gun that can hit the goal is in range: hold, don't bum-rush
         else wantMove = true; // close in (every unit fires while moving); brawlers charge all the way into contact
         if (!wantMove) {
-          // holding: turrets do the aiming; only a gun that traverses slower than the hull turns swings the hull toward the fight
+          // holding: turrets do the aiming; only a spinal (fixed-arc) gun swings the hull toward the fight
           this.faceTarget(I);
           return;
         }
@@ -2602,17 +2710,18 @@ export class Battle {
     return best;
   }
 
-  /** While parked, the turrets do the aiming and the hull stays put. The exception is a gun whose traverse is slower
-   *  than the hull's turn rate (e.g. the spinal mass driver): then swinging the whole vehicle is the faster way to
-   *  bring it on target, so the hull turns toward that weapon's target (the highest-dps such weapon that is engaged)
-   *  and carries the barrel with it. Ground units only; the hull only otherwise turns to steer while moving. */
+  /** While parked, the turrets do the aiming and the hull stays put, however slowly a heavy turret traverses (turret
+   *  traverse is a real trade, priced by stats.ts traverseFactor). The exception is a spinal (fixed-arc) gun, e.g. the
+   *  mass driver or the howitzer: it can only fire along the hull, so the hull turns toward that weapon's target (the
+   *  highest-dps such weapon that is engaged) and carries the barrel with it -- the vehicle commits to one arc at a
+   *  time. Ground units only; the hull only otherwise turns to steer while moving. */
   private faceTarget(I: Internal): void {
     const u = I.u;
     if (u.flying || u.stun > 0) return;
     let best = -1, bestDps = -1;
     for (let mi = 0; mi < I.wpns.length; mi++) {
       const w = I.wpns[mi];
-      if (!w || w.heal > 0 || w.traverse >= I.turn || u.mounts[mi].target < 0) continue;
+      if (!w || w.heal > 0 || w.def.spinal == null || u.mounts[mi].target < 0) continue;
       if (w.dps > bestDps) { bestDps = w.dps; best = mi; }
     }
     if (best < 0) return;
@@ -2887,8 +2996,13 @@ export class Battle {
         I.strafeT = 1.1; // overshoot, then loop back
         I.loopDir = -I.loopDir; // alternate the loop each pass: runs trace a figure eight over the target
         want = u.angle;
-      } else if (Math.abs(angDiff(u.angle, want)) > 2.4) {
-        want = u.angle + I.loopDir; // target behind: swing round in this pass's loop direction
+      } else {
+        // a target inside the turning circle and off the nose can't be reached by turning toward it: the jet just
+        // orbits it for good (a wide-turning gunless giant bomber circled a tank all battle). Fly on to open the
+        // distance first, then loop back onto it
+        const diff = Math.abs(angDiff(u.angle, want)), loopR = I.speed / Math.max(0.3, I.turn);
+        if (diff > 0.35 && d < 2 * loopR * Math.sin(Math.min(diff, Math.PI / 2))) want = u.angle;
+        else if (diff > 2.4) want = u.angle + I.loopDir; // target behind: swing round in this pass's loop direction
       }
     } else {
       want = Math.atan2(FIELD_H / 2 - u.y, FIELD_W / 2 - u.x);

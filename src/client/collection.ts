@@ -3,7 +3,7 @@
 
 import { DECK_SIZE } from '../shared/match.ts';
 import { STARTER_DESIGNS } from '../shared/starters.ts';
-import { MAX_LOAD, computeStats, slotError, validateDesign } from '../shared/stats.ts';
+import { MAX_LOAD, computeStats, dropExtraWeapons, replaceRetiredModules, slotError, validateDesign } from '../shared/stats.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, pairingError } from '../shared/parts.ts';
 import type { Design } from '../shared/types.ts';
 import { loadDeckIds, loadDesigns, saveDeckIds, saveDesigns } from './storage.ts';
@@ -60,6 +60,8 @@ export function repairDesign(raw: unknown): Design | null {
     ...(x.behavior && typeof x.behavior === 'object' ? { behavior: { ...x.behavior } } : {}),
     ...(typeof x.editedAt === 'number' && Number.isFinite(x.editedAt) ? { editedAt: x.editedAt } : {}),
   };
+  replaceRetiredModules(d); // retired parts (rules 7: Autoloader, Gyro) swap for their replacement
+  dropExtraWeapons(d); // over the hull's weapon cap (rules 7): the weakest extra weapons go back to stores
   const overloaded = () => { try { return computeStats(d).load > MAX_LOAD; } catch { return false; } };
   while (overloaded()) {
     let k = -1;

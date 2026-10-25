@@ -4,10 +4,10 @@ import { PARA_PER_STUN, PHANTOM_FIRE_REVEAL, REGEN_DELAY, SHIELD_DELAY, SHIELD_R
 import { CLOAK_REVEAL } from '../../shared/types.ts';
 import { h } from '../app.ts';
 import { METERS_PER_CELL, fmtMeters } from '../../shared/grid.ts';
-import { AP_TIERS, MAX_ENERGY_RESIST, accuracyRating, stackWeight, apTier, damageKinds, firingStyle, turretTurnRate, weaponDps, type ApTier, type DamageKind } from '../../shared/stats.ts';
+import { AP_TIERS, MAX_ENERGY_RESIST, SPLASH_EDGE, accuracyRating, burstOf, stackWeight, apTier, damageKinds, firingStyle, turretTurnRate, weaponDps, type ApTier, type DamageKind } from '../../shared/stats.ts';
 import { MELEE_SPRINT } from '../../shared/sim/battle.ts';
 import { MOUNT_LETTER, ROLES } from '../../shared/parts.ts';
-import type { ModuleDef, MoveKind, Role } from '../../shared/types.ts';
+import type { ModuleDef, MoveKind, Role, TuneKey } from '../../shared/types.ts';
 import { drawPartIcon, moduleCategoryColor, type PartKind } from '../render/field.ts';
 import { CATEGORY_COLOR } from '../render/turrets.ts';
 
@@ -197,10 +197,54 @@ export function moduleEffects(mod: ModuleDef): string[] {
   if (mod.shred) t.push(`armor shred ${n1(mod.shred)}`);
   if (mod.fireField) t.push(mod.fireField.rad ? `radiation ${n1(mod.fireField.duration)}s` : `fire field ${n1(mod.fireField.duration)}s`);
   if (mod.cluster) t.push(`cluster ×${mod.cluster.count}`);
+  if (mod.proximity) t.push('proximity fuse');
+  if (mod.dodge) t.push(`dodge ≤${Math.round(mod.dodge * 100)}%`);
+  if (mod.deflect) t.push(`deflect ${mod.deflect}/hit`);
+  if (mod.pack) t.push(`+${Math.round(mod.pack.per * 100)}%/ally (≤${Math.round(mod.pack.cap * 100)}%)`);
+  if (mod.deathBlast?.stun) t.push('EMP on death');
+  if ((mod.splashEdge ?? 0) >= 0.5) t.push('flat blast');
   if (mod.minRange) t.push(`min rng ${fmtMeters(mod.minRange)}`);
   if (mod.rangeBonus) t.push(`+${Math.round(mod.rangeBonus * 100)}% unit range`);
   if (mod.spreadMult && mod.spreadMult < 1) t.push(`-${Math.round((1 - mod.spreadMult) * 100)}% spread`);
   return t;
+}
+
+const TUNE_LABEL: Record<TuneKey, string> = {
+  damage: 'damage', range: 'range', fireRate: 'fire rate', speed: 'speed', turn: 'turn rate', hp: 'hull hp', weight: 'weight',
+  ap: 'AP tier', splash: 'blast', projSpeed: 'shell speed', traverse: 'traverse',
+};
+/** A trade-off module's explicit gains and costs, for the green + / red − lines on its card (empty for plain modules).
+ *  Only modules that really have a downside get a red line. */
+export function moduleTradeoffs(mod: ModuleDef): { plus: string[]; minus: string[] } {
+  const plus: string[] = [], minus: string[] = [];
+  const pct = (v: number) => `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}%`;
+  const add = (good: boolean, text: string) => (good ? plus : minus).push(text);
+  if (mod.kind === 'weapon') return { plus, minus };
+  for (const [k, v] of Object.entries(mod.tune ?? {}) as [TuneKey, number][]) {
+    if (!v) continue;
+    const good = k === 'weight' ? v < 0 : v > 0;
+    if (k === 'ap') add(good, `${v > 0 ? '+' : '−'}${Math.abs(v) === 0.5 ? '½' : Math.abs(v)} AP tier`);
+    else if (k === 'splash') add(good, `${v > 0 ? '+' : '−'}${fmtMeters(Math.abs(v))} blast`);
+    else add(good, `${pct(v)} ${TUNE_LABEL[k]}`);
+  }
+  if (mod.rangeBonus) add(true, `${pct(mod.rangeBonus)} range`);
+  if (mod.fireRateBonus) add(true, `${pct(mod.fireRateBonus)} fire rate`);
+  if (mod.speedBonus) add(true, `${pct(mod.speedBonus)} speed`);
+  if (mod.spreadMult && mod.spreadMult < 1 && mod.tune) add(true, `−${Math.round((1 - mod.spreadMult) * 100)}% spread`);
+  if (mod.shield && mod.tune) add(true, `+${mod.shield} shield`);
+  const costly = !!(mod.tune || mod.overheat || mod.cloakDamage);
+  if (mod.cloak && costly) add(true, mod.cloak === 'phantom' ? "can't be targeted, even point-blank" : "can't be targeted from range");
+  if (mod.armor && mod.armor > 0 && costly) add(true, `+${mod.armor} armor`);
+  if (mod.hp && costly) add(true, `+${mod.hp} hp`);
+  if (mod.armor && mod.armor < 0) add(false, `${mod.armor} armor`);
+  if (mod.berserk) add(true, `+${Math.round(mod.berserk.damage * 100)}% damage below ${Math.round(mod.berserk.below * 100)}% hp`);
+  if (mod.paint) add(true, `+${Math.round(mod.paint.bonus * 100)}% army damage on marked targets (${n1(mod.paint.duration)} s)`);
+  if (mod.overcharge) add(true, `+${Math.round(mod.overcharge.mult * 100)}% first-volley damage (after ${n1(mod.overcharge.idle)} s idle)`);
+  if (mod.killRush) add(true, `+${Math.round(mod.killRush.speed * 100)}% speed, +${Math.round(mod.killRush.fireRate * 100)}% fire rate for ${n1(mod.killRush.duration)} s after a kill`);
+  if (mod.overheat) add(false, `−${n1(mod.overheat * 100)}% hp / s while firing`);
+  if (mod.cloakDamage) add(false, `−${Math.round(mod.cloakDamage * 100)}% damage on shots from cloak`);
+  if (mod.deathBlast?.friendly) add(false, `cooks off on death: ${mod.deathBlast.damage} damage, allies included`);
+  return { plus, minus };
 }
 
 /** Firing pattern + timing, e.g. "5-rd clip · 0.45 s/shot · 2.5 s reload", "Salvo ×4 · reloads 4.0 s",
@@ -213,9 +257,13 @@ export function firingText(mod: ModuleDef): string {
   const spin = mod.spinUp ? ` · spin-up ${secs(mod.spinUp)}` : '';
   if (style === 'Salvo') {
     const n = (mod.burst ?? 1) * (mod.pellets ?? 1);
-    return clip ? `Salvo ×${n} · ${clip}` : `Salvo ×${n} · reloads ${secs(cd)}`;
+    if (clip) { const b = burstOf(mod); return `Salvo ×${n} · burst ${Math.round(b.damage)} · then ${secs(b.reload)} reload`; }
+    return `Salvo ×${n} (${Math.round(burstOf(mod).damage)} dmg) · reloads ${secs(cd)}`;
   }
-  if (style === 'Clip') return clip;
+  if (style === 'Clip') {
+    const b = burstOf(mod);
+    return `Burst ${Math.round(b.damage)} in ${secs(b.time)} · then ${secs(b.reload)} reload · sustained ${Math.round(weaponDps(mod))} dps`;
+  }
   if (style === 'Sustained') return `Sustained · ${Math.round(1 / Math.max(0.05, cd))} rds/s${spin}`;
   return `Single shot · reloads ${secs(cd)}`;
 }
@@ -257,7 +305,8 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
     stat('dps', fmt(weaponDps(mod), 0));
     stat('rng', mod.minRange ? `${Math.round(mod.minRange * METERS_PER_CELL)}–${fmtMeters(mod.range ?? 0)}` : fmtMeters(mod.range ?? 0));
     const cd = mod.cooldown ?? 1;
-    if (mod.magazine && mod.reload) stat('reload', secs(mod.reload));
+    if (mod.magazine && mod.reload) { stat('burst', String(Math.round(burstOf(mod).damage))); stat('reload', secs(mod.reload)); }
+    else if ((mod.burst ?? 1) * (mod.pellets ?? 1) > 1 || (mod.damage ?? 0) >= 100) { stat('alpha', String(Math.round(burstOf(mod).damage))); stat('reload', secs(cd)); }
     else if (firingStyle(mod) === 'Sustained') stat('rds/s', String(Math.round(1 / Math.max(0.05, cd))));
     else stat('reload', secs(cd));
     if (mod.splash) stat('AoE', fmtMeters(mod.splash));
@@ -287,6 +336,10 @@ export function moduleStats(mod: ModuleDef, withEffects = false): HTMLElement {
     const fx = moduleEffects(mod).filter((t) => !t.startsWith('min rng'));
     for (const t of fx) out.append(h('span.g-fx', null, t));
   }
+  // trade-off modules: explicit gains in green, costs in red
+  const tr = moduleTradeoffs(mod);
+  for (const t of tr.plus) out.append(h('span.g-tr.plus', null, t));
+  for (const t of tr.minus) out.append(h('span.g-tr.minus', null, t));
   return out;
 }
 
@@ -449,8 +502,11 @@ export function moduleRules(mod: ModuleDef): string[] {
     r.push(`Armour penetration: ${tier === 'none' ? 'none (every hit loses the target\'s full armour value)' : tier === 'half' ? 'half (ignores half the target\'s armour)' : 'full (ignores the target\'s armour completely)'}. Shields are hit first and ignore penetration.`);
     r.push(damageKinds(mod).map((k) => DMG_KIND[k].desc).join(' '));
     if (mod.projectile === 'melee') r.push(`Melee: needs to reach its target. A unit armed only with melee weapons sprints ${Math.round((MELEE_SPRINT - 1) * 100)}% faster toward enemies.`);
-    if (mod.splash) r.push(`Area damage: hurts every enemy within ${m(mod.splash)} of the impact.`);
+    if (mod.splash) r.push(`Area damage: hurts every enemy within ${m(mod.splash)} of the impact, ${Math.round((mod.splashEdge ?? SPLASH_EDGE) * 100)}% of the full hit at the rim.`);
+    if (mod.proximity) r.push(`Proximity fuse: the shell bursts as soon as it passes within ${m(mod.proximity)} of an enemy aircraft, so jinking or evasive flyers can't slip the airburst.`);
+    if (mod.magazine && mod.reload && !mod.resupply) r.push(`Clip: empties its ${mod.magazine}-round magazine in a burst, then reloads for ${n1(mod.reload)} s. A partly spent clip reloads by itself after 1 s with nothing to shoot, so each fight opens with a full burst.`);
     if (mod.projectile === 'missile') r.push('Homing: follows its target. Point defense can shoot it down; jammers break its lock.');
+    else if ((mod.projectile === 'shell') && mod.dmgKind === 'kinetic') r.push('A solid kinetic slug: flies to where the target was when fired, so fast movers can dodge it, but point defense can\'t shoot it down and reactive armour doesn\'t blunt it.');
     else if (mod.projectile === 'rocket' || mod.projectile === 'shell' || mod.projectile === 'arc') r.push('Flies to where the target was when fired, so fast movers can dodge it. Point defense can shoot it down.');
     else if (mod.projectile === 'beam' || mod.projectile === 'lightning' || mod.projectile === 'rail') r.push('Hitscan: hits instantly, can\'t miss or be intercepted.');
     if (mod.resupply) r.push(`Bomb bay: ${mod.magazine ?? 1} pass${(mod.magazine ?? 1) > 1 ? 'es' : ''} per load. Bombs are released just short of the target and carry on with the plane's speed. When the bay is empty the bomber flies back over its own deploy zone and rearms there (${mod.reload ?? 0} s), then returns.`);

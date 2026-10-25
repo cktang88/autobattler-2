@@ -21,18 +21,18 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-firestorm', name: 'Firestorm', chassis: 'striker', mobility: 'spider', mounts: ['mortar', 'mortar', null] },
   // ---- flyers ----
   { id: 'starter-hornet', name: 'Hornet', chassis: 'drone', mobility: 'rotor', mounts: ['twinmg'] },
-  { id: 'starter-strafer', name: 'Strafer', chassis: 'strikejet', mobility: 'jet', mounts: ['rockets', 'guidedrocket', 'hmg'] },
+  { id: 'starter-strafer', name: 'Strafer', chassis: 'strikejet', mobility: 'jet', mounts: ['rockets', 'guidedrocket', 'targeting'] },
   // ---- support ----
   { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['autocannon', 'repair'] },
   // ---- brawler ----
-  { id: 'starter-stormcaller', name: 'Voltrider', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'shotgun'] },
+  { id: 'starter-stormcaller', name: 'Voltrider', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'targeting'] },
   // ---- size-3 heavies ----
-  { id: 'starter-behemoth', name: 'Ironbreaker', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'twin30', 'hmg'] },
-  { id: 'starter-ironclad', name: 'Ironclad', chassis: 'bastion', mobility: 'treads', mounts: ['cannon', 'plateM', 'autocannon'] },
+  { id: 'starter-behemoth', name: 'Ironbreaker', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'reinforced', 'longbarrel'] },
+  { id: 'starter-ironclad', name: 'Ironclad', chassis: 'bastion', mobility: 'treads', mounts: ['autocannon', 'plateM', 'autocannon'] },
   // ---- emplacement ----
   { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'spider', mounts: ['guidedrocket', 'hmg'] },
   // ---- melee: fast hover brawler that dives into the line ----
-  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'legs', mounts: ['buzzsaw', 'shockprod'] },
+  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'hover', mounts: ['buzzsaw', 'shockprod'] },
   // ---- stealth: cloaked sniper platform ----
   { id: 'starter-shade', name: 'Shade', chassis: 'striker', mobility: 'halftrack', mounts: ['lightrail', 'stealth', 'sniper'] },
   // ---- shield wall: barrier-heavy anchor of the line ----
@@ -40,9 +40,9 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- support aura: command vehicle that speeds up and repairs its escorts ----
   { id: 'starter-commander', name: 'Commander', chassis: 'striker', mobility: 'halftrack', mounts: ['uplink', 'twin30', 'hmg'] },
   // ---- giant (size 4): all-round assault walker ----
-  { id: 'starter-juggernaut', name: 'Gargantua', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'autocannon'] },
+  { id: 'starter-juggernaut', name: 'Gargantua', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'reinforced'] },
   // ---- titan (size 5): beam-armed war machine ----
-  { id: 'starter-warlord', name: 'Kronos', chassis: 'titan', mobility: 'megatracks', mounts: ['annihilator', 'siegeplasma', 'cannon', 'cannon', 'autocannon'] },
+  { id: 'starter-warlord', name: 'Kronos', chassis: 'titan', mobility: 'megatracks', mounts: ['annihilator', 'siegeplasma', 'cannon', 'cannon', 'plateM'] },
   // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
-  { id: 'starter-thunderbird', name: 'Thunderbird', chassis: 'strategic', mobility: 'jet', mounts: ['bombs', 'bombs', 'heavybomb', 'bombs', 'hmg', 'hmg'] },
+  { id: 'starter-thunderbird', name: 'Thunderbird', chassis: 'strategic', mobility: 'jet', mounts: ['bombs', 'bombs', 'heavybomb', 'plateM', 'pointdef', 'shieldL'] },
 ];

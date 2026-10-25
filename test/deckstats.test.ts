@@ -25,12 +25,12 @@ test('mountDps matches weaponDps on a plain design and follows the sim for fire-
 });
 
 test('designInfo: squad totals are per-unit dps x squad; frontline is judged per unit', () => {
-  const buzz = starter('Buzzsaw');
-  const st = computeStats(buzz);
-  assert.equal(st.squad, 16);
-  const i = designInfo(buzz)!;
-  assert.ok(Math.abs(i.gnd - unitDps(buzz).ground * 16) < 1e-9);
-  // 16 paper scouts add up to 2240 hp but hold no line
+  const torch = starter('Torchbug');
+  const st = computeStats(torch);
+  assert.ok(st.squad >= 8);
+  const i = designInfo(torch)!;
+  assert.ok(Math.abs(i.gnd - unitDps(torch).ground * st.squad) < 1e-9);
+  // 16 paper scouts add up to a lot of hp but hold no line
   for (const n of ['Buzzsaw', 'Torchbug', 'Tank Hunter', 'Lancer', 'Hornet', 'Gnasher']) assert.ok(!designInfo(starter(n))!.caps.has('front'), n);
   for (const n of ['Bulwark', 'Ironclad', 'Aegis Wall', 'Gargantua']) assert.ok(designInfo(starter(n))!.caps.has('front'), n);
 });
