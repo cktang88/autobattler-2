@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { CHASSIS, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
-import { TEAM_FEATURES, TEAM_FIT, TEAM_VALUE, analyticStats, clearPriceCache, computeStats, slotError, squadK, teamMultiplier, validateDesign } from '../src/shared/stats.ts';
+import { TEAM_FEATURES, TEAM_FIT, TEAM_VALUE, TOUGH, analyticStats, clearPriceCache, computeStats, slotError, squadK, teamMultiplier, validateDesign } from '../src/shared/stats.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS, RULES_VERSION, migrateMatch, newMatch, newPlayer, placementValue, relegalizeBoard, shapeOf } from '../src/shared/match.ts';
 import { DEPLOY_D, DEPLOY_W, blockDims, blockInZone, blocksOverlap } from '../src/shared/grid.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
@@ -40,13 +40,31 @@ test('the team-value correction ships off: the price is the analytic one (raised
   }
 });
 
+test('toughness floor (wall tax): weaponless walls pay for their hull; ordinary designs and the starters are untouched', () => {
+  const wall = D('m2', 'monolith', 'spider', ['bulwarkshield', 'pointdef']);
+  const twin = D('m1', 'monolith', 'titanlegs', ['twinmg', null]);
+  const smoke = D('m3', 'monolith', 'titanlegs', ['smoke', null]);
+  const hull = D('j1', 'juggernaut', 'treads', ['plateH', 'smoke']);
+  assert.equal(analyticStats(wall).cost, 180);
+  assert.ok(computeStats(wall).cost >= 400, `the player's shield + point-defense wall: ${computeStats(wall).cost}`);
+  assert.ok(computeStats(twin).cost >= 400 && computeStats(smoke).cost >= 350, `${computeStats(twin).cost} / ${computeStats(smoke).cost}`);
+  assert.ok(computeStats(hull).cost >= 2 * analyticStats(hull).cost, `Monolith Hull plate + smoke ${analyticStats(hull).cost} -> ${computeStats(hull).cost}`);
+  // a gun on a taxed wall still pays at least half its own analytic price (it isn't free up to the floor)
+  const bare = D('m0', 'monolith', 'titanlegs', [null, 'smoke']), gun = D('m4', 'monolith', 'titanlegs', ['mg', 'smoke']);
+  const dA = analyticStats(gun).cost - analyticStats(bare).cost, dN = computeStats(gun).cost - computeStats(bare).cost;
+  assert.ok(dN >= 0.5 * dA - 10, `mg on a wall: +${dN} (analytic +${dA})`);
+  // ordinary hulls sit below the threshold; gun-heavy giants' guns already cost more than the floor
+  for (const d of STARTER_DESIGNS) assert.equal(computeStats(d).toughTax, 0, d.name);
+  assert.equal(TOUGH.t0 > 0 && TOUGH.a > 0, true);
+});
+
 test('the switch works: on, the fitted correction prices walls up (tooling: scripts/teamvalue.ts TV_ON=1)', () => {
   const wall = D('m2', 'monolith', 'spider', ['bulwarkshield', 'pointdef']);
   const off = computeStats(wall).cost;
   TEAM_VALUE.on = true; clearPriceCache();
   try {
     const on = computeStats(wall);
-    assert.ok(on.cost >= 1.2 * off && on.teamMult > 1.2, `wall ${off} -> ${on.cost}`);
+    assert.ok(on.cost >= off + 50, `wall ${off} -> ${on.cost}`);
   } finally { TEAM_VALUE.on = false; clearPriceCache(); }
   assert.equal(computeStats(wall).cost, off);
 });

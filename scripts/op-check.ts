@@ -6,12 +6,14 @@
 //      OP_DESIGNS='[{"id":"x","chassis":"..","mobility":"..","mounts":[..]}]' adds designs.
 import { readFileSync } from 'node:fs';
 import { Battle } from '../src/shared/sim/battle.ts';
-import { AP_VALUE, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
+import { AP_VALUE, MODULE_CAL, TOUGH, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { blockDims, DEPLOY_W, DEPLOY_D, rectsOverlap } from '../src/shared/grid.ts';
 import type { Design, Placement } from '../src/shared/types.ts';
 
 if (process.env.BAL_APK) AP_VALUE.k = Number(process.env.BAL_APK);
+if (process.env.TV_TOUGH) { Object.assign(TOUGH, JSON.parse(process.env.TV_TOUGH)); clearPriceCache(); }
+if (process.env.BAL_CAL) { Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CAL)); clearPriceCache(); }
 // TV_BASE=1: analytic prices only (stats.ts TEAM_FIT zeroed); TV_FIT=<json>: turn the team-value correction on with a trial fit (scripts/teamvalue.ts)
 if (process.env.TV_FIT) { const f = JSON.parse(readFileSync(process.env.TV_FIT, 'utf8')); TEAM_VALUE.on = true; TEAM_FIT.b0 = f.b0; Object.assign(TEAM_FIT.beta, f.beta); Object.assign(TEAM_FIT.center, f.center); clearPriceCache(); }
 if (process.env.TV_BASE === '1') { TEAM_FIT.b0 = 0; for (const k of Object.keys(TEAM_FIT.beta) as (keyof typeof TEAM_FIT.beta)[]) TEAM_FIT.beta[k] = 0; clearPriceCache(); }

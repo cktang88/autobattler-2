@@ -2051,6 +2051,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           row('Parts complexity', `${sv(parts)} supply`),
           row('Combat power', `${sv(pow)} supply`),
           sup >= 0.05 ? row('Support (auras, point defense)', `${sv(sup)} supply`) : null,
+          s.toughTax >= 0.05 ? row('Toughness floor (in combat power)', `+${sv(s.toughTax * q)} supply`) : null,
           TEAM_VALUE.on && Math.abs(s.teamMult - 1) >= 0.005 ? row('Team value (in parts + power)', `×${s.teamMult.toFixed(2)}`) : null,
           Math.abs(rounding) >= 0.05 ? row('Rounding', `${rounding > 0 ? '+' : '−'}${sv(Math.abs(rounding))}`) : null,
           row(q > 1 ? 'Combat power rating (each)' : 'Combat power rating', String(s.power), d('power')),

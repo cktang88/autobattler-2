@@ -85,6 +85,9 @@ coverage) and **effective HP** (hp, shields, armor, evasion, cloaks, flight…),
 armies are balanced whatever their composition. `scripts/balance.ts` checks this by fighting
 equal-cost armies for every module.
 
+A **toughness floor** ("wall tax", `TOUGH` in `stats.ts`) charges very tough hulls for their raw toughness
+(hp × armour + shields above ~3000, on a concave curve) when their bare hull is priced below it, with guns on them
+counted at half: a weaponless 13k-hp Monolith wall costs ~450, not 180. Ordinary hulls are untouched.
 Prices are monotone: adding a part never makes a design cheaper (a design costs at least as much as any of its
 sub-designs). The analytic price treats a unit as if it fought alone; `scripts/teamvalue.ts` measures what designs
 are worth as part of an army (WAR / RAPM style: context armies, a stock filler as replacement level, Shapley-shared

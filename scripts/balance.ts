@@ -13,7 +13,7 @@
 import { aiDeck, aiDeploy, type AiDifficulty } from '../src/shared/ai.ts';
 import { applyDeploy, newMatch, newPlayer, resolveRound, validateDeploy } from '../src/shared/match.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
-import { AP_VALUE, MOBILITY_CAL, MODULE_CAL, SIZE_K, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
+import { AP_VALUE, TOUGH, MOBILITY_CAL, MODULE_CAL, SIZE_K, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { runBattle } from '../src/shared/sim/battle.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -26,6 +26,7 @@ if (process.env.BAL_MOBCAL) Object.assign(MOBILITY_CAL, JSON.parse(process.env.B
 // BAL_CHASSIS = {chassisId: {hp, cost, armor, weight, agility}}: trial hull numbers (fit_cal.py fits hp/cost; copy into parts.ts)
 if (process.env.BAL_CHASSIS) for (const [id, patch] of Object.entries(JSON.parse(process.env.BAL_CHASSIS) as Record<string, Record<string, number>>)) { const c = CHASSIS_BY_ID.get(id); if (c) Object.assign(c, patch); }
 if (process.env.BAL_APK) AP_VALUE.k = Number(process.env.BAL_APK);
+if (process.env.TV_TOUGH) { Object.assign(TOUGH, JSON.parse(process.env.TV_TOUGH)); clearPriceCache(); }
 if (process.env.BAL_SIZEK) SIZE_K.splice(0, 5, ...(JSON.parse(process.env.BAL_SIZEK) as number[]));
 // TV_BASE=1: analytic prices only (stats.ts TEAM_FIT zeroed); TV_FIT=<json>: turn the team-value correction on with a trial fit (scripts/teamvalue.ts)
 if (process.env.TV_FIT) { const f = JSON.parse(readFileSync(process.env.TV_FIT, 'utf8')); TEAM_VALUE.on = true; TEAM_FIT.b0 = f.b0; Object.assign(TEAM_FIT.beta, f.beta); Object.assign(TEAM_FIT.center, f.center); }

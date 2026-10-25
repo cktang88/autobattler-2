@@ -210,7 +210,7 @@ export const MODULE_CAL: Record<string, number> = {
   lightrail: 12, massdriver: 0.75, mg: 3, minigun: 0.80, mirror: 0.50, missilebattery: 4.99, mlrs: 6.73,
   mortar: 10.84, nanite: 0.14, napalm: 0.12, overclock: 0.21, phantom: 0.16, plasma: 3.4, plasmablade: 0.69,
   plasmaorb: 0.868, pointdef: 4.00, quad20: 0.66, railgun: 20, ram: 0.86, reactive: 0.78, repair: 12.45,
-  repairM: 4.00, rocketL: 1.16, rockets: 1.67, sam: 4.55, selfdestruct: 0.14, sensor: 1.0, shield: 0.81,
+  repairM: 4.00, rocketL: 1.16, rockets: 1.67, sam: 4.55, selfdestruct: 7, sensor: 1.0, shield: 0.81,
   shieldH: 1.05, shieldL: 1.32, shockprod: 0.52, shotgun: 1, siege240: 1.53, siegeplasma: 0.85, skyfortress: 0.62,
   slowbeam: 4.95, smoke: 4.00, sniper: 16.11, sonic: 0.38, stealth: 0.44, stormcore: 0.91, stormtower: 2.55,
   stungun: 0.705, swarm: 3, tactnuke: 3.2, targeting: 4.00, tesla: 0.534, titanfist: 1.8, turbo: 0.14,
@@ -222,6 +222,9 @@ export const MODULE_CAL: Record<string, number> = {
   // block, no overlap) at roughly even vs the same supply of guns. fit_cal.py holds them fixed (non-stacking makes
   // its all-carrier gradient drift them toward zero). aegisTAura prices the Aegis Field's projected shield only.
   aegisTAura: 1.5, repairAura: 1.5,
+  // selfdestruct was 0.14 (fitted on lone carriers, where one 300-damage blast barely matters): a 16-cart block of
+  // bare self-destruct carriages cost 70 and won ~90% of equal-supply fights (`node scripts/teamvalue.ts walls`).
+  // At 7 such swarms land near 50% (and come 8 to a block).
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
@@ -377,12 +380,41 @@ export function armorBlock(armor: number): number {
   return TYPICAL_HITS.reduce((t, h) => t + Math.min(0.85, Math.max(0, armor) / h), 0) / TYPICAL_HITS.length;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Toughness floor ("wall tax"). sqrt(offense x ehp) prices a hull with no real gun at next to nothing (offense is
+// floored at 5): a 13k-hp, 34-armour Monolith wall with a shield and point defense cost 180, and fronting a gun line
+// it won most fights. Raw toughness now has a minimum price, a concave curve above a threshold:
+//     F = TOUGH.a x max(0, toughness / 1000 - TOUGH.t0)^TOUGH.g   supply per unit
+// toughness = (hp + reactive) x (1 + armour / 15) + 1.2 x shields: the hull alone (smoke, cloaks, flight and evasion
+// are left out: they already scale the analytic ehp, and taxing them twice made a smoke wall unbuyable).
+// A unit pays what its price falls short of F, counting its BARE HULL (the design with its weapons removed) fully
+// and its guns at TOUGH.w (half):
+//     price = analytic + max(0, F - (bare + w x (analytic - bare)))
+// so a wall pays for its toughness, guns on a wall still pay at least half their own price (a token gun isn't free
+// up to the floor), and a gun-heavy giant whose guns already cost far more than its hull is untouched. Ordinary hulls
+// sit below t0. Tuned with `node scripts/teamvalue.ts walls` (Monolith walls + artillery / riot, massed cheap walls,
+// the wall + pokers army) and `node scripts/balance.ts army 2 starter-` (the starters' spread around 50% must not grow).
+export const TOUGH = { a: 38.5, g: 0.64, t0: 3, w: 0.5 };
+/** analytic raw price of a design's bare hull (weapons removed), memoised */
+const bareCache = new Map<string, number>();
+function bareRawOf(d: Design): number {
+  const bare = { ...d, mounts: d.mounts.map((x) => (x && MODULE_BY_ID.get(x)?.kind === 'weapon' ? null : x)) };
+  const k = priceKey(bare);
+  let v = bareCache.get(k);
+  if (v === undefined) {
+    v = statsFor(bare, undefined, true)._rawBase;
+    if (bareCache.size > 100000) bareCache.clear();
+    bareCache.set(k, v);
+  }
+  return v;
+}
+
 /** Monotone price floor: price(design) >= price(design minus any module), so adding a weapon (or any part) never
  *  makes a design cheaper. Memoised per chassis / drive / module multiset (mount order doesn't change the price). */
 const teamBaseCache = new Map<string, number>();
-const priceKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.filter((x) => x).sort().join(',')}`;
+export const priceKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.filter((x) => x).sort().join(',')}`;
 /** Forget memoised prices (scripts that change the price constants at run time call this). */
-export function clearPriceCache(): void { teamBaseCache.clear(); }
+export function clearPriceCache(): void { teamBaseCache.clear(); bareCache.clear(); }
 function teamBaseOf(d: Design): number {
   const k = priceKey(d);
   let v = teamBaseCache.get(k);
@@ -395,28 +427,28 @@ function teamBaseOf(d: Design): number {
 }
 
 export function computeStats(d: Design): UnitStats {
-  const { _teamBase, ...s } = statsFor(d);
-  void _teamBase;
+  const { _teamBase, _rawBase, ...s } = statsFor(d);
+  void _teamBase; void _rawBase;
   return s;
 }
 
 /** Stats of a light / medium design forced into a `squad`-unit block (legacy pricing for rules migrations / analysis
  *  scripts); the game itself always lets squadFor decide. */
 export function statsWithSquad(d: Design, squad: number): UnitStats {
-  const { _teamBase, ...s } = statsFor(d, squad);
-  void _teamBase;
+  const { _teamBase, _rawBase, ...s } = statsFor(d, squad);
+  void _teamBase; void _rawBase;
   return s;
 }
 
-/** Stats under the analytic price alone (no team-value correction, no monotone floor): the rules-4 prices, for the
+/** Stats under the analytic price alone (no team-value correction, no toughness floor, no monotone floor): the rules-4 prices, for the
  *  rules-5 migration (match.ts) and analysis scripts. */
 export function analyticStats(d: Design): UnitStats {
-  const { _teamBase, ...s } = statsFor(d, undefined, true);
-  void _teamBase;
+  const { _teamBase, _rawBase, ...s } = statsFor(d, undefined, true);
+  void _teamBase; void _rawBase;
   return s;
 }
 
-function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats & { _teamBase: number } {
+function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats & { _teamBase: number; _rawBase: number } {
   const c = CHASSIS_BY_ID.get(d.chassis);
   const m = MOBILITY_BY_ID.get(d.mobility);
   if (!c || !m) throw new Error(`bad design parts: ${d.chassis}/${d.mobility}`);
@@ -520,7 +552,9 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   }
   offense = Math.max(offense, 5);
   // shields soak hits at full strength (armour doesn't help them); armour multiplies only the hull's worth
-  let ehp = ((hp + reactiveHp) * (1 + armor / 15) + 1.2 * shield * shieldCal) * ehpMult;
+  // raw toughness (hull, armour, shields): what the toughness floor (TOUGH) prices
+  const hullEhp = (hp + reactiveHp) * (1 + armor / 15) + 1.2 * shield * shieldCal;
+  let ehp = hullEhp * ehpMult;
   if (traits.includes('evasive')) ehp *= 1.15;
   if (flying) ehp *= 1.2; // only anti-air can answer it
   // long reach shelters a fragile hull: artillery behind a front line is rarely shot, so a paper-thin carriage with a
@@ -541,7 +575,13 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const supportRaw = SUPPORT_K * (support + interceptors);
   features.support = supportRaw / (supportRaw + rawBase);
   const teamMult = analytic || !TEAM_VALUE.on ? 1 : teamMultiplier(features);
-  let base = rawBase * teamMult;
+  // toughness floor (TOUGH): what the bare hull's analytic price falls short of F(ehp)
+  let toughRaw = 0;
+  if (!analytic && TOUGH.a > 0 && hullEhp > TOUGH.t0 * 1000) {
+    const bare = bareRawOf(d);
+    toughRaw = Math.max(0, PRICE_DIV * TOUGH.a * (hullEhp / 1000 - TOUGH.t0) ** TOUGH.g - (bare + TOUGH.w * Math.max(0, rawBase - bare)));
+  }
+  let base = rawBase * teamMult + toughRaw;
   if (!analytic) for (let i = 0; i < d.mounts.length; i++) {
     if (!d.mounts[i]) continue;
     const sub = { ...d, mounts: d.mounts.map((x, j) => (j === i ? null : x)) };
@@ -567,7 +607,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
-    teamMult: teamBase / rawBase, teamFeatures: features, _teamBase: teamBase,
+    teamMult: teamBase / rawBase, teamFeatures: features, toughTax: toughRaw / PRICE_DIV, _teamBase: teamBase, _rawBase: rawBase,
   };
 }
 

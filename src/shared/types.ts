@@ -317,11 +317,15 @@ export interface UnitStats {
   ehp: number;
   /** combat power = sqrt(offense * ehp) * mobility factor */
   power: number;
-  /** team-value correction on the parts + power price (stats.ts TEAM_FIT; 1 = the analytic price; includes the
-   *  monotone floor that keeps a design at least as dear as any of its sub-designs) */
+  /** final parts + power price / analytic parts + power price (1 = analytic): the team-value correction (stats.ts
+   *  TEAM_FIT, off in the game), the toughness floor and the monotone floor (a design is at least as dear as any of its
+   *  sub-designs) */
   teamMult: number;
   /** the physical features that correction is computed from (stats.ts TEAM_FEATURES) */
   teamFeatures: Record<string, number>;
+  /** toughness floor ("wall tax", stats.ts TOUGH): supply per unit added because the bare hull is priced below its
+   *  toughness; included in pricePower (unrounded, before the squad factor) */
+  toughTax: number;
 }
 
 /** One placed unit instance on a player's board. Coordinates are in the player's LOCAL deploy grid (see grid.ts). */

@@ -6,6 +6,7 @@
 //   node scripts/teamvalue.ts all [seeds=4]                measure + fit
 //   node scripts/teamvalue.ts check [seeds=12]             scenario win rates (op-check style and team contexts)
 //   node scripts/teamvalue.ts stack [seeds=3]              stacking check: 1 / 2 / 4 blocks of a few designs
+//   node scripts/teamvalue.ts walls [seeds=12]             wall-tax tuning set (stats.ts TOUGH; TV_TOUGH='{"a":..,"g":..}')
 //   node scripts/teamvalue.ts exploit [gens=6] [pop=24]    GA search for designs / mixes beating the reference mix
 //   node scripts/teamvalue.ts show                         the reference library's prices (analytic vs fitted)
 //
@@ -53,7 +54,7 @@
 import { fork } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { Battle } from '../src/shared/sim/battle.ts';
-import { TEAM_FEATURES, TEAM_FIT, TEAM_VALUE, clearPriceCache, computeStats, validateDesign, type TeamFeature } from '../src/shared/stats.ts';
+import { MODULE_CAL, TEAM_FEATURES, TEAM_FIT, TEAM_VALUE, TOUGH, clearPriceCache, computeStats, validateDesign, type TeamFeature } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { CHASSIS, MOBILITY, MODULES, pairingError } from '../src/shared/parts.ts';
 import { slotError } from '../src/shared/stats.ts';
@@ -78,6 +79,8 @@ export function applyFit(f: Partial<Fit> | null): void {
   }
   clearPriceCache();
 }
+if (process.env.TV_TOUGH) { Object.assign(TOUGH, JSON.parse(process.env.TV_TOUGH)); clearPriceCache(); }
+if (process.env.BAL_CAL) { Object.assign(MODULE_CAL, JSON.parse(process.env.BAL_CAL)); clearPriceCache(); }
 if (process.env.TV_BASE === '1') applyFit(null);
 else if (process.env.TV_FIT) applyFit(JSON.parse(readFileSync(process.env.TV_FIT, 'utf8')));
 else if (process.env.TV_ON === '1') applyFit({});
@@ -651,6 +654,59 @@ async function armyVs(cases: { name: string; a: Design[]; opp: Design[]; budget?
   });
 }
 
+/** The wall-tax tuning set (stats.ts TOUGH): Monolith walls in front of the artillery / riot mix, massed cheap
+ *  weaponless walls, the self-destruct cart swarm, and the player's wall + K POKIES army. Prints one summary line
+ *  (mean distance from 55%) for scripting. */
+async function walls(seeds: number) {
+  const { winRate } = await import('./op-check.ts');
+  const cases: { name: string; d: Design; pool: Design[]; budget: number }[] = [
+    { name: 'Monolith twinmg + arty/riot', d: L('x-mono-twinmg'), pool: USER_MIX, budget: 700 },
+    { name: 'Monolith smoke + arty/riot', d: L('x-mono-smoke'), pool: USER_MIX, budget: 700 },
+    { name: 'Monolith shield+PD wall + arty/riot', d: L('x-wall-mono'), pool: USER_MIX, budget: 700 },
+    { name: 'Monolith shield+PD wall + starters', d: L('x-wall-mono'), pool: DEFAULT_MIX, budget: 700 },
+    { name: 'Monolith Hull plate+smoke (massed)', d: D('w1', 'juggernaut', 'treads', ['plateH', 'smoke']), pool: DEFAULT_MIX, budget: 1000 },
+    { name: 'Monolith Hull reactive+smoke (massed)', d: D('w2', 'juggernaut', 'treads', ['reactive', 'smoke']), pool: USER_MIX, budget: 1000 },
+    { name: 'Monolith Hull shieldH+smoke (massed)', d: D('w3', 'juggernaut', 'treads', ['shieldH', 'smoke']), pool: DEFAULT_MIX, budget: 1000 },
+    { name: 'Bastion plate wall (massed)', d: L('x-bastion-wall'), pool: USER_MIX, budget: 1000 },
+    { name: 'Monolith Hull hmg (massed)', d: D('w4', 'juggernaut', 'treads', ['hmg', null]), pool: DEFAULT_MIX, budget: 1000 },
+    { name: 'self-destruct carts x16 (massed)', d: D('w5', 'carriage', 'wheels', ['selfdestruct']), pool: DEFAULT_MIX, budget: 1000 },
+  ];
+  // half the budget must still buy the design: a design dearer than budget / 2 is tested at 2.4x its price
+  for (const c of cases) c.budget = Math.max(c.budget, Math.ceil((2.4 * cost(c.d)) / 50) * 50);
+  const team = await scenario(cases, seeds, 'walls');
+  const wall = L('x-wall-mono'), kp = L('x-kpokies');
+  const STARTER8 = ['bulwark', 'lancer', 'tankbuster', 'skyguard', 'firestorm', 'hunter', 'stormcaller', 'thunderhead'].map(S);
+  const rows: number[] = [];
+  console.log(`\nwin % (half the budget on the design + the mix, vs the mix): op-check (corner packing) / team (AI + line placement), ${seeds} seeds x 2 sides`);
+  cases.forEach((c, i) => {
+    const st = computeStats(c.d), op = winRate(c.d, c.budget, seeds, c.pool);
+    rows.push(op, team[i]);
+    console.log(`${c.name.padEnd(40)} ${String(st.cost).padStart(5)} x${st.squad} (tax +${st.toughTax.toFixed(0)}/unit) @${c.budget}  op-check ${String(op).padStart(3)}%   team ${String(team[i]).padStart(3)}%`);
+  });
+  console.log(`\nwall army (wall ${cost(wall)}, K POKIES ${cost(kp)} x${computeStats(kp).squad}): 1 wall + 2 K POKIES vs equal supply`);
+  const res = await armyVsRows([
+    { name: 'vs K POKIES', a: [wall, kp, kp], opp: [kp] },
+    { name: 'vs starter mix (8)', a: [wall, kp, kp], opp: STARTER8 },
+    { name: 'vs arty+riot mix', a: [wall, kp, kp], opp: USER_MIX },
+    { name: 'vs all starters <= size 3', a: [wall, kp, kp], opp: DEFAULT_MIX },
+  ], seeds);
+  rows.push(...res);
+  console.log(`SUMMARY mean |win - 55| = ${mean(rows.map((x) => Math.abs(x - 55))).toFixed(1)}  (mean win ${mean(rows).toFixed(1)})`);
+}
+async function armyVsRows(cases: { name: string; a: Design[]; opp: Design[] }[], seeds: number): Promise<number[]> {
+  const jobs: Job[] = [], designs = new Map<string, Design>();
+  // equal supply, as near as the opponent's block prices allow (it may go over by up to half its cheapest block)
+  const bs = cases.map((c) => { [...c.a, ...c.opp].forEach((x) => designs.set(x.id, x)); return buildArmy(c.opp.map((x) => [x, 1] as [Design, number]), c.a.reduce((t, x) => t + cost(x), 0) + Math.min(...c.opp.map(cost)) / 2); });
+  cases.forEach((c, i) => { for (let s = 0; s < seeds; s++) jobs.push({ key: `${i}|${s}`, a: ids(c.a), b: ids(bs[i]), seed: s }); });
+  const r = await runJobs(jobs, [...designs.values()], 'armies');
+  return cases.map((c, i) => {
+    const ms = Array.from({ length: seeds }, (_, s) => r.get(`${i}|${s}`)!);
+    const w = Math.round((100 * ms.reduce((t, m) => t + (m > 0.02 ? 1 : m < -0.02 ? 0 : 0.5), 0)) / ms.length);
+    console.log(`${c.name.padEnd(40)} ${String(c.a.reduce((t, x) => t + cost(x), 0)).padStart(5)} vs ${String(bs[i].reduce((t, x) => t + cost(x), 0)).padStart(5)}:  win ${String(w).padStart(3)}%  margin ${mean(ms).toFixed(2)}`);
+    return w;
+  });
+}
+
 async function stack(seeds: number) {
   const list = ['x-mono-twinmg', 'x-wall-mono', 'x-aegis-cannon-hmg', 'thunderhead', 'hornet', 'skyguard', 'x-jugg-smoke', 'spire', 'ironclad', 'bulwark', 'lancer', 'pool-gunsled'].map(L);
   const ctxs = CONTEXTS.filter((c) => !c.neutral).filter((_, i) => i % 3 === 0);
@@ -764,6 +820,7 @@ else if (process.argv[1]?.endsWith('teamvalue.ts')) {
   else if (mode === 'all') { await measure(Number(a3 ?? 4), ''); fit(); }
   else if (mode === 'check') await check(Number(a3 ?? 12));
   else if (mode === 'stack') await stack(Number(a3 ?? 3));
+  else if (mode === 'walls') await walls(Number(a3 ?? 12));
   else if (mode === 'exploit') await exploit(Number(a3 ?? 6), Number(a4 ?? 24));
   else show();
 }
