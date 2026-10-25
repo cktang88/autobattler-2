@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   AI_POOL, DECK_TAGS, POOL_CAP, ROLE_MAX, ROLE_MIN, TAG_MIN, defaultPool, designTags, drawDeck, evolvePool, poolKey, roleOf,
   sanitizePool, scoreMatch, slotKey, type AiPool, type DesignPerf,
+  MAX_UNPROVEN_MUTANTS, MUTANT_PRIOR, mutateDesign, mutateWeak,
 } from '../src/shared/aipool.ts';
 import { aiDeck, aiDeploy, generateDesign, type Role } from '../src/shared/ai.ts';
 import { ROLES } from '../src/shared/aiprofile.ts';
@@ -215,4 +216,53 @@ test('scoreMatch rates both sides of a real match', () => {
   const pool = evolvePool(defaultPool(), m, 1, p);
   floorsHold(pool);
   assert.equal(pool.matches, 1);
+});
+
+test('mutateDesign: small legal tweaks that keep the role and coverage tags', () => {
+  const rng = makeRng(9);
+  let made = 0;
+  for (const d of AI_POOL) {
+    const k = mutateDesign(d, rng, 'mut');
+    if (!k) continue;
+    made++;
+    assert.ok(isValidDesign(k), `${d.id} -> ${JSON.stringify(k)}`);
+    assert.equal(roleOf(k), roleOf(d), d.id);
+    for (const t of DECK_TAGS) if (designTags(d).has(t)) assert.ok(designTags(k).has(t), `${d.id} keeps ${t}`);
+    assert.notEqual(poolKey(k), poolKey(d));
+  }
+  assert.ok(made >= AI_POOL.length * 0.7, `mutants for ${made}/${AI_POOL.length}`);
+});
+
+test('mutateWeak: an ineffective AI design yields one deterministic, deduped mutant; unproven mutants are capped', () => {
+  const m = oneRound([starter('hunter')]);
+  const aiDeck = m.players[1].deck;
+  const weakId = aiDeck[0].id;
+  const rows: [0 | 1, string, number][] = aiDeck.map((d) => [1, d.id, d.id === weakId ? 0.05 : 1.2] as [1, string, number]);
+  const run = (seed: number) => {
+    const pool = defaultPool();
+    const made = mutateWeak(pool.entries, m, 1, perf(m, rows), seed);
+    return { pool, made };
+  };
+  const a = run(77), b = run(77);
+  assert.equal(a.made.length, 1);
+  assert.deepEqual(a.made, b.made, 'same match -> same mutant');
+  const mut = a.made[0];
+  assert.equal(roleOf(mut), roleOf(aiDeck[0]));
+  assert.ok(isValidDesign(mut));
+  const e = a.pool.entries.find((x) => poolKey(x.design) === poolKey(mut))!;
+  assert.ok(e.mutant && e.score === MUTANT_PRIOR && e.games === 0);
+  assert.ok(a.pool.entries.some((x) => poolKey(x.design) === poolKey(aiDeck[0])), 'the parent stays');
+  floorsHold(a.pool);
+  // nothing weak -> no mutant
+  assert.equal(mutateWeak(defaultPool().entries, m, 1, perf(m, aiDeck.map((d) => [1, d.id, 1] as [1, string, number])), 77).length, 0);
+  // the pool already holds the maximum of unproven mutants -> no more
+  const full = defaultPool();
+  let k = 0;
+  for (const d of AI_POOL) {
+    if (full.entries.filter((x) => x.mutant).length >= MAX_UNPROVEN_MUTANTS) break;
+    const v = mutateDesign(d, makeRng(k++), `cap${k}`);
+    if (v && !full.entries.some((x) => slotKey(x.design) === slotKey(v))) full.entries.push({ design: v, score: MUTANT_PRIOR, games: 0, mutant: true });
+  }
+  assert.equal(full.entries.filter((x) => x.mutant).length, MAX_UNPROVEN_MUTANTS);
+  assert.equal(mutateWeak(full.entries, m, 1, perf(m, rows), 77).length, 0);
 });

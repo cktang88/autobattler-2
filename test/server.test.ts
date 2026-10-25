@@ -554,3 +554,93 @@ test('accounts: register, sign in again from a new device, wrong password, uniqu
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ------------------------------------------------------------------ global AI design pool
+
+import { aiDeck, aiDeploy } from '../src/shared/ai.ts';
+import { applyDeploy as applyD, newMatch as newM, newPlayer as newP, resolveRound as resolveR } from '../src/shared/match.ts';
+import { poolKey } from '../src/shared/aipool.ts';
+import { STARTER_DESIGNS } from '../src/shared/starters.ts';
+import { ADOPT_REPORTERS } from '../src/server/aipool.ts';
+
+/** A finished vs-AI match (side 1 = an easy AI) that the "player" (side 0, starter designs played by the normal AI) won. */
+function wonAiMatch(): MatchState {
+  for (let seed = 1; seed < 40; seed++) {
+    const m = newM(`local-test-${seed}`, 'ai', seed, newP('Player', STARTER_DESIGNS.slice(0, 9)), newP('AI', aiDeck(seed, 'easy'), true));
+    while (m.status === 'deploy') {
+      for (const side of [0, 1] as const) applyD(m, side, aiDeploy(m, side, side === 0 ? 'normal' : 'easy'));
+      resolveR(m);
+    }
+    if (m.winner === 0) return m;
+  }
+  throw new Error('no won match');
+}
+
+// Playing the match blocks the event loop for seconds. Doing that between requests lets the server's keep-alive
+// timeout (5 s) close fetch's idle pooled socket at the very moment fetch reuses it (ECONNRESET, "fetch failed"), so
+// the match is played before any request of these tests.
+let aiMatch: MatchState;
+before(() => { aiMatch = wonAiMatch(); });
+
+test('AI pool: GET serves the global pool (cacheable)', async () => {
+  const r = await fetch(base + '/api/aipool');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('cache-control') ?? '', /max-age=\d+/);
+  const body = await r.json() as any;
+  assert.ok(Array.isArray(body.pool.entries) && body.pool.entries.length >= 18);
+  assert.equal(body.pool.v, 2);
+});
+
+test('AI pool: reports are validated, deduped, re-simulated; adoption needs distinct reporters', async () => {
+  const m = aiMatch;
+  const tokens = await Promise.all(Array.from({ length: ADOPT_REPORTERS }, (_, i) => login(`Reporter ${i}`)));
+  const before = srv.store.aiPool.reports;
+  const send = (match: unknown, token?: string) => api('POST', '/api/aipool/report', token, { match });
+  // bad reports
+  // (bad reports from a guest IP: each report takes from the reporter's rate limit, valid or not)
+  assert.equal((await send(undefined)).status, 400);
+  assert.equal((await send({ ...m, status: 'deploy' })).status, 400);
+  assert.equal((await send({ ...m, mode: 'pvp' })).status, 400);
+  const rich = structuredClone(m);
+  rich.history[0].boards[0] = Array.from({ length: 50 }, (_, i) => ({ uid: 900 + i, designId: m.players[0].deck[8].id, x: (i % 12) * 8, y: Math.floor(i / 12) * 5, level: 3, round: 1 }));
+  assert.equal((await send(rich)).status, 400, 'a board worth more than the supply granted');
+  assert.equal((await send({ ...m, id: 'local-test-spam' })).status, 429, 'rate-limited per reporter');
+  const big = await fetch(base + '/api/aipool/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: m, pad: 'x'.repeat(1_200_000) }) });
+  assert.equal(big.status, 413);
+  // a valid report is accepted; the same match id again is a duplicate
+  assert.equal((await send(m, tokens[0].token)).status, 200);
+  assert.equal((await send(m, tokens[1].token)).status, 409);
+  await srv.api.aiPool.drain();
+  assert.equal(srv.store.aiPool.reports, before + 1, 're-scored on the server');
+  const playerKeys = new Set(m.players[0].deck.map((d) => poolKey(d)));
+  const pooled = () => srv.store.aiPool.pool.entries.filter((e) => playerKeys.has(poolKey(e.design))).length;
+  assert.equal(pooled(), 0, 'one report never adopts');
+  const cands = srv.store.aiPool.candidates.filter((c) => playerKeys.has(c.key));
+  assert.ok(cands.length >= 1 && cands.every((c) => c.reporters.length === 1));
+  // the same reporter again (new match id) still counts once
+  assert.equal((await send({ ...m, id: 'local-test-again' }, tokens[0].token)).status, 200);
+  await srv.api.aiPool.drain();
+  assert.equal(pooled(), 0);
+  // a tampered result fails re-simulation: rejected, nothing learned
+  const fake = structuredClone(m);
+  fake.id = 'local-test-fake';
+  const loser = fake.history[0].result.winner === 0 ? 1 : 0;
+  fake.history[0].result.damage[loser] += 1;
+  const rejected = srv.store.aiPool.rejected;
+  assert.equal((await send(fake, tokens[1].token)).status, 200);
+  await srv.api.aiPool.drain();
+  assert.equal(srv.store.aiPool.rejected, rejected + 1);
+  // distinct reporters: adopted at the ADOPT_REPORTERS-th
+  for (let i = 1; i < ADOPT_REPORTERS; i++) {
+    assert.equal((await send({ ...m, id: `local-test-r${i}` }, tokens[i].token)).status, 200);
+    await srv.api.aiPool.drain();
+  }
+  assert.ok(pooled() >= 1, 'adopted after enough distinct reporters');
+  const adopted = srv.store.aiPool.pool.entries.find((e) => playerKeys.has(poolKey(e.design)))!;
+  assert.ok(adopted.learned && !STARTER_DESIGNS.some((d) => d.name === adopted.design.name), 'adopted with an AI name');
+  // persisted
+  srv.store.flush();
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'aipool.json'), 'utf8'));
+  assert.equal(saved.reports, srv.store.aiPool.reports);
+  assert.ok(saved.seen.includes(m.id));
+});

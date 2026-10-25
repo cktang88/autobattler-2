@@ -1,6 +1,6 @@
 // Local persistence of the player's garage (designs) and active deck.
 
-import type { Design } from '../shared/types.ts';
+import type { Design, MatchState } from '../shared/types.ts';
 import { sanitizePool, type AiPool } from '../shared/aipool.ts';
 
 const KEY_DESIGNS = 'ab2.designs';
@@ -89,8 +89,14 @@ export const loadSettings = (): Settings => {
 };
 export const saveSettings = (s: Settings) => write(KEY_SETTINGS, s);
 
-// ---- the AI's learned design pool (shared/aipool.ts), per browser ----
+// ---- cached copy of the server's global AI design pool (shared/aipool.ts) ----
+// Only a cache: the pool lives on the server. A per-browser v1 pool from before is discarded by sanitizePool
+// (wrong version -> the curated default) and overwritten by the next fetch.
 const KEY_AI_POOL = 'ab2.aiPool';
-/** The stored AI pool, validated (corrupt / old-version / invalid data falls back to the curated default). */
+const KEY_AI_REPORTS = 'ab2.aiReports';
+/** The cached AI pool, validated (missing / corrupt / old-version data falls back to the curated default). */
 export const loadAiPool = (): AiPool => sanitizePool(read<unknown>(KEY_AI_POOL, null));
 export const saveAiPool = (p: AiPool) => write(KEY_AI_POOL, p);
+/** Finished vs-AI matches whose report has not reached the server yet (oldest first, at most 3 kept). */
+export const loadPendingReports = (): MatchState[] => { const r = read<unknown>(KEY_AI_REPORTS, []); return Array.isArray(r) ? (r as MatchState[]).slice(-3) : []; };
+export const savePendingReports = (r: MatchState[]) => write(KEY_AI_REPORTS, r.slice(-3));

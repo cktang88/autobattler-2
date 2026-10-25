@@ -8,6 +8,7 @@ import {
 } from '../shared/match.ts';
 import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
+import { GlobalAiPool, REPORT_BODY_LIMIT, validateReport } from './aipool.ts';
 import { hashToken, nameKey, type MatchRecord, type PasswordHash, type PlayerRecord, type Store } from './store.ts';
 import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
 
@@ -64,6 +65,8 @@ interface Ctx {
   query: URLSearchParams;
   ip: string;
   body: unknown;
+  /** seconds a successful GET may be cached by the client / proxies (default: no-store) */
+  cache?: number;
 }
 
 export interface ApiOptions {
@@ -81,6 +84,10 @@ export class Api {
   /** wrong passwords per username: slows guessing one account from many IPs */
   private readonly failLimiter = new RateLimiter(10, 1 / 30);
   private readonly trustProxy: boolean;
+  /** vs-AI match reports per reporter (account, else IP): a match takes minutes to play */
+  private readonly reportLimiter = new RateLimiter(4, 1 / 120);
+  /** the global AI design pool (persisted in the store) */
+  readonly aiPool: GlobalAiPool;
   /** long-poll waiters per match id, woken whenever that match changes */
   private readonly waiters = new Map<string, Set<() => void>>();
 
@@ -91,6 +98,7 @@ export class Api {
     this.limiter = new RateLimiter(Math.max(10, rpm / 4), rpm / 60);
     this.loginLimiter = new RateLimiter(Math.max(3, lpm / 2), lpm / 60);
     this.trustProxy = !!opts.trustProxy;
+    this.aiPool = new GlobalAiPool(store.aiPool, () => store.save());
   }
 
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
@@ -105,11 +113,11 @@ export class Api {
         throw new HttpError(429, 'Too many requests — slow down');
       }
       let body: unknown = undefined;
-      if (method === 'POST') body = await readJson(req);
+      if (method === 'POST') body = await readJson(req, url.pathname === '/api/aipool/report' ? REPORT_BODY_LIMIT : BODY_LIMIT);
       else if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
       const ctx: Ctx = { req, method, parts: url.pathname.split('/').filter(Boolean).slice(1), query: url.searchParams, ip, body };
       const out = await this.route(ctx);
-      if (!res.destroyed) send(res, 200, out);
+      if (!res.destroyed) send(res, 200, out, ctx.cache ? { 'Cache-Control': `public, max-age=${ctx.cache}` } : undefined);
     } catch (e) {
       if (e instanceof HttpError) {
         send(res, e.status, { error: e.message }, e.status === 429 ? { 'Retry-After': '5' } : undefined);
@@ -128,6 +136,10 @@ export class Api {
     if (a === 'logout' && !b && M === 'POST') return this.logout(c);
     if (a === 'password' && !b && M === 'POST') return this.changePassword(c);
     if (a === 'me' && !b && M === 'GET') return this.me(c);
+    if (a === 'aipool') {
+      if (!b && M === 'GET') { c.cache = 60; return { pool: this.aiPool.pool(), reports: this.store.aiPool.reports }; }
+      if (b === 'report' && !d && M === 'POST') return this.reportAiMatch(c);
+    }
     if (a === 'garage' && !b) {
       if (M === 'GET') return this.getGarage(c);
       if (M === 'POST') return this.putGarage(c);
@@ -542,6 +554,18 @@ export class Api {
     return changed;
   }
 
+  /** A finished vs-AI match for the global AI pool: validated now, re-simulated and scored in the background. The
+   *  reporter is the signed-in account (any session), else the IP; adoption needs several distinct reporters. */
+  private reportAiMatch(c: Ctx) {
+    const auth = bearer(c.req);
+    const p = auth ? this.store.playersByToken.get(hashToken(auth)) : undefined;
+    const reporter = p ? `p:${p.id}` : `ip:${c.ip}`;
+    if (!this.reportLimiter.take(reporter)) throw new HttpError(429, 'Too many reports — try again later');
+    const match = validateReport(c.body);
+    const reporterKey = crypto.createHash('sha256').update(reporter).digest('hex').slice(0, 24);
+    return { ok: true, ...this.aiPool.submit(match, reporterKey) };
+  }
+
   private clientIp(req: IncomingMessage): string {
     if (this.trustProxy) {
       // The trusted proxy (one hop, e.g. Fly's edge) APPENDS the address it saw, so only the LAST entry is
@@ -557,6 +581,7 @@ export class Api {
     this.limiter.prune();
     this.loginLimiter.prune();
     this.failLimiter.prune();
+    this.reportLimiter.prune();
   }
 }
 
@@ -620,17 +645,17 @@ function obj(v: unknown): Record<string, unknown> {
   return v as Record<string, unknown>;
 }
 
-function readJson(req: IncomingMessage): Promise<unknown> {
+function readJson(req: IncomingMessage, limit = BODY_LIMIT): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const len = Number(req.headers['content-length']);
-    if (len > BODY_LIMIT) { reject(new HttpError(413, 'Request body too large')); req.resume(); return; }
+    if (len > limit) { reject(new HttpError(413, 'Request body too large')); req.resume(); return; }
     const chunks: Buffer[] = [];
     let size = 0;
     let failed = false;
     req.on('data', (chunk: Buffer) => {
       if (failed) return;
       size += chunk.length;
-      if (size > BODY_LIMIT) { failed = true; reject(new HttpError(413, 'Request body too large')); return; }
+      if (size > limit) { failed = true; reject(new HttpError(413, 'Request body too large')); return; }
       chunks.push(chunk);
     });
     req.on('end', () => {

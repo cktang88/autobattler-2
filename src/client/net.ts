@@ -1,6 +1,7 @@
 // Client side of async multiplayer: session (localStorage), fetch wrapper, lobby calls and NetDriver.
 
 import type { DeployAction, Design, MatchState, Side } from '../shared/types.ts';
+import { sanitizePool, type AiPool } from '../shared/aipool.ts';
 import type { MatchDriver } from './driver.ts';
 
 /** `auto`: a guest placeholder created silently so the garage can be stored server-side.
@@ -322,5 +323,36 @@ export class NetDriver implements MatchDriver {
     for (const cb of [...this.subs]) {
       try { cb(m); } catch (e) { console.error('[net] subscriber failed', e); }
     }
+  }
+}
+
+// ---- the global AI design pool (server: src/server/aipool.ts) ----
+
+/** The server's global AI pool (validated), or null when the server can't be reached within `timeoutMs`. */
+export async function fetchAiPool(timeoutMs = 1500): Promise<AiPool | null> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(API + '/aipool', { signal: ctl.signal });
+    if (!res.ok) return null;
+    const data = await res.json() as { pool?: unknown };
+    const pool = sanitizePool(data?.pool);
+    return pool.v === (data?.pool as AiPool | undefined)?.v ? pool : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Report a finished vs-AI match to the global pool. true = accepted or a permanent refusal (don't retry: bad match,
+ *  duplicate); false = try again later (offline, rate-limited, busy). */
+export async function reportAiMatch(match: MatchState): Promise<boolean> {
+  try {
+    await call('POST', '/aipool/report', { match });
+    return true;
+  } catch (e) {
+    const st = e instanceof NetError ? e.status : 0;
+    return st === 400 || st === 409 || st === 413;
   }
 }

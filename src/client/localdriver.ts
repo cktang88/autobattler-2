@@ -4,15 +4,29 @@
 import { aiDeck, aiDeploy, type AiDifficulty } from '../shared/ai.ts';
 import { applyDeploy, migrateMatch, newMatch, newPlayer, redactFor, resolveRound, validateDeploy } from '../shared/match.ts';
 import { isValidDesign } from '../shared/stats.ts';
-import { combinePerf, evolvePool, scoreRound, type RoundTally } from '../shared/aipool.ts';
-import { loadAiPool, saveAiPool } from './storage.ts';
+import { loadAiPool, loadPendingReports, saveAiPool, savePendingReports } from './storage.ts';
+import { fetchAiPool, reportAiMatch } from './net.ts';
 import type { DeployAction, Design, MatchMode, MatchState, Side } from '../shared/types.ts';
 import type { MatchDriver } from './driver.ts';
 
 const KEY_LOCAL = 'ab2.localMatch';
 const WATCH_PREFIX = 'ab2.watched.';
-/** id of the last finished match the AI pool learned from (so a reload never learns twice) */
-const KEY_LEARNED = 'ab2.aiPool.learned';
+/** id of the last finished match reported to the global AI pool (so a reload never reports twice) */
+const KEY_REPORTED = 'ab2.aiPool.reported';
+
+/** Refresh the cached copy of the server's global AI pool (short timeout; the cache and then the curated default
+ *  stand in when offline), and send any match reports that failed earlier. Runs when the module loads (app start),
+ *  so the pool is fresh before the player starts a vs-AI match; LocalDriver.create never waits on the network. */
+export async function syncAiPool(timeoutMs = 2500): Promise<void> {
+  const pool = await fetchAiPool(timeoutMs);
+  if (pool) saveAiPool(pool);
+  const pending = loadPendingReports();
+  if (!pending.length) return;
+  const left: MatchState[] = [];
+  for (const m of pending) if (!(await reportAiMatch(m))) left.push(m);
+  savePendingReports(left);
+}
+if (typeof window !== 'undefined') setTimeout(() => { void syncAiPool(); }, 0);
 
 interface SavedLocal { v: 1; difficulty: AiDifficulty; match: MatchState }
 
@@ -156,23 +170,18 @@ export class LocalDriver implements MatchDriver {
     }
   }
 
-  /** Fold the finished match into the browser's AI design pool (shared/aipool.ts evolvePool): re-simulates one round
-   *  per macrotask so the UI stays responsive, then stores the evolved pool. Runs once per match. */
+  /** Report the finished match to the server's global AI pool (fire-and-forget; queued for a retry when offline).
+   *  The server re-simulates and scores it; the pool is never evolved locally. Runs once per match. */
   private learn(): void {
     const m = structuredClone(this.match);
     try {
-      if (localStorage.getItem(KEY_LEARNED) === m.id) return;
-      localStorage.setItem(KEY_LEARNED, m.id);
+      if (localStorage.getItem(KEY_REPORTED) === m.id) return;
+      localStorage.setItem(KEY_REPORTED, m.id);
     } catch { return; }
-    const rounds: RoundTally[] = [];
-    let i = 0;
-    const step = () => {
-      try {
-        if (i < m.history.length) { rounds.push(scoreRound(m, m.history[i++])); setTimeout(step, 0); return; }
-        saveAiPool(evolvePool(loadAiPool(), m, 1, combinePerf(rounds)));
-      } catch (e) { console.warn('AI pool learning failed', e); }
-    };
-    setTimeout(step, 50);
+    void reportAiMatch(m).then((ok) => {
+      if (!ok) savePendingReports([...loadPendingReports().filter((x) => x.id !== m.id), m]);
+      return syncAiPool();
+    }).catch(() => { /* offline: the pending list keeps it */ });
   }
 
   subscribe(cb: (m: MatchState) => void): () => void {

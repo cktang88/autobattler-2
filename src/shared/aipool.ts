@@ -13,12 +13,13 @@
 // Cost-efficiency of the curated designs: scripts/aipool-check.ts (equal-supply mixed armies, ~50% = priced right).
 
 import { classify, profile, ROLES, type Role } from './aiprofile.ts';
-import { MODULE_BY_ID } from './parts.ts';
-import { isValidDesign, MAX_LEVEL } from './stats.ts';
+import { CHASSIS, MOBILITY, MODULES, MODULE_BY_ID, pairingError } from './parts.ts';
+import { isValidDesign, MAX_LEVEL, slotError } from './stats.ts';
 import { DECK_SIZE, battleInputFor, placementValue } from './match.ts';
 import { makeRng, mixSeed, type Rng } from './rng.ts';
 import { Battle } from './sim/battle.ts';
-import type { Design, MatchState, RoundRecord, Side } from './types.ts';
+import type { Design, MatchState, ModuleDef, RoundRecord, Side } from './types.ts';
+import type { BattleSummary } from './sim/types.ts';
 
 const D = (id: string, name: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name, chassis, mobility, mounts });
 
@@ -133,7 +134,8 @@ export const roleOf = (d: Design): Role => profile(d).role;
 // ---------------------------------------------------------------------------------------------
 // Stored pool
 
-export const POOL_VERSION = 1;
+/** 2: the pool is global (server-side); per-browser v1 pools from before are discarded. */
+export const POOL_VERSION = 2;
 export interface PoolEntry {
   design: Design;
   /** running effectiveness (decayed average; 1 = an average design in the matches it played) */
@@ -142,6 +144,8 @@ export interface PoolEntry {
   games: number;
   /** adopted from a player */
   learned?: boolean;
+  /** a tweaked variant of an ineffective AI design (mutateWeak) */
+  mutant?: boolean;
 }
 export interface AiPool { v: typeof POOL_VERSION; entries: PoolEntry[]; matches: number }
 
@@ -153,7 +157,7 @@ function cleanDesign(d: Design): Design {
   return { id: String(d.id).slice(0, 40), name: String(d.name).slice(0, 24), chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] };
 }
 
-function validEntryDesign(d: unknown): d is Design {
+export function validEntryDesign(d: unknown): d is Design {
   if (!d || typeof d !== 'object') return false;
   const x = d as Design;
   if (typeof x.id !== 'string' || typeof x.name !== 'string' || typeof x.chassis !== 'string' || typeof x.mobility !== 'string' || !Array.isArray(x.mounts)) return false;
@@ -178,6 +182,7 @@ export function sanitizePool(raw: unknown): AiPool {
     keys.add(poolKey(d)); slots.add(slotKey(d));
     const pe: PoolEntry = { design: d, score, games };
     if (e.learned) pe.learned = true;
+    if (e.mutant) pe.mutant = true;
     entries.push(pe);
   }
   const pool: AiPool = { v: POOL_VERSION, entries: entries.slice(0, POOL_CAP), matches: Number.isInteger(r.matches) && r.matches! >= 0 ? r.matches! : 0 };
@@ -252,6 +257,11 @@ export type RoundTally = Map<string, Omit<DesignPerf, 'eff'>>;
 
 /** Re-simulate one recorded round (deterministic) and tally every design's investment, kills and damage. */
 export function scoreRound(m: MatchState, rec: RoundRecord): RoundTally {
+  return simRound(m, rec).tally;
+}
+
+/** scoreRound plus the battle's summary (the server checks it against the reported result). */
+export function simRound(m: MatchState, rec: RoundRecord): { tally: RoundTally; summary: BattleSummary } {
   const b = new Battle(battleInputFor(m, rec));
   while (!b.done) b.step();
   const units = b.units;
@@ -268,7 +278,7 @@ export function scoreRound(m: MatchState, rec: RoundRecord): RoundTally {
     e.dealt += t.dealt + t.healed;
     for (const v of t.kills) e.killed += valueOf[v] ?? 0;
   }
-  return out;
+  return { tally: out, summary: b.summary() };
 }
 
 /** Sum round tallies and rate every design against the match average. */
@@ -294,11 +304,11 @@ export function scoreMatch(m: MatchState): DesignPerf[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Evolution
+// Evolution (building blocks shared by the local evolvePool and the server's global pool, src/server/aipool.ts)
 
 const NAMES_A = ['Copy', 'Mimic', 'Echo', 'Ghost', 'Stolen', 'Shadow', 'Mirror', 'Rival', 'Twin', 'Phantom', 'Proxy', 'Clone'];
 const NAMES_B = ['hound', 'fang', 'wasp', 'ram', 'mantis', 'beetle', 'hawk', 'golem', 'viper', 'lance', 'maul', 'kite', 'warden', 'spike'];
-function hash(s: string): number {
+export function hash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
@@ -309,7 +319,7 @@ export function adoptDesign(d: Design): Design {
   return { id: `lrn-${h.toString(36)}`, name: `${NAMES_A[h % NAMES_A.length]}${NAMES_B[(h >>> 8) % NAMES_B.length]}`, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] };
 }
 
-const median = (xs: number[]) => {
+export const median = (xs: number[]) => {
   if (!xs.length) return 1;
   const s = [...xs].sort((a, b) => a - b);
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
@@ -326,10 +336,195 @@ function removable(entries: PoolEntry[], e: PoolEntry, replacement?: Design): bo
   return true;
 }
 
-/** Fold a match into the pool: score the AI's designs, adopt the player's best designs when they earned it, prune the
- *  weakest. Pure: returns a new pool. `aiSide` = the AI's side (localdriver: 1); `perf` = scoreMatch(m) (pass it in
- *  when already computed). Never adds a duplicate (same key or slot), never takes a role / tag below its floor,
- *  never exceeds POOL_CAP. */
+/** Blend one match's effectiveness into an entry's running score. */
+export function blendScore(e: PoolEntry, eff: number, alpha = SCORE_ALPHA): void {
+  e.score = e.score * (1 - alpha) + alpha * Math.max(0, Math.min(5, eff));
+  e.games++;
+}
+export const findByKey = (entries: PoolEntry[], d: Design) => entries.find((e) => poolKey(e.design) === poolKey(d));
+export const findBySlot = (entries: PoolEntry[], d: Design) => entries.find((e) => slotKey(e.design) === slotKey(d));
+
+/** The AI side's fielded designs with their match performance (only those the pool knows). */
+function aiFielded(m: MatchState, aiSide: Side, scores: DesignPerf[]): { d: Design; s: DesignPerf }[] {
+  const deck = new Map(m.players[aiSide].deck.map((d) => [d.id, d] as const));
+  return scores.filter((s) => s.side === aiSide && s.invested > 0 && deck.has(s.designId)).map((s) => ({ d: deck.get(s.designId)!, s }));
+}
+
+/** 1. Running scores of the AI's own designs (in place). */
+export function updateAiScores(entries: PoolEntry[], m: MatchState, aiSide: Side, scores: DesignPerf[], alpha = SCORE_ALPHA): void {
+  for (const { d, s } of aiFielded(m, aiSide, scores)) {
+    const e = findByKey(entries, d) ?? findBySlot(entries, d);
+    if (e) blendScore(e, s.eff, alpha);
+  }
+}
+
+/** A player design that earned adoption in one match. */
+export interface Candidate { design: Design; eff: number }
+
+/** 2. The player's two best designs (with a real investment behind them) that earned adoption: the player won, or
+ *  the design did ADOPT_RATIO x better than the AI's own designs of its role. Designs come back renamed (adoptDesign). */
+export function playerCandidates(entries: PoolEntry[], m: MatchState, aiSide: Side, scores: DesignPerf[]): Candidate[] {
+  const pSide: Side = aiSide === 0 ? 1 : 0;
+  const pDeck = new Map(m.players[pSide].deck.map((d) => [d.id, d] as const));
+  const ai = aiFielded(m, aiSide, scores);
+  const pPerf = scores.filter((s) => s.side === pSide && pDeck.has(s.designId));
+  const pTotal = pPerf.reduce((t, s) => t + s.invested, 0);
+  const won = m.status === 'done' && m.winner === pSide;
+  const best = pPerf.filter((s) => s.invested >= Math.max(1, 0.05 * pTotal)).sort((a, b) => b.eff - a.eff || (a.designId < b.designId ? -1 : 1)).slice(0, 2);
+  const out: Candidate[] = [];
+  for (const s of best) {
+    const src = pDeck.get(s.designId)!;
+    if (!validEntryDesign(src)) continue;
+    const d = adoptDesign(src);
+    if (!isValidDesign(d)) continue;
+    const role = roleOf(d);
+    const rivals = ai.filter((a) => roleOf(a.d) === role);
+    const rivalEff = rivals.length
+      ? rivals.reduce((t, a) => t + a.s.eff * a.s.invested, 0) / rivals.reduce((t, a) => t + a.s.invested, 0)
+      : median(entries.filter((e) => roleOf(e.design) === role).map((e) => e.score));
+    if (won || s.eff >= ADOPT_RATIO * rivalEff) out.push({ design: d, eff: s.eff });
+  }
+  return out;
+}
+
+/** 3. Put a design into the pool (in place): merge into an identical entry; keep the better of a near-duplicate pair;
+ *  else grow (role ceiling and POOL_CAP permitting) or replace the weakest entry that may go and scores below it.
+ *  Returns what happened. */
+export function insertEntry(entries: PoolEntry[], fresh: PoolEntry, eff = fresh.score): 'merged' | 'slot' | 'added' | 'replaced' | 'rejected' {
+  const d = fresh.design;
+  const same = findByKey(entries, d);
+  if (same) { blendScore(same, eff); return 'merged'; }
+  const near = findBySlot(entries, d);
+  if (near) {
+    if (eff > near.score) { near.design = d; if (fresh.learned) near.learned = true; if (fresh.mutant) near.mutant = true; else delete near.mutant; }
+    blendScore(near, eff);
+    return 'slot';
+  }
+  const role = roleOf(d);
+  const roleN = entries.filter((e) => roleOf(e.design) === role).length;
+  if (roleN < ROLE_MAX[role] && entries.length < POOL_CAP) { entries.push(fresh); return 'added'; }
+  const victims = entries
+    .filter((e) => (roleN >= ROLE_MAX[role] ? roleOf(e.design) === role : true) && e.score < fresh.score && removable(entries, e, d))
+    .sort((a, b) => a.score - b.score || (poolKey(a.design) < poolKey(b.design) ? -1 : 1));
+  if (!victims.length) return 'rejected';
+  entries[entries.indexOf(victims[0])] = fresh;
+  return 'replaced';
+}
+
+/** 4. Prune one entry that has clearly fallen behind its role (in place). */
+export function pruneWeakest(entries: PoolEntry[]): void {
+  const medians = new Map(ROLES.map((r) => [r, median(entries.filter((e) => roleOf(e.design) === r).map((e) => e.score))] as const));
+  const weak = entries
+    .filter((e) => e.games >= PRUNE_GAMES && e.score < PRUNE_RATIO * medians.get(roleOf(e.design))! && removable(entries, e))
+    .sort((a, b) => a.score / medians.get(roleOf(a.design))! - b.score / medians.get(roleOf(b.design))!);
+  if (weak.length) entries.splice(entries.indexOf(weak[0]), 1);
+}
+
+// ---- mutation: the AI's clearly ineffective designs spawn slightly tweaked variants ----
+
+/** At most this many mutants per match / report. */
+export const MUTANTS_PER_MATCH = 1;
+/** Unproven mutants (fewer than PRUNE_GAMES matches) the pool may hold at once. */
+export const MAX_UNPROVEN_MUTANTS = 6;
+/** Starting score of a mutant: modest, below an average design, so it has to prove itself. */
+export const MUTANT_PRIOR = 0.85;
+/** A fielded AI design is "clearly ineffective" below this share of its role's median effectiveness in the match
+ *  (or of 1 when it is alone in its role), and below MUTATE_ABS overall. */
+export const MUTATE_REL = 0.5;
+export const MUTATE_ABS = 0.5;
+
+const isWeapon = (m: ModuleDef) => m.kind === 'weapon';
+/** Same family for a weapon swap: same mount class, same air / ground reach, melee stays melee. */
+const sameFamily = (a: ModuleDef, b: ModuleDef) => a.mount === b.mount && !!a.targetsAir === !!b.targetsAir && (a.targetsGround !== false) === (b.targetsGround !== false) && (a.projectile === 'melee') === (b.projectile === 'melee');
+
+/** One random, small, legal tweak of `d` keeping its role and coverage tags: a same-family weapon swap, a utility /
+ *  armour swap, a different legal drive, or (rarely) a same-size chassis. Null if nothing legal was found. */
+export function mutateDesign(d: Design, rng: Rng, id: string): Design | null {
+  const role = roleOf(d);
+  const tags = [...designTags(d)].filter((t) => DECK_TAGS.includes(t));
+  const chassis = CHASSIS.find((c) => c.id === d.chassis);
+  if (!chassis) return null;
+  const flies = MOBILITY.find((x) => x.id === d.mobility)?.kind === 'air';
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const r = rng();
+    const out: Design = { id, name: d.name, chassis: d.chassis, mobility: d.mobility, mounts: [...d.mounts] };
+    const c = CHASSIS.find((x) => x.id === out.chassis)!;
+    if (r < 0.45) {
+      const slots = out.mounts.map((m, i) => ({ m: MODULE_BY_ID.get(m ?? ''), i })).filter((x) => x.m && isWeapon(x.m));
+      if (!slots.length) continue;
+      const s = slots[Math.floor(rng() * slots.length)];
+      const opts = MODULES.filter((m) => isWeapon(m) && m.id !== s.m!.id && sameFamily(m, s.m!) && !slotError(c, out.mobility, s.i, m));
+      if (!opts.length) continue;
+      out.mounts[s.i] = opts[Math.floor(rng() * opts.length)].id;
+    } else if (r < 0.7) {
+      const slots = out.mounts.map((m, i) => ({ m: m ? MODULE_BY_ID.get(m) : undefined, i })).filter((x) => !x.m || !isWeapon(x.m));
+      if (!slots.length) continue;
+      const s = slots[Math.floor(rng() * slots.length)];
+      const opts = MODULES.filter((m) => !isWeapon(m) && m.id !== s.m?.id && !slotError(c, out.mobility, s.i, m));
+      if (!opts.length) continue;
+      out.mounts[s.i] = opts[Math.floor(rng() * opts.length)].id;
+    } else if (r < 0.9) {
+      const opts = MOBILITY.filter((mb) => mb.id !== out.mobility && (mb.kind === 'air') === flies && !pairingError(out.chassis, mb.id));
+      if (!opts.length) continue;
+      out.mobility = opts[Math.floor(rng() * opts.length)].id;
+    } else {
+      const opts = CHASSIS.filter((x) => x.id !== c.id && x.size === c.size && x.mounts.length >= 1 && !pairingError(x.id, out.mobility));
+      if (!opts.length) continue;
+      const nc = opts[Math.floor(rng() * opts.length)];
+      out.chassis = nc.id;
+      out.mounts = nc.mounts.map((_, i) => {
+        const m = MODULE_BY_ID.get(d.mounts[i] ?? '');
+        return m && !slotError(nc, out.mobility, i, m) ? m.id : null;
+      });
+    }
+    if (poolKey(out) === poolKey(d)) continue;
+    try {
+      if (!isValidDesign(out) || profile(out).stats.load > 1.1) continue;
+      if (roleOf(out) !== role || !tags.every((t) => designTags(out).has(t))) continue;
+      if (profile(out).groundDps + profile(out).aaDps + profile(out).heal <= 0) continue;
+    } catch { continue; }
+    return out;
+  }
+  return null;
+}
+
+/** 5. Mutate the AI's clearly ineffective fielded designs (in place): up to `max` new, deduped variants with a modest
+ *  prior, while the pool holds fewer than MAX_UNPROVEN_MUTANTS unproven mutants. Seeded by `seed` (e.g. the match id),
+ *  so a re-run gives the same mutants. The parents stay (they decay and get pruned normally). Returns the mutants. */
+export function mutateWeak(entries: PoolEntry[], m: MatchState, aiSide: Side, scores: DesignPerf[], seed: number, max = MUTANTS_PER_MATCH): Design[] {
+  const fielded = aiFielded(m, aiSide, scores);
+  const byRole = new Map<Role, number[]>();
+  for (const f of fielded) byRole.set(roleOf(f.d), [...(byRole.get(roleOf(f.d)) ?? []), f.s.eff]);
+  const weak = fielded
+    .filter((f) => {
+      const peers = byRole.get(roleOf(f.d))!;
+      const ref = peers.length > 1 ? median(peers) : 1;
+      return f.s.eff < MUTATE_REL * ref && f.s.eff < MUTATE_ABS && findByKey(entries, f.d) !== undefined;
+    })
+    .sort((a, b) => a.s.eff - b.s.eff || (a.d.id < b.d.id ? -1 : 1))
+    .slice(0, 2);
+  const rng = makeRng(mixSeed(seed >>> 0, 0x3a7));
+  const made: Design[] = [];
+  for (const w of weak) {
+    if (made.length >= max) break;
+    if (entries.filter((e) => e.mutant && e.games < PRUNE_GAMES).length >= MAX_UNPROVEN_MUTANTS) break;
+    const parent = findByKey(entries, w.d)!.design;
+    const mk = mutateDesign(parent, rng, 'tmp');
+    if (!mk) continue;
+    const h = hash(poolKey(mk));
+    const child: Design = { ...mk, id: `mut-${h.toString(36)}`, name: `${parent.name.replace(/ Mk\d+$/, '').slice(0, 18)} Mk${2 + (h % 7)}` };
+    if (findByKey(entries, child) || findBySlot(entries, child)) continue;
+    const res = insertEntry(entries, { design: child, score: MUTANT_PRIOR, games: 0, mutant: true }, MUTANT_PRIOR);
+    if (res === 'added' || res === 'replaced') made.push(child);
+  }
+  return made;
+}
+
+/** Fold a match into the pool locally (tools / tests; the game itself reports matches to the server's global pool):
+ *  score the AI's designs, adopt the player's best designs when they earned it (immediately: the server needs
+ *  several reporters), mutate the AI's clearly ineffective designs, prune the weakest. Pure: returns a new pool.
+ *  `aiSide` = the AI's side (localdriver: 1); `perf` = scoreMatch(m) when already computed. Never adds a duplicate
+ *  (same key or slot), never takes a role / tag below its floor, never exceeds POOL_CAP. */
 export function evolvePool(pool: AiPool, m: MatchState, aiSide: Side = 1, perf?: DesignPerf[]): AiPool {
   const base = sanitizePool(pool);
   const entries: PoolEntry[] = base.entries.map((e) => ({ ...e, design: cleanDesign(e.design) }));
@@ -337,63 +532,10 @@ export function evolvePool(pool: AiPool, m: MatchState, aiSide: Side = 1, perf?:
   if (!m || !Array.isArray(m.history) || !m.history.length || !m.players?.[0] || !m.players?.[1]) return out;
   let scores: DesignPerf[];
   try { scores = perf ?? scoreMatch(m); } catch { return out; }
-  const pSide: Side = aiSide === 0 ? 1 : 0;
-  const deckOf = (s: Side) => new Map(m.players[s].deck.map((d) => [d.id, d] as const));
-  const aiDecks = deckOf(aiSide), pDecks = deckOf(pSide);
-  const findKey = (d: Design) => entries.find((e) => poolKey(e.design) === poolKey(d));
-  const findSlot = (d: Design) => entries.find((e) => slotKey(e.design) === slotKey(d));
-  const blend = (e: PoolEntry, eff: number) => { e.score = e.score * (1 - SCORE_ALPHA) + SCORE_ALPHA * eff; e.games++; };
-
-  // 1. the AI's own designs: running scores
-  const aiPerf = scores.filter((s) => s.side === aiSide && s.invested > 0 && aiDecks.has(s.designId));
-  for (const s of aiPerf) {
-    const d = aiDecks.get(s.designId)!;
-    const e = findKey(d) ?? findSlot(d);
-    if (e) blend(e, s.eff);
-  }
-
-  // 2. the player's two best designs (with a real investment behind them)
-  const pPerf = scores.filter((s) => s.side === pSide && pDecks.has(s.designId));
-  const pTotal = pPerf.reduce((t, s) => t + s.invested, 0);
-  const won = m.status === 'done' && m.winner === pSide;
-  const best = pPerf.filter((s) => s.invested >= Math.max(1, 0.05 * pTotal)).sort((a, b) => b.eff - a.eff || (a.designId < b.designId ? -1 : 1)).slice(0, 2);
-  for (const s of best) {
-    const src = pDecks.get(s.designId)!;
-    if (!validEntryDesign(src)) continue;
-    const d = adoptDesign(src);
-    if (!isValidDesign(d)) continue;
-    const role = roleOf(d);
-    const rivals = aiPerf.filter((a) => roleOf(aiDecks.get(a.designId)!) === role);
-    const rivalEff = rivals.length
-      ? rivals.reduce((t, a) => t + a.eff * a.invested, 0) / rivals.reduce((t, a) => t + a.invested, 0)
-      : median(entries.filter((e) => roleOf(e.design) === role).map((e) => e.score));
-    if (!won && !(s.eff >= ADOPT_RATIO * rivalEff)) continue;
-    // already pooled (same parts in any order): merge
-    const same = findKey(d);
-    if (same) { blend(same, s.eff); continue; }
-    // near-duplicate (same hull, drive, weapons): keep the better one in that slot
-    const near = findSlot(d);
-    if (near) {
-      if (s.eff > near.score) { near.design = d; near.learned = true; }
-      blend(near, s.eff);
-      continue;
-    }
-    const fresh: PoolEntry = { design: d, score: Math.max(0.5, Math.min(3, s.eff)), games: 1, learned: true };
-    const roleN = entries.filter((e) => roleOf(e.design) === role).length;
-    if (roleN < ROLE_MAX[role] && entries.length < POOL_CAP) { entries.push(fresh); continue; }
-    // full: replace the weakest that may go (same role when the role is full) and scores below the newcomer
-    const victims = entries
-      .filter((e) => (roleN >= ROLE_MAX[role] ? roleOf(e.design) === role : true) && e.score < fresh.score && removable(entries, e, d))
-      .sort((a, b) => a.score - b.score || (poolKey(a.design) < poolKey(b.design) ? -1 : 1));
-    if (victims.length) entries[entries.indexOf(victims[0])] = fresh;
-  }
-
-  // 3. prune one entry that has clearly fallen behind its role
-  const medians = new Map(ROLES.map((r) => [r, median(entries.filter((e) => roleOf(e.design) === r).map((e) => e.score))] as const));
-  const weak = entries
-    .filter((e) => e.games >= PRUNE_GAMES && e.score < PRUNE_RATIO * medians.get(roleOf(e.design))! && removable(entries, e))
-    .sort((a, b) => a.score / medians.get(roleOf(a.design))! - b.score / medians.get(roleOf(b.design))!);
-  if (weak.length) entries.splice(entries.indexOf(weak[0]), 1);
+  updateAiScores(entries, m, aiSide, scores);
+  for (const c of playerCandidates(entries, m, aiSide, scores)) insertEntry(entries, { design: c.design, score: Math.max(0.5, Math.min(3, c.eff)), games: 1, learned: true }, c.eff);
+  mutateWeak(entries, m, aiSide, scores, hash(String(m.id)));
+  pruneWeakest(entries);
   return out;
 }
 

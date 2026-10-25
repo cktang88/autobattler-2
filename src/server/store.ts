@@ -1,6 +1,6 @@
 // JSON-file persistence for players and matches.
 // Layout (DATA_DIR): players.json = {version, players: PlayerRecord[]} (incl. each player's garage of designs),
-// matches.json = {version, matches: MatchRecord[]}.
+// matches.json = {version, matches: MatchRecord[]}, aipool.json = the global AI design pool (server/aipool.ts).
 // Writes are debounced and atomic (write tmp file, fsync, rename).
 
 import fs from 'node:fs';
@@ -8,6 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { migrateMatch } from '../shared/match.ts';
 import type { Design, MatchState } from '../shared/types.ts';
+import { freshState, sanitizeState, type GlobalPoolState } from './aipool.ts';
 
 export interface PlayerRecord {
   id: string;
@@ -71,6 +72,8 @@ export class Store {
   readonly playersByName = new Map<string, PlayerRecord>();
   readonly matches = new Map<string, MatchRecord>();
   readonly matchesByCode = new Map<string, MatchRecord>();
+  /** the global AI design pool, its adoption candidates and the reported-match dedupe list */
+  aiPool: GlobalPoolState = freshState();
   private timer: NodeJS.Timeout | null = null;
   private dirty = false;
   private readonly debounceMs: number;
@@ -107,6 +110,7 @@ export class Store {
       try { if (migrateMatch(r.match)) { migrated++; r.match.updatedAt = Math.max(Date.now(), (r.match.updatedAt || 0) + 1); } } catch (e) { console.error(`[store] could not migrate match ${r.match.id}`, e); }
       this.indexMatch(r);
     }
+    this.aiPool = sanitizeState(readJson<unknown>(path.join(this.dir, 'aipool.json')));
     if (migrated) { console.log(`[store] migrated ${migrated} match(es) to the current rules version`); this.save(); }
   }
 
@@ -172,6 +176,7 @@ export class Store {
     try {
       writeAtomic(path.join(this.dir, 'players.json'), { version: VERSION, players: [...this.players.values()] });
       writeAtomic(path.join(this.dir, 'matches.json'), { version: VERSION, matches: [...this.matches.values()] });
+      writeAtomic(path.join(this.dir, 'aipool.json'), this.aiPool);
     } catch (e) {
       console.error('[store] write failed', e);
       this.dirty = true;
