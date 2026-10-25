@@ -14,9 +14,7 @@ import { applyViewSettings, loadSettings } from '../storage.ts';
 import { Battle } from '../../shared/sim/battle.ts';
 import { MAX_TICKS, TICK_RATE, type BattleEvent, type SimUnit } from '../../shared/sim/types.ts';
 import type { BlockShape } from '../../shared/grid.ts';
-import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, forwardY, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
-import { bodyScale, hullK, mountOffsets } from '../../shared/mountgeo.ts';
-import { TILT_SIN, flyHeight, hullHeight } from '../render/tilt.ts';
+import { DEPLOY_D, DEPLOY_W, FIELD_H, FIELD_W, MAX_SPACING, blockDims, blockInZone, blockWorldRect, fmtMeters, fmtSpeed, hasSpacing, localToWorldCell, normSpacing, placementUnitCenters, squadOffsets } from '../../shared/grid.ts';
 import { battleInputFor, MAX_BLOCKS, MAX_SIM_UNITS, placementValue, SELL_REFUND, sellValue, START_HP, upgradeCost, validateDeploy } from '../../shared/match.ts';
 import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../../shared/parts.ts';
 import { LEVEL_BONUS, MAX_LEVEL, computeStats, defaultOrders, fmtUnitPrice, levelMult } from '../../shared/stats.ts';
@@ -24,7 +22,8 @@ import { type DeployAction, type Design, type MatchState, type Placement, type R
 import * as kit from './kit.ts';
 import { mapForRound } from '../render/ground.ts';
 import { BATTLE_SPEEDS, speedLabel } from '../storage.ts';
-import { RING_COLOR, confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, ringsOf, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
+import { confirmModal, kiteOptions, miniStats, ordersControl, ordersEqual, ordersOf, orderFields, paintPreview, sizeLabel, statCard, svgIcon, type EscortUi, type Orders } from './match-ui.ts';
+import { AutoCam, boxIsTiny, costTag, createRangeRings, drawBoxSel, inBox, liveLine, liveUnitAt, placeTipAt, ringLegend, stars, tipFor, zoomButtons, type BoxSel, type RingTarget, CARD_FILTERS, type CardFilter } from './fieldtools.ts';
 import { playerName } from './vsai.ts';
 import { designInfo, type DesignInfo } from './deckstats.ts';
 import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
@@ -97,8 +96,6 @@ export function spacingControl(value: number, onPick: ((v: number) => void) | nu
 type Op = { kind: 'place' | 'upgrade' | 'sell'; uid: number };
 type Sel = { side: Side; uid: number; pending: boolean } | null;
 type FieldWithEvents = BattleView;
-
-const stars = (lv: number) => '★'.repeat(lv) + '☆'.repeat(Math.max(0, MAX_LEVEL - lv));
 
 export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>): Screen {
   const driver: MatchDriver = route.driver;
@@ -298,16 +295,6 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const supplyLbl = h('div.lbl', null, 'Supply', h('br'), 'remaining');
   const cardsEl = h('div.cards');
   // shop filter: what the card can do (sorted cheapest first; 1-9 follow the visible order)
-  type CardFilter = 'all' | 'aa' | 'ground' | 'armor' | 'swarm' | 'long' | 'air';
-  const CARD_FILTERS: { value: CardFilter; label: string; title: string; test: (i: DesignInfo) => boolean }[] = [
-    { value: 'all', label: 'All', title: 'Every design in your deck', test: () => true },
-    { value: 'aa', label: 'Anti-air', title: 'Can shoot aircraft', test: (i) => i.caps.has('aa') },
-    { value: 'ground', label: 'Anti-ground', title: 'Can shoot ground units', test: (i) => i.gnd > 0 },
-    { value: 'armor', label: 'Anti-armor', title: 'Armor-piercing or heavy single hits', test: (i) => i.caps.has('armor') },
-    { value: 'swarm', label: 'Splash', title: 'Splash, flame, chain or spread: clears light squads', test: (i) => i.caps.has('swarm') },
-    { value: 'long', label: 'Long range', title: 'Reaches 80 m or more', test: (i) => i.caps.has('long') },
-    { value: 'air', label: 'Aircraft', title: 'Flying units', test: (i) => i.caps.has('air') },
-  ];
   let cardFilter: CardFilter = 'all';
   try { const v = localStorage.getItem('match.cardFilter'); if (CARD_FILTERS.some((f) => f.value === v)) cardFilter = v as CardFilter; } catch { /* ignore */ }
   const infoCache = new Map<string, DesignInfo | null>();
@@ -352,13 +339,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let showMine = false, showFoe = false, shiftDown = false, ringHi: string | null = null;
   const mineBtn = h('button.small.rbtn', { type: 'button', title: 'Show weapon ranges of all your units (hold Shift)', 'aria-pressed': 'false', onclick: () => { showMine = !showMine; paintRangeBtns(); } }, svgIcon('range', 16), 'Ranges');
   const foeBtn = h('button.small.rbtn.foe', { type: 'button', title: 'Show weapon ranges of all enemy units', 'aria-pressed': 'false', onclick: () => { showFoe = !showFoe; paintRangeBtns(); } }, svgIcon('range', 16), 'Enemy ranges');
-  const legendEl = h('div.rlegend.hidden', null,
-    h('span', { style: `--c:${RING_COLOR.ground}` }, 'Ground'),
-    h('span', { style: `--c:${RING_COLOR.air}` }, 'Air'),
-    h('span', { style: `--c:${RING_COLOR.both}` }, 'Both'),
-    h('span.sup', { style: `--c:${RING_COLOR.support}` }, 'Support'),
-    h('span.dash', { style: `--c:${'#ffffff'}` }, 'Min range'),
-  );
+  const legendEl = ringLegend();
   // box-select mode: plain drag on the field draws a selection box (same as Shift+drag; the only way on touch)
   let boxMode = false;
   const selBtn = h('button.small.rbtn.sel', { type: 'button', title: 'Box select: drag a rectangle over your blocks to set their orders together (or hold Shift and drag)', 'aria-pressed': 'false', onclick: () => { boxMode = !boxMode; selBtn.setAttribute('aria-pressed', String(boxMode)); selBtn.classList.toggle('active', boxMode); renderAll(); } }, svgIcon('select', 16), 'Box select');
@@ -377,11 +358,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function togglePause(on = !paused) { paused = on; renderSpeed(); }
   const speedbar = h('div.speedbar.hidden', null, pauseBtn, ...speedBtns, skipBtn);
   const overlayEl = h('div');
-  const zoomBar = h('div.zoombtns', null,
-    h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1.5); } }, '+'),
-    h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => { view.cam.userAt = performance.now(); view.zoomBy(1 / 1.5); } }, '−'),
-    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag (or Ctrl / Option + drag) turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => { view.cam.userAt = performance.now(); view.fit(); } }, '⤢'),
-  );
+  const zoomBar = zoomButtons(view);
   fieldwrap.append(hintEl, miniEl, infoEl, speedbar, zoomBar, rangeBar, overlayEl);
 
   const el = h('div.screen.match', null, topbar, h('div.mbody', null, fieldwrap, sideEl));
@@ -429,70 +406,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   /** unit clicked during a battle replay: its stat card stays up with live hp / damage until you click elsewhere */
   let liveTip: { id: number; at: { x: number; y: number } } | null = null;
   let liveTipT = 0;
-  function liveUnitAt(px: number, rawY: number): SimUnit | null {
-    if (!battle) return null;
-    // the drawn hull: the sim's oriented box (hullK x footprint, body-scaled) plus a finger margin; long hulls are hit
-    // along their whole length. Tilted: a unit is drawn raised by its height (flyers by their altitude), so the
-    // pointer is also read on the plane of its top.
-    const probe = new Map<number, { x: number; y: number } | null>();
-    const at = (rise: number) => {
-      if (!probe.has(rise)) { try { probe.set(rise, view.screenToWorld(px, rawY + rise)); } catch { probe.set(rise, null); } }
-      return probe.get(rise)!;
-    };
-    let best: SimUnit | null = null, bd = Infinity;
-    for (const u of battle.units) {
-      if (!u.alive) continue;
-      const S = u.stats.size, hk = hullK(S), cs = Math.cos(u.angle), sn = Math.sin(u.angle);
-      const tops = view.tilted ? [0, Math.round((u.flying ? flyHeight(S) : 0.6 * hullHeight(S)) * TILT_SIN * view.cam.k)] : [0];
-      for (const rise of tops) {
-        const w = at(rise);
-        if (!w) continue;
-        const dx = w.x - u.x, dy = w.y - u.y;
-        const out = Math.hypot(Math.max(0, Math.abs(dx * cs + dy * sn) - hk * u.stats.fh), Math.max(0, Math.abs(dy * cs - dx * sn) - hk * u.stats.fw));
-        const d = Math.hypot(dx, dy);
-        if (out < 0.3 && d < bd) { bd = d; best = u; }
-      }
-    }
-    return best;
-  }
-  /** live hp / damage of a clicked unit. The sim only tallies damage per block, so for a squad the hp is this one
-   *  unit's (plus a squad hp / alive line) and the damage is labelled as the whole squad's. */
-  function liveLine(u: SimUnit): HTMLElement {
-    const dealt = battle ? Math.round(battle.blockDamage(u.side, u.uid)) : 0;
-    const squad = u.stats.squad ?? 1;
-    let alive = 0, hpSum = 0, hpMax = 0;
-    if (squad > 1 && battle) for (const q of battle.units) {
-      if (q.side !== u.side || q.uid !== u.uid) continue;
-      hpMax += q.maxHp;
-      if (q.alive) { alive++; hpSum += Math.max(0, q.hp); }
-    }
-    const fmt = (n: number) => Math.round(n).toLocaleString();
-    return h('div.sc-dmg.sc-live', null,
-      h('span', null, u.alive ? (squad > 1 ? 'This unit' : 'Now') : (squad > 1 ? 'Unit destroyed' : 'Destroyed')),
-      u.alive ? h('b', null, `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)} HP${u.shield > 0 ? ` · ${Math.ceil(u.shield)} shield` : ''}`) : null,
-      u.alive && u.para > 0 ? h('em', { style: { color: '#9fe0ff' } }, u.stun > 0 ? `stunned ${u.stun.toFixed(1)}s` : `paralysis ${Math.round((100 * u.para) / u.maxHp)}%`) : null,
-      squad > 1
-        ? h('div.sc-live-sq', null,
-          h('span', null, 'Squad'),
-          h('b', null, `${alive}/${squad}`), h('small', null, ' alive · '),
-          h('b', null, fmt(hpSum)), h('small', null, ` / ${fmt(hpMax)} HP`),
-          h('em', null, `squad dealt ${dealt.toLocaleString()} this battle`))
-        : h('em', null, `dealt ${dealt.toLocaleString()} this battle`));
-  }
   function showLiveTip(u: SimUnit, at: { x: number; y: number }) {
     const mine = u.side === side;
     const bp = replay?.boards[u.side].find((q) => q.uid === u.uid); // the block's placement: real spacing / rotation
-    const tip = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats, bp?.spacing), false, liveLine(u), !!bp?.rot);
+    const tip = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats, bp?.spacing), undefined, liveLine(battle, u), !!bp?.rot);
     mountTip(tip, false);
     tipKey = `live:${u.id}`;
     liveTip = { id: u.id, at };
-    const er = el.getBoundingClientRect();
-    const { w, h: ht } = tipSize;
-    let left = at.x - er.left + 18, top = at.y - er.top + 18;
-    if (left + w > er.width - 4) left = at.x - er.left - w - 18;
-    if (top + ht > er.height - 4) top = at.y - er.top - ht - 18;
-    tipEl!.style.left = `${Math.max(4, left)}px`;
-    tipEl!.style.top = `${Math.max(4, top)}px`;
+    placeTipAt(tipEl!, el, at, tipSize);
   }
   function refreshLiveTip(dt: number) {
     if (!liveTip || !tipEl || !battle) return;
@@ -501,25 +422,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     liveTipT = 0;
     const u = battle.units.find((q) => q.id === liveTip!.id);
     const old = tipEl.querySelector('.sc-live');
-    if (u && old) old.replaceWith(liveLine(u));
-  }
-  /** block price; for a squad it buys all its units */
-  /** `d` + `level` > 1: also the supply invested in the block (price + its upgrades), which is what it is worth */
-  const costTag = (st: UnitStats, d?: Design, level = 1) => {
-    const inv = d && level > 1 ? placementValue(d, level) : 0;
-    return h('span.sc-cost', { title: `${st.squad > 1 ? `Block price: buys the whole squad of ${st.squad} units (≈${fmtUnitPrice(st.unitCost)} each)` : 'Supply price'}${inv ? ` · ${inv} invested with level ${level} upgrades` : ''}` },
-      svgIcon('cost', 16), String(st.cost), st.squad > 1 ? h('small.sc-per', null, ` for ${st.squad}`) : null, inv ? h('small.sc-per', null, ` · ${inv} invested`) : null);
-  };
-  function tipFor(d: Design, st: UnitStats, level: number, tag: string, mine: boolean, spacing: number, interactive: boolean, dmg: HTMLElement | null = null, rot = false): HTMLElement {
-    const lv = Math.max(1, Math.min(MAX_LEVEL, level));
-    return h('div.stat-tip', { role: 'tooltip', class: mine ? 'friendly' : 'enemy' },
-      h('div.sc-head', null,
-        h('b.sc-name', null, d.name),
-        h('span.stars', null, stars(lv)),
-        h('span.sc-tag2', null, tag),
-        costTag(st)),
-      dmg,
-      statCard({ design: d, st, level: lv, spacing, rot, onRing: interactive ? (k) => { ringHi = k; } : undefined }));
+    if (u && old) old.replaceWith(liveLine(battle, u));
   }
   function mountTip(tip: HTMLElement, sheet: boolean) {
     hideTip();
@@ -537,7 +440,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   function showDeckTip(b: HTMLElement, d: Design, sheet: boolean) {
     const st = statsOf(d);
     if (!st) return;
-    mountTip(tipFor(d, st, 1, 'In shop', true, spacingOfCard(d), sheet, null, rotCard), sheet);
+    mountTip(tipFor(d, st, 1, 'In shop', true, spacingOfCard(d), sheet ? onRingHi : undefined, null, rotCard), sheet);
     if (sheet) return;
     const r = b.getBoundingClientRect(), er = el.getBoundingClientRect();
     const { w, h: ht } = tipSize;
@@ -575,13 +478,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       tipKey = key;
     }
     if (sheet || !at) return;
-    const er = el.getBoundingClientRect();
-    const { w, h: ht } = tipSize;
-    let left = at.x - er.left + 18, top = at.y - er.top + 18;
-    if (left + w > er.width - 4) left = at.x - er.left - w - 18;
-    if (top + ht > er.height - 4) top = at.y - er.top - ht - 18;
-    tipEl!.style.left = `${Math.max(4, left)}px`;
-    tipEl!.style.top = `${Math.max(4, top)}px`;
+    placeTipAt(tipEl!, el, at, tipSize);
   }
   function attachDeckTip(b: HTMLElement, d: Design) {
     let timer = 0;
@@ -1306,23 +1203,17 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
 
   /** Shift+drag on the field (deploy, no card picked): rubber-band selection of my blocks, canvas CSS px */
   /** add: Shift / Box-select mode (a click toggles one block in the group); else a plain drag (a click is a click) */
-  let boxSel: { x0: number; y0: number; x1: number; y1: number; add: boolean } | null = null;
-  function drawBox() {
-    if (!boxSel) { boxEl.classList.add('hidden'); return; }
-    const l = Math.min(boxSel.x0, boxSel.x1), t = Math.min(boxSel.y0, boxSel.y1);
-    Object.assign(boxEl.style, { left: `${l}px`, top: `${t}px`, width: `${Math.abs(boxSel.x1 - boxSel.x0)}px`, height: `${Math.abs(boxSel.y1 - boxSel.y0)}px` });
-    boxEl.classList.remove('hidden');
-  }
+  let boxSel: BoxSel | null = null;
+  const drawBox = () => drawBoxSel(boxEl, boxSel);
   /** my blocks whose footprint centre falls inside the box */
-  function blocksInBox(b: NonNullable<typeof boxSel>): NonNullable<Sel>[] {
-    const l = Math.min(b.x0, b.x1), r = Math.max(b.x0, b.x1), t = Math.min(b.y0, b.y1), bt = Math.max(b.y0, b.y1);
+  function blocksInBox(b: BoxSel): NonNullable<Sel>[] {
     const out: NonNullable<Sel>[] = [];
     const test = (p: Placement, pending: boolean) => {
       const d = designOf(side, p.designId);
       const wr = blockWorldRect(side, p, shapeOf(d));
       let sp: { x: number; y: number };
       try { sp = view.worldToScreen(wr.col + wr.w / 2, wr.row + wr.h / 2); } catch { return; }
-      if (sp.x >= l && sp.x <= r && sp.y >= t && sp.y <= bt) out.push({ side, uid: p.uid, pending });
+      if (inBox(b, sp.x, sp.y)) out.push({ side, uid: p.uid, pending });
     };
     for (const p of myBoard()) test(p, false);
     for (const p of place) test(p, true);
@@ -1456,7 +1347,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       boxSel = null;
       drawBox();
       view.controls.enabled = true;
-      const tiny = Math.abs(b.x1 - b.x0) < 6 && Math.abs(b.y1 - b.y0) < 6;
+      const tiny = boxIsTiny(b);
       if (tiny && !b.add) {
         // a plain click, not a drag: fall through to the normal click handling below
       } else if (tiny) {
@@ -1482,7 +1373,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (phase === 'battle' || phase === 'result' || phase === 'over') {
       // battle: click a unit to pin its stats (live hp + damage), click empty ground to close
       const lp = local(e);
-      const u = liveUnitAt(lp.px, lp.rawY);
+      const u = liveUnitAt(view, battle, lp.px, lp.rawY);
       if (u) { showLiveTip(u, { x: e.clientX, y: e.clientY }); sfx('click'); } else if (tipKey) hideTip();
       return;
     }
@@ -1594,7 +1485,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       // resumed mid-match: rebuild last round's damage tally off the critical path
       if (m.history.length && lastDmg?.round !== m.history[m.history.length - 1].round) setTimeout(ensureLastDamage, 600);
     }
-    if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } autoCam = { on: loadSettings().autoCam !== false, since: view.cam.userAt, box: null }; }
+    if (p === 'battle' && prev !== 'battle') { try { view.fit(); } catch { /* */ } autoCam.start(loadSettings().autoCam !== false); }
     if (p !== 'deploy' && p !== 'waiting') clearRings();
     renderAll();
     renderOverlay();
@@ -1732,19 +1623,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   }
 
   // ---------- range rings overlay ----------
-  interface RingTarget { side: Side; design: Design; st: UnitStats; pos: Pick<Placement, 'x' | 'y'> & { spacing?: number; rot?: boolean }; strong: boolean; invalid?: boolean }
-  const ringCtx = ringCv.getContext('2d');
-  let ringW = 0, ringH = 0, ringDpr = 1, ringsShown = false;
-  function clearRings() {
-    if (!ringCtx || !ringsShown) return;
-    // Reset the backing store instead of clearRect: Chrome was seen skipping a lone clearRect on this canvas when
-    // nothing had been drawn since the last frame (the deploy rings then stayed up through the whole battle).
-    // Assigning width always drops the bitmap (and the context state).
-    ringCv.width = ringCv.width;
-    ringCv.style.visibility = 'hidden'; // and hide the layer, belt and braces (seen under GPU load with 3D)
-    ringsShown = false;
-    legendEl.classList.add('hidden');
-  }
+  const rings = createRangeRings(view, canvas, ringCv, legendEl, side);
+  const clearRings = () => rings.clear();
   function rangeTargets(): RingTarget[] {
     const out: RingTarget[] = [];
     const seen = new Set<string>();
@@ -1769,151 +1649,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
     if (showFoe) for (const p of foe().board) push(opp, p, designOf(opp, p.designId), false, keyOf(opp, p.uid));
     return out;
   }
-  /** point on the outline of the rect [x0,x1]x[y0,y1] grown by r, along the ray from its centre at `ang` */
-  function envelopePoint(x0: number, y0: number, x1: number, y1: number, r: number, ang: number): { x: number; y: number } {
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = (x1 - x0) / 2, hh = (y1 - y0) / 2;
-    const dx = Math.cos(ang), dy = Math.sin(ang);
-    let lo = 0, hi = r + Math.hypot(hw, hh) + 2;
-    for (let i = 0; i < 22; i++) {
-      const t = (lo + hi) / 2;
-      const ex = Math.max(0, Math.abs(dx * t) - hw), ey = Math.max(0, Math.abs(dy * t) - hh);
-      if (Math.hypot(ex, ey) < r) lo = t; else hi = t;
-    }
-    return { x: cx + dx * lo, y: cy + dy * lo };
-  }
-  function drawRanges() {
-    if (!ringCtx) return;
-    const dpr = Math.min(3, window.devicePixelRatio || 1);
-    const cw = canvas.clientWidth, ch = canvas.clientHeight;
-    if (cw !== ringW || ch !== ringH || dpr !== ringDpr) {
-      ringW = cw; ringH = ch; ringDpr = dpr;
-      ringCv.width = Math.max(1, Math.round(cw * dpr));
-      ringCv.height = Math.max(1, Math.round(ch * dpr));
-    }
-    const g = ringCtx;
-    const targets = rangeTargets();
-    if (!targets.length) { clearRings(); return; }
-    if (ringsShown) ringCv.width = ringCv.width; // full reset (see clearRings)
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ringsShown = true;
-    ringCv.style.visibility = '';
-    legendEl.classList.remove('hidden');
-    const taken: { x: number; y: number; w: number; h: number }[] = [];
-    // weak (all-units) rings first so the focused block's rings sit on top
-    for (const t of [...targets].sort((a, b) => Number(a.strong) - Number(b.strong))) {
-      const worldCenters = placementUnitCenters(t.side, t.pos, t.st);
-      // local ground scale at this block (the 3D perspective camera draws nearer ground larger)
-      const sc = view.scaleAt(worldCenters[0]?.x ?? 0, worldCenters[0]?.y ?? 0);
-      const k = sc.k;
-      // units deploy facing the enemy; ranges are measured from each weapon's own mount (same offsets as the sim)
-      const bs = bodyScale(t.st.size), offs = mountOffsets(t.design).map((o) => ({ x: o.x * bs, y: o.y * bs }));
-      const head = forwardY(t.side) < 0 ? -Math.PI / 2 : Math.PI / 2, hc = Math.cos(head), hs = Math.sin(head);
-      let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-      const frame = (mounts: number[] | null) => {
-        x0 = Infinity; y0 = Infinity; x1 = -Infinity; y1 = -Infinity;
-        for (const c of worldCenters) {
-          for (const m of mounts ?? [-1]) {
-            const o = m >= 0 ? offs[m] : undefined;
-            const wx = c.x + (o ? hc * o.x - hs * o.y : 0), wy = c.y + (o ? hs * o.x + hc * o.y : 0);
-            const sp = view.worldToScreen(wx, wy);
-            x0 = Math.min(x0, sp.x); y0 = Math.min(y0, sp.y); x1 = Math.max(x1, sp.x); y1 = Math.max(y1, sp.y);
-          }
-        }
-      };
-      const rings = ringsOf(t.design, t.st).sort((a, b) => b.range - a.range);
-      // the ring lives on the ground plane (foreshortened by the camera tilt): a circle around the mount for one unit,
-      // the rounded outline of all its circles for a squad
-      const ay = sc.ay;
-      let uh = 0;
-      let cur = new Path2D();
-      const path = (r: number) => {
-        const base = new Path2D();
-        base.roundRect(x0 - r, y0 - r, x1 - x0 + 2 * r, uh + 2 * r, r);
-        cur = new Path2D();
-        cur.addPath(base, new DOMMatrix([1, 0, 0, ay, 0, y0 * (1 - ay)]));
-      };
-      const angles = [-90, -62, -118, -34, -146, -10, -170].map((a) => (a * Math.PI) / 180);
-      rings.forEach((rg, i) => {
-        frame(rg.melee ? null : rg.mounts);
-        uh = (y1 - y0) / ay;
-        const R = rg.range * k;
-        const hi = ringHi != null && rg.key === ringHi;
-        const dim = ringHi != null && !hi ? 0.3 : 1;
-        const sup = rg.kind === 'support';
-        g.save();
-        g.lineJoin = 'round';
-        g.lineCap = 'round';
-        if (t.strong) {
-          path(R);
-          g.globalAlpha = (hi ? 0.2 : sup ? 0.04 : 0.07) * dim;
-          g.fillStyle = rg.color;
-          g.fill(cur);
-          if (rg.minRange > 0) { // dead zone: darken
-            path(rg.minRange * k);
-            g.globalAlpha = 0.22 * dim;
-            g.fillStyle = '#000';
-            g.fill(cur);
-          }
-          // dark under-stroke for contrast against any terrain
-          path(R);
-          g.globalAlpha = 0.55 * dim;
-          g.strokeStyle = '#06090c';
-          g.lineWidth = (hi ? 6 : 4.5);
-          g.setLineDash(sup ? [1, 7] : []);
-          g.stroke(cur);
-          g.globalAlpha = (t.invalid ? 0.6 : 1) * dim;
-          g.strokeStyle = rg.color;
-          g.lineWidth = hi ? 3.5 : 2.4;
-          g.stroke(cur);
-          if (rg.minRange > 0) {
-            path(rg.minRange * k);
-            g.setLineDash([7, 6]);
-            g.lineWidth = 2;
-            g.globalAlpha = 0.95 * dim;
-            g.strokeStyle = rg.color;
-            g.stroke(cur);
-          }
-        } else {
-          g.globalAlpha = (t.side === side ? 0.62 : 0.55);
-          g.strokeStyle = rg.color;
-          g.lineWidth = 1.2;
-          g.setLineDash(sup ? [1, 5] : t.side === side ? [] : [6, 4]);
-          path(R);
-          g.stroke(cur);
-          if (rg.minRange > 0) { path(rg.minRange * k); g.setLineDash([3, 4]); g.stroke(cur); }
-        }
-        g.restore();
-        if (!t.strong && !hi) return;
-        // label on the ring, nudged along the arc until it fits the viewport and misses other labels
-        g.font = '700 14px "Barlow Condensed", "Barlow", system-ui, sans-serif';
-        const tw = g.measureText(rg.label).width + 14, th = 20;
-        for (let a = 0; a < angles.length * 2; a++) {
-          const ang = angles[(i + a) % angles.length] + (a >= angles.length ? 0.12 : 0);
-          const pu = envelopePoint(x0, y0, x1, y0 + uh, R, ang);
-          const pt = { x: pu.x, y: y0 + (pu.y - y0) * ay };
-          const lx = pt.x - tw / 2, ly = pt.y - th / 2;
-          if (lx < 6 || ly < 6 || lx + tw > cw - 6 || ly + th > ch - 6) continue;
-          if (taken.some((q) => lx < q.x + q.w + 3 && q.x < lx + tw + 3 && ly < q.y + q.h + 3 && q.y < ly + th + 3)) continue;
-          taken.push({ x: lx, y: ly, w: tw, h: th });
-          g.save();
-          g.globalAlpha = dim < 1 ? 0.5 : 1;
-          g.fillStyle = 'rgba(8,11,15,0.88)';
-          g.strokeStyle = rg.color;
-          g.lineWidth = 1.5;
-          g.beginPath();
-          g.roundRect(lx, ly, tw, th, 10);
-          g.fill();
-          g.stroke();
-          g.fillStyle = '#f4f8fb';
-          g.textBaseline = 'middle';
-          g.textAlign = 'center';
-          g.fillText(rg.label, pt.x, pt.y + 0.5);
-          g.restore();
-          break;
-        }
-      });
-    }
-  }
+  const drawRanges = () => rings.draw(rangeTargets(), ringHi);
 
   /** keep the pinned stat panel from covering the block it describes (desktop: dock left or right) */
   function dockInfo() {
@@ -1938,32 +1674,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let raf = 0;
   let last = performance.now();
   let drawErr = false;
-  /** Auto camera for the battle replay: frames every living unit (zooming in as the fight thins out) until the
-   *  player moves the camera themselves (Camera.userAt changes); back on at the next battle. `box` is the eased
-   *  bounding box (world cells), so the framing glides instead of jumping when a unit dies or a jet loops away. */
-  let autoCam: { on: boolean; since: number; box: [number, number, number, number] | null } = { on: false, since: 0, box: null };
-  function updateAutoCam(b: Battle, dt: number) {
-    if (!autoCam.on) return;
-    if (view.cam.userAt > autoCam.since) { autoCam.on = false; return; }
-    // where most of the units are: with 8+ alive, the outer 8% on each axis (stragglers, jets looping wide) is
-    // left out so one far unit doesn't hold the whole field in view
-    const xs: number[] = [], ys: number[] = [];
-    for (const u of b.units) if (u.alive) { xs.push(u.x); ys.push(u.y); }
-    if (!xs.length) return;
-    xs.sort((p, q) => p - q); ys.sort((p, q) => p - q);
-    const cut = xs.length >= 8 ? Math.floor(xs.length * 0.08) : 0, hiI = xs.length - 1 - cut;
-    const x0 = xs[cut], x1 = xs[hiI], y0 = ys[cut], y1 = ys[hiI];
-    const bx = autoCam.box;
-    if (!bx) autoCam.box = [x0, y0, x1, y1];
-    else {
-      // ease toward the live box: grows a little faster than it shrinks so units rarely leave the frame
-      const ease = (cur: number, want: number, out: boolean) => cur + (want - cur) * Math.min(1, dt * (out ? 2.2 : 0.9));
-      bx[0] = ease(bx[0], x0, x0 < bx[0]); bx[1] = ease(bx[1], y0, y0 < bx[1]);
-      bx[2] = ease(bx[2], x1, x1 > bx[2]); bx[3] = ease(bx[3], y1, y1 > bx[3]);
-    }
-    const f = autoCam.box!;
-    view.frameWorldBox(f[0], f[1], f[2], f[3]);
-  }
+  /** auto camera for the battle replay (until the player moves the camera; back on at the next battle) */
+  const autoCam = new AutoCam(view);
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     view.controls.doubleClickZoom = phase !== 'deploy' || (selCard < 0 && !sel);
@@ -1987,7 +1699,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
           }
         }
         clearRings(); // first: a slow (3D) or throwing drawBattle must not leave deploy rings up
-        if (phase === 'battle') updateAutoCam(battle, dt);
+        if (phase === 'battle') autoCam.update(battle, dt);
         view.drawBattle(battle, dt);
         refreshLiveTip(dt);
       } else {

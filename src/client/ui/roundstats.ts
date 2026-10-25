@@ -75,7 +75,8 @@ let lastGroup: Group = 'design';
 let lastShow: Show = 'both';
 
 /** Open the stats popup for a finished (or skipped-to-the-end) battle. `me` is the viewer's side. */
-export function openRoundStats(battle: Battle, round: number, me: Side, names: [string, string]): void {
+/** `title`: the modal's heading (default "Round N stats") */
+export function openRoundStats(battle: Battle, round: number, me: Side, names: [string, string], title?: string): void {
   const units = battle.units;
   const endS = battle.tick / TICK_RATE;
   // supply value of one unit: its block's investment shared by the squad
@@ -216,6 +217,6 @@ export function openRoundStats(battle: Battle, round: number, me: Side, names: [
     );
   };
   draw();
-  const modal = openModal(`Round ${round} stats`, body);
+  const modal = openModal(title ?? `Round ${round} stats`, body);
   modal.el.classList.add('modal-wide');
 }
