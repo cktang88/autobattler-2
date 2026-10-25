@@ -30,7 +30,7 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-behemoth', name: 'Ironbreaker', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'twin30', 'hmg'] },
   { id: 'starter-ironclad', name: 'Ironclad', chassis: 'bastion', mobility: 'treads', mounts: ['cannon', 'plateM', 'autocannon'] },
   // ---- emplacement ----
-  { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'anchor', mounts: ['guidedrocket', 'hmg'] },
+  { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'spider', mounts: ['guidedrocket', 'hmg'] },
   // ---- melee: fast hover brawler that dives into the line ----
   { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'legs', mounts: ['buzzsaw', 'shockprod'] },
   // ---- stealth: cloaked sniper platform ----

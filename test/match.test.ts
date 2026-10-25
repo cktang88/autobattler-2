@@ -11,7 +11,7 @@ import { blockDims, blockInZone, blocksOverlap, rectInZone, rectsOverlap, localR
 const ZW = DEPLOY_W, ZD = DEPLOY_D;
 import type { DeployAction, Design, MatchState, Placement } from '../src/shared/types.ts';
 
-test('starter designs are valid, unique and cover sizes/flyers/static', () => {
+test('starter designs are valid, unique and cover sizes/flyers/healers', () => {
   assert.ok(STARTER_DESIGNS.length >= 10);
   const ids = new Set<string>();
   for (const d of STARTER_DESIGNS) {
@@ -23,7 +23,7 @@ test('starter designs are valid, unique and cover sizes/flyers/static', () => {
   const stats = STARTER_DESIGNS.map(computeStats);
   assert.ok(stats.some((s) => s.size === 3));
   assert.ok(stats.some((s) => s.flying));
-  assert.ok(stats.some((s) => s.isStatic));
+  assert.ok(!stats.some((s) => s.isStatic)); // the Anchor Mount is retired
   assert.ok(stats.some((s) => s.heal > 0));
   assert.ok(stats.some((s) => s.cost <= supplyForRound(1) / 4));
 });

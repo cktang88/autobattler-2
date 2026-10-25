@@ -69,7 +69,7 @@ const DESIGNS: Design[] = [
 ];
 
 test('test designs are legal', () => {
-  for (const d of DESIGNS) assert.deepEqual(validateDesign(d), [], d.id);
+  for (const d of DESIGNS) assert.deepEqual(validateDesign(d, true), [], d.id);
 });
 
 let uidSeq = 1;
@@ -512,8 +512,8 @@ test('summary: a placement survives while any unit lives; aliveFraction reports 
 test('bombers fly over ground targets and bomb them; bombs cannot hit flyers', () => {
   const bomber = D('bomber', 'strikejet', 'jet', ['bombs', null, null]);
   const rotorBomber = D('rotorbomber', 'gunship', 'rotor', ['bombs', null]);
-  assert.deepEqual(validateDesign(bomber), []);
-  assert.deepEqual(validateDesign(rotorBomber), []);
+  assert.deepEqual(validateDesign(bomber, true), []);
+  assert.deepEqual(validateDesign(rotorBomber, true), []);
   const designs = [...DESIGNS, bomber, rotorBomber];
   const run = (a: Placement[], bb: Placement[]) => {
     const b = new Battle({ seed: 5, sides: [{ designs, units: a }, { designs, units: mirrorShift(bb) }] });
@@ -927,7 +927,7 @@ test('titan battle: giants/titans fight, crush smaller units, stay deterministic
   const titan = D('titanw', 'titan', 'megatracks', ['stormcore', 'siege240', 'cannon', 'cannon', 'autocannon']);
   const giant = D('giantw', 'goliath', 'titanlegs', ['siege240', 'cannon', 'cannon', 'autocannon']);
   const designs = [...DESIGNS, titan, giant];
-  for (const d of [titan, giant]) assert.deepEqual(validateDesign(d), [], d.id);
+  for (const d of [titan, giant]) assert.deepEqual(validateDesign(d, true), [], d.id);
   const mk = (): BattleInput => {
     const a = [P('titanw', 4, 0), P('giantw', 14, 0), P('bulwark', 22, 0), P('buggy', 30, 0)];
     const b = [P('giantw', 4, 0), P('titanw', 12, 0), P('lancer', 24, 0), P('ironclad', 30, 0)];
@@ -953,7 +953,7 @@ test('titan battle: giants/titans fight, crush smaller units, stay deterministic
 
 test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar', () => {
   const mm = D('mortmg', 'warden', 'halftrack', ['mortar', 'mg']);
-  assert.deepEqual(validateDesign(mm), []);
+  assert.deepEqual(validateDesign(mm, true), []);
   const designs = [...DESIGNS, mm];
   const run = (kiteMount?: number) => {
     const u: Placement = { ...P('mortmg', 10, 0), kite: true, kiteMount };
@@ -975,7 +975,7 @@ test('kiteMount: kiting on the mg mount holds closer than kiting on the mortar',
 test('kite: an outranged kiter closes in to its own firing range (from its mount) and never backs off while out of range', () => {
   // flamerear: a rear-mounted short-range gun (the old hull-centre distance parked it just out of reach for good)
   const rear = D('flamerear', 'longarm', 'treads', ['flamer']);
-  assert.deepEqual(validateDesign(rear), []);
+  assert.deepEqual(validateDesign(rear, true), []);
   const designs = [...DESIGNS, rear];
   for (const kd of ['flamerear', 'mgtank']) {
     const b = new Battle({ seed: 3, sides: [{ designs, units: [{ ...P(kd, 10, 0), kite: true }] }, { designs, units: mirrorShift([{ ...P('sniperw', 10, 0), stance: 'holdPos' }]) }] });
@@ -1034,7 +1034,7 @@ test('non-square footprints: long units spawn on their footprint centre and cont
 test('ranged units stop advancing once all weapons are in range (no bum-rush), even fire-on-move walkers', () => {
   const walker = D('rangewalker', 'strider', 'legs', ['autocannon', null, null]);
   const wall = D('rangewall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back at the walker
-  assert.deepEqual(validateDesign(walker), []);
+  assert.deepEqual(validateDesign(walker, true), []);
   const designs = [walker, wall];
   const b = new Battle({ seed: 9, sides: [
     { designs, units: [{ uid: 1, designId: 'rangewalker', x: 23, y: 0, level: 1, round: 1 }] },
@@ -1091,7 +1091,7 @@ test('hold: outer squad members whose formation slot lies beyond their range sti
   // a spaced-out (22 cells wide) mg squad on hold vs one emplacement: the outer half parked at their slots around the
   // target, 6-9 cells out with 5.5-cell guns, and never fired
   const fort = D('flakfort', 'bastion', 'anchor', ['flak', 'plateH', 'plateM']); // air-only gun: can't shoot back
-  assert.deepEqual(validateDesign(fort), []);
+  assert.deepEqual(validateDesign(fort, true), []);
   const designs = [DESIGNS.find((d) => d.id === 'buggy')!, fort];
   const b = new SimBattle({ seed: 2, sides: [
     { designs, units: [{ uid: 1, designId: 'buggy', x: 37, y: 0, level: 1, round: 1, spacing: 2, hold: true, kite: false }] },
@@ -1107,8 +1107,8 @@ test('fire-on-move units close to the range of the guns that can hit the goal, n
   // out of reach of every gun that could hit it, for the rest of the battle.
   const t = D('aatitan', 'titan', 'titanlegs', ['skyfortress', 'stormtower', null, null, null]);
   const tgt = D('anchoredflak', 'warden', 'anchor', ['flak', null]); // can't shoot back at ground
-  assert.deepEqual(validateDesign(t), []);
-  assert.deepEqual(validateDesign(tgt), []);
+  assert.deepEqual(validateDesign(t, true), []);
+  assert.deepEqual(validateDesign(tgt, true), []);
   const { b, e } = duel([t, tgt], { designId: 'aatitan', kite: false }, { designId: 'anchoredflak' }, 25);
   const hp0 = e.hp;
   for (let i = 0; i < 20 * 30 && !b.done; i++) b.step();
@@ -1135,7 +1135,7 @@ test('flames reach a long hull seen end-on (projectiles hit the capsule, not the
   // so 180 shots in a row missed and the duel never ended
   const f = D('flameunit', 'warden', 'halftrack', ['flamer', null]);
   const centi = D('centi', 'centipede', 'treads', ['flak', null, null, null]);
-  assert.deepEqual(validateDesign(centi), []);
+  assert.deepEqual(validateDesign(centi, true), []);
   const { b, k, e } = duel([f, centi], { designId: 'flameunit', kite: false }, { designId: 'centi', stance: 'holdPos' }, 30);
   let fires = 0, hits = 0;
   for (let i = 0; i < 500 && !b.done; i++) {
@@ -1149,7 +1149,7 @@ test('flames reach a long hull seen end-on (projectiles hit the capsule, not the
 test('the biggest hull (10x10 weaver titan) is found by the spatial hash: splash at its edge hits it', () => {
   // MAX_RADIUS (gather margin) was 4.0 while the arachne's footprint reaches 4.5 from its centre
   const big = D('weaver', 'arachne', 'spider', ['massdriver', 'flak', 'stormtower', 'railgun']);
-  assert.deepEqual(validateDesign(big), []);
+  assert.deepEqual(validateDesign(big, true), []);
   const { b, e } = duel([big, DESIGNS.find((d) => d.id === 'bulwark')!], { designId: 'bulwark' }, { designId: 'weaver', stance: 'holdPos' }, 40);
   // impact 0.2 outside the hull edge (hullK * 10 from the centre), placed so the hull's hash cell lies just past the
   // impact's gather box at a too-small margin

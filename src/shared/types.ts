@@ -16,14 +16,14 @@ export type Role =
   | 'raider' | 'skirmisher' | 'riot' | 'assault' | 'tank' | 'artillery' | 'antiair'
   | 'support' | 'scout' | 'flyer' | 'bomber' | 'siege' | 'stealth' | 'melee';
 
-export type ChassisTrait = 'rangeBoost' | 'repairAura' | 'airOnly' | 'compact';
+export type ChassisTrait = 'rangeBoost' | 'repairAura' | 'airOnly' | 'compact' | 'swift';
 /** distance (cells, edge to edge) at which a 'stealth' cloak is revealed */
 export const CLOAK_REVEAL = 2.5;
 /** [aura balance] Support radii are measured EDGE TO EDGE (carrier footprint to the other unit's footprint), so big
  *  carriers project further and big allies are easy to cover. Auras never stack: each unit takes the single strongest
  *  source of each effect. Radius (cells, edge to edge) of the chassis 'repairAura' trait. */
 export const REPAIR_AURA_RANGE = 6;
-export type MobilityTrait = 'fireOnMove' | 'evasive' | 'leap' | 'fortified' | 'stable' | 'strafe' | 'crush';
+export type MobilityTrait = 'evasive' | 'leap' | 'fortified' | 'stable' | 'strafe' | 'crush';
 
 export interface ChassisDef {
   id: string;
@@ -79,6 +79,8 @@ export interface MobilityDef {
   /** cost per size unit */
   cost: number;
   traits: MobilityTrait[];
+  /** no longer offered to players (designer, decks, server): validateDesign rejects it; the sim still runs it */
+  retired?: boolean;
   /** roles this mobility suits */
   roles: Role[];
   /** unit class this mobility belongs to; defaults to 'ground' */
@@ -315,6 +317,11 @@ export interface UnitStats {
   ehp: number;
   /** combat power = sqrt(offense * ehp) * mobility factor */
   power: number;
+  /** team-value correction on the parts + power price (stats.ts TEAM_FIT; 1 = the analytic price; includes the
+   *  monotone floor that keeps a design at least as dear as any of its sub-designs) */
+  teamMult: number;
+  /** the physical features that correction is computed from (stats.ts TEAM_FEATURES) */
+  teamFeatures: Record<string, number>;
 }
 
 /** One placed unit instance on a player's board. Coordinates are in the player's LOCAL deploy grid (see grid.ts). */

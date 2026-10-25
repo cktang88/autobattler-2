@@ -133,8 +133,6 @@ const BOMB_STAGGER = Math.round(0.22 * TICK_RATE);
 const HOLD_BREAK_IDLE = 3 * TICK_RATE; // ticks a holdPos unit sits with no target in reach before chasing whoever is hitting it
 const HOLD_BREAK_HIT = 12 * TICK_RATE; // ...if it was hit this recently (long enough to span a slow gun's reload)
 const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
-/** s: a backing-off kiter (not fireOnMove) stops for its kite gun when it is this close to firing */
-const KITE_PAUSE = 0.15;
 const ENGAGE_SHARE = 0.999; // halt once ALL weapons that can hit the goal are in range (no reason to close further unless melee/charge)
 
 // spatial hash
@@ -267,7 +265,6 @@ interface Internal {
   dmgMult: number;
   speed: number;
   turn: number;
-  fireOnMove: boolean;
   strafe: boolean;
   evasive: boolean;
   canLeap: boolean;
@@ -785,7 +782,7 @@ export class Battle {
       hl: hk * stats.fh, hw: hk * stats.fw, capR: hk * Math.min(stats.fw, stats.fh), capS: hk * Math.abs(stats.fh - stats.fw),
       capAcross: stats.fw > stats.fh, bound: boundOf(stats.fw, stats.fh, stats.size), mass: stats.isStatic ? 1e6 : stats.size * stats.size * (cfg.stance === 'holdPos' ? HOLDPOS_MASS : 1), dmgMult: lm,
       speed: stats.speed, turn: stats.turn,
-      fireOnMove: traits.includes('fireOnMove'), strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
+      strafe: traits.includes('strafe'), evasive: traits.includes('evasive'),
       canLeap: traits.includes('leap'), crush: traits.includes('crush'), aura: traits.includes('repairAura'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
@@ -2449,11 +2446,7 @@ export class Battle {
         // close enough to the ally already: don't shove it around
         if (this.gap(I, this.ints[goal.id]) <= 1.2 && Math.abs(goal.y - fwd * 1.6 - u.y) < 2.5) return;
       } else if (kiteR < 0.7) {
-        // kiting: an enemy got inside 70% of our range, back away (non-fireOnMove units pause to shoot first)
-        // Only the kite gun counts, and only one with a real reload cycle: a rapid-fire gun (mg: 0.15 s) is "about to
-        // fire" every tick and would pin the kiter in place for good while the enemy closes.
-        const kw = I.wpns[kiteMi]!, km = u.mounts[kiteMi];
-        if (!I.fireOnMove && (kw.def.cooldown ?? 1) > 2 * KITE_PAUSE && km.cooldown <= KITE_PAUSE && km.target >= 0 && u.disarm <= 0) return; // (a disarmed gun will not fire: keep running)
+        // kiting: an enemy got inside 70% of our range, back away (every unit fires on the move: no pause to shoot)
         gx = clamp(u.x - (dx / Math.max(d, 1e-6)) * 3, I.radius, FIELD_W - I.radius);
         gy = clamp(u.y - (dy / Math.max(d, 1e-6)) * 3, I.radius, FIELD_H - I.radius);
         stopDist = 0;
@@ -2515,14 +2508,8 @@ export class Battle {
           else this.faceTarget(I);
           return;
         }
-        else if (engaged && !I.meleeOnly) wantMove = false; // includes fire-on-move units: hold at range, don't bum-rush
-        else if (I.meleeOnly) wantMove = true; // brawlers charge all the way into contact
-        // bombers (tiny range) fly right over the target; a melee weapon still needs contact (a fire-on-move walker with
-        // a gun and a fist used to park at 70% of the gun's range, and the fist never swung), and so does a hull whose
-        // guns all sit too far back to reach from there (the 70% is measured from the hull centre, ranges from the
-        // mounts: a titan walker with rear-mounted guns parked with nothing in reach and never fired)
-        else if (I.fireOnMove && !relevantMelee && engagedDps > 0 && engageR > 2.5 && this.edgeC(this.ints[goal.id], u.x, u.y) <= Math.max(1.2, engageR * 0.7)) wantMove = false;
-        else wantMove = true;
+        else if (engaged && !I.meleeOnly) wantMove = false; // every gun that can hit the goal is in range: hold, don't bum-rush
+        else wantMove = true; // close in (every unit fires while moving); brawlers charge all the way into contact
         if (!wantMove) {
           // holding: turrets do the aiming; only a gun that traverses slower than the hull turns swings the hull toward the fight
           this.faceTarget(I);

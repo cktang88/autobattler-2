@@ -85,6 +85,12 @@ coverage) and **effective HP** (hp, shields, armor, evasion, cloaks, flight…),
 armies are balanced whatever their composition. `scripts/balance.ts` checks this by fighting
 equal-cost armies for every module.
 
+Prices are monotone: adding a part never makes a design cheaper (a design costs at least as much as any of its
+sub-designs). The analytic price treats a unit as if it fought alone; `scripts/teamvalue.ts` measures what designs
+are worth as part of an army (WAR / RAPM style: context armies, a stock filler as replacement level, Shapley-shared
+synergy, `mean + 0.5·(P80 − mean)` over contexts) and fits a correction `analytic × exp(Σ β·features)`
+(`TEAM_FIT` in `stats.ts`). That correction ships **off** (`TEAM_VALUE.on = false`); it is tooling for now.
+
 ## Code map
 
 | Path | What |

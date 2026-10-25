@@ -11,7 +11,7 @@ const D = (id: string, chassis: string, mobility: string, mounts: (string | null
 
 test('jet bombers are fast: a loaded strato bomber cruises at 30+ m/s', () => {
   const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']);
-  assert.deepEqual(validateDesign(strato), []);
+  assert.deepEqual(validateDesign(strato, true), []);
   assert.ok(computeStats(strato).speed * METERS_PER_CELL >= 30, `${computeStats(strato).speed * METERS_PER_CELL} m/s`);
 });
 
@@ -77,7 +77,7 @@ test('bombs, artillery shells and their splash, bomblets and fire never hit airc
   // a bomber pounding a tank that has an enemy helicopter hovering right over it: only the tank takes bomb damage
   const strato = D('strato', 'stratobomber', 'jet', ['bombs', 'clusterbombs', 'heavybomb', null]);
   const tank = D('tank', 'bastion', 'anchor', ['cannon', 'plateM', null]);
-  assert.deepEqual(validateDesign(tank), []);
+  assert.deepEqual(validateDesign(tank, true), []);
   const heli = D('heli', 'gunship', 'rotor', ['flak', null]);
   const designs = [strato, tank, heli];
   const b = new Battle({ seed: 7, sides: [
@@ -106,7 +106,7 @@ const isBomb = (id: string | null) => !!id && !!MODULES.find((m) => m.id === id)
 test('giant and titan bombers: legal single-unit bombers, slower than the strato and too big to jink', () => {
   const strato = computeStats(D('strato', 'stratobomber', 'jet', ['bombs', 'bombs', 'bombs', 'mg']));
   for (const d of [STRAT, SFORT, DREAD]) {
-    assert.deepEqual(validateDesign(d), [], d.id);
+    assert.deepEqual(validateDesign(d, true), [], d.id);
     const s = computeStats(d);
     assert.equal(s.squad, 1, d.id);
     assert.equal(airRole(d), 'bomber', d.id);

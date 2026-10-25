@@ -1,0 +1,39 @@
+{
+ "b0": 0.0472,
+ "beta": {
+  "tough": 0.1311,
+  "dps": -0.1113,
+  "wall": 0.0799,
+  "armorBlock": -1.6204,
+  "range": 0.1697,
+  "splash": -0.0192,
+  "aa": -0.1204,
+  "airOnly": -0.693,
+  "ap": 0.2406,
+  "speed": 0.0581,
+  "flying": 0.2797,
+  "light": 0.117,
+  "big": -0.1899,
+  "melee": -0.9797,
+  "support": 1.9516
+ },
+ "center": {
+  "tough": 3.1717,
+  "dps": 0.7399,
+  "wall": 0.7348,
+  "armorBlock": 0.3316,
+  "range": 0.0986,
+  "splash": 0.33,
+  "aa": 0.5795,
+  "airOnly": 0.0188,
+  "ap": 0.4256,
+  "speed": 0.659,
+  "flying": 0.0926,
+  "light": 0.1667,
+  "big": 0.2407,
+  "melee": 0.0096,
+  "support": 0.0101
+ },
+ "min": 0.6,
+ "max": 2
+}

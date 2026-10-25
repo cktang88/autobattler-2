@@ -4,7 +4,7 @@
 import { DECK_SIZE } from '../shared/match.ts';
 import { STARTER_DESIGNS } from '../shared/starters.ts';
 import { MAX_LOAD, computeStats, slotError, validateDesign } from '../shared/stats.ts';
-import { CHASSIS_BY_ID, MODULE_BY_ID, pairingError } from '../shared/parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, pairingError } from '../shared/parts.ts';
 import type { Design } from '../shared/types.ts';
 import { loadDeckIds, loadDesigns, saveDeckIds, saveDesigns } from './storage.ts';
 import { firstLegalMobility } from './ui/garage-fit.ts';
@@ -41,7 +41,7 @@ export function repairDesign(raw: unknown): Design | null {
   const c = typeof x.chassis === 'string' ? CHASSIS_BY_ID.get(x.chassis) : undefined;
   if (!c) return null;
   const name = (typeof x.name === 'string' ? x.name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trim() : '') || 'Untitled';
-  const mobility = typeof x.mobility === 'string' && !pairingError(c.id, x.mobility) ? x.mobility : firstLegalMobility(c.id);
+  const mobility = typeof x.mobility === 'string' && !pairingError(c.id, x.mobility) && !MOBILITY_BY_ID.get(x.mobility)?.retired ? x.mobility : firstLegalMobility(c.id);
   const mounts: (string | null)[] = c.mounts.map(() => null);
   const left: string[] = [];
   (Array.isArray(x.mounts) ? x.mounts : []).forEach((id, i) => {

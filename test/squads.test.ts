@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
-import { SQUAD_TIERS, computeStats, squadFor, squadOf, statsWithSquad } from '../src/shared/stats.ts';
+import { SQUAD_TIERS, analyticStats, computeStats, squadFor, squadOf, statsWithSquad } from '../src/shared/stats.ts';
 import { blockDims, normSpacing, placementUnitCenters, squadLayout, squadOffsets, MAX_SPACING } from '../src/shared/grid.ts';
 import { MAX_BLOCKS, MAX_SIM_UNITS, RULES_VERSION, designCost, migrateMatch, newMatch, newPlayer, placementValue, shapeOf, upgradeCost, validateDeploy } from '../src/shared/match.ts';
 import { profile } from '../src/shared/ai.ts';
@@ -31,12 +31,14 @@ test('squad tiers: cheap light units 16 to a block, pricier ones 8 or 4; medium 
   // the starters
   const sq = Object.fromEntries(STARTER_DESIGNS.map((d) => [d.name, computeStats(d).squad]));
   assert.deepEqual([sq['Buzzsaw'], sq['Torchbug'], sq['Gnasher'], sq['Tank Hunter'], sq['Lancer'], sq['Hornet']], [16, 16, 8, 4, 4, 16]);
-  assert.deepEqual([sq['Missile Spire'], sq['Strafer'], sq['Tankbuster'], sq['Bulwark'], sq['Skyguard']], [2, 2, 2, 1, 1]);
+  assert.deepEqual([sq['Missile Spire'], sq['Strafer'], sq['Tankbuster'], sq['Bulwark'], sq['Skyguard']], [1, 2, 2, 1, 1]); // (Spire: spider legs since the anchor was retired)
   assert.equal(computeStats(EIGHT).squad, 8, 'test design EIGHT');
   for (const d of STARTER_DESIGNS) if (computeStats(d).size > 2) assert.equal(computeStats(d).squad, 1, d.name);
-  // a squad's unit price (one decimal shown) sits in its tier
+  // a squad's unit price (one decimal shown) sits in its tier -- the analytic price: the team-value correction (stats.ts
+  // TEAM_FIT) changes what a block costs, never how many units it holds
   for (const d of STARTER_DESIGNS) {
-    const s = computeStats(d);
+    const s = analyticStats(d);
+    assert.equal(computeStats(d).squad, s.squad, d.name);
     const tiers = SQUAD_TIERS[s.size];
     if (!tiers) continue;
     const i = tiers.findIndex((t) => t[1] === s.squad);

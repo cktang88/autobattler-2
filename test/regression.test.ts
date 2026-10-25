@@ -79,7 +79,7 @@ test('slow and disarm build against max hp; slow caps at 60%', () => {
 test('an up shield blocks status effects (paralysis drains it); hardened systems are immune', () => {
   const shieldD = D('shieldy', 'warden', 'halftrack', ['shield', 'mg']);
   const hardD = D('hard', 'raider', 'halftrack', ['mg', 'hardened']);
-  assert.deepEqual(validateDesign(shieldD), []);
+  assert.deepEqual(validateDesign(shieldD, true), []);
   const designs = [shieldD, hardD, D('shot', 'warden', 'halftrack', ['mg', null])];
   const b = new Battle({ seed: 1, sides: [{ designs, units: [pl('shot')] }, { designs, units: [pl('shieldy', { x: 10 }), pl('hard', { uid: 2, x: 60 })] }] });
   const sh = b.units.find((u) => u.design.id === 'shieldy')!, hd = b.units.find((u) => u.design.id === 'hard')!;
@@ -161,6 +161,7 @@ test('no chassis art overhangs its footprint, and every mount sits on the hull',
 test('every chassis / mobility / module the designer allows validates and has finite stats', () => {
   let n = 0;
   for (const c of CHASSIS) for (const m of MOBILITY) {
+    if (m.retired) continue; // not offered in the designer
     if (pairingError(c.id, m.id)) continue;
     for (let i = 0; i < c.mounts.length; i++) for (const mod of MODULES) {
       if (slotError(c, m.id, i, mod)) continue;
@@ -187,8 +188,8 @@ test('a long hull nosed into a big emplacement pivots so its rear-mounted short 
   // for the rest of the battle, pushing on a hull that can't move
   const train = D('train', 'centipede', 'halftrack', [null, null, 'shieldH', 'flamer']);
   const fort = D('fort', 'leviathan', 'anchor', [null, null, 'flak', null]); // air-only gun: can't shoot back
-  assert.deepEqual(validateDesign(train), []);
-  assert.deepEqual(validateDesign(fort), []);
+  assert.deepEqual(validateDesign(train, true), []);
+  assert.deepEqual(validateDesign(fort, true), []);
   const { b, e } = duel([train, fort], { designId: 'train', kite: false }, { designId: 'fort' }, 20);
   const hp0 = e.hp;
   for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) b.step();
@@ -308,8 +309,8 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   // A kiter parked at its range edge then sat with no target for the rest of the battle.
   const flame = D('flametower', 'warden', 'anchor', ['flamer', null]);
   const cit = D('cit', 'citadel', 'anchor', [null, null, null, 'flak', null, null]); // 8 x 7 box
-  assert.deepEqual(validateDesign(flame), []);
-  assert.deepEqual(validateDesign(cit), []);
+  assert.deepEqual(validateDesign(flame, true), []);
+  assert.deepEqual(validateDesign(cit, true), []);
   const b = new Battle({ seed: 1, sides: [{ designs: [flame, cit], units: [pl('flametower')] }, { designs: [flame, cit], units: [pl('cit')] }] });
   const s = b.units[0], t = b.units.find((u) => u.side === 1)!; // (the cheap flame tower is a 4-squad: its first unit)
   type W = { range: number; ox: number; oy: number };
@@ -332,7 +333,7 @@ test('a long reload is not a quiet stalemate: two nuke launchers trade shots pas
   // the quiet end (nothing moved, fired or got hurt for 10 s) cut the duel at ~20 s as a draw, while both 20 s-reload
   // launchers still held a live target and were about to fire again
   const nuker = D('nuker', 'titan', 'anchor', ['tactnuke', null, null, null, null]);
-  assert.deepEqual(validateDesign(nuker), []);
+  assert.deepEqual(validateDesign(nuker, true), []);
   const { b } = duel([nuker], { designId: 'nuker' }, { designId: 'nuker' }, 30);
   while (!b.done) b.step();
   const s = b.summary();
@@ -346,8 +347,8 @@ test('overkill prevention does not let one point-defense laser swat a whole miss
   // down, so the squad never finished a nearly dead target
   const hunter = D('hunter', 'raider', 'legs', ['atgm', 'atgm']);
   const fort = D('fort', 'bastion', 'anchor', ['pointdef', 'plateH', null]);
-  assert.deepEqual(validateDesign(hunter), []);
-  assert.deepEqual(validateDesign(fort), []);
+  assert.deepEqual(validateDesign(hunter, true), []);
+  assert.deepEqual(validateDesign(fort, true), []);
   for (const dx of [3, 9, 11]) {
     const b = new Battle({ seed: 1, sides: [{ designs: [hunter, fort], units: [pl('hunter', { kite: false, stance: 'holdPos' }), pl('hunter', { uid: 2, x: 44, kite: false, stance: 'holdPos' })] }, { designs: [hunter, fort], units: [pl('fort')] }] });
     // two squads of hunters (squads size by unit price) vs the fort
@@ -365,8 +366,8 @@ test('a fire-on-move walker with a gun and a melee weapon closes to contact and 
   // with a gun plus a buzzsaw or titan fist parked out of reach and never swung (treads closed in fine)
   const walker = D('sawwalker', 'strider', 'legs', ['autocannon', 'buzzsaw', null]);
   const wall = D('sawwall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back
-  assert.deepEqual(validateDesign(walker), []);
-  assert.deepEqual(validateDesign(wall), []);
+  assert.deepEqual(validateDesign(walker, true), []);
+  assert.deepEqual(validateDesign(wall, true), []);
   const { b, k } = duel([walker, wall], { designId: 'sawwalker', kite: false }, { designId: 'sawwall' }, 20);
   let swings = 0;
   for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
@@ -381,7 +382,7 @@ test('a fire-on-move titan whose guns sit behind its centre keeps closing until 
   // so the walker parked at 70% of the laser's range with every gun out of reach and never fired
   const titan = D('reartitan', 'titan', 'titanlegs', ['shotgun', 'twinmg', 'shotgun', 'laser', 'mg']);
   const wall = D('rearwall', 'bastion', 'anchor', ['flak', 'plateM', 'plateM']); // air-only gun: can't shoot back
-  assert.deepEqual(validateDesign(titan), []);
+  assert.deepEqual(validateDesign(titan, true), []);
   const { b, k, e } = duel([titan, wall], { designId: 'reartitan', kite: false }, { designId: 'rearwall' }, 25);
   let shots = 0;
   for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
@@ -396,7 +397,7 @@ test('the contact pivot swings a gun that can fire at contact range, not a longe
   // mounted near the centre, so no pivot at all), although its 8-cell minimum range never lets it fire there
   const train = D('trainH', 'centipede', 'halftrack', ['howitzer', null, 'shieldH', 'flamer']);
   const fort = D('fort', 'leviathan', 'anchor', [null, null, 'flak', null]);
-  assert.deepEqual(validateDesign(train), []);
+  assert.deepEqual(validateDesign(train, true), []);
   const { b, k } = duel([train, fort], { designId: 'trainH', kite: false, focus: false }, { designId: 'fort' }, 20);
   let flames = 0;
   for (let i = 0; i < 40 * TICK_RATE && !b.done; i++) {
@@ -423,7 +424,7 @@ test('blocks that escort each other (A -> B, B -> A) fight normally instead of h
 test('server input checks accept every legal design: the 10-mount superfortress, a full board of upgrades', async () => {
   const { sanitizeDeck, sanitizeGarage, sanitizeAction } = await import('../src/server/validate.ts');
   const sf = D('sf', 'superfortress', 'jet', ['bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'bombs', 'mg', 'mg', null, null]);
-  assert.deepEqual(validateDesign(sf), []);
+  assert.deepEqual(validateDesign(sf, true), []);
   // the server used to cap mount lists at 8: a deck with one was a 400, and a garage with one failed to sync at all
   assert.equal(sanitizeDeck([sf])[0].mounts.length, 10);
   assert.deepEqual(sanitizeGarage({ designs: [sf], deck: ['sf'] }).deck, ['sf']);

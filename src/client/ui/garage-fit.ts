@@ -6,7 +6,7 @@ import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CHASSIS, MOBILITY, MOBILITY_BY_ID, MODULE_BY_ID, MOUNT_RANK, chassisDomain, pairingError } from '../../shared/parts.ts';
 import type { ChassisDef, Design, Domain, ModuleDef } from '../../shared/types.ts';
 
-export const firstLegalMobility = (chassisId: string) => MOBILITY.find((m) => !pairingError(chassisId, m.id))?.id ?? MOBILITY[0].id;
+export const firstLegalMobility = (chassisId: string) => MOBILITY.find((m) => !m.retired && !pairingError(chassisId, m.id))?.id ?? MOBILITY[0].id;
 
 /** why a module can't be mounted with this mobility (null = fine) */
 export function reqReason(mod: { requires?: 'air' | 'ground' }, mobility: string): string | null {

@@ -13,11 +13,11 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { computeStats, levelMult, MAX_LEVEL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
+import { analyticStats, computeStats, levelMult, MAX_LEVEL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
 import type { BlockShape } from './grid.ts';
-import { MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadLayout } from './grid.ts';
+import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadLayout } from './grid.ts';
 import { mixSeed } from './rng.ts';
-import { MODULE_BY_ID } from './parts.ts';
+import { MOBILITY, MOBILITY_BY_ID, MODULE_BY_ID, pairingError } from './parts.ts';
 import { runBattle } from './sim/battle.ts';
 import type { BattleInput } from './sim/types.ts';
 import { STANCES, START_DELAYS, TARGET_PRIORITIES } from './types.ts';
@@ -39,14 +39,18 @@ export const MAX_PLAYER_NAME = 24;
 /** Rules / price-scale version stamped on every new match (MatchState.rules).
  *  2: prices are raw cost / PRICE_DIV (5) -- supply 600 + 120 per round instead of 3000 + 600.
  *  3: light squads are 16, 8 or 4 units by per-unit price (stats.ts squadFor) instead of always 16.
- *  4: medium (size-2) designs come 4, 2 or 1 to a block by per-unit price, likewise; 60 blocks per side instead of 40. */
-export const RULES_VERSION = 4;
+ *  4: medium (size-2) designs come 4, 2 or 1 to a block by per-unit price, likewise; 60 blocks per side instead of 40.
+ *  5: the Anchor Mount is retired (decks repaired, retireParts) and prices are monotone (adding a part never makes a
+ *     design cheaper; stats.ts). Squad sizes come from the analytic price, so repricing never reshapes a block. */
+export const RULES_VERSION = 5;
 /** First rules version on the / 5 price scale. */
 const RESCALED_RULES = 2;
 /** Units per light block before rules 3. */
 const LEGACY_SQUAD = 16;
 /** First rules version with medium squads. */
 const MEDIUM_SQUAD_RULES = 4;
+/** First rules version with team-value prices. */
+const TEAM_VALUE_RULES = 5;
 /** When the price / 5 rescale shipped (commit 4a9c201). An unmarked match created before it ran on 5x supply. */
 export const PRICE_RESCALE_AT = Date.UTC(2026, 9, 14, 2, 48, 53);
 const OLD_PRICE_DIV = 5;
@@ -123,6 +127,12 @@ export function isPreRescaleMatch(m: MatchState): boolean {
  *  - Before rules 4 every medium block was 1 unit. One unit can't be split into a squad, so a board block of a design
  *    that is now a 2- or 4-unit squad is sold back at the full supply it cost (price + upgrades, single-unit prices)
  *    and leaves the board (escorts of it are dropped); the player rebuys it as squads.
+ *  - Before rules 5 prices had no monotone floor. Matches in progress simply take the new prices (no refunds for
+ *    the price change, nothing frozen). Squad sizes still come from the analytic price, so repricing reshapes no
+ *    block; a block whose shape did change anyway (a deck design moved off a retired drive, retireParts, or a squad
+ *    that differs from its analytic one) is re-checked by relegalizeBoard: kept if still legal, else moved to the
+ *    nearest free legal spot, else (fits nowhere, or would break MAX_BLOCKS / MAX_SIM_UNITS) sold back at its full
+ *    current value (price + upgrades) and dropped from the board (escorts of it are cleared).
  *  Past rounds' records are left as they were. */
 export function migrateMatch(m: MatchState): boolean {
   if (m.rules !== undefined && m.rules >= RULES_VERSION) return false;
@@ -131,6 +141,7 @@ export function migrateMatch(m: MatchState): boolean {
   if (m.status !== 'done') for (const p of m.players) {
     if (from < 3) splitLegacySquads(p);
     if (from < MEDIUM_SQUAD_RULES) refundMediumSingles(p);
+    if (from < TEAM_VALUE_RULES) relegalizeBoard(p, retireParts(p));
   }
   m.rules = RULES_VERSION;
   return true;
@@ -185,6 +196,70 @@ function refundMediumSingles(p: PlayerState): void {
   if (!gone.size) return;
   p.board = p.board.filter((u) => !gone.has(u.uid));
   for (const u of p.board) if (u.escort !== undefined && gone.has(u.escort)) delete u.escort;
+}
+
+/** Rules 5 retired the Anchor Mount: deck designs on a retired drive move to the first legal current one (heaviest
+ *  modules dropped while overloaded). Returns the ids of the designs changed (their blocks get re-checked). */
+export function retireParts(p: PlayerState): Set<string> {
+  const changed = new Set<string>();
+  for (const d of p.deck) {
+    if (!d || !MOBILITY_BY_ID.get(d.mobility)?.retired) continue;
+    const mob = MOBILITY.find((m) => !m.retired && !pairingError(d.chassis, m.id));
+    if (!mob) continue;
+    d.mobility = mob.id;
+    while (validateDesign(d).length) {
+      let k = -1;
+      d.mounts.forEach((id, i) => { if (id && (k < 0 || (MODULE_BY_ID.get(id)?.weight ?? 0) > (MODULE_BY_ID.get(d.mounts[k]!)?.weight ?? 0))) k = i; });
+      if (k < 0 || d.mounts.filter(Boolean).length <= 1) break;
+      d.mounts[k] = null;
+    }
+    changed.add(d.id);
+  }
+  return changed;
+}
+
+/** Make a board legal again under the current block shapes (see migrateMatch, rules 5). Blocks of designs whose
+ *  squad size the repricing changed are re-checked in board order: kept where they are if legal, else moved to the
+ *  nearest free spot, else sold back. Every other block stays exactly as it was. */
+export function relegalizeBoard(p: PlayerState, force: ReadonlySet<string> = new Set()): void {
+  const designs = new Map(p.deck.map((d) => [d.id, d] as const));
+  const kept: Placement[] = [];
+  const fps: { x: number; y: number; spacing?: number; rot?: boolean; shape: BlockShape }[] = [];
+  const gone = new Set<number>();
+  let units = 0;
+  for (const u of p.board) {
+    const d = designs.get(u.designId);
+    const shape = shapeOf(d);
+    // only blocks whose squad the repricing changed are touched; the rest stay exactly as they were (obstacles)
+    let changed = false;
+    if (d) try { changed = force.has(d.id) || analyticStats(d).squad !== shape.squad; } catch { /* unpriceable: leave it */ }
+    if (!changed) { kept.push(u); fps.push({ x: u.x, y: u.y, spacing: u.spacing, rot: u.rot, shape }); units += shape.squad; continue; }
+    if (!hasSpacing(shape)) { if (u.spacing) u.spacing = 0; if (u.rot) delete u.rot; }
+    const fits = (x: number, y: number) => blockInZone(x, y, shape, u.spacing, !!u.rot) && !fps.some((f) => blocksOverlap({ x, y, spacing: u.spacing, rot: u.rot }, shape, f, f.shape));
+    let spot: { x: number; y: number } | null = null;
+    if (kept.length < MAX_BLOCKS && units + shape.squad <= MAX_SIM_UNITS) {
+      if (fits(u.x, u.y)) spot = { x: u.x, y: u.y };
+      else {
+        // nearest free spot (city-block distance, then row, then column: deterministic)
+        let best = Infinity;
+        for (let y = 0; y < DEPLOY_D; y++) for (let x = 0; x < DEPLOY_W; x++) {
+          const dist = Math.abs(x - u.x) + Math.abs(y - u.y);
+          if (dist < best && fits(x, y)) { best = dist; spot = { x, y }; }
+        }
+      }
+    }
+    if (!spot) {
+      gone.add(u.uid);
+      if (d) p.supply += placementValue(d, u.level);
+      continue;
+    }
+    u.x = spot.x; u.y = spot.y;
+    kept.push(u);
+    fps.push({ x: u.x, y: u.y, spacing: u.spacing, rot: u.rot, shape });
+    units += shape.squad;
+  }
+  p.board = kept;
+  if (gone.size) for (const u of p.board) if (u.escort !== undefined && gone.has(u.escort)) delete u.escort;
 }
 
 // ---------------------------------------------------------------------------------------------

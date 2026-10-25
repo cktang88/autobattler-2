@@ -122,6 +122,9 @@ export const GIANT_JET_CAL: Record<number, number> = { 4: 1.05, 5: 1.17 };
 /** reference enemy armor mix used to rate weapons */
 const REF_ARMOR = [0, 5, 12];
 const RANGE_EXP = 1.0;
+/** Extra value of armour penetration beyond REF_ARMOR's 0 / 5 / 12: front lines run 12-37 armour (scripts/teamvalue.ts
+ *  found full-AP guns underpriced). Mutable for trial runs (balance.ts BAL_APK). */
+export const AP_VALUE = { k: 0 };
 /** Range (cells) rated 1.0. Weapon ranges were stretched ~1.3x for the 96 x 92 field (direct fire 6 -> 7.5 cells);
  *  the reference moved with them so a gun's price is unchanged by the stretch. Repair beams kept their range, so
  *  their MODULE_CAL was scaled by 6.5 / 5 to keep their price; weapon MODULE_CAL re-fitted with fit_cal.py. */
@@ -242,7 +245,8 @@ const PD_PTS = 23;
  *  this share of a lone carrier's (the squad's union covers ~2 lone carriers' worth of ground). */
 export const auraSquadShare = (squad: number) => (squad > 1 ? Math.min(1, 2 / squad) : 1);
 
-/** Squads: units per block by hull size and per-unit price (supply). Cheap units come in big blocks, pricier ones in
+/** Squads: units per block by hull size and per-unit price (supply; the analytic price, before the team-value
+ *  correction, so repricing never reshapes a block). Cheap units come in big blocks, pricier ones in
  *  smaller blocks so one purchase stays affordable: per size, [max per-unit price, squad] tiers. Light (size-1) hulls
  *  come 16 / 8 / 4 to a block, medium (size-2) ones 4 / 2 / 1 (a ~30-supply turret is a 4-block, not a 30-supply
  *  single); sizes 3+ are single units. Per-unit stats and price don't depend on the tier (except the SQUAD_K factor
@@ -317,6 +321,7 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   if (w.shred) v += (w.shred / cyc) * 6; // stripped armour helps every other gun on the target
   if (w.impulse) v += (Math.abs(w.impulse) / cyc) * 6 * (1 + 0.6 * (w.splash ?? 0));
   v *= hitFactor(w);
+  v *= 1 + AP_VALUE.k * (w.ap ?? 0); // armour penetration vs real front-line armour (see AP_VALUE)
   if (w.projectile === 'missile') v *= 1.1; // homing: rarely misses
   if (w.minRange) v *= 0.9;
   // versatility costs: a gun that hits both ground and air pays a premium; ground-only or air-only guns get more
@@ -325,17 +330,93 @@ export function weaponValue(w: ModuleDef, rangeMult = 1): number {
   return v * coverage * rangeF * cal(w.id);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Team value. The power term above prices a unit as if it fought alone. In a real army a unit is worth what it adds
+// to the team: a 13k-hp wall with a token gun barely scratches anything alone but lets a gun line behind it win, and
+// a cheap hull carrying a heavy gun plus a light one covers every target type. scripts/teamvalue.ts measures what
+// ~80 reference designs are worth AS PART OF ~30 context armies (baseball WAR / basketball RAPM style: the supply
+// of a stock filler design each one is worth when swapped in, vs a varied set of opponents; synergy with the
+// context shared Shapley-style), aggregates each design to
+//     price* = mean(context value) + 0.5 * (P80(context value) - mean)
+// (halfway between its average-team and best-fit-team value), and distils that into this instant correction:
+//     price = analytic price x exp(b0 + sum beta_i * (feature_i - center_i)),   clamped to [min, max]
+// fitted by ridge regression of log(price* / analytic) with leave-designs-out CV (shrinks toward 1, the analytic
+// price). Features are physical (from the numbers above, before this correction), so any player design gets a price
+// at once. Re-fit with `node scripts/teamvalue.ts all` after changing the sim, parts or the analytic model.
+// ---------------------------------------------------------------------------------------------
+
+/** typical damage per hit of the guns a unit meets (7.62 mm .. 120 mm), for the armour-block feature */
+const TYPICAL_HITS = [8, 16, 32, 55, 95, 190];
+/** Team-value features (all from the analytic numbers, u = analytic unit price):
+ *  tough ln(ehp / u) · dps ln(offense / u) (their difference is the HP:DPS tankiness ratio) · wall: tankiness
+ *  past ehp / offense = 55 (near-weaponless walls) · armorBlock: share of typical hits flat armour takes off ·
+ *  range ln(range / 6.5) · splash, aa (can hit air), airOnly (can't hit ground), ap (armour penetration): offense-weighted weapon shares ·
+ *  speed (cells/s / 3) · flying, light (size 1), big (size >= 4) · melee: offense share · support: aura share. */
+export const TEAM_FEATURES = ['tough', 'dps', 'wall', 'armorBlock', 'range', 'splash', 'aa', 'airOnly', 'ap', 'speed', 'flying', 'light', 'big', 'melee', 'support'] as const;
+export type TeamFeature = typeof TEAM_FEATURES[number];
+/** Team-value correction switch. OFF in the shipped game: prices are the analytic ones (plus the monotone floor).
+ *  The fitted constants below are kept as tooling (scripts/teamvalue.ts, op-check / balance TV_FIT, TV_ON=1). */
+export const TEAM_VALUE = { on: false };
+/** Fitted team-value constants (scripts/teamvalue.ts fit; written to scripts/teamvalue-fit.json). Used only while
+ *  TEAM_VALUE.on. */
+export const TEAM_FIT: { b0: number; beta: Record<TeamFeature, number>; center: Record<TeamFeature, number>; min: number; max: number } = {
+  b0: 0.0472,
+  beta: { tough: 0.1311, dps: -0.1113, wall: 0.0799, armorBlock: -1.6204, range: 0.1697, splash: -0.0192, aa: -0.1204, airOnly: -0.693, ap: 0.2406, speed: 0.0581, flying: 0.2797, light: 0.117, big: -0.1899, melee: -0.9797, support: 1.9516 },
+  center: { tough: 3.1717, dps: 0.7399, wall: 0.7348, armorBlock: 0.3316, range: 0.0986, splash: 0.33, aa: 0.5795, airOnly: 0.0188, ap: 0.4256, speed: 0.659, flying: 0.0926, light: 0.1667, big: 0.2407, melee: 0.0096, support: 0.0101 },
+  min: 0.6,
+  max: 2,
+};
+/** Team-value multiplier for a feature vector (clamped to [TEAM_FIT.min, TEAM_FIT.max]). */
+export function teamMultiplier(f: Record<TeamFeature, number>): number {
+  let x = TEAM_FIT.b0;
+  for (const k of TEAM_FEATURES) x += TEAM_FIT.beta[k] * (f[k] - TEAM_FIT.center[k]);
+  return Math.min(TEAM_FIT.max, Math.max(TEAM_FIT.min, Math.exp(x)));
+}
+/** Armour-block feature: average share of a typical hit that the hull's flat armour takes off (sim: at most 85%). */
+export function armorBlock(armor: number): number {
+  return TYPICAL_HITS.reduce((t, h) => t + Math.min(0.85, Math.max(0, armor) / h), 0) / TYPICAL_HITS.length;
+}
+
+/** Monotone price floor: price(design) >= price(design minus any module), so adding a weapon (or any part) never
+ *  makes a design cheaper. Memoised per chassis / drive / module multiset (mount order doesn't change the price). */
+const teamBaseCache = new Map<string, number>();
+const priceKey = (d: Design) => `${d.chassis}|${d.mobility}|${d.mounts.filter((x) => x).sort().join(',')}`;
+/** Forget memoised prices (scripts that change the price constants at run time call this). */
+export function clearPriceCache(): void { teamBaseCache.clear(); }
+function teamBaseOf(d: Design): number {
+  const k = priceKey(d);
+  let v = teamBaseCache.get(k);
+  if (v === undefined) {
+    v = statsFor(d)._teamBase;
+    if (teamBaseCache.size > 100000) teamBaseCache.clear();
+    teamBaseCache.set(k, v);
+  }
+  return v;
+}
+
 export function computeStats(d: Design): UnitStats {
-  return statsFor(d);
+  const { _teamBase, ...s } = statsFor(d);
+  void _teamBase;
+  return s;
 }
 
 /** Stats of a light / medium design forced into a `squad`-unit block (legacy pricing for rules migrations / analysis
  *  scripts); the game itself always lets squadFor decide. */
 export function statsWithSquad(d: Design, squad: number): UnitStats {
-  return statsFor(d, squad);
+  const { _teamBase, ...s } = statsFor(d, squad);
+  void _teamBase;
+  return s;
 }
 
-function statsFor(d: Design, forceSquad?: number): UnitStats {
+/** Stats under the analytic price alone (no team-value correction, no monotone floor): the rules-4 prices, for the
+ *  rules-5 migration (match.ts) and analysis scripts. */
+export function analyticStats(d: Design): UnitStats {
+  const { _teamBase, ...s } = statsFor(d, undefined, true);
+  void _teamBase;
+  return s;
+}
+
+function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats & { _teamBase: number } {
   const c = CHASSIS_BY_ID.get(d.chassis);
   const m = MOBILITY_BY_ID.get(d.mobility);
   if (!c || !m) throw new Error(`bad design parts: ${d.chassis}/${d.mobility}`);
@@ -366,7 +447,6 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
     shield += mod.shield ?? 0;
     heal += mod.heal ?? 0;
     dps += weaponDps(mod);
-    if (mod.gyro && !traits.includes('fireOnMove')) traits.push('fireOnMove');
     if (mod.cloak && !traits.includes(mod.cloak)) traits.push(mod.cloak);
     if (mod.hardened && !traits.includes('hardened')) traits.push('hardened');
   }
@@ -379,7 +459,8 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   const jet = d.mobility === 'jet';
   const sizeSpeed = (jet ? [1, 1, 0.95, 0.8, 0.68] : [1, 0.95, 0.85, 0.75, 0.65])[size - 1];
   const loadF = jet && load > 1 ? Math.max(0.5, 1 - (load - 1) * 0.6) : loadSpeedFactor(load);
-  const speed = m.kind === 'static' ? 0 : m.speed * loadF * sizeSpeed * (1 + speedBonus);
+  // swift frames: +20% move speed
+  const speed = m.kind === 'static' ? 0 : m.speed * loadF * sizeSpeed * (1 + speedBonus) * (c.traits.includes('swift') ? 1.2 : 1);
   // body turn rate: mobility base x hull agility x size inertia, slowed when overloaded (heavier armament = slower)
   const sizeTurn = [1, 0.95, 0.85, 0.75, 0.65][size - 1];
   const turn = m.turn * c.agility * sizeTurn * (load > 1 ? Math.max(0.5, 1 - (load - 1)) : 1);
@@ -394,7 +475,18 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   // bomb bays rearm only over the own lines: a jet is back for its next run in seconds, a hovering bomber (rotor / grav
   // lift) crawls home and back between loads, so its bays drop far fewer bombs per fight (HOVER_BOMB_K)
   const bombK = flying && !jet ? HOVER_BOMB_K : 1;
-  for (const mod of mods) offense += weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
+  let splashW = 0, airW = 0, airOnlyW = 0, meleeW = 0, apW = 0; // offense-weighted weapon traits (team-value features)
+  for (const mod of mods) {
+    const wv = weaponValue(mod, rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
+    offense += wv;
+    if (mod.kind !== 'weapon' || mod.heal) continue;
+    splashW += wv * Math.min(2, mod.splash ?? 0);
+    if (mod.targetsAir) airW += wv;
+    if (mod.targetsAir && !mod.targetsGround) airOnlyW += wv;
+    apW += wv * (mod.ap ?? 0);
+    if (mod.projectile === 'melee') meleeW += wv;
+  }
+  const weaponW = Math.max(1e-9, offense);
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
   offense *= fireRate;
   let reactiveHp = 0;
@@ -434,18 +526,39 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
   // long reach shelters a fragile hull: artillery behind a front line is rarely shot, so a paper-thin carriage with a
   // mortar is priced as if it were at least moderately tough (sturdy hulls are already above the floor: no change)
   ehp = Math.max(ehp, SHELTER_EHP * Math.min(1, Math.max(0, (range - SHELTER_FROM) / SHELTER_SPAN)));
-  const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('fireOnMove') ? 0.05 : 0) + (traits.includes('leap') ? 0.05 : 0);
+  const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed + (traits.includes('leap') ? 0.05 : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
   const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1);
-  let base = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
+  const rawBase = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
+  // team value (see TEAM_FIT): features from the analytic numbers, then the monotone floor over every sub-design
+  const u0 = rawBase / PRICE_DIV;
+  const features: Record<TeamFeature, number> = {
+    tough: Math.log(ehp / u0), dps: Math.log(offense / u0), wall: Math.max(0, Math.log(ehp / offense) - 4), armorBlock: armorBlock(armor),
+    range: Math.log(Math.max(1, range) / RANGE_REF), splash: splashW / weaponW, aa: airW / weaponW, airOnly: airOnlyW / weaponW, ap: apW / weaponW,
+    speed: speed / 3, flying: flying ? 1 : 0, light: size === 1 ? 1 : 0, big: size >= 4 ? 1 : 0,
+    melee: meleeW / weaponW, support: 0,
+  };
+  const supportRaw = SUPPORT_K * (support + interceptors);
+  features.support = supportRaw / (supportRaw + rawBase);
+  const teamMult = analytic || !TEAM_VALUE.on ? 1 : teamMultiplier(features);
+  let base = rawBase * teamMult;
+  if (!analytic) for (let i = 0; i < d.mounts.length; i++) {
+    if (!d.mounts[i]) continue;
+    const sub = { ...d, mounts: d.mounts.map((x, j) => (j === i ? null : x)) };
+    base = Math.max(base, teamBaseOf(sub));
+  }
+  const teamBase = base;
   const extraFor = (sq: number) => SUPPORT_K * (support * auraSquadShare(sq) + interceptors);
-  const unitRaw = (sq: number) => base * squadK(size, sq) + extraFor(sq);
+  // the squad tier comes from the ANALYTIC unit price: the team-value correction changes what a block costs, not how
+  // many units it holds (squads, block footprints and every board stay as they were; squadK isn't compounded with it)
+  const unitRaw = (sq: number) => rawBase * squadK(size, sq) + extraFor(sq);
   const squad = forceSquad && SQUAD_TIERS[size] ? forceSquad : squadFor(size, (sq) => unitRaw(sq) / PRICE_DIV);
   const extra = extraFor(squad);
   base *= squadK(size, squad);
   // the block price is the only rounded number: every per-unit figure below is derived from it or sums to it
   const cost = roundCost((base + extra) * squad);
-  const priceParts = Math.min(base, PARTS_WEIGHT * partsCost * classK) / PRICE_DIV;
+  // the team correction scales the parts and power rows alike (base / rawBase), so the breakdown still adds up
+  const priceParts = Math.min(base, PARTS_WEIGHT * partsCost * classK * (teamBase / rawBase)) / PRICE_DIV;
 
   return {
     size, fw: c.footprint?.[0] ?? size, fh: c.footprint?.[1] ?? size, hp: Math.round(hp), armor, weight: Math.round(weight * 10) / 10, capacity, load,
@@ -454,6 +567,7 @@ function statsFor(d: Design, forceSquad?: number): UnitStats {
     flying, isStatic, range: Math.round(range * 10) / 10,
     dps: Math.round(dps), shield, heal, traits, rangeMult, spreadMult,
     partsCost, offense: Math.round(offense), ehp: Math.round(ehp), power: Math.round(power),
+    teamMult: teamBase / rawBase, teamFeatures: features, _teamBase: teamBase,
   };
 }
 
@@ -510,13 +624,15 @@ export function slotError(c: ChassisDef, mobilityId: string | null | undefined, 
 }
 
 /** Returns a list of problems; empty means the design is legal. */
-export function validateDesign(d: Design): string[] {
+/** `allowRetired`: accept retired parts (the Anchor Mount); only the sim does, so old records and tests still run. */
+export function validateDesign(d: Design, allowRetired = false): string[] {
   const errs: string[] = [];
   if (!d || typeof d !== 'object') return ['Not a design'];
   if (typeof d.id !== 'string' || !d.id || d.id.length > 40) errs.push('Bad id');
   if (typeof d.name !== 'string' || !d.name.trim() || d.name.length > 24) errs.push('Name must be 1-24 characters');
   const pe = pairingError(d.chassis, d.mobility);
   if (pe) { errs.push(pe); return errs; }
+  if (!allowRetired && MOBILITY_BY_ID.get(d.mobility)?.retired) { errs.push(`${MOBILITY_BY_ID.get(d.mobility)!.name} is no longer available`); return errs; }
   const c = CHASSIS_BY_ID.get(d.chassis)!;
   if (!Array.isArray(d.mounts) || d.mounts.length !== c.mounts.length) { errs.push('Mount count mismatch'); return errs; }
   let weapons = 0;
@@ -535,7 +651,7 @@ export function validateDesign(d: Design): string[] {
   return errs;
 }
 
-export const isValidDesign = (d: Design) => validateDesign(d).length === 0;
+export const isValidDesign = (d: Design) => validateDesign(d, true).length === 0;
 
 /** Units bought per block of a design (computeStats().squad; 1 for a design that can't be priced). */
 export function squadOf(d: Design): number {

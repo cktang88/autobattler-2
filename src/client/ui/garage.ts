@@ -17,7 +17,7 @@ import { slotError } from '../../shared/stats.ts';
 import { meleeSlots } from '../../shared/mountgeo.ts';
 import { CATEGORIES, CHASSIS, CHASSIS_BY_ID, DOMAINS, chassisDomain, mobilityDomain, MOBILITY, MOBILITY_BY_ID, MODULES, MODULE_BY_ID, ROLES, fitsMount, pairingError, MOUNT_RANK, MOUNT_LETTER, MOUNT_NAME, moduleRoles } from '../../shared/parts.ts';
 import * as kit from './kit.ts';
-import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
+import { AIR_ROLE_INFO, MAX_LOAD, PARTS_WEIGHT, POWER_K, PRICE_DIV, TEAM_VALUE, accuracyRating, airRole, computeStats, defaultOrders, fmtUnitPrice, loadSpeedFactor, validateDesign, weaponDps } from '../../shared/stats.ts';
 import type { ChassisDef, Design, Domain, MobilityDef, ModuleDef, MountClass, UnitStats } from '../../shared/types.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { TARGETS, THREATS, intelNumbers, percentile, referenceMeans, runMatchups, type IntelNumbers, type Matchup } from '../../shared/intel.ts';
@@ -198,7 +198,7 @@ const DOMAIN_BADGE: Record<Domain, string> = { ground: 'GND', jet: 'JET', heli: 
 const DOMAIN_ICON: Record<Domain, string> = { ground: 'raider', jet: 'strikejet', heli: 'gunship' };
 const DOMAIN_SHORT: Record<Domain, string> = { ground: 'Ground', jet: 'Jet aircraft', heli: 'Helicopter · VTOL' };
 const domainChassis = (dom: Domain) => CHASSIS.filter((c) => chassisDomain(c) === dom);
-const domainMobility = (dom: Domain) => MOBILITY.filter((m) => mobilityDomain(m) === dom);
+const domainMobility = (dom: Domain) => MOBILITY.filter((m) => !m.retired && mobilityDomain(m) === dom);
 const designDomain = (d: Design): Domain => { const c = CHASSIS_BY_ID.get(d.chassis); return c ? chassisDomain(c) : 'ground'; };
 
 function blankDesign(taken: string[], dom: Domain = 'ground'): Design {
@@ -2051,6 +2051,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           row('Parts complexity', `${sv(parts)} supply`),
           row('Combat power', `${sv(pow)} supply`),
           sup >= 0.05 ? row('Support (auras, point defense)', `${sv(sup)} supply`) : null,
+          TEAM_VALUE.on && Math.abs(s.teamMult - 1) >= 0.005 ? row('Team value (in parts + power)', `×${s.teamMult.toFixed(2)}`) : null,
           Math.abs(rounding) >= 0.05 ? row('Rounding', `${rounding > 0 ? '+' : '−'}${sv(Math.abs(rounding))}`) : null,
           row(q > 1 ? 'Combat power rating (each)' : 'Combat power rating', String(s.power), d('power')),
           row(q > 1 ? 'Offense rating (each)' : 'Offense rating', String(s.offense), d('offense')),
