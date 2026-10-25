@@ -15,5 +15,6 @@ export const TILT_TAN = Math.tan(RAD);
 
 /** Hull body height (cells) of a ground unit of chassis size S: the extruded side wall. */
 export const hullHeight = (S: number): number => 0.38 * Math.pow(Math.max(0.5, S), 0.85);
-/** Flight height (cells) of a flyer of chassis size S. */
-export const flyHeight = (S: number): number => 0.7 + 0.3 * S;
+/** Flight height (cells) of a flyer of chassis size S: jets (fighters, bombers) cruise well above helicopters and
+ *  grav-lifters, which hover low over the fight. */
+export const flyHeight = (S: number, jet = false): number => (jet ? 1.6 + 0.45 * S : 0.7 + 0.3 * S);

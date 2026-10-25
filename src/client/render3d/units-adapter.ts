@@ -212,6 +212,8 @@ export class Rig {
   look: Look = 'normal';
   readonly L: number; readonly W: number; readonly S: number;
   readonly flying: boolean;
+  /** a jet (fighter / bomber): flies higher than helicopters (tilt.ts flyHeight) */
+  readonly jet: boolean;
   readonly height: number;
   readonly midY: number;
   readonly radius: number;
@@ -240,7 +242,7 @@ export class Rig {
     // battlefield body scale (shared/mountgeo bodyScale): the whole rig shrinks about its origin, sizes follow
     const bs = bodyScale(u.S);
     this.root.scale.setScalar(bs);
-    this.L = u.L * bs; this.W = u.W * bs; this.S = u.S; this.flying = u.flying; this.height = tpl.height * bs; this.midY = tpl.midY * bs; this.radius = u.radius * bs;
+    this.L = u.L * bs; this.W = u.W * bs; this.S = u.S; this.flying = u.flying; this.jet = tpl.design.mobility === 'jet'; this.height = tpl.height * bs; this.midY = tpl.midY * bs; this.radius = u.radius * bs;
     this.hull = tpl.hull.map((v) => v * bs) as unknown as Rig['hull'];
     this.objs = tpl.nodes.map((n) => {
       if (!n.dyn) return null;
@@ -525,7 +527,7 @@ function buildTemplate(design: Design, team: 0 | 1): Template {
     const bs = bodyScale(unit.S);
     const blob = contactShadow(unit.L * 0.85, unit.W * 0.85);
     // (+0.065: clear of the ground through the +-0.05 cruise bob)
-    blob.position.y = (0.065 - (flyHeight(unit.S) + 0.4)) / bs;
+    blob.position.y = (0.065 - (flyHeight(unit.S, design.mobility === 'jet') + 0.4)) / bs;
     root.add(blob);
     root.updateMatrixWorld(true);
   }

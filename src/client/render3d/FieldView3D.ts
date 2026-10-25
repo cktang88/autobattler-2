@@ -940,7 +940,7 @@ export class FieldView3D implements BattleView {
       const rig = this.layer.acquire(u.design, team);
       this.deployUsed.push(rig);
       const ang = u.side === 0 ? -Math.PI / 2 : Math.PI / 2;
-      rig.root.position.set(u.x, rig.flying ? flyHeight(rig.S) + 0.4 : 0, u.y);
+      rig.root.position.set(u.x, rig.flying ? flyHeight(rig.S, rig.jet) + 0.4 : 0, u.y);
       rig.root.rotation.y = -ang;
       if (rig.flying && !u.ghost) rig.locomote(0, false, time + u.x * 0.37, dt);
       rig.update(dt);
@@ -1125,7 +1125,7 @@ export class FieldView3D implements BattleView {
     this.trackVis(u, v);
     v.posed = false;
     if (enemyCloak || this.offscreen(x, y, rig.radius + 5)) return;
-    const h = u.flying ? flyHeight(rig.S) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * rig.S;
+    const h = u.flying ? flyHeight(rig.S, rig.jet) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * rig.S;
     rig.root.position.set(x, h, y);
     // (heavy guns rock the hull: Rig.update tilts the quaternion, so the full rotation is reset here every frame)
     rig.root.rotation.set(0, -ang, 0);
@@ -1821,7 +1821,7 @@ export class FieldView3D implements BattleView {
   private unitHeight(unit: number, byId: Map<number, SimUnit>, fallback = 0.45): number {
     const v = this.bu.get(unit), su = byId.get(unit);
     if (!v || !su) return fallback;
-    return su.flying ? flyHeight(v.rig.S) + 0.4 + v.rig.midY : Math.min(v.rig.height * 0.6, Math.max(0.7, v.rig.height * 0.35));
+    return su.flying ? flyHeight(v.rig.S, v.rig.jet) + 0.4 + v.rig.midY : Math.min(v.rig.height * 0.6, Math.max(0.7, v.rig.height * 0.35));
   }
 
   /** A drawn unit's rough hit box for rounds (cached per frame): a rotated rectangle inside both its solid parts (80%)
@@ -1841,7 +1841,7 @@ export class FieldView3D implements BattleView {
         ang = lerpAngle(pr.angle, c.angle, a);
       }
       const [x0, x1, y0, y1, z0, z1] = rig.hull;
-      const base = u.flying ? flyHeight(rig.S) + 0.4 : u.leap * 1.8 * rig.S;
+      const base = u.flying ? flyHeight(rig.S, rig.jet) + 0.4 : u.leap * 1.8 * rig.S;
       const lo = u.flying ? y0 : Math.max(0, y0), h = Math.max(0.3, y1 - lo);
       b = {
         x, z: y, ca: Math.cos(ang), sa: Math.sin(ang),
@@ -2265,7 +2265,7 @@ export class FieldView3D implements BattleView {
           break;
         }
         if (vis) {
-          const y = e.flying ? (v ? flyHeight(v.rig.S) + 0.2 + v.rig.midY : 1) : 0;
+          const y = e.flying ? (v ? flyHeight(v.rig.S, v.rig.jet) + 0.2 + v.rig.midY : 1) : 0;
           // the blast grows with the destruction: a perforated hull just coughs fire, a vaporised one goes up whole
           if (lv === 0) fx.explosion(e.x, e.y, 0.45 + sz * 0.4, e.kind === 'energy' ? 'plasma' : 'fire', y, e.kind !== 'kinetic', 0.7, paint);
           else fx.bigExplosion(e.x, e.y, e.flying ? Math.max(1, sz * 0.8) : sz + (lv - 1) * 0.6, y, paint);

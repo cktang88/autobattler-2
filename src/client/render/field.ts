@@ -530,7 +530,7 @@ export class FieldView {
 
   /** height (cells) of a unit's hull top above the ground: hull body for ground units, altitude for flyers */
   private heightOf(p: UnitPose, L: UnitLayout): number {
-    if (L.air || p.flying) return flyHeight(L.S) + Math.sin(p.time * 2.1 + (p.seed ?? 0)) * 0.05;
+    if (L.air || p.flying) return flyHeight(L.S, L.mob.id === 'jet') + Math.sin(p.time * 2.1 + (p.seed ?? 0)) * 0.05;
     let h = hullHeight(L.S);
     if (L.mob.id === 'spider' || L.mob.id === 'titanlegs' || CREATURE_SHAPES.has(L.shape)) h *= 0.8;
     else if (L.mob.id === 'hover') h = h * 0.75 + 0.08;
@@ -1802,7 +1802,7 @@ export class FieldView {
     if (this.tiltOn) {
       // barrel sits on top of the raised hull; ground rounds are then drawn from the shared gun line (see drawProjectiles)
       const L = layoutOf(ur.u.design);
-      const h = ur.u.flying || L.air ? flyHeight(L.S) : hullHeight(L.S) * (L.mob.id === 'spider' || L.mob.id === 'titanlegs' || CREATURE_SHAPES.has(L.shape) ? 0.8 : 1) * 1.45;
+      const h = ur.u.flying || L.air ? flyHeight(L.S, L.mob.id === 'jet') : hullHeight(L.S) * (L.mob.id === 'spider' || L.mob.id === 'titanlegs' || CREATURE_SHAPES.has(L.shape) ? 0.8 : 1) * 1.45;
       const lv = this.liftVec(h);
       mx += lv.x; my += lv.y;
     }
@@ -1893,7 +1893,7 @@ export class FieldView {
    *  airborne lift drawUnit adds); zero for ground units. Hits, bursts and shields on flyers are drawn there. */
   private airLift(u: SimUnit): { x: number; y: number } {
     if (!u.flying && !layoutOf(u.design).air) return { x: 0, y: 0 };
-    const h = 0.12 + (this.tiltOn ? flyHeight(layoutOf(u.design).S) * TILT_TAN : 0);
+    const h = 0.12 + (this.tiltOn ? flyHeight(layoutOf(u.design).S, u.design.mobility === 'jet') * TILT_TAN : 0);
     return { x: this.dirs.ux * h, y: this.dirs.uy * h };
   }
 

@@ -181,7 +181,7 @@ export class UnitStage3D {
     const rig = this.layer.acquire(d, 0);
     this.rig = rig;
     this.bs = bodyScale(rig.S);
-    this.pos.set(0, rig.flying ? flyHeight(rig.S) + 0.4 : 0, 0);
+    this.pos.set(0, rig.flying ? flyHeight(rig.S, rig.jet) + 0.4 : 0, 0);
     rig.root.position.copy(this.pos);
     rig.root.rotation.set(0, -FACING, 0);
     rig.update(0);

@@ -137,7 +137,7 @@ export function liveUnitAt(view: BattleView, battle: Battle | null, px: number, 
   for (const u of battle.units) {
     if (!u.alive) continue;
     const S = u.stats.size, hk = hullK(S), cs = Math.cos(u.angle), sn = Math.sin(u.angle);
-    const tops = view.tilted ? [0, Math.round((u.flying ? flyHeight(S) : 0.6 * hullHeight(S)) * TILT_SIN * view.cam.k)] : [0];
+    const tops = view.tilted ? [0, Math.round((u.flying ? flyHeight(S, u.design.mobility === 'jet') : 0.6 * hullHeight(S)) * TILT_SIN * view.cam.k)] : [0];
     for (const rise of tops) {
       const w = at(rise);
       if (!w) continue;
