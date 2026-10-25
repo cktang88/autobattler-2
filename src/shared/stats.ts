@@ -346,10 +346,12 @@ export const MODULE_CAL: Record<string, number> = {
   //      fights, the Longarm ~65%; 2.4 is the most that keeps the Tankbuster a 2-squad). A cannon on a thick hull
   //      still wins ~70-80% at any cannon price tried (up to 6: dearer cannons also thin the cannons out of the
   //      opposing field), so the Ironclad keeps its autocannons.
+  //   4. cannon75 2.951 -> 5.5 (balance.ts, frozen mix: a 75 mm on a warden or bastion won 75-85%; at 5.5 the Aegis
+  //      Wall sits near 45%).
   leech: 2.905, prism: 3.272, voidlance: 3.725, entropy: 2.41,
   aamissile: 1.086, ac20: 2.067, ac40: 5.353, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 8.757,
   autocannon: 4.001, autoloader: 2.89, avenger: 1.216, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
-  cannon: 2.4, cannon75: 2.951, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
+  cannon: 2.4, cannon75: 5.5, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
   dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.7, gauss: 11.118,
   gravity: 6.197, grinder: 0.398, guidedrocket: 7.551, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
   heavyflak: 1.094, hmg: 3.498, howitzer: 2.271, incendiary: 0.843, inferno: 0.609, jammer: 0.25, laser: 6.042,
