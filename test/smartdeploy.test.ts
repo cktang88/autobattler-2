@@ -111,3 +111,18 @@ test('timing: chaff paced to the armour, artillery reaches the clash, delays leg
   }
   assert.ok(worst < 8, `chaff kept near the armour (max lead ${worst.toFixed(1)} cells)`);
 });
+
+test('timing: with no ground line to wait for, aircraft go at once', () => {
+  const ds: Design[] = ['hornet', 'strafer', 'thunderbird'].map(S);
+  const place = smartDeploy(ds.map((d) => ({ d, n: 2 })));
+  assert.equal(place.length, 6);
+  assert.ok(place.every((p) => p.delay === 0), 'all-air army: no delay');
+  const re = formationDelays(place.map((p) => ({ d: ds.find((d) => d.id === p.designId)!, p })));
+  for (const p of place) assert.equal(re.get(p.uid), 0, p.designId);
+  // aircraft behind artillery only: still nothing to time against
+  const withArty = smartDeploy([...ds, S('thunderhead')].map((d) => ({ d, n: 1 })));
+  assert.ok(withArty.filter((p) => p.designId !== 'starter-thunderhead').every((p) => p.delay === 0), 'air + artillery: no delay');
+  // add a ground line and the same aircraft are timed to its clash again (a jet waits)
+  const mixed = smartDeploy([...ds, S('bulwark')].map((d) => ({ d, n: 1 })));
+  assert.ok((mixed.find((p) => p.designId === 'starter-strafer')!.delay ?? 0) > 0, 'jets wait for the ground clash');
+});

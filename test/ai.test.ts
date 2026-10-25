@@ -7,6 +7,7 @@ import { computeStats, defaultOrders } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
 import { deployRole, formationDelays } from '../src/shared/smartdeploy.ts';
 import { START_DELAYS } from '../src/shared/types.ts';
+import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 
 test('aiDeck is valid, deterministic and covers roles', () => {
   for (const diff of ['easy', 'normal', 'hard'] as AiDifficulty[]) {
@@ -198,7 +199,11 @@ test('normal / hard AI: decks carry chaff clear; every round lays out in the sma
       const timed = formationDelays(board.map((p) => ({ d: byId.get(p.designId)!, p })));
       for (const p of board.filter((q) => role(q) === 'air' || role(q) === 'melee')) {
         assert.ok((START_DELAYS as readonly number[]).includes(p.delay ?? 0), 'legal delay');
-        if (rec.round === 1) assert.ok(Math.abs(START_DELAYS.indexOf((p.delay ?? 0) as never) - START_DELAYS.indexOf(timed.get(p.uid) as never)) <= 1, `aircraft / melee timed to the clash (seed ${seed})`);
+        if (rec.round === 1) assert.equal(p.delay ?? 0, timed.get(p.uid), `aircraft / melee timed to the clash (seed ${seed} side ${side})`);
+      }
+      // no ground line to wait for: aircraft go at once
+      if (!board.some((q) => role(q) !== 'air' && role(q) !== 'artillery' && role(q) !== 'support')) for (const p of board.filter((q) => role(q) === 'air')) {
+        assert.equal(p.delay ?? 0, 0, `all-air army not held back (seed ${seed} r${rec.round})`);
       }
       // chaff and riot escort the armour when there is some
       if (board.some((q) => role(q) === 'armor')) for (const p of board.filter((q) => role(q) === 'chaff' || role(q) === 'riot')) {
@@ -209,4 +214,13 @@ test('normal / hard AI: decks carry chaff clear; every round lays out in the sma
       if (armour.length && arty.length) assert.ok(Math.max(...arty.map((q) => q.y)) > Math.min(...armour.map((q) => q.y)), 'artillery behind the armour');
     }
   }
+});
+
+test('smart formation: an all-air AI army is not held back (no ground line to time against)', () => {
+  const air = ['hornet', 'strafer', 'thunderbird'].map((id) => STARTER_DESIGNS.find((d) => d.id === `starter-${id}`)!);
+  const m = newMatch('air', 'ai', 5, newPlayer('A', air, true), newPlayer('B', aiDeck(6, 'normal'), true));
+  const act = aiDeploy(m, 0, 'normal');
+  assert.equal(validateDeploy(m, 0, act), null);
+  assert.ok(act.place.length > 0, 'bought something');
+  for (const p of act.place) assert.equal(p.delay ?? 0, 0, p.designId);
 });

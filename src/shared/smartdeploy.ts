@@ -97,7 +97,10 @@ export function formationClock(armour: UnitStats[], others: UnitStats[], armorY:
   const ranges = front.map((x) => x.range).sort((a, b) => a - b);
   const clash = clashPoint(armorY, va, Math.min(14, ranges.length ? ranges[Math.floor(ranges.length / 2)] : 8), foe?.speed !== undefined ? { ...foe, speed: 0.8 * foe.speed } : foe);
   const arrive = (v: number, y: number, lag: number) => nearestDelay(clash.t + lag - Math.max(0, y - clash.enemyY) / Math.max(0.3, v));
-  return { clash, arrive };
+  /** aircraft: arrive AIR_LAG s after the clash; with no ground line to wait for (an all-air army, or only artillery
+   *  behind it) they go at once — holding back would only hand the enemy free time */
+  const airDelay = (v: number, y: number) => (front.length ? arrive(v, y, AIR_LAG) : 0);
+  return { clash, arrive, airDelay };
 }
 
 /** aircraft reach the enemy front this long after the lines meet (not into fresh anti-air); melee a moment after the
@@ -110,10 +113,13 @@ export function formationDelays(board: { d: Design; p: Placement }[], foe?: Depl
   const out = new Map<number, number>();
   const roles = board.map((b) => deployRole(b.d)), st = board.map((b) => computeStats(b.d));
   const arm = board.filter((_, i) => roles[i] === 'armor');
-  const armorY = arm.length ? Math.min(...arm.map((b) => b.p.y)) : 0;
-  const { arrive } = formationClock(st.filter((_, i) => roles[i] === 'armor'), st.filter((_, i) => roles[i] !== 'air' && roles[i] !== 'artillery' && roles[i] !== 'support'), armorY, foe);
+  // the armour row; without armour, the row smartDeployBlocks would give it (2 behind the chaff screen, else the front)
+  const ch = board.filter((_, i) => roles[i] === 'chaff');
+  const armorY = arm.length ? Math.min(...arm.map((b) => b.p.y))
+    : ch.length ? Math.max(...ch.map((b) => b.p.y + blockDims(computeStats(b.d), b.p.spacing, b.p.rot).h)) + 2 : 0;
+  const { arrive, airDelay } = formationClock(st.filter((_, i) => roles[i] === 'armor'), st.filter((_, i) => roles[i] !== 'air' && roles[i] !== 'artillery' && roles[i] !== 'support'), armorY, foe);
   board.forEach((b, i) => {
-    if (roles[i] === 'air') out.set(b.p.uid, arrive(st[i].speed, b.p.y, AIR_LAG));
+    if (roles[i] === 'air') out.set(b.p.uid, airDelay(st[i].speed, b.p.y));
     else if (roles[i] === 'melee') out.set(b.p.uid, arrive(st[i].speed, armorY, MELEE_LAG));
   });
   return out;
@@ -206,7 +212,7 @@ export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Pla
   const armorDepth = exDepth(occ.filter((q) => q.role === 'armor'));
   const hasArmor = armorUids.length > 0;
   // timing: when / where our armour line meets the enemy front (clashPoint; a mirror enemy unless o.foe says otherwise)
-  const { clash, arrive } = formationClock(occ.filter((q) => q.role === 'armor').map((q) => q.shape),
+  const { clash, arrive, airDelay } = formationClock(occ.filter((q) => q.role === 'armor').map((q) => q.shape),
     [...occ, ...blocks].filter((q) => q.role !== 'air' && q.role !== 'artillery' && q.role !== 'support').map((q) => q.shape), armorY, o.foe);
   /** the armour block nearest x (escort target) */
   const nearArmor = (x: number) => {
@@ -266,6 +272,12 @@ export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Pla
     if (bx >= 0) put(b, bx, by, {}, sp);
   }
   const airY = Math.max(0, backY - depth(air, 1) - 1);
-  line(air, airY, 1, 2, (b) => ({ delay: arrive(b.shape.speed, airY, AIR_LAG) }), DEPLOY_W / 2);
+  // timed from the row each block actually landed on (the same clock formationDelays re-times a board with)
+  let ax = DEPLOY_W / 2 - width(air, 1, 2) / 2;
+  for (const b of air) {
+    const p = put(b, ax, airY, {}, 1);
+    if (p) p.delay = airDelay(b.shape.speed, p.y);
+    ax += dimsOf(b, 1).w + 2;
+  }
   return out;
 }
