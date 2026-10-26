@@ -1,4 +1,4 @@
-// node_modules/three/build/three.core.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/build/three.core.js
 var REVISION = "186";
 var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
@@ -20685,7 +20685,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// node_modules/three/build/three.module.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/build/three.module.js
 function WebGLAnimation() {
   let context = null;
   let isAnimating = false;
@@ -32183,7 +32183,7 @@ var WebGLRenderer = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/controls/OrbitControls.js
 var _changeEvent = { type: "change" };
 var _startEvent = { type: "start" };
 var _endEvent = { type: "end" };
@@ -33105,10 +33105,10 @@ var STARTER_DESIGNS = [
   { id: "starter-buzzsaw", name: "Buzzsaw", chassis: "scout", mobility: "wheels", mounts: ["mg"] },
   { id: "starter-torchbug", name: "Torchbug", chassis: "scout", mobility: "halftrack", mounts: ["flamer"] },
   // ---- skirmisher ----
-  { id: "starter-lancer", name: "Lancer", chassis: "raider", mobility: "halftrack", mounts: ["laser", "laser"] },
+  { id: "starter-lancer", name: "Lancer", chassis: "raider", mobility: "legs", mounts: ["laser", "laser"] },
   { id: "starter-hunter", name: "Tank Hunter", chassis: "raider", mobility: "legs", mounts: ["atgm", "atgm"] },
   // ---- frontline tank ----
-  { id: "starter-bulwark", name: "Bulwark", chassis: "warden", mobility: "treads", mounts: ["autocannon", "plateL"] },
+  { id: "starter-bulwark", name: "Bulwark", chassis: "warden", mobility: "treads", mounts: ["hmg", "plateL"] },
   // ---- anti-tank ----
   { id: "starter-tankbuster", name: "Tankbuster", chassis: "longarm", mobility: "spider", mounts: ["cannon"] },
   // ---- anti-air ----
@@ -33124,7 +33124,7 @@ var STARTER_DESIGNS = [
   // ---- brawler ----
   { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "targeting"] },
   // ---- size-3 heavies ----
-  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "reinforced", "longbarrel"] },
+  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "reinforced", "plateL"] },
   { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["autocannon", "plateM", "autocannon"] },
   // ---- emplacement ----
   { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "spider", mounts: ["guidedrocket", "hmg"] },
@@ -33133,7 +33133,7 @@ var STARTER_DESIGNS = [
   // ---- stealth: cloaked sniper platform ----
   { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
   // ---- shield wall: barrier-heavy anchor of the line ----
-  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "cannon75", "shield"] },
+  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "cannon75", "smoke"] },
   // ---- support aura: command vehicle that speeds up and repairs its escorts ----
   { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "twin30", "hmg"] },
   // ---- giant (size 4): all-round assault walker ----
@@ -34777,10 +34777,10 @@ var MODULES = [
   util({ id: "overcharge", name: "Overcharge Capacitor", family: "Capacitor", desc: "Banks power between engagements: the first volley after 3 s without firing hits twice as hard. +100% first-volley damage.", category: "systems", visual: "coolant", caliber: 0.4, mount: "S", weight: 1, cost: 10, overcharge: { mult: 1, idle: 3 } }),
   util({ id: "killrush", name: "Kill Rush Injector", family: "Stim", desc: "Combat stims on every kill: +30% speed and +30% fire rate for 4 s after each kill.", category: "systems", visual: "nanite", caliber: 0.3, mount: "S", weight: 0.8, cost: 10, killRush: { speed: 0.3, fireRate: 0.3, duration: 4 } }),
   // ---- small-hull utilities: worth most on light, fast or numerous units (the % modules above favour big hp pools) ----
-  util({ id: "evasion", name: "Evasion Thrusters", family: "Thrusters", desc: "Side thrusters jink away from incoming fire: up to a 35% chance to dodge shells, rockets and orbs on a light hull at speed. Less on bigger or slower hulls; titans get almost nothing.", category: "defense", visual: "engine", caliber: 0.3, mount: "S", weight: 0.8, cost: 6, dodge: 0.35 }),
+  util({ id: "evasion", name: "Evasion Thrusters", family: "Thrusters", desc: "Side thrusters jink away from incoming fire: about a 45% chance to dodge shells, rockets and orbs on a light hull at speed (up to 60% when very fast), and 60% of that against bullets. Less on bigger or slower hulls; titans get almost nothing.", category: "defense", visual: "engine", caliber: 0.3, mount: "S", weight: 0.8, cost: 6, dodge: 0.45, dodgeBullets: 0.6 }),
   util({ id: "deflector", name: "Deflector Grid", family: "Deflector", desc: "Ignores the first 6 damage of every hit on the hull: shrugs off machine-gun and flak swarms, does nothing against big guns.", category: "defense", visual: "shield", caliber: 0.3, mount: "S", weight: 0.8, cost: 6, deflect: 6 }),
-  util({ id: "scrapmine", name: "Scrap Mine", family: "On death", desc: "The wreck blows up: 90 damage to enemies within 7.5 m of the hull. Worth most on a numerous squad.", category: "systems", visual: "charge", caliber: 0.3, mount: "S", weight: 0.8, cost: 4, deathBlast: { damage: 90, radius: 1.5 } }),
-  util({ id: "emppop", name: "EMP Pop", family: "On death", desc: "The wreck lets off an EMP burst: stuns enemies within 12.5 m of the hull and drains their shields. Worth most on a numerous squad.", category: "systems", visual: "nanite", caliber: 0.3, mount: "S", weight: 0.8, cost: 5, deathBlast: { damage: 20, radius: 2.5, stun: 1.5 } }),
+  util({ id: "scrapmine", name: "Scrap Mine", family: "On death", desc: "The wreck blows up: 140 damage to enemies within 10 m of the hull, and the shrapnel slows them. Worth most on a numerous squad.", category: "systems", visual: "charge", caliber: 0.3, mount: "S", weight: 0.8, cost: 4, deathBlast: { damage: 140, radius: 2, slow: 1 } }),
+  util({ id: "emppop", name: "EMP Pop", family: "On death", desc: "The wreck lets off a big EMP burst: 40 damage, stuns enemies within 17.5 m of the hull and drains their shields. Worth most on a numerous squad.", category: "systems", visual: "nanite", caliber: 0.3, mount: "S", weight: 0.8, cost: 5, deathBlast: { damage: 40, radius: 3.5, stun: 2.5 } }),
   util({ id: "packlink", name: "Pack Link", family: "Swarm net", desc: "Swarm networking: +6% damage for each ally of the same design within 20 m, up to +30%. Made for big light squads.", category: "systems", visual: "sensor", caliber: 0.3, mount: "S", weight: 0.5, cost: 6, pack: { per: 0.06, cap: 0.3, radius: 4 } }),
   util({ id: "selfdestruct", name: "Self-Destruct Charge", family: "Demolition", desc: "Detonates on death for 300 damage up to 10 m beyond its hull.", category: "systems", visual: "charge", caliber: 0.4, mount: "S", weight: 1.5, cost: 3, deathBlast: { damage: 300, radius: 2 } }),
   // ---------------- Giant class (G mounts, size-4 chassis) ----------------
@@ -36074,7 +36074,7 @@ function baseKit(team) {
   return kits[team];
 }
 
-// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
 function mergeGeometries(geometries, useGroups = false) {
   const isIndexed = geometries[0].index !== null;
   const attributesUsed = new Set(Object.keys(geometries[0].attributes));
@@ -43170,7 +43170,6 @@ function keel(c, l, x = 0) {
   const w = stance.legs === "spider" ? W * 0.5 : Math.max(W * 0.3, W * 0.54 - t * 1.6);
   block(b, kit.trim, x, stance.hipY - t * 0.9, 0, l, w, stance.y0 - stance.hipY + t * 0.95, { top: [1.06, 1.08], ch: t * 0.5, bev: t * 0.12, bot: t * 0.25 });
 }
-var onGround = (c) => c.mob.id === "wheels" || c.mob.id === "halftrack" || c.mob.id === "anchor" || c.mob.id === "treads";
 var UP = [0, 1, 0];
 var ZA = [0, 0, 1];
 var XA = [1, 0, 0];
@@ -43285,16 +43284,11 @@ function carriage(c) {
   const deckY = y0 + 0.13;
   facetHull(c, kit.armor2, [[mx - mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1, mr * 1.15, mr * 1], [mx + mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1, mr * 1.15, mr * 1]], 0, false);
   both((s) => piston(b, kit, [X(-0.17), y0 + 0.04, s * mr * 1.1], [mx + mr * 0.6, deckY - 0.01, s * mr * 1.1], 0.016, 0.55, false));
-  const g = onGround(c);
-  const ty = g ? 0.02 : y0 - 0.02;
-  both((s) => {
-    const a = [X(-0.14), y0 + 0.05, s * Z(0.08)], e = [X(-0.58), ty + 0.035, s * Z(0.3)];
-    beam(b, kit.armor2, a, e, 0.05, 0.055);
-    b.g(strutGeo([e[0] + 0.07, e[1] + 0.03, e[2] - s * 0.03], [e[0] + 0.07, e[1] + 0.085, e[2] + s * 0.02], 6e-3, 6e-3, 4), kit.joint);
-    const yaw = Math.atan2(e[2] - a[2], a[0] - e[0]);
-    spade(b, kit, new Matrix4().makeRotationY(-yaw + Math.PI / 2).setPosition(e[0] - 0.03, e[1] + 0.05, e[2]), 0.12, g ? 0.09 : 0.06, 0.012);
-  });
-  stowBox(b, kit, frame([X(-0.38), y0 + 0.085, -Z(0.18)], UP, [Math.cos(0.5), 0, -Math.sin(0.5)]), 0.11, 0.055, 0.07, kit.canvas);
+  beam(b, kit.armor2, [X(-0.12), y0 + 0.06, 0], [X(-0.36), y0 + 0.06, 0], Z(0.16), 0.06);
+  const bx3 = X(-0.42), bw = Math.min(Z(0.4), stance.wi * 2.2);
+  b.g(bevBox(X(0.16), 0.1, bw, 0.012), kit.armor2, mtx([bx3, y0 + 0.08, 0]));
+  b.g(bevBox(X(0.1), 0.02, bw * 0.8, 6e-3), kit.mech, mtx([bx3, y0 + 0.14, 0]));
+  stowBox(b, kit, frame([bx3 + X(0.02), y0 + 0.08, -bw / 2 - 0.03], UP, XA), 0.09, 0.06, 0.05, kit.canvas);
   const R = Math.max(mr * 1.55, Z(0.3));
   const sx = mx + R * 0.62, sh = 0.3;
   const shieldPlate = (yaw, zc, w, h) => {
@@ -45726,7 +45720,7 @@ function buildTerrain(w, h, opts = {}) {
   return { group, ground };
 }
 
-// node_modules/three/examples/jsm/shaders/CopyShader.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/CopyShader.js
 var CopyShader = {
   name: "CopyShader",
   uniforms: {
@@ -45766,7 +45760,7 @@ var CopyShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/Pass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/Pass.js
 var Pass = class {
   /**
    * Constructs a new pass.
@@ -45857,7 +45851,7 @@ var FullScreenQuad = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/ShaderPass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/ShaderPass.js
 var ShaderPass = class extends Pass {
   /**
    * Constructs a new shader pass.
@@ -45922,7 +45916,7 @@ var ShaderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/MaskPass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/MaskPass.js
 var MaskPass = class extends Pass {
   /**
    * Constructs a new mask pass.
@@ -46010,7 +46004,7 @@ var ClearMaskPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/EffectComposer.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/EffectComposer.js
 var EffectComposer = class {
   /**
    * Constructs a new effect composer.
@@ -46195,7 +46189,7 @@ var EffectComposer = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/RenderPass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/RenderPass.js
 var RenderPass = class extends Pass {
   /**
    * Constructs a new render pass.
@@ -46268,7 +46262,7 @@ var RenderPass = class extends Pass {
   }
 };
 
-// node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/LuminosityHighPassShader.js
 var LuminosityHighPassShader = {
   name: "LuminosityHighPassShader",
   uniforms: {
@@ -46320,7 +46314,7 @@ var LuminosityHighPassShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/UnrealBloomPass.js
 var UnrealBloomPass = class _UnrealBloomPass extends Pass {
   /**
    * Constructs a new Unreal Bloom pass.
@@ -46659,7 +46653,7 @@ var UnrealBloomPass = class _UnrealBloomPass extends Pass {
 UnrealBloomPass.BlurDirectionX = new Vector2(1, 0);
 UnrealBloomPass.BlurDirectionY = new Vector2(0, 1);
 
-// node_modules/three/examples/jsm/shaders/GTAOShader.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/GTAOShader.js
 var GTAOShader = {
   name: "GTAOShader",
   defines: {
@@ -47025,7 +47019,7 @@ function generateMagicSquare(size) {
   return magicSquare;
 }
 
-// node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/PoissonDenoiseShader.js
 var PoissonDenoiseShader = {
   name: "PoissonDenoiseShader",
   defines: {
@@ -47228,7 +47222,7 @@ function generateDenoiseSamples(numSamples, numRings, radiusExponent) {
   return samples;
 }
 
-// node_modules/three/examples/jsm/math/SimplexNoise.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/math/SimplexNoise.js
 var SimplexNoise = class {
   /**
    * Constructs a new simplex noise object.
@@ -47662,7 +47656,7 @@ var SimplexNoise = class {
   }
 };
 
-// node_modules/three/examples/jsm/postprocessing/GTAOPass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/GTAOPass.js
 var GTAOPass = class _GTAOPass extends Pass {
   /**
    * Constructs a new GTAO pass.
@@ -48089,7 +48083,7 @@ GTAOPass.OUTPUT = {
   "Denoise": 5
 };
 
-// node_modules/three/examples/jsm/shaders/OutputShader.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/shaders/OutputShader.js
 var OutputShader = {
   name: "OutputShader",
   uniforms: {
@@ -48177,7 +48171,7 @@ var OutputShader = {
   )
 };
 
-// node_modules/three/examples/jsm/postprocessing/OutputPass.js
+// ../../../../../../home/user/autobattler-2/node_modules/three/examples/jsm/postprocessing/OutputPass.js
 var OutputPass = class extends Pass {
   /**
    * Constructs a new output pass.
