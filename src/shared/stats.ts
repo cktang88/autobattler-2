@@ -182,13 +182,24 @@ export const MOBILITY_CAL: Record<string, number> = { anchor: 0.97, gravlift: 1.
  *  (fitted on all airframes) under-rates on the small, cheap ones. Fitted with balance.ts army on drone / gunship
  *  rotor designs and interceptor / delta-wing / strike-jet designs (supplies 1000 / 1200 / 1400, 4 seeds): gunships
  *  ~85% -> ~65%, drones ~70% -> ~55%, light jets ~75% -> ~65%; laser-armed flyers still ~80-90%. */
-export const SMALL_AIR_CAL: Record<string, number[]> = { rotor: [1.1, 1.3], jet: [1, 1.1] };
+// rules 7b: light rotor drones 1.1 -> 0.95 (the Hornet won ~25%)
+export const SMALL_AIR_CAL: Record<string, number[]> = { rotor: [0.95, 1.3], jet: [1, 1.1] };
 /** Hover brawlers: a hovering drive is fast, floats over burning ground and can't be crushed, which is worth far more
  *  to a hull that must close to knife range (melee, flamers, shotguns: reach <= HOVER_BRAWL.reach cells) than to a
  *  gun platform. Price factor 1 + k x (offense share of such weapons) on hover designs. Fitted with balance.ts army:
  *  mantis / scout hover saw, prod and flamer designs won ~80-85% (ranged hover designs ~30-50%); k = 0.45 brings the
  *  hover Gnasher to ~50%. */
-export const HOVER_BRAWL = { k: 0.45, reach: 5 };
+// Rules 7b: the cutoff tapers (full weight up to reach, none from reach + taper) instead of a hard step at 5 cells:
+// hover twin napalm (reach 6, just past the old step) won ~80% (k 0.6 dropped the Gnasher to a 4-squad: kept 0.45).
+export const HOVER_BRAWL = { k: 0.45, reach: 4, taper: 4 };
+/** brawl weight of a weapon by reach (HOVER_BRAWL): 1 up to reach, linear to 0 at reach + taper */
+export const brawlWeight = (r: number) => Math.min(1, Math.max(0, (HOVER_BRAWL.reach + HOVER_BRAWL.taper - r) / HOVER_BRAWL.taper));
+/** Price factor on rangeBoost hulls (the Longarm: +20% reach on its one heavy gun). Reach decides most fights and the
+ *  1.2x on offense is sqrt-damped to ~1.1x price: the Tankbuster and Thunderhead won ~70%. 1 = rules-7 price (match.ts). */
+export const LONG_REACH = { k: 1.2 };
+/** Air-to-ground hitscan: lasers on a flying hull never miss what they dive on and only anti-air answers back, so
+ *  laser-armed fliers won 77-90% of mixed fights. Extra weapon value of these weapons on flying hulls (1 = rules 7). */
+export const AIR_LASER_CAL: Record<string, number> = { laser: 1.6 }; // (twinlaser at 1.6: a twin-laser gunship fell to ~6%)
 /** Share of the speed term (mobilityF) lost per unit of reverse penalty (reverse 0.5 -> speed worth 0.5 x REVERSE_W less) */
 const REVERSE_W = 0.3;
 /** mobilityF bonus of an omnidirectional ('omni') walker */
@@ -201,7 +212,8 @@ const HOVER_EHP = 1.06;
  *  (one or two of them plus a starter mix vs the mix, ~2x their price per side) and `node scripts/role-check.ts bomber`. */
 // (x SIZE_K: 1.05 / 1.17 -> 1.2 / 1.4 when SIZE_K for giants / titans came down with the convex armour term, so the
 // bombers' prices hold)
-export const GIANT_JET_CAL: Record<number, number> = { 4: 1.2, 5: 1.4 };
+// rules 7b: giant 1.2 -> 1.35 (the Thunderbird won ~75%)
+export const GIANT_JET_CAL: Record<number, number> = { 4: 1.35, 5: 1.4 };
 /** Convex armour value (rules 7). Flat armour takes a fixed amount off every hit, so a thick hull shrugs off whole
  *  classes of guns (an Ironclad is all but immune to machine guns), while sqrt(offense x ehp) with a linear armour
  *  factor priced that like any other hit points (an armour-stacked bastion with a token gun won ~80% of mixed-army fights).
@@ -354,19 +366,29 @@ export const MODULE_CAL: Record<string, number> = {
   //      opposing field), so the Ironclad keeps its autocannons.
   //   4. cannon75 2.951 -> 6.5 (balance.ts, frozen mix: a 75 mm on a warden or bastion won 75-85%; at 6.5 the Aegis
   //      Wall sits near 50%).
+  //   5. cannon 2.4 -> 4 (balance.ts, supplies 1000 / 1200 / 1400: a 120 mm on a warden or bastion still won 80-100%;
+  //      now 60-80%). The price is sqrt-damped (sqrt(offense x ehp)), so the cal must move far to move the price; the
+  //      Tankbuster loses its second unit (2 x 60 -> 1 x 70) and stays strong on its Longarm reach.
+  //   6. rules 7b starter pass (quickmatch): atgm 8.757 -> 12.3 (Hunter ~72%), ac40 5.353 -> 4 (Skyguard ~30%),
+  //      guidedrocket 7.551 -> 6 and rockets 4.04 -> 3.3 (Strafer ~31%), lightrail 13.806 -> 11 and sniper
+  //      10.425 -> 8.5 (Shade ~32%).
+  //   7. gauss 11.118 -> 3.5, railgun 12.612 -> 9: both hit ground AND air (coverage x1.5 vs a ground gun's x0.65) and
+  //      pierce, so their analytic base is ~4x the cannon's, and the fit's trust region (2.5x the base) left them priced
+  //      far past their worth: a lone gauss cost 250 on a warden / 1450 on a titan (cannon 80 / 520) and won 0% of
+  //      quickmatch mixes (railgun 0-38%). At 2.2 / 7 the module designs swung to 70-98% (balance.ts), so set in between.
   leech: 2.905, prism: 3.272, voidlance: 3.725, entropy: 2.41,
-  aamissile: 1.086, ac20: 2.067, ac40: 5.353, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 8.757,
+  aamissile: 1.086, ac20: 2.067, ac40: 4, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 12.3,
   autocannon: 4.001, autoloader: 2.89, avenger: 1.216, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
-  cannon: 2.4, cannon75: 6.5, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
-  dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.7, gauss: 11.118,
-  gravity: 6.197, grinder: 0.398, guidedrocket: 7.551, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
+  cannon: 4, cannon75: 6.5, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
+  dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.7, gauss: 3.5,
+  gravity: 6.197, grinder: 0.398, guidedrocket: 6, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
   heavyflak: 1.094, hmg: 3.498, howitzer: 2.271, incendiary: 0.843, inferno: 0.609, jammer: 0.25, laser: 6.042,
-  lightrail: 13.806, massdriver: 0.396, mg: 3.044, minigun: 0.885, mirror: 1.18, missilebattery: 1.979, mlrs: 6.561,
+  lightrail: 11, massdriver: 0.396, mg: 3.044, minigun: 0.885, mirror: 1.18, missilebattery: 1.979, mlrs: 6.561,
   mortar: 4.078, nanite: 0.417, napalm: 0.214, overclock: 0.775, phantom: 0.476, plasma: 3.815, plasmablade: 1.719,
-  plasmaorb: 2.49, pointdef: 4.171, quad20: 0.693, railgun: 12.612, ram: 0.32, reactive: 1.574, repair: 13.628,
-  repairM: 4, rocketL: 2.387, rockets: 4.04, sam: 8.339, selfdestruct: 2.695, sensor: 1, shield: 2.269,
+  plasmaorb: 2.49, pointdef: 4.171, quad20: 0.693, railgun: 9, ram: 0.32, reactive: 1.574, repair: 13.628,
+  repairM: 4, rocketL: 2.387, rockets: 3.3, sam: 8.339, selfdestruct: 2.695, sensor: 1, shield: 2.269,
   shieldH: 2.222, shieldL: 3.093, shockprod: 0.348, shotgun: 0.461, siege240: 1.887, siegeplasma: 0.523, skyfortress: 0.614,
-  slowbeam: 6.666, smoke: 3.573, sniper: 10.425, sonic: 0.594, stealth: 1.91, stormcore: 0.539, stormtower: 1.218,
+  slowbeam: 6.666, smoke: 3.573, sniper: 8.5, sonic: 0.594, stealth: 1.91, stormcore: 0.539, stormtower: 1.218,
   stungun: 0.89, swarm: 5.064, tactnuke: 3.025, targeting: 5.464, tesla: 0.92, titanfist: 0.711, turbo: 0.315,
   twin120: 2.649, twin30: 3.25, twinlaser: 3.018, twinmg: 2.675, uplink: 0.511,
   clusterhow: 4.798, firebomb: 2.462, flechette: 7.073, grenade: 2.728,
@@ -676,7 +698,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const bombK = flying && !jet ? HOVER_BOMB_K : 1;
   let splashW = 0, airW = 0, airOnlyW = 0, meleeW = 0, apW = 0, shortW = 0; // offense-weighted weapon traits (team-value features)
   for (const mod of mods) {
-    const wv = weaponValue(tunedWeapon(mod, tune), rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
+    const wv = (flying ? AIR_LASER_CAL[mod.id] ?? 1 : 1) * weaponValue(tunedWeapon(mod, tune), rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
     offense += wv;
     if (mod.kind !== 'weapon' || mod.heal) continue;
     splashW += wv * Math.min(2, mod.splash ?? 0);
@@ -684,7 +706,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     if (mod.targetsAir && !mod.targetsGround) airOnlyW += wv;
     apW += wv * (mod.ap ?? 0);
     if (mod.projectile === 'melee') meleeW += wv;
-    if ((mod.range ?? 0) <= HOVER_BRAWL.reach) shortW += wv;
+    shortW += wv * brawlWeight(mod.range ?? 0);
   }
   const weaponW = Math.max(1e-9, offense);
   // utility modules: rate-of-fire boosts multiply offense; ally/defensive effects add value
@@ -750,7 +772,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const mobilityF = isStatic ? 0.85 : 1 + 0.08 * speed * (1 - REVERSE_W * (1 - reverse)) + (traits.includes('leap') ? 0.05 : 0) + (traits.includes('omni') ? OMNI_F : 0);
   const power = Math.sqrt(offense * ehp) * mobilityF;
   const brawlK = traits.includes('hover') ? 1 + HOVER_BRAWL.k * (shortW / weaponW) : 1;
-  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1) * (SMALL_AIR_CAL[d.mobility]?.[size - 1] ?? 1) * brawlK;
+  const classK = (SIZE_K[size - 1] ?? 1) * ((jet ? GIANT_JET_CAL[size] : undefined) ?? MOBILITY_CAL[d.mobility] ?? 1) * (SMALL_AIR_CAL[d.mobility]?.[size - 1] ?? 1) * brawlK * (traits.includes('rangeBoost') ? LONG_REACH.k : 1);
   const rawBase = Math.max(10, (PARTS_WEIGHT * partsCost + POWER_K * power) * classK);
   // team value (see TEAM_FIT): features from the analytic numbers, then the monotone floor over every sub-design
   const u0 = rawBase / PRICE_DIV;
