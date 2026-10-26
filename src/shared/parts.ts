@@ -345,8 +345,9 @@ export const CHASSIS_BY_ID = byId(CHASSIS);
 export function maxWeaponsFor(size: number): number {
   return size >= 5 ? 4 : size === 4 ? 3 : 2;
 }
-/** The weapon cap of a hull: its own ChassisDef.maxWeapons, else the size default. */
-export const weaponCap = (c: Pick<ChassisDef, 'size' | 'maxWeapons'>): number => c.maxWeapons ?? maxWeaponsFor(c.size);
+/** The weapon cap of a hull: its own ChassisDef.maxWeapons, else the size default, never more than it has sockets. */
+export const weaponCap = (c: Pick<ChassisDef, 'size' | 'maxWeapons'> & { mounts?: readonly unknown[] }): number =>
+  Math.min(c.maxWeapons ?? maxWeaponsFor(c.size), c.mounts?.length ?? Infinity);
 export const MOBILITY_BY_ID = byId(MOBILITY);
 export const MODULE_BY_ID = byId(MODULES);
 

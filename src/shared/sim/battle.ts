@@ -7,7 +7,7 @@
 import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
 import { SPLASH_EDGE, dodgeChance, tunedWeapon, airRole, computeStats, standoffOrbit, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
@@ -43,6 +43,19 @@ const SPLIT_MARGIN = 1.1;
 /** a fresh shot is held (and the turret looks for another target) while rounds already in flight are expected to
  *  finish its target off; rechecked every this many seconds */
 const OVERKILL_RECHECK = 0.3; // s
+/** cells past a point-defense unit's reach within which a target still counts as covered by it (see pdCovers) */
+const PD_COVER_MARGIN = 2;
+/** turn-aware 'closest' / 'farthest' picks: candidates whose distance is within max(TURN_TIE_M metres, TURN_TIE_FRAC x
+ *  the weapon's range) of the best one count as ties, and the tie that needs the least turning (+ flight) time wins
+ *  (METERS_PER_CELL = 5, so the 5 m floor is 1 cell) */
+const TURN_TIE_M = 5;
+const TURN_TIE_FRAC = 0.1;
+/** Turrets at least this fast (rad/s) keep the pure closest / farthest pick: 240 deg/s swings 180 deg in 0.75 s, about
+ *  one retarget period plus the aim settle, so the turn saved is not worth taking a farther (nearer) target. Light guns,
+ *  lasers, light missile racks and the 4-tube rocket pod (240-300 deg/s) are in this class; medium/heavy guns, cannons,
+ *  artillery, rails, heavy launchers (<= ~235 deg/s) and every hull-fixed weapon (spinal guns, bomb bays: the whole hull
+ *  must turn) are turn-aware. */
+const FAST_TRAVERSE = (240 * Math.PI) / 180;
 export const SHIELD_DELAY = 3; // s
 export const SHIELD_REGEN = 0.05; // fraction of max per s
 const EVADE_CHANCE = 0.2;
@@ -248,6 +261,8 @@ interface Wpn {
   salvoAx: number;
   salvoAy: number;
   salvoPts: number[];
+  /** the salvo switched targets mid-ripple (overkill): the remaining tubes wait until the turret is laid on the new one */
+  salvoWait: boolean;
   /** guided volleys (missile salvos and bursts): [unit id, expected damage] committed by this volley's missiles that the
    *  overkill bookkeeping (incoming) does not count, so the volley spreads over several targets */
   split: number[];
@@ -790,7 +805,7 @@ export class Battle {
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
-        salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], split: [],
+        salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], salvoWait: false, split: [],
         okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0, lastFire: -1e9, ocShot: -1,
         bomb: bombBay, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
@@ -1346,6 +1361,9 @@ export class Battle {
     // valid candidates in scan order, kept for the focus pass (most scans find none, so focus is only worked out
     // when there is something to choose between; nothing in the scan below depends on it)
     const focus = I.focus, candJ = this.candJ, candS = this.candS, candD = this.candD;
+    // closest / farthest with a slow turret or a hull-fixed gun: near-ties go to the one quickest to swing onto
+    const turnAware = (prio === 'closest' || prio === 'farthest') && this.turnAware(w);
+    const keep = focus || turnAware;
     let nc = 0;
     // short-range weapons only look at the spatial hash neighbourhood (hash is at most one step stale);
     // ties are broken by lowest index so the result does not depend on iteration order
@@ -1392,9 +1410,10 @@ export class Battle {
         default: sc = I.airRole === 'fighter' && o.flying ? d * 0.3 : d; // fighters: aircraft first
       }
       if (sc < bestS - 1e-9 || (Math.abs(sc - bestS) <= 1e-9 && (d < bestD || (d === bestD && j < best)))) { bestS = sc; bestD = d; best = j; }
-      if (focus) { candJ[nc] = j; candS[nc] = sc; candD[nc] = d; nc++; }
+      if (keep) { candJ[nc] = j; candS[nc] = sc; candD[nc] = d; nc++; }
     }
     if (nc === 0) return best >= 0 ? best : doomedBest;
+    if (!focus) return this.turnTie(I, w, mx, my, nc, bestS, -1);
     // focus: enemies that allies nearby (and we ourselves) are already shooting are preferred
     const stamp = ++this.focusStamp;
     const fcnt = this.gatherSideNear(u.side, u.x, u.y, FOCUS_RADIUS + MAX_RADIUS, FOCUS_RADIUS);
@@ -1413,7 +1432,48 @@ export class Battle {
       const j = candJ[c], sc = candS[c], d = candD[c];
       if (this.focusMark[j] === stamp && (sc < fS - 1e-9 || (Math.abs(sc - fS) <= 1e-9 && (d < fD || (d === fD && j < fBest))))) { fS = sc; fD = d; fBest = j; }
     }
-    return fBest >= 0 ? fBest : best;
+    if (!turnAware) return fBest >= 0 ? fBest : best;
+    return fBest >= 0 ? this.turnTie(I, w, mx, my, nc, fS, stamp) : this.turnTie(I, w, mx, my, nc, bestS, -1);
+  }
+
+  /** Does this weapon's closest / farthest pick weigh turning time (see FAST_TRAVERSE)? */
+  private turnAware(w: Wpn): boolean {
+    return w.bomb || w.def.spinal != null || w.traverse < FAST_TRAVERSE;
+  }
+
+  /** Turn-aware tie-break of a closest / farthest pick: among the gathered candidates (candJ/candS/candD, nc of them;
+   *  only focus-marked ones when stamp >= 0) whose score is within the tie band of `bestS` -- max(TURN_TIE_M m,
+   *  TURN_TIE_FRAC x range), in the score's distance units -- the one the mount (or, for hull-fixed weapons, the hull)
+   *  can swing onto fastest. The cost is the turning time plus the round's flight time to it (hitscan: none), i.e.
+   *  how soon a round can land: without the flight term slow-shell guns (the barrage) took the tie straight down the
+   *  barrel even when it sat a full band farther, losing hits on fast units to the longer flight and wider spread.
+   *  Equal costs fall back to score, distance, then lowest index. */
+  private turnTie(I: Internal, w: Wpn, mx: number, my: number, nc: number, bestS: number, stamp: number): number {
+    const band = Math.max(TURN_TIE_M / METERS_PER_CELL, TURN_TIE_FRAC * w.range);
+    const u = I.u, units = this.units, candJ = this.candJ, candS = this.candS, candD = this.candD;
+    // the mount carrying this weapon (its barrel angle is where the swing starts from)
+    const mi = I.wpns.indexOf(w);
+    const mAng = mi >= 0 ? u.mounts[mi].angle : u.angle;
+    const hull = w.bomb || w.def.spinal != null;
+    const spinal = w.bomb ? 0 : w.def.spinal ?? 0;
+    const rate = hull ? (w.bomb ? I.turn : spinRate(I) * 0.5) : w.traverse;
+    const kind = w.def.projectile ?? 'bullet';
+    const hitscan = kind === 'beam' || kind === 'rail' || kind === 'lightning' || kind === 'melee' || kind === 'none';
+    const invSpeed = w.bomb || hitscan ? 0 : 1 / Math.max(1e-3, w.def.projectileSpeed ?? 15);
+    let best = -1, bT = Infinity, bS = Infinity, bD = Infinity;
+    for (let c = 0; c < nc; c++) {
+      const j = candJ[c], sc = candS[c], d = candD[c];
+      if (sc > bestS + band + 1e-9 || (stamp >= 0 && this.focusMark[j] !== stamp)) continue;
+      const o = units[j];
+      const brg = Math.atan2(o.y - my, o.x - mx);
+      const ang = hull ? Math.max(0, Math.abs(angDiff(u.angle, brg)) - spinal) : Math.abs(angDiff(mAng, brg));
+      // (a hull that cannot turn -- static -- can't trade turning for distance: only the flight time differs)
+      const tt = (rate > 1e-6 ? ang / rate : 0) + d * invSpeed;
+      if (tt < bT - 1e-9 || (Math.abs(tt - bT) <= 1e-9 && (sc < bS - 1e-9 || (Math.abs(sc - bS) <= 1e-9 && (d < bD || (d === bD && j < best)))))) {
+        bT = tt; bS = sc; bD = d; best = j;
+      }
+    }
+    return best;
   }
 
   /** Escort bookkeeping: nearest living unit of the escorted block, and the threat to engage near it. */
@@ -1564,6 +1624,9 @@ export class Battle {
           if (w.bomb && this.tick < I.bombGate) continue;
           // the bombs already falling will finish this one: put the rest of the stick on another target along the run
           if (w.bomb && t && this.doomed(t.id) && this.bombRetarget(I, w, m, t)) continue;
+          // overkill: the rest of the burst goes to another target (the barrel slews onto it first), or waits while the
+          // rounds already in flight are expected to finish this one
+          if (!w.bomb && t && this.overkillHold(I, w, m, t)) continue;
           if (w.bomb) I.bombGate = this.tick + BOMB_STAGGER;
           w.burstLeft--;
           w.burstTimer = BURST_GAP;
@@ -1576,9 +1639,31 @@ export class Battle {
       if (w.salvoLeft > 0) {
         if (u.disarm > 0) { w.salvoLeft = 0; continue; }
         if (--w.salvoTimer <= 0) {
+          let st = w.salvoTgt >= 0 && units[w.salvoTgt].alive ? units[w.salvoTgt] : null;
+          // overkill (unguided salvos; guided ones share out targets per missile, see splitTarget): once the tubes
+          // already fired (and everything else in flight) are expected to kill the salvo's target, or it is dead, the
+          // rest of the ripple is laid on another target -- or held while there is none (until the rounds in flight
+          // land, or something else comes into reach: a strafing jet keeps them for its next pass)
+          if (w.def.projectile !== 'missile') {
+            if ((!st || this.doomed(st.id)) && this.tick >= w.okHold) {
+              w.okHold = this.tick + Math.round(OVERKILL_RECHECK * TICK_RATE);
+              const c = this.pickTarget(I, w, 1);
+              if (c >= 0 && c !== w.salvoTgt && !this.doomed(c)) {
+                m.target = c; w.retarget = RETARGET_EVERY;
+                w.salvoTgt = c; w.salvoPts.length = 0; w.salvoWait = true;
+                st = units[c];
+              }
+            }
+            if (!st || this.doomed(st.id)) { w.salvoTimer = 0; continue; }
+            if (w.salvoWait) {
+              // laid on the new target yet? (a refresh may have moved the turret to another valid one: follow it)
+              if (t && t.id !== w.salvoTgt && !this.doomed(t.id)) { w.salvoTgt = t.id; st = t; w.salvoPts.length = 0; }
+              if (!t || t !== st || !onTarget) { w.salvoTimer = 0; continue; }
+              w.salvoWait = false;
+            }
+          }
           w.salvoTimer = w.ripple;
           w.salvoLeft--;
-          const st = w.salvoTgt >= 0 && units[w.salvoTgt].alive ? units[w.salvoTgt] : null;
           // still laid on the salvo's target: follow its lead point (a moving target is not left behind the cloud)
           if (st && t === st) { w.salvoAx = ax; w.salvoAy = ay; }
           this.fire(I, mi, w, st, w.salvoAx, w.salvoAy, w.salvoK++, w.salvoN);
@@ -1611,7 +1696,7 @@ export class Battle {
           // launcher battery: the tubes ripple-fire (one every `ripple` ticks), all laid on this aim point, their
           // impacts scattered through a cloud around it
           w.salvoPts.length = 0;
-          w.salvoN = burst; w.salvoK = 1; w.salvoLeft = burst - 1; w.salvoTimer = w.ripple;
+          w.salvoN = burst; w.salvoK = 1; w.salvoLeft = burst - 1; w.salvoTimer = w.ripple; w.salvoWait = false;
           w.salvoTgt = t.id; w.salvoAx = ax; w.salvoAy = ay;
           this.fire(I, mi, w, t, ax, ay, 0, burst);
           continue;
@@ -1681,6 +1766,30 @@ export class Battle {
     return true;
   }
 
+  /** Overkill check for the follow-up rounds of a burst: rounds already in flight are expected to kill `t`. Returns
+   *  true when this round must not go at it now: the mount switched to another (not doomed) target (m.target; the
+   *  barrel slews onto it before the burst resumes), or nothing else is in reach and the round is held until those
+   *  rounds land. The search for another target is repeated every OVERKILL_RECHECK s. */
+  private overkillHold(I: Internal, w: Wpn, m: MountState, t: SimUnit): boolean {
+    if (!this.doomed(t.id)) return false;
+    if (this.tick >= w.okHold) {
+      w.okHold = this.tick + Math.round(OVERKILL_RECHECK * TICK_RATE);
+      const c = this.pickTarget(I, w, 1);
+      if (c >= 0 && c !== t.id && !this.doomed(c)) { m.target = c; w.retarget = RETARGET_EVERY; }
+    }
+    return true;
+  }
+
+  /** Is `t` inside the reach (plus a margin for rounds crossing it on the way in) of a living point-defense unit of
+   *  its own side? */
+  private pdCovers(t: SimUnit): boolean {
+    for (const P of this.pds) {
+      if (!P.u.alive || P.u.side !== t.side) continue;
+      if (this.edgeC(P, t.x, t.y) <= P.pdRange + PD_COVER_MARGIN) return true;
+    }
+    return false;
+  }
+
   /** Damage one round is expected to deal to `t` after armour (shields count as hp, see doomed). */
   private expectedHit(t: SimUnit, raw: number, ap: number, airBonus: number): number {
     const r = t.flying ? raw * airBonus : raw;
@@ -1694,12 +1803,6 @@ export class Battle {
   private interceptable(k: string, moduleId?: string): boolean {
     if (moduleId && MODULE_BY_ID.get(moduleId)?.dmgKind === 'kinetic') return false;
     return k === 'rocket' || k === 'missile' || k === 'shell' || k === 'arc' || k === 'orb';
-  }
-
-  /** does `side` field a living point-defense unit? */
-  private sideHasPd(side: Side): boolean {
-    for (const P of this.pds) if (P.u.alive && P.u.side === side) return true;
-    return false;
   }
 
   /** Rounds already in flight are expected to kill this unit. */
@@ -1841,9 +1944,11 @@ export class Battle {
     const speed = def.projectileSpeed ?? 15;
     const air = kind === 'arc' || kind === 'flame' ? false : t ? t.flying : !w.hitG;
     // overkill bookkeeping: what one round is expected to deal to the target it was fired at. Rounds point defense can
-    // shoot down are not counted on while the target's side fields any: a squad holding fire for the one missile in
-    // the air let a single PD laser swat every shot, one at a time, for the rest of the battle
-    const est = t && kind !== 'flame' && !(this.interceptable(kind, def.id) && this.sideHasPd(t.side))
+    // shoot down are not counted on while the target sits under a PD umbrella: a squad holding fire for the one
+    // missile in the air let a single PD laser swat every shot, one at a time, for the rest of the battle. (This used
+    // to exempt them whenever the target's side fielded a PD unit anywhere on the field, which switched overkill
+    // prevention off for every rocket, missile and shell against that whole army.)
+    const est = t && kind !== 'flame' && !(this.interceptable(kind, def.id) && this.pdCovers(t))
       ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : pellets > 1 || salvoN > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
       : 0;
     if (guidedVolley && t) {

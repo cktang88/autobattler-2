@@ -169,7 +169,9 @@ const fxView = {
 /* ---------------------------------------------------------------------------------------------- particles */
 
 /** Particle tiles (emit `tex`): 0 glow, 1 + 2 billowing puff (fire pool: fireball flipbook, otherwise smoke flipbook;
- *  2 is the mirrored variant), 3 spark (a streak stretched along its velocity once the atlas is in), 4 star flare. */
+ *  2 is the mirrored variant), 3 spark (a streak stretched along its velocity once the atlas is in), 4 star flare,
+ *  6 muzzle tongue (a flame petal rooted at its position, pointing along its velocity, |velocity| = length / width;
+ *  it does not move). */
 class Particles {
   readonly mesh: THREE.Mesh;
   n = 0;
@@ -233,6 +235,16 @@ class Particles {
               tile = 5.0; // streak sprite
             }
           }
+          if (tile > 5.5 && tile < 6.5) {
+            // muzzle tongue: rooted at iPos, along iVel (screen-projected, so a flash toward the camera foreshortens
+            // into a round burst), |iVel| = length / width
+            vec3 vv = (viewMatrix * vec4(iVel, 0.0)).xyz;
+            float vl = length(vv), sp = length(vv.xy);
+            ax = sp > 1e-4 ? vv.xy / sp : vec2(1.0, 0.0); ay = vec2(-ax.y, ax.x);
+            float wd = iSR.x / max(1.0, vl);
+            float len = max(iSR.x * (vl > 1e-4 ? sp / vl : 0.0), wd * 1.1);
+            q = vec2((position.x + 0.5) * len, position.y * wd);
+          }
           vec2 o = ax * q.x + ay * q.y;
           vec3 wp = iPos + right * o.x + up * o.y;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(wp, 1.0);
@@ -256,7 +268,17 @@ class Particles {
         }
         void main() {
           vec3 rgb = vCol.rgb; float a;
-          if (uMode < 0.5) {
+          if (vTile > 5.5) {
+            // muzzle tongue: narrow neck at the muzzle, fat body a third of the way out, pointed tip; white-hot along the
+            // axis near the root
+            float x = vUv.x, y = vUv.y * 2.0 - 1.0;
+            float prof = pow(x, 0.45) * pow(1.0 - x, 0.9) * 2.3;
+            float d = abs(y) / max(prof, 1e-3);
+            a = (1.0 - smoothstep(0.4, 1.0, d)) * smoothstep(0.0, 0.05, x) * vCol.a;
+            // white-hot along the axis near the root, burning out to orange-yellow at the edges and the tip
+            float core = exp(-d * d * 5.0) * (1.0 - 0.75 * x);
+            rgb = mix(rgb * vec3(0.62, 0.42, 0.2), rgb * 1.05, core);
+          } else if (uMode < 0.5) {
             // procedural fallback atlas (2 x 2)
             float t = vTile > 3.5 ? 0.0 : vTile;
             vec2 cell = vec2(mod(t, 2.0), floor(t / 2.0));
@@ -338,6 +360,7 @@ class Particles {
         this.n--;
         continue;
       }
+      if (this.tex[i] > 5.5) { i++; continue; } // muzzle tongues stay put (their velocity is a direction)
       const dk = Math.max(0, 1 - this.drag[i] * dt);
       this.vx[i] *= dk; this.vy[i] = this.vy[i] * dk + this.grav[i] * dt; this.vz[i] *= dk;
       this.px[i] += this.vx[i] * dt; this.py[i] += this.vy[i] * dt; this.pz[i] += this.vz[i] * dt;
@@ -1347,12 +1370,32 @@ export class Fx3D {
     this.alpha.emit(x, y, z, vx * 0.75, vy, vz * 0.75, life * 0.45, s0 * 0.55, s1 * 0.4, spin, drag, grav, tex, ramp);
   }
 
-  /** muzzle flash at a barrel tip: a hot core, a forward spike and (big guns) a puff of smoke */
+  /** one flame tongue of a muzzle flash, rooted at (x, y, z) along the unit vector (ux, uy, uz): len long, len /
+   *  aspect wide (Particles tile 6) */
+  private tongue(x: number, y: number, z: number, ux: number, uy: number, uz: number, len: number, aspect: number, life: number, ramp: Ramp, h: number): void {
+    this.add.emit(x, y, z, ux * aspect, uy * aspect, uz * aspect, life, len, len * 0.8, 0, 0, 0, 6, ramp, h);
+  }
+
+  /** A gun's muzzle flash, sized q (~ its tongue length): a small white-hot core, the main tongue straight out of the
+   *  barrel (x plume), prongs out of the flash hider at a random roll every shot (so the star changes shot to shot), or
+   *  with brake set two jets thrown sideways out of a muzzle brake, and a faint bloom of light. It is over in 2-3 frames. */
+  private gunFlash(x: number, y: number, z: number, nx: number, nz: number, q: number, prongs: number, brake: boolean, h: number, plume = 1, life = 0.045, ramp: Ramp = RAMPS.flash): void {
+    this.add.emit(x, y, z, 0, 0, 0, life * 0.8, q * 0.45, q * 0.25, 0, 0, 0, 0, ramp, h * 0.8);
+    this.tongue(x, y, z, nx, 0, nz, q * R(1.25, 1.8) * plume, R(2.8, 3.6) * Math.sqrt(plume), life, ramp, h);
+    const px = -nz, pz = nx, r0 = brake ? 0 : Math.random() * 6.283;
+    for (let i = 0; i < prongs; i++) {
+      const a = r0 + (i * 6.283) / prongs, c = Math.cos(a), sn = Math.sin(a), f = brake ? R(-0.25, -0.05) : R(0.05, 0.35);
+      const ux = nx * f + px * c, uy = brake ? R(0, 0.15) : sn, uz = nz * f + pz * c, l = Math.hypot(ux, uy, uz);
+      this.tongue(x, y, z, ux / l, uy / l, uz / l, q * (brake ? R(0.55, 0.75) : R(0.35, 0.65)), R(2.2, 3), life * 0.8, ramp, h);
+    }
+    this.add.emit(x + nx * q * 0.5, y, z + nz * q * 0.5, 0, 0, 0, life * 1.4, q * 1.6, q * 1.2, 0, 0, 0, 0, RAMPS.fire, h * 0.1);
+  }
+
+  /** muzzle flash at a barrel tip (machine guns and other small arms): a sharp star of flame and (big guns) a puff of
+   *  smoke */
   muzzle(x: number, y: number, z: number, dx: number, dz: number, cal: number): void {
-    const s = 0.28 + cal * 0.75;
-    this.add.emit(x, y, z, 0, 0, 0, 0.085, s * 1.25, s * 0.6, 0, 0, 0, 0, RAMPS.flash, this.hdr);
-    const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l;
-    this.add.emit(x + nx * s * 0.45, y, z + nz * s * 0.45, nx * 3, 0, nz * 3, 0.06, s * 0.7, s * 0.3, 0, 2, 0, 3, RAMPS.flash, this.hdr);
+    const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l, s = 0.28 + cal * 0.75;
+    this.gunFlash(x, y, z, nx, nz, 0.1 + cal * 0.7, Math.random() < 0.5 ? 4 : 3, false, this.hdr);
     if (cal > 0.55) {
       for (let i = 0; i < 2; i++) this.puff(x + nx * 0.2, y, z + nz * 0.2, nx * R(0.8, 2) + R(-0.3, 0.3), R(0.2, 0.7), nz * R(0.8, 2) + R(-0.3, 0.3), R(0.7, 1.3), s * 0.5, s * 1.7, R(-0.6, 0.6), 1.6, 0, 1 + (i & 1), RAMPS.smokeLight);
     }
@@ -1507,10 +1550,8 @@ export class Fx3D {
     const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l, h = this.hdr;
     const px = -nz, pz = nx; // side
     switch (kind) {
-      case 'gatling': { // star-shaped flicker that grows with the spin
-        const q = s * (0.55 + 0.6 * k);
-        this.add.emit(x, y, z, 0, 0, 0, 0.05, q * 1.2, q * 0.6, 0, 0, 0, 4, RAMPS.flash, h);
-        this.add.emit(x + nx * q * 0.5, y, z + nz * q * 0.5, nx * 4, 0, nz * 4, 0.045, q * 0.8, q * 0.25, 0, 2, 0, 3, RAMPS.flash, h);
+      case 'gatling': { // a ragged, rounder star (the barrels spin under it) that grows with the spin
+        this.gunFlash(x, y, z, nx, nz, (0.1 + s * 0.6) * (0.6 + 0.5 * k), 5, false, h, 0.8, 0.04);
         if (Math.random() < 0.35 * k) this.add.emit(x, y, z, px * R(-2, 2) + nx, R(0.5, 2), pz * R(-2, 2) + nz, R(0.15, 0.3), 0.05, 0.02, 0, 1.5, -12, 3, RAMPS.spark, h);
         break;
       }
@@ -1530,8 +1571,11 @@ export class Fx3D {
         // the flash lights up the ground around the gun for an instant
         this.pools.add(x + nx * s * 0.5, z + nz * s * 0.5, 0.05, s * 1.6, s * 3.2, 0.16, 0.8 * h, 0.5 * h, 0.2 * h);
         this.add.emit(x + nx * s * 0.3, y, z + nz * s * 0.3, 0, 0, 0, 0.07, s * 2.6, s * 1.4, 0, 0, 0, 4, RAMPS.flash, h);
-        this.add.emit(x + nx * s * 0.6, y, z + nz * s * 0.6, nx * 5, 0, nz * 5, 0.08, s * 1.3, s * 0.5, 0, 3, 0, 3, RAMPS.flash, h);
-        for (const sd of [-1, 1]) this.add.emit(x + px * sd * s * 0.2, y, z + pz * sd * s * 0.2, px * sd * 4, 0, pz * sd * 4, 0.07, s * 0.8, s * 0.3, 0, 4, 0, 3, RAMPS.fire, h);
+        this.tongue(x, y, z, nx, 0, nz, s * R(1.6, 2.1), 2.6, 0.09, RAMPS.flash, h);
+        for (const sd of [-1, 1]) {
+          const ux = px * sd - nx * 0.2, uz = pz * sd - nz * 0.2, l = Math.hypot(ux, uz);
+          this.tongue(x, y, z, ux / l, 0.05, uz / l, s * R(0.8, 1.1), 2.4, 0.08, RAMPS.fire, h);
+        }
         const n = this.lodN(kind === 'he' ? 6 : 4);
         for (let i = 0; i < n; i++) {
           const a = (i / n) * 6.283;
@@ -1550,9 +1594,8 @@ export class Fx3D {
         }
         break;
       }
-      case 'sniper': { // long thin spike and a puff of dust
-        this.add.emit(x, y, z, 0, 0, 0, 0.08, s * 1.4, s * 0.6, 0, 0, 0, 0, RAMPS.flash, h);
-        for (let i = 1; i <= 3; i++) this.add.emit(x + nx * s * i * 0.45, y, z + nz * s * i * 0.45, nx * 3, 0, nz * 3, 0.07, s * (0.8 - i * 0.15), s * 0.2, 0, 2, 0, 3, RAMPS.flash, h);
+      case 'sniper': { // a long thin tongue, muzzle-brake side jets and a puff of dust
+        this.gunFlash(x, y, z, nx, nz, 0.12 + s * 0.8, 2, true, h, 1.6, 0.06);
         this.puff(x + nx * 0.3, y, z + nz * 0.3, nx * 1.5, 0.2, nz * 1.5, R(0.6, 1.0), s * 0.4, s * 1.4, R(-1, 1), 2.5, 0, 1, RAMPS.smokeLight);
         break;
       }
@@ -1574,16 +1617,13 @@ export class Fx3D {
         for (let i = 0; i < n; i++) this.puff(x, y + 0.1, z, nx * R(0.2, 0.8) + R(-0.3, 0.3), R(1.2, 2.2), nz * R(0.2, 0.8) + R(-0.3, 0.3), R(0.9, 1.6), s * 0.4, s * 1.6, R(-1, 1), 2, 0, 1 + (i & 1), RAMPS.smokeLight);
         break;
       }
-      case 'flak': { // twin-jet flash, dark smoke
-        this.add.emit(x, y, z, 0, 0, 0, 0.08, s * 1.4, s * 0.6, 0, 0, 0, 0, RAMPS.flash, h);
-        this.add.emit(x + nx * s * 0.4, y, z + nz * s * 0.4, nx * 4, 1.5, nz * 4, 0.07, s * 0.9, s * 0.3, 0, 2, 0, 3, RAMPS.fire, h);
+      case 'flak': { // a hot flash out of the brake, dark smoke
+        this.gunFlash(x, y, z, nx, nz, 0.15 + s * 0.8, 2, true, h, 1, 0.06, RAMPS.fire);
         this.puff(x + nx * 0.2, y, z + nz * 0.2, nx * 1.2, 0.5, nz * 1.2, R(0.7, 1.2), s * 0.4, s * 1.3, R(-1, 1), 2, 0, 1, RAMPS.smoke);
         break;
       }
-      case 'ac': { // autocannon: chunky flash + side vents, no smoke
-        this.add.emit(x, y, z, 0, 0, 0, 0.07, s * 1.6, s * 0.8, 0, 0, 0, 4, RAMPS.flash, h);
-        this.add.emit(x + nx * s * 0.45, y, z + nz * s * 0.45, nx * 3.5, 0, nz * 3.5, 0.06, s * 0.8, s * 0.3, 0, 2, 0, 3, RAMPS.fire, h);
-        for (const sd of [-1, 1]) this.add.emit(x, y, z, px * sd * 2.5, 0, pz * sd * 2.5, 0.05, s * 0.45, s * 0.2, 0, 3, 0, 3, RAMPS.flash, h);
+      case 'ac': { // autocannon: a chunky tongue + muzzle-brake side jets, no smoke
+        this.gunFlash(x, y, z, nx, nz, 0.14 + s * 0.8, 2, true, h, 1.1, 0.055);
         break;
       }
       default: this.muzzle(x, y, z, dx, dz, s); break;
@@ -1769,8 +1809,8 @@ export class Fx3D {
   }
 
   /** a cluster shell splitting open just above the ground: a bright crack and a ring of sparks (the bomblets follow) */
-  clusterBurst(x: number, z: number, r: number): void {
-    const y = 0.7 + r * 0.25, h = this.hdr;
+  clusterBurst(x: number, z: number, r: number, base = 0): void {
+    const y = base > 0 ? base + 0.15 : 0.7 + r * 0.25, h = this.hdr;
     this.add.emit(x, y, z, 0, 0, 0, 0.12, 1.4 + r * 0.6, 0.6, 0, 0, 0, 0, RAMPS.flash, h * 1.2);
     const n = this.lodN(16);
     for (let i = 0; i < n; i++) {

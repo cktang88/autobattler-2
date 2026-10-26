@@ -15,7 +15,7 @@ const D = (id: string, chassis: string, mobility: string, mounts: (string | null
 
 test('weapon cap by hull size: 2 up to heavy hulls, 3 on giants, 4 on titans', () => {
   assert.deepEqual([1, 2, 3, 4, 5].map(maxWeaponsFor), [2, 2, 2, 3, 4]);
-  for (const c of CHASSIS) assert.equal(weaponCap(c), c.maxWeapons ?? maxWeaponsFor(c.size), c.id);
+  for (const c of CHASSIS) assert.equal(weaponCap(c), Math.min(c.maxWeapons ?? maxWeaponsFor(c.size), c.mounts.length), c.id);
   assert.equal(weaponCap({ size: 2, maxWeapons: 3 }), 3, 'a hull may deviate');
 });
 

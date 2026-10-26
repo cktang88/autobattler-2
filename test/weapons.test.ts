@@ -57,7 +57,9 @@ test('howitzer vs barrage: the howitzer outranges and out-alphas it, the barrage
   const hm = margin(D('how', 'warden', 'treads', ['howitzer', 'plateL']), swarm, 700);
   const bm = margin(D('bar', 'warden', 'treads', ['barrage', 'plateL']), swarm, 700);
   assert.equal(computeStats(swarm).squad, 16);
-  assert.ok(bm > hm + 0.2, `vs a light swarm: barrage ${bm.toFixed(2)} vs howitzer ${hm.toFixed(2)}`);
+  // margin narrowed 0.2 -> 0.1 with turn-aware closest/farthest picks (sim: turnTie), which cost slow-shell weapons
+  // some nearest-first precision against a closing swarm
+  assert.ok(bm > hm + 0.1, `vs a light swarm: barrage ${bm.toFixed(2)} vs howitzer ${hm.toFixed(2)}`);
 });
 
 test('mg vs Suppressor: the 7.62 mm outranges and outdamages it; the Suppressor pins', () => {

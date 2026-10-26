@@ -54,6 +54,7 @@ const DESIGNS: Design[] = [
   D('pdtank', 'warden', 'halftrack', ['autocannon', 'pointdef']),
   D('plaintank', 'warden', 'halftrack', ['autocannon', 'plateL']),
   D('rocketeer', 'warden', 'halftrack', ['rockets', null]),
+  D('hmgw', 'warden', 'halftrack', ['hmg', null]), // a single unit with a fast (291 deg/s) turret
   D('smoker', 'warden', 'halftrack', ['autocannon', 'smoke']),
   D('bomb', 'scout', 'wheels', ['selfdestruct']),
   D('hardtank', 'warden', 'halftrack', ['autocannon', 'hardened']),
@@ -546,7 +547,9 @@ import { computeStats } from '../src/shared/stats.ts';
 import type { TargetPriority } from '../src/shared/types.ts';
 
 function pickedTarget(prio: TargetPriority, enemyA: string, enemyB: string, tweak?: (near: Battle['units'][number], far: Battle['units'][number]) => void): { near: number; far: number; got: number } {
-  const b = new Battle(input(1, [{ ...P('sniperw', 10, 0), target: prio, kite: false, focus: false }], [P(enemyA, 8, 0), P(enemyB, 12, 1)]));
+  const b = new Battle(input(1, [{ ...P('sniperw', 10, 0), target: prio, kite: false, focus: false }], [P(enemyA, 8, 0), P(enemyB, 12, 3)]));
+  // (the far one sits 2+ cells farther: within the turn-aware tie band, max(5 m, 10% of range), a slow turret would
+  // treat them as equally near and take whichever it is already laid on)
   const near = b.units[1], far = b.units[2];
   tweak?.(near, far);
   for (let i = 0; i < 600 && b.units[0].mounts[0].target < 0; i++) b.step();
@@ -565,6 +568,35 @@ test('target priority: closest / farthest / lowestHp / highestHp', () => {
   assert.equal(r.got, r.far);
   r = pickedTarget('highestHp', 'bulwark', 'bulwark', (_n, f) => { f.hp = 300; });
   assert.equal(r.got, r.near);
+});
+
+test('target priority: closest / farthest near-ties go to the target a slow turret can swing onto soonest', () => {
+  // shooter at (sx, sy) facing +y (the enemy side), turret laid straight ahead. A sits 1 cell nearer but 90 deg off the
+  // barrel; B dead ahead. Ties are within max(5 m, 10% of range) = 1 cell (5 m) for these 7.5-10 cell guns.
+  type Hook = { rebuildHash(): void; findTarget(u: Battle['units'][number], w: unknown): number; ints: { wpns: unknown[] }[] };
+  const pick = (design: string, prio: TargetPriority, dA: number, dB: number) => {
+    const b = new Battle(input(1, [{ ...P(design, 10, 0), target: prio, kite: false, focus: false }], [{ ...P('bulwark', 4, 0), stance: 'holdPos' }, { ...P('bulwark', 16, 0), stance: 'holdPos' }]));
+    const h = b as unknown as Hook;
+    const u = b.units[0], A = b.units[1], B = b.units[2];
+    u.x = 30; u.y = 30; u.angle = Math.PI / 2; u.mounts[0].angle = Math.PI / 2;
+    A.x = u.x + dA; A.y = u.y; B.x = u.x; B.y = u.y + dB;
+    h.rebuildHash();
+    return { got: h.findTarget(u, h.ints[0].wpns[0]), A: A.id, B: B.id };
+  };
+  // 120 mm cannon (113 deg/s): 6 vs 6.8 cells is a tie, and swinging 90 deg takes ~0.8 s -- take the one ahead
+  let r = pick('buster', 'closest', 6, 6.8);
+  assert.equal(r.got, r.B, 'slow turret: near-tie straight ahead');
+  // farther apart than the band: plain closest
+  r = pick('buster', 'closest', 6, 8);
+  assert.equal(r.got, r.A, 'slow turret: a clearly nearer target still wins');
+  // farthest: the mirror image (B 0.8 cells nearer but dead ahead)
+  r = pick('buster', 'farthest', 6.8, 6);
+  assert.equal(r.got, r.B, 'slow turret, farthest: near-tie straight ahead');
+  // a fast heavy machine gun (291 deg/s) keeps the pure closest pick
+  r = pick('hmgw', 'closest', 5, 5.6);
+  assert.equal(r.got, r.A, 'fast turret: pure closest');
+  // deterministic: the same set-up picks the same target
+  assert.equal(pick('buster', 'closest', 6, 6.8).got, pick('buster', 'closest', 6, 6.8).got);
 });
 
 test('target priority: highestDps / lowestDps', () => {
@@ -1268,17 +1300,57 @@ test('guided volleys split over several weak targets, but all go to one tough ta
   }
 });
 
-test('unguided rocket salvos keep saturating one aim point even when it overkills', () => {
-  const b = new Battle(input(4, [P('mlrsTruck', 10, 0)], [0, 2, 4, 6].map((x) => ({ ...P('buggy', 7 + x, 0), stance: 'holdPos' as const }))));
+test('unguided rocket salvos: once the tubes fired will kill the target, the rest of the ripple goes to another one', () => {
+  // (salvos used to pour every tube into the aim point they were laid on, however few rounds the target needed)
+  const b = new Battle(input(4, [P('mlrsTruck', 10, 0)], [0, 3, 6, 9].map((x) => ({ ...P('buggy', 5 + x, 0), stance: 'holdPos' as const }))));
   for (const u of b.units) if (u.side === 1) { u.hp = 10; u.maxHp = 10; u.shield = 0; }
-  const seen = new Map<number, SP>();
-  while (!b.done && b.tick < 20 * 40 && seen.size < 12) {
+  type RP = SP & { aimT: number; est: number };
+  const seen = new Map<number, RP>();
+  const inc = () => (b as unknown as { incoming: Float64Array }).incoming;
+  while (!b.done && b.tick < 20 * 40 && seen.size < 4) {
     b.step();
-    for (const p of simProjs(b)) if (p.moduleId === 'mlrs' && p.src === 0 && !seen.has(p.id)) seen.set(p.id, p);
+    for (const p of simProjs(b) as RP[]) {
+      if (p.moduleId !== 'mlrs' || p.src !== 0 || seen.has(p.id)) continue;
+      seen.set(p.id, { ...p });
+      assert.ok(p.aimT >= 0, 'every rocket is booked on its target');
+      // nothing but this rocket was already headed at its target in numbers that kill it
+      assert.ok(inc()[p.aimT] - p.est < b.units[p.aimT].hp, `rocket ${seen.size} fired at a doomed target`);
+    }
   }
   const rs = [...seen.values()];
-  const mx = rs.reduce((a, r) => a + r.tx, 0) / rs.length, my = rs.reduce((a, r) => a + r.ty, 0) / rs.length;
-  assert.ok(rs.every((r) => Math.hypot(r.tx - mx, r.ty - my) < 4), 'one cloud round a single aim point');
+  assert.equal(rs.length, 4);
+  assert.equal(new Set(rs.map((r) => r.aimT)).size, 4, 'the salvo spread over all four buggies (one rocket each kills)');
+});
+
+test('overkill: a strike jet rocket pod spreads its salvo, also when the enemy fields point defense elsewhere', () => {
+  // the Strafer case: a 4-tube pod (84 per rocket) on a strike jet vs ground units one rocket kills. The salvo's
+  // later tubes ignored the overkill tally, and rockets were not booked at all while the enemy had any PD unit alive
+  for (const withPd of [false, true]) {
+    // (howitzer trucks: single ground-only units that can't shoot back at the jet)
+    const foes = [0, 4, 8].map((x) => ({ ...P('arty', 6 + x, 0), stance: 'holdPos' as const }));
+    if (withPd) foes.push({ ...P('pdtank', 22, 12), stance: 'holdPos' as const }); // far off: covers none of the buggies
+    const b = new Battle(input(3, [P('strafer', 10, 0)], foes));
+    const arty = b.units.filter((u) => u.side === 1 && u.design.id === 'arty');
+    assert.equal(arty.length, 3);
+    for (const u of arty) { u.hp = 30; u.maxHp = 30; u.shield = 0; }
+    type RP = SP & { aimT: number; est: number };
+    const inc = () => (b as unknown as { incoming: Float64Array }).incoming;
+    const seen = new Set<number>();
+    const aimed: number[] = [];
+    while (!b.done && b.tick < 60 * 20 && seen.size < 3) {
+      b.step();
+      for (const p of simProjs(b) as RP[]) {
+        if (p.moduleId !== 'rockets' || p.src !== 0 || seen.has(p.id)) continue;
+        seen.add(p.id);
+        assert.ok(p.aimT >= 0, `pd ${withPd}: rocket ${seen.size} is booked on its target`);
+        const t = b.units[p.aimT];
+        assert.ok(inc()[p.aimT] - p.est < t.hp + t.shield, `pd ${withPd}: rocket ${seen.size} went into a target already doomed`);
+        aimed.push(p.aimT);
+      }
+    }
+    assert.equal(seen.size, 3, `pd ${withPd}: the pod fired`);
+    assert.ok(new Set(aimed).size >= 2, `pd ${withPd}: the salvo spread over ${new Set(aimed).size} target(s)`);
+  }
 });
 
 test('overkill: shooters do not pile onto a target that rounds in flight will already kill', () => {

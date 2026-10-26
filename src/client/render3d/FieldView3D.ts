@@ -87,6 +87,8 @@ interface Wreck {
 }
 interface ProjRec {
   y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean;
+  /** bomblets: height their cargo shell split at (a hull's roof, else 0): they fall from there to their landing point */
+  bh: number;
   /** smoothed 3D flight direction, the last trail emission point, launch time, wobble phase */
   dx: number; dy: number; dz: number; ex: number; ey: number; ez: number; born: number; seed: number;
   /** offset from the sim's launch point to the barrel / tube tip it left (eased out over the first few frames) */
@@ -453,7 +455,7 @@ export class FieldView3D implements BattleView {
   /** focusing beams (ModuleDef.ramp): time on the current target per unit * 16 + mount */
   private ramp = new Map<number, { start: number; last: number; x: number; y: number }>();
   /** where cluster shells just burst (their bomblets are drawn as bomblets) */
-  private clusterPts: { x: number; y: number; t: number }[] = [];
+  private clusterPts: { x: number; y: number; t: number; h: number }[] = [];
   /** aircraft going down in flames */
   private fallers: Faller[] = [];
   /** per unit * 16 + mount: the barrel the last shot left (rounds / beams start at that tip) and rounds fired (tracer count) */
@@ -1501,11 +1503,12 @@ export class FieldView3D implements BattleView {
         const st = styleOf(p.moduleId);
         // rotary guns: how far the barrels had spun up when this round left them
         const k = st.fam === 'gatling' && p.src !== undefined && p.mount !== undefined ? this.spin.get(p.src * 16 + p.mount)?.k ?? 1 : 1;
-        const bomblet = st.fam === 'cluster' && this.clusterPts.some((c) => Math.abs(c.x - p.x) < 0.7 && Math.abs(c.y - p.y) < 0.7);
-        if (bomblet || st.fam === 'bomb') y0 = pos.z + 0.12;
+        const cp = st.fam === 'cluster' ? this.clusterPts.find((c) => Math.abs(c.x - p.x) < 0.7 && Math.abs(c.y - p.y) < 0.7) : undefined;
+        const bomblet = !!cp, bh = cp?.h ?? 0;
+        if (bomblet || st.fam === 'bomb') y0 = pos.z + 0.12 + bh;
         const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
         rec = {
-          y0, lastH: y0, px: pos.x + ox, py: pos.y + oz, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet,
+          y0, lastH: y0, px: pos.x + ox, py: pos.y + oz, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet, bh,
           dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x + ox, ey: y0, ez: pos.y + oz, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
           ox, oz, tracer: every > 0 && shots % every === 0, sx: pos.x + ox, sz: pos.y + oz, team: this.teamOf(p.side),
           fx0: pos.x, fz0: pos.y, k0: clamp(pos.progress, 0, 1), mod: p.moduleId, side: p.side, kind: p.kind,
@@ -1529,7 +1532,7 @@ export class FieldView3D implements BattleView {
       // (missiles: down to their target's body height)
       const lofts = !rec.air && (p.kind === 'arc' || p.kind === 'rocket' || p.kind === 'missile');
       let H: number;
-      if (rec.bomblet || st.fam === 'bomb') H = pos.z + 0.12;
+      if (rec.bomblet || st.fam === 'bomb') H = pos.z + 0.12 + rec.bh * (1 - kp);
       else if (lofts) H = lerp(rec.y0, p.kind === 'missile' ? rec.hEnd : 0.15, kp) + pos.z;
       else H = lerp(rec.y0, rec.hEnd, kp);
       // eased from the barrel tip onto the sim's path over the first ~0.15 s
@@ -2295,7 +2298,10 @@ export class FieldView3D implements BattleView {
       case 'explode': {
         this.lastBlast = { x: e.x, y: e.y, r: e.radius };
         const st = styleOf(e.moduleId), r = Math.max(0.3, e.radius);
-        if (st.fam === 'cluster' && e.radius >= 1.1) this.clusterPts.push({ x: e.x, y: e.y, t: this.time });
+        // a cluster shell that comes down on a hull splits on its roof (its bomblets fall from there), not under the model
+        const cargo = st.fam === 'cluster' && e.radius >= 1.1;
+        const roof = cargo ? this.impactFor(e.x, e.y, e.moduleId, byId) : null;
+        if (cargo) this.clusterPts.push({ x: e.x, y: e.y, t: this.time, h: roof ? roof.y : 0 });
         if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
         // a round that burst on a hull goes off where its drawn flight met the hull's hit box (the side it flew into, or
         // the roof it came down on), not on the ground at the sim's burst point inside / under the model: the warhead's
@@ -2335,7 +2341,10 @@ export class FieldView3D implements BattleView {
             }
             fx.explosion(ex, ez, r, 'fire', ey); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.7); break;
           case 'cluster':
-            if (e.radius >= 1.1) { fx.clusterBurst(e.x, e.y, r); fx.explosion(e.x, e.y, r * 0.75, 'fire', 0, false, 0.6); } // the cargo shell splits
+            if (e.radius >= 1.1) { // the cargo shell splits (in the air, or on the roof it came down on)
+              const rx = roof ? roof.x : e.x, rz = roof ? roof.z : e.y, ry = roof ? roof.y : 0;
+              fx.clusterBurst(rx, rz, r, ry); fx.explosion(rx, rz, r * 0.75, 'fire', ry, false, 0.6);
+            }
             else { fx.explosion(ex, ez, r * 0.8, 'fire', ey, false, 0.4); if (!ey) fx.dirtGeyser(e.x, e.y, r * 0.35); } // one of the bomblet carpet
             break;
           case 'firebomb': fx.pop(ex, ey, ez, r * 0.8, RAMPS.ember); break; // the burning patch ('fireField') follows
