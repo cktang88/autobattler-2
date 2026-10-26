@@ -9,11 +9,11 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-torchbug', name: 'Torchbug', chassis: 'scout', mobility: 'halftrack', mounts: ['flamer'] },
   // ---- skirmisher ----
   { id: 'starter-lancer', name: 'Lancer', chassis: 'raider', mobility: 'legs', mounts: ['laser', 'laser'] },
-  { id: 'starter-hunter', name: 'Tank Hunter', chassis: 'raider', mobility: 'legs', mounts: ['atgm', 'atgm'] },
+  { id: 'starter-hunter', name: 'Tank Hunter', chassis: 'raider', mobility: 'legs', mounts: ['atgm', 'mg'] },
   // ---- frontline tank ----
   { id: 'starter-bulwark', name: 'Bulwark', chassis: 'warden', mobility: 'treads', mounts: ['hmg', 'plateL'] },
   // ---- anti-tank ----
-  { id: 'starter-tankbuster', name: 'Tankbuster', chassis: 'longarm', mobility: 'spider', mounts: ['cannon'] },
+  { id: 'starter-tankbuster', name: 'Tankbuster', chassis: 'longarm', mobility: 'treads', mounts: ['cannon'] },
   // ---- anti-air ----
   { id: 'starter-skyguard', name: 'Skyguard', chassis: 'warden', mobility: 'halftrack', mounts: ['ac40', 'ac20'] },
   // ---- artillery ----
@@ -32,7 +32,7 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- emplacement ----
   { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'spider', mounts: ['guidedrocket', 'hmg'] },
   // ---- melee: fast hover brawler that dives into the line ----
-  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'hover', mounts: ['buzzsaw', 'shockprod'] },
+  { id: 'starter-ripper', name: 'Gnasher', chassis: 'mantis', mobility: 'hover', mounts: ['buzzsaw', null] },
   // ---- stealth: cloaked sniper platform ----
   { id: 'starter-shade', name: 'Shade', chassis: 'striker', mobility: 'halftrack', mounts: ['lightrail', 'stealth', 'sniper'] },
   // ---- shield wall: barrier-heavy anchor of the line ----
