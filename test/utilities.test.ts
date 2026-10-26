@@ -95,6 +95,21 @@ test('Overcharge: the first volley after a pause hits much harder; Berserker hit
     return 0;
   };
   assert.ok(first(ocC) > first(plainC) * 1.8, `first hit ${first(plainC).toFixed(0)} vs overcharged ${first(ocC).toFixed(0)}`);
+  // a slow gun (reload past the capacitor's idle time) gets the charge on the opening shot only, not on every reload
+  const hits = (d: Design) => {
+    const wall = D('wall', 'bastion', 'treads', ['plateH', 'plateM', 'flak']);
+    const b = new Battle({ seed: 1, sides: [{ designs: [d, wall], units: [pl(d.id, 40)] }, { designs: [d, wall], units: [pl('wall', 40)] }] });
+    const me = b.units[0], t = b.units.find((u) => u.side === 1)!;
+    t.hp = t.maxHp = 1e7; t.x = me.x; t.y = me.y - 6;
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    const out: number[] = [];
+    for (let i = 0; i < 20 * TICK_RATE; i++) { b.step(); for (const e of b.events) if (e.t === 'hit' && e.unit === t.id) out.push(e.damage); }
+    return out;
+  };
+  const slow = hits(D('ocg', 'warden', 'halftrack', ['gauss', 'overcharge'])), slowPlain = hits(D('pg', 'warden', 'halftrack', ['gauss', null]));
+  assert.ok(slow.length >= 3, `gauss hits: ${slow.length}`);
+  assert.ok(slow[0] > slowPlain[0] * 1.8, 'the opening gauss shot is charged');
+  for (let i = 1; i < slow.length; i++) assert.ok(slow[i] < slowPlain[0] * 1.2, `gauss shot ${i} overcharged: ${slow[i].toFixed(0)} vs ${slowPlain[0].toFixed(0)}`);
   const bz = D('bz', 'warden', 'halftrack', ['autocannon', 'berserker']);
   const whole = dealt(bz, 10);
   const hurt = (() => {

@@ -221,6 +221,8 @@ interface Wpn {
   /** tick of this gun's last volley, and of its last overcharged one (ModuleDef.overcharge) */
   lastFire: number;
   ocShot: number;
+  /** ticks this gun has sat loaded and ready without firing (the overcharge's idle clock: reload time doesn't count) */
+  readyT: number;
   def: ModuleDef;
   /** turret traverse rad/s */
   traverse: number;
@@ -813,7 +815,7 @@ export class Battle {
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
         salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], salvoWait: false, resvTgt: -1, resvEst: 0, split: [],
-        okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0, lastFire: -1e9, ocShot: -1,
+        okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0, lastFire: -1e9, ocShot: -1, readyT: 1e9,
         bomb: bombBay, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
         traverse: turretTurnRate(def),
@@ -1560,6 +1562,7 @@ export class Battle {
       if (u.stun > 0) continue; // paralysed: no aiming, no firing, no reloading
       if (m.cooldown > -DT && !(w.resupply && m.reloading && !this.overHome(u))) m.cooldown -= DT * (1 - u.slow) * (I.fireRate + I.rateAura) * (w.def.spinUp ? SPIN_MIN + (1 - SPIN_MIN) * w.spin : 1);
       if (m.reloading && m.cooldown <= 1e-9) { m.reloading = false; m.ammo = w.def.magazine; }
+      if (m.cooldown <= 1e-9 && !m.reloading) w.readyT++; // (firing resets it, see fireImpl)
       // tactical reload: a partly spent clip refills once the unit has had nothing to shoot for TACTICAL_RELOAD s, so
       // every engagement opens with the full burst (bomb bays still rearm only over home, see needsResupply)
       if (!m.reloading && m.ammo !== undefined && w.def.magazine && m.ammo < w.def.magazine && !w.def.resupply && I.idleT > TACTICAL_RELOAD * TICK_RATE && w.burstLeft <= 0) { m.reloading = true; m.cooldown = Math.max(m.cooldown, (w.def.reload ?? 0) * I.reloadMult); }
@@ -1890,9 +1893,10 @@ export class Battle {
       if (nt && nt !== t) { t = nt; ax = nt.x; ay = nt.y; }
     }
     m.flash = 1;
-    // overcharge: the first volley after a pause carries the capacitor's charge (read before the timer resets)
-    const overcharged = I.ocMult > 0 && w.lastFire < this.tick - I.ocIdle * TICK_RATE && salvoK === 0;
-    if (salvoK === 0) w.lastFire = this.tick;
+    // overcharge: the first volley after the gun sat loaded for a while carries the capacitor's charge (read before
+    // the clock resets; a long reload alone doesn't charge it, or every shot of a slow gun would be overcharged)
+    const overcharged = I.ocMult > 0 && w.readyT >= I.ocIdle * TICK_RATE && salvoK === 0;
+    if (salvoK === 0) { w.lastFire = this.tick; w.readyT = 0; }
     if (overcharged) w.ocShot = this.tick;
     const cloakedShot = u.cloaked && I.cloakDmg > 0;
     I.sinceFire = 0;

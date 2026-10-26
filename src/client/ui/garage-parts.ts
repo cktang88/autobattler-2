@@ -241,7 +241,7 @@ export function moduleTradeoffs(mod: ModuleDef): { plus: string[]; minus: string
   if (mod.armor && mod.armor < 0) add(false, `${mod.armor} armor`);
   if (mod.berserk) add(true, `+${Math.round(mod.berserk.damage * 100)}% damage below ${Math.round(mod.berserk.below * 100)}% hp`);
   if (mod.paint) add(true, `+${Math.round(mod.paint.bonus * 100)}% army damage on marked targets (${n1(mod.paint.duration)} s)`);
-  if (mod.overcharge) add(true, `+${Math.round(mod.overcharge.mult * 100)}% first-volley damage (after ${n1(mod.overcharge.idle)} s idle)`);
+  if (mod.overcharge) add(true, `+${Math.round(mod.overcharge.mult * 100)}% first-volley damage (after ${n1(mod.overcharge.idle)} s loaded & idle)`);
   if (mod.killRush) add(true, `+${Math.round(mod.killRush.speed * 100)}% speed, +${Math.round(mod.killRush.fireRate * 100)}% fire rate for ${n1(mod.killRush.duration)} s after a kill`);
   if (mod.overheat) add(false, `−${n1(mod.overheat * 100)}% hp / s while firing`);
   if (mod.cloakDamage) add(false, `−${Math.round(mod.cloakDamage * 100)}% damage on shots from cloak`);
