@@ -410,8 +410,10 @@ export const MODULE_CAL: Record<string, number> = {
   // At 7 such swarms land near 50% (and come 8 to a block).
   // [weapon pass] new bomb bays (stun / EMP control bombs)
   stunbomb: 20.296, empbomb: 22.443, stuncluster: 12.827,
-  // [weapon pass] new modules
-  shortbarrel: 0.118, longbarrel: 1.754, herounds: 0.745, optics: 1.828, reinforced: 0.67, lightframe: 0.835, berserker: 0.794, ammorack: 0.146, overcharge: 1.75, killrush: 1.518, evasion: 0.9, scrapmine: 1.5, emppop: 0.7, packlink: 2.935, heavyrounds: 0.889, afterburner: 1.248, painter: 1.563, deflector: 1.98,
+  // [weapon pass] new modules. optics 1.828 -> 1.0 when it gained +40% shell speed: spread barely matters (direct fire
+  //   already lands ~95% of rounds), so at 1.828 the optics side of an equal-supply mirror lost ~80% of fights; at 1.0
+  //   it wins ~50% (strong on MG / cannon / plasma orb, weak on artillery).
+  shortbarrel: 0.118, longbarrel: 1.754, herounds: 0.745, optics: 1.0, reinforced: 0.67, lightframe: 0.835, berserker: 0.794, ammorack: 0.146, overcharge: 1.75, killrush: 1.518, evasion: 0.9, scrapmine: 1.5, emppop: 0.7, packlink: 2.935, heavyrounds: 0.889, afterburner: 1.248, painter: 1.563, deflector: 1.98,
 };
 const cal = (id: string) => MODULE_CAL[id] ?? 1;
 
