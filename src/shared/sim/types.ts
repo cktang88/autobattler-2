@@ -123,7 +123,9 @@ export type BattleEvent =
   | { t: 'beam'; moduleId: string; x1: number; y1: number; x2: number; y2: number; side: Side; unit?: number; mount?: number }
   | { t: 'chain'; moduleId: string; points: { x: number; y: number }[]; side: Side; unit?: number; mount?: number }
   | { t: 'hit'; unit: number; damage: number; shieldHit: boolean; x: number; y: number; moduleId: string }
-  | { t: 'explode'; x: number; y: number; radius: number; moduleId: string }
+  /** air: the blast went off in the air (a round fired at aircraft, e.g. a flak proximity burst): only flyers are hit,
+   *  and the renderers draw it at the aircraft's altitude with no mark on the ground (absent for ground bursts) */
+  | { t: 'explode'; x: number; y: number; radius: number; moduleId: string; air?: true }
   | { t: 'heal'; unit: number; amount: number; from: number }
   /** overkill / hit: how far below 0 hp the killing blow went, and that blow's size (after armour), both in max hp;
    *  kind: what killed it; wreck: WreckLevel derived from the three (visual only) */

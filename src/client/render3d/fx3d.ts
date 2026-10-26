@@ -51,6 +51,8 @@ export const RAMPS = {
   railFlash: [4.0, 4.4, 5.0, 1, 1.4, 2.2, 4.4, 0.8, 0.25, 0.5, 1.6, 0],
   /** flak burst: oily black puffs */
   flakSmoke: [0.05, 0.05, 0.05, 0.8, 0.09, 0.09, 0.09, 0.6, 0.14, 0.14, 0.14, 0],
+  /** flak airburst puff: near-black and dense at first, thinning to a dark grey as it hangs and drifts */
+  flakPuff: [0.035, 0.034, 0.033, 0.92, 0.06, 0.058, 0.056, 0.7, 0.12, 0.118, 0.115, 0],
   /** rocket motor flame: orange, hot but not blown out */
   exhaust: [2.2, 1.2, 0.35, 0.9, 1.4, 0.45, 0.08, 0.6, 0.4, 0.08, 0.02, 0],
   /** missile contrail: thin white */
@@ -1790,22 +1792,47 @@ export class Fx3D {
     this.trauma = Math.min(1, this.trauma + 0.01 + r * 0.03);
   }
 
-  /** flak: an oily black air burst with a ball of shrapnel sparks; nothing reaches the ground */
-  airBurst(x: number, y: number, z: number, r: number): void {
-    r = clamp(r, 0.4, 3);
-    const h = this.hdr, kq = 1 / (1 + this.heat * 0.4);
-    this.heat += 0.6;
-    this.add.emit(x, y, z, 0, 0, 0, 0.08, r * 1.6, r * 0.8, 0, 0, 0, 0, RAMPS.flash, h * kq);
-    const nf = this.lodN(3);
-    for (let i = 0; i < nf; i++) this.fire.emit(x, y, z, R(-1, 1) * r, R(-0.5, 1) * r, R(-1, 1) * r, R(0.15, 0.3), r * 0.4, r * 0.8, 0, 4, 0, 1 + (i & 1), RAMPS.fire, h * kq);
-    const ns = this.lodN(3 + Math.round(r * 2));
-    for (let i = 0; i < ns; i++) this.puff(x + R(-0.3, 0.3) * r, y + R(-0.2, 0.3) * r, z + R(-0.3, 0.3) * r, R(-0.6, 0.6) * r, R(-0.2, 0.4), R(-0.6, 0.6) * r, R(1.4, 2.4), r * 0.45, r * 1.3, R(-0.6, 0.6), 1.8, -0.1, 1 + (i & 1), RAMPS.flakSmoke);
-    const nk = this.lodN(8 + Math.round(r * 4));
-    for (let i = 0; i < nk; i++) {
-      const a = Math.random() * 6.283, e = R(-0.6, 0.9), sp = R(4, 8) * (0.6 + r * 0.4);
-      this.add.emit(x, y, z, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp, Math.sin(a) * Math.cos(e) * sp, R(0.2, 0.4), 0.06, 0.02, 0, 2, -6, 3, RAMPS.spark, h);
+  /** Flak airburst at an aircraft's altitude (r: the shell's splash radius; heavy: heavy flak, a bigger burst): a white
+   *  flash with a brief orange core, a ball of dark-grey / black smoke that hangs ~1 s and drifts with the breeze, and
+   *  shrapnel streaks flung out in every direction. All from the shared particle pools; nothing reaches the ground (no
+   *  scorch, ring or dust). */
+  flakBurst(x: number, y: number, z: number, r: number, heavy = false): void {
+    const k = clamp(r, 0.8, 3) * (heavy ? 1.3 : 1) * 0.5, h = this.hdr, kq = 1 / (1 + this.heat * 0.35);
+    this.heat += heavy ? 0.6 : 0.4;
+    // the detonation: a hard white flash, a softer warm bloom and a short-lived orange core
+    this.add.emit(x, y, z, 0, 0, 0, 0.07, k * 2.4, k * 1.2, 0, 0, 0, 0, RAMPS.flash, h * 1.3 * kq);
+    this.add.emit(x, y, z, 0, 0, 0, 0.16, k * 2.6, k * 3.2, 0, 0, 0, 0, RAMPS.fire, h * 0.35 * kq);
+    const nf = this.lodN(heavy ? 3 : 2);
+    for (let i = 0; i < nf; i++) this.fire.emit(x + R(-0.15, 0.15) * k, y + R(-0.1, 0.15) * k, z + R(-0.15, 0.15) * k, R(-1, 1) * k, R(-0.4, 0.8) * k, R(-1, 1) * k, R(0.16, 0.26), k * 0.55, k * 1.05, R(-1, 1), 5, 0, 1 + (i & 1), RAMPS.fireball, h * 0.8 * kq);
+    // the classic flak puff: a tight ball of oily black smoke (not thinned like other puffs: it is the signature)
+    const ns = this.lodN(heavy ? 6 : 4);
+    for (let i = 0; i < ns; i++) {
+      const a = Math.random() * 6.283, d = R(0, 0.35) * k;
+      this.alpha.emit(x + Math.cos(a) * d, y + R(-0.2, 0.25) * k, z + Math.sin(a) * d, Math.cos(a) * R(0.3, 0.9) * k + WIND_X * 1.6, R(-0.05, 0.25), Math.sin(a) * R(0.3, 0.9) * k + WIND_Z * 1.6,
+        R(0.95, 1.35) * (heavy ? 1.15 : 1), k * R(0.75, 1.0), k * R(1.8, 2.4), R(-0.5, 0.5), 2.2, 0.04, 1 + (i & 1), RAMPS.flakPuff);
     }
-    this.trauma = Math.min(1, this.trauma + 0.02 + r * 0.03);
+    // shrapnel: bright streaks radiating out in a full sphere, and a few slower glowing fragments that drop away
+    const nk = this.lodN(heavy ? 22 : 14);
+    for (let i = 0; i < nk; i++) {
+      const a = Math.random() * 6.283, e = Math.asin(R(-0.85, 0.95)), sp = R(7, 13) * (heavy ? 1.15 : 1);
+      this.add.emit(x, y, z, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp, Math.sin(a) * Math.cos(e) * sp, R(0.14, 0.28), 0.07 + k * 0.03, 0.02, 0, 2.2, -5, 3, RAMPS.spark, h * 1.1);
+    }
+    const nb = this.lodN(heavy ? 5 : 3);
+    for (let i = 0; i < nb; i++) { const a = Math.random() * 6.283; this.add.emit(x, y, z, Math.cos(a) * R(1.5, 3.5), R(0, 2), Math.sin(a) * R(1.5, 3.5), R(0.35, 0.6), 0.06, 0.02, 0, 1.2, -9, 3, RAMPS.molten, h); }
+    this.trauma = Math.min(1, this.trauma + (heavy ? 0.03 : 0.015));
+  }
+
+  /** shrapnel striking an aircraft's hull (a flak burst beside it): a pinpoint flash and sparks skittering off the
+   *  side facing the burst ((dx, dz): from the burst toward the hull) */
+  flakHit(x: number, y: number, z: number, dx: number, dz: number, s: number): void {
+    const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l, h = this.hdr;
+    this.add.emit(x, y, z, 0, 0, 0, 0.06, 0.25 + s * 0.3, 0.1, 0, 0, 0, 0, RAMPS.flash, h);
+    const n = this.lodN(4 + Math.round(s * 4));
+    for (let i = 0; i < n; i++) {
+      const a = R(-1.1, 1.1), sp = R(2.5, 6), c = Math.cos(a), sn = Math.sin(a);
+      // glancing off: back out toward the burst side and along the skin
+      this.add.emit(x, y, z, (-nx * c - nz * sn) * sp, R(-1, 2.5), (-nz * c + nx * sn) * sp, R(0.1, 0.24), 0.05, 0.015, 0, 2, -9, 3, RAMPS.spark, h);
+    }
   }
 
   /** a cluster shell splitting open just above the ground: a bright crack and a ring of sparks (the bomblets follow) */
@@ -1993,7 +2020,7 @@ export class Fx3D {
    *        back out of the hole, a tight fireball clinging to the plate and a puff of dark smoke.
    *  he:   high-explosive shell / rocket: flash, a lobed fireball on the hull, a ring of sparks, grey-black smoke.
    *  plasma / emp: a coloured burst of the same size. */
-  warheadHit(x: number, y: number, z: number, dx: number, dz: number, w: number, kind: 'heat' | 'he' | 'plasma' | 'emp'): void {
+  warheadHit(x: number, y: number, z: number, dx: number, dz: number, w: number, kind: 'heat' | 'he' | 'plasma' | 'emp', air = false): void {
     w = clamp(w, 0.15, 1.8);
     const l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l, h = this.hdr;
     const kq = 1 / (1 + this.heat * 0.3);
@@ -2010,7 +2037,7 @@ export class Fx3D {
     // flash: a hard star + a soft bloom
     this.add.emit(x, y, z, 0, 0, 0, 0.1, (0.7 + 1.3 * w) * (kind === 'heat' ? 1.2 : 1), 0.3, 0, 0, 0, 4, kind === 'heat' ? RAMPS.jet : RAMPS.flash, h * kq);
     this.add.emit(x, y, z, 0, 0, 0, 0.16, 0.9 + 1.8 * w, 0.4 + 0.8 * w, 0, 0, 0, 0, RAMPS.flash, h * kq * 0.8);
-    this.pools.add(x, z, 0.05, 0.6 + w, 1.4 + 2 * w, 0.2, 0.7 * h * kq, 0.4 * h * kq, 0.15 * h * kq);
+    if (!air) this.pools.add(x, z, 0.05, 0.6 + w, 1.4 + 2 * w, 0.2, 0.7 * h * kq, 0.4 * h * kq, 0.15 * h * kq);
     if (kind === 'heat') {
       // the jet: hot spall streaking on through and out of the far side, in a narrow cone
       const n = this.lodN(8 + Math.round(w * 12));
@@ -2034,7 +2061,7 @@ export class Fx3D {
     }
     const ns = this.lodN(1 + Math.round(w * 2));
     for (let i = 0; i < ns; i++) this.puff(x - nx * r * 0.4, y + r * 0.3, z - nz * r * 0.4, R(-0.25, 0.25) - nx * 0.4 + WIND_X, R(0.5, 1.0), R(-0.25, 0.25) - nz * 0.4 + WIND_Z, R(1.2, 2.2), r * 0.6, r * 2.4, R(-0.4, 0.4), 1.1, 0, 1 + (i & 1), RAMPS.blastSmoke);
-    if (w > 0.7) this.rings.add(x, z, Math.max(0.06, y - 0.2), r * 0.4, r * 2.6, 0.22, 0.4 * h * kq, 0.36 * h * kq, 0.3 * h * kq);
+    if (w > 0.7 && !air) this.rings.add(x, z, Math.max(0.06, y - 0.2), r * 0.4, r * 2.6, 0.22, 0.4 * h * kq, 0.36 * h * kq, 0.3 * h * kq);
   }
 
   /** a heavy gun's muzzle blast slapping the ground under the barrel: a dust ring shoved out (mostly forward) and a
@@ -2055,7 +2082,9 @@ export class Fx3D {
    *  dark soot, a column of sun-lit smoke that lingers and drifts, a ground-hugging dust shove, long hot spark streaks,
    *  one crisp shock ring, chunky tumbling debris (in `paint` where a hull blew up) and a soft scorch. r > 3.2 (titan
    *  deaths, nukes) adds a rising fire column and a slow wide dust wave. style picks the palette. */
-  explosion(x: number, z: number, r: number, style: 'fire' | 'plasma' | 'emp' = 'fire', y = 0, debris = true, q = 1, paint?: readonly [number, number, number]): void {
+  /** air: it went off in the air (a round striking an aircraft, an aircraft blowing up): no light pool, dust, shock ring
+   *  or scorch on the ground */
+  explosion(x: number, z: number, r: number, style: 'fire' | 'plasma' | 'emp' = 'fire', y = 0, debris = true, q = 1, paint?: readonly [number, number, number], air = false): void {
     r = clamp(r, 0.3, 9);
     const lodN = (n: number) => this.lodN(n * q);
     const fire = style === 'plasma' ? RAMPS.plasma : style === 'emp' ? RAMPS.emp : RAMPS.fireball;
@@ -2064,7 +2093,7 @@ export class Fx3D {
     this.heat += 1;
     const h = this.hdr;
     this.add.emit(x, cy, z, 0, 0, 0, 0.09, r * 1.5, r * 1.1, 0, 0, 0, 0, RAMPS.flash, h * kq);
-    this.pools.add(x, z, y + 0.04, r * 1.0, r * 2.3, 0.42, 0.85 * h * kq, 0.42 * h * kq, 0.12 * h * kq);
+    if (!air) this.pools.add(x, z, y + 0.04, r * 1.0, r * 2.3, 0.42, 0.85 * h * kq, 0.42 * h * kq, 0.12 * h * kq);
     // fireball: lobed flipbook puffs that expand, cool from the outside in and roll over into soot
     const nf = lodN(3 + Math.round(r * 2.2));
     for (let i = 0; i < nf; i++) {
@@ -2080,7 +2109,7 @@ export class Fx3D {
         R(2.6, 4.4) * (0.8 + r * 0.1), r * R(0.7, 0.95), r * R(2.2, 3.2), R(-0.25, 0.25), 0.6, 0.12, 1 + (i & 1), style === 'fire' ? RAMPS.blastSmoke : RAMPS.smokeLight);
     }
     // ground-hugging dust shove
-    const nd = lodN(4 + Math.round(r * 3));
+    const nd = air ? 0 : lodN(4 + Math.round(r * 3));
     for (let i = 0; i < nd; i++) {
       const a = (i / nd) * 6.283 + Math.random() * 0.4, sp = r * R(2.2, 4.2);
       this.puff(x, 0.14, z, Math.cos(a) * sp, R(0, 0.4), Math.sin(a) * sp, R(0.8, 1.4), r * 0.45, r * 1.3, R(-0.5, 0.5), 3.4, 0, 1 + (i & 1), this.dust);
@@ -2092,7 +2121,7 @@ export class Fx3D {
       this.add.emit(x, cy, z, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 1, Math.sin(a) * Math.cos(e) * sp, R(0.35, 0.8), 0.06 + r * 0.02, 0.03, 0, 0.7, -9, 3, RAMPS.spark, h);
     }
     // one crisp shock ring, quick (secondary blasts of a chain don't add their own)
-    if (q >= 1) this.rings.add(x, z, y + 0.07, r * 0.35, r * 2.4, 0.24 + r * 0.03, 0.6 * h * kq, 0.56 * h * kq, 0.5 * h * kq);
+    if (q >= 1 && !air) this.rings.add(x, z, y + 0.07, r * 0.35, r * 2.4, 0.24 + r * 0.03, 0.6 * h * kq, 0.56 * h * kq, 0.5 * h * kq);
     if (debris) {
       const nc = this.lodN(3 + Math.round(r * 2));
       for (let i = 0; i < nc; i++) {
@@ -2109,30 +2138,30 @@ export class Fx3D {
           R(1.3, 1.9), r * R(0.4, 0.6), r * R(1.0, 1.4), R(-0.3, 0.3), 1.0, 0.1, 1 + (i & 1), fire, h * kq);
         this.puff(x, cy + k * r * 0.6, z, R(-0.3, 0.3) + WIND_X * 2, R(1.2, 2.2) + k * r * 0.4, R(-0.3, 0.3) + WIND_Z * 2, R(4, 6), r * 0.5, r * R(1.6, 2.4), R(-0.2, 0.2), 0.5, 0.05, 1 + (i & 1), RAMPS.blastSmoke);
       }
-      const nw = lodN(10 + Math.round(r * 2));
+      const nw = air ? 0 : lodN(10 + Math.round(r * 2));
       for (let i = 0; i < nw; i++) {
         const a = (i / nw) * 6.283 + Math.random() * 0.3, sp = r * R(1.6, 2.4);
         this.puff(x + Math.cos(a) * r * 0.5, 0.2, z + Math.sin(a) * r * 0.5, Math.cos(a) * sp, R(0.2, 0.6), Math.sin(a) * sp, R(2, 3), r * 0.4, r * 1.2, R(-0.3, 0.3), 1.4, 0, 1 + (i & 1), this.dust);
       }
-      this.rings.add(x, z, y + 0.08, r * 0.6, r * 3.6, 0.8, 0.22 * h, 0.2 * h, 0.17 * h);
+      if (!air) this.rings.add(x, z, y + 0.08, r * 0.6, r * 3.6, 0.8, 0.22 * h, 0.2 * h, 0.17 * h);
     }
-    this.addScorch(x, z, r * R(1.0, 1.35));
+    if (!air) this.addScorch(x, z, r * R(1.0, 1.35));
     this.trauma = Math.min(1, this.trauma + 0.05 + r * 0.07);
     if (r > 3.2) this.flashA = Math.min(1, this.flashA + Math.min(0.55, (r - 3) * 0.14));
   }
 
   /** multi-stage blast for big hulls: chain of secondaries, a rolling fireball and a final cook-off */
-  bigExplosion(x: number, z: number, size: number, y = 0, paint?: readonly [number, number, number]): void {
+  bigExplosion(x: number, z: number, size: number, y = 0, paint?: readonly [number, number, number], air = false): void {
     const r = 0.6 + size * 0.7;
-    this.explosion(x, z, r, 'fire', y, true, 1, paint);
+    this.explosion(x, z, r, 'fire', y, true, 1, paint, air);
     const stages = Math.min(8, Math.max(0, size - 1) * 2);
     for (let i = 0; i < stages; i++) {
       const t = 0.12 + i * 0.17 + R(0, 0.1);
       const a = Math.random() * 6.283, d = Math.random() * size * 0.45;
-      this.later.push({ t: this.time + t, fn: () => this.explosion(x + Math.cos(a) * d, z + Math.sin(a) * d, r * R(0.4, 0.75), 'fire', y, true, 0.7, paint) });
+      this.later.push({ t: this.time + t, fn: () => this.explosion(x + Math.cos(a) * d, z + Math.sin(a) * d, r * R(0.4, 0.75), 'fire', y, true, 0.7, paint, air) });
     }
     if (size >= 4) {
-      this.later.push({ t: this.time + 0.25 + stages * 0.17, fn: () => { this.explosion(x, z, r * 1.25, 'fire', y, true, 1, paint); this.trauma = Math.min(1, this.trauma + 0.35); this.flashA = Math.min(1, this.flashA + 0.45); } });
+      this.later.push({ t: this.time + 0.25 + stages * 0.17, fn: () => { this.explosion(x, z, r * 1.25, 'fire', y, true, 1, paint, air); this.trauma = Math.min(1, this.trauma + 0.35); this.flashA = Math.min(1, this.flashA + 0.45); } });
     }
   }
 

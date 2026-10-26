@@ -584,13 +584,21 @@ export class Fx {
       return;
     }
     if (style === 'flak') {
-      // airburst: sharp white pop, dark smoke puffs that hang in the air, fragment sparks flying out
-      this.glow(x, y, r * 1.2, '#fff0c0', 0.06, 1);
-      this.glow(x, y, r * 1.8, '#ffb050', 0.12, 0.7);
-      this.star(x, y, r * 1.2, '#ffe0a0', rnd() * 6, 0.07);
-      this.sparks(x, y, 20 * q, '#ffc050', 7 * r, undefined, Math.PI, 0.3);
-      this.sparks(x, y, 6 * q, '#ffffff', 4 * r, undefined, Math.PI, 0.15);
-      for (let i = 0; i < 4; i++) this.smoke(x + rr(-0.4, 0.4) * r, y + rr(-0.4, 0.4) * r, r * rr(0.5, 0.8), rr(1.6, 2.6), i ? '#2e2824' : '#4a423a', this.wind.x * 0.3, 0, 0.6, rr(0.1, 0.4), 0.6);
+      // airburst (at the aircraft's drawn altitude, nothing on the ground): a sharp white pop with a brief orange core,
+      // a tight ball of black smoke that hangs ~1 s and drifts, and shrapnel streaks flung out all round
+      this.glow(x, y, r * 0.9, '#ffffff', 0.05, 1);
+      this.glow(x, y, r * 1.5, '#ffa040', 0.14, 0.65);
+      this.star(x, y, r * 1.3, '#fff0c0', rnd() * 6, 0.07);
+      this.sparks(x, y, 18 * q, '#ffc860', 9 * r, undefined, Math.PI, 0.26);
+      this.sparks(x, y, 6 * q, '#ffffff', 6 * r, undefined, Math.PI, 0.14);
+      const n = r > 0.9 ? 6 : 4;
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * PI2, d = rr(0, 0.3) * r;
+        this.add(SMOKE, x + Math.cos(a) * d, y + Math.sin(a) * d, {
+          size: r * rr(0.38, 0.55), grow: r * rr(0.6, 0.9), max: rr(0.9, 1.3), color: i % 3 ? '#171615' : '#2a2725',
+          vx: this.wind.x * 0.5 + Math.cos(a) * 0.35 * r, vy: this.wind.y * 0.5 + Math.sin(a) * 0.35 * r, drag: 2, alpha: 0.8, vr: rr(-0.5, 0.5),
+        });
+      }
       return;
     }
     const big = style === 'big' || r > 1.4;
@@ -600,8 +608,10 @@ export class Fx {
     // (1) instant: white pop, light pool, hard ring
     this.glow(x, y, r * 0.8, '#ffffff', 0.07, 0.9);
     this.glow(x, y, r * 1.5, '#ffb060', 0.18 + 0.03 * r, 0.55);
-    this.light(x, y, r * (big ? 1.9 : 1.6), '#ffa850', 0.25 + 0.05 * rs, 0.2);
-    this.ring(x, y, r * 0.25, r * (big ? 2.7 : 2.0), '#ffe2b0', 0.26 + 0.06 * rs, 0.85);
+    if (ground) {
+      this.light(x, y, r * (big ? 1.9 : 1.6), '#ffa850', 0.25 + 0.05 * rs, 0.2);
+      this.ring(x, y, r * 0.25, r * (big ? 2.7 : 2.0), '#ffe2b0', 0.26 + 0.06 * rs, 0.85);
+    }
     // (2) fireball: central white-hot ball + turbulent lobes thrown outward
     this.fball(x, y, r * 0.8, life * 0.6, 0, 0, 0.3);
     const nf = Math.min(18, Math.round((4 + r * 5) * q));
@@ -659,8 +669,10 @@ export class Fx {
       if (r >= 0.4) this.hot(x, y, r * 0.8, 2 + r);
     }
     if (huge) {
-      this.shockwave(x, y, r * 1.7, '#ffd8a0', 0.8);
-      this.schedule(0.1, () => this.ring(x, y, r * 0.3, r * 3.4, '#ffe8c0', 0.8, 0.5));
+      if (ground) {
+        this.shockwave(x, y, r * 1.7, '#ffd8a0', 0.8);
+        this.schedule(0.1, () => this.ring(x, y, r * 0.3, r * 3.4, '#ffe8c0', 0.8, 0.5));
+      }
       this.glow(x, y, r * 3, '#ffe0b0', 0.3, 0.8 * L);
       this.shake(0.5);
     }

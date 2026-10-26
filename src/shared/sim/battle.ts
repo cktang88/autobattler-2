@@ -2336,7 +2336,7 @@ export class Battle {
   }
 
   private splash(x: number, y: number, R: number, raw: number, ap: number, airBonus: number, side: Side, air: boolean, moduleId: string, direct: number, emit: boolean, fx: ModuleDef | null = null, fxMult = 1, cls = 0, ox = x, oy = y): void {
-    if (emit) this.events.push({ t: 'explode', x, y, radius: R, moduleId });
+    if (emit) this.events.push(air ? { t: 'explode', x, y, radius: R, moduleId, air: true } : { t: 'explode', x, y, radius: R, moduleId });
     const edge = MODULE_BY_ID.get(moduleId)?.splashEdge ?? SPLASH_EDGE; // per-weapon falloff (heavy shells: a flat lethal radius)
     const cnt = this.gather(x, y, R + MAX_RADIUS);
     for (let q = 0; q < cnt; q++) {

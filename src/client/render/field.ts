@@ -2422,6 +2422,12 @@ export class FieldView {
         if (vis === 'repair') break;
         if (vis === 'flamer') { fx.flameHit(e.x, e.y, 0.6 + (mod?.caliber ?? 0.3)); break; }
         if (vis === 'heatray') break;
+        if (vis === 'flak' && ur.flying) {
+          // shrapnel from the airburst beside it skittering off the hull (the burst itself is the 'explode')
+          fx.glow(e.x, e.y, 0.22, '#fff0c0', 0.06, 0.9);
+          fx.sparks(e.x, e.y, 5, '#ffd080', 3.5, Math.atan2(e.y - dr.y - al.y, e.x - dr.x - al.x), 1.1, 0.18);
+          break;
+        }
         const S = layoutOf(ur.design).S;
         // knockback (impulse weapons, ground units): dirt shoved out from under the hull along the push
         if (mod?.impulse && !ur.flying && mod.category !== 'melee') {
@@ -2463,19 +2469,26 @@ export class FieldView {
         const mod = modOf(e.moduleId);
         const vis = mod?.visual;
         const r = e.radius;
-        const air = mod ? !mod.targetsGround && !!mod.targetsAir : false;
-        if (mod?.targetsAir) {
-          // air bursts and missiles striking an aircraft go off at its drawn altitude, not on the ground below
-          let best: SimUnit | null = null, bd = 1.2 * 1.2;
+        // an air burst (a round fired at aircraft: flak, an AA missile striking a flyer) goes off at the drawn altitude of
+        // the aircraft it caught, pulled in onto its hull, and leaves nothing on the ground (no damage ring or scorch)
+        const air = e.air === true || (mod ? !mod.targetsGround && !!mod.targetsAir : false);
+        if (air) {
+          let best: SimUnit | null = null, bd = Infinity;
           for (const u of this.units.values()) {
             if (!u.flying || (!u.alive && !this.prevU.has(u.id))) continue;
-            const d = (u.x - e.x) ** 2 + (u.y - e.y) ** 2;
-            if (d < bd) { bd = d; best = u; }
+            const d = Math.hypot(u.x - e.x, u.y - e.y);
+            if (d < r + 2 && d < bd) { bd = d; best = u; }
           }
-          if (best) { const al = this.airLift(best); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
+          if (best) {
+            const al = this.airLift(best), lim = 0.25 + 0.3 * (layoutOf(best.design).S || 1);
+            let ox = e.x - best.x, oy = e.y - best.y;
+            const d = Math.hypot(ox, oy);
+            if (d > lim) { ox *= lim / d; oy *= lim / d; }
+            e = { ...e, x: best.x + ox + al.x, y: best.y + oy + al.y };
+          } else { const al = this.liftVec(1.4); e = { ...e, x: e.x + al.x, y: e.y + al.y }; }
         }
-        // the area the blast actually damaged: a ring at exactly the sim's splash radius
-        if (mod?.projectile !== 'flame' && vis !== 'pointdef') fx.aoe(e.x, e.y, r, vis === 'emp' || vis === 'plasma' || vis === 'sonic' || (mod?.stun && mod.requires === 'air') ? '#8fd0ff' : '#ffb060');
+        // the area the blast actually damaged: a ring at exactly the sim's splash radius (on the ground: not for air bursts)
+        if (!air && mod?.projectile !== 'flame' && vis !== 'pointdef') fx.aoe(e.x, e.y, r, vis === 'emp' || vis === 'plasma' || vis === 'sonic' || (mod?.stun && mod.requires === 'air') ? '#8fd0ff' : '#ffb060');
         if (mod?.projectile === 'flame') {
           // a flame jet's splash: the jet itself, its hits and the burning ground carry the look; a blast flash per
           // round (10 a second per flamer) only blew a dozen jets on one target out to a white ball
@@ -2501,7 +2514,8 @@ export class FieldView {
           fx.shake(0.12);
         } else if (mod?.id === 'tactnuke') fx.nuke(e.x, e.y, Math.max(2, r * 0.8));
         else if (mod?.id === 'doomsday') { fx.boom(e.x, e.y, r * 0.8, 'big'); fx.shake(0.45); }
-        else if (vis === 'flak' || air) fx.boom(e.x, e.y, Math.max(0.6, r * 0.9), 'flak', false);
+        else if (vis === 'flak') fx.boom(e.x, e.y, Math.max(0.6, r * ((mod?.caliber ?? 0.5) >= 0.8 ? 0.62 : 0.5)), 'flak', false);
+        else if (air) fx.boom(e.x, e.y, Math.max(0.35, r * 0.6), 'fire', false);
         else if (vis === 'emp' || (mod?.stun && mod.requires === 'air')) fx.boom(e.x, e.y, Math.max(0.4, r), 'emp'); // EMP orbs, stun / EMP bombs
         else if (vis === 'plasma') fx.boom(e.x, e.y, Math.max(0.4, r * 0.8), 'plasma');
         else if (vis === 'sonic') fx.boom(e.x, e.y, Math.max(0.5, r), 'sonic');

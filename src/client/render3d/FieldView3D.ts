@@ -772,7 +772,7 @@ export class FieldView3D implements BattleView {
       }
       case 'explode': {
         const st = styleOf(e.moduleId), r = Math.max(0.3, e.radius);
-        sh.add(e.x, e.y, r * (BLAST_SHAKE[st.fam] ?? 1) * (st.fam === 'cluster' && e.radius < 1.1 ? 0.55 : 1));
+        sh.add(e.x, e.y, r * (BLAST_SHAKE[st.fam] ?? 1) * (st.fam === 'cluster' && e.radius < 1.1 ? 0.55 : 1) * (e.air ? 0.5 : 1));
         break;
       }
       case 'death': {
@@ -1855,8 +1855,8 @@ export class FieldView3D implements BattleView {
     if (heli) { vx *= 0.6; vz *= 0.6; }
     // the hit that killed it: a burst at altitude (bigger the more it broke up)
     const y = p.y + rig.midY;
-    if (lv === 0) { fx.warheadHit(p.x, y, p.z, vx, vz, 0.35 + rig.S * 0.15, 'he'); }
-    else fx.explosion(p.x, p.z, 0.45 + rig.S * (lv === 2 ? 0.45 : 0.3), 'fire', y - 0.1, true, lv === 2 ? 1 : 0.7, paint);
+    if (lv === 0) { fx.warheadHit(p.x, y, p.z, vx, vz, 0.35 + rig.S * 0.15, 'he', true); }
+    else fx.explosion(p.x, p.z, 0.45 + rig.S * (lv === 2 ? 0.45 : 0.3), 'fire', y - 0.1, true, lv === 2 ? 1 : 0.7, paint, true);
     if (lv === 2) fx.scatter(p.x, p.z, y, Math.round(4 + rig.S * 2), rig.radius * 1.6 + 0.4, 0.12 + rig.S * 0.06, 0, paint);
     const R0 = (a: number, b: number) => a + Math.random() * (b - a);
     rig.root.rotation.order = 'YXZ';
@@ -1996,6 +1996,33 @@ export class FieldView3D implements BattleView {
     return best;
   }
 
+  /** Where an air burst the sim set off at (x, y) is drawn: beside the aircraft it caught (the nearest flyer within its
+   *  reach), at that hull's altitude and pulled in onto its drawn (interpolated) position, so the burst visibly hits the
+   *  airframe; with no flyer near (a shell that ran out its flight), at the height its drawn round had climbed to. */
+  private airBurstAt(x: number, y: number, R: number, moduleId: string, byId: Map<number, SimUnit>): { x: number; y: number; z: number } {
+    let best: SimUnit | null = null, bd = Infinity;
+    for (const u of byId.values()) {
+      const v = u.flying ? this.bu.get(u.id) : undefined;
+      if (!v) continue;
+      const d = Math.hypot(u.x - x, u.y - y) - v.rig.radius;
+      if (d < R + 1.2 && d < bd) { bd = d; best = u; }
+    }
+    if (best) {
+      const v = this.bu.get(best.id)!, c = this.drawnAt(best);
+      let ox = x - best.x, oz = y - best.y;
+      const d = Math.hypot(ox, oz), lim = v.rig.radius * 0.75 + 0.2;
+      if (d > lim) { ox *= lim / d; oz *= lim / d; }
+      return { x: c.x + ox, y: this.unitHeight(best.id, byId) - 0.15 + (Math.random() - 0.5) * 0.3, z: c.y + oz };
+    }
+    let h = flyHeight(1.5) + 0.4, bd2 = 3.5 * 3.5;
+    for (const [id, r] of this.projRec) {
+      if (r.mod !== moduleId || this.curP.has(id)) continue;
+      const d = (r.px - x) ** 2 + (r.py - y) ** 2;
+      if (d < bd2) { bd2 = d; h = Math.max(0.8, r.lastH); }
+    }
+    return { x, y: h, z: y };
+  }
+
   /** Where a shell / rocket / missile / orb that the sim burst at (x, y) struck a hull, on that hull's hit box: where its
    *  drawn flight (the round's record, gone from the sim this tick) enters the box, else the burst point brought onto the
    *  box. null: no such round, or it burst on open ground. `unit`: the unit a 'hit' event names (only that hull, and
@@ -2063,6 +2090,16 @@ export class FieldView3D implements BattleView {
       if (t <= 0 || t >= best) continue;
       const v = this.bu.get(u.id);
       if (Math.abs(rx * dy - ry * dx) < 0.5 + (v ? v.rig.radius : 0.5)) { best = t; id = u.id; }
+    }
+    if (id < 0 && air) {
+      // a round aimed at aircraft with none right on its line (it leads a moving flyer): it still climbs to the
+      // altitude of the flyer nearest its line ahead, not along the ground
+      let bl = Infinity;
+      for (const u of byId.values()) {
+        if (!u.alive || u.side === side || !u.flying) continue;
+        const rx = u.x - x, ry = u.y - y, t = rx * dx + ry * dy, lat = Math.abs(rx * dy - ry * dx);
+        if (t > 0 && lat < bl && lat < 0.6 * t + 3) { bl = lat; id = u.id; }
+      }
     }
     return id >= 0 ? this.unitHeight(id, byId, fallback) : fallback;
   }
@@ -2279,6 +2316,7 @@ export class FieldView3D implements BattleView {
           case 'shotgun': fx.pelletHit(e.x, yh, e.y); break;
           case 'flechette': fx.dartHit(e.x, yh, e.y, tdx, tdz); break;
           case 'ac': fx.impact(e.x, yh, e.y, 0.1, true); break; // its 'explode' pops right after
+          case 'flak': fx.flakHit(e.x, yh, e.y, tdx, tdz, s); break; // shrapnel from the burst beside it (drawn by 'explode')
           case 'plasma': case 'plasmaOrb': fx.plasmaHit(e.x, yh, e.y, s); break;
           case 'chain': case 'empOrb': fx.empHit(e.x, yh, e.y, s); break;
           case 'flame': break; // the flames and the burn say it all
@@ -2303,6 +2341,16 @@ export class FieldView3D implements BattleView {
         const roof = cargo ? this.impactFor(e.x, e.y, e.moduleId, byId) : null;
         if (cargo) this.clusterPts.push({ x: e.x, y: e.y, t: this.time, h: roof ? roof.y : 0 });
         if (this.offscreen(e.x, e.y, e.radius + 4)) { fx.trauma = Math.min(1, fx.trauma + 0.02); break; }
+        // an air burst (a round fired at aircraft: a flak shell's proximity burst, an AA missile striking a flyer) goes
+        // off at the aircraft's altitude on the hull it caught, and nothing of it reaches the ground: no damage ring,
+        // scorch, dust or shock ring under it
+        if (e.air || (st.def?.targetsAir && !st.def.targetsGround)) {
+          const at = this.airBurstAt(e.x, e.y, e.radius, e.moduleId, byId);
+          if (st.fam === 'flak') fx.flakBurst(at.x, at.y, at.z, r, (st.def?.caliber ?? 0.5) >= 0.8);
+          else if (r < 0.6) fx.pop(at.x, at.y, at.z, Math.max(0.25, r * 0.8), RAMPS.fire, false);
+          else fx.explosion(at.x, at.z, r * 0.8, st.fam === 'plasmaOrb' || st.fam === 'plasma' ? 'plasma' : st.fam === 'empOrb' || st.fam === 'chain' ? 'emp' : 'fire', at.y - 0.1 - r * 0.25, false, 0.7, undefined, true);
+          break;
+        }
         // a round that burst on a hull goes off where its drawn flight met the hull's hit box (the side it flew into, or
         // the roof it came down on), not on the ground at the sim's burst point inside / under the model: the warhead's
         // blast on the plate and the fireball around it. (The cargo shell of a cluster round splits in the air.)
@@ -2313,19 +2361,9 @@ export class FieldView3D implements BattleView {
           fx.warheadHit(imp.x, imp.y, imp.z, imp.nx, imp.nz, w, st.fam === 'plasmaOrb' ? 'plasma' : st.fam === 'empOrb' || (st.fam === 'bomb' && st.def?.stun) ? 'emp' : 'he');
           ex = imp.x; ez = imp.z;
           ey = Math.max(0, imp.y - 0.1 - (imp.top ? 0 : 0.3 * r));
-        } else if (st.def?.targetsAir) {
-          // air bursts and missiles striking an aircraft go off at its altitude, not on the ground below (as in 2D)
-          let bd = 1.2 * 1.2, best = -1;
-          for (const u of byId.values()) {
-            if (!u.flying || !this.bu.has(u.id)) continue;
-            const d = (u.x - e.x) ** 2 + (u.y - e.y) ** 2;
-            if (d < bd) { bd = d; best = u.id; }
-          }
-          if (best >= 0) ey = Math.max(0, this.unitHeight(best, byId) - 0.15);
         }
-        // the area the blast actually damaged (the sim's splash radius), marked on the ground / at the burst height
-        const ringY = imp && !byId.get(imp.unit)?.flying ? 0 : ey;
-        if (st.fam !== 'pd') fx.aoeRing(e.x, st.fam === 'flak' ? (ringY > 0 ? ringY : 1.3) : ringY, e.y, e.radius, st.fam === 'plasmaOrb' || st.fam === 'plasma' || st.fam === 'empOrb' || st.fam === 'chain' || st.fam === 'sonic');
+        // the area the blast actually damaged (the sim's splash radius), marked on the ground
+        if (st.fam !== 'pd') fx.aoeRing(e.x, 0, e.y, e.radius, st.fam === 'plasmaOrb' || st.fam === 'plasma' || st.fam === 'empOrb' || st.fam === 'chain' || st.fam === 'sonic');
         switch (st.fam) {
           case 'mg': case 'hmg': case 'gatling': case 'ac': case 'twinmg': case 'shotgun': case 'sniper':
             fx.pop(ex, ey, ez, r * 0.8); break; // autocannon HE round: a sharp little pop
@@ -2349,7 +2387,7 @@ export class FieldView3D implements BattleView {
             break;
           case 'firebomb': fx.pop(ex, ey, ez, r * 0.8, RAMPS.ember); break; // the burning patch ('fireField') follows
           case 'incend': fx.explosion(ex, ez, r, 'fire', ey); fx.fireSplash(e.x, e.y, r * 0.8); break;
-          case 'flak': fx.airBurst(e.x, ey > 0 ? ey : 1.3, e.y, r * 0.75); break;
+          case 'flak': { const at = this.airBurstAt(e.x, e.y, e.radius, e.moduleId, byId); fx.flakBurst(at.x, at.y, at.z, r, (st.def?.caliber ?? 0.5) >= 0.8); break; }
           case 'plasmaOrb': case 'plasma': fx.explosion(ex, ez, r, 'plasma', ey); break;
           case 'empOrb': case 'chain': {
             fx.explosion(ex, ez, r, 'emp', ey, false, 0.7);
@@ -2385,9 +2423,9 @@ export class FieldView3D implements BattleView {
         if (vis) {
           const y = e.flying ? (v ? flyHeight(v.rig.S, v.rig.jet) + 0.2 + v.rig.midY : 1) : 0;
           // the blast grows with the destruction: a perforated hull just coughs fire, a vaporised one goes up whole
-          if (lv === 0) fx.explosion(e.x, e.y, 0.45 + sz * 0.4, e.kind === 'energy' ? 'plasma' : 'fire', y, e.kind !== 'kinetic', 0.7, paint);
-          else fx.bigExplosion(e.x, e.y, e.flying ? Math.max(1, sz * 0.8) : sz + (lv - 1) * 0.6, y, paint);
-          if (e.kind === 'energy' && lv > 0) fx.explosion(e.x, e.y, 0.5 + sz * 0.45, 'plasma', y, false, 0.6);
+          if (lv === 0) fx.explosion(e.x, e.y, 0.45 + sz * 0.4, e.kind === 'energy' ? 'plasma' : 'fire', y, e.kind !== 'kinetic', 0.7, paint, e.flying);
+          else fx.bigExplosion(e.x, e.y, e.flying ? Math.max(1, sz * 0.8) : sz + (lv - 1) * 0.6, y, paint, e.flying);
+          if (e.kind === 'energy' && lv > 0) fx.explosion(e.x, e.y, 0.5 + sz * 0.45, 'plasma', y, false, 0.6, undefined, e.flying);
           if (lv === 3) { fx.dirtGeyser(e.x, e.y, 0.6 + sz * 0.4); fx.trauma = Math.min(1, fx.trauma + 0.1 + sz * 0.04); }
         }
         // blown apart: torn scrap all around (aircraft rain theirs onto the ground below)
