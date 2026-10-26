@@ -3,8 +3,8 @@
 // MAX_SIM_UNITS) and the usual placement rules (inside the deploy zone, no overlapping blocks).
 // The sim runs directly here (new Battle(...) stepped per frame), drawn with the same BattleView as a match, and the
 // field controls are the match screen's (fieldtools.ts): box / Shift / double-click group selection with group
-// orders, escort orders, range rings, stat tooltips, the battle auto camera, right-drag turning the 3D view in
-// battle, clicking a unit mid-battle for its live stats, and the detailed stats screen after the battle.
+// orders, escort orders, range rings, stat tooltips, the battle auto camera, right-drag turning the 3D view, clicking a unit
+// mid-battle for its live stats, and the detailed stats screen after the battle.
 
 import { createMinimap, type MiniDot } from './minimap.ts';
 import { h, type App, type Screen } from '../app.ts';
@@ -519,7 +519,7 @@ export function playgroundScreen(app: App): Screen {
       else if (boards[0].length || boards[1].length) {
         t = boxMode ? 'Drag a box over blocks to select them together · turn off Box select to pan'
           : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together'
-            : 'Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag (or Ctrl / Option + drag) to pan';
+            : `Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag (or Ctrl / Option + drag) to ${view.canRotate ? 'turn the view · WASD / middle-drag to pan' : 'pan'}`;
       } else t = 'Pick a unit card, then click either half of the field';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
@@ -1163,7 +1163,7 @@ export function playgroundScreen(app: App): Screen {
     } else if (phase === 'edit' && (e.key === 'Backspace' || (e.key === 'z' && (e.ctrlKey || e.metaKey)))) {
       e.preventDefault();
       undo();
-    // (F / Home = fit, + / - zoom, Q / E turn in battle are the camera's own keys: CameraControls handles them)
+    // (F / Home = fit, + / - zoom, Q / E turn are the camera's own keys: CameraControls handles them)
     } else if (e.key === 'Escape') {
       if (tipEl?.classList.contains('sheet') || liveTip) { hideTip(); return; }
       if (phase !== 'edit') { backToEdit(); return; }
@@ -1333,9 +1333,8 @@ export function playgroundScreen(app: App): Screen {
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     view.controls.doubleClickZoom = phase !== 'edit' || (selCard < 0 && !sel);
-    // watching (battle / result): right-drag (Ctrl / Option + drag) and Q / E turn the 3D view; editing keeps
-    // right-drag = pan, as in a match
-    view.controls.rotate = !!view.canRotate && phase !== 'edit';
+    // right-drag (Ctrl / Option + drag), a two-finger twist and Q / E turn the 3D view while editing and watching, as in a match
+    view.controls.rotate = !!view.canRotate;
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     try {

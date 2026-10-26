@@ -771,7 +771,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       const d = deck()[selCard];
       if (d) t = hover && !hover.valid && hover.reason ? hover.reason : `Place ${d.name}${squadOf(d) > 1 ? ' squad' : ''} in your zone${hasSpacing(shapeOf(d)) ? ' · [ ] spacing · R rotate' : ''} · Esc to cancel`;
       else if (multi.length >= 2) t = `${multi.length} blocks selected · Shift+click to add/remove · Esc to clear`;
-      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : 'Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag (or Ctrl / Option + drag) to pan') : 'Pick a unit card, then tap your zone to deploy';
+      else t = place.length || myBoard().length ? (boxMode ? 'Drag a box over your blocks to select them together · turn off Box select to pan' : window.matchMedia('(hover: none)').matches ? 'Tap a block to adjust it · Box select picks several to set their orders together' : `Click a block to adjust it · drag a box over several, or double-click to pick every one of a kind · right-drag (or Ctrl / Option + drag) to ${view.canRotate ? 'turn the view · WASD / middle-drag to pan' : 'pan'}`) : 'Pick a unit card, then tap your zone to deploy';
     } else if (phase === 'battle') t = 'Battle in progress';
     hintEl.textContent = t;
     hintEl.classList.toggle('hidden', !t);
@@ -1682,8 +1682,8 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     view.controls.doubleClickZoom = phase !== 'deploy' || (selCard < 0 && !sel);
-    // watching (battle / result / replay): right-drag turns the 3D view; deploying keeps right-drag = pan
-    view.controls.rotate = !!view.canRotate && (phase === 'battle' || phase === 'result' || phase === 'over');
+    // right-drag (Ctrl / Option + drag), a two-finger twist and Q / E turn the 3D view in every phase, deploying too
+    view.controls.rotate = !!view.canRotate;
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     try {

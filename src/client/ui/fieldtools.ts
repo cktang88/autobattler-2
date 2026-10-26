@@ -37,7 +37,7 @@ export function zoomButtons(view: BattleView): HTMLElement {
   return h('div.zoombtns', null,
     h('button.small', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => { user(); view.zoomBy(1.5); } }, '+'),
     h('button.small', { title: 'Zoom out (-)', 'aria-label': 'Zoom out', onclick: () => { user(); view.zoomBy(1 / 1.5); } }, '−'),
-    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag (or Ctrl / Option + drag) turns the view in battle', 'aria-label': 'Fit whole field', onclick: () => { user(); view.fit(); } }, '⤢'),
+    h('button.small', { title: 'Fit whole field and reset the view (F) · right-drag (or Ctrl / Option + drag) turns the view', 'aria-label': 'Fit whole field', onclick: () => { user(); view.fit(); } }, '⤢'),
   );
 }
 

@@ -367,7 +367,7 @@ export class CameraControls {
   /** double click / double tap zooms in on the point (or back to fit). Screens may switch this off temporarily. */
   doubleClickZoom = true;
   /** right-drag (and a two-finger twist, and Q / E) turns the view about its centre instead of panning. Only for
-   *  views that can draw a turned field; screens switch it per phase (deploy keeps right-drag = pan). */
+   *  views that can draw a turned field (the 3D view); elsewhere right-drag pans. */
   rotate = false;
   private orbiting = false;
   private twist = 0;
