@@ -23,7 +23,7 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-hornet', name: 'Hornet', chassis: 'drone', mobility: 'rotor', mounts: ['twinmg'] },
   { id: 'starter-strafer', name: 'Strafer', chassis: 'strikejet', mobility: 'jet', mounts: ['rockets', 'guidedrocket', 'targeting'] },
   // ---- support ----
-  { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['autocannon', 'repair'] },
+  { id: 'starter-medic', name: 'Field Medic', chassis: 'aegis', mobility: 'halftrack', mounts: ['twin30', 'repair'] },
   // ---- brawler ----
   { id: 'starter-stormcaller', name: 'Voltrider', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'targeting'] },
   // ---- size-3 heavies ----
@@ -40,7 +40,7 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- support aura: command vehicle that speeds up and repairs its escorts ----
   { id: 'starter-commander', name: 'Commander', chassis: 'striker', mobility: 'halftrack', mounts: ['uplink', 'twin30', 'hmg'] },
   // ---- giant (size 4): all-round assault walker ----
-  { id: 'starter-juggernaut', name: 'Gargantua', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'reinforced'] },
+  { id: 'starter-juggernaut', name: 'Gargantua', chassis: 'goliath', mobility: 'megatracks', mounts: ['avenger', 'cannon', 'cannon', 'plateM'] },
   // ---- titan (size 5): beam-armed war machine ----
   { id: 'starter-warlord', name: 'Kronos', chassis: 'titan', mobility: 'megatracks', mounts: ['annihilator', 'siegeplasma', 'cannon', 'cannon', 'plateM'] },
   // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
