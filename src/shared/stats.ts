@@ -478,9 +478,11 @@ export function engagementShare(w: ModuleDef, longest: number): number {
   return q >= 0.66 ? 1 : q <= 0.2 ? 0.4 : 0.4 + (0.6 * (q - 0.2)) / 0.46;
 }
 
-export function weaponValue(w: ModuleDef, rangeMult = 1): number {
+/** `capMult`: the module range bonus (targeting computer, range tunes) also lifts RANGE_CAP, so a gun already past the
+ *  cap (railgun, artillery) still pays for the extra reach; below the cap it changes nothing. */
+export function weaponValue(w: ModuleDef, rangeMult = 1, capMult = 1): number {
   const range = (w.range ?? 0) * rangeMult;
-  const rangeF = Math.min(RANGE_CAP, Math.max(0.5, Math.pow(range / RANGE_REF, RANGE_EXP))); // reach decides most fights
+  const rangeF = Math.min(RANGE_CAP * capMult, Math.max(0.5, Math.pow(range / RANGE_REF, RANGE_EXP))); // reach decides most fights
   if (w.heal) return w.heal * 1.6 * rangeF * cal(w.id);
   if (w.kind !== 'weapon' || !w.damage || !w.cooldown) return 0;
   const shots = (w.burst ?? 1) * (w.pellets ?? 1);
@@ -705,7 +707,7 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
   const bombK = flying && !jet ? HOVER_BOMB_K : 1;
   let splashW = 0, airW = 0, airOnlyW = 0, meleeW = 0, apW = 0, shortW = 0; // offense-weighted weapon traits (team-value features)
   for (const mod of mods) {
-    const wv = (flying ? AIR_LASER_CAL[mod.id] ?? 1 : 1) * weaponValue(tunedWeapon(mod, tune), rangeMult) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
+    const wv = (flying ? AIR_LASER_CAL[mod.id] ?? 1 : 1) * weaponValue(tunedWeapon(mod, tune), rangeMult, 1 + stack.range) * (mod.spread && spreadMult < 1 ? 1 + 0.15 * (1 - spreadMult) : 1) * engagementShare(mod, longest) * (mod.resupply ? bombK : 1);
     offense += wv;
     if (mod.kind !== 'weapon' || mod.heal) continue;
     splashW += wv * Math.min(2, mod.splash ?? 0);

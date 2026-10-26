@@ -99,3 +99,13 @@ test('the garage never labels raw part complexity points as supply', () => {
     assert.ok(!/icon\('cost'\), String\((c|m)\.cost/.test(src), `${f} shows a part's complexity with the supply icon`);
   }
 });
+
+test('a targeting computer costs supply on a gun already past the range-value cap', () => {
+  const D = (mounts: (string | null)[]): Design => ({ id: 'tc', name: 'tc', chassis: 'striker', mobility: 'halftrack', mounts });
+  for (const gun of ['railgun', 'howitzer', 'lightrail']) {
+    const bare = computeStats(D([gun, null, null])), tc = computeStats(D([gun, null, 'targeting']));
+    assert.ok(tc.offense > bare.offense, `${gun}: +15% reach adds offense`);
+    const raw = (s: typeof bare) => s.priceParts + s.pricePower + s.priceSupport; // before rounding to the nearest 10
+    assert.ok(raw(tc) > raw(bare) * 1.03, `${gun}: ${raw(bare)} -> ${raw(tc)}`);
+  }
+});
