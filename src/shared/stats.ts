@@ -48,6 +48,11 @@ export function tuneOf(mods: ModuleDef[]): Partial<Record<TuneKey, number>> {
     const v = signedStack(mods.map((x) => x.tune?.[k] ?? 0));
     if (v) out[k] = v;
   }
+  // gun-only damage stacks with the all-weapon kind: guns get the whole stack, melee only the `damage` share of it
+  if (out.gunDamage) {
+    const all = signedStack(mods.map((x) => (x.tune?.damage ?? 0) || (x.tune?.gunDamage ?? 0)));
+    out.gunDamage = all - (out.damage ?? 0);
+  }
   return out;
 }
 /** A weapon as a tuned loadout fires it (shared by the sim and the price, so they agree): damage scaled, armour
@@ -56,9 +61,10 @@ export function tuneOf(mods: ModuleDef[]): Partial<Record<TuneKey, number>> {
  *  The module itself is returned untouched when nothing applies. */
 export function tunedWeapon(w: ModuleDef, t: Partial<Record<TuneKey, number>> | undefined): ModuleDef {
   if (!t || w.kind !== 'weapon' || w.heal) return w;
-  const { damage = 0, ap = 0, splash = 0, projSpeed = 0, traverse = 0 } = t;
-  if (!damage && !ap && !splash && !projSpeed && !traverse) return w;
+  const { damage: dmgAll = 0, gunDamage = 0, ap = 0, splash = 0, projSpeed = 0, traverse = 0 } = t;
   const p = w.projectile;
+  const damage = dmgAll + (p === 'melee' ? 0 : gunDamage);
+  if (!damage && !ap && !splash && !projSpeed && !traverse) return w;
   const solid = p !== 'beam' && p !== 'lightning' && p !== 'rail' && p !== 'flame' && p !== 'melee';
   const out: ModuleDef = { ...w };
   if (damage && w.damage) out.damage = w.damage * Math.max(0.2, 1 + damage);
@@ -765,7 +771,9 @@ function statsFor(d: Design, forceSquad?: number, analytic = false): UnitStats &
     if (mod.deathBlast?.stun) offense += mod.deathBlast.stun * 25 * u;
     if (mod.deathBlast?.slow) offense += mod.deathBlast.slow * 15 * u;
     // pure tuning (range, damage, hull...) is priced through the tuned stats above; its MODULE_CAL is a lever on top
-    if (mod.tune && !mod.berserk && !mod.paint) offense *= 1 + (u - 1) * 0.3;
+    // (a range trade-off -- short / long barrels, optics -- only bites on guns: melee reach ignores it, so on a melee
+    //  loadout the lever scales with the ranged share; else a short barrel was +25% damage on a saw, at a discount)
+    if (mod.tune && !mod.berserk && !mod.paint) offense *= 1 + (u - 1) * 0.3 * (mod.tune.range ? 1 - meleeW / weaponW : 1);
   }
   offense = Math.max(offense, 5);
   // shields soak hits at full strength (armour doesn't help them); armour multiplies only the hull's worth

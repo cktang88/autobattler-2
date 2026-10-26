@@ -306,7 +306,8 @@ export interface ModuleDef {
 }
 
 /** keys of ModuleDef.tune */
-export type TuneKey = 'damage' | 'range' | 'fireRate' | 'speed' | 'turn' | 'hp' | 'weight' | 'ap' | 'splash' | 'projSpeed' | 'traverse';
+/** gunDamage: damage of every weapon but melee (a barrel kit does nothing for a saw) */
+export type TuneKey = 'damage' | 'gunDamage' | 'range' | 'fireRate' | 'speed' | 'turn' | 'hp' | 'weight' | 'ap' | 'splash' | 'projSpeed' | 'traverse';
 
 /** A player-authored unit blueprint. */
 export interface Design {

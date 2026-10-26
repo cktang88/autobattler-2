@@ -146,6 +146,8 @@ export const REGEN_DELAY = 2;
 const REACTIVE_MULT = 0.25;
 const CLS_EXPLOSIVE = 1;
 const CLS_ENERGY = 2;
+/** flame jets, burning and fallout: a steady stream of small pulses, not hits (a deflector doesn't catch them) */
+const CLS_FIRE = 4;
 const KNOCK_RATE = 0.35; // fraction of pending knockback applied per tick
 const FOCUS_RADIUS = 6; // cells: allies this close count towards 'focus'
 const RETREAT_BELOW = 0.3; // hp fraction that starts a retreat
@@ -371,6 +373,8 @@ interface Internal {
   cloak: 'stealth' | 'phantom' | null;
   detect: number;
   sinceFire: number;
+  /** s since a repair beam last mended an ally: a cloak shows it like a shot (else a cloaked medic is never seen) */
+  sinceHeal: number;
   domeR: number;
   domeAmt: number;
   regen: number;
@@ -505,7 +509,7 @@ function kiteMountOf(wpns: (Wpn | null)[], mount: number): number {
 function damageClass(def: ModuleDef): number {
   let c = 0;
   for (const k of damageKinds(def)) c |= k === 'explosive' ? CLS_EXPLOSIVE : k === 'energy' ? CLS_ENERGY : 0;
-  return c;
+  return def.projectile === 'flame' ? c | CLS_FIRE : c;
 }
 
 /** Wreck flavour and heft of a weapon's killing blow (visual only; see wreckLevel). */
@@ -896,7 +900,7 @@ export class Battle {
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
       leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, rearming: false, crushCd: 0,
       burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
-      cloak, detect, sinceFire: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
+      cloak, detect, sinceFire: 99, sinceHeal: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
       smokeR, smokeDur, smokeUsed: false, smoked: false, energyResist: Math.min(0.8, energyResist), hardened,
       blastDmg: blastDmg * lm, blastR, blastModule, blastFriendly, blocker: !hasWeapon && !hasHeal,
@@ -932,6 +936,7 @@ export class Battle {
       u.hitFlash = Math.max(0, u.hitFlash - DT * 4);
       I.sinceDamage += DT;
       I.sinceFire += DT;
+      I.sinceHeal += DT;
       // overheat: hot guns cook the hull while they fire (never below a quarter of its hp)
       if (I.overheat > 0 && I.sinceFire < 0.5 && u.hp > u.maxHp * 0.25) u.hp = Math.max(u.maxHp * 0.25, u.hp - u.maxHp * I.overheat * DT);
       // kill rush wears off
@@ -968,7 +973,7 @@ export class Battle {
           I.burnTick = 0;
           this.dmgSrc = I.burnSrc;
           this.dmgKind = 'fire';
-          this.damage(u, dmg, 1, 1, I.burnSide, I.burnModule, u.x, u.y);
+          this.damage(u, dmg, 1, 1, I.burnSide, I.burnModule, u.x, u.y, null, 1, NaN, NaN, CLS_FIRE);
           this.dmgSrc = -1;
           this.dmgKind = null;
         }
@@ -1097,7 +1102,7 @@ export class Battle {
       const I = ints[i];
       const u = I.u;
       if (!I.cloak || !u.alive) continue;
-      let visible = I.sinceFire < (I.cloak === 'phantom' ? PHANTOM_FIRE_REVEAL : STEALTH_FIRE_REVEAL);
+      let visible = Math.min(I.sinceFire, I.sinceHeal) < (I.cloak === 'phantom' ? PHANTOM_FIRE_REVEAL : STEALTH_FIRE_REVEAL);
       if (!visible) {
         for (const D of this.detectors) {
           const o = D.u;
@@ -2160,6 +2165,7 @@ export class Battle {
     m.angle = turnToward(m.angle, Math.atan2(t.y - this.mpy, t.x - this.mpx), w.traverse * DT);
     const amt = Math.min(w.heal * DT, t.maxHp - t.hp);
     t.hp += amt;
+    if (amt > 0) I.sinceHeal = 0;
     this.tallies[u.id].healed += amt;
     w.healAcc += amt;
     m.flash = Math.max(m.flash, 0.5);
@@ -2278,7 +2284,8 @@ export class Battle {
     if (dmg > 0) {
       if ((cls & CLS_ENERGY) && T.energyResist > 0) dmg *= 1 - T.energyResist;
       if ((cls & CLS_EXPLOSIVE) && t.reactive > 0) { dmg *= REACTIVE_MULT; t.reactive--; }
-      if (T.deflect > 0) dmg = Math.max(dmg * 0.1, dmg - T.deflect); // deflector: small hits lose most of their bite
+      // deflector: small hits lose most of their bite (not fire: a flame jet's or a burn's pulses are a stream, not hits)
+      if (T.deflect > 0 && !(cls & CLS_FIRE)) dmg = Math.max(dmg * 0.1, dmg - T.deflect);
       dmg = Math.max(dmg * MIN_DMG_FRAC, dmg - (t.stats.armor - T.shred) * (1 - ap));
     }
     const hitDmg = dmg; // what reached the hull: the wreck's "hit size"
@@ -2537,7 +2544,7 @@ export class Battle {
           if (f.rad) {
             // fallout: a pulse of damage that ignores armor (shields still soak it), fading as the zone decays
             this.dmgSrc = f.src;
-            this.damage(o, f.dps * BURN_EVERY * Math.min(1, 0.4 + f.t / 10), 1, 1, f.side, f.moduleId, o.x, o.y);
+            this.damage(o, f.dps * BURN_EVERY * Math.min(1, 0.4 + f.t / 10), 1, 1, f.side, f.moduleId, o.x, o.y, null, 1, NaN, NaN, CLS_FIRE);
             this.dmgSrc = -1;
           } else this.ignite(o, f.dps, FIELD_BURN, f.side, f.src, f.moduleId);
         }

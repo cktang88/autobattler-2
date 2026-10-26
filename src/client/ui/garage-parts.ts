@@ -212,7 +212,7 @@ export function moduleEffects(mod: ModuleDef): string[] {
 }
 
 const TUNE_LABEL: Record<TuneKey, string> = {
-  damage: 'damage', range: 'range', fireRate: 'fire rate', speed: 'speed', turn: 'turn rate', hp: 'hull hp', weight: 'weight',
+  damage: 'damage', gunDamage: 'gun damage', range: 'range', fireRate: 'fire rate', speed: 'speed', turn: 'turn rate', hp: 'hull hp', weight: 'weight',
   ap: 'AP tier', splash: 'blast', projSpeed: 'shell speed', traverse: 'traverse',
 };
 /** A trade-off module's explicit gains and costs, for the green + / red − lines on its card (empty for plain modules).

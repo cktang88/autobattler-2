@@ -68,7 +68,7 @@ test('stacking diminishes: a second copy adds less, and gains and costs stack se
   const one = computeStats(D('a', 'striker', 'halftrack', ['autocannon', 'twin30', 'shortbarrel']));
   const two = computeStats(D('b', 'raider', 'halftrack', ['shortbarrel', 'shortbarrel']));
   void two;
-  assert.ok(one.tune.damage! > 0.24 && one.tune.damage! < 0.26);
+  assert.ok(one.tune.gunDamage! > 0.24 && one.tune.gunDamage! < 0.26);
   const tw = tunedWeapon(MODULE_BY_ID.get('autocannon')!, { damage: signedStack([0.25, 0.25]) });
   assert.ok(tw.damage! < 32 * 1.5 && tw.damage! > 32 * 1.25, `two kits: ${tw.damage}`);
 });
@@ -183,4 +183,52 @@ test('EMP Pop stuns the enemies around the wreck; Pack Link pays off in a big sq
   assert.ok(stunned >= 2, `scouts stunned by the pop: ${stunned}`);
   const pk = computeStats(D('pk', 'raider', 'halftrack', ['hmg', 'packlink'])), np = computeStats(D('np', 'raider', 'halftrack', ['hmg', null]));
   assert.ok(pk.pricePower > np.pricePower, 'pack link is priced (unrounded power price)');
+});
+
+test('Short-Barrel Kit: guns hit harder, melee gains nothing (and pays nothing for it)', () => {
+  const saw = MODULE_BY_ID.get('buzzsaw')!, ac = MODULE_BY_ID.get('autocannon')!;
+  const t = computeStats(D('sb', 'mantis', 'hover', ['buzzsaw', 'shortbarrel'])).tune;
+  assert.equal(tunedWeapon(saw, t).damage, saw.damage);
+  assert.ok(Math.abs(tunedWeapon(ac, t).damage! - ac.damage! * 1.25) < 1e-6);
+  // stacks (diminishing) with the Ammo Rack's all-weapon damage on guns; melee keeps only the rack's share
+  const mixed = computeStats(D('arsb', 'striker', 'treads', ['autocannon', null, 'shortbarrel'])).tune;
+  const withRack = computeStats(D('arsb2', 'strider', 'legs', ['autocannon', 'shortbarrel', 'ammorack'])).tune;
+  assert.ok(Math.abs(tunedWeapon(ac, mixed).damage! / ac.damage! - 1.25) < 1e-6);
+  assert.ok(Math.abs(tunedWeapon(ac, withRack).damage! / ac.damage! - (1 + signedStack([0.25, 0.15]))) < 1e-6);
+  assert.ok(Math.abs(tunedWeapon(saw, withRack).damage! / saw.damage! - 1.15) < 1e-6);
+  // priced like the bare saw unit: no free damage, and no range-trade discount on a loadout the range cut can't touch
+  assert.equal(computeStats(D('s0', 'mantis', 'hover', ['buzzsaw', null])).cost, computeStats(D('s1', 'mantis', 'hover', ['buzzsaw', 'shortbarrel'])).cost);
+});
+
+test('Deflector Grid stops small hits, not flame jets or burning', () => {
+  const flamer = D('fl', 'striker', 'treads', [null, null, 'flamer']);
+  const hit = (mod: string | null) => {
+    const tgt = D('t' + mod, 'warden', 'treads', ['repairM', mod]);
+    const b = new Battle({ seed: 1, sides: [{ designs: [flamer, tgt], units: [pl(flamer.id, 40, { stance: undefined })] }, { designs: [flamer, tgt], units: [pl(tgt.id, 40)] }] });
+    const me = b.units[0], t = b.units.find((u) => u.side === 1)!;
+    t.hp = t.maxHp = 1e7; me.hp = me.maxHp = 1e7; t.x = me.x; t.y = me.y - 3;
+    (b as unknown as { rebuildHash(): void }).rebuildHash();
+    let sum = 0;
+    for (let i = 0; i < 8 * TICK_RATE; i++) { b.step(); for (const e of b.events) if (e.t === 'hit' && e.unit === t.id) sum += e.damage; }
+    return sum;
+  };
+  const plain = hit(null);
+  assert.ok(plain > 0);
+  assert.ok(Math.abs(hit('deflector') - plain) < plain * 0.02, 'a flamer burns a deflector hull as hard as a bare one');
+});
+
+test('a cloaked medic shows up while its repair beam works', () => {
+  const medic = D('medic', 'striker', 'treads', ['repairM', 'phantom', null]);
+  const hurt = D('hurt', 'warden', 'treads', ['autocannon', null]);
+  const wall = D('wall', 'bastion', 'treads', ['plateH', 'plateM', 'flak']);
+  const b = new Battle({ seed: 1, sides: [{ designs: [medic, hurt, wall], units: [pl('medic', 40), pl('hurt', 44, { uid: 2 })] }, { designs: [medic, hurt, wall], units: [pl('wall', 40)] }] });
+  const m = b.units.find((u) => u.side === 0 && u.design.id === 'medic')!, h = b.units.find((u) => u.side === 0 && u.design.id === 'hurt')!;
+  h.x = m.x + 3; h.y = m.y;
+  (b as unknown as { rebuildHash(): void }).rebuildHash();
+  b.step();
+  assert.equal(m.cloaked, true, 'hidden while idle');
+  h.hp = h.maxHp * 0.3;
+  let seen = 0;
+  for (let i = 0; i < 2 * TICK_RATE; i++) { b.step(); if (!m.cloaked) seen++; }
+  assert.ok(seen > TICK_RATE, `visible ${seen} ticks of ${2 * TICK_RATE} while repairing`);
 });
