@@ -379,9 +379,13 @@ export const MODULE_CAL: Record<string, number> = {
   //      quickmatch mixes (railgun 0-38%). At 2.2 / 7 the module designs swung to 70-98% (balance.ts), so set in between.
   //      Railgun kept at 9: a lone railgun on a warden / titan / dreadnought wins 29 / 0 / 13% of quickmatch mixes, but
   //      at 5.5 the balance.ts railgun designs and the Behemoth won ~90%. Lightrail 11 -> 9, sniper 8.5 -> 7 (Shade ~23%); autocannon 4.001 -> 3.4 (Ironclad ~31% -> ~50%).
+  //   8. reach for the titan riot guns, which every cheap long gun used to out-range (they lost 100% of equal-supply
+  //      fights to sniper / light-rail / ATGM kiters): annihilator 11 -> 16, stormcore 9.5 -> 14, avenger 9 -> 13 cells.
+  //      Their price rose with the range factor but not enough (Kronos 44% -> 75%, Gargantua 56% -> 75% vs mixed,
+  //      size-check.ts N=16): annihilator 0.868 -> 1.3 (Kronos ~56%), avenger 0.3 -> 0.5 (~69%; the lever is weak there).
   leech: 2.905, prism: 3.272, voidlance: 3.725, entropy: 2.41,
-  aamissile: 1.086, ac20: 1.9, ac40: 3.2, aegisT: 1.1, annihilator: 0.868, arclance: 1.62, atgm: 12.3,
-  autocannon: 3.4, autoloader: 2.89, avenger: 0.3, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
+  aamissile: 1.086, ac20: 1.9, ac40: 3.2, aegisT: 1.1, annihilator: 1.3, arclance: 1.62, atgm: 12.3,
+  autocannon: 3.4, autoloader: 2.89, avenger: 0.5, barrage: 10.564, bombs: 9.177, bulwarkshield: 1.689, buzzsaw: 0.171,
   cannon: 4, cannon75: 7.6, chainsaw: 1.136, claw: 0.918, clusterbombs: 17.296, heavybomb: 6.502, cruise: 10.931, disarm: 0.84,
   dome: 1, domeG: 1, doomsday: 3.879, drill: 0.721, empcannon: 1.545, flak: 0.284, flamer: 0.6, gauss: 3.5,
   gravity: 6.197, grinder: 0.398, guidedrocket: 5.3, gyro: 0.11, hammer: 0.643, hardened: 0.335, heatray: 1.468,
