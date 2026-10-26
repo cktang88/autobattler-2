@@ -35,7 +35,7 @@ import { STARTER_DESIGNS } from './starters.ts';
 import { DECK_SIZE, MAX_BLOCKS, MAX_SIM_UNITS, battleInputFor, newMatch, newPlayer, designCost, placementValue, sellValue, redactFor, roundDamage, supplyForRound, totalSupplyThrough, upgradeCost, validateDeploy } from './match.ts';
 import { designKey, isHealer, profile, weaponDps, type Profile, type Role } from './aiprofile.ts';
 import { defaultPool, drawDeck, type AiPool } from './aipool.ts';
-import { deployRole, roleOrders, smartDeployBlocks, type DeployRole } from './smartdeploy.ts';
+import { deployRole, formationDelays, smartDeployBlocks, type DeployOpts, type DeployRole } from './smartdeploy.ts';
 import type { DeployAction, Design, MatchState, ModuleDef, Placement, Side, Stance, TargetPriority, UnitConfig } from './types.ts';
 
 export { profile, classify, type Profile, type Role } from './aiprofile.ts';
@@ -44,8 +44,8 @@ export type AiDifficulty = 'easy' | 'normal' | 'hard';
 
 /** Normal / hard formation and composition (scripts/aibench.ts turns them off to measure the previous AI; game code
  *  never changes them). smartDeploy: lay every round's buys out in the smartdeploy.ts formation around the blocks
- *  already on the board (chaff screen, armour front-centre, riot at its ends, melee flanks, escorts, artillery spread
- *  at the back, aircraft delayed); riotMix: keep ~15-25% of the army's value in chaff clear and draw a chaff-clear
+ *  already on the board (chaff screen and riot escorting the armour front-centre, melee flanks, escorts, artillery
+ *  placed to reach the clash, aircraft / melee timed to it, against the enemy front seen on its board); riotMix: keep ~15-25% of the army's value in chaff clear and draw a chaff-clear
  *  design into the deck when the pool has one. */
 export const AI_KNOBS = { smartDeploy: true, riotMix: true };
 
@@ -1132,7 +1132,8 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
     count(p, buy!, p.cost);
   }
 
-  if (AI_KNOBS.smartDeploy && action.place.length) formUp(action, board, byId, o.flank);
+  const foe = AI_KNOBS.smartDeploy ? foeFront(oppBoard, oppDeck) : undefined;
+  if (AI_KNOBS.smartDeploy && action.place.length) formUp(action, board, byId, o.flank, foe);
 
   // --- escorts, and every block's orders re-tuned against the enemy we see now ---
   const all = [
@@ -1145,6 +1146,7 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
     const e = pickEscort(all, pl.uid);
     if (e !== undefined && (!AI_KNOBS.smartDeploy || pl.escort === undefined)) { pl.escort = e; delete pl.stance; delete pl.delay; delete pl.kiteMount; if (pr.defaults.kite) pl.kite = false; else delete pl.kite; }
   }
+  let retimed: Map<number, number> | undefined;
   if (view.round >= 2) {
     for (const u of board) {
       const d = byId.get(u.designId);
@@ -1168,10 +1170,26 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
         if (b.stance !== (u.stance ?? 'advance')) cfg.stance = b.stance;
         if (b.delay !== (u.delay ?? 0)) cfg.delay = b.delay;
         if (b.retreat !== !!u.retreat) cfg.retreat = b.retreat;
-        // the formation's timing stays: aircraft never make first contact, melee waits for the armour
+        // the formation's timing stays: aircraft never make first contact, melee waits for the armour (both re-timed
+        // to the clash of the board as it is now); escorts and artillery keep moving the formation's way
         if (AI_KNOBS.smartDeploy) {
-          const want = roleOrders(roleOfDesign(d)).delay;
+          const role = roleOfDesign(d);
+          const want = (retimed ??= formationDelays([...board, ...action.place].flatMap((p) => { const x = byId.get(p.designId); return x ? [{ d: x, p }] : []; }), foe)).get(u.uid);
           if (want !== undefined) { if ((u.delay ?? 0) === want) delete cfg.delay; else cfg.delay = want; }
+          // chaff / riot bought before there was armour to escort take it up now
+          if ((role === 'chaff' || role === 'riot') && u.escort === undefined) {
+            let best: Placement | undefined;
+            for (const q of [...board, ...action.place]) {
+              const qd = byId.get(q.designId);
+              if (qd && roleOfDesign(qd) === 'armor' && (!best || Math.abs(q.x - u.x) < Math.abs(best.x - u.x))) best = q;
+            }
+            if (best) cfg.escort = best.uid;
+          }
+          if (want === undefined && (role === 'artillery' || u.escort !== undefined || cfg.escort !== undefined)) {
+            delete cfg.delay; delete cfg.stance;
+            if ((u.delay ?? 0) !== 0) cfg.delay = 0;
+            if ((u.stance ?? 'advance') !== 'advance') cfg.stance = 'advance';
+          }
         }
       }
       if (Object.keys(cfg).length > 1) (action.configure ??= []).push(cfg);
@@ -1184,10 +1202,10 @@ function smartPlan(view: MatchState, side: Side, oppBoard: Placement[], oppDeck:
  *  on the board: spots and spacing from the formation (keeping the planner's spacing vs splash), orders from the
  *  planner (targets, kiting...) with the formation's on top (holds, melee / aircraft delays, escorts of the armour).
  *  A block the formation can't fit keeps the planner's spot when that is still free, else is dropped. */
-function formUp(action: DeployAction, board: Placement[], byId: Map<string, Design>, flank: number): void {
+function formUp(action: DeployAction, board: Placement[], byId: Map<string, Design>, flank: number, foe?: DeployOpts['foe']): void {
   const existing = board.flatMap((p) => { const d = byId.get(p.designId); return d ? [{ d, p }] : []; });
   const laid = smartDeployBlocks(action.place.map((pl) => ({ d: byId.get(pl.designId)!, uid: pl.uid, spacing: pl.spacing ?? 0 })),
-    { existing, round: action.round, centre: DEPLOY_W / 2 + flank });
+    { existing, round: action.round, centre: DEPLOY_W / 2 + flank, foe });
   const at = new Map(laid.map((p) => [p.uid, p] as const));
   const foot = (p: Placement) => ({ x: p.x, y: p.y, ...blockDims(profile(byId.get(p.designId)!).stats, p.spacing, !!p.rot) });
   const occ: Foot[] = [...board.filter((p) => byId.has(p.designId)).map(foot), ...laid.map(foot)];
@@ -1209,8 +1227,12 @@ function formUp(action: DeployAction, board: Placement[], byId: Map<string, Desi
     if (f.escort !== undefined) {
       pl.escort = f.escort;
       delete pl.delay;
-      if (pl.stance === 'flankLeft' || pl.stance === 'flankRight') delete pl.stance;
+      // an escort follows the armour: a charge / hold / flank stance would override it
+      delete pl.stance;
     }
+    // artillery is placed to walk up into range of the clash and stop there (the sim's advance parks it at its
+    // guns' reach): holding its spot or waiting would leave it out of range when the lines meet
+    if (role === 'artillery') { delete pl.delay; if (pl.stance === 'holdPos') delete pl.stance; }
     if (role === 'air' && pl.stance === 'charge') delete pl.stance;
     keep.push(pl);
   }
@@ -1218,6 +1240,16 @@ function formUp(action: DeployAction, board: Placement[], byId: Map<string, Desi
   const kept = new Set(keep.map((p) => p.uid));
   for (const pl of keep) if (pl.escort !== undefined && pl.escort >= action.place[0].uid && !kept.has(pl.escort)) delete pl.escort;
   action.place = keep;
+}
+
+/** What the enemy's front looks like (smartdeploy.ts DeployOpts.foe), from its board: its armour line's slowest hull,
+ *  front row and median gun reach (no armour on the board yet: a mirror of ours). */
+function foeFront(oppBoard: Placement[], oppDeck: Design[]): DeployOpts['foe'] {
+  const byId = new Map(oppDeck.map((d) => [d.id, d] as const));
+  const arm = oppBoard.flatMap((p) => { const d = byId.get(p.designId); return d && roleOfDesign(d) === 'armor' ? [{ p, s: profile(d).stats }] : []; });
+  if (!arm.length) return undefined;
+  const r = arm.map((a) => a.s.range).sort((a, b) => a - b);
+  return { speed: Math.min(...arm.map((a) => a.s.speed)), row: Math.min(...arm.map((a) => a.p.y)), range: Math.min(14, r[Math.floor(r.length / 2)]) };
 }
 
 /** Target / stance tweaks from the intel: anti-air hunts aircraft only when there are some, long guns go for the

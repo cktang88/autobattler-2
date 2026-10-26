@@ -5,7 +5,9 @@ import { MAX_BLOCKS, MAX_SIM_UNITS, newMatch, newPlayer, validateDeck, validateD
 import { DEPLOY_D, DEPLOY_W, blockDims, rectsOverlap, blockInZone } from '../src/shared/grid.ts';
 import { computeStats, defaultOrders } from '../src/shared/stats.ts';
 import type { MatchState, Placement } from '../src/shared/types.ts';
-import { deployRole } from '../src/shared/smartdeploy.ts';
+import { deployRole, formationDelays } from '../src/shared/smartdeploy.ts';
+import { START_DELAYS } from '../src/shared/types.ts';
+import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 
 test('aiDeck is valid, deterministic and covers roles', () => {
   for (const diff of ['easy', 'normal', 'hard'] as AiDifficulty[]) {
@@ -168,18 +170,27 @@ test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone
   }
 });
 
-test('hard AI mid-match decision with big armies stays under 1.5s', () => {
+test('hard AI mid-match decision with big armies stays under 1.5s (on a laptop)', () => {
   const m = newMatch('h', 'ai', 77, newPlayer('A', aiDeck(77, 'hard'), true), newPlayer('B', aiDeck(78, 'hard'), true));
+  // machine speed: the hard AI's search budget is in laptop ms (~1.1 us per sim unit per tick), so a slower or busy
+  // machine (CI containers run ~2x slower) gets a proportionally longer limit; never a shorter one
+  let simMs = 0, unitTicks = 0;
   for (let r = 0; r < 4 && m.status === 'deploy'; r++) {
     for (const side of [0, 1] as const) applyDeploy(m, side, aiDeploy(m, side, 'normal'));
+    const sides = ([0, 1] as const).map((s) => ({ designs: m.players[s].deck, units: m.players[s].board }));
+    const n = sides.reduce((a, sd) => a + sd.units.reduce((b, u) => b + computeStats(sd.designs.find((d) => d.id === u.designId)!).squad, 0), 0);
+    const t0 = performance.now();
     resolveRound(m);
+    simMs += performance.now() - t0;
+    unitTicks += n * (m.history.at(-1)?.result.ticks ?? 0);
   }
   if (m.status !== 'deploy') return;
+  const slow = unitTicks ? Math.max(1, simMs / unitTicks / 0.0011) : 1;
   const t = performance.now();
   const act = aiDeploy(m, 0, 'hard');
   const ms = performance.now() - t;
   assert.equal(validateDeploy(m, 0, act), null);
-  assert.ok(ms < 1500, `took ${ms}ms`);
+  assert.ok(ms < 1500 * slow, `took ${ms}ms (machine ${slow.toFixed(2)}x a laptop)`);
 });
 
 test('normal / hard AI: decks carry chaff clear; every round lays out in the smart formation', () => {
@@ -192,9 +203,33 @@ test('normal / hard AI: decks carry chaff clear; every round lays out in the sma
       const deck = m.players[side].deck, byId = new Map(deck.map((d) => [d.id, d] as const));
       const board = rec.boards[side];
       const role = (p: Placement) => deployRole(byId.get(p.designId)!);
-      for (const p of board.filter((q) => role(q) === 'air')) assert.ok((p.delay ?? 0) >= 6, `aircraft delayed (seed ${seed} r${rec.round})`);
+      // aircraft / melee held until just after the clash (smartdeploy.ts formationDelays). Later rounds also time
+      // against the enemy front the AI can see, so only round 1 (nothing seen yet) is checked against the mirror clock
+      const timed = formationDelays(board.map((p) => ({ d: byId.get(p.designId)!, p })));
+      for (const p of board.filter((q) => role(q) === 'air' || role(q) === 'melee')) {
+        assert.ok((START_DELAYS as readonly number[]).includes(p.delay ?? 0), 'legal delay');
+        if (rec.round === 1) assert.equal(p.delay ?? 0, timed.get(p.uid), `aircraft / melee timed to the clash (seed ${seed} side ${side})`);
+      }
+      // no ground line to wait for: aircraft go at once
+      if (!board.some((q) => role(q) !== 'air' && role(q) !== 'artillery' && role(q) !== 'support')) for (const p of board.filter((q) => role(q) === 'air')) {
+        assert.equal(p.delay ?? 0, 0, `all-air army not held back (seed ${seed} r${rec.round})`);
+      }
+      // chaff and riot escort the armour when there is some
+      if (board.some((q) => role(q) === 'armor')) for (const p of board.filter((q) => role(q) === 'chaff' || role(q) === 'riot')) {
+        const e = board.find((q) => q.uid === p.escort);
+        assert.ok(e && role(e) === 'armor', `chaff / riot escorts the armour (seed ${seed} r${rec.round})`);
+      }
       const armour = board.filter((q) => role(q) === 'armor'), arty = board.filter((q) => role(q) === 'artillery');
       if (armour.length && arty.length) assert.ok(Math.max(...arty.map((q) => q.y)) > Math.min(...armour.map((q) => q.y)), 'artillery behind the armour');
     }
   }
+});
+
+test('smart formation: an all-air AI army is not held back (no ground line to time against)', () => {
+  const air = ['hornet', 'strafer', 'thunderbird'].map((id) => STARTER_DESIGNS.find((d) => d.id === `starter-${id}`)!);
+  const m = newMatch('air', 'ai', 5, newPlayer('A', air, true), newPlayer('B', aiDeck(6, 'normal'), true));
+  const act = aiDeploy(m, 0, 'normal');
+  assert.equal(validateDeploy(m, 0, act), null);
+  assert.ok(act.place.length > 0, 'bought something');
+  for (const p of act.place) assert.equal(p.delay ?? 0, 0, p.designId);
 });

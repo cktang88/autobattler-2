@@ -271,11 +271,13 @@ export interface ModuleDef {
   /** immune to stun, slow, disarm, burn and knockback */
   hardened?: boolean;
   /** explodes on death (radius beyond the carrier's hull); `friendly`: the blast also hurts allies (an ammo rack cooking off) */
-  deathBlast?: { damage: number; radius: number; friendly?: boolean; stun?: number };
+  deathBlast?: { damage: number; radius: number; friendly?: boolean; stun?: number; slow?: number };
   // ---- small-hull utilities: worth most on light, fast or numerous units ----
   /** evasion thrusters: chance to dodge slow projectiles (shells, rockets, lobbed rounds, orbs); scaled down by hull size
    *  and up by speed (stats.ts dodgeChance) */
   dodge?: number;
+  /** share of the dodge chance that also applies to bullets (evasion thrusters on a light hull) */
+  dodgeBullets?: number;
   /** deflector: every hit on the hull loses this much damage first (never below 10% of it): shrugs off MG / flak swarms */
   deflect?: number;
   /** pack link: +`per` damage for each ally of the same design within `radius` cells, up to +`cap` */

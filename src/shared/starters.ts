@@ -8,10 +8,10 @@ export const STARTER_DESIGNS: Design[] = [
   { id: 'starter-buzzsaw', name: 'Buzzsaw', chassis: 'scout', mobility: 'wheels', mounts: ['mg'] },
   { id: 'starter-torchbug', name: 'Torchbug', chassis: 'scout', mobility: 'halftrack', mounts: ['flamer'] },
   // ---- skirmisher ----
-  { id: 'starter-lancer', name: 'Lancer', chassis: 'raider', mobility: 'halftrack', mounts: ['laser', 'laser'] },
+  { id: 'starter-lancer', name: 'Lancer', chassis: 'raider', mobility: 'legs', mounts: ['laser', 'laser'] },
   { id: 'starter-hunter', name: 'Tank Hunter', chassis: 'raider', mobility: 'legs', mounts: ['atgm', 'atgm'] },
   // ---- frontline tank ----
-  { id: 'starter-bulwark', name: 'Bulwark', chassis: 'warden', mobility: 'treads', mounts: ['autocannon', 'plateL'] },
+  { id: 'starter-bulwark', name: 'Bulwark', chassis: 'warden', mobility: 'treads', mounts: ['hmg', 'plateL'] },
   // ---- anti-tank ----
   { id: 'starter-tankbuster', name: 'Tankbuster', chassis: 'longarm', mobility: 'spider', mounts: ['cannon'] },
   // ---- anti-air ----
@@ -27,7 +27,7 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- brawler ----
   { id: 'starter-stormcaller', name: 'Voltrider', chassis: 'striker', mobility: 'halftrack', mounts: ['minigun', 'twin30', 'targeting'] },
   // ---- size-3 heavies ----
-  { id: 'starter-behemoth', name: 'Ironbreaker', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'reinforced', 'longbarrel'] },
+  { id: 'starter-behemoth', name: 'Ironbreaker', chassis: 'colossus', mobility: 'treads', mounts: ['railgun', 'cannon', 'reinforced', 'plateL'] },
   { id: 'starter-ironclad', name: 'Ironclad', chassis: 'bastion', mobility: 'treads', mounts: ['autocannon', 'plateM', 'autocannon'] },
   // ---- emplacement ----
   { id: 'starter-spire', name: 'Missile Spire', chassis: 'warden', mobility: 'spider', mounts: ['guidedrocket', 'hmg'] },
@@ -36,7 +36,7 @@ export const STARTER_DESIGNS: Design[] = [
   // ---- stealth: cloaked sniper platform ----
   { id: 'starter-shade', name: 'Shade', chassis: 'striker', mobility: 'halftrack', mounts: ['lightrail', 'stealth', 'sniper'] },
   // ---- shield wall: barrier-heavy anchor of the line ----
-  { id: 'starter-aegiswall', name: 'Aegis Wall', chassis: 'bastion', mobility: 'treads', mounts: ['shieldH', 'cannon75', 'shield'] },
+  { id: 'starter-aegiswall', name: 'Aegis Wall', chassis: 'bastion', mobility: 'treads', mounts: ['shieldH', 'cannon75', 'smoke'] },
   // ---- support aura: command vehicle that speeds up and repairs its escorts ----
   { id: 'starter-commander', name: 'Commander', chassis: 'striker', mobility: 'halftrack', mounts: ['uplink', 'twin30', 'hmg'] },
   // ---- giant (size 4): all-round assault walker ----
