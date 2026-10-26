@@ -1300,6 +1300,13 @@ test('guided volleys split over several weak targets, but all go to one tough ta
   }
 });
 
+/** what unit `src`'s salvos still to launch have booked on unit `j` (Wpn.resvTgt) */
+function ownResv(b: Battle, src: number, j: number): number {
+  type W = { resvTgt: number; resvEst: number; salvoLeft: number } | null;
+  const ws = (b as unknown as { ints: { wpns: W[] }[] }).ints[src].wpns;
+  return ws.reduce((a, w) => a + (w && w.resvTgt === j ? w.resvEst * w.salvoLeft : 0), 0);
+}
+
 test('unguided rocket salvos: once the tubes fired will kill the target, the rest of the ripple goes to another one', () => {
   // (salvos used to pour every tube into the aim point they were laid on, however few rounds the target needed)
   const b = new Battle(input(4, [P('mlrsTruck', 10, 0)], [0, 3, 6, 9].map((x) => ({ ...P('buggy', 5 + x, 0), stance: 'holdPos' as const }))));
@@ -1313,8 +1320,9 @@ test('unguided rocket salvos: once the tubes fired will kill the target, the res
       if (p.moduleId !== 'mlrs' || p.src !== 0 || seen.has(p.id)) continue;
       seen.set(p.id, { ...p });
       assert.ok(p.aimT >= 0, 'every rocket is booked on its target');
-      // nothing but this rocket was already headed at its target in numbers that kill it
-      assert.ok(inc()[p.aimT] - p.est < b.units[p.aimT].hp, `rocket ${seen.size} fired at a doomed target`);
+      // nothing but this rocket (and the rest of its own salvo, booked ahead) was already headed at its target in
+      // numbers that kill it
+      assert.ok(inc()[p.aimT] - p.est - ownResv(b, 0, p.aimT) < b.units[p.aimT].hp, `rocket ${seen.size} fired at a doomed target`);
     }
   }
   const rs = [...seen.values()];
@@ -1344,13 +1352,30 @@ test('overkill: a strike jet rocket pod spreads its salvo, also when the enemy f
         seen.add(p.id);
         assert.ok(p.aimT >= 0, `pd ${withPd}: rocket ${seen.size} is booked on its target`);
         const t = b.units[p.aimT];
-        assert.ok(inc()[p.aimT] - p.est < t.hp + t.shield, `pd ${withPd}: rocket ${seen.size} went into a target already doomed`);
+        assert.ok(inc()[p.aimT] - p.est - ownResv(b, 0, p.aimT) < t.hp + t.shield, `pd ${withPd}: rocket ${seen.size} went into a target already doomed`);
         aimed.push(p.aimT);
       }
     }
     assert.equal(seen.size, 3, `pd ${withPd}: the pod fired`);
     assert.ok(new Set(aimed).size >= 2, `pd ${withPd}: the salvo spread over ${new Set(aimed).size} target(s)`);
   }
+});
+
+test('overkill: three strike jets do not all open their rocket salvos on the same target', () => {
+  // the reported case: three Strafers in one pass all laid their pods on one unit. A salvo now books its unlaunched
+  // tubes on its target the moment it starts, at the share of the rocket cloud expected to hit, so the next jet sees
+  // that target as taken while the first salvo is still rippling out
+  const foes = [0, 4, 8].map((x) => ({ ...P('arty', 6 + x, 0), stance: 'holdPos' as const }));
+  const b = new Battle(input(3, [P('strafer', 8, 0), P('strafer', 10, 0), P('strafer', 12, 0)], foes));
+  for (const u of b.units) if (u.side === 1) { u.hp = 200; u.maxHp = 200; u.shield = 0; } // one full salvo kills
+  type RP = SP & { aimT: number };
+  const first = new Map<number, number>(); // jet -> target of its first salvo's first rocket
+  while (!b.done && b.tick < 60 * 20 && first.size < 3) {
+    b.step();
+    for (const p of simProjs(b) as RP[]) if (p.moduleId === 'rockets' && !first.has(p.src)) first.set(p.src, p.aimT);
+  }
+  assert.equal(first.size, 3, 'all three jets fired');
+  assert.equal(new Set(first.values()).size, 3, `first salvos went to ${[...first.values()].join(', ')}`);
 });
 
 test('overkill: shooters do not pile onto a target that rounds in flight will already kill', () => {

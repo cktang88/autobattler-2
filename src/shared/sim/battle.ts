@@ -263,6 +263,11 @@ interface Wpn {
   salvoPts: number[];
   /** the salvo switched targets mid-ripple (overkill): the remaining tubes wait until the turret is laid on the new one */
   salvoWait: boolean;
+  /** overkill reservation: the tubes still to launch are booked on the salvo's target (incoming) from the moment the
+   *  salvo starts, so other shooters see the whole salvo coming, not just the tubes already away: the unit holding it
+   *  (-1 none) and what each tube is expected to deal */
+  resvTgt: number;
+  resvEst: number;
   /** guided volleys (missile salvos and bursts): [unit id, expected damage] committed by this volley's missiles that the
    *  overkill bookkeeping (incoming) does not count, so the volley spreads over several targets */
   split: number[];
@@ -605,6 +610,8 @@ export class Battle {
   private focusMark: Int32Array = new Int32Array(0);
   /** expected damage of rounds in flight toward each unit (see Proj.est) */
   private incoming: Float64Array = new Float64Array(0);
+  /** expected damage of the last round fire() launched (0: not counted) */
+  private lastEst = 0;
   private focusStamp = 0;
   /** pickTarget scratch: valid candidates (unit index, score, distance) in scan order */
   private candJ: Int32Array = new Int32Array(0);
@@ -801,7 +808,7 @@ export class Battle {
         hitG: isWeapon && !!def.targetsGround, hitA: isWeapon && !!def.targetsAir,
         burstLeft: 0, burstTimer: 0, retarget: (id * 0.037) % RETARGET_EVERY, aimX: 0, aimY: 0, healAcc: 0, healTimer: 0, preaim: -1, turnDir: 0,
         salvo: isWeapon && (def.burst ?? 1) > 1 && (def.projectile === 'rocket' || (def.projectile === 'missile' && (def.burst ?? 1) >= 4)),
-        salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], salvoWait: false, split: [],
+        salvoLeft: 0, salvoK: 0, salvoN: 0, salvoTimer: 0, ripple: (def.burst ?? 1) >= 8 ? 1 : 2, salvoTgt: -1, salvoAx: 0, salvoAy: 0, salvoPts: [], salvoWait: false, resvTgt: -1, resvEst: 0, split: [],
         okHold: 0, spin: 0, rampT: -1, rampStart: 0, rampLast: 0, lastFire: -1e9, ocShot: -1,
         bomb: bombBay, resupply: isWeapon && !!def.resupply,
         spread: (def.spread ?? 0) * (stats.spreadMult ?? 1),
@@ -1630,7 +1637,7 @@ export class Battle {
       }
       // salvo ripple: the battery's tubes go off one after another at the aim point the salvo was laid on
       if (w.salvoLeft > 0) {
-        if (u.disarm > 0) { w.salvoLeft = 0; continue; }
+        if (u.disarm > 0) { this.releaseSalvo(w); w.salvoLeft = 0; continue; }
         if (--w.salvoTimer <= 0) {
           let st = w.salvoTgt >= 0 && units[w.salvoTgt].alive ? units[w.salvoTgt] : null;
           // overkill (unguided salvos; guided ones share out targets per missile, see splitTarget): once the tubes
@@ -1638,24 +1645,29 @@ export class Battle {
           // rest of the ripple is laid on another target -- or held while there is none (until the rounds in flight
           // land, or something else comes into reach: a strafing jet keeps them for its next pass)
           if (w.def.projectile !== 'missile') {
-            if ((!st || this.doomed(st.id)) && this.tick >= w.okHold) {
+            // (this salvo's own reservation does not count against its own target)
+            const doomedNow = (o: SimUnit | null) => !o || this.doomed(o.id, o.id === w.resvTgt ? w.resvEst * w.salvoLeft : 0);
+            if (doomedNow(st) && this.tick >= w.okHold) {
               w.okHold = this.tick + Math.round(OVERKILL_RECHECK * TICK_RATE);
               const c = this.pickTarget(I, w, 1);
               if (c >= 0 && c !== w.salvoTgt && !this.doomed(c)) {
                 m.target = c; w.retarget = RETARGET_EVERY;
                 w.salvoTgt = c; w.salvoPts.length = 0; w.salvoWait = true;
                 st = units[c];
+                this.reserveSalvo(w, c);
               }
             }
-            if (!st || this.doomed(st.id)) { w.salvoTimer = 0; continue; }
+            if (doomedNow(st)) { w.salvoTimer = 0; continue; }
             if (w.salvoWait) {
               // laid on the new target yet? (a refresh may have moved the turret to another valid one: follow it)
-              if (t && t.id !== w.salvoTgt && !this.doomed(t.id)) { w.salvoTgt = t.id; st = t; w.salvoPts.length = 0; }
+              if (t && t.id !== w.salvoTgt && !this.doomed(t.id)) { w.salvoTgt = t.id; st = t; w.salvoPts.length = 0; this.reserveSalvo(w, t.id); }
               if (!t || t !== st || !onTarget) { w.salvoTimer = 0; continue; }
               w.salvoWait = false;
             }
           }
           w.salvoTimer = w.ripple;
+          // this tube books its own round (fire): take it off the reservation
+          if (w.resvTgt >= 0) { this.incoming[w.resvTgt] = Math.max(0, this.incoming[w.resvTgt] - w.resvEst); if (w.salvoLeft === 1) w.resvTgt = -1; }
           w.salvoLeft--;
           // still laid on the salvo's target: follow its lead point (a moving target is not left behind the cloud)
           if (st && t === st) { w.salvoAx = ax; w.salvoAy = ay; }
@@ -1692,6 +1704,12 @@ export class Battle {
           w.salvoN = burst; w.salvoK = 1; w.salvoLeft = burst - 1; w.salvoTimer = w.ripple; w.salvoWait = false;
           w.salvoTgt = t.id; w.salvoAx = ax; w.salvoAy = ay;
           this.fire(I, mi, w, t, ax, ay, 0, burst);
+          // book the rest of the salvo on its target now (unguided only: guided volleys share out targets per missile)
+          w.resvTgt = -1;
+          if (w.def.projectile !== 'missile' && this.lastEst > 0 && w.salvoLeft > 0) {
+            w.resvEst = this.lastEst; w.resvTgt = t.id;
+            this.incoming[t.id] += w.resvEst * w.salvoLeft;
+          }
           continue;
         }
         if (burst > 1) { w.burstLeft = burst - 1; w.burstTimer = BURST_GAP; }
@@ -1745,6 +1763,7 @@ export class Battle {
 
   private fire(I: Internal, mi: number, w: Wpn, t: SimUnit | null, ax: number, ay: number, salvoK = 0, salvoN = 1): void {
     this.curSrc = this.dmgSrc = I.u.id;
+    this.lastEst = 0;
     this.fireImpl(I, mi, w, t, ax, ay, salvoK, salvoN);
     this.curSrc = this.dmgSrc = -1;
   }
@@ -1798,9 +1817,26 @@ export class Battle {
     return k === 'rocket' || k === 'missile' || k === 'shell' || k === 'arc' || k === 'orb';
   }
 
-  /** Rounds already in flight are expected to kill this unit. */
-  private doomed(j: number): boolean {
-    const inc = this.incoming[j];
+  /** Move a salvo's reservation (its tubes still to launch) onto unit `j`. */
+  private reserveSalvo(w: Wpn, j: number): void {
+    if (w.resvTgt < 0 || w.resvTgt === j) return;
+    const amt = w.resvEst * w.salvoLeft;
+    this.incoming[w.resvTgt] = Math.max(0, this.incoming[w.resvTgt] - amt);
+    this.incoming[j] += amt;
+    w.resvTgt = j;
+  }
+
+  /** Drop a salvo's reservation (the salvo is cut short). */
+  private releaseSalvo(w: Wpn): void {
+    if (w.resvTgt < 0) return;
+    this.incoming[w.resvTgt] = Math.max(0, this.incoming[w.resvTgt] - w.resvEst * w.salvoLeft);
+    w.resvTgt = -1;
+  }
+
+  /** Rounds already in flight (and salvos already started, see Wpn.resvTgt) are expected to kill this unit; `minus`:
+   *  a share of that not to count (a salvo's own reservation, when it asks about its own target). */
+  private doomed(j: number, minus = 0): boolean {
+    const inc = this.incoming[j] - minus;
     if (inc <= 0) return false;
     const o = this.units[j];
     return inc >= o.hp + o.shield + o.auraShield;
@@ -1941,9 +1977,14 @@ export class Battle {
     // missile in the air let a single PD laser swat every shot, one at a time, for the rest of the battle. (This used
     // to exempt them whenever the target's side fielded a PD unit anywhere on the field, which switched overkill
     // prevention off for every rocket, missile and shell against that whole army.)
+    // An unguided salvo's rounds land scattered through a cloud around the aim point (radius as below): the share whose
+    // blast still reaches the target's hull, from the cloud's size against the blast plus the hull (uniform in a disc)
+    const cloudR = Math.max(err, (def.splash ?? 0.5) * 0.35 * Math.sqrt(salvoN));
+    const salvoHit = t ? 0.85 * Math.min(1, ((def.splash ?? 0) + this.ints[t.id].radius * 0.8) ** 2 / Math.max(1e-6, cloudR * cloudR * SALVO_LONG)) : 0;
     const est = t && kind !== 'flame' && !(this.interceptable(kind, def.id) && this.pdCovers(t))
-      ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : pellets > 1 || salvoN > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
+      ? this.expectedHit(t, raw, ap, airBonus) * (kind === 'missile' ? 0.9 : salvoN > 1 ? Math.max(0.3, salvoHit) : pellets > 1 ? 0.5 : err > 0 ? 0.7 : 0.9)
       : 0;
+    this.lastEst = est;
     if (guidedVolley && t) {
       // this volley's next missiles see what this one will deal, PD or not (incoming already counts est)
       const exp = this.expectedHit(t, raw, ap, airBonus) * 0.9 * pellets - est * pellets;
@@ -1955,7 +1996,7 @@ export class Battle {
         // salvo cloud: each round lands at a random point of an ellipse around the aim point (longer along the line of
         // fire, where rockets scatter most) -- the best of a few uniform-in-disc candidates, the one farthest from
         // the salvo's earlier impacts, so the blasts carpet the area at random instead of stacking
-        const R = Math.max(err, (def.splash ?? 0.5) * 0.35 * Math.sqrt(salvoN));
+        const R = cloudR;
         const pts = w.salvoPts;
         let be1 = 0, be2 = 0, bestD = -1;
         for (let q = 0; q < SALVO_CANDIDATES; q++) {
@@ -2267,6 +2308,7 @@ export class Battle {
       t.hp = 0;
       t.alive = false;
       tt.deathTick = this.tick;
+      for (const dw of this.ints[t.id].wpns) if (dw && dw.salvoLeft > 0) { this.releaseSalvo(dw); dw.salvoLeft = 0; }
       if (srcU && srcU.side !== t.side) { tt.killedBy = srcU.id; this.tallies[srcU.id].kills.push(t.id); this.tallies[srcU.id].byWeapon[moduleId].kills.push(t.id); }
       // kill rush: the killer surges (speed and rate of fire) for a few seconds
       if (srcU && srcU.side !== t.side && srcU.alive) {
