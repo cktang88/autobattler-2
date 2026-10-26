@@ -13,7 +13,7 @@
 // Units persist between rounds (killed units come back at full hp next round at their placement).
 // No Math.random / Date: callers pass `now` for timestamps.
 
-import { ARMOR_PRICE, GIANT_JET_CAL, HOVER_BRAWL, SIZE_K, SMALL_AIR_CAL, analyticStats, clearPriceCache, computeStats, dropExtraWeapons, replaceRetiredModules, levelMult, MAX_LEVEL, MOBILITY_CAL, MODULE_CAL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
+import { AIR_LASER_CAL, ARMOR_PRICE, GIANT_JET_CAL, LONG_REACH, HOVER_BRAWL, SIZE_K, SMALL_AIR_CAL, analyticStats, clearPriceCache, computeStats, dropExtraWeapons, replaceRetiredModules, levelMult, MAX_LEVEL, MOBILITY_CAL, MODULE_CAL, roundPrice, statsWithSquad, validateDesign } from './stats.ts';
 import type { BlockShape } from './grid.ts';
 import { DEPLOY_D, DEPLOY_W, MAX_SPACING, blockInZone, blocksOverlap, hasSpacing, normSpacing, squadLayout } from './grid.ts';
 import { mixSeed } from './rng.ts';
@@ -348,7 +348,7 @@ export function capDeckWeapons(p: PlayerState): Set<string> {
  *  with it their squad, moved. Returns the ids of the deck designs whose squad differs from their rules-6 one (their
  *  blocks get re-checked by relegalizeBoard); every other block keeps its exact shape and place. (The price model's
  *  new flight-time / falloff / traverse terms are not replayed: they move prices by a few percent at most; the convex
- *  armour term, HOVER_BRAWL, SIZE_K, GIANT_JET_CAL and SMALL_AIR_CAL are.) */
+ *  armour term, HOVER_BRAWL, SIZE_K, GIANT_JET_CAL, SMALL_AIR_CAL, LONG_REACH and AIR_LASER_CAL are.) */
 export function weaponsReshaped(p: PlayerState): Set<string> {
   const out = new Set<string>();
   // (every deck design: the size-class factors and the convex armour term reach designs without a changed part)
@@ -359,6 +359,7 @@ export function weaponsReshaped(p: PlayerState): Set<string> {
   const saved: [Record<string, unknown>, Record<string, unknown>][] = [];
   const savedCal: Record<string, number | undefined> = {};
   const savedSize: number[] = [];
+  let savedReach: number | undefined, savedLaser: Record<string, number> | undefined;
   let savedArmorK: number | undefined, savedBrawlK: number | undefined, savedJet: Record<number, number> | undefined, savedAir: Record<string, number[]> | undefined;
   try {
     for (const [id, old] of Object.entries(RULES6_WEAPONS)) {
@@ -377,6 +378,10 @@ export function weaponsReshaped(p: PlayerState): Set<string> {
     HOVER_BRAWL.k = 0; // nor a hover-brawler factor
     savedJet = { ...GIANT_JET_CAL };
     Object.assign(GIANT_JET_CAL, RULES6_GIANT_JET);
+    savedReach = LONG_REACH.k;
+    LONG_REACH.k = 1; // nor a Longarm reach factor (rules 7b)
+    savedLaser = { ...AIR_LASER_CAL };
+    for (const k of Object.keys(AIR_LASER_CAL)) AIR_LASER_CAL[k] = 1; // nor an air-to-ground laser factor
     savedAir = { ...SMALL_AIR_CAL };
     Object.assign(SMALL_AIR_CAL, RULES6_SMALL_AIR);
     clearPriceCache();
@@ -391,6 +396,8 @@ export function weaponsReshaped(p: PlayerState): Set<string> {
     if (savedBrawlK !== undefined) HOVER_BRAWL.k = savedBrawlK;
     if (savedJet) Object.assign(GIANT_JET_CAL, savedJet);
     if (savedAir) Object.assign(SMALL_AIR_CAL, savedAir);
+    if (savedReach !== undefined) LONG_REACH.k = savedReach;
+    if (savedLaser) Object.assign(AIR_LASER_CAL, savedLaser);
     clearPriceCache();
   }
   return out;

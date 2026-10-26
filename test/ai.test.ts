@@ -152,8 +152,7 @@ test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 2/4/8/16-unit 
   }
   const avg = lens.reduce((a, b) => a + b, 0) / lens.length;
   assert.ok(avg >= 5 && avg <= 9, `avg rounds ${avg} (${lens})`); // 8.5 -> 9 when air roles made air fights more even
-  // 12 -> 14: turn-aware targeting left the 20-seed average unchanged (7.9 -> 8.1) but drew one 13-round match here
-  assert.ok(lens.every((n) => n >= 4 && n <= 14), `rounds ${lens}`);
+  assert.ok(lens.every((n) => n >= 4 && n <= 14), `rounds ${lens}`); // 12 -> 14: overkill prevention + smart formation leave one seed at 13
 });
 
 test('AI round-1 deployment buys a handful of blocks, spaced squads fit the zone width', () => {

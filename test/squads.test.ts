@@ -31,7 +31,7 @@ test('squad tiers: cheap light units 16 to a block, pricier ones 8 or 4; medium 
   // the starters
   const sq = Object.fromEntries(STARTER_DESIGNS.map((d) => [d.name, computeStats(d).squad]));
   assert.deepEqual([sq['Buzzsaw'], sq['Torchbug'], sq['Gnasher'], sq['Tank Hunter'], sq['Lancer'], sq['Hornet']], [8, 8, 8, 4, 4, 8]); // rules 7: light squads repriced up (SIZE_K 0.85 -> 0.97), none is a 16 any more
-  assert.deepEqual([sq['Missile Spire'], sq['Strafer'], sq['Tankbuster'], sq['Bulwark'], sq['Skyguard']], [1, 1, 2, 1, 1]); // (Spire: spider legs since the anchor was retired)
+  assert.deepEqual([sq['Missile Spire'], sq['Strafer'], sq['Tankbuster'], sq['Bulwark'], sq['Skyguard']], [1, 1, 1, 1, 1]); // (Spire: spider legs since the anchor was retired; Tankbuster a single unit since rules 7b's dearer cannon / Longarm)
   assert.equal(computeStats(EIGHT).squad, 8, 'test design EIGHT');
   for (const d of STARTER_DESIGNS) if (computeStats(d).size > 2) assert.equal(computeStats(d).squad, 1, d.name);
   // a squad's unit price (one decimal shown) sits in its tier -- the analytic price: the team-value correction (stats.ts
@@ -153,7 +153,7 @@ test('migrating a rules-2 match splits old 16-unit blocks into blocks of the new
 });
 
 test('medium squads: 2 x 2 / 2 x 1 blocks of the real hull footprint, spaced, rotated, validated and simulated', () => {
-  const spire = SPIRE4, tb = S('starter-tankbuster'); // 2 x 2 hull x4, 1 x 3 hull x2
+  const spire = SPIRE4, tb: Design = { id: 'longarm-mg', name: 'Longarm MG', chassis: 'longarm', mobility: 'spider', mounts: ['mg'] }; // 2 x 2 hull x4, 1 x 3 hull x2
   const ss = computeStats(spire), ts = computeStats(tb);
   assert.deepEqual([ss.squad, ss.fw, ss.fh, ts.squad, ts.fw, ts.fh], [4, 2, 2, 2, 1, 3]);
   assert.deepEqual(squadLayout(2), [2, 1]);
