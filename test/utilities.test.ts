@@ -37,8 +37,8 @@ test('every trade-off module is legal on a hull, priced, and shows its gains and
     assert.ok(computeStats(d).cost >= base.cost, `${m.id}: a net gain costs supply`);
     const tr = moduleTradeoffs(m);
     assert.ok(tr.plus.length >= 1, `${m.id}: a green + line`);
-    // the cost is real: a red − line on every module that has one (the overcharge and kill rush are pure upside)
-    if (!m.overcharge && !m.killRush) assert.ok(tr.minus.length >= 1, `${m.id}: a red − line`);
+    // the cost is real: a red − line on every module that has one (the overcharge, kill rush and optics are pure upside)
+    if (!m.overcharge && !m.killRush && m.id !== 'optics') assert.ok(tr.minus.length >= 1, `${m.id}: a red − line`);
   }
   // plain modules stay plain: no red line on basic armour, repair or sensors
   for (const id of ['plateL', 'plateM', 'repair', 'sensor', 'targeting']) assert.deepEqual(moduleTradeoffs(MODULE_BY_ID.get(id)!).minus, [], id);
