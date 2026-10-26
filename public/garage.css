@@ -1068,8 +1068,6 @@
 .garage .g-lslot.utilonly .g-lslot-name { color: var(--amber); font-style: italic; }
 .garage .g-sock.utilonly { opacity: 0.75; }
 .garage .g-sock.utilonly .g-sock-plus { color: var(--amber); }
-.garage .g-ptile.atcap { opacity: 0.45; filter: saturate(0.4); }
-.garage .g-ptile.atcap:hover, .garage .g-ptile.atcap.pin { opacity: 0.8; }
 .garage .g-ptile-cap { display: block; font-size: 10px; color: var(--amber); text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* ---- trade-off modules: explicit gains (green) and costs (red) on every module card ---- */

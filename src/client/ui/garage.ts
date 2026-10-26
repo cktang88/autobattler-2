@@ -1692,11 +1692,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const tile = (m: ModuleDef) => {
       const fitsActive = activeSlot !== null && !slotBlock(m, activeSlot);
       const fh = fitsHull(m);
-      // weapon limit reached: weapon tiles dim (they can still replace a mounted weapon)
+      // weapon limit reached: weapon tiles stay live (drag one onto a mounted weapon to replace it) but get a note
       const capped = m.kind === 'weapon' && atWeaponCap();
       const t = partTile({
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
-        cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', capped ? 'atcap' : '', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
+        cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
         fk: `mod-${m.id}`, title: !fh ? noFitReason(m) ?? undefined : capped ? `Weapon limit reached (${weaponCap(chassis())}/${weaponCap(chassis())}): it can only replace a mounted weapon` : m.category === 'melee' ? 'Melee: fits edge mounts only' : undefined,
         onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
         ondblclick: () => quickEquip(m.id),
