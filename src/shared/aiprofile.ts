@@ -105,7 +105,7 @@ export function profile(d: Design): Profile {
       apSum += dps * (m.ap ?? 0);
     }
     if ((m.splash ?? 0) >= 0.8 || (m.chain ?? 0) > 0 || m.pierce) splashDps += dps * (1 + (m.splash ?? 0) + (m.chain ?? 0) * 0.5);
-    if ((m.splash ?? 0) >= 0.8 || m.category === 'flame' || m.category === 'artillery') splashRadius = Math.max(splashRadius, m.splash ?? 1);
+    if ((m.splash ?? 0) >= 0.8 || m.category === 'flame' || m.category === 'artillery' || m.category === 'bomb') splashRadius = Math.max(splashRadius, m.splash ?? 1);
     if (m.projectile === 'melee') melee = true;
     if (m.minRange) minRange = Math.max(minRange, m.minRange);
     const p = m.projectile;

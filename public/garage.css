@@ -693,7 +693,6 @@
 /* bay toolbar */
 .garage .g-baytools { flex-wrap: wrap; }
 .garage .g-search { flex: 1 1 160px; min-height: 36px; }
-.garage button.k-select.g-rolesel { min-height: 36px; max-width: 190px; }
 .garage .k-seg.g-subtabs { flex: none; align-self: stretch; }
 /* only grow sideways when it shares the toolbar row (hull / drive); in the column it keeps its own height */
 .garage .g-baytools .k-seg.g-subtabs { flex: 1 1 auto; align-self: center; }

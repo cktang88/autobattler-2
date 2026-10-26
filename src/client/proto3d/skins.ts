@@ -43,7 +43,7 @@ function turretSkin(m: ModuleDef | null, hull: LayerName, giant: boolean): Layer
   if (!m) return null;
   if (hull === 'stealth' || hull === 'carapace') return hull;
   if (m.category === 'energy') return 'ceramic';
-  if (m.category === 'artillery' || m.category === 'missile' || m.category === 'rocket') return 'arty';
+  if (m.category === 'artillery' || m.category === 'bomb' || m.category === 'missile' || m.category === 'rocket') return 'arty';
   if (m.category === 'melee') return 'brawler';
   if (SUPPORT_UTIL.has(m.category) || m.category === 'defense') return 'support';
   return giant ? (hull === 'titan' ? 'slab' : hull) : hull;

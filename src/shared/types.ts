@@ -104,7 +104,7 @@ export type ProjectileKind = 'bullet' | 'shell' | 'rocket' | 'missile' | 'beam' 
 
 /** Main weapon/module categories (UI grouping + AI roles). */
 export type ModuleCategory =
-  | 'machinegun' | 'autocannon' | 'cannon' | 'precision' | 'rocket' | 'missile' | 'artillery'
+  | 'machinegun' | 'autocannon' | 'cannon' | 'precision' | 'rocket' | 'missile' | 'artillery' | 'bomb'
   | 'energy' | 'flame' | 'disruption' | 'antiair' | 'melee'
   | 'support' | 'defense' | 'stealth' | 'systems' | 'armor';
 

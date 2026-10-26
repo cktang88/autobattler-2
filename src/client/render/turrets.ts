@@ -650,7 +650,7 @@ export function drawTurret(g: Ctx, m: ModuleDef, pal: TeamPal, d: number, o: num
 /** Category accent colours: one hue per weapon role, used on turrets (rear tick) and part icons. */
 export const CATEGORY_COLOR: Record<string, string> = {
   machinegun: '#ffd54a', autocannon: '#ffa23a', cannon: '#ff6a3a', precision: '#5ad8ff', rocket: '#ff4a4a', missile: '#ff7ab0',
-  artillery: '#c8a060', energy: '#d070ff', flame: '#ff8a20', disruption: '#80a8ff', antiair: '#a0ff70', melee: '#ff3060',
+  artillery: '#c8a060', bomb: '#e07850', energy: '#d070ff', flame: '#ff8a20', disruption: '#80a8ff', antiair: '#a0ff70', melee: '#ff3060',
   support: '#5aff9a', defense: '#7fd8ff', stealth: '#a0a0c8', systems: '#e0e0a0', armor: '#b0b8c0',
 };
 

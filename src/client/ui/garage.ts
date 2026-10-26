@@ -67,12 +67,12 @@ const TAB_ICON: Record<Tab, string> = {
 /** Sub-tabs: weapons and systems are split into a handful of single-choice groups, each listing its categories as sections. */
 type Group = { id: string; label: string; tip: string; cats: string[] };
 const WEAPON_GROUPS: Group[] = [
-  { id: 'ballistic', label: 'Guns', tip: 'Machine guns, autocannons and tank cannons', cats: ['machinegun', 'autocannon', 'cannon'] },
+  { id: 'ballistic', label: 'Guns', tip: 'Machine guns, autocannons, tank cannons and flak', cats: ['machinegun', 'autocannon', 'cannon', 'antiair'] },
   { id: 'rockets', label: 'Rockets', tip: 'Rocket salvos and homing missiles', cats: ['rocket', 'missile'] },
   { id: 'longrange', label: 'Long range', tip: 'Snipers, railguns and artillery', cats: ['precision', 'artillery'] },
+  { id: 'bombs', label: 'Bombs', tip: 'Bomb bays and dispensers for flying designs', cats: ['bomb'] },
   { id: 'energy', label: 'Energy', tip: 'Beams, plasma, lightning and stun weapons', cats: ['energy', 'disruption'] },
   { id: 'close', label: 'Close', tip: 'Flamers and melee', cats: ['flame', 'melee'] },
-  { id: 'aa', label: 'Anti-air', tip: 'Dedicated flak', cats: ['antiair'] },
 ];
 const SYSTEM_GROUPS: Group[] = [
   { id: 'defense', label: 'Defense', tip: 'Shields, point defense, smoke and coatings', cats: ['defense'] },
@@ -256,7 +256,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const pinned: Partial<Record<Tab, Inspect>> = {};
   let hoverInspect: Inspect | null = null;
   const groupSel: Record<'weapons' | 'systems', string> = { weapons: WEAPON_GROUPS[0].id, systems: SYSTEM_GROUPS[0].id };
-  let roleSel = '*';
+  /** weapons tab: only weapons that can hit aircraft (across every group) */
+  let airOnly = false;
   let sizeSel = 0;
   let driveSel = '*';
   const openMore = new Set<string>();
@@ -682,7 +683,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     prunePins();
     pinned.hull = { kind: 'chassis', id: c.id };
     pinned.drive = { kind: 'mobility', id: draft.mobility };
-    sizeSel = 0; roleSel = '*'; driveSel = '*';
+    sizeSel = 0; driveSel = '*';
     if (lost > 0) app.toast(`${lost} module${lost > 1 ? 's' : ''} did not fit the ${c.name} and went back to stores`);
     sfx('click');
     update();
@@ -1579,16 +1580,6 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     node.addEventListener('blur', () => { if (hoverInspect && hoverInspect.id === it.id) { hoverInspect = null; renderInspector(); applyPick(); } });
   }
 
-  /** Single-choice role dropdown (shared by every tab). */
-  function roleSelect(): HTMLElement {
-    return kit.select({
-      value: roleSel, label: 'Filter by role', prefix: 'Role', fk: 'role', className: 'g-rolesel',
-      options: [{ value: '*', label: 'Any' }, ...ROLES.map((r) => ({ value: r.id as string, label: r.name, hint: r.desc }))],
-      onChange: (v) => { roleSel = v; sfx('click'); update(); },
-    });
-  }
-  const roleOk = (roles: readonly string[]) => roleSel === '*' || roles.includes(roleSel);
-
   /** Collapsed tail of a list ("4 need bigger sockets ▸"). */
   function overflow(key: string, label: string, tiles: HTMLElement[]): HTMLElement[] {
     if (!tiles.length) return [];
@@ -1632,7 +1623,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const pool = domainChassis(designDomain(draft));
     const sizes = [...new Set(pool.map((c) => c.size))].sort((a, b) => a - b);
     if (sizeSel !== 0 && !sizes.includes(sizeSel as ChassisDef['size'])) sizeSel = 0;
-    const shown = pool.filter((c) => c.id === draft.chassis || ((sizeSel === 0 || c.size === sizeSel) && roleOk(c.roles)))
+    const shown = pool.filter((c) => c.id === draft.chassis || (sizeSel === 0 || c.size === sizeSel))
       .sort((a, b) => a.size - b.size || a.weight - b.weight);
     const tiles = shown.map((c) => partTile({
       kind: 'chassis', id: c.id, name: c.name, sub: `${footDims(c)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')} · ${weaponCap(c)} weapons`,
@@ -1646,8 +1637,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           value: sizeSel, label: 'Hull size', fk: 'hsize', className: 'g-subtabs',
           options: [{ value: 0, label: 'All' }, ...sizes.map((z) => ({ value: z as number, label: footprintLabel(z), title: `${SIZE_CLASSES[z - 1]} hulls, ${footprintLabel(z)} across` }))],
           onChange: (v) => { sizeSel = v; sfx('click'); update(); },
-        }),
-        roleSelect()),
+        })),
       h('div.g-ptiles', { role: 'group', 'aria-label': 'Chassis' }, ...tiles),
       shown.length <= 1 ? h('p.g-nomatch', null, 'No other hulls match.') : null,
     ].filter(Boolean) as HTMLElement[];
@@ -1658,7 +1648,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const dpool = domainMobility(designDomain(draft));
     const kinds = (['ground', 'air', 'static'] as const).filter((k) => dpool.some((m) => m.kind === k));
     if (driveSel !== '*' && !kinds.includes(driveSel as 'ground')) driveSel = '*';
-    const pool = dpool.filter((m) => m.id === draft.mobility || ((driveSel === '*' || m.kind === driveSel) && roleOk(m.roles)))
+    const pool = dpool.filter((m) => m.id === draft.mobility || (driveSel === '*' || m.kind === driveSel))
       .sort((a, b) => a.weight - b.weight);
     const tile = (m: MobilityDef) => {
       const err = pairingError(draft.chassis, m.id);
@@ -1678,8 +1668,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
           value: driveSel, label: 'Drive type', fk: 'dkind', className: 'g-subtabs',
           options: [{ value: '*', label: 'All' }, ...kinds.map((k) => ({ value: k as string, label: KIND_LABEL[k] }))],
           onChange: (v) => { driveSel = v; sfx('click'); update(); },
-        }),
-        roleSelect()),
+        })),
       h('p.g-secnote', null, `Lightest first · speeds shown for the ${c.name}`),
       h('div.g-ptiles', { role: 'group', 'aria-label': 'Mobility' }, ...fits.map(tile)),
       ...overflow('drive-nofit', `don't fit the ${c.name}`, nofit.map(tile)),
@@ -1696,8 +1685,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     for (const id of draft.mounts) if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
     const fitsHull = (m: ModuleDef) => !noFitReason(m);
     const mountedIn = (g: Group) => draft.mounts.some((id) => id && g.cats.includes(MODULE_BY_ID.get(id)!.category));
-    // search looks across the whole tab; otherwise the selected group
-    const cats = q ? groups.flatMap((g) => g.cats) : groups.find((g) => g.id === gid)!.cats;
+    const air = which === 'weapons' && airOnly;
+    // search (and the hits-air filter) looks across the whole tab; otherwise the selected group
+    const cats = q || air ? groups.flatMap((g) => g.cats) : groups.find((g) => g.id === gid)!.cats;
     const pin = pinned[which];
     const tile = (m: ModuleDef) => {
       const fitsActive = activeSlot !== null && !slotBlock(m, activeSlot);
@@ -1722,7 +1712,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     let hiddenN = 0;
     for (const catId of cats) {
       const def = CATEGORIES.find((k) => k.id === catId);
-      const mods = MODULES.filter((m) => m.category === catId && (!m.retired || counts.has(m.id)) && ((!q && counts.has(m.id)) || (roleOk(moduleRoles(m)) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
+      const mods = MODULES.filter((m) => m.category === catId && (!m.retired || counts.has(m.id)) && ((!q && !air && counts.has(m.id)) || ((!air || !!m.targetsAir) && (!q || `${m.name} ${m.family} ${def?.name ?? ''}`.toLowerCase().includes(q)))))
         .sort((a, b) => a.weight - b.weight || a.cost - b.cost);
       if (!mods.length) continue;
       const ok = mods.filter(fitsHull), no = mods.filter((m) => !fitsHull(m));
@@ -1750,8 +1740,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     });
     const slotCls = activeSlot !== null ? c.mounts[activeSlot] : null;
     return [
-      h('div.g-baytools', null, search.el, roleSelect()),
-      q ? h('p.g-secnote', null, `Searching all ${which}`) : kit.segmented({
+      h('div.g-baytools', null, search.el, which === 'weapons' ? kit.toggle({
+        label: 'Hits air', on: airOnly, fk: 'aironly', className: 'g-aironly', title: 'Show only weapons that can shoot at aircraft, from every group',
+        onChange: (v) => { airOnly = v; sfx('click'); update(); bayBody.scrollTop = 0; },
+      }) : null),
+      q || air ? h('p.g-secnote', null, q ? `Searching all ${which}${air ? ' that hit air' : ''}` : 'All weapons that can hit aircraft') : kit.segmented({
         value: gid, label: `${which} group`, fk: `grp-${which}`, className: 'g-subtabs full',
         options: groups.map((g) => ({ value: g.id, label: h('span', null, g.label, mountedIn(g) ? h('i.g-gdot', { title: 'Something from this group is mounted' }) : null), title: g.tip })),
         onChange: (v) => { groupSel[which] = v; sfx('click'); update(); bayBody.scrollTop = 0; },

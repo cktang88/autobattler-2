@@ -204,7 +204,8 @@ function famOf(def: ModuleDef | undefined): Fam {
     case 'precision': return pk === 'rail' ? 'rail' : 'sniper';
     case 'rocket': return def.burn ? 'incend' : 'rocket';
     case 'missile': return v === 'cruise' || (def.splash ?? 0) >= 2 ? 'bigMissile' : 'missile';
-    case 'artillery': return def.requires === 'air' ? 'bomb' : v === 'mortar' ? (def.mount === 'S' ? 'grenade' : 'mortar') : 'howitzer';
+    case 'bomb': return 'bomb';
+    case 'artillery': return v === 'mortar' ? (def.mount === 'S' ? 'grenade' : 'mortar') : 'howitzer';
     case 'antiair': return 'flak';
     case 'flame': return 'flame';
     default: break;
