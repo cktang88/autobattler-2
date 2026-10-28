@@ -51,8 +51,9 @@
 //     metal (dark gunmetal mechanics), steel (bright pistons/rods), rubber (tracks, tyres, foot pads), glass
 //     (canopies/visors; dark tinted), hazard (yellow bands), accent (team colour paint), glow (team-coloured emissive
 //     strips), lamp (warm white emissive), hot (orange exhaust glow), plasma/rail (weapon emissives), canvas.
-//   * Triangle budget per unit incl. turrets and gear (unit.tris): S1 <= 3k, S2 <= 8k, S3 <= 12k, S4 <= 20k, S5 <= 35k.
-//     Turrets use Bld.segK (weapons3d) to stay cheap; use plain THREE.BoxGeometry via b.g() for repeated tiny parts.
+//   * Triangle budget per unit incl. turrets and gear (unit.tris): S1 <= 10k, S2..S5 <= 30k. Spend it on shape (bevels,
+//     smooth rounded parts, layered plates), not on piles of tiny greebles; use plain THREE.BoxGeometry via b.g() for
+//     repeated tiny parts.
 //     Lathes: 8-12 segments for small parts, 16-24 for big drums; lofts with 8-point rings.
 // =====================================================================================================================
 
