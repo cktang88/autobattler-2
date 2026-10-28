@@ -95,6 +95,8 @@ interface ProjRec {
   ox: number; oz: number;
   /** bright tracer round (every Nth round of a fast gun) and where the round started (streaks never reach behind it) */
   tracer: boolean; sx: number; sz: number; team: 0 | 1;
+  /** one-shot path effect (sniper beam + smoke wake) already laid */
+  laid?: boolean;
   /** sim position and progress when first seen (to estimate where a round ends: flash rounds race ahead of the sim) */
   fx0: number; fz0: number; k0: number;
   /** the round's module, side and sim kind (to match it to the 'explode' / 'hit' that ends it) */
@@ -892,7 +894,7 @@ export class FieldView3D implements BattleView {
     if (q.direct) this.renderer.render(this.scene, this.camera);
     else {
       if (this.post.gtao) this.post.gtao.enabled = q.ao;
-      if (this.post.bloom) { this.post.bloom.enabled = q.bloom; this.post.bloom.strength = 0.2 + 0.14 * clamp(this.flashScale, 0, 1); }
+      if (this.post.bloom) { this.post.bloom.enabled = q.bloom; this.post.bloom.strength = 0.3 + 0.25 * clamp(this.flashScale, 0, 1); }
       this.outline.renderMask(this.renderer, this.scene, this.camera);
       this.post.render();
     }
@@ -1603,7 +1605,7 @@ export class FieldView3D implements BattleView {
           const T = rec.tracer, w = st.rw * 0.6, tn = st.tint;
           const red = rec.team === 1 ? 0.85 : 1;
           const gk = st.fam === 'gatling' ? 0.6 + 0.4 * rec.k : 1;
-          const lum = (T ? 1.7 : 0.75) * gk;
+          const lum = (T ? 2.6 : 1.1) * gk;
           const r = tn[0] * lum, g = tn[1] * lum * red, bl = tn[2] * lum * red;
           if (FLASH.has(st.fam)) {
             // where the round ends: from the sim's progress since first seen (straight line, constant speed)
@@ -1614,13 +1616,16 @@ export class FieldView3D implements BattleView {
             const ex = pos.x + ca * left, ez = pos.y + sa * left;
             const sx = rec.sx, sy = rec.y0, sz0 = rec.sz;
             const L = Math.max(0.1, Math.hypot(ex - sx, ez - sz0));
-            const chunk = clamp(0.4 * L, 0.6, 3.5) / L; // fraction of the path the flash spans
+            if (st.fam === 'sniper' && !rec.laid) { rec.laid = true; this.fx.sniperShot(sx, sy, sz0, ex, rec.hEnd, ez, rec.team === 1); }
+            const chunk = clamp(0.5 * L, 1.0, 4.5) / L; // fraction of the path the flash spans
             const th = age / FLASH_T, tt = th - chunk;
             if (tt < 1) {
               const a0 = Math.max(0, tt), a1 = Math.min(1, th);
               const fade = 1 - 0.5 * clamp(tt, 0, 1);
-              proj.round(lerp(sx, ex, a0), lerp(sy, rec.hEnd, a0), lerp(sz0, ez, a0), lerp(sx, ex, a1), lerp(sy, rec.hEnd, a1), lerp(sz0, ez, a1),
-                w, r * fade, g * fade, bl * fade);
+              const ax = lerp(sx, ex, a0), ay = lerp(sy, rec.hEnd, a0), az = lerp(sz0, ez, a0), hx = lerp(sx, ex, a1), hy = lerp(sy, rec.hEnd, a1), hz = lerp(sz0, ez, a1);
+              // a wide warm glow under a hot core: the tracer reads as a glowing bolt, not a hairline
+              proj.round(ax, ay, az, hx, hy, hz, w * 3.2, r * fade * 0.35, g * fade * 0.3, bl * fade * 0.25);
+              proj.round(ax, ay, az, hx, hy, hz, w * 1.2, r * fade, g * fade, bl * fade);
             }
             break;
           }
@@ -1628,7 +1633,7 @@ export class FieldView3D implements BattleView {
             case 'shotgun': roundT(st.rw * 3, w, r, g, bl); break; // a spray of short pellet dashes
             case 'flechette': roundT(st.rw * 12, w * 0.5, r, g, bl); break; // thin steel needles
             case 'ac': roundT(st.rw * (T ? 12 : 9), w, r, g * 0.9, bl * 0.8); break; // HE autocannon: every round a glowing slug
-            default: roundT(st.rw * 8, w, r, g, bl); break;
+            default: roundT(st.rw * 8, w * 2.6, r * 0.3, g * 0.26, bl * 0.22); roundT(st.rw * 10, w, r, g, bl); break;
           }
           break;
         }

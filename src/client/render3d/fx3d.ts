@@ -21,12 +21,12 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 /** 3-stop colour ramp (rgba x 3) at particle age 0, 0.35, 1. rgb > 1 is HDR (blooms). */
 export type Ramp = readonly number[];
 export const RAMPS = {
-  fire: [2.5, 1.9, 1.0, 0.85, 1.7, 0.6, 0.13, 0.7, 0.28, 0.07, 0.02, 0],
-  flame: [2.6, 1.7, 0.6, 0.9, 1.9, 0.6, 0.12, 0.7, 0.3, 0.06, 0.02, 0],
+  fire: [3.8, 2.7, 1.1, 0.9, 2.7, 1.1, 0.16, 0.8, 0.5, 0.12, 0.02, 0],
+  flame: [3.6, 2.3, 0.6, 0.95, 2.7, 0.95, 0.12, 0.8, 0.45, 0.08, 0.02, 0],
   plasma: [2.8, 1.6, 3.2, 1, 1.6, 0.5, 2.4, 0.85, 0.2, 0.05, 0.4, 0],
   emp: [2.4, 3.0, 4.0, 1, 0.9, 1.8, 3.2, 0.8, 0.1, 0.3, 0.8, 0],
-  spark: [3.5, 2.6, 1.2, 1, 2.5, 1.0, 0.25, 0.9, 1.0, 0.25, 0.05, 0],
-  flash: [3.4, 2.8, 1.8, 1, 2.2, 1.3, 0.5, 0.6, 1.0, 0.45, 0.12, 0],
+  spark: [5.0, 3.6, 1.3, 1, 3.6, 1.5, 0.25, 0.95, 1.4, 0.3, 0.05, 0],
+  flash: [4.3, 3.5, 2.3, 1, 2.9, 1.7, 0.6, 0.65, 1.2, 0.5, 0.13, 0],
   smoke: [0.15, 0.14, 0.13, 0.5, 0.22, 0.2, 0.18, 0.36, 0.3, 0.28, 0.26, 0],
   smokeLight: [0.22, 0.215, 0.205, 0.26, 0.2, 0.195, 0.185, 0.16, 0.2, 0.195, 0.19, 0],
   /** gameplay smoke screen: stays a readable light grey */
@@ -34,7 +34,7 @@ export const RAMPS = {
   /** rocket / missile exhaust: a thin light-grey streak that fades fast */
   exhaustSmoke: [0.6, 0.6, 0.58, 0.3, 0.5, 0.5, 0.49, 0.18, 0.45, 0.45, 0.44, 0],
   /** flipbook fireball tint: the atlas carries the temperature, this sets the hue and brightness */
-  fireball: [2.7, 1.15, 0.28, 1, 2.3, 0.75, 0.15, 1, 1.4, 0.38, 0.08, 0],
+  fireball: [4.6, 2.7, 0.7, 1, 3.6, 1.6, 0.25, 1, 1.7, 0.5, 0.08, 0],
   /** explosion smoke: fades in while the fire burns, lingers grey-brown, lit by the sun */
   blastSmoke: [0.08, 0.075, 0.07, 0.05, 0.1, 0.095, 0.09, 0.55, 0.13, 0.125, 0.12, 0],
   heal: [0.7, 2.8, 1.1, 1, 0.3, 1.6, 0.6, 0.6, 0.1, 0.8, 0.3, 0],
@@ -58,7 +58,7 @@ export const RAMPS = {
   /** missile contrail: thin white */
   contrail: [0.92, 0.92, 0.9, 0.55, 0.86, 0.86, 0.85, 0.36, 0.8, 0.8, 0.8, 0],
   /** napalm / incendiary: sticky deep orange + dark smoke */
-  ember: [3.0, 1.4, 0.3, 1, 2.2, 0.6, 0.05, 0.9, 0.5, 0.1, 0, 0],
+  ember: [4.2, 2.2, 0.4, 1, 3.2, 1.0, 0.08, 0.95, 0.7, 0.15, 0, 0],
   molten: [3.2, 2.0, 0.8, 1, 2.4, 0.9, 0.15, 0.9, 0.8, 0.15, 0.02, 0],
   gravity: [1.4, 0.6, 2.6, 1, 0.7, 0.25, 1.8, 0.8, 0.15, 0.02, 0.5, 0],
   /** fallout: sickly radioactive green glow and haze */
@@ -1281,6 +1281,8 @@ export class Fx3D {
   /** camera position (set by the view each frame) so rail beams can face it */
   readonly eye = new THREE.Vector3(0, 100, 0);
   private bolts: BoltFx[] = [];
+  /** firebrands: burning chunks flung out of a blast, each trailing flame and a thin smoke streak (x y z vx vy vz life max size acc) */
+  private brands: number[][] = [];
   private later: { t: number; fn: () => void }[] = [];
   private smokes: { x: number; z: number; r: number; left: number; acc: number }[] = [];
   /** burning ground patches (sim 'fireField') */
@@ -1349,7 +1351,7 @@ export class Fx3D {
   clear(): void {
     this.add.clear(); this.fire.clear(); this.alpha.clear(); this.rings.clear(); this.aoe.clear(); this.pools.clear(); this.debris.clear(); this.scrap.clear();
     this.scorchN = 0; this.scorch.count = 0;
-    this.bolts.length = 0; this.later.length = 0; this.smokes.length = 0; this.fields.length = 0; this.radZones.length = 0;
+    this.bolts.length = 0; this.brands.length = 0; this.later.length = 0; this.smokes.length = 0; this.fields.length = 0; this.radZones.length = 0;
     this.trauma = 0; this.flashA = 0;
   }
 
@@ -1788,6 +1790,7 @@ export class Fx3D {
     const nk = this.lodN(4 + Math.round(r * 8));
     for (let i = 0; i < nk; i++) { const a = Math.random() * 6.283, sp = R(3, 8); this.add.emit(x, y + 0.1, z, Math.cos(a) * sp, R(1.5, 5.5), Math.sin(a) * sp, R(0.22, 0.5), 0.05 + r * 0.04, 0.02, 0, 1.0, -10, 3, RAMPS.spark, h); }
     this.puff(x, y + 0.15 + r * 0.2, z, R(-0.2, 0.2) + WIND_X, R(0.4, 0.9), R(-0.2, 0.2) + WIND_Z, R(1.2, 2.0), r * 0.7, r * 2.0, R(-0.4, 0.4), 1.2, 0, 1, RAMPS.blastSmoke);
+    if (ramp === RAMPS.fire && r > 0.4 && Math.random() < r) this.firebrands(x, y + 0.1, z, 1 + Math.round(r), r * 0.6);
     if (scorch && y < 0.2) this.addScorch(x, z, r * 0.8);
     this.trauma = Math.min(1, this.trauma + 0.01 + r * 0.03);
   }
@@ -1931,6 +1934,24 @@ export class Fx3D {
       // ionised air: a corkscrew of glowing motes that hangs on the line after the slug has gone
       const ph = t * len * 2.2, rr = 0.06 + s * 0.08;
       this.add.emit(x + Math.cos(ph) * rr, y + Math.sin(ph) * rr, z + Math.sin(ph) * rr, 0, R(0.05, 0.2), 0, R(0.35, 0.7), 0.1 + s * 0.08, 0.03, 0, 1, 0, 0, ramp, this.hdr);
+    }
+  }
+
+  /** Sniper round: a blue-white beam snapped along the whole path that fades over a third of a second, a star flare at
+   *  the muzzle and at the hit, and a thin smoke wake that hangs on the line and drifts off. enemy: a warmer white. */
+  sniperShot(ax: number, ay: number, az: number, bx: number, by: number, bz: number, enemy = false): void {
+    const h = this.hdr;
+    _col.setRGB(enemy ? 1 : 0.25, enemy ? 0.7 : 0.55, enemy ? 0.45 : 1);
+    this.beam(ax, ay, az, bx, by, bz, _col, 0.045, 0.32, 0, 0, 1.2);
+    const flare = enemy ? RAMPS.flash : RAMPS.railFlash;
+    this.add.emit(ax, ay, az, 0, 0, 0, 0.12, 1.4, 0.5, 0, 0, 0, 4, flare, h);
+    this.add.emit(bx, by, bz, 0, 0, 0, 0.16, 1.1, 0.4, 0, 0, 0, 4, flare, h);
+    for (let i = 0; i < 6; i++) this.add.emit(bx, by, bz, R(-3, 3), R(0.5, 4), R(-3, 3), R(0.15, 0.35), 0.06, 0.02, 0, 1.5, -10, 3, enemy ? RAMPS.spark : RAMPS.gauss, h);
+    const len = Math.hypot(bx - ax, by - ay, bz - az), n = this.lodN(Math.min(110, Math.round(len / 0.12)));
+    for (let i = 0; i < n; i++) {
+      const t = (i + Math.random()) / n;
+      this.alpha.emit(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t, R(-0.05, 0.05) + WIND_X, R(0.05, 0.2), R(-0.05, 0.05) + WIND_Z,
+        R(0.8, 1.3), 0.12, R(0.28, 0.42), R(-1, 1), 0.8, 0, 1 + (i & 1), RAMPS.exhaustSmoke);
     }
   }
 
@@ -2089,10 +2110,21 @@ export class Fx3D {
     const lodN = (n: number) => this.lodN(n * q);
     const fire = style === 'plasma' ? RAMPS.plasma : style === 'emp' ? RAMPS.emp : RAMPS.fireball;
     const cy = y + 0.1 + r * 0.3;
-    const kq = 1 / (1 + this.heat * 0.45);
+    const kq = 1 / (1 + this.heat * 0.3);
     this.heat += 1;
     const h = this.hdr;
     this.add.emit(x, cy, z, 0, 0, 0, 0.09, r * 1.5, r * 1.1, 0, 0, 0, 0, RAMPS.flash, h * kq);
+    // white-hot starburst: a flare and radial spikes that snap out and vanish, then a warm glow that lingers
+    if (q >= 0.7) {
+      this.add.emit(x, cy, z, 0, 0, 0, 0.13, r * 1.9, r * 1.1, 0, 0, 0, 4, RAMPS.flash, h * kq);
+      const nsp = lodN(8 + Math.round(r * 4));
+      for (let i = 0; i < nsp; i++) {
+        const a = (i / nsp) * 6.283 + R(-0.2, 0.2), e = R(0.15, 1.2), sp = R(14, 24) * (0.6 + r * 0.25);
+        this.add.emit(x, cy, z, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp, Math.sin(a) * Math.cos(e) * sp, R(0.08, 0.14), 0.12 + r * 0.04, 0.05, 0, 6, 0, 3, RAMPS.flash, h * kq);
+      }
+    }
+    this.add.emit(x, cy, z, 0, 0.3, 0, 0.4, r * 1.3, r * 1.7, 0, 0, 0, 0, RAMPS.fire, h * 0.22 * kq);
+    if (style === 'fire') this.firebrands(x, cy, z, lodN(3 + Math.round(r * 4)), r);
     if (!air) this.pools.add(x, z, y + 0.04, r * 1.0, r * 2.3, 0.42, 0.85 * h * kq, 0.42 * h * kq, 0.12 * h * kq);
     // fireball: lobed flipbook puffs that expand, cool from the outside in and roll over into soot
     const nf = lodN(3 + Math.round(r * 2.2));
@@ -2113,6 +2145,12 @@ export class Fx3D {
     for (let i = 0; i < nd; i++) {
       const a = (i / nd) * 6.283 + Math.random() * 0.4, sp = r * R(2.2, 4.2);
       this.puff(x, 0.14, z, Math.cos(a) * sp, R(0, 0.4), Math.sin(a) * sp, R(0.8, 1.4), r * 0.45, r * 1.3, R(-0.5, 0.5), 3.4, 0, 1 + (i & 1), this.dust);
+    }
+    // a tan dust dome billowing out around the fireball (not thinned like the puffs, so it reads behind the fire)
+    const nm = air || q < 0.7 ? 0 : lodN(3 + Math.round(r * 1.5));
+    for (let i = 0; i < nm; i++) {
+      const a = (i / nm) * 6.283 + Math.random() * 0.5, sp = r * R(1.6, 2.6);
+      this.alpha.emit(x + Math.cos(a) * r * 0.3, 0.2 + r * 0.25, z + Math.sin(a) * r * 0.3, Math.cos(a) * sp, R(0.3, 0.9), Math.sin(a) * sp, R(1.1, 1.7), r * 0.9, r * 2.1, R(-0.3, 0.3), 2.6, 0, 1 + (i & 1), this.dust);
     }
     // hot spark streaks flung out in every direction
     const nk = lodN(10 + Math.round(r * 8));
@@ -2148,6 +2186,15 @@ export class Fx3D {
     if (!air) this.addScorch(x, z, r * R(1.0, 1.35));
     this.trauma = Math.min(1, this.trauma + 0.05 + r * 0.07);
     if (r > 3.2) this.flashA = Math.min(1, this.flashA + Math.min(0.55, (r - 3) * 0.14));
+  }
+
+  /** n burning chunks flung out of a blast of radius r: they arc, bounce once or twice and burn out (see update) */
+  private firebrands(x: number, y: number, z: number, n: number, r: number): void {
+    for (let i = 0; i < n && this.brands.length < 160; i++) {
+      const a = Math.random() * 6.283, sp = R(2.5, 6.5) + r * 1.4;
+      const life = R(0.7, 1.5);
+      this.brands.push([x, y, z, Math.cos(a) * sp, R(2.5, 6.5) + r * 0.8, Math.sin(a) * sp, life, life, (0.1 + r * 0.05) * R(0.7, 1.3), Math.random()]);
+    }
   }
 
   /** multi-stage blast for big hulls: chain of secondaries, a rolling fireball and a final cook-off */
@@ -2248,6 +2295,25 @@ export class Fx3D {
         s.acc--;
         const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * s.r;
         this.alpha.emit(s.x + Math.cos(a) * d, R(0.15, 0.6), s.z + Math.sin(a) * d, R(-0.2, 0.2), R(0.05, 0.25), R(-0.2, 0.2), R(1.5, 2.6), s.r * 0.3, s.r * 0.55, R(-0.4, 0.4), 0.3, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.screen);
+      }
+    }
+    for (let i = this.brands.length - 1; i >= 0; i--) {
+      const b = this.brands[i];
+      b[6] -= dt;
+      if (b[6] <= 0) { this.brands[i] = this.brands[this.brands.length - 1]; this.brands.pop(); continue; }
+      b[4] -= 11 * dt;
+      const dr = Math.exp(-0.8 * dt);
+      b[3] *= dr; b[5] *= dr;
+      b[0] += b[3] * dt; b[1] += b[4] * dt; b[2] += b[5] * dt;
+      if (b[1] < 0.05) { b[1] = 0.05; b[4] = b[4] < -1.5 ? -b[4] * 0.3 : 0; b[3] *= 0.5; b[5] *= 0.5; }
+      const k = Math.min(1, b[6] / (b[7] * 0.6)), s = b[8] * (0.4 + 0.6 * k);
+      // the hot head (one short-lived glow per frame), flame shed behind it, a thin pale smoke streak
+      this.add.emit(b[0], b[1], b[2], 0, 0, 0, 0.05, s * 2.2, s * 2, 0, 0, 0, 0, RAMPS.fire, this.hdr * (0.5 + 0.5 * k));
+      b[9] += dt * 50 * this.lod;
+      while (b[9] >= 1) {
+        b[9]--;
+        this.fire.emit(b[0], b[1], b[2], R(-0.2, 0.2), R(0.2, 0.6), R(-0.2, 0.2), R(0.15, 0.28), s * 1.6, s * 0.4, R(-2, 2), 1, 0, 1 + (Math.random() < 0.5 ? 1 : 0), RAMPS.flame, this.hdr * (0.4 + 0.6 * k));
+        this.alpha.emit(b[0], b[1], b[2], WIND_X * 0.5, R(0.05, 0.2), WIND_Z * 0.5, R(0.4, 0.75), s * 0.8, s * 1.8, R(-0.5, 0.5), 0.5, 0, 1, RAMPS.exhaustSmoke);
       }
     }
     this.add.update(dt);
