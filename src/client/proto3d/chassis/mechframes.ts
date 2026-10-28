@@ -211,5 +211,108 @@ function aegis(c: ChassisCtx): ChassisOut {
   };
 }
 
+// ---- hunter: raptor carrier ---------------------------------------------------------------------------------------------
+function hunter(c: ChassisCtx): ChassisOut {
+  const { b, kit, stance, L, W } = c;
+  const kx = L / 2, kz = W; // authored at L = 2, W = 1
+  const k = Math.min(kx, kz);
+  const legs = !!stance.legs;
+  const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.1 * k);
+  const hero = heroOf(c.mounts);
+  const hx = hero?.x ?? 0.24 * kx, hz = hero?.z ?? 0, R = hero?.r ?? 0.4 * k;
+  const wi = Math.min(stance.wi, 0.36 * kz);
+  // ---- low dark chassis between the wheels (keel to the hips on legs)
+  const bb = legs ? stance.hipY - stance.thick * 0.9 : y0;
+  block(b, kit.mech, -0.08 * kx, bb, 0, 1.72 * kx, wi * 2, yt + 0.03 * k - bb, { top: [0.96, 0.92], ch: 0.08 * k, bev: 0.015 * k, bot: 0.015 * k });
+  // ---- pointed nose: dark wedge, team prow, bone top plate, twin lamp slits
+  block(b, kit.armor2, 0.74 * kx, y0 + 0.02 * k, 0, 0.5 * kx, 0.6 * kz, yt - y0 + 0.06 * k, { top: [0.55, 0.62], shift: [-0.08 * kx, 0], ch: 0.1 * k, bev: 0.02 * k, bot: 0.02 * k });
+  block(b, kit.armor, 0.7 * kx, yt + 0.04 * k, 0, 0.46 * kx, 0.4 * kz, 0.08 * k, { top: [0.35, 0.55], shift: [-0.1 * kx, 0], ch: 0.06 * k, bev: 0.02 * k });
+  block(b, kit.shell, 0.66 * kx, yt + 0.115 * k, 0, 0.18 * kx, 0.2 * kz, 0.03 * k, { top: [0.6, 0.7], ch: 0.03 * k, bev: 0.008 * k });
+  both((s) => pbox(b, kit.lamp, 0.03 * kx, 0.016 * k, 0.07 * kz, 0.94 * kx, yt + 0.02 * k, s * 0.1 * kz, [0, -s * 0.5, 0.35]));
+  // ---- chest pylon under the gun: barrel-chested team block, bone front plates, dark ribs at the sides
+  const cY = yt + 0.02 * k, cT = yt + 0.26 * k, seatY = cT + 0.06 * k;
+  block(b, kit.armor, hx - 0.02 * kx, cY, hz, 0.56 * kx, 0.66 * kz, cT - cY, { top: [0.74, 0.76], shift: [0.02 * kx, 0], ch: 0.1 * k, bev: 0.03 * k, bot: 0.02 * k, mid: [[0.42, 1.05, 1.05]] });
+  both((s) => {
+    facePlate(b, kit, kit.shell, [hx + 0.28 * kx, cY + 0.03 * k, s * 0.12 * kz], [hx + 0.22 * kx, cT - 0.02 * k, s * 0.11 * kz], ZA, 0.17 * kz, 0.022 * k, XA, { standoff: 0.006 * k, gap: 0.01 * k, fill: 0.9 });
+    // flank vents: glowing slot behind a dark louvre
+    pbox(b, kit.plasma, 0.2 * kx, 0.03 * k, 0.012 * k, hx - 0.04 * kx, cY + 0.11 * k, s * 0.345 * kz);
+    for (const f of [-0.06, 0.0, 0.06]) pbox(b, kit.mech, 0.025 * kx, 0.06 * k, 0.02 * k, hx - 0.04 * kx + f * kx, cY + 0.11 * k, s * 0.35 * kz);
+  });
+  block(b, kit.mech, hx + 0.26 * kx, cY + 0.02 * k, 0, 0.05 * kx, 0.05 * kz, cT - cY - 0.04 * k, { ch: 0.01 * k, bev: 0.005 * k });
+  const pr = Math.min(R * 0.72, 0.26 * k);
+  plinth(b, kit.shell, hx, cT - 0.01 * k, seatY - 0.01 * k, hz, pr, 14);
+  // ---- hunched back: rises behind the gun to a tall hump, then drops to the tail. Team loft over a glowing spine
+  // core in a dark channel, layered bone carapace plates stepping up the crown, dark flank plates over glowing slots
+  const hb: [number, number, number][] = [[-0.06, 0.16, 0.3], [-0.3, 0.42, 0.33], [-0.56, 0.66, 0.32], [-0.78, 0.6, 0.28], [-0.92, 0.4, 0.24], [-1.0, 0.18, 0.2]];
+  const ht = (x: number) => {
+    const f = x / kx;
+    for (let i = 0; i < hb.length - 1; i++) {
+      const [a, ta] = hb[i], [e, te] = hb[i + 1];
+      if (f <= a && f >= e) return yt + (ta + ((te - ta) * (f - a)) / (e - a)) * k;
+    }
+    return yt;
+  };
+  const ring = (x: number, top: number, hw: number): V3[] => {
+    const yb = yt - 0.02 * k, t = yt + top * k;
+    return [[x, yb, -hw * 0.9], [x, yb, hw * 0.9], [x, yb + (t - yb) * 0.5, hw], [x, t - 0.06 * k, hw * 0.88], [x, t, hw * 0.5], [x, t, -hw * 0.5], [x, t - 0.06 * k, -hw * 0.88], [x, yb + (t - yb) * 0.5, -hw]];
+  };
+  b.loft(kit.armor, hb.map(([x, t, hw]) => ring(x * kx, t, hw * kz)));
+  // spine channel + glowing core bar along the crown
+  b.loft(kit.mech, hb.slice(1, 5).map(([x, t]) => ring(x * kx, t + 0.03, 0.08 * kz)));
+  for (const [x0, x1] of [[-0.32, -0.52], [-0.6, -0.86]]) {
+    const xm = ((x0 + x1) / 2) * kx;
+    pbox(b, kit.plasma, Math.abs(x1 - x0) * kx * 0.8, 0.025 * k, 0.05 * kz, xm, ht(xm) + 0.045 * k, 0, [0, 0, x0 > -0.4 ? 0.45 : -0.15]);
+  }
+  // carapace: three stacked bone plates per side, each overlapping the one behind (offset edges), tilted with the crown
+  both((s) => {
+    for (const [x0, x1, dz] of [[-0.14, -0.4, 0.0], [-0.38, -0.66, 0.012], [-0.64, -0.9, 0.0]] as [number, number, number][]) {
+      const xa = x0 * kx, xb = x1 * kx, xm = (xa + xb) / 2;
+      const ya = ht(xa), yb2 = ht(xb), slope = Math.atan2(ya - yb2, xa - xb);
+      const F = new THREE.Matrix4().makeRotationZ(slope).setPosition(xm, (ya + yb2) / 2 - 0.035 * k, s * (0.15 + dz) * kz);
+      b.g(new THREE.BoxGeometry(Math.abs(xa - xb) * 1.04, 0.015 * k, 0.1 * kz), kit.mech, F.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.035 * k, 0)));
+      const g = new THREE.BoxGeometry(Math.abs(xa - xb), 0.05 * k, 0.13 * kz);
+      b.g(g, kit.shell, F.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.065 * k, s * 0.01 * kz)));
+    }
+    // flank: glowing slot under a dark plate on the hump side
+    pbox(b, kit.plasma, 0.4 * kx, 0.04 * k, 0.012 * k, -0.6 * kx, yt + 0.3 * k, s * 0.318 * kz);
+    const F = frame([-0.58 * kx, yt + 0.15 * k, s * 0.33 * kz], [0, 0.12, s], XA);
+    armorPlate(b, kit, kit.armor2, F, rectP(0.56 * kx, 0.17 * k, 0.03 * k), 0.024 * k, { standoff: 0.008 * k, gap: 0.012 * k });
+    // forelimb: armoured strut from the chest shoulder down over the front wheel, joint drum at the shoulder, a
+    // fender pad over the tyre (the predator crouching on its front wheels)
+    const sh: V3 = [hx - 0.02 * kx, cT - 0.08 * k, s * 0.36 * kz], ft: V3 = [0.7 * kx, yt + 0.06 * k, s * 0.43 * kz];
+    b.cylb(kit.joint, 0.08 * k, 0.1 * kz, 0.012 * k, [sh[0], sh[1], s * 0.3 * kz], 'z', 12);
+    beam(b, kit.armor, sh, ft, 0.07 * kz, 0.09 * k, [0, 0, s]);
+    beam(b, kit.shell, [sh[0] + 0.03 * kx, sh[1] + 0.01 * k, sh[2] + s * 0.035 * kz], [ft[0] - 0.08 * kx, ft[1] + 0.04 * k, ft[2] + s * 0.035 * kz], 0.02 * kz, 0.06 * k, [0, 0, s]);
+    block(b, kit.armor2, ft[0] + 0.02 * kx, ft[1] - 0.03 * k, ft[2], 0.3 * kx, 0.13 * kz, 0.06 * k, { top: [0.6, 0.85], shift: [0.02 * kx, 0], ch: 0.04 * k, bev: 0.012 * k });
+  });
+  // ---- haunches over the rear axle: big joint drums in armoured hip blocks (the raptor's hind legs)
+  both((s) => {
+    const p: V3 = [-0.66 * kx, yt + 0.02 * k, s * 0.36 * kz];
+    b.cylb(kit.joint, 0.11 * k, 0.1 * kz, 0.015 * k, [p[0], p[1], s * 0.34 * kz], 'z', 14);
+    block(b, kit.armor, p[0] + 0.02 * kx, yt - 0.06 * k, s * 0.43 * kz, 0.4 * kx, 0.1 * kz, 0.2 * k, { top: [0.66, 0.8], shift: [-0.05 * kx, -s * 0.01 * kz], ch: 0.05 * k, bev: 0.02 * k, bot: 0.015 * k });
+    block(b, kit.shell, p[0] - 0.01 * kx, yt + 0.12 * k, s * 0.43 * kz, 0.22 * kx, 0.08 * kz, 0.03 * k, { top: [0.7, 0.8], ch: 0.025 * k, bev: 0.01 * k });
+    pbox(b, kit.glow, 0.16 * kx, 0.016 * k, 0.01 * k, p[0] + 0.02 * kx, yt + 0.04 * k, s * 0.483 * kz);
+    // ram from the haunch up to the hump
+    piston(b, kit, [p[0] + 0.14 * kx, yt + 0.02 * k, s * 0.34 * kz], [-0.3 * kx, yt + 0.24 * k, s * 0.3 * kz], 0.022 * k, 0.55, true);
+  });
+  // tail: twin exhausts out the back of the hump
+  both((s) => b.cyl(kit.hot, 0.03 * k, 0.03 * k, 0.012 * k, [-1.005 * kx, yt + 0.08 * k, s * 0.08 * kz], '-x', 8));
+  antenna(b, kit, -0.86 * kx, yt + 0.38 * k, -0.18 * kz, 0.4 * k, 0.006 * k, [-0.3, 0, 0]);
+  const deck = (x: number, z: number) => {
+    if (Math.abs(z) > 0.5 * kz || Math.abs(x) > kx) return -1;
+    if (Math.hypot(x - hx, z - hz) < pr) return seatY;
+    if (Math.abs(x - hx) < 0.28 * kx && Math.abs(z) < 0.3 * kz) return cT;
+    return yt + 0.05 * k;
+  };
+  return {
+    deckAt: deck, top: seatY + 0.02 * k, custom: true, dressed: true,
+    seat: (m) => {
+      if (m === hero) { collar(b, kit, m.x, seatY, m.z, m.r, seatY - 0.02 * k, 16); return { y: seatY, socket: true }; }
+      return { y: ringSeat(b, kit, m, deck(m.x, m.z) > 0 ? deck(m.x, m.z) : yt, 0.015 * k, 10), socket: true };
+    },
+  };
+}
+
 registerChassis('raider', raider);
 registerChassis('aegis', aegis);
+registerChassis('hunter', hunter);
