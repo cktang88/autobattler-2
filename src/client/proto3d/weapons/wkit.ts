@@ -69,37 +69,51 @@ export function shell(B: Bld, mat: MatLike, st: Station[], y: number, z = 0, m?:
   B.loft(mat, st.map(([x, w, wt, h]) => sec8(x, w * 0.86, w, wt, y, y + h * 0.16, y + h * 0.58, y + h).map((v) => [v[0], v[1], v[2] + z] as V3)), true, true, m);
 }
 
-/** Barrel along +X from x0: optional breech block, tapered tube, sleeve, bore evacuator and muzzle device; adds a muzzle. */
+/** octagonal (chamfered-rectangle) section in the y-z plane at x: h tall, w wide, centred (y, z) */
+function oct8(x: number, y: number, z: number, h: number, w: number, c = 0.3): V3[] {
+  const H = h / 2, W = w / 2, ch = Math.min(H, W) * c * 2;
+  return [[x, y + H, z - W + ch], [x, y + H, z + W - ch], [x, y + H - ch, z + W], [x, y - H + ch, z + W],
+    [x, y - H, z + W - ch], [x, y - H, z - W + ch], [x, y - H + ch, z - W], [x, y + H - ch, z - W]];
+}
+/** armoured jacket segment along +X: octagonal section, chamfered (narrower) ends */
+function jacket(B: Bld, mat: MatLike, x0: number, x1: number, y: number, z: number, h: number, w: number, taper = 0.92): void {
+  const e = Math.min((x1 - x0) * 0.18, h * 0.3);
+  B.loft(mat, [oct8(x0, y, z, h * 0.78, w * 0.82), oct8(x0 + e, y, z, h, w), oct8(x1 - e, y, z, h * taper, w * taper), oct8(x1, y, z, h * taper * 0.8, w * taper * 0.84)]);
+}
+
+/** Barrel along +X from x0, in the armoured sci-fi style: a bare inner tube that only shows toward the muzzle, an
+ *  angular octagonal shroud over the breech two-thirds in two stepped segments (light receiver jacket, darker forward
+ *  jacket) on a dark gap, a top rail, dark vent slots and a team glow strip along the side, and an angular ported block
+ *  muzzle brake. Adds a muzzle. (sleeve: longer shroud; evac: a third short collar segment near the muzzle.) */
 export function barrel(C: WCtx, B: Bld, o: {
   len: number; rad: number; x0?: number; y?: number; z?: number; seg?: number; mat?: MatLike;
   sleeve?: boolean; evac?: boolean; brake?: 'slot' | 'cone' | 'flash' | 'block' | 'none'; taper?: number; noMuzzle?: boolean;
 }): number {
   const { kit } = C;
-  const x0 = o.x0 ?? 0, y = o.y ?? 0, z = o.z ?? 0, R = o.rad, L = o.len, seg = o.seg ?? 8;
-  const tp = o.taper ?? 0.82;
-  const at: V3 = [x0, y, z];
+  const x0 = o.x0 ?? 0, y = o.y ?? 0, z = o.z ?? 0, R = o.rad, L = o.len, seg = Math.min(o.seg ?? 8, 8);
   const brake = o.brake ?? 'none';
-  const bl = brake === 'none' ? 0 : brake === 'flash' ? R * 2.6 : brake === 'slot' ? R * 3.2 : R * 2.8;
-  const tubeEnd = L - bl * 0.85;
-  // tube: thick root (collar), taper to the muzzle
-  B.lathe(o.mat ?? kit.metal, [[0, 0], [R * 1.25, 0], [R * 1.25, L * 0.1], [R, L * 0.14], [R * tp, tubeEnd], [0, tubeEnd]], at, 'x', seg);
-  // recoil / thermal sleeve over the breech end: reads as a stepped barrel, not a pipe
-  if (o.sleeve) B.lathe(kit.trim, [[0, L * 0.12], [R * 1.2, L * 0.12], [R * 1.28, L * 0.15], [R * 1.28, L * 0.4], [R * 1.08, L * 0.44], [0, L * 0.44]], at, 'x', seg);
-  // fume extractor: a short spindle-shaped bulge a little past mid-barrel
-  // breech rings: thin bands of the fitting finish (brass on artillery / siege guns) at the collar and sleeve end
-  if (kit.fitting !== kit.metal) for (const f of o.sleeve ? [0.135, 0.43] : [0.13]) band(B, kit.fitting, x0 + L * f, y, z, R * (o.sleeve && f > 0.2 ? 1.36 : 1.33), L * 0.026, seg);
-  if (o.evac) { const a = L * 0.56, e = L * 0.68; B.lathe(kit.fitting, [[0, a], [R * tp, a], [R * 1.42, a + (e - a) * 0.3], [R * 1.42, e - (e - a) * 0.3], [R * tp, e], [0, e]], at, 'x', seg); }
+  const bl = brake === 'none' ? R * 1.6 : brake === 'flash' ? R * 2.4 : R * 3.0;
+  // inner tube (bare metal) all the way to the brake
+  B.lathe(o.mat ?? kit.metal, [[0, 0], [R * 0.9, 0], [R * 0.82, L - bl * 0.8], [0, L - bl * 0.8]], [x0, y, z], 'x', Math.max(6, seg));
+  // shroud: two stepped octagonal segments, wider than tall
+  const sEnd = L * (o.sleeve ? 0.72 : 0.64), cut = sEnd * 0.42, g = R * 0.35;
+  const h0 = R * 2.5, w0 = R * 2.9;
+  jacket(B, kit.panel, x0, x0 + cut - g / 2, y, z, h0, w0, 0.96);
+  jacket(B, kit.trim, x0 + cut + g / 2, x0 + sEnd, y, z, h0 * 0.86, w0 * 0.86, 0.88);
+  B.lathe(kit.trim, [[0, 0], [R * 1.2, 0], [R * 1.2, g * 1.2], [0, g * 1.2]], [x0 + cut - g * 0.6, y, z], 'x', 6); // dark gap core
+  if (o.evac) jacket(B, kit.fitting, x0 + L * 0.74, x0 + L * 0.8, y, z, h0 * 0.7, w0 * 0.7, 0.9);
+  // top rail along the receiver jacket, vent slots on its flanks, a small glow strip
+  bx(B, kit.trim, x0 + cut * 0.5, y + h0 * 0.5 + R * 0.12, z, cut * 0.8, R * 0.24, R * 0.7);
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 3; i++) bx(B, kit.trim, x0 + cut * (0.22 + i * 0.22), y, z + s * w0 * 0.5, cut * 0.12, h0 * 0.42, R * 0.12);
+    if (s > 0) bx(B, kit.glow, x0 + cut + (sEnd - cut) * 0.5, y + h0 * 0.08, z + s * w0 * 0.43, (sEnd - cut) * 0.55, R * 0.16, R * 0.08);
+  }
+  // muzzle: angular block brake with side ports (all brake kinds; 'none' = short collar)
   const m0 = L - bl;
-  if (brake === 'slot') {
-    // double-baffle muzzle brake: a slim core with two flat baffle plates wider than tall (reads as a cross-bar from above)
-    B.lathe(kit.metal, [[0, m0], [R * 1.12, m0], [R * 1.12, L], [R * 0.55, L], [0, L - bl * 0.1]], at, 'x', seg);
-    for (const f of [0.3, 0.8]) cbox(B, kit.metal, x0 + m0 + bl * f, y, z, bl * 0.24, R * 2.0, R * 3.0, R * 0.24);
-  } else if (brake === 'block') {
-    cbox(B, kit.metal, x0 + m0 + bl / 2, y, z, bl, R * 2.0, R * 2.6, R * 0.4);
-  } else if (brake === 'cone' || brake === 'flash') {
-    // 'cone' = muzzle can (slightly wider than the tube), 'flash' = short flared hider
-    if (brake === 'cone') B.lathe(kit.metal, [[0, m0], [R * 1.22, m0], [R * 1.32, m0 + bl * 0.15], [R * 1.32, L - bl * 0.15], [R * 1.18, L], [R * 0.6, L], [0, L - bl * 0.2]], at, 'x', seg);
-    else B.lathe(kit.metal, [[0, m0], [R * 1.0, m0], [R * 1.32, L], [R * 0.6, L], [0, L - bl * 0.3]], at, 'x', seg);
+  if (brake === 'none') jacket(B, kit.metal, x0 + m0, x0 + L, y, z, R * 1.9, R * 2.1, 0.9);
+  else {
+    jacket(B, kit.metal, x0 + m0, x0 + L, y, z, R * 2.3, R * (brake === 'flash' ? 2.4 : 3.0), 0.92);
+    for (const f of brake === 'flash' ? [0.5] : [0.3, 0.7]) bx(B, kit.trim, x0 + m0 + bl * f, y, z, bl * 0.14, R * 1.5, R * (brake === 'flash' ? 2.5 : 3.1));
   }
   if (!o.noMuzzle) C.muzzle(x0 + L + R * 0.3, y, z);
   return L;

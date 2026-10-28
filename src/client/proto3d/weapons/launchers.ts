@@ -29,8 +29,12 @@ function missile(B: Bld, nose: MatLike, body: MatLike, fin: MatLike, x0: number,
   for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; bx(B, fin, x0 + len * 0.1, y + Math.sin(a) * R * 1.3, z + Math.cos(a) * R * 1.3, len * 0.16, R * 0.15, R * 1.0, [a, 0, 0]); }
 }
 
+/** angular launcher base: a faceted armoured plinth with a dark skirt and two yoke cheeks (no round pedestal) */
 const pedestal = (C: WCtx, k = 0.6, h = 0.22) => {
-  C.b.lathe(C.kit.panel, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.55], [C.r * k * 0.75, C.r * h], [0, C.r * h]], [0, C.y0, 0], 'y', 8);
+  const { b, kit, r, y0 } = C, R = r * k, H = r * h;
+  bx(b, kit.trim, 0, y0 + H * 0.15, 0, R * 1.6, H * 0.3, R * 1.5);
+  shell(b, kit.panel, [[-R, R * 0.7, R * 0.52, H], [-R * 0.5, R * 0.86, R * 0.66, H], [R * 0.6, R * 0.86, R * 0.66, H], [R, R * 0.6, R * 0.42, H * 0.8]], y0 + H * 0.1);
+  for (const s of [-1, 1]) cbox(b, kit.hull, -R * 0.1, y0 + H * 1.2, s * R * 0.74, R * 0.9, H * 1.3, r * 0.1, r * 0.03, undefined, 0.8);
 };
 
 /** 2 / 4 chunky tubes strapped into a bundle on a side yoke. */
@@ -45,15 +49,8 @@ function rocketBundle(C: WCtx) {
   cbox(p, kit.panel, 0, -ph * 0.5 - r * 0.02, 0, r * 0.6, r * 0.08, pw * 0.8, r * 0.02);
   C.t.pitch.rotation.z = 0.18;
   const tip = C.mod.id === 'incendiary' ? kit.hot : kit.hazard;
-  const ox = -pl * 0.35;
-  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
-    const y = (i - (rows - 1) / 2) * g, z = (j - (cols - 1) / 2) * g;
-    rc.lathe(kit.panel, [[0, 0], [tr * 0.9, 0], [tr, tr * 0.3], [tr, pl], [tr * 0.78, pl], [tr * 0.78, pl - tr * 0.5], [0, pl - tr * 0.5]], [ox, y, z], 'x', 8);
-    rc.lathe(tip, [[0, 0], [tr * 0.62, 0], [0, tr * 0.7]], [ox + pl - tr * 0.5, y, z], 'x', 6);
-    C.muzzle(ox + pl + 0.01, y, z);
-  }
-  for (const f of [0.2, 0.7]) cbox(rc, kit.trim, ox + pl * f, 0, 0, r * 0.14, ph + r * 0.06, pw + r * 0.06, r * 0.03);
-  accent(C, ox + pl * 0.45, ph / 2 + r * 0.01, 0, pl * 0.3, pw * 0.5, undefined, rc);
+  const prow = cols > 2 ? 2 : 1, pcol = Math.ceil(cols / prow);
+  armouredPod(C, pl * 0.12, 0, pl * 0.85, prow * g * 1.1 + r * 0.1, pcol * g * 1.05 + r * 0.1, pcol, prow, tip);
   C.t.shot = 'rocket';
   C.t.rate = 0.9;
 }
@@ -68,10 +65,7 @@ function mlrs(C: WCtx) {
   C.t.pitch.position.set(-r * 0.3, y0 + r * 0.55, 0);
   C.t.pitch.rotation.z = 0.28;
   const ox = pl * 0.25;
-  cbox(rc, kit.panel, ox, ph * 0.5, 0, pl, ph, pw, r * 0.06);
-  for (const f of [-0.3, 0.1]) bx(rc, kit.hull, ox + pl * f, ph + r * 0.02, 0, pl * 0.12, r * 0.04, pw * 1.02);
-  tipGridAt(C, rc, ox + pl / 2, ph * 0.5, cols, rows, cell, kit.hazard);
-  accent(C, ox - pl * 0.1, ph + 0.003, 0, pl * 0.35, pw * 0.4, undefined, rc);
+  armouredPod(C, ox, ph * 0.5, pl, ph, pw, cols, rows, kit.hazard);
   C.t.shot = 'rocket';
   C.t.rate = 0.35;
 }
@@ -83,6 +77,36 @@ function tipGridAt(C: WCtx, B: Bld, xFace: number, yc: number, cols: number, row
     B.lathe(tip, [[0, 0], [cell * 0.36, 0], [0, cell * 0.42]], [xFace, y, z], 'x', 6);
     C.muzzle(xFace + cell * 0.4, y, z);
   }
+}
+
+/** Armoured launcher pod (Mechabellum-style) in the recoil group: an angular chamfered body centred at (ox, yc) of
+ *  length pl / height ph / width pw, thick team-colour side cheeks framing the face, a dark hood overhanging the front
+ *  like a visor, a recessed tube grid (metal tube rims, warheads set back) on the face, a rear exhaust block with vent
+ *  slots, an underside rail and a glow strip. Adds a muzzle per tube. */
+function armouredPod(C: WCtx, ox: number, yc: number, pl: number, ph: number, pw: number, cols: number, rows: number, tip: MatLike) {
+  const { rc, kit, r } = C;
+  const cell = Math.min((pw * 0.82) / cols, (ph * 0.8) / rows);
+  cbox(rc, kit.panel, ox, yc, 0, pl, ph, pw, Math.min(ph, pw) * 0.14, undefined, 0.92);
+  for (const s of [-1, 1]) {
+    cbox(rc, kit.hull, ox + pl * 0.06, yc, s * (pw / 2 + r * 0.05), pl * 0.98, ph * 1.08, r * 0.12, r * 0.035, undefined, 0.9);
+    bx(rc, kit.trim, ox - pl * 0.15, yc - ph * 0.15, s * (pw / 2 + r * 0.115), pl * 0.4, ph * 0.12, r * 0.02);
+  }
+  cbox(rc, kit.hull2, ox + pl * 0.1, yc + ph / 2 + r * 0.04, 0, pl * 0.94, r * 0.08, pw * 0.98, r * 0.02);
+  bx(rc, kit.glow, ox - pl * 0.1, yc + ph / 2 + r * 0.085, pw * 0.3, pl * 0.4, r * 0.015, r * 0.04);
+  // recessed face: dark plate, tube rims, warheads set back
+  const xf = ox + pl / 2;
+  bx(rc, kit.trim, xf - r * 0.02, yc, 0, r * 0.06, rows * cell + r * 0.04, cols * cell + r * 0.04);
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+    const y = yc + (i - (rows - 1) / 2) * cell, z = (j - (cols - 1) / 2) * cell;
+    rc.lathe(kit.metal, [[cell * 0.3, 0], [cell * 0.44, 0], [cell * 0.44, r * 0.05], [cell * 0.3, r * 0.05]], [xf - r * 0.01, y, z], 'x', 6);
+    rc.lathe(tip, [[0, 0], [cell * 0.28, 0], [0, cell * 0.3]], [xf - r * 0.04, y, z], 'x', 6);
+    C.muzzle(xf + cell * 0.3, y, z);
+  }
+  // rear exhaust block with vent slots, underside rail
+  cbox(rc, kit.trim, ox - pl / 2 - r * 0.06, yc, 0, r * 0.14, ph * 0.8, pw * 0.8, r * 0.03);
+  for (let i = 0; i < 3; i++) bx(rc, kit.metal, ox - pl / 2 - r * 0.135, yc + (i - 1) * ph * 0.22, 0, r * 0.02, ph * 0.08, pw * 0.66);
+  bx(rc, kit.trim, ox, yc - ph / 2 - r * 0.04, 0, pl * 0.8, r * 0.08, pw * 0.3);
+  C.acc = true;
 }
 
 /** ATGM: one fat launch tube on a side arm of a post, sight box on the other side. */
@@ -150,16 +174,8 @@ function samCells(C: WCtx) {
   C.t.pitch.position.set(-r * 0.2, y0 + r * 0.55, 0);
   C.t.pitch.rotation.z = 0.32;
   const ox = pl * 0.25;
-  cbox(rc, kit.panel, ox, pw * 0.5, 0, pl, pw, pw, r * 0.06);
-  // dark face frame, four cell covers each with a frangible hazard cap
-  bx(rc, kit.trim, ox + pl / 2 + r * 0.01, pw * 0.5, 0, r * 0.03, pw * 0.94, pw * 0.94);
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
-    const y = pw * 0.5 + (i - 0.5) * cell, z = (j - 0.5) * cell;
-    cbox(rc, kit.hull, ox + pl / 2 + r * 0.03, y, z, r * 0.05, cell * 0.8, cell * 0.8, r * 0.02);
-    cbox(rc, kit.hazard, ox + pl / 2 + r * 0.06, y, z, r * 0.03, cell * 0.44, cell * 0.44, r * 0.01);
-    C.muzzle(ox + pl / 2 + r * 0.08, y, z);
-  }
-  accent(C, ox - pl * 0.15, pw + 0.003, 0, pl * 0.4, pw * 0.35, undefined, rc);
+  armouredPod(C, ox, pw * 0.5, pl, pw, pw, 2, 2, kit.hazard);
+  void cell;
   C.t.shot = 'rocket';
   C.t.rate = 0.8;
 }
@@ -174,9 +190,7 @@ function swarm(C: WCtx) {
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.55 + ph * 0.5, 0);
   C.t.pitch.rotation.z = 0.2;
   const ox = pl * 0.2;
-  shell(rc, kit.panel, [[ox - pl / 2, pw * 0.38, pw * 0.3, ph * 0.8], [ox - pl * 0.3, pw * 0.5, pw * 0.42, ph], [ox + pl / 2, pw * 0.5, pw * 0.42, ph]], -ph / 2);
-  tipGridAt(C, rc, ox + pl / 2, -ph / 2 + ph * 0.5, cols, rows, cell, kit.hazard);
-  accent(C, ox - pl * 0.05, ph / 2 + 0.003, 0, pl * 0.4, pw * 0.4, undefined, rc);
+  armouredPod(C, ox, 0, pl, ph, pw, cols, rows, kit.hazard);
   C.t.shot = 'rocket';
   C.t.rate = 0.6;
 }
@@ -192,9 +206,8 @@ function vls(C: WCtx) {
   C.t.pitch.position.set(-r * 0.45, y0 + r * 0.62, 0);
   C.t.pitch.rotation.z = 0.75;
   const ox = pl * 0.3;
-  cbox(rc, kit.panel, ox, pw * 0.5, 0, pl, pw, pw, r * 0.07);
-  tipGridAt(C, rc, ox + pl / 2, pw * 0.5, cols, rows, cell, kit.hazard);
-  accent(C, ox, pw + 0.003, 0, pl * 0.6, pw * 0.3, undefined, rc);
+  armouredPod(C, ox, pw * 0.5, pl, pw, pw, cols, rows, kit.hazard);
+  void cell;
   C.t.shot = 'rocket';
   C.t.rate = 0.4;
 }

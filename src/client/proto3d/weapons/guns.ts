@@ -77,8 +77,7 @@ function ballMount(C: WCtx) {
 function wedgeAC(C: WCtx) {
   const { b, p, rc, kit, r, y0, nb } = C;
   const R = C.bore, h = r * 0.52;
-  const st: Station[] = [[-r * 0.9, r * 0.5, r * 0.36, h * 0.85], [-r * 0.6, r * 0.88, r * 0.62, h], [r * 0.2, r * 0.88, r * 0.62, h], [r * 0.95, r * 0.28, r * 0.16, h * 0.68]];
-  shell(b, kit.panel, st, y0);
+  mechHousing(C, r * 1.6, r * 0.72, h, 0.8);
   C.t.pitch.position.set(r * 0.62, y0 + h * 0.52, 0);
   const gap = R * 3.4;
   cbox(p, kit.trim, 0, 0, 0, r * 0.3, h * 0.62, nb > 1 ? gap * nb + R * 3 : R * 5.5);
@@ -104,9 +103,6 @@ function wedgeAC(C: WCtx) {
     // side box magazine + feed chute
     cbox(p, kit.hull, -r * 0.05, -h * 0.05, -(mw / 2 + r * 0.1), r * 0.3, h * 0.5, r * 0.16, r * 0.03);
   }
-  bx(b, kit.hull, -r * 0.35, y0 + h * 0.75, r * 0.72, r * 0.6, h * 0.5, r * 0.22);
-  cbox(b, kit.trim, -r * 0.45, y0 + h + r * 0.06, -r * 0.2, r * 0.26, r * 0.12, r * 0.26);
-  accent(C, -r * 0.1, y0 + h + 0.002, r * 0.25, r * 0.55, r * 0.1);
   C.t.rate = 0.18 + (1 - C.c) * 0.1;
 }
 
@@ -235,74 +231,78 @@ const tankCommon = (C: WCtx, roofY: number, cx: number, cz: number) => {
   bx(b, kit.glass, cx + r * 0.15, roofY + r * 0.05, cz, r * 0.03, r * 0.05, r * 0.12);
 };
 
-/** 75 mm class: low, wide cast turret (flattened dome) with a rear bustle, cast mantlet and a long gun with a fume
- *  extractor and a double-baffle brake. */
+/** Armoured sci-fi turret housing (Mechabellum-style): a faceted light core wedge, thick team-colour cheek armour
+ *  slabs running forward past the mantlet, a layered dark roof plate, a sensor block with a glowing lens, dark heat-sink
+ *  fins across the back. l / w / h: length, half-width, height (cells); fwd: how far the cheeks reach forward (x r).
+ *  Returns the roof height. */
+function mechHousing(C: WCtx, l: number, w: number, h: number, fwd = 1.05, sensorZ = -1): number {
+  const { b, kit, r, y0 } = C;
+  shell(b, kit.panel, [[-l * 0.55, w * 0.62, w * 0.46, h * 0.82], [-l * 0.32, w, w * 0.76, h], [l * 0.2, w, w * 0.76, h], [l * 0.48, w * 0.7, w * 0.42, h * 0.72]], y0);
+  for (const s of [-1, 1]) {
+    // cheek slab: long, thick, leaning in a little, chamfered top; a dark seam strip under it
+    const cl = l * 0.55 + r * fwd * 0.5, cx = -l * 0.3 + cl / 2;
+    cbox(b, kit.hull, cx, y0 + h * 0.52, s * (w * 0.98 + r * 0.06), cl, h * 0.9, r * 0.16, r * 0.05, [s * 0.06, 0, 0], 0.86);
+    bx(b, kit.trim, cx, y0 + h * 0.06, s * (w * 0.98 + r * 0.06), cl * 0.92, h * 0.1, r * 0.17);
+    // armour step: a smaller plate layered on the cheek's front half
+    cbox(b, kit.hull2, cx + cl * 0.22, y0 + h * 0.6, s * (w * 0.98 + r * 0.15), cl * 0.42, h * 0.5, r * 0.05, r * 0.02);
+  }
+  // layered roof plate, sensor block with a glowing lens facing forward
+  cbox(b, kit.hull2, -l * 0.08, y0 + h + r * 0.02, -sensorZ * w * 0.18, l * 0.5, r * 0.05, w * 0.7, r * 0.015);
+  cbox(b, kit.trim, -l * 0.12, y0 + h + r * 0.11, sensorZ * w * 0.48, r * 0.36, r * 0.16, r * 0.24, r * 0.04);
+  bx(b, kit.glow, -l * 0.12 + r * 0.185, y0 + h + r * 0.11, sensorZ * w * 0.48, r * 0.02, r * 0.07, r * 0.14);
+  // heat-sink fins across the back
+  for (let i = 0; i < 4; i++) bx(b, kit.trim, -l * 0.56 - r * 0.04, y0 + h * 0.48, (i - 1.5) * w * 0.38, r * 0.12, h * 0.66, r * 0.05);
+  C.acc = true;
+  return y0 + h;
+}
+
+/** 75 mm class: compact armoured turret, single shrouded gun with a block brake. */
 function castDome(C: WCtx) {
-  const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.48;
-  b.lathe(kit.hull, [[0, 0], [r * 0.9, 0], [r * 0.94, h * 0.3], [r * 0.78, h * 0.78], [r * 0.42, h], [0, h]], [-r * 0.08, y0, 0], 'y', 12);
-  // rear bustle overhanging the engine deck
-  cbox(b, kit.hull2, -r * 0.98, y0 + h * 0.5, 0, r * 0.5, h * 0.62, r * 1.05, r * 0.05);
-  cbox(b, kit.trim, -r * 1.2, y0 + h * 0.5, 0, r * 0.08, h * 0.5, r * 0.9, r * 0.02);
-  tankCommon(C, y0 + h, -r * 0.3, -r * 0.3);
-  accent(C, -r * 0.95, y0 + h * 0.82, 0, r * 0.3, r * 0.6);
-  C.t.pitch.position.set(r * 0.72, y0 + h * 0.48, 0);
-  cbox(p, kit.hull2, 0, 0, 0, r * 0.34, h * 0.78, Math.max(R * 5.5, r * 0.62), r * 0.07, undefined, 0.78);
+  const { p, rc, kit, r, y0 } = C;
+  const R = C.bore, h = r * 0.5;
+  mechHousing(C, r * 1.7, r * 0.72, h, 0.9);
+  C.t.pitch.position.set(r * 0.7, y0 + h * 0.5, 0);
+  cbox(p, kit.trim, 0, 0, 0, r * 0.4, h * 0.8, Math.max(R * 5.5, r * 0.62), r * 0.07, undefined, 0.78);
   barrel(C, rc, { len: mainLen(C, C.D * 1.45, 0.72), rad: R, x0: r * 0.12, seg: 8, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 1.0;
 }
 
-/** 120 mm class: angular wedge turret with a long bustle, chunky mantlet and a long clean smoothbore (thermal
- *  sleeve + fume extractor, no brake). */
+/** 120 mm class: long low armoured wedge, heavy cheeks, long shrouded smoothbore with a muzzle sensor. */
 function wedgeTank(C: WCtx) {
-  const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.42;
-  // wide, flat wedge: sharp cheeks forward, long bustle behind the ring
-  shell(b, kit.hull, [[-r * 1.25, r * 0.5, r * 0.4, h * 0.85], [-r * 0.75, r * 0.92, r * 0.72, h], [r * 0.3, r * 0.96, r * 0.74, h], [r * 0.75, r * 0.7, r * 0.5, h * 0.85], [r * 1.0, r * 0.34, r * 0.22, h * 0.6]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.hull2, -r * 0.3, y0 + h * 0.5, s * r * 1.0, r * 0.95, h * 0.6, r * 0.08, r * 0.025, [0, -s * 0.06, 0]);
-  // bustle stowage rack (dark frame) across the rear
-  cbox(b, kit.trim, -r * 1.32, y0 + h * 0.55, 0, r * 0.14, h * 0.55, r * 0.9, r * 0.02);
-  tankCommon(C, y0 + h, -r * 0.45, -r * 0.32);
-  accent(C, -r * 0.2, y0 + h + 0.002, r * 0.3, r * 0.6, r * 0.12);
-  C.t.pitch.position.set(r * 0.86, y0 + h * 0.52, 0);
-  cbox(p, kit.hull2, 0, 0, 0, r * 0.36, h * 0.8, Math.max(R * 6, r * 0.66), r * 0.06, undefined, 0.8);
+  const { p, rc, kit, r, y0 } = C;
+  const R = C.bore, h = r * 0.46;
+  mechHousing(C, r * 2.1, r * 0.82, h, 1.25);
+  C.t.pitch.position.set(r * 0.9, y0 + h * 0.52, 0);
+  cbox(p, kit.trim, 0, 0, 0, r * 0.44, h * 0.84, Math.max(R * 6, r * 0.66), r * 0.06, undefined, 0.8);
   const len = mainLen(C, C.D * 1.6, 0.76);
-  barrel(C, rc, { len, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, taper: 0.88 });
-  // muzzle reference sensor: a small box on top of the muzzle
-  cbox(rc, kit.trim, r * 0.12 + len * 0.97, R * 1.05, 0, R * 1.4, R * 0.5, R * 0.7, R * 0.1);
+  barrel(C, rc, { len, rad: R, x0: r * 0.12, seg: 8, sleeve: true, evac: true, brake: 'block' });
+  cbox(rc, kit.trim, r * 0.12 + len * 0.6, R * 1.6, 0, R * 1.6, R * 0.6, R * 0.8, R * 0.1);
   C.t.shot = 'shell';
   C.t.rate = 1.2;
 }
 
-/** Twin 120: wide flat hex turret, two barrels on one broad mantlet. */
+/** Twin 120: wide armoured housing, two shrouded barrels on one broad mantlet. */
 function twinHex(C: WCtx) {
-  const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.4, gap = Math.max(R * 3.6, r * 0.3);
-  shell(b, kit.hull, [[-r * 0.95, r * 0.5, r * 0.4, h * 0.9], [-r * 0.5, r * 0.95, r * 0.75, h], [r * 0.45, r * 0.95, r * 0.75, h], [r * 0.95, r * 0.55, r * 0.42, h * 0.8]], y0);
-  tankCommon(C, y0 + h, -r * 0.5, r * 0.4);
-  cbox(b, kit.hull, -r * 0.4, y0 + h + r * 0.05, -r * 0.35, r * 0.4, r * 0.1, r * 0.3);
-  accent(C, -r * 0.1, y0 + h + 0.002, 0, r * 0.2, r * 0.9);
+  const { p, rc, kit, r, y0 } = C;
+  const R = C.bore, h = r * 0.46, gap = Math.max(R * 3.6, r * 0.34);
+  mechHousing(C, r * 1.9, r * 0.92, h, 1.15);
   C.t.pitch.position.set(r * 0.85, y0 + h * 0.5, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.32, h * 0.7, gap + R * 6, r * 0.06, undefined, 0.85);
+  cbox(p, kit.trim, 0, 0, 0, r * 0.4, h * 0.76, gap + R * 6, r * 0.06, undefined, 0.85);
   for (const z of zs(2, gap)) barrel(C, rc, { len: mainLen(C, C.D * 1.4, 0.68), rad: R, x0: r * 0.1, z, seg: 8, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 0.9;
 }
 
-/** 240 mm siege gun: tall sloped casemate, monster barrel with recoil cylinders. */
+/** 240 mm siege gun: tall armoured casemate, monster shrouded barrel with exposed recoil rams. */
 function siegeCasemate(C: WCtx) {
-  const { b, p, rc, kit, r, y0 } = C;
-  const R = C.bore, h = r * 0.62;
-  shell(b, kit.panel, [[-r * 0.95, r * 0.68, r * 0.45, h * 0.9], [r * 0.15, r * 0.78, r * 0.5, h], [r * 0.6, r * 0.78, r * 0.5, h * 0.7], [r * 0.9, r * 0.62, r * 0.42, h * 0.32]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.hull, -r * 0.35, y0 + h * 0.45, s * r * 0.82, r * 1.0, h * 0.6, r * 0.1, r * 0.03);
-  tankCommon(C, y0 + h, -r * 0.55, r * 0.35);
-  b.lathe(kit.metal, [[0, 0], [r * 0.09, 0], [r * 0.09, r * 0.18], [0, r * 0.2]], [-r * 0.7, y0 + h, -r * 0.4], 'y', 6);
-  accent(C, -r * 0.35, y0 + h + 0.002, -r * 0.05, r * 0.7, r * 0.14);
-  C.t.pitch.position.set(r * 0.55, y0 + h * 0.6, 0);
-  cbox(p, kit.trim, 0, 0, 0, r * 0.4, h * 0.85, R * 5, r * 0.07, undefined, 0.85);
-  for (const s of [-1, 1]) p.cyl(kit.steel, R * 0.4, R * 0.4, C.D * 0.45, [r * 0.1, R * 1.5, s * R * 1.2], 'x', 6);
-  barrel(C, rc, { len: mainLen(C, C.D * 1.6, 0.7, 2.6), rad: R, x0: r * 0.15, seg: 10, sleeve: true, evac: true, brake: 'slot' });
+  const { p, rc, kit, r, y0 } = C;
+  const R = C.bore, h = r * 0.66;
+  mechHousing(C, r * 1.95, r * 0.8, h, 1.0, 1);
+  C.t.pitch.position.set(r * 0.6, y0 + h * 0.6, 0);
+  cbox(p, kit.trim, 0, 0, 0, r * 0.46, h * 0.85, R * 5, r * 0.07, undefined, 0.85);
+  for (const s of [-1, 1]) p.cyl(kit.steel, R * 0.4, R * 0.4, C.D * 0.45, [r * 0.1, R * 1.6, s * R * 1.3], 'x', 6);
+  barrel(C, rc, { len: mainLen(C, C.D * 1.6, 0.7, 2.6), rad: R, x0: r * 0.15, seg: 8, sleeve: true, evac: true, brake: 'slot' });
   C.t.shot = 'shell';
   C.t.rate = 2.2;
 }
