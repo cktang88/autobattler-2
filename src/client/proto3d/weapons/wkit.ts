@@ -76,7 +76,7 @@ function oct8(x: number, y: number, z: number, h: number, w: number, c = 0.3): V
     [x, y - H, z + W - ch], [x, y - H, z - W + ch], [x, y - H + ch, z - W], [x, y + H - ch, z - W]];
 }
 /** armoured jacket segment along +X: octagonal section, chamfered (narrower) ends */
-function jacket(B: Bld, mat: MatLike, x0: number, x1: number, y: number, z: number, h: number, w: number, taper = 0.92): void {
+export function jacket(B: Bld, mat: MatLike, x0: number, x1: number, y: number, z: number, h: number, w: number, taper = 0.92): void {
   const e = Math.min((x1 - x0) * 0.18, h * 0.3);
   B.loft(mat, [oct8(x0, y, z, h * 0.78, w * 0.82), oct8(x0 + e, y, z, h, w), oct8(x1 - e, y, z, h * taper, w * taper), oct8(x1, y, z, h * taper * 0.8, w * taper * 0.84)]);
 }
@@ -158,3 +158,38 @@ export function hazardRings(B: Bld, kit: Kit, x: number, y: number, z: number, R
   const t = len / n;
   for (let i = 0; i < n; i++) band(B, i % 2 ? kit.trim : kit.hazard, x + t * (i + 0.5), y, z, R, t, seg);
 }
+
+/** Angular launcher / gun base: a faceted armoured plinth (radius k x r, height h x r) with a dark skirt and two yoke
+ *  cheeks. Replaces round lathed pedestals. */
+export function plinth(C: WCtx, k = 0.6, h = 0.22): void {
+  const { b, kit, r, y0 } = C, R = r * k, H = r * h;
+  bx(b, kit.trim, 0, y0 + H * 0.15, 0, R * 1.6, H * 0.3, R * 1.5);
+  shell(b, kit.panel, [[-R, R * 0.7, R * 0.52, H], [-R * 0.5, R * 0.86, R * 0.66, H], [R * 0.6, R * 0.86, R * 0.66, H], [R, R * 0.6, R * 0.42, H * 0.8]], y0 + H * 0.1);
+  for (const s of [-1, 1]) cbox(b, kit.hull, -R * 0.1, y0 + H * 1.2, s * R * 0.74, R * 0.9, H * 1.3, r * 0.1, r * 0.03, undefined, 0.8);
+}
+
+/** Armoured sci-fi turret housing (Mechabellum-style): a faceted light core wedge, thick team-colour cheek armour
+ *  slabs running forward past the mantlet, a layered dark roof plate, a sensor block with a glowing lens, dark heat-sink
+ *  fins across the back. l / w / h: length, half-width, height (cells); fwd: how far the cheeks reach forward (x r).
+ *  Returns the roof height. */
+export function mechHousing(C: WCtx, l: number, w: number, h: number, fwd = 1.05, sensorZ = -1): number {
+  const { b, kit, r, y0 } = C;
+  shell(b, kit.panel, [[-l * 0.55, w * 0.62, w * 0.46, h * 0.82], [-l * 0.32, w, w * 0.76, h], [l * 0.2, w, w * 0.76, h], [l * 0.48, w * 0.7, w * 0.42, h * 0.72]], y0);
+  for (const s of [-1, 1]) {
+    // cheek slab: long, thick, leaning in a little, chamfered top; a dark seam strip under it
+    const cl = l * 0.55 + r * fwd * 0.5, cx = -l * 0.3 + cl / 2;
+    cbox(b, kit.hull, cx, y0 + h * 0.52, s * (w * 0.98 + r * 0.06), cl, h * 0.9, r * 0.16, r * 0.05, [s * 0.06, 0, 0], 0.86);
+    bx(b, kit.trim, cx, y0 + h * 0.06, s * (w * 0.98 + r * 0.06), cl * 0.92, h * 0.1, r * 0.17);
+    // armour step: a smaller plate layered on the cheek's front half
+    cbox(b, kit.hull2, cx + cl * 0.22, y0 + h * 0.6, s * (w * 0.98 + r * 0.15), cl * 0.42, h * 0.5, r * 0.05, r * 0.02);
+  }
+  // layered roof plate, sensor block with a glowing lens facing forward
+  cbox(b, kit.hull2, -l * 0.08, y0 + h + r * 0.02, -sensorZ * w * 0.18, l * 0.5, r * 0.05, w * 0.7, r * 0.015);
+  cbox(b, kit.trim, -l * 0.12, y0 + h + r * 0.11, sensorZ * w * 0.48, r * 0.36, r * 0.16, r * 0.24, r * 0.04);
+  bx(b, kit.glow, -l * 0.12 + r * 0.185, y0 + h + r * 0.11, sensorZ * w * 0.48, r * 0.02, r * 0.07, r * 0.14);
+  // heat-sink fins across the back
+  for (let i = 0; i < 4; i++) bx(b, kit.trim, -l * 0.56 - r * 0.04, y0 + h * 0.48, (i - 1.5) * w * 0.38, r * 0.12, h * 0.66, r * 0.05);
+  C.acc = true;
+  return y0 + h;
+}
+

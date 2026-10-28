@@ -226,7 +226,9 @@ export class Bld {
   tris = 0;
   /** multiplies radial segment counts of cyl/cylb/lathe/strut (min 5): a cheap LOD knob for dense parts (turrets) */
   segK = 1;
-  private sg(n: number): number { return this.segK === 1 ? n : Math.max(5, Math.round(n * this.segK)); }
+  /** caps radial segments of cyl/cylb/lathe/strut (weapons use 6: faceted hex forms read as armour, not turned tubes) */
+  segMax = 64;
+  private sg(n: number): number { return Math.min(this.segMax, this.segK === 1 ? n : Math.max(5, Math.round(n * this.segK))); }
   g(geo: THREE.BufferGeometry, matl: MatLike, m?: THREE.Matrix4): this {
     const n = prep(geo);
     if (m) n.applyMatrix4(m);

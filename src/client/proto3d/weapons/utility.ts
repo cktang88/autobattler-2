@@ -3,7 +3,7 @@
 // facets, EMP cage, autoloader carousel, overclock radiator, nanite hive, turbo stacks and a gyroscope.
 
 import { dome as domeShape } from '../chassis/shapes.ts';
-import { accent, band, ball, bx, capsule, cbox, hazardRings, type WCtx } from './wkit.ts';
+import { accent, band, ball, bx, capsule, cbox, hazardRings, plinth, type WCtx } from './wkit.ts';
 
 export function buildUtility(C: WCtx): void {
   C.t.shot = 'none';
@@ -68,7 +68,7 @@ function shieldPylon(C: WCtx) {
 function domeProjector(C: WCtx) {
   const { b, kit, r, y0 } = C;
   const H = r * 0.85;
-  b.lathe(kit.panel, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.16], [r * 0.6, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 12);
+  plinth(C, 0.8, 0.26);
   domeShape(b, kit.glass, [0, y0 + r * 0.24, 0], r * 0.42, r * 0.38, 10, 2);
   const n = C.tier >= 5 ? 6 : 4;
   for (let i = 0; i < n; i++) {
@@ -209,7 +209,7 @@ function cage(C: WCtx) {
 /** Autoloader: ammo carousel drum with brass rounds standing in it. */
 function autoloader(C: WCtx) {
   const { b, kit, r, y0 } = C;
-  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.3], [r * 0.62, r * 0.36], [0, r * 0.36]], [0, y0, 0], 'y', 10);
+  plinth(C, 0.7, 0.36);
   for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; capsule(b, kit.hazard, Math.cos(a) * r * 0.45, y0 + r * 0.44, Math.sin(a) * r * 0.45, r * 0.09, r * 0.34, 'y', 5); }
   b.cylb(kit.trim, r * 0.2, r * 0.25, r * 0.04, [0, y0 + r * 0.36, 0], 'y', 8);
   accent(C, 0, y0 + r * 0.62, 0, r * 0.25, r * 0.25);

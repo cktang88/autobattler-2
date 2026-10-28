@@ -84,6 +84,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   };
   const segK = S >= 4 ? 1 : 0.85;
   C.b.segK = C.p.segK = C.rc.segK = C.sp.segK = segK;
+  C.b.segMax = C.p.segMax = C.rc.segMax = 6;
   const v = mod.visual;
   if (MELEE.has(v)) t.idleSpin = t.spinV = 6;
   if (!fixed && v !== 'plate' && !MELEE.has(v)) deckRing(C);

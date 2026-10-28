@@ -4,7 +4,7 @@
 
 import type { MatLike } from '../materials.ts';
 import type { Bld } from '../geo.ts';
-import { accent, band, barrel, bx, capsule, cbox, hazardRings, shell, type WCtx } from './wkit.ts';
+import { accent, band, barrel, bx, capsule, cbox, hazardRings, plinth, shell, type WCtx } from './wkit.ts';
 
 export function buildLauncher(C: WCtx): void {
   const v = C.mod.visual, id = C.mod.id;
@@ -29,13 +29,7 @@ function missile(B: Bld, nose: MatLike, body: MatLike, fin: MatLike, x0: number,
   for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; bx(B, fin, x0 + len * 0.1, y + Math.sin(a) * R * 1.3, z + Math.cos(a) * R * 1.3, len * 0.16, R * 0.15, R * 1.0, [a, 0, 0]); }
 }
 
-/** angular launcher base: a faceted armoured plinth with a dark skirt and two yoke cheeks (no round pedestal) */
-const pedestal = (C: WCtx, k = 0.6, h = 0.22) => {
-  const { b, kit, r, y0 } = C, R = r * k, H = r * h;
-  bx(b, kit.trim, 0, y0 + H * 0.15, 0, R * 1.6, H * 0.3, R * 1.5);
-  shell(b, kit.panel, [[-R, R * 0.7, R * 0.52, H], [-R * 0.5, R * 0.86, R * 0.66, H], [R * 0.6, R * 0.86, R * 0.66, H], [R, R * 0.6, R * 0.42, H * 0.8]], y0 + H * 0.1);
-  for (const s of [-1, 1]) cbox(b, kit.hull, -R * 0.1, y0 + H * 1.2, s * R * 0.74, R * 0.9, H * 1.3, r * 0.1, r * 0.03, undefined, 0.8);
-};
+const pedestal = plinth;
 
 /** 2 / 4 chunky tubes strapped into a bundle on a side yoke. */
 function rocketBundle(C: WCtx) {
@@ -236,7 +230,7 @@ function erector(C: WCtx) {
 function mortar(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
   const R = Math.max(C.bore, r * 0.18);
-  b.lathe(kit.panel, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.08], [r * 0.55, r * 0.18], [0, r * 0.2]], [0, y0, 0], 'y', 10);
+  plinth(C, 0.8, 0.2);
   cbox(b, kit.hull, -r * 0.45, y0 + r * 0.3, r * 0.42, r * 0.4, r * 0.2, r * 0.3);
   cbox(b, kit.trim, -r * 0.1, y0 + r * 0.28, 0, r * 0.4, r * 0.18, r * 0.5);
   C.t.pitch.position.set(-r * 0.15, y0 + r * 0.32, 0);

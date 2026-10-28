@@ -5,7 +5,7 @@
 import { pod } from '../chassis/shapes.ts';
 import type { MatLike } from '../materials.ts';
 import type { Bld } from '../geo.ts';
-import { accent, band, ball, barrel, bx, capsule, cbox, hazardRings, type WCtx } from './wkit.ts';
+import { accent, band, ball, barrel, bx, capsule, cbox, hazardRings, mechHousing, plinth, type WCtx } from './wkit.ts';
 
 export function buildEnergy(C: WCtx): void {
   const v = C.mod.visual, id = C.mod.id;
@@ -41,7 +41,7 @@ function lensEmitter(C: WCtx, B: Bld, e: number, len: number, z = 0, core: MatLi
 
 function laser(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  ball(b, kit.panel, 0, y0 + r * 0.38, 0, r * 0.78, 0.6, 10);
+  mechHousing(C, r * 1.5, r * 0.68, r * 0.56, 0.8);
   C.t.pitch.position.set(r * 0.4, y0 + r * 0.4, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
   lensEmitter(C, rc, r * 0.17, C.D * 1.05);
@@ -147,7 +147,7 @@ function coilStack(B: Bld, mat: MatLike, x: number, y: number, z: number, R: num
 
 function teslaCoil(C: WCtx) {
   const { b, rc, kit, r, y0 } = C;
-  b.lathe(kit.panel, [[0, 0], [r * 0.78, 0], [r * 0.78, r * 0.12], [r * 0.45, r * 0.32], [0, r * 0.32]], [0, y0, 0], 'y', 10);
+  plinth(C, 0.78, 0.32);
   coilStack(b, kit.metal, 0, y0 + r * 0.3, 0, r * 0.36, r * 0.75, 4);
   for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; b.strut(kit.trim, [Math.cos(a) * r * 0.62, y0 + r * 0.1, Math.sin(a) * r * 0.62], [Math.cos(a) * r * 0.2, y0 + r * 0.9, Math.sin(a) * r * 0.2], r * 0.04, r * 0.03, 4); }
   C.t.pitch.position.set(0, y0 + r * 1.22, 0);
@@ -161,7 +161,7 @@ function teslaCoil(C: WCtx) {
 /** Arc lance: horizontal coil lance on a yoke, orb at the tip. */
 function arcLance(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.14], [r * 0.5, r * 0.26], [0, r * 0.26]], [0, y0, 0], 'y', 10);
+  plinth(C, 0.7, 0.26);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.1, y0 + r * 0.42, s * r * 0.38, r * 0.45, r * 0.45, r * 0.12);
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.55, 0);
   ball(p, kit.trim, 0, 0, 0, r * 0.3, 1, 8, 'x');
@@ -176,7 +176,7 @@ function arcLance(C: WCtx) {
 /** Storm tower (L): tall coil tower with flaring discs, big orb, lightning rods. */
 function stormTower(C: WCtx) {
   const { b, rc, kit, r, y0 } = C;
-  b.lathe(kit.panel, [[0, 0], [r * 0.85, 0], [r * 0.85, r * 0.15], [r * 0.5, r * 0.35], [0, r * 0.35]], [0, y0, 0], 'y', 12);
+  plinth(C, 0.85, 0.35);
   coilStack(b, kit.metal, 0, y0 + r * 0.3, 0, r * 0.32, r * 1.0, 5);
   for (const [f, k] of [[0.35, 0.55], [0.7, 0.45]]) b.lathe(kit.trim, [[0, 0], [r * k, r * 0.03], [r * k, r * 0.06], [0, r * 0.08]], [0, y0 + r * 0.3 + r * f, 0], 'y', 10);
   for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + 0.4; b.strut(kit.steel, [Math.cos(a) * r * 0.65, y0 + r * 0.2, Math.sin(a) * r * 0.65], [Math.cos(a) * r * 0.55, y0 + r * 0.95, Math.sin(a) * r * 0.55], r * 0.04, r * 0.02, 4); ball(b, kit.rail, Math.cos(a) * r * 0.55, y0 + r * 0.98, Math.sin(a) * r * 0.55, r * 0.07, 1, 6); }
@@ -191,7 +191,7 @@ function stormTower(C: WCtx) {
 /** Tempest core (XL): three coil towers around a big central orb. */
 function stormCore(C: WCtx) {
   const { b, rc, kit, r, y0 } = C;
-  b.lathe(kit.panel, [[0, 0], [r * 0.9, 0], [r * 0.9, r * 0.15], [r * 0.6, r * 0.32], [0, r * 0.32]], [0, y0, 0], 'y', 12);
+  plinth(C, 0.9, 0.32);
   const n = Math.max(3, C.nb);
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + Math.PI / 2, x = Math.cos(a) * r * 0.5, z = Math.sin(a) * r * 0.5;
@@ -277,7 +277,7 @@ function tuningFork(C: WCtx) {
 /** Sonic pulser: big flared horn (LRAD) on a yoke. */
 function horn(C: WCtx) {
   const { b, p, rc, kit, r, y0 } = C;
-  b.lathe(kit.panel, [[0, 0], [r * 0.7, 0], [r * 0.7, r * 0.15], [r * 0.5, r * 0.28], [0, r * 0.28]], [0, y0, 0], 'y', 10);
+  plinth(C, 0.7, 0.28);
   for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.1, y0 + r * 0.48, s * r * 0.62, r * 0.4, r * 0.5, r * 0.1);
   C.t.pitch.position.set(-r * 0.1, y0 + r * 0.62, 0);
   const R = r * 0.7, L = r * 0.85;
