@@ -14,7 +14,7 @@
 import type { V3 } from '../geo.ts';
 import type { Bld } from '../geo.ts';
 import type { MatLike } from '../materials.ts';
-import { bx, cbox, jacket, mechHousing, plinth, type WCtx } from './wkit.ts';
+import { barrel, bx, cbox, jacket, mechHousing, plinth, type WCtx } from './wkit.ts';
 
 /** hollow hex muzzle collar along +X from x (length l, outer radius Ro): inner wall + a near-black core inside */
 export function hollowMuzzle(C: WCtx, B: Bld, x: number, y: number, z: number, Ro: number, l: number, mat: MatLike = C.kit.metal): void {
@@ -180,4 +180,62 @@ export function flame(C: WCtx): void {
   C.muzzle(L + r * 0.05, 0, 0);
   C.t.shot = 'flame';
   C.t.rate = 0.12;
+}
+
+// ---- pulse carbine (machine guns, autocannons, quad AA, scatterguns, flak, point defence, sniper) -----------------
+export function carbine(C: WCtx): void {
+  const { rc, kit, r } = C;
+  const v = C.mod.visual, sniper = v === 'sniper', flak = v === 'flak', pd = v === 'pointdef', scat = v === 'shotgun';
+  const h = r * (flak ? 0.55 : 0.5);
+  mechHousing(C, r * (sniper ? 1.8 : 1.5), r * (scat ? 0.7 : 0.62), h, sniper ? 1.1 : 0.7);
+  const nb = Math.max(1, C.nb), cols = nb >= 4 ? 2 : Math.min(nb, 3), rows = nb >= 4 ? 2 : 1;
+  const R = C.bore * (scat ? 1.6 : 1), gap = Math.max(R * 3.2, r * 0.2);
+  const len = C.D * (sniper ? 2.4 : scat ? 0.75 : flak ? 1.3 : 1.1);
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+    barrel(C, rc, { len, rad: R, x0: r * 0.1, y: (i - (rows - 1) / 2) * gap, z: (j - (cols - 1) / 2) * gap, sleeve: sniper, cap: sniper ? 44 : 18,
+      brake: flak ? 'slot' : scat ? 'none' : sniper ? 'block' : 'flash' });
+  }
+  if (sniper) {
+    cbox(rc, kit.trim, r * 0.45, R * 2.4 + r * 0.08, 0, r * 0.9, r * 0.12, r * 0.14, r * 0.03);
+    bx(rc, kit.rail, r * 0.91, R * 2.4 + r * 0.08, 0, r * 0.02, r * 0.08, r * 0.1);
+  }
+  if (flak) C.t.pitch.rotation.z = 0.5;
+  C.t.shot = flak ? 'shell' : pd ? 'beam' : 'tracer';
+  C.t.rate = flak ? 0.35 : pd ? 0.3 : sniper ? 2.0 : scat ? 0.5 : nb >= 4 ? 0.1 : C.tier === 1 ? 0.12 : 0.2;
+}
+
+// ---- artillery cradle (mortar, howitzer, barrage, cluster, doomsday) ------------------------------------------------
+export function artillery(C: WCtx): void {
+  const { rc, kit, r } = C;
+  const mortar = C.mod.visual === 'mortar', nb = Math.max(1, C.nb), xl = C.tier >= 5;
+  mechHousing(C, r * (mortar ? 1.3 : 1.9), r * (nb > 1 ? 0.85 : 0.7), r * 0.6, mortar ? 0.5 : 1.0, 1);
+  const R = C.bore * (mortar ? 1.4 : 1), gap = Math.max(R * 3.2, r * 0.26), len = C.D * (mortar ? 0.9 : 1.6);
+  for (let k = 0; k < nb; k++) {
+    const z = (k - (nb - 1) / 2) * gap;
+    barrel(C, rc, { len, rad: R, x0: r * 0.1, z, sleeve: !mortar, evac: !mortar, brake: mortar ? 'none' : 'slot' });
+    if (!mortar) for (const s of [-1, 1]) bx(rc, kit.steel, r * 0.1 + len * 0.22, R * 1.5 * s, z, len * 0.32, R * 0.32, R * 0.32);
+  }
+  C.t.pitch.rotation.z = mortar ? 0.9 : nb >= 3 ? 0.55 : 0.45;
+  C.t.shot = 'shell';
+  C.t.rate = mortar ? 1.4 : xl ? 3 : 2.4;
+}
+
+// ---- field emitter (heat ray, EMP / stun / disarm, slow beam, sonic, gravity) ---------------------------------------
+export function emitter(C: WCtx): void {
+  const { rc, kit, r } = C;
+  const v = C.mod.visual, id = C.mod.id;
+  const core = v === 'heatray' ? kit.hot : v === 'gravity' ? kit.plasma : v === 'slowbeam' ? kit.glow : v === 'sonic' ? kit.lamp : kit.rail;
+  mechHousing(C, r * 1.5, r * 0.66, r * 0.55, 0.6);
+  const L = C.D * 0.55, e = r * 0.3, x = r * 0.3 + L;
+  // three angular prongs reaching forward round the core (top, lower left, lower right)
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 2, cy = Math.sin(a) * e * 1.05, cz = Math.cos(a) * e * 1.05;
+    cbox(rc, kit.hull, r * 0.3 + L * 0.55, cy, cz, L * 1.0, e * 0.42, e * 0.42, e * 0.1, [a - Math.PI / 2, 0, 0], 0.7);
+  }
+  // hollow hex frame and the glowing core disc inside it
+  rc.lathe(kit.trim, [[e * 0.7, 0], [e * 1.0, 0], [e * 1.0, e * 0.25], [e * 0.7, e * 0.25], [e * 0.7, 0]], [x - e * 0.1, 0, 0], 'x', 6);
+  rc.lathe(core, [[0, 0], [e * 0.62, 0], [e * 0.62, e * 0.14], [0, e * 0.14]], [x - e * 0.05, 0, 0], 'x', 6);
+  C.muzzle(x + e * 0.4, 0, 0);
+  C.t.shot = v === 'sonic' || id === 'empcannon' ? 'orb' : 'beam';
+  C.t.rate = v === 'heatray' ? 0.7 : id === 'stungun' ? 0.8 : id === 'empcannon' ? 1.3 : v === 'slowbeam' ? 1.0 : v === 'sonic' ? 1.1 : 1.2;
 }

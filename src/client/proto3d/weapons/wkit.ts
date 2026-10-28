@@ -92,10 +92,11 @@ export function jacket(B: Bld, mat: MatLike, x0: number, x1: number, y: number, 
 export function barrel(C: WCtx, B: Bld, o: {
   len: number; rad: number; x0?: number; y?: number; z?: number; seg?: number; mat?: MatLike;
   sleeve?: boolean; evac?: boolean; brake?: 'slot' | 'cone' | 'flash' | 'block' | 'none'; taper?: number; noMuzzle?: boolean;
+  /** max length in barrel radii (default 18; precision rifles run longer) */ cap?: number;
 }): number {
   const { kit } = C;
   // length follows the bore: thin guns are short and stubby, heavy guns long (never a thin rod as long as a cannon)
-  const x0 = o.x0 ?? 0, y = o.y ?? 0, z = o.z ?? 0, R = o.rad, L = Math.min(o.len, R * 18), seg = Math.min(o.seg ?? 8, 8);
+  const x0 = o.x0 ?? 0, y = o.y ?? 0, z = o.z ?? 0, R = o.rad, L = Math.min(o.len, R * (o.cap ?? 18)), seg = Math.min(o.seg ?? 8, 8);
   const brake = o.brake ?? 'none';
   const bl = brake === 'none' ? R * 1.6 : brake === 'flash' ? R * 2.4 : R * 3.0;
   // inner tube (bare metal) all the way to the brake
