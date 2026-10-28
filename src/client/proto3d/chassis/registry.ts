@@ -51,7 +51,7 @@
 //     metal (dark gunmetal mechanics), steel (bright pistons/rods), rubber (tracks, tyres, foot pads), glass
 //     (canopies/visors; dark tinted), hazard (yellow bands), accent (team colour paint), glow (team-coloured emissive
 //     strips), lamp (warm white emissive), hot (orange exhaust glow), plasma/rail (weapon emissives), canvas.
-//   * Triangle budget per unit incl. turrets and gear (unit.tris): S1 <= 10k, S2..S5 <= 30k. Spend it on shape (bevels,
+//   * Triangle budget per unit incl. turrets and gear (unit.tris): S1 <= 15k, S2..S5 <= 30k. Spend it on shape (bevels,
 //     smooth rounded parts, layered plates), not on piles of tiny greebles; use plain THREE.BoxGeometry via b.g() for
 //     repeated tiny parts.
 //     Lathes: 8-12 segments for small parts, 16-24 for big drums; lofts with 8-point rings.
@@ -116,6 +116,12 @@ export interface ChassisOut {
   custom?: boolean;
   /** the builder placed the hard-surface functional kit itself: skip units3d's slot autoDress (hs-kit AUTO_DRESS) */
   dressed?: boolean;
+  /** mech torso: the hero weapon's turret becomes the upper body (it twists as a whole, weapons on arms / shoulders).
+   *  Called after the turrets exist with a builder in the hero yaw frame (origin = the hero seat, +x forward, world
+   *  units, unscaled); returns the weapon hardpoints in that frame: hp[0] = the hero's trunnion, hp[1..] = the pods
+   *  (secondary weapons riding the hero, in pod order). units3d drops the hero's ring / yoke and the pod brackets.
+   *  at moves the twist pivot (the hero yaw origin) to that point of the hull frame. heroK rescales the hero weapon (arm guns are usually smaller than a deck-mounted main gun). */
+  torso?: (b: Bld, t: { heroR: number; podR: number[] }) => { hp: V3[]; heroK?: number; at?: V3 };
 }
 
 export type ChassisBuilder = (c: ChassisCtx) => ChassisOut;

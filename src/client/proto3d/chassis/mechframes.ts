@@ -57,7 +57,10 @@ function raider(c: ChassisCtx): ChassisOut {
   const hx = hero?.x ?? 0.06 * k, hz = hero?.z ?? 0, R = hero?.r ?? 0.35 * k;
   // torso root: on legs the pelvis sits between the hips, otherwise the torso rides a dark drive block
   const B = legs ? stance.hipY + 0.02 * k : Math.max(stance.yt, y0 + 0.1 * k);
-  const chestY = B + 0.13 * k, chestT = B + 0.32 * k, seatY = B + 0.39 * k;
+  // waist height: a walker's torso sits right on its pelvis; a wheeled / tracked raider stands its torso up on a taller
+  // glowing waist column over the drive block (a centaur, not a turret)
+  const wH = legs ? 0.08 * k : 0.2 * k;
+  
   // ---- lower body
   let hips: Hip[] | undefined;
   if (legs) {
@@ -80,50 +83,52 @@ function raider(c: ChassisCtx): ChassisOut {
     block(b, kit.armor2, 0.36 * k, y0 + 0.01 * k, 0, 0.18 * k, wi * 1.7, B - y0 + 0.02 * k, { top: [0.45, 0.85], shift: [-0.04 * k, 0], ch: 0.05 * k, bev: 0.012 * k });
     pbox(b, kit.lamp, 0.012 * k, 0.018 * k, wi * 0.9, 0.45 * k, y0 + (B - y0) * 0.45, 0);
   }
-  // ---- waist: glowing core in a ribbed cage between pelvis / drive block and chest
-  coreCage(b, kit, -0.03 * k, B, 0, 0.15 * k, 0.15 * k, 8);
-  // ---- chest: barrel-chested team block, bone collar under the gun
-  block(b, kit.armor, -0.01 * k, chestY, 0, 0.6 * k, 0.56 * k, chestT - chestY, { top: [0.8, 0.8], shift: [0.03 * k, 0], ch: 0.1 * k, bev: 0.03 * k, bot: 0.025 * k, mid: [[0.45, 1.05, 1.06]] });
-  // chest front: two layered bone plates either side of a notch, the sensor head sits in the notch
-  both((s) => {
-    const p0: V3 = [0.31 * k, chestY + 0.02 * k, s * 0.13 * k], p1: V3 = [0.27 * k, chestT - 0.015 * k, s * 0.115 * k];
-    const F = facePlate(b, kit, kit.shell, p0, p1, ZA, 0.18 * k, 0.022 * k, XA, { standoff: 0.006 * k, gap: 0.01 * k, fill: 0.92 });
-    armorPlate(b, kit, kit.armor, F.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.03 * k, -0.02 * k)), rectP(0.11 * k, 0.1 * k, 0.025 * k), 0.016 * k, { standoff: 0.004 * k, gap: 0.006 * k });
-  });
-  block(b, kit.mech, 0.3 * k, chestY + 0.01 * k, 0, 0.06 * k, 0.07 * k, chestT - chestY - 0.02 * k, { ch: 0.015 * k, bev: 0.006 * k });
-  // sensor head: dark visor block with a wide lamp, jutting out of the notch under the gun
-  block(b, kit.armor2, 0.37 * k, chestY + 0.035 * k, 0, 0.13 * k, 0.15 * k, 0.085 * k, { top: [0.7, 0.8], shift: [0.015 * k, 0], ch: 0.035 * k, bev: 0.012 * k });
-  pbox(b, kit.lamp, 0.016 * k, 0.022 * k, 0.1 * k, 0.43 * k, chestY + 0.08 * k, 0);
-  // ---- shoulders: big layered pauldrons (team block, bone cap, glow strip), dark shoulder drum in the gap
-  both((s) => {
-    const zc = s * 0.34 * k;
-    b.cylb(kit.joint, 0.075 * k, 0.1 * k, 0.012 * k, [0.0, chestY + 0.1 * k, s * 0.2 * k], 'z', 8);
-    block(b, kit.armor, 0.01 * k, chestY + 0.02 * k, zc, 0.42 * k, 0.19 * k, 0.16 * k, { top: [0.76, 0.66], shift: [0.01 * k, s * 0.025 * k], ch: 0.06 * k, bev: 0.025 * k, bot: 0.02 * k });
-    block(b, kit.shell, 0.03 * k, chestY + 0.175 * k, zc + s * 0.01 * k, 0.3 * k, 0.12 * k, 0.035 * k, { top: [0.8, 0.75], ch: 0.04 * k, bev: 0.012 * k });
-    // lower pauldron lip: dark plate stepping out under the team block
-    block(b, kit.armor2, -0.01 * k, chestY - 0.03 * k, zc + s * 0.03 * k, 0.36 * k, 0.15 * k, 0.06 * k, { top: [0.95, 0.9], ch: 0.04 * k, bev: 0.012 * k });
-    pbox(b, kit.glow, 0.2 * k, 0.018 * k, 0.012 * k, 0.03 * k, chestY + 0.07 * k, s * 0.44 * k);
-  });
-  // ---- back: twin reactor drums (team, bone band, glowing vent ring) with a dark exhaust block between
-  both((s) => {
-    const p: V3 = [-0.35 * k, chestY - 0.06 * k, s * 0.14 * k];
-    b.cylb(kit.armor2, 0.085 * k, 0.27 * k, 0.015 * k, p, 'y', 10);
-    b.cyl(kit.plasma, 0.088 * k, 0.088 * k, 0.03 * k, [p[0], p[1] + 0.07 * k, p[2]], 'y', 10);
-    b.cylb(kit.shell, 0.092 * k, 0.05 * k, 0.012 * k, [p[0], p[1] + 0.16 * k, p[2]], 'y', 10);
-    b.lathe(kit.mech, [[0, 0], [0.08 * k, 0], [0.05 * k, 0.03 * k], [0, 0.03 * k]], [p[0], p[1] + 0.27 * k, p[2]], 'y', 8);
-  });
-  block(b, kit.mech, -0.32 * k, chestY - 0.04 * k, 0, 0.12 * k, 0.16 * k, 0.2 * k, { ch: 0.03 * k, bev: 0.01 * k });
-  both((s) => b.cyl(kit.hot, 0.022 * k, 0.022 * k, 0.012 * k, [-0.385 * k, chestY + 0.08 * k, s * 0.04 * k], '-x', 8));
-  // ---- the gun's plinth: bone drum on the chest top (narrower than the housing), collar
-  const pr = Math.min(R * 0.8, 0.34 * k);
-  plinth(b, kit.shell, hx, chestT - 0.01 * k, seatY - 0.012 * k, hz, pr, 12);
-  antenna(b, kit, -0.3 * k, chestT, -0.25 * k, 0.32 * k, 0.005 * k, [-0.25, 0, 0]);
-  const deck = (x: number, z: number) => (Math.abs(x) <= 0.5 * k && Math.abs(z) <= 0.45 * k ? (Math.hypot(x - hx, z - hz) < pr ? seatY : chestT) : -1);
+  // ---- waist: a short glowing core in a ribbed cage, the swivel the whole upper body twists on
+  coreCage(b, kit, -0.03 * k, B, 0, 0.12 * k, wH, 8);
+  const seatY = B + wH;
+  b.cylb(kit.joint, 0.13 * k, 0.02 * k, 0.006 * k, [-0.03 * k, seatY - 0.02 * k, 0], 'y', 12);
+  const deck = (x: number, z: number) => (Math.abs(x) <= 0.4 * k && Math.abs(z) <= 0.4 * k ? seatY : -1);
   return {
-    deckAt: deck, top: seatY + 0.02 * k, custom: true, dressed: true, hips,
-    seat: (m) => {
-      if (m === hero) { collar(b, kit, m.x, seatY, m.z, m.r, seatY - 0.02 * k, 16); return { y: seatY, socket: true }; }
-      return { y: ringSeat(b, kit, m, deck(m.x, m.z) > 0 ? deck(m.x, m.z) : chestT, 0.015 * k, 10), socket: true };
+    deckAt: deck, top: seatY + 0.4 * k, custom: true, dressed: true, hips,
+    seat: (m) => (m === hero ? { y: seatY, socket: true } : { y: ringSeat(b, kit, m, seatY, 0.015 * k, 10), socket: true }),
+    // ---- the upper body twists with the guns: a hunched predator torso leaning over its beak, the hero gun as the
+    // right forearm, the second gun on the left, big swept pauldrons with blade fins, a reactor pack with exhaust horns
+    torso: (t) => {
+      // the upper body outweighs the legs: broad, top-heavy, shoulders wider than the stance
+      const u = k * 1.3;
+      // dark core and the swivel collar
+      t.cylb(kit.mech, 0.11 * u, 0.05 * u, 0.012 * u, [-0.02 * u, 0, 0], 'y', 12);
+      block(t, kit.mech, -0.04 * u, 0.03 * u, 0, 0.4 * u, 0.3 * u, 0.24 * u, { top: [0.82, 0.8], ch: 0.06 * u, bev: 0.015 * u });
+      // carapace: a high rear hump and a lower front plate tipping down to the beak, a glowing seam between them
+      block(t, kit.armor, -0.1 * u, 0.13 * u, 0, 0.32 * u, 0.42 * u, 0.17 * u, { top: [0.62, 0.66], shift: [-0.03 * u, 0], ch: 0.07 * u, bev: 0.018 * u, bot: 0.012 * u, mid: [[0.5, 0.96, 1.0]] });
+      block(t, kit.shell, -0.13 * u, 0.28 * u, 0, 0.17 * u, 0.2 * u, 0.04 * u, { top: [0.7, 0.7], ch: 0.04 * u, bev: 0.01 * u });
+      block(t, kit.armor, 0.13 * u, 0.06 * u, 0, 0.24 * u, 0.36 * u, 0.15 * u, { top: [0.45, 0.62], shift: [0.05 * u, 0], ch: 0.06 * u, bev: 0.016 * u, bot: 0.01 * u });
+      pbox(t, kit.plasma, 0.02 * u, 0.12 * u, 0.3 * u, 0.04 * u, 0.15 * u, 0, [0, 0, 0.5]);
+      // the face: a narrow dark beak low at the front, a V of hot visor slits, a chin blade under it
+      block(t, kit.armor2, 0.3 * u, 0.04 * u, 0, 0.13 * u, 0.15 * u, 0.09 * u, { top: [0.35, 0.55], shift: [0.03 * u, 0], ch: 0.04 * u, bev: 0.01 * u });
+      both((sd) => pbox(t, kit.hot, 0.008 * u, 0.012 * u, 0.055 * u, 0.355 * u, 0.09 * u, sd * 0.03 * u, [0, sd * 0.45, -sd * 0.35]));
+      block(t, kit.shell, 0.31 * u, 0.0, 0, 0.12 * u, 0.06 * u, 0.04 * u, { top: [0.3, 0.6], shift: [0.05 * u, 0], ch: 0.02 * u, bev: 0.006 * u });
+      both((sd) => {
+        const zs = sd * 0.23 * u;
+        // shoulder drum, pauldron (team block swept back, dark lip, bone cap) and a long blade fin raking back
+        t.cylb(kit.joint, 0.07 * u, 0.08 * u, 0.012 * u, [-0.02 * u, 0.16 * u, zs], 'z', 10);
+        block(t, kit.armor2, -0.04 * u, 0.08 * u, sd * 0.31 * u, 0.3 * u, 0.12 * u, 0.12 * u, { top: [0.85, 0.9], ch: 0.04 * u, bev: 0.012 * u });
+        block(t, kit.armor, -0.05 * u, 0.15 * u, sd * 0.32 * u, 0.32 * u, 0.15 * u, 0.12 * u, { top: [0.55, 0.62], shift: [-0.06 * u, sd * 0.03 * u], ch: 0.05 * u, bev: 0.016 * u, bot: 0.01 * u });
+        block(t, kit.shell, -0.07 * u, 0.25 * u, sd * 0.34 * u, 0.2 * u, 0.06 * u, 0.025 * u, { top: [0.4, 0.8], shift: [-0.05 * u, 0], ch: 0.02 * u, bev: 0.006 * u });
+        block(t, kit.armor, -0.14 * u, 0.24 * u, sd * 0.3 * u, 0.18 * u, 0.025 * u, 0.12 * u, { top: [0.1, 0.6], shift: [-0.16 * u, sd * 0.03 * u], ch: 0.01 * u, bev: 0.005 * u });
+        pbox(t, kit.glow, 0.16 * u, 0.012 * u, 0.008 * u, -0.05 * u, 0.13 * u, sd * 0.392 * u);
+        // upper arm: a dark strut from the shoulder drum down to the gun's trunnion, a piston beside it
+        beam(t, kit.mech, [-0.02 * u, 0.15 * u, sd * 0.3 * u], [0.04 * u, 0.0, sd * 0.42 * u], 0.07 * u, 0.06 * u);
+        piston(t, kit, [-0.08 * u, 0.12 * u, sd * 0.36 * u], [0.0, 0.02 * u, sd * 0.38 * u], 0.012 * u);
+      });
+      // reactor pack: a dark block with two exhaust horns raking up and back, glowing vents
+      block(t, kit.mech, -0.28 * u, 0.06 * u, 0, 0.12 * u, 0.22 * u, 0.2 * u, { top: [0.8, 0.85], ch: 0.03 * u, bev: 0.01 * u });
+      both((sd) => {
+        beam(t, kit.armor2, [-0.3 * u, 0.2 * u, sd * 0.07 * u], [-0.42 * u, 0.36 * u, sd * 0.1 * u], 0.05 * u, 0.05 * u);
+        t.cyl(kit.hot, 0.02 * u, 0.02 * u, 0.01 * u, [-0.425 * u, 0.367 * u, sd * 0.1 * u], 'y', 8);
+        pbox(t, kit.plasma, 0.008 * u, 0.1 * u, 0.04 * u, -0.345 * u, 0.15 * u, sd * 0.06 * u);
+      });
+      return { hp: [[0.06 * u, 0.0, 0.44 * u], [0.06 * u, 0.0, -0.44 * u], [-0.1 * u, 0.32 * u, 0.2 * u], [-0.1 * u, 0.32 * u, -0.2 * u]], heroK: 0.8, at: [-0.03 * u, seatY, 0] };
     },
   };
 }

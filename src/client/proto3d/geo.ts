@@ -4,6 +4,67 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshoptSimplifier } from 'meshoptimizer';
+
+// ---- mesh simplification ------------------------------------------------------------------------------------------
+// Every merged mesh is simplified at mount (meshoptimizer): vertices are welded per part (position + part id), the
+// mesh is collapsed as far as a geometric error of SIMP x the mesh's extent allows, then normals are rebuilt with a
+// crease angle (edges sharper than CREASE stay hard, curved surfaces stay smooth). Flat faces, bevel strips and
+// over-segmented curves lose their spare triangles; the silhouette and part colours stay.
+await MeshoptSimplifier.ready;
+let SIMP = 0.004;
+const CREASE = Math.cos((40 * Math.PI) / 180);
+/** set the simplification error (fraction of each mesh's extent; 0 = off). Returns the previous value. */
+export function setSimplify(err: number): number { const was = SIMP; SIMP = err; return was; }
+
+function simplifyGeo(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const p = g.attributes.position, n = p.count, mid = g.attributes.mid;
+  if (SIMP <= 0 || g.index || n < 96 || n % 3 || Object.keys(g.attributes).some((k) => k !== 'position' && k !== 'normal' && k !== 'mid')) return g;
+  // weld per part (exact position + part id)
+  const key = new Map<string, number>(), P: number[] = [], M: number[] = [], idx = new Uint32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), m = mid ? mid.getX(i) : 0;
+    const k = `${Math.round(x * 1e4)},${Math.round(y * 1e4)},${Math.round(z * 1e4)},${Math.round(m * 1e3)}`;
+    let v = key.get(k);
+    if (v === undefined) { v = P.length / 3; key.set(k, v); P.push(x, y, z); M.push(m); }
+    idx[i] = v;
+  }
+  const [ix] = MeshoptSimplifier.simplify(idx, new Float32Array(P), 3, 0, SIMP, []);
+  if (ix.length >= n * 0.97) return g;
+  // un-index with crease-angle normals: a corner takes the area-weighted normals of the faces round its vertex that
+  // lie within CREASE of its own face
+  const nf = ix.length / 3, fn = new Float32Array(nf * 3), faces: number[][] = Array.from({ length: P.length / 3 }, () => []);
+  for (let f = 0; f < nf; f++) {
+    const a = ix[f * 3]! * 3, b = ix[f * 3 + 1]! * 3, c = ix[f * 3 + 2]! * 3;
+    const ux = P[b]! - P[a]!, uy = P[b + 1]! - P[a + 1]!, uz = P[b + 2]! - P[a + 2]!;
+    const vx = P[c]! - P[a]!, vy = P[c + 1]! - P[a + 1]!, vz = P[c + 2]! - P[a + 2]!;
+    fn[f * 3] = uy * vz - uz * vy; fn[f * 3 + 1] = uz * vx - ux * vz; fn[f * 3 + 2] = ux * vy - uy * vx;
+    for (let j = 0; j < 3; j++) faces[ix[f * 3 + j]!]!.push(f);
+  }
+  const pos = new Float32Array(nf * 9), nor = new Float32Array(nf * 9), mids = new Float32Array(nf * 3);
+  for (let f = 0; f < nf; f++) {
+    const l0 = Math.hypot(fn[f * 3]!, fn[f * 3 + 1]!, fn[f * 3 + 2]!) || 1;
+    const ax = fn[f * 3]! / l0, ay = fn[f * 3 + 1]! / l0, az = fn[f * 3 + 2]! / l0;
+    for (let j = 0; j < 3; j++) {
+      const v = ix[f * 3 + j]!, o = (f * 3 + j) * 3;
+      pos[o] = P[v * 3]!; pos[o + 1] = P[v * 3 + 1]!; pos[o + 2] = P[v * 3 + 2]!;
+      mids[f * 3 + j] = M[v]!;
+      let sx = 0, sy = 0, sz = 0;
+      for (const h of faces[v]!) {
+        const bx = fn[h * 3]!, by = fn[h * 3 + 1]!, bz = fn[h * 3 + 2]!, lb = Math.hypot(bx, by, bz) || 1;
+        if ((ax * bx + ay * by + az * bz) / lb >= CREASE) { sx += bx; sy += by; sz += bz; }
+      }
+      const ls = Math.hypot(sx, sy, sz) || 1;
+      nor[o] = sx / ls; nor[o + 1] = sy / ls; nor[o + 2] = sz / ls;
+    }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  if (mid) out.setAttribute('mid', new THREE.BufferAttribute(mids, 1));
+  g.dispose();
+  return out;
+}
 
 export type V3 = [number, number, number];
 export interface UMat { uid: number; base: THREE.Material }
@@ -282,8 +343,9 @@ export class Bld {
   mount(parent: THREE.Object3D, decalMat?: THREE.Material, opts: { shadow?: boolean } = {}): THREE.Mesh[] {
     const out: THREE.Mesh[] = [];
     for (const [mat, list] of this.m) {
-      const g = mergeGeometries(list, false);
-      if (!g) continue;
+      const g0 = mergeGeometries(list, false);
+      if (!g0) continue;
+      const g = simplifyGeo(g0);
       const mesh = new THREE.Mesh(g, mat);
       mesh.castShadow = opts.shadow !== false;
       mesh.receiveShadow = true;

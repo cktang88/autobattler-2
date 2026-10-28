@@ -1,3 +1,4 @@
+import { setSimplify } from './geo.ts';
 // Standalone 3D prototype: a battlefield slice with starter designs built procedurally from their part data.
 // Not wired into the game. Build: `npm run build:proto3d` -> public/proto3d.js, open public/proto3d.html.
 
@@ -14,6 +15,8 @@ import { aimPod, aimTurret, recoilKick, recoilRelax, type Turret } from './weapo
 const params = new URLSearchParams(location.search);
 const lab = params.get('lab');
 const has = (k: string, d = false) => (params.has(k) ? params.get(k) !== '0' : d);
+// ?simp=<err> mesh simplification error (fraction of each mesh's extent), ?simp=0 turns it off for comparison
+if (params.has('simp')) setSimplify(Number(params.get('simp')));
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const renderer = createRenderer(canvas);

@@ -188,6 +188,30 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     }
     bk.mount(H.yaw);
   }
+  // mech torso: the chassis builds the upper body into the hero's yaw group (so torso + weapons twist together) and
+  // says where the hero and the pods hang; the hero's own ring / yoke and the pod brackets go
+  if (out?.torso && hero >= 0 && tur[hero] && !tur[hero]!.fixed && !flying) {
+    const H = tur[hero]!, kH = H.yaw.scale.x;
+    for (const o of [...H.yaw.children]) if ((o as THREE.Mesh).isMesh) H.yaw.remove(o);
+    const tb = new Bld(), T = new THREE.Group();
+    T.scale.setScalar(1 / kH);
+    const res = out.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i]!.r) });
+    tb.mount(T);
+    H.yaw.add(T);
+    if (res.at) H.yaw.position.set(...res.at);
+    const hk = res.heroK ?? 1, p0 = res.hp[0] ?? [0, 0, 0];
+    H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);
+    H.pitch.scale.setScalar(hk);
+    H.r *= hk;
+    pods.forEach((i, j) => {
+      const p = res.hp[j + 1], tu = tur[i]!;
+      if (p) tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
+      // arm / shoulder weapons are sized like limbs of one body: by their size relative to the hero, not shrunk to fit
+      // beside a deck turret (twin arm guns of the same kind come out the same size)
+      const want = H.r * Math.min(1, weaponD(mods[i]!) / weaponD(mods[hero]!));
+      tu.yaw.scale.multiplyScalar(want / tu.r); tu.r = want;
+    });
+  }
   // turret list in design mount order (render3d maps mount i -> the i-th present turret)
   mods.forEach((_, i) => { if (tur[i] && offs[i]) turrets.push(tur[i]!); });
   for (const i of pods) tur[i]!.host = turrets.indexOf(tur[hero]!);
