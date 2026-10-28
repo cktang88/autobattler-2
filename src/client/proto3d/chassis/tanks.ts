@@ -11,8 +11,7 @@
 //                            prow out to a castor pair.
 //   colossus   'titan'      multi-turret heavy tank: long central hull, two armoured side casemates over the outer tracks,
 //                            nose barbette, rear MG cupola, handrails and a ladder.
-//   siegeplat  'siegeplat'  siege platform: girder spine with lattice side girders, two pedestals on rams fed by ammo
-//                            hoses, four hydraulic outrigger jacks, crew cab front-left, fire-control mast front-right.
+//   (siegeplat lives in chassis/heavies.ts)
 //   juggernaut 'juggernaut' breaching casemate, wider than long: chevron hull, frontal plate stacks + ERA, set-back
 //                            casemate, hex keep, full-width toothed mine plough on push arms and rams.
 // Running gear looks per shape live in mobility/tracks.ts (trackStyle). Shape helpers: chassis/tanks-kit.ts.
@@ -383,74 +382,6 @@ function colossus(c: ChassisCtx): ChassisOut {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-function siegeplat(c: ChassisCtx): ChassisOut {
-  // Siege platform (hs-kit): a long girder platform (dark box spine, lattice side girders, armoured deck plates) on four
-  // bogies, two weapon pedestals on hydraulic rams fed by ammo hoses from the rear hoppers, four hydraulic outrigger
-  // jacks on ground pads (stowed when moving on legs / hover), handrailed catwalks. Asymmetric: crew cab front-left,
-  // fire-control mast front-right, exhaust right rear, antenna left rear.
-  const { b, kit, L, W, S, stance } = c;
-  const kx = L / 4, kz = W / 2, k = Math.min(kx, kz);
-  const fine = fineFor(S);
-  const y0 = stance.y0;
-  const X = (f: number) => f * kx, Z = (f: number) => f * kz;
-  facetHull(c, kit.mech, [[X(-1.9), 0, 0.02, 0.14, 0.16, Z(0.36), Z(0.42), Z(0.42)], [X(1.88), 0.02, 0.04, 0.14, 0.16, Z(0.32), Z(0.38), Z(0.38)]]);
-  const H = facetHull(c, kit.armor, [
-    [X(-1.98), 0.14, 0.14, 0.26, 0.3, Z(0.4), Z(0.5), Z(0.46)],
-    [X(-1.84), 0.12, 0.12, 0.28, 0.32, Z(0.46), Z(0.56), Z(0.52)],
-    [X(1.74), 0.12, 0.12, 0.28, 0.32, Z(0.46), Z(0.56), Z(0.52)],
-    [X(1.98), 0.14, 0.14, 0.22, 0.24, Z(0.36), Z(0.46), Z(0.34)],
-  ]);
-  const dY = y0 + 0.32;
-  // lattice side girders under the deck edge (the platform's construction read)
-  both((s) => trussRun(b, kit, [X(-1.7), dY - 0.13 * k, s * Z(0.6)], [X(1.7), dY - 0.13 * k, s * Z(0.6)], [0, 0.07 * k, 0], 0.012 * k, 8));
-  // deck plates in two runs with a gap (walkways), handrails along the edges
-  both((s) => armorPlate(b, kit, kit.armor2, frame([X(-0.05), dY, s * Z(0.3)], [0, 1, 0], [1, 0, 0]), rectP(X(3.2), Z(0.36), 0.03 * k), 0.016 * k, { standoff: 0.005 * k, gap: 0.01 * k }));
-  if (fine) both((s) => handrail(b, kit, [[X(-1.75), dY + 0.11 * k, s * Z(0.52)], [X(-0.6), dY + 0.11 * k, s * Z(0.52)], [X(0.7), dY + 0.11 * k, s * Z(0.52)], [X(1.35), dY + 0.11 * k, s * Z(0.52)]], 0.007 * k, 0.11 * k));
-  // crew cab front-left (glass visor, periscopes) and fire-control mast front-right
-  const cabX = X(1.62), cabZ = -Z(0.24);
-  const Cb = facetHull(c, kit.armor, [
-    [cabX - X(0.3), 0.32, 0.32, 0.44, 0.5, Z(0.2), Z(0.22), Z(0.18)],
-    [cabX + X(0.18), 0.32, 0.32, 0.44, 0.5, Z(0.2), Z(0.22), Z(0.18)],
-    [cabX + X(0.32), 0.32, 0.32, 0.36, 0.38, Z(0.18), Z(0.2), Z(0.14)],
-  ], cabZ, false);
-  b.g(new THREE.BoxGeometry(0.02 * k, 0.05 * k, Z(0.3)), kit.glass, mtx([cabX + X(0.25), y0 + 0.43, cabZ], [0, 0, 0.9]));
-  sensorMast(b, kit, [X(1.6), dY, Z(0.3)], 0.5 * k, 0.018 * k, 0, 1.4);
-  // ammo hoppers at the tail feeding the pedestals through hoses
-  const hop: V3[] = [[X(-1.6), dY, -Z(0.28)], [X(-1.6), dY, Z(0.28)]];
-  for (const p of hop) {
-    b.g(bevBox(0.3 * k, 0.2 * k, 0.24 * k, 0.02 * k), kit.armor2, mtx([p[0], p[1] + 0.1 * k, p[2]]));
-    b.g(new THREE.BoxGeometry(0.32 * k, 0.025 * k, 0.26 * k), kit.mech, mtx([p[0], p[1] + 0.16 * k, p[2]]));
-  }
-  const sorted = [...c.mounts].sort((a, q) => a.z - q.z);
-  sorted.forEach((m, i) => { const p = hop[Math.min(i, 1)]; hose(b, kit, [p[0] + 0.15 * k, p[1] + 0.12 * k, p[2]], [m.x - m.r, dY + 0.18 * k, m.z], 0.018 * k, 0.12, 5); });
-  // outrigger jacks: four, on ground pads when grounded, folded up against the platform otherwise
-  const g = grounded(c);
-  for (const fx of [1.3, -1.3]) both((s) => {
-    const a: V3 = [X(fx), dY - 0.05 * k, s * Z(0.5)];
-    const foot: V3 = g ? [X(fx + Math.sign(fx) * 0.45), 0, s * Z(1.25)] : [X(fx + Math.sign(fx) * 0.2), dY - 0.1 * k, s * Z(0.85)];
-    outrigger(b, kit, a, foot, 0.05 * k, fine, kit.mech);
-  });
-  // exhaust right rear, antenna left rear, ladder on the left side, tow hooks
-  exhaustBox(b, kit, frame([X(-1.88), dY, Z(0.0)], [0, 1, 0], [0, 0, 1]), 0.05 * k, fine);
-  antenna(b, kit, X(-1.85), dY, -Z(0.46), 1.0 * k, 0.009 * k, [-0.15, 0, 0]);
-  ladder(b, kit, [X(0.3), 0.06, -Z(0.56)], [X(0.3), dY, -Z(0.56)], 0.12 * k, [1, 0, 0], [0, 0, -1], 0.03 * k);
-  cagedLamp(b, kit, frame([X(1.9), dY, Z(0.0)], [0, 1, 0], [1, 0, 0]), 0.07 * k, fine);
-  const deck = (x: number, z: number) => Math.max(H.deck(x, z), Cb.deck(x, z));
-  return {
-    deckAt: deck, top: dY + 0.4 * k, custom: true, dressed: true,
-    seat: (m) => {
-      // armoured pedestal on two hydraulic rams
-      const h = 0.24 * k, y = dY + h;
-      frustum(b, kit.armor2, ngon(8, m.r * 1.5, m.r * 1.5, Math.PI / 8, m.x, m.z), dY - 0.01, 0.06 * k, { top: [0.94, 0.94], bev: 0.008 * k });
-      b.cylb(kit.mech, m.r * 0.8, h - 0.06 * k, 0.01 * k, [m.x, dY + 0.05 * k, m.z], 'y', 8);
-      both((s) => piston(b, kit, [m.x - m.r * 1.2, dY + 0.05 * k, m.z + s * m.r * 0.9], [m.x - m.r * 0.3, y - 0.04 * k, m.z + s * m.r * 0.7], 0.025 * k, 0.5, fine));
-      frustum(b, kit.armor, ngon(8, m.r * 1.25, m.r * 1.25, Math.PI / 8, m.x, m.z), y - 0.07 * k, 0.05 * k, { top: [0.94, 0.94], bev: 0.008 * k });
-      return { y: ringSeat(b, kit, m, y - 0.02 * k, 0.02 * k, 16), socket: true };
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
 function juggernaut(c: ChassisCtx): ChassisOut {
   // Breaching casemate (hs-kit): wider than long. A dark belly, a chevron-plan faceted lower hull, a set-back casemate,
   // a hex keep for the main gun. The front is a wall of layered armour: two-layer plate stacks on the chevron facets
@@ -532,5 +463,4 @@ registerChassis('hex', warden);
 registerChassis('fortress', bastion);
 registerChassis(['long', 'longarm'], longarm);
 registerChassis('colossus', colossus);
-registerChassis('siegeplat', siegeplat);
 registerChassis('juggernaut', juggernaut);

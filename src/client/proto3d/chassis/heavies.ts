@@ -23,6 +23,7 @@ import { ringSeat } from './hs-kit-vehicles.ts';
 import type { Bld } from '../geo.ts';
 
 const biggest = (ms: MountSpec[]) => ms.reduce<MountSpec | undefined>((a, m) => (!a || m.r > a.r ? m : a), undefined);
+const grounded = (c: ChassisCtx) => !c.stance.legs && c.mob.kind !== 'air';
 
 /** plain box for small emissive / accent parts */
 function pbox(b: Bld, mat: MatLike, w: number, h: number, d: number, x: number, y: number, z: number, rot?: V3): void {
@@ -172,3 +173,114 @@ function riot(c: ChassisCtx): ChassisOut {
 }
 
 registerChassis('riot', riot);
+
+// =====================================================================================================================
+// SIEGEPLAT: siege spire (gun tower on a girder keel, magazine counterweight, four splayed jack legs)
+// =====================================================================================================================
+function siegeplat(c: ChassisCtx): ChassisOut {
+  const { b, kit, L, W, S, stance } = c;
+  const kx = L / 4, kz = W / 1.7; // authored at L = 4, W = 1.7
+  const k = Math.min(kx, kz) * (0.9 + 0.035 * S);
+  const fine = fineFor(S);
+  const y0 = stance.y0;
+  const ya = Math.max(stance.yt, y0 + 0.22 * k);
+  const wi = Math.min(stance.wi, 0.5 * kz);
+  const hero = biggest(c.mounts);
+  const hx = hero?.x ?? 0.8 * kx, R = hero?.r ?? 0.68 * k;
+  const gs = hx >= -0.05 ? 1 : -1; // tower end (+1 front)
+  const seatY = ya + 1.35 * k;
+  // ---- keel: a narrow dark girder spine recessed between the bogies, sloped armour skirts leaning in over it
+  block(b, kit.mech, 0, y0, 0, 3.7 * kx, 2 * wi * 0.85, ya - y0 + 0.1 * k, { top: [0.97, 0.9], ch: 0.1 * k, bev: 0.025 * k, bot: 0.05 * k });
+  both((s) => block(b, kit.armor2, -gs * 0.2 * kx, ya - 0.12 * k, s * 0.36 * kz, 2.6 * kx, 0.22 * kz, 0.26 * k, { top: [0.94, 0.5], shift: [0, -s * 0.06 * kz], ch: 0.06 * k, bev: 0.02 * k }));
+  // ---- the gun tower: slewing drum, two tall layered pylons, a glowing coil column between them, big lift rams
+  const tx = hx;
+  b.lathe(kit.armor2, [[0, 0], [R * 0.95, 0], [R * 0.95, 0.08 * k], [R * 0.86, 0.14 * k], [0, 0.14 * k]], [tx, ya + 0.08 * k, 0], 'y', 16);
+  const pz = R * 0.46, pH = seatY - ya - 0.32 * k, pB = ya + 0.2 * k;
+  both((s) => {
+    // pylon: dark inner core, team armour slab tapering up and leaning back, bone cheek plate on its outer face
+    block(b, kit.mech, tx, pB, s * pz, R * 1.15, 0.2 * k, pH + 0.14 * k, { top: [0.62, 0.9], shift: [-gs * 0.06 * kx, 0], ch: 0.06 * k, bev: 0.02 * k });
+    block(b, kit.armor, tx + gs * 0.02 * kx, pB - 0.02 * k, s * (pz + 0.09 * k), R * 1.3, 0.12 * k, pH * 0.92, { top: [0.5, 0.85], shift: [-gs * 0.1 * kx, 0], ch: 0.05 * k, bev: 0.02 * k });
+    block(b, kit.shell, tx - gs * 0.04 * kx, pB + pH * 0.3, s * (pz + 0.16 * k), R * 0.8, 0.06 * k, pH * 0.5, { top: [0.62, 0.8], shift: [-gs * 0.06 * kx, 0], ch: 0.04 * k, bev: 0.015 * k });
+    pbox(b, kit.glow, 0.03 * k, pH * 0.42, 0.03 * k, tx + gs * R * 0.28, pB + pH * 0.4, s * (pz + 0.16 * k), [0, 0, -gs * 0.28]);
+    // lift ram: from the deck behind the tower up to the cradle
+    piston(b, kit, [tx - gs * R * 1.15, ya + 0.12 * k, s * (pz + 0.2 * k)], [tx - gs * R * 0.35, seatY - 0.2 * k, s * (pz + 0.1 * k)], 0.06 * k, 0.5, fine);
+  });
+  glowCore(b, kit, [tx, pB + pH * 0.48, 0], R * 0.3, pH * 0.82, 'y', 6);
+  // cradle under the collar: a stepped octagonal plate stack bridging the pylon tops
+  b.lathe(kit.armor2, [[0, 0], [R * 0.8, 0], [R * 0.9, 0.06 * k], [R * 0.9, 0.12 * k], [0, 0.12 * k]], [tx, seatY - 0.2 * k, 0], 'y', 8);
+  b.lathe(kit.armor, [[0, 0], [R * 0.84, 0], [R * 0.78, 0.08 * k], [0, 0.08 * k]], [tx, seatY - 0.08 * k, 0], 'y', 8);
+  // prow: a layered armour wedge climbing from the bow up the tower's face (dark base, team mass, bone brow)
+  block(b, kit.armor2, tx + gs * R * 1.0, y0 + 0.02 * k, 0, 0.75 * kx, 0.95 * kz, ya - y0 + 0.2 * k, { top: [0.5, 0.86], shift: [-gs * 0.14 * kx, 0], ch: 0.1 * k, bev: 0.03 * k });
+  block(b, kit.armor, tx + gs * R * 0.78, ya + 0.12 * k, 0, 0.6 * kx, 0.8 * kz, pH * 0.5, { top: [0.3, 0.86], shift: [-gs * 0.16 * kx, 0], ch: 0.08 * k, bev: 0.03 * k });
+  // sensor head on the tower front: dark visor with a glowing slit
+  block(b, kit.mech, tx + gs * R * 0.62, pB + pH * 0.62, 0, 0.22 * k, 0.32 * k, 0.16 * k, { top: [0.6, 0.8], shift: [gs * 0.03 * k, 0], ch: 0.04 * k });
+  pbox(b, kit.glow, 0.03 * k, 0.04 * k, 0.24 * k, tx + gs * (R * 0.62 + 0.1 * k), pB + pH * 0.62 + 0.1 * k, 0);
+  // ---- magazine at the other end: armoured housing, a revolving shell drum glowing through its cut-outs
+  const mx = -gs * 1.3 * kx, ml = 1.05 * kx, mH = 0.72 * k;
+  block(b, kit.mech, mx, ya + 0.04 * k, 0, ml, 0.9 * kz, mH, { top: [0.9, 0.9], ch: 0.1 * k, bev: 0.03 * k });
+  glowCore(b, kit, [mx + gs * 0.05 * kx, ya + mH * 0.62, 0], 0.22 * k, 1.2 * kz, 'z', 8, kit.hot);
+  // armour hood over the drum: team shell with a bone ridge, open at the sides (the drum shows)
+  block(b, kit.armor, mx - gs * 0.05 * kx, ya + mH * 0.85, 0, ml * 0.9, 0.8 * kz, 0.2 * k, { top: [0.8, 0.7], ch: 0.1 * k, bev: 0.035 * k });
+  block(b, kit.shell, mx - gs * 0.1 * kx, ya + mH * 0.85 + 0.18 * k, 0, ml * 0.55, 0.36 * kz, 0.08 * k, { top: [0.8, 0.7], ch: 0.06 * k, bev: 0.02 * k });
+  block(b, kit.armor2, mx - gs * ml * 0.45, ya - 0.02 * k, 0, 0.2 * kx, 1.02 * kz, mH * 0.75, { top: [0.5, 0.9], shift: [gs * 0.05 * kx, 0], ch: 0.06 * k, bev: 0.02 * k });
+  // the spine: a massive armoured feed boom climbing from the magazine up the tower's back into the cradle (dark core,
+  // team armour plates in two runs with a gap, bone ridge caps, a glowing feed channel along its top)
+  const f0: V3 = [mx + gs * ml * 0.2, ya + mH * 0.55, 0], f2: V3 = [tx - gs * R * 0.55, seatY - 0.22 * k, 0];
+  const f1: V3 = [f0[0] + (f2[0] - f0[0]) * 0.5, f0[1] + (f2[1] - f0[1]) * 0.42, 0];
+  beam(b, kit.mech, f0, f2, 0.34 * k, 0.3 * k);
+  for (const [a0, a1, mat] of [[0.08, 0.48, kit.armor], [0.54, 0.92, kit.shell]] as [number, number, MatLike][]) {
+    const p0: V3 = [f0[0] + (f2[0] - f0[0]) * a0, f0[1] + (f2[1] - f0[1]) * a0 + 0.13 * k, 0];
+    const p1: V3 = [f0[0] + (f2[0] - f0[0]) * a1, f0[1] + (f2[1] - f0[1]) * a1 + 0.13 * k, 0];
+    both((s) => beam(b, mat, [p0[0], p0[1], s * 0.13 * k], [p1[0], p1[1], s * 0.13 * k], 0.2 * k, 0.12 * k, [0, 1, s * 0.6]));
+  }
+  // the body under the boom: a hunched armoured mass rising from the keel into the boom (dark core, team flank plates
+  // stepping up toward the tower, bone plates, glow strip), so magazine, body, boom and tower read as one climbing mass
+  {
+    const xa = mx + gs * ml * 0.5, xb = tx - gs * R * 0.92, xc = (xa + xb) / 2, bl = Math.abs(xb - xa) + 0.1 * kx;
+    const at = (x: number) => f0[1] + ((f2[1] - f0[1]) * (x - f0[0])) / (f2[0] - f0[0]);
+    const hA = at(xc) - ya;
+    block(b, kit.mech, xc, ya - 0.04 * k, 0, bl, 0.62 * kz, hA, { top: [0.9, 0.7], ch: 0.1 * k, bev: 0.03 * k });
+    both((s) => {
+      block(b, kit.armor, xc + gs * 0.04 * kx, ya + 0.02 * k, s * 0.33 * kz, bl * 0.95, 0.16 * kz, hA * 0.82, { top: [0.8, 0.6], shift: [gs * 0.08 * kx, -s * 0.03 * kz], ch: 0.05 * k, bev: 0.02 * k });
+      block(b, kit.shell, xc + gs * 0.1 * kx, ya + hA * 0.35, s * 0.42 * kz, bl * 0.5, 0.06 * kz, hA * 0.4, { top: [0.7, 0.8], shift: [gs * 0.05 * kx, 0], ch: 0.03 * k, bev: 0.012 * k });
+      pbox(b, kit.glow, bl * 0.6, 0.04 * k, 0.03 * k, xc, ya + hA * 0.25, s * 0.42 * kz);
+    });
+  }
+  beam(b, kit.plasma, [f0[0], f0[1] + 0.17 * k, 0], [f2[0], f2[1] + 0.17 * k, 0], 0.07 * k, 0.05 * k);
+  void f1;
+  // ---- four splayed jack legs: armoured upper leg out from the keel to a knee drum, a jack down to a broad pad
+  const g = grounded(c);
+  for (const fx of [1, -1]) both((s) => {
+    const hip: V3 = [fx * 1.25 * kx, ya + 0.02 * k, s * 0.42 * kz];
+    const knee: V3 = g ? [fx * 1.62 * kx, ya + 0.28 * k, s * 1.05 * kz] : [fx * 1.45 * kx, ya + 0.26 * k, s * 0.72 * kz];
+    const foot: V3 = g ? [fx * 1.95 * kx, 0, s * 1.3 * kz] : [fx * 1.62 * kx, ya - 0.05 * k, s * 0.86 * kz];
+    jointDrum(b, kit, hip, 0.1 * k, 0.16 * k, 'x');
+    beam(b, kit.mech, hip, knee, 0.13 * k, 0.11 * k);
+    beam(b, fx === gs ? kit.armor : kit.shell, [hip[0], hip[1] + 0.08 * k, hip[2]], [knee[0], knee[1] + 0.07 * k, knee[2]], 0.19 * k, 0.07 * k);
+    b.cylb(kit.joint, 0.085 * k, 0.16 * k, 0.015 * k, [knee[0], knee[1], knee[2] - 0.08 * k], 'z', 10);
+    b.strut(kit.armor2, knee, [foot[0], foot[1] + 0.12 * k, foot[2]], 0.06 * k, 0.055 * k, 8);
+    b.lathe(kit.mech, [[0, 0], [0.17 * k, 0], [0.17 * k, 0.03 * k], [0.12 * k, 0.07 * k], [0, 0.07 * k]], foot, 'y', 8);
+    piston(b, kit, [hip[0] - fx * 0.1 * kx, hip[1] - 0.05 * k, s * 0.3 * kz], [knee[0] - fx * 0.05 * kx, knee[1] - 0.12 * k, knee[2] - s * 0.05 * kz], 0.028 * k, 0.5, fine);
+  });
+  // tail lights on the magazine end
+  both((s) => pbox(b, kit.lamp, 0.03 * k, 0.04 * k, 0.12 * k, mx - gs * (ml * 0.55 + 0.02 * k), ya + 0.2 * k, s * 0.35 * kz));
+  if (fine) cableBundle(b, kit, [mx + gs * ml * 0.4, ya + 0.15 * k, 0.3 * kz], [tx - gs * R * 0.5, pB + 0.1 * k, pz + 0.2 * k], 0.022 * k, [0, 1, 0], 2, 0.08);
+  if (stance.legs) {
+    const t = stance.thick;
+    block(b, kit.mech, 0, stance.hipY - t * 0.9, 0, L * 0.6, W * 0.5, y0 - stance.hipY + t * 0.95, { top: [1.06, 1.08], ch: t * 0.5, bev: t * 0.12 });
+  }
+  const deck = (x: number, z: number) => {
+    if (Math.abs(x - tx) < R * 0.55 && Math.abs(z) < R * 0.55) return seatY;
+    if (Math.abs(x - mx) < ml / 2 && Math.abs(z) < 0.4 * kz) return ya + mH * 0.85 + 0.2 * k;
+    return Math.abs(x) <= 1.9 * kx && Math.abs(z) <= 0.7 * kz ? ya + 0.12 * k : -1;
+  };
+  return {
+    deckAt: deck, top: seatY + 0.1 * k, custom: true, dressed: true,
+    seat: (m) => {
+      if (m === hero) { collar(b, kit, m.x, seatY, m.z, m.r, seatY - 0.06 * k, 16); return { y: seatY, socket: true }; }
+      return { y: ringSeat(b, kit, m, Math.max(ya + 0.12 * k, deck(m.x, m.z)), 0.03 * k, 14), socket: true };
+    },
+  };
+}
+
+registerChassis('siegeplat', siegeplat);
