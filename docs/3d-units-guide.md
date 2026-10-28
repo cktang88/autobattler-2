@@ -1,0 +1,185 @@
+# 3D units: art direction, architecture and lessons learned
+
+How the procedural 3D units (hulls, legs, weapons) are built, what makes them look good, and the rules we learned
+the hard way. Read this before touching `src/client/proto3d/`. The goal: units that look as cool, deadly and
+imposing as Mechabellum / War Robots / BattleTech, readable from the RTS camera.
+
+References live in `docs/inspo/` (user-picked) and `docs/inspo/research/` (War Robots Ares, Behemoth, Fafnir,
+Raijin, Ravana; BattleTech Timber Wolf). Mechabellum unit renders and top-down silhouettes were the first target.
+**Look at real reference images, never design from memory.**
+
+---
+
+## 1. Art direction: the rules
+
+### The weapon IS the body
+- Every unit is built around **one huge weapon system** (the "hero": its biggest weapon). On a tank, the hero's
+  housing is the whole upper body (Mechabellum's Sabertooth). On a mech, the weapons are its arms and shoulders.
+- **Extra weapons ride the main system** (side pods, mirrored shoulder pairs, top pods). Never scattered as
+  separate turrets on a deck: that looks like duct tape and makes everything block everything else's traverse.
+- **Never a generic flat platform with turrets on top.** No turret discs on a slab: a disc on a box reads as
+  "someone put a cylinder on a tank".
+- The hull is the **carrier** of the weapon: where it sits (centre, far back with a counterweight, on a spine, on a
+  shoulder yoke), and what holds it up. Weapon locations are designed in, not N generic slots.
+
+### Silhouette
+- **Vertical and integrated**, not flat: stacked, layered masses climbing up into the weapon (raised torso, gun
+  tower, shoulder masses over the running gear).
+- **Top-heavy and wide**, like War Robots: compact torso, broad shoulders, weapons sticking out wider than the body
+  at head height, thick legs in a wide stance. Lean forward, hunch; a narrow visor slit or a V of glowing eyes reads
+  as menace. Swept-back armour blades and fins.
+- **Every hull distinct from every other**, zoomed out and from the top-down camera: Sabertooth = four corner
+  track pods; Fortress = two long forward pods; Vulcan = two big shoulder masses; Scorpion = long spine + splayed
+  legs. Diverse sizes, shapes, module types and arrangements.
+- Proportions matter more than detail: a mech whose legs outweigh its torso looks timid.
+
+### Surface and parts
+- Hulls are **assemblies of distinct chunky parts** with deep dark gaps between blocks, not one moulded block.
+  Paint roles alternate: `kit.armor` (team colour), `kit.armor2` (near-black team), `kit.shell` (light bone),
+  `kit.mech` (near-black mechanics), `kit.joint` (metal), emissives `kit.glow` / `kit.lamp` / `kit.plasma` /
+  `kit.hot`.
+- **Layered armour**: 2-3 stacked bevelled plates with offset edges; exposed mechanics (rams, drums, pistons) in
+  the gaps; glowing cores seen through cut-outs.
+- **A few big details, not many tiny ones.** Rows of tiny boxes read as "teeth" or "keyboard keys". Dots are cheap.
+- **Glow must be chunky** enough to bloom (`kit.plasma` / `kit.glow` strips with real width, glowing cores).
+  Thin emissive lines read as "white strings". `kit.rail` (blue, emissive 2.4) saturates to flat white: prefer
+  `kit.plasma` for big glowing shapes.
+- **Not low-poly**: rounded parts use real segment counts (weapon `Bld.segMax` is 16 on S>=2 units, 10 on S1).
+
+### Weapons (year 2500, not modern / 1990s)
+- New hardware on new physics: angular armoured housings, faceted glowing cores, layered receivers with vents and
+  cut-outs. Families live in `weapons/w2500.ts` (rotary, blades, arc / arcCannon, lens, cradle, flame, carbine,
+  artillery, emitter, railDriver).
+- **Barrels are hollow** (a hollow muzzle with an inner wall and a dark core), and **length follows calibre**: thin
+  guns are short (`barrel()` caps length at ~18 bores; `railDriver` caps by bore too).
+- **Housing scales with the chassis** (`C.arm`, `mechHousing` levels): a small unit carrying a big gun is mostly
+  exposed gun on a slim mount; a big body wraps it in full armour.
+- The black turret ring/collar must **never overhang its base** (no "rubber gasket"): seats and collars are
+  narrower than the turret (`collar()`, `ringSeat()`).
+- Things the user hated, never again: nerf / foam guns, MLRS like an overhead projector, Tesla like Christmas decor,
+  a railgun like a sandwiched block of ice, a laser with a round dish like a **suction cup**, coil teeth like a
+  mouth. Prefer open forks, armoured petals, crystals, angular shrouds.
+
+---
+
+## 2. Architecture
+
+```
+src/client/proto3d/
+  units3d.ts        buildUnit(design): hero pick + scaling, pods, chassis + mobility, turrets, torso, zfix, skin
+  geo.ts            Bld: per-material geometry builder (box, slab, cyl, lathe, loft, strut, g); merge + SIMPLIFY at mount
+  zfix.ts           z-fighting fix pass (run once per built unit)
+  materials.ts      shared per-team "uber" material, role rows (kit.*)
+  surface3d.ts      triplanar surface skins (layers, L0/L1/L2 tables)
+  weapons3d.ts      buildTurret: rig groups, sizing, family dispatch (W25 families first)
+  weapons/          wkit.ts (barrel, mechHousing, finishHousing, helpers), w2500.ts (families), legacy guns/launchers/...
+  chassis/          registry.ts (READ ITS HEADER), one builder per shape/id, shapes.ts + hs-kit*.ts helpers
+  mobility/         legs.ts (biped / spider / bug legs, legStance), tracks.ts, wheels, hover, ...
+src/shared/mountgeo.ts   mount points shared with the sim (MOUNT_PTS / FOOT_MOUNTS / PART_SHAPES)
+src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a template unit), UnitStage3D.ts (garage)
+```
+
+- Frame: +x = nose / muzzle, +y up, +z right; 1 cell = 1 unit.
+- Turret rig groups: `yaw` (traverse) > `pitch` > `recoil` > `spin`; static parts merged per material per group
+  (`C.b` yaw, `C.p` pitch, `C.rc` recoil, `C.sp` spin). `C.muzzle(x,y,z)` adds a muzzle point; the game fires
+  effects from the muzzle's world position.
+- **Hero scaling** (units3d): housing ~0.8 x min(L, W) (cap x3.2); secondaries >= 0.26 x min(L, W); on overlap the
+  hero keeps its size.
+- **Pods**: on ground hulls with S <= 3 whose shape is not in PART_SHAPES, secondary weapons ride the hero's yaw
+  group as pods (`Turret.host`, aimed with `aimPod`, +-0.4 rad of their own). The chassis builder only receives the
+  hero (and utilities) in `c.mounts`.
+- **Mech torso mode** (`ChassisOut.torso`): the chassis builds the upper body into the hero's yaw group, so torso
+  and weapons twist together (a mech, not a turret on a box). It returns weapon hardpoints in the yaw frame:
+  `hp[0]` = hero trunnion (its pitch group moves there), `hp[1..]` = pods; `at` moves the twist pivot; `heroK`
+  rescales the hero (arm guns are smaller than a deck main gun). units3d drops the hero's ring / yoke / pod
+  brackets and sizes pods as limbs (same weapon = same size). The torso group is tagged `userData.torso` so the
+  garage socket / highlight skips it. Example: `raider` in `chassis/mechframes.ts`.
+- **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
+  (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
+  footprint art (`render/footart.ts`) still draws from them.
+- The game (`render3d/units-adapter.ts`) builds one template per (design, team) and instances it; nodes under a
+  turret's groups are dynamic. Anything you hang under a turret group moves with it.
+- The garage socket rings (`UnitStage3D.buildMounts`) use the weapon's OWN parts only (not pods riding it, not a
+  torso) and sit over the trunnion when a weapon hangs off a torso. Keep that in mind when you add parts to a yaw
+  group: tag non-weapon parts (`userData.torso = true`).
+
+### Legs
+`mobility/legs.ts`: biped thighs / shins / feet (`hsThigh` / `hsShin` / `hsFoot`) are layered armour segments over
+a dark core, big hip / knee drums, bright rams, stepped feet. `legStance`: biped `hipY = 0.56*m + 0.14` (tall
+stance: thigh and shin both read), bones 1.12x the hip height so the knee always bends forward. Chassis that place
+their own hips (`ChassisOut.hips`) set the leg height: hips set too low make short stubby legs.
+
+---
+
+## 3. Triangle budgets and mesh simplification
+
+- Budget per unit incl. weapons and gear: **S1 <= 15k, S2..S5 <= 30k** (registry.ts). Spend it on shape (bevels,
+  layered plates, smooth curves), not greebles.
+- **Every merged mesh is simplified at mount** (`geo.ts`, meshoptimizer):
+  1. weld vertices per part (exact position + part id `mid`, so parts / colours never merge),
+  2. `MeshoptSimplifier.simplify` down to a geometric error of `SIMP` x the mesh's extent (default **0.004**),
+  3. rebuild normals with a **40 deg crease angle** (hard edges stay hard, curves stay smooth), un-index.
+- Result: about **1/3 fewer triangles** across the roster (311k -> 208k). Not 1/4 of the original: the models are
+  hard-surface, so most triangles are hard edges and bevels that ARE the detail. Measured:
+  - keeping every hard edge as a seam: only 14-23% saved;
+  - welding by position and letting the error decide: 0.003 -> 0.72, 0.005 -> 0.60, 0.008 -> 0.44;
+  - 0.005 erased a thin support under a helicopter pod (turretseat test failed); 0.004 is the safe default.
+- Knobs: `setSimplify(err)` (geo.ts), `?simp=<err>` / `?simp=0` on proto3d.html for before / after renders.
+  `scripts/3d/tri-budget.ts` prints roster totals at several errors.
+- Weapons self-reduce detail on big units (`detail()` in w2500: S3/S4 ~0.6 segments, S5 ~0.5).
+
+---
+
+## 4. Z-fighting (flicker)
+
+Symptom: "two solids colliding and overriding each other's texture in spots", flickering as the camera moves.
+Cause: faces of different parts in exactly the same plane, facing the same way, overlapping (a glow strip laid
+flush on a plate, two blocks sharing a face, a collar flush on a deck). The depth test can't pick one.
+
+- `zfix.ts` runs on every built unit (units3d, after assembly): buckets all triangles by world plane, finds
+  overlapping pairs from different parts, lifts the smaller face 2 mm along its normal (ranked when several stack),
+  two passes. Cut the titan from 344 coplanar pairs to 17, goliath 310 -> 14, most units -> 0.
+- Still author cleanly: inset or proud details by a visible amount instead of exactly flush.
+- Check: `node scripts/3d/zfight-scan.ts` (expect 0 or a few tiny pairs per design).
+
+---
+
+## 5. Workflow
+
+1. Look at the references (docs/inspo, research). Write down the concept per hull in one line: what carries the
+   weapon, the silhouette from the side and from the top.
+2. Build: `npm run build:proto3d` (writes `public/proto3d.js`, which IS committed: rebuild and commit it with your
+   changes). Serve: `cd public && python3 -m http.server 8766`.
+3. Render several views in one browser session with `scripts/3d/shots.cjs` (see its header). Always look at:
+   a close 3/4 front at low tilt (10-25 deg), the back, the top-down (tilt ~80), and **game zoom** (d ~ 14-22,
+   tilt ~57). Make a contact sheet (PIL) and actually look at it. Iterate until it is genuinely cool, then compare
+   with the reference images side by side.
+4. Check the garage too: `scripts/3d/garage-shots.cjs` (socket rings on the weapons).
+5. Checks: `npx tsc --noEmit`; `node --test test/turretseat3d.test.ts test/mountgeo.test.ts` (floating turrets,
+   mount geometry); `npm test` before pushing. The sim test "120v120 stays fast" is timing-based and fails on a
+   loaded machine (parallel agents rendering): re-run it on a quiet machine before blaming your change.
+6. Budget: `node scripts/3d/tri-budget.ts` / the tri count `shots.cjs` prints; flicker: `scripts/3d/zfight-scan.ts`.
+
+### Pitfalls
+- `lathe` does not close open profiles: add the closing point (e.g. `[Ri, 0]`) for hollow shapes.
+- swiftshader renders take minutes under load: load once with `&freeze=1` and call `renderOnce()` per view
+  (shots.cjs does), use long timeouts, never one browser per view.
+- Camera framing: pass explicit views (`setView(x, z, dist, tilt, yaw, targetY)`); the default framing crops big
+  units.
+- Parallel agents: give each its own git worktree and render port, a written brief (concept rules + references +
+  workflow), and tell them which shared files they must not touch. Merge their branches one at a time, re-run the
+  tests, rebuild the bundle.
+- Pods are sized against the hero: if you rescale the hero, rescale the pods with it.
+
+---
+
+## 6. Feedback history (what the user asked for, in order)
+
+Brighter explosions / fire / sniper shots / tracers -> replace the "electro" skin (high-tech + dull-metal skins) ->
+hulls must be assemblies of distinct parts -> weapons too small: the main weapon must dominate, weapon locations
+designed into each hull -> no turret ring overhang -> weapons year 2500, hollow barrels, length by calibre ->
+integrated weapon housings sized by chassis -> each unit built around ONE weapon system, extras ride it ->
+railgun: real rails, sizzling energy, wings -> denser, cooler weapons; legs like real mech legs; hulls integrated
+and vertical; not low-poly; 30k budget and simplification -> flat hulls should become vertical bodies / mechs,
+diverse, built around their weapons -> research real mech games (War Robots, Star Wars, BattleTech): look cool,
+deadly, imposing -> fix flicker and garage sockets -> write all of this down (this file).
