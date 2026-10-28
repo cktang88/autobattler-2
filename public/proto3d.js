@@ -15872,9 +15872,9 @@ function filterPoints(start, end) {
   } while (again || p !== end);
   return end;
 }
-function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
+function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass2) {
   if (!ear) return;
-  if (!pass && invSize) indexCurve(ear, minX, minY, invSize);
+  if (!pass2 && invSize) indexCurve(ear, minX, minY, invSize);
   let stop = ear;
   while (ear.prev !== ear.next) {
     const prev = ear.prev;
@@ -15888,12 +15888,12 @@ function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
     }
     ear = next;
     if (ear === stop) {
-      if (!pass) {
+      if (!pass2) {
         earcutLinked(filterPoints(ear), triangles, dim, minX, minY, invSize, 1);
-      } else if (pass === 1) {
+      } else if (pass2 === 1) {
         ear = cureLocalIntersections(filterPoints(ear), triangles);
         earcutLinked(ear, triangles, dim, minX, minY, invSize, 2);
-      } else if (pass === 2) {
+      } else if (pass2 === 2) {
         splitEarcut(ear, triangles, dim, minX, minY, invSize);
       }
       break;
@@ -16166,15 +16166,15 @@ function locallyInside(a, b) {
 }
 function middleInside(a, b) {
   let p = a;
-  let inside2 = false;
+  let inside3 = false;
   const px2 = (a.x + b.x) / 2;
   const py2 = (a.y + b.y) / 2;
   do {
     if (p.y > py2 !== p.next.y > py2 && p.next.y !== p.y && px2 < (p.next.x - p.x) * (py2 - p.y) / (p.next.y - p.y) + p.x)
-      inside2 = !inside2;
+      inside3 = !inside3;
     p = p.next;
   } while (p !== a);
-  return inside2;
+  return inside3;
 }
 function splitPolygon(a, b) {
   const a2 = createNode(a.i, a.x, a.y), b2 = createNode(b.i, b.x, b.y), an = a.next, bp = b.prev;
@@ -40724,6 +40724,75 @@ function recoilRelax(t, dt) {
   }
 }
 
+// src/client/proto3d/zfix.ts
+var LIFT = 2e-3;
+var _u = new Vector3();
+var _w = new Vector3();
+function inside(P, t) {
+  const e = (x, y) => _u.subVectors(y, x).cross(_w.subVectors(P, x)).dot(t.n);
+  const eps = 1e-8;
+  return e(t.a, t.b) > eps && e(t.b, t.d) > eps && e(t.d, t.a) > eps;
+}
+function fixZFight(root) {
+  return pass(root) + pass(root);
+}
+function pass(root) {
+  root.updateMatrixWorld(true);
+  const meshes = [];
+  root.traverse((o) => {
+    const m = o;
+    if (m.isMesh && !m.geometry.index && !m.material.isMeshBasicMaterial) meshes.push(m);
+  });
+  const buckets = /* @__PURE__ */ new Map();
+  meshes.forEach((m, mi) => {
+    const p = m.geometry.attributes.position, mid = m.geometry.attributes.mid;
+    const W = m.matrixWorld;
+    for (let f = 0; f < p.count; f += 3) {
+      const a = new Vector3().fromBufferAttribute(p, f).applyMatrix4(W);
+      const b = new Vector3().fromBufferAttribute(p, f + 1).applyMatrix4(W);
+      const d = new Vector3().fromBufferAttribute(p, f + 2).applyMatrix4(W);
+      const n = _u.subVectors(b, a).cross(_w.subVectors(d, a)).clone();
+      const area2 = n.length() / 2;
+      if (area2 < 1e-7) continue;
+      n.normalize();
+      const pl = n.dot(a);
+      const key = `${Math.round(n.x * 150)},${Math.round(n.y * 150)},${Math.round(n.z * 150)},${Math.round(pl * 1500)}`;
+      const t = { mesh: mi, f, part: mi * 1e5 + (mid ? Math.round(mid.getX(f) * 1e3) : 0), a, b, d, n, area: area2, c: a.clone().add(b).add(d).divideScalar(3) };
+      let l = buckets.get(key);
+      if (!l) buckets.set(key, l = []);
+      l.push(t);
+    }
+  });
+  const lift = /* @__PURE__ */ new Map();
+  for (const l of buckets.values()) {
+    if (l.length < 2) continue;
+    for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
+      const s = l[i], t = l[j];
+      if (s.part === t.part) continue;
+      if (!(inside(s.c, t) || inside(t.c, s))) continue;
+      const top = s.area < t.area ? s : t, low = top === s ? t : s;
+      lift.set(top, Math.max(lift.get(top) ?? 0, (lift.get(low) ?? 0) + 1));
+    }
+  }
+  if (!lift.size) return 0;
+  const inv = meshes.map((m) => new Matrix4().copy(m.matrixWorld).invert());
+  const dirty = /* @__PURE__ */ new Set();
+  for (const [t, k] of lift) {
+    const m = meshes[t.mesh], p = m.geometry.attributes.position;
+    for (let v = 0; v < 3; v++) {
+      const w = new Vector3().fromBufferAttribute(p, t.f + v).applyMatrix4(m.matrixWorld).addScaledVector(t.n, LIFT * Math.min(k, 3));
+      w.applyMatrix4(inv[t.mesh]);
+      p.setXYZ(t.f + v, w.x, w.y, w.z);
+    }
+    dirty.add(t.mesh);
+  }
+  for (const i of dirty) {
+    meshes[i].geometry.attributes.position.needsUpdate = true;
+    meshes[i].geometry.computeBoundingSphere();
+  }
+  return lift.size;
+}
+
 // src/client/proto3d/hulls3d.ts
 var RECIPES = {
   wedge: [[-1, 0.84, 0.86, 0.82], [-0.86, 1, 0.88, 1], [0.05, 1, 0.86, 1], [0.6, 0.92, 0.72, 0.62], [1, 0.56, 0.5, 0.3]],
@@ -42980,7 +43049,7 @@ registerChassis("broodmother", broodmother);
 // src/client/proto3d/chassis/titan-greebles.ts
 var V = (x, y, z) => new Vector3(x, y, z);
 var mirror2 = (half) => [...half, ...half.slice(1, -1).reverse().map(([x, z]) => [x, -z])];
-function inside(poly, x, z) {
+function inside2(poly, x, z) {
   let r = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const [xi, zi] = poly[i], [xj, zj] = poly[j];
@@ -46471,8 +46540,8 @@ function citadel(c) {
   const deck = (x, z) => {
     for (const [tx, ty, tz] of towers) if (Math.hypot(x - tx, z - tz) < tR) return ty;
     if (inPoly(K2top, x, z)) return s2;
-    if (inside(T, x, z)) return deck2;
-    return inside(rimP, x, z) ? deckY : -1;
+    if (inside2(T, x, z)) return deck2;
+    return inside2(rimP, x, z) ? deckY : -1;
   };
   let hips;
   if (stance.legs === "biped") {
@@ -46818,7 +46887,7 @@ function lance(c) {
   const deck = (x, z) => {
     if (x > sp0 && x < sp1 && Math.abs(z) < 0.6 * kz) return spTop;
     if (Math.abs(x - ax) < 0.6 * kx && Math.abs(z) < 0.7 * kz) return aTop;
-    return inside(deckPoly, x, z) ? deckY : -1;
+    return inside2(deckPoly, x, z) ? deckY : -1;
   };
   return {
     deckAt: deck,
@@ -46972,7 +47041,7 @@ function monolith(c) {
   boltRing(b, kit.metal, cx3, t3, 0, 1.15 * k, 16, u * 0.5);
   if (fine) {
     const rail2 = inset(scl(P1, sTop), 0.2 * k), ry = s1 + 0.3 * k;
-    const blocked = (x, z) => inside(P2u, x, z) || Math.abs(x + 0.22 * kx) < 0.55 * kx || x < -2.3 * kx || c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 2.2 + 0.9 * k);
+    const blocked = (x, z) => inside2(P2u, x, z) || Math.abs(x + 0.22 * kx) < 0.55 * kx || x < -2.3 * kx || c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 2.2 + 0.9 * k);
     let run = [];
     const flush = () => {
       if (run.length > 1) handrail(b, kit, run, 0.025 * k, 0.32 * k);
@@ -47039,9 +47108,9 @@ function monolith(c) {
   const top1 = scl(P1, sTop);
   const deck = (x, z) => {
     if (Math.abs(x - cbx) < 0.4 * kx && Math.abs(z) < 0.45 * kz) return cbT;
-    if (inside(top3, x, z)) return t3;
-    if (inside(roof2, x, z)) return t2;
-    return inside(top1, x, z) ? s1 : -1;
+    if (inside2(top3, x, z)) return t3;
+    if (inside2(roof2, x, z)) return t2;
+    return inside2(top1, x, z) ? s1 : -1;
   };
   return {
     deckAt: deck,
@@ -47836,6 +47905,7 @@ function buildUnit(design, team) {
     for (const o of [...H.yaw.children]) if (o.isMesh) H.yaw.remove(o);
     const tb = new Bld(), T = new Group();
     T.scale.setScalar(1 / kH);
+    T.userData.torso = true;
     const res = out2.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i].r) });
     tb.mount(T);
     H.yaw.add(T);
@@ -47857,6 +47927,7 @@ function buildUnit(design, team) {
   });
   for (const i of pods) tur[i].host = turrets.indexOf(tur[hero]);
   hb.mount(body, kit.decal);
+  fixZFight(root);
   applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i].yaw, mount: m.i })), ...pods.map((i) => ({ obj: tur[i].yaw, mount: i }))], kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
@@ -48638,9 +48709,9 @@ var EffectComposer = class {
    *
    * @param {Pass} pass - The pass to add.
    */
-  addPass(pass) {
-    this.passes.push(pass);
-    pass.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
+  addPass(pass2) {
+    this.passes.push(pass2);
+    pass2.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
   }
   /**
    * Inserts the given pass at a given index.
@@ -48648,17 +48719,17 @@ var EffectComposer = class {
    * @param {Pass} pass - The pass to insert.
    * @param {number} index - The index into the pass chain.
    */
-  insertPass(pass, index) {
-    this.passes.splice(index, 0, pass);
-    pass.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
+  insertPass(pass2, index) {
+    this.passes.splice(index, 0, pass2);
+    pass2.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
   }
   /**
    * Removes the given pass from the pass chain.
    *
    * @param {Pass} pass - The pass to remove.
    */
-  removePass(pass) {
-    const index = this.passes.indexOf(pass);
+  removePass(pass2) {
+    const index = this.passes.indexOf(pass2);
     if (index !== -1) {
       this.passes.splice(index, 1);
     }
@@ -48691,11 +48762,11 @@ var EffectComposer = class {
     const currentRenderTarget = this.renderer.getRenderTarget();
     let maskActive = false;
     for (let i = 0, il = this.passes.length; i < il; i++) {
-      const pass = this.passes[i];
-      if (pass.enabled === false) continue;
-      pass.renderToScreen = this.renderToScreen && this.isLastEnabledPass(i);
-      pass.render(this.renderer, this.writeBuffer, this.readBuffer, deltaTime, maskActive);
-      if (pass.needsSwap) {
+      const pass2 = this.passes[i];
+      if (pass2.enabled === false) continue;
+      pass2.renderToScreen = this.renderToScreen && this.isLastEnabledPass(i);
+      pass2.render(this.renderer, this.writeBuffer, this.readBuffer, deltaTime, maskActive);
+      if (pass2.needsSwap) {
         if (maskActive) {
           const context = this.renderer.getContext();
           const stencil = this.renderer.state.buffers.stencil;
@@ -48706,9 +48777,9 @@ var EffectComposer = class {
         this.swapBuffers();
       }
       if (MaskPass !== void 0) {
-        if (pass instanceof MaskPass) {
+        if (pass2 instanceof MaskPass) {
           maskActive = true;
-        } else if (pass instanceof ClearMaskPass) {
+        } else if (pass2 instanceof ClearMaskPass) {
           maskActive = false;
         }
       }

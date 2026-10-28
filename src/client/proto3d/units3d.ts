@@ -11,6 +11,7 @@ import { makeKit, rng } from './materials.ts';
 import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
 import { buildTurret, type Turret } from './weapons3d.ts';
 import { CLASS_RANK, weaponD } from '../render/weaponsize.ts';
+import { fixZFight } from './zfix.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
 import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
@@ -195,6 +196,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     for (const o of [...H.yaw.children]) if ((o as THREE.Mesh).isMesh) H.yaw.remove(o);
     const tb = new Bld(), T = new THREE.Group();
     T.scale.setScalar(1 / kH);
+    T.userData.torso = true; // not part of the hero weapon itself (the garage socket / highlight skips it)
     const res = out.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i]!.r) });
     tb.mount(T);
     H.yaw.add(T);
@@ -217,6 +219,8 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   for (const i of pods) tur[i]!.host = turrets.indexOf(tur[hero]!);
   hb.mount(body, kit.decal);
   // surface skin by role / domain / scale (skins.ts); turrets keep their own per-weapon skin
+  // faces of different parts sharing a plane flicker (z-fighting): lift the smaller of each pair a hair off it
+  fixZFight(root);
   applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), ...pods.map((i) => ({ obj: tur[i]!.yaw, mount: i }))], kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;

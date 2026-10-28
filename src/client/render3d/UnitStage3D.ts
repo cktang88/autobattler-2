@@ -232,13 +232,24 @@ export class UnitStage3D {
       const ti = tpl.mountTurret[i] ?? -1;
       const tu = ti >= 0 ? u.turrets[ti] : undefined;
       if (tu) {
-        const b = new THREE.Box3().setFromObject(tu.yaw);
-        const p = b.getCenter(new THREE.Vector3());
+        // this weapon's own parts only: not the pods riding it (their own sockets) nor a mech torso built into its yaw
+        const others = new Set<THREE.Object3D>(u.turrets.filter((t) => t !== tu).map((t) => t.yaw));
+        const b = new THREE.Box3();
         const own = new Set<THREE.Object3D>();
         const meshes: number[] = [];
-        tu.yaw.traverse((o) => { own.add(o); const j = tpl.meshes.indexOf(o as THREE.Mesh); if (j >= 0 && !tpl.isBlob[j]) meshes.push(j); });
-        // the ring sits on the housing; the barrel's length does not count
-        const p2 = new THREE.Vector3().setFromMatrixPosition(tu.yaw.matrixWorld);
+        const walk = (o: THREE.Object3D): void => {
+          if (others.has(o) || o.userData.torso) return;
+          own.add(o);
+          const j = tpl.meshes.indexOf(o as THREE.Mesh);
+          if (j >= 0) { b.expandByObject(o, false); if (!tpl.isBlob[j]) meshes.push(j); }
+          for (const c of o.children) walk(c);
+        };
+        walk(tu.yaw);
+        const p = b.isEmpty() ? new THREE.Vector3().setFromMatrixPosition(tu.yaw.matrixWorld) : b.getCenter(new THREE.Vector3());
+        // the ring sits on the housing (the barrel's length does not count): over the yaw pivot, or over the weapon's
+        // trunnion when the weapon hangs off a torso away from the pivot
+        const torso = tu.yaw.children.some((c) => c.userData.torso);
+        const p2 = new THREE.Vector3().setFromMatrixPosition((torso ? tu.pitch : tu.yaw).matrixWorld);
         p.x = p2.x; p.z = p2.z;
         return { p, r: Math.max(0.12, tu.r), meshes, own };
       }
