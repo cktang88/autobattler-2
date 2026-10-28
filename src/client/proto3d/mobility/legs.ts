@@ -1,16 +1,17 @@
 // Legged locomotion: bipeds (legs, titanlegs; jump legs live in mobility/jumpjets.ts) and multi-leg spiders. Thick, load-bearing legs built from
-// chunky segments: a big hip drum, an armoured thigh with a hydraulic ram, a knee drum + knee cap, an armoured shin
-// with a calf ram, and broad feet (three-toed stompers for bipeds, splayed claw pads for spiders). 2-bone IK per leg.
+// chunky segments: big layered hip / knee drums, multi-segment thighs and shins of layered armour shells over a dark
+// core with bright rams down the back, and wide stepped feet (toed stompers for bipeds, stepped pads or armoured boots
+// for spiders). 2-bone IK per leg.
 //
 // Each leg is three groups (thigh, shin, foot) with manual matrices, so the render adapter instances them as animated
 // nodes. Hip positions come from the chassis (ChassisOut.hips) or the defaults below.
 
 import * as THREE from 'three';
 import { Bld, strutGeo, type V3 } from '../geo.ts';
-import type { Kit } from '../materials.ts';
+import type { Kit, MatLike } from '../materials.ts';
 import { registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
-import { armorPlate, cableBundle, frame, frameLimb, hose, jointDrum, piston, plateStack, rectP, trapP } from '../chassis/hs-kit.ts';
+import { cableBundle, hose, piston } from '../chassis/hs-kit.ts';
 import { claw, limbSegs, limbShell, spike } from '../chassis/hs-kit-organic.ts';
 
 export interface Leg { step(t: number, moving: number, dir?: number): void }
@@ -28,7 +29,8 @@ export function legStance(s: StanceIn): Stance {
   }
   // titan-class legs carry far more mass: thicker for the same reach
   // (x1.2: chunky load-bearing legs whose armour stacks read as separate blocks from the RTS camera)
-  const hipY = 0.4 * m + 0.12, t = (0.062 * m + 0.04) * (s.mobId === 'titanlegs' ? 1.2 : 1) * 1.2;
+  // tall stance: long thigh and shin both read (vertical mechs, not crouched boxes)
+  const hipY = 0.56 * m + 0.14, t = (0.062 * m + 0.04) * (s.mobId === 'titanlegs' ? 1.2 : 1) * 1.2;
   return { y0: hipY - t * 0.5, yt: hipY + t * 0.6, wi: s.W * 0.34, tracked: false, legs: 'biped', thick: t, hipY };
 }
 
@@ -57,174 +59,199 @@ const ring = (z: number, wx: number, wy: number, c = 0.3): V3[] => [
 
 // ---- multi-leg (spider) segments, hard-surface (chassis/hs-kit.ts + hs-kit-organic.ts). Local frame: +Z along the
 // bone, +Y the dorsal / outer side (toward the knee bend), X across (the joint axis).
-//   'mech'    a dark twin-strut skeleton under stacked armour plates on shadow gaps, joint drums, a hydraulic ram under
-//             every bone, a stepped toe pad (machines walking on legs: striders, saucers, trains, tanks on legs)
+//   'mech'    the biped's armoured segments (dark core, layered bevelled shells, big layered drums, a bright ram under
+//             every bone) at spider cost, a stepped cross-toed pad (machines on legs: striders, saucers, trains, tanks)
 //   'organic' arthropod limbs: a thin dark core under overlapping chitin shells (faceted, thick, shingled down the
 //             bone), sinew cable runs instead of rams, spurs at the knee, a hooked claw tip (crawlers, the brood)
 export type LegStyle = 'mech' | 'organic';
 
-/** joint drum across the bone (axis x): the full hs-kit drum with pin caps on fine legs, a plain bevelled drum with one
- *  dark hub ring otherwise (half the triangles: spider legs come four to eight at a time) */
-function legDrum(b: Bld, kit: Kit, z: number, r: number, w: number, fine: boolean) {
-  if (fine) { jointDrum(b, kit, [0, 0, z], r, w, 'x'); return; }
-  b.cylb(kit.joint, r, w, r * 0.12, [-w / 2, 0, z], 'x', 8);
-  b.cyl(kit.mech, r * 0.62, r * 0.62, w * 1.12, [-w * 0.56, 0, z], 'x', 6);
-}
-
 function spThigh(b: Bld, kit: Kit, l: number, t: number, style: LegStyle, fine: boolean, lite: boolean) {
-  const org = style === 'organic';
+  // machine legs: the same armoured segments as the bipeds (dorsal armour, rams underneath), cheaper per leg
+  if (style !== 'organic') { armThigh(b, kit, l, t, lite ? Q_SPIDER_LITE : fine ? Q_SPIDER_FINE : Q_SPIDER); return; }
+  // arthropod: a big dark hip ball-drum, a thick dark core under heavy shingled chitin, a light ventral shell, sinew
+  // cables underneath, a knee spur, a knee drum
+  drum(b, kit, [0, 0, 0], t * 1.12, t * 1.2, lite ? Q_SPIDER_LITE : Q_SPIDER, kit.armor2);
+  b.loft(kit.mech, [ring(t * 0.4, t * 0.54, t * 0.58), ring(l * 0.5, t * 0.5, t * 0.54), ring(l * 0.94, t * 0.4, t * 0.42)]);
   if (lite) {
-    // cheap: hip drum, one dark spar, one dorsal shell, knee drum
-    b.cylb(kit.mech, t * 1.0, t * 1.5, t * 0.15, [-t * 0.75, 0, 0], 'x', 7);
-    b.g(strutGeo([0, 0, t * 0.4], [0, 0, l], t * 0.5, t * 0.4, 5), kit.mech);
-    if (org) limbShell(b, kit.armor, l * 0.06, l * 0.94, t * 0.7, t * 0.32, t * 0.22, t * 0.2, { tp: 0.7, cols: 2 });
-    else armorPlate(b, kit, kit.armor, frame([0, t * 0.3, l * 0.5], [0, 1, 0], [0, 0, 1]), trapP(l * 0.8, t * 0.95, t * 1.25, t * 0.14), t * 0.2, { standoff: t * 0.12, back: null });
-    b.cylb(kit.joint, t * 0.62, t * 1.15, t * 0.1, [-t * 0.58, 0, l], 'x', 6);
-    return;
-  }
-  legDrum(b, kit, 0, t * 1.02, t * 1.6, fine);
-  if (org) {
-    // dark tapering core, two chitin shells down the dorsal side, a ventral plate, sinew cables underneath
-    b.loft(kit.mech, [ring(t * 0.4, t * 0.46, t * 0.5), ring(l * 0.5, t * 0.42, t * 0.46), ring(l * 0.94, t * 0.34, t * 0.36)]);
-    limbSegs(b, [kit.armor, kit.armor2], t * 0.5, l * 0.92, 2, t * 0.78, t * 0.42, t * 0.24, t * 0.2, 0.74, 3);
-    limbShell(b, kit.shell, l * 0.18, l * 0.78, t * 0.5, t * 0.16, t * 0.36, t * 0.14, { sign: -1, tp: 0.8, cols: 2 });
-    cableBundle(b, kit, [t * 0.42, -t * 0.42, l * 0.1], [t * 0.36, -t * 0.4, l * 0.88], t * 0.08, [1, 0, 0], fine ? 2 : 1, 0.05);
-    // knee spur: a short spike rising off the knee, raked back toward the hip
-    spike(b, kit.armor2, [0, t * 0.5, l * 0.9], [0, t * 1.5, l * 0.72], t * 0.26);
+    limbShell(b, kit.armor, l * 0.06, l * 0.94, t * 0.86, t * 0.42, t * 0.28, t * 0.24, { tp: 0.7, cols: 2 });
   } else {
-    frameLimb(b, kit, [0, 0, t * 0.5], [0, 0, l * 0.95], t * 0.18, [t * 0.36, 0, 0]);
-    plateStack(b, kit, kit.armor2, frame([0, t * 0.18, l * 0.5], [0, 1, 0], [0, 0, 1]), trapP(l * 0.78, t * 1.05, t * 1.4, t * 0.16), [
-      { inset: 0, thick: t * 0.2, standoff: t * 0.22 },
-      { inset: t * 0.2, thick: t * 0.15, shift: [l * 0.08, 0], mat: kit.armor },
-    ], { gap: t * 0.16 });
-    piston(b, kit, [0, -t * 0.46, l * 0.12], [0, -t * 0.42, l * 0.84], t * 0.17, 0.55, fine);
-    if (fine) cableBundle(b, kit, [t * 0.5, -t * 0.12, l * 0.1], [t * 0.44, -t * 0.2, l * 0.88], t * 0.06, [0, 1, 0], 2, 0.04);
+    limbSegs(b, [kit.armor, kit.armor2], t * 0.5, l * 0.92, 2, t * 0.98, t * 0.54, t * 0.3, t * 0.26, 0.74, 3);
+    limbShell(b, kit.shell, l * 0.18, l * 0.78, t * 0.62, t * 0.22, t * 0.42, t * 0.18, { sign: -1, tp: 0.8, cols: 2 });
+    cableBundle(b, kit, [t * 0.42, -t * 0.5, l * 0.1], [t * 0.36, -t * 0.46, l * 0.88], t * 0.09, [1, 0, 0], fine ? 2 : 1, 0.05);
+    spike(b, kit.armor2, [0, t * 0.62, l * 0.88], [0, t * 1.7, l * 0.68], t * 0.32);
   }
-  legDrum(b, kit, l, t * 0.74, t * 1.36, fine);
+  drum(b, kit, [0, 0, l], t * 0.9, t * 1.05, lite ? Q_SPIDER_LITE : Q_SPIDER, kit.armor);
 }
 
 function spShin(b: Bld, kit: Kit, l: number, t: number, style: LegStyle, fine: boolean, lite: boolean) {
-  const org = style === 'organic';
-  if (lite) {
-    b.g(strutGeo([0, 0, t * 0.3], [0, 0, l * 0.96], t * 0.44, t * 0.3, 5), kit.mech);
-    if (org) limbShell(b, kit.armor2, l * 0.04, l * 0.6, t * 0.6, t * 0.26, t * 0.2, t * 0.18, { tp: 0.55, cols: 2 });
-    else armorPlate(b, kit, kit.armor2, frame([0, t * 0.26, l * 0.32], [0, 1, 0], [0, 0, 1]), trapP(l * 0.5, t * 0.7, t * 1.05, t * 0.12), t * 0.18, { standoff: t * 0.1, back: null });
-    return;
-  }
-  if (org) {
-    // tapering core into a long claw, three shingled chitin shells, a pair of spines on the outer edge, sinew
-    b.loft(kit.mech, [ring(t * 0.3, t * 0.4, t * 0.42), ring(l * 0.5, t * 0.32, t * 0.34), ring(l * 0.86, t * 0.18, t * 0.2)]);
-    limbSegs(b, [kit.armor2, kit.armor, kit.armor2], t * 0.3, l * 0.8, 3, t * 0.72, t * 0.38, t * 0.2, t * 0.18, 0.5, 3);
-    for (const f of [0.3, 0.55]) spike(b, kit.joint, [t * 0.3, t * 0.45, l * f], [t * 0.5, t * 1.05, l * (f - 0.08)], t * 0.12);
-    hose(b, kit, [-t * 0.3, -t * 0.36, l * 0.06], [-t * 0.2, -t * 0.26, l * 0.7], t * 0.07, 0.04, 3);
-    b.g(strutGeo([0, 0, l * 0.82], [0, 0, l], t * 0.22, t * 0.1, 4), kit.joint);
-    return;
-  }
-  frameLimb(b, kit, [0, 0, t * 0.4], [0, 0, l * 0.84], t * 0.16, [t * 0.3, 0, 0]);
-  plateStack(b, kit, kit.armor2, frame([0, t * 0.14, l * 0.4], [0, 1, 0], [0, 0, 1]), trapP(l * 0.66, t * 0.8, t * 1.25, t * 0.14), [
-    { inset: 0, thick: t * 0.18, standoff: t * 0.22 },
-    { inset: t * 0.18, thick: t * 0.13, shift: [-l * 0.08, 0], mat: kit.shell },
-  ], { gap: t * 0.14 });
-  // knee cap overhanging the knee drum
-  armorPlate(b, kit, kit.armor, frame([0, t * 0.58, t * 0.08], [0, 0.85, -0.5], [1, 0, 0]), trapP(t * 1.25, t * 0.85, t * 0.62, t * 0.12), t * 0.18, { standoff: t * 0.06 });
-  piston(b, kit, [0, -t * 0.4, l * 0.08], [0, -t * 0.32, l * 0.7], t * 0.14, 0.55, fine);
-  // lower leg: dark tapering strut to the foot pivot, a collar at the transition
-  b.g(strutGeo([0, 0, l * 0.8], [0, 0, l], t * 0.4, t * 0.32, 6), kit.mech);
-  b.cyl(kit.joint, t * 0.46, t * 0.46, t * 0.14, [0, 0, l * 0.8], 'z', 6);
+  if (style !== 'organic') { armShin(b, kit, l, t, lite ? Q_SPIDER_LITE : fine ? Q_SPIDER_FINE : Q_SPIDER); return; }
+  // tapering dark core, heavy shingled chitin down the outer side, spines, a sinew hose, into the armoured boot
+  b.loft(kit.mech, [ring(t * 0.3, t * 0.48, t * 0.5), ring(l * 0.5, t * 0.4, t * 0.42), ring(l * 0.9, t * 0.28, t * 0.3)]);
+  if (lite) { limbShell(b, kit.armor2, l * 0.04, l * 0.66, t * 0.76, t * 0.36, t * 0.24, t * 0.22, { tp: 0.55, cols: 2 }); return; }
+  limbSegs(b, [kit.armor2, kit.armor, kit.armor2], t * 0.3, l * 0.82, 3, t * 0.9, t * 0.48, t * 0.24, t * 0.22, 0.55, 3);
+  for (const f of [0.3, 0.55]) spike(b, kit.joint, [t * 0.36, t * 0.55, l * f], [t * 0.6, t * 1.2, l * (f - 0.08)], t * 0.15);
+  hose(b, kit, [-t * 0.34, -t * 0.42, l * 0.06], [-t * 0.24, -t * 0.32, l * 0.7], t * 0.08, 0.04, 3);
 }
 
 function spFoot(b: Bld, kit: Kit, t: number, style: LegStyle, fine: boolean, lite: boolean) {
   if (style === 'organic') {
-    // hooked claw tip: a small dark hoof, three claws splayed forward and out, a heel spur
-    b.cyl(kit.mech, t * 0.5, t * 0.62, t * 0.36, [0, 0.0, 0], 'y', 5);
-    if (lite) { spike(b, kit.joint, [0, t * 0.1, 0], [t * 0.7, 0, 0], t * 0.3); return; }
-    for (const a of [-0.7, 0, 0.7]) claw(b, kit.joint, [0, t * 0.16, 0], [Math.cos(a) * t * 0.55, t * 0.24, Math.sin(a) * t * 0.55], [Math.cos(a) * t * 1.05, 0, Math.sin(a) * t * 1.05], t * 0.17);
-    spike(b, kit.armor2, [0, t * 0.2, 0], [-t * 0.75, t * 0.02, 0], t * 0.18);
+    // armoured boot (hull_b crab feet): a tall team wedge on a dark sole, a light cap, thick claws splayed forward
+    block(b, kit.mech, 0, 0, 0, t * 1.9, t * 1.6, t * 0.26, { ch: t * 0.45, bev: t * 0.05 });
+    block(b, kit.armor, -t * 0.05, t * 0.22, 0, t * 1.6, t * 1.3, t * 1.15, { top: [0.62, 0.74], shift: [-t * 0.18, 0], ch: t * 0.34, bev: t * 0.1 });
+    if (lite) return;
+    block(b, kit.shell, -t * 0.25, t * 1.37, 0, t * 0.8, t * 0.8, t * 0.22, { top: [0.7, 0.75], ch: t * 0.22, bev: t * 0.06 });
+    for (const a of [-0.55, 0.55]) claw(b, kit.joint, [t * 0.5, t * 0.4, Math.sin(a) * t * 0.4], [Math.cos(a) * t * 1.05, t * 0.38, Math.sin(a) * t * 0.7], [Math.cos(a) * t * 1.45, 0, Math.sin(a) * t * 0.95], t * 0.22);
+    if (fine) spike(b, kit.armor2, [-t * 0.6, t * 0.5, 0], [-t * 1.25, t * 0.06, 0], t * 0.22);
     return;
   }
-  // stepped pad: rubber sole, dark hub, armoured toe plates in three directions
-  b.cyl(kit.rubber, t * 0.95, t * 0.85, t * 0.18, [0, 0, 0], 'y', 6);
-  b.cylb(kit.mech, t * 0.62, t * 0.42, t * 0.08, [0, t * 0.16, 0], 'y', 6);
-  if (lite) return;
-  for (let k = 0; k < 3; k++) {
-    const a = (k / 3) * Math.PI * 2;
-    armorPlate(b, kit, kit.armor, frame([Math.cos(a) * t * 0.68, t * 0.2, Math.sin(a) * t * 0.68], [Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5], [Math.cos(a), 0, Math.sin(a)]), trapP(t * 0.75, t * 0.4, t * 0.62, t * 0.08), t * 0.12, { standoff: t * 0.03, back: null });
+  // stepped armoured pad: dark sole, a team tier, four sloped toe blocks (cross), a light cap, the ankle collar
+  block(b, kit.mech, 0, 0, 0, t * 2.7, t * 2.7, t * 0.22, { ch: t * 0.8, bev: t * 0.05 });
+  block(b, kit.armor2, 0, t * 0.2, 0, t * 2.0, t * 2.0, t * 0.34, { top: [0.76, 0.76], ch: t * 0.6, bev: t * 0.08 });
+  if (!lite) for (const s of [-1, 1]) {
+    block(b, kit.armor, s * t * 1.05, t * 0.16, 0, t * 1.0, t * 0.82, t * 0.44, { top: [0.5, 0.8], shift: [-s * t * 0.22, 0], ch: t * 0.16, bev: t * 0.06 });
+    block(b, kit.armor, 0, t * 0.16, s * t * 1.05, t * 0.82, t * 1.0, t * 0.44, { top: [0.8, 0.5], shift: [0, -s * t * 0.22], ch: t * 0.16, bev: t * 0.06 });
   }
-  if (fine) b.cyl(kit.joint, t * 0.22, t * 0.22, t * 0.3, [0, t * 0.5, 0], 'y', 6);
+  block(b, kit.shell, 0, t * 0.52, 0, t * 1.1, t * 1.1, t * 0.2, { top: [0.7, 0.7], ch: t * 0.34, bev: t * 0.06 });
+  b.cylb(kit.joint, t * 0.5, t * 0.62, t * 0.08, [0, t * 0.66, 0], 'y', lite ? 8 : 10);
 }
 
-// ---- cheap biped segments (size-1 walkers): the hard-surface read (dark spar, one armour shell on a shadow gap, joint
-// drums, a calf ram) at a fraction of the triangles
-function liteThigh(b: Bld, kit: Kit, l: number, t: number) {
-  b.cylb(kit.joint, t * 1.05, t * 1.7, t * 0.15, [-t * 0.85, 0, 0], 'x', 8);
-  b.g(strutGeo([0, 0, t * 0.4], [0, 0, l], t * 0.48, t * 0.4, 5), kit.mech);
-  armorPlate(b, kit, kit.armor, frame([0, t * 0.36, l * 0.46], [0, 1, 0], [0, 0, 1]), trapP(l * 0.72, t * 1.1, t * 1.45, t * 0.16), t * 0.24, { standoff: t * 0.16 });
-  b.g(strutGeo([0, -t * 0.55, l * 0.15], [0, -t * 0.5, l * 0.8], t * 0.18, t * 0.18, 4), kit.joint);
-  b.cylb(kit.mech, t * 0.74, t * 1.5, t * 0.1, [-t * 0.75, 0, l], 'x', 7);
-}
-function liteShin(b: Bld, kit: Kit, l: number, t: number) {
-  b.g(strutGeo([0, 0, t * 0.3], [0, 0, l], t * 0.4, t * 0.32, 5), kit.mech);
-  armorPlate(b, kit, kit.armor2, frame([0, t * 0.3, l * 0.44], [0, 1, 0], [0, 0, 1]), trapP(l * 0.7, t * 0.85, t * 1.2, t * 0.14), t * 0.2, { standoff: t * 0.14 });
-  armorPlate(b, kit, kit.armor, frame([0, t * 0.5, t * 0.1], [0, 0.85, -0.5], [1, 0, 0]), trapP(t * 1.2, t * 0.8, t * 0.6, t * 0.12), t * 0.18, { standoff: t * 0.05, back: null });
-  b.g(strutGeo([0, -t * 0.45, l * 0.1], [0, -t * 0.38, l * 0.75], t * 0.15, t * 0.15, 4), kit.joint);
-  b.cylb(kit.joint, t * 0.55, t * 1.2, t * 0.08, [-t * 0.6, 0, l], 'x', 6);
-}
-function liteFoot(b: Bld, kit: Kit, t: number) {
-  b.slab(kit.rubber, rectP(t * 3.6, t * 2.2, t * 0.5), t * 0.2, t * 0.05, t * 0.3, 0, 0);
-  block(b, kit.mech, -t * 0.1, t * 0.18, 0, t * 2.0, t * 1.5, t * 0.55, { top: [0.66, 0.74], ch: t * 0.3, bev: t * 0.06 });
-  armorPlate(b, kit, kit.armor, frame([t * 1.15, t * 0.24, 0], [0.45, 1, 0], [1, 0, 0]), trapP(t * 1.3, t * 1.9, t * 1.5, t * 0.3), t * 0.16, { standoff: t * 0.04, back: null });
+// ---- armoured walker segments (hard-surface, after docs/inspo/legs_cool.jpg / hull_ares.jpg) ------------------------
+// A leg is a dark mechanical core (a waisted spine) carrying separate bevelled armour shells: each bone has two armour
+// segments with a shadow gap between them (a chunky glow block sits in the gap), each segment a heavy dark-team shell
+// wrapping the face and flanks with a team plate layered over it at an offset (a light bone panel on the flanks / lower
+// face), so every plate edge steps. Joints are big round layered drums (dark core band, machined flanges, team hub
+// caps, bright pins). Bright hydraulic rams run down the back of every bone out of the drums; the shin carries one big
+// calf ram. Feet are wide stepped pads: sole, two tiers, parallel armoured toes with bone toe caps, a heel block, ankle
+// cheeks around an ankle drum and an ankle ram. Segments stay flat-shaded lofts (cheap, crisp facets): the triangle
+// budget goes into the drums and the silhouette, not into greebles.
+//
+// Local frame for the bone segments: +Z along the bone, +Y the armoured face (toward the knee bend; reverse-jointed legs
+// are rolled 180 deg so the armour faces forward), X across (the joint axis). Feet: +x forward, +y up, z across.
+
+type Sec = [z: number, wx: number, wy: number, yc: number];
+/** chamfered 8-point section at z, centred (xc, yc) */
+const sec = (z: number, wx: number, wy: number, yc = 0, xc = 0, c = 0.32): V3[] => ring(z, wx, wy, c).map(([x, y]) => [x + xc, y + yc, z] as V3);
+/** armour shell along the bone: a flat-shaded chamfered loft through stations [z, half-width, half-depth, centre y],
+ *  both ends bevelled by bev (the first / last station is the outer extent) */
+function shell(b: Bld, mat: MatLike, s: Sec[], bev: number, xc = 0, c = 0.32) {
+  const f = s[0], l = s[s.length - 1], d = Math.sign(l[0] - f[0]) || 1;
+  const rings = [sec(f[0], f[1] - bev, f[2] - bev, f[3], xc, c), sec(f[0] + bev * d, f[1], f[2], f[3], xc, c)];
+  for (const m of s.slice(1, -1)) rings.push(sec(m[0], m[1], m[2], m[3], xc, c));
+  rings.push(sec(l[0] - bev * d, l[1], l[2], l[3], xc, c), sec(l[0], l[1] - bev, l[2] - bev, l[3], xc, c));
+  b.loft(mat, rings);
 }
 
-// ---- hard-surface biped segments (chassis/hs-kit.ts): a dark twin-strut skeleton, separate armour shells on shadow
-// gaps (front plate stacks, side shells, knee cap), exposed joint drums with actuator rings, paired pistons on the back
-// of each bone, hose runs, armoured toe plates. Same local frames as the segment builders above.
-export function hsThigh(b: Bld, kit: Kit, l: number, t: number, fine: boolean, heavy = false) {
-  // heavy (titan) legs: a solid dark core inside the frame, so the leg reads load-bearing, plus a third plate layer
-  if (heavy) b.loft(kit.mech, [ring(t * 0.4, t * 0.6, t * 0.62), ring(l * 0.5, t * 0.58, t * 0.6), ring(l * 0.92, t * 0.5, t * 0.5)]);
-  jointDrum(b, kit, [0, 0, 0], t * 1.12, t * 1.9, 'x');
-  b.cyl(kit.mech, t * 1.26, t * 1.26, t * 0.34, [-t * 0.17, 0, 0], 'x', 12);
-  frameLimb(b, kit, [0, 0, t * 0.6], [0, 0, l * 0.96], t * 0.2, [t * 0.4, 0, 0]);
-  plateStack(b, kit, kit.armor2, frame([0, t * 0.16, l * 0.47], [0, 1, 0], [0, 0, 1]), trapP(l * 0.74, t * 1.4, t * 1.75, t * 0.16), [
-    { inset: 0, thick: t * 0.22, standoff: t * 0.26 },
-    { inset: t * 0.22, thick: t * 0.16, shift: [l * 0.1, 0], mat: kit.armor },
-    ...(heavy ? [{ inset: t * 0.3, thick: t * 0.12, shift: [l * 0.16, 0] as [number, number], mat: kit.armor2 }] : []),
-  ], { gap: t * 0.18 });
-  for (const sx of [-1, 1]) armorPlate(b, kit, kit.armor, frame([sx * t * 0.6, -t * 0.05, l * 0.36], [sx, 0, 0], [0, 0, 1]), rectP(l * 0.42, t * 0.95, t * 0.12), t * 0.13, { standoff: t * 0.06, gap: t * 0.12 });
-  for (const sx of [-1, 1]) piston(b, kit, [sx * t * 0.3, -t * 0.52, l * 0.14], [sx * t * 0.28, -t * 0.46, l * 0.86], t * 0.15, 0.55, fine);
-  jointDrum(b, kit, [0, 0, l], t * 0.8, t * 1.65, 'x');
-  if (fine) cableBundle(b, kit, [t * 0.62, -t * 0.32, l * 0.08], [t * 0.56, -t * 0.4, l * 0.9], t * 0.06, [0, 1, 0], 2, 0.04);
-}
-export function hsShin(b: Bld, kit: Kit, l: number, t: number, fine: boolean, heavy = false) {
-  if (heavy) b.loft(kit.mech, [ring(t * 0.3, t * 0.52, t * 0.55), ring(l * 0.9, t * 0.46, t * 0.48)]);
-  frameLimb(b, kit, [0, 0, t * 0.5], [0, 0, l * 0.92], t * 0.18, [t * 0.34, 0, 0]);
-  plateStack(b, kit, kit.armor2, frame([0, t * 0.12, l * 0.46], [0, 1, 0], [0, 0, 1]), trapP(l * 0.72, t * 1.05, t * 1.45, t * 0.14), [
-    { inset: 0, thick: t * 0.2, standoff: t * 0.26 },
-    { inset: t * 0.2, thick: t * 0.15, shift: [-l * 0.1, 0], mat: kit.shell },
-  ], { gap: t * 0.16 });
-  // knee cap overhanging the knee drum
-  armorPlate(b, kit, kit.armor, frame([0, t * 0.62, t * 0.05], [0, 0.85, -0.5], [1, 0, 0]), trapP(t * 1.35, t * 0.9, t * 0.7, t * 0.12), t * 0.2, { standoff: t * 0.08 });
-  for (const sx of [-1, 1]) piston(b, kit, [sx * t * 0.28, -t * 0.42, l * 0.1], [sx * t * 0.26, -t * 0.38, l * 0.78], t * 0.13, 0.55, fine);
-  jointDrum(b, kit, [0, 0, l], t * 0.6, t * 1.35, 'x');
-  if (heavy) for (const sx of [-1, 1]) armorPlate(b, kit, kit.armor, frame([sx * t * 0.56, 0, l * 0.5], [sx, 0, 0], [0, 0, 1]), rectP(l * 0.5, t * 0.8, t * 0.1), t * 0.12, { standoff: t * 0.05 });
-  if (fine) hose(b, kit, [-t * 0.55, -t * 0.25, l * 0.05], [-t * 0.5, -t * 0.3, l * 0.85], t * 0.06, 0.04, 4);
-}
-export function hsFoot(b: Bld, kit: Kit, t: number, fine: boolean, heavy = false) {
-  const L = t * (heavy ? 4.6 : 4.2), Wd = t * (heavy ? 3.0 : 2.5);
-  b.slab(kit.rubber, rectP(L * 0.92, Wd, t * 0.45), t * 0.2, t * 0.05, t * 0.3, 0, 0);
-  block(b, kit.mech, t * 0.05, t * 0.18, 0, L * 0.5, Wd * 0.66, t * 0.62, { top: [0.66, 0.74], shift: [-t * 0.15, 0], ch: t * 0.3, bev: t * 0.08 });
-  // instep armour, three armoured toes (each a core + a sloped plate), heel spur
-  armorPlate(b, kit, kit.armor2, frame([t * 0.55, t * 0.62, 0], [0.55, 1, 0], [0, 0, 1]), rectP(Wd * 0.62, t * 1.1, t * 0.12), t * 0.18, { standoff: t * 0.05 });
-  const toes: [number, number][] = heavy ? [[-1.05, -0.3], [-0.36, -0.1], [0.36, 0.1], [1.05, 0.3]] : [[-0.8, -0.24], [0, 0], [0.8, 0.24]];
-  for (const [dz, ry] of toes) {
-    const x = t * 1.55 + Math.cos(ry) * t * 0.4;
-    block(b, kit.joint, x, t * 0.12, dz * t, t * 1.3, t * 0.68, t * 0.38, { top: [0.6, 0.85], shift: [t * 0.2, 0], ch: t * 0.18, bev: t * 0.05 });
-    armorPlate(b, kit, kit.armor, frame([x + t * 0.05, t * 0.48, dz * t], [0.4, 1, 0], [Math.cos(ry), 0, Math.sin(ry)]), rectP(t * 1.05, t * 0.6, t * 0.08), t * 0.12, { standoff: t * 0.03, gap: t * 0.06 });
+/** detail of one armoured leg: radial segments, armour layers (1 = shells only, 2 = + layered plates, 3 = + side
+ *  panels and a second layer on the lower segments), rams per bone, clevis eyes on the rams, glow blocks in the gaps */
+interface LegQ { seg: number; layers: 1 | 2 | 3; rams: 1 | 2; clevis: boolean; glow: boolean; lite: boolean }
+const Q_FULL: LegQ = { seg: 16, layers: 2, rams: 2, clevis: true, glow: true, lite: false };
+const Q_HEAVY: LegQ = { seg: 18, layers: 3, rams: 2, clevis: true, glow: true, lite: false };
+const Q_LITE: LegQ = { seg: 9, layers: 2, rams: 1, clevis: false, glow: true, lite: true };
+const Q_SPIDER: LegQ = { seg: 10, layers: 2, rams: 1, clevis: false, glow: false, lite: true };
+const Q_SPIDER_LITE: LegQ = { seg: 8, layers: 1, rams: 1, clevis: false, glow: false, lite: true };
+const Q_SPIDER_FINE: LegQ = { seg: 12, layers: 2, rams: 1, clevis: true, glow: true, lite: false };
+const qFor = (fine: boolean, heavy: boolean) => (heavy ? Q_HEAVY : fine ? Q_FULL : { ...Q_FULL, seg: 12, clevis: false });
+
+/** big layered joint drum, axis x (bones) or z (feet), centred at p, overall width ~1.34 w: a recessed dark core band
+ *  between two machined metal flanges, a team-colour hub cap on each side and a bright pin. lite: flanges + caps only */
+function drum(b: Bld, kit: Kit, p: V3, r: number, w: number, q: LegQ, cap: MatLike = kit.armor, axis: 'x' | 'z' = 'x') {
+  const seg = q.seg, X = axis === 'x';
+  const at = (s: number, d: number): V3 => (X ? [p[0] + s * d, p[1], p[2]] : [p[0], p[1], p[2] + s * d]);
+  if (q.lite) b.cyl(kit.mech, r * 0.86, r * 0.86, w * 0.64, at(-1, w * 0.32), axis, seg);
+  else b.cylb(kit.mech, r * 0.86, w * 0.64, r * 0.05, at(-1, w * 0.32), axis, seg);
+  for (const s of [-1, 1] as const) {
+    const ax = (X ? (s > 0 ? 'x' : '-x') : (s > 0 ? 'z' : '-z')) as 'x' | '-x' | 'z' | '-z';
+    const o = at(s, w * 0.3);
+    if (q.lite) {
+      b.lathe(kit.joint, [[r * 0.8, 0], [r, w * 0.04], [r, w * 0.17], [r * 0.78, w * 0.22]], o, ax, seg);
+      b.lathe(cap, [[r * 0.72, w * 0.21], [r * 0.6, w * 0.29], [0, w * 0.29]], o, ax, seg);
+      continue;
+    }
+    b.lathe(kit.joint, [[r * 0.8, 0], [r, w * 0.03], [r, w * 0.15], [r * 0.92, w * 0.21], [r * 0.7, w * 0.21]], o, ax, seg);
+    b.lathe(cap, [[r * 0.72, w * 0.2], [r * 0.66, w * 0.28], [r * 0.44, w * 0.3], [r * 0.4, w * 0.26], [0, w * 0.26]], o, ax, seg);
+    if (!q.lite) b.lathe(kit.steel, [[r * 0.24, w * 0.25], [r * 0.24, w * 0.34], [r * 0.16, w * 0.38], [0, w * 0.38]], o, ax, Math.max(8, seg - 4));
   }
-  block(b, kit.joint, -t * 1.6, t * 0.1, 0, t * 0.9, t * 0.9, t * 0.4, { top: [0.6, 0.7], shift: [-t * 0.2, 0], ch: t * 0.25, bev: t * 0.06 });
-  // ankle yoke + ankle piston from the heel up to the shin
-  for (const sz of [-1, 1]) b.box(kit.mech, t * 0.9, t * 0.9, t * 0.24, 0, t * 0.85, sz * t * 0.66, t * 0.08);
-  piston(b, kit, [-t * 1.45, t * 0.5, 0], [-t * 0.45, t * 1.35, 0], t * 0.16, 0.55, fine);
 }
+
+/** hydraulic ram with mounting blocks at both ends (the rams read as bright machinery between the plates) */
+function ram(b: Bld, kit: Kit, a: V3, c: V3, r: number, q: LegQ, ext = 0.5) {
+  piston(b, kit, a, c, r, ext, q.clevis);
+}
+
+function armThigh(b: Bld, kit: Kit, l: number, t: number, q: LegQ) {
+  // dark mechanical core: a waisted spine from the hip drum into the knee drum
+  b.loft(kit.mech, [sec(t * 0.2, t * 0.5, t * 0.55), sec(l * 0.32, t * 0.6, t * 0.62), sec(l * 0.72, t * 0.5, t * 0.52), sec(l - t * 0.2, t * 0.46, t * 0.48)]);
+  drum(b, kit, [0, 0, 0], t * 1.12, t * 1.46, q);
+  const gp = Math.min(t * 0.34, l * 0.07), zA0 = t * 0.95, zA1 = l * 0.5, zB0 = l * 0.5 + gp, zB1 = l - t * 0.8;
+  // upper segment: heavy dark-team shell wrapping face and flanks, a team plate layered over its face (offset edges)
+  shell(b, kit.armor2, [[zA0, t * 0.86, t * 0.58, t * 0.18], [l * 0.28, t * 0.94, t * 0.66, t * 0.22], [zA1, t * 0.8, t * 0.56, t * 0.14]], t * 0.16);
+  if (q.layers >= 2) shell(b, kit.armor, [[zA0 + t * 0.3, t * 0.7, t * 0.22, t * 0.84], [l * 0.3, t * 0.76, t * 0.26, t * 0.92], [zA1 - t * 0.16, t * 0.62, t * 0.22, t * 0.76]], t * 0.11);
+  if (q.layers >= 3) shell(b, kit.armor2, [[zA0 + t * 0.62, t * 0.46, t * 0.12, t * 1.16], [zA1 - t * 0.4, t * 0.4, t * 0.12, t * 1.04]], t * 0.07);
+  // light side panels on the flanks of the upper segment
+  if (q.layers >= 2) for (const s of [-1, 1]) shell(b, kit.shell, [[l * 0.16, t * 0.1, t * 0.4, t * 0.06], [zA1 - t * 0.2, t * 0.1, t * 0.34, t * 0.04]], t * 0.05, s * t * 0.96);
+  // lower segment: team shell over the knee, a light bone strip layered on its face
+  shell(b, kit.armor, [[zB0, t * 0.74, t * 0.52, t * 0.14], [zB1, t * 0.66, t * 0.48, t * 0.12]], t * 0.13);
+  if (q.layers >= 2) shell(b, kit.shell, [[zB0 + t * 0.16, t * 0.5, t * 0.16, t * 0.66], [zB1 - t * 0.12, t * 0.42, t * 0.15, t * 0.62]], t * 0.07);
+  if (q.layers >= 3) for (const s of [-1, 1]) shell(b, kit.armor2, [[zB0 + t * 0.1, t * 0.09, t * 0.36, t * 0.08], [zB1 - t * 0.1, t * 0.09, t * 0.3, t * 0.06]], t * 0.04, s * t * 0.8);
+  // glowing core block in the gap between the segments
+  if (q.glow) shell(b, kit.glow, [[zA1 - t * 0.04, t * 0.4, t * 0.14, t * 0.46], [zB0 + t * 0.04, t * 0.36, t * 0.12, t * 0.44]], t * 0.03);
+  // bright rams down the back, out of the hip drum into the knee
+  if (q.rams === 2) for (const s of [-1, 1]) ram(b, kit, [s * t * 0.36, -t * 0.66, t * 0.5], [s * t * 0.34, -t * 0.62, l * 0.86], t * 0.17, q);
+  else ram(b, kit, [0, -t * 0.66, t * 0.5], [0, -t * 0.6, l * 0.86], t * 0.2, q);
+  drum(b, kit, [0, 0, l], t * 0.82, t * 1.24, q);
+}
+
+function armShin(b: Bld, kit: Kit, l: number, t: number, q: LegQ) {
+  b.loft(kit.mech, [sec(t * 0.1, t * 0.5, t * 0.52), sec(l * 0.45, t * 0.52, t * 0.54), sec(l * 0.9, t * 0.36, t * 0.38), sec(l, t * 0.3, t * 0.32)]);
+  // knee cap: a big rounded plate over the front of the knee drum, a light plate layered on it
+  shell(b, kit.armor, [[-t * 0.62, t * 0.6, t * 0.28, t * 0.82], [t * 0.12, t * 0.8, t * 0.42, t * 0.96], [t * 0.86, t * 0.66, t * 0.3, t * 0.74]], t * 0.15);
+  if (q.layers >= 2) shell(b, kit.shell, [[-t * 0.36, t * 0.4, t * 0.13, t * 1.26], [t * 0.16, t * 0.5, t * 0.15, t * 1.34], [t * 0.62, t * 0.38, t * 0.12, t * 1.12]], t * 0.07);
+  const gp = Math.min(t * 0.32, l * 0.07), zA0 = t * 0.9, zA1 = l * 0.56, zB0 = l * 0.56 + gp, zB1 = l * 0.86;
+  // upper shin: dark-team shell, a team plate layered over the face, light flank panels
+  shell(b, kit.armor2, [[zA0, t * 0.84, t * 0.58, t * 0.14], [l * 0.3, t * 0.88, t * 0.64, t * 0.18], [zA1, t * 0.72, t * 0.54, t * 0.12]], t * 0.15);
+  if (q.layers >= 2) shell(b, kit.armor, [[zA0 + t * 0.2, t * 0.64, t * 0.22, t * 0.8], [l * 0.32, t * 0.66, t * 0.24, t * 0.86], [zA1 - t * 0.14, t * 0.5, t * 0.2, t * 0.72]], t * 0.1);
+  if (q.layers >= 3) for (const s of [-1, 1]) shell(b, kit.shell, [[zA0 + t * 0.3, t * 0.1, t * 0.38, t * 0.04], [zA1 - t * 0.2, t * 0.1, t * 0.32, t * 0.02]], t * 0.05, s * t * 0.9);
+  // lower shin: team shell narrowing to the ankle, a light plate on its face
+  shell(b, kit.armor, [[zB0, t * 0.64, t * 0.5, t * 0.1], [zB1, t * 0.54, t * 0.42, t * 0.06]], t * 0.12);
+  if (q.layers >= 2) shell(b, kit.shell, [[zB0 + t * 0.14, t * 0.44, t * 0.15, t * 0.6], [zB1 - t * 0.1, t * 0.36, t * 0.13, t * 0.5]], t * 0.06);
+  if (q.glow) shell(b, kit.glow, [[zA1 - t * 0.04, t * 0.36, t * 0.13, t * 0.44], [zB0 + t * 0.04, t * 0.32, t * 0.12, t * 0.42]], t * 0.03);
+  // the big calf ram down the back of the shin (bracket block at its top), slim side rams on heavy legs
+  shell(b, kit.mech, [[t * 0.3, t * 0.34, t * 0.24, -t * 0.72], [t * 1.1, t * 0.3, t * 0.2, -t * 0.66]], t * 0.06);
+  ram(b, kit, [0, -t * 0.82, t * 0.7], [0, -t * 0.58, l * 0.9], t * (q.lite ? 0.2 : 0.24), q, 0.45);
+  if (q.layers >= 3) for (const s of [-1, 1]) ram(b, kit, [s * t * 0.62, -t * 0.4, l * 0.12], [s * t * 0.5, -t * 0.36, l * 0.8], t * 0.12, q);
+}
+
+function armFoot(b: Bld, kit: Kit, t: number, q: LegQ, heavy = false) {
+  const L = t * (heavy ? 4.8 : 4.1), W = t * (heavy ? 3.3 : 2.8);
+  // sole and two stepped tiers: a wide, low, heavy footprint with sloped edges
+  block(b, kit.mech, 0, 0, 0, L, W, t * 0.24, { ch: t * 0.5, bev: t * 0.05 });
+  block(b, kit.armor2, -t * 0.1, t * 0.22, 0, L * 0.86, W * 0.88, t * 0.32, { top: [0.92, 0.94], ch: t * 0.45, bev: t * 0.08 });
+  block(b, kit.mech, -t * 0.35, t * 0.52, 0, L * 0.52, W * 0.6, t * 0.46, { top: [0.76, 0.84], ch: t * 0.3, bev: t * 0.08 });
+  // parallel armoured toes, each a sloped team block with a light toe cap layered on top
+  const n = heavy ? 4 : 3, tw = (W * 0.92) / n;
+  for (let i = 0; i < n; i++) {
+    const z = (i - (n - 1) / 2) * tw, x = L * 0.2 + (i === 0 || i === n - 1 ? -t * 0.12 : 0);
+    block(b, kit.armor, x, t * 0.2, z, t * 1.9, tw * 0.86, t * 0.5, { top: [0.55, 0.86], shift: [-t * 0.32, 0], ch: t * 0.16, bev: t * 0.07 });
+    if (q.layers >= 2) block(b, kit.shell, x - t * 0.36, t * 0.68, z, t * 0.86, tw * 0.62, t * 0.16, { top: [0.62, 0.8], shift: [-t * 0.06, 0], ch: t * 0.1, bev: t * 0.05 });
+  }
+  // heel block sloping back, a light cap on it
+  block(b, kit.armor, -L * 0.36, t * 0.2, 0, t * 1.3, W * 0.56, t * 0.56, { top: [0.6, 0.82], shift: [t * 0.22, 0], ch: t * 0.22, bev: t * 0.07 });
+  if (q.layers >= 2) block(b, kit.shell, -L * 0.33, t * 0.74, 0, t * 0.6, W * 0.36, t * 0.14, { top: [0.6, 0.8], ch: t * 0.1, bev: t * 0.04 });
+  // ankle: team cheeks either side of the shin around a drum across the foot, a bright ram from the heel
+  for (const s of [-1, 1]) block(b, kit.armor, -t * 0.12, t * 0.5, s * t * 0.86, t * 1.5, t * 0.3, t * 0.86, { top: [0.66, 1], shift: [-t * 0.08, 0], ch: t * 0.1, bev: t * 0.06 });
+  drum(b, kit, [-t * 0.1, t * 0.86, 0], t * 0.56, t * 1.3, q, kit.armor2, 'z');
+  ram(b, kit, [-L * 0.3, t * 0.7, 0], [-t * 0.62, t * 1.12, 0], t * 0.18, q, 0.5);
+}
+
+// ---- exported segment builders (titanlegs.ts / jumpjets.ts reuse them) ----------------------------------------------
+function liteThigh(b: Bld, kit: Kit, l: number, t: number) { armThigh(b, kit, l, t, Q_LITE); }
+function liteShin(b: Bld, kit: Kit, l: number, t: number) { armShin(b, kit, l, t, Q_LITE); }
+function liteFoot(b: Bld, kit: Kit, t: number) { armFoot(b, kit, t, Q_LITE); }
+
+export function hsThigh(b: Bld, kit: Kit, l: number, t: number, fine: boolean, heavy = false) { armThigh(b, kit, l, t, qFor(fine, heavy)); }
+export function hsShin(b: Bld, kit: Kit, l: number, t: number, fine: boolean, heavy = false) { armShin(b, kit, l, t, qFor(fine, heavy)); }
+export function hsFoot(b: Bld, kit: Kit, t: number, fine: boolean, heavy = false) { armFoot(b, kit, t, qFor(fine, heavy), heavy); }
+
 
 export interface LegOpts {
   kind: 'biped' | 'spider'; stride: number; lift: number;
@@ -252,7 +279,9 @@ export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg 
   const spider = o.kind === 'spider';
   const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
-  const rk = o.reach ?? 1;
+  // bipeds: bones a little longer than the hip-to-foot drop, so the knee always breaks forward (a loaded, crouched leg
+  // whose thigh and shin both show, not a straight post under the hull)
+  const rk = o.reach ?? (spider ? 1 : 1.12);
   const l1 = d0 * (spider ? 0.7 : 0.6) * rk, l2 = d0 * (spider ? 0.84 : 0.6) * rk;
   const t = Math.max(hip.t, Math.max(l1, l2) / MAX_SLENDER[o.kind]);
   const bendV = spider ? new THREE.Vector3(0, 1, hip.side * 0.3) : new THREE.Vector3(o.bend === 'back' ? -1 : 1, 0.12, 0);
