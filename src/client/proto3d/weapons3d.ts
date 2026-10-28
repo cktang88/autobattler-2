@@ -21,6 +21,7 @@ import { buildLauncher } from './weapons/launchers.ts';
 import { buildEnergy } from './weapons/energy.ts';
 import { buildMelee } from './weapons/melee.ts';
 import { buildUtility } from './weapons/utility.ts';
+import { arc, blades, cradle, flame, lens, rotary } from './weapons/w2500.ts';
 
 export interface Turret {
   /** yaw group: rotate .rotation.y for traverse */
@@ -92,7 +93,10 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   if (MELEE.has(v)) t.idleSpin = t.spinV = 6;
   if (!fixed && v !== 'plate' && !MELEE.has(v)) deckRing(C);
 
-  if (GUNS.has(v)) buildGun(C);
+  // year-2500 families (weapons/w2500.ts) take precedence over the older modern-weapon builders
+  const W25 = v === 'gatling' ? rotary : v === 'rocketPod' || v === 'missileRack' ? blades : v === 'tesla' ? arc : v === 'laser' ? lens : v === 'plasma' ? cradle : v === 'flamer' ? flame : null;
+  if (W25) W25(C);
+  else if (GUNS.has(v)) buildGun(C);
   else if (LAUNCH.has(v)) buildLauncher(C);
   else if (ENERGY.has(v)) buildEnergy(C);
   else if (MELEE.has(v)) buildMelee(C);

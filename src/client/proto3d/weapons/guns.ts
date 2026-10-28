@@ -24,7 +24,8 @@ export function buildGun(C: WCtx): void {
 /** Barrel length: the family default (`base`, housing-relative), or for the unit's main gun a hull-proportioned length
  *  (C.mainL x k; tank cannons ~0.85 L, autocannons ~0.55 L), capped at `cap` x the housing so a gun never dwarfs its
  *  own turret on a huge hull. */
-const mainLen = (C: WCtx, base: number, k = 1, cap = 3.0) => (C.mainL > 0 ? Math.max(base, Math.min(C.mainL * k, C.D * cap)) : base);
+// the unit's main gun is only a little longer than the family default (barrel length follows the bore, see barrel())
+const mainLen = (C: WCtx, base: number, _k = 1, _cap = 3.0) => (C.mainL > 0 ? base * 1.15 : base);
 
 const zs = (n: number, gap: number) => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * gap);
 

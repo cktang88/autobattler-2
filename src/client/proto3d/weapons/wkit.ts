@@ -90,7 +90,8 @@ export function barrel(C: WCtx, B: Bld, o: {
   sleeve?: boolean; evac?: boolean; brake?: 'slot' | 'cone' | 'flash' | 'block' | 'none'; taper?: number; noMuzzle?: boolean;
 }): number {
   const { kit } = C;
-  const x0 = o.x0 ?? 0, y = o.y ?? 0, z = o.z ?? 0, R = o.rad, L = o.len, seg = Math.min(o.seg ?? 8, 8);
+  // length follows the bore: thin guns are short and stubby, heavy guns long (never a thin rod as long as a cannon)
+  const x0 = o.x0 ?? 0, y = o.y ?? 0, z = o.z ?? 0, R = o.rad, L = Math.min(o.len, R * 18), seg = Math.min(o.seg ?? 8, 8);
   const brake = o.brake ?? 'none';
   const bl = brake === 'none' ? R * 1.6 : brake === 'flash' ? R * 2.4 : R * 3.0;
   // inner tube (bare metal) all the way to the brake
@@ -108,13 +109,12 @@ export function barrel(C: WCtx, B: Bld, o: {
     for (let i = 0; i < 3; i++) bx(B, kit.trim, x0 + cut * (0.22 + i * 0.22), y, z + s * w0 * 0.5, cut * 0.12, h0 * 0.42, R * 0.12);
     if (s > 0) bx(B, kit.glow, x0 + cut + (sEnd - cut) * 0.5, y + h0 * 0.08, z + s * w0 * 0.43, (sEnd - cut) * 0.55, R * 0.16, R * 0.08);
   }
-  // muzzle: angular block brake with side ports (all brake kinds; 'none' = short collar)
-  const m0 = L - bl;
-  if (brake === 'none') jacket(B, kit.metal, x0 + m0, x0 + L, y, z, R * 1.9, R * 2.1, 0.9);
-  else {
-    jacket(B, kit.metal, x0 + m0, x0 + L, y, z, R * 2.3, R * (brake === 'flash' ? 2.4 : 3.0), 0.92);
-    for (const f of brake === 'flash' ? [0.5] : [0.3, 0.7]) bx(B, kit.trim, x0 + m0 + bl * f, y, z, bl * 0.14, R * 1.5, R * (brake === 'flash' ? 2.5 : 3.1));
-  }
+  // muzzle: a HOLLOW hex sleeve (inner wall + a near-black core set deep inside, so the bore reads as a hole), with
+  // dark side ports on ported kinds
+  const m0 = L - bl, Ro = R * (brake === 'none' ? 1.15 : 1.45), Ri = R * 0.72;
+  B.lathe(kit.metal, [[Ri, 0], [Ro * 0.92, 0], [Ro, bl * 0.2], [Ro, bl], [Ri, bl], [Ri, 0]], [x0 + m0, y, z], 'x', 6);
+  B.lathe(kit.rubber, [[0, bl * 0.25], [Ri * 1.01, bl * 0.25], [Ri * 1.01, bl * 0.3], [0, bl * 0.3]], [x0 + m0, y, z], 'x', 6);
+  if (brake !== 'none' && brake !== 'flash') for (const f of [0.4, 0.75]) for (const s of [-1, 1]) bx(B, kit.rubber, x0 + m0 + bl * f, y, z + s * Ro * 0.9, bl * 0.14, R * 0.9, R * 0.3);
   if (!o.noMuzzle) C.muzzle(x0 + L + R * 0.3, y, z);
   return L;
 }
