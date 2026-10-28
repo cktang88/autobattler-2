@@ -10,9 +10,7 @@
 //                       pistons, a short spine back to an armoured counterweight bustle with the ammo box on its left
 //   hunter   (hunter)   long low 6-wheel tank hunter: shallow glacis with a folded trim vane, smoke banks, driver's
 //                       hatch + periscopes (left), remote weapon station on the engine deck, exhaust (right), bins
-//   (riot lives in chassis/heavies.ts)
-//   striker  (cross)    sponson gun carrier: narrow central hull, two armoured side casemates carrying the guns, bow
-//                       ball mount on a stepped glacis, side doors, smoke banks, exhaust stacks (left)
+//   (riot lives in chassis/heavies.ts, striker 'cross' in chassis/carriers.ts)
 //   aegis    (round)    armoured recovery / repair vehicle: chamfered octagon hull, crane jib stowed along the left
 //                       deck with a hook block, comms dish mast (right), winch + tow bar on the nose, engineer crosses
 // Hulls work on every mobility: the lower hull is clamped inside the running gear (stance.wi), anything wider starts at
@@ -258,86 +256,6 @@ function hunter(c: ChassisCtx): ChassisOut {
   };
 }
 
-// ---- striker: sponson gun carrier -----------------------------------------------------------------------------------------
-function striker(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, S, stance } = c;
-  const y0 = stance.y0;
-  const X = (f: number) => (f * L) / 3, Z = (f: number) => (f * W) / 2; // authored at L=3, W=2
-  const fine = fineFor(S);
-  keel(c, L * 0.4, -L * 0.05);
-  facetHull(c, kit.mech, [[X(-1.45), 0, 0.02, 0.1, 0.12, Z(0.32), Z(0.4), Z(0.4)], [X(1.4), 0.05, 0.06, 0.1, 0.12, Z(0.2), Z(0.26), Z(0.26)]]);
-  // narrow central hull: flat deck, stepped glacis to the bow mount, sloped rear plate
-  const st: FSt[] = [
-    [X(-1.5), 0.06, 0.06, 0.22, 0.27, Z(0.32), Z(0.38), Z(0.3)],
-    [X(-1.32), 0.04, 0.04, 0.24, 0.32, Z(0.36), Z(0.42), Z(0.33)],
-    [X(0.7), 0.04, 0.04, 0.24, 0.32, Z(0.36), Z(0.42), Z(0.33)],
-    [X(1.0), 0.05, 0.05, 0.2, 0.26, Z(0.32), Z(0.38), Z(0.27)],
-    [X(1.42), 0.08, 0.08, 0.13, 0.15, Z(0.18), Z(0.26), Z(0.14)],
-  ];
-  const H = facetHull(c, kit.armor, st);
-  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
-  facePlate(b, kit, kit.armor, [X(1.42), y0 + 0.15, 0], [X(1.0), y0 + 0.26, 0], ZA, Z(0.46), 0.014, UP, { standoff: 0.005, gap: 0.01, fill: 0.86 });
-  const sorted = [...c.mounts].sort((a, q) => Math.abs(a.z) - Math.abs(q.z));
-  const nose = sorted[0] && Math.abs(sorted[0].z) < 0.25 ? sorted[0] : undefined;
-  const side = c.mounts.filter((m) => m !== nose);
-  // side casemates: faceted armoured sponsons overhanging the running gear, sloped fronts, gun on the roof
-  const sy0 = Math.max(stance.yt + 0.02, y0 + 0.14) - y0;
-  const podTop = new Map<MountSpec, number>();
-  both((s) => {
-    const m = side.find((q) => Math.sign(q.z) === s);
-    const z = m?.z ?? s * Z(0.66), mx = m?.x ?? 0;
-    const hw = Math.max(Z(0.24), (m?.r ?? 0.12) * 1.5), inner = Math.abs(z) - hw;
-    const zc = s * (inner + hw);
-    const P = facetHull(c, kit.armor, [
-      [mx - X(0.55), sy0, sy0, sy0 + 0.14, sy0 + 0.2, hw * 0.92, hw, hw * 0.86],
-      [mx + X(0.3), sy0, sy0, sy0 + 0.14, sy0 + 0.2, hw * 0.92, hw, hw * 0.86],
-      [mx + X(0.55), sy0, sy0, sy0 + 0.06, sy0 + 0.08, hw * 0.8, hw * 0.88, hw * 0.7],
-    ], zc, false);
-    const top = y0 + sy0 + 0.2;
-    // sloped front plate, side door (recess) on the outer face, smoke bank on the front corner
-    facePlate(b, kit, kit.armor2, [mx + X(0.55), y0 + sy0 + 0.08, zc], [mx + X(0.3), top, zc], ZA, hw * 1.6, 0.012, [1, 0.5, 0], { standoff: 0.004, gap: 0.008, fill: 0.84 });
-    grille(b, kit, frame([mx - X(0.2), y0 + sy0 + 0.1, zc + s * hw], [0, 0, s], XA), X(0.24), 0.11, 0.012);
-    smokeLaunchers(b, kit, frame([mx + X(0.38), top, zc + s * hw * 0.55], UP, [Math.cos(0.5), 0, s * Math.sin(0.5)]), 3, 0.017);
-    // underside bracing back to the hull
-    beam(b, kit.mech, [mx - X(0.3), y0 + sy0, s * Z(0.36)], [mx - X(0.3), y0 + sy0 - 0.02, zc + s * hw * 0.5], 0.05, 0.04);
-    void P;
-    if (m) podTop.set(m, top);
-  });
-  // bow ball mount housing, driver's visor + hatch on the left of the bow, commander's hatch (right)
-  const nx = nose?.x ?? X(0.9);
-  const ny = dk(nx) + 0.01;
-  b.g(bevBox(0.12, 0.05, 0.12, 0.012), kit.armor2, mtx([nx, ny - 0.02, 0]));
-  periscopes(b, kit, X(0.78), dk(X(0.78)), -Z(0.2), 2, 0.024);
-  crewHatch(b, kit, frame([X(0.62), dk(X(0.62)), -Z(0.2)], UP), 0.045, fine);
-  crewHatch(b, kit, frame([X(-0.5), dk(X(-0.5)), Z(0.16)], UP), 0.045, fine);
-  // rear: twin exhaust stacks on the left, louvred grille, stowage rack, tow hooks
-  for (const dz of [0.0, 0.12]) {
-    const p: V3 = [X(-1.4), dk(X(-1.4)), -Z(0.18) + dz];
-    b.g(strutGeo(p, [p[0], p[1] + 0.16, p[2]], 0.018, 0.016, 7), kit.joint);
-    b.g(new THREE.CylinderGeometry(0.012, 0.012, 0.004, 7), kit.hot, mtx([p[0], p[1] + 0.162, p[2]]));
-  }
-  grille(b, kit, frame([X(-1.12), dk(X(-1.12)), Z(0.06)], UP), X(0.3), Z(0.4), 0.015, 4);
-  stowBox(b, kit, frame([X(-0.75), dk(X(-0.75)), Z(0.17)], UP, XA), X(0.26), 0.05, 0.08);
-  jerryCans(b, kit, frame([X(-0.75), dk(X(-0.75)), -Z(0.18)], UP, ZA), 2, 0.06);
-  antenna(b, kit, X(-1.2), dk(X(-1.2)), Z(0.28), 0.7, 0.007, [-0.15, 0, 0]);
-  towHooks(b, kit, frame([X(-1.5) - 0.004, y0 + 0.14, 0], [-1, 0, 0], ZA), Z(0.4), 0.022);
-  both((s) => cagedLamp(b, kit, frame([X(1.3), dk(X(1.3), s * Z(0.13)), s * Z(0.13)], UP, XA), 0.04, fine));
-  b.decal(0.13, 0.13, X(0.2), dk(X(0.2)) + 0.003, -Z(0.15), atlasUV(1), 0);
-  return {
-    deckAt: (x, z) => {
-      const d = H.deck(x, z);
-      for (const [m, t] of podTop) if (Math.abs(x - m.x) < X(0.3) && Math.abs(z - m.z) < Z(0.22)) return Math.max(d, t);
-      return d;
-    },
-    top: dk(0) + 0.06, custom: true, dressed: true,
-    seat: (m) => {
-      const pt = podTop.get(m);
-      if (pt !== undefined) return { y: ringSeat(b, kit, m, pt, 0.02, 14), socket: true };
-      return { y: ringSeat(b, kit, m, ny + 0.03, 0.012, 12, kit.mech), socket: true };
-    },
-  };
-}
-
 // ---- aegis: armoured recovery / repair vehicle -----------------------------------------------------------------------------
 function aegis(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, S, stance } = c;
@@ -405,6 +323,5 @@ registerChassis('wedge', scout);
 registerChassis('box', raider);
 registerChassis('carriage', carriage);
 registerChassis('hunter', hunter);
-registerChassis('cross', striker);
 registerChassis('round', aegis);
 void hose;

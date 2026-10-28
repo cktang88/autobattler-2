@@ -13,6 +13,7 @@ import './bombers.ts';
 import '../mobility/air.ts';
 import './light.ts';
 import './heavies.ts';
+import './carriers.ts';
 import '../mobility/wheels.ts';
 import '../mobility/hover.ts';
 import '../mobility/anchor.ts';

@@ -35189,7 +35189,8 @@ var MOUNT_PTS = {
 };
 var FOOT_MOUNTS = {
   long: [[-0.17, 0]],
-  cross: [[0, -0.33], [0, 0.33], [0.3, 0]],
+  // striker: the hero weapon stands on the torso at the centre (the other M rides it as a pod), utility over the prow
+  cross: [[-0.06, -0.05], [-0.06, 0.05], [0.3, 0]],
   airframe: [[0.04, -0.37], [0.04, 0.37]],
   delta: [[0.12, 0], [-0.22, -0.28], [-0.22, 0.28]],
   interceptor: [[-0.06, -0.3], [-0.06, 0.3]],
@@ -40690,7 +40691,7 @@ function frustum(b, mat, plan, y, h, o = {}) {
 }
 
 // src/client/proto3d/mobility/tracks.ts
-var STYLE = { hex: "hs", fortress: "pods", long: "exposed", siegeplat: "bogies", juggernaut: "wall", titan: "twin" };
+var STYLE = { hex: "hs", fortress: "wall", long: "exposed", siegeplat: "bogies", juggernaut: "wall", titan: "twin" };
 function trackStyle(shape, mobId = "treads") {
   if (mobId !== "treads") return "skirt";
   return STYLE[shape] ?? "skirt";
@@ -40936,66 +40937,6 @@ function warden(c) {
     }
   };
 }
-function bastion(c) {
-  const { b, kit, L, W, S, stance } = c;
-  const kx = L / 3, kz = W / 3, k = Math.min(kx, kz);
-  const fine = fineFor(S);
-  const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
-  frustum(b, kit.mech, ngon(8, 1.25 * kx, Math.min(stance.wi, 1.2 * kz), Math.PI / 8), y0, yt - y0 + 0.02, { bev: 0.02 });
-  const cit = ngon(8, 1.5 * kx, 1.42 * kz, Math.PI / 8);
-  const hC = 0.3 * k, cy = yt - 0.03 * k, top = 0.86;
-  frustum(b, kit.armor, cit, cy, hC, { top: [top, top], bot: 0.03 * k, bev: 0.012 * k });
-  const deckY = cy + hC;
-  frustumPlates(b, kit, kit.armor2, cit, cy, hC, top, 0.03 * k, { standoff: 0.012 * k, gap: 0.025 * k, widthK: 0.82, f0: 0.14, f1: 0.82 });
-  const facetMid = (i, f) => {
-    const a = cit[i], e = cit[(i + 1) % 8], kk = 1 - (1 - top) * f;
-    return [(a[0] + e[0]) / 2 * kk, cy + hC * f, (a[1] + e[1]) / 2 * kk];
-  };
-  both((s) => {
-    const i = s > 0 ? 0 : 7, p = facetMid(i, 1);
-    smokeLaunchers(b, kit, frame([p[0] - 0.06 * k, deckY, p[2] * 0.82], [0, 1, 0], [Math.cos(0.4), 0, s * Math.sin(0.4)]), 4, 0.03 * k);
-    cagedLamp(b, kit, frame([1.18 * kx, deckY, s * 0.28 * kz], [0, 1, 0], [1, 0, 0]), 0.08 * k, fine);
-  });
-  const sorted = [...c.mounts].sort((a, q) => q.x - a.x);
-  const front = sorted[0];
-  const fx2 = front?.x ?? 0.18 * kx;
-  const keep = ngon(8, 0.66 * k, 0.62 * k, Math.PI / 8, fx2, 0);
-  const keepY = deckY + 0.15 * k;
-  frustum(b, kit.armor, keep, deckY - 0.02 * k, keepY - deckY + 0.02 * k, { top: [0.86, 0.86], bev: 0.01 * k });
-  frustumPlates(b, kit, kit.armor, keep, deckY - 0.02 * k, keepY - deckY + 0.02 * k, 0.86, 0.022 * k, { standoff: 8e-3 * k, gap: 0.016 * k, skip: (i) => i > 1 && i < 6, widthK: 0.75 });
-  crewHatch(b, kit, frame([fx2 + 0.82 * k, deckY, -0.42 * kz], [0, 1, 0]), 0.08 * k, fine);
-  periscopes(b, kit, fx2 + 0.96 * k, deckY, -0.42 * kz, 3, 0.04 * k);
-  const towerY = deckY + 0.2 * k;
-  const towers = sorted.slice(1);
-  const towerAt = towers.length ? towers.map((m) => [m.x, m.z, m.r]) : [[-0.72 * kx, -0.75 * kz, 0.24 * k], [-0.72 * kx, 0.75 * kz, 0.24 * k]];
-  for (const [x, z, mr] of towerAt) {
-    const r = Math.max(mr, 0.24 * k) * 1.42;
-    const pl = ngon(8, r, r, Math.PI / 8, x, z);
-    frustum(b, kit.armor, pl, deckY - 0.05 * k, towerY - deckY + 0.05 * k, { top: [0.9, 0.9], bev: 0.01 * k });
-    frustum(b, kit.armor2, ngon(8, r * 1.06, r * 1.06, Math.PI / 8, x, z), deckY - 0.02 * k, 0.07 * k, { top: [0.98, 0.98], bev: 8e-3 * k });
-    if (fine) handrail(b, kit, ngon(8, r * 0.95, r * 0.95, Math.PI / 8, x, z).slice(3, 7).map(([px2, pz2]) => [px2, towerY + 0.07 * k, pz2]), 7e-3 * k, 0.07 * k);
-  }
-  recessPanel(b, kit, frame([-1 * kx, deckY, 0], [0, 1, 0]), 0.36 * kx, 0.62 * kz, 0.035 * k, { slats: 5, frame: kit.armor2 });
-  exhaustBox(b, kit, frame([-0.98 * kx, deckY, 0.5 * kz], [0, 1, 0], [-0.4, 0, 1]), 0.06 * k, fine);
-  jerryCans(b, kit, frame([-0.3 * kx, deckY, -1.08 * kz], [0, 1, 0], [1, 0, 0]), 3, 0.09 * k);
-  antenna(b, kit, -0.25 * kx, deckY, -0.82 * kz, 0.9 * k, 9e-3 * k, [-0.15, 0, 0]);
-  stowBox(b, kit, frame([-0.2 * kx, deckY, 1.06 * kz], [0, 1, 0], [1, 0, -0.25]), 0.5 * kx, 0.08 * k, 0.14 * kz);
-  const fr = facetMid(0, 0.5);
-  spareTrack(b, kit, frame([fr[0] - 0.04 * k, fr[1] + 0.04 * k, fr[2] - 0.04 * k], [0.62, 0.55, 0.62], [-1, 0, 1]), 3, 0.2 * k, 0.08 * k);
-  const rp = facetMid(4, 0.5);
-  ladder(b, kit, [rp[0] - 0.12 * k, 0.04, -0.3 * kz], [rp[0] + 0.02 * k, deckY, -0.3 * kz], 0.12 * k, [0, 0, 1], [-1, 0, 0], 0.03 * k);
-  towHooks(b, kit, frame([rp[0] - 0.03 * k, cy + 0.08 * k, 0.2 * kz], [-1, 0, 0], [0, 0, 1]), 0.3 * kz, 0.045 * k);
-  b.decal(0.22 * k, 0.22 * k, 0.55 * kx, deckY + 4e-3, 0.62 * kz, atlasUV(1), 0);
-  const topP = scalePlan(cit, top, top);
-  const deck = (x, z) => inPlan(topP, x, z) ? deckY : inPlan(cit, x, z) ? cy + hC * 0.5 : -1;
-  return {
-    deckAt: deck,
-    top: keepY,
-    custom: true,
-    dressed: true,
-    seat: (m) => ({ y: ringSeat(b, kit, m, m === front ? keepY : towerY, 0.02 * k, m === front ? 18 : 14), socket: true })
-  };
-}
 function longarm(c) {
   const { b, kit, L, W, S, stance } = c;
   const kx = L / 3, kz = W, k = Math.min(kx, kz);
@@ -41223,7 +41164,6 @@ function juggernaut(c) {
   };
 }
 registerChassis("hex", warden);
-registerChassis("fortress", bastion);
 registerChassis(["long", "longarm"], longarm);
 registerChassis("colossus", colossus);
 registerChassis("juggernaut", juggernaut);
@@ -43111,7 +43051,7 @@ function bomberhull(c) {
 function carrier(c) {
   const { b, kit } = c;
   const Y = c.stance.y0, cy = Y + 0.36;
-  const keel2 = [
+  const keel3 = [
     [1.98, cy, 0.12, 0.22],
     [1.6, cy + 0.04, 0.34, 0.5],
     [0.8, cy + 0.06, 0.46, 0.7],
@@ -43119,7 +43059,7 @@ function carrier(c) {
     [-1.5, cy + 0.08, 0.4, 0.6],
     [-1.98, cy + 0.06, 0.24, 0.4]
   ];
-  const K = new Fuse(keel2, 0, { kw: 0.5, lw: 0.86, ly: -0.62, chy: 0, sh: 0.9, shy: 0.6, tw: 0.62 });
+  const K = new Fuse(keel3, 0, { kw: 0.5, lw: 0.86, ly: -0.62, chy: 0, sh: 0.9, shy: 0.6, tw: 0.62 });
   fuselage(b, kit.armor, K);
   for (const x of [1.55, 0.9, 0.2, -0.5, -1.2, -1.75]) panelBreak(b, kit, K, x, 0.02);
   const deckY = (x) => K.top(x);
@@ -43791,80 +43731,6 @@ function hunter(c) {
     }
   };
 }
-function striker(c) {
-  const { b, kit, L, W, S, stance } = c;
-  const y0 = stance.y0;
-  const X = (f) => f * L / 3, Z = (f) => f * W / 2;
-  const fine = fineFor(S);
-  keel(c, L * 0.4, -L * 0.05);
-  facetHull(c, kit.mech, [[X(-1.45), 0, 0.02, 0.1, 0.12, Z(0.32), Z(0.4), Z(0.4)], [X(1.4), 0.05, 0.06, 0.1, 0.12, Z(0.2), Z(0.26), Z(0.26)]]);
-  const st = [
-    [X(-1.5), 0.06, 0.06, 0.22, 0.27, Z(0.32), Z(0.38), Z(0.3)],
-    [X(-1.32), 0.04, 0.04, 0.24, 0.32, Z(0.36), Z(0.42), Z(0.33)],
-    [X(0.7), 0.04, 0.04, 0.24, 0.32, Z(0.36), Z(0.42), Z(0.33)],
-    [X(1), 0.05, 0.05, 0.2, 0.26, Z(0.32), Z(0.38), Z(0.27)],
-    [X(1.42), 0.08, 0.08, 0.13, 0.15, Z(0.18), Z(0.26), Z(0.14)]
-  ];
-  const H = facetHull(c, kit.armor, st);
-  const dk = (x, z = 0) => Math.max(y0, H.deck(x, z));
-  facePlate(b, kit, kit.armor, [X(1.42), y0 + 0.15, 0], [X(1), y0 + 0.26, 0], ZA, Z(0.46), 0.014, UP, { standoff: 5e-3, gap: 0.01, fill: 0.86 });
-  const sorted = [...c.mounts].sort((a, q) => Math.abs(a.z) - Math.abs(q.z));
-  const nose = sorted[0] && Math.abs(sorted[0].z) < 0.25 ? sorted[0] : void 0;
-  const side = c.mounts.filter((m) => m !== nose);
-  const sy0 = Math.max(stance.yt + 0.02, y0 + 0.14) - y0;
-  const podTop = /* @__PURE__ */ new Map();
-  both((s) => {
-    const m = side.find((q) => Math.sign(q.z) === s);
-    const z = m?.z ?? s * Z(0.66), mx = m?.x ?? 0;
-    const hw = Math.max(Z(0.24), (m?.r ?? 0.12) * 1.5), inner = Math.abs(z) - hw;
-    const zc = s * (inner + hw);
-    const P = facetHull(c, kit.armor, [
-      [mx - X(0.55), sy0, sy0, sy0 + 0.14, sy0 + 0.2, hw * 0.92, hw, hw * 0.86],
-      [mx + X(0.3), sy0, sy0, sy0 + 0.14, sy0 + 0.2, hw * 0.92, hw, hw * 0.86],
-      [mx + X(0.55), sy0, sy0, sy0 + 0.06, sy0 + 0.08, hw * 0.8, hw * 0.88, hw * 0.7]
-    ], zc, false);
-    const top = y0 + sy0 + 0.2;
-    facePlate(b, kit, kit.armor2, [mx + X(0.55), y0 + sy0 + 0.08, zc], [mx + X(0.3), top, zc], ZA, hw * 1.6, 0.012, [1, 0.5, 0], { standoff: 4e-3, gap: 8e-3, fill: 0.84 });
-    grille(b, kit, frame([mx - X(0.2), y0 + sy0 + 0.1, zc + s * hw], [0, 0, s], XA), X(0.24), 0.11, 0.012);
-    smokeLaunchers(b, kit, frame([mx + X(0.38), top, zc + s * hw * 0.55], UP, [Math.cos(0.5), 0, s * Math.sin(0.5)]), 3, 0.017);
-    beam(b, kit.mech, [mx - X(0.3), y0 + sy0, s * Z(0.36)], [mx - X(0.3), y0 + sy0 - 0.02, zc + s * hw * 0.5], 0.05, 0.04);
-    void P;
-    if (m) podTop.set(m, top);
-  });
-  const nx = nose?.x ?? X(0.9);
-  const ny = dk(nx) + 0.01;
-  b.g(bevBox(0.12, 0.05, 0.12, 0.012), kit.armor2, mtx([nx, ny - 0.02, 0]));
-  periscopes(b, kit, X(0.78), dk(X(0.78)), -Z(0.2), 2, 0.024);
-  crewHatch(b, kit, frame([X(0.62), dk(X(0.62)), -Z(0.2)], UP), 0.045, fine);
-  crewHatch(b, kit, frame([X(-0.5), dk(X(-0.5)), Z(0.16)], UP), 0.045, fine);
-  for (const dz of [0, 0.12]) {
-    const p = [X(-1.4), dk(X(-1.4)), -Z(0.18) + dz];
-    b.g(strutGeo(p, [p[0], p[1] + 0.16, p[2]], 0.018, 0.016, 7), kit.joint);
-    b.g(new CylinderGeometry(0.012, 0.012, 4e-3, 7), kit.hot, mtx([p[0], p[1] + 0.162, p[2]]));
-  }
-  grille(b, kit, frame([X(-1.12), dk(X(-1.12)), Z(0.06)], UP), X(0.3), Z(0.4), 0.015, 4);
-  stowBox(b, kit, frame([X(-0.75), dk(X(-0.75)), Z(0.17)], UP, XA), X(0.26), 0.05, 0.08);
-  jerryCans(b, kit, frame([X(-0.75), dk(X(-0.75)), -Z(0.18)], UP, ZA), 2, 0.06);
-  antenna(b, kit, X(-1.2), dk(X(-1.2)), Z(0.28), 0.7, 7e-3, [-0.15, 0, 0]);
-  towHooks(b, kit, frame([X(-1.5) - 4e-3, y0 + 0.14, 0], [-1, 0, 0], ZA), Z(0.4), 0.022);
-  both((s) => cagedLamp(b, kit, frame([X(1.3), dk(X(1.3), s * Z(0.13)), s * Z(0.13)], UP, XA), 0.04, fine));
-  b.decal(0.13, 0.13, X(0.2), dk(X(0.2)) + 3e-3, -Z(0.15), atlasUV(1), 0);
-  return {
-    deckAt: (x, z) => {
-      const d = H.deck(x, z);
-      for (const [m, t] of podTop) if (Math.abs(x - m.x) < X(0.3) && Math.abs(z - m.z) < Z(0.22)) return Math.max(d, t);
-      return d;
-    },
-    top: dk(0) + 0.06,
-    custom: true,
-    dressed: true,
-    seat: (m) => {
-      const pt = podTop.get(m);
-      if (pt !== void 0) return { y: ringSeat(b, kit, m, pt, 0.02, 14), socket: true };
-      return { y: ringSeat(b, kit, m, ny + 0.03, 0.012, 12, kit.mech), socket: true };
-    }
-  };
-}
 function aegis(c) {
   const { b, kit, L, W, S, stance } = c;
   const y0 = stance.y0;
@@ -43927,7 +43793,6 @@ registerChassis("wedge", scout);
 registerChassis("box", raider);
 registerChassis("carriage", carriage);
 registerChassis("hunter", hunter);
-registerChassis("cross", striker);
 registerChassis("round", aegis);
 
 // src/client/proto3d/chassis/heavies.ts
@@ -44241,6 +44106,239 @@ function goliath(c) {
   };
 }
 registerChassis("goliath", goliath);
+
+// src/client/proto3d/chassis/carriers.ts
+var biggest3 = (ms) => ms.reduce((a, m) => !a || m.r > a.r ? m : a, void 0);
+var pbox4 = (b, mat, w, h, d, x, y, z, rot) => b.g(new BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
+function nacelle2(b, mat, c, rx, ry, rz, yaw, prof2, n = 12, flat2 = 0.3) {
+  const rings = prof2.map(([f, k]) => ellRing(f * rx, 0, 0, Math.max(3e-3, ry * k), Math.max(3e-3, rz * k), n, 2.6, flat2));
+  b.loft(mat, rings, true, true, mtx(c, [0, yaw, 0]));
+}
+function reactorDrum(b, kit, x, z, r, y0, y1, ribs, shellMat, seg = 16) {
+  const h = y1 - y0;
+  const wb0 = y0 + h * 0.36, wb1 = y0 + h * 0.7;
+  b.lathe(shellMat, [[0, 0], [r * 1.04, 0], [r * 1.04, (wb0 - y0) * 0.8], [r * 0.96, wb0 - y0], [0, wb0 - y0]], [x, y0, z], "y", seg);
+  b.cyl(kit.plasma, r * 0.8, r * 0.8, wb1 - wb0 + 0.01, [x, wb0 - 5e-3, z], "y", seg);
+  b.lathe(shellMat, [[0, 0], [r * 0.96, 0], [r * 1.04, (y1 - wb1) * 0.2], [r * 1.04, (y1 - wb1) * 0.62], [r * 0.82, y1 - wb1], [0, y1 - wb1]], [x, wb1, z], "y", seg);
+  for (let i = 0; i < ribs; i++) {
+    const a = i / ribs * Math.PI * 2 + Math.PI / ribs;
+    b.g(bevBox(r * 0.36, wb1 - wb0 + 4e-3, r * 0.26, r * 0.05), kit.mech, mtx([x + Math.cos(a) * r * 0.9, (wb0 + wb1) / 2, z + Math.sin(a) * r * 0.9], [0, -a, 0]));
+  }
+}
+function keel2(c, l, x = 0) {
+  const { b, kit, stance, W } = c;
+  if (!stance.legs) return;
+  const t = stance.thick;
+  const w = stance.legs === "spider" ? W * 0.5 : Math.max(W * 0.3, W * 0.54 - t * 1.6);
+  block(b, kit.mech, x, stance.hipY - t * 0.9, 0, l, w, stance.y0 - stance.hipY + t * 0.95, { top: [1.06, 1.08], ch: t * 0.5, bev: t * 0.12, bot: t * 0.25 });
+}
+function striker(c) {
+  const { b, kit, L, W, S, stance } = c;
+  const fine = fineFor(S);
+  const X = (f) => f * L / 3, Z = (f) => f * W / 2;
+  const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.14);
+  const wi = Math.min(stance.wi, Z(0.5));
+  const main = biggest3(c.mounts.filter((m) => m.mod.kind === "weapon")) ?? biggest3(c.mounts);
+  const hx = main?.x ?? X(-0.18), hz = main?.z ?? 0;
+  const R = Math.max(main?.r ?? 0.5, 0.3);
+  const seatY = yt + 0.4;
+  keel2(c, L * 0.42, X(-0.1));
+  block(b, kit.mech, X(0), y0, 0, X(2.5), wi * 2, yt - y0 + 0.04, { top: [0.96, 0.92], ch: 0.08, bev: 0.025, bot: 0.03 });
+  block(b, kit.armor2, hx, yt - 0.02, hz, R * 1.9, Z(1), 0.08, { top: [0.97, 0.95], ch: 0.14, bev: 0.02 });
+  const t0 = yt + 0.04, t1 = t0 + 0.15, g0 = t1 + 0.01, g1 = g0 + 0.07, t2 = seatY - 0.02;
+  const o1 = ngon(8, R * 0.92, R * 0.86, Math.PI / 8, hx, hz);
+  frustum(b, kit.armor2, o1, t0 - 0.02, t1 - t0 + 0.02, { top: [0.92, 0.92], bev: 0.02 });
+  frustumPlates(b, kit, kit.armor, o1, t0 - 0.02, t1 - t0 + 0.02, 0.92, 0.022, { standoff: 6e-3, gap: 0.012, widthK: 0.78, f0: 0.12, f1: 0.86 });
+  b.cyl(kit.plasma, R * 0.72, R * 0.72, g1 - g0 + 0.02, [hx, g0 - 0.01, hz], "y", 16);
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2;
+    b.g(bevBox(0.07, g1 - g0, 0.05, 0.012), kit.mech, mtx([hx + Math.cos(a) * R * 0.74, (g0 + g1) / 2, hz + Math.sin(a) * R * 0.74], [0, -a, 0]));
+  }
+  const o2 = ngon(8, R * 0.84, R * 0.78, Math.PI / 8, hx, hz);
+  frustum(b, kit.shell, o2, g1, t2 - g1, { top: [0.9, 0.9], bev: 0.025, bot: 0.012 });
+  const pX0 = hx + R * 0.45, pX1 = X(1.5);
+  block(b, kit.mech, (pX0 + pX1) / 2 - 0.05, y0 + 0.02, 0, pX1 - pX0 + 0.1, Z(0.56), yt - y0 + 0.02, { top: [0.82, 0.86], shift: [-0.06, 0], ch: 0.06, bev: 0.02, bot: 0.02 });
+  block(b, kit.armor, (pX0 + pX1) / 2 - 0.02, yt - 0.03, 0, pX1 - pX0 - 0.02, Z(0.66), 0.2, { top: [0.48, 0.62], shift: [-(pX1 - pX0) * 0.24, 0], ch: 0.07, bev: 0.025, mid: [[0.45, 0.86, 0.94]] });
+  b.loft(kit.shell, [0.05, -0.05].map((zz) => [
+    [pX1 - 0.04, yt + 0.06, zz],
+    [pX1 - 0.22, yt + 0.2, zz * 0.9],
+    [pX0 + 0.04, t1 + 0.04, zz * 0.9],
+    [pX0 - 0.02, t0, zz]
+  ]), true, true);
+  both((s) => {
+    pbox4(b, kit.glow, 0.26, 0.026, 0.02, pX1 - 0.34, yt + 0.06, s * Z(0.27), [0, s * 0.42, -0.12]);
+    pbox4(b, kit.lamp, 0.03, 0.04, 0.09, pX1 - 0.02, yt - 0.04, s * Z(0.13));
+  });
+  const nY = yt + 0.16, nZ = Z(0.86), nX = hx + X(0.22), sweep = 0.32;
+  both((s) => {
+    const cN = [nX, nY, s * nZ];
+    const yaw = s * sweep;
+    nacelle2(b, kit.armor2, [cN[0] - 0.02, cN[1] - 0.03, cN[2]], 0.5, 0.15, 0.2, yaw, [[-1, 0.45], [-0.8, 0.86], [0.5, 1], [0.86, 0.9], [1, 0.62]], 12, 0.5);
+    nacelle2(b, kit.armor, [cN[0], cN[1] + 0.035, cN[2] + s * 0.012], 0.44, 0.14, 0.17, yaw, [[-0.95, 0.5], [-0.7, 0.92], [0.3, 1], [0.7, 0.9], [0.9, 0.55]], 12, 0.2);
+    nacelle2(b, kit.shell, [cN[0] + 0.05, cN[1] + 0.12, cN[2] + s * 0.03], 0.3, 0.05, 0.1, yaw, [[-1, 0.5], [-0.6, 1], [0.6, 1], [1, 0.4]], 8, 0.9);
+    const fwd = [Math.cos(yaw), 0, -Math.sin(yaw)];
+    const nose = [cN[0] + fwd[0] * 0.5, cN[1], cN[2] + fwd[2] * 0.5];
+    b.lathe(kit.mech, [[0, 0], [0.13, 0], [0.13, 0.03], [0.1, 0.05], [0, 0.05]], nose, "x", 14, [0, yaw, 0]);
+    b.lathe(kit.plasma, [[0, 0], [0.09, 0], [0.09, 0.012], [0, 0.012]], [nose[0] + fwd[0] * 0.045, nose[1], nose[2] + fwd[2] * 0.045], "x", 14, [0, yaw, 0]);
+    const tail = [cN[0] - fwd[0] * 0.5, cN[1] + 0.01, cN[2] - fwd[2] * 0.5];
+    b.lathe(kit.joint, [[0, 0], [0.12, 0], [0.1, 0.1], [0.08, 0.12], [0, 0.12]], tail, "-x", 12, [0, yaw, 0]);
+    b.cyl(kit.hot, 0.07, 0.07, 0.01, [tail[0] - fwd[0] * 0.12, tail[1], tail[2] - fwd[2] * 0.12], "x", 10);
+    const root = [hx + 0.05, t0 + 0.03, s * R * 0.62];
+    b.g(bevBox(0.16, 0.1, nZ - R * 0.62, 0.02), kit.mech, mtx([root[0] + 0.05, root[1], s * (R * 0.62 + (nZ - R * 0.62) / 2)], [0, s * sweep * 0.6, 0]));
+    b.cylb(kit.joint, 0.09, 0.16, 0.015, [root[0], root[1], root[2] - s * 0.04], s > 0 ? "z" : "-z", 12);
+    if (fine) piston(b, kit, [root[0] - 0.12, t1, s * R * 0.66], [cN[0] - 0.18, nY + 0.12, s * (nZ - 0.16)], 0.02, 0.55, true);
+  });
+  const bX = X(-1.2), bZ = Z(0.62), bR = 0.2, bY = yt + 0.26, bTop = seatY + 0.22;
+  block(b, kit.armor2, bX + 0.06, yt - 0.04, 0, 0.5, Z(0.9), 0.14, { top: [0.9, 0.9], ch: 0.08, bev: 0.02 });
+  b.cyl(kit.plasma, bR * 0.8, bR * 0.8, bZ * 1.6, [bX, bY, -bZ * 0.8], "z", 16);
+  for (let i = 0; i < 9; i++) {
+    const a = i / 9 * Math.PI * 2;
+    b.g(bevBox(0.07, 0.06, bZ * 1.56, 0.012), kit.mech, mtx([bX + Math.cos(a) * bR * 0.84, bY + Math.sin(a) * bR * 0.84, 0], [0, 0, a]));
+  }
+  both((s) => {
+    block(b, kit.mech, bX + 0.02, yt + 0.04, s * (bZ * 0.8 + 0.04), 0.22, 0.08, bY - yt, { top: [0.7, 1], ch: 0.03, bev: 0.012 });
+    b.lathe(kit.armor, [[0, 0], [bR * 1.12, 0], [bR * 1.16, 0.04], [bR * 1.16, bZ * 0.2], [bR * 0.92, bZ * 0.28], [0, bZ * 0.28]], [bX, bY, s * bZ * 0.8], s > 0 ? "z" : "-z", 16);
+    b.lathe(kit.shell, [[0, 0], [bR * 1.2, 0], [bR * 1.2, 0.05], [0, 0.05]], [bX, bY, s * (bZ * 0.8 + 0.08)], s > 0 ? "z" : "-z", 16);
+    b.cyl(kit.hot, bR * 0.5, bR * 0.5, 0.012, [bX, bY, s * (bZ * 1.08 + 2e-3)], s > 0 ? "z" : "-z", 12);
+  });
+  const spX0 = bX + bR * 0.6, spX1 = hx - R * 0.55;
+  block(b, kit.armor, (spX0 + spX1) / 2, yt - 0.02, 0, spX1 - spX0, Z(0.42), 0.26, { top: [0.92, 0.8], ch: 0.06, bev: 0.025 });
+  block(b, kit.shell, (spX0 + spX1) / 2 - 0.03, yt + 0.235, 0, (spX1 - spX0) * 0.7, Z(0.2), 0.04, { top: [0.9, 0.8], ch: 0.03, bev: 0.012 });
+  b.loft(kit.armor, [0.035, -0.035].map((zz) => [[bX + 0.22, bY + bR * 0.6, zz], [bX + 0.02, bTop, zz], [bX - 0.2, bTop - 0.04, zz], [bX - 0.3, bY, zz]]), true, true);
+  b.loft(kit.shell, [0.05, -0.05].map((zz) => [[bX + 0.05, bTop - 0.06, zz], [bX + 0, bTop + 0.025, zz], [bX - 0.2, bTop - 0.015, zz], [bX - 0.18, bTop - 0.09, zz]]), true, true);
+  pbox4(b, kit.glow, 0.2, 0.025, 0.08, bX - 0.08, bTop - 0.12, 0, [0, 0, 0.12]);
+  block(b, kit.armor2, X(-1.42), y0 + 0.06, 0, 0.16, Z(0.7), yt - y0, { top: [0.7, 0.9], shift: [0.02, 0], ch: 0.04, bev: 0.015 });
+  const deck = (x, z) => {
+    if (Math.hypot(x - hx, z - hz) < R * 0.78) return seatY;
+    if (Math.abs(x - bX) < bR && Math.abs(z) < bZ) return bY + bR;
+    if (x > pX0 && x < pX1 && Math.abs(z) < Z(0.33)) return yt + 0.16;
+    return Math.abs(x) <= L / 2 && Math.abs(z) <= W / 2 ? yt + 0.06 : -1;
+  };
+  return {
+    deckAt: deck,
+    top: bTop,
+    custom: true,
+    dressed: true,
+    seat: (m) => {
+      if (m === main) {
+        collar(b, kit, m.x, seatY, m.z, m.r, seatY - 0.05, 16);
+        return { y: seatY, socket: true };
+      }
+      return { y: ringSeat(b, kit, m, Math.max(yt + 0.06, deck(m.x, m.z)), 0.02, 12), socket: true };
+    }
+  };
+}
+function bastion(c) {
+  const { b, kit, L, W, S, stance } = c;
+  const fine = fineFor(S);
+  const kx = L / 2, kz = W / 2, k = Math.min(kx, kz);
+  const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
+  const wi = Math.min(stance.wi, 0.62 * kz);
+  const front = [...c.mounts].sort((a, q) => q.x - a.x)[0];
+  const onTorso = (m) => Math.abs(m.z) < 0.1 && m.x > -0.1 * kx;
+  const hx = front && onTorso(front) ? front.x : 0.06 * L, hz = 0;
+  const top = c.mounts.find(onTorso);
+  const R = Math.max(top?.r ?? 0.75 * k, 0.45 * k);
+  const pY = yt + 0.08 * k;
+  const wY0 = pY + 0.02 * k, wY1 = yt + 0.46 * k;
+  const seatY = yt + 0.88 * k;
+  keel2(c, L * 0.5);
+  block(b, kit.mech, -0.02 * kx, y0, 0, 1.86 * kx, wi * 2, yt - y0 + 0.04, { top: [0.97, 0.94], ch: 0.1, bev: 0.03, bot: 0.04 });
+  block(b, kit.armor, -0.02 * kx, yt - 0.06 * k, 0, 1.3 * kx, 1.18 * kz, pY - yt + 0.06 * k, { top: [0.88, 0.9], ch: 0.14 * k, bev: 0.03 * k });
+  block(b, kit.armor2, 0.86 * kx, y0 + 0.02 * k, 0, 0.32 * kx, 1 * kz, yt - y0 + 0.02 * k, { top: [0.4, 0.92], shift: [-0.1 * kx, 0], ch: 0.06 * k, bev: 0.02 * k, bot: 0.02 * k });
+  both((s) => {
+    block(b, kit.shell, 0.52 * kx, pY - 5e-3, s * 0.42 * kz, 0.4 * kx, 0.36 * kz, 0.04 * k, { top: [0.84, 0.86], ch: 0.04 * k, bev: 0.015 * k });
+    pbox4(b, kit.lamp, 0.03 * k, 0.05 * k, 0.12 * k, 0.99 * kx, yt - 0.04 * k, s * 0.3 * kz);
+  });
+  const wX0 = -0.94 * kx, wX1 = 0.38 * kx, wl = wX1 - wX0, wz = Math.max(wi + 0.2 * k, 0.8 * kz), ww = 0.36 * kz;
+  both((s) => {
+    block(b, kit.armor2, (wX0 + wX1) / 2, yt + 0.02 * k, s * wz, wl, ww, 0.1 * k, { top: [0.97, 0.86], shift: [0, -s * 0.02 * k], ch: 0.06 * k, bev: 0.02 * k });
+    block(b, kit.armor, (wX0 + wX1) / 2 - 0.04 * k, yt + 0.11 * k, s * (wz - 0.02 * k), wl * 0.9, ww * 0.82, 0.08 * k, { top: [0.9, 0.78], shift: [-0.03 * k, -s * 0.02 * k], ch: 0.06 * k, bev: 0.025 * k });
+    block(b, kit.shell, (wX0 + wX1) / 2 - 0.1 * k, yt + 0.185 * k, s * (wz - 0.05 * k), wl * 0.5, ww * 0.38, 0.035 * k, { top: [0.9, 0.8], ch: 0.03 * k, bev: 0.012 * k });
+    pbox4(b, kit.glow, wl * 0.36, 0.022 * k, 0.025 * k, (wX0 + wX1) / 2 + 0.1 * k, yt + 0.07 * k, s * (wz + ww * 0.5 + 4e-3));
+  });
+  const wR = R * 0.48;
+  frustum(b, kit.mech, ngon(8, wR * 1.25, wR * 1.25, Math.PI / 8, hx, hz), pY - 0.01, 0.07 * k, { top: [0.92, 0.92], bev: 0.015 * k });
+  b.cyl(kit.plasma, wR * 0.82, wR * 0.82, wY1 - wY0, [hx, wY0, hz], "y", 16);
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2;
+    b.g(bevBox(0.1 * k, wY1 - wY0, 0.06 * k, 0.012), kit.mech, mtx([hx + Math.cos(a) * wR * 0.86, (wY0 + wY1) / 2, hz + Math.sin(a) * wR * 0.86], [0, -a, 0]));
+  }
+  b.cylb(kit.joint, wR * 1.02, 0.05 * k, 0.01, [hx, wY1 - 0.04 * k, hz], "y", 18);
+  for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) piston(b, kit, [hx + dx * wR * 1.15, pY + 0.01, dz * wR * 0.9], [hx + dx * wR * 1.15, wY1 + 0.04 * k, dz * wR * 1.25], 0.045 * k, 0.5, fine);
+  const hipY = pY + 0.1 * k, hipZ = wR * 1.25 + 0.12 * k;
+  b.cylb(kit.mech, 0.08 * k, hipZ * 2, 0.01, [hx - 0.04 * k, hipY, -hipZ], "z", 12);
+  both((s) => {
+    b.lathe(kit.joint, [[0, 0], [0.17 * k, 0], [0.19 * k, 0.03 * k], [0.19 * k, 0.11 * k], [0.15 * k, 0.15 * k], [0, 0.15 * k]], [hx - 0.04 * k, hipY, s * (hipZ - 0.1 * k)], s > 0 ? "z" : "-z", 18);
+    b.lathe(kit.armor, [[0, 0], [0.13 * k, 0], [0.1 * k, 0.04 * k], [0, 0.04 * k]], [hx - 0.04 * k, hipY, s * (hipZ + 0.05 * k)], s > 0 ? "z" : "-z", 14);
+  });
+  const abY0 = wY0 + 0.06 * k, abY1 = wY1 - 0.02 * k;
+  b.g(bevBox(0.05 * k, abY1 - abY0, wR * 1.3, 0.014 * k), kit.armor2, mtx([hx + wR * 1, (abY0 + abY1) / 2, hz], [0, 0, 0.12]));
+  b.g(bevBox(0.05 * k, (abY1 - abY0) * 0.7, wR * 0.9, 0.014 * k), kit.shell, mtx([hx + wR * 1 + 0.045 * k, (abY0 + abY1) / 2 + 0.03 * k, hz], [0, 0, 0.12]));
+  const cL = R * 1.5, cW = R * 1.5, cY0 = wY1 - 0.01, cY1 = seatY - 0.03 * k;
+  block(b, kit.armor2, hx - 0.02 * k, cY0, hz, cL * 0.78, cW * 0.78, 0.12 * k, { top: [1.18, 1.2], ch: 0.08 * k, bev: 0.02 * k, bot: 0.03 * k });
+  block(b, kit.armor, hx - 0.03 * k, cY0 + 0.1 * k, hz, cL * 0.92, cW * 0.94, cY1 - cY0 - 0.1 * k, { top: [1.04, 1.06], ch: 0.14 * k, bev: 0.035 * k, mid: [[0.5, 1.04, 1.06]] });
+  both((s) => {
+    const F = frame([hx + cL * 0.5, (cY0 + cY1) / 2 + 0.04 * k, s * cW * 0.24], [1, 0.22, s * 0.25], [0, 0, 1]);
+    b.g(bevBox(cW * 0.4, 0.035 * k, (cY1 - cY0) * 0.62, 0.012 * k), kit.shell, F.clone().multiply(new Matrix4().makeTranslation(0, 0.02 * k, 0)));
+    b.g(bevBox(cW * 0.3, 0.03 * k, (cY1 - cY0) * 0.4, 0.01 * k), kit.armor, F.clone().multiply(new Matrix4().makeTranslation(-s * 0.01 * k, 0.05 * k, -0.02 * k)));
+    const G2 = frame([hx - 0.02 * k, (cY0 + cY1) / 2 + 0.02 * k, s * cW * 0.5], [0, 0.1, s], [1, 0, 0]);
+    b.g(bevBox(cL * 0.7, 0.03 * k, (cY1 - cY0) * 0.55, 0.01 * k), kit.armor2, G2);
+  });
+  pbox4(b, kit.plasma, 0.03 * k, (cY1 - cY0) * 0.45, cW * 0.1, hx + cL * 0.52, (cY0 + cY1) / 2, hz, [0, 0, -0.22]);
+  block(b, kit.shell, hx + cL * 0.5, cY0 + 0.02 * k, hz, 0.24 * k, cW * 0.42, 0.14 * k, { top: [0.5, 0.8], shift: [-0.05 * k, 0], ch: 0.04 * k, bev: 0.015 * k });
+  const pz2 = cW * 0.5 + 0.3 * k, pyC = seatY - 0.17 * k;
+  both((s) => {
+    b.cylb(kit.joint, 0.13 * k, pz2 - cW * 0.42, 0.02 * k, [hx, pyC - 0.04 * k, s * cW * 0.42], s > 0 ? "z" : "-z", 14);
+    b.lathe(kit.mech, [[0, 0], [0.17 * k, 0], [0.14 * k, 0.05 * k], [0, 0.05 * k]], [hx, pyC - 0.04 * k, s * (pz2 - 0.14 * k)], s > 0 ? "z" : "-z", 14);
+    nacelle2(b, kit.armor2, [hx - 0.02 * k, pyC - 0.04 * k, s * pz2], 0.5 * k, 0.2 * k, 0.24 * k, 0, [[-1, 0.5], [-0.75, 0.9], [0.5, 1], [0.85, 0.85], [1, 0.5]], 14, 0.55);
+    nacelle2(b, kit.armor, [hx, pyC + 0.02 * k, s * (pz2 + 0.02 * k)], 0.46 * k, 0.17 * k, 0.25 * k, 0, [[-0.95, 0.5], [-0.7, 0.92], [0.4, 1], [0.8, 0.88], [0.95, 0.5]], 14, 0.15);
+    nacelle2(b, kit.shell, [hx + 0.04 * k, pyC + 0.12 * k, s * (pz2 + 0.04 * k)], 0.34 * k, 0.06 * k, 0.17 * k, 0, [[-1, 0.5], [-0.6, 1], [0.6, 1], [1, 0.45]], 10, 0.9);
+    pbox4(b, kit.glow, 0.5 * k, 0.028 * k, 0.03 * k, hx - 0.04 * k, pyC - 0.02 * k, s * (pz2 + 0.25 * k));
+    pbox4(b, kit.lamp, 0.03 * k, 0.05 * k, 0.1 * k, hx + 0.47 * k, pyC - 0.02 * k, s * (pz2 + 0.04 * k));
+  });
+  const sX = -0.8 * kx, sZ = 0.44 * kz, sR = 0.19 * k, sTop = seatY + 0.26 * k;
+  block(b, kit.armor2, sX + 0.02 * k, pY - 0.02 * k, 0, 0.5 * k, 2 * sZ + 0.3 * k, 0.14 * k, { top: [0.9, 0.94], ch: 0.07 * k, bev: 0.02 * k });
+  both((s) => {
+    reactorDrum(b, kit, sX, s * sZ, sR, pY + 0.1 * k, sTop, 8, kit.shell, 20);
+    b.lathe(kit.armor, [[0, 0], [sR * 1.2, 0], [sR * 1.2, 0.08 * k], [sR * 1.08, 0.11 * k], [0, 0.11 * k]], [sX, pY + 0.1 * k, s * sZ], "y", 16);
+    b.lathe(kit.armor, [[0, 0], [sR * 1.1, 0], [sR * 1.1, 0.06 * k], [0, 0.06 * k]], [sX, sTop - 0.22 * k, s * sZ], "y", 16);
+    b.lathe(kit.armor2, [[0, 0], [sR * 0.86, 0], [sR * 0.7, 0.07 * k], [sR * 0.38, 0.1 * k], [0, 0.1 * k]], [sX, sTop - 5e-3, s * sZ], "y", 16);
+    b.cyl(kit.hot, sR * 0.28, sR * 0.28, 0.01, [sX, sTop + 0.096 * k, s * sZ], "y", 10);
+  });
+  const bH = seatY - 0.12 * k;
+  block(b, kit.armor, sX + 0.02 * k, pY + 0.1 * k, 0, 0.34 * k, 2 * sZ - sR * 1.4, bH - pY - 0.1 * k, { top: [0.86, 0.9], shift: [0.02 * k, 0], ch: 0.06 * k, bev: 0.025 * k });
+  block(b, kit.shell, sX + 0.03 * k, bH - 5e-3, 0, 0.26 * k, 2 * sZ - sR * 2.1, 0.05 * k, { top: [0.86, 0.86], ch: 0.04 * k, bev: 0.015 * k });
+  b.g(bevBox(0.16 * k, 0.12 * k, hx - cL * 0.4 - sX, 0.02 * k), kit.mech, mtx([(sX + hx - cL * 0.4) / 2, bH - 0.1 * k, 0], [0, Math.PI / 2, 0]));
+  if (fine) recessPanel(b, kit, frame([sX - 0.17 * k, (pY + bH) / 2, 0], [-1, 0, 0], [0, 1, 0]), (bH - pY) * 0.5, sZ, 0.012 * k, { slats: 4, frame: kit.armor });
+  both((s) => exhaustBox(b, kit, frame([-0.98 * kx, pY, s * 0.68 * kz], [0, 1, 0], [-1, 0, 0]), 0.05 * k, fine));
+  const deck = (x, z) => {
+    const az = Math.abs(z);
+    if (Math.hypot(x - hx, z - hz) < R * 0.78) return seatY;
+    if (Math.abs(x - hx) < 0.4 * k && Math.abs(az - pz2) < 0.2 * k) return pyC + 0.18 * k;
+    if (Math.hypot(x - sX, az - sZ) < sR) return sTop;
+    if (Math.abs(x - sX) < 0.2 * k && az < sZ) return bH + 0.05 * k;
+    if (x > wX0 && x < wX1 && Math.abs(az - wz) < ww / 2) return yt + 0.2 * k;
+    return Math.abs(x) <= kx * 0.86 && az <= kz * 0.72 ? pY : Math.abs(x) <= kx && az <= kz ? yt : -1;
+  };
+  return {
+    deckAt: deck,
+    top: sTop,
+    custom: true,
+    dressed: true,
+    seat: (m) => {
+      if (m === top) {
+        collar(b, kit, m.x, seatY, m.z, m.r, seatY - 0.05 * k, 18);
+        return { y: seatY, socket: true };
+      }
+      const y = pY + 0.12 * k;
+      frustum(b, kit.armor2, ngon(8, m.r * 1, m.r * 1, Math.PI / 8, m.x, m.z), pY - 0.02 * k, y - pY + 0.02 * k, { top: [0.9, 0.9], bev: 0.015 * k });
+      return { y: ringSeat(b, kit, m, y, 0.02 * k, 14), socket: true };
+    }
+  };
+}
+registerChassis("cross", striker);
+registerChassis("fortress", bastion);
 
 // src/client/proto3d/mobility/wheels.ts
 var BASE = { tracked: false, legs: null, thick: 0, hipY: 0 };
@@ -45484,7 +45582,7 @@ registerChassis("monolith", monolith);
 // src/client/proto3d/chassis/mechframes.ts
 var XA2 = [1, 0, 0];
 var ZA2 = [0, 0, 1];
-var pbox4 = (b, mat, w, h, d, x, y, z, rot) => b.g(new BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
+var pbox5 = (b, mat, w, h, d, x, y, z, rot) => b.g(new BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
 var heroOf = (ms) => ms.filter((m) => m.mod.kind === "weapon").reduce((a, m) => !a || m.r > a.r ? m : a, void 0) ?? ms[0];
 function coreCage(b, kit, x, y, z, r, h, n, mat = kit.plasma) {
   b.cyl(mat, r * 0.84, r * 0.84, h, [x, y, z], "y", Math.max(8, n));
@@ -45513,7 +45611,7 @@ function raider2(c) {
     const t = stance.thick, hy = stance.hipY;
     block(b, kit.mech, -0.04 * k, hy - t * 0.9, 0, 0.32 * k, 0.36 * k, B + 0.04 * k - (hy - t * 0.9), { top: [0.9, 1.05], ch: 0.06 * k, bev: 0.015 * k });
     block(b, kit.armor2, 0.13 * k, hy - t * 1.15, 0, 0.12 * k, 0.17 * k, t * 1.25, { top: [0.6, 0.85], shift: [0.025 * k, 0], ch: 0.04 * k, bev: 0.012 * k, bot: 0.01 * k });
-    pbox4(b, kit.glow, 0.012 * k, 0.05 * k, 0.04 * k, 0.17 * k, hy - t * 0.45, 0);
+    pbox5(b, kit.glow, 0.012 * k, 0.05 * k, 0.04 * k, 0.17 * k, hy - t * 0.45, 0);
     both((s) => {
       jointDrum(b, kit, [-0.04 * k, hy, s * 0.2 * k], t * 0.72, 0.07 * k, "z");
       block(b, kit.armor, -0.03 * k, hy - t * 0.7, s * 0.345 * k, 0.24 * k, 0.05 * k, t * 1.6, { top: [0.86, 0.9], shift: [0, -s * 0.012 * k], ch: 0.02 * k, bev: 0.01 * k });
@@ -45524,7 +45622,7 @@ function raider2(c) {
     const wi = Math.min(stance.wi, 0.42 * k);
     block(b, kit.mech, -0.02 * k, y0, 0, 0.84 * k, wi * 2, B + 0.06 * k - y0, { top: [0.94, 0.96], ch: 0.08 * k, bev: 0.015 * k, bot: 0.015 * k });
     block(b, kit.armor2, 0.36 * k, y0 + 0.01 * k, 0, 0.18 * k, wi * 1.7, B - y0 + 0.02 * k, { top: [0.45, 0.85], shift: [-0.04 * k, 0], ch: 0.05 * k, bev: 0.012 * k });
-    pbox4(b, kit.lamp, 0.012 * k, 0.018 * k, wi * 0.9, 0.45 * k, y0 + (B - y0) * 0.45, 0);
+    pbox5(b, kit.lamp, 0.012 * k, 0.018 * k, wi * 0.9, 0.45 * k, y0 + (B - y0) * 0.45, 0);
   }
   coreCage(b, kit, -0.03 * k, B, 0, 0.15 * k, 0.15 * k, 8);
   block(b, kit.armor, -0.01 * k, chestY, 0, 0.6 * k, 0.56 * k, chestT - chestY, { top: [0.8, 0.8], shift: [0.03 * k, 0], ch: 0.1 * k, bev: 0.03 * k, bot: 0.025 * k, mid: [[0.45, 1.05, 1.06]] });
@@ -45535,14 +45633,14 @@ function raider2(c) {
   });
   block(b, kit.mech, 0.3 * k, chestY + 0.01 * k, 0, 0.06 * k, 0.07 * k, chestT - chestY - 0.02 * k, { ch: 0.015 * k, bev: 6e-3 * k });
   block(b, kit.armor2, 0.37 * k, chestY + 0.035 * k, 0, 0.13 * k, 0.15 * k, 0.085 * k, { top: [0.7, 0.8], shift: [0.015 * k, 0], ch: 0.035 * k, bev: 0.012 * k });
-  pbox4(b, kit.lamp, 0.016 * k, 0.022 * k, 0.1 * k, 0.43 * k, chestY + 0.08 * k, 0);
+  pbox5(b, kit.lamp, 0.016 * k, 0.022 * k, 0.1 * k, 0.43 * k, chestY + 0.08 * k, 0);
   both((s) => {
     const zc = s * 0.34 * k;
     b.cylb(kit.joint, 0.075 * k, 0.1 * k, 0.012 * k, [0, chestY + 0.1 * k, s * 0.2 * k], "z", 8);
     block(b, kit.armor, 0.01 * k, chestY + 0.02 * k, zc, 0.42 * k, 0.19 * k, 0.16 * k, { top: [0.76, 0.66], shift: [0.01 * k, s * 0.025 * k], ch: 0.06 * k, bev: 0.025 * k, bot: 0.02 * k });
     block(b, kit.shell, 0.03 * k, chestY + 0.175 * k, zc + s * 0.01 * k, 0.3 * k, 0.12 * k, 0.035 * k, { top: [0.8, 0.75], ch: 0.04 * k, bev: 0.012 * k });
     block(b, kit.armor2, -0.01 * k, chestY - 0.03 * k, zc + s * 0.03 * k, 0.36 * k, 0.15 * k, 0.06 * k, { top: [0.95, 0.9], ch: 0.04 * k, bev: 0.012 * k });
-    pbox4(b, kit.glow, 0.2 * k, 0.018 * k, 0.012 * k, 0.03 * k, chestY + 0.07 * k, s * 0.44 * k);
+    pbox5(b, kit.glow, 0.2 * k, 0.018 * k, 0.012 * k, 0.03 * k, chestY + 0.07 * k, s * 0.44 * k);
   });
   both((s) => {
     const p = [-0.35 * k, chestY - 0.06 * k, s * 0.14 * k];
@@ -45600,8 +45698,8 @@ function aegis2(c) {
     for (const f of [0.06, 0.42, 0.74]) b.cylb(kit.mech, cr * 1.06, 0.05 * u, 8e-3 * u, [tx, ty + f * H, tz], "y", 16);
     for (const a of [0, 0.7, -0.7]) {
       const ang = s * (Math.PI / 2) + a * s, wx = tx + Math.cos(ang) * cr * 0.97, wz = tz + Math.sin(ang) * cr * 0.97;
-      pbox4(b, kit.plasma, 0.035 * u, H * 0.26, 0.035 * u, wx, ty + H * 0.24, wz, [0, -ang, 0]);
-      pbox4(b, kit.plasma, 0.035 * u, H * 0.2, 0.035 * u, wx, ty + H * 0.58, wz, [0, -ang, 0]);
+      pbox5(b, kit.plasma, 0.035 * u, H * 0.26, 0.035 * u, wx, ty + H * 0.24, wz, [0, -ang, 0]);
+      pbox5(b, kit.plasma, 0.035 * u, H * 0.2, 0.035 * u, wx, ty + H * 0.58, wz, [0, -ang, 0]);
     }
     b.cylb(kit.joint, cr * 0.42, 0.06 * u, 0.01 * u, [tx, ty + H - 0.01 * u, tz], "y", 10);
     b.cyl(kit.lamp, cr * 0.2, cr * 0.2, 0.012 * u, [tx, ty + H + 0.05 * u, tz], "y", 8);
@@ -45611,7 +45709,7 @@ function aegis2(c) {
     }
     block(b, kit.armor, 0.22 * u, yt - 0.04 * u, s * 0.79 * u, 0.74 * u, 0.32 * u, 0.15 * u, { top: [0.82, 0.8], shift: [-0.04 * u, -s * 0.02 * u], ch: 0.08 * u, bev: 0.025 * u, bot: 0.015 * u });
     block(b, kit.shell, 0.18 * u, yt + 0.105 * u, s * 0.78 * u, 0.42 * u, 0.2 * u, 0.03 * u, { top: [0.85, 0.8], ch: 0.05 * u, bev: 0.01 * u });
-    pbox4(b, kit.glow, 0.4 * u, 0.022 * u, 0.014 * u, 0.22 * u, yt + 0.04 * u, s * 0.955 * u);
+    pbox5(b, kit.glow, 0.4 * u, 0.022 * u, 0.014 * u, 0.22 * u, yt + 0.04 * u, s * 0.955 * u);
     b.g(new TorusGeometry(0.12 * u, 0.024 * u, 6, 10, Math.PI / 2), kit.rubber, mtx([tx + 0.18 * u, Y1 + 0.2 * u, s * 0.62 * u], [Math.PI / 2, 0, s > 0 ? Math.PI / 2 : 0]));
   });
   const nX = 0.8 * u;
@@ -45619,7 +45717,7 @@ function aegis2(c) {
   const crossF = frame([nX + 0.035 * u, yt + 0.035 * u, 0], [Math.sin(0.95), Math.cos(0.95), 0], ZA2);
   b.g(new BoxGeometry(0.06 * u, 0.012 * u, 0.2 * u), kit.accent, crossF);
   b.g(new BoxGeometry(0.17 * u, 0.012 * u, 0.06 * u), kit.accent, crossF);
-  both((s) => pbox4(b, kit.lamp, 0.02 * u, 0.04 * u, 0.14 * u, nX + 0.12 * u, yt - 0.02 * u, s * 0.3 * u, [0, -s * 0.35, 0]));
+  both((s) => pbox5(b, kit.lamp, 0.02 * u, 0.04 * u, 0.14 * u, nX + 0.12 * u, yt - 0.02 * u, s * 0.3 * u, [0, -s * 0.35, 0]));
   const bayX = -0.78 * u, bayT = yt + 0.12 * u;
   block(b, kit.armor, bayX, yt - 0.04 * u, 0, 0.34 * u, 0.62 * u, bayT - yt + 0.04 * u, { top: [0.86, 0.9], shift: [0.02 * u, 0], ch: 0.08 * u, bev: 0.02 * u });
   block(b, kit.shell, bayX - 0.02 * u, bayT - 5e-3 * u, 0, 0.22 * u, 0.5 * u, 0.03 * u, { top: [0.8, 0.9], ch: 0.05 * u, bev: 0.01 * u });
@@ -45663,13 +45761,13 @@ function hunter2(c) {
   block(b, kit.armor2, 0.74 * kx, y0 + 0.02 * k, 0, 0.5 * kx, 0.6 * kz, yt - y0 + 0.06 * k, { top: [0.55, 0.62], shift: [-0.08 * kx, 0], ch: 0.1 * k, bev: 0.02 * k, bot: 0.02 * k });
   block(b, kit.armor, 0.7 * kx, yt + 0.04 * k, 0, 0.46 * kx, 0.4 * kz, 0.08 * k, { top: [0.35, 0.55], shift: [-0.1 * kx, 0], ch: 0.06 * k, bev: 0.02 * k });
   block(b, kit.shell, 0.66 * kx, yt + 0.115 * k, 0, 0.18 * kx, 0.2 * kz, 0.03 * k, { top: [0.6, 0.7], ch: 0.03 * k, bev: 8e-3 * k });
-  both((s) => pbox4(b, kit.lamp, 0.03 * kx, 0.016 * k, 0.07 * kz, 0.94 * kx, yt + 0.02 * k, s * 0.1 * kz, [0, -s * 0.5, 0.35]));
+  both((s) => pbox5(b, kit.lamp, 0.03 * kx, 0.016 * k, 0.07 * kz, 0.94 * kx, yt + 0.02 * k, s * 0.1 * kz, [0, -s * 0.5, 0.35]));
   const cY = yt + 0.02 * k, cT = yt + 0.26 * k, seatY = cT + 0.06 * k;
   block(b, kit.armor, hx - 0.02 * kx, cY, hz, 0.56 * kx, 0.66 * kz, cT - cY, { top: [0.74, 0.76], shift: [0.02 * kx, 0], ch: 0.1 * k, bev: 0.03 * k, bot: 0.02 * k, mid: [[0.42, 1.05, 1.05]] });
   both((s) => {
     facePlate(b, kit, kit.shell, [hx + 0.28 * kx, cY + 0.03 * k, s * 0.12 * kz], [hx + 0.22 * kx, cT - 0.02 * k, s * 0.11 * kz], ZA2, 0.17 * kz, 0.022 * k, XA2, { standoff: 6e-3 * k, gap: 0.01 * k, fill: 0.9 });
-    pbox4(b, kit.plasma, 0.2 * kx, 0.03 * k, 0.012 * k, hx - 0.04 * kx, cY + 0.11 * k, s * 0.345 * kz);
-    for (const f of [-0.06, 0, 0.06]) pbox4(b, kit.mech, 0.025 * kx, 0.06 * k, 0.02 * k, hx - 0.04 * kx + f * kx, cY + 0.11 * k, s * 0.35 * kz);
+    pbox5(b, kit.plasma, 0.2 * kx, 0.03 * k, 0.012 * k, hx - 0.04 * kx, cY + 0.11 * k, s * 0.345 * kz);
+    for (const f of [-0.06, 0, 0.06]) pbox5(b, kit.mech, 0.025 * kx, 0.06 * k, 0.02 * k, hx - 0.04 * kx + f * kx, cY + 0.11 * k, s * 0.35 * kz);
   });
   block(b, kit.mech, hx + 0.26 * kx, cY + 0.02 * k, 0, 0.05 * kx, 0.05 * kz, cT - cY - 0.04 * k, { ch: 0.01 * k, bev: 5e-3 * k });
   const pr = Math.min(R * 0.72, 0.26 * k);
@@ -45691,7 +45789,7 @@ function hunter2(c) {
   b.loft(kit.mech, hb.slice(1, 5).map(([x, t]) => ring4(x * kx, t + 0.03, 0.08 * kz)));
   for (const [x0, x1] of [[-0.32, -0.52], [-0.6, -0.86]]) {
     const xm = (x0 + x1) / 2 * kx;
-    pbox4(b, kit.plasma, Math.abs(x1 - x0) * kx * 0.8, 0.025 * k, 0.05 * kz, xm, ht(xm) + 0.045 * k, 0, [0, 0, x0 > -0.4 ? 0.45 : -0.15]);
+    pbox5(b, kit.plasma, Math.abs(x1 - x0) * kx * 0.8, 0.025 * k, 0.05 * kz, xm, ht(xm) + 0.045 * k, 0, [0, 0, x0 > -0.4 ? 0.45 : -0.15]);
   }
   both((s) => {
     for (const [x0, x1, dz] of [[-0.14, -0.4, 0], [-0.38, -0.66, 0.012], [-0.64, -0.9, 0]]) {
@@ -45702,7 +45800,7 @@ function hunter2(c) {
       const g = new BoxGeometry(Math.abs(xa - xb), 0.05 * k, 0.13 * kz);
       b.g(g, kit.shell, F2.clone().multiply(new Matrix4().makeTranslation(0, 0.065 * k, s * 0.01 * kz)));
     }
-    pbox4(b, kit.plasma, 0.4 * kx, 0.04 * k, 0.012 * k, -0.6 * kx, yt + 0.3 * k, s * 0.318 * kz);
+    pbox5(b, kit.plasma, 0.4 * kx, 0.04 * k, 0.012 * k, -0.6 * kx, yt + 0.3 * k, s * 0.318 * kz);
     const F = frame([-0.58 * kx, yt + 0.15 * k, s * 0.33 * kz], [0, 0.12, s], XA2);
     armorPlate(b, kit, kit.armor2, F, rectP(0.56 * kx, 0.17 * k, 0.03 * k), 0.024 * k, { standoff: 8e-3 * k, gap: 0.012 * k });
     const sh = [hx - 0.02 * kx, cT - 0.08 * k, s * 0.36 * kz], ft = [0.7 * kx, yt + 0.06 * k, s * 0.43 * kz];
@@ -45716,7 +45814,7 @@ function hunter2(c) {
     b.cylb(kit.joint, 0.11 * k, 0.1 * kz, 0.015 * k, [p[0], p[1], s * 0.34 * kz], "z", 14);
     block(b, kit.armor, p[0] + 0.02 * kx, yt - 0.06 * k, s * 0.43 * kz, 0.4 * kx, 0.1 * kz, 0.2 * k, { top: [0.66, 0.8], shift: [-0.05 * kx, -s * 0.01 * kz], ch: 0.05 * k, bev: 0.02 * k, bot: 0.015 * k });
     block(b, kit.shell, p[0] - 0.01 * kx, yt + 0.12 * k, s * 0.43 * kz, 0.22 * kx, 0.08 * kz, 0.03 * k, { top: [0.7, 0.8], ch: 0.025 * k, bev: 0.01 * k });
-    pbox4(b, kit.glow, 0.16 * kx, 0.016 * k, 0.01 * k, p[0] + 0.02 * kx, yt + 0.04 * k, s * 0.483 * kz);
+    pbox5(b, kit.glow, 0.16 * kx, 0.016 * k, 0.01 * k, p[0] + 0.02 * kx, yt + 0.04 * k, s * 0.483 * kz);
     piston(b, kit, [p[0] + 0.14 * kx, yt + 0.02 * k, s * 0.34 * kz], [-0.3 * kx, yt + 0.24 * k, s * 0.3 * kz], 0.022 * k, 0.55, true);
   });
   both((s) => b.cyl(kit.hot, 0.03 * k, 0.03 * k, 0.012 * k, [-1.005 * kx, yt + 0.08 * k, s * 0.08 * kz], "-x", 8));

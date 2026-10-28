@@ -4,8 +4,7 @@
 //   warden     'hex'        battle-tank carrier (Sabertooth-like): the hero weapon body is the upper body on a squat
 //                            pedestal; four separate armoured track pods stand out at the corners (light front pods with
 //                            team prows, team rear pods), low glacis wedge and dark engine block between them.
-//   bastion    'fortress'   fortress tank on four corner track pods: octagonal citadel with a plate per facet, stepped
-//                            octagonal keep for the front gun, two faceted barbettes for the rear guns, rear ladder.
+//   (bastion 'fortress' lives in chassis/carriers.ts)
 //   longarm    'long'       long-gun carrier: the gun on a raised shoulder yoke far back, twin engine-nacelle
 //                            counterweight with splayed radiator fins and recoil spades at the tail, long low segmented
 //                            prow out to a castor pair.
@@ -126,76 +125,6 @@ function warden(c: ChassisCtx): ChassisOut {
       // a utility rides the engine deck behind the turret
       return { y: ringSeat(b, kit, m, Math.max(eh, deckFn(m.x, m.z)), 0.02 * k, 12), socket: true };
     },
-  };
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-function bastion(c: ChassisCtx): ChassisOut {
-  // Fortress tank (hs-kit): dark octagonal belly between the four track pods, a low faceted octagonal citadel wearing
-  // an armour belt of separate plates on shadow gaps (one per facet), a stepped octagonal keep for the front gun and two
-  // faceted barbettes for the rear guns. Functional: smoke banks + caged lamps on the front facets, driver's hatch and
-  // periscopes, louvred engine grille between the barbettes, ladder on the rear plate. Asymmetric: exhaust right
-  // rear, jerry cans + antenna left rear, spare track on the front-right facet, tool bins on the right deck only.
-  const { b, kit, L, W, S, stance } = c;
-  const kx = L / 3, kz = W / 3, k = Math.min(kx, kz);
-  const fine = fineFor(S);
-  const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
-  frustum(b, kit.mech, ngon(8, 1.25 * kx, Math.min(stance.wi, 1.2 * kz), Math.PI / 8), y0, yt - y0 + 0.02, { bev: 0.02 });
-  const cit = ngon(8, 1.5 * kx, 1.42 * kz, Math.PI / 8);
-  const hC = 0.3 * k, cy = yt - 0.03 * k, top = 0.86;
-  frustum(b, kit.armor, cit, cy, hC, { top: [top, top], bot: 0.03 * k, bev: 0.012 * k });
-  const deckY = cy + hC;
-  // armour belt: one thick plate per facet (front-right facet carries spare track instead)
-  frustumPlates(b, kit, kit.armor2, cit, cy, hC, top, 0.03 * k, { standoff: 0.012 * k, gap: 0.025 * k, widthK: 0.82, f0: 0.14, f1: 0.82 });
-  const facetMid = (i: number, f: number): V3 => {
-    const a = cit[i], e = cit[(i + 1) % 8], kk = 1 - (1 - top) * f;
-    return [((a[0] + e[0]) / 2) * kk, cy + hC * f, ((a[1] + e[1]) / 2) * kk];
-  };
-  // ngon(8, rot pi/8): facet 0 faces front-right (+x +z), facet 7 front-left
-  both((s) => {
-    const i = s > 0 ? 0 : 7, p = facetMid(i, 1.0);
-    smokeLaunchers(b, kit, frame([p[0] - 0.06 * k, deckY, p[2] * 0.82], [0, 1, 0], [Math.cos(0.4), 0, s * Math.sin(0.4)]), 4, 0.03 * k);
-    cagedLamp(b, kit, frame([1.18 * kx, deckY, s * 0.28 * kz], [0, 1, 0], [1, 0, 0]), 0.08 * k, fine);
-  });
-  const sorted = [...c.mounts].sort((a, q) => q.x - a.x);
-  const front = sorted[0];
-  const fx = front?.x ?? 0.18 * kx;
-  // stepped octagonal keep for the front gun, sloped front plate, driver's hatch + periscopes ahead-left of it
-  const keep = ngon(8, 0.66 * k, 0.62 * k, Math.PI / 8, fx, 0);
-  const keepY = deckY + 0.15 * k;
-  frustum(b, kit.armor, keep, deckY - 0.02 * k, keepY - deckY + 0.02 * k, { top: [0.86, 0.86], bev: 0.01 * k });
-  frustumPlates(b, kit, kit.armor, keep, deckY - 0.02 * k, keepY - deckY + 0.02 * k, 0.86, 0.022 * k, { standoff: 0.008 * k, gap: 0.016 * k, skip: (i) => i > 1 && i < 6, widthK: 0.75 });
-  crewHatch(b, kit, frame([fx + 0.82 * k, deckY, -0.42 * kz], [0, 1, 0]), 0.08 * k, fine);
-  periscopes(b, kit, fx + 0.96 * k, deckY, -0.42 * kz, 3, 0.04 * k);
-  // rear barbettes: faceted octagonal drums with a stepped armour band
-  const towerY = deckY + 0.2 * k;
-  const towers = sorted.slice(1);
-  const towerAt: [number, number, number][] = towers.length ? towers.map((m) => [m.x, m.z, m.r]) : [[-0.72 * kx, -0.75 * kz, 0.24 * k], [-0.72 * kx, 0.75 * kz, 0.24 * k]];
-  for (const [x, z, mr] of towerAt) {
-    const r = Math.max(mr, 0.24 * k) * 1.42;
-    const pl = ngon(8, r, r, Math.PI / 8, x, z);
-    frustum(b, kit.armor, pl, deckY - 0.05 * k, towerY - deckY + 0.05 * k, { top: [0.9, 0.9], bev: 0.01 * k });
-    frustum(b, kit.armor2, ngon(8, r * 1.06, r * 1.06, Math.PI / 8, x, z), deckY - 0.02 * k, 0.07 * k, { top: [0.98, 0.98], bev: 0.008 * k });
-    if (fine) handrail(b, kit, ngon(8, r * 0.95, r * 0.95, Math.PI / 8, x, z).slice(3, 7).map(([px, pz]) => [px, towerY + 0.07 * k, pz] as V3), 0.007 * k, 0.07 * k);
-  }
-  // engine deck between the barbettes: louvred grille; exhaust right rear, jerry cans + antenna left rear
-  recessPanel(b, kit, frame([-1.0 * kx, deckY, 0], [0, 1, 0]), 0.36 * kx, 0.62 * kz, 0.035 * k, { slats: 5, frame: kit.armor2 });
-  exhaustBox(b, kit, frame([-0.98 * kx, deckY, 0.5 * kz], [0, 1, 0], [-0.4, 0, 1]), 0.06 * k, fine);
-  jerryCans(b, kit, frame([-0.3 * kx, deckY, -1.08 * kz], [0, 1, 0], [1, 0, 0]), 3, 0.09 * k);
-  antenna(b, kit, -0.25 * kx, deckY, -0.82 * kz, 0.9 * k, 0.009 * k, [-0.15, 0, 0]);
-  stowBox(b, kit, frame([-0.2 * kx, deckY, 1.06 * kz], [0, 1, 0], [1, 0.0, -0.25]), 0.5 * kx, 0.08 * k, 0.14 * kz);
-  const fr = facetMid(0, 0.5);
-  spareTrack(b, kit, frame([fr[0] - 0.04 * k, fr[1] + 0.04 * k, fr[2] - 0.04 * k], [0.62, 0.55, 0.62], [-1, 0, 1]), 3, 0.2 * k, 0.08 * k);
-  // ladder up the rear facet (scale cue: a crew member climbs it), tow hooks
-  const rp = facetMid(4, 0.5);
-  ladder(b, kit, [rp[0] - 0.12 * k, 0.04, -0.3 * kz], [rp[0] + 0.02 * k, deckY, -0.3 * kz], 0.12 * k, [0, 0, 1], [-1, 0, 0], 0.03 * k);
-  towHooks(b, kit, frame([rp[0] - 0.03 * k, cy + 0.08 * k, 0.2 * kz], [-1, 0, 0], [0, 0, 1]), 0.3 * kz, 0.045 * k);
-  b.decal(0.22 * k, 0.22 * k, 0.55 * kx, deckY + 0.004, 0.62 * kz, atlasUV(1), 0);
-  const topP = scalePlan(cit, top, top);
-  const deck = (x: number, z: number) => (inPlan(topP, x, z) ? deckY : inPlan(cit, x, z) ? cy + hC * 0.5 : -1);
-  return {
-    deckAt: deck, top: keepY, custom: true, dressed: true,
-    seat: (m) => ({ y: ringSeat(b, kit, m, m === front ? keepY : towerY, 0.02 * k, m === front ? 18 : 14), socket: true }),
   };
 }
 
@@ -460,7 +389,6 @@ function juggernaut(c: ChassisCtx): ChassisOut {
 }
 
 registerChassis('hex', warden);
-registerChassis('fortress', bastion);
 registerChassis(['long', 'longarm'], longarm);
 registerChassis('colossus', colossus);
 registerChassis('juggernaut', juggernaut);
