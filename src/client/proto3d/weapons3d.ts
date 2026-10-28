@@ -74,6 +74,9 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   const C: WCtx = {
     b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
     c: classPos(mod, ov), tier: (ov ? CLASS_RANK[ov] : moduleTier(mod)) as WCtx['tier'], nb: mod.barrels ?? 1,
+    // armour level of the weapon body: grows with the chassis, shrinks for a weapon big for its chassis (a small unit
+    // carrying a big gun is mostly exposed gun on a slim mount; a big body wraps it in a full armoured housing)
+    arm: Math.max(0, Math.min(1, (S - 0.5) / 3 - ((ov ? CLASS_RANK[ov] : moduleTier(mod)) - 2) * 0.15)),
     // stylized but gun-like: barrel radius ~0.4 x the true bore width (long slim tubes read as machines, fat pipes as
     // toys), never thinner than 7.5% of the housing radius so it survives a small screen
     bore: Math.max(boreOf(calibreMm(mod)) * 0.4 * kS, r * 0.075),

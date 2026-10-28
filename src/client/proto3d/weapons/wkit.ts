@@ -39,8 +39,10 @@ export interface WCtx {
   t: Turret;
   /** set once a team accent was placed */
   acc?: boolean;
+  /** armour level of the weapon body 0..1 (chassis size vs weapon size): light / medium / heavy housing */
+  arm: number;
   /** set by mechHousing: the integrated weapon body's size (finishHousing builds the yoke) */
-  mh?: { l: number; w: number; h: number };
+  mh?: { l: number; w: number; h: number; lv: number };
   muzzle(x: number, y: number, z: number): void;
   /** make the spin group (optionally re-axed: 'z' spins about the turret's lateral axis, e.g. saw discs) */
   spin(axis?: 'x' | 'z', at?: V3): void;
@@ -178,8 +180,28 @@ export function plinth(C: WCtx, k = 0.6, h = 0.22): void {
  *  trunnion near the ring centre and builds the low yoke under it. Returns the body's top height (approx). */
 export function mechHousing(C: WCtx, l: number, w: number, h: number, fwd = 1.05, sensorZ = -1): number {
   const { p, kit, r, y0 } = C;
-  const x0 = -l * 0.62, x1 = l * 0.38, pw = w * 0.62 + r * 0.1;
+  // armour level (chassis size vs weapon): light = slim receiver hugging the barrel; medium = + thin side pods and a
+  // sensor; heavy = the full body (thick pods with an armour step, spine, finned counterweight)
+  const lv = C.arm < 0.34 ? 0 : C.arm < 0.67 ? 1 : 2;
+  if (lv < 2) { l *= lv ? 0.85 : 0.62; w *= lv ? 0.8 : 0.55; h *= lv ? 0.85 : 0.65; }
+  const x0 = -l * 0.62, x1 = l * 0.38, pw = w * 0.62 + r * (lv ? 0.1 : 0.04);
   cbox(p, kit.panel, (x0 + x1) / 2, 0, 0, x1 - x0, h * 0.82, w * 1.25, h * 0.12, undefined, 0.88);
+  C.mh = { l, w, h, lv };
+  C.acc = true;
+  cbox(p, kit.trim, x1 + r * 0.02, 0, 0, r * 0.12, h * 0.6, w * 0.8, r * 0.03);
+  if (lv === 0) {
+    // light: a team stripe and a small counterweight only
+    bx(p, kit.hull, (x0 + x1) / 2, h * 0.42, 0, (x1 - x0) * 0.6, r * 0.03, w * 0.5);
+    cbox(p, kit.trim, x0 - r * 0.06, 0, 0, r * 0.16, h * 0.6, w * 0.9, r * 0.03);
+    return y0 + h;
+  }
+  if (lv === 1) {
+    for (const s of [-1, 1]) cbox(p, kit.hull, x0 + (x1 - x0) * 0.55, -h * 0.04, s * pw, (x1 - x0) * 0.75, h * 0.6, r * 0.12, r * 0.03, undefined, 0.85);
+    cbox(p, kit.trim, x0 + l * 0.3, h * 0.48, sensorZ * w * 0.32, r * 0.28, r * 0.12, r * 0.18, r * 0.03);
+    bx(p, kit.glow, x0 + l * 0.3 + r * 0.14, h * 0.48, sensorZ * w * 0.32, r * 0.02, r * 0.06, r * 0.11);
+    cbox(p, kit.trim, x0 - r * 0.08, -h * 0.05, 0, r * 0.22, h * 0.65, w * 1.0, r * 0.04);
+    return y0 + h;
+  }
   for (const s of [-1, 1]) {
     cbox(p, kit.hull, x0 + (x1 - x0) * 0.55 + l * fwd * 0.08, -h * 0.04, s * pw, (x1 - x0) * 0.85, h * 0.7, r * 0.2, r * 0.05, undefined, 0.85);
     cbox(p, kit.hull2, x1 + l * fwd * 0.06, -h * 0.02, s * (pw + r * 0.11), l * 0.3, h * 0.45, r * 0.05, r * 0.02);
@@ -190,9 +212,6 @@ export function mechHousing(C: WCtx, l: number, w: number, h: number, fwd = 1.05
   bx(p, kit.glow, x0 + l * 0.3 + r * 0.17, h * 0.5, sensorZ * w * 0.32, r * 0.02, r * 0.07, r * 0.13);
   cbox(p, kit.trim, x0 - r * 0.1, -h * 0.05, 0, r * 0.3, h * 0.7, w * 1.1, r * 0.05);
   for (let i = 0; i < 4; i++) bx(p, kit.metal, x0 - r * 0.26, -h * 0.05, (i - 1.5) * w * 0.26, r * 0.06, h * 0.55, r * 0.04);
-  cbox(p, kit.trim, x1 + r * 0.02, 0, 0, r * 0.12, h * 0.6, w * 0.8, r * 0.03);
-  C.mh = { l, w, h };
-  C.acc = true;
   return y0 + h;
 }
 
@@ -200,11 +219,13 @@ export function mechHousing(C: WCtx, l: number, w: number, h: number, fwd = 1.05
  *  than the turret, two pylons up to the trunnion outside the side pods, a metal axle). */
 export function finishHousing(C: WCtx): void {
   if (!C.mh) return;
-  const { b, kit, r, y0 } = C, { l, w, h } = C.mh;
-  const py = y0 + h * 0.6, px = l * 0.12, zp = w * 0.62 + r * 0.33;
+  const { b, kit, r, y0 } = C, { l, w, h, lv } = C.mh;
+  const py = y0 + h * 0.6 + (lv ? 0 : r * 0.12), px = l * 0.12, zp = w * 0.62 + r * (lv === 2 ? 0.33 : lv ? 0.24 : 0.12);
   C.t.pitch.position.set(px, py, 0);
-  shell(b, kit.trim, [[-r * 0.6, r * 0.55, r * 0.45, h * 0.3], [r * 0.5, r * 0.55, r * 0.45, h * 0.3]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.hull2, px, (y0 + h * 0.25 + py) / 2, s * zp, r * 0.4, py - y0 - h * 0.25 + r * 0.1, r * 0.1, r * 0.03);
+  // light mounts: two thin pylons straight off the ring, no base; heavier ones a dark base under the yoke
+  if (lv) shell(b, kit.trim, [[-r * 0.6, r * 0.55, r * 0.45, h * 0.3], [r * 0.5, r * 0.55, r * 0.45, h * 0.3]].map(([x, a, c, d]) => [x * (lv === 2 ? 1 : 0.8), a * (lv === 2 ? 1 : 0.8), c * (lv === 2 ? 1 : 0.8), d]) as Station[], y0);
+  const pt = lv === 2 ? r * 0.1 : lv ? r * 0.08 : r * 0.05, yb = lv ? y0 + h * 0.25 : y0;
+  for (const s of [-1, 1]) cbox(b, kit.hull2, px, (yb + py) / 2, s * zp, r * (lv ? 0.4 : 0.26), py - yb + r * 0.1, pt, r * 0.02);
   b.cylb(kit.metal, r * 0.11, zp * 2 + r * 0.06, r * 0.02, [px, py, -zp - r * 0.03], 'z', 6);
 }
 
