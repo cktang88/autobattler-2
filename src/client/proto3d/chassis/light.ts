@@ -10,8 +10,7 @@
 //                       pistons, a short spine back to an armoured counterweight bustle with the ammo box on its left
 //   hunter   (hunter)   long low 6-wheel tank hunter: shallow glacis with a folded trim vane, smoke banks, driver's
 //                       hatch + periscopes (left), remote weapon station on the engine deck, exhaust (right), bins
-//   riot     (riot)     dozer brute: full-width curved dozer blade on push arms + rams, twin guns on a raised rear
-//                       casemate, slat cage armour on the flanks, riot light bar, searchlight (right), antenna (left)
+//   (riot lives in chassis/heavies.ts)
 //   striker  (cross)    sponson gun carrier: narrow central hull, two armoured side casemates carrying the guns, bow
 //                       ball mount on a stepped glacis, side doors, smoke banks, exhaust stacks (left)
 //   aegis    (round)    armoured recovery / repair vehicle: chamfered octagon hull, crane jib stowed along the left
@@ -31,7 +30,7 @@ import {
   stowBox, sub, towHooks,
 } from './hs-kit.ts';
 import {
-  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, slatCage, spareWheel, wheelArch, type FSt,
+  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, spareWheel, wheelArch, type FSt,
 } from './hs-kit-vehicles.ts';
 
 /** cheap unbevelled box (12 tris) for small parts: lamps, strips, accents, brackets */
@@ -259,75 +258,6 @@ function hunter(c: ChassisCtx): ChassisOut {
   };
 }
 
-// ---- riot: dozer brute -------------------------------------------------------------------------------------------------------
-function riot(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, S, stance } = c;
-  const y0 = stance.y0;
-  const X = (f: number) => (f * L) / 2, Z = (f: number) => (f * W) / 3; // authored at L=2, W=3
-  const fine = fineFor(S);
-  keel(c, L * 0.5, -L * 0.1);
-  facetHull(c, kit.mech, [[X(-0.96), 0, 0.02, 0.1, 0.12, Z(0.85), Z(0.95), Z(0.95)], [X(0.9), 0.04, 0.06, 0.1, 0.12, Z(0.8), Z(0.9), Z(0.9)]]);
-  // wide low hull with sponsons over the tracks, sloped front plate
-  const st: FSt[] = [
-    [X(-1.0), 0.06, 0.06, 0.2, 0.28, Z(0.9), Z(1.36), Z(1.12)],
-    [X(-0.86), 0.04, 0.04, 0.22, 0.33, Z(0.92), Z(1.42), Z(1.2)],
-    [X(0.42), 0.04, 0.04, 0.22, 0.33, Z(0.92), Z(1.42), Z(1.2)],
-    [X(0.86), 0.06, 0.06, 0.18, 0.2, Z(0.9), Z(1.38), Z(1.12)],
-  ];
-  const H = facetHull(c, kit.armor, st);
-  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
-  const deckY = dk(0);
-  facePlate(b, kit, kit.armor2, [X(0.86), y0 + 0.2, 0], [X(0.42), deckY, 0], ZA, Z(2.2), 0.018, UP, { standoff: 0.006, gap: 0.014, fill: 0.86 });
-  // raised rear casemate carrying the twin guns: vertical band, sloped front, flat roof
-  const mz = Math.max(...c.mounts.map((m) => Math.abs(m.z)), Z(0.45));
-  const cw = mz + Z(0.32);
-  const C = facetHull(c, kit.armor, [
-    [X(-0.84), 0.32, 0.32, 0.39, 0.44, cw * 0.95, cw, cw * 0.92],
-    [X(-0.02), 0.32, 0.32, 0.39, 0.44, cw * 0.95, cw, cw * 0.92],
-    [X(0.2), 0.32, 0.32, 0.34, 0.36, cw * 0.9, cw * 0.95, cw * 0.82],
-  ], 0, false);
-  const roof = y0 + 0.44;
-  facePlate(b, kit, kit.armor2, [X(0.2), y0 + 0.36, 0], [X(-0.02), roof, 0], ZA, cw * 1.6, 0.014, [1, 0.6, 0], { standoff: 0.005, gap: 0.01, fill: 0.8 });
-  // riot light bar across the casemate front (four caged lamps)
-  for (const f of [-0.6, -0.2, 0.2, 0.6]) cagedLamp(b, kit, frame([X(0.06), roof, f * cw * 0.8], UP, XA), 0.045, fine);
-  // the dozer blade: full width, curved in plan, leaning back, steel cutting edge, ribs behind, push arms + rams
-  const half = Z(1.5), n = 6, bh = (y0 + 0.22) * 1.25;
-  const pts: P2[] = [];
-  for (let i = 0; i <= n; i++) { const z = -half + (2 * half * i) / n; pts.push([X(1.12) - X(0.3) * (z / half) ** 2, z]); }
-  for (let i = 0; i < n; i++) {
-    const [x0, z0] = pts[i], [x1, z1] = pts[i + 1];
-    const len = Math.hypot(x1 - x0, z1 - z0), yaw = Math.atan2(x1 - x0, z1 - z0);
-    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    const M = new THREE.Matrix4().makeRotationY(yaw).multiply(new THREE.Matrix4().makeRotationZ(0.22)).setPosition(cx, 0.03 + bh / 2, cz);
-    b.g(bevBox(0.035, bh, len * 1.02, 0.008), kit.armor2, M);
-    b.g(new THREE.BoxGeometry(0.03, 0.035, len * 1.0), kit.steel, M.clone().multiply(new THREE.Matrix4().makeTranslation(0.012, -bh / 2 + 0.01, 0)));
-    b.g(new THREE.BoxGeometry(0.045, bh * 0.8, 0.02), kit.mech, M.clone().multiply(new THREE.Matrix4().makeTranslation(-0.03, 0, len * 0.4)));
-    if (i === 1 || i === 4) b.g(new THREE.BoxGeometry(0.008, 0.04, len * 0.7), kit.hazard, M.clone().multiply(new THREE.Matrix4().makeTranslation(0.02, bh / 2 - 0.03, 0)));
-  }
-  both((s) => {
-    beam(b, kit.mech, [X(1.0), 0.12, s * Z(0.75)], [X(0.4), y0 + 0.05, s * Z(0.9)], 0.06, 0.07);
-    piston(b, kit, [X(0.7), y0 + 0.2, s * Z(0.5)], [X(0.98), bh * 0.85, s * Z(0.5)], 0.024, 0.55, fine);
-  });
-  // slat cage armour off the sponson flanks (the riot look at a distance), searchlight (right), antenna (left)
-  both((s) => slatCage(b, kit, frame([X(-0.2), y0 + 0.08, s * (Z(1.42) + 0.06)], [0, 0, s], XA), X(1.1), 0.2, 4, 0.007));
-  const sl: V3 = [X(-0.5), roof, cw * 0.7];
-  b.g(strutGeo(sl, [sl[0], sl[1] + 0.07, sl[2]], 0.012, 0.012, 6), kit.joint);
-  b.g(new THREE.CylinderGeometry(0.04, 0.035, 0.06, 8).rotateZ(-Math.PI / 2), kit.mech, mtx([sl[0], sl[1] + 0.1, sl[2]]));
-  b.g(new THREE.CylinderGeometry(0.033, 0.033, 0.01, 8).rotateZ(-Math.PI / 2), kit.lamp, mtx([sl[0] + 0.032, sl[1] + 0.1, sl[2]]));
-  antenna(b, kit, X(-0.7), roof, -cw * 0.75, 0.75, 0.007, [-0.15, 0, 0]);
-  crewHatch(b, kit, frame([X(-0.6), roof, 0], UP), 0.05, fine);
-  // engine deck behind the casemate: louvres, exhaust (right), jerry cans (left)
-  grille(b, kit, frame([X(-0.93), dk(X(-0.93)), 0], UP), X(0.1), Z(1.1), 0.015, 3);
-  exhaustBox(b, kit, frame([X(-0.92), dk(X(-0.92), Z(1.0)), Z(1.0)], UP, ZA), 0.03, fine);
-  jerryCans(b, kit, frame([X(-0.92), dk(X(-0.92), -Z(1.0)), -Z(1.0)], UP), 2, 0.06);
-  b.decal(0.16, 0.16, X(0.6), deckY + 0.003, -Z(0.8), atlasUV(1), 0);
-  const deck = (x: number, z: number) => Math.max(H.deck(x, z), C.deck(x, z));
-  return {
-    deckAt: deck, top: roof + 0.04, custom: true, dressed: true,
-    seat: (m) => ({ y: ringSeat(b, kit, m, Math.max(roof, deck(m.x, m.z)), 0.025, 14), socket: true }),
-  };
-}
-
 // ---- striker: sponson gun carrier -----------------------------------------------------------------------------------------
 function striker(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, S, stance } = c;
@@ -475,7 +405,6 @@ registerChassis('wedge', scout);
 registerChassis('box', raider);
 registerChassis('carriage', carriage);
 registerChassis('hunter', hunter);
-registerChassis('riot', riot);
 registerChassis('cross', striker);
 registerChassis('round', aegis);
 void hose;
