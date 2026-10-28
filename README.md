@@ -4,24 +4,33 @@ A browser autobattler in the spirit of **Mechabellum**, where you **design your 
 (like *Echoes of the Architect*). Play against the AI, or play **async multiplayer** against other
 players: each of you deploys whenever you like, and the server resolves the round once both have.
 
-![Battle in progress](docs/screenshots/battle.jpg)
+![3D battlefield: every unit is built procedurally from its part design](docs/screenshots/3d-units.jpg)
 
 ## Screenshots
 
 | Unit designer | Weapon ranges in the designer |
 |---|---|
-| ![Unit designer: drag weapons and modules onto the sockets on the hull, on a true-scale 5 m grid](docs/screenshots/designer.jpg) | ![Range view: every weapon's reach drawn from its own mount](docs/screenshots/designer-ranges.jpg) |
+| ![Unit designer: drag weapons and modules onto the sockets on the 3D model, on a true-scale 5 m grid](docs/screenshots/designer.jpg) | ![Range view: every weapon's reach drawn from its own mount](docs/screenshots/designer-ranges.jpg) |
 | **Deck builder (vs AI)** | **Deploying, with ranges shown** |
 | ![Deck builder: drag designs into a 9-card deck and see what it covers](docs/screenshots/deck-builder.jpg) | ![Deployment: place blocks in your zone, each weapon's range drawn from its mount](docs/screenshots/deploy.jpg) |
 
+## 3D units
+
+Every unit is modelled procedurally in three.js from its part design: the hull is built around its main weapon,
+secondary weapons ride the main system, mechs twist their whole torso with their arm guns, and every weapon family
+has its own year-2500 look. How it works and the art rules: [docs/3d-units-guide.md](docs/3d-units-guide.md).
+
+![3D unit gallery: raider mech with twin arm lasers, railgun carrier, striker, riot, siege spire, warhulk](docs/screenshots/3d-gallery.jpg)
+
 ## 2D and 3D battlefield
 
-Settings → **Battlefield art** switches between the classic hand-drawn 2D view and three.js 3D models (experimental, needs WebGL). The designer and the rest of the UI are the same in both.
+The battlefield is 3D by default (three.js, needs WebGL). Settings → **Battlefield art** switches to the classic
+hand-drawn 2D view. The designer and the rest of the UI are the same in both.
 
 | 2D | 3D |
 |---|---|
 | ![2D battlefield](docs/screenshots/battle.jpg) | ![3D units: built procedurally from the same part designs, with shadows and lighting](docs/screenshots/3d-units.jpg) |
-| ![2D deployment with ranges](docs/screenshots/deploy.jpg) | ![3D deployment with a weapon range shown](docs/screenshots/3d-deploy.jpg) |
+| ![2D deployment with ranges](docs/screenshots/deploy.jpg) | ![3D deployment: blocks placed in your zone](docs/screenshots/3d-deploy.jpg) |
 
 ## Run
 
