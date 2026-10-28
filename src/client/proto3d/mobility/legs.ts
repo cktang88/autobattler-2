@@ -29,7 +29,8 @@ export function legStance(s: StanceIn): Stance {
   }
   // titan-class legs carry far more mass: thicker for the same reach
   // (x1.2: chunky load-bearing legs whose armour stacks read as separate blocks from the RTS camera)
-  const hipY = 0.4 * m + 0.12, t = (0.062 * m + 0.04) * (s.mobId === 'titanlegs' ? 1.2 : 1) * 1.2;
+  // tall stance: long thigh and shin both read (vertical mechs, not crouched boxes)
+  const hipY = 0.56 * m + 0.14, t = (0.062 * m + 0.04) * (s.mobId === 'titanlegs' ? 1.2 : 1) * 1.2;
   return { y0: hipY - t * 0.5, yt: hipY + t * 0.6, wi: s.W * 0.34, tracked: false, legs: 'biped', thick: t, hipY };
 }
 
