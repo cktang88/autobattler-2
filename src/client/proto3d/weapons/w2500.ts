@@ -98,6 +98,7 @@ export function blades(C: WCtx): void {
 
 // ---- arc projector ---------------------------------------------------------------------------------------------------
 export function arc(C: WCtx): void {
+  if (C.tier <= 3) return arcCannon(C);
   const { b, rc, kit, r, y0 } = C;
   const big = C.tier >= 4, n = C.tier >= 5 ? 3 : 2;
   plinth(C, 0.75, 0.28);
@@ -238,4 +239,24 @@ export function emitter(C: WCtx): void {
   C.muzzle(x + e * 0.4, 0, 0);
   C.t.shot = v === 'sonic' || id === 'empcannon' ? 'orb' : 'beam';
   C.t.rate = v === 'heatray' ? 0.7 : id === 'stungun' ? 0.8 : id === 'empcannon' ? 1.3 : v === 'slowbeam' ? 1.0 : v === 'sonic' ? 1.1 : 1.2;
+}
+
+/** Arc cannon (tesla, arc lance): the integrated weapon body with two long angular conductor rails reaching forward,
+ *  a floating crystal held between their tips in a halo of segmented plates, glowing channels along the rails. */
+function arcCannon(C: WCtx): void {
+  const { rc, kit, r } = C;
+  mechHousing(C, r * 1.55, r * 0.7, r * 0.55, 0.7);
+  const L = C.D * 0.85, g = r * 0.36, cx = r * 0.25 + L * 0.9;
+  for (const s of [-1, 1]) {
+    cbox(rc, kit.hull, r * 0.25 + L * 0.45, 0, s * g, L * 0.9, r * 0.3, r * 0.17, r * 0.04, undefined, 0.75);
+    bx(rc, kit.rail, r * 0.25 + L * 0.5, r * 0.155, s * g, L * 0.7, r * 0.025, r * 0.08);
+    crystal(rc, kit.rail, r * 0.25 + L, 0, s * g, r * 0.08, r * 0.14, 'x');
+  }
+  crystal(rc, kit.rail, cx, 0, 0, r * 0.2, r * 0.3, 'x');
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    bx(rc, i % 2 ? kit.trim : kit.panel, cx, Math.sin(a) * r * 0.33, Math.cos(a) * r * 0.33, r * 0.06, r * 0.13, r * 0.13, [a, 0, 0]);
+  }
+  C.muzzle(cx + r * 0.22, 0, 0);
+  C.t.rate = C.mod.id === 'arclance' ? 1.2 : 0.9;
 }
