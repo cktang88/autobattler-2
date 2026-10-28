@@ -9,7 +9,7 @@ import type { Design } from '../../shared/types.ts';
 import { buildUnit, type Unit3D } from './units3d.ts';
 import { buildTerrain } from './terrain3d.ts';
 import { createRenderer, setupStage, setupPost, type Post } from './stage3d.ts';
-import { aimTurret, recoilKick, recoilRelax, type Turret } from './weapons3d.ts';
+import { aimPod, aimTurret, recoilKick, recoilRelax, type Turret } from './weapons3d.ts';
 
 const params = new URLSearchParams(location.search);
 const lab = params.get('lab');
@@ -217,7 +217,7 @@ function frame() {
       if (best && bd < 60 && !tu.fixed) {
         tgt.copy(best.u.root.position); tgt.y += 0.5;
         const loc = u.root.worldToLocal(tgt.clone());
-        const diff = aimTurret(tu, loc.x, loc.z, dt);
+        const diff = tu.host !== undefined ? aimPod(tu, u.turrets[tu.host].yaw.rotation.y, Math.atan2(loc.z, loc.x), dt) : aimTurret(tu, loc.x, loc.z, dt);
         const gx = Math.abs(diff) < 0.25;
         const ns = nextShot.get(tu) ?? (t + 1 + ((i * 0.37 + p.x * 0.13) % 2));
         if (gx && t >= ns && !frozen) {

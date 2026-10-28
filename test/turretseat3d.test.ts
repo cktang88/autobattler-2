@@ -163,6 +163,8 @@ function checkDesign(d: Design, tamper?: (u: ReturnType<typeof buildUnit>) => vo
   const mods = d.mounts.filter((m) => m);
   const fill = d.mounts.map((m) => m ?? '-').join('|');
   u.turrets.forEach((t, k) => {
+    // a weapon pod rides its host turret's flank on a bracket: the host is the one that must stand on the hull
+    if (t.host !== undefined) return;
     const base = t.yaw.getWorldPosition(new THREE.Vector3());
     const limit = Math.max(0.04, 0.3 * t.r);
     const top = new THREE.Box3().setFromObject(t.yaw).max.y;
@@ -236,5 +238,5 @@ test('the support check catches a lifted or side-shifted turret (negative contro
   const d = { id: 'float-ctl', name: 'ctl', chassis: 'warden', mobility: 'treads', mounts: ['autocannon', 'mg'] } as Design;
   assert.equal(checkDesign(d).length, 0);
   assert.equal(checkDesign(d, (u) => { u.turrets[0].yaw.position.y += 0.35; }).length, 1, 'lifted turret');
-  assert.equal(checkDesign(d, (u) => { u.turrets[1].yaw.position.z += u.W * 0.9; }).length, 1, 'turret beside the hull');
+  assert.equal(checkDesign(d, (u) => { u.turrets[0].yaw.position.z += u.W * 0.9; }).length, 1, 'turret beside the hull');
 });

@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { CHASSIS_BY_ID, MODULE_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
-import { mountOffsets } from '../../shared/mountgeo.ts';
+import { mountOffsets, PART_SHAPES } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
@@ -113,8 +113,16 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     }
     tur.forEach((tu, i) => { if (tu && sc[i] < 1) { tu.yaw.scale.multiplyScalar(sc[i]); tu.r *= sc[i]; } });
   }
+  // weapon pods: on small / medium ground hulls whose weapons are not carried by limbs, the secondary weapons ride the
+  // hero turret as pods on its flanks (right, mirrored left, then one on top at the back) instead of standing as
+  // separate turrets on the deck: one cohesive weapon system that turns as a whole, nothing blocks anything's traverse
+  const podOf: number[] = mods.map(() => -1);
+  if (!flying && S <= 3 && !PART_SHAPES.has(ch.shape) && hero >= 0 && tur[hero] && !tur[hero]!.fixed) {
+    let n = 0;
+    mods.forEach((m, i) => { if (n < 3 && i !== hero && m && m.kind === 'weapon' && tur[i] && offs[i]) podOf[i] = n++; });
+  }
   const specs: MountSpec[] = [];
-  tur.forEach((tu, i) => { if (tu && offs[i]) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
+  tur.forEach((tu, i) => { if (tu && offs[i] && podOf[i] < 0) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
 
   // flyers with a registered airframe (chassis/air.ts) take the registry path like ground units; the airframe returns
   // its lift points (AirOut.lift) and the air mobility (mobility/air.ts) renders rotors / fans / nozzles / grav pods
@@ -160,11 +168,32 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     }
     tu.yaw.position.set(air?.hpX ? air.hpX(m.x, m.z) : m.x, y, m.z);
     body.add(tu.yaw);
-    turrets.push(tu);
   }
+  // pods onto the hero turret (its local frame is scaled by the hero's size factor kH: positions in its unscaled units)
+  const pods = podOf.map((s, i) => (s >= 0 ? i : -1)).filter((i) => i >= 0);
+  if (pods.length) {
+    const H = tur[hero]!, kH = H.yaw.scale.x, r0 = H.r / kH, py = H.pitch.position.y;
+    const bk = new Bld();
+    for (const i of pods) {
+      const tu = tur[i]!, slot = podOf[i];
+      const k = Math.min(1, (H.r * 0.62) / tu.r);
+      tu.yaw.scale.multiplyScalar(k / kH); tu.r *= k;
+      const rl = tu.r / kH, s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
+      const x = slot < 2 ? -r0 * 0.12 : -r0 * 0.75, z = s * (r0 * 1.05 + rl * 0.9), y = slot < 2 ? py * 0.6 : py + r0 * 0.3;
+      tu.yaw.position.set(x, y, z);
+      H.yaw.add(tu.yaw);
+      // bracket arm from the housing to the pod's base (side pods), or a pillar (top pod)
+      if (s) bk.box(kit.trim, rl * 1.3, rl * 0.32, Math.abs(z) - r0 * 0.55, x, y - rl * 0.05, s * (r0 * 0.55 + (Math.abs(z) - r0 * 0.55) / 2), rl * 0.06);
+      else bk.box(kit.trim, rl * 0.9, y - py * 0.5, rl * 0.9, x, (y + py * 0.5) / 2, 0, rl * 0.06);
+    }
+    bk.mount(H.yaw);
+  }
+  // turret list in design mount order (render3d maps mount i -> the i-th present turret)
+  mods.forEach((_, i) => { if (tur[i] && offs[i]) turrets.push(tur[i]!); });
+  for (const i of pods) tur[i]!.host = turrets.indexOf(tur[hero]!);
   hb.mount(body, kit.decal);
   // surface skin by role / domain / scale (skins.ts); turrets keep their own per-weapon skin
-  applySkin(root, body, specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), kit.uber, skin, design.id);
+  applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), ...pods.map((i) => ({ obj: tur[i]!.yaw, mount: i }))], kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && !(me.material as THREE.MeshBasicMaterial).isMeshBasicMaterial) tris += (me.geometry.index ? me.geometry.index.count : me.geometry.attributes.position.count) / 3; });

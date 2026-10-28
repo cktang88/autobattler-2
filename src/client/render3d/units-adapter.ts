@@ -14,7 +14,7 @@ import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { flyHeight } from '../render/tilt.ts';
-import { aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withDetail, withSurfaceDetail, type Turret, type Unit3D } from '../proto3d/index.ts';
+import { aimPod, aimTurret, buildUnit, contactShadow, recoilKick, recoilRelax, withDetail, withSurfaceDetail, type Turret, type Unit3D } from '../proto3d/index.ts';
 import { OUTLINE_LAYER } from './outline3d.ts';
 
 export { buildTerrain, createRenderer, setupPost, setupStage, setSurfaceDetail, type Post, type Stage } from '../proto3d/index.ts';
@@ -307,8 +307,9 @@ export class Rig {
   aim(i: number, localAngle: number, dt: number): void {
     const tu = this.turrets[i];
     if (!tu || tu.fixed) return;
-    const x0 = tu.yaw.position.x, z0 = tu.yaw.position.z;
     this.dirty = true;
+    if (tu.host !== undefined) { aimPod(tu, this.all[tu.host].yaw.rotation.y, localAngle, dt, 22); return; }
+    const x0 = tu.yaw.position.x, z0 = tu.yaw.position.z;
     aimTurret(tu, x0 + Math.cos(localAngle) * 10, z0 + Math.sin(localAngle) * 10, dt, 22);
   }
   /** a shot from mount i: the barrel assembly slams back by k x the base recoil and runs out again at `rate` /s */

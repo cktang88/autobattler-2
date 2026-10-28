@@ -9,7 +9,7 @@
 //   aimTurret(tu, localX, localZ, dt); recoilKick(tu); recoilRelax(tu, dt);
 
 export { buildUnit, contactShadow, type Unit3D } from './units3d.ts';
-export { buildTurret, aimTurret, recoilKick, recoilRelax, type Turret } from './weapons3d.ts';
+export { buildTurret, aimPod, aimTurret, recoilKick, recoilRelax, type Turret } from './weapons3d.ts';
 export { makeKit, paint, rng, atlasUV, type Kit, type MatLike, type UMat } from './materials.ts';
 export { setSurfaceDetail, withSurfaceDetail, loadSurfaceTextures, setSurfaceTextureBase } from './surface3d.ts';
 export { buildTerrain, type Terrain, type TerrainOpts } from './terrain3d.ts';

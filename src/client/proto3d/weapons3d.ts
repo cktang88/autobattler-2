@@ -38,6 +38,9 @@ export interface Turret {
   idleSpin: number;
   /** weapon fires fixed forward (aircraft hardpoints) */
   fixed: boolean;
+  /** weapon pod riding another turret (index into the unit's turrets): it turns with its host and aims only a little
+   *  on its own (aimPod) */
+  host?: number;
   /** visual projectile style */
   shot: 'tracer' | 'shell' | 'beam' | 'orb' | 'rocket' | 'flame' | 'none';
   /** cooldown seconds between visual shots */
@@ -115,6 +118,15 @@ export function aimTurret(t: Turret, lx: number, lz: number, dt: number, rate = 
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
   t.yaw.rotation.y += diff * Math.min(1, dt * rate);
   return Math.abs(diff);
+}
+/** Aim a pod riding a host turret: the pod's yaw is relative to the host, so it takes the wanted unit-local angle
+ *  (0 = forward, +ve toward +z) minus the host's traverse, clamped to +-0.4 rad. Returns the remaining error (rad). */
+export function aimPod(t: Turret, hostYaw: number, localAngle: number, dt: number, rate = 3): number {
+  let want = -localAngle - hostYaw;
+  want = Math.atan2(Math.sin(want), Math.cos(want));
+  const tgt = Math.max(-0.4, Math.min(0.4, want));
+  t.yaw.rotation.y += (tgt - t.yaw.rotation.y) * Math.min(1, dt * rate);
+  return Math.abs(want - t.yaw.rotation.y);
 }
 /** Kick the barrel assembly back (call on each shot) and relax it each frame with recoilRelax. */
 export function recoilKick(t: Turret): void { t.recoil.position.x = -t.r * 0.18; t.spinV = 30; }
