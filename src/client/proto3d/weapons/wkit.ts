@@ -125,7 +125,7 @@ export function capsule(B: Bld, mat: MatLike, x: number, y: number, z: number, R
 }
 
 /** Turret ring (deck bearing) under non-fixed weapons. */
-export function deckRing(C: WCtx, k = 0.95): void {
+export function deckRing(C: WCtx, k = 0.8): void {
   const { b, kit, r } = C;
   b.lathe(kit.trim, [[0, 0], [r * k, 0], [r * k, r * 0.07], [r * k * 0.9, r * 0.1], [0, r * 0.1]], [0, 0, 0], 'y', C.tier >= 4 ? 16 : 12);
 }

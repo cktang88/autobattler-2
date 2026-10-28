@@ -98,7 +98,8 @@ export function facePlate(b: Bld, kit: Kit, mat: MatLike, p0: V3, p1: V3, along:
 /** Low armoured turret-ring guard flush on the deck + the collar the turret sits in. Returns the seat height. */
 export function ringSeat(b: Bld, kit: Kit, m: MountSpec, deck: number, lift: number, seg = 14, mat?: MatLike): number {
   const y = deck + lift;
-  b.lathe(mat ?? kit.armor2, [[0, 0], [m.r * 1.3, 0], [m.r * 1.28, Math.max(0.004, lift - 0.01)], [m.r * 1.16, lift], [0, lift]], [m.x, deck - 0.004, m.z], 'y', seg);
+  // hull-colour plinth narrower than the turret (the turret overhangs it)
+  b.lathe(mat ?? kit.armor, [[0, 0], [m.r * 0.9, 0], [m.r * 0.88, Math.max(0.004, lift - 0.01)], [m.r * 0.84, lift], [0, lift]], [m.x, deck - 0.004, m.z], 'y', seg);
   collar(b, kit, m.x, y, m.z, m.r, y - Math.max(0.012, lift * 0.6), seg);
   return y;
 }

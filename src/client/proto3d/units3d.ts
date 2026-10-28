@@ -87,6 +87,17 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   });
   const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
   const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), i === main ? mainL : 0) : null));
+  // hero weapon: the unit's biggest weapon is drawn well over life size so it dominates the silhouette (you read the
+  // unit from its gun at a glance, Mechabellum style); the rest a little over (render-only: the sim never sees it)
+  let hero = -1;
+  mods.forEach((m, i) => { if (m && m.kind === 'weapon' && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]!))) hero = i; });
+  tur.forEach((tu, i) => {
+    if (!tu) return;
+    // hero housing >= half the hull width, the others >= a quarter (x1.5 / x1.15 at least, x2.4 at most)
+    const wantD = Math.min(L, W) * (i === hero ? 0.5 : 0.26);
+    const k = flying ? 1.1 : Math.min(2.4, Math.max(i === hero ? 1.5 : 1.15, wantD / (2 * tu.r)));
+    tu.yaw.scale.setScalar(k); tu.r *= k;
+  });
   // calibre-true housings can outgrow tightly packed hardpoints (four M guns down a land-train spine, twin dorsal
   // mounts on a small pod): shrink both housings of an overlapping ground pair until their rings just clear (>= 72%)
   if (!flying) {
@@ -95,9 +106,12 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
       const a = tur[i], b = tur[j], pa = offs[i], pb = offs[j];
       if (!a || !b || !pa || !pb) continue;
       const d = Math.hypot(pa.x - pb.x, pa.y - pb.y), want = 0.95 * (a.r + b.r);
-      if (d < want) { const k = Math.max(0.72, d / want); sc[i] = Math.min(sc[i], k); sc[j] = Math.min(sc[j], k); }
+      if (d >= want) continue;
+      // the hero weapon keeps its size: the other housing gives way (down to 60%); otherwise both shrink
+      if (i === hero || j === hero) { const o = i === hero ? j : i, ro = tur[o]!.r, rh = tur[i === hero ? i : j]!.r; sc[o] = Math.min(sc[o], Math.max(0.6, (d / 0.95 - rh) / ro)); }
+      else { const k = Math.max(0.72, d / want); sc[i] = Math.min(sc[i], k); sc[j] = Math.min(sc[j], k); }
     }
-    tur.forEach((tu, i) => { if (tu && sc[i] < 1) { tu.yaw.scale.setScalar(sc[i]); tu.r *= sc[i]; } });
+    tur.forEach((tu, i) => { if (tu && sc[i] < 1) { tu.yaw.scale.multiplyScalar(sc[i]); tu.r *= sc[i]; } });
   }
   const specs: MountSpec[] = [];
   tur.forEach((tu, i) => { if (tu && offs[i]) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });

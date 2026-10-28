@@ -110,7 +110,7 @@ function warden(c: ChassisCtx): ChassisOut {
     seat: (m) => {
       // low armoured turret-ring guard flush on the deck (no plinth: the turret sits low, like a real MBT)
       const big = m === main, y = deck + (big ? 0.03 : 0.04) * k;
-      b.lathe(kit.armor2, [[0, 0], [m.r * 1.32, 0], [m.r * 1.3, y - deck - 0.01 * k], [m.r * 1.18, y - deck], [0, y - deck]], [m.x, deck - 0.005, m.z], 'y', big ? 18 : 14);
+      b.lathe(kit.armor, [[0, 0], [m.r * 0.9, 0], [m.r * 0.88, y - deck - 0.01 * k], [m.r * 0.84, y - deck], [0, y - deck]], [m.x, deck - 0.005, m.z], 'y', big ? 18 : 14);
       collar(b, kit, m.x, y, m.z, m.r, y - 0.02 * k, big ? 18 : 14);
       return { y, socket: true };
     },
