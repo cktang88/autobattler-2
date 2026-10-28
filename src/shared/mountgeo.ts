@@ -57,7 +57,8 @@ export const MOUNT_PTS: Record<string, [number, number][]> = {
  *  MOUNT_PTS). Part-riding ones are overwritten from the part's weapon point (PART_REST). */
 export const FOOT_MOUNTS: Record<string, Pt[]> = {
   long: [[-0.17, 0]],
-  cross: [[0.0, -0.33], [0.0, 0.33], [0.3, 0]],
+  // striker: the hero weapon stands on the torso at the centre (the other M rides it as a pod), utility over the prow
+  cross: [[-0.06, -0.05], [-0.06, 0.05], [0.3, 0]],
   airframe: [[0.04, -0.37], [0.04, 0.37]],
   delta: [[0.12, 0], [-0.22, -0.28], [-0.22, 0.28]],
   interceptor: [[-0.06, -0.3], [-0.06, 0.3]],

@@ -2,9 +2,9 @@
 // few oversized road wheels, dressed in one of several looks chosen from the hull shape so tanks do not all sit on the
 // same two long strips:
 //   skirt    armoured side skirts with a fender lip, nose-tapered (default for any hull)
-//   pods     four short track pods at the corners under faceted armour hoods (fortress tanks: bastion)
+//   pods     four short track pods at the corners under faceted armour hoods (unused since bastion moved to walls)
 //   exposed  carriage: bare tracks under the rear only, big dished road wheels, castor pair under the nose (longarm)
-//   wall     heavy segmented plate skirts reaching the ground (wall-of-armour hulls: juggernaut)
+//   wall     heavy segmented plate skirts reaching the ground (wall-of-armour hulls: juggernaut, bastion)
 //   bogies   four short bare track bogies at the corners, toed out, on swing arms (siege platforms: siegeplat)
 //   twin     long inner tracks + short skirted outer tracks under the side casemates (colossus 'titan')
 //   hs       hard-surface track system (chassis/hs-kit.ts trackSystem): narrow link belt, 5-7 road wheels on arms, return
@@ -20,7 +20,7 @@ import { place, XBld } from '../chassis/tanks-kit.ts';
 import { armorPlate, cagedLamp, fineFor, frame, hexSec, rectP, skirtRun, trackSystem } from '../chassis/hs-kit.ts';
 
 export type TrackStyle = 'skirt' | 'round' | 'pods' | 'exposed' | 'wall' | 'twin' | 'bogies' | 'hs';
-const STYLE: Record<string, TrackStyle> = { hex: 'hs', fortress: 'pods', long: 'exposed', siegeplat: 'bogies', juggernaut: 'wall', titan: 'twin' };
+const STYLE: Record<string, TrackStyle> = { hex: 'hs', fortress: 'wall', long: 'exposed', siegeplat: 'bogies', juggernaut: 'wall', titan: 'twin' };
 export function trackStyle(shape: string, mobId = 'treads'): TrackStyle {
   if (mobId !== 'treads') return 'skirt';
   return STYLE[shape] ?? 'skirt';

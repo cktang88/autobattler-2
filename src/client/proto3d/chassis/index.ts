@@ -12,6 +12,7 @@ import './air.ts';
 import './bombers.ts';
 import '../mobility/air.ts';
 import './light.ts';
+import './carriers.ts';
 import '../mobility/wheels.ts';
 import '../mobility/hover.ts';
 import '../mobility/anchor.ts';
