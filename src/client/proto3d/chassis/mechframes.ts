@@ -128,4 +128,88 @@ function raider(c: ChassisCtx): ChassisOut {
   };
 }
 
+// ---- aegis: field-medic bell tower ------------------------------------------------------------------------------------
+function aegis(c: ChassisCtx): ChassisOut {
+  const { b, kit, stance, L, W, S } = c;
+  const u = Math.min(L, W) / 2; // authored at 2 x 2
+  const fine = fineFor(S);
+  const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.12 * u);
+  const legs = !!stance.legs;
+  const hero = heroOf(c.mounts);
+  const hx = hero?.x ?? -0.04 * u, hz = hero?.z ?? 0, R = hero?.r ?? 0.8 * u;
+  const wi = Math.min(stance.wi, 0.6 * u);
+  // ---- belly between the running gear (on legs a keel down to the hips)
+  const bb = legs ? stance.hipY - stance.thick * 0.9 : y0;
+  block(b, kit.mech, -0.02 * u, bb, 0, 1.7 * u, wi * 2, yt + 0.02 * u - bb, { top: [0.96, 0.96], ch: 0.14 * u, bev: 0.02 * u, bot: 0.02 * u });
+  // ---- round armoured skirt over the running gear: dark 12-gon frustum with a team plate on every facet
+  const sk = ngon(12, 0.92 * u, 0.9 * u, Math.PI / 12, -0.03 * u, 0);
+  const skY = yt - 0.06 * u, skH = 0.15 * u;
+  frustum(b, kit.armor2, sk, skY, skH, { top: [0.9, 0.9], bev: 0.02 * u, bot: 0.015 * u });
+  frustumPlates(b, kit, kit.armor, sk, skY, skH, 0.9, 0.028 * u, { standoff: 0.01 * u, gap: 0.02 * u, widthK: 0.84, f0: 0.12, f1: 0.86, skip: (i) => i === 5 || i === 6 });
+  const Y1 = skY + skH;
+  // ---- rotunda lifting the gun: team base drum, glowing nanite core band in a ribbed cage, bone drum, plinth
+  const r1 = Math.min(0.74 * u, R * 0.92);
+  b.lathe(kit.armor, [[0, 0], [r1, 0], [r1, 0.08 * u], [r1 * 0.94, 0.12 * u], [0, 0.12 * u]], [hx, Y1 - 0.01 * u, hz], 'y', 20);
+  coreCage(b, kit, hx, Y1 + 0.11 * u, hz, r1 * 0.78, 0.2 * u, 14);
+  b.lathe(kit.shell, [[0, 0], [r1 * 0.86, 0], [r1 * 0.86, 0.06 * u], [r1 * 0.8, 0.1 * u], [0, 0.1 * u]], [hx, Y1 + 0.31 * u, hz], 'y', 20);
+  const seatY = Y1 + 0.47 * u;
+  plinth(b, kit.mech, hx, Y1 + 0.4 * u, seatY - 0.01 * u, hz, Math.min(R * 0.68, r1 * 0.7), 16);
+  // ---- nanite tanks standing upright at the rear flanks (taller than the gun: the medic's silhouette), bone capsules
+  // with dark bands, glowing windows down their outer faces, valve heads, clamped to the rotunda by armoured arms;
+  // a low team fender runs forward from each tank over the front of the running gear
+  both((s) => {
+    const tx = -0.5 * u, tz = s * 0.76 * u, cr = 0.17 * u, ty = yt - 0.04 * u, H = seatY + 0.3 * u - ty;
+    b.lathe(kit.shell, [[0, 0], [cr * 0.9, 0], [cr, cr * 0.3], [cr, H - cr * 1.1], [cr * 0.86, H - cr * 0.45], [cr * 0.45, H], [0, H]], [tx, ty, tz], 'y', 16);
+    for (const f of [0.06, 0.42, 0.74]) b.cylb(kit.mech, cr * 1.06, 0.05 * u, 0.008 * u, [tx, ty + f * H, tz], 'y', 16);
+    for (const a of [0.0, 0.7, -0.7]) {
+      const ang = s * (Math.PI / 2) + a * s, wx = tx + Math.cos(ang) * cr * 0.97, wz = tz + Math.sin(ang) * cr * 0.97;
+      pbox(b, kit.plasma, 0.035 * u, H * 0.26, 0.035 * u, wx, ty + H * 0.24, wz, [0, -ang, 0]);
+      pbox(b, kit.plasma, 0.035 * u, H * 0.2, 0.035 * u, wx, ty + H * 0.58, wz, [0, -ang, 0]);
+    }
+    b.cylb(kit.joint, cr * 0.42, 0.06 * u, 0.01 * u, [tx, ty + H - 0.01 * u, tz], 'y', 10);
+    b.cyl(kit.lamp, cr * 0.2, cr * 0.2, 0.012 * u, [tx, ty + H + 0.05 * u, tz], 'y', 8);
+    // clamp arms to the rotunda (two heights)
+    for (const yy of [Y1 + 0.04 * u, Y1 + 0.27 * u]) {
+      block(b, kit.armor2, tx + 0.02 * u, yy, s * 0.5 * u, 0.14 * u, 0.36 * u, 0.07 * u, { ch: 0.03 * u, bev: 0.012 * u });
+      b.cylb(kit.mech, cr * 1.1, 0.075 * u, 0.01 * u, [tx, yy - 0.003 * u, tz], 'y', 16);
+    }
+    // front fender over the running gear: team block, bone cap, glow strip, feed hose into the core
+    block(b, kit.armor, 0.22 * u, yt - 0.04 * u, s * 0.79 * u, 0.74 * u, 0.32 * u, 0.15 * u, { top: [0.82, 0.8], shift: [-0.04 * u, -s * 0.02 * u], ch: 0.08 * u, bev: 0.025 * u, bot: 0.015 * u });
+    block(b, kit.shell, 0.18 * u, yt + 0.105 * u, s * 0.78 * u, 0.42 * u, 0.2 * u, 0.03 * u, { top: [0.85, 0.8], ch: 0.05 * u, bev: 0.01 * u });
+    pbox(b, kit.glow, 0.4 * u, 0.022 * u, 0.014 * u, 0.22 * u, yt + 0.04 * u, s * 0.955 * u);
+    b.g(new THREE.TorusGeometry(0.12 * u, 0.024 * u, 6, 10, Math.PI / 2), kit.rubber, mtx([tx + 0.18 * u, Y1 + 0.2 * u, s * 0.62 * u], [Math.PI / 2, 0, s > 0 ? Math.PI / 2 : 0]));
+  });
+  // ---- rounded nose bumper with the medic cross, lamps
+  const nX = 0.8 * u;
+  block(b, kit.shell, nX, yt - 0.1 * u, 0, 0.3 * u, 1.0 * u, 0.2 * u, { top: [0.45, 0.82], shift: [-0.07 * u, 0], ch: 0.14 * u, bev: 0.03 * u, bot: 0.02 * u, mid: [[0.5, 1.02, 1.0]] });
+  const crossF = frame([nX + 0.035 * u, yt + 0.035 * u, 0], [Math.sin(0.95), Math.cos(0.95), 0], ZA);
+  b.g(new THREE.BoxGeometry(0.06 * u, 0.012 * u, 0.2 * u), kit.accent, crossF);
+  b.g(new THREE.BoxGeometry(0.17 * u, 0.012 * u, 0.06 * u), kit.accent, crossF);
+  both((s) => pbox(b, kit.lamp, 0.02 * u, 0.04 * u, 0.14 * u, nX + 0.12 * u, yt - 0.02 * u, s * 0.3 * u, [0, -s * 0.35, 0]));
+  // ---- raised service bay at the back for the repair rig / utility, twin sensor masts at the rear corners
+  const bayX = -0.78 * u, bayT = yt + 0.12 * u;
+  block(b, kit.armor, bayX, yt - 0.04 * u, 0, 0.34 * u, 0.62 * u, bayT - yt + 0.04 * u, { top: [0.86, 0.9], shift: [0.02 * u, 0], ch: 0.08 * u, bev: 0.02 * u });
+  block(b, kit.shell, bayX - 0.02 * u, bayT - 0.005 * u, 0, 0.22 * u, 0.5 * u, 0.03 * u, { top: [0.8, 0.9], ch: 0.05 * u, bev: 0.01 * u });
+  both((s) => {
+    const p: V3 = [-0.86 * u, yt - 0.02 * u, s * 0.42 * u];
+    b.cylb(kit.armor2, 0.05 * u, 0.42 * u, 0.01 * u, p, 'y', 10);
+    b.cyl(kit.glow, 0.053 * u, 0.053 * u, 0.025 * u, [p[0], p[1] + 0.3 * u, p[2]], 'y', 10);
+    antenna(b, kit, p[0], p[1] + 0.42 * u, p[2], 0.5 * u, 0.007 * u, [-0.1, 0, s * 0.08]);
+    piston(b, kit, [p[0] + 0.06 * u, yt, s * 0.3 * u], [-0.55 * u, Y1 + 0.05 * u, s * 0.3 * u], 0.02 * u, 0.55, fine);
+  });
+  const deck = (x: number, z: number) => {
+    if (Math.hypot(x - hx, z - hz) < r1 * 0.8) return seatY;
+    if (Math.abs(x - bayX) < 0.17 * u && Math.abs(z) < 0.3 * u) return bayT + 0.02 * u;
+    return Math.abs(x) <= u && Math.abs(z) <= u ? Y1 : -1;
+  };
+  return {
+    deckAt: deck, top: seatY + 0.02 * u, custom: true, dressed: true,
+    seat: (m) => {
+      if (m === hero) { collar(b, kit, m.x, seatY, m.z, m.r, seatY - 0.03 * u, 18); return { y: seatY, socket: true }; }
+      return { y: ringSeat(b, kit, m, Math.max(0, deck(m.x, m.z)), 0.02 * u, 12), socket: true };
+    },
+  };
+}
+
 registerChassis('raider', raider);
+registerChassis('aegis', aegis);
