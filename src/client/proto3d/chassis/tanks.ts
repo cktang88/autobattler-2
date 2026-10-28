@@ -20,7 +20,7 @@ import { atlasUV } from '../materials.ts';
 import { bevBox, type P2, type V3 } from '../geo.ts';
 import { HS_NARROW } from '../mobility/tracks.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
-import { both, collar, beam } from './shapes.ts';
+import { both, collar, beam, block } from './shapes.ts';
 import { frustum, inPlan, mirrorPlan, ngon, scalePlan } from './tanks-kit.ts';
 import {
   antenna, armorPlate, cagedLamp, crewHatch, cupola, eraGrid, exhaustBox, fineFor, frame, handrail, hexSec, hose, jerryCans, ladder,
@@ -35,94 +35,76 @@ const grounded = (c: ChassisCtx) => !c.stance.legs && c.mob.kind !== 'air';
 
 // ---------------------------------------------------------------------------------------------------------------------
 function warden(c: ChassisCtx): ChassisOut {
-  // Hard-surface line tank (chassis/hs-kit.ts): a low dark belly between the track systems, a faceted upper hull with
-  // sponsons over the tracks and a flat engine deck (elongated hex from above: chamfered nose and tail corners), a
-  // two-plate upper glacis standing proud on shadow gaps, a separate lower glacis plate, a thin V dozer/ram blade on
-  // push arms and two hydraulic rams (the warden's signature), smoke-grenade banks on the sponson fronts, caged
-  // headlamps. Asymmetric: driver's hatch + periscopes front-left, exhaust right rear, jerry cans + antenna left rear,
-  // tool bins and spare track on the right side only.
+  // Line tank as an ASSEMBLY of chunky armour blocks (Mechabellum style): a dark mechanical core shows through deep gaps
+  // between separate blocks, and each block carries its own role colour so the hull never reads as one moulded piece.
+  //   core      dark belly + inner frame between the tracks (visible in every gap)
+  //   spine     team-colour central block carrying the turret, two light access plates on its rear half
+  //   glacis    light bone wedge on the nose, a dark lower plate under it, caged lamps on its corners
+  //   sponsons  two blocks per side over the tracks (light front, team rear) split by a gap with a hydraulic ram in it
+  //   skirts    three thick outward-tilted plates per side over the track run
+  //   engine    dark stepped-down rear block: louvred grille, twin exhaust stacks, jerry cans + antenna (left)
+  // Asymmetric: driver's hatch + periscopes front-left, tool bin right shoulder.
   const { b, kit, L, W, stance, S } = c;
   const kx = L / 2, kz = (W / 2) * (HS_NARROW.hex ?? 1), k = Math.min(L / 2, W / 2);
   const fine = fineFor(S);
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.12 * k);
   const wi = Math.min(stance.wi, 0.66 * kz);
-  const ys = yt + 0.03 * k, deck = ys + 0.25 * k;
-  // ---- belly (dark structure between the tracks): lower glacis slope at the front, short rear slope
+  const ys = yt + 0.03 * k, deck = ys + 0.27 * k;
+  const G = 0.035 * k; // gap between blocks
+  // ---- core: dark belly between the tracks and an inner frame block that fills the gaps between the armour blocks
   const belly: [number, number, number][] = [[1.02, ys - 0.06 * k, 0.55], [0.86, y0 + 0.04 * k, 1], [-0.9, y0, 1], [-1.0, y0 + 0.07 * k, 0.9]];
   b.loft(kit.mech, belly.map(([x, yb, f]) => hexSec(x * kx, yb, wi * f * 0.9, wi * f, yb + 0.03 * k, ys - 0.01, wi * f, ys + 0.01)));
-  // ---- upper hull: faceted sponson hull (x, sponson half-width, side band height, deck half-width, top y)
-  const up: [number, number, number, number, number][] = [
-    [1.07, 0.42, 0.04, 0.3, ys + 0.06 * k], [0.86, 0.94, 0.07, 0.68, ys + 0.11 * k], [0.4, 1.0, 0.1, 0.72, deck],
-    [-0.74, 1.0, 0.1, 0.72, deck], [-0.95, 0.86, 0.1, 0.6, deck - 0.02 * k], [-1.0, 0.72, 0.09, 0.5, deck - 0.05 * k],
-  ];
-  b.loft(kit.armor, up.map(([x, ws, hs, wt, ytop]) => hexSec(x * kx, ys, ws * kz, ws * kz, ys, ys + hs * k, wt * kz, ytop)));
-  const T = 0.038 * k; // plate thickness
-  // ---- upper glacis: two-plate stack on the sloped front
-  const g0: V3 = [0.86 * kx, ys + 0.11 * k, 0], g1: V3 = [0.4 * kx, deck, 0];
-  const gl = Math.hypot(g1[0] - g0[0], g1[1] - g0[1]);
-  const GF = frame([(g0[0] + g1[0]) / 2, (g0[1] + g1[1]) / 2, 0], [g1[1] - g0[1], g0[0] - g1[0], 0], [0, 0, 1]);
-  armorPlate(b, kit, kit.armor, GF, trapP(1.36 * kz, gl * 0.9, gl * 0.9, 0.06 * k), T, { standoff: 0.012 * k, gap: 0.03 * k });
-  armorPlate(b, kit, kit.armor, sub(GF, 0, 0.012 * k + T, gl * 0.14), rectP(1.1 * kz, gl * 0.46, 0.05 * k), T * 0.9, { standoff: T * 0.45, gap: 0.03 * k });
-  // sloped side armour: two plates per shoulder (hull side above the sponson), shadow gap between them
-  const sh0 = ys + 0.1 * k;
+  block(b, kit.mech, -0.06 * kx, ys - 0.02 * k, 0, 1.84 * kx, 1.3 * kz, (deck - ys) * 0.5, { ch: 0.1 * k, bev: 0.02 * k });
+  // ---- spine: team-colour centre block (turret base)
+  const spL = 1.12 * kx, spX = -0.02 * kx, spW = 0.98 * kz;
+  block(b, kit.armor, spX, ys, 0, spL, spW, deck - ys, { top: [0.95, 0.9], ch: 0.12 * k, bev: 0.035 * k });
+  // light access plates on the spine's rear half, either side of the centre line
+  both((s) => block(b, kit.shell, -0.36 * kx, deck - 0.004, s * 0.22 * kz, 0.34 * kx, 0.3 * kz, 0.035 * k, { top: [0.92, 0.88], ch: 0.04 * k, bev: 0.012 * k }));
+  // ---- glacis: light wedge on the nose (sloped top), dark lower plate under it
+  const gX0 = spX + spL / 2 + G, gX1 = 1.06 * kx, gl = gX1 - gX0;
+  block(b, kit.shell, (gX0 + gX1) / 2, ys - 0.01 * k, 0, gl, 1.18 * kz, (deck - ys) * 0.86, { top: [0.42, 0.86], shift: [-gl * 0.28, 0], ch: 0.1 * k, bev: 0.025 * k });
+  block(b, kit.armor2, 0.93 * kx, y0 + 0.06 * k, 0, 0.26 * kx, wi * 1.6, ys - y0 - 0.08 * k, { top: [0.55, 0.92], shift: [-0.04 * kx, 0], ch: 0.05 * k, bev: 0.015 * k });
+  // ---- sponsons over the tracks: front block light, rear block team colour, a gap between with a ram across it
+  const spZ = 0.8 * kz, spWd = 0.36 * kz, sh = 0.17 * k, sy = ys + 0.01 * k;
   both((s) => {
-    const a: V3 = [0, sh0, s * 1.0 * kz], e: V3 = [0, deck, s * 0.72 * kz];
-    const sl = Math.hypot(e[1] - a[1], e[2] - a[2]);
-    const SF = frame([0, (a[1] + e[1]) / 2, (a[2] + e[2]) / 2], [0, Math.abs(e[2] - a[2]), s * (e[1] - a[1])], [1, 0, 0]);
-    for (const [x0, x1] of [[0.36, -0.2], [-0.24, -0.72]] as [number, number][]) {
-      armorPlate(b, kit, kit.armor2, sub(SF, ((x0 + x1) / 2) * kx, 0, 0), rectP((x0 - x1) * kx - 0.03 * k, sl * 0.8), T * 0.9, { standoff: 0.008 * k, gap: 0.02 * k });
+    block(b, kit.shell, 0.4 * kx, sy, s * spZ, 0.5 * kx, spWd, sh, { top: [0.82, 0.78], shift: [-0.03 * kx, -s * 0.02 * kz], ch: 0.06 * k, bev: 0.02 * k });
+    block(b, kit.armor, -0.45 * kx, sy, s * spZ, 0.95 * kx, spWd, sh * 1.12, { top: [0.94, 0.78], shift: [0, -s * 0.02 * kz], ch: 0.06 * k, bev: 0.02 * k });
+    piston(b, kit, [0.06 * kx, sy + sh * 0.55, s * spZ], [0.2 * kx, sy + sh * 0.55, s * spZ], 0.024 * k, 0.5, fine);
+    // skirts: three thick plates tilted out over the track run, alternating team / dark
+    for (let i = 0; i < 3; i++) {
+      const x0 = 0.86 - i * 0.64, x1 = x0 - 0.6, sx = ((x0 + x1) / 2) * kx, sl = (x0 - x1) * kx;
+      const F = frame([sx, sy - 0.035 * k, s * (spZ + spWd / 2 + 0.02 * kz)], [0, 0.2, s], [1, 0, 0]);
+      armorPlate(b, kit, i === 1 ? kit.armor2 : kit.armor, F, rectP(sl, 0.13 * k, 0.03 * k), 0.045 * k, { standoff: 0.006 * k, gap: 0.015 * k });
     }
+    // exposed hydraulics in the gap between spine and sponson: a long ram and a pivot drum at the front
+    piston(b, kit, [-0.7 * kx, ys + 0.06 * k, s * 0.56 * kz], [0.3 * kx, ys + 0.09 * k, s * 0.56 * kz], 0.022 * k, 0.6, fine);
+    b.cylb(kit.joint, 0.05 * k, 0.07 * kz, 0.01 * k, [0.54 * kx, ys + 0.08 * k, s * 0.53 * kz - 0.035 * kz], 'z', 12);
+    // smoke-grenade banks on the light sponson fronts, caged lamps on the glacis corners
+    smokeLaunchers(b, kit, frame([0.66 * kx, sy + sh, s * spZ], [0, 1, 0], [Math.cos(0.5), 0, s * Math.sin(0.5)]), 3, 0.026 * k);
+    cagedLamp(b, kit, frame([0.92 * kx, ys + 0.08 * k, s * 0.5 * kz], [0, 1, 0], [1, 0, 0]), 0.07 * k, fine);
   });
-  // spare track links clipped to the right half of the glacis (asymmetric stowage)
-  spareTrack(b, kit, sub(GF, 0.42 * kz, 0.012 * k + T * 2.3, gl * 0.12, 0, Math.PI / 2, 0), 3, 0.2 * k, 0.07 * k);
-  // ---- lower glacis plate on the belly front
-  const l0: V3 = [0.86 * kx, y0 + 0.04 * k, 0], l1: V3 = [1.02 * kx, ys - 0.06 * k, 0];
-  const ll = Math.hypot(l1[0] - l0[0], l1[1] - l0[1]);
-  const LF = frame([(l0[0] + l1[0]) / 2, (l0[1] + l1[1]) / 2, 0], [l1[1] - l0[1], l0[0] - l1[0], 0], [0, 0, 1]);
-  armorPlate(b, kit, kit.armor2, LF, rectP(wi * 1.7, ll * 0.86, 0.03 * k), T, { standoff: 0.01 * k });
-  // ---- dozer / ram blade: thin V on push arms and two hydraulic rams
-  const bh = ((ys - 0.06 * k) - 0.05 * k) * 0.62, by = 0.05 * k + bh / 2;
-  both((s) => {
-    const a: P2 = [1.2 * kx, 0], e: P2 = [1.06 * kx, s * 0.9 * kz];
-    const len = Math.hypot(e[0] - a[0], e[1] - a[1]), yaw = Math.atan2(-(e[1] - a[1]), e[0] - a[0]);
-    const m = new THREE.Matrix4().makeRotationY(yaw).setPosition((a[0] + e[0]) / 2, by, (a[1] + e[1]) / 2);
-    b.g(bevBox(len, bh, 0.035 * k, 0.008 * k), kit.armor2, m.clone().multiply(new THREE.Matrix4().makeRotationX(s * 0.18)));
-    b.g(new THREE.BoxGeometry(len * 0.98, 0.022 * k, 0.04 * k), kit.steel, m.clone().multiply(new THREE.Matrix4().makeTranslation(0, -bh / 2, 0)));
-    b.g(new THREE.BoxGeometry(len * 0.5, 0.02 * k, 0.045 * k), kit.hazard, m.clone().multiply(new THREE.Matrix4().makeTranslation(len * 0.2, bh / 2, -0.01 * k)));
-    // push arm from the blade back to the belly side, ram from the glacis foot to the blade top
-    beam(b, kit.mech, [1.08 * kx, by - bh * 0.1, s * 0.46 * kz], [0.74 * kx, y0 + 0.06 * k, s * wi * 0.92], 0.04 * k, 0.05 * k);
-    piston(b, kit, [0.94 * kx, ys - 0.04 * k, s * 0.32 * kz], [1.1 * kx, by + bh * 0.4, s * 0.3 * kz], 0.02 * k, 0.55, fine);
-  });
-  // ---- sponson fronts: smoke-grenade banks (fire forward-out), caged headlamps on the nose corners
-  both((s) => {
-    smokeLaunchers(b, kit, frame([0.52 * kx, sh0, s * 0.86 * kz], [0, 1, 0], [Math.cos(0.5), 0, s * Math.sin(0.5)]), 4, 0.026 * k);
-    cagedLamp(b, kit, frame([0.92 * kx, ys + 0.06 * k, s * 0.74 * kz], [0, 1, 0], [1, 0, 0]), 0.07 * k, fine);
-  });
-  // ---- driver's hatch with periscopes (front left)
-  const hx = 0.32 * kx, hz = -0.48 * kz;
-  crewHatch(b, kit, frame([hx, deck, hz], [0, 1, 0]), 0.075 * k, fine);
-  for (const dz of [-0.07, 0, 0.07]) b.g(new THREE.BoxGeometry(0.05 * k, 0.05 * k, 0.06 * k), kit.glass, new THREE.Matrix4().makeRotationY(dz * 3).setPosition(hx + 0.11 * k, deck + 0.025 * k, hz + dz * k));
-  // ---- shoulders: tool bins on the right, stowage strap rail + crowbar on the left
-  stowBox(b, kit, frame([-0.2 * kx, sh0 + 0.004, 0.93 * kz], [0, 1, 0]), 0.5 * kx, 0.07 * k, 0.1 * kz);
-  stowBox(b, kit, frame([-0.66 * kx, sh0 + 0.004, 0.93 * kz], [0, 1, 0]), 0.3 * kx, 0.09 * k, 0.1 * kz, kit.canvas);
-  b.g(new THREE.BoxGeometry(0.42 * kx, 0.018 * k, 0.04 * k), kit.steel, new THREE.Matrix4().makeTranslation(-0.3 * kx, deck + 0.012 * k, -0.62 * kz));
-  b.g(new THREE.BoxGeometry(0.12 * kx, 0.02 * k, 0.07 * k), kit.joint, new THREE.Matrix4().makeTranslation(-0.06 * kx, deck + 0.012 * k, -0.62 * kz));
-  // ---- engine deck: recessed louvred grille, exhaust (right rear only), jerry cans + antenna (left rear)
-  recessPanel(b, kit, frame([-0.86 * kx, deck, -0.08 * kz], [0, 1, 0]), 0.2 * kx, 0.56 * kz, 0.03 * k, { slats: 5, frame: kit.armor });
-  // engine access plates either side of the S turret (raised, on shadow gaps)
-  both((s) => armorPlate(b, kit, kit.armor, frame([-0.48 * kx, deck, s * 0.52 * kz], [0, 1, 0]), rectP(0.36 * kx, 0.22 * kz, 0.03 * k), 0.018 * k, { standoff: 0.006 * k, gap: 0.015 * k }));
-  exhaustBox(b, kit, frame([-0.86 * kx, deck, 0.5 * kz], [0, 1, 0], [0, 0, 1]), 0.055 * k, fine);
-  jerryCans(b, kit, frame([-0.88 * kx, deck - 0.004 * k, -0.52 * kz], [0, 1, 0]), 2, 0.085 * k);
-  antenna(b, kit, -0.7 * kx, deck, -0.64 * kz, 0.7 * k, 0.008 * k, [-0.15, 0, 0]);
-  // ---- rear plate: tow hooks and a tow cable looped across it
-  const rp: V3 = [-1.0 * kx - 0.004, (ys + deck - 0.06 * k) / 2, 0];
-  towHooks(b, kit, frame(rp, [-1, 0, 0], [0, 0, 1]), 0.9 * kz, 0.04 * k);
-  if (fine) hose(b, kit, [-1.01 * kx, deck - 0.08 * k, -0.45 * kz], [-1.01 * kx, deck - 0.08 * k, 0.45 * kz], 0.012 * k, 0.12, 6, kit.joint);
-  b.decal(0.12 * k, 0.12 * k, -0.18 * kx, deck + 0.003, 0.58 * kz, atlasUV(1), 0);
+  // ---- engine: dark stepped-down rear block with a louvred grille and twin exhaust stacks
+  const eX1 = spX - spL / 2 - G, eX0 = -1.02 * kx, el = eX1 - eX0, eh = (deck - ys) * 0.74;
+  block(b, kit.armor2, (eX0 + eX1) / 2, ys, 0, el, 1.0 * kz, eh, { top: [0.88, 0.86], ch: 0.08 * k, bev: 0.02 * k });
+  recessPanel(b, kit, frame([(eX0 + eX1) / 2, ys + eh, 0], [0, 1, 0]), el * 0.6, 0.5 * kz, 0.025 * k, { slats: 5, frame: kit.armor2 });
+  both((s) => exhaustBox(b, kit, frame([eX0 + 0.06 * kx, ys + eh * 0.55, s * 0.36 * kz], [-1, 0, 0], [0, 0, 1]), 0.05 * k, fine));
+  jerryCans(b, kit, frame([(eX0 + eX1) / 2, ys + eh - 0.004 * k, -0.42 * kz], [0, 1, 0]), 2, 0.07 * k);
+  antenna(b, kit, eX1 - 0.04 * kx, ys + eh, -0.44 * kz, 0.7 * k, 0.008 * k, [-0.15, 0, 0]);
+  // ---- driver's hatch with periscopes (front left of the spine), tool bin on the right rear sponson
+  const hx = 0.36 * kx, hz = -0.28 * kz;
+  crewHatch(b, kit, frame([hx, deck, hz], [0, 1, 0]), 0.07 * k, fine);
+  for (const dz of [-0.06, 0, 0.06]) b.g(new THREE.BoxGeometry(0.05 * k, 0.05 * k, 0.05 * k), kit.glass, new THREE.Matrix4().makeRotationY(dz * 3).setPosition(hx + 0.1 * k, deck + 0.025 * k, hz + dz * k));
+  stowBox(b, kit, frame([-0.5 * kx, sy + sh * 1.12, spZ], [0, 1, 0]), 0.4 * kx, 0.06 * k, 0.2 * kz);
+  if (fine) hose(b, kit, [eX0 - 0.01, ys + eh * 0.4, -0.3 * kz], [eX0 - 0.01, ys + eh * 0.4, 0.3 * kz], 0.012 * k, 0.12, 6, kit.joint);
+  b.decal(0.12 * k, 0.12 * k, -0.36 * kx, deck + 0.04 * k, 0.22 * kz, atlasUV(1), 0);
+  const deckFn = (x: number, z: number) => {
+    const az = Math.abs(z);
+    if (x > spX - spL / 2 && x < spX + spL / 2 && az < spW * 0.45) return deck;
+    if (x <= eX1 && x > eX0 && az < 0.45 * kz) return ys + eh;
+    if (az > spZ - spWd / 2 && az < spZ + spWd / 2 && x > -0.92 * kx && x < 0.65 * kx) return sy + sh;
+    return Math.abs(x) <= kx && az <= kz ? ys + 0.06 * k : -1;
+  };
   const main = biggest(c.mounts);
-  const topP = sc(mirrorPlan([[0.4, 0.72], [-0.74, 0.72], [-0.95, 0.6], [-1.0, 0.5]]), kx, kz);
-  const outP = sc(mirrorPlan([[1.07, 0.4], [0.86, 0.94], [0.42, 1.0], [-0.72, 1.0], [-0.94, 0.86], [-1.0, 0.72]]), kx, kz);
-  const deckFn = (x: number, z: number) => (inPlan(topP, x, z) ? deck : inPlan(outP, x, z) ? ys + 0.07 * k : -1);
   return {
     deckAt: deckFn, top: deck + 0.1 * k, custom: true,
     seat: (m) => {

@@ -186,7 +186,14 @@ float sdLayerFor(int mi, float wny) {
     if (mi == 1 && wny > 0.8) return 12.0;                // decks: grating
     if (mech) return 13.0;                                // exposed machinery
   }
-  return floor(vSdV.x + 0.5);
+  // each part role wears its own surface, so a hull reads as distinct pieces rather than one skin: dark mechanics are
+  // machinery, light shells clean fine panels (creature / stealth hulls keep their own look all over)
+  float own = floor(vSdV.x + 0.5);
+  if (sec < 0.0 && own != 8.0 && own != 11.0) {
+    if (mi == 1) return 13.0;
+    if (mi == 2) return 4.0;
+  }
+  return own;
 }
 void sdRun(int mi, vec3 nView) {
   sdCav = 1.0; sdWear = 0.0; sdGrime = 0.0; sdMot = 0.0; sdMask = 0.0; sdGrad = vec3(0.0); sdLayer = 0.0;
@@ -240,7 +247,7 @@ export const SD_APPLY = /* glsl */ `
     float det = sdRowDet * fine;
     float sdW = sdRowWear * up.x, sdGr = sdRowGrime * up.y;
     // metal skins: the paint gives way to bare metal with a hint of the team hue (team colour stays on the accent mask)
-    float metalK = l2.x * sdRowDet;
+    float metalK = (mi == 0 || mi == 15) ? l2.x * sdRowDet : 0.0; // armour plates only
     if (metalK > 0.0) {
       float lm = max(dot(base, vec3(0.2126, 0.7152, 0.0722)), 0.02);
       base = mix(base, l2.y * mix(vec3(1.0), base / lm, l2.w), metalK);

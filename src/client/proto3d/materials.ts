@@ -287,6 +287,36 @@ uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS
         float pj = clamp((vMid - float(mi)) * 5.0, -1.0, 1.0);
         base *= 1.0 + pj * 0.06 * rB.w;
         base += vec3(0.006, 0.0, -0.006) * pj * rB.w;
+        // armour plating: the team-armour row is broken into plates of different paint -- team colour, light shell,
+        // near-black team shade -- with dark seams, laid out in object space on the face's dominant plane (so every
+        // chassis, flat or sloped, reads as an assembly of distinct plates instead of one moulded colour). Each plate
+        // is a cell of a grid sized to the unit (its skin's texel density), split once across at a random point.
+        // Creature and stealth skins keep their own look.
+        float plateSeam = 0.0;
+        float skinL = floor(vSdV.x + 0.5);
+        if (mi == 0 && skinL != 8.0 && skinL != 11.0) {
+          vec3 n = normalize(vNormal);
+          vec3 on = abs(vec3(dot(n, vSdAX), dot(n, vSdAY), dot(n, vSdAZ)));
+          float ax = on.y >= max(on.x, on.z) ? 0.0 : (on.x > on.z ? 1.0 : 2.0);
+          vec2 q = ax == 0.0 ? vSdP.xz : (ax == 1.0 ? vSdP.zy : vSdP.xy);
+          float S = 0.62 / max(0.3, vSdV.y > 0.001 ? vSdV.y : 0.8);
+          vec2 gq = q / S + vec2(0.31, 0.17) + ax * vec2(0.37, 0.71);
+          vec2 c = floor(gq), f = fract(gq);
+          float h1 = fract(sin(dot(c + ax * 7.0, vec2(127.1, 311.7))) * 43758.5453);
+          float cut = 0.3 + 0.4 * fract(h1 * 13.7);
+          bool cx = fract(h1 * 7.13) < 0.5;
+          float side = step(cut, cx ? f.x : f.y);
+          float id = fract(sin(dot(c + ax * 7.0 + side * vec2(17.0, 31.0), vec2(269.5, 183.3))) * 43758.5453);
+          float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+          e = min(e, abs((cx ? f.x : f.y) - cut)) * S; // distance to the plate edge, object units
+          float px = max(fwidth(gq.x), fwidth(gq.y)) * S;
+          plateSeam = 1.0 - smoothstep(0.012 + px * 0.5, 0.024 + px, e);
+          vec3 shell = uA[2].rgb * (0.97 + 0.06 * fract(id * 31.0)), dark = uA[15].rgb;
+          base = id < 0.5 ? base : id < 0.76 ? shell : dark;
+          // a bright worn bevel just inside each plate edge
+          base *= 1.0 + 0.1 * (1.0 - smoothstep(0.024 + px, 0.05 + px, e)) * (1.0 - plateSeam);
+          base *= 1.0 - 0.6 * plateSeam;
+        }
         // painted top-light (subtle: the lighting does the form) + darker undersides (fake AO for faces looking down)
         base *= mix(0.86, 1.02, smoothstep(-0.7, 0.85, wn.y));
         base *= mix(1.0, mix(0.72, 1.0, smoothstep(-0.75, -0.05, wn.y)), rB.w);
@@ -355,8 +385,8 @@ export interface Kit {
  * Paint plan ("stylized realistic": Phantom Brigade / Iron Harvest / BattleTech value structure). Every chassis builder
  * assigns parts by role:
  *   armor  (kit.hull)   muted military team tint, matte paint   the biggest plates (slate blue-grey / oxide red-brown)
- *   armor2 (kit.hull2)  darker team shade                       inner / lower faces of big plates, secondary plates
- *   shell  (kit.panel)  mid grey (faint team cast), matte       caps, skirts, cheek plates, leg covers, turret tops
+ *   armor2 (kit.hull2)  near-black team shade                   inner / lower faces of big plates, secondary plates
+ *   shell  (kit.panel)  light bone (faint team cast), matte     caps, skirts, cheek plates, leg covers, turret tops
  *   mech   (kit.trim)   near-black                              joints, track frames, recesses, vents, belly
  *   joint  (kit.metal)  bare-metal FINISH, metallic             pistons, barrels, axles, hinges (default dark gunmetal;
  *                       per unit / per weapon: dark chrome, blued steel, oiled bronze, copper, brass; see METAL_FINISH)
@@ -376,9 +406,11 @@ export const PAINT_PLAN = {
 } as const;
 
 /** team paint: [armor, armor2, shell, canvas]; matches render/palette.ts TEAM_PAL body / dark */
+// Parts must separate by VALUE, not just hue (Mechabellum-style): clean team armour, near-black team-tinted secondary
+// plates, light bone shells, near-black mechanics and metal joints, so a hull reads as an assembly of distinct pieces.
 export const TEAM_PAINT: [string, string, string, string][] = [
-  ['#34486f', '#253352', '#62686e', '#4a5258'],
-  ['#7d3324', '#56231a', '#6b645d', '#5c5248'],
+  ['#3b5d9c', '#1a2338', '#b4b6b0', '#4a5258'],
+  ['#9b3a27', '#36170f', '#bab0a3', '#5c5248'],
 ];
 /**
  * Bare-metal finishes for the joint / metal role (pistons, axles, hinges, barrels) as extra uber rows: every finish of
@@ -431,10 +463,10 @@ function baseKit(team: 0 | 1): Kit {
   const names = ['hull', 'trim', 'panel', 'metal', 'steel', 'rubber', 'glass', 'canvas', 'hazard', 'accent', 'glow', 'lamp', 'hot', 'plasma', 'rail', 'hull2'] as const;
   const tp = TEAM_PAINT[team];
   const rows: Row[] = [
-    /* hull   */ { color: tp[0], rough: 0.68, metal: 0.04, det: 0.85, grime: 0.8, wear: 0.85 },
-    /* trim   */ { color: '#26292c', rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
-    /* panel  */ { color: tp[2], rough: 0.66, metal: 0.03, det: 0.75, grime: 0.75, wear: 0.75 },
-    /* metal  */ { color: '#383d42', rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
+    /* hull   */ { color: tp[0], rough: 0.58, metal: 0.06, det: 0.85, grime: 0.8, wear: 0.85 },
+    /* trim   */ { color: '#1d2023', rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
+    /* panel  */ { color: tp[2], rough: 0.6, metal: 0.03, det: 0.75, grime: 0.6, wear: 0.9 },
+    /* metal  */ { color: '#474e55', rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
     /* steel  */ { color: '#b3bac0', rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
     /* rubber */ { color: '#1b1c1e', rough: 0.88, metal: 0, bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.1 },
     /* glass  */ { color: '#14262f', rough: 0.08, metal: 0.3, bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.2 },
