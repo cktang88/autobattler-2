@@ -93,9 +93,9 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   mods.forEach((m, i) => { if (m && m.kind === 'weapon' && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]!))) hero = i; });
   tur.forEach((tu, i) => {
     if (!tu) return;
-    // hero housing >= half the hull width, the others >= a quarter (x1.5 / x1.15 at least, x2.4 at most)
-    const wantD = Math.min(L, W) * (i === hero ? 0.5 : 0.26);
-    const k = flying ? 1.1 : Math.min(2.4, Math.max(i === hero ? 1.5 : 1.15, wantD / (2 * tu.r)));
+    // hero housing ~0.8 x the hull width: the main weapon system IS the upper body; the others >= a quarter (x3.2 at most)
+    const wantD = Math.min(L, W) * (i === hero ? 0.8 : 0.26);
+    const k = flying ? 1.1 : Math.min(3.2, Math.max(i === hero ? 1.5 : 1.15, wantD / (2 * tu.r)));
     tu.yaw.scale.setScalar(k); tu.r *= k;
   });
   // calibre-true housings can outgrow tightly packed hardpoints (four M guns down a land-train spine, twin dorsal
