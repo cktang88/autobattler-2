@@ -15,7 +15,7 @@ import type { ModuleDef, MountClass } from '../../shared/types.ts';
 import { CLASS_RANK, boreOf, calibreMm, classPos, weaponD } from '../render/weaponsize.ts';
 import type { Kit } from './materials.ts';
 import { Bld, loft, type P2 } from './geo.ts';
-import { accent, deckRing, type WCtx } from './weapons/wkit.ts';
+import { accent, deckRing, finishHousing, type WCtx } from './weapons/wkit.ts';
 import { buildGun } from './weapons/guns.ts';
 import { buildLauncher } from './weapons/launchers.ts';
 import { buildEnergy } from './weapons/energy.ts';
@@ -101,6 +101,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   else if (ENERGY.has(v)) buildEnergy(C);
   else if (MELEE.has(v)) buildMelee(C);
   else buildUtility(C);
+  finishHousing(C);
 
   // team accent: a stripe on the housing's left cheek for weapons that did not place their own
   if (!fixed && t.shot !== 'none' && !C.acc) accent(C, -r * 0.3, C.y0 + r * 0.42, -r * 0.42, r * 0.36, r * 0.07);

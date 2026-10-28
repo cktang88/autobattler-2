@@ -39,6 +39,8 @@ export interface WCtx {
   t: Turret;
   /** set once a team accent was placed */
   acc?: boolean;
+  /** set by mechHousing: the integrated weapon body's size (finishHousing builds the yoke) */
+  mh?: { l: number; w: number; h: number };
   muzzle(x: number, y: number, z: number): void;
   /** make the spin group (optionally re-axed: 'z' spins about the turret's lateral axis, e.g. saw discs) */
   spin(axis?: 'x' | 'z', at?: V3): void;
@@ -168,28 +170,41 @@ export function plinth(C: WCtx, k = 0.6, h = 0.22): void {
   for (const s of [-1, 1]) cbox(b, kit.hull, -R * 0.1, y0 + H * 1.2, s * R * 0.74, R * 0.9, H * 1.3, r * 0.1, r * 0.03, undefined, 0.8);
 }
 
-/** Armoured sci-fi turret housing (Mechabellum-style): a faceted light core wedge, thick team-colour cheek armour
- *  slabs running forward past the mantlet, a layered dark roof plate, a sensor block with a glowing lens, dark heat-sink
- *  fins across the back. l / w / h: length, half-width, height (cells); fwd: how far the cheeks reach forward (x r).
- *  Returns the roof height. */
+/** Integrated weapon body (not a turret box the barrel pokes out of): the armour is built ROUND THE BARREL in the
+ *  pitch group, so the whole body elevates with the gun: a long chamfered receiver core from a finned counterweight
+ *  at the back to a dark collar where the barrel exits, thick team-colour side pods along both flanks with an armour
+ *  step and a glow line, a dark spine plate and a sensor block on top. l / w / h: length, half-width, height (cells);
+ *  fwd: how far the side pods reach forward. Pitch-local frame (origin on the trunnion); finishHousing() then sets the
+ *  trunnion near the ring centre and builds the low yoke under it. Returns the body's top height (approx). */
 export function mechHousing(C: WCtx, l: number, w: number, h: number, fwd = 1.05, sensorZ = -1): number {
-  const { b, kit, r, y0 } = C;
-  shell(b, kit.panel, [[-l * 0.55, w * 0.62, w * 0.46, h * 0.82], [-l * 0.32, w, w * 0.76, h], [l * 0.2, w, w * 0.76, h], [l * 0.48, w * 0.7, w * 0.42, h * 0.72]], y0);
+  const { p, kit, r, y0 } = C;
+  const x0 = -l * 0.62, x1 = l * 0.38, pw = w * 0.62 + r * 0.1;
+  cbox(p, kit.panel, (x0 + x1) / 2, 0, 0, x1 - x0, h * 0.82, w * 1.25, h * 0.12, undefined, 0.88);
   for (const s of [-1, 1]) {
-    // cheek slab: long, thick, leaning in a little, chamfered top; a dark seam strip under it
-    const cl = l * 0.55 + r * fwd * 0.5, cx = -l * 0.3 + cl / 2;
-    cbox(b, kit.hull, cx, y0 + h * 0.52, s * (w * 0.98 + r * 0.06), cl, h * 0.9, r * 0.16, r * 0.05, [s * 0.06, 0, 0], 0.86);
-    bx(b, kit.trim, cx, y0 + h * 0.06, s * (w * 0.98 + r * 0.06), cl * 0.92, h * 0.1, r * 0.17);
-    // armour step: a smaller plate layered on the cheek's front half
-    cbox(b, kit.hull2, cx + cl * 0.22, y0 + h * 0.6, s * (w * 0.98 + r * 0.15), cl * 0.42, h * 0.5, r * 0.05, r * 0.02);
+    cbox(p, kit.hull, x0 + (x1 - x0) * 0.55 + l * fwd * 0.08, -h * 0.04, s * pw, (x1 - x0) * 0.85, h * 0.7, r * 0.2, r * 0.05, undefined, 0.85);
+    cbox(p, kit.hull2, x1 + l * fwd * 0.06, -h * 0.02, s * (pw + r * 0.11), l * 0.3, h * 0.45, r * 0.05, r * 0.02);
+    bx(p, kit.glow, x0 + (x1 - x0) * 0.42, h * 0.12, s * (pw + r * 0.102), l * 0.3, r * 0.02, r * 0.01);
   }
-  // layered roof plate, sensor block with a glowing lens facing forward
-  cbox(b, kit.hull2, -l * 0.08, y0 + h + r * 0.02, -sensorZ * w * 0.18, l * 0.5, r * 0.05, w * 0.7, r * 0.015);
-  cbox(b, kit.trim, -l * 0.12, y0 + h + r * 0.11, sensorZ * w * 0.48, r * 0.36, r * 0.16, r * 0.24, r * 0.04);
-  bx(b, kit.glow, -l * 0.12 + r * 0.185, y0 + h + r * 0.11, sensorZ * w * 0.48, r * 0.02, r * 0.07, r * 0.14);
-  // heat-sink fins across the back
-  for (let i = 0; i < 4; i++) bx(b, kit.trim, -l * 0.56 - r * 0.04, y0 + h * 0.48, (i - 1.5) * w * 0.38, r * 0.12, h * 0.66, r * 0.05);
+  cbox(p, kit.hull2, (x0 + x1) / 2 - l * 0.05, h * 0.43, 0, (x1 - x0) * 0.7, r * 0.06, w * 0.7, r * 0.02);
+  cbox(p, kit.trim, x0 + l * 0.3, h * 0.5, sensorZ * w * 0.32, r * 0.34, r * 0.15, r * 0.22, r * 0.04);
+  bx(p, kit.glow, x0 + l * 0.3 + r * 0.17, h * 0.5, sensorZ * w * 0.32, r * 0.02, r * 0.07, r * 0.13);
+  cbox(p, kit.trim, x0 - r * 0.1, -h * 0.05, 0, r * 0.3, h * 0.7, w * 1.1, r * 0.05);
+  for (let i = 0; i < 4; i++) bx(p, kit.metal, x0 - r * 0.26, -h * 0.05, (i - 1.5) * w * 0.26, r * 0.06, h * 0.55, r * 0.04);
+  cbox(p, kit.trim, x1 + r * 0.02, 0, 0, r * 0.12, h * 0.6, w * 0.8, r * 0.03);
+  C.mh = { l, w, h };
   C.acc = true;
   return y0 + h;
+}
+
+/** After a family built a mechHousing weapon: trunnion near the ring centre, low yoke under it (a dark base narrower
+ *  than the turret, two pylons up to the trunnion outside the side pods, a metal axle). */
+export function finishHousing(C: WCtx): void {
+  if (!C.mh) return;
+  const { b, kit, r, y0 } = C, { l, w, h } = C.mh;
+  const py = y0 + h * 0.6, px = l * 0.12, zp = w * 0.62 + r * 0.33;
+  C.t.pitch.position.set(px, py, 0);
+  shell(b, kit.trim, [[-r * 0.6, r * 0.55, r * 0.45, h * 0.3], [r * 0.5, r * 0.55, r * 0.45, h * 0.3]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.hull2, px, (y0 + h * 0.25 + py) / 2, s * zp, r * 0.4, py - y0 - h * 0.25 + r * 0.1, r * 0.1, r * 0.03);
+  b.cylb(kit.metal, r * 0.11, zp * 2 + r * 0.06, r * 0.02, [px, py, -zp - r * 0.03], 'z', 6);
 }
 
