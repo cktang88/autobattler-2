@@ -40405,12 +40405,16 @@ function lens(C) {
       }
       win(rc, kit, kit.glow, L * 0.6, e * 0.22, z + s * e * 0.7, L * 0.3, e * 0.28, s > 0 ? "z+" : "z-", 2, e * 0.12);
     }
-    ring(rc, kit.rail, L * 0.85 + e * 0.87, 0, z, e * 1.16, e * 1.36, e * 0.05);
-    rc.lathe(kit.trim, [[e * 0.6, 0], [e * 0.8, 0], [e * 1.2, e * 0.3], [e * 1.38, e * 0.9], [e * 1.15, e * 0.9], [e * 0.88, e * 0.35], [e * 0.6, e * 0.35], [e * 0.6, 0]], [L * 0.85, 0, z], "x", SM);
-    if (!dt) rc.lathe(kit.glass, [[0, 0], [e * 0.95, 0], [e * 0.95, e * 0.08], [0, e * 0.08]], [L * 0.95, 0, z], "x", SM);
-    rc.lathe(kit.rail, [[0, 0], [e * 0.62, 0], [e * 0.62, e * 0.12], [0, e * 0.12]], [L * 0.965, 0, z], "x", SM);
-    if (!dt) rc.lathe(kit.rubber, [[0, 0], [e * 0.22, 0], [e * 0.22, e * 0.04], [0, e * 0.04]], [L * 0.965 + e * 0.12, 0, z], "x", 10);
-    C.muzzle(L + e, 0, z);
+    const hx = L * 0.8, hl = e * 1.7;
+    for (let q = 0; q < 4; q++) {
+      const a = q * Math.PI / 2, cy = Math.cos(a), cz = Math.sin(a);
+      const mat = q === 0 ? kit.hull : q === 2 ? kit.panel : kit.trim;
+      cbox(rc, mat, hx + hl / 2, cy * e * 0.78, z + cz * e * 0.78, hl, cz ? e * 0.95 : e * 0.3, cz ? e * 0.3 : e * 0.95, e * 0.08, [a, 0, 0], 0.86);
+      cbox(rc, kit.trim, hx + hl + e * 0.12, cy * e * 0.86, z + cz * e * 0.86, e * 0.3, cz ? e * 0.55 : e * 0.22, cz ? e * 0.22 : e * 0.55, e * 0.05, [a, 0, 0], 0.5);
+    }
+    rc.lathe(kit.plasma, [[0, 0], [e * 0.42, e * 0.35], [e * 0.3, hl * 0.75], [0, hl * 0.95]], [hx + e * 0.05, 0, z], "x", 6, [Math.PI / 6, 0, 0]);
+    if (!dt) rc.lathe(kit.trim, [[e * 0.45, 0], [e * 0.66, 0], [e * 0.66, e * 0.12], [e * 0.45, e * 0.12], [e * 0.45, 0]], [hx + hl * 0.45, 0, z], "x", 8, [Math.PI / 8, 0, 0]);
+    C.muzzle(L * 0.8 + e * 2, 0, z);
   }
   C.t.rate = n > 1 ? 0.4 : 0.5;
 }
