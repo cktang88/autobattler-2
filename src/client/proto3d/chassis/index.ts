@@ -22,3 +22,4 @@ import './titans-citadel.ts';
 import './titans-arachne.ts';
 import './titans-lance.ts';
 import './titans-monolith.ts';
+import './mechframes.ts';
