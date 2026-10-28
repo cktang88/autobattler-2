@@ -7,12 +7,13 @@
 //   cloaked (stealth module)  -> stealth    faceted matte tiles, no markings
 //   support (repair / shield / uplink / sensor, aegis)  -> support   clean panels, role crosses / rings in team accent
 //   melee brawlers (>= 1/4)   -> brawler    dented, gouged, scraped
-//   energy-weapon heavy       -> ceramic    sleek plates, circuit traces with a faint team glow
+//   energy-weapon heavy       -> ceramic    high-tech: dark gunmetal plates over mesh, hex cells, team-accent plates, lights
 //   artillery / siege         -> arty       utilitarian ribbed / strapped plates, hazard stencils, dust
 //   titans and giants (4-5)   -> titan      huge riveted plates, battle damage
-//   heavy (3)                 -> slab       layered slab armour, big bolts, pooled grime
+//   heavy (3)                 -> dullmetal  bare scratched metal: chamfered panels, vents, pipe runs, engraved traces
 //   medium (2)                -> cast       pitted cast armour, weld beads, bolted add-on plates
 //   light (1)                 -> scout      fine panels, many small hatches, small stencils, camo
+// (slab: layered slab armour, big bolts, pooled grime -- now worn by giants' turrets)
 // Turrets wear a skin for their weapon (energy -> ceramic, artillery / missiles -> arty, melee -> brawler, support ->
 // support) or the hull's. Running gear joints get machinery. Giants also mix by part (see surface3d.ts).
 // Texel density is per size class, so plates grow with the unit.
@@ -67,7 +68,7 @@ export function pickSkin(design: Design, ch: ChassisDef, mob: MobilityDef, mods:
   else if (share((m) => m.category === 'energy') >= 0.5) hull = 'ceramic';
   else if (giant) hull = 'titan';
   else if (roles.includes('artillery') || share((m) => m.category === 'artillery') >= 0.5) hull = 'arty';
-  else hull = S >= 3 ? 'slab' : S === 2 ? 'cast' : 'scout';
+  else hull = S >= 3 ? 'dullmetal' : S === 2 ? 'cast' : 'scout';
   const secondary: LayerName | null = !giant ? null
     : hull === 'carapace' ? 'ceramic' : hull === 'air' || hull === 'rotor' ? 'scout' : hull === 'ceramic' ? 'scout' : 'scout';
   return { hull, secondary, turret: mods.map((m) => turretSkin(m, hull, giant)), density: 1 / TILE_SPAN[S], giant, size: S };

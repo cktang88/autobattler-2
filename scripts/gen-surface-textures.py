@@ -3,10 +3,10 @@
 
 Every map is greyscale DATA that modulates the per-part paint colours in the shader (src/client/proto3d/surface3d.ts):
 
-  surf_detail.png  vertical strip of 14 layers, 512 px each (one per surface treatment, see LAYERS):
+  surf_detail.png  vertical strip of 15 layers, 512 px each (one per surface treatment, see LAYERS):
                    R,G = height slope d(h)/du, d(h)/dv (0.5 = flat), B = cavity / paint tone (0.75 = neutral)
   surf_mask.png    the same strip, one channel: a per-treatment special mask (camo, pits, scorch, accent paint,
-                   circuit glow, gouges, dust, sheen, oil ... the shader decides per layer what it means)
+                   accent panels, gouges, dust, sheen, oil ... the shader decides per layer what it means)
   hull_wear.jpg    1024 px, shared: R = chipped paint / scratches, G = grime and drip streaks, B = mottling (0.5 = neutral)
   surf_marks.png   12 x 128 px glyph cells for intentional big-unit markings: digits 0-9, kill tally, insignia
 
@@ -29,7 +29,7 @@ SOURCES = {
 }
 # order = layer index in the shader (surface3d.ts LAYER)
 LAYERS = ['scout', 'cast', 'slab', 'titan', 'air', 'rotor', 'arty', 'support', 'carapace', 'ceramic', 'brawler',
-          'stealth', 'grating', 'machinery']
+          'stealth', 'grating', 'machinery', 'dullmetal']
 N = 512
 R8 = lambda a: np.clip(np.round(a * 255), 0, 255).astype(np.uint8)
 
@@ -445,26 +445,188 @@ def L_carapace():  # creatures: chitin plates (Voronoi), smooth domes, thin groo
     return L
 
 
-def L_ceramic():  # high-tech: sleek ceramic plates, hairline seams, circuit-like traces; A = trace glow
+def wrap_draw(fn):
+    """draw on a tileable N x N canvas: fn(draw, dx, dy) is called for the 9 wrapped offsets"""
+    im = Image.new('L', (N, N), 0)
+    dr = ImageDraw.Draw(im)
+    for oy in (-N, 0, N):
+        for ox in (-N, 0, N):
+            fn(dr, ox, oy)
+    return np.asarray(im, np.float32) / 255.0
+
+
+def chamfer_d(L, x, y, w, h, c, corners):
+    """distance inside a rect with the listed corners (0 tl, 1 tr, 2 bl, 3 br) cut at 45 degrees by c px"""
+    sy, sx = L.yy[y:y + h, x:x + w], L.xx[y:y + h, x:x + w]
+    d = L.rect_d(x, y, w, h)
+    for k in corners:
+        ddx = sx - x + 0.5 if k in (0, 2) else x + w - 0.5 - sx
+        ddy = sy - y + 0.5 if k in (0, 1) else y + h - 0.5 - sy
+        d = np.minimum(d, (ddx + ddy - c) / 1.414)
+    return np.maximum(d, 0)
+
+
+def hexes(L, cx, cy, r, rings):
+    """centres of a hex-cell cluster (pointy-top) around (cx, cy)"""
+    out = []
+    for q in range(-rings, rings + 1):
+        for rr in range(max(-rings, -q - rings), min(rings, -q + rings) + 1):
+            out.append((cx + r * 1.732 * (q + rr / 2), cy + r * 1.5 * rr))
+    return out
+
+
+def L_ceramic():  # high-tech: dark angular armour plates over a fine mesh weave, hex-cell clusters, small LED lights;
+    # A = 0.5 team-accent plates, 1.0 lights (the shader splits the two)
     L = Layer(20)
-    P = L.split(140, 3, stop=0.3)
-    L.plates(P, 1.0, depth=0.08, tone=0.04, cav=0.3)
-    tr = np.zeros((N, N), np.float32)
-    for _ in range(26):
-        x, y = int(L.rnd() * N), int(L.rnd() * N)
-        for seg in range(4 + int(L.rnd() * 4)):
-            ln = 12 + int(L.rnd() * 50)
-            if seg % 2 == 0:
-                xs = np.mod(np.arange(x, x + ln), N); tr[y % N, xs] = 1; tr[(y + 1) % N, xs] = 1; x += ln
+    # under-layer: woven mesh (shows in the gaps between the plates)
+    wv = (np.sin(L.xx * 1.15) * np.sin(L.yy * 1.15))
+    L.H[:] = 0.2 + 0.03 * wv
+    L.C[:] = 0.42 + 0.08 * wv
+    A = np.zeros((N, N), np.float32)
+    P = L.split(96, 4, stop=0.2)
+    gap = 4
+    for (x, y, w, h) in P:
+        x0, y0, w0, h0 = x + gap, y + gap, w - 2 * gap, h - 2 * gap
+        if w0 < 12 or h0 < 12:
+            continue
+        ks = [k for k in range(4) if L.rnd() < 0.45]
+        d = chamfer_d(L, x0, y0, w0, h0, min(w0, h0) * (0.18 + 0.2 * L.rnd()), ks)
+        on = d > 0
+        prof = smooth(0, 3.5, d)
+        bevel = smooth(0.5, 1.8, d) * (1 - smooth(2.5, 4.5, d))
+        top = 0.62 + 0.06 * L.rnd()
+        L.H[y0:y0 + h0, x0:x0 + w0] = np.where(on, 0.3 + (top - 0.3) * prof, L.H[y0:y0 + h0, x0:x0 + w0])
+        L.C[y0:y0 + h0, x0:x0 + w0] = np.where(on, (0.74 + (L.rnd() - 0.5) * 0.08) * (0.7 + 0.3 * prof) + bevel * 0.2, L.C[y0:y0 + h0, x0:x0 + w0])
+        L.seam[y0:y0 + h0, x0:x0 + w0] = d
+        inner = smooth(4, 6, d)
+        if L.rnd() < 0.18:
+            A[y0:y0 + h0, x0:x0 + w0] = np.maximum(A[y0:y0 + h0, x0:x0 + w0], inner * 0.5)
+        # a thin engraved line following the plate outline
+        if w0 > 50 and h0 > 40 and L.rnd() < 0.6:
+            ln = (np.abs(d - 9) < 0.8)
+            L.H[y0:y0 + h0, x0:x0 + w0] -= ln * 0.04
+            L.C[y0:y0 + h0, x0:x0 + w0] *= 1 - ln * 0.3
+        for (px, py) in ((x0 + 8, y0 + 8), (x0 + w0 - 8, y0 + h0 - 8)):
+            if d[min(h0 - 1, int(py - y0)), min(w0 - 1, int(px - x0))] > 5 and L.rnd() < 0.6:
+                L.rivet(px, py, 1.6, 0.04, 0.16)
+    # hex-cell clusters: raised cells with a glowing centre cell
+    for _ in range(2):
+        cx, cy, r = L.rnd() * N, L.rnd() * N, 15 + L.rnd() * 5
+        for i, (hx, hy) in enumerate(hexes(L, cx, cy, r, 1)):
+            sy, sx, iy, ix = L._grid(hx - r, hy - r, hx + r + 1, hy + r + 1)
+            dx, dy = np.abs(sx - hx), np.abs(sy - hy)
+            hd = (r * 0.86 - np.maximum(dx * 0.866 + dy * 0.5, dy))  # px inside the hex edge (pointy-top)
+            on = hd > 0
+            L.H[iy, ix] = np.where(on, 0.3 + 0.36 * smooth(0, 3, hd), L.H[iy, ix])
+            L.C[iy, ix] = np.where(on, 0.6 + 0.14 * smooth(0, 3, hd) + 0.15 * (smooth(0.5, 1.5, hd) * (1 - smooth(2, 3.5, hd))), L.C[iy, ix])
+            if i == len(hexes(L, cx, cy, r, 1)) // 2:  # centre cell: a lit grid
+                grid = (np.mod(sx, 4) < 2) * (np.mod(sy, 4) < 2) * smooth(2, 4, hd)
+                A[iy, ix] = np.maximum(A[iy, ix], np.where(on, smooth(2, 4, hd) * (0.88 + 0.12 * grid), 0))
+    # small LED lights in recessed sockets, and short light strips
+    for _ in range(10):
+        x, y = L.rnd() * N, L.rnd() * N
+        if L.rnd() < 0.6:
+            sy, sx, iy, ix = L._grid(x - 11, y - 11, x + 12, y + 12)
+            rr = np.hypot(sx - x, sy - y)
+            L.H[iy, ix] -= (rr < 9) * 0.06
+            L.C[iy, ix] *= 1 - (rr < 9) * 0.4
+            A[iy, ix] = np.maximum(A[iy, ix], smooth(7, 5, rr))
+        else:
+            w, h = (int(24 + L.rnd() * 30), 6) if L.rnd() < 0.5 else (6, int(24 + L.rnd() * 30))
+            sy, sx, iy, ix = L._grid(x, y, x + w, y + h)
+            A[iy, ix] = 1
+            L.H[iy, ix] -= 0.05
+    L.A = np.clip(A, 0, 1)
+    return L
+
+
+def L_dullmetal():  # dull scratched metal: chamfered panels, deep seams, vent grilles, pipe runs with collars,
+    # engraved trace grooves (no glow), heavy fine scratches; A = team accent paint on some panels
+    L = Layer(23)
+    P = L.split(100, 4, stop=0.2)
+    A = np.zeros((N, N), np.float32)
+    g = 2.6
+    for (x, y, w, h) in P:
+        ks = [k for k in range(4) if L.rnd() < 0.35]
+        d = chamfer_d(L, x, y, w, h, min(w, h) * (0.12 + 0.12 * L.rnd()), ks)
+        prof = smooth(0, g, d)
+        L.H[y:y + h, x:x + w] = 0.3 + (0.22 + 0.04 * L.rnd()) * prof
+        L.C[y:y + h, x:x + w] = (0.75 + (L.rnd() - 0.5) * 0.1) * (0.4 + 0.6 * prof) + 0.12 * smooth(g, g + 1, d) * (1 - smooth(g + 1.5, g + 3.5, d))
+        L.seam[y:y + h, x:x + w] = d
+        if L.rnd() < 0.3:
+            A[y:y + h, x:x + w] = smooth(g + 3, g + 5, d)
+        r = L.rnd()
+        if r < 0.3 and w > 50 and h > 40:  # vent grille in a framed recess
+            vw, vh = int(w * 0.5), int(min(h * 0.45, 60))
+            vx, vy = x + (w - vw) // 2, y + (h - vh) // 2
+            L.hatch(vx, vy, vw, vh, 2.0)
+            L.slots(vx + 5, vy + 5, vw - 10, vh - 10, max(3, (vh - 10) // 6), horizontal=L.rnd() < 0.7, depth=0.12)
+        elif r < 0.55 and w > 60 and h > 50:  # inner framed panel with chamfered corners
+            iw, ih = int(w * 0.6), int(h * 0.55)
+            ix, iy = x + (w - iw) // 2, y + (h - ih) // 2
+            di = chamfer_d(L, ix, iy, iw, ih, min(iw, ih) * 0.2, [0, 3])
+            L.H[iy:iy + ih, ix:ix + iw] -= 0.05 * smooth(0, 2, di) * (di > 0)
+            L.C[iy:iy + ih, ix:ix + iw] *= 1 - 0.25 * ((di > 0) & (di < 1.5))
+        for (px, py) in ((x + 7, y + 7), (x + w - 7, y + 7), (x + 7, y + h - 7), (x + w - 7, y + h - 7)):
+            if d[min(h - 1, max(0, int(py - y))), min(w - 1, max(0, int(px - x)))] > g + 2 and L.rnd() < 0.55:
+                L.hexbolt(px, py, 2.4, 0.07)
+    # engraved trace grooves: parallel runs with 45 degree jogs, ending in small pads
+    runs = []
+    for _ in range(4):
+        x, y = L.rnd() * N, L.rnd() * N
+        pts, dirn = [(x, y)], 0
+        for _ in range(4):
+            ln = 30 + L.rnd() * 70
+            ang = [0, 45, 90, -45][dirn % 4] if L.rnd() < 0.6 else 0
+            x += ln * np.cos(np.radians(ang)); y += ln * np.sin(np.radians(ang)); pts.append((x, y)); dirn += 1
+        runs.append(pts)
+
+    def tr(dr, ox, oy):
+        for pts in runs:
+            for k in range(4):
+                o = k * 5
+                dr.line([(px + ox, py + oy + o) for (px, py) in pts], fill=255, width=2)
+                ex, ey = pts[-1]
+                dr.ellipse([ex + ox - 3, ey + oy + o - 3, ex + ox + 3, ey + oy + o + 3], outline=255, width=1)
+    grooves = wrap_draw(tr)
+    L.H -= grooves * 0.05
+    L.C *= 1 - grooves * 0.28
+    # pipe runs: raised round tubes with collar rings
+    pipes = []
+    for _ in range(3):
+        x, y = L.rnd() * N, L.rnd() * N
+        horiz = L.rnd() < 0.5
+        pts = [(x, y)]
+        for k in range(3):
+            ln = 50 + L.rnd() * 110
+            if (k % 2 == 0) == horiz:
+                x += ln
             else:
-                dirn = 1 if L.rnd() < 0.5 else -1
-                ys = np.mod(np.arange(y, y + dirn * ln, dirn), N); tr[ys, x % N] = 1; tr[ys, (x + 1) % N] = 1; y += dirn * ln
-        sy, sx, iy, ix = L._grid(x - 4, y - 4, x + 5, y + 5)
-        tr[iy, ix] = np.maximum(tr[iy, ix], np.hypot(sx - x, sy - y) < 3.2)
-    trb = blur(tr, 1)
-    L.H -= trb * 0.05
-    L.C *= 1 - trb * 0.25
-    L.A = np.clip(tr * 0.9 + trb * 0.4, 0, 1)
+                y += ln * (1 if L.rnd() < 0.5 else -1)
+            pts.append((x, y))
+        pipes.append(pts)
+
+    def pp(dr, ox, oy):
+        for pts in pipes:
+            dr.line([(px + ox, py + oy) for (px, py) in pts], fill=255, width=9, joint='curve')
+    pm = wrap_draw(pp)
+    tube = np.sqrt(np.clip(blur(pm, 2), 0, 1))
+    L.H = np.maximum(L.H, 0.45 + tube * 0.3 * (pm > 0.01))
+    L.C = np.where(tube > 0.05, 0.62 + 0.25 * tube, L.C * (1 - 0.35 * np.clip(blur(pm, 4) - pm, 0, 1)))  # contact shadow
+    # heavy fine scratches: short random strokes, mostly lighter (bare metal), a few dark
+    sc = Image.new('L', (N, N), 128)
+    dr = ImageDraw.Draw(sc)
+    for _ in range(1400):
+        x, y = L.rnd() * N, L.rnd() * N
+        a = L.rnd() * np.pi if L.rnd() < 0.4 else (0.6 + L.rnd() * 0.3) * (1 if L.rnd() < 0.5 else -1)
+        ln = 6 + L.rnd() ** 2 * 60
+        v = 128 + int((40 if L.rnd() < 0.8 else -45) * (0.4 + 0.6 * L.rnd()))
+        for ox in (-N, 0, N):
+            for oy in (-N, 0, N):
+                dr.line([(x + ox, y + oy), (x + ox + ln * np.cos(a), y + oy + ln * np.sin(a))], fill=v, width=1)
+    s2 = (np.asarray(sc, np.float32) - 128) / 128
+    L.C = L.C * (1 + s2 * 0.6 * (L.H > 0.4))
+    L.A = np.clip(A * 0.9, 0, 1)
     return L
 
 
@@ -560,7 +722,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     gens = {'scout': L_scout, 'cast': L_cast, 'slab': L_slab, 'titan': L_titan, 'air': L_air, 'rotor': L_rotor,
             'arty': L_arty, 'support': L_support, 'carapace': L_carapace, 'ceramic': L_ceramic, 'brawler': L_brawler,
-            'stealth': L_stealth, 'grating': L_grating, 'machinery': L_machinery}
+            'stealth': L_stealth, 'grating': L_grating, 'machinery': L_machinery, 'dullmetal': L_dullmetal}
     rgbs, masks = [], []
     for name in LAYERS:
         rgb, a = gens[name]().finish()

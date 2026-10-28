@@ -6,7 +6,7 @@
 // program and units keep instancing. The maps only modulate the part colours (team paint, trims, accents keep their hue).
 //
 //   surf_detail.png  14 layers: R,G = height slope (0.5 = flat), B = cavity / paint tone (0.75 = neutral)
-//   surf_mask.png    14 layers: per-skin special mask (camo, pits, scorch, role paint, circuit glow, gouges, dust, ...)
+//   surf_mask.png    14 layers: per-skin special mask (camo, pits, scorch, role / accent paint, gouges, dust, ...)
 //   hull_wear.jpg    shared: R = chipped paint / scratches, G = grime + drip streaks, B = mottling (0.5 = neutral)
 //   surf_marks.png   glyph atlas for intentional big-unit markings (digits, kill tally, insignia)
 //
@@ -29,37 +29,45 @@ export function setSurfaceTextureBase(path: string): void { base = path.endsWith
 /** skin layers (index into the texture array; order = scripts/gen-surface-textures.py LAYERS) */
 export const LAYER = {
   scout: 0, cast: 1, slab: 2, titan: 3, air: 4, rotor: 5, arty: 6, support: 7, carapace: 8, ceramic: 9, brawler: 10,
-  stealth: 11, grating: 12, machinery: 13,
+  stealth: 11, grating: 12, machinery: 13, dullmetal: 14,
 } as const;
 export type LayerName = keyof typeof LAYER;
-const N_LAYERS = 14, TEX = 512;
+const N_LAYERS = 15, TEX = 512;
 
 // per layer: what the skin's mask does and how strong its bump is
 //   L0 = (bump, mask darkens, mask = bare metal, mask = team accent paint)   L1 = (glow, dust, sheen, grime)
 const L0: Record<LayerName, [number, number, number, number]> = {
   scout: [1.0, 0.14, 0, 0], cast: [1.2, 0.16, 0, 0], slab: [1.4, 0.14, 0, 0], titan: [1.1, 0.22, 0.3, 0],
   air: [0.8, 0, 0, 0], rotor: [1.0, 0, 0, 0], arty: [1.0, 0, 0, 0], support: [0.7, 0, 0, 0.7],
-  carapace: [0.9, 0, 0, 0], ceramic: [0.7, 0, 0, 0], brawler: [1.3, 0, 0.9, 0], stealth: [0.6, 0, 0, 0],
-  grating: [1.3, 0, 0, 0], machinery: [1.2, 0, 0, 0],
+  carapace: [0.9, 0, 0, 0], ceramic: [1.1, 0, 0, 0.8], brawler: [1.3, 0, 0.9, 0], stealth: [0.6, 0, 0, 0],
+  grating: [1.3, 0, 0, 0], machinery: [1.2, 0, 0, 0], dullmetal: [1.25, 0, 0, 0.8],
 };
 const L1: Record<LayerName, [number, number, number, number]> = {
   scout: [0, 0, 0, 0], cast: [0, 0, 0, 0], slab: [0, 0, 0, 0.7], titan: [0, 0, 0, 0],
   air: [0, 0, 0, 0], rotor: [0, 0, 0, 0.6], arty: [0, 0.55, 0, 0], support: [0, 0, 0, 0],
-  carapace: [0, 0, 0.35, 0], ceramic: [0.6, 0, 0.08, 0], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
-  grating: [0, 0, 0, 0], machinery: [0, 0, 0, 0.6],
+  carapace: [0, 0, 0.35, 0], ceramic: [1.6, 0, 0, 0], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
+  grating: [0, 0, 0, 0], machinery: [0, 0, 0, 0.6], dullmetal: [0, 0, 0, 0.3],
 };
 // per PRIMARY skin (the whole unit shares it, so one machine has one wear / grime level): (wear, grime, mottle, -)
 const UNIT: Record<LayerName, [number, number, number, number]> = {
   scout: [0.8, 0.8, 1.0, 0], cast: [0.7, 1.0, 1.0, 0], slab: [0.75, 1.35, 1.0, 0], titan: [1.1, 1.2, 0.9, 0],
   air: [0.45, 0.3, 0.6, 0], rotor: [0.7, 0.8, 0.8, 0], arty: [0.8, 1.2, 1.0, 0], support: [0.35, 0.45, 0.5, 0],
-  carapace: [0.1, 0.6, 0.7, 0], ceramic: [0.25, 0.35, 0.4, 0], brawler: [1.8, 1.1, 1.0, 0], stealth: [0.2, 0.4, 0.4, 0],
-  grating: [1, 1, 1, 0], machinery: [1, 1, 1, 0],
+  carapace: [0.1, 0.6, 0.7, 0], ceramic: [0.6, 0.45, 0.5, 0], brawler: [1.8, 1.1, 1.0, 0], stealth: [0.2, 0.4, 0.4, 0],
+  grating: [1, 1, 1, 0], machinery: [1, 1, 1, 0], dullmetal: [1.0, 0.9, 0.8, 0],
 };
-const vec4s = (t: Record<LayerName, [number, number, number, number]>) => {
+// per layer: metal skins, where the paint gives way to bare metal and the team colour lives on the accent mask
+//   L2 = (metal amount, metal brightness, roughness, share of the team hue kept)
+const L2: Record<LayerName, [number, number, number, number]> = {
+  scout: [0, 0, 0, 0], cast: [0, 0, 0, 0], slab: [0, 0, 0, 0], titan: [0, 0, 0, 0],
+  air: [0, 0, 0, 0], rotor: [0, 0, 0, 0], arty: [0, 0, 0, 0], support: [0, 0, 0, 0],
+  carapace: [0, 0, 0, 0], ceramic: [0.85, 0.2, 0.42, 0.15], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
+  grating: [0, 0, 0, 0], machinery: [0, 0, 0, 0], dullmetal: [0.88, 0.27, 0.62, 0.1],
+};
+const vec4s = (t: Record<LayerName, [number, number, number, number]>, none: [number, number, number, number] = [1, 0, 0, 0]) => {
   const out: THREE.Vector4[] = [];
   for (let i = 0; i < 16; i++) {
     const k = (Object.keys(LAYER) as LayerName[]).find((n) => LAYER[n] === i);
-    out.push(new THREE.Vector4(...(k ? t[k] : [1, 0, 0, 0])));
+    out.push(new THREE.Vector4(...(k ? t[k] : none)));
   }
   return out;
 };
@@ -87,6 +95,7 @@ export const surfaceUniforms = {
   sdBump: { value: 0.9 },
   sdL0: { value: vec4s(L0) },
   sdL1: { value: vec4s(L1) },
+  sdL2: { value: vec4s(L2, [0, 0, 0, 0]) },
   sdU: { value: vec4s(UNIT) },
 };
 
@@ -163,7 +172,7 @@ export const SD_VERT_MAIN = /* glsl */ `
 export const SD_FRAG_DECL = /* glsl */ `
 varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;
 uniform highp sampler2DArray sdA; uniform sampler2D sdB; uniform sampler2D sdM; uniform float sdOn; uniform float sdBump;
-uniform vec4 sdL0[16]; uniform vec4 sdL1[16]; uniform vec4 sdU[16];
+uniform vec4 sdL0[16]; uniform vec4 sdL1[16]; uniform vec4 sdL2[16]; uniform vec4 sdU[16];
 float sdCav, sdWear, sdGrime, sdMot, sdMask, sdLayer, sdRegion, sdGiant; vec3 sdGrad; vec3 sdON;
 float sdLayerFor(int mi, float wny) {
   float w = floor(vSdV.w + 0.5);
@@ -222,7 +231,7 @@ export const SD_APPLY = /* glsl */ `
   sdRun(mi, normalize(vNormal));
   {
     int sl = int(sdLayer + 0.5);
-    vec4 l0 = sdL0[sl], l1 = sdL1[sl], up = sdU[int(vSdV.z + 0.5)];
+    vec4 l0 = sdL0[sl], l1 = sdL1[sl], l2 = sdL2[sl], up = sdU[int(vSdV.z + 0.5)];
     // fine detail (seams, rivets, small stencils, pits) fades out once a texel is well under a pixel, so a zoomed-out
     // battle shows clean paint instead of averaged-down grey mud; big features (masks, markings, wear on edges) stay
     float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
@@ -230,20 +239,28 @@ export const SD_APPLY = /* glsl */ `
     float fine = 1.0 - smoothstep(2.2, 4.0, lod);
     float det = sdRowDet * fine;
     float sdW = sdRowWear * up.x, sdGr = sdRowGrime * up.y;
+    // metal skins: the paint gives way to bare metal with a hint of the team hue (team colour stays on the accent mask)
+    float metalK = l2.x * sdRowDet;
+    if (metalK > 0.0) {
+      float lm = max(dot(base, vec3(0.2126, 0.7152, 0.0722)), 0.02);
+      base = mix(base, l2.y * mix(vec3(1.0), base / lm, l2.w), metalK);
+    }
     base *= mix(1.0, pow(sdCav, 1.5), det);
     // the skin's special mask: camo / pits / scorch darken, gouges = bare metal, role paint in the team accent,
-    // dust, chitin sheen, soot / oil = grime, circuit glow
+    // dust, chitin sheen, soot / oil = grime. Glowing skins split the mask: 0.5 = accent paint, 1 = lights
     float mk = sdMask * sdRowDet;
+    float gm = l1.x > 0.0 ? smoothstep(0.75, 0.95, sdMask) : 0.0;
+    float am = l1.x > 0.0 ? smoothstep(0.3, 0.5, sdMask) * (1.0 - gm) * sdRowDet : mk;
     // (camo / pits / scorch: kept subtle -- strong blotches read from above as shadow patches lying on the unit)
     base *= 1.0 - mk * l0.y;
     float wearSrc = max(sdWear * up.x, sdMask * l0.z);
-    base = mix(base, sdAccent * (0.85 + 0.2 * sdCav), mk * l0.w);
+    base = mix(base, sdAccent * (0.85 + 0.2 * sdCav), am * l0.w);
     // dust (artillery skins): settles low on the hull and in crevices, faint up top -- big pale blotches across the
     // deck read from the game camera as patches of light and shadow lying on the unit
     base = mix(base, vec3(0.6, 0.53, 0.42), mk * l1.y * 0.3 * (1.0 - 0.8 * smoothstep(0.1, 0.6, vWY)));
     base *= 1.0 + mk * l1.z * 0.35;
     float grimeSrc = max(sdGrime, sdMask * l1.w);
-    sdGlow = mk * l1.x;
+    sdGlow = gm * sdRowDet * l1.x;
     // mottling and grime: low on the hull, underneath and in streaks down the sides; top faces stay clean
     // (darkening only, and gentle: big pale blotches across a hull read from the game camera as cloud shadows
     // lying on the unit)
@@ -257,7 +274,7 @@ export const SD_APPLY = /* glsl */ `
     float wm = wearSrc * sdRowWear * (0.05 + 1.6 * bev);
     wm = smoothstep(0.55, 0.8, wm);
     base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
-    sdMetal = wm; sdRough = mix(1.0 + gr * 0.3, 0.55, wm);
+    sdMetal = max(wm, metalK * 0.75); sdRough = mix(mix(1.0 + gr * 0.3, l2.z, metalK), 0.55, wm);
     if (sdOn > 0.5) {
       // giants: hazard bands on turret collars (the trim row of a turret)
       if (sdGiant > 0.5 && sdRegion > 0.5 && sdRegion < 1.5 && mi == 1 && abs(sdON.y) < 0.5) {

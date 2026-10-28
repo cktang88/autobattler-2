@@ -60,6 +60,7 @@ function hullFinish(design: Design, mob: MobilityDef, skin: Skin): MetalFinish {
     case 'arty': f = pick(u, [['gunmetal', 3], ['blued', 2]]); break;
     case 'brawler': f = pick(u, [['gunmetal', 2], ['blued', 1], ['bronze', 1]]); break;
     case 'slab': f = pick(u, [['gunmetal', 5], ['chrome', 2], ['bronze', 1.5]]); break;
+    case 'dullmetal': f = pick(u, [['gunmetal', 4], ['bronze', 1.5]]); break;
     case 'cast': f = pick(u, [['gunmetal', 5], ['blued', 2], ['chrome', 1.5]]); break;
     case 'scout': f = pick(u, [['blued', 4], ['gunmetal', 4], ['chrome', 1.5]]); break;
     default: f = 'gunmetal';
