@@ -258,65 +258,72 @@ function longarm(c: ChassisCtx): ChassisOut {
 
 // ---------------------------------------------------------------------------------------------------------------------
 function colossus(c: ChassisCtx): ChassisOut {
-  // Multi-turret heavy tank (hs-kit): a long faceted central hull (sponsons over the inner tracks, flat deck, stepped
-  // glacis), two armoured side casemates over the outer tracks carrying the flank guns, a faceted nose barbette, a rear
-  // MG cupola. Functional: casemate side doors and smoke banks, glacis plate stack, engine grilles, handrails along the
-  // deck edges, ladder on the left casemate. Asymmetric: driver's hatch front-left, exhaust right rear, antennas + cans
-  // left rear, spare track on the right of the glacis.
+  // Multi-turret heavy (walks or rolls) as a MODULAR assembly (Mechabellum / modular-mech style): a dark structural
+  // frame carrying separate modules with deep gaps between them, each in its own role colour:
+  //   centre    team-colour main module (the centre guns), framed panel grid on its flanks
+  //   nose      light wedge module with a dark lower plate; rear: dark engine module with grilles + exhaust stacks
+  //   casemates light container-like side modules over the flanks carrying the side guns: team roof cap, framed
+  //             recessed panels, vertical ribs, a dark band, joined to the centre by dark beams and hydraulic rams
+  // Asymmetric: driver's hatch + periscopes front-left, ladder on the left casemate, antennas + cans left rear.
   const { b, kit, L, W, S, stance } = c;
   const kx = L / 4, kz = W / 3, k = Math.min(kx, kz);
   const fine = fineFor(S);
   const y0 = stance.y0;
   const X = (f: number) => f * kx, Z = (f: number) => f * kz;
-  facetHull(c, kit.mech, [[X(-1.95), 0, 0.03, 0.16, 0.2, Z(0.5), Z(0.58), Z(0.58)], [X(1.9), 0.05, 0.07, 0.16, 0.2, Z(0.4), Z(0.5), Z(0.5)]]);
-  const H = facetHull(c, kit.armor, [
-    [X(-2.0), 0.08, 0.08, 0.42, 0.5, Z(0.5), Z(0.72), Z(0.56)],
-    [X(-1.76), 0.04, 0.04, 0.46, 0.62, Z(0.56), Z(0.96), Z(0.76)],
-    [X(1.16), 0.04, 0.04, 0.46, 0.62, Z(0.56), Z(0.96), Z(0.76)],
-    [X(1.72), 0.06, 0.06, 0.34, 0.4, Z(0.5), Z(0.82), Z(0.56)],
-    [X(2.02), 0.1, 0.1, 0.18, 0.2, Z(0.36), Z(0.56), Z(0.3)],
-  ]);
-  const dk = (x: number, z = 0) => Math.max(y0, H.deck(x, z));
-  const deckY = y0 + 0.62;
-  // stepped glacis: two-plate stack, lower nose plate
-  const GF = facePlate(b, kit, kit.armor, [X(1.72), y0 + 0.4, 0], [X(1.16), deckY, 0], [0, 0, 1], Z(1.2), 0.035 * k, [1, 1, 0], { standoff: 0.012 * k, gap: 0.025 * k, fill: 0.9 });
-  armorPlate(b, kit, kit.armor2, sub(GF, 0, 0.012 * k + 0.035 * k, 0), rectP(Z(0.9), 0.24 * k, 0.03 * k), 0.03 * k, { standoff: 0.01 * k, gap: 0.02 * k });
-  facePlate(b, kit, kit.armor2, [X(2.02), y0 + 0.2, 0], [X(1.72), y0 + 0.4, 0], [0, 0, 1], Z(0.8), 0.03 * k, [1, 0.6, 0], { standoff: 0.01 * k, gap: 0.02 * k, fill: 0.86 });
-  spareTrack(b, kit, sub(GF, Z(0.42), 0.1 * k, -0.04 * k, 0, Math.PI / 2, 0), 3, 0.22 * k, 0.08 * k);
-  // side casemates over the outer tracks: faceted, sloped front, gun on the roof
+  const G = 0.05 * k, deckY = y0 + 0.62, pTop = y0 + 0.74;
+  // ---- frame: dark keel the modules sit on (shows in every gap)
+  block(b, kit.mech, X(-0.1), y0, 0, X(3.7), Z(1.3), 0.3, { ch: 0.1 * k, bev: 0.03 * k, bot: 0.04 * k });
+  // ---- centre module (team colour)
+  const cX0 = X(-1.45), cX1 = X(1.15), cW = Z(1.04);
+  block(b, kit.armor, (cX0 + cX1) / 2, y0 + 0.08, 0, cX1 - cX0, cW, deckY - y0 - 0.08, { top: [0.97, 0.9], ch: 0.12 * k, bev: 0.035 * k });
+  both((s) => {
+    for (const gx of [-0.9, -0.15, 0.6]) recessPanel(b, kit, frame([X(gx), y0 + 0.36, s * cW / 2], [0, 0, s], [1, 0, 0]), X(0.6), 0.2, 0.02 * k, { frame: kit.armor });
+  });
+  // ---- nose module: light wedge, dark lower plate, caged lamps
+  const nX0 = cX1 + G, nX1 = X(2.02), nl = nX1 - nX0;
+  block(b, kit.shell, (nX0 + nX1) / 2, y0 + 0.12, 0, nl, Z(0.96), deckY - y0 - 0.16, { top: [0.4, 0.86], shift: [-nl * 0.3, 0], ch: 0.1 * k, bev: 0.03 * k });
+  block(b, kit.armor2, X(1.86), y0 + 0.02, 0, X(0.36), Z(0.8), 0.14, { top: [0.6, 0.9], shift: [-X(0.05), 0], ch: 0.05 * k, bev: 0.015 * k });
+  both((s) => cagedLamp(b, kit, frame([X(1.72), y0 + 0.36, s * Z(0.36)], [0, 1, 0], [1, 0, 0]), 0.07 * k, fine));
+  // ---- rear engine module (dark), grilles on top, twin exhaust stacks out the back
+  const rX0 = X(-2.02), rX1 = cX0 - G, rl = rX1 - rX0, rh = 0.46;
+  block(b, kit.armor2, (rX0 + rX1) / 2, y0 + 0.08, 0, rl, Z(1.1), rh, { top: [0.9, 0.88], ch: 0.1 * k, bev: 0.03 * k });
+  recessPanel(b, kit, frame([(rX0 + rX1) / 2, y0 + 0.08 + rh, 0], [0, 1, 0]), rl * 0.6, Z(0.7), 0.03 * k, { slats: 5, frame: kit.armor2 });
+  both((s) => exhaustBox(b, kit, frame([rX0 + X(0.06), y0 + 0.3, s * Z(0.36)], [-1, 0, 0], [0, 0, 1]), 0.06 * k, fine));
+  towHooks(b, kit, frame([rX0 - 0.005, y0 + 0.2, 0], [-1, 0, 0], [0, 0, 1]), Z(0.7), 0.05 * k);
+  // ---- side casemates (light container modules) over the flanks, carrying the side guns
   const side = c.mounts.filter((m) => Math.abs(m.z) > 0.4 * kz);
   const sx = side.length ? side[0].x : X(0.08), sz = side.length ? Math.abs(side[0].z) : Z(0.9);
-  const hw = Z(0.4), zc = sz + Z(0.12), pTop = y0 + 0.74;
-  const pods = new Map<number, (x: number, z: number) => number>();
+  const hw = Z(0.4), zc = sz + Z(0.12), cl = X(1.9), cy0 = y0 + 0.1;
   both((s) => {
-    const P = facetHull(c, kit.armor, [
-      [sx - X(0.95), 0.3, 0.3, 0.6, 0.74, hw * 0.9, hw, hw * 0.88],
-      [sx + X(0.55), 0.3, 0.3, 0.6, 0.74, hw * 0.9, hw, hw * 0.88],
-      [sx + X(0.95), 0.3, 0.3, 0.4, 0.46, hw * 0.8, hw * 0.92, hw * 0.7],
-    ], s * zc, false);
-    pods.set(s, P.deck);
-    facePlate(b, kit, kit.armor2, [sx + X(0.95), y0 + 0.46, s * zc], [sx + X(0.55), pTop, s * zc], [0, 0, 1], hw * 1.6, 0.03 * k, [1, 1, 0], { standoff: 0.01 * k, gap: 0.02 * k, fill: 0.86 });
-    recessPanel(b, kit, frame([sx - X(0.35), y0 + 0.47, s * (zc + hw)], [0, 0, s], [1, 0, 0]), X(0.5), 0.2 * k, 0.025 * k, { frame: kit.armor2 });
-    smokeLaunchers(b, kit, frame([sx + X(0.62), pTop, s * (zc + hw * 0.5)], [0, 1, 0], [Math.cos(0.45), 0, s * Math.sin(0.45)]), 4, 0.028 * k);
-    cagedLamp(b, kit, frame([X(1.6), dk(X(1.6), s * Z(0.4)), s * Z(0.4)], [0, 1, 0], [1, 0, 0]), 0.07 * k, fine);
-    if (fine) handrail(b, kit, [[X(-1.6), deckY + 0.08 * k, s * Z(0.7)], [sx - X(1.05), deckY + 0.08 * k, s * Z(0.7)]], 0.007 * k, 0.08 * k);
+    block(b, kit.shell, sx, cy0, s * zc, cl, hw * 2, pTop - cy0 - 0.045 * k, { top: [0.9, 0.9], shift: [-X(0.05), 0], ch: 0.1 * k, bev: 0.025 * k });
+    // team roof cap, dark band round the base, vertical ribs and a framed panel grid on the outer flank
+    block(b, kit.armor, sx - X(0.04), pTop - 0.05 * k, s * zc, cl * 0.84, hw * 1.7, 0.05 * k, { top: [0.94, 0.9], ch: 0.06 * k, bev: 0.015 * k });
+    block(b, kit.armor2, sx, cy0 - 0.02, s * zc, cl * 1.02, hw * 2.04, 0.1, { ch: 0.1 * k, bev: 0.02 * k });
+    const ox = s * (zc + hw);
+    for (let i = 0; i < 4; i++) b.box(kit.mech, 0.035 * k, (pTop - cy0) * 0.62, 0.03 * k, sx - cl * 0.36 + i * cl * 0.24, cy0 + 0.1 + (pTop - cy0) * 0.31, ox + s * 0.012 * k, 0.008 * k);
+    for (let i = 0; i < 3; i++) recessPanel(b, kit, frame([sx - cl * 0.24 + i * cl * 0.24, cy0 + 0.1 + (pTop - cy0) * 0.34, ox], [0, 0, s], [1, 0, 0]), cl * 0.18, (pTop - cy0) * 0.42, 0.02 * k, { frame: kit.shell, slats: i === 1 ? 4 : 0 });
+    // connectors to the centre module: two dark beams and a ram in the gap
+    for (const bx of [sx - cl * 0.3, sx + cl * 0.25]) beam(b, kit.mech, [bx, y0 + 0.3, s * cW * 0.45], [bx, y0 + 0.3, s * (zc - hw + 0.02)], 0.09 * k, 0.12 * k);
+    piston(b, kit, [sx - cl * 0.05, y0 + 0.46, s * cW * 0.47], [sx - cl * 0.05, y0 + 0.5, s * (zc - hw * 0.9)], 0.025 * k, 0.5, fine);
+    smokeLaunchers(b, kit, frame([sx + cl * 0.42, pTop, s * (zc + hw * 0.5)], [0, 1, 0], [Math.cos(0.45), 0, s * Math.sin(0.45)]), 3, 0.028 * k);
   });
-  ladder(b, kit, [sx - X(0.7), 0.05, -(zc + hw)], [sx - X(0.7), pTop, -(zc + hw)], 0.13 * k, [1, 0, 0], [0, 0, -1], 0.03 * k);
-  // deck: driver's hatch front-left, engine grilles, exhaust right rear, antennas + jerry cans left rear, tow hooks
-  crewHatch(b, kit, frame([X(1.0), deckY, -Z(0.32)], [0, 1, 0]), 0.08 * k, fine);
-  periscopes(b, kit, X(1.12), deckY, -Z(0.32), 3, 0.04 * k);
-  for (const gx of [-1.2, -1.62]) recessPanel(b, kit, frame([X(gx), deckY, Z(0.1)], [0, 1, 0]), 0.3 * kx, Z(0.6), 0.03 * k, { slats: 4, frame: kit.armor2 });
-  exhaustBox(b, kit, frame([X(-1.75), deckY, Z(0.6)], [0, 1, 0], [0, 0, 1]), 0.06 * k, fine);
-  jerryCans(b, kit, frame([X(-1.0), deckY, -Z(0.58)], [0, 1, 0], [1, 0, 0]), 3, 0.09 * k);
-  antenna(b, kit, X(-1.85), deckY, -Z(0.5), 1.0 * k, 0.009 * k, [-0.15, 0, 0]);
-  antenna(b, kit, X(-0.6), deckY, -Z(0.6), 0.7 * k, 0.008 * k, [-0.1, 0, 0]);
-  towHooks(b, kit, frame([X(-2.0) - 0.005, y0 + 0.3, 0], [-1, 0, 0], [0, 0, 1]), Z(0.7), 0.05 * k);
-  b.decal(0.24 * k, 0.24 * k, X(0.4), deckY + 0.004, Z(0.45), atlasUV(1), 0);
+  ladder(b, kit, [sx - cl * 0.36, 0.05, -(zc + hw) - 0.03 * k], [sx - cl * 0.36, pTop, -(zc + hw) - 0.03 * k], 0.13 * k, [1, 0, 0], [0, 0, -1], 0.03 * k);
+  // ---- deck kit: driver's hatch front-left, antennas + jerry cans left rear
+  crewHatch(b, kit, frame([X(0.9), deckY, -Z(0.26)], [0, 1, 0]), 0.08 * k, fine);
+  periscopes(b, kit, X(1.02), deckY, -Z(0.26), 3, 0.04 * k);
+  jerryCans(b, kit, frame([(rX0 + rX1) / 2, y0 + 0.08 + rh, -Z(0.44)], [0, 1, 0], [1, 0, 0]), 2, 0.08 * k);
+  antenna(b, kit, rX0 + X(0.12), y0 + 0.08 + rh, -Z(0.46), 1.0 * k, 0.009 * k, [-0.15, 0, 0]);
+  antenna(b, kit, X(-1.2), deckY, -Z(0.4), 0.7 * k, 0.008 * k, [-0.1, 0, 0]);
+  b.decal(0.24 * k, 0.24 * k, X(0.4), deckY + 0.004, Z(0.3), atlasUV(1), 0);
   const deck = (x: number, z: number) => {
-    let d = H.deck(x, z);
-    for (const f of pods.values()) d = Math.max(d, f(x, z));
-    return d;
+    const az = Math.abs(z);
+    if (az > zc - hw && az < zc + hw && x > sx - cl / 2 && x < sx + cl / 2) return pTop;
+    if (az < cW / 2 && x > cX0 && x < cX1) return deckY;
+    if (az < cW / 2 && x >= cX1 && x < nX1) return y0 + 0.12 + (deckY - y0 - 0.16) * Math.max(0, 1 - (x - nX0) / nl);
+    if (az < Z(0.55) && x <= rX1 && x > rX0) return y0 + 0.08 + rh;
+    return Math.abs(x) < X(2) && az < Z(1.4) ? y0 + 0.3 : -1;
   };
+  const H = { deck };
   return {
     deckAt: deck, top: pTop + 0.1 * k, custom: true, dressed: true,
     seat: (m) => {

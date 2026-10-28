@@ -27,8 +27,8 @@ export function legStance(s: StanceIn): Stance {
     return { y0: hipY - t * 1.3, yt: hipY + t * 0.4, wi: s.W * 0.34, tracked: false, legs: 'spider', thick: t, hipY };
   }
   // titan-class legs carry far more mass: thicker for the same reach
-  // (x0.88: slimmer structure; walkers read as machines when the frame is thinner than the masses it carries)
-  const hipY = 0.4 * m + 0.12, t = (0.062 * m + 0.04) * (s.mobId === 'titanlegs' ? 1.2 : 1) * 0.88;
+  // (x1.2: chunky load-bearing legs whose armour stacks read as separate blocks from the RTS camera)
+  const hipY = 0.4 * m + 0.12, t = (0.062 * m + 0.04) * (s.mobId === 'titanlegs' ? 1.2 : 1) * 1.2;
   return { y0: hipY - t * 0.5, yt: hipY + t * 0.6, wi: s.W * 0.34, tracked: false, legs: 'biped', thick: t, hipY };
 }
 
