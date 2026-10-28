@@ -38852,43 +38852,51 @@ function railDriver(C) {
   mechHousing(C, r * 1.8, r * 0.78, r * 0.5, 0.8);
   const R = Math.max(C.bore * 1.2, r * 0.11) * (nf > 1 ? 0.85 : 1);
   const len = Math.min(C.D * (xl ? 1.65 : 1.35 + 0.2 * C.c), R * (xl ? 24 : 15 + 4 * C.c)), x0 = r * 0.02, x1 = x0 + len;
-  const g = R * 1.15, rh = R * 1.15, rw = R * 2.1;
+  const g = R * 1.2, rh = R * 1.15, rw = R * 2.1, xb = x0 + r * 0.72;
   cbox(p, kit.trim, r * 0.1, 0, 0, r * 0.4, g * 2 + rh * 2.1, rw * nf + R * (nf > 1 ? 3.5 : 1.2), r * 0.05, void 0, 0.85);
   for (const s of [-1, 1]) {
     const zw = s * (rw * (nf > 1 ? 2.2 : 1) / 2 + R * (nf > 1 ? 1.6 : 0.2));
     cbox(rc, kit.hull, x0 + len * 0.3, 0, zw + s * R * 1.1, len * 0.36, R * 0.32, R * 2.4, R * 0.1, [0, s * 0.42, 0], 0.6);
+    cbox(rc, kit.panel, x0 + len * 0.27, R * 0.2, zw + s * R * 0.9, len * 0.26, R * 0.14, R * 1.6, R * 0.05, [0, s * 0.42, 0], 0.7);
     cbox(rc, kit.trim, x0 + len * 0.22, 0, zw + s * R * 0.5, len * 0.3, R * 0.7, R * 0.9, R * 0.12);
-    bx(rc, kit.rail, x0 + len * 0.21, 0, zw + s * R * 2, len * 0.18, R * 0.36, R * 0.08, [0, s * 0.42, 0]);
+    bx(rc, kit.plasma, x0 + len * 0.21, 0, zw + s * R * 2, len * 0.2, R * 0.42, R * 0.16, [0, s * 0.42, 0]);
   }
   for (let f = 0; f < nf; f++) {
     const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0;
     for (const s of [-1, 1]) {
       const y = s * (g + rh / 2);
-      cbox(rc, s > 0 ? kit.hull : kit.panel, (x0 + x1) / 2, y, z, len, rh, rw, rh * 0.22, void 0, 0.9);
-      bx(rc, kit.trim, (x0 + x1) / 2 - len * 0.05, y + s * rh * 0.52, z, len * 0.8, R * 0.12, rw * 0.45);
-      cbox(rc, kit.trim, x1 - R * 0.9, y + s * R * 0.12, z, R * 2.2, rh * 1.35, rw * 1.12, R * 0.25, [0, 0, s * 0.1], 0.8);
-      bx(rc, kit.rail, (x0 + x1) / 2, s * g, z, len * 0.9, R * 0.06, rw * 0.28);
-      const nt = Math.round(len / (R * 1.3));
-      for (let i = Math.ceil((r * 0.72 + R * 4.4) / (len / nt)); i < nt - 2; i++) for (const q of [-1, 1])
-        bx(rc, kit.trim, x0 + i * len / nt, s * (g - R * 0.13), z + q * rw * 0.32, R * 0.22, R * 0.28, rw * 0.32);
+      cbox(rc, s > 0 ? kit.hull : kit.panel, (x0 + x1) / 2, y, z, len, rh, rw, rh * 0.25, void 0, 0.88);
+      cbox(rc, kit.trim, (x0 + x1) / 2 - len * 0.06, y + s * rh * 0.55, z, len * 0.82, R * 0.26, rw * 0.8, R * 0.1, void 0, 0.8);
+      cbox(rc, s > 0 ? kit.panel : kit.hull, (x0 + x1) / 2 - len * 0.12, y + s * rh * 0.7, z, len * 0.5, R * 0.18, rw * 0.5, R * 0.07, void 0, 0.75);
+      cbox(rc, kit.trim, x1 - R * 1, y + s * R * 0.1, z, R * 2.4, rh * 1.35, rw * 1.14, R * 0.3, [0, 0, s * 0.1], 0.8);
+      cbox(rc, s > 0 ? kit.hull : kit.panel, x1 - R * 1.3, y + s * R * 0.55, z, R * 1.6, R * 0.4, rw * 0.9, R * 0.12, [0, 0, s * 0.1], 0.75);
+      bx(rc, kit.plasma, (x0 + x1) / 2 + R * 0.6, s * g, z, len * 0.84, R * 0.14, rw * 0.32);
+      for (const q of [-1, 1]) cbox(rc, kit.steel, (x0 + x1) / 2 + R * 0.6, s * (g - R * 0.06), z + q * rw * 0.33, len * 0.84, R * 0.24, rw * 0.2, R * 0.06, void 0, 0.7);
+      for (const q of [-1, 1]) for (let k = 0; k < 3; k++) {
+        const xw = x0 + len * (0.38 + k * 0.17);
+        bx(rc, kit.trim, xw, y, z + q * (rw / 2 + R * 0.01), len * 0.13, rh * 0.6, R * 0.06);
+        bx(rc, kit.plasma, xw, y, z + q * (rw / 2 + R * 0.03), len * 0.1, rh * 0.32, R * 0.04);
+      }
     }
     for (let i = 0; i < 3; i++) {
-      const xr = x0 + r * 0.72 + i * R * 1.4, Ro = g + rh * 1.06;
-      rc.lathe(kit.trim, [[g * 0.95, 0], [Ro, 0], [Ro, R * 0.4], [g * 0.95, R * 0.4], [g * 0.95, 0]], [xr, 0, z], "x", 8, [Math.PI / 8, 0, 0]);
-      rc.lathe(i === 1 ? kit.rail : kit.hot, [[R * 0.3, R * 0.15], [g * 0.96, R * 0.15], [g * 0.96, R * 0.4], [R * 0.3, R * 0.4], [R * 0.3, R * 0.15]], [xr, 0, z], "x", 8, [Math.PI / 8, 0, 0]);
+      const xr = xb + i * R * 1.4, Ro = g + rh * 1.06;
+      rc.lathe(kit.trim, [[g * 0.95, 0], [Ro, 0], [Ro, R * 0.45], [g * 0.95, R * 0.45], [g * 0.95, 0]], [xr, 0, z], "x", 8, [Math.PI / 8, 0, 0]);
+      rc.lathe(i === 1 ? kit.hot : kit.plasma, [[R * 0.35, R * 0.12], [g * 0.96, R * 0.12], [g * 0.96, R * 0.38], [R * 0.35, R * 0.38], [R * 0.35, R * 0.12]], [xr, 0, z], "x", 16);
     }
-    crystal(rc, kit.rail, x0 + r * 0.72 + R * 3.6, 0, z, R * 0.3, R * 0.6, "x");
+    rc.lathe(kit.plasma, [[g * 0.7, 0], [g * 0.95, 0], [g * 0.95, R * 0.25], [g * 0.7, R * 0.25], [g * 0.7, 0]], [x1 - R * 0.6, 0, z], "x", 16);
+    const nc = xl ? 6 : 4, cl = (x1 - R * 1.5 - (xb + R * 3.2)) / nc;
+    for (let k = 0; k < nc; k++) crystal(rc, k % 2 ? kit.rail : kit.plasma, xb + R * 3.2 + cl * (k + 0.5), 0, z, R * (0.36 - k * 0.03), cl * 0.42, "x");
     C.muzzle(x1 + R * 0.4, 0, z);
   }
   C.spin("x", [x0 + len * 0.5, 0, 0]);
-  const nb = xl ? 6 : 5;
+  const nb = xl ? 5 : 3;
   for (let f = 0; f < nf; f++) for (let i = 0; i < nb; i++) {
-    const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0, xa = (i / (nb - 1) - 0.5) * len * 0.8, a = i * 2.4 + f;
-    let prev = [xa, -g * 0.9, z];
-    for (let k = 1; k <= 3; k++) {
-      const t = k / 3, j = k < 3 ? (k % 2 ? 1 : -1) * R * 0.35 : 0;
-      const nx = [xa + j * Math.cos(a), -g * 0.9 + t * g * 1.8, z + j * Math.sin(a) * 0.6];
-      sp.strut(kit.rail, prev, nx, R * 0.07, R * 0.07, 3);
+    const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0, xa = (i / (nb - 1) - 0.5) * len * 0.6, a = i * 2.4 + f;
+    let prev = [xa, -g * 0.85, z];
+    for (let k = 1; k <= 4; k++) {
+      const t = k / 4, j = k < 4 ? (k % 2 ? 1 : -1) * R * 0.4 : 0;
+      const nx = [xa + j * Math.cos(a), -g * 0.85 + t * g * 1.7, z + j * Math.sin(a) * 0.6];
+      sp.strut(kit.plasma, prev, nx, R * 0.11, R * 0.11, 5);
       prev = nx;
     }
   }
@@ -38957,9 +38965,7 @@ function buildTurret(mod, S, kit, fixed = false, cls, mainL = 0) {
       t.spin = spinG;
     }
   };
-  const segK = S >= 4 ? 1 : 0.85;
-  C.b.segK = C.p.segK = C.rc.segK = C.sp.segK = segK;
-  C.b.segMax = C.p.segMax = C.rc.segMax = 6;
+  C.b.segMax = C.p.segMax = C.rc.segMax = S >= 2 ? 16 : 10;
   const v = mod.visual;
   if (MELEE2.has(v)) t.idleSpin = t.spinV = 6;
   if (!fixed && v !== "plate" && !MELEE2.has(v)) deckRing(C);
