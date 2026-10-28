@@ -10,6 +10,8 @@
 //   lens        lens projector (lasers): long finned emitter body, glowing channel, hollow hood round a glowing iris
 //   cradle      plasma cradle: armoured jaws gripping an elongated glowing crystal core, hollow emitter nozzle
 //   flame       flame projector: flat flared nozzle with a hot mouth, armoured fuel cells on the back
+//   railDriver  rail driver (rail rifle, railgun, mass driver): open fork of two armoured rails, coil teeth, glowing
+//               breech rings, flickering arcs across the gap, swept wings
 
 import type { V3 } from '../geo.ts';
 import type { Bld } from '../geo.ts';
@@ -259,4 +261,66 @@ function arcCannon(C: WCtx): void {
   }
   C.muzzle(cx + r * 0.22, 0, 0);
   C.t.rate = C.mod.id === 'arclance' ? 1.2 : 0.9;
+}
+
+// ---- rail driver ---------------------------------------------------------------------------------------------------
+/** Rail driver (rail rifle, railgun, spinal mass driver): an open fork of two heavy armoured rails with no tube
+ *  between them, rows of coil teeth along their inner faces, live conductor strips, glowing accelerator rings at the
+ *  breech and a sizzle of arcs jumping the gap (a spin group flickering at an off-beat rate), swept heat-sink wings on
+ *  the breech and armoured caps on the rail ends. Two forks side by side on a twin mass driver. */
+export function railDriver(C: WCtx): void {
+  const { p, rc, sp, kit, r } = C;
+  const xl = C.tier >= 5, nf = C.nb >= 2 ? 2 : 1;
+  mechHousing(C, r * 1.8, r * 0.78, r * 0.5, 0.8);
+  const R = Math.max(C.bore * 1.2, r * 0.11) * (nf > 1 ? 0.85 : 1);
+  const len = Math.min(C.D * (xl ? 1.65 : 1.35 + 0.2 * C.c), R * (xl ? 24 : 15 + 4 * C.c)), x0 = r * 0.02, x1 = x0 + len;
+  const g = R * 1.15, rh = R * 1.15, rw = R * 2.1;
+  // breech block on the cradle: wings sweep back off it like heat sinks
+  cbox(p, kit.trim, r * 0.1, 0, 0, r * 0.4, g * 2 + rh * 2.1, rw * nf + R * (nf > 1 ? 3.5 : 1.2), r * 0.05, undefined, 0.85);
+  for (const s of [-1, 1]) {
+    // a swept wing off each side of the fork in the rail plane: heat sink and the unit's top-down signature
+    const zw = s * ((rw * (nf > 1 ? 2.2 : 1)) / 2 + R * (nf > 1 ? 1.6 : 0.2));
+    cbox(rc, kit.hull, x0 + len * 0.3, 0, zw + s * R * 1.1, len * 0.36, R * 0.32, R * 2.4, R * 0.1, [0, s * 0.42, 0], 0.6);
+    cbox(rc, kit.trim, x0 + len * 0.22, 0, zw + s * R * 0.5, len * 0.3, R * 0.7, R * 0.9, R * 0.12);
+    bx(rc, kit.rail, x0 + len * 0.21, 0, zw + s * R * 2.0, len * 0.18, R * 0.36, R * 0.08, [0, s * 0.42, 0]);
+  }
+  for (let f = 0; f < nf; f++) {
+    const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0;
+    for (const s of [-1, 1]) {
+      const y = s * (g + rh / 2);
+      // the rail: team-colour top beam, light bottom beam, a dark spine on each and a heavy angular cap at the tip
+      cbox(rc, s > 0 ? kit.hull : kit.panel, (x0 + x1) / 2, y, z, len, rh, rw, rh * 0.22, undefined, 0.9);
+      bx(rc, kit.trim, (x0 + x1) / 2 - len * 0.05, y + s * rh * 0.52, z, len * 0.8, R * 0.12, rw * 0.45);
+      cbox(rc, kit.trim, x1 - R * 0.9, y + s * R * 0.12, z, R * 2.2, rh * 1.35, rw * 1.12, R * 0.25, [0, 0, s * 0.1], 0.8);
+      // live conductor strip on the inner face, flanked by rows of coil teeth reaching into the gap
+      bx(rc, kit.rail, (x0 + x1) / 2, s * g, z, len * 0.9, R * 0.06, rw * 0.28);
+      const nt = Math.round(len / (R * 1.3));
+      for (let i = Math.ceil((r * 0.72 + R * 4.4) / (len / nt)); i < nt - 2; i++) for (const q of [-1, 1])
+        bx(rc, kit.trim, x0 + (i * len) / nt, s * (g - R * 0.13), z + q * rw * 0.32, R * 0.22, R * 0.28, rw * 0.32);
+    }
+    // accelerator rings at the breech: a dark collar holding a glowing annulus, the slug sitting in the first one
+    for (let i = 0; i < 3; i++) {
+      const xr = x0 + r * 0.72 + i * R * 1.4, Ro = g + rh * 1.06;
+      rc.lathe(kit.trim, [[g * 0.95, 0], [Ro, 0], [Ro, R * 0.4], [g * 0.95, R * 0.4], [g * 0.95, 0]], [xr, 0, z], 'x', 8, [Math.PI / 8, 0, 0]);
+      rc.lathe(i === 1 ? kit.rail : kit.hot, [[R * 0.3, R * 0.15], [g * 0.96, R * 0.15], [g * 0.96, R * 0.4], [R * 0.3, R * 0.4], [R * 0.3, R * 0.15]], [xr, 0, z], 'x', 8, [Math.PI / 8, 0, 0]);
+    }
+    crystal(rc, kit.rail, x0 + r * 0.72 + R * 3.6, 0, z, R * 0.3, R * 0.6, 'x');
+    C.muzzle(x1 + R * 0.4, 0, z);
+  }
+  // the sizzle: jagged arcs jumping between the rails, on an off-beat spin so they flicker rather than turn
+  C.spin('x', [x0 + len * 0.5, 0, 0]);
+  const nb = xl ? 6 : 5;
+  for (let f = 0; f < nf; f++) for (let i = 0; i < nb; i++) {
+    const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0, xa = (i / (nb - 1) - 0.5) * len * 0.8, a = i * 2.4 + f;
+    let prev: V3 = [xa, -g * 0.9, z];
+    for (let k = 1; k <= 3; k++) {
+      const t = k / 3, j = k < 3 ? (k % 2 ? 1 : -1) * R * 0.35 : 0;
+      const nx: V3 = [xa + j * Math.cos(a), -g * 0.9 + t * g * 1.8, z + j * Math.sin(a) * 0.6];
+      sp.strut(kit.rail, prev, nx, R * 0.07, R * 0.07, 3);
+      prev = nx;
+    }
+  }
+  C.t.idleSpin = C.t.spinV = 23.3;
+  C.t.shot = 'beam';
+  C.t.rate = xl ? 3 : 2.0;
 }

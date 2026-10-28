@@ -21,7 +21,7 @@ import { buildLauncher } from './weapons/launchers.ts';
 import { buildEnergy } from './weapons/energy.ts';
 import { buildMelee } from './weapons/melee.ts';
 import { buildUtility } from './weapons/utility.ts';
-import { arc, artillery, blades, carbine, cradle, emitter, flame, lens, rotary } from './weapons/w2500.ts';
+import { arc, artillery, blades, carbine, cradle, emitter, flame, lens, railDriver, rotary } from './weapons/w2500.ts';
 
 export interface Turret {
   /** yaw group: rotate .rotation.y for traverse */
@@ -97,7 +97,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   if (!fixed && v !== 'plate' && !MELEE.has(v)) deckRing(C);
 
   // year-2500 families (weapons/w2500.ts) take precedence over the older modern-weapon builders
-  const W25 = v === 'gatling' ? rotary : v === 'rocketPod' || v === 'missileRack' ? blades : v === 'tesla' ? arc : v === 'laser' ? lens : v === 'plasma' ? cradle : v === 'flamer' ? flame
+  const W25 = v === 'gatling' ? rotary : v === 'rocketPod' || v === 'missileRack' ? blades : v === 'tesla' ? arc : v === 'laser' ? lens : v === 'plasma' ? cradle : v === 'flamer' ? flame : v === 'rail' ? railDriver
     : v === 'gun' || v === 'shotgun' || v === 'flak' || v === 'pointdef' || v === 'sniper' ? carbine
     : v === 'mortar' || v === 'artillery' ? artillery
     : v === 'heatray' || v === 'emp' || v === 'slowbeam' || v === 'sonic' || v === 'gravity' ? emitter : null;
