@@ -90,6 +90,12 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   slots, which are the bigger classes) with everything else fitting round them, NOT by inflating the main gun.
   The weapon body's armour level (`C.arm`) also follows the size class only. Aircraft keep their own hardpoint
   scale. Never rescale a weapon per hull (no hero boost, no shrinking to fit: fix the layout / mounts instead).
+  The housing is exactly `DRAW_D` (buildTurret `drawD`); only barrels vary (bore from calibre, length per weapon),
+  all on one drawing scale `DRAW_K`. No hull-based barrel stretch either.
+- **The hull follows its guns**: a hull must be big enough for the class housings it carries (an M housing is 1.5
+  cells, so an M-carrying hull is >= 2 cells wide). Resize the footprint in `parts.ts` when it isn't (the art box may
+  not overhang the footprint: a test enforces it); carriage, longarm and hunter went from 1 to 2 cells wide for this.
+  Audit: fill every hull with typical weapons and check housing overlap / housing vs hull width.
 - **Pods**: on ground hulls with S <= 3 whose shape is not in PART_SHAPES, secondary weapons ride the hero's yaw
   group as pods (`Turret.host`, aimed with `aimPod`, +-0.4 rad of their own). The chassis builder only receives the
   hero (and utilities) in `c.mounts`.

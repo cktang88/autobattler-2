@@ -58,14 +58,21 @@ const ENERGY = new Set(['laser', 'heatray', 'plasma', 'flamer', 'tesla', 'emp', 
 const MELEE = new Set(['saw', 'chainsaw', 'hammer', 'claw', 'blade', 'drill', 'prod', 'ram']);
 
 /** Unit-size scale applied to reference weapon sizes (bigger hulls carry proportionally bigger hardware). */
+/** reference cells -> drawn cells for ground weapons (units3d DRAW_D M 1.5 over the M band middle 0.52) */
+export const DRAW_K = 1.5 / 0.52;
+
 export const unitScale = (S: number) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 
 /** `cls` overrides the size class (a utility shrunk to a smaller hardpoint, same rule as the 2D art's weaponsize). */
-/** `mainL` (cells) asks the unit's main gun for a hull-proportioned barrel (units3d picks the main gun). */
-export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, cls?: MountClass, mainL = 0): Turret {
-  const kS = unitScale(S);
+/** `drawD` (cells) fixes the housing diameter: ground units pass their size class's drawn size (units3d DRAW_D), so a
+ *  class's housing is the same on every hull; bores (calibre) and barrel lengths (class position) still vary per
+ *  weapon on top of it, scaled by the same drawing scale. Without it the old hull-scaled size applies (aircraft). */
+export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, cls?: MountClass, drawD = 0): Turret {
   const ov = cls && cls !== mod.mount ? cls : undefined;
-  const D = weaponD(mod, ov) * kS;
+  // drawing scale: reference cells -> drawn cells (one global factor for every ground weapon, hull size for aircraft)
+  const kS = drawD ? DRAW_K : unitScale(S);
+  const D = drawD || weaponD(mod, ov) * kS;
+  const mainL = 0;
   const r = D / 2;
   const yaw = new THREE.Group(), pitch = new THREE.Group(), recoil = new THREE.Group();
   yaw.add(pitch); pitch.add(recoil);

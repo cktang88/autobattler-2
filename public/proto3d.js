@@ -35163,7 +35163,7 @@ var CHASSIS = [
   { id: "raider", name: "Raider Frame", desc: "Light skirmisher with twin light mounts.", size: 1, hp: 210, armor: 2, weight: 5, cost: 75, mounts: ["S", "S"], agility: 1.15, roles: ["raider"], traits: ["swift"], shape: "box" },
   { id: "warden", name: "Warden Hull", desc: "Sturdy medium hull built to hold a line.", size: 2, hp: 560, armor: 6, weight: 14, cost: 115, mounts: ["M", "S"], agility: 0.95, roles: ["assault", "tank"], traits: [], shape: "hex" },
   { id: "striker", name: "Striker Frame", desc: "Aggressive medium frame with three mounts.", size: 2, hp: 430, armor: 4, weight: 12, cost: 160, footprint: [2, 3], mounts: ["M", "M", "S"], agility: 1, roles: ["skirmisher", "assault"], traits: [], shape: "cross" },
-  { id: "longarm", name: "Longarm Platform", desc: "Stabilized platform: one heavy mount, +20% weapon range.", size: 2, hp: 360, armor: 3, weight: 12, cost: 250, footprint: [1, 3], mounts: ["M"], agility: 0.85, roles: ["artillery", "siege"], traits: ["rangeBoost"], shape: "long" },
+  { id: "longarm", name: "Longarm Platform", desc: "Stabilized platform: one heavy mount, +20% weapon range.", size: 2, hp: 360, armor: 3, weight: 12, cost: 250, footprint: [2, 3], mounts: ["M"], agility: 0.85, roles: ["artillery", "siege"], traits: ["rangeBoost"], shape: "long" },
   { id: "aegis", name: "Aegis Frame", desc: "Support frame. Field-repairs allies within 30 m (1.2% hp/s; repair auras don't stack).", size: 2, hp: 610, armor: 4, weight: 13, cost: 60, mounts: ["M", "S"], agility: 0.95, roles: ["support"], traits: ["repairAura"], shape: "round" },
   { id: "gunship", name: "Gunship", desc: "Attack helicopter airframe with stub-wing mounts.", size: 2, hp: 420, armor: 3, weight: 8, cost: 60, footprint: [2, 3], art: [1.8, 2.7], domain: "heli", mounts: ["M", "M"], agility: 1.1, roles: ["flyer"], traits: ["airOnly"], shape: "airframe" },
   { id: "bastion", name: "Bastion Hull", desc: "Massive armored hull. Slow, nearly unbreakable.", size: 3, hp: 1500, armor: 14, weight: 38, cost: 400, art: [2.65, 2.65], mounts: ["M", "M", "M"], agility: 0.8, roles: ["tank", "assault"], traits: [], shape: "fortress" },
@@ -35179,8 +35179,8 @@ var CHASSIS = [
   { id: "scorpion", name: "Tailgun Crawler", desc: "Armored crawler with a crane-boom heavy weapon over its back and twin arm mounts.", size: 3, hp: 1200, armor: 12, weight: 32, cost: 260, footprint: [3, 5], art: [3, 4], mounts: ["M", "M", "M"], agility: 0.95, mobility: ["spider", "treads", "anchor"], roles: ["assault", "siege"], traits: [], shape: "scorpion" },
   { id: "centipede", name: "Landtrain Hull", desc: "Articulated multi-car land-train with four medium mounts down its spine.", size: 3, hp: 1300, armor: 9, weight: 33, cost: 525, footprint: [2, 5], art: [2, 4.75], mounts: ["M", "M", "M", "M"], agility: 0.8, mobility: ["spider", "halftrack", "treads"], roles: ["riot", "assault"], traits: [], shape: "centipede" },
   // ---- Role-specialist frames ----
-  { id: "carriage", name: "Gun Carriage", desc: "Light, thin-skinned carriage that holds a medium weapon. Cheap artillery or tank-hunter.", size: 1, hp: 110, armor: 0, weight: 3, cost: 40, mounts: ["M"], agility: 0.9, roles: ["artillery", "skirmisher"], traits: [], shape: "carriage" },
-  { id: "hunter", name: "Hunter Frame", desc: "Fast, lightly armored skirmisher frame. Strikes from range and keeps moving.", size: 2, hp: 360, armor: 2, weight: 9, cost: 80, footprint: [1, 2], mounts: ["M", "S"], agility: 1.25, roles: ["skirmisher", "raider"], traits: ["swift"], shape: "hunter" },
+  { id: "carriage", name: "Gun Carriage", desc: "Light, thin-skinned carriage that holds a medium weapon. Cheap artillery or tank-hunter.", size: 1, hp: 110, armor: 0, weight: 3, cost: 40, footprint: [2, 2], mounts: ["M"], agility: 0.9, roles: ["artillery", "skirmisher"], traits: [], shape: "carriage" },
+  { id: "hunter", name: "Hunter Frame", desc: "Fast, lightly armored skirmisher frame. Strikes from range and keeps moving.", size: 2, hp: 360, armor: 2, weight: 9, cost: 80, footprint: [2, 2], mounts: ["M", "S"], agility: 1.25, roles: ["skirmisher", "raider"], traits: ["swift"], shape: "hunter" },
   { id: "riot", name: "Riot Frame", desc: "Sloped front armor and twin medium mounts. Built to wade into swarms.", size: 2, hp: 650, armor: 9, weight: 15, cost: 230, footprint: [3, 2], mounts: ["M", "M"], agility: 0.9, roles: ["riot", "tank"], traits: [], shape: "riot" },
   { id: "interceptor", name: "Interceptor", desc: "Light fighter airframe. Must fly.", size: 1, hp: 120, armor: 1, weight: 1.2, cost: 15, footprint: [1, 2], domain: "jet", mounts: ["S", "S"], agility: 1.3, roles: ["antiair", "flyer", "raider"], traits: ["airOnly"], shape: "interceptor" },
   { id: "siegeplat", name: "Siege Platform", desc: "Thin-skinned heavy platform carrying two heavy weapons. Pure artillery: keep it behind the line.", size: 3, hp: 800, armor: 3, weight: 22, cost: 265, footprint: [2, 4], art: [1.7, 4], mounts: ["M", "M"], agility: 0.7, roles: ["artillery", "siege"], traits: [], shape: "siegeplat" },
@@ -38667,10 +38667,6 @@ function weaponD(m, cls) {
   const [a, b] = BAND_D[tierOf(m, cls)];
   return a + (b - a) * classPos(m, cls);
 }
-function slotD(cls) {
-  const [a, b] = BAND_D[CLASS_RANK[cls]];
-  return (a + b) / 2;
-}
 var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
 
 // src/client/proto3d/weapons/wkit.ts
@@ -40623,11 +40619,13 @@ var GUNS = /* @__PURE__ */ new Set(["gun", "gatling", "shotgun", "cannon", "gaus
 var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mortar", "artillery", "charge"]);
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
+var DRAW_K = 1.5 / 0.52;
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
-function buildTurret(mod, S, kit, fixed = false, cls, mainL = 0) {
-  const kS = unitScale(S);
+function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {
   const ov = cls && cls !== mod.mount ? cls : void 0;
-  const D = weaponD(mod, ov) * kS;
+  const kS = drawD ? DRAW_K : unitScale(S);
+  const D = drawD || weaponD(mod, ov) * kS;
+  const mainL = 0;
   const r = D / 2;
   const yaw = new Group(), pitch = new Group(), recoil = new Group();
   yaw.add(pitch);
@@ -47776,7 +47774,7 @@ function buildUnit(design, team) {
   const ch = CHASSIS_BY_ID.get(design.chassis);
   const mob = MOBILITY_BY_ID.get(design.mobility);
   const S = ch.size;
-  const W = ch.footprint?.[0] ?? S, L = ch.footprint?.[1] ?? S;
+  const [W, L] = artBox(ch);
   const rnd = rng([...design.id].reduce((a, c) => a * 31 + c.charCodeAt(0) >>> 0, 7));
   const root = new Group();
   const body = new Group();
@@ -47796,24 +47794,20 @@ function buildUnit(design, team) {
     const sl = ch.mounts[i];
     return sl && mod.kind !== "weapon" && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : void 0;
   };
-  const LEGGED2 = /* @__PURE__ */ new Set(["legs", "spider", "jumpjets", "titanlegs"]);
-  let main = -1;
-  if (!flying) mods.forEach((m, i) => {
-    if (!m || m.visual !== "cannon" && m.visual !== "gun" || slotCls(m, i)) return;
-    if (main < 0 || weaponD(m) > weaponD(mods[main])) main = i;
+  const tur = mods.map((mod, i) => {
+    if (!mod) return null;
+    const cls = slotCls(mod, i) ?? mod.mount;
+    return buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), flying ? 0 : DRAW_D[cls]);
   });
-  const mainL = L * (LEGGED2.has(mob.id) ? 0.62 : 1);
-  const tur = mods.map((mod, i) => mod ? buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), i === main ? mainL : 0) : null);
   let hero = -1;
   mods.forEach((m, i) => {
     if (m && m.kind === "weapon" && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]))) hero = i;
   });
-  tur.forEach((tu, i) => {
-    if (!tu) return;
-    const m = mods[i], cls = slotCls(m, i) ?? m.mount;
-    const k = flying ? 1.1 : DRAW_D[cls] * Math.sqrt(weaponD(m, slotCls(m, i)) / slotD(cls)) / (2 * tu.r);
-    tu.yaw.scale.setScalar(k);
-    tu.r *= k;
+  if (flying) tur.forEach((tu) => {
+    if (tu) {
+      tu.yaw.scale.setScalar(1.1);
+      tu.r *= 1.1;
+    }
   });
   const podOf = mods.map(() => -1);
   if (!flying && S <= 3 && !PART_SHAPES.has(ch.shape) && hero >= 0 && tur[hero] && !tur[hero].fixed) {

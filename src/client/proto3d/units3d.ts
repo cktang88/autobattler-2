@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { CHASSIS_BY_ID, MODULE_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
-import { mountOffsets, PART_SHAPES } from '../../shared/mountgeo.ts';
+import { artBox, mountOffsets, PART_SHAPES } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
@@ -61,7 +61,9 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const ch = CHASSIS_BY_ID.get(design.chassis)!;
   const mob = MOBILITY_BY_ID.get(design.mobility)!;
   const S = ch.size;
-  const W = ch.footprint?.[0] ?? S, L = ch.footprint?.[1] ?? S;
+  // the drawn hull follows the chassis art box (ChassisDef.art, else the footprint): a hull carrying a weapon wider
+  // than its footprint is drawn wide enough for it (weapons have a fixed size per class; the hull follows them)
+  const [W, L] = artBox(ch);
   const rnd = rng([...design.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7));
   const root = new THREE.Group();
   const body = new THREE.Group(); // hull + turrets (bobs); running gear lives in root
@@ -82,29 +84,19 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const kit = makeKit(team, fin.hull);
   // a utility in a smaller hardpoint than its class is drawn at the slot's size (as the 2D art does)
   const slotCls = (mod: NonNullable<(typeof mods)[number]>, i: number) => { const sl = ch.mounts[i]; return sl && mod.kind !== 'weapon' && CLASS_RANK[mod.mount] > CLASS_RANK[sl] ? sl : undefined; };
-  // the unit's main gun (biggest cannon / autocannon housing on a ground unit) gets a hull-proportioned barrel: real
-  // tank guns run ~0.75 x hull length; walkers carry theirs on an arm or shoulder, so shorter
-  const LEGGED = new Set(['legs', 'spider', 'jumpjets', 'titanlegs']);
-  let main = -1;
-  if (!flying) mods.forEach((m, i) => {
-    if (!m || (m.visual !== 'cannon' && m.visual !== 'gun') || slotCls(m, i)) return;
-    if (main < 0 || weaponD(m) > weaponD(mods[main]!)) main = i;
+  const tur = mods.map((mod, i) => {
+    if (!mod) return null;
+    const cls = slotCls(mod, i) ?? mod.mount;
+    return buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), flying ? 0 : DRAW_D[cls]);
   });
-  const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
-  const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), i === main ? mainL : 0) : null));
-  // weapon size is a property of the weapon, never of the hull it sits on or of whether it is the main gun: the same
-  // gun is drawn the same size on every unit (one drawn diameter per size class, calibre / weight moving it a little
-  // inside the class band), so a player reads a weapon by its size anywhere. A hull's look comes from being built
+  // weapon size is a property of the weapon, never of the hull it sits on or of whether it is the main gun: every
+  // weapon of a size class has the same housing (DRAW_D, built at that size by buildTurret, no multipliers after);
+  // only its barrels differ (bore from the calibre, length from the weapon), so a player reads a weapon anywhere. A hull's look comes from being built
   // round its biggest slots (its main weapon system), not from inflating whatever it carries. Aircraft keep their
   // hardpoint scale (a ground turret's housing would swallow a jet).
   let hero = -1;
   mods.forEach((m, i) => { if (m && m.kind === 'weapon' && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]!))) hero = i; });
-  tur.forEach((tu, i) => {
-    if (!tu) return;
-    const m = mods[i]!, cls = slotCls(m, i) ?? m.mount;
-    const k = flying ? 1.1 : (DRAW_D[cls] * Math.sqrt(weaponD(m, slotCls(m, i)) / slotD(cls))) / (2 * tu.r);
-    tu.yaw.scale.setScalar(k); tu.r *= k;
-  });
+  if (flying) tur.forEach((tu) => { if (tu) { tu.yaw.scale.setScalar(1.1); tu.r *= 1.1; } });
   // weapon pods: on small / medium ground hulls whose weapons are not carried by limbs, the secondary weapons ride the
   // hero turret as pods on its flanks (right, mirrored left, then one on top at the back) instead of standing as
   // separate turrets on the deck: one cohesive weapon system that turns as a whole, nothing blocks anything's traverse

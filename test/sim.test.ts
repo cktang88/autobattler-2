@@ -1056,7 +1056,7 @@ test('default orders: kite / focus derived from the design; unset placements use
 });
 
 test('non-square footprints: long units spawn on their footprint centre and contact uses the long axis', () => {
-  const long = D('longone', 'longarm', 'halftrack', ['cannon']); // 1 wide x 3 long
+  const long = D('longone', 'longarm', 'halftrack', ['cannon']); // 2 wide x 3 long
   const designs = [...DESIGNS, long];
   const st = computeStats(long);
   assert.equal(st.fh, 3);
@@ -1064,7 +1064,7 @@ test('non-square footprints: long units spawn on their footprint centre and cont
   const b = mk([P('longone', 10, 2)]);
   const c = placementUnitCenters(0, { x: 10, y: 2 }, st)[0];
   assert.deepEqual([b.units[0].x, b.units[0].y], [c.x, c.y]);
-  assert.deepEqual([c.x, c.y], [10.5, FIELD_H - DEPLOY_D + 2 + 1.5]);
+  assert.deepEqual([c.x, c.y], [11, FIELD_H - DEPLOY_D + 2 + 1.5]);
   // deterministic and still resolves a full fight
   const a0 = [P('longone', 4, 0), P('longone', 8, 0)], a1 = mirrorShift([P('buggy', 4, 0), P('bulwark', 20, 0)]);
   const inp = (): BattleInput => structuredClone({ seed: 5, sides: [{ designs, units: a0 }, { designs, units: a1 }] });

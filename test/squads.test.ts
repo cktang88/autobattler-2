@@ -153,15 +153,15 @@ test('migrating a rules-2 match splits old 16-unit blocks into blocks of the new
 });
 
 test('medium squads: 2 x 2 / 2 x 1 blocks of the real hull footprint, spaced, rotated, validated and simulated', () => {
-  const spire = SPIRE4, tb: Design = { id: 'longarm-mg', name: 'Longarm MG', chassis: 'longarm', mobility: 'spider', mounts: ['mg'] }; // 2 x 2 hull x4, 1 x 3 hull x2
+  const spire = SPIRE4, tb: Design = { id: 'longarm-mg', name: 'Longarm MG', chassis: 'longarm', mobility: 'spider', mounts: ['mg'] }; // 2 x 2 hull x4, 2 x 3 hull x2
   const ss = computeStats(spire), ts = computeStats(tb);
-  assert.deepEqual([ss.squad, ss.fw, ss.fh, ts.squad, ts.fw, ts.fh], [4, 2, 2, 2, 1, 3]);
+  assert.deepEqual([ss.squad, ss.fw, ss.fh, ts.squad, ts.fw, ts.fh], [4, 2, 2, 2, 2, 3]);
   assert.deepEqual(squadLayout(2), [2, 1]);
   assert.deepEqual(squadLayout(2, true), [1, 2]);
   for (let sp = 0; sp <= MAX_SPACING; sp++) {
     assert.deepEqual(blockDims(ss, sp), { w: 4 + sp, h: 4 + sp });
-    assert.deepEqual(blockDims(ts, sp), { w: 2 + sp, h: 3 });
-    assert.deepEqual(blockDims(ts, sp, true), { w: 1, h: 6 + sp });
+    assert.deepEqual(blockDims(ts, sp), { w: 4 + sp, h: 3 });
+    assert.deepEqual(blockDims(ts, sp, true), { w: 2, h: 6 + sp });
     // unit centres sit a hull + spacing apart, each hull inside the block
     assert.deepEqual(squadOffsets(ss, sp).map((c) => [c.x, c.y]), [[1, 1], [3 + sp, 1], [1, 3 + sp], [3 + sp, 3 + sp]]);
   }
