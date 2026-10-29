@@ -1,4 +1,6 @@
-// Citadel Fortress (size 5, 8 wide x 7 long): a castle that walks. From above it is a waisted, star-like trace, not a
+// Citadel Fortress (size 5, 8 wide x 7 long): a castle that walks. Built round its twin titan guns: each XL stands on
+// a battered drum exactly its housing wide that replaces the front corner tower (a front tower is only built where no
+// XL bastion stands); the small gun sits on a gatehouse on the prow between their barrels. From above it is a waisted, star-like trace, not a
 // slab: four tall faceted towers (battered bases, plated shafts, overhanging machicolated crowns) stand out beyond a
 // bailey whose curtain walls pinch in between them; the twin titan guns ride faceted ravelin bastions that bulge out
 // of the forward walls; a ram prow juts between the front towers. Inside, the deck steps up twice: a raised inner
@@ -33,6 +35,14 @@ function citadel(c: ChassisCtx): ChassisOut {
   const sc = (pts: P2[]): P2[] => pts.map(([x, z]) => [x * kx, z * kz] as P2);
   const scl = (pts: P2[], s: number): P2[] => pts.map(([x, z]) => [x * s, z * s] as P2);
   const nearMount = (x: number, z: number, pad: number) => c.mounts.some((m) => Math.hypot(m.x - x, m.z - z) < m.r * 1.7 + pad);
+  // corner towers: the rear pair always; a front one only where no titan gun bastion stands (the twin XL bastions ARE
+  // the forward towers: a fortress built round its two titan guns)
+  const TW: [number, number][] = [];
+  for (const sx of [1, -1]) for (const sz of [-1, 1]) {
+    const tx = sx * 2.45 * kx, tz = sz * 2.85 * kz;
+    if (sx > 0 && c.mounts.some((m) => m.cls === 'XL' && Math.hypot(m.x - tx, m.z - tz) < 2.4 * k)) continue;
+    TW.push([tx, tz]);
+  }
   // lower hull between the running gear
   const wi = Math.min(stance.wi, 2.1 * kz);
   planLoftT(b, kit.mech, [[3.1 * kx, -wi * 0.6], [3.1 * kx, wi * 0.6], [2.4 * kx, wi], [-2.4 * kx, wi], [-3.1 * kx, wi * 0.6], [-3.1 * kx, -wi * 0.6], [-2.4 * kx, -wi], [2.4 * kx, -wi]], [[y0, 0.94], [yt + 0.1, 1.0]]);
@@ -44,7 +54,7 @@ function citadel(c: ChassisCtx): ChassisOut {
   planLoftT(b, kit.mech, B, [[yt + 0.22 * k, 1.012], [yt + 0.36 * k, 1.01]]);
   const rimP = scl(B, 0.9);
   armourWalls(b, kit, B, [yt + 0.38 * k, 0.996], [shY - 0.04 * k, 0.977], {
-    u, pitch: 1.25 * k, fill: 0.7, slits: true, front: 0.75,
+    u, pitch: 1.6 * k, fill: 0.7, slits: true, front: 0.75,
     skip: (p) => Math.hypot(p[0] - 2.45 * kx, Math.abs(p[2]) - 2.85 * kz) < 0.9 * k || Math.hypot(p[0] + 2.45 * kx, Math.abs(p[2]) - 2.85 * kz) < 0.9 * k,
   });
   // waist walls: a recessed vent and a ladder from the skirt to the rampart
@@ -56,10 +66,6 @@ function citadel(c: ChassisCtx): ChassisOut {
     ladder(b, kit, [a.x, a.y, a.z], [e.x, e.y + 0.1 * k, e.z], 0.3 * k, [f.u.x, f.u.y, f.u.z], [f.n.x, f.n.y, f.n.z], 0.12 * k);
   }
   both((s) => {
-    // waist conduits clamped to the wall, hanging skirt plates on shadow gaps between the tower pods
-    const zc = s * 2.1 * kz, yc = yt + 0.32 * k;
-    pipeRun(b, kit, [[1.3 * kx, yc, zc * 1.1], [0.3 * kx, yc, zc * 1.02], [-1.0 * kx, yc, zc * 1.02], [-1.8 * kx, yc, zc * 1.13]], 0.06 * k, kit.joint);
-    for (const x of [-0.75, 0.05]) armorPlate(b, kit, kit.armor2, frame([x * kx, yt + 0.02, s * 2.08 * kz], [0, -0.12, s], [1, 0, 0]), rectP(0.75 * kx, 0.42 * k, 0.05 * k), u * 1.1, { standoff: u * 0.8 });
   });
   // rampart: crenellated parapet plates along the rim (skipping the bastions and towers), a railed walk inside it
   for (let i = 0; i < rimP.length; i++) {
@@ -75,7 +81,7 @@ function citadel(c: ChassisCtx): ChassisOut {
       parapet(b, kit, x, deckY - 0.02, z, nx, nz, (len / n) * 0.62, 0.3 * k, 0.09 * k, j % 2 ? kit.armor2 : kit.armor);
     }
   }
-  function inTower(x: number, z: number) { return Math.hypot(Math.abs(x) - 2.45 * kx, Math.abs(z) - 2.85 * kz) < 1.15 * k; }
+  function inTower(x: number, z: number) { return TW.some(([tx, tz]) => Math.hypot(x - tx, z - tz) < 1.15 * k); }
   if (fine) railLoop(b, kit, scl(B, 0.78), deckY + 0.3 * k, 0.55 * k, (x, z) => nearMount(x, z, 0.35) || inTower(x, z) || x > 2.3 * kx, 0.02 * k, 0.28 * k);
 
   // ---- prow: ram glacis between the front pods, gate slits, beak plate, searchlights at the gate
@@ -85,7 +91,7 @@ function citadel(c: ChassisCtx): ChassisOut {
   }
   armorPlate(b, kit, kit.shell, frame([2.85 * kx, deckY - 0.02, 0], [0.3, 1, 0], [1, 0, 0]), [[0.9 * kx, 0], [0.2 * kx, 0.85 * kz], [-0.6 * kx, 0.85 * kz], [-0.6 * kx, -0.85 * kz], [0.2 * kx, -0.85 * kz]], u * 1.2, { standoff: u * 0.5 });
   hazard(b, kit, 3.0 * kx, deckY + 0.2 * k, 0, 0.8 * kz, 0.16 * kx, 4, Math.PI / 2);
-  both((s) => searchlight(b, kit, 2.55 * kx, deckY + 0.05 * k, s * 1.3 * kz, s * 0.35, 0.2 * k, fine));
+  both((s) => searchlight(b, kit, 3.0 * kx, deckY + 0.05 * k, s * 0.62 * kz, s * 0.35, 0.18 * k, fine));
 
   // ---- inner terrace: the deck steps up once before the keep (plated walls)
   const T = scl(B, 0.5).map(([x, z]) => [x - 0.35 * kx, z] as P2);
@@ -95,7 +101,7 @@ function citadel(c: ChassisCtx): ChassisOut {
   for (let i = 0; i < T.length; i++) {
     const f = wallFace(T, i, [deckY + 0.1 * k, 1.03], [deck2 - 0.06 * k, 1.0]);
     if (f.w < 0.5 * k) continue;
-    const n = Math.max(1, Math.round(f.w / (0.8 * k)));
+    const n = Math.max(1, Math.round(f.w / (1.6 * k)));
     for (let j = 0; j < n; j++) facePlateHS(b, kit, f, (j + 0.5 - n / 2) * (f.w / n), 0, (f.w / n) * 0.84, f.h * 0.7, u * 0.7, kit.armor2, u * 0.3);
   }
 
@@ -103,9 +109,9 @@ function citadel(c: ChassisCtx): ChassisOut {
   const tR = 0.88 * k;
   const towers: V3[] = [];
   const fTop = deckY + 1.35 * k, rTop = deckY + 1.95 * k;
-  for (const sx of [1, -1]) for (const sz of [-1, 1]) {
-    const base = legged ? yt : Math.max(yt - 0.1, 1.0), tx = sx * 2.45 * kx, tz = sz * 2.85 * kz, top = sx > 0 ? fTop : rTop;
-    octTower(b, kit, tx, base, tz, tR, top, { u: u * 0.8 });
+  for (const [tx, tz] of TW) {
+    const base = legged ? yt : Math.max(yt - 0.1, 1.0), top = tx > 0 ? fTop : rTop;
+    octTower(b, kit, tx, base, tz, tR, top, { u: u * 0.8, brackets: false });
     // crown merlons: upright plates round the crown edge (the turret ring stands inside them)
     const P = ngonT(8, tR * 1.2, tR * 1.2);
     for (let i = 0; i < 8; i += 1) {
@@ -119,11 +125,17 @@ function citadel(c: ChassisCtx): ChassisOut {
     towers.push([tx, top, tz]);
   }
 
-  // twin titan-gun ravelins: faceted battered bastions bulging out of the forward walls
+  // twin titan-gun bastions: the fortress's forward towers, each a battered ten-sided drum exactly the titan gun's
+  // housing wide (XL 3.6), standing proud of the walls with a glowing band under its crown and an armoured spur
+  // raking forward-out from its base: the two big guns are what the whole front of the castle is built round
   const bast = (x: number, z: number, r: number) => {
-    const R = Math.max(r * 1.2, 0.8 * k), h = deckY + 0.62 * k - (yt + 0.2 * k);
-    const top = octBarbette(b, kit, x, yt + 0.2 * k, z, R, h, { mat: kit.armor, n: 10, slits: true });
-    planLoftT(b, kit.mech, ngonT(10, R, R), [[top - 0.02, 0.9], [top + 0.06 * k, 0.9]], [x, z]);
+    const R = Math.max(r * 0.98, 0.8 * k), h = deckY + 0.72 * k - (yt + 0.2 * k);
+    const top = octBarbette(b, kit, x, yt + 0.2 * k, z, R, h, { mat: kit.armor, n: 8, slits: true });
+    planLoftT(b, kit.glow, ngonT(8, R, R), [[top - h * 0.12, 0.96], [top - h * 0.08, 0.96]], [x, z]);
+    planLoftT(b, kit.mech, ngonT(8, R, R), [[top - 0.02, 0.9], [top + 0.06 * k, 0.9]], [x, z]);
+    const sz = Math.sign(z) || 1, a = Math.atan2(sz * 0.75, 1), ca = Math.cos(a), sa = Math.sin(a);
+    block(b, kit.armor2, x + ca * R * 0.95, yt + 0.1 * k, z + sa * R * 0.95, 1.1 * k, 0.55 * k, h * 0.62, { top: [0.3, 0.7], shift: [0.35 * k * ca, 0.35 * k * sa], ch: 0.12 * k, bev: 0.03 });
+    hazard(b, kit, x + ca * R * 1.02, yt + 0.2 * k + h * 0.45, z + sa * R * 1.02, 0.5 * k, 0.12 * k, 3, -a + Math.PI / 2);
     return top + 0.06 * k;
   };
 
@@ -132,12 +144,11 @@ function citadel(c: ChassisCtx): ChassisOut {
   const s1 = deck2 + 1.0 * k, s2 = s1 + 0.95 * k;
   const K1 = ngonT(8, 1.55 * kx, 1.6 * kz), K2 = ngonT(8, 1.12 * kx, 1.18 * kz);
   planLoftT(b, kit.armor, K1, [[deck2 - 0.05, 1.04], [deck2 + 0.2 * k, 1.0], [s1 - 0.22 * k, 0.96], [s1, 0.86]], [kxC, 0]);
-  armourWalls(b, kit, K1, [deck2 + 0.22 * k, 1.0], [s1 - 0.24 * k, 0.96], { at: [kxC, 0], u: u * 0.9, pitch: 1.4 * k, fill: 0.72, slits: true, front: 0.9, rear: -0.9 });
+  armourWalls(b, kit, K1, [deck2 + 0.22 * k, 1.0], [s1 - 0.24 * k, 0.96], { at: [kxC, 0], u: u * 0.9, pitch: 2.0 * k, fill: 0.72, slits: true, front: 0.9, rear: -0.9 });
   planLoftT(b, kit.mech, K2, [[s1 - 0.02, 1.08], [s1 + 0.1 * k, 1.08]], [kxC + 0.05 * kx, 0]);
   planLoftT(b, kit.shell, K2, [[s1 + 0.08 * k, 1.0], [s2 - 0.18 * k, 0.96], [s2, 0.86]], [kxC + 0.05 * kx, 0]);
   for (let i = 0; i < 8; i++) {
     const g = wallFace(K2, i, [s1 + 0.12 * k, 1.0], [s2 - 0.18 * k, 0.96], [kxC + 0.05 * kx, 0]);
-    facePlateHS(b, kit, g, 0, -g.h * 0.12, g.w * 0.74, g.h * 0.5, u * 0.7, i % 2 ? kit.armor2 : kit.armor, u * 0.3);
     if (g.n.x > 0.3) faceSlit(b, kit, g, 0, g.h * 0.3, g.w * 0.45, u * 0.38, kit.glass);
   }
   // keep buttresses on the diagonals: thick fin plates from the terrace to the first stage's roof
@@ -151,7 +162,6 @@ function citadel(c: ChassisCtx): ChassisOut {
   // reactor in front of the keep, between the titan guns: the fortress's glowing heart, coolant runs into the keep
   reactor(b, kit, [0.75 * kx, deck2 - 0.02, 0], 0.55 * k, 'y', 4);
   planLoftT(b, kit.mech, ngonT(8, 0.8 * k, 0.8 * k), [[deck2 - 0.04, 1.0], [deck2 + 0.12 * k, 0.95]], [0.75 * kx, 0]);
-  both((s) => pipeRun(b, kit, [[0.75 * kx, deck2 + 0.15 * k, s * 0.72 * k], [0.1 * kx, deck2 + 0.15 * k, s * 0.9 * kz], [kxC + 1.3 * kx, deck2 + 0.5 * k, s * 0.95 * kz]], 0.06 * k, kit.joint));
   // shield-generator spire behind the keep: a faceted tapered pylon on four fins, glow halo rings, beacon on top
   const spX = kxC - 1.45 * kx, spH = 4.6 * k;
   planLoftT(b, kit.mech, ngonT(8, 0.45 * k, 0.45 * k), [[deckY - 0.02, 1.0], [deckY + 0.3 * k, 0.86]], [spX, 0]);
@@ -188,7 +198,7 @@ function citadel(c: ChassisCtx): ChassisOut {
     b.box(kit.joint, 0.12 * k, 0.16 * k, 0.12 * k, tip[0], deckY + 0.5 * k, tip[2], 0.02 * k);
     for (const [dx, dz] of [[-0.35, -0.1], [0.05, -0.15]]) stowBox(b, kit, frame([hx + dx * kx, deck2, hz + dz * kz], [0, 1, 0], [1, 0, 0]), 0.32 * k, 0.24 * k, 0.4 * k, kit.armor2);
   }
-  for (const [dz, h] of [[0.55, 1.15], [1.05, 0.8]]) octStack(b, kit, -3.0 * kx, deckY - 0.1, dz * kz, 0.18 * k, h * k, [-1, 0, 0]);
+  for (const [dz, h] of [[0.75, 1.15]]) octStack(b, kit, -3.0 * kx, deckY - 0.1, dz * kz, 0.18 * k, h * k, [-1, 0, 0]);
   recessPanel(b, kit, frame([-3.0 * kx, deckY, -0.8 * kz], [0, 1, 0]), 0.5 * kx, 0.6 * kz, 0.05 * k, { slats: 4 });
   // banners flying from the rear towers
   both((s) => banner(b, kit, -2.45 * kx - tR * 0.4, rTop, s * 2.85 * kz, 2.4 * k, 0.85 * k, s));
@@ -221,6 +231,12 @@ function citadel(c: ChassisCtx): ChassisOut {
       if (tw) { collar(b, kit, m.x, tw[1] + 0.04, m.z, m.r, tw[1] - 0.1, 16); return { y: tw[1] + 0.04, socket: true }; }
       if (Math.hypot(m.x - kxC, m.z) < 0.6 * k) { const y = s2 + 0.04; collar(b, kit, m.x, y, m.z, m.r, s2 - 0.2, 20); return { y, socket: true }; }
       if (m.cls === 'XL' || (m.x > 0.8 * kx && Math.abs(m.z) > 1.2 * kz)) { const y = bast(m.x, m.z, m.r); collar(b, kit, m.x, y, m.z, m.r, y - 0.1, 20); return { y, socket: true }; }
+      if (m.x > 2.3 * kx && Math.abs(m.z) < 0.6 * kz) {
+        // gatehouse on the prow between the titan guns: a squat faceted turret base under their barrels
+        const y = octBarbette(b, kit, m.x, deckY - 0.02, m.z, Math.max(m.r * 1.25, 0.42 * k), 0.38 * k, { mat: kit.armor2, n: 8 });
+        collar(b, kit, m.x, y, m.z, m.r, y - 0.1 * k, 16);
+        return { y, socket: true };
+      }
       const d = deck(m.x, m.z), base = d > 0 ? d : deckY;
       const y = octBarbette(b, kit, m.x, base - 0.02, m.z, m.r * 1.3, 0.32 * k, { mat: kit.armor, plates: false });
       collar(b, kit, m.x, y, m.z, m.r, y - 0.1 * k, 16);

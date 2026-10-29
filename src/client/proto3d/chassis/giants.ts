@@ -3,19 +3,24 @@
 //   leviathan              land battleship: long hull with a raked prow and tapered stern, two big centreline turrets
 //                          either side of a tall stepped bridge tower with a mast, sponson guns, funnel.
 //   broodmother            matriarch spider: armoured cephalothorax + head with eye cluster, a huge segmented egg-sac
-//                          abdomen with glowing pods, eight legs.
+//                          abdomen with glowing pods, eight legs; its guns ride a weapon howdah on a raised neck
+//                          (torso mode): mediums on pedipalp arms, the giant gun in a cradle, a rider medium on top.
 // Hard-surface pass (chassis/hs-kit.ts + hs-kit-organic.ts): every hull is a dark faceted core plated face by face with
 // separate armour on shadow gaps (quadPlate over the loft faces), functional parts in named slots (smoke dischargers,
 // caged lamps, ladders, handrails, tow hooks, stowage, mufflers, cranes), and 2-3 one-sided features per hull.
 
-import { strutGeo, type MatLike, type P2, type V3 } from '../geo.ts';
-import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
+import { strutGeo, type Bld, type MatLike, type P2, type V3 } from '../geo.ts';
+import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { beam, block, both, collar, exhaust, glow, hazard, pod, sensor, stationHull, stationTop } from './shapes.ts';
 import { glowGrille, inPoly, mast, ngon, planLoft, reactor } from './giants-kit.ts';
 import {
   armorPlate, cableBundle, cagedLamp, cupola, exhaustBox, fineFor, frame, frameLimb, handrail, inset, jointDrum, ladder, piston, plateStack,
   recessPanel, rectP, skirtRun, smokeLaunchers, stowBox, towHooks, trapP,
 } from './hs-kit.ts';
+import { torsoHP, torsoSlots, type TorsoSlots } from './torso-kit.ts';
+import { planLoftT } from './hs-kit-titan.ts';
+import { wallFace } from './titan-greebles.ts';
+import { facePlateHS } from './hs-kit-titan.ts';
 import { archShell, boneFrame, claw, deckFrame, eyeCluster, limbShell, quadPlate, shingles, spike, stationQuads } from './hs-kit-organic.ts';
 
 type St = [number, number, number, number, number, number][];
@@ -264,10 +269,28 @@ function broodmother(c: ChassisCtx): ChassisOut {
   } else if (stance.legs === 'biped') {
     hips = ([-1, 1] as const).map((s) => ({ p: [-0.1 * kx, stance.hipY, s * 1.1 * kz] as V3, side: s, t: stance.thick, foot: [-0.1 * kx, 0, s * 1.3 * kz] as V3, phase: s > 0 ? Math.PI : 0 }));
   }
+  // ---- neck: the weapon howdah turns on a raised swivel column over the carapace (clear of the abdomen when it slews):
+  // a glowing core in a ribbed cage between a dark base drum and a bright bearing race
+  const ts = torsoSlots(c);
+  const heroSeat = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : undefined;
+  const yW = Math.max(capY, abTop) + 0.1 * k;
+  if (heroSeat) {
+    b.cyl(kit.mech, 0.62 * k, 0.75 * k, 0.16 * k, [cx, capY + 0.06 * k, 0], 'y', 16);
+    const hN = yW - capY - 0.2 * k;
+    b.cyl(kit.plasma, 0.42 * k, 0.42 * k, hN, [cx, capY + 0.14 * k + hN / 2, 0], 'y', 12);
+    for (let i = 0; i < 10; i++) {
+      const a = ((i + 0.5) / 10) * Math.PI * 2;
+      b.box(kit.mech, 0.14 * k, hN, 0.13 * k, cx + Math.cos(a) * 0.47 * k, capY + 0.14 * k + hN / 2, Math.sin(a) * 0.47 * k, 0.01, [0, -a, 0]);
+    }
+    b.cylb(kit.joint, 0.66 * k, 0.08 * k, 0.012 * k, [cx, yW - 0.06 * k, 0], 'y', 16);
+    both((s) => piston(b, kit, [cx - 0.3 * k, capY + 0.02 * k, s * 0.55 * k], [cx - 0.15 * k, yW - 0.1 * k, s * 0.5 * k], 0.05 * k, 0.55, fine));
+  }
   const deck = (x: number, z: number) => (inPoly(cp.map(([px, pz]) => [px * 0.6 + cx, pz * 0.6] as P2), x, z) ? capY : -1);
   return {
-    deckAt: deck, top: Math.max(capY, abTop), custom: true, dressed: true, hips,
+    deckAt: deck, top: heroSeat ? yW + 2.3 : Math.max(capY, abTop), custom: true, dressed: true, hips,
     seat: (m: MountSpec) => {
+      // the hero's yaw is the howdah's swivel (torso: at = the neck top)
+      if (m === heroSeat) return { y: yW, socket: true };
       if (m.x > 0.9 * kx) {
         // head turret between the eyes, on the brow shell
         const y = hy + 0.36 * k;
@@ -291,8 +314,86 @@ function broodmother(c: ChassisCtx): ChassisOut {
       collar(b, kit, m.x, y, m.z, m.r, capY - 0.2, 20);
       return { y, socket: true };
     },
+    torso: heroSeat ? (t, { heroR }) => { buildHowdah(t, c, ts, fine); return { hp: torsoHP(ts, broodBase, heroR), at: [cx, yW, 0] }; } : undefined,
   };
 }
+
+// ---- weapon howdah (torso): the matriarch's guns stacked in tiers on one swivel -------------------------------------
+// Yaw frame (origin = the neck top, +x forward), world cells, laid out round the fixed class housings (L 2.4, M 1.5,
+// S 0.75): the giant gun rides high in a chitin-plated cradle between two cheek shells; the two flank mediums hang low
+// and forward on armoured pedipalp arms; the third medium rides a raised hump over the giant gun's breech; the small
+// gun sits under the giant gun's barrel as a chin gun. Tiers: arms -> cradle -> rider, every housing in clear air.
+const B_L: V3 = [0.0, 1.0, 0];
+const B_ARM = (s: number): V3 => [0.95, 0.38, s * 1.8];
+const B_RIDE: V3 = [-2.2, 2.3, 0];
+const B_SIDE: V3 = [-2.0, 1.62, -0.95];
+const broodBase = (i: number): V3 => (i === 0 ? B_L : i === 1 ? B_RIDE : i === 2 ? B_ARM(-1) : i === 3 ? B_ARM(1) : i === 4 ? B_SIDE : [-1.2, 1.2, 0]);
+
+function buildHowdah(t: Bld, c: ChassisCtx, ts: TorsoSlots, fine: boolean): void {
+  const { kit } = c;
+  const pu = 0.045;
+  // swivel race
+  t.cyl(kit.mech, 0.7, 0.8, 0.16, [0, 0.08, 0], 'y', 16);
+  // saddle: the faceted howdah body (dark core, team chitin plates on its walls), nose forward over the head
+  const SP: P2[] = [[1.85, 0], [1.4, -0.66], [0.4, -1.02], [-1.7, -1.02], [-2.75, -0.66], [-3.0, 0], [-2.75, 0.66], [-1.7, 1.02], [0.4, 1.02], [1.4, 0.66]];
+  planLoftT(t, kit.mech, SP, [[0.08, 0.78], [0.22, 0.98]]);
+  planLoftT(t, kit.armor2, SP, [[0.2, 0.985], [0.78, 1.0], [0.9, 0.9]]);
+  // deck: a team armour plate over the saddle top with a bone brow on the nose
+  armorPlate(t, kit, kit.armor, frame([0, 0.9, 0], [0, 1, 0], [1, 0, 0]), SP.map(([x, z]) => [x * 0.86, z * 0.84] as P2), 0.05, { standoff: 0.015 });
+  archShell(t, kit.shell, { x: 1.2, len: 0.9, y0: 0.9, w: 0.55, h: 0.12, thick: 0.06, cols: 4, taperF: 0.5, taperB: 1.0, lift: 0.04 });
+  for (let i = 0; i < SP.length; i++) {
+    const f = wallFace(SP, i, [0.24, 0.98], [0.76, 1.0]);
+    if (f.w < 0.3) continue;
+    facePlateHS(t, kit, f, 0, 0, f.w * 0.84, f.h * 0.76, pu * 1.2, i % 3 === 1 ? kit.shell : i % 2 ? kit.armor2 : kit.armor, pu * 0.5);
+  }
+  // gun bed: a dark drum the giant gun lies on, a glowing feed core aft of it
+  t.cyl(kit.mech, 0.72, 0.82, 0.14, [B_L[0], B_L[1] - 0.05, 0], 'y', 16);
+  glow(t, kit, -1.0, 0.92, 0, 1.2, 0.04, 0.3, undefined, kit.plasma);
+  // cradle: low swept fenders either side of the giant gun, bearing posts and the trunnion axle into it
+  if (ts.armed(0)) both((s) => {
+    const z = s * 1.28, px = B_L[0] + 0.23, py = B_L[1] + 0.55;
+    block(t, kit.armor, -0.25, 0.85, z, 2.1, 0.34, 0.5, { top: [0.55, 0.75], shift: [-0.4, s * 0.03], ch: 0.1, bev: 0.03 });
+    archShell(t, kit.shell, { x: -0.35, len: 1.3, y0: 1.32, w: 0.18, h: 0.06, thick: 0.05, cols: 3, cz: z, taperF: 0.5, taperB: 1.0, lift: 0.04 });
+    block(t, kit.armor2, px, 0.85, s * 1.18, 0.5, 0.24, py - 0.85 + 0.18, { top: [0.7, 0.9], ch: 0.06, bev: 0.02 });
+    t.cyl(kit.joint, 0.16, 0.16, 0.4, [px, py, s * 0.98], 'z', 12);
+    t.cyl(kit.plasma, 0.09, 0.09, 0.05, [px, py, s * 1.32], 'z', 10);
+    glow(t, kit, -0.4, 1.05, s * 1.46, 0.9, 0.05, 0.04);
+  });
+  // pedipalp gun arms: a joint drum on the saddle flank, an armoured arm out to a cowled gun seat under each medium
+  both((s) => {
+    const slot = s < 0 ? 2 : 3;
+    if (!ts.armed(slot)) return;
+    const [ax, ay, az] = B_ARM(s);
+    jointDrum(t, kit, [0.35, 0.5, s * 0.98], 0.24, 0.3, 'z');
+    beam(t, kit.mech, [0.35, 0.48, s * 0.98], [ax, ay - 0.1, az * 0.9], 0.34, 0.24);
+    block(t, kit.armor, ax - 0.05, ay - 0.36, az, 1.3, 1.05, 0.36, { top: [0.9, 0.9], ch: 0.22, bev: 0.03, bot: 0.04 });
+    // cowl: a stepped chitin plate over the arm's outboard edge, a claw tip under the muzzle
+    plateStack(t, kit, kit.armor2, frame([ax - 0.05, ay - 0.18, az + s * 0.54], [0, 0, s], [1, 0, 0]), rectP(1.15, 0.3, 0.05), [
+      { inset: 0, thick: pu * 1.2, standoff: pu * 0.4 }, { inset: pu * 1.4, thick: pu, mat: kit.armor },
+    ], { gap: pu });
+    claw(t, kit.joint, [ax + 0.55, ay - 0.28, az], [ax + 0.85, ay - 0.45, az - s * 0.05], [ax + 0.95, ay - 0.75, az - s * 0.18], 0.07);
+    if (fine) piston(t, kit, [0.1, 0.85, s * 0.98], [ax - 0.3, ay - 0.08, az * 0.92], 0.045, 0.55, fine);
+    glow(t, kit, ax - 0.1, ay - 0.22, az - s * 0.53, 0.8, 0.05, 0.04);
+  });
+  // rider hump over the breech: a stepped chitin mass rising aft to the top medium's seat, a reactor slot in its back
+  if (ts.armed(1)) {
+    const [rx, ry] = B_RIDE;
+    block(t, kit.armor, rx, 0.85, 0, 1.5, 1.6, 0.75, { top: [0.82, 0.8], shift: [-0.08, 0], ch: 0.32, bev: 0.04 });
+    block(t, kit.armor2, rx - 0.08, 1.58, 0, 1.0, 1.05, ry - 1.58, { top: [0.86, 0.82], shift: [-0.04, 0], ch: 0.2, bev: 0.03 });
+    armorPlate(t, kit, kit.shell, frame([rx + 0.66, 1.25, 0], [0.88, 0.48, 0], [0, 0, 1]), rectP(1.1, 0.5, 0.1), pu * 1.2, { standoff: pu * 0.5 });
+    both((s) => glow(t, kit, rx - 0.1, ry - 0.3, s * 0.5, 0.6, 0.05, 0.04, undefined, kit.plasma));
+    glow(t, kit, rx - 0.78, 1.2, 0, 0.05, 0.4, 0.5, undefined, kit.plasma);
+  } else {
+    block(t, kit.armor, -2.1, 0.85, 0, 1.3, 1.3, 0.45, { top: [0.7, 0.7], ch: 0.25, bev: 0.04 });
+  }
+  // sidearm: the small gun on a bracket off the rider hump's left shoulder, its barrel clear outboard of the giant gun
+  if (ts.armed(4)) {
+    const [sx, sy, sz] = B_SIDE;
+    block(t, kit.armor2, sx, 0.9, sz + 0.12, 0.62, 0.5, sy - 0.9, { top: [0.85, 0.85], ch: 0.1, bev: 0.02 });
+    glow(t, kit, sx + 0.32, sy - 0.25, sz + 0.12, 0.04, 0.3, 0.3, undefined, kit.plasma);
+  }
+}
 registerChassis('broodmother', broodmother);
+registerTorso('broodmother');
 void reactor; void glowGrille;
 

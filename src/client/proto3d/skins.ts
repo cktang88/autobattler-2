@@ -87,11 +87,13 @@ export function applySkin(root: THREE.Object3D, body: THREE.Object3D, turretRoot
   const sec = skin.secondary ? LAYER[skin.secondary] + 1 : 0;
   const turretOf = new Map<THREE.Object3D, number>();
   for (const t of turretRoots) turretOf.set(t.obj, t.mount);
-  const regionOf = (o: THREE.Object3D): { region: number; mount: number } => {
-    let underBody = false;
+  // a mech torso (ChassisOut.torso) hangs under the hero turret's yaw but is body, not weapon: hull skin, no collar bands
+  const regionOf = (o: THREE.Object3D): { region: number; mount: number; torso?: boolean } => {
+    let underBody = false, torso = false;
     for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+      if (p.userData.torso) torso = true;
       const m = turretOf.get(p);
-      if (m !== undefined) return { region: 1, mount: m };
+      if (m !== undefined) return torso ? { region: 0, mount: -1, torso } : { region: 1, mount: m };
       if (p === body) underBody = true;
       if (p === root) break;
     }
@@ -101,10 +103,10 @@ export function applySkin(root: THREE.Object3D, body: THREE.Object3D, turretRoot
   root.traverse((o) => {
     const me = o as THREE.Mesh;
     if (!me.isMesh || me.material !== uber) return;
-    const { region, mount } = regionOf(me);
+    const { region, mount, torso } = regionOf(me);
     const layer = region === 1 ? LAYER[skin.turret[mount] ?? skin.hull] : prim;
     setAttr(me.geometry, 'sdv', [layer, skin.density, prim, sec + 32 * region]);
-    if (region === 0) hullMeshes.push(me);
+    if (region === 0 && !torso) hullMeshes.push(me);
   });
   if (skin.size < 3 || !hullMeshes.length || skin.hull === 'stealth' || skin.hull === 'carapace') return;
   // hull markings (size 3+): numerals on the flanks a little ahead of centre, at ~60% hull height; insignia behind them

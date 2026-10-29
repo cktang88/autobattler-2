@@ -107,6 +107,12 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   `registerTorso(id)` (registry.ts): then ALL its secondary weapons ride the torso as pods at your hardpoints
   (any size, any anatomy, up to 6), so the sim's mount table no longer decides where a gun is drawn: design the
   hull, housing and hardpoints round the fixed-size weapons, never the other way round.
+  Big hulls use it too (arachne mantle, broodmother howdah in `giants.ts`): `chassis/torso-kit.ts` `torsoSlots(c)`
+  tells which design slot is the hero and which slots ride as pods (so the torso builds a sponson / arm only for armed
+  slots), `torsoHP` turns a per-slot base table into the hp list. Lay the slots out in world cells round the class
+  housings (XL 3.6, L 2.4, M 1.5: centre distance >= 0.9 x the radii sum, or stack them in tiers with clear air between
+  housings), and keep the static body under the torso's sweep low (raise the swivel on a neck if an abdomen / knees
+  would cut through it). The torso takes the hull's surface skin (skins.ts), not the turret's (no collar hazard bands).
 - **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
   (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
   footprint art (`render/footart.ts`) still draws from them.

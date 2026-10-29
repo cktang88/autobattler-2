@@ -31,7 +31,7 @@ export const MOUNT_PTS: Record<string, [number, number][]> = {
   carrier: [[0.33, 0], [-0.07, -0.31], [-0.37, -0.25], [-0.37, 0.25]],
   // titan walker: T on the right forearm, G on the left forearm, heavies on the shoulder blades, M on the backpack
   titan: [[0.15, 0.37], [0.15, -0.37], [-0.115, -0.165], [-0.115, 0.165], [-0.34, 0]],
-  citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  citadel: [[0.235, -0.235], [0.235, 0.235], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.41, 0]],
   // odd shapes: turrets sit where the anatomy carries them (forelimbs, arms, claws, tail tip, spine segments)
   mantis: [[0.31, -0.165], [0.31, 0.165]],
   strider: [[0.32, 0.335], [0.32, -0.335], [-0.04, -0.3]],
@@ -89,7 +89,7 @@ export const FOOT_MOUNTS: Record<string, Pt[]> = {
   siegeplat: [[0.2, 0], [-0.16, 0]],
   hunter: [[0.12, 0], [-0.3, 0]],
   colossal: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
-  citadel: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.385, -0.385]],
+  citadel: [[0.24, -0.25], [0.24, 0.25], [-0.17, 0], [-0.385, -0.385], [-0.385, 0.385], [0.41, 0]],
   // lance: the titan gun at the breech of the spinal accelerator (centreline, ahead of the bridge), the medium on the
   // aft deck; monolith: the giant gun in the roof cupola, the medium in a rear-quarter casemate
   lance: [[0.06, 0], [-0.36, 0]],

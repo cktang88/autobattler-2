@@ -1,7 +1,10 @@
 // Weaver Titan / arachne (size 5, 10 x 10 footprint, body art ~7): a colossal spider-tank - alien in silhouette,
 // machine in construction. A ten-faceted carapace of overlapping armour scales (thick plates on shadow gaps, a skirt
-// ring under them, radial fin ribs with glow seams between) carries the titan gun on a faceted turret tower crowned by
-// swept fin plates. SIGNATURE: the head - a heavy armoured prow with a huge glowing cyclops lens in an octagonal
+// ring under them, radial fin ribs with glow seams between) carries a weapon MANTLE on a plated waist drum: the whole
+// battery twists as one (torso mode, buildMantle below) - the titan gun laid in a deep keel between two shoulder masses
+// that each carry a giant gun abreast of it (its trunnion bearings on their inner walls, swept pauldrons astern), a
+// command spine lifting the medium gun over the titan gun's breech. The palp housings below are only built for
+// utilities in the giant slots (weapons ride the mantle). SIGNATURE: the head - a heavy armoured prow with a huge glowing cyclops lens in an octagonal
 // armoured socket, ringed by smaller eyes and sensor whiskers, with hydraulic chelicerae (twin-strut arms, rams,
 // claw blades) under it, flanked by two plated pedipalp weapon housings for the giant guns (ERA on their front
 // faces). Behind it a segmented faceted abdomen (each segment an 8-sided armour ring with a dorsal plate, dark
@@ -9,13 +12,14 @@
 // housings on exposed rams round the rim; eight hard-surface legs (mobility/titanlegs.ts) whose knees tower over the
 // body. Asymmetric: lattice mast left, team banner right, a sensor pod on the left palp.
 
-import type { P2, V3 } from '../geo.ts';
-import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
-import { beam, both, collar, glow, hazard } from './shapes.ts';
+import type { Bld, P2, V3 } from '../geo.ts';
+import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
+import { beam, block, both, collar, glow, hazard } from './shapes.ts';
 import { banner, inPoly, reactor } from './giants-kit.ts';
 import { armorPlate, cableBundle, eraGrid, fineFor, frame, frameLimb, jointDrum, piston, plateStack, recessPanel, rectP, trapP } from './hs-kit.ts';
-import { facePlateHS, latticeMast, ngonT, octBarbette, planLoftT, xPrism } from './hs-kit-titan.ts';
-import { pipeRun, sensorDome, wallFace, whip } from './titan-greebles.ts';
+import { armourWalls, facePlateHS, latticeMast, ngonT, octBarbette, planLoftT, xPrism } from './hs-kit-titan.ts';
+import { mirror, pipeRun, sensorDome, wallFace, whip } from './titan-greebles.ts';
+import { torsoHP, torsoSlots, type TorsoSlots } from './torso-kit.ts';
 
 function arachne(c: ChassisCtx): ChassisOut {
   const { b, kit, L, W, stance } = c;
@@ -23,6 +27,7 @@ function arachne(c: ChassisCtx): ChassisOut {
   const fine = fineFor(c.S);
   const pu = 0.08 * u;
   const spider = stance.legs === 'spider';
+  const ts = torsoSlots(c);
   const by = spider ? stance.hipY * 1.75 : stance.legs === 'biped' ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1.0 * u;
   if (!spider && stance.legs !== 'biped') planLoftT(b, kit.mech, ngonT(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1.0], [by, 0.85]], [-0.4 * u, 0]);
   // ---- carapace: ten-faceted shell over a dark belly; scale plates on every upper facet, a skirt ring below
@@ -53,23 +58,17 @@ function arachne(c: ChassisCtx): ChassisOut {
     const a2 = a + Math.PI / 10;
     if (!head(a2)) glow(b, kit, cx + Math.cos(a2) * 2.78 * u, by + 0.28 * u, Math.sin(a2) * 2.96 * u, 0.42 * u, 0.05 * u, 0.05 * u, [0, -a2 + Math.PI / 2, 0]);
   }
-  // ---- turret tower for the titan gun: faceted, plated faces, glow band, crown of swept fin plates
-  const tY = cTop + 1.35 * u;
-  const TP = ngonT(8, 1.15 * u, 1.15 * u);
-  planLoftT(b, kit.armor, TP, [[cTop - 0.3 * u, 1.0], [cTop + 0.5 * u, 0.86], [tY - 0.12 * u, 0.82], [tY, 0.76]], [cx, 0]);
-  for (let i = 0; i < 8; i++) {
-    const f = wallFace(TP, i, [cTop + 0.55 * u, 0.86], [tY - 0.14 * u, 0.82], [cx, 0]);
-    facePlateHS(b, kit, f, 0, -f.h * 0.08, f.w * 0.74, f.h * 0.62, pu, i % 2 ? kit.armor2 : kit.shell, pu * 0.4);
+  // ---- waist: the swivel the weapon mantle turns on (a battered faceted drum on the carapace crown, plated faces, glow
+  // band, bearing ring). The mantle above it carries the titan gun and every other weapon (torso, below).
+  const WP = ngonT(10, 1.0, 1.0);
+  const yW = cTop + 0.42 * u;
+  planLoftT(b, kit.armor, WP, [[yS - 0.06 * u, 2.25 * u], [cTop - 0.1 * u, 2.0 * u], [cTop + 0.2 * u, 1.86 * u], [yW - 0.08 * u, 1.8 * u]], [cx, 0]);
+  for (let i = 0; i < 10; i++) {
+    const f = wallFace(WP, i, [cTop - 0.08 * u, 1.99 * u], [cTop + 0.18 * u, 1.87 * u], [cx, 0]);
+    facePlateHS(b, kit, f, 0, 0, f.w * 0.76, f.h * 0.8, pu * 0.9, i % 2 ? kit.armor2 : kit.shell, pu * 0.4);
   }
-  planLoftT(b, kit.glow, TP, [[cTop + 0.5 * u, 0.875], [cTop + 0.58 * u, 0.87]], [cx, 0]);
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + Math.PI / 6, rx = Math.cos(a), rz = Math.sin(a);
-    const base: V3 = [cx + rx * 1.05 * u, cTop + 0.15 * u, rz * 1.05 * u];
-    armorPlate(b, kit, i % 2 ? kit.armor2 : kit.accent, frame([cx + rx * 1.28 * u, cTop + 0.75 * u, rz * 1.28 * u], [-rz, 0, rx], [rx * 0.35, 1, rz * 0.35]),
-      [[-0.65 * u, -0.1 * u], [0.75 * u, 0.2 * u], [0.6 * u, 0.42 * u], [-0.65 * u, 0.12 * u]], 0.07 * u, { back: null, standoff: 0 });
-    if (fine && i % 2) piston(b, kit, base, [cx + rx * 1.3 * u, cTop + 0.95 * u, rz * 1.3 * u], 0.05 * u, 0.55, fine);
-  }
-  both((s) => hazard(b, kit, cx + 0.75 * u, tY - 0.2 * u, s * 0.45 * u, 0.5 * u, 0.16 * u, 3, 0.5 * s));
+  planLoftT(b, kit.glow, WP, [[cTop + 0.22 * u, 1.87 * u], [cTop + 0.3 * u, 1.85 * u]], [cx, 0]);
+  b.cylb(kit.joint, 1.7 * u, 0.12 * u, 0.02 * u, [cx, yW - 0.06 * u, 0], 'y', 20);
 
   // ---- head (SIGNATURE): armoured prow, cyclops lens in an octagonal socket, eye ring, whiskers, chelicerae
   const hx = 2.3 * u, hy = by + 0.15 * u;
@@ -141,7 +140,7 @@ function arachne(c: ChassisCtx): ChassisOut {
   // ---- pedipalp weapon housings at the giant-gun mounts (front flanks of the head)
   const palp = new Map<MountSpec, number>();
   for (const m of c.mounts) {
-    if (!(m.x > 0.9 * u && Math.abs(m.z) > 0.6 * u)) continue;
+    if (m.i === ts.hero || !(m.x > 0.9 * u && Math.abs(m.z) > 0.6 * u)) continue;
     const s = Math.sign(m.z) as -1 | 1, top = by + 1.3 * u;
     const pl = 2.2 * u, pw = m.r * 2.5, px = m.x + 0.45 * u;
     // arm from the head root to the housing: twin struts + a joint drum
@@ -178,12 +177,15 @@ function arachne(c: ChassisCtx): ChassisOut {
     hips = ([-1, 1] as const).map((s) => ({ p: [cx, stance.hipY, s * 1.6 * u] as V3, side: s, t: stance.thick, foot: [cx, 0, s * 1.9 * u] as V3, phase: s > 0 ? Math.PI : 0 }));
   }
   const deck = (x: number, z: number) => (inPoly(cp.map(([px, pz]) => [px * 0.5 + cx, pz * 0.5] as P2), x, z) ? cTop : -1);
+  const heroSeat = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : undefined;
   return {
-    deckAt: deck, top: tY, custom: true, hips,
+    deckAt: deck, top: yW + 2.4, custom: true, hips,
     seat: (m: MountSpec) => {
+      // the hero's yaw is the mantle's swivel (torso: at = the waist top)
+      if (m === heroSeat) return { y: yW, socket: true };
       const pt = palp.get(m);
       if (pt !== undefined) { collar(b, kit, m.x, pt, m.z, m.r, pt - 0.1 * u, 16); return { y: pt, socket: true }; }
-      if (Math.hypot(m.x - cx, m.z) < 0.9 * u) { collar(b, kit, m.x, tY, m.z, m.r, tY - 0.15 * u, 20); return { y: tY, socket: true }; }
+      if (Math.hypot(m.x - cx, m.z) < 0.9 * u) { collar(b, kit, m.x, yW, m.z, m.r, yW - 0.15 * u, 20); return { y: yW, socket: true }; }
       if (m.x < ax0 + 0.3 * u) {
         // tail gun on a faceted plinth over the abdomen
         const sg = segs.reduce((a, q) => (Math.abs(q.x - m.x) < Math.abs(a.x - m.x) ? q : a), segs[0]);
@@ -196,7 +198,85 @@ function arachne(c: ChassisCtx): ChassisOut {
       collar(b, kit, m.x, y, m.z, m.r, y - 0.4 * u, 16);
       return { y, socket: true };
     },
+    torso: heroSeat ? (t, { heroR }) => { buildMantle(t, c, ts, fine); return { hp: torsoHP(ts, slotBase, heroR), at: [cx, yW, 0] }; } : undefined,
   };
 }
 
+// ---- weapon mantle (torso): the whole battery twists on the waist as one weapon system ----------------------------
+// Yaw frame (origin = waist top, +x forward), world cells: weapons have a fixed size per class (XL 3.6, L 2.4, M 1.5),
+// so the mantle is laid out round those housings. The titan gun lies in a deep keel between two shoulder masses; each
+// shoulder carries a giant gun on its deck and the titan gun's trunnion bearing on its inner wall; a command spine
+// astern lifts the medium gun over the titan gun's breech. Only armed slots get their sponson / spine.
+const P_XL: V3 = [0.1, 0.55, 0];
+const P_L = (s: number): V3 => [0.55, 0.95, s * 2.75];
+const P_M: V3 = [-2.8, 2.3, 0];
+const slotBase = (i: number): V3 => (i === 0 ? P_XL : i === 1 ? P_L(-1) : i === 2 ? P_L(1) : i === 3 ? P_M : [-1.2, 1.4, 0]);
+
+function buildMantle(t: Bld, c: ChassisCtx, ts: TorsoSlots, fine: boolean): void {
+  const { kit } = c;
+  const pu = 0.055;
+  // swivel: dark bearing drum and a bright race
+  t.cyl(kit.mech, 1.35, 1.45, 0.24, [0, 0.12, 0], 'y', 18);
+  t.cylb(kit.joint, 1.5, 0.06, 0.01, [0, 0.22, 0], 'y', 18);
+  // keel: the long faceted gun bed the titan gun is laid in (nose glacis forward, tail aft), plated walls, ERA forward
+  const KP = mirror([[2.15, 0], [1.65, -1.05], [0.75, -1.6], [-1.9, -1.6], [-2.75, -1.05], [-3.15, 0]]);
+  planLoftT(t, kit.armor2, KP, [[0.1, 0.8], [0.3, 1.0], [0.6, 0.98], [0.72, 0.9]]);
+  armourWalls(t, kit, KP, [0.3, 1.0], [0.6, 0.98], { u: pu, pitch: 0.95, fill: 0.72, front: 0.75, rear: -0.9 });
+  // the bed under the gun: a dark trough with a glowing feed core showing between the gun and the keel
+  planLoftT(t, kit.mech, ngonT(8, 1.55, 0.75), [[0.68, 1.0], [0.76, 0.96]], [-0.5, 0]);
+  glow(t, kit, -0.5, 0.78, 0, 2.2, 0.05, 0.42, undefined, kit.plasma);
+  both((s) => glow(t, kit, -2.2, 0.66, s * 0.98, 0.9, 0.06, 0.06, [0, s * 0.62, 0], kit.plasma));
+  // shoulders: a deep armoured mass each side, deck = the giant gun's seat; ERA on the front, a stepped cheek outboard,
+  // the titan gun's trunnion bearing on the inner wall, a swept blade astern of the gun
+  both((s) => {
+    const slot = s < 0 ? 1 : 2;
+    const [, ly, lz] = P_L(s);
+    if (ts.armed(slot)) {
+      // shoulder mass: a wedge with a sloped glacis forward, its deck the giant gun's seat
+      block(t, kit.armor, -0.1, 0.12, lz * 0.97, 3.3, 1.95, ly - 0.12, { top: [0.78, 0.92], shift: [-0.3, s * 0.02], ch: 0.3, bev: 0.05, bot: 0.05 });
+      block(t, kit.mech, -1.5, 0.2, lz * 0.95, 0.9, 1.5, ly - 0.3, { ch: 0.2, bev: 0.03 });
+      // outer cheek: stepped dark plates with a glow seam under them
+      plateStack(t, kit, kit.armor2, frame([-0.05, ly * 0.5, s * 3.63], [0, 0, s], [1, 0, 0]), rectP(2.7, ly * 0.66, 0.1), [
+        { inset: 0, thick: pu * 1.4, standoff: pu * 0.5 }, { inset: pu * 2.2, thick: pu, mat: kit.armor, shift: [-0.25, 0] },
+      ], { gap: pu * 1.1 });
+      glow(t, kit, -0.1, 0.2, s * 3.62, 2.4, 0.08, 0.06);
+      // glacis: ERA bricks on the sloped front face
+      eraGrid(t, kit, frame([1.45, ly * 0.5, lz * 0.97], [0.75, 0.66, 0], [0, 0, 1]), 2, 3, 0.5, 0.3, pu * 0.7, kit.armor2);
+      // pauldron: a big swept armour mass rising behind the gun and raking out and back, a bone cap and a blade fin
+      block(t, kit.armor, -1.65, ly - 0.15, lz * 1.06, 1.5, 1.25, 1.05, { top: [0.4, 0.55], shift: [-0.55, s * 0.22], ch: 0.22, bev: 0.04, mid: [[0.5, 0.82, 0.92]] });
+      block(t, kit.shell, -2.05, ly + 0.88, lz * 1.06 + s * 0.2, 0.62, 0.62, 0.06, { top: [0.6, 0.7], shift: [-0.12, s * 0.04], ch: 0.1, bev: 0.015 });
+      block(t, kit.armor2, -2.0, ly + 0.25, lz * 1.06 + s * 0.6, 1.2, 0.12, 0.8, { top: [0.2, 0.6], shift: [-0.6, s * 0.1], ch: 0.04, bev: 0.015 });
+      glow(t, kit, -1.6, ly + 0.35, lz * 1.06 + s * 0.6, 0.7, 0.06, 0.05, [0, 0, 0.5]);
+      if (fine) piston(t, kit, [-1.0, 0.3, s * 1.75], [-1.5, ly + 0.2, s * 2.3], 0.06, 0.55, fine);
+    } else {
+      // unarmed side: a low armour skirt so the keel still reads as a mantle
+      block(t, kit.armor, -0.2, 0.12, s * 1.95, 2.4, 0.9, 0.5, { top: [0.9, 0.7], ch: 0.2, bev: 0.04 });
+    }
+    if (ts.armed(0)) {
+      // titan gun trunnion bearing: an upright armoured block on the shoulder's inner wall, the axle into the gun
+      const bx = P_XL[0] + 0.34, byy = P_XL[1] + 0.83;
+      block(t, kit.armor2, bx, 0.6, s * 1.76, 0.85, 0.3, byy + 0.28 - 0.6, { top: [0.7, 0.9], ch: 0.08, bev: 0.025 });
+      t.cyl(kit.joint, 0.22, 0.22, 0.42, [bx, byy, s * 1.42], 'z', 14);
+      t.cyl(kit.plasma, 0.12, 0.12, 0.06, [bx, byy, s * 1.93], 'z', 10);
+    }
+  });
+  if (ts.armed(3)) {
+    // command spine astern: a stepped armoured hump rising from the keel's tail behind the titan gun's breech up to the
+    // medium gun's seat (the skyline climbs aft), a bone glacis plate on its slope, fins and glowing slots on its flanks
+    const [mx, my] = P_M;
+    block(t, kit.armor, mx - 0.05, 0.55, 0, 1.6, 1.55, my - 0.55, { top: [0.66, 0.72], shift: [-0.1, 0], ch: 0.3, bev: 0.05, mid: [[0.45, 0.9, 0.95]] });
+    armorPlate(t, kit, kit.shell, frame([mx + 0.6, 1.5, 0], [0.95, 0.3, 0], [0, 0, 1]), rectP(1.05, 1.0, 0.12), pu * 1.3, { standoff: pu * 0.6 });
+    both((s) => {
+      plateStack(t, kit, kit.armor2, frame([mx - 0.1, (my + 0.55) / 2 - 0.1, s * 0.72], [0, 0, s], [1, 0, 0]), rectP(1.1, (my - 0.55) * 0.6, 0.08), [
+        { inset: 0, thick: pu * 1.2, standoff: pu * 0.4 }, { inset: pu * 1.6, thick: pu, mat: kit.armor },
+      ], { gap: pu });
+      glow(t, kit, mx + 0.25, my - 0.55, s * 0.6, 0.06, 0.55, 0.05, undefined, kit.plasma);
+      // radiator fins down the back
+      for (let k = 0; k < 3; k++) t.box(kit.mech, 0.06, 0.8, 0.4, mx - 0.78, 0.95 + k * 0.38, s * 0.34, 0.01, [0, 0, 0.45]);
+    });
+    hazard(t, kit, mx + 0.62, my - 0.18, 0, 0.6, 0.12, 3, Math.PI / 2);
+  }
+}
+
 registerChassis('arachne', arachne);
+registerTorso('arachne');
