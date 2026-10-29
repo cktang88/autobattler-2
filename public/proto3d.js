@@ -41120,6 +41120,11 @@ var MOBILITY2 = /* @__PURE__ */ new Map();
 function registerChassis(keys, fn) {
   for (const k of Array.isArray(keys) ? keys : [keys]) CHASSIS2.set(k, fn);
 }
+var TORSO = /* @__PURE__ */ new Set();
+function registerTorso(keys) {
+  for (const k of Array.isArray(keys) ? keys : [keys]) TORSO.add(k);
+}
+var hasTorso = (ch) => TORSO.has(ch.id) || !CHASSIS2.has(ch.id) && TORSO.has(ch.shape);
 function registerMobility(ids, def) {
   for (const k of Array.isArray(ids) ? ids : [ids]) MOBILITY2.set(k, def);
 }
@@ -47395,6 +47400,7 @@ function hunter2(c) {
   };
 }
 registerChassis("raider", raider2);
+registerTorso("raider");
 registerChassis("aegis", aegis2);
 registerChassis("hunter", hunter2);
 
@@ -47810,10 +47816,12 @@ function buildUnit(design, team) {
     }
   });
   const podOf = mods.map(() => -1);
-  if (!flying && S <= 3 && !PART_SHAPES.has(ch.shape) && hero >= 0 && tur[hero] && !tur[hero].fixed) {
+  const torsoHull = !flying && hasTorso(ch);
+  if (!flying && (torsoHull || S <= 3 && !PART_SHAPES.has(ch.shape)) && hero >= 0 && tur[hero] && !tur[hero].fixed) {
     let n = 0;
+    const max = torsoHull ? 6 : 3;
     mods.forEach((m, i) => {
-      if (n < 3 && i !== hero && m && m.kind === "weapon" && tur[i] && offs[i]) podOf[i] = n++;
+      if (n < max && i !== hero && m && m.kind === "weapon" && tur[i] && offs[i]) podOf[i] = n++;
     });
   }
   const specs = [];

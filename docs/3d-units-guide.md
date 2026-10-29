@@ -103,7 +103,10 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   and weapons twist together (a mech, not a turret on a box). It returns weapon hardpoints in the yaw frame:
   `hp[0]` = hero trunnion (its pitch group moves there), `hp[1..]` = pods; `at` moves the twist pivot. units3d
   drops the hero's ring / yoke / pod brackets; weapons keep their class size. The torso group is tagged `userData.torso` so the
-  garage socket / highlight skips it. Example: `raider` in `chassis/mechframes.ts`.
+  garage socket / highlight skips it. Example: `raider` in `chassis/mechframes.ts`. Declare the chassis with
+  `registerTorso(id)` (registry.ts): then ALL its secondary weapons ride the torso as pods at your hardpoints
+  (any size, any anatomy, up to 6), so the sim's mount table no longer decides where a gun is drawn: design the
+  hull, housing and hardpoints round the fixed-size weapons, never the other way round.
 - **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
   (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
   footprint art (`render/footart.ts`) still draws from them.

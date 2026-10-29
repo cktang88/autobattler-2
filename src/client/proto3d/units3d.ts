@@ -15,7 +15,7 @@ import type { MountClass } from '../../shared/types.ts';
 import { fixZFight } from './zfix.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
-import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
+import { chassisBuilder, hasTorso, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
 import { buildJet, buildRotor, type Air } from './air3d.ts';
 import { applySkin, pickSkin } from './skins.ts';
 import { pickFinish } from './finish3d.ts';
@@ -101,9 +101,11 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   // hero turret as pods on its flanks (right, mirrored left, then one on top at the back) instead of standing as
   // separate turrets on the deck: one cohesive weapon system that turns as a whole, nothing blocks anything's traverse
   const podOf: number[] = mods.map(() => -1);
-  if (!flying && S <= 3 && !PART_SHAPES.has(ch.shape) && hero >= 0 && tur[hero] && !tur[hero]!.fixed) {
+  const torsoHull = !flying && hasTorso(ch);
+  if (!flying && (torsoHull || (S <= 3 && !PART_SHAPES.has(ch.shape))) && hero >= 0 && tur[hero] && !tur[hero]!.fixed) {
     let n = 0;
-    mods.forEach((m, i) => { if (n < 3 && i !== hero && m && m.kind === 'weapon' && tur[i] && offs[i]) podOf[i] = n++; });
+    const max = torsoHull ? 6 : 3;
+    mods.forEach((m, i) => { if (n < max && i !== hero && m && m.kind === 'weapon' && tur[i] && offs[i]) podOf[i] = n++; });
   }
   const specs: MountSpec[] = [];
   tur.forEach((tu, i) => { if (tu && offs[i] && podOf[i] < 0) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });

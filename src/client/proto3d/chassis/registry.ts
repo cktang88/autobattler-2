@@ -150,6 +150,14 @@ const MOBILITY = new Map<string, MobilityBuilder>();
 export function registerChassis(keys: string | string[], fn: ChassisBuilder): void {
   for (const k of Array.isArray(keys) ? keys : [keys]) CHASSIS.set(k, fn);
 }
+const TORSO = new Set<string>();
+/** Declare chassis (ids or shapes) whose builder returns `torso`: ALL their secondary weapons then ride the hero's yaw
+ *  as pods (whatever the size or anatomy) at the torso's hardpoints, so the hull is designed round its weapons and
+ *  no mount position from the sim tables decides where a gun is drawn. */
+export function registerTorso(keys: string | string[]): void {
+  for (const k of Array.isArray(keys) ? keys : [keys]) TORSO.add(k);
+}
+export const hasTorso = (ch: ChassisDef): boolean => TORSO.has(ch.id) || (!CHASSIS.has(ch.id) && TORSO.has(ch.shape));
 export function registerMobility(ids: string | string[], def: MobilityBuilder): void {
   for (const k of Array.isArray(ids) ? ids : [ids]) MOBILITY.set(k, def);
 }

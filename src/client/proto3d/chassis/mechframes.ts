@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { mtx, type MatLike, type V3 } from '../geo.ts';
 import type { Bld } from '../geo.ts';
 import type { Kit } from '../materials.ts';
-import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
+import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { beam, block, both, collar } from './shapes.ts';
 import { frustum, ngon } from './tanks-kit.ts';
 import { antenna, armorPlate, fineFor, frame, jointDrum, piston, rectP } from './hs-kit.ts';
@@ -319,5 +319,6 @@ function hunter(c: ChassisCtx): ChassisOut {
 }
 
 registerChassis('raider', raider);
+registerTorso('raider');
 registerChassis('aegis', aegis);
 registerChassis('hunter', hunter);
