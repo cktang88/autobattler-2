@@ -152,9 +152,11 @@ export function capsule(B: Bld, mat: MatLike, x: number, y: number, z: number, R
 }
 
 /** Turret ring (deck bearing) under non-fixed weapons. */
-export function deckRing(C: WCtx, k = 0.8): void {
+export function deckRing(C: WCtx, k = 0.5): void {
+  // a low dark swivel well tucked under the housing, never a wide round plate (a dark disc under every gun read as
+  // "a cylinder put on a box"); octagonal so it reads as machined armour, not a turned dish
   const { b, kit, r } = C;
-  b.lathe(kit.trim, [[0, 0], [r * k, 0], [r * k, r * 0.07], [r * k * 0.9, r * 0.1], [0, r * 0.1]], [0, 0, 0], 'y', C.tier >= 4 ? 16 : 12);
+  b.lathe(kit.trim, [[0, 0], [r * k, 0], [r * k, r * 0.06], [r * k * 0.88, r * 0.09], [0, r * 0.09]], [0, 0, 0], 'y', 8, [0, Math.PI / 8, 0]);
 }
 
 /** Team accent panel lying on a face (horizontal by default). */
