@@ -107,6 +107,18 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   `registerTorso(id)` (registry.ts): then ALL its secondary weapons ride the torso as pods at your hardpoints
   (any size, any anatomy, up to 6), so the sim's mount table no longer decides where a gun is drawn: design the
   hull, housing and hardpoints round the fixed-size weapons, never the other way round.
+  More examples: the walkers in `chassis/walkers.ts` (strider, mantis, arachnid; shared `torsoOut()` helper, which
+  also builds the torso static when a fit has no weapon so all-utility fits still have a body).
+  Torso lessons:
+  - `hp[0]` is the hero's PITCH point, `hp[1..]` are the pods' YAW origins: a pod still has its own black turret ring
+    (S ~0.6 cells wide, 0.19 tall; M ~1.2 wide, 0.34 tall) and its trunnion sits ~0.16 (S) / 0.27-0.47 (M) above it.
+    A ring standing on a narrow forearm reads as a "disc on a box": sink it instead. Put the pod's yaw origin ~0.4 r
+    below the top of a forearm / shoulder bay / cradle at least 1.5-1.7 r across, so only the ring's lip shows, and give
+    the hero a matching lip so paired guns sit alike (arachnid).
+  - Two S guns cannot sit side by side on a 1-cell hull (2 x 0.75 + a body): put them on the centre line one behind
+    the other instead (mantis: chin gun under the head, second gun on a dorsal hump).
+  - Arm guns: trunnion just outside the chest flank (z ~ 0.3 + 0.78 r), the chest narrow at gun height and the
+    shoulders / pauldrons widening above the gun (strider): top-heavy without the gun clipping the body.
 - **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
   (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
   footprint art (`render/footart.ts`) still draws from them.

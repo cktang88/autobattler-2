@@ -6,10 +6,10 @@
 // floats when no column holds it. Flyers may also hang a pod from above, so their columns are walked upward too.
 // A negative control (a lifted / side-shifted turret) proves the check can fail.
 //
-//   node test/turretseat3d.test.ts                 -> runs as a test (all chassis except mantis, + starter designs)
+//   node test/turretseat3d.test.ts                 -> runs as a test (all chassis + starter designs)
 //   FLOAT_RANDOM=12 ...                             -> 12 extra seeded random fills per pairing (incl. melee / empties)
 //   FLOAT_LOD=0.5 ...                               -> check the far-view low-detail build instead
-//   FLOAT_ONLY=bastion,hunter FLOAT_V=1 node test/turretseat3d.test.ts   -> subset (may name mantis), print every turret
+//   FLOAT_ONLY=bastion,hunter FLOAT_V=1 node test/turretseat3d.test.ts   -> subset, print every turret
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,7 +38,7 @@ import type { Design, ModuleDef } from '../src/shared/types.ts';
 import type { Material, Mesh } from 'three';
 
 /** chassis the check skips (rebuilt separately) */
-const SKIP = new Set(['mantis']);
+const SKIP = new Set<string>();
 const SOLID = 0.035;
 
 // ---- tiny triangle BVH ------------------------------------------------------------------------------------------------
