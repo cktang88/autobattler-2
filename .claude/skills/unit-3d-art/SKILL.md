@@ -18,7 +18,8 @@ description: Design, model or fix the procedural 3D units (hulls, mech torsos, l
 5. Check before committing:
    - `npx tsc --noEmit`
    - `node --test test/turretseat3d.test.ts test/mountgeo.test.ts`, then `npm test`
-   - `node scripts/3d/zfight-scan.ts` (flicker), `node scripts/3d/tri-budget.ts` (S1 <= 15k, S2..S5 <= 30k)
+   - `node scripts/3d/zfight-scan.ts` (flicker), `node scripts/3d/tri-budget.ts` (S1 <= 15k, S2..S5 <= 30k),
+     `node scripts/3d/fit-audit.ts` (weapons fit their hull, no housings overlapping)
    - garage sockets if you touched turrets / pods / torso: `scripts/3d/garage-shots.cjs`
 6. Commit the rebuilt `public/proto3d.js(.map)` with the source change. Add anything new you learned to
    `docs/3d-units-guide.md`.
