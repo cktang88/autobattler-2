@@ -83,16 +83,20 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
 - Turret rig groups: `yaw` (traverse) > `pitch` > `recoil` > `spin`; static parts merged per material per group
   (`C.b` yaw, `C.p` pitch, `C.rc` recoil, `C.sp` spin). `C.muzzle(x,y,z)` adds a muzzle point; the game fires
   effects from the muzzle's world position.
-- **Hero scaling** (units3d): housing ~0.8 x min(L, W) (cap x3.2); secondaries >= 0.26 x min(L, W); on overlap the
-  hero keeps its size.
+- **Weapon size belongs to the weapon, never to the hull** (units3d `DRAW_D`): one drawn housing diameter per
+  size class, the same on every hull, main gun or not: S 0.75, M 1.5, L 2.4, XL 3.6 cells (calibre moves it a
+  little inside the class: sqrt of weaponD / slotD). The same gun is the same size everywhere, so players read
+  weapons by size. A hull gets its integrated look by being designed round its biggest slots (its 1-2 main weapon
+  slots, which are the bigger classes) with everything else fitting round them, NOT by inflating the main gun.
+  The weapon body's armour level (`C.arm`) also follows the size class only. Aircraft keep their own hardpoint
+  scale. Never rescale a weapon per hull (no hero boost, no shrinking to fit: fix the layout / mounts instead).
 - **Pods**: on ground hulls with S <= 3 whose shape is not in PART_SHAPES, secondary weapons ride the hero's yaw
   group as pods (`Turret.host`, aimed with `aimPod`, +-0.4 rad of their own). The chassis builder only receives the
   hero (and utilities) in `c.mounts`.
 - **Mech torso mode** (`ChassisOut.torso`): the chassis builds the upper body into the hero's yaw group, so torso
   and weapons twist together (a mech, not a turret on a box). It returns weapon hardpoints in the yaw frame:
-  `hp[0]` = hero trunnion (its pitch group moves there), `hp[1..]` = pods; `at` moves the twist pivot; `heroK`
-  rescales the hero (arm guns are smaller than a deck main gun). units3d drops the hero's ring / yoke / pod
-  brackets and sizes pods as limbs (same weapon = same size). The torso group is tagged `userData.torso` so the
+  `hp[0]` = hero trunnion (its pitch group moves there), `hp[1..]` = pods; `at` moves the twist pivot. units3d
+  drops the hero's ring / yoke / pod brackets; weapons keep their class size. The torso group is tagged `userData.torso` so the
   garage socket / highlight skips it. Example: `raider` in `chassis/mechframes.ts`.
 - **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
   (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
@@ -169,7 +173,6 @@ flush on a plate, two blocks sharing a face, a collar flush on a deck). The dept
 - Parallel agents: give each its own git worktree and render port, a written brief (concept rules + references +
   workflow), and tell them which shared files they must not touch. Merge their branches one at a time, re-run the
   tests, rebuild the bundle.
-- Pods are sized against the hero: if you rescale the hero, rescale the pods with it.
 
 ---
 
@@ -182,4 +185,5 @@ integrated weapon housings sized by chassis -> each unit built around ONE weapon
 railgun: real rails, sizzling energy, wings -> denser, cooler weapons; legs like real mech legs; hulls integrated
 and vertical; not low-poly; 30k budget and simplification -> flat hulls should become vertical bodies / mechs,
 diverse, built around their weapons -> research real mech games (War Robots, Star Wars, BattleTech): look cool,
-deadly, imposing -> fix flicker and garage sockets -> write all of this down (this file).
+deadly, imposing -> fix flicker and garage sockets -> write all of this down (this file) -> the same weapon must be
+the same size on every hull (size by class), hulls integrate by designing round their 1-2 main (bigger) slots.

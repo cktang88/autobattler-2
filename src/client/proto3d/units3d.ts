@@ -10,7 +10,8 @@ import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
 import { buildTurret, type Turret } from './weapons3d.ts';
-import { CLASS_RANK, weaponD } from '../render/weaponsize.ts';
+import { CLASS_RANK, slotD, weaponD } from '../render/weaponsize.ts';
+import type { MountClass } from '../../shared/types.ts';
 import { fixZFight } from './zfix.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
@@ -53,6 +54,9 @@ export function contactShadow(L: number, W: number): THREE.Mesh {
   return m;
 }
 
+/** Drawn housing diameter (cells) of a weapon / module at the middle of its size class, the same on every hull. */
+const DRAW_D: Record<MountClass, number> = { S: 0.75, M: 1.5, L: 2.4, XL: 3.6 };
+
 export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const ch = CHASSIS_BY_ID.get(design.chassis)!;
   const mob = MOBILITY_BY_ID.get(design.mobility)!;
@@ -88,32 +92,19 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   });
   const mainL = L * (LEGGED.has(mob.id) ? 0.62 : 1);
   const tur = mods.map((mod, i) => (mod ? buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), i === main ? mainL : 0) : null));
-  // hero weapon: the unit's biggest weapon is drawn well over life size so it dominates the silhouette (you read the
-  // unit from its gun at a glance, Mechabellum style); the rest a little over (render-only: the sim never sees it)
+  // weapon size is a property of the weapon, never of the hull it sits on or of whether it is the main gun: the same
+  // gun is drawn the same size on every unit (one drawn diameter per size class, calibre / weight moving it a little
+  // inside the class band), so a player reads a weapon by its size anywhere. A hull's look comes from being built
+  // round its biggest slots (its main weapon system), not from inflating whatever it carries. Aircraft keep their
+  // hardpoint scale (a ground turret's housing would swallow a jet).
   let hero = -1;
   mods.forEach((m, i) => { if (m && m.kind === 'weapon' && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]!))) hero = i; });
   tur.forEach((tu, i) => {
     if (!tu) return;
-    // hero housing ~0.8 x the hull width: the main weapon system IS the upper body; the others >= a quarter (x3.2 at most)
-    const wantD = Math.min(L, W) * (i === hero ? 0.8 : 0.26);
-    const k = flying ? 1.1 : Math.min(3.2, Math.max(i === hero ? 1.5 : 1.15, wantD / (2 * tu.r)));
+    const m = mods[i]!, cls = slotCls(m, i) ?? m.mount;
+    const k = flying ? 1.1 : (DRAW_D[cls] * Math.sqrt(weaponD(m, slotCls(m, i)) / slotD(cls))) / (2 * tu.r);
     tu.yaw.scale.setScalar(k); tu.r *= k;
   });
-  // calibre-true housings can outgrow tightly packed hardpoints (four M guns down a land-train spine, twin dorsal
-  // mounts on a small pod): shrink both housings of an overlapping ground pair until their rings just clear (>= 72%)
-  if (!flying) {
-    const sc = tur.map(() => 1);
-    for (let i = 0; i < tur.length; i++) for (let j = i + 1; j < tur.length; j++) {
-      const a = tur[i], b = tur[j], pa = offs[i], pb = offs[j];
-      if (!a || !b || !pa || !pb) continue;
-      const d = Math.hypot(pa.x - pb.x, pa.y - pb.y), want = 0.95 * (a.r + b.r);
-      if (d >= want) continue;
-      // the hero weapon keeps its size: the other housing gives way (down to 60%); otherwise both shrink
-      if (i === hero || j === hero) { const o = i === hero ? j : i, ro = tur[o]!.r, rh = tur[i === hero ? i : j]!.r; sc[o] = Math.min(sc[o], Math.max(0.6, (d / 0.95 - rh) / ro)); }
-      else { const k = Math.max(0.72, d / want); sc[i] = Math.min(sc[i], k); sc[j] = Math.min(sc[j], k); }
-    }
-    tur.forEach((tu, i) => { if (tu && sc[i] < 1) { tu.yaw.scale.multiplyScalar(sc[i]); tu.r *= sc[i]; } });
-  }
   // weapon pods: on small / medium ground hulls whose weapons are not carried by limbs, the secondary weapons ride the
   // hero turret as pods on its flanks (right, mirrored left, then one on top at the back) instead of standing as
   // separate turrets on the deck: one cohesive weapon system that turns as a whole, nothing blocks anything's traverse
@@ -177,8 +168,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const bk = new Bld();
     for (const i of pods) {
       const tu = tur[i]!, slot = podOf[i];
-      const k = Math.min(1, (H.r * 0.62) / tu.r);
-      tu.yaw.scale.multiplyScalar(k / kH); tu.r *= k;
+      tu.yaw.scale.multiplyScalar(1 / kH); // keeps its own drawn size inside the hero's scaled frame
       const rl = tu.r / kH, s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
       const x = slot < 2 ? -r0 * 0.12 : -r0 * 0.75, z = s * (r0 * 1.05 + rl * 0.9), y = slot < 2 ? py * 0.6 : py + r0 * 0.3;
       tu.yaw.position.set(x, y, z);
@@ -201,17 +191,11 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     tb.mount(T);
     H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
-    const hk = res.heroK ?? 1, p0 = res.hp[0] ?? [0, 0, 0];
+    const p0 = res.hp[0] ?? [0, 0, 0];
     H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);
-    H.pitch.scale.setScalar(hk);
-    H.r *= hk;
     pods.forEach((i, j) => {
       const p = res.hp[j + 1], tu = tur[i]!;
       if (p) tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
-      // arm / shoulder weapons are sized like limbs of one body: by their size relative to the hero, not shrunk to fit
-      // beside a deck turret (twin arm guns of the same kind come out the same size)
-      const want = H.r * Math.min(1, weaponD(mods[i]!) / weaponD(mods[hero]!));
-      tu.yaw.scale.multiplyScalar(want / tu.r); tu.r = want;
     });
   }
   // turret list in design mount order (render3d maps mount i -> the i-th present turret)

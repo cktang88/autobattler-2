@@ -120,8 +120,9 @@ export interface ChassisOut {
    *  Called after the turrets exist with a builder in the hero yaw frame (origin = the hero seat, +x forward, world
    *  units, unscaled); returns the weapon hardpoints in that frame: hp[0] = the hero's trunnion, hp[1..] = the pods
    *  (secondary weapons riding the hero, in pod order). units3d drops the hero's ring / yoke and the pod brackets.
-   *  at moves the twist pivot (the hero yaw origin) to that point of the hull frame. heroK rescales the hero weapon (arm guns are usually smaller than a deck-mounted main gun). */
-  torso?: (b: Bld, t: { heroR: number; podR: number[] }) => { hp: V3[]; heroK?: number; at?: V3 };
+   *  at moves the twist pivot (the hero yaw origin) to that point of the hull frame. Weapons keep their own class size
+   *  (units3d DRAW_D): design the torso round the slot sizes, never rescale a weapon. */
+  torso?: (b: Bld, t: { heroR: number; podR: number[] }) => { hp: V3[]; at?: V3 };
 }
 
 export type ChassisBuilder = (c: ChassisCtx) => ChassisOut;

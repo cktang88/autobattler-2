@@ -38667,6 +38667,10 @@ function weaponD(m, cls) {
   const [a, b] = BAND_D[tierOf(m, cls)];
   return a + (b - a) * classPos(m, cls);
 }
+function slotD(cls) {
+  const [a, b] = BAND_D[CLASS_RANK[cls]];
+  return (a + b) / 2;
+}
 var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
 
 // src/client/proto3d/weapons/wkit.ts
@@ -40642,9 +40646,9 @@ function buildTurret(mod, S, kit, fixed = false, cls, mainL = 0) {
     c: classPos(mod, ov),
     tier: ov ? CLASS_RANK[ov] : moduleTier(mod),
     nb: mod.barrels ?? 1,
-    // armour level of the weapon body: grows with the chassis, shrinks for a weapon big for its chassis (a small unit
-    // carrying a big gun is mostly exposed gun on a slim mount; a big body wraps it in a full armoured housing)
-    arm: Math.max(0, Math.min(1, (S - 0.5) / 3 - ((ov ? CLASS_RANK[ov] : moduleTier(mod)) - 2) * 0.15)),
+    // armour level of the weapon body by its size class only (a weapon looks the same on every hull): small weapons
+    // are slim exposed guns, medium ones get side pods and a sensor, large / titan weapons the full armoured body
+    arm: ((t2) => t2 <= 1 ? 0.15 : t2 <= 2 ? 0.5 : t2 <= 4 ? 0.85 : 1)(ov ? CLASS_RANK[ov] : moduleTier(mod)),
     // stylized but gun-like: barrel radius ~0.4 x the true bore width (long slim tubes read as machines, fat pipes as
     // toys), never thinner than 7.5% of the housing radius so it survives a small screen
     bore: Math.max(boreOf(calibreMm(mod)) * 0.4 * kS, r * 0.075),
@@ -47219,7 +47223,7 @@ function raider2(c) {
         t.cyl(kit.hot, 0.02 * u, 0.02 * u, 0.01 * u, [-0.425 * u, 0.367 * u, sd * 0.1 * u], "y", 8);
         pbox5(t, kit.plasma, 8e-3 * u, 0.1 * u, 0.04 * u, -0.345 * u, 0.15 * u, sd * 0.06 * u);
       });
-      return { hp: [[0.06 * u, 0, 0.44 * u], [0.06 * u, 0, -0.44 * u], [-0.1 * u, 0.32 * u, 0.2 * u], [-0.1 * u, 0.32 * u, -0.2 * u]], heroK: 0.8, at: [-0.03 * u, seatY, 0] };
+      return { hp: [[0.06 * u, 0, 0.44 * u], [0.06 * u, 0, -0.44 * u], [-0.1 * u, 0.32 * u, 0.2 * u], [-0.1 * u, 0.32 * u, -0.2 * u]], at: [-0.03 * u, seatY, 0] };
     }
   };
 }
@@ -47767,6 +47771,7 @@ function contactShadow(L, W) {
   m.renderOrder = 0;
   return m;
 }
+var DRAW_D = { S: 0.75, M: 1.5, L: 2.4, XL: 3.6 };
 function buildUnit(design, team) {
   const ch = CHASSIS_BY_ID.get(design.chassis);
   const mob = MOBILITY_BY_ID.get(design.mobility);
@@ -47805,34 +47810,11 @@ function buildUnit(design, team) {
   });
   tur.forEach((tu, i) => {
     if (!tu) return;
-    const wantD = Math.min(L, W) * (i === hero ? 0.8 : 0.26);
-    const k = flying ? 1.1 : Math.min(3.2, Math.max(i === hero ? 1.5 : 1.15, wantD / (2 * tu.r)));
+    const m = mods[i], cls = slotCls(m, i) ?? m.mount;
+    const k = flying ? 1.1 : DRAW_D[cls] * Math.sqrt(weaponD(m, slotCls(m, i)) / slotD(cls)) / (2 * tu.r);
     tu.yaw.scale.setScalar(k);
     tu.r *= k;
   });
-  if (!flying) {
-    const sc2 = tur.map(() => 1);
-    for (let i = 0; i < tur.length; i++) for (let j = i + 1; j < tur.length; j++) {
-      const a = tur[i], b = tur[j], pa = offs[i], pb = offs[j];
-      if (!a || !b || !pa || !pb) continue;
-      const d = Math.hypot(pa.x - pb.x, pa.y - pb.y), want = 0.95 * (a.r + b.r);
-      if (d >= want) continue;
-      if (i === hero || j === hero) {
-        const o = i === hero ? j : i, ro = tur[o].r, rh = tur[i === hero ? i : j].r;
-        sc2[o] = Math.min(sc2[o], Math.max(0.6, (d / 0.95 - rh) / ro));
-      } else {
-        const k = Math.max(0.72, d / want);
-        sc2[i] = Math.min(sc2[i], k);
-        sc2[j] = Math.min(sc2[j], k);
-      }
-    }
-    tur.forEach((tu, i) => {
-      if (tu && sc2[i] < 1) {
-        tu.yaw.scale.multiplyScalar(sc2[i]);
-        tu.r *= sc2[i];
-      }
-    });
-  }
   const podOf = mods.map(() => -1);
   if (!flying && S <= 3 && !PART_SHAPES.has(ch.shape) && hero >= 0 && tur[hero] && !tur[hero].fixed) {
     let n = 0;
@@ -47888,9 +47870,7 @@ function buildUnit(design, team) {
     const bk = new Bld();
     for (const i of pods) {
       const tu = tur[i], slot = podOf[i];
-      const k = Math.min(1, H.r * 0.62 / tu.r);
-      tu.yaw.scale.multiplyScalar(k / kH);
-      tu.r *= k;
+      tu.yaw.scale.multiplyScalar(1 / kH);
       const rl = tu.r / kH, s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
       const x = slot < 2 ? -r0 * 0.12 : -r0 * 0.75, z = s * (r0 * 1.05 + rl * 0.9), y = slot < 2 ? py2 * 0.6 : py2 + r0 * 0.3;
       tu.yaw.position.set(x, y, z);
@@ -47910,16 +47890,11 @@ function buildUnit(design, team) {
     tb.mount(T);
     H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
-    const hk = res.heroK ?? 1, p0 = res.hp[0] ?? [0, 0, 0];
+    const p0 = res.hp[0] ?? [0, 0, 0];
     H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);
-    H.pitch.scale.setScalar(hk);
-    H.r *= hk;
     pods.forEach((i, j) => {
       const p = res.hp[j + 1], tu = tur[i];
       if (p) tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
-      const want = H.r * Math.min(1, weaponD(mods[i]) / weaponD(mods[hero]));
-      tu.yaw.scale.multiplyScalar(want / tu.r);
-      tu.r = want;
     });
   }
   mods.forEach((_, i) => {
