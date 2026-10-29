@@ -15,10 +15,12 @@
 // wrist housing carries a weapon; melee weapons get an open jaw so the tool reads as a claw at the end of an arm.
 
 import * as THREE from 'three';
-import { aim, Bld, strutGeo, type MatLike, type P2, type V3 } from '../geo.ts';
+import { aim, Bld, mtx, strutGeo, type MatLike, type P2, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
-import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
-import { block, both, collar, dome, exhaust, glow, hazard } from './shapes.ts';
+import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
+import { MODULE_BY_ID } from '../../../shared/parts.ts';
+import { PART_REST } from '../../../shared/mountgeo.ts';
+import { beam, block, both, collar, exhaust, glow, hazard } from './shapes.ts';
 import {
   antenna, armorPlate, cableBundle, cagedLamp, crewHatch, exhaustBox, fineFor, frame, frameLimb, hexSec, hose, inset, jointDrum, piston, plateStack, recessPanel,
   rectP, smokeLaunchers, stowBox, sub, trapP, visionBlocks,
@@ -371,18 +373,98 @@ function tailgunCrawler(c: ChassisCtx): ChassisOut {
 
 // ---- Saucer Disc --------------------------------------------------------------------------------------------------------
 
+/** glowing core seen through a ribbed dark cage (vertical): emissive drum, n dark ribs round it, dark rims */
+function coreCage(b: Bld, kit: Kit, x: number, y: number, z: number, r: number, h: number, n: number, mat: MatLike = kit.plasma): void {
+  b.cyl(mat, r * 0.84, r * 0.84, h, [x, y, z], 'y', Math.max(8, n));
+  const tw = ((Math.PI * 2 * r) / n) * 0.5;
+  for (let i = 0; i < n; i++) {
+    const a = ((i + 0.5) / n) * Math.PI * 2;
+    b.g(new THREE.BoxGeometry(r * 0.32, h, tw), kit.mech, new THREE.Matrix4().makeRotationY(-a).setPosition(x + Math.cos(a) * r * 0.9, y + h / 2, z + Math.sin(a) * r * 0.9));
+  }
+}
+
+/** turret-ish launch / melee weapons carry their trunnion higher in the housing than guns (weapons3d) */
+const TALL_VIS = new Set(['rocketPod', 'missileRack', 'cruise', 'mortar', 'artillery', 'charge']);
+const pitchEst = (m: MountSpec) => m.r * (TALL_VIS.has(m.mod.visual ?? '') || isMelee(m) ? 0.62 : 0.38);
+
+/** Saucer gun crown stations (cells, crown frame: origin on the swivel bearing, +x forward). The two medium guns ride
+ *  armoured sponsons hung off the crown's flanks, far enough apart that two M housings (1.5 cells) stand side by side
+ *  with clear space; the small slot stands on a raised dorsal pylon behind them, high enough to fire over the spine. */
+const SAUCER_SP = 0.86, SAUCER_SPY = 0.33, SAUCER_DX = -0.86, SAUCER_DY = 0.7;
+
+/**
+ * The rotating gun crown of the Saucer Disc (it twists as one with its weapons). A low dark faceted core with a team
+ * carapace and a bone spine plate, a forward beak with a V of hot visor slits, two big armoured sponsons on the flanks
+ * (dark core, team shell, outer armour plate with a glowing vent, front glacis, chin keel, bearing plate the gun stands
+ * on), a raised dorsal pylon at the back for the small gun, two blade fins raking back with hot exhaust tips. y0 lifts
+ * everything (0 inside the torso frame; the crown height when drawn static on a hull with no weapon). heroSt: which
+ * station the hero (whose own yaw base is dropped) stands on, so it gets a base block like a pod's.
+ */
+function saucerCrown(t: Bld, kit: Kit, fine: boolean, y0: number, heroSt: number, heroR: number): void {
+  const Y = (y: number) => y0 + y;
+  const SP = SAUCER_SP, SY = SAUCER_SPY;
+  // core pod: a narrow dark hull between the guns (it fits between the two housings), a keel round the bearing
+  block(t, kit.mech, -0.08, Y(-0.1), 0, 1.36, 0.56, 0.42, { top: [0.84, 0.86], shift: [-0.04, 0], ch: 0.14, bev: 0.03, bot: 0.05 });
+  block(t, kit.armor2, -0.04, Y(-0.18), 0, 0.7, 0.62, 0.1, { top: [1.1, 0.9], ch: 0.12, bev: 0.02 });
+  // carapace: a team shell with a glowing seam along its foot, a bone spine plate stepping down to the beak
+  block(t, kit.armor, -0.16, Y(0.26), 0, 1.06, 0.52, 0.36, { top: [0.66, 0.62], shift: [-0.1, 0], ch: 0.12, bev: 0.03, bot: 0.015, mid: [[0.45, 0.94, 0.98]] });
+  both((s) => glow(t, kit, -0.12, Y(0.27), s * 0.255, 0.8, 0.04, 0.03, undefined, kit.plasma));
+  block(t, kit.shell, -0.3, Y(0.62), 0, 0.5, 0.22, 0.045, { top: [0.8, 0.7], ch: 0.05, bev: 0.012 });
+  both((s) => block(t, kit.armor2, -0.2, Y(0.4), s * 0.17, 0.62, 0.14, 0.2, { top: [0.6, 0.6], shift: [-0.12, s * 0.02], ch: 0.04, bev: 0.012 }));
+  // beak: a team wedge leaning forward over a dark chin, a V of hot visor slits, a lamp
+  block(t, kit.mech, 0.62, Y(-0.06), 0, 0.34, 0.42, 0.28, { top: [0.6, 0.8], shift: [-0.04, 0], ch: 0.08, bev: 0.02 });
+  block(t, kit.armor, 0.5, Y(0.14), 0, 0.56, 0.5, 0.32, { top: [0.3, 0.6], shift: [-0.17, 0], ch: 0.1, bev: 0.02, bot: 0.01 });
+  both((s) => t.g(new THREE.BoxGeometry(0.16, 0.035, 0.035), kit.hot, mtx([0.71, Y(0.18), s * 0.085], [0, s * 0.5, -0.5])));
+  t.cyl(kit.lamp, 0.035, 0.035, 0.03, [0.8, Y(0.04), 0], 'x', 8);
+  both((s) => {
+    const z = s * SP;
+    // sponson arm: a dark box beam out of the core flank, a ram under it
+    beam(t, kit.mech, [-0.1, Y(0.1), s * 0.22], [-0.04, Y(SY - 0.12), z], 0.5, 0.16);
+    piston(t, kit, [0.14, Y(-0.06), s * 0.26], [0.14, Y(SY - 0.2), z - s * 0.24], 0.035, 0.55, fine);
+    // cradle under the gun (narrower than the housing: the gun overhangs it), bearing plate on top
+    block(t, kit.mech, -0.02, Y(SY - 0.2), z, 0.86, 0.6, 0.18, { top: [0.9, 0.9], ch: 0.1, bev: 0.02, bot: 0.03 });
+    t.cylb(kit.joint, 0.36, 0.035, 0.008, [0, Y(SY - 0.03), z], 'y', 16);
+    // pauldron: layered armour hanging down and out from the cradle's outer edge (a shoulder under the gun),
+    // team plate over a dark backing, bone top layer, glow vent, hazard band on its nose
+    block(t, kit.armor2, -0.04, Y(SY - 0.34), z + s * 0.06, 0.9, 0.5, 0.18, { top: [1.04, 1.2], shift: [0, s * 0.06], ch: 0.08, bev: 0.02, bot: 0.03 });
+    const pd = frame([-0.06, Y(SY - 0.27), z + s * 0.36], [0, 1, s * 0.75], [1, 0, 0]);
+    plateStack(t, kit, kit.armor, pd, trapP(1.0, 0.4, 0.5, 0.09), [
+      { inset: 0, thick: 0.06, standoff: 0.03 },
+      { inset: 0.07, thick: 0.04, shift: [-0.06, 0.02], mat: kit.armor2 },
+    ], { gap: 0.04 });
+    glow(t, kit, -0.1, Y(SY - 0.33), z + s * 0.5, 0.56, 0.035, 0.035, [0.9 * s, 0, 0]);
+    hazard(t, kit, 0.38, Y(SY - 0.2), z + s * 0.3, 0.07, 0.24, 3, Math.PI / 2);
+  });
+  // dorsal pylon behind the core for the small gun: a raked dark column under a team cap, a glowing slot
+  beam(t, kit.mech, [-0.56, Y(0.06), 0], [SAUCER_DX, Y(SAUCER_DY - 0.16), 0], 0.26, 0.24);
+  block(t, kit.armor, SAUCER_DX + 0.02, Y(SAUCER_DY - 0.2), 0, 0.44, 0.36, 0.16, { top: [0.86, 0.86], ch: 0.09, bev: 0.02, bot: 0.02 });
+  glow(t, kit, -0.66, Y(0.26), 0, 0.12, 0.04, 0.27, [0, 0, -0.6], kit.plasma);
+  t.cylb(kit.joint, 0.17, 0.03, 0.006, [SAUCER_DX, Y(SAUCER_DY - 0.03), 0], 'y', 12);
+  // blade fins raking back from the core's shoulders, hot exhaust tips
+  both((s) => {
+    beam(t, kit.armor2, [-0.42, Y(0.22), s * 0.2], [-1.0, Y(0.42), s * 0.36], 0.09, 0.07);
+    t.cyl(kit.hot, 0.035, 0.035, 0.02, [-1.02, Y(0.43), s * 0.365], 'x', 8);
+    if (fine) t.g(new THREE.BoxGeometry(0.34, 0.12, 0.02), kit.armor, mtx([-0.7, Y(0.38), s * 0.3], [0, s * 0.27, 0.4]));
+  });
+  // the hero's housing base (its own yaw base is dropped in torso mode): a block shaped like a pod's base
+  if (heroSt >= 0) {
+    const [x, y, z] = heroSt < 2 ? [0, SY, (heroSt ? 1 : -1) * SP] : [SAUCER_DX, SAUCER_DY, 0];
+    block(t, kit.mech, x - heroR * 0.06, Y(y), z, heroR * 1.2, heroR * 1.0, heroR * 0.34, { top: [0.86, 0.8], ch: heroR * 0.2, bev: heroR * 0.04 });
+  }
+}
+
 function saucerDisc(c: ChassisCtx): ChassisOut {
-  // An alien disc built like a machine: a dark faceted underside bowl with an emitter ring, a ring of eight separate
-  // armour petals on the sloped upper skirt (gaps between them, each standing proud on a dark backing), the glowing rim
-  // band showing in the shadow line under the petals, a raised turret plateau (armour drum + cap plate), a cockpit
-  // canopy on an armoured collar with two ribs, louvred vents at the rear. On legs it is a tripod on armoured hip
-  // housings. Asymmetric: a sensor mast at the rear left, an antenna whisker at the rear right, a crew hatch on the right.
+  // A spinning-top gunship: a static alien disc below (dark faceted underside bowl with an emitter ring, a ring of eight
+  // armour petals over a glowing rim band, a deck for utilities), a glowing core in a ribbed cage as the waist, and on it
+  // a rotating gun crown that is built round its two medium guns: they ride armoured sponsons on the crown's flanks,
+  // wider than the disc, with clear space between them, the small gun on a dorsal pylon behind (saucerCrown). All the
+  // weapons turn with the crown (mech torso mode). On legs the disc is a tripod on armoured hip housings.
   const { b, kit, stance, L, W, ch } = c;
   const R = (ch.art?.[0] ?? Math.min(L, W)) / 2; // 0.875
   const u = R / 0.875;
   const fine = fineFor(c.S);
   const legged = stance.legs !== null;
-  const by = legged ? stance.hipY + 0.32 * u : stance.y0 + 0.2 * u;
+  const by = legged ? stance.hipY + 0.26 * u : stance.y0 + 0.2 * u;
   const deckY = by + 0.18 * u;
   // underside: dark faceted bowl + core skirt under the petals
   b.lathe(kit.mech, [[0, by - 0.2 * u], [0.32 * u, by - 0.2 * u], [0.62 * u, by - 0.13 * u], [0.84 * u, by - 0.03 * u], [0.86 * u, by], [0, by]], [0, 0, 0], 'y', 16);
@@ -391,7 +473,7 @@ function saucerDisc(c: ChassisCtx): ChassisOut {
   b.lathe(kit.glow, [[0.84 * u, by - 0.03 * u], [0.875 * u, by - 0.025 * u], [0.875 * u, by - 0.005 * u], [0.84 * u, by - 0.005 * u]], [0, 0, 0], 'y', 16);
   b.lathe(kit.glow, [[0.16 * u, by - 0.21 * u], [0.26 * u, by - 0.21 * u], [0.26 * u, by - 0.2 * u], [0.16 * u, by - 0.2 * u]], [0, 0, 0], 'y', 10);
   b.lathe(kit.joint, [[0.12 * u, by - 0.2 * u], [0.3 * u, by - 0.2 * u], [0.3 * u, by - 0.23 * u], [0.12 * u, by - 0.23 * u]], [0, 0, 0], 'y', 10);
-  // armour petals: eight trapezoids on the sloped skirt (the front one split around the canopy), alternating shades
+  // armour petals: eight trapezoids on the sloped skirt, alternating shades
   const sl = Math.atan2(deckY - 0.03 * u - (by + 0.02 * u), 0.84 * u - 0.62 * u);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -399,31 +481,21 @@ function saucerDisc(c: ChassisCtx): ChassisOut {
     const rm = 0.74 * u, ym = (by + deckY) / 2 + 0.005 * u;
     const n: V3 = [ca * Math.sin(sl), Math.cos(sl), sa * Math.sin(sl)];
     const F = frame([ca * rm, ym, sa * rm], n, [-sa, 0, ca]);
-    // local +z runs up the slope (inward): narrow end there
     const petal: P2[] = [[-0.3 * u, -0.13 * u], [0.3 * u, -0.13 * u], [0.2 * u, 0.12 * u], [-0.2 * u, 0.12 * u]];
     armorPlate(b, kit, i % 2 ? kit.armor2 : kit.armor, F, petal, 0.035 * u, { standoff: 0.014 * u, gap: 0.03 * u });
   }
-  // turret plateau: armoured drum, dark seam, cap plate
-  b.lathe(kit.armor, [[0, 0], [0.6 * u, 0], [0.62 * u, 0.06 * u], [0.6 * u, 0.1 * u], [0, 0.1 * u]], [0, deckY - 0.08 * u, 0], 'y', 16);
-  b.lathe(kit.mech, [[0.5 * u, 0], [0.61 * u, 0], [0.61 * u, 0.015 * u], [0.5 * u, 0.015 * u]], [0, deckY - 0.01 * u, 0], 'y', 16);
-  // cockpit canopy at the front edge on an armoured collar, two ribs over the glass, sensor eye under it
-  const cpx = 0.66 * u, cpy = deckY - 0.02 * u;
-  b.lathe(kit.armor2, [[0, 0], [0.2 * u, 0], [0.19 * u, 0.05 * u], [0, 0.05 * u]], [cpx, cpy - 0.03 * u, 0], 'y', 10);
-  dome(b, kit.glass, [cpx, cpy + 0.02 * u, 0], 0.16 * u, 0.13 * u, 10, 2);
-  for (const zf of [-0.35, 0.35]) {
-    const R0 = 0.165 * u, z0 = zf * R0, rr = Math.sqrt(R0 * R0 - z0 * z0);
-    const rows: V3[][] = [];
-    for (let i = 0; i <= 3; i++) { const th = 0.3 + (i / 3) * 2.5; rows.push([-1, 1].map((e) => [cpx + Math.cos(th) * rr, cpy + 0.02 * u + Math.sin(th) * rr * 0.8, z0 + e * 0.014 * u] as V3)); }
-    b.g(shellGeo(rows, 0.012 * u, (q) => { const d: V3 = [cpx - q[0], cpy - q[1], 0]; const l = Math.hypot(d[0], d[1]) || 1; return [d[0] / l, d[1] / l, 0]; }), kit.armor);
-  }
+  // deck: a team drum ring round the waist, dark seam, louvred vents and a hatch on it
+  b.lathe(kit.armor, [[0.3 * u, 0], [0.6 * u, 0], [0.62 * u, 0.05 * u], [0.58 * u, 0.08 * u], [0.3 * u, 0.08 * u]], [0, deckY - 0.06 * u, 0], 'y', 16);
+  both((s) => recessPanel(b, kit, frame([-0.44 * u, deckY + 0.02 * u, s * 0.2 * u], [0, 1, 0], [0, 0, 1]), 0.16 * u, 0.1 * u, 0.015 * u, { slats: fine ? 3 : 0 }));
   eyeCluster(b, kit, frame([0.8 * u, by + 0.02 * u, 0], [0, 1, 0], [1, 0, 0]), [[0, 0, 0.03 * u], [-0.08 * u, 0, 0.018 * u], [0.08 * u, 0, 0.018 * u]]);
-  // rear: two louvred vents on the skirt, sensor mast (left), whisker antenna (right), hatch (right)
-  both((s) => recessPanel(b, kit, frame([-0.48 * u, deckY - 0.02 * u, s * 0.28 * u], [-0.3, 1, 0], [0, 0, 1]), 0.18 * u, 0.12 * u, 0.02 * u, { slats: fine ? 3 : 0 }));
-  b.strut(kit.joint, [-0.5 * u, deckY - 0.04 * u, -0.46 * u], [-0.62 * u, deckY + 0.3 * u, -0.52 * u], 0.02 * u, 0.012 * u, 5);
-  b.cyl(kit.mech, 0.04 * u, 0.04 * u, 0.06 * u, [-0.62 * u, deckY + 0.3 * u, -0.52 * u], 'y', 6);
-  b.g(new THREE.BoxGeometry(0.03 * u, 0.02 * u, 0.03 * u), kit.lamp, new THREE.Matrix4().makeTranslation(-0.62 * u, deckY + 0.37 * u, -0.52 * u));
-  antenna(b, kit, -0.66 * u, deckY - 0.06 * u, 0.42 * u, 0.5 * u, 0.008 * u, [-0.5, 0, 0.2]);
-  crewHatch(b, kit, frame([-0.2 * u, deckY + 0.025 * u, 0.42 * u], [0, 1, 0]), 0.07 * u, fine);
+  antenna(b, kit, -0.66 * u, deckY - 0.06 * u, 0.42 * u, 0.36 * u, 0.008 * u, [-0.5, 0, 0.2]);
+  // waist: a glowing core in a ribbed cage between the deck and the crown bearing (the crown swivels on it); taller when
+  // utilities stand on the deck, so the crown and its sponsons swing clear over them
+  const hero = c.mounts.filter((m) => m.mod.kind === 'weapon').reduce<MountSpec | undefined>((a, m) => (!a || m.r > a.r ? m : a), undefined);
+  const crownY = deckY + Math.max(0.5 * u, ...c.mounts.filter((m) => m !== hero).map((m) => 0.22 * u + m.r * 1.45));
+  b.cylb(kit.mech, 0.34 * u, 0.06 * u, 0.012 * u, [0, deckY + 0.01 * u, 0], 'y', 14);
+  coreCage(b, kit, 0, deckY + 0.06 * u, 0, 0.26 * u, crownY - deckY - 0.1 * u, 10);
+  b.cylb(kit.joint, 0.3 * u, 0.05 * u, 0.01 * u, [0, crownY - 0.05 * u, 0], 'y', 14);
   let hips: Hip[] | undefined;
   if (legged) {
     // tripod: one leg forward, two swept back, each from an armoured hip housing under the disc
@@ -438,116 +510,187 @@ function saucerDisc(c: ChassisCtx): ChassisOut {
       b.cyl(kit.armor2, t * 1.25, t * 1.15, t * 0.2, [h.p[0], by - 0.2 * u - t * 0.3, h.p[2]], 'y', 8);
     }
   }
-  const deck = (x: number, z: number) => { const r = Math.hypot(x, z); return r < 0.6 * u ? deckY + 0.02 * u : r < 0.86 * u ? by + 0.1 * u : -1; };
+  // the crown stations: M slots on the sponsons (slot 0 left, 1 right), the S slot on the dorsal pylon
+  const st = (i: number): V3 => (i < 2 ? [0, SAUCER_SPY, (i ? 1 : -1) * SAUCER_SP] : [SAUCER_DX, SAUCER_DY, 0]);
+  if (!hero) saucerCrown(b, kit, fine, crownY, -1, 0); // no weapon: the crown stands still
+  const deck = (x: number, z: number) => { const r = Math.hypot(x, z); return r < 0.62 * u ? deckY + 0.02 * u : r < 0.86 * u ? by + 0.1 * u : -1; };
   return {
-    deckAt: deck, top: deckY, hips, custom: true, dressed: true,
-    seat: (m) => { collar(b, kit, m.x, deckY + 0.02 * u, m.z, m.r, deckY - 0.04 * u, 14); return { y: deckY + 0.02 * u, socket: true }; },
+    deckAt: deck, top: crownY + 0.5, hips, custom: true, dressed: true,
+    // utilities stand on the deck under the crown; the hero's own seat is replaced by the torso
+    seat: (m) => {
+      if (m === hero) return { y: crownY, socket: true };
+      const y = Math.max(deck(m.x, m.z), deckY) + 0.02 * u;
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.06 * u, 14);
+      return { y, socket: true };
+    },
+    torso: hero ? (t) => {
+      // pods are the other weapons in slot order: each takes its slot's station
+      const pods = c.design.mounts.map((id, i) => (i !== hero.i && id && MODULE_BY_ID.get(id)?.kind === 'weapon' ? i : -1)).filter((i) => i >= 0);
+      saucerCrown(t, kit, fine, 0, Math.min(hero.i, 2), hero.r);
+      const h0 = st(Math.min(hero.i, 2));
+      return { hp: [[h0[0], h0[1] + pitchEst(hero), h0[2]], ...pods.map((i) => st(Math.min(i, 2)))], at: [0, crownY, 0] };
+    } : undefined,
   };
 }
 
 // ---- Landtrain ------------------------------------------------------------------------------------------------------------
 
+/** One gun car of the Landtrain in its own frame (centreline z = 0, gun at z = s * zg): a dark bogie frame and coupler,
+ *  and a casemate built round the gun: a dark wedge across the car whose roof climbs from the far side up to the gun
+ *  side and leans out over the running gear there (top-heavy, the weapon on its crest), team armour on the slope, a
+ *  dark outer wall plate with a glow slit, a bone crest plate the gun's bearing ring sits on; a low armoured reactor
+ *  bunker on the far side (under the neighbouring guns' housings) with a glowing window. Seen from above the cars form
+ *  a saw-tooth of alternating wedges down the train. */
+function trainCar(cb: Bld, kit: Kit, fine: boolean, by: number, ys: number, s: number, zg: number, r: number, big: boolean, last: boolean): void {
+  const L = 0.62, zb = s * zg;
+  // bogie frame + coupler to the car behind
+  block(cb, kit.mech, 0, by - 0.2, 0, L * 0.9, 0.96, 0.24, { top: [1.04, 1.04], ch: 0.08, bev: 0.02, bot: 0.03 });
+  if (!last) {
+    cb.cylb(kit.joint, 0.09, 0.2, 0.02, [-L / 2 - 0.12, by - 0.08, 0], 'x', 8);
+    if (fine) hose(cb, kit, [-L / 2, by + 0.02, -s * 0.2], [-L / 2 - 0.1, by - 0.02, -s * 0.2], 0.016, 0.2, 3);
+  }
+  // casemate wedge: bottom across the car, the crest over the gun side
+  const y0 = by - 0.02, h = ys - 0.05 - y0, wb = 0.55;
+  const zt0 = s * 0.18, zt1 = s * (zg + 0.3), tw = Math.abs(zt1 - zt0), tc = (zt0 + zt1) / 2;
+  block(cb, kit.mech, 0, y0, 0, L, wb * 2, h, { top: [0.94, tw / (wb * 2)], shift: [0, tc], ch: 0.07, bev: 0.02 });
+  // slope armour (far side, climbing to the crest): team plate, a second darker layer, a hazard band at its foot
+  const dz = Math.abs(zt0 + s * wb);
+  const sm: V3 = [0, y0 + h * 0.56, (zt0 - s * wb) / 2 + s * 0.02];
+  const sF = frame(sm, [0, dz, -s * h], [1, 0, 0]);
+  const sl = Math.hypot(dz, h);
+  plateStack(cb, kit, big ? kit.armor : kit.armor2, sF, rectP(L * 0.9, sl * 0.74, 0.05), [
+    { inset: 0, thick: 0.04, standoff: 0.015 },
+    { inset: 0.06, thick: 0.03, shift: [0, s * sl * 0.12], mat: big ? kit.armor2 : kit.armor },
+  ], { gap: 0.025 });
+  // outer wall leaning out over the running gear: dark-team plate, glow slit, team lip under the crest
+  const ow = Math.abs(zt1) - wb;
+  const oF = frame([0, y0 + h * 0.5, s * (wb + ow * 0.5 + 0.02)], [0, -ow, s * h], [1, 0, 0]);
+  const ol = Math.hypot(ow, h);
+  plateStack(cb, kit, kit.armor, oF, rectP(L * 0.92, ol * 0.8, 0.06), [
+    { inset: 0, thick: 0.04, standoff: 0.015 },
+    { inset: 0.05, thick: 0.03, shift: [0, -ol * 0.14], mat: kit.armor2 },
+  ], { gap: 0.025 });
+  glow(cb, kit, 0, y0 + h * 0.3, s * (wb + ow * 0.3 + 0.075), L * 0.56, 0.045, 0.03, [s * Math.atan2(ow, h), 0, 0]);
+  block(cb, kit.shell, 0, ys - 0.15, s * (Math.abs(zt1) - 0.05), L * 0.96, 0.14, 0.1, { top: [0.9, 0.7], ch: 0.04, bev: 0.015 });
+  // gun deck cantilevered fore and aft off the crest (over the neighbours' low far sides), so the weapon's housing
+  // stands on armour of nearly its own size: dark brackets under it, team deck slab, bone crest plate
+  const dl = 1.04, dw = Math.min(tw * 1.12, 0.9), dc = s * (Math.abs(tc) + 0.02);
+  for (const f of [-1, 1]) beam(cb, kit.mech, [f * L * 0.3, ys - 0.42, dc], [f * dl * 0.44, ys - 0.17, dc], 0.12, dw * 0.6);
+  block(cb, kit.armor, 0, ys - 0.19, dc, dl, dw, 0.155, { top: [0.96, 0.96], ch: 0.1, bev: 0.02, bot: 0.03 });
+  block(cb, kit.shell, 0, ys - 0.045, dc, dl * 0.8, dw * 0.76, 0.04, { top: [0.9, 0.9], ch: 0.08, bev: 0.012 });
+  both((f) => glow(cb, kit, f * dl * 0.49, ys - 0.12, dc, 0.03, 0.04, dw * 0.5, undefined, kit.plasma));
+  // far side: low reactor bunker under the neighbours' guns, glowing window
+  const zf = -s * 0.4;
+  block(cb, kit.armor2, 0, by - 0.04, zf, L * 0.84, 0.36, 0.3, { top: [0.86, 0.6], shift: [0, -s * 0.06], ch: 0.06, bev: 0.02, bot: 0.015 });
+  cb.box(kit.plasma, L * 0.42, 0.06, 0.02, 0, by + 0.08, -s * 0.585, 0.006);
+  if (fine) recessPanel(cb, kit, frame([0, by + 0.25, zf - s * 0.08], [0, 1, -s * 0.5], [1, 0, 0]), L * 0.5, 0.12, 0.015, { slats: 3 });
+  // bearing ring the weapon turns on (well inside the housing: the gun overhangs its crest)
+  cb.lathe(kit.trim, [[0, -0.05], [r * 0.42, -0.05], [r * 0.44, -0.02], [r * 0.42, -0.004], [0, -0.004]], [0, ys, zb], 'y', 14);
+}
+
 function landtrain(c: ChassisCtx): ChassisOut {
-  // An articulated armoured train (hard-surface): a locomotive (dark chassis frame, a long hood under stepped armour
-  // plates with a louvred grille, a raised cab with vision slits and a roof hatch, caged headlamps on the nose, a dozer
-  // plough on rams), four gun cars that sway on their couplers (each a dark octagonal drum under separate wall plates
-  // and a roof plate, side skirts with glow slits, a coupler housing with a brake hose to the next car), and a caboose.
-  // Asymmetric: the locomotive's exhaust stack and antenna on the left, a stowage bin on the right of the hood.
+  // An articulated armoured battle train (hard-surface) built round its four medium guns: they stand staggered right /
+  // left down the train (one per car, alternating sides), so every M housing (1.5 cells) stands clear of its neighbours
+  // and each gun has its own armoured barbette tower; the far side of each car is a low reactor bunker that the
+  // neighbouring guns swing over. Front: a locomotive (dark chassis, a long armoured hood with a louvred grille, a
+  // raised armoured cab with vision slits, caged headlamps, a dozer plough on rams) kept low under the front guns'
+  // barrels; rear: a caboose with tail lamps and exhaust stacks. The gun cars sway on their couplers (animated groups,
+  // pivoting about their gun points so the turrets stay seated).
   const { b, kit, stance, L, W } = c;
   const u = Math.min(W / 2, L / 5);
   const fine = fineFor(c.S);
   const legged = stance.legs !== null;
   const by = legged ? stance.hipY + 0.06 * u : Math.max(stance.y0 + 0.14 * u, stance.yt);
-  const xs = [0.608, -0.0665, -0.741, -1.4155].map((x, i) => c.mounts.find((m) => m.i === i)?.x ?? x * u);
-  const carH = 0.46 * u, carZ = 0.62 * u, carX = 0.25 * u;
-  const topY = by + carH;
-  // spine: coupler beam under the whole train (static)
-  b.cylb(kit.joint, 0.08 * u, (xs[0] - xs[3]) + 1.0 * u, 0.02 * u, [xs[3] - 0.6 * u, by + 0.04 * u, 0], 'x', 8);
-  // ---- locomotive
-  const hx = xs[0] + 0.95 * u;
-  block(b, kit.mech, hx, by - 0.16 * u, 0, 1.1 * u, 1.0 * u, 0.3 * u, { top: [1, 1], ch: 0.2 * u, bev: 0.03 * u });
-  // hood: dark core with side plates, a stepped top stack and a louvred grille
-  block(b, kit.mech, hx + 0.1 * u, by + 0.1 * u, 0, 0.9 * u, 0.86 * u, 0.28 * u, { top: [0.9, 0.9], ch: 0.14 * u, bev: 0.02 * u });
-  both((s) => armorPlate(b, kit, kit.armor2, frame([hx + 0.1 * u, by + 0.22 * u, s * 0.44 * u], [0, 0.1, s], [1, 0, 0]), trapP(0.92 * u, 0.2 * u, 0.24 * u, 0.04 * u), 0.04 * u, { standoff: 0.015 * u }));
-  plateStack(b, kit, kit.armor, frame([hx + 0.14 * u, by + 0.38 * u, 0], [0.15, 1, 0], [1, 0, 0]), trapP(0.86 * u, 0.62 * u, 0.86 * u, 0.12 * u), [
-    { inset: 0, thick: 0.05 * u, standoff: 0.02 * u },
-    { inset: 0.12 * u, thick: 0.035 * u, shift: [0.06 * u, 0], mat: kit.armor2 },
-  ], { gap: 0.03 * u });
-  recessPanel(b, kit, frame([hx - 0.05 * u, by + 0.46 * u, 0], [0, 1, 0], [1, 0, 0]), 0.3 * u, 0.36 * u, 0.025 * u, { slats: fine ? 4 : 0 });
-  stowBox(b, kit, frame([hx + 0.1 * u, by + 0.42 * u, 0.38 * u], [0, 1, 0], [1, 0, 0]), 0.36 * u, 0.08 * u, 0.12 * u);
-  // cab: dark box under armour cheek plates and a roof plate, vision slits, roof hatch
-  const cabX = hx - 0.42 * u;
-  block(b, kit.mech, cabX, by + 0.24 * u, 0, 0.42 * u, 0.86 * u, 0.42 * u, { top: [0.8, 0.9], shift: [-0.03 * u, 0], ch: 0.12 * u, bev: 0.02 * u });
-  armorPlate(b, kit, kit.armor, frame([cabX + 0.2 * u, by + 0.48 * u, 0], [1, 0.6, 0], [0, 0, 1]), rectP(0.86 * u, 0.24 * u, 0.06 * u), 0.04 * u, { standoff: 0.02 * u });
-  armorPlate(b, kit, kit.armor2, frame([cabX - 0.04 * u, by + 0.67 * u, 0], [0, 1, 0], [1, 0, 0]), rectP(0.44 * u, 0.86 * u, 0.06 * u), 0.04 * u, { standoff: 0.01 * u });
-  b.box(kit.glass, 0.03 * u, 0.04 * u, 0.6 * u, cabX + 0.28 * u, by + 0.52 * u, 0, 0.008 * u, [0, 0, -0.6]);
-  both((s) => b.box(kit.glass, 0.22 * u, 0.04 * u, 0.02 * u, cabX, by + 0.54 * u, s * 0.44 * u, 0.006 * u));
-  crewHatch(b, kit, frame([cabX - 0.06 * u, by + 0.73 * u, 0.18 * u], [0, 1, 0]), 0.07 * u, fine);
-  exhaust(b, kit, cabX - 0.16 * u, by + 0.5 * u, -0.3 * u, 0.045 * u, 0.36 * u);
-  antenna(b, kit, cabX - 0.16 * u, by + 0.7 * u, -0.1 * u, 0.7 * u, 0.008 * u, [-0.3, 0, 0]);
-  // nose: caged headlamps + dozer plough on two rams, hazard chevrons
-  both((s) => cagedLamp(b, kit, frame([hx + 0.5 * u, by + 0.2 * u, s * 0.32 * u], [0, 1, 0], [1, 0, 0]), 0.09 * u, fine));
-  b.slab(kit.armor2, [[0.34 * u, -0.16 * u], [0.34 * u, 0.16 * u], [0.06 * u, 0.6 * u], [-0.08 * u, 0.6 * u], [-0.08 * u, -0.6 * u], [0.06 * u, -0.6 * u]], 0.12 * u, 0.02 * u, hx + 0.62 * u, by - 0.26 * u, 0);
-  both((s) => {
-    hazard(b, kit, hx + 0.76 * u, by - 0.13 * u, s * 0.22 * u, 0.24 * u, 0.1 * u, 3, s * -0.95);
-    piston(b, kit, [hx + 0.36 * u, by - 0.04 * u, s * 0.3 * u], [hx + 0.6 * u, by - 0.18 * u, s * 0.34 * u], 0.03 * u, 0.55, fine);
+  const rest = PART_REST.centipede!;
+  const cars = rest.map((p, i) => {
+    const m = c.mounts.find((q) => q.i === i);
+    return { x: m?.x ?? p![0], z: m?.z ?? p![1], m };
   });
-  glow(b, kit, hx + 0.56 * u, by + 0.08 * u, 0, 0.03 * u, 0.03 * u, 0.4 * u);
-  // caboose: dark wedge with an armour cap, tail lamps
-  const tx = xs[3] - 0.56 * u;
-  block(b, kit.mech, tx, by - 0.1 * u, 0, 0.36 * u, 0.86 * u, 0.38 * u, { top: [0.6, 0.8], shift: [0.06 * u, 0], ch: 0.14 * u, bev: 0.02 * u });
-  armorPlate(b, kit, kit.armor, frame([tx - 0.06 * u, by + 0.22 * u, 0], [-0.6, 1, 0], [0, 0, 1]), rectP(0.8 * u, 0.3 * u, 0.06 * u), 0.04 * u, { standoff: 0.015 * u });
-  both((s) => b.box(kit.glow, 0.04 * u, 0.06 * u, 0.12 * u, tx - 0.18 * u, by + 0.06 * u, s * 0.28 * u, 0.01 * u));
-  // ---- gun cars: each its own animated group (pivoting about its mount point, so turrets stay seated)
-  const cars: THREE.Group[] = [];
+  // gun collar heights: a battery climbing toward the rear (superfiring: each gun's barrel clears the housing of the
+  // gun two cars ahead on its side)
+  const ysOf = (i: number) => by + 0.5 + 0.12 * i;
+  // spine: coupler beam under the whole train (static)
+  const x0 = cars[3].x - 0.75, x1 = cars[0].x + 0.7;
+  b.cylb(kit.joint, 0.07, x1 - x0, 0.02, [x0, by - 0.08, 0], 'x', 8);
+  // ---- locomotive: kept under the front guns' barrels (its roof stays below the collars behind it)
+  const lx = cars[0].x + 0.44; // rear of the loco
+  block(b, kit.mech, lx + 0.56, by - 0.2, 0, 1.12, 1.0, 0.3, { top: [1, 1], ch: 0.2, bev: 0.03 });
+  // rear coupling block (under gun 0's housing): a low dark tender with a glowing reactor slot
+  block(b, kit.mech, lx + 0.18, by + 0.02, 0, 0.42, 1.0, 0.3, { top: [0.9, 0.9], ch: 0.1, bev: 0.02 });
+  block(b, kit.armor2, lx + 0.18, by + 0.2, -0.24, 0.38, 0.44, 0.2, { top: [0.8, 0.8], ch: 0.06, bev: 0.02 });
+  b.box(kit.plasma, 0.04, 0.05, 0.6, lx + 0.4, by + 0.2, 0, 0.008);
+  // cab: dark box under a forward-raked team brow and a roof plate, vision slits, roof hatch, exhaust stacks
+  const cabX = lx + 0.62;
+  block(b, kit.mech, cabX, by + 0.08, 0, 0.42, 0.9, 0.5, { top: [0.82, 0.86], shift: [-0.04, 0], ch: 0.12, bev: 0.02 });
+  plateStack(b, kit, kit.armor, frame([cabX + 0.17, by + 0.46, 0], [1, 0.7, 0], [0, 0, 1]), rectP(0.88, 0.26, 0.07), [
+    { inset: 0, thick: 0.05, standoff: 0.02 },
+    { inset: 0.05, thick: 0.035, shift: [0, -0.02], mat: kit.armor2 },
+  ], { gap: 0.03 });
+  armorPlate(b, kit, kit.armor2, frame([cabX - 0.06, by + 0.58, 0], [0, 1, 0], [1, 0, 0]), rectP(0.36, 0.8, 0.06), 0.04, { standoff: 0.01 });
+  b.box(kit.glass, 0.03, 0.04, 0.62, cabX + 0.22, by + 0.38, 0, 0.008, [0, 0, -0.6]);
+  both((s) => b.box(kit.glass, 0.2, 0.04, 0.02, cabX, by + 0.42, s * 0.45, 0.006));
+  crewHatch(b, kit, frame([cabX - 0.1, by + 0.63, -0.18], [0, 1, 0]), 0.07, fine);
+  both((s) => exhaust(b, kit, cabX - 0.18, by + 0.3, s * 0.4, 0.045, 0.42));
+  antenna(b, kit, cabX - 0.12, by + 0.6, 0.22, 0.6, 0.008, [-0.3, 0, 0]);
+  // hood: long dark core under stepped armour plates, side plates, louvred grille, stowage bin
+  const hx = cabX + 0.56;
+  block(b, kit.mech, hx, by + 0.02, 0, 0.72, 0.86, 0.32, { top: [0.86, 0.9], ch: 0.14, bev: 0.02 });
+  both((s) => armorPlate(b, kit, kit.armor2, frame([hx, by + 0.17, s * 0.44], [0, 0.1, s], [1, 0, 0]), trapP(0.74, 0.18, 0.22, 0.04), 0.04, { standoff: 0.015 }));
+  plateStack(b, kit, kit.armor, frame([hx + 0.04, by + 0.3, 0], [0.2, 1, 0], [1, 0, 0]), trapP(0.7, 0.56, 0.8, 0.12), [
+    { inset: 0, thick: 0.05, standoff: 0.02 },
+    { inset: 0.12, thick: 0.035, shift: [0.05, 0], mat: kit.armor2 },
+  ], { gap: 0.03 });
+  recessPanel(b, kit, frame([hx - 0.12, by + 0.37, 0], [0, 1, 0], [1, 0, 0]), 0.22, 0.34, 0.025, { slats: fine ? 3 : 0 });
+  stowBox(b, kit, frame([hx - 0.05, by + 0.34, -0.36], [0, 1, 0], [1, 0, 0]), 0.3, 0.07, 0.11);
+  // nose: caged headlamps, glow bar, dozer plough on two rams with hazard chevrons
+  const nx = hx + 0.38;
+  both((s) => cagedLamp(b, kit, frame([nx, by + 0.12, s * 0.3], [0, 1, 0], [1, 0, 0]), 0.09, fine));
+  glow(b, kit, nx + 0.02, by + 0.04, 0, 0.03, 0.03, 0.4);
+  b.slab(kit.armor2, [[0.3, -0.16], [0.3, 0.16], [0.06, 0.58], [-0.08, 0.58], [-0.08, -0.58], [0.06, -0.58]], 0.12, 0.02, nx + 0.1, by - 0.3, 0);
+  both((s) => {
+    hazard(b, kit, nx + 0.22, by - 0.17, s * 0.22, 0.22, 0.1, 3, s * -0.95);
+    piston(b, kit, [nx - 0.14, by - 0.06, s * 0.3], [nx + 0.08, by - 0.22, s * 0.34], 0.03, 0.55, fine);
+  });
+  // ---- caboose: dark wedge, team cap, tail lamps, twin stacks (kept low: the rear gun's housing swings over it)
+  const tx = cars[3].x - 0.7;
+  block(b, kit.mech, tx, by - 0.18, 0, 0.5, 0.96, 0.52, { top: [0.66, 0.84], shift: [-0.06, 0], ch: 0.14, bev: 0.02 });
+  armorPlate(b, kit, kit.armor, frame([tx - 0.08, by + 0.26, 0], [-0.6, 1, 0], [0, 0, 1]), rectP(0.84, 0.3, 0.06), 0.04, { standoff: 0.015 });
+  both((s) => b.box(kit.glow, 0.04, 0.06, 0.12, tx - 0.25, by + 0.02, s * 0.3, 0.01));
+  exhaustBox(b, kit, frame([tx - 0.06, by + 0.3, 0.32], [0, 1, 0], [-1, 0, 0]), 0.07, fine);
+  // ---- gun cars: each its own animated group pivoting about its gun point (the turret stays seated on its collar)
+  const groups: THREE.Group[] = [];
   const seated = new Set<MountSpec>();
-  xs.forEach((x, i) => {
+  cars.forEach((cr, i) => {
     const cb = new Bld();
-    const big = i % 2 === 0;
-    const z = carZ * (big ? 1 : 0.9), h = carH * (big ? 1 : 0.92);
-    // dark octagonal drum core
-    shell(cb, kit.mech, 0, 0, carX * 1.1, carX * 1.1, z * 0.9, [[by - 0.16 * u, 0.86], [by + 0.04 * u, 1.0], [by + h * 0.8, 0.98], [by + h - 0.02 * u, 0.74]], 8, 2);
-    // separate wall plates on the eight faces, roof plate, team accent on the big cars
-    for (const f of ringFaces(0, 0, carX * 1.12, carX * 1.12, z * 0.92, by + 0.06 * u, by + h * 0.78)) {
-      if (Math.abs(f.n[0]) > 0.9) continue; // front / back faces carry the couplers
-      armorPlate(cb, kit, Math.abs(f.n[2]) > 0.9 ? (big ? kit.armor : kit.armor2) : kit.shell, frame(f.c, f.n, f.e), rectP(f.w * 0.9, h * 0.62, 0.03 * u), 0.035 * u, { standoff: 0.015 * u, gap: 0.025 * u });
-    }
-    armorPlate(cb, kit, big ? kit.armor : kit.armor2, frame([0, by + h - 0.02 * u, 0], [0, 1, 0], [1, 0, 0]), rectP(carX * 1.7, z * 1.2, carX * 0.4), 0.03 * u, { standoff: 0.01 * u });
-    if (big) cb.box(kit.accent, 0.05 * u, 0.012 * u, z * 1.1, -carX * 0.86, by + h + 0.02 * u, 0, 0.004);
-    // side skirts with a glow slit
-    both((s) => {
-      armorPlate(cb, kit, kit.armor2, frame([0, by - 0.02 * u, s * z * 1.0], [0, 0.15, s], [1, 0, 0]), rectP(carX * 2.0, 0.18 * u, 0.03 * u), 0.03 * u, { standoff: 0.012 * u });
-      glow(cb, kit, 0, by + h * 0.58, s * z * 1.0, carX * 0.9, 0.025 * u, 0.025 * u);
-    });
-    // coupler housing to the next car back + a brake hose
-    cb.cylb(kit.joint, 0.11 * u, 0.22 * u, 0.02 * u, [-carX * 1.2 - 0.18 * u, by + 0.16 * u, 0], 'x', 8);
-    if (fine && i < 3) hose(cb, kit, [-carX * 1.1, by + 0.28 * u, 0.14 * u], [-carX * 1.2 - 0.3 * u, by + 0.22 * u, 0.12 * u], 0.016 * u, 0.2, 3);
-    // turret collar rides the car
-    const m = c.mounts.find((q) => Math.abs(q.x - x) < 0.05);
-    if (m) { seated.add(m); collar(cb, kit, 0, topY, m.z, m.r, topY - 0.1 * u, 14); }
-    const g = new THREE.Group();
-    g.position.set(x, 0, 0);
-    cb.mount(g);
+    const s = cr.z < 0 ? -1 : 1, zg = Math.abs(cr.z);
+    trainCar(cb, kit, fine, by, ysOf(i), s, zg, cr.m?.r ?? 0.75, i % 2 === 0, i === cars.length - 1);
+    if (cr.m) seated.add(cr.m);
+    const g = new THREE.Group(), inner = new THREE.Group();
+    g.position.set(cr.x, 0, cr.z);
+    inner.position.set(0, 0, -cr.z);
+    cb.mount(inner);
+    g.add(inner);
     c.body.add(g);
-    cars.push(g);
+    groups.push(g);
   });
   // sway: a travelling yaw wave down the train while moving (small, so turrets stay on their collars)
   c.updates.push((t, _dt, mv) => {
-    cars.forEach((g, i) => { g.rotation.y = Math.sin(t * 1.6 - i * 1.1) * 0.07 * mv; g.rotation.x = Math.sin(t * 3.2 - i * 1.1) * 0.03 * mv; });
+    groups.forEach((g, i) => { g.rotation.y = Math.sin(t * 1.6 - i * 1.1) * 0.05 * mv; g.rotation.x = Math.sin(t * 3.2 - i * 1.1) * 0.02 * mv; });
   });
   let hips: Hip[] | undefined;
   if (legged) {
     hips = [];
-    xs.forEach((x, i) => {
-      for (const s of [-1, 1] as const) hips!.push({ p: [x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [x + 0.05 * u, 0, s * 1.38 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
+    cars.forEach((cr, i) => {
+      for (const s of [-1, 1] as const) hips!.push({ p: [cr.x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [cr.x + 0.05 * u, 0, s * 1.38 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
     });
   }
-  const deck = (x: number, z: number) => (Math.abs(z) < carZ * 0.6 && xs.some((cx) => Math.abs(x - cx) < carX) ? topY : -1);
+  const deck = (x: number, z: number) => (Math.abs(z) < 0.55 && cars.some((cr) => Math.abs(x - cr.x) < 0.3) ? by + 0.38 : -1);
   return {
-    deckAt: deck, top: by + 0.7 * u, hips, custom: true, dressed: true,
+    deckAt: deck, top: ysOf(3) + 0.1, hips, custom: true, dressed: true,
     seat: (m) => {
-      if (!seated.has(m)) collar(b, kit, m.x, topY, m.z, m.r, topY - 0.1 * u, 14);
-      return { y: topY, socket: true };
+      const ys = ysOf(Math.min(m.i, 3));
+      if (!seated.has(m)) collar(b, kit, m.x, ys, m.z, m.r, ys - 0.1, 14);
+      return { y: ys, socket: true };
     },
   };
 }
@@ -555,5 +698,6 @@ function landtrain(c: ChassisCtx): ChassisOut {
 registerChassis('crab', bunkerCrawler);
 registerChassis('scorpion', tailgunCrawler);
 registerChassis('saucer', saucerDisc);
+registerTorso('saucer');
 registerChassis('centipede', landtrain);
 

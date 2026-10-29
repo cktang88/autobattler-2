@@ -179,6 +179,13 @@ flush on a plate, two blocks sharing a face, a collar flush on a deck). The dept
   (shots.cjs does), use long timeouts, never one browser per view.
 - Camera framing: pass explicit views (`setView(x, z, dist, tilt, yaw, targetY)`); the default framing crops big
   units.
+- Torso mode drops the hero's own yaw base (ring / lower housing) but pods keep theirs: when the hero and a pod stand on
+  mirrored stations (saucer sponsons), model a base block under the hero's station so both guns look alike, and put
+  the hero's hardpoint at station + its trunnion height (~0.38 r for guns, ~0.62 r for launchers / melee).
+- Many same-class guns on a narrow hull: stagger them (centipede: alternate sides 0.6 cells off the centreline, cars
+  0.71 apart) and step their heights toward the rear (superfiring) instead of shrinking or overlapping them. Mounts
+  riding animated parts come from the 2D rig (footart footParts) via PART_REST: change the rig, regenerate PART_REST
+  from layoutOf, run test/mountgeo.test.ts.
 - Parallel agents: give each its own git worktree and render port, a written brief (concept rules + references +
   workflow), and tell them which shared files they must not touch. Merge their branches one at a time, re-run the
   tests, rebuild the bundle.

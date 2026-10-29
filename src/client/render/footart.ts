@@ -1630,10 +1630,11 @@ function footParts(L: UnitLayout): PartDef[] | null {
       break;
     }
     case 'centipede': {
-      // cars: spread down the length (head shears keep their place on the cab)
+      // cars: spread down the length (head shears keep their place on the cab); the guns stand on sponsons staggered
+      // right / left down the train (mount 0 right), so neighbouring M housings (1.5 cells) clear each other
       const cars = ps.filter((p) => p.ext >= 0.2 * S);
       const n = cars.length;
-      cars.forEach((p, j) => { p.px = (-0.44 + (j * 0.71) / (n - 1)) * L.X; p.py = 0; if (p.mounts) p.mountAt = [0, 0]; });
+      cars.forEach((p, j) => { p.px = (-0.44 + (j * 0.75) / (n - 1)) * L.X; p.py = 0; if (p.mounts) p.mountAt = [0, (p.mounts[0] % 2 ? -0.3 : 0.3) * L.Y]; });
       for (const p of ps) if (!cars.includes(p)) { p.px = 0.48 * L.X; p.py = Math.sign(p.py) * 0.06 * L.Y; }
       break;
     }
