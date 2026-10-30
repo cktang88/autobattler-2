@@ -1,4 +1,5 @@
 import { setSimplify } from './geo.ts';
+import { CASTLE_ID } from './chassis/castle.ts';
 // Standalone 3D prototype: a battlefield slice with starter designs built procedurally from their part data.
 // Not wired into the game. Build: `npm run build:proto3d` -> public/proto3d.js, open public/proto3d.html.
 
@@ -56,12 +57,14 @@ if (lab) {
   let z = 0;
   const items = lab.split(',');
   items.forEach((it, k) => {
-    const [cid, mid, seed, fit] = it.split(':'); // fit: explicit mounts 'bombs|bombs|-|mg' ('-' = empty)
+    const [cid0, mid0, seed, fit] = it.split(':'); // fit: explicit mounts 'bombs|bombs|-|mg' ('-' = empty)
+    // 'castle': the tug of war castle (a Monolith on an anchor, built by chassis/castle.ts round its one gun)
+    const isCastle = cid0 === 'castle', cid = isCastle ? 'monolith' : cid0, mid = isCastle ? 'anchor' : mid0;
     const c = CHASSIS_BY_ID.get(cid);
     if (!c) return;
     const sd = Number(seed ?? k) || 0;
     const mounts = fit ? c.mounts.map((_, i) => { const id = fit.split('|')[i]; return id && id !== '-' ? id : null; }) : params.get('empty') ? c.mounts.map(() => null) : c.mounts.map((slot, i) => { const opts = MODULES.filter((m) => m.kind === 'weapon' && m.mount === slot); return opts[(sd * 7 + i * 13) % opts.length]?.id ?? null; });
-    const d: Design = { id: `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid ?? 'treads', mounts };
+    const d: Design = { id: isCastle ? `${CASTLE_ID}#${k}` : `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid ?? 'treads', mounts };
     byId.set(d.id, d);
     const w = c.footprint?.[0] ?? c.size;
     z += (k ? w / 2 : 0);

@@ -17,6 +17,7 @@ import { armorPlate, cagedLamp, eraGrid, fineFor, frame, ladder, piston, plateSt
 import { octBarbette } from './hs-kit-titan.ts';
 import { torsoHP, torsoSlots } from './torso-kit.ts';
 import { shiftTo } from './titans.ts';
+import { castle, isCastle } from './castle.ts';
 import type { Kit, MatLike } from '../materials.ts';
 import type { Bld } from '../geo.ts';
 
@@ -28,6 +29,7 @@ const faceGrille = (b: Bld, kit: Kit, f: Face, du: number, dv: number, w: number
   recessPanel(b, kit, faceFrame(f, du, dv, 0), w, d, Math.min(w, d) * 0.12, { slats: n });
 
 function monolith(c: ChassisCtx): ChassisOut {
+  if (isCastle(c.design.id)) return castle(c); // the tug of war castle rides a Monolith hull in the sim
   const { b, kit, L, W, stance } = c;
   const kx = L / 7, kz = W / 7, k = Math.min(kx, kz);
   const legged = stance.legs !== null;
