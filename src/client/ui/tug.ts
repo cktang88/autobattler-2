@@ -87,7 +87,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
         saveRosterIds(roster.map((x) => x.id));
         renderRoster();
       },
-    }, cv,
+    }, h('span.tug-card-badge', { 'aria-hidden': 'true' }, inRoster ? '✕' : '+'), cv,
       h('div.tug-card-name', null, d.name),
       h('div.tug-card-meta', null, h('span.gold', null, `${costOf(d)}g`), ' · ', h('span', { class: size > TUG.startTier ? 'warn' : 'muted' }, sizeLabel(size))),
     );
@@ -161,7 +161,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
       openHost.replaceChildren(...(open.length ? open.map((o) => h('div.tug-openrow', null,
         h('span.grow', null, o.name),
         h('button', { onclick: () => { sfx('click'); void online(() => tugJoin(o.id, roster)); } }, 'Join'),
-      )) : [h('div.muted', null, 'No open games right now. Start a quick match and wait for someone to join.')]));
+      )) : [h('div.muted', null, 'No open games right now. Find a match and wait for the next player to join.')]));
     } catch (e) {
       openHost.replaceChildren(h('div.muted', null, e instanceof Error ? e.message : 'Offline'));
     }
@@ -172,6 +172,47 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     sfx('click');
     go({ kind: 'ai', difficulty, roster });
   };
+
+  // ---- the play panel: TABS pick the opponent kind, CHOICES pick a difficulty, one ACTION starts the game ----
+  const KEY_TAB = 'ab2.tugTab', KEY_DIFF = 'ab2.tugDiff';
+  const recall = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const remember = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
+  let tab: 'ai' | 'online' = recall(KEY_TAB) === 'online' ? 'online' : 'ai';
+  let diff: AiDifficulty = (['easy', 'normal', 'hard'] as const).find((d) => d === recall(KEY_DIFF)) ?? 'normal';
+  const DIFFS: { v: AiDifficulty; name: string; desc: string }[] = [
+    { v: 'easy', name: 'Easy', desc: 'Slow to react, light on economy. Learn the ropes.' },
+    { v: 'normal', name: 'Normal', desc: 'Invests, unlocks bigger hulls, answers your pushes.' },
+    { v: 'hard', name: 'Hard', desc: 'Fast economy and quick counters. Bring a plan.' },
+  ];
+  const playPanel = h('section.panel.tug-play');
+  const renderPlay = () => {
+    const tabBtn = (t: typeof tab, label: string) => h('button.tab', {
+      class: tab === t ? 'on' : null, role: 'tab', 'aria-selected': String(tab === t),
+      onclick: () => { if (tab !== t) { sfx('click'); tab = t; remember(KEY_TAB, t); renderPlay(); } },
+    }, label);
+    const body = tab === 'ai'
+      ? h('div', { role: 'tabpanel' },
+        h('div.choice-label', null, 'Difficulty'),
+        h('div.choices', { role: 'radiogroup', 'aria-label': 'Difficulty' }, ...DIFFS.map((d) => h('button.choice', {
+          class: diff === d.v ? 'on' : null, role: 'radio', 'aria-checked': String(diff === d.v),
+          onclick: () => { sfx('click'); diff = d.v; remember(KEY_DIFF, d.v); renderPlay(); },
+        }, h('span.col', { style: { gap: '0' } }, h('span.ch-name', null, d.name), h('span.ch-desc', null, d.desc))))),
+        h('button.big.primary.go', { onclick: vsAi(diff) }, `Start vs AI · ${DIFFS.find((d) => d.v === diff)!.name}`),
+      )
+      : h('div', { role: 'tabpanel' },
+        h('button.big.primary.go', { onclick: () => { sfx('click'); void online(() => tugQuick(roster)); }, title: 'Join the oldest open game, or open one and wait for an opponent' }, 'Find a match'),
+        h('button.go', { style: { marginTop: '8px' }, onclick: () => { sfx('click'); void online(() => tugCreate(roster, true)); }, title: 'Get a code to share with a friend' }, 'Create private game'),
+        h('div.choice-label', { style: { marginTop: '16px' } }, 'Have a code from a friend?'),
+        h('div.row', null, codeIn,
+          h('button', { onclick: () => { sfx('click'); const c = codeIn.value.trim(); if (c) void online(() => tugJoin(c, roster)); } }, 'Join'),
+        ),
+        status,
+        h('div.choice-label', { style: { marginTop: '16px' } }, 'Open games'),
+        openHost,
+      );
+    playPanel.replaceChildren(h('div.tabbar', { role: 'tablist' }, tabBtn('ai', 'vs AI'), tabBtn('online', 'vs Players')), body);
+  };
+  renderPlay();
 
   const el = h('div.screen.lobby.tug-setup', null,
     h('div.topbar', null,
@@ -185,28 +226,10 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
         `after a ${TUG.spawnFreeze} s spawn time (frozen, but already shooting) they march up their lane, fight whatever comes within reach and shell the enemy castle. Invest gold to raise your income, `,
         `or unlock bigger hulls (you start with ${TIER_NAMES[1]} and ${TIER_NAMES[2]}). Destroy the enemy castle to win.`),
       h('div.tug-cols', null,
-        h('section.panel.tug-play', null,
-          h('h3', null, 'Play vs AI'),
-          h('div.row', null,
-            h('button.grow', { onclick: vsAi('easy') }, 'Easy'),
-            h('button.grow.primary', { onclick: vsAi('normal') }, 'Normal'),
-            h('button.grow', { onclick: vsAi('hard') }, 'Hard'),
-          ),
-          h('h3', { style: { marginTop: '14px' } }, 'Play online'),
-          h('div.row', null,
-            h('button.grow.primary', { onclick: () => { sfx('click'); void online(() => tugQuick(roster)); } }, 'Quick match'),
-            h('button.grow', { onclick: () => { sfx('click'); void online(() => tugCreate(roster, true)); }, title: 'A private game: share the code with a friend' }, 'Private game'),
-          ),
-          h('div.row', { style: { marginTop: '8px' } }, codeIn,
-            h('button', { onclick: () => { sfx('click'); const c = codeIn.value.trim(); if (c) void online(() => tugJoin(c, roster)); } }, 'Join'),
-          ),
-          status,
-          h('h4', { style: { marginTop: '14px' } }, 'Open games'),
-          openHost,
-        ),
+        playPanel,
         h('section.panel.tug-rosterpanel', null,
           h('h3', null, `Tug roster (up to ${TUG.rosterSize})`),
-          h('p.muted', null, 'Separate from your Loadout deck. Click a design to add or remove it.'),
+          h('p.muted', null, 'The designs you can buy in Tug of War (separate from your Classic Loadout). ✕ removes one; + below adds one.'),
           rosterHost,
           h('h4', { style: { marginTop: '12px' } }, 'Your designs'),
           poolHost,

@@ -22,7 +22,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   const refreshBtn = h('button.icon', { title: 'Refresh', onclick: () => { sfx('click'); void refresh(true); } }, '⟳');
   const el = h('div.screen.lobby', null,
     h('div.topbar', null,
-      h('button.icon', { onclick: () => { sfx('click'); app.go({ name: 'menu' }); }, title: 'Back' }, '‹ Back'),
+      h('button.icon', { onclick: () => { sfx('click'); app.go({ name: 'classic' }); }, title: 'Back' }, '‹ Back'),
       h('h2', null, 'Multiplayer'),
       h('div.spacer'),
       userBox,

@@ -58,7 +58,7 @@ export function playerName(): string {
 export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' | 'menu' } = { name: 'vsai' }): Screen {
   /** loadout editor only (menu "Loadout" / lobby "Change loadout"): Done goes back, no difficulty / Start */
   const editOnly = route.from != null;
-  const backTo = route.from === 'lobby' ? 'lobby' as const : 'menu' as const;
+  const backTo = route.from === 'lobby' ? 'lobby' as const : route.from === 'menu' ? 'menu' as const : 'classic' as const;
   playMusic('menu');
   let diff: AiDifficulty = 'normal';
   let sort: Sort = 'cost';

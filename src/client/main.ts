@@ -6,7 +6,7 @@ import { preload3d } from './render/viewfactory.ts';
 import { loadSettings } from './storage.ts';
 import { setSyncProblemHandler, startGarageSync } from './sync.ts';
 import { currentSession, refreshSession } from './net.ts';
-import { menuScreen } from './ui/menu.ts';
+import { classicScreen, menuScreen } from './ui/menu.ts';
 import { vsaiScreen } from './ui/vsai.ts';
 import { matchScreen } from './ui/match.ts';
 import { settingsScreen } from './ui/settings.ts';
@@ -19,6 +19,7 @@ const root = document.getElementById('app') ?? document.body.appendChild(documen
 const app = new App(root);
 
 app.register('menu', menuScreen);
+app.register('classic', classicScreen);
 app.register('vsai', vsaiScreen);
 app.register('match', matchScreen);
 app.register('settings', settingsScreen);

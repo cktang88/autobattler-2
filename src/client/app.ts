@@ -14,6 +14,8 @@ export type Route =
   | { name: 'playground' }
   | { name: 'settings' }
   /** tug of war: roster + opponent setup, and the live game */
+  /** a game mode's page: choose vs AI or vs players */
+  | { name: 'classic' }
   | { name: 'tug' }
   | { name: 'tugmatch'; launch: TugLaunch };
 

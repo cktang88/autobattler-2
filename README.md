@@ -87,7 +87,7 @@ saves its data on shutdown, so nothing is lost. Health check: `GET /api/health`.
 
 ### Tug of War
 
-A real-time mode (menu → **Tug of War**), against the AI (easy / normal / hard) or another person online (quick
+A real-time mode (main menu → choose a game mode → **Tug of War**), against the AI (easy / normal / hard) or another person online (quick
 match, or a private game with a join code). One endless battle on its own field: half the standard width and a
 quarter longer (240 m x 575 m), with a shallower deploy zone per side. Each side has a castle at its back edge and
 earns gold every second. Spend it on blocks from your **tug roster** (up to 9 designs, kept separately from the

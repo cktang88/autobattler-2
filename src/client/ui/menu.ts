@@ -72,6 +72,39 @@ export function howToPlay(): HTMLElement {
   );
 }
 
+/** A big action that opens a game mode (or a mode's vs AI / vs players page): title, one line on what it is, chevron. */
+export function modeCard(title: string, desc: string, onclick: () => void, primary = false): HTMLButtonElement {
+  return h('button.mode-card', { class: primary ? 'primary' : null, onclick },
+    h('span.mc-title', null, title), h('span.mc-desc', null, desc), h('span.mc-go', { 'aria-hidden': 'true' }, '›'));
+}
+
+/** Classic (round-based) mode: pick the opponent. */
+export function classicScreen(app: App): Screen {
+  const go = (fn: () => void) => () => { sfx('click'); fn(); };
+  const resumable = LocalDriver.resumable();
+  const el = h('div.screen.lobby.mode-page', null,
+    h('div.topbar', null,
+      h('button.icon', { onclick: go(() => app.go({ name: 'menu' })), title: 'Back' }, '‹ Back'),
+      h('h2', null, 'Classic'),
+    ),
+    h('div.screen-scroll.grow', null, h('div.page.mode-page-body', null,
+      h('p.muted', null, 'Each round you get supply, buy units from your Loadout and place them in secret. Then the battle plays out on its own; the loser takes damage. Bring the enemy to 0 HP to win.'),
+      h('div.mode-head', null, 'Choose your opponent'),
+      h('div.mode-cards', null,
+        resumable ? h('button.mode-card.primary', { onclick: go(() => { const d = LocalDriver.resume(); if (d) app.go({ name: 'match', driver: d }); }) },
+          h('span.mc-title', null, 'Resume vs AI'), h('span.mc-desc', null, `Your game in progress · round ${resumable.match.round}`), h('span.mc-go', null, '›')) : null,
+        modeCard('vs AI', 'Play against the computer, at your own pace.', go(() => app.go({ name: 'vsai' })), !resumable),
+        modeCard('vs Players', 'Online, turn by turn: each of you deploys whenever you like.', go(() => app.go({ name: 'lobby' }))),
+      ),
+      h('div.menu-links', null,
+        h('button.link', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })) }, 'Edit Loadout'),
+        h('button.link', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),
+      ),
+    )),
+  );
+  return { el };
+}
+
 export function menuScreen(app: App): Screen {
   playMusic('menu');
   const canvas = h('canvas.menu-bg');
@@ -111,19 +144,20 @@ export function menuScreen(app: App): Screen {
         h('h1', null, 'Ironclad', h('br'), 'Assembly'),
         h('div.sub', null, 'Design · Deploy · Destroy'),
       ),
+      // one decision first: the game mode. vs AI / vs players is chosen inside each mode.
       h('div.menu-buttons', null,
         resumeBtn,
-        h('button.big.primary', { onclick: go(() => app.go({ name: 'vsai' })) }, 'Play vs AI'),
-        h('button.big', { onclick: go(() => app.go({ name: 'lobby' })), title: 'Async matches against other players (needs an account)' }, 'Multiplayer'),
-        h('button.big', { onclick: go(() => app.go({ name: 'tug' })), title: 'Real-time tug of war vs the AI or another player: buy units with gold as it flows in and push down the enemy castle' }, 'Tug of War'),
-        h('div.row.menu-pair', null,
-          h('button.big.grow', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })), title: 'Choose the 9 designs you take into battle' }, 'Loadout'),
-          h('button.big.grow', { onclick: go(() => app.go({ name: 'garage' })), title: 'Build and edit unit designs' }, 'Unit Designer'),
+        h('div.mode-head', null, 'Choose a game mode'),
+        h('div.mode-cards', null,
+          modeCard('Classic', 'Rounds: deploy in secret, then watch the battle. vs AI or online.', go(() => app.go({ name: 'classic' })), true),
+          modeCard('Tug of War', 'Real time: gold flows in, drop units, push down the enemy castle. vs AI or online.', go(() => app.go({ name: 'tug' }))),
+          modeCard('Playground', 'Sandbox: place any designs on both sides for free and watch them fight.', go(() => app.go({ name: 'playground' }))),
         ),
-        h('button.big', { title: 'Sandbox: place any of your designs on both sides for free and watch them fight', onclick: go(() => app.go({ name: 'playground' })) }, 'Playground'),
-        h('div.row', null,
-          h('button.grow', { onclick: go(() => app.go({ name: 'settings' })) }, 'Settings'),
-          h('button.grow', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),
+        h('div.menu-links', null,
+          h('button.link', { onclick: go(() => app.go({ name: 'garage' })), title: 'Build and edit unit designs' }, 'Unit Designer'),
+          h('button.link', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })), title: 'Choose the 9 designs you take into Classic battles' }, 'Loadout'),
+          h('button.link', { onclick: go(() => app.go({ name: 'settings' })) }, 'Settings'),
+          h('button.link', { onclick: go(() => openModal('How to play', howToPlay())) }, 'How to play'),
         ),
       ),
       h('div.menu-foot', null, 'Build your army from parts. Outthink, outgun, outlast.'),

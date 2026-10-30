@@ -6,7 +6,13 @@
 .tug-roster, .tug-pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .tug-pool { max-height: 46vh; overflow-y: auto; padding-right: 4px; }
 .tug-card { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; min-height: 0; text-align: center; background: var(--panel2); }
-.tug-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tug-card { position: relative; clip-path: none; }
+.tug-card.on { border-color: var(--accent-dim); }
+.tug-card-badge { position: absolute; top: 4px; right: 6px; font-size: 0.95rem; line-height: 1; color: var(--muted); }
+.tug-card:not(.on) .tug-card-badge { color: var(--accent); font-size: 1.2rem; }
+.tug-card.on:hover:not(:disabled) .tug-card-badge { color: var(--bad); }
+.tug-play .tabbar { margin: -4px -4px 14px; }
+.tug-play .tug-code { min-height: 40px; }
 .tug-card.empty { border: 1px dashed var(--line2); border-radius: var(--radius); color: var(--muted); display: grid; place-items: center; min-height: 104px; font-size: 0.85rem; }
 .tug-thumb { width: 100%; height: 56px; display: block; }
 .tug-card-name { font-family: var(--font-head); font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
