@@ -162,12 +162,15 @@ a dark core, big hip / knee drums, bright rams, stepped feet. `legStance`: biped
 stance: thigh and shin both read), bones 1.12x the hip height so the knee always bends forward. Chassis that place
 their own hips (`ChassisOut.hips`) set the leg height: hips set too low make short stubby legs.
 
-- **The tug of war castle** (`chassis/castle.ts`, design id `tug-castle`: a Monolith on an anchor in the sim) swaps
-  its one gun during a game for any weapon of any class, so its housing is the one exception that follows the gun: a
-  keep with corner bastions and a torso-mode cupola whose radius / height come from the equipped gun's `DRAW_D`
-  (S ~0.6, M ~1.0, L ~1.9, XL ~3.2 cells radius), raised on a neck drum when it would reach the parapet and bastions.
-  The gun itself keeps its class size. The Monolith builder hands off to it (`isCastle`); proto3d lab: `castle:anchor:0:<gun>|-`.
-  The zfight scan covers it with a gun of each class.
+- **The tug of war castle** (`chassis/castle.ts`, design id `tug-castle`: a Monolith on an anchor in the sim) is its own
+  model: the side's mothership set down for good as a forward base (wedge carrier hull on four splayed landing legs,
+  bow ramp down as the gate, folded wings planted as rampart walls, cooling engines, an off-centre command island, the
+  glowing reactor ring on the spine as the thing worth defending, a camp of crates and fuel tanks). It is drawn 15%
+  past its 7-cell footprint (the drop zone keeps a clear ring round it) and builds its own footing (`ChassisOut.ownGround`
+  skips the anchor's plinth). It swaps its one gun during a game for any weapon of any class, so its gun cupola is the
+  one housing that follows the gun: radius / height from the gun's `DRAW_D` (S ~0.6 .. XL ~3.2 cells), on a raised
+  drum for big guns. The gun keeps its class size. proto3d lab: `castle:anchor:0:<gun>|-`; the zfight scan covers it
+  with a gun of each class.
 
 ---
 

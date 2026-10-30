@@ -83,7 +83,7 @@ test('income, tiers, gold and the drop zone are enforced', () => {
   // not enough gold
   S.gold = 0;
   assert.match(g.check(0, { t: 'income' }) ?? '', /gold/);
-  assert.match(g.check(0, { t: 'tier' }) ?? '', /gold/);
+  assert.match(g.check(0, { t: 'tier' }) ?? '', /no bigger hulls/, 'heavy is the biggest hull in this roster: nothing more to sell');
   assert.ok(TIER_COST[4] > TIER_COST[3]);
 });
 
@@ -97,6 +97,24 @@ test('spawned units march on the enemy castle and hurt it', () => {
   for (let i = 0; i < 20 * 120 && !g.done; i++) g.step();
   assert.ok(g.castleHp(1) < TUG.castleHp, 'the enemy castle took damage');
   assert.equal(g.castleHp(0), TUG.castleHp);
+});
+
+test('a tier unlock skips hull sizes the roster has no design of', () => {
+  const giant = STARTER_DESIGNS.find((d) => computeStats(d).size === 4)!;
+  assert.ok(giant, 'a giant starter');
+  const g = new TugGame(6, [[...ROSTER, giant], [...ROSTER, HEAVY]]);
+  assert.equal(g.nextTier(0), 4, 'no heavy designs: medium goes straight to giant');
+  assert.equal(g.nextTier(1), 3);
+  g.sides[0].gold = 5000;
+  assert.equal(g.apply(0, { t: 'tier' }), null);
+  assert.equal(g.sides[0].tier, 4);
+  assert.equal(g.sides[0].gold, 5000 - TIER_COST[4]);
+  assert.equal(g.nextTier(0), null);
+  assert.match(g.check(0, { t: 'tier' }) ?? '', /no bigger hulls/);
+  // a roster of small hulls only has nothing to unlock at all
+  const h = new TugGame(7, [ROSTER, ROSTER]);
+  assert.equal(h.nextTier(0), null);
+  assert.match(h.check(0, { t: 'tier' }) ?? '', /no bigger hulls/);
 });
 
 test('a design can only be bought again after its cooldown', () => {

@@ -116,6 +116,8 @@ export interface ChassisOut {
   custom?: boolean;
   /** the builder placed the hard-surface functional kit itself: skip units3d's slot autoDress (hs-kit AUTO_DRESS) */
   dressed?: boolean;
+  /** the builder made its own footing (the tug castle's landing legs): skip the mobility's running gear */
+  ownGround?: boolean;
   /** mech torso: the hero weapon's turret becomes the upper body (it twists as a whole, weapons on arms / shoulders).
    *  Called after the turrets exist with a builder in the hero yaw frame (origin = the hero seat, +x forward, world
    *  units, unscaled); returns the weapon hardpoints in that frame: hp[0] = the hero's trunnion, hp[1..] = the pods

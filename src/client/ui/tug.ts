@@ -368,7 +368,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       const c = o.cmd;
       if (c.t === 'buy') { const d = g.design(me, c.designId); if (d) s += costOf(d); }
       else if (c.t === 'income') s += incomeCost(g.sides[me].incomeLvl);
-      else if (c.t === 'tier') s += TIER_COST[Math.min(5, g.sides[me].tier + 1) as Size];
+      else if (c.t === 'tier') { const nt = g.nextTier(me); if (nt) s += TIER_COST[nt]; }
       else if (c.t === 'castleGun') { const m = MODULE_BY_ID.get(c.moduleId); if (m) s += castleGunPrice(m); }
     }
     return s + inFlight;
@@ -399,9 +399,15 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       incomeBtn.replaceChildren(h('span', null, `Invest +${TUG.incomeStep}/s`), h('small.gold', null, ` ${c}g`));
       incomeBtn.disabled = gold < c || g.done;
     }
-    if (S.tier >= TUG.maxTier) { tierBtn.textContent = 'All hulls unlocked'; tierBtn.disabled = true; }
-    else {
-      const nt = (S.tier + 1) as Size, c = TIER_COST[nt];
+    const nt = g.nextTier(me);
+    if (nt === null) {
+      // nothing bigger in the roster: no upgrade to sell
+      tierBtn.textContent = S.tier >= TUG.maxTier ? 'All hulls unlocked' : 'No bigger hulls';
+      tierBtn.title = S.tier >= TUG.maxTier ? '' : 'Your roster has no bigger designs to unlock';
+      tierBtn.disabled = true;
+    } else {
+      const c = TIER_COST[nt];
+      tierBtn.title = nt > S.tier + 1 ? `Your roster has no ${TIER_NAMES[(S.tier + 1) as Size]} designs, so this goes straight to ${TIER_NAMES[nt]} (U)` : `Unlock ${TIER_NAMES[nt]} hulls (U)`;
       tierBtn.replaceChildren(h('span', null, `Unlock ${TIER_NAMES[nt]}`), h('small.gold', null, ` ${c}g`));
       tierBtn.disabled = gold < c || g.done;
     }
@@ -465,7 +471,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     sfx(cmd.t === 'buy' ? 'place' : 'click');
     if (!net) { g.apply(me, cmd); renderCards(); return; }
     const cost = cmd.t === 'buy' ? costOf(g.design(me, cmd.designId)!) : cmd.t === 'income' ? incomeCost(g.sides[me].incomeLvl)
-      : cmd.t === 'tier' ? TIER_COST[Math.min(5, g.sides[me].tier + 1) as Size] : cmd.t === 'castleGun' ? castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!) : 0;
+      : cmd.t === 'tier' ? TIER_COST[g.nextTier(me) ?? 1] : cmd.t === 'castleGun' ? castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!) : 0;
     inFlight += cost;
     if (cmd.t === 'buy') {
       ghosts.push({ cmd, at: performance.now() });
