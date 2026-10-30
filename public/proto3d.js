@@ -32472,10 +32472,10 @@ var MeshoptEncoder = (function() {
   function spatialsort(fun, positions, count, stride) {
     var sbrk = instance.exports.sbrk;
     var ip = sbrk(count * 4);
-    var sp = sbrk(count * stride);
+    var sp2 = sbrk(count * stride);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(positions), sp);
-    fun(ip, sp, count, stride);
+    heap.set(bytes(positions), sp2);
+    fun(ip, sp2, count, stride);
     heap = new Uint8Array(instance.exports.memory.buffer);
     var remap = new Uint32Array(count);
     new Uint8Array(remap.buffer).set(heap.subarray(ip, ip + count * 4));
@@ -32485,10 +32485,10 @@ var MeshoptEncoder = (function() {
   function encode(fun, bound, source, count, size, level, version) {
     var sbrk = instance.exports.sbrk;
     var tp = sbrk(bound);
-    var sp = sbrk(count * size);
+    var sp2 = sbrk(count * size);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(source), sp);
-    var res = fun(tp, bound, sp, count, size, level, version);
+    heap.set(bytes(source), sp2);
+    var res = fun(tp, bound, sp2, count, size, level, version);
     var target = new Uint8Array(res);
     target.set(heap.subarray(tp, tp + res));
     sbrk(tp - sbrk(0));
@@ -32514,10 +32514,10 @@ var MeshoptEncoder = (function() {
   function filter(fun, source, count, stride, bits, insize, mode) {
     var sbrk = instance.exports.sbrk;
     var tp = sbrk(count * stride);
-    var sp = sbrk(count * insize);
+    var sp2 = sbrk(count * insize);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(source), sp);
-    fun(tp, count, stride, bits, sp, mode);
+    heap.set(bytes(source), sp2);
+    fun(tp, count, stride, bits, sp2, mode);
     var target = new Uint8Array(count * stride);
     target.set(heap.subarray(tp, tp + count * stride));
     sbrk(tp - sbrk(0));
@@ -32757,10 +32757,10 @@ var MeshoptDecoder = (function() {
     var sbrk = instance2.exports.sbrk;
     var count4 = count + 3 & ~3;
     var tp = sbrk(count4 * size);
-    var sp = sbrk(source.length);
+    var sp2 = sbrk(source.length);
     var heap = new Uint8Array(instance2.exports.memory.buffer);
-    heap.set(source, sp);
-    var res = fun(tp, count, size, sp, source.length);
+    heap.set(source, sp2);
+    var res = fun(tp, count, size, sp2, source.length);
     if (res == 0 && filter) {
       filter(tp, count4, size);
     }
@@ -32970,10 +32970,10 @@ var MeshoptSimplifier = (function() {
   function genremap(fun, positions, vertices, stride) {
     var sbrk = instance.exports.sbrk;
     var rp = sbrk(vertices * 4);
-    var sp = sbrk(vertices * stride * 4);
+    var sp2 = sbrk(vertices * stride * 4);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(positions), sp);
-    fun(rp, sp, vertices, stride * 4);
+    heap.set(bytes(positions), sp2);
+    fun(rp, sp2, vertices, stride * 4);
     heap = new Uint8Array(instance.exports.memory.buffer);
     var remap = new Uint32Array(vertices);
     new Uint8Array(remap.buffer).set(heap.subarray(rp, rp + vertices * 4));
@@ -33007,12 +33007,12 @@ var MeshoptSimplifier = (function() {
     var sbrk = instance.exports.sbrk;
     var te = sbrk(4);
     var ti = sbrk(index_count * 4);
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var si = sbrk(index_count * 4);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
+    heap.set(bytes(vertex_positions), sp2);
     heap.set(bytes(indices), si);
-    var result = fun(ti, si, index_count, sp, vertex_count, vertex_positions_stride, target_index_count, target_error, options, te);
+    var result = fun(ti, si, index_count, sp2, vertex_count, vertex_positions_stride, target_index_count, target_error, options, te);
     heap = new Uint8Array(instance.exports.memory.buffer);
     var target = new Uint32Array(result);
     bytes(target).set(heap.subarray(ti, ti + result * 4));
@@ -33025,13 +33025,13 @@ var MeshoptSimplifier = (function() {
     var sbrk = instance.exports.sbrk;
     var te = sbrk(4);
     var ti = sbrk(index_count * 4);
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var sa = sbrk(vertex_count * vertex_attributes_stride);
     var sw = sbrk(attribute_weights.length * 4);
     var si = sbrk(index_count * 4);
     var vl = vertex_lock ? sbrk(vertex_count) : 0;
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
+    heap.set(bytes(vertex_positions), sp2);
     heap.set(bytes(vertex_attributes), sa);
     heap.set(bytes(attribute_weights), sw);
     heap.set(bytes(indices), si);
@@ -33042,7 +33042,7 @@ var MeshoptSimplifier = (function() {
       ti,
       si,
       index_count,
-      sp,
+      sp2,
       vertex_count,
       vertex_positions_stride,
       sa,
@@ -33066,13 +33066,13 @@ var MeshoptSimplifier = (function() {
   function simplifyUpdate(fun, indices, index_count, vertex_positions, vertex_count, vertex_positions_stride, vertex_attributes, vertex_attributes_stride, attribute_weights, vertex_lock, target_index_count, target_error, options) {
     var sbrk = instance.exports.sbrk;
     var te = sbrk(4);
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var sa = sbrk(vertex_count * vertex_attributes_stride);
     var sw = sbrk(attribute_weights.length * 4);
     var si = sbrk(index_count * 4);
     var vl = vertex_lock ? sbrk(vertex_count) : 0;
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
+    heap.set(bytes(vertex_positions), sp2);
     heap.set(bytes(vertex_attributes), sa);
     heap.set(bytes(attribute_weights), sw);
     heap.set(bytes(indices), si);
@@ -33082,7 +33082,7 @@ var MeshoptSimplifier = (function() {
     var result = fun(
       si,
       index_count,
-      sp,
+      sp2,
       vertex_count,
       vertex_positions_stride,
       sa,
@@ -33097,7 +33097,7 @@ var MeshoptSimplifier = (function() {
     );
     heap = new Uint8Array(instance.exports.memory.buffer);
     bytes(indices).set(heap.subarray(si, si + result * 4));
-    bytes(vertex_positions).set(heap.subarray(sp, sp + vertex_count * vertex_positions_stride));
+    bytes(vertex_positions).set(heap.subarray(sp2, sp2 + vertex_count * vertex_positions_stride));
     bytes(vertex_attributes).set(heap.subarray(sa, sa + vertex_count * vertex_attributes_stride));
     var error2 = new Float32Array(1);
     bytes(error2).set(heap.subarray(te, te + 4));
@@ -33106,24 +33106,24 @@ var MeshoptSimplifier = (function() {
   }
   function simplifyScale(fun, vertex_positions, vertex_count, vertex_positions_stride) {
     var sbrk = instance.exports.sbrk;
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
-    var result = fun(sp, vertex_count, vertex_positions_stride);
-    sbrk(sp - sbrk(0));
+    heap.set(bytes(vertex_positions), sp2);
+    var result = fun(sp2, vertex_count, vertex_positions_stride);
+    sbrk(sp2 - sbrk(0));
     return result;
   }
   function simplifyPoints(fun, vertex_positions, vertex_count, vertex_positions_stride, vertex_colors, vertex_colors_stride, color_weight, target_vertex_count) {
     var sbrk = instance.exports.sbrk;
     var ti = sbrk(target_vertex_count * 4);
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var sc2 = vertex_colors ? sbrk(vertex_count * vertex_colors_stride) : 0;
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
+    heap.set(bytes(vertex_positions), sp2);
     if (vertex_colors) {
       heap.set(bytes(vertex_colors), sc2);
     }
-    var result = fun(ti, sp, vertex_count, vertex_positions_stride, sc2, vertex_colors_stride, color_weight, target_vertex_count);
+    var result = fun(ti, sp2, vertex_count, vertex_positions_stride, sc2, vertex_colors_stride, color_weight, target_vertex_count);
     heap = new Uint8Array(instance.exports.memory.buffer);
     var target = new Uint32Array(result);
     bytes(target).set(heap.subarray(ti, ti + result * 4));
@@ -33134,16 +33134,16 @@ var MeshoptSimplifier = (function() {
     var sbrk = instance.exports.sbrk;
     var te = sbrk(4);
     var ti = sbrk(index_count * 4);
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var si = sbrk(index_count * 4);
     var vl = vertex_lock ? sbrk(vertex_count) : 0;
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
+    heap.set(bytes(vertex_positions), sp2);
     heap.set(bytes(indices), si);
     if (vertex_lock) {
       heap.set(bytes(vertex_lock), vl);
     }
-    var result = fun(ti, si, index_count, sp, vertex_count, vertex_positions_stride, vl, target_index_count, target_error, te);
+    var result = fun(ti, si, index_count, sp2, vertex_count, vertex_positions_stride, vl, target_index_count, target_error, te);
     heap = new Uint8Array(instance.exports.memory.buffer);
     var target = new Uint32Array(result);
     bytes(target).set(heap.subarray(ti, ti + result * 4));
@@ -33155,12 +33155,12 @@ var MeshoptSimplifier = (function() {
   function simplifyPrune(fun, indices, index_count, vertex_positions, vertex_count, vertex_positions_stride, target_error) {
     var sbrk = instance.exports.sbrk;
     var ti = sbrk(index_count * 4);
-    var sp = sbrk(vertex_count * vertex_positions_stride);
+    var sp2 = sbrk(vertex_count * vertex_positions_stride);
     var si = sbrk(index_count * 4);
     var heap = new Uint8Array(instance.exports.memory.buffer);
-    heap.set(bytes(vertex_positions), sp);
+    heap.set(bytes(vertex_positions), sp2);
     heap.set(bytes(indices), si);
-    var result = fun(ti, si, index_count, sp, vertex_count, vertex_positions_stride, target_error);
+    var result = fun(ti, si, index_count, sp2, vertex_count, vertex_positions_stride, target_error);
     heap = new Uint8Array(instance.exports.memory.buffer);
     var target = new Uint32Array(result);
     bytes(target).set(heap.subarray(ti, ti + result * 4));
@@ -33774,9 +33774,9 @@ function setSimplify(err) {
   SIMP = err;
   return was;
 }
-function simplifyGeo(g) {
+function simplifyGeo(g, err = SIMP) {
   const p = g.attributes.position, n = p.count, mid = g.attributes.mid;
-  if (SIMP <= 0 || g.index || n < 96 || n % 3 || Object.keys(g.attributes).some((k) => k !== "position" && k !== "normal" && k !== "mid")) return g;
+  if (err <= 0 || g.index || n < 96 || n % 3 || Object.keys(g.attributes).some((k) => k !== "position" && k !== "normal" && k !== "mid")) return g;
   const key = /* @__PURE__ */ new Map(), P = [], M = [], idx = new Uint32Array(n);
   for (let i = 0; i < n; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), m = mid ? mid.getX(i) : 0;
@@ -33790,7 +33790,7 @@ function simplifyGeo(g) {
     }
     idx[i] = v;
   }
-  const [ix] = MeshoptSimplifier.simplify(idx, new Float32Array(P), 3, 0, SIMP, []);
+  const [ix] = MeshoptSimplifier.simplify(idx, new Float32Array(P), 3, 0, err, []);
   if (ix.length >= n * 0.97) return g;
   const nf = ix.length / 3, fn = new Float32Array(nf * 3), faces = Array.from({ length: P.length / 3 }, () => []);
   for (let f = 0; f < nf; f++) {
@@ -34045,6 +34045,9 @@ var Bld = class {
   segK = 1;
   /** caps radial segments of cyl/cylb/lathe/strut (weapons use 6: faceted hex forms read as armour, not turned tubes) */
   segMax = 64;
+  /** simplification error for this builder's meshes (fraction of each mesh's extent; default SIMP). The error is
+   *  relative, so one big merged hull loses the most curvature: a large showpiece (the tug castle) sets it lower. */
+  simp = void 0;
   sg(n) {
     return Math.min(this.segMax, this.segK === 1 ? n : Math.max(5, Math.round(n * this.segK)));
   }
@@ -34101,7 +34104,7 @@ var Bld = class {
     for (const [mat, list] of this.m) {
       const g0 = mergeGeometries(list, false);
       if (!g0) continue;
-      const g = simplifyGeo(g0);
+      const g = simplifyGeo(g0, this.simp === void 0 ? SIMP : Math.min(this.simp, SIMP));
       const mesh = new Mesh(g, mat);
       mesh.castShadow = opts.shadow !== false;
       mesh.receiveShadow = true;
@@ -36736,7 +36739,7 @@ function flak(C) {
   C.t.rate = 0.35;
 }
 function gatling(C) {
-  const { b, p, rc, sp, kit, r, y0 } = C;
+  const { b, p, rc, sp: sp2, kit, r, y0 } = C;
   const n = Math.max(6, C.nb);
   const big = C.tier >= 4;
   const cr = r * (big ? 0.3 : 0.25);
@@ -36761,14 +36764,14 @@ function gatling(C) {
   }
   rc.lathe(kit.trim, [[0, 0], [ro, 0], [ro, r * 0.1], [0, r * 0.1]], [r * 0.25, 0, 0], "x", 10);
   C.spin("x", [r * 0.33, 0, 0]);
-  sp.cyl(kit.trim, ro * 0.95, ro * 0.95, r * 0.08, [0, 0, 0], "x", n);
+  sp2.cyl(kit.trim, ro * 0.95, ro * 0.95, r * 0.08, [0, 0, 0], "x", n);
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2;
-    sp.cyl(kit.metal, rb, rb, len, [0, Math.sin(a) * cr, Math.cos(a) * cr], "x", 5);
+    sp2.cyl(kit.metal, rb, rb, len, [0, Math.sin(a) * cr, Math.cos(a) * cr], "x", 5);
   }
-  sp.cyl(kit.trim, cr * 0.42, cr * 0.42, len * 0.84, [0, 0, 0], "x", 6);
-  sp.cyl(kit.steel, ro * 0.92, ro * 0.92, r * 0.05, [len * 0.42, 0, 0], "x", n);
-  sp.cyl(kit.steel, ro, ro, r * 0.1, [len * 0.8, 0, 0], "x", 10);
+  sp2.cyl(kit.trim, cr * 0.42, cr * 0.42, len * 0.84, [0, 0, 0], "x", 6);
+  sp2.cyl(kit.steel, ro * 0.92, ro * 0.92, r * 0.05, [len * 0.42, 0, 0], "x", n);
+  sp2.cyl(kit.steel, ro, ro, r * 0.1, [len * 0.8, 0, 0], "x", 10);
   C.muzzle(r * 0.33 + len + r * 0.04, 0, 0);
   C.t.rate = 0.07;
 }
@@ -37549,18 +37552,18 @@ function buildMelee(C) {
   void rc;
 }
 function saw(C, A2) {
-  const { rc, sp, kit, r } = C;
+  const { rc, sp: sp2, kit, r } = C;
   const big = C.tier >= 4;
   const R = r * (big ? 0.82 : 0.7), t = r * (big ? 0.12 : 0.05);
   cbox(rc, kit.trim, A2, 0, 0, r * 0.3, r * 0.3, r * 0.34);
   cbox(rc, kit.panel, A2 + R * 0.2, R * 0.82, 0, R * 1.3, r * 0.08, t * 2 + r * 0.14, r * 0.03);
   C.spin("z", [A2 + R * 0.75, 0, 0]);
-  sp.lathe(kit.metal, [[0, -t], [R * 0.86, -t], [R, 0], [R * 0.86, t], [0, t]], [0, 0, 0], "x", 14);
-  sp.lathe(kit.hazard, [[0, -t * 1.6], [R * 0.3, -t * 1.6], [R * 0.3, t * 1.6], [0, t * 1.6]], [0, 0, 0], "x", 8);
+  sp2.lathe(kit.metal, [[0, -t], [R * 0.86, -t], [R, 0], [R * 0.86, t], [0, t]], [0, 0, 0], "x", 14);
+  sp2.lathe(kit.hazard, [[0, -t * 1.6], [R * 0.3, -t * 1.6], [R * 0.3, t * 1.6], [0, t * 1.6]], [0, 0, 0], "x", 8);
   const n = big ? 10 : 8;
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2;
-    bx(sp, kit.steel, 0, Math.sin(a) * R, Math.cos(a) * R, t * 2.4, R * 0.22, R * 0.14, [a, 0, 0]);
+    bx(sp2, kit.steel, 0, Math.sin(a) * R, Math.cos(a) * R, t * 2.4, R * 0.22, R * 0.14, [a, 0, 0]);
   }
 }
 function chainsaw(C, A2) {
@@ -37601,7 +37604,7 @@ function fist(C, A2) {
   cbox(rc, kit.metal, A2 + r * 0.45, -r * 0.05, -r * 0.36, r * 0.4, r * 0.18, r * 0.14, r * 0.04, [0, 0.4, 0]);
 }
 function drill(C, A2) {
-  const { rc, sp, kit, r } = C;
+  const { rc, sp: sp2, kit, r } = C;
   const R = r * 0.42, L = r * 1.4;
   rc.lathe(kit.panel, [[0, 0], [R * 0.9, 0], [R * 1.1, r * 0.15], [R * 1.1, r * 0.3], [0, r * 0.3]], [A2 - r * 0.1, 0, 0], "x", 10);
   C.spin("x", [A2 + r * 0.2, 0, 0]);
@@ -37612,10 +37615,10 @@ function drill(C, A2) {
     prof2.push([R * (1 - f0) * 1, L * f0 + L * 0.02], [R * (1 - f1) + R * 0.12, L * f1 - L * 0.03]);
   }
   prof2.push([0, L]);
-  sp.lathe(kit.metal, prof2, [0, 0, 0], "x", 7);
+  sp2.lathe(kit.metal, prof2, [0, 0, 0], "x", 7);
   for (let i = 0; i < 3; i++) {
     const a = i / 3 * Math.PI * 2;
-    sp.strut(kit.metal, [L * 0.05, Math.sin(a) * R * 0.95, Math.cos(a) * R * 0.95], [L * 0.85, Math.sin(a + 1.6) * R * 0.18, Math.cos(a + 1.6) * R * 0.18], r * 0.05, r * 0.02, 4);
+    sp2.strut(kit.metal, [L * 0.05, Math.sin(a) * R * 0.95, Math.cos(a) * R * 0.95], [L * 0.85, Math.sin(a + 1.6) * R * 0.18, Math.cos(a + 1.6) * R * 0.18], r * 0.05, r * 0.02, 4);
   }
 }
 function blade(C, A2) {
@@ -37904,7 +37907,7 @@ function coil(B, mat, x, y, z, Ri, Ro, t, axis = "x", seg = SM) {
   B.lathe(mat, [[Ri, 0], [Ro - e, 0], [Ro, e], [Ro, t - e], [Ro - e, t], [Ri, t], [Ri, 0]], at2, axis, seg);
 }
 function rotary(C) {
-  const { p, rc, sp, kit, r, y0 } = C;
+  const { p, rc, sp: sp2, kit, r, y0 } = C;
   const big = C.tier >= 4, n = big ? 4 : 3;
   const h = r * 0.5;
   mechHousing(C, r * 1.5, r * 0.7, h, 0.6);
@@ -37926,13 +37929,13 @@ function rotary(C) {
   const L22 = len - br * 2.2;
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2, yy = Math.sin(a) * cr, zz = Math.cos(a) * cr;
-    sp.lathe(kit.metal, [[0, 0], [br * 1.12, 0], [br * 1.12, len * 0.16], [br, len * 0.19], [br, L22], [0, L22]], [0, yy, zz], "x", 12);
-    hollowMuzzle(C, sp, L22, yy, zz, br * 1.3, br * 2.2);
+    sp2.lathe(kit.metal, [[0, 0], [br * 1.12, 0], [br * 1.12, len * 0.16], [br, len * 0.19], [br, L22], [0, L22]], [0, yy, zz], "x", 12);
+    hollowMuzzle(C, sp2, L22, yy, zz, br * 1.3, br * 2.2);
   }
-  sp.lathe(kit.plasma, [[0, 0], [cr * 0.36, 0], [cr * 0.36, len * 0.84], [cr * 0.2, len * 0.9], [0, len * 0.93]], [0, 0, 0], "x", 12);
-  coil(sp, kit.trim, len * 0.47, 0, 0, cr * 0.5, CR * 1.04, len * 0.07);
-  if (!dt) ring(sp, kit.metal, len * 0.47, 0, 0, CR * 0.96, CR * 1.1, len * 0.025);
-  coil(sp, kit.hull2, L22 - br * 0.4, 0, 0, cr * 0.5, CR * 0.98, br * 0.5);
+  sp2.lathe(kit.plasma, [[0, 0], [cr * 0.36, 0], [cr * 0.36, len * 0.84], [cr * 0.2, len * 0.9], [0, len * 0.93]], [0, 0, 0], "x", 12);
+  coil(sp2, kit.trim, len * 0.47, 0, 0, cr * 0.5, CR * 1.04, len * 0.07);
+  if (!dt) ring(sp2, kit.metal, len * 0.47, 0, 0, CR * 0.96, CR * 1.1, len * 0.025);
+  coil(sp2, kit.hull2, L22 - br * 0.4, 0, 0, cr * 0.5, CR * 0.98, br * 0.5);
   C.muzzle(r * 0.42 + len + r * 0.04, 0, 0);
   C.t.rate = big ? 0.05 : 0.07;
 }
@@ -38203,7 +38206,7 @@ function emitter(C) {
   C.t.rate = v === "heatray" ? 0.7 : id === "stungun" ? 0.8 : id === "empcannon" ? 1.3 : v === "slowbeam" ? 1 : v === "sonic" ? 1.1 : 1.2;
 }
 function railDriver(C) {
-  const { p, rc, sp, kit, r } = C;
+  const { p, rc, sp: sp2, kit, r } = C;
   const xl = C.tier >= 5, nf = C.nb >= 2 ? 2 : 1;
   mechHousing(C, r * 1.8, r * 0.78, r * 0.5, 0.8);
   const R = Math.max(C.bore * 1.2, r * 0.11) * (nf > 1 ? 0.85 : 1);
@@ -38252,7 +38255,7 @@ function railDriver(C) {
     for (let k = 1; k <= 4; k++) {
       const t = k / 4, j = k < 4 ? (k % 2 ? 1 : -1) * R * 0.4 : 0;
       const nx = [xa + j * Math.cos(a), -g * 0.85 + t * g * 1.7, z + j * Math.sin(a) * 0.6];
-      sp.strut(kit.plasma, prev, nx, R * 0.11, R * 0.11, 5);
+      sp2.strut(kit.plasma, prev, nx, R * 0.11, R * 0.11, 5);
       prev = nx;
     }
   }
@@ -38381,66 +38384,6 @@ function recoilRelax(t, dt) {
   }
 }
 var hasGeo = (B) => B.m.size > 0;
-
-// src/client/proto3d/chassis/giants-kit.ts
-function ngon(n, rx, rz, a0 = Math.PI / n) {
-  const out2 = [];
-  for (let i = 0; i < n; i++) {
-    const a = a0 + i / n * Math.PI * 2;
-    out2.push([Math.cos(a) * rx, Math.sin(a) * rz]);
-  }
-  return out2;
-}
-function planLoft(b, mat, poly, levels, at2 = [0, 0]) {
-  b.loft(mat, levels.map(([y, s, dx = 0, dz = 0]) => poly.map(([px2, pz2]) => [at2[0] + dx + px2 * s, y, at2[1] + dz + pz2 * s])));
-}
-function inPoly(poly, x, z) {
-  let sgn = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const [ax, az] = poly[i], [bx3, bz] = poly[(i + 1) % poly.length];
-    const c = (bx3 - ax) * (z - az) - (bz - az) * (x - ax);
-    if (Math.abs(c) < 1e-9) continue;
-    const s = Math.sign(c);
-    if (sgn === 0) sgn = s;
-    else if (s !== sgn) return false;
-  }
-  return true;
-}
-function mast(b, kit, x, y, z, h, r = 0.05) {
-  b.cylb(kit.trim, r * 2.6, r * 2.2, r * 0.6, [x, y, z], "y", 8);
-  b.cyl(kit.steel, r, r * 0.45, h, [x, y, z], "y", 6);
-  for (const f of [0.45, 0.72]) b.box(kit.metal, r * 0.8, r * 0.8, h * (0.42 - f * 0.25), x, y + h * f, z, r * 0.2);
-  b.box(kit.metal, h * 0.14, r * 0.7, r * 0.7, x, y + h * 0.6, z, r * 0.2);
-  b.cyl(kit.lamp, r * 1.3, r * 1.3, r * 1.6, [x, y + h, z], "y", 6);
-}
-function banner(b, kit, x, y, z, h, w, dir = -1) {
-  b.cyl(kit.steel, h * 0.016, h * 0.012, h, [x, y, z], "y", 6);
-  b.cyl(kit.lamp, h * 0.03, h * 0.03, h * 0.03, [x, y + h, z], "y", 6);
-  b.box(kit.metal, h * 0.03, h * 0.02, w * 1.1, x, y + h * 0.95, z + dir * w * 0.5, 4e-3);
-  const fh = h * 0.5, t = Math.max(0.012, h * 0.012);
-  const poly = [[0, 0], [w, 0], [w, fh * 0.8], [w * 0.5, fh * 0.62], [0, fh]];
-  const g = new Shape(poly.map(([px2, py2]) => new Vector2(px2, py2)));
-  const geo = new ExtrudeGeometry(g, { depth: t, bevelEnabled: false });
-  const m = new Matrix4().makeBasis(new Vector3(0, 0, dir), new Vector3(0, -1, 0), new Vector3(dir, 0, 0)).setPosition(x - t / 2 * dir, y + h * 0.94, z + dir * h * 0.02);
-  b.g(geo, kit.accent, m);
-  b.box(kit.hazard, t * 1.2, fh * 0.06, w * 0.9, x, y + h * 0.94 - fh * 0.2, z + dir * w * 0.5, 2e-3);
-}
-function reactor(b, kit, at2, r, axis = "y", ribs = 4) {
-  const d = r * 0.5;
-  b.cylb(kit.trim, r * 1.3, d, d * 0.2, at2, axis, 16);
-  const off = axis === "y" ? [0, d, 0] : axis === "x" ? [d, 0, 0] : [-d, 0, 0];
-  const c = [at2[0] + off[0], at2[1] + off[1], at2[2] + off[2]];
-  b.cyl(kit.glow, r, r * 0.7, r * 0.5, [c[0] - off[0] * 0.5, c[1] - off[1] * 0.5, c[2] - off[2] * 0.5], axis, 14);
-  for (let i = 0; i < ribs; i++) {
-    const a = i / ribs * Math.PI;
-    if (axis === "y") b.box(kit.metal, r * 2.3, r * 0.14, r * 0.14, c[0], c[1] + r * 0.22, c[2], r * 0.04, [0, a, 0]);
-    else b.box(kit.metal, r * 0.14, r * 2.3, r * 0.14, c[0] + off[0] * 0.44, c[1], c[2], r * 0.04, [a, 0, 0]);
-  }
-}
-function glowGrille(b, kit, x, y, z, w, h, n, dir = 1) {
-  b.box(kit.trim, h * 0.2, h, w, x, y, z, h * 0.06);
-  for (let i = 0; i < n; i++) glow(b, kit, x + dir * h * 0.08, y - h * 0.32 + h * 0.64 * i / Math.max(1, n - 1), z, h * 0.08, h * 0.08, w * 0.8);
-}
 
 // src/client/proto3d/chassis/hs-kit.ts
 var fineFor = (S) => S >= 2;
@@ -38977,154 +38920,295 @@ function whip(b, kit, x, y, z, h, r = h * 0.012) {
 // src/client/proto3d/chassis/castle.ts
 var CASTLE_ID = "tug-castle";
 var isCastle = (id) => id === CASTLE_ID || id.startsWith(CASTLE_ID + "#");
+var TAU = Math.PI * 2;
+var CASTLE_SIMP = 8e-4;
+var sp = (u, p) => Math.sign(u) * Math.pow(Math.abs(u), p);
+var smooth = (t) => t * t * (3 - 2 * t);
+var torusP = (R, r, n = 14) => {
+  const out2 = [];
+  for (let i = 0; i <= n; i++) {
+    const a = i / n * TAU - Math.PI / 2;
+    out2.push([R + Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return out2;
+};
+var domeP = (R, h, rr, n = 8) => {
+  const out2 = [[0, 0], [R, 0], [R, h - rr]];
+  for (let i = 1; i <= n; i++) {
+    const a = i / n * (Math.PI / 2);
+    out2.push([R - rr + Math.cos(a) * rr, h - rr + Math.sin(a) * rr]);
+  }
+  out2.push([0, h]);
+  return out2;
+};
 function castle(c) {
   const { b, kit, L, W } = c;
+  b.simp = CASTLE_SIMP;
   const k = Math.min(L, W) / 7 * 1.15;
   const fine = fineFor(c.S);
   const gun = c.design.mounts[0] ? MODULE_BY_ID.get(c.design.mounts[0]) : void 0;
   const D = DRAW_D[gun?.mount ?? "S"];
-  const yBelly = 1 * k, yShoulder = 1.75 * k, yDeck = 2.25 * k;
-  stationHull(b, kit.hull, [
-    [-3.15 * k, 1.05 * k, yBelly + 0.15 * k, yShoulder - 0.05 * k, yDeck - 0.15 * k, 0.78],
-    [-2.4 * k, 1.35 * k, yBelly, yShoulder, yDeck, 0.82],
-    [0.2 * k, 1.45 * k, yBelly, yShoulder, yDeck, 0.84],
-    [1.9 * k, 1.1 * k, yBelly + 0.1 * k, yShoulder - 0.1 * k, yDeck - 0.25 * k, 0.7],
-    [3 * k, 0.55 * k, yBelly + 0.35 * k, yShoulder - 0.3 * k, yDeck - 0.75 * k, 0.5],
-    [3.42 * k, 0.18 * k, yBelly + 0.6 * k, yShoulder - 0.45 * k, yDeck - 1.05 * k, 0.4]
-  ], 0, 0.8);
-  stationHull(b, kit.trim, [
-    [-2.9 * k, 0.75 * k, yBelly - 0.12 * k, yBelly + 0.1 * k, yBelly + 0.15 * k, 1],
-    [2.2 * k, 0.6 * k, yBelly - 0.12 * k, yBelly + 0.1 * k, yBelly + 0.15 * k, 1]
-  ], 0, 0.9);
+  const CP = [
+    [-3.25, 0.95, 1.15, 2.05],
+    [-2.8, 1.3, 1, 2.3],
+    [-1.5, 1.45, 0.95, 2.42],
+    [0.5, 1.45, 0.95, 2.4],
+    [1.8, 1.15, 1.02, 2.15],
+    [2.8, 0.7, 1.2, 1.78],
+    [3.42, 0.22, 1.42, 1.52]
+  ];
+  const prof2 = (x) => {
+    const xs = x / k;
+    if (xs <= CP[0][0]) return [CP[0][1] * k, CP[0][2] * k, CP[0][3] * k];
+    for (let i = 0; i < CP.length - 1; i++) {
+      const a = CP[i], e = CP[i + 1];
+      if (xs <= e[0]) {
+        const t = smooth((xs - a[0]) / (e[0] - a[0]));
+        return [(a[1] + (e[1] - a[1]) * t) * k, (a[2] + (e[2] - a[2]) * t) * k, (a[3] + (e[3] - a[3]) * t) * k];
+      }
+    }
+    const l = CP[CP.length - 1];
+    return [l[1] * k, l[2] * k, l[3] * k];
+  };
+  const NS = 36;
+  const skin = (x, a, grow = 0, p = 0.62) => {
+    const [hw, y0, y1] = prof2(x), yc = (y0 + y1) / 2, ry = (y1 - y0) / 2;
+    return [x, yc + (ry + grow) * sp(Math.sin(a), p), (hw + grow) * sp(Math.cos(a), p)];
+  };
+  const ring4 = (x, grow = 0, a0 = -Math.PI / 2, a1 = Math.PI * 1.5, n = NS, p = 0.62) => {
+    const out2 = [];
+    for (let i = 0; i < n; i++) out2.push(skin(x, a0 + (a1 - a0) * i / n, grow, p));
+    return out2;
+  };
+  const sweep = (mat, x0, x1, n, grow = 0, p = 0.62) => {
+    const rings = [];
+    for (let i = 0; i <= n; i++) rings.push(ring4(x0 + (x1 - x0) * i / n, grow, -Math.PI / 2, Math.PI * 1.5, NS, p));
+    b.loft(mat, rings);
+  };
+  const xS = -3.25 * k, xB = 3.42 * k;
+  sweep(kit.hull, xS, xB, 22);
+  const top = (x) => prof2(x)[2];
+  const belly = (x) => prof2(x)[1];
+  const half = (x) => prof2(x)[0];
+  for (const [x0, x1, mat] of [[-2.9, -1.95, kit.armor2], [-1.7, -0.25, kit.shell], [0, 1.45, kit.armor2]]) sweep(mat, x0 * k, x1 * k, 6, 0.045 * k);
+  {
+    const rings = [];
+    for (let i = 0; i <= 14; i++) {
+      const x = -2.9 * k + 5.2 * k * i / 14, [hw, y0] = prof2(x), w = hw * 0.55;
+      const r = [];
+      for (let j = 0; j < 24; j++) {
+        const a = j / 24 * TAU;
+        r.push([x, y0 + 0.02 * k + 0.16 * k * sp(Math.sin(a), 0.7), w * sp(Math.cos(a), 0.7)]);
+      }
+      rings.push(r);
+    }
+    b.loft(kit.trim, rings);
+  }
+  const spX0 = -2.75 * k, spX1 = 1.7 * k, spH = 0.14 * k;
+  {
+    const rings = [];
+    for (let i = 0; i <= 14; i++) {
+      const x = spX0 + (spX1 - spX0) * i / 14, w = half(x) * 0.58, y = top(x) - 0.06 * k;
+      const r = [];
+      for (let j = 0; j < 28; j++) {
+        const a = j / 28 * TAU;
+        r.push([x, y + spH / 2 + spH / 2 * sp(Math.sin(a), 0.35), w * sp(Math.cos(a), 0.35)]);
+      }
+      rings.push(r);
+    }
+    b.loft(kit.armor2, rings);
+  }
+  const deck = (x) => top(x) - 0.06 * k + spH;
+  const band2 = (mat, a, x0, x1, w, h, n = 24) => {
+    const rings = [];
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + (x1 - x0) * i / n, p = skin(x, a, 0), q = skin(x, a, 0.1);
+      const nn = [(q[0] - p[0]) / 0.1, (q[1] - p[1]) / 0.1, (q[2] - p[2]) / 0.1];
+      const u0 = skin(x, a - 0.02, 0), u1 = skin(x, a + 0.02, 0);
+      const ul = Math.hypot(u1[1] - u0[1], u1[2] - u0[2]) || 1, u = [0, (u1[1] - u0[1]) / ul, (u1[2] - u0[2]) / ul];
+      const P = (sw, sh) => [p[0] + nn[0] * sh, p[1] + u[1] * sw + nn[1] * sh, p[2] + u[2] * sw + nn[2] * sh];
+      rings.push([P(-w, -0.01), P(w, -0.01), P(w, h), P(-w, h)]);
+    }
+    b.loft(mat, rings);
+  };
   both((s) => {
-    b.box(kit.accent, 4.6 * k, 0.12 * k, 0.05 * k, -0.35 * k, yShoulder + 0.02 * k, s * 1.43 * k, 0.01);
-    for (const x of [-2, -0.7, 0.6]) {
-      armorPlate(b, kit, x === -0.7 ? kit.shell : kit.armor2, frame([x * k, (yBelly + yShoulder) / 2 + 0.05 * k, s * 1.43 * k], [0, 0, s], [1, 0, 0]), rectP(1.1 * k, 0.5 * k, 0.06 * k), 0.07 * k, { standoff: 0.03 * k });
-      glow(b, kit, (x + 0.65) * k, (yBelly + yShoulder) / 2 + 0.05 * k, s * 1.46 * k, 0.12 * k, 0.08 * k, 0.03 * k, void 0, kit.lamp);
+    const a = s > 0 ? 0.6 : Math.PI - 0.6;
+    band2(kit.trim, a, -3.05 * k, 2.85 * k, 0.09 * k, 0.03 * k);
+    band2(kit.glow, a, -2.95 * k, 2.75 * k, 0.05 * k, 0.05 * k);
+    for (let i = 0; i < 9; i++) {
+      const x = (-2.6 + i * 0.52) * k, p = skin(x, s > 0 ? 0.28 : Math.PI - 0.28, 0.05 * k);
+      b.cyl(kit.lamp, 0.06 * k, 0.06 * k, 0.03 * k, [p[0], p[1], p[2]], s > 0 ? "z" : "-z", 16);
+    }
+    for (const x of [-2.4, -1, 0.7]) {
+      const p = skin(x * k, s > 0 ? 0.12 : Math.PI - 0.12, 0.08 * k);
+      armorPlate(b, kit, x === -1 ? kit.armor : kit.armor2, frame(p, [0, 0.12, s], [1, 0, 0]), rectP(0.9 * k, 0.42 * k, 0.08 * k), 0.06 * k, { standoff: 0.02 * k });
     }
   });
-  block(b, kit.armor2, -0.4 * k, yDeck - 0.02, 0, 4.6 * k, 1.9 * k, 0.12 * k, { ch: 0.3 * k });
-  hazard(b, kit, 1.9 * k, yDeck - 0.22 * k, 0, 0.12 * k, 1.5 * k, 6, Math.PI / 2);
-  const rampTop = [2.55 * k, yBelly + 0.12 * k, 0], rampFoot = [3.45 * k, 0.04, 0];
+  hazard(b, kit, 1.95 * k, deck(1.95 * k) - 0.04 * k, 0, 0.12 * k, 1.1 * k, 6, Math.PI / 2);
+  const rampTop = [2.55 * k, belly(2.55 * k) + 0.12 * k, 0], rampFoot = [3.5 * k, 0.04, 0];
   {
     const dx = rampFoot[0] - rampTop[0], dy = rampFoot[1] - rampTop[1], len = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
-    b.box(kit.armor, len, 0.1 * k, 1.25 * k, (rampTop[0] + rampFoot[0]) / 2, (rampTop[1] + rampFoot[1]) / 2, 0, 0.02, [0, 0, a]);
-    for (let i = 0; i < 4; i++) {
-      const f = (i + 0.5) / 4;
-      b.box(kit.trim, 0.06 * k, 0.03 * k, 1.1 * k, rampTop[0] + dx * f, rampTop[1] + dy * f + 0.06 * k, 0, 5e-3, [0, 0, a]);
+    b.box(kit.armor, len, 0.1 * k, 1.25 * k, (rampTop[0] + rampFoot[0]) / 2, (rampTop[1] + rampFoot[1]) / 2, 0, 0.03, [0, 0, a]);
+    for (let i = 0; i < 5; i++) {
+      const f = (i + 0.5) / 5;
+      b.box(kit.trim, 0.05 * k, 0.03 * k, 1.05 * k, rampTop[0] + dx * f, rampTop[1] + dy * f + 0.06 * k, 0, 5e-3, [0, 0, a]);
     }
-    both((s) => glow(b, kit, (rampTop[0] + rampFoot[0]) / 2, (rampTop[1] + rampFoot[1]) / 2 + 0.07 * k, s * 0.6 * k, len * 0.95, 0.04 * k, 0.05 * k, [0, 0, a]));
-    b.box(kit.trim, 0.3 * k, 0.6 * k, 1.1 * k, 2.45 * k, yBelly + 0.42 * k, 0, 0.03);
-    glow(b, kit, 2.56 * k, yBelly + 0.5 * k, 0, 0.04 * k, 0.32 * k, 0.9 * k, void 0, kit.lamp);
+    both((s) => {
+      glow(b, kit, (rampTop[0] + rampFoot[0]) / 2, (rampTop[1] + rampFoot[1]) / 2 + 0.07 * k, s * 0.6 * k, len * 0.95, 0.05 * k, 0.1 * k, [0, 0, a]);
+      for (let i = 0; i < 4; i++) {
+        const f = (i + 0.5) / 4;
+        b.cyl(kit.lamp, 0.045 * k, 0.045 * k, 0.03 * k, [rampTop[0] + dx * f, rampTop[1] + dy * f + 0.06 * k, s * 0.66 * k], "y", 14);
+      }
+    });
+    b.box(kit.trim, 0.35 * k, 0.62 * k, 1.12 * k, 2.42 * k, belly(2.42 * k) + 0.42 * k, 0, 0.12 * k);
+    glow(b, kit, 2.6 * k, belly(2.6 * k) + 0.5 * k, 0, 0.04 * k, 0.36 * k, 0.92 * k, void 0, kit.lamp);
   }
-  block(b, kit.armor, 2.6 * k, yShoulder - 0.35 * k, 0, 1.4 * k, 1.3 * k, 0.5 * k, { top: [0.6, 0.7], shift: [0.25 * k, 0], ch: 0.25 * k });
-  both((s) => cagedLamp(b, kit, frame([3.05 * k, yShoulder - 0.25 * k, s * 0.38 * k], [1, 0.2, 0], [0, 0, 1]), 0.13 * k, fine));
+  b.lathe(kit.armor, domeP(0.36 * k, 0.32 * k, 0.24 * k, 10), [3 * k, top(3 * k) - 0.1 * k, 0], "x", 40);
+  b.lathe(kit.plasma, domeP(0.2 * k, 0.12 * k, 0.1 * k, 8), [3.3 * k, top(3 * k) - 0.1 * k, 0], "x", 32);
+  both((s) => {
+    const p = skin(2.75 * k, s > 0 ? 0.35 : Math.PI - 0.35, 0.02 * k);
+    b.lathe(kit.trim, [[0, 0], [0.12 * k, 0], [0.13 * k, 0.06 * k], [0.1 * k, 0.08 * k], [0, 0.08 * k]], p, "x", 32);
+    b.cyl(kit.lamp, 0.09 * k, 0.09 * k, 0.02 * k, [p[0] + 0.07 * k, p[1], p[2]], "x", 32);
+  });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const hip = [sx * 1.7 * k - 0.2 * k, yBelly + 0.15 * k, sz * 1.15 * k];
-    const knee = [sx * 2.35 * k - 0.2 * k, 0.75 * k, sz * 2.2 * k];
-    const foot2 = [sx * 2.5 * k - 0.2 * k, 0.12 * k, sz * 2.55 * k];
-    block(b, kit.mech, hip[0], yBelly - 0.15 * k, hip[2], 0.55 * k, 0.55 * k, 0.4 * k, { top: [0.8, 0.8], ch: 0.12 * k });
-    b.strut(kit.mech, hip, knee, 0.24 * k, 0.2 * k, 8);
-    b.strut(kit.mech, knee, foot2, 0.2 * k, 0.17 * k, 8);
+    const hx = sx * 1.7 * k - 0.2 * k;
+    const hip = [hx, belly(hx) + 0.2 * k, sz * 1.1 * k];
+    const knee = [sx * 2.35 * k - 0.2 * k, 0.8 * k, sz * 2.2 * k];
+    const foot2 = [sx * 2.5 * k - 0.2 * k, 0.16 * k, sz * 2.55 * k];
+    b.lathe(kit.armor2, [[0, -0.3 * k], [0.3 * k, -0.3 * k], [0.34 * k, -0.1 * k], [0.34 * k, 0.15 * k], [0.26 * k, 0.25 * k], [0, 0.25 * k]], [hip[0], hip[1] - 0.25 * k, hip[2]], "y", 40);
+    b.strut(kit.mech, hip, knee, 0.22 * k, 0.19 * k, 24);
+    b.strut(kit.mech, knee, foot2, 0.19 * k, 0.16 * k, 24);
     const mid = (p, q, f) => [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f];
-    beam(b, kit.armor, mid(hip, knee, 0.12), mid(hip, knee, 0.85), 0.4 * k, 0.3 * k, [0, 1, 0]);
-    beam(b, kit.armor2, mid(knee, foot2, 0.15), mid(knee, foot2, 0.7), 0.32 * k, 0.24 * k, [0, 1, 0]);
-    b.lathe(kit.joint, [[0, -0.2 * k], [0.26 * k, -0.2 * k], [0.26 * k, 0.2 * k], [0, 0.2 * k]], knee, "z", 14);
-    piston(b, kit, [hip[0], hip[1] - 0.2 * k, hip[2] * 0.8], [(knee[0] + foot2[0]) / 2, (knee[1] + foot2[1]) / 2, (knee[2] + foot2[2]) / 2], 0.06 * k, 0.55, fine);
-    planLoft(b, kit.trim, ngon(8, 0.62 * k, 0.62 * k), [[-0.02, 1.15], [0.06 * k, 1]], [foot2[0], foot2[2]]);
-    planLoft(b, kit.mech, ngon(8, 0.48 * k, 0.48 * k), [[0.04 * k, 1], [0.2 * k, 0.86]], [foot2[0], foot2[2]]);
-    hazard(b, kit, foot2[0], 0.2 * k, foot2[2], 0.5 * k, 0.1 * k, 3, sz * 0.8);
+    beam(b, kit.armor, mid(hip, knee, 0.12), mid(hip, knee, 0.85), 0.42 * k, 0.32 * k, [0, 1, 0]);
+    beam(b, kit.armor2, mid(knee, foot2, 0.15), mid(knee, foot2, 0.7), 0.34 * k, 0.26 * k, [0, 1, 0]);
+    b.lathe(kit.armor2, [[0, -0.22 * k], [0.27 * k, -0.22 * k], [0.3 * k, -0.18 * k], [0.3 * k, 0.18 * k], [0.27 * k, 0.22 * k], [0, 0.22 * k]], [knee[0], knee[1], knee[2] - 0.22 * k * 0], "z", 40);
+    b.lathe(kit.glow, torusP(0.2 * k, 0.03 * k, 10), [knee[0], knee[1], knee[2] + sz * 0.23 * k], "z", 40);
+    piston(b, kit, [hip[0], hip[1] - 0.25 * k, hip[2] * 0.8], mid(knee, foot2, 0.5), 0.065 * k, 0.55, fine);
+    b.lathe(kit.trim, [[0, -0.02], [0.78 * k, -0.02], [0.7 * k, 0.07 * k], [0, 0.07 * k]], [foot2[0], 0, foot2[2]], "y", 48);
+    b.lathe(kit.mech, [[0, 0], [0.55 * k, 0], [0.56 * k, 0.12 * k], [0.46 * k, 0.24 * k], [0, 0.26 * k]], [foot2[0], 0.04 * k, foot2[2]], "y", 48);
+    b.lathe(kit.glow, torusP(0.63 * k, 0.025 * k, 8), [foot2[0], 0.08 * k, foot2[2]], "y", 48);
+    hazard(b, kit, foot2[0], 0.3 * k, foot2[2], 0.42 * k, 0.08 * k, 3, sz * 0.8);
   }
   both((s) => {
-    const zi = s * 1.6 * k, zo = s * 3.2 * k;
-    const ring4 = (x, lift) => [[x, 0.02, zo], [x, 0.02, zo - s * 0.32 * k], [x, yShoulder - 0.2 * k + lift, zi], [x, yShoulder + lift, zi + s * 0.14 * k]];
+    const zi = s * 1.62 * k, zo = s * 3.2 * k, yTop = 1.62 * k;
+    const sec2 = (x, lift) => [[x, 0.02, zo], [x, 0.02, zo - s * 0.32 * k], [x, yTop - 0.22 * k + lift, zi], [x, yTop + lift, zi + s * 0.14 * k]];
     for (const [x0, x1] of [[-1.9, -0.88], [-0.78, 0.25], [0.35, 1.4]]) {
-      b.loft(kit.armor2, [ring4(x0 * k, 0), ring4(x1 * k, 0)]);
-      b.loft(kit.armor, [
-        ring4((x0 + 0.08) * k, 0.03 * k).map(([x, y, z]) => [x, y, z + s * 0.02 * k]).slice(2).concat([[(x0 + 0.08) * k, yShoulder - 0.45 * k, zi + s * 0.32 * k], [(x0 + 0.08) * k, yShoulder - 0.3 * k, zi + s * 0.38 * k]]),
-        ring4((x1 - 0.08) * k, 0.03 * k).map(([x, y, z]) => [x, y, z + s * 0.02 * k]).slice(2).concat([[(x1 - 0.08) * k, yShoulder - 0.45 * k, zi + s * 0.32 * k], [(x1 - 0.08) * k, yShoulder - 0.3 * k, zi + s * 0.38 * k]])
-      ]);
+      b.loft(kit.armor2, [sec2(x0 * k, 0), sec2(x1 * k, 0)]);
+      const cz = (zi + zo) / 2, cy = yTop * 0.5;
+      armorPlate(b, kit, kit.armor, frame([(x0 + x1) / 2 * k, cy, cz + s * 0.12 * k], [0, Math.abs(zo - zi) / Math.hypot(yTop, zo - zi), s * yTop / Math.hypot(yTop, zo - zi)], [1, 0, 0]), rectP((x1 - x0) * 0.82 * k, Math.hypot(yTop, zo - zi) * 0.62, 0.08 * k), 0.05 * k, { standoff: 0.03 * k });
     }
+    glow(b, kit, -0.25 * k, yTop + 0.04 * k, zi + s * 0.07 * k, 3.3 * k, 0.06 * k, 0.12 * k);
     b.box(kit.trim, 3.3 * k, 0.04 * k, Math.abs(zo - zi) * 0.95, -0.25 * k, 0.02, (zi + zo) / 2, 5e-3);
-    block(b, kit.armor2, 1.55 * k, 0.02, (zi + zo) / 2, 0.35 * k, Math.abs(zo - zi) * 0.95, 0.9 * k, { top: [0.6, 0.6], ch: 0.08 * k });
-    glow(b, kit, 1.7 * k, 0.75 * k, zo - s * 0.15 * k, 0.12 * k, 0.12 * k, 0.12 * k, void 0, s > 0 ? kit.glow : kit.hot);
-    for (const x of [-1.2, -0.25, 0.7]) {
-      const a = [x * k, 0.05, zo - s * 0.15 * k], e = [x * k, yShoulder - 0.05 * k, zi + s * 0.08 * k];
-      b.strut(kit.trim, a, e, 0.05 * k, 0.05 * k, 6);
-    }
-    glow(b, kit, -0.25 * k, yShoulder - 0.08 * k, zi + s * 0.05 * k, 3 * k, 0.05 * k, 0.06 * k, void 0, kit.plasma);
+    b.lathe(kit.armor, domeP(0.2 * k, 0.4 * k, 0.18 * k, 8), [1.42 * k, 0.5 * k, (zi + zo) / 2], "x", 32);
+    b.lathe(s > 0 ? kit.glow : kit.hot, domeP(0.09 * k, 0.08 * k, 0.08 * k, 6), [1.78 * k, 0.5 * k, (zi + zo) / 2], "x", 24);
   });
   both((s) => {
-    const z = s * 0.95 * k, y = yShoulder - 0.15 * k;
-    b.lathe(kit.armor2, [[0, 0], [0.42 * k, 0], [0.55 * k, 0.5 * k], [0.58 * k, 1.5 * k], [0.5 * k, 1.9 * k], [0, 1.9 * k]], [-1.4 * k, y, z], "x", 16, [0, 0, Math.PI]);
-    b.cyl(kit.trim, 0.44 * k, 0.36 * k, 0.25 * k, [-3.55 * k, y, z], "x", 16);
-    b.cyl(kit.hot, 0.3 * k, 0.3 * k, 0.03 * k, [-3.58 * k, y, z], "x", 14);
-    for (const f of [0.3, 0.7]) b.cylb(kit.accent, 0.585 * k, 0.07 * k, 0.01, [-1.4 * k - (1.5 * f + 0.2) * k, y, z], "x", 16);
+    const z = s * 1 * k, y = top(-2.6 * k) - 0.55 * k, xn = -3.7 * k;
+    const R = 0.55 * k;
+    b.lathe(kit.armor2, [[0.3 * k, 0], [0.42 * k, 0], [0.5 * k, 0.12 * k], [R, 0.45 * k], [R * 1.04, 1.2 * k], [R, 1.8 * k], [0.46 * k, 2.15 * k], [0.36 * k, 2.3 * k], [0.36 * k, 2.25 * k], [0.3 * k, 2.2 * k]], [xn, y, z], "x", 48);
+    for (const f of [0.55, 1.65]) b.lathe(kit.accent, [[R * 0.9, 0], [R * 1.09, 0.02 * k], [R * 1.09, 0.12 * k], [R * 0.9, 0.14 * k]], [xn + f * k, y, z], "x", 48);
+    b.lathe(kit.glow, [[R * 0.9, 0], [R * 1.08, 0.02 * k], [R * 1.08, 0.1 * k], [R * 0.9, 0.12 * k]], [xn + 1.1 * k, y, z], "x", 48);
+    b.lathe(kit.trim, [[0, 0], [0.32 * k, 0], [0.32 * k, 0.05 * k], [0, 0.05 * k]], [xn + 2.18 * k, y, z], "x", 40);
+    b.lathe(kit.joint, domeP(0.14 * k, 0.12 * k, 0.12 * k, 8), [xn + 2.2 * k, y, z], "x", 32);
+    b.lathe(kit.trim, [[0.4 * k, 0.02 * k], [0.36 * k, 0.35 * k], [0, 0.4 * k]], [xn, y, z], "x", 40);
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * TAU;
+      b.box(kit.metal, 0.05 * k, 0.03 * k, 0.3 * k, xn + 0.24 * k, y + Math.sin(a) * 0.17 * k, z + Math.cos(a) * 0.17 * k, 5e-3, [a, 0, 0.3]);
+    }
+    b.lathe(kit.hot, domeP(0.2 * k, 0.12 * k, 0.1 * k, 8), [xn + 0.32 * k, y, z], "-x", 32);
+    b.lathe(kit.plasma, torusP(0.4 * k, 0.035 * k, 10), [xn + 0.02 * k, y, z], "x", 48);
+    b.lathe(kit.hot, [[0, 0], [0.3 * k, 0], [0.12 * k, 0.32 * k], [0, 0.38 * k]], [xn - 0.01 * k, y, z], "-x", 32);
+    beam(b, kit.armor, [xn + 0.9 * k, y, z * 0.55], [xn + 1.9 * k, y + 0.1 * k, z * 0.4], 0.3 * k, 0.5 * k, [0, 1, 0]);
   });
-  const rx = -1.95 * k;
-  b.lathe(kit.armor2, [[0.42 * k, 0], [0.62 * k, 0], [0.62 * k, 0.35 * k], [0.5 * k, 0.45 * k], [0.42 * k, 0.45 * k]], [rx, yDeck, 0], "y", 18);
-  b.lathe(kit.plasma, [[0, 0], [0.42 * k, 0], [0.4 * k, 0.32 * k], [0.25 * k, 0.5 * k], [0, 0.55 * k]], [rx, yDeck, 0], "y", 16);
-  for (let i = 0; i < 6; i++) {
-    const a = i / 6 * Math.PI * 2;
-    b.box(kit.mech, 0.12 * k, 0.5 * k, 0.12 * k, rx + Math.cos(a) * 0.66 * k, yDeck + 0.2 * k, Math.sin(a) * 0.66 * k, 0.02);
-  }
-  const ix = -2.35 * k, iz = 1 * k, iTop = yDeck + 2.1 * k;
-  block(b, kit.hull, ix, yDeck - 0.05, iz, 1.1 * k, 0.7 * k, iTop - yDeck, { top: [0.75, 0.8], shift: [-0.12 * k, 0], ch: 0.15 * k, bev: 0.04 });
-  block(b, kit.armor, ix + 0.08 * k, iTop - 0.42 * k, iz, 1.25 * k, 0.82 * k, 0.32 * k, { top: [0.86, 0.9], ch: 0.15 * k });
-  glow(b, kit, ix + 0.6 * k, iTop - 0.28 * k, iz, 0.06 * k, 0.12 * k, 0.65 * k, void 0, kit.lamp);
-  both((s) => glow(b, kit, ix + 0.1 * k, iTop - 0.28 * k, iz + s * 0.42 * k, 0.9 * k, 0.12 * k, 0.04 * k, void 0, kit.lamp));
-  whip(b, kit, ix - 0.25 * k, iTop - 0.05, iz, 1.4 * k);
-  sensorDome(b, kit, ix + 0.2 * k, iTop - 0.1 * k, iz - 0.15 * k, 0.18 * k);
+  const rx = -1.85 * k, ry0 = deck(rx);
+  b.lathe(kit.armor2, [[0, 0], [0.78 * k, 0], [0.8 * k, 0.12 * k], [0.66 * k, 0.2 * k], [0, 0.2 * k]], [rx, ry0, 0], "y", 48);
   {
-    const dx0 = -2.55 * k, dz0 = -0.95 * k, dy0 = yDeck;
-    b.cylb(kit.metal, 0.08 * k, 0.6 * k, 0.01, [dx0, dy0, dz0], "y", 8);
-    b.lathe(kit.shell, [[0, 0], [0.45 * k, 0.12 * k], [0.47 * k, 0.16 * k], [0, 0.06 * k]], [dx0, dy0 + 0.62 * k, dz0], "y", 16, [0, 0, 0.9]);
-    b.cylb(kit.lamp, 0.05 * k, 0.1 * k, 0.01, [dx0 + 0.15 * k, dy0 + 0.8 * k, dz0], "y", 6);
+    const pr = [];
+    for (let i = 0; i <= 12; i++) {
+      const a = -Math.PI / 2 + i / 12 * Math.PI;
+      pr.push([Math.cos(a) * 0.4 * k, 0.6 * k + Math.sin(a) * 0.4 * k]);
+    }
+    b.lathe(kit.plasma, pr, [rx, ry0, 0], "y", 40);
+  }
+  for (const [h, R] of [[0.32, 0.6], [0.6, 0.66], [0.88, 0.6]]) b.lathe(kit.glow, torusP(R * k, 0.045 * k, 10), [rx, ry0 + h * k, 0], "y", 48);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * TAU;
+    b.strut(kit.mech, [rx + Math.cos(a) * 0.72 * k, ry0 + 0.15 * k, Math.sin(a) * 0.72 * k], [rx + Math.cos(a) * 0.5 * k, ry0 + 1.12 * k, Math.sin(a) * 0.5 * k], 0.05 * k, 0.04 * k, 12);
+  }
+  b.lathe(kit.armor, [[0, 0], [0.55 * k, 0], [0.5 * k, 0.08 * k], [0, 0.1 * k]], [rx, ry0 + 1.1 * k, 0], "y", 48);
+  b.lathe(kit.lamp, domeP(0.08 * k, 0.1 * k, 0.08 * k, 6), [rx, ry0 + 1.2 * k, 0], "y", 24);
+  {
+    const ix = -2.45 * k, iz = 1 * k, iy = deck(ix) - 0.04 * k, ih = 2 * k;
+    b.lathe(kit.hull, [[0, 0], [0.42 * k, 0], [0.4 * k, ih * 0.6], [0.36 * k, ih * 0.66], [0, ih * 0.66]], [ix, iy, iz], "y", 40);
+    b.lathe(kit.accent, [[0.405 * k, ih * 0.2], [0.41 * k, ih * 0.2], [0.41 * k, ih * 0.26], [0.405 * k, ih * 0.26]], [ix, iy, iz], "y", 40);
+    b.lathe(kit.armor, [[0, 0], [0.5 * k, 0], [0.58 * k, 0.12 * k], [0.58 * k, 0.42 * k], [0.5 * k, 0.5 * k], [0, 0.5 * k]], [ix, iy + ih * 0.62, iz], "y", 48);
+    b.lathe(kit.lamp, [[0.585 * k, 0.2 * k], [0.59 * k, 0.2 * k], [0.59 * k, 0.32 * k], [0.585 * k, 0.32 * k]], [ix, iy + ih * 0.62, iz], "y", 48);
+    b.lathe(kit.armor2, domeP(0.42 * k, 0.24 * k, 0.2 * k, 8), [ix, iy + ih * 0.62 + 0.5 * k, iz], "y", 40);
+    whip(b, kit, ix - 0.12 * k, iy + ih * 0.62 + 0.72 * k, iz, 1.3 * k);
+    b.lathe(kit.glow, domeP(0.05 * k, 0.06 * k, 0.05 * k, 6), [ix - 0.12 * k, iy + ih * 0.62 + 2.02 * k, iz], "y", 16);
+    const dx0 = -2.6 * k, dz0 = -0.95 * k, dy0 = deck(dx0);
+    b.cylb(kit.metal, 0.07 * k, 0.65 * k, 0.01, [dx0, dy0, dz0], "y", 16);
+    const bowl = [];
+    for (let i = 0; i <= 10; i++) {
+      const r = i / 10 * 0.5 * k;
+      bowl.push([r, 0.5 * (r * r) / (0.5 * k)]);
+    }
+    for (let i = 10; i >= 0; i--) {
+      const r = i / 10 * 0.48 * k;
+      bowl.push([r, 0.5 * (r * r) / (0.5 * k) + 0.03 * k]);
+    }
+    b.lathe(kit.shell, bowl, [dx0, dy0 + 0.66 * k, dz0], "y", 40, [0, 0, 0.8]);
+    b.strut(kit.metal, [dx0, dy0 + 0.7 * k, dz0], [dx0 - 0.25 * k, dy0 + 0.92 * k, dz0], 0.02 * k, 0.02 * k, 8);
+    b.lathe(kit.glow, domeP(0.05 * k, 0.05 * k, 0.05 * k, 6), [dx0 - 0.25 * k, dy0 + 0.9 * k, dz0], "y", 16);
   }
   const crate = (x, y, z, ry, mat = kit.shell) => {
-    b.box(mat, 0.75 * k, 0.4 * k, 0.4 * k, x, y + 0.2 * k, z, 0.03, [0, ry, 0]);
+    b.box(mat, 0.75 * k, 0.4 * k, 0.4 * k, x, y + 0.2 * k, z, 0.04, [0, ry, 0]);
     b.box(kit.trim, 0.77 * k, 0.05 * k, 0.42 * k, x, y + 0.3 * k, z, 0.01, [0, ry, 0]);
+    b.box(kit.lamp, 0.12 * k, 0.05 * k, 0.43 * k, x + 0.25 * k, y + 0.12 * k, z, 5e-3, [0, ry, 0]);
   };
   crate(-3 * k, 0, 2.6 * k, 0.15);
   crate(-3.05 * k, 0, 2.12 * k, -0.1, kit.armor);
   crate(-3 * k, 0.4 * k, 2.38 * k, 0.05, kit.armor2);
   both((s) => {
-    for (const dz of [0, 0.42]) {
+    for (const dz of [0, 0.44]) {
       const z = s * (2.75 - dz) * k;
-      b.cylb(kit.armor2, 0.18 * k, 0.55 * k, 0.04, [2 * k, 0, z], "y", 12);
-      b.cylb(kit.hazard, 0.185 * k, 0.06 * k, 5e-3, [2 * k, 0.4 * k, z], "y", 12);
+      b.lathe(kit.armor2, domeP(0.19 * k, 0.6 * k, 0.12 * k, 8), [2.05 * k, 0, z], "y", 32);
+      b.lathe(kit.hazard, [[0.195 * k, 0.38 * k], [0.2 * k, 0.38 * k], [0.2 * k, 0.44 * k], [0.195 * k, 0.44 * k]], [2.05 * k, 0, z], "y", 32);
+      b.cyl(kit.glow, 0.035 * k, 0.035 * k, 0.02 * k, [2.05 * k + 0.19 * k, 0.25 * k, z], "x", 12);
     }
   });
-  b.cylb(kit.metal, 0.05 * k, 1.1 * k, 0.01, [-3.15 * k, 0, -2.75 * k], "y", 6);
-  glow(b, kit, -3.15 * k, 1.12 * k, -2.75 * k, 0.14 * k, 0.14 * k, 0.14 * k);
+  b.cylb(kit.metal, 0.05 * k, 1.1 * k, 0.01, [-3.15 * k, 0, -2.75 * k], "y", 16);
+  b.lathe(kit.glow, domeP(0.1 * k, 0.16 * k, 0.1 * k, 8), [-3.15 * k, 1.1 * k, -2.75 * k], "y", 24);
   const cr = D * 0.58 + 0.15 * k;
   const ch = D * 0.3 + 0.12 * k;
-  const neck = cr > 2.2 * k ? 1 * k : cr > 1.5 * k ? 0.45 * k : 0.08 * k;
   const gx = 0.45 * k;
+  const yG = deck(gx);
+  const neck = cr > 2.2 * k ? 1 * k : cr > 1.5 * k ? 0.45 * k : 0.06 * k;
   const rn = Math.min(cr * 0.8, 1.25 * k);
-  planLoft(b, kit.trim, ngon(16, rn, rn), [[yDeck - 0.04, 1.1], [yDeck + neck * 0.35, 1], [yDeck + neck, 1]], [gx, 0]);
-  if (neck > 0.2) planLoft(b, kit.accent, ngon(16, rn, rn), [[yDeck + neck * 0.5, 1.01], [yDeck + neck * 0.64, 1.01]], [gx, 0]);
-  const at2 = [gx, yDeck + neck, 0];
+  b.lathe(kit.trim, [[0, -0.05 * k], [rn * 1.1, -0.05 * k], [rn, neck * 0.3], [rn, neck], [0, neck]], [gx, yG, 0], "y", 48);
+  if (neck > 0.2) b.lathe(kit.glow, torusP(rn * 1.005, 0.03 * k, 8), [gx, yG + neck * 0.6, 0], "y", 48);
+  const at2 = [gx, yG + neck, 0];
   const hp0 = [cr * 0.12, ch * 1.02, 0];
   const cupola3 = (t) => {
-    const Pc = ngon(8, cr, cr);
-    planLoft(t, kit.armor, Pc, [[0, 0.92], [0.12 * ch, 1], [0.62 * ch, 1], [0.9 * ch, 0.86], [ch, 0.74]]);
-    planLoft(t, kit.mech, Pc, [[0.12 * ch, 1.012], [0.2 * ch, 1.012]]);
+    t.lathe(kit.armor, domeP(cr, ch, Math.min(ch * 0.55, cr * 0.4), 10), [0, 0, 0], "y", 48);
+    t.lathe(kit.mech, [[cr * 1, 0.06 * ch], [cr * 1.03, 0.08 * ch], [cr * 1.03, 0.2 * ch], [cr * 1, 0.22 * ch]], [0, 0, 0], "y", 48);
+    t.lathe(kit.glow, torusP(cr * 1.035, Math.max(0.02, cr * 0.02), 8), [0, 0.14 * ch, 0], "y", 48);
     both((s) => {
-      armorPlate(t, kit, kit.armor2, frame([cr * 0.1, ch * 0.42, s * cr * 0.98], [0, 0.15, s], [1, 0, 0]), rectP(cr * 0.8, ch * 0.4, cr * 0.06), cr * 0.04, { standoff: cr * 0.02 });
-      glow(t, kit, cr * 0.75, ch * 0.4, s * cr * 0.55, cr * 0.06, ch * 0.07, cr * 0.32);
+      armorPlate(t, kit, kit.armor2, frame([cr * 0.1, ch * 0.45, s * cr * 0.97], [0, 0.15, s], [1, 0, 0]), rectP(cr * 0.8, ch * 0.4, cr * 0.08), cr * 0.04, { standoff: cr * 0.02 });
+      t.lathe(kit.lamp, domeP(cr * 0.07, cr * 0.03, cr * 0.03, 4), [cr * 0.86, ch * 0.5, s * cr * 0.4], "x", 24);
     });
-    block(t, kit.armor2, -cr * 0.48, ch * 0.96, 0, cr * 0.42, cr * 0.5, ch * 0.16, { top: [0.8, 0.8], ch: cr * 0.06 });
-    hazard(t, kit, -cr * 0.95, ch * 0.2, 0, cr * 0.6, ch * 0.08, 4, Math.PI / 2);
+    t.lathe(kit.armor2, domeP(cr * 0.24, ch * 0.12, ch * 0.08, 6), [-cr * 0.45, ch * 0.97, 0], "y", 32);
+    hazard(t, kit, -cr * 0.97, ch * 0.3, 0, cr * 0.5, ch * 0.07, 4, Math.PI / 2);
   };
   return {
-    deckAt: (x, z) => Math.abs(z) < 1.2 * k && x > -3 * k && x < 2 * k ? yDeck : -1,
-    top: Math.max(yDeck + 1.6 * k, at2[1] + ch + 0.5),
+    deckAt: (x, z) => Math.abs(z) < half(x) * 0.55 && x > spX0 && x < spX1 ? deck(x) : -1,
+    top: Math.max(deck(0) + 1.8 * k, at2[1] + ch + 0.5),
     custom: true,
     dressed: true,
     ownGround: true,
-    seat: (m) => ({ y: m === c.mounts[0] ? at2[1] : yDeck + 0.2 * k, socket: true }),
+    seat: (m) => ({ y: m === c.mounts[0] ? at2[1] : deck(m.x) + 0.2 * k, socket: true }),
     torso: (t) => {
+      t.simp = CASTLE_SIMP;
       cupola3(t);
       return { hp: [hp0], at: at2 };
     }
@@ -42126,7 +42210,7 @@ var XBld = class extends Bld {
   }
 };
 var place = (x, y, z, yaw = 0) => new Matrix4().makeRotationY(yaw).setPosition(x, y, z);
-function ngon2(n, rx, rz = rx, rot = 0, cx = 0, cz = 0) {
+function ngon(n, rx, rz = rx, rot = 0, cx = 0, cz = 0) {
   const out2 = [];
   for (let i = 0; i < n; i++) {
     const a = rot + i / n * Math.PI * 2;
@@ -42585,7 +42669,7 @@ function colossus(c) {
       const base3 = Math.max(y0, H.deck(m.x, m.z));
       if (m.x > X(1.2)) {
         const y = deckY + 0.02 * k;
-        frustum(b, kit.armor, ngon2(8, m.r * 1.45, m.r * 1.45, Math.PI / 8, m.x, m.z), base3 - 0.1 * k, y - base3 + 0.1 * k, { top: [0.9, 0.9], bev: 0.01 * k });
+        frustum(b, kit.armor, ngon(8, m.r * 1.45, m.r * 1.45, Math.PI / 8, m.x, m.z), base3 - 0.1 * k, y - base3 + 0.1 * k, { top: [0.9, 0.9], bev: 0.01 * k });
         return { y: ringSeat(b, kit, m, y, 0.015 * k, 16), socket: true };
       }
       return { y: ringSeat(b, kit, m, base3, 0.03 * k, 14), socket: true };
@@ -42709,6 +42793,66 @@ registerChassis(["long", "longarm"], longarm);
 registerChassis("colossus", colossus);
 registerChassis("juggernaut", juggernaut);
 registerTorso("juggernaut");
+
+// src/client/proto3d/chassis/giants-kit.ts
+function ngon2(n, rx, rz, a0 = Math.PI / n) {
+  const out2 = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + i / n * Math.PI * 2;
+    out2.push([Math.cos(a) * rx, Math.sin(a) * rz]);
+  }
+  return out2;
+}
+function planLoft(b, mat, poly, levels, at2 = [0, 0]) {
+  b.loft(mat, levels.map(([y, s, dx = 0, dz = 0]) => poly.map(([px2, pz2]) => [at2[0] + dx + px2 * s, y, at2[1] + dz + pz2 * s])));
+}
+function inPoly(poly, x, z) {
+  let sgn = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, az] = poly[i], [bx3, bz] = poly[(i + 1) % poly.length];
+    const c = (bx3 - ax) * (z - az) - (bz - az) * (x - ax);
+    if (Math.abs(c) < 1e-9) continue;
+    const s = Math.sign(c);
+    if (sgn === 0) sgn = s;
+    else if (s !== sgn) return false;
+  }
+  return true;
+}
+function mast(b, kit, x, y, z, h, r = 0.05) {
+  b.cylb(kit.trim, r * 2.6, r * 2.2, r * 0.6, [x, y, z], "y", 8);
+  b.cyl(kit.steel, r, r * 0.45, h, [x, y, z], "y", 6);
+  for (const f of [0.45, 0.72]) b.box(kit.metal, r * 0.8, r * 0.8, h * (0.42 - f * 0.25), x, y + h * f, z, r * 0.2);
+  b.box(kit.metal, h * 0.14, r * 0.7, r * 0.7, x, y + h * 0.6, z, r * 0.2);
+  b.cyl(kit.lamp, r * 1.3, r * 1.3, r * 1.6, [x, y + h, z], "y", 6);
+}
+function banner(b, kit, x, y, z, h, w, dir = -1) {
+  b.cyl(kit.steel, h * 0.016, h * 0.012, h, [x, y, z], "y", 6);
+  b.cyl(kit.lamp, h * 0.03, h * 0.03, h * 0.03, [x, y + h, z], "y", 6);
+  b.box(kit.metal, h * 0.03, h * 0.02, w * 1.1, x, y + h * 0.95, z + dir * w * 0.5, 4e-3);
+  const fh = h * 0.5, t = Math.max(0.012, h * 0.012);
+  const poly = [[0, 0], [w, 0], [w, fh * 0.8], [w * 0.5, fh * 0.62], [0, fh]];
+  const g = new Shape(poly.map(([px2, py2]) => new Vector2(px2, py2)));
+  const geo = new ExtrudeGeometry(g, { depth: t, bevelEnabled: false });
+  const m = new Matrix4().makeBasis(new Vector3(0, 0, dir), new Vector3(0, -1, 0), new Vector3(dir, 0, 0)).setPosition(x - t / 2 * dir, y + h * 0.94, z + dir * h * 0.02);
+  b.g(geo, kit.accent, m);
+  b.box(kit.hazard, t * 1.2, fh * 0.06, w * 0.9, x, y + h * 0.94 - fh * 0.2, z + dir * w * 0.5, 2e-3);
+}
+function reactor(b, kit, at2, r, axis = "y", ribs = 4) {
+  const d = r * 0.5;
+  b.cylb(kit.trim, r * 1.3, d, d * 0.2, at2, axis, 16);
+  const off = axis === "y" ? [0, d, 0] : axis === "x" ? [d, 0, 0] : [-d, 0, 0];
+  const c = [at2[0] + off[0], at2[1] + off[1], at2[2] + off[2]];
+  b.cyl(kit.glow, r, r * 0.7, r * 0.5, [c[0] - off[0] * 0.5, c[1] - off[1] * 0.5, c[2] - off[2] * 0.5], axis, 14);
+  for (let i = 0; i < ribs; i++) {
+    const a = i / ribs * Math.PI;
+    if (axis === "y") b.box(kit.metal, r * 2.3, r * 0.14, r * 0.14, c[0], c[1] + r * 0.22, c[2], r * 0.04, [0, a, 0]);
+    else b.box(kit.metal, r * 0.14, r * 2.3, r * 0.14, c[0] + off[0] * 0.44, c[1], c[2], r * 0.04, [a, 0, 0]);
+  }
+}
+function glowGrille(b, kit, x, y, z, w, h, n, dir = 1) {
+  b.box(kit.trim, h * 0.2, h, w, x, y, z, h * 0.06);
+  for (let i = 0; i < n; i++) glow(b, kit, x + dir * h * 0.08, y - h * 0.32 + h * 0.64 * i / Math.max(1, n - 1), z, h * 0.08, h * 0.08, w * 0.8);
+}
 
 // src/client/proto3d/chassis/hs-kit-titan.ts
 function ngonT(n, rx, rz, a0 = Math.PI / n) {
@@ -43002,10 +43146,10 @@ function broodmother(c) {
   const spider = stance.legs === "spider";
   const by = spider ? stance.hipY * 1.3 : stance.legs === "biped" ? stance.hipY + 0.1 : Math.max(stance.yt, 0.5) + 0.55 * k;
   if (!spider && stance.legs !== "biped") {
-    planLoft(b, kit.mech, ngon(8, 1.5 * kx, 1.5 * kz), [[0, 1.1], [by - 0.3, 1], [by, 0.85]], [-0.3 * kx, 0]);
-    planLoft(b, kit.armor2, ngon(8, 1.5 * kx, 1.5 * kz), [[0.05, 1.16], [0.35, 1.12]], [-0.3 * kx, 0]);
+    planLoft(b, kit.mech, ngon2(8, 1.5 * kx, 1.5 * kz), [[0, 1.1], [by - 0.3, 1], [by, 0.85]], [-0.3 * kx, 0]);
+    planLoft(b, kit.armor2, ngon2(8, 1.5 * kx, 1.5 * kz), [[0.05, 1.16], [0.35, 1.12]], [-0.3 * kx, 0]);
   }
-  const cx = 0, cp = ngon(8, 1.15 * kx, 1.45 * kz, Math.PI / 8);
+  const cx = 0, cp = ngon2(8, 1.15 * kx, 1.45 * kz, Math.PI / 8);
   const cy0 = by - 0.45 * k, cW0 = by + 0.08 * k, cW1 = by + 0.3 * k, cR = by + 0.5 * k, cTop = by + 0.62 * k;
   planLoft(b, kit.mech, cp, [[cy0, 0.7], [by - 0.1 * k, 0.95], [cW0, 0.98], [cW1, 0.98], [cR, 0.78], [cTop - 0.06 * k, 0.56]], [cx, 0]);
   const ring4 = (y, s) => cp.map(([px2, pz2]) => [cx + px2 * s, y, pz2 * s]);
@@ -45725,7 +45869,7 @@ function striker(c) {
   block(b, kit.mech, X(0), y0, 0, X(2.5), wi * 2, yt - y0 + 0.04, { top: [0.96, 0.92], ch: 0.08, bev: 0.025, bot: 0.03 });
   block(b, kit.armor2, hx, yt - 0.02, hz, R * 1.9, Z(1), 0.08, { top: [0.97, 0.95], ch: 0.14, bev: 0.02 });
   const t0 = yt + 0.04, t1 = t0 + 0.15, g0 = t1 + 0.01, g1 = g0 + 0.07, t2 = seatY - 0.02;
-  const o1 = ngon2(8, R * 0.92, R * 0.86, Math.PI / 8, hx, hz);
+  const o1 = ngon(8, R * 0.92, R * 0.86, Math.PI / 8, hx, hz);
   frustum(b, kit.armor2, o1, t0 - 0.02, t1 - t0 + 0.02, { top: [0.92, 0.92], bev: 0.02 });
   frustumPlates(b, kit, kit.armor, o1, t0 - 0.02, t1 - t0 + 0.02, 0.92, 0.022, { standoff: 6e-3, gap: 0.012, widthK: 0.78, f0: 0.12, f1: 0.86 });
   b.cyl(kit.plasma, R * 0.72, R * 0.72, g1 - g0 + 0.02, [hx, g0 - 0.01, hz], "y", 16);
@@ -45733,7 +45877,7 @@ function striker(c) {
     const a = i / 10 * Math.PI * 2;
     b.g(bevBox(0.07, g1 - g0, 0.05, 0.012), kit.mech, mtx([hx + Math.cos(a) * R * 0.74, (g0 + g1) / 2, hz + Math.sin(a) * R * 0.74], [0, -a, 0]));
   }
-  const o2 = ngon2(8, R * 0.84, R * 0.78, Math.PI / 8, hx, hz);
+  const o2 = ngon(8, R * 0.84, R * 0.78, Math.PI / 8, hx, hz);
   frustum(b, kit.shell, o2, g1, t2 - g1, { top: [0.9, 0.9], bev: 0.025, bot: 0.012 });
   const pX0 = hx + R * 0.45, pX1 = X(1.5);
   block(b, kit.mech, (pX0 + pX1) / 2 - 0.05, y0 + 0.02, 0, pX1 - pX0 + 0.1, Z(0.56), yt - y0 + 0.02, { top: [0.82, 0.86], shift: [-0.06, 0], ch: 0.06, bev: 0.02, bot: 0.02 });
@@ -45837,7 +45981,7 @@ function bastion(c) {
     pbox6(b, kit.glow, wl * 0.36, 0.022 * k, 0.025 * k, (wX0 + wX1) / 2 + 0.1 * k, yt + 0.07 * k, s * (wz + ww * 0.5 + 4e-3));
   });
   const wR = R * 0.48;
-  frustum(b, kit.mech, ngon2(8, wR * 1.25, wR * 1.25, Math.PI / 8, hx, hz), pY - 0.01, 0.07 * k, { top: [0.92, 0.92], bev: 0.015 * k });
+  frustum(b, kit.mech, ngon(8, wR * 1.25, wR * 1.25, Math.PI / 8, hx, hz), pY - 0.01, 0.07 * k, { top: [0.92, 0.92], bev: 0.015 * k });
   b.cyl(kit.plasma, wR * 0.82, wR * 0.82, wY1 - wY0, [hx, wY0, hz], "y", 16);
   for (let i = 0; i < 10; i++) {
     const a = i / 10 * Math.PI * 2;
@@ -45911,7 +46055,7 @@ function bastion(c) {
         return { y: seatY, socket: true };
       }
       const y = pY + 0.12 * k;
-      frustum(b, kit.armor2, ngon2(8, m.r * 1, m.r * 1, Math.PI / 8, m.x, m.z), pY - 0.02 * k, y - pY + 0.02 * k, { top: [0.9, 0.9], bev: 0.015 * k });
+      frustum(b, kit.armor2, ngon(8, m.r * 1, m.r * 1, Math.PI / 8, m.x, m.z), pY - 0.02 * k, y - pY + 0.02 * k, { top: [0.9, 0.9], bev: 0.015 * k });
       return { y: ringSeat(b, kit, m, y, 0.02 * k, 14), socket: true };
     }
   };
@@ -47540,7 +47684,7 @@ function monolith(c) {
   const ts = torsoSlots(c);
   const heroM = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : void 0;
   const wi = Math.min(stance.wi, 2.3 * kz);
-  planLoft(b, kit.trim, ngon(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
+  planLoft(b, kit.trim, ngon2(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
   const P1 = sc2(mirror2([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
   const s1 = yt + 1.25 * k, sTop = 0.84;
   const sh1 = s1 - 0.28 * k;
@@ -47575,8 +47719,8 @@ function monolith(c) {
     ladder(b, kit, [a.x, a.y, a.z], [e.x, e.y + 0.1 * k, e.z], 0.3 * k, [f.u.x, f.u.y, f.u.z], [f.n.x, f.n.y, f.n.z], 0.08 * k);
   });
   const wR = 2.35 * k;
-  planLoft(b, kit.trim, ngon(10, wR * kx / k, wR * kz / k), [[s1 - 0.04, 1], [s1 + 0.4 * k, 1]]);
-  planLoft(b, kit.metal, ngon(10, wR * kx / k, wR * kz / k), [[s1 + 0.3 * k, 1.04], [s1 + 0.38 * k, 1.04]]);
+  planLoft(b, kit.trim, ngon2(10, wR * kx / k, wR * kz / k), [[s1 - 0.04, 1], [s1 + 0.4 * k, 1]]);
+  planLoft(b, kit.metal, ngon2(10, wR * kx / k, wR * kz / k), [[s1 + 0.3 * k, 1.04], [s1 + 0.38 * k, 1.04]]);
   both((s) => {
     const x = -0.22 * kx, zi = s * 1.75 * kz, zo = s * 2.95 * kz;
     const ring4 = (z, hw, lo, hi) => [
@@ -51783,11 +51927,11 @@ var mats = {
   beam: new MeshBasicMaterial({ color: new Color(0.6, 0.85, 1).multiplyScalar(3), toneMapped: false, transparent: true })
 };
 function spawnFlash(p, s) {
-  const sp = new Sprite(new SpriteMaterial({ map: glowTex, blending: AdditiveBlending, depthWrite: false, transparent: true }));
-  sp.position.copy(p);
-  sp.scale.setScalar(s);
-  scene.add(sp);
-  fx.push({ obj: sp, life: 0.09, max: 0.09, kind: "flash" });
+  const sp2 = new Sprite(new SpriteMaterial({ map: glowTex, blending: AdditiveBlending, depthWrite: false, transparent: true }));
+  sp2.position.copy(p);
+  sp2.scale.setScalar(s);
+  scene.add(sp2);
+  fx.push({ obj: sp2, life: 0.09, max: 0.09, kind: "flash" });
 }
 function fire(tu, target) {
   const m = tu.muzzles[Math.floor(Math.random() * tu.muzzles.length)];

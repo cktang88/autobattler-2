@@ -194,6 +194,8 @@ export function lodGeometries(hi: THREE.Mesh[], loRoot: THREE.Object3D): THREE.B
 }
 
 function buildLo(t: Template): void {
+  // the tug of war castle stays at full detail: there are only two on the field and they are the thing to defend
+  if (t.design.id.startsWith('tug-castle')) { t.lo = null; return; }
   try {
     const u = withDetail(LOD_DETAIL, () => buildUnit(t.design, t.team));
     t.lo = lodGeometries(t.meshes, u.root);
