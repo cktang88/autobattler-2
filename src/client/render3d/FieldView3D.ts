@@ -1495,7 +1495,10 @@ export class FieldView3D implements BattleView {
           if (rig && rig.muzzleWorld(p.mount!, _v3, bi)) {
             y0 = _v3.y;
             const dx = _v3.x - pos.x, dz = _v3.z - pos.y;
-            if (dx * dx + dz * dz < 6) { ox = dx; oz = dz; }
+            // the round leaves the real tube (a pod / arm gun / rack can sit far from the sim's launch point on a big
+            // unit): accept any muzzle within the shooter's own reach, only a stale far-off rig falls back to the sim
+            const reach = rig.radius + 3;
+            if (dx * dx + dz * dz < reach * reach) { ox = dx; oz = dz; }
           }
         }
         const shots = key >= 0 ? (this.shotN.get(key) ?? 0) + 1 : p.id;
