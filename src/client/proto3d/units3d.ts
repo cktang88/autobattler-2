@@ -153,7 +153,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const dress = AUTO_DRESS[ch.shape];
     if (dress && !flying && !out.dressed) autoDress({ b: hb, kit, L, W, S, mounts: specs }, out.deckAt, dress);
     const mctx: MobilityCtx & { lift?: unknown } = { root, kit, mobId: mob.id, L, W, S, shape: ch.shape, stance, hips: out.hips, lift: (out as { lift?: unknown }).lift };
-    const upd = mb.build(mctx);
+    const upd = out.ownGround ? undefined : mb.build(mctx);
     if (upd) updates.push((t, _dt, mv, dir) => upd(t, mv, dir));
   }
 

@@ -62,11 +62,10 @@ export class TugAi {
     const ecoWant = Math.min(ecoCap, 1 + Math.floor(g.time / pace));
     if (S.incomeLvl < ecoWant) return S.gold >= incomeCost(S.incomeLvl) ? [{ t: 'income' }] : this.spareBuy(g, incomeCost(S.incomeLvl));
     // tiers: when the roster has designs waiting on the next tier, on a schedule
-    if (S.tier < TUG.maxTier) {
-      const nt = (S.tier + 1) as Size;
-      const waiting = g.rosters[this.side].some((d) => computeStats(d).size >= nt);
+    const nt = g.nextTier(this.side);
+    if (nt !== null) {
       const due = g.time > (this.diff === 'hard' ? 80 : 110) * (nt - 2);
-      if (waiting && due) return S.gold >= TIER_COST[nt] ? [{ t: 'tier' }] : this.spareBuy(g, TIER_COST[nt]);
+      if (due) return S.gold >= TIER_COST[nt] ? [{ t: 'tier' }] : this.spareBuy(g, TIER_COST[nt]);
     }
     // castle guns: climb a ladder of better guns once the economy is going
     const ladder = this.diff === 'easy' ? CASTLE_LADDER.slice(0, 1) : CASTLE_LADDER;

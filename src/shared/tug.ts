@@ -46,7 +46,7 @@ export const TUG = {
 
 /** price of the next income level (from level `lvl`) */
 export const incomeCost = (lvl: number): number => 150 + 125 * lvl;
-/** price to unlock hull tier `size` (from the tier below it) */
+/** price to unlock hull tier `size` (the unlock skips sizes the roster has no design of: TugGame.nextTier) */
 export const TIER_COST: Record<Size, number> = { 1: 0, 2: 0, 3: 400, 4: 900, 5: 1600 };
 export const incomeRate = (lvl: number): number => TUG.baseIncome + TUG.incomeStep * lvl;
 export const TIER_NAMES: Record<Size, string> = { 1: 'Light', 2: 'Medium', 3: 'Heavy', 4: 'Giant', 5: 'Titan' };
@@ -194,6 +194,16 @@ export class TugGame {
   }
 
   design(side: Side, id: string): Design | undefined { return this.rosters[side].find((d) => d.id === id); }
+  /** The hull size the next unlock opens: the smallest size above the current tier that the roster has a design of
+   *  (no Heavy designs: Medium goes straight to Giant, at the Giant price). null: nothing bigger to unlock. */
+  nextTier(side: Side): Size | null {
+    let best: Size | null = null;
+    for (const d of this.rosters[side]) {
+      const sz = computeStats(d).size;
+      if (sz > this.sides[side].tier && (best === null || sz < best)) best = sz;
+    }
+    return best;
+  }
   /** ticks until `side` may buy this design again (0: now) */
   cooldown(side: Side, designId: string): number { return Math.max(0, (this.sides[side].ready[designId] ?? 0) - this.battle.tick); }
 
@@ -217,9 +227,11 @@ export class TugGame {
       case 'income':
         if (S.incomeLvl >= TUG.maxIncomeLevel) return 'Income is maxed';
         return S.gold < incomeCost(S.incomeLvl) ? 'Not enough gold' : null;
-      case 'tier':
-        if (S.tier >= TUG.maxTier) return 'Every tier is unlocked';
-        return S.gold < TIER_COST[(S.tier + 1) as Size] ? 'Not enough gold' : null;
+      case 'tier': {
+        const nt = this.nextTier(side);
+        if (nt === null) return S.tier >= TUG.maxTier ? 'Every tier is unlocked' : 'Your roster has no bigger hulls';
+        return S.gold < TIER_COST[nt] ? 'Not enough gold' : null;
+      }
       case 'castleGun': {
         const m = MODULE_BY_ID.get(cmd.moduleId);
         if (!m || !castleGuns().includes(m)) return 'Not a castle gun';
@@ -250,7 +262,7 @@ export class TugGame {
         break;
       }
       case 'income': S.gold -= incomeCost(S.incomeLvl); S.incomeLvl++; break;
-      case 'tier': S.tier = (S.tier + 1) as Size; S.gold -= TIER_COST[S.tier]; break;
+      case 'tier': S.tier = this.nextTier(side)!; S.gold -= TIER_COST[S.tier]; break;
       case 'castleGun': {
         S.gold -= castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!);
         S.castleGun = cmd.moduleId;
