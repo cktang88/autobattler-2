@@ -18,6 +18,7 @@ const ctx2d: unknown = new Proxy({}, {
 const THREE = await import('three');
 const { UnitLayer } = await import('../src/client/render3d/units-adapter.ts');
 import type { Design } from '../src/shared/types.ts';
+import type { Mesh, Vector3 } from 'three';
 
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
 
@@ -28,7 +29,7 @@ test('a fired launcher shows no ammunition until it reloads', () => {
   assert.ok(i >= 0, 'the launcher has visible ammunition');
   const ammo = rig.turrets[i]!.ammo!;
   const meshes: number[] = [];
-  ammo.traverse((o) => { const j = rig.tpl.meshes.indexOf(o as THREE.Mesh); if (j >= 0) meshes.push(j); });
+  ammo.traverse((o) => { const j = rig.tpl.meshes.indexOf(o as Mesh); if (j >= 0) meshes.push(j); });
   assert.ok(meshes.length > 0);
   const size = () => { rig.update(0); const m = new THREE.Matrix4(); rig.meshMatrix(meshes[0]!, m); return new THREE.Vector3().setFromMatrixScale(m).length(); };
   const full = size();
@@ -49,6 +50,6 @@ test('each muzzle sits on its own weapon, away from the unit centre', () => {
     const dc = Math.hypot(m.x, m.z), dt = Math.hypot(m.x - tp.x, m.z - tp.z);
     assert.ok(dt < dc || dc > 0.5, `mount ${i}: muzzle ${dt.toFixed(2)} from its turret, ${dc.toFixed(2)} from the centre`);
   });
-  const pts = rig.turrets.map((t, i) => (t?.muzzles.length ? rig.muzzleWorld(i, new THREE.Vector3())!.clone() : null)).filter(Boolean) as THREE.Vector3[];
+  const pts = rig.turrets.map((t, i) => (t?.muzzles.length ? rig.muzzleWorld(i, new THREE.Vector3())!.clone() : null)).filter(Boolean) as Vector3[];
   for (let a = 0; a < pts.length; a++) for (let b = a + 1; b < pts.length; b++) assert.ok(pts[a]!.distanceTo(pts[b]!) > 0.3, 'weapons fire from different places');
 });
