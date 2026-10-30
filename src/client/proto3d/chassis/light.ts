@@ -18,17 +18,16 @@
 
 import * as THREE from 'three';
 import type { P2, V3 } from '../geo.ts';
-import { bevBox, mtx, strutGeo } from '../geo.ts';
-import type { Bld } from '../geo.ts';
+import { bevBox, Bld, mtx, slabGeo, strutGeo } from '../geo.ts';
 import { atlasUV, type Kit, type MatLike } from '../materials.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
 import { beam, block, both } from './shapes.ts';
 import {
-  antenna, armorPlate, cagedLamp, crewHatch, exhaustBox, fineFor, frame, hose, jerryCans, piston, recessPanel, rectP, smokeLaunchers,
+  antenna, armorPlate, cagedLamp, plateStack, crewHatch, exhaustBox, fineFor, frame, hose, jerryCans, piston, recessPanel, rectP, smokeLaunchers,
   stowBox, sub, towHooks,
 } from './hs-kit.ts';
 import {
-  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, spareWheel, wheelArch, type FSt,
+  bullBar, dish, facePlate, grille, facetHull, periscopes, ringSeat, sensorMast, spade, spareWheel, wheelArch, type FSt,
 } from './hs-kit-vehicles.ts';
 
 /** cheap unbevelled box (12 tris) for small parts: lamps, strips, accents, brackets */
@@ -159,45 +158,130 @@ function raider(c: ChassisCtx): ChassisOut {
 }
 
 // ---- carriage: self-propelled field gun ------------------------------------------------------------------------------------------
+// Built round its one medium gun (1.5 cells, the same size on every hull): a split-trail field carriage that drives
+// itself. Static: the gun axle (a box beam between the wheels with hub drive motors and armoured mudguards), the bottom
+// carriage saddle + slewing ring on it, two box-section trails splaying back to recoil spades at the rear corners and a
+// glowing power pack slung between them. Twisting with the gun (mech torso mode): the top carriage (dark saddle,
+// cradle trough), two tall trunnion cheeks holding the gun's trunnion pins, equilibrator rams, and a faceted gun shield
+// (centre apron under the barrel, two swept wings flanking the gun, sight box on the left). Top-down: a broad shield
+// across the front, the trails as an arrowhead behind it.
 function carriage(c: ChassisCtx): ChassisOut {
-  const { b, kit, L, W, stance } = c;
+  const { b, kit, L, W, S, stance } = c;
   const y0 = stance.y0;
-  const X = (f: number) => f * L, Z = (f: number) => f * W;
-  const m = c.mounts[0];
-  const mr = m?.r ?? 0.16, mx = m?.x ?? 0;
-  keel(c, L * 0.4);
-  // cradle / saddle on the axle: dark core box, armour top carriage the turntable sits on
-  const cw = Math.min(Z(0.34), stance.wi * 2);
-  facetHull(c, kit.mech, [[X(-0.2), 0, 0.01, 0.06, 0.08, cw * 0.4, cw * 0.46, cw * 0.4], [X(0.2), 0.0, 0.01, 0.06, 0.08, cw * 0.4, cw * 0.46, cw * 0.4]]);
-  const deckY = y0 + 0.13;
-  facetHull(c, kit.armor2, [[mx - mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1.0, mr * 1.15, mr * 1.0], [mx + mr * 1.25, 0.06, 0.06, 0.1, 0.13, mr * 1.0, mr * 1.15, mr * 1.0]], 0, false);
-  // equilibrator pistons either side of the cradle (functional: they balance the barrel)
-  both((s) => piston(b, kit, [X(-0.17), y0 + 0.04, s * mr * 1.1], [mx + mr * 0.6, deckY - 0.01, s * mr * 1.1], 0.016, 0.55, false));
-  // self-propelled mount, not a towed gun: no trails or spades. A short box-section spine runs back from the cradle to
-  // an armoured counterweight bustle (balances the barrel), with the ready-ammo box strapped to its left side
-  beam(b, kit.armor2, [X(-0.12), y0 + 0.06, 0], [X(-0.36), y0 + 0.06, 0], Z(0.16), 0.06);
-  const bx = X(-0.42), bw = Math.min(Z(0.4), stance.wi * 2.2);
-  b.g(bevBox(X(0.16), 0.1, bw, 0.012), kit.armor2, mtx([bx, y0 + 0.08, 0]));
-  b.g(bevBox(X(0.1), 0.02, bw * 0.8, 0.006), kit.mech, mtx([bx, y0 + 0.14, 0]));
-  stowBox(b, kit, frame([bx + X(0.02), y0 + 0.08, -bw / 2 - 0.03], UP, XA), 0.09, 0.06, 0.05, kit.canvas);
-  // gun shield: centre plate + two raked wings on a dark backing, notched top, sight box on the left wing
-  const R = Math.max(mr * 1.55, Z(0.3));
-  const sx = mx + R * 0.62, sh = 0.3;
-  const shieldPlate = (yaw: number, zc: number, w: number, h: number) => {
-    const F = new THREE.Matrix4().makeRotationY(yaw).multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 2 + 0.2)).setPosition(sx - Math.abs(zc) * Math.sin(Math.abs(yaw)) * 0.9, y0 + 0.03 + h / 2, zc);
-    // after rotZ the plate's local +y faces forward (+x), local x runs down -> poly in (x = height, z = width)
-    armorPlate(b, kit, kit.armor, F, [[-h / 2, -w / 2], [h / 2 - 0.03, -w / 2], [h / 2, -w / 2 + 0.03], [h / 2, w / 2 - 0.03], [h / 2 - 0.03, w / 2], [-h / 2, w / 2]], 0.014, { standoff: 0.004, gap: 0.01 });
+  const k = Math.min(L, W) / 2; // authored at 2 x 2
+  const wheels = c.mob.id === 'wheels';
+  const legs = !!stance.legs;
+  keel(c, L * 0.3);
+  // gun axle height: the wheel centre on wheels, otherwise just above the running gear
+  const ay = wheels ? wheelR(S) * 1.0 + 0.06 * (S - 1) : y0 + 0.08 * k;
+  const P = Math.max(stance.yt, ay + 0.1 * k) + 0.12 * k; // slewing ring top = the twist pivot
+  // ---- axle: dark box beam between the wheels, drive motor drums at the hubs, armoured mudguards
+  block(b, kit.mech, 0, ay - 0.08 * k, 0, 0.24 * k, (wheels ? 1.72 : 1.3) * k, 0.16 * k, { ch: 0.05 * k, bev: 0.015 * k });
+  if (wheels) both((s) => {
+    const wr = wheelR(S);
+    b.cylb(kit.joint, 0.1 * k, 0.16 * k, 0.012 * k, [0, ay, s * 0.86 * k - (s > 0 ? 0.16 * k : 0)], 'z', 10);
+    // mudguard: a flat team plate over the tyre, sloped lips front and back, bone cap
+    const z0 = 0.84 * k, z1 = 1.0 * k, gy = ay + wr + 0.05 * k;
+    block(b, kit.armor, 0, gy, s * (z0 + z1) / 2, wr * 1.5, z1 - z0, 0.035 * k, { top: [0.9, 0.9], ch: 0.02 * k, bev: 0.01 * k });
+    for (const d of [-1, 1]) b.g(new THREE.BoxGeometry(wr * 0.7, 0.03 * k, z1 - z0), kit.armor2, mtx([d * wr * 0.98, gy - wr * 0.2, s * (z0 + z1) / 2], [0, 0, d * -0.75]));
+    // strut from the axle beam up to the mudguard
+    beam(b, kit.mech, [0, ay + 0.06 * k, s * 0.7 * k], [0, gy, s * 0.88 * k], 0.06 * k, 0.05 * k);
+  });
+  // ---- bottom carriage: armoured saddle on the axle, slewing ring
+  const sb = legs ? stance.hipY - stance.thick * 0.6 : ay - 0.02 * k;
+  block(b, kit.armor2, 0, sb, 0, 0.62 * k, 0.66 * k, P - 0.04 * k - sb, { top: [0.8, 0.82], ch: 0.1 * k, bev: 0.02 * k, bot: 0.015 * k });
+  b.cylb(kit.joint, 0.34 * k, 0.06 * k, 0.012 * k, [0, P - 0.055 * k, 0], 'y', 16);
+  // ---- split trails: box beams from hinge drums on the saddle back to recoil spades at the rear corners
+  const tr: V3 = [-0.86 * k, Math.max(0.1 * k, y0 * 0.7), 0];
+  both((s) => {
+    const h0: V3 = [-0.22 * k, ay, s * 0.2 * k], e: V3 = [tr[0], tr[1], s * 0.72 * k];
+    b.cylb(kit.joint, 0.075 * k, 0.2 * k, 0.012 * k, [h0[0], ay - 0.1 * k, h0[2]], 'y', 10);
+    beam(b, kit.armor2, h0, e, 0.15 * k, 0.13 * k);
+    // armour cap along the trail top, bright lift handle near the end
+    beam(b, kit.armor, [h0[0] - 0.06 * k, h0[1] + 0.075 * k, h0[2] + s * 0.02 * k], [e[0] + 0.12 * k, e[1] + 0.07 * k, e[2] - s * 0.04 * k], 0.1 * k, 0.03 * k);
+    pbox(b, kit.glow, 0.26 * k, 0.018 * k, 0.012 * k, (h0[0] + e[0]) / 2, (h0[1] + e[1]) / 2 + 0.01 * k, (h0[2] + e[2]) / 2 + s * 0.068 * k, [0, Math.atan2(e[2] - h0[2], e[0] - h0[0]) * -1 + Math.PI, 0]);
+    // recoil spade: a wide blade digging in behind the trail end, braced by ribs
+    spade(b, kit, new THREE.Matrix4().makeRotationY(Math.PI / 2).multiply(new THREE.Matrix4().makeRotationX(-0.35)).setPosition(e[0] - 0.04 * k, e[1] + 0.06 * k, e[2]), 0.32 * k, 0.22 * k, 0.03 * k, kit.armor2);
+    b.cylb(kit.joint, 0.04 * k, 0.24 * k, 0.006 * k, [e[0] - 0.02 * k, e[1] + 0.04 * k, e[2] - 0.12 * k], 'z', 8);
+  });
+  // power pack between the trails (the gun drives itself): dark block, glowing vents, an exhaust out the back
+  const pp = -0.5 * k;
+  block(b, kit.mech, pp, Math.max(0.05 * k, ay - 0.1 * k), 0, 0.36 * k, 0.3 * k, 0.2 * k, { top: [0.9, 0.85], ch: 0.05 * k, bev: 0.012 * k });
+  pbox(b, kit.plasma, 0.2 * k, 0.012 * k, 0.2 * k, pp, Math.max(0.05 * k, ay - 0.1 * k) + 0.205 * k, 0);
+  b.cyl(kit.hot, 0.025 * k, 0.025 * k, 0.01 * k, [pp - 0.185 * k, ay, 0.06 * k], '-x', 8);
+  arches(c, []);
+
+  // ---- top carriage, cheeks and shield (twist with the gun); hero trunnion at hp
+  const hp: V3 = [0.12 * k, 0.4 * k, 0];
+  const upper = (t: Bld) => {
+    // swivel collar + dark top carriage
+    t.cylb(kit.mech, 0.3 * k, 0.05 * k, 0.01 * k, [0, -0.01 * k, 0], 'y', 16);
+    block(t, kit.mech, -0.04 * k, 0.02 * k, 0, 0.86 * k, 0.86 * k, 0.12 * k, { top: [0.9, 0.9], ch: 0.14 * k, bev: 0.02 * k });
+    // cradle trough the gun rests in
+    block(t, kit.armor2, 0.12 * k, 0.12 * k, 0, 0.9 * k, 0.5 * k, 0.07 * k, { top: [0.92, 0.9], ch: 0.06 * k, bev: 0.012 * k });
+    both((s) => {
+      // trunnion cheek: a tall team plate (dark backing inside), bone cap, trunnion bearing drum + pin into the gun
+      const cz = s * 0.62 * k;
+      cheek(t, kit.armor, [[-0.42 * k, 0.04 * k], [0.4 * k, 0.04 * k], [0.34 * k, 0.4 * k], [0.18 * k, 0.56 * k], [-0.12 * k, 0.56 * k], [-0.36 * k, 0.3 * k]], cz + s * 0.03 * k, 0.07 * k);
+      cheek(t, kit.mech, [[-0.36 * k, 0.04 * k], [0.36 * k, 0.04 * k], [0.3 * k, 0.36 * k], [-0.3 * k, 0.3 * k]], cz - s * 0.03 * k, 0.05 * k);
+      block(t, kit.shell, 0.02 * k, 0.56 * k, cz + s * 0.03 * k, 0.26 * k, 0.09 * k, 0.03 * k, { top: [0.7, 0.8], ch: 0.02 * k, bev: 0.008 * k });
+      t.cylb(kit.joint, 0.11 * k, 0.12 * k, 0.015 * k, [hp[0], hp[1], cz + (s > 0 ? -0.02 : -0.1) * k], 'z', 12);
+      t.cyl(kit.mech, 0.06 * k, 0.06 * k, 0.36 * k, [hp[0], hp[1], s > 0 ? 0.3 * k : -0.66 * k], 'z', 8);
+      pbox(t, kit.glow, 0.3 * k, 0.025 * k, 0.012 * k, -0.06 * k, 0.2 * k, cz + s * 0.072 * k);
+      // equilibrator ram from the top carriage up to the cheek head
+      piston(t, kit, [-0.36 * k, 0.12 * k, s * 0.5 * k], [-0.08 * k, 0.5 * k, s * 0.53 * k], 0.03 * k, 0.55, S >= 2);
+      // shield wing: hinged on the apron edge either side of the barrel slot, swept back past the wheel, its inner
+      // top a horn rising beside the gun; two-layer plate (team face, bone inner layer) on a dark backing
+      const a = 0.42, n: V3 = [Math.cos(a), 0.26, s * Math.sin(a)];
+      const F = frame([0.84 * k - Math.sin(a) * 0.33 * k, 0.22 * k, s * (0.34 + Math.cos(a) * 0.33) * k], n, [-n[2], 0, n[0]]);
+      // (local x runs outward-back along the wing, local z up the plate)
+      const wing: P2[] = [[-0.33 * k, -0.36 * k], [0.2 * k, -0.42 * k], [0.33 * k, -0.3 * k], [0.33 * k, 0.2 * k], [0.12 * k, 0.32 * k], [-0.2 * k, 0.36 * k], [-0.33 * k, 0.46 * k]];
+      plateStack(t, kit, kit.armor, F, wing, [
+        { inset: 0, thick: 0.045 * k, standoff: 0.025 * k },
+        { inset: 0.11 * k, thick: 0.025 * k, mat: kit.armor2, shift: [0.05 * k, -0.08 * k] },
+      ], { gap: 0.03 * k });
+      // bone edge cap along the horn and a glowing vision slit
+      t.g(new THREE.BoxGeometry(0.2 * k, 0.03 * k, 0.05 * k), kit.shell, sub(F, -0.24 * k, 0.1 * k, 0.4 * k, 0, 0, 0));
+      t.g(new THREE.BoxGeometry(0.22 * k, 0.03 * k, 0.025 * k), kit.glow, sub(F, 0.06 * k, 0.1 * k, 0.12 * k, 0, 0, 0));
+      // wing brace back to the cheek
+      beam(t, kit.mech, [0.3 * k, 0.24 * k, s * 0.62 * k], [0.64 * k, 0.24 * k, s * 0.62 * k], 0.07 * k, 0.1 * k);
+    });
+    // centre apron under the barrel slot: a raked two-layer plate below the gun
+    const AF = frame([0.84 * k, -0.08 * k, 0], [1, 0.4, 0], [0, 0, 1]);
+    plateStack(t, kit, kit.armor, AF, [[-0.36 * k, -0.22 * k], [0.36 * k, -0.22 * k], [0.36 * k, 0.16 * k], [0.2 * k, 0.2 * k], [-0.2 * k, 0.2 * k], [-0.36 * k, 0.16 * k]], [
+      { inset: 0, thick: 0.04 * k, standoff: 0.02 * k },
+      { inset: 0.05 * k, thick: 0.025 * k, mat: kit.armor2, shift: [0, -0.02 * k] },
+    ], { gap: 0.02 * k });
+    both((s) => pbox(t, kit.lamp, 0.02 * k, 0.03 * k, 0.1 * k, 0.9 * k, -0.06 * k, s * 0.2 * k, [0, 0, -0.38]));
+    // sight box on the left wing top, accent tick on the right
+    block(t, kit.armor2, 0.3 * k, 0.6 * k, -0.84 * k, 0.12 * k, 0.1 * k, 0.08 * k, { ch: 0.02 * k, bev: 0.008 * k });
+    pbox(t, kit.glass, 0.01 * k, 0.03 * k, 0.06 * k, 0.365 * k, 0.645 * k, -0.84 * k);
+    // ready-ammo bin on the back of the top carriage
+    block(t, kit.armor2, -0.48 * k, 0.1 * k, 0.3 * k, 0.18 * k, 0.24 * k, 0.14 * k, { ch: 0.03 * k, bev: 0.01 * k });
+    pbox(t, kit.accent, 0.012 * k, 0.03 * k, 0.18 * k, -0.575 * k, 0.17 * k, 0.3 * k);
   };
-  shieldPlate(0, 0, R * 0.95, sh * 0.82);
-  both((s) => shieldPlate(-s * 0.55, s * R * 0.72, R * 0.6, sh));
-  b.g(bevBox(0.05, 0.035, 0.035, 0.006), kit.armor2, mtx([sx + 0.01, y0 + 0.03 + sh + 0.012, -R * 0.62]));
-  b.g(new THREE.BoxGeometry(0.008, 0.016, 0.022), kit.glass, mtx([sx + 0.036, y0 + 0.03 + sh + 0.014, -R * 0.62]));
-  cbox(b, kit.accent, 0.004, 0.02, R * 0.4, sx + 0.04, y0 + 0.03 + sh * 0.68, R * 0.22, 0, [0, 0, 0.2]);
+  const heroM = c.mounts.find((m) => m.mod.kind === 'weapon');
+  if (!heroM) {
+    // a utility instead of a gun: the same upper carriage, static
+    const tb = new Bld(), g = new THREE.Group();
+    g.position.set(0, P, 0);
+    upper(tb);
+    tb.mount(g);
+    c.body.add(g);
+  }
   return {
-    deckAt: (x, z) => (Math.hypot(x - mx, z) < mr * 1.15 ? deckY : -1), top: deckY + 0.02, custom: true, dressed: true,
-    seat: (mm) => ({ y: ringSeat(b, kit, mm, deckY, 0.02, 12), socket: true }),
+    deckAt: (x, z) => (Math.hypot(x, z) < 0.4 * k ? P : -1), top: P + 0.6 * k, custom: true, dressed: true,
+    seat: (mm) => (mm === heroM ? { y: P, socket: true } : { y: ringSeat(b, kit, mm, P + 0.14 * k, 0.02, 12), socket: true }),
+    torso: heroM ? (t) => { upper(t); return { hp: [hp], at: [0, P, 0] }; } : undefined,
   };
 }
+
+/** flat side plate in the x-y plane (a cheek / fin): poly in (x, y), thickness th centred on z */
+function cheek(b: Bld, mat: MatLike, poly: P2[], z: number, th: number): void {
+  const g = slabGeo(poly, th, Math.min(th * 0.3, 0.02));
+  b.g(g, mat, new THREE.Matrix4().makeTranslation(0, 0, z + th / 2).multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2)));
+}
+const pbox = (b: Bld, mat: MatLike, w: number, h: number, d: number, x: number, y: number, z: number, rot?: V3) => b.g(new THREE.BoxGeometry(w, h, d), mat, mtx([x, y, z], rot));
 
 // ---- hunter: long low 6-wheel tank hunter ----------------------------------------------------------------------------------
 function hunter(c: ChassisCtx): ChassisOut {

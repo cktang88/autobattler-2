@@ -1,9 +1,9 @@
 // Creature-machine hulls (mechanical, not literal animals; think salvage-robot fauna and droid crawlers), built with the
 // hard-surface kit (chassis/hs-kit.ts) and its organic extension (chassis/hs-kit-organic.ts): dark structural cores,
 // separate armour with real thickness on shadow gaps, exposed joint drums, rams and sinew cables, parts in named slots.
-//   * Bunker Crawler (crab):  a wide, low pillbox on legs: wall plates around a dark core, an overhanging roof shell with
-//                             a vision-block hatch ring, a heavy brow over a glowing visor band, two excavator arms
-//                             reaching forward to big fist housings that carry the guns.
+//   * Bunker Crawler (crab):  a heavy crab carapace twisting on a leg hub (mech torso mode): overlapping armour bands,
+//                             a bone crest, a wedge head with mandibles, and its two medium guns as the pincers: each sits
+//                             sunk in an armoured claw cradle between a hooked lower finger and an arching upper thumb.
 //   * Tailgun Crawler (scorpion): a long armadillo of shingled carapace bands with a wedge prow; a box-section crane
 //                             boom on lift rams rises from mid-back and arches over the rear to cradle the heavy weapon;
 //                             two pincer arms out front.
@@ -15,7 +15,7 @@
 // wrist housing carries a weapon; melee weapons get an open jaw so the tool reads as a claw at the end of an arm.
 
 import * as THREE from 'three';
-import { aim, Bld, mtx, strutGeo, type MatLike, type P2, type V3 } from '../geo.ts';
+import { aim, Bld, mtx, slabGeo, strutGeo, type MatLike, type P2, type V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { MODULE_BY_ID } from '../../../shared/parts.ts';
@@ -25,7 +25,9 @@ import {
   antenna, armorPlate, cableBundle, cagedLamp, crewHatch, exhaustBox, fineFor, frame, frameLimb, hexSec, hose, inset, jointDrum, piston, plateStack, recessPanel,
   rectP, smokeLaunchers, stowBox, sub, trapP, visionBlocks,
 } from './hs-kit.ts';
-import { boneFrame, claw, eyeCluster, limbSegs, limbShell, quadPlate, shellGeo, shingles } from './hs-kit-organic.ts';
+import { boneFrame, claw, eyeCluster, limbSegs, limbShell, mandibles, quadPlate, shellGeo, shingles } from './hs-kit-organic.ts';
+import { ringSeat } from './hs-kit-vehicles.ts';
+import { torsoSlots } from './torso-kit.ts';
 
 /** point a fraction f from a to c, plus an offset */
 const mid3 = (a: V3, c: V3, f: number, off: V3 = [0, 0, 0]): V3 => [a[0] + (c[0] - a[0]) * f + off[0], a[1] + (c[1] - a[1]) * f + off[1], a[2] + (c[2] - a[2]) * f + off[2]];
@@ -157,107 +159,127 @@ function ringFaces(cx: number, cz: number, rxF: number, rxB: number, rz: number,
   return out;
 }
 
+const XA: V3 = [1, 0, 0];
+const pbox = tbox;
+/** flat plate in the x-y plane (a pincer blade / fin): poly in world (x, y), thickness th centred on z */
+function fin(b: Bld, mat: MatLike, poly: P2[], z: number, th: number): void {
+  const g = slabGeo(poly, th, Math.min(th * 0.3, 0.02));
+  b.g(g, mat, new THREE.Matrix4().makeTranslation(0, 0, z + th / 2).multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2)));
+}
+
 function bunkerCrawler(c: ChassisCtx): ChassisOut {
-  // A wide, low pillbox on legs (hard-surface): a dark faceted core, a ring of separate wall plates around it on shadow
-  // gaps (thicker and doubled across the front arc), a faceted roof shell overhanging the walls, a roof hatch ring with
-  // vision blocks (it is a pillbox), a heavy two-layer brow over a recessed visor band, two excavator arms (joint drums,
-  // twin-strut bones under chitin shells, sinew cables) reaching forward to fist housings that carry the guns.
-  // Functional slots: smoke dischargers on the brow corners, caged lamps under the visor, an exhaust muffler and louvred
-  // engine grille at the rear. Asymmetric: the roof hatch and an antenna on the left, a stowage bin on the rear right.
+  // Built round its two medium guns (1.5 cells each, the same on every hull): the guns ARE its pincers. A low leg hub
+  // (or a dark drive block) carries a heavy carapace that twists with the guns (mech torso mode): overlapping armour
+  // bands stepping up to a bone dorsal crest, a wedge head with a glowing visor V and mandibles between the claws, and at
+  // each front corner a massive claw: a shoulder drum, an armoured cradle the gun sinks into (the pod's ring sunk, the
+  // main gun with a matching lip), an outer cheek plate and two hooked pincer blades (a lower finger under the barrel, an
+  // upper thumb arching over the outer side) so each gun sits in a grasping claw. The light slot rides the crest (gun or
+  // utility). Top-down: a wide crab shell with two big gun claws thrust forward.
   const { b, kit, stance, L, W } = c;
-  const u = Math.min(L, W) / 3; // authored for the 3 x 3 footprint (art 3 wide x 2 long)
+  const k = Math.min(L / 2, W / 3); // authored at art 3 wide x 2 long
   const fine = fineFor(c.S);
   const legged = stance.legs !== null;
-  const by = legged ? stance.hipY + 0.02 * u : Math.max(stance.y0 + 0.24 * u, stance.yt);
-  const cx = -0.08 * u;
-  const rxF = 0.78 * u, rxB = 0.92 * u, rz = 1.18 * u;
-  // dark core: belly, wall band and roof (the armour below is all separate plates on it)
-  const rW = 0.93, yW0 = by - 0.06 * u, yW1 = by + 0.34 * u, yR = by + 0.46 * u, rR = 0.72, yC = by + 0.5 * u, rC = 0.58;
-  shell(b, kit.mech, cx, 0, rxF, rxB, rz, [[by - 0.24 * u, 0.7], [yW0, rW], [yW1, rW], [yR, rR, -0.04 * u], [yC, rC, -0.06 * u]], 8, 2);
-  // wall plates: one per face, a second layer on the three front faces
-  const faces = ringFaces(cx, 0, rxF * rW, rxB * rW, rz * rW, yW0, yW1);
-  let visorX = cx + rxF;
-  faces.forEach((f, i) => {
-    if (f.n[0] > 0.9) {
-      // the front face: a low glacis plate under the visor slit (the brow covers the top)
-      armorPlate(b, kit, kit.armor, frame([f.c[0], by - 0.0 * u, f.c[2]], f.n, f.e), rectP(f.w * 0.92, 0.14 * u, 0.03 * u), 0.07 * u, { standoff: 0.035 * u });
-      visorX = f.c[0];
-      return;
-    }
-    const front = f.n[0] > 0.5;
-    const F = frame(f.c, f.n, f.e);
-    const t = (front ? 0.07 : 0.055) * u;
-    const top = armorPlate(b, kit, i % 2 ? kit.armor2 : kit.armor, F, rectP(f.w * 0.9, 0.36 * u, 0.04 * u), t, { standoff: 0.035 * u, gap: 0.04 * u });
-    if (front) armorPlate(b, kit, kit.armor, sub(F, 0, top, 0.02 * u), rectP(f.w * 0.66, 0.2 * u, 0.03 * u), 0.04 * u, { standoff: 0.012 * u });
-  });
-  // roof: eight sector plates on the sloped roof faces (gaps between them show the dark core), a cap plate on top
-  const ringW = planRing(cx, yW1, 0, rxF * rW, rxB * rW, rz * rW, 8, 2), ringR = planRing(cx - 0.04 * u, yR, 0, rxF * rR, rxB * rR, rz * rR, 8, 2);
-  for (let i = 0; i < 8; i++) {
-    const j = (i + 1) % 8, m = [(ringW[i][0] + ringW[j][0]) / 2 - cx, 0, (ringW[i][2] + ringW[j][2]) / 2];
-    quadPlate(b, kit, i % 2 ? kit.armor : kit.armor2, [ringW[i], ringW[j], ringR[j], ringR[i]], 0.05 * u, [m[0], 0.8, m[2]], { margin: 0.035 * u, standoff: 0.03 * u, back: null });
-  }
-  const cap = planRing(0, 0, 0, rxF * rC, rxB * rC, rz * rC, 8, 2).map((p) => [p[0], p[2]] as P2);
-  armorPlate(b, kit, kit.shell, frame([cx - 0.06 * u, yC, 0], [0, 1, 0], [1, 0, 0]), inset(cap, 0.03 * u), 0.04 * u, { standoff: 0.02 * u });
-  const topY = yC + 0.06 * u;
-  // roof: hatch ring with vision blocks (left of centre), a raised armour cap, an antenna on the left
-  const rhx = cx - 0.1 * u, rhz = -0.5 * u;
-  b.cylb(kit.armor2, 0.2 * u, 0.06 * u, 0.012 * u, [rhx, topY - 0.02 * u, rhz], 'y', 10);
-  visionBlocks(b, kit, rhx, topY + 0.02 * u, rhz, 0.17 * u, 5, 0.05 * u, fine);
-  crewHatch(b, kit, frame([rhx, topY + 0.04 * u, rhz], [0, 1, 0]), 0.11 * u, fine);
-  antenna(b, kit, cx - 0.5 * u, topY - 0.06 * u, -0.62 * u, 0.9 * u, 0.012 * u, [-0.2, 0, -0.05]);
-  // brow: two stepped armour layers overhanging the visor, hazard band on top
-  const fx = visorX + 0.05 * u;
-  plateStack(b, kit, kit.armor2, frame([fx - 0.02 * u, by + 0.28 * u, 0], [0.7, 1, 0], [0, 0, 1]), trapP(1.3 * u, 0.26 * u, 0.36 * u, 0.08 * u), [
-    { inset: 0, thick: 0.06 * u, standoff: 0.03 * u },
-    { inset: 0.05 * u, thick: 0.05 * u, shift: [0, -0.03 * u], mat: kit.armor },
-  ], { gap: 0.04 * u });
-  hazard(b, kit, fx - 0.1 * u, by + 0.4 * u, 0, 0.1 * u, 0.6 * u, 5, Math.PI / 2);
-  // visor slit: dark recess + glowing eye band between the glacis and the brow, caged lamps under the glacis
-  b.box(kit.mech, 0.06 * u, 0.1 * u, 0.62 * u, fx - 0.02 * u, by + 0.14 * u, 0, 0.015 * u);
-  glow(b, kit, fx + 0.0 * u, by + 0.14 * u, 0, 0.03 * u, 0.035 * u, 0.5 * u);
-  both((s) => cagedLamp(b, kit, frame([fx + 0.02 * u, by - 0.16 * u, s * 0.24 * u], [0, 1, 0], [1, 0, 0]), 0.08 * u, fine));
-  smokeLaunchers(b, kit, frame([fx - 0.18 * u, by + 0.42 * u, 0.62 * u], [0, 1, 0], [Math.cos(0.6), 0, Math.sin(0.6)]), 3, 0.03 * u);
-  // rear: louvred engine grille, muffler box on the right, stowage bin
-  recessPanel(b, kit, frame([cx - rxB * 0.7, by + 0.42 * u, 0], [-0.6, 1, 0], [0, 0, 1]), 0.7 * u, 0.26 * u, 0.04 * u, { slats: 4 });
-  exhaustBox(b, kit, frame([cx - rxB * 0.92, by + 0.12 * u, 0.5 * u], [-1, 0, 0], [0, 0, -1]), 0.07 * u, fine);
-  stowBox(b, kit, frame([cx - rxB * 0.5, by + 0.4 * u, 0.62 * u], [-0.3, 1, 0.3], [1, 0, -0.5]), 0.3 * u, 0.1 * u, 0.16 * u);
-  // arms: shoulders under the rim at the front flanks, elbows out and up, fists at the arm mounts
-  const arms = c.mounts.filter((m) => Math.abs(m.z) > 0.8 * u);
-  const podTop = new Map<MountSpec, number>();
-  both((s) => {
-    const m = arms.find((q) => Math.sign(q.z) === s);
-    const mx = m ? m.x : 0.76 * u, mz = m ? m.z : s * 1.24 * u, r = m?.r ?? 0.29 * u;
-    const jaw = isMelee(m);
-    const podL = Math.max(0.62 * u, r * 2.3), podW = Math.max(0.4 * u, r * 1.6), podH = 0.28 * u;
-    const px = jaw ? mx - podL * 0.25 : mx;
-    const wy = by - 0.12 * u;
-    // shoulder mount: a dark bracket on the wall the drum turns in
-    block(b, kit.mech, cx + 0.3 * u, by + 0.12 * u, s * 0.82 * u, 0.3 * u, 0.2 * u, 0.32 * u, { ch: 0.05 * u });
-    const top = reachArmHS(b, kit, s, [cx + 0.3 * u, by + 0.3 * u, s * 0.9 * u], [cx + 0.12 * u, by + 0.78 * u, s * 1.36 * u], [px, wy, mz], { t: 0.11 * u, podL, podW, podH, jaw, fine, organic: true });
-    if (m) podTop.set(m, top);
-  });
-  let hips: Hip[] | undefined;
+  const ts = torsoSlots(c);
+  // ---- static lower body: the leg hub (or a dark drive block) and the swivel the carapace turns on
+  const ax = -0.16 * k; // twist pivot under the light slot (that mount stays on the pivot axis)
+  let P: number, hips: Hip[] | undefined;
   if (legged) {
+    const hy = stance.hipY, t = stance.thick;
+    block(b, kit.mech, -0.2 * k, hy - t * 1.4, 0, 1.0 * k, 1.1 * k, t * 2.4, { top: [0.86, 0.86], ch: 0.22 * k, bev: 0.02 * k, bot: 0.03 * k });
+    b.cyl(kit.plasma, 0.14 * k, 0.1 * k, 0.04 * k, [-0.2 * k, hy - t * 1.4 - 0.035 * k, 0], 'y', 10);
     hips = [];
-    for (const [hx, fx2, fz, ph] of [[-0.02, 0.25, 2.05, 0], [-0.55, -1.15, 1.9, Math.PI]] as [number, number, number, number][]) for (const s of [-1, 1] as const) {
-      const p: V3 = [hx * u, by - 0.04 * u, s * 0.86 * u];
-      hips.push({ p, side: s, t: stance.thick, foot: [fx2 * u, 0, s * fz * u], phase: ph + (s > 0 ? Math.PI : 0) });
+    for (const [hx, fx, fz, ph] of [[0.08, 0.45, 1.5, 0], [-0.5, -1.0, 1.4, Math.PI]] as [number, number, number, number][]) for (const s of [-1, 1] as const) {
+      const p: V3 = [hx * k, hy + 0.04 * k, s * 0.5 * k];
+      hips.push({ p, side: s, t, foot: [fx * k, 0, s * fz * k], phase: ph + (s > 0 ? Math.PI : 0) });
+      block(b, kit.armor, hx * k, hy - t * 1.1, s * 0.48 * k, 0.26 * k, 0.2 * k, t * 2.3, { top: [0.8, 0.85], ch: 0.05 * k, bev: 0.012 * k });
+      pbox(b, kit.glow, 0.14 * k, 0.02 * k, 0.012 * k, hx * k, hy + t * 0.6, s * 0.585 * k);
     }
+    P = hy + t * 1.0 + 0.08 * k;
+  } else {
+    const wi = Math.min(stance.wi, 1.1 * k);
+    P = Math.max(stance.y0 + 0.3 * k, stance.yt + 0.06 * k);
+    block(b, kit.mech, -0.1 * k, stance.y0 - 0.02, 0, 1.6 * k, wi * 2, P - 0.02 * k - stance.y0 + 0.02, { top: [0.9, 0.9], ch: 0.2 * k, bev: 0.02 * k, bot: 0.02 * k });
+    both((s) => pbox(b, kit.glow, 1.0 * k, 0.025 * k, 0.012 * k, -0.1 * k, P - 0.12 * k, s * (wi + 0.002)));
   }
-  const deck = (x: number, z: number) => {
-    const dx = (x - cx) / (x > cx ? rxF : rxB), dz = z / rz;
-    const d = dx * dx + dz * dz;
-    return d < 1 ? by + 0.12 * u + (topY - by - 0.12 * u) * Math.max(0, 1 - d * 1.3) : -1;
+  b.cylb(kit.joint, 0.5 * k, 0.05 * k, 0.01 * k, [ax, P - 0.06 * k, 0], 'y', 16);
+
+  // ---- the carapace (twists with the guns); frame origin on the pivot, +x forward
+  const gx = 0.86 * k, gz = 1.02 * k, GY = 0.42 * k; // claw stations (main gun trunnion height GY)
+  const crest = 0.96 * k;
+  const station = (i: number): V3 => (i === 2 ? [-0.1 * k, crest - 0.06 * k, 0] : [gx, GY, (i === 0 ? -1 : 1) * gz]);
+  const build = (t: Bld, heroR: number, podR: number[]): V3[] => {
+    const rOf = (i: number) => (i === ts.hero ? heroR : podR[ts.pods.indexOf(i)] ?? 0.75 * k / 2);
+    t.cylb(kit.mech, 0.46 * k, 0.06 * k, 0.012 * k, [0, -0.02 * k, 0], 'y', 16);
+    // dark core and the overlapping carapace bands (team / dark team), side skirts dropping over the hub
+    block(t, kit.mech, -0.12 * k, 0.02 * k, 0, 1.5 * k, 1.36 * k, 0.5 * k, { top: [0.84, 0.8], ch: 0.3 * k, bev: 0.02 * k });
+    shingles(t, [kit.armor, kit.armor2], 0.52 * k, -1.02 * k, 4, 0.07 * k, (f) => [(0.78 + 0.16 * Math.sin(Math.PI * f)) * k, (0.26 + 0.1 * Math.sin(Math.PI * f)) * k, (0.38 + 0.16 * Math.sin(Math.PI * Math.min(1, f * 1.4))) * k], { cols: 5, pw: 1.6, drop: 0.28 * k, lift: 0.09 * k });
+    // bone dorsal crest with a glowing seam, and the light-slot plinth on it
+    block(t, kit.shell, -0.22 * k, 0.74 * k, 0, 0.9 * k, 0.32 * k, crest - 0.74 * k, { top: [0.7, 0.6], shift: [-0.06 * k, 0], ch: 0.08 * k, bev: 0.02 * k });
+    both((s) => pbox(t, kit.plasma, 0.6 * k, 0.03 * k, 0.03 * k, -0.24 * k, 0.8 * k, s * 0.17 * k));
+    if (!ts.armed(2)) block(t, kit.mech, -0.1 * k, crest - 0.04 * k, 0, 0.42 * k, 0.42 * k, 0.05 * k, { ch: 0.1 * k, bev: 0.01 * k });
+    else block(t, kit.armor2, -0.1 * k, crest - 0.2 * k, 0, 0.6 * k, 0.56 * k, 0.16 * k, { top: [0.9, 0.9], ch: 0.12 * k, bev: 0.015 * k });
+    // the head between the claws: a dark team wedge, a V of hot visor slits, a lamp eye, mandibles under it
+    block(t, kit.armor2, 0.62 * k, 0.04 * k, 0, 0.5 * k, 0.6 * k, 0.4 * k, { top: [0.45, 0.72], shift: [-0.08 * k, 0], ch: 0.12 * k, bev: 0.02 * k, bot: 0.02 * k });
+    both((sd) => pbox(t, kit.hot, 0.03 * k, 0.03 * k, 0.16 * k, 0.86 * k, 0.28 * k, sd * 0.09 * k, [0, sd * 0.5, -sd * 0.35]));
+    t.cyl(kit.lamp, 0.03 * k, 0.03 * k, 0.03 * k, [0.875 * k, 0.2 * k, 0], 'x', 8);
+    if (fine) mandibles(t, kit, [0.82 * k, 0.06 * k, 0], 0.3 * k, 0.035 * k, 0.12 * k, 0.4);
+    // rear: abdomen plate over a glowing vent stack, twin exhausts
+    block(t, kit.mech, -1.0 * k, 0.04 * k, 0, 0.3 * k, 0.9 * k, 0.36 * k, { top: [0.8, 0.9], ch: 0.08 * k, bev: 0.015 * k });
+    for (const f of [0.14, 0.26]) pbox(t, kit.plasma, 0.02 * k, 0.04 * k, 0.6 * k, -1.16 * k, f * k, 0);
+    both((s) => t.cyl(kit.hot, 0.045 * k, 0.045 * k, 0.015 * k, [-1.06 * k, 0.42 * k, s * 0.3 * k], 'y', 8));
+    // ---- the claws
+    for (const i of [0, 1]) {
+      const s = i === 0 ? -1 : 1, z = s * gz, armed = ts.armed(i);
+      const r = armed ? rOf(i) : 0.75 * k / 2, ct = GY - r * 0.11;
+      // shoulder: joint drum through the carapace flank, a dark arm block out to the claw
+      jointDrum(t, kit, [0.1 * k, GY - 0.12 * k, s * 0.62 * k], 0.18 * k, 0.2 * k, 'z');
+      block(t, kit.mech, 0.3 * k, ct - r * 0.62, s * 0.72 * k, 0.6 * k, 0.4 * k, r * 0.5, { top: [0.9, 0.9], ch: 0.06 * k, bev: 0.012 * k });
+      // cradle the gun sinks into: one solid dark-team mass with a dark under-tier
+      block(t, kit.armor2, gx - 0.08 * k, ct - r * 0.5, z, r * 1.9, r * 1.8, r * 0.5, { top: [0.92, 0.92], ch: r * 0.45, bev: 0.02 * k, bot: 0.03 * k });
+      block(t, kit.mech, gx - 0.1 * k, ct - r * 0.68, z, r * 1.5, r * 1.4, r * 0.2, { ch: r * 0.4, bev: 0.008 * k });
+      // outer cheek plate down the claw's flank, glow strip under its lip
+      armorPlate(t, kit, kit.armor, frame([gx - 0.08 * k, ct - r * 0.24, z + s * r * 0.9], [0, 0.0, s], XA), trapP(r * 1.6, r * 0.34, r * 0.4, 0.03 * k), 0.035 * k, { standoff: 0.012 * k });
+      pbox(t, kit.glow, r * 1.1, 0.022 * k, 0.012 * k, gx - 0.08 * k, ct - r * 0.44, z + s * (r * 0.94 + 0.01 * k));
+      // pincer: a hooked lower finger under the barrel (outer side) and an upper thumb arching over the outer flank
+      const zf = z + s * r * 0.62;
+      fin(t, kit.armor, [[gx - r * 0.4, ct - r * 0.5], [gx + r * 1.5, ct - r * 0.3], [gx + r * 1.85, ct + r * 0.05], [gx + r * 1.7, ct + r * 0.12], [gx + r * 1.35, ct - r * 0.04], [gx - r * 0.2, ct + r * 0.02]], zf, 0.07 * k);
+      fin(t, kit.armor2, [[gx - r * 1.1, ct + r * 0.05], [gx - r * 0.6, ct + r * 0.66], [gx + r * 0.5, ct + r * 0.78], [gx + r * 1.25, ct + r * 0.56], [gx + r * 1.1, ct + r * 0.44], [gx + r * 0.4, ct + r * 0.54], [gx - r * 0.45, ct + r * 0.42], [gx - r * 0.8, ct + r * 0.05]], zf + s * 0.06 * k, 0.07 * k);
+      fin(t, kit.shell, [[gx - r * 0.5, ct + r * 0.66], [gx + r * 0.5, ct + r * 0.78], [gx + r * 0.5, ct + r * 0.7], [gx - r * 0.45, ct + r * 0.58]], zf + s * 0.13 * k, 0.02 * k);
+      claw(t, kit.joint, [gx + r * 1.15, ct + r * 0.52, zf + s * 0.06 * k], [gx + r * 1.4, ct + r * 0.44, zf + s * 0.03 * k], [gx + r * 1.5, ct + r * 0.24, zf], 0.035 * k);
+      // the thumb's ram from the shoulder
+      piston(t, kit, [0.18 * k, GY + 0.06 * k, s * 0.78 * k], [gx - r * 0.4, ct + r * 0.7, zf + s * 0.06 * k], 0.026 * k, 0.55, fine);
+      if (!armed) {
+        // no gun in this claw: an armoured fist block closes it
+        block(t, kit.armor, gx, ct - 0.02 * k, z, r * 1.6, r * 1.2, r * 0.6, { top: [0.7, 0.8], ch: r * 0.3, bev: 0.02 * k });
+      } else if (i === ts.hero) {
+        // the main gun gets the same sunk ring lip as the pod's swivel well, so both claws read alike
+        t.lathe(kit.trim, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.2], [r * 0.74, r * 0.24], [0, r * 0.24]], [gx, ct - r * 0.12, z], 'y', 16);
+      }
+    }
+    const hero = ts.hero >= 0 ? station(ts.hero) : station(0);
+    return [hero, ...ts.pods.map((i) => { const p = station(i); return [p[0], p[1] - rOf(i) * 0.36, p[2]] as V3; })];
   };
+  const at: V3 = [ax, P, 0];
+  if (ts.hero < 0) {
+    const tb = new Bld(), g = new THREE.Group();
+    g.position.set(...at);
+    build(tb, 0.375 * k, []);
+    tb.mount(g);
+    c.body.add(g);
+  }
+  const top = P + crest;
   return {
-    deckAt: deck, top: topY, hips, custom: true, dressed: true,
+    deckAt: (x, z) => (Math.hypot(x - ax, z) < 0.5 * k ? P : -1), top, hips, custom: true, dressed: true,
     seat: (m) => {
-      const pt = podTop.get(m);
-      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r), socket: true };
-      const y = Math.max(deck(m.x, m.z), by + 0.4 * u) + 0.06 * u;
-      collar(b, kit, m.x, y, m.z, m.r, y - 0.2 * u, 16);
+      if (m.i === ts.hero) return { y: P, socket: true };
+      // a utility in the light slot stands on the crest plinth (on the pivot axis, so it stays on the carapace); one in
+      // a claw slot stands over that claw's closed fist
+      if (Math.abs(m.z) < 0.3 * k) return { y: ringSeat(b, kit, m, top + 0.01 * k, 0.012 * k, 12), socket: true };
+      const y = P + GY + 0.2 * k;
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.06 * k, 12);
       return { y, socket: true };
     },
+    torso: ts.hero >= 0 ? (t, r) => ({ hp: build(t, r.heroR, r.podR), at }) : undefined,
   };
 }
 
@@ -696,6 +718,7 @@ function landtrain(c: ChassisCtx): ChassisOut {
 }
 
 registerChassis('crab', bunkerCrawler);
+registerTorso('crab');
 registerChassis('scorpion', tailgunCrawler);
 registerChassis('saucer', saucerDisc);
 registerTorso('saucer');

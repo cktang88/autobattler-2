@@ -11,15 +11,15 @@
 //   colossus   'titan'      multi-turret heavy tank: long central hull, two armoured side casemates over the outer tracks,
 //                            nose barbette, rear MG cupola, handrails and a ladder.
 //   (siegeplat lives in chassis/heavies.ts)
-//   juggernaut 'juggernaut' breaching casemate, wider than long: chevron hull, frontal plate stacks + ERA, set-back
-//                            casemate, hex keep, full-width toothed mine plough on push arms and rams.
+//   juggernaut 'juggernaut' breaching gun-citadel, wider than long: chevron hull, frontal plate stacks + ERA, set-back
+//                            casemate, a twisting citadel with two tall gun walls round the main gun, mine plough.
 // Running gear looks per shape live in mobility/tracks.ts (trackStyle). Shape helpers: chassis/tanks-kit.ts.
 
 import * as THREE from 'three';
 import { atlasUV, type MatLike } from '../materials.ts';
 import { bevBox, type P2, type V3 } from '../geo.ts';
 import { HS_NARROW } from '../mobility/tracks.ts';
-import { registerChassis, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
+import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type MountSpec } from './registry.ts';
 import { both, collar, beam, block } from './shapes.ts';
 import { frustum, inPlan, mirrorPlan, ngon, scalePlan } from './tanks-kit.ts';
 import {
@@ -27,7 +27,7 @@ import {
   piston, recessPanel, rectP, smokeLaunchers, spareTrack, stowBox, sub, towHooks, trapP,
 } from './hs-kit.ts';
 import { facePlate, facetHull, frustumPlates, outrigger, periscopes, ringSeat, sensorMast, spade, trussRun } from './hs-kit-vehicles.ts';
-import { mtx, strutGeo } from '../geo.ts';
+import { Bld, mtx, strutGeo } from '../geo.ts';
 
 const sc = (p: P2[], kx: number, kz: number): P2[] => p.map(([x, z]) => [x * kx, z * kz]);
 const biggest = (ms: MountSpec[]) => ms.reduce<MountSpec | undefined>((a, m) => (!a || m.r > a.r ? m : a), undefined);
@@ -312,17 +312,20 @@ function colossus(c: ChassisCtx): ChassisOut {
 
 // ---------------------------------------------------------------------------------------------------------------------
 function juggernaut(c: ChassisCtx): ChassisOut {
-  // Breaching casemate (hs-kit): wider than long. A dark belly, a chevron-plan faceted lower hull, a set-back casemate,
-  // a hex keep for the main gun. The front is a wall of layered armour: two-layer plate stacks on the chevron facets
-  // with ERA grids, and a full-width mine plough (two V halves of toothed blades on push arms and rams). Asymmetric:
-  // commander's cupola left, exhaust right rear, jerry cans + antenna left rear, ladder on the right flank.
+  // Breaching gun-citadel, built round its medium main gun (1.5 cells, the same on every hull): the mass steps up into
+  // the gun. A wide low chevron lower hull with a wall of frontal armour (plate stacks + ERA) and a full-width toothed
+  // mine plough, a set-back casemate tier, and on it the CITADEL that twists with the gun (mech torso mode): a low
+  // armoured body under the gun, a raked glacis below the barrel and two tall stepped gun walls flanking the housing so
+  // the gun sits deep in an armoured slot (top-down: the light gun framed by two dark walls). The light gun rides a
+  // raised bay on the right wall's back, a sensor block caps the left wall, a reactor bustle overhangs the rear.
+  // Asymmetric: commander's cupola front left, exhaust right rear, jerry cans + antenna left rear, ladder right flank.
   const { b, kit, L, W, S, stance } = c;
   const kx = L / 3, kz = W / 4, k = Math.min(kx, kz);
   const fine = fineFor(S);
   const y0 = stance.y0, yt = Math.max(stance.yt, y0 + 0.15 * k);
   frustum(b, kit.mech, sc(mirrorPlan([[1.3, 0.5], [1.0, Math.min(stance.wi, 1.5)], [-1.3, Math.min(stance.wi, 1.5)], [-1.45, 1.0]]), kx, 1), y0, yt - y0 + 0.02, { bev: 0.02 });
   const t1 = sc(mirrorPlan([[1.52, 0.3], [0.45, 1.98], [-0.95, 1.98], [-1.48, 1.1]]), kx, kz);
-  const h1 = 0.34 * k, y1 = yt - 0.05 * k;
+  const h1 = 0.3 * k, y1 = yt - 0.05 * k;
   frustum(b, kit.armor, t1, y1, h1, { top: [0.9, 0.93], shift: [-0.06 * kx, 0], bot: 0.04 * k, bev: 0.012 * k });
   const d1 = y1 + h1;
   // frontal wall: plate stack + ERA on the two chevron facets (t1 points 0->1 is the right front facet, last->0 left)
@@ -334,19 +337,19 @@ function juggernaut(c: ChassisCtx): ChassisOut {
     eraGrid(b, kit, sub(F, 0, 0.014 * k + 0.04 * k, 0), 2, 5, Math.hypot(e[0] - a[0], e[1] - a[1]) * 0.15, h1 * 0.4, 0.03 * k, kit.armor);
   });
   frustumPlates(b, kit, kit.armor2, t1, y1, h1, 0.91, 0.03 * k, { standoff: 0.01 * k, gap: 0.022 * k, f0: 0.15, f1: 0.85, skip: (i) => i === 0 || i === t1.length - 1 || i === 3, widthK: 0.8 });
-  // tier 2: set-back casemate, flat roof
+  // tier 2: set-back casemate the citadel turns on
   const t2 = sc(mirrorPlan([[0.74, 0.26], [0.05, 1.4], [-0.85, 1.4], [-1.3, 0.8]]), kx, kz);
-  const h2 = 0.24 * k;
+  const h2 = 0.22 * k;
   frustum(b, kit.mech, scalePlan(t2, 1.04, 1.03), d1 - 0.03 * k, 0.06 * k, { top: [0.99, 0.99], bev: 0.01 * k });
   frustum(b, kit.armor, t2, d1 + 0.02 * k, h2 - 0.02 * k, { top: [0.86, 0.88], shift: [-0.06 * kx, 0], bev: 0.012 * k });
   frustumPlates(b, kit, kit.armor, t2, d1 + 0.02 * k, h2 - 0.02 * k, 0.87, 0.025 * k, { standoff: 0.008 * k, gap: 0.018 * k, f0: 0.15, f1: 0.85, skip: (i) => i > 1 && i < t2.length - 2, widthK: 0.78 });
   const d2 = d1 + h2;
-  const main = biggest(c.mounts);
-  const mx = main?.x ?? -0.42 * kx, mz = main?.z ?? 0;
-  const keepY = d2 + 0.16 * k;
-  const kp = ngon(6, 0.62 * k, 0.66 * k, 0, mx, mz);
-  frustum(b, kit.armor, kp, d2 - 0.03 * k, keepY - d2 + 0.03 * k, { top: [0.86, 0.86], bev: 0.01 * k });
-  frustumPlates(b, kit, kit.armor2, kp, d2 - 0.03 * k, keepY - d2 + 0.03 * k, 0.86, 0.022 * k, { standoff: 0.008 * k, gap: 0.015 * k, skip: (i) => i === 2 || i === 3, widthK: 0.72 });
+  const main = c.mounts.filter((m) => m.mod.kind === 'weapon').reduce<MountSpec | undefined>((a, m) => (!a || m.r > a.r ? m : a), undefined);
+  const mx = -0.28 * kx; // twist pivot (the citadel sits a little forward of the main mount, over the hull centre)
+  // slewing ring: dark drum + joint band on the casemate roof
+  b.cylb(kit.mech, 0.8 * k, 0.08 * k, 0.015 * k, [mx, d2 - 0.02 * k, 0], 'y', 18);
+  b.cylb(kit.joint, 0.72 * k, 0.03 * k, 0.008 * k, [mx, d2 + 0.035 * k, 0], 'y', 18);
+  const P = d2 + 0.07 * k;
   // mine plough: two V halves of toothed blades across the front, on push arms and rams
   const pw = yt * 0.78;
   both((s) => {
@@ -364,27 +367,76 @@ function juggernaut(c: ChassisCtx): ChassisOut {
     piston(b, kit, [1.15 * kx, d1 - 0.04 * k, s * 0.7 * kz], [1.55 * kx, 0.04 * k + pw * 0.9, s * 0.62 * kz], 0.03 * k, 0.55, fine);
     cagedLamp(b, kit, frame([0.8 * kx, d1, s * 1.45 * kz], [0, 1, 0], [1, 0, 0]), 0.08 * k, fine);
   });
-  // commander's cupola (left of the keep), driver's periscopes, crew hatch
-  cupola(b, kit, mx + 0.35 * kx, d2, -1.0 * kz, 0.12 * k, { fine });
-  periscopes(b, kit, 0.52 * kx, d2, -0.55 * kz, 4, 0.045 * k, -0.35);
-  crewHatch(b, kit, frame([-0.95 * kx, d2, 0.55 * kz], [0, 1, 0]), 0.08 * k, fine);
+  // commander's cupola (front left, clear of the citadel's sweep), driver's periscopes, crew hatch
+  cupola(b, kit, 0.55 * kx, d1, -1.25 * kz, 0.12 * k, { fine });
+  periscopes(b, kit, 0.62 * kx, d2, -0.18 * kz, 3, 0.045 * k, -0.2);
+  crewHatch(b, kit, frame([0.25 * kx, d2, 0.95 * kz], [0, 1, 0]), 0.08 * k, fine);
   // rear deck: grille, exhaust (right), jerry cans + antenna (left), ladder on the right flank, tow hooks
-  recessPanel(b, kit, frame([-1.2 * kx, d1, -0.15 * kz], [0, 1, 0]), 0.2 * kx, 0.7 * kz, 0.03 * k, { slats: 4, frame: kit.armor2 });
+  recessPanel(b, kit, frame([-1.28 * kx, d1, -0.15 * kz], [0, 1, 0]), 0.2 * kx, 0.7 * kz, 0.03 * k, { slats: 4, frame: kit.armor2 });
   exhaustBox(b, kit, frame([-1.25 * kx, d1, 0.9 * kz], [0, 1, 0], [0, 0, 1]), 0.06 * k, fine);
   jerryCans(b, kit, frame([-1.2 * kx, d1, -1.2 * kz], [0, 1, 0], [0, 0, 1]), 3, 0.09 * k);
-  antenna(b, kit, -1.0 * kx, d2, -0.75 * kz, 1.0 * k, 0.009 * k, [-0.15, 0, 0]);
+  antenna(b, kit, -1.25 * kx, d1, -1.6 * kz, 1.0 * k, 0.009 * k, [-0.15, 0, 0]);
   ladder(b, kit, [-0.4 * kx, 0.05, 1.98 * kz], [-0.4 * kx, d1, 1.98 * kz * 0.95], 0.13 * k, [1, 0, 0], [0, 0, 1], 0.04 * k);
   towHooks(b, kit, frame([-1.46 * kx, y1 + 0.1 * k, 0], [-1, 0, 0], [0, 0, 1]), 0.9 * kz, 0.05 * k);
-  b.decal(0.26 * k, 0.26 * k, 0.1 * kx, d2 + 0.004, -0.75 * kz, atlasUV(1), 0);
+  b.decal(0.26 * k, 0.26 * k, 0.75 * kx, d1 + 0.004, 1.2 * kz, atlasUV(1), 0);
+
+  // ---- the citadel (twists with the guns); frame origin on the slewing ring, +x forward
+  const wz = 0.96 * k; // gun-wall centre line (inner face clear of the widest medium housing, 0.7)
+  const WT = 1.08 * k; // wall top
+  const hp0: V3 = [0.22 * k, 0.6 * k, 0], hp1: V3 = [-0.5 * k, WT - 0.13 * k, wz];
+  const citadel = (t: Bld) => {
+    t.cylb(kit.mech, 0.66 * k, 0.06 * k, 0.012 * k, [0, 0, 0], 'y', 16);
+    // low body under the gun: dark core, team armour shell stepping in, raked glacis under the barrel
+    block(t, kit.mech, -0.2 * k, 0.02 * k, 0, 1.7 * k, 1.5 * k, 0.4 * k, { top: [0.94, 0.94], ch: 0.16 * k, bev: 0.02 * k });
+    block(t, kit.armor, -0.24 * k, 0.04 * k, 0, 1.62 * k, 1.86 * k, 0.34 * k, { top: [0.9, 0.86], ch: 0.2 * k, bev: 0.025 * k, bot: 0.02 * k });
+    block(t, kit.armor2, 0.62 * k, 0.03 * k, 0, 0.42 * k, 1.26 * k, 0.36 * k, { top: [0.3, 0.84], shift: [-0.12 * k, 0], ch: 0.1 * k, bev: 0.02 * k, bot: 0.015 * k });
+    pbox(t, kit.plasma, 0.03 * k, 0.05 * k, 0.6 * k, 0.69 * k, 0.17 * k, 0, [0, 0, -1.0]);
+    both((s) => {
+      const z = s * wz;
+      // gun wall: dark core, a tall team block raked back and inward, a stepped dark upper layer, bone crest
+      block(t, kit.mech, -0.14 * k, 0.2 * k, z, 1.44 * k, 0.38 * k, WT - 0.24 * k, { top: [0.86, 0.9], ch: 0.08 * k, bev: 0.015 * k });
+      block(t, kit.armor, -0.1 * k, 0.24 * k, z + s * 0.04 * k, 1.62 * k, 0.5 * k, WT - 0.34 * k, { top: [0.72, 0.62], shift: [-0.14 * k, -s * 0.03 * k], ch: 0.12 * k, bev: 0.025 * k, bot: 0.02 * k, mid: [[0.4, 0.98, 1.04]] });
+      block(t, kit.armor2, -0.22 * k, WT - 0.12 * k, z, 0.9 * k, 0.24 * k, 0.08 * k, { top: [0.8, 0.8], shift: [-0.05 * k, 0], ch: 0.06 * k, bev: 0.015 * k });
+      block(t, kit.shell, -0.24 * k, WT - 0.04 * k, z, 0.62 * k, 0.14 * k, 0.04 * k, { top: [0.7, 0.7], ch: 0.04 * k, bev: 0.01 * k });
+      // outer face: a layered plate on the wall flank, glow slit under it; front prow blade of the wall
+      armorPlate(t, kit, kit.armor2, frame([-0.12 * k, 0.6 * k, s * (wz + 0.26 * k)], [0, 0.18, s], [1, 0, 0]), trapP(1.1 * k, 0.44 * k, 0.34 * k, 0.06 * k), 0.04 * k, { standoff: 0.015 * k, gap: 0.03 * k });
+      pbox(t, kit.glow, 0.7 * k, 0.03 * k, 0.02 * k, -0.12 * k, 0.33 * k, s * (wz + 0.282 * k));
+      block(t, kit.armor2, 0.62 * k, 0.12 * k, z, 0.24 * k, 0.3 * k, 0.5 * k, { top: [0.3, 0.7], shift: [-0.08 * k, 0], ch: 0.06 * k, bev: 0.012 * k });
+      // trunnion bearing in the wall's inner face + the pin into the gun
+      t.cylb(kit.joint, 0.13 * k, 0.12 * k, 0.015 * k, [hp0[0] - 0.02 * k, hp0[1] - 0.06 * k, s > 0 ? z - 0.29 * k : z + 0.17 * k], 'z', 12);
+      t.cyl(kit.mech, 0.06 * k, 0.06 * k, 0.36 * k, [hp0[0] - 0.02 * k, hp0[1] - 0.06 * k, s > 0 ? 0.36 * k : -0.72 * k], 'z', 8);
+    });
+    // light-gun bay on the right wall's back (the pod sinks in it), sensor block + mast on the left wall
+    block(t, kit.armor2, -0.5 * k, 0.3 * k, wz, 0.62 * k, 0.6 * k, WT - 0.34 * k, { top: [0.9, 0.9], ch: 0.1 * k, bev: 0.02 * k });
+    block(t, kit.mech, -0.5 * k, WT - 0.06 * k, wz, 0.46 * k, 0.46 * k, 0.04 * k, { ch: 0.08 * k, bev: 0.01 * k });
+    block(t, kit.armor2, -0.42 * k, WT, -wz, 0.3 * k, 0.26 * k, 0.12 * k, { top: [0.8, 0.8], ch: 0.04 * k, bev: 0.012 * k });
+    pbox(t, kit.lamp, 0.012 * k, 0.04 * k, 0.16 * k, -0.265 * k, WT + 0.07 * k, -wz);
+    antenna(t, kit, -0.6 * k, WT, -wz - 0.06 * k, 0.8 * k, 0.008 * k, [-0.2, 0, 0]);
+    // reactor bustle overhanging the rear: dark block, glowing vent stack, twin exhausts
+    block(t, kit.mech, -1.12 * k, 0.08 * k, 0, 0.36 * k, 1.1 * k, 0.5 * k, { top: [0.8, 0.9], shift: [-0.04 * k, 0], ch: 0.08 * k, bev: 0.015 * k });
+    for (const f of [0.2, 0.32, 0.44]) pbox(t, kit.plasma, 0.02 * k, 0.04 * k, 0.8 * k, -1.31 * k, f * k, 0);
+    both((s) => t.cyl(kit.hot, 0.05 * k, 0.05 * k, 0.015 * k, [-1.2 * k, 0.58 * k, s * 0.34 * k], 'y', 8));
+  };
+  if (!main) {
+    const tb = new Bld(), g = new THREE.Group();
+    g.position.set(mx, P, 0);
+    citadel(tb);
+    tb.mount(g);
+    c.body.add(g);
+  }
   const t2top = scalePlan(t2, 0.86, 0.88, -0.05 * kx, 0);
   const deck = (x: number, z: number) => (inPlan(t2top, x, z) ? d2 : inPlan(t1, x, z) ? d1 : -1);
   return {
-    deckAt: deck, top: keepY, custom: true, dressed: true,
+    deckAt: deck, top: P + WT, custom: true, dressed: true,
     seat: (m) => {
-      if (m === main) return { y: ringSeat(b, kit, m, keepY, 0.02 * k, 18), socket: true };
-      const base = Math.max(0, deck(m.x, m.z));
-      return { y: ringSeat(b, kit, m, base, 0.04 * k, 14), socket: true };
+      if (m === main) return { y: P, socket: true };
+      // a utility (shield, repair rig, ...) on a dark mast at its own mount, over the citadel
+      const y = P + WT + 0.1 * k;
+      block(b, kit.mech, m.x, d2 - 0.05, m.z, m.r * 0.5, m.r * 0.5, y - d2 + 0.08, { ch: m.r * 0.12, bev: m.r * 0.04 });
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.04, 12);
+      return { y, socket: true };
     },
+    torso: main ? (t) => { citadel(t); return { hp: [hp0, hp1], at: [mx, P, 0] }; } : undefined,
   };
 }
 
@@ -392,3 +444,4 @@ registerChassis('hex', warden);
 registerChassis(['long', 'longarm'], longarm);
 registerChassis('colossus', colossus);
 registerChassis('juggernaut', juggernaut);
+registerTorso('juggernaut');
