@@ -3,7 +3,7 @@
 // TugCommands, so it plays by exactly the rules a person does.
 
 import { makeRng, type Rng } from './rng.ts';
-import { FIELD_H, FIELD_W } from './grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W } from './grid.ts';
 import { computeStats } from './stats.ts';
 import { TIER_COST, TUG, castlePos, dropError, incomeCost, type TugCommand, type TugGame } from './tug.ts';
 import type { AiDifficulty } from './ai.ts';
@@ -118,7 +118,7 @@ export class TugAi {
     const fwd = this.side === 0 ? -1 : 1;
     const home = castlePos(this.side);
     // defend: drop between the threat and the castle; push: drop a little ahead of the castle
-    const ty = Number.isNaN(y) ? home.y + fwd * (14 + this.rng() * 10) : clampHalf(this.side, y - fwd * 10);
+    const ty = Number.isNaN(y) ? clampZone(this.side, home.y + fwd * (10 + this.rng() * (DEPLOY_D - 12))) : clampZone(this.side, y - fwd * 10);
     for (let k = 0; k < 8; k++) {
       const px = Math.max(4, Math.min(FIELD_W - 4, x + (this.rng() - 0.5) * 6 * k));
       const py = ty + (this.rng() - 0.5) * 2 * k;
@@ -131,6 +131,7 @@ export class TugAi {
   }
 }
 
-function clampHalf(side: Side, y: number): number {
-  return side === 0 ? Math.max(FIELD_H / 2 + TUG.midGap + 4, Math.min(FIELD_H - 4, y)) : Math.min(FIELD_H / 2 - TUG.midGap - 4, Math.max(4, y));
+/** keep a drop row inside our deploy zone, a little in from its edges */
+function clampZone(side: Side, y: number): number {
+  return side === 0 ? Math.max(FIELD_H - DEPLOY_D + 4, Math.min(FIELD_H - 4, y)) : Math.min(DEPLOY_D - 4, Math.max(4, y));
 }

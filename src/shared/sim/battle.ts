@@ -7,7 +7,7 @@
 import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../parts.ts';
 import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
 import { SPLASH_EDGE, dodgeChance, tunedWeapon, airRole, computeStats, standoffOrbit, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W, METERS_PER_CELL, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, MAX_FIELD_H, MAX_FIELD_W, METERS_PER_CELL, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
 import { CLOAK_REVEAL, REPAIR_AURA_RANGE, START_DELAYS, STANCES, TARGET_PRIORITIES } from '../types.ts';
 import type { Design, ModuleDef, Side, Stance, TargetPriority } from '../types.ts';
@@ -174,8 +174,9 @@ const ENGAGE_SHARE = 0.999; // halt once ALL weapons that can hit the goal are i
 const TUG_AGGRO = 8;
 const THREAT_MEMORY = 6 * TICK_RATE; // ticks a recorded attacker stays 'the threat'
 const CELL = 3;
-const HCOLS = Math.ceil(FIELD_W / CELL);
-const HROWS = Math.ceil(FIELD_H / CELL);
+// sized for the largest field (setField): cellOf clamps, so a smaller field just leaves cells empty
+const HCOLS = Math.ceil(MAX_FIELD_W / CELL);
+const HROWS = Math.ceil(MAX_FIELD_H / CELL);
 const SAT_N = (HCOLS + 1) * (HROWS + 1);
 /** Centre-to-farthest-point radius of a hull's shape: the circle of radius k * side for square footprints, else the
  *  oriented k * fw x k * fh box that range / edge checks measure to, whose corners reach past k * longest side

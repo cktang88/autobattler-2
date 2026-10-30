@@ -18,10 +18,30 @@ import type { Placement, Side, Size } from './types.ts';
  *  A size-1 unit is a 5 m light vehicle, size 2 a 10 m tank, size 3 a 15 m walker. All ranges/speeds in
  *  data are in cells; multiply by METERS_PER_CELL for display. */
 export const METERS_PER_CELL = 5;
-export const FIELD_W = 96;
-export const FIELD_H = 92;
-export const DEPLOY_W = FIELD_W;
-export const DEPLOY_D = 24;
+export let FIELD_W = 96;
+export let FIELD_H = 92;
+export let DEPLOY_W = FIELD_W;
+export let DEPLOY_D = 24;
+
+/** A battlefield's size in cells: w across, h long (side to side), deploy = rows of each side's deploy zone. */
+export interface FieldSize { w: number; h: number; deploy: number }
+/** the round-based modes' field */
+export const STANDARD_FIELD: Readonly<FieldSize> = { w: 96, h: 92, deploy: 24 };
+/** the largest field any mode uses (sizes fixed buffers, e.g. the sim's spatial hash) */
+export const MAX_FIELD_W = 96;
+export const MAX_FIELD_H = 116;
+
+/** Switch the battlefield size (the FIELD_* / DEPLOY_* bindings above are live). Tug of war plays on its own narrow,
+ *  long field and puts the standard one back when it ends; everything else always runs on STANDARD_FIELD. */
+export function setField(f: Readonly<FieldSize>): void {
+  if (f.w > MAX_FIELD_W || f.h > MAX_FIELD_H) throw new Error(`field ${f.w}x${f.h} is larger than ${MAX_FIELD_W}x${MAX_FIELD_H}`);
+  FIELD_W = f.w;
+  FIELD_H = f.h;
+  DEPLOY_W = f.w;
+  DEPLOY_D = f.deploy;
+}
+/** cache key part for anything drawn or built at the current field size */
+export const fieldKey = (): string => `${FIELD_W}x${FIELD_H}x${DEPLOY_D}`;
 
 /** Top-left world cell of a placement of the given size. */
 export function localToWorldCell(side: Side, x: number, y: number, size: number): { col: number; row: number } {

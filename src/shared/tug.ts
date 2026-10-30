@@ -9,7 +9,7 @@
 
 import { Battle } from './sim/battle.ts';
 import { DT, TICK_RATE } from './sim/types.ts';
-import { FIELD_H, FIELD_W, blockDims, squadOffsets } from './grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, blockDims, setField, squadOffsets, type FieldSize } from './grid.ts';
 import { computeStats, validateDesign } from './stats.ts';
 import type { Design, Side, Size } from './types.ts';
 
@@ -32,8 +32,9 @@ export const TUG = {
   maxAlive: 180,
   /** designs in a tug roster at most */
   rosterSize: 9,
-  /** no new blocks within this many cells of the midline (own half only) */
-  midGap: 3,
+  /** the tug field: half the standard width, a quarter longer, and a shallower deploy zone per side (blocks drop
+   *  anywhere in your own zone) so the lanes are narrow and the march is long */
+  field: { w: 48, h: 115, deploy: 28 } as FieldSize,
 } as const;
 
 /** price of the next income level (from level `lvl`) */
@@ -93,14 +94,14 @@ export function blockCenters(side: Side, design: Design, x: number, y: number, r
   return squadOffsets(st, 0, rot).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
 }
 
-/** where `side` may drop a block of this footprint (world box of the whole block): its own half, clear of the
- *  midline and of its castle. Returns null when allowed, else the reason. */
+/** where `side` may drop a block of this footprint (world box of the whole block): anywhere in its own deploy zone
+ *  (the back DEPLOY_D rows of the tug field), clear of its castle. Returns null when allowed, else the reason. */
 export function dropError(side: Side, design: Design, x: number, y: number, rot = false): string | null {
   const st = computeStats(design);
   const { w, h } = blockDims(st, 0, rot);
   const x0 = Math.round(x - w / 2), y0 = Math.round(y - h / 2), x1 = x0 + w, y1 = y0 + h;
   if (x0 < 0 || y0 < 0 || x1 > FIELD_W || y1 > FIELD_H) return 'Off the field';
-  if (side === 0 ? y0 < FIELD_H / 2 + TUG.midGap : y1 > FIELD_H / 2 - TUG.midGap) return 'Only on your own half';
+  if (side === 0 ? y0 < FIELD_H - DEPLOY_D : y1 > DEPLOY_D) return 'Only in your own deploy zone';
   const c = castlePos(side);
   if (x1 > c.x - CASTLE_CLEAR && x0 < c.x + CASTLE_CLEAR && y1 > c.y - CASTLE_CLEAR && y0 < c.y + CASTLE_CLEAR) return 'Too close to your castle';
   return null;
@@ -108,7 +109,7 @@ export function dropError(side: Side, design: Design, x: number, y: number, rot 
 
 /** the drop zone of a side as a world box (for drawing) */
 export function dropZone(side: Side): { x0: number; y0: number; x1: number; y1: number } {
-  return side === 0 ? { x0: 0, y0: FIELD_H / 2 + TUG.midGap, x1: FIELD_W, y1: FIELD_H } : { x0: 0, y0: 0, x1: FIELD_W, y1: FIELD_H / 2 - TUG.midGap };
+  return side === 0 ? { x0: 0, y0: FIELD_H - DEPLOY_D, x1: FIELD_W, y1: FIELD_H } : { x0: 0, y0: 0, x1: FIELD_W, y1: DEPLOY_D };
 }
 
 export class TugGame {
@@ -120,7 +121,9 @@ export class TugGame {
   surrendered: Side | null = null;
   private uid = 1;
 
+  /** Switches the shared field to TUG.field (grid.ts setField): whoever ends the game puts STANDARD_FIELD back. */
   constructor(seed: number, rosters: [Design[], Design[]]) {
+    setField(TUG.field);
     this.rosters = rosters;
     this.battle = new Battle({ seed, tug: true, sides: [{ designs: [], units: [] }, { designs: [], units: [] }] });
     const mk = (): TugSideState => ({ gold: TUG.startGold, incomeLvl: 0, tier: TUG.startTier, bought: 0, spent: 0 });

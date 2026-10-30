@@ -5,7 +5,7 @@
 // and it lines up with every other rectangle: the full-field canvas, the hi-res patch drawn when zoomed in, and the
 // darkened surround outside the field all agree. Kept low-contrast and mid-dark so units (and their team glows) pop.
 
-import { DEPLOY_D, FIELD_H, FIELD_W } from '../../shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, fieldKey } from '../../shared/grid.ts';
 import { ctx2d, makeCanvas, type Ctx } from './palette.ts';
 
 export type MapId = 'basin' | 'plains' | 'steppe';
@@ -290,7 +290,7 @@ const cached = (key: string, make: () => HTMLCanvasElement) => {
 /** Whole field at px per cell. */
 export function groundCanvas(px: number, map: MapTheme = MAPS[0]): HTMLCanvasElement {
   px = Math.max(4, Math.round(px));
-  return cached(`${map.id}:${px}`, () => {
+  return cached(`${map.id}:${px}:${fieldKey()}`, () => {
     const c = makeCanvas(FIELD_W * px, FIELD_H * px);
     paint(ctx2d(c), map, px, 0, 0, FIELD_W, FIELD_H, c.width, c.height);
     return c;
@@ -307,7 +307,7 @@ export function groundRegion(px: number, x0: number, y0: number, x1: number, y1:
 /** The land beyond the field edge (cells x0..x1, y0..y1), darkened, no grid: the board sits in a landscape. */
 export const SURROUND = 16;
 export function surroundCanvas(map: MapTheme = MAPS[0]): HTMLCanvasElement {
-  return cached(`${map.id}:surround`, () => {
+  return cached(`${map.id}:surround:${fieldKey()}`, () => {
     const px = 6;
     const x0 = -SURROUND, y0 = -SURROUND, x1 = FIELD_W + SURROUND, y1 = FIELD_H + SURROUND;
     const c = makeCanvas((x1 - x0) * px, (y1 - y0) * px);

@@ -15,7 +15,7 @@ import type { BattleView } from '../render/view.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
 import { paintWhenLaidOut, sizeLabel } from './match-ui.ts';
 import { aiDeck, type AiDifficulty } from '../../shared/ai.ts';
-import { FIELD_H, FIELD_W } from '../../shared/grid.ts';
+import { FIELD_H, FIELD_W, STANDARD_FIELD, setField } from '../../shared/grid.ts';
 import { TICK_RATE } from '../../shared/sim/types.ts';
 import { computeStats } from '../../shared/stats.ts';
 import {
@@ -181,7 +181,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     ),
     h('div.screen-scroll.grow', null, h('div.page', null,
       h('p.muted', null,
-        'One endless battle. Gold flows in every second: spend it on units from your roster and drop them anywhere on your half — ',
+        'One endless battle on a long, narrow field. Gold flows in every second: spend it on units from your roster and drop them anywhere in your deploy zone — ',
         'they march up their lane, fight whatever comes within reach and shell the enemy castle. Invest gold to raise your income, ',
         `or unlock bigger hulls (you start with ${TIER_NAMES[1]} and ${TIER_NAMES[2]}). Destroy the enemy castle to win.`),
       h('div.tug-cols', null,
@@ -489,7 +489,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     netEl.textContent = net && netDown ? 'reconnecting…' : '';
     // the placement hint stays up while a card is picked (a refusal flashes over it for a moment)
     if (sel >= 0 && !hintTimer) {
-      hint.textContent = `Click your half to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · R rotates' : ''} · right-click / Esc cancels`;
+      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · R rotates' : ''} · right-click / Esc cancels`;
       hint.classList.add('show');
     } else if (sel < 0 && !hintTimer) hint.classList.remove('show');
     renderCards();
@@ -604,6 +604,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     el,
     destroy() {
       destroyed = true;
+      setField(STANDARD_FIELD); // TugGame switched to the tug field; every other screen plays on the standard one
       abort.abort();
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKey);

@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import { battleSfx, setPanFlip } from '../audio.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W } from '../../shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, fieldKey } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import { DT, type BattleEvent, type DeathKind, type SimProjectile, type SimUnit, type WreckLevel } from '../../shared/sim/types.ts';
@@ -345,8 +345,9 @@ const _c2 = new THREE.Color();
 interface BuiltTerrain { group: THREE.Group; ground: THREE.Mesh; tint: THREE.Color }
 const terrainCache = new Map<string, BuiltTerrain>();
 function terrainFor(map: MapTheme): BuiltTerrain {
-  let t = terrainCache.get(map.id);
-  if (t) { terrainCache.delete(map.id); terrainCache.set(map.id, t); return t; }
+  const key = `${map.id}:${fieldKey()}`; // tug of war plays on its own field size
+  let t = terrainCache.get(key);
+  if (t) { terrainCache.delete(key); terrainCache.set(key, t); return t; }
   // no baked cell grid: the board reads as a place during battle; the placement grid is an overlay shown while deploying
   const b = buildTerrain(FIELD_H, FIELD_W, { seed: map.seed * 13 + 5, ppc: 14, grid: false, zoneFrac: DEPLOY_D / FIELD_H, props: false });
   // restyle per map: multiply the sandy base by the 2D theme's mid ramp colour (relative to the base's own tone)
@@ -358,7 +359,7 @@ function terrainFor(map: MapTheme): BuiltTerrain {
     if (m?.color) m.color.copy(tint).multiplyScalar(i === 0 ? 1 : 0.8);
   });
   t = { group: b.group, ground: b.ground, tint };
-  terrainCache.set(map.id, t);
+  terrainCache.set(key, t);
   // keep the two most recent maps; older ones free their textures
   while (terrainCache.size > 2) {
     const [k, old] = terrainCache.entries().next().value as [string, BuiltTerrain];

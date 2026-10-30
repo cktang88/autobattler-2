@@ -88,9 +88,10 @@ saves its data on shutdown, so nothing is lost. Health check: `GET /api/health`.
 ### Tug of War
 
 A real-time mode (menu → **Tug of War**), against the AI (easy / normal / hard) or another person online (quick
-match, or a private game with a join code). One endless battle: each side has a castle at its back edge and earns
-gold every second. Spend it on blocks from your **tug roster** (up to 9 designs, kept separately from the Loadout
-deck) and drop them anywhere on your half while the fight runs. They march straight up their lane, fight anything
+match, or a private game with a join code). One endless battle on its own field: half the standard width and a
+quarter longer (240 m x 575 m), with a shallower deploy zone per side. Each side has a castle at its back edge and
+earns gold every second. Spend it on blocks from your **tug roster** (up to 9 designs, kept separately from the
+Loadout deck) and drop them anywhere in your deploy zone while the fight runs. They march straight up their lane, fight anything
 that comes within reach and shell the enemy castle once they get there. Gold can also be **invested** in a higher
 income rate or spent to **unlock the next hull tier** (Light and Medium to start, then Heavy, Giant, Titan). Destroy
 the enemy castle to win; from 10:00, overtime crumbles both castles so every game ends.

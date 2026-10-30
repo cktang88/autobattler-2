@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Battle } from '../src/shared/sim/battle.ts';
-import { FIELD_H } from '../src/shared/grid.ts';
+import { FIELD_H, FIELD_W, STANDARD_FIELD, setField } from '../src/shared/grid.ts';
 import { computeStats } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import {
@@ -17,6 +17,16 @@ const ROSTER: Design[] = STARTER_DESIGNS.filter((d) => computeStats(d).size <= 2
 const HEAVY = STARTER_DESIGNS.find((d) => computeStats(d).size === 3)!;
 
 const digest = (g: TugGame) => g.battle.units.map((u) => `${u.id}:${+u.alive}:${u.x.toFixed(6)}:${u.y.toFixed(6)}:${u.hp.toFixed(4)}`).join('|') + '#' + g.sides.map((s) => s.gold.toFixed(6)).join(',');
+
+test('tug plays on its own narrow, long field', () => {
+  setField(STANDARD_FIELD);
+  new TugGame(1, [ROSTER, ROSTER]);
+  assert.deepEqual([FIELD_W, FIELD_H], [TUG.field.w, TUG.field.h]);
+  assert.ok(TUG.field.w <= STANDARD_FIELD.w / 2 && TUG.field.h >= STANDARD_FIELD.h * 1.25);
+  assert.ok(TUG.field.w * TUG.field.deploy < STANDARD_FIELD.w * STANDARD_FIELD.deploy, 'less deploy area than a round-based match');
+  setField(STANDARD_FIELD);
+  assert.deepEqual([FIELD_W, FIELD_H], [96, 92]);
+});
 
 test('castles stand at each back edge and the game runs until one falls', () => {
   const g = new TugGame(7, [ROSTER, ROSTER]);
@@ -40,19 +50,21 @@ test('income, tiers, gold and the drop zone are enforced', () => {
   const g = new TugGame(1, [[...ROSTER, HEAVY], ROSTER]);
   const S = g.sides[0];
   assert.equal(S.gold, TUG.startGold);
-  assert.match(g.check(0, { t: 'buy', designId: HEAVY.id, x: 30, y: 70 }) ?? '', /Unlock/);
-  assert.match(g.check(0, { t: 'buy', designId: 'nope', x: 30, y: 70 }) ?? '', /roster/);
-  // own half only, clear of the castle, on the field
+  assert.match(g.check(0, { t: 'buy', designId: HEAVY.id, x: 12, y: 95 }) ?? '', /Unlock/);
+  assert.match(g.check(0, { t: 'buy', designId: 'nope', x: 12, y: 95 }) ?? '', /roster/);
+  // anywhere in the own deploy zone (the back rows), clear of the castle, on the field
   const d = ROSTER[0];
-  assert.match(dropError(0, d, 30, 20) ?? '', /own half/);
-  assert.match(dropError(1, d, 30, 70) ?? '', /own half/);
+  assert.match(dropError(0, d, 12, FIELD_H / 2) ?? '', /deploy zone/);
+  assert.match(dropError(0, d, 12, 18) ?? '', /deploy zone/);
+  assert.match(dropError(1, d, 12, 95) ?? '', /deploy zone/);
   assert.match(dropError(0, d, castlePos(0).x, castlePos(0).y) ?? '', /castle/);
-  assert.match(dropError(0, d, -5, 70) ?? '', /Off the field/);
-  assert.equal(dropError(0, d, 30, 70), null);
-  assert.equal(dropError(1, d, 30, 20), null);
+  assert.match(dropError(0, d, -5, 95) ?? '', /Off the field/);
+  assert.equal(dropError(0, d, 12, 95), null);
+  assert.equal(dropError(0, d, 36, FIELD_H - TUG.field.deploy + 3), null);
+  assert.equal(dropError(1, d, 12, 18), null);
   // buy: gold goes down, units appear
   const cost = computeStats(d).cost;
-  assert.equal(g.apply(0, { t: 'buy', designId: d.id, x: 30, y: 70 }), null);
+  assert.equal(g.apply(0, { t: 'buy', designId: d.id, x: 12, y: 95 }), null);
   assert.equal(S.gold, TUG.startGold - cost);
   assert.equal(g.aliveCount(0), computeStats(d).squad);
   // income
@@ -66,7 +78,7 @@ test('income, tiers, gold and the drop zone are enforced', () => {
   // tier unlock opens the heavy hull
   assert.equal(g.apply(0, { t: 'tier' }), null);
   assert.equal(S.tier, 3);
-  assert.equal(g.check(0, { t: 'buy', designId: HEAVY.id, x: 60, y: 70 }), null);
+  assert.equal(g.check(0, { t: 'buy', designId: HEAVY.id, x: 36, y: 95 }), null);
   // not enough gold
   S.gold = 0;
   assert.match(g.check(0, { t: 'income' }) ?? '', /gold/);
@@ -77,7 +89,7 @@ test('income, tiers, gold and the drop zone are enforced', () => {
 test('spawned units march on the enemy castle and hurt it', () => {
   const g = new TugGame(3, [ROSTER, ROSTER]);
   g.sides[0].gold = 1e6;
-  for (const x of [30, 48, 66]) for (const d of ROSTER.slice(0, 4)) g.apply(0, { t: 'buy', designId: d.id, x, y: 60 });
+  for (const x of [12, 24, 36]) for (const d of ROSTER.slice(0, 4)) assert.equal(g.apply(0, { t: 'buy', designId: d.id, x, y: 92 }), null);
   for (let i = 0; i < 20 * 120 && !g.done; i++) g.step();
   assert.ok(g.castleHp(1) < TUG.castleHp, 'the enemy castle took damage');
   assert.equal(g.castleHp(0), TUG.castleHp);
@@ -103,6 +115,7 @@ test('the same orders give the same game (lockstep determinism)', () => {
 });
 
 test('a mid-battle spawn keeps an ordinary battle working', () => {
+  setField(STANDARD_FIELD);
   const d = ROSTER[0];
   const b = new Battle({ seed: 2, sides: [{ designs: [d], units: [{ uid: 1, designId: d.id, x: 40, y: 2, level: 1, round: 1 }] }, { designs: [d], units: [{ uid: 1, designId: d.id, x: 40, y: 2, level: 1, round: 1 }] }] });
   for (let i = 0; i < 20; i++) b.step();
@@ -172,7 +185,7 @@ test('server hub: matchmaking, lockstep stamping, surrender and idle forfeit', a
   assert.ok(v.frontier < order.tick + TUG_LEAD);
   // a poll with nothing new waits, and wakes when an order arrives
   const p = hub.poll(a, r0.id, 1, 400);
-  hub.command(b, r0.id, { t: 'buy', designId: ROSTER[0].id, x: 30, y: 20 });
+  hub.command(b, r0.id, { t: 'buy', designId: ROSTER[0].id, x: 12, y: 18 });
   assert.equal((await p).orders.length, 1);
   assert.throws(() => hub.command(b, r0.id, { t: 'buy', designId: 1 }), /Bad command/);
   // surrender ends it for both
