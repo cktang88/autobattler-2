@@ -15,6 +15,7 @@ import type { BattleView } from '../render/view.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
 import { openModal, paintWhenLaidOut, sizeLabel } from './match-ui.ts';
 import { zoomButtons } from './fieldtools.ts';
+import { createFpsMeter } from './fps.ts';
 import { drawPartIcon } from '../render/field.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { weaponDps } from '../../shared/stats.ts';
@@ -670,9 +671,11 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   // ---- main loop ----
   let raf = 0, last = performance.now(), acc = 0, hudT = 0, ended = false;
   view.fit(true);
+  const fps = createFpsMeter(fieldwrap);
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000);
+    fps.tick(now);
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     try {
       if (!g.done) {

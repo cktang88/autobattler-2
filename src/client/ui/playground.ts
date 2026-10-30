@@ -35,6 +35,7 @@ import {
   tipFor, zoomButtons, type BoxSel, type CardFilter, type RingTarget,
 } from './fieldtools.ts';
 import { secondaryLeft } from '../render/camera.ts';
+import { createFpsMeter } from './fps.ts';
 
 type Phase = 'edit' | 'battle' | 'result';
 type PlaceSide = 'auto' | 0 | 1;
@@ -1330,8 +1331,10 @@ export function playgroundScreen(app: App): Screen {
   let last = performance.now();
   let drawErr = false;
   let topT = 0;
+  const fps = createFpsMeter(fieldwrap);
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
+    fps.tick(now);
     view.controls.doubleClickZoom = phase !== 'edit' || (selCard < 0 && !sel);
     // right-drag (Ctrl / Option + drag), a two-finger twist and Q / E turn the 3D view while editing and watching, as in a match
     view.controls.rotate = !!view.canRotate;
@@ -1394,6 +1397,7 @@ export function playgroundScreen(app: App): Screen {
       hideTip();
       try { view.destroy(); } catch { /* */ }
       minimap.destroy();
+      fps.destroy();
     },
   };
 }

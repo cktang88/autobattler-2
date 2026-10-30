@@ -29,6 +29,7 @@ import { designInfo, type DesignInfo } from './deckstats.ts';
 import { hpAfterRound, totalDamageTaken } from './matchmath.ts';
 import { openRoundStats } from './roundstats.ts';
 import { mountChat } from './chat.ts';
+import { createFpsMeter } from './fps.ts';
 import { secondaryLeft } from '../render/camera.ts';
 
 type Phase = 'deploy' | 'waiting' | 'battle' | 'result' | 'over';
@@ -1677,10 +1678,12 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
   let raf = 0;
   let last = performance.now();
   let drawErr = false;
+  const fps = createFpsMeter(fieldwrap);
   /** auto camera for the battle replay (until the player moves the camera; back on at the next battle) */
   const autoCam = new AutoCam(view);
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
+    fps.tick(now);
     view.controls.doubleClickZoom = phase !== 'deploy' || (selCard < 0 && !sel);
     // right-drag (Ctrl / Option + drag), a two-finger twist and Q / E turn the 3D view in every phase, deploying too
     view.controls.rotate = !!view.canRotate;
@@ -1757,6 +1760,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       driver.stop();
       try { view.destroy(); } catch { /* */ }
       minimap.destroy();
+      fps.destroy();
     },
   };
 }
