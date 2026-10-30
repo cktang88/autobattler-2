@@ -235,6 +235,11 @@ export class Rig {
   /** true for rigs that never move again (wrecks): transforms are not recomputed */
   frozen = false;
   private settle = 2;
+  /** walkers: odometer signed along the stride axis (runs back while reversing), its current sign, and how long the
+   *  walk is held through a stop-start */
+  wodo = 0;
+  wsign = 1;
+  walkHold = 0;
   /** set once anything moved off the template's rest pose (gear animated, a turret aimed or kicked) */
   dirty = false;
   /** per design mount: which barrel / tube fires next (multi-barrel guns and launchers take turns) */
@@ -291,23 +296,38 @@ export class Rig {
    *  in reverse). `turn` (rad this frame): walkers step round while turning on the spot. */
   locomote(dist: number, moving: boolean, t: number, dt: number, fwd = dist, lat = 0, turn = 0): void {
     const tpl = this.tpl;
-    if (tpl.walks && dist < 1e-4 && Math.abs(turn) > 1e-4) { dist = Math.abs(turn) * this.radius * 0.5; moving = true; }
-    // a walker whose body travels steps, whatever moved it (shoved by a neighbour, knocked back, nudged into place):
-    // feet never skate under a hull the sim reports as standing; and it reaches full stride fast, since the stride
-    // amplitude scales the planted feet's speed (a slow ramp would skate them while the hull is already at pace)
-    if (tpl.walks && dt > 0 && dist / dt > 0.05) moving = true;
+    let sign = 1;
+    if (tpl.walks) {
+      const sp = dt > 0 ? dist / dt : 0;
+      if (dist < 1e-4 && dt > 0 && Math.abs(turn) / dt > 0.4) { dist = Math.abs(turn) * this.radius * 0.5; moving = true; } // stepping round on the spot
+      else if (sp > 0.3) moving = true; // shoved / knocked back / nudged at a real pace: the feet step, they don't skate
+      // stop-start ticks (the sim halting and going again) keep the walk going a moment instead of snapping the stride
+      if (moving) this.walkHold = 0.3;
+      else if (this.walkHold > 0 && sp > 0.05) { this.walkHold -= dt; moving = true; }
+      if (!moving) dist = 0; // sub-pace jitter (separation nudges, interpolation): no stride, no twitching feet
+      // stride axis: reversing (backing up, a spider's sidestep turning back) runs the gait backwards along the same
+      // axis instead of swinging every foot round through 180 deg; the axis itself turns slowly toward the travel
+      if (moving && sp > 0.2) {
+        let d = Math.atan2(lat, fwd) - this.way;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) > Math.PI / 2) { sign = -1; d = d > 0 ? d - Math.PI : d + Math.PI; }
+        this.way += d * Math.min(1, dt * 4);
+      } else sign = this.wsign;
+      this.wsign = sign;
+    }
     const target = moving ? 1 : 0;
-    this.mv += (target - this.mv) * Math.min(1, dt * (tpl.walks ? 20 : 7));
+    this.mv += (target - this.mv) * Math.min(1, dt * (tpl.walks ? 9 : 7));
     if (this.mv < 0.01) this.mv = 0;
     this.odo += dist;
+    this.wodo += sign * dist;
     this.sodo += Math.abs(fwd) > 1e-6 ? Math.sign(fwd) * dist : 0;
-    if (Math.abs(fwd) + Math.abs(lat) > 1e-4) {
+    if (!tpl.walks && Math.abs(fwd) + Math.abs(lat) > 1e-4) {
       const d = Math.atan2(lat, fwd) - this.way, k = Math.min(1, dt * 8);
       this.way += Math.atan2(Math.sin(d), Math.cos(d)) * k;
     }
     if (!tpl.animates) return;
     if (this.flying) { this.animate(t, dt, 1); return; }
-    const clock = (tpl.walks ? this.odo : this.sodo) * tpl.phaseK, way = tpl.walks ? this.way : 0;
+    const clock = (tpl.walks ? this.wodo : this.sodo) * tpl.phaseK, way = tpl.walks ? this.way : 0;
     if (this.mv > 0) { this.settle = 2; this.animate(clock, dt, this.mv, way); }
     else if (this.settle > 0) { this.settle--; this.animate(clock, dt, 0, way); }
   }
@@ -708,7 +728,7 @@ export class UnitLayer {
     const t = this.template(design, team);
     const r = this.free.get(t.key)?.pop() ?? new Rig(t);
     if (r.dirty) r.restPose();
-    r.look = 'normal'; r.frozen = false; r.mv = 0; r.odo = 0; r.sodo = 0; r.way = 0; r.tr = r.tg = r.tb = 1;
+    r.look = 'normal'; r.frozen = false; r.mv = 0; r.odo = 0; r.sodo = 0; r.way = 0; r.wodo = 0; r.wsign = 1; r.walkHold = 0; r.tr = r.tg = r.tb = 1;
     r.root.position.set(0, 0, 0); r.root.rotation.set(0, 0, 0); r.root.scale.setScalar(bodyScale(t.unit.S)); // wrecks squash it
     return r;
   }

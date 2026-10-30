@@ -71,3 +71,40 @@ test('spider legs sidestep across the line of fire while holding at range', () =
   assert.ok(fired, 'the spider got its gun on the wall');
   assert.ok(hi - lo > 1, `weaves ${(hi - lo).toFixed(2)} cells side to side while firing`);
 });
+
+/** largest per-frame jump of any foot (model units) over a scripted motion: (dx, dz, sim-moving) per frame */
+function footJumps(d: Design, motion: (f: number) => [number, number, boolean], frames: number): number {
+  const rig = new UnitLayer().acquire(d, 0);
+  const root = rig.tpl.unit.root;
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root), H = box.max.y - box.min.y, v = new THREE.Vector3();
+  const feet = rig.tpl.animated.filter((k) => v.setFromMatrixPosition(rig.tpl.nodes[k]!.src.matrixWorld).y < H * 0.12);
+  const objs = (rig as unknown as { objs: { matrixWorld: Matrix4 }[] }).objs;
+  const dt = 1 / 60, prev = new Map<number, Vector3>();
+  let x = 0, z = 0, worst = 0;
+  for (let f = 0; f < frames; f++) {
+    const [dx, dz, mv] = motion(f);
+    x += dx; z += dz;
+    rig.root.position.set(x, 0, z);
+    rig.locomote(Math.hypot(dx, dz), mv, f * dt, dt, dx, dz, 0);
+    rig.update(dt);
+    for (const k of feet) {
+      const p = new THREE.Vector3().setFromMatrixPosition(objs[k]!.matrixWorld).sub(new THREE.Vector3(x, 0, z));
+      const q = prev.get(k);
+      if (q && f > 30) worst = Math.max(worst, p.distanceTo(q));
+      prev.set(k, p);
+    }
+  }
+  return worst;
+}
+
+test('legs do not twitch: jitter leaves the feet still, reversing does not whip them round', () => {
+  const spider = D('spider', 'striker', 'spider', ['mortar', 'mortar']);
+  // a standing unit nudged back and forth by a hair every frame (separation / interpolation noise)
+  const jitter = footJumps(spider, (f) => [Math.sin(f * 2.3) * 0.002, Math.cos(f * 1.7) * 0.002, false], 240);
+  assert.ok(jitter < 0.01, `feet twitch ${jitter.toFixed(3)} per frame on a jittering standing unit`);
+  // walking sideways, reversing every 0.7 s (a spider's sidestep): no foot jumps much more than a walking step
+  const step = 1.2 / 60;
+  const rev = footJumps(spider, (f) => [0, (Math.floor(f / 42) % 2 ? -1 : 1) * step, true], 400);
+  assert.ok(rev < step * 6, `a foot jumps ${rev.toFixed(3)} per frame when the walk reverses (step ${step.toFixed(3)})`);
+});

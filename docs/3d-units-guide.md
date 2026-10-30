@@ -190,7 +190,7 @@ hull, i.e. it stays put on the ground while the body walks over it; then it swin
 clock is the odometer (units-adapter `phaseFor`); `cadence()` scales the step rate so the planted foot's speed equals
 ground speed, counting the game's `bodyScale` model scale and a stride capped by hip height (a short-legged walker
 steps faster, it doesn't skate). Feet follow the travel direction in the hull frame (a spider strafing, legs backing
-up). The rig steps whenever the body moves (shoved, nudged), reaches full stride fast, and hangs its legs mid-leap.
+up). No twitching: the rig steps when the sim says it moves or the body travels at a real pace (> 0.3 cells/s: shoved, knocked back), never on sub-pace jitter (separation nudges, interpolation noise); a stop-start keeps the walk 0.3 s; reversing runs the gait backwards along the same stride axis (a signed odometer) instead of swinging every foot round 180 deg, and the axis itself turns slowly. Legs hang mid-leap.
 Check: `node scripts/3d/foot-slip.ts` (`WAY=1.57` sideways) and `test/walkers.test.ts`: planted-foot ground speed
 must stay near 0 (the old sine gait ran backwards: planted feet moved WITH the body, skating at ~1.3x walking speed).
 Sim side, spider legs ('omni') sidestep across the line of fire while holding at range (battle.ts `sidestep`).
