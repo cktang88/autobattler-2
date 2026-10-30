@@ -115,6 +115,7 @@ export function menuScreen(app: App): Screen {
         resumeBtn,
         h('button.big.primary', { onclick: go(() => app.go({ name: 'vsai' })) }, 'Play vs AI'),
         h('button.big', { onclick: go(() => app.go({ name: 'lobby' })), title: 'Async matches against other players (needs an account)' }, 'Multiplayer'),
+        h('button.big', { onclick: go(() => app.go({ name: 'tug' })), title: 'Real-time tug of war vs the AI or another player: buy units with gold as it flows in and push down the enemy castle' }, 'Tug of War'),
         h('div.row.menu-pair', null,
           h('button.big.grow', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })), title: 'Choose the 9 designs you take into battle' }, 'Loadout'),
           h('button.big.grow', { onclick: go(() => app.go({ name: 'garage' })), title: 'Build and edit unit designs' }, 'Unit Designer'),

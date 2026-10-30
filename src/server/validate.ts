@@ -1,6 +1,7 @@
 // Input sanitizers: rebuild request payloads from known fields only, with strict type/size checks,
 // before handing them to the shared match rules.
 
+import { TUG, validateRoster } from '../shared/tug.ts';
 import { DECK_SIZE, MAX_BLOCKS, validateDeck } from '../shared/match.ts';
 import { CHASSIS } from '../shared/parts.ts';
 import { MAX_LEVEL, validateDesign } from '../shared/stats.ts';
@@ -86,6 +87,17 @@ export function sanitizeDeck(raw: unknown): Design[] {
   const errs = validateDeck(deck);
   if (errs.length) bad(errs.join('; '));
   return deck;
+}
+
+/** A tug of war roster: like a deck, but only the designs themselves are checked (no deck-wide rules). */
+export function sanitizeRoster(raw: unknown): Design[] {
+  if (!Array.isArray(raw) || raw.length === 0) bad('Roster must be a non-empty array of designs');
+  const arr = raw as unknown[];
+  if (arr.length > TUG.rosterSize) bad(`A roster holds at most ${TUG.rosterSize} designs`);
+  const roster = arr.map((d, i) => readDesign(d, i));
+  const errs = validateRoster(roster);
+  if (errs.length) bad(errs.join('; '));
+  return roster;
 }
 
 /** Most designs one player's garage may hold on the server. */

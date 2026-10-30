@@ -13,6 +13,7 @@ import { settingsScreen } from './ui/settings.ts';
 import { garageScreen } from './ui/garage.ts';
 import { lobbyScreen } from './ui/lobby.ts';
 import { playgroundScreen } from './ui/playground.ts';
+import { tugMatchScreen, tugSetupScreen } from './ui/tug.ts';
 
 const root = document.getElementById('app') ?? document.body.appendChild(document.createElement('div'));
 const app = new App(root);
@@ -24,6 +25,8 @@ app.register('settings', settingsScreen);
 app.register('garage', garageScreen);
 app.register('lobby', lobbyScreen);
 app.register('playground', playgroundScreen);
+app.register('tug', tugSetupScreen);
+app.register('tugmatch', tugMatchScreen);
 
 // garage sync problems the player must know about (over the account's design cap, an upload the server refused)
 setSyncProblemHandler((msg) => { if (msg) app.toast(msg, 'error'); });

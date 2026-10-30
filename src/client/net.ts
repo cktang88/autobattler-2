@@ -3,6 +3,7 @@
 import type { DeployAction, Design, MatchState, Side } from '../shared/types.ts';
 import { sanitizePool, type AiPool } from '../shared/aipool.ts';
 import type { MatchDriver } from './driver.ts';
+import type { TugCommand, TugOrder } from '../shared/tug.ts';
 
 /** `auto`: a guest placeholder created silently so the garage can be stored server-side.
  *  `registered`: signed in with a username + password (the account works on any device). A session with neither is
@@ -372,4 +373,54 @@ export async function postChat(matchId: string, text: string): Promise<ChatMessa
 export async function pollChat(matchId: string, since: number | null, wait: number, signal?: AbortSignal): Promise<{ msgs: ChatMessage[]; last: number }> {
   const q = since == null ? '' : `?since=${since}&wait=${wait}`;
   return call('GET', `/matches/${encodeURIComponent(matchId)}/chat${q}`, undefined, signal);
+}
+
+// ---- tug of war (real time; server/tug.ts) ----
+
+/** Mirrors TugRoomView in src/server/tug.ts. */
+export interface TugRoom {
+  id: string;
+  code?: string;
+  side: Side;
+  status: 'waiting' | 'countdown' | 'live' | 'done';
+  seed: number;
+  names: [string, string | null];
+  rosters?: [Design[], Design[]];
+  now: number;
+  startAt: number;
+  tick: number;
+  frontier: number;
+  orders: TugOrder[];
+  total: number;
+  winner: Side | -1 | null;
+}
+
+export async function tugList(): Promise<{ open: { id: string; name: string; createdAt: number }[] }> {
+  await ensureSession();
+  return call('GET', '/tug');
+}
+export async function tugCreate(roster: Design[], priv: boolean): Promise<TugRoom> {
+  await ensureSession();
+  return call('POST', '/tug', { roster, private: priv });
+}
+export async function tugQuick(roster: Design[]): Promise<TugRoom> {
+  await ensureSession();
+  return call('POST', '/tug/quick', { roster });
+}
+export async function tugJoin(idOrCode: string, roster: Design[]): Promise<TugRoom> {
+  await ensureSession();
+  return call('POST', `/tug/${encodeURIComponent(idOrCode.trim())}/join`, { roster });
+}
+/** long poll: orders from index `since` (-1: also wait for the opponent to join) */
+export function tugPoll(id: string, since: number, wait: number, signal?: AbortSignal): Promise<TugRoom> {
+  return call('GET', `/tug/${encodeURIComponent(id)}?since=${since}&wait=${wait}`, undefined, signal);
+}
+export function tugCommand(id: string, cmd: TugCommand): Promise<{ order: TugOrder; index: number }> {
+  return call('POST', `/tug/${encodeURIComponent(id)}/cmd`, { cmd });
+}
+export function tugResult(id: string, winner: Side | -1): Promise<unknown> {
+  return call('POST', `/tug/${encodeURIComponent(id)}/result`, { winner });
+}
+export function tugLeave(id: string): Promise<unknown> {
+  return call('POST', `/tug/${encodeURIComponent(id)}/leave`, {});
 }

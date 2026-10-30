@@ -1,0 +1,70 @@
+/* Tug of war: setup page + live game (src/client/ui/tug.ts) */
+
+.tug-cols { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 14px; align-items: start; }
+@media (max-width: 760px) { .tug-cols { grid-template-columns: 1fr; } }
+.tug-setup .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.tug-roster, .tug-pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.tug-pool { max-height: 46vh; overflow-y: auto; padding-right: 4px; }
+.tug-card { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; min-height: 0; text-align: center; background: var(--panel2); }
+.tug-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tug-card.empty { border: 1px dashed var(--line2); border-radius: var(--radius); color: var(--muted); display: grid; place-items: center; min-height: 104px; font-size: 0.85rem; }
+.tug-thumb { width: 100%; height: 56px; display: block; }
+.tug-card-name { font-family: var(--font-head); font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tug-card-meta { font-size: 0.8rem; }
+.gold { color: var(--gold); }
+.tug-code { width: 9em; text-transform: uppercase; background: var(--bg2); color: var(--text); border: 1px solid var(--line2); border-radius: 4px; padding: 6px 8px; font: inherit; flex: 1; min-width: 0; }
+.tug-status { margin-top: 10px; }
+.tug-wait { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--accent-dim); border-radius: var(--radius); background: rgba(46, 211, 192, 0.06); }
+.tug-codeshow { font-family: var(--font-head); font-size: 1.3rem; letter-spacing: 0.15em; color: var(--accent); }
+.tug-wait .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--accent); animation: tug-spin 0.8s linear infinite; flex: none; }
+@keyframes tug-spin { to { transform: rotate(360deg); } }
+.tug-open { display: flex; flex-direction: column; gap: 6px; }
+.tug-openrow { display: flex; gap: 8px; align-items: center; padding: 4px 6px; background: var(--panel2); border-radius: 4px; }
+
+/* ---- live game ---- */
+.tug-match { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tug-top { display: flex; align-items: center; gap: 10px; padding: 6px 10px; padding-top: calc(6px + var(--safe-t)); background: var(--panel); border-bottom: 1px solid var(--line); }
+.tug-hp { flex: 1; min-width: 0; }
+.tug-hp.theirs { text-align: right; }
+.tug-hpname { font-family: var(--font-head); font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tug-hp.mine .tug-hpname { color: var(--friendly); }
+.tug-hp.theirs .tug-hpname { color: var(--enemy); }
+.tug-hpbar { position: relative; height: 16px; background: var(--bg2); border: 1px solid var(--line2); border-radius: 3px; overflow: hidden; }
+.tug-hpfill { position: absolute; top: 0; bottom: 0; left: 0; transition: width 0.25s; }
+.tug-hp.mine .tug-hpfill { background: linear-gradient(90deg, #1f7fae, var(--friendly)); }
+.tug-hp.theirs .tug-hpfill { left: auto; right: 0; background: linear-gradient(270deg, #b4401f, var(--enemy)); }
+.tug-hptxt { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 6px; font-size: 0.75rem; line-height: 1; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+.tug-hp.theirs .tug-hptxt { justify-content: flex-end; }
+.tug-clock { font-family: var(--font-head); font-size: 1.4rem; font-weight: 700; min-width: 3.2em; text-align: center; }
+.tug-clock.overtime { color: var(--bad); }
+.tug-clock.overtime::after { content: 'OVERTIME'; display: block; font-size: 0.6rem; letter-spacing: 0.12em; margin-top: -4px; }
+.tug-net { color: var(--warn); font-size: 0.85rem; }
+.tug-net:empty { display: none; }
+.tug-speed button.on { border-color: var(--accent); color: var(--accent); }
+.tug-field { position: relative; flex: 1; min-height: 0; }
+.tug-canvas, .tug-overlay { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tug-overlay { pointer-events: none; }
+.tug-hint { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); background: rgba(10, 14, 20, 0.85); border: 1px solid var(--line2); border-radius: 4px; padding: 4px 10px; font-size: 0.9rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
+.tug-hint.show { opacity: 1; }
+.tug-bottom { display: flex; gap: 10px; align-items: stretch; padding: 8px 10px; padding-bottom: calc(8px + var(--safe-b)); background: var(--panel); border-top: 1px solid var(--line); }
+.tug-econ { display: flex; flex-direction: column; gap: 5px; flex: none; width: 150px; }
+.tug-gold { font-family: var(--font-head); font-size: 1.35rem; }
+.tug-eco { padding: 4px 6px; min-height: 0; font-size: 0.85rem; display: flex; justify-content: space-between; gap: 4px; }
+.tug-cards { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; }
+.tug-unit { position: relative; flex: none; width: 96px; display: flex; flex-direction: column; align-items: stretch; gap: 1px; padding: 4px; min-height: 0; text-align: center; }
+.tug-unit.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.tug-unit.poor { opacity: 0.55; }
+.tug-unit.locked { opacity: 0.4; filter: grayscale(0.8); }
+.tug-unit .tug-thumb { height: 48px; }
+.tug-unit-name { font-family: var(--font-head); font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tug-unit-meta { font-size: 0.78rem; }
+.tug-key { position: absolute; top: 3px; left: 3px; font-size: 0.7rem; padding: 0 3px; }
+@media (max-width: 640px) {
+  .tug-econ { width: 118px; }
+  .tug-unit { width: 78px; }
+  .tug-key { display: none; }
+  .tug-clock { font-size: 1.1rem; }
+}
+.tug-endveil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 8, 12, 0.6); z-index: 5; padding: 16px; }
+.tug-end { background: var(--panel); border: 1px solid var(--line2); border-radius: var(--radius); padding: 22px 26px; text-align: center; box-shadow: var(--shadow); max-width: 420px; }
+.tug-end .row { justify-content: center; margin-top: 10px; }

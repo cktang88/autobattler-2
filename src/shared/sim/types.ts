@@ -34,6 +34,9 @@ export interface SideInput {
 export interface BattleInput {
   seed: number;
   sides: [SideInput, SideInput];
+  /** tug of war (shared/tug.ts): an endless fight that blocks join mid-battle (Battle.spawnBlock); it ends only when
+   *  a side's core (Battle.cores) is destroyed, and units ignore enemies far off their lane and march on the core */
+  tug?: boolean;
 }
 
 export interface MountState {

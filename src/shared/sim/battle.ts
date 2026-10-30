@@ -170,6 +170,8 @@ const HOLDPOS_MASS = 60; // holdPos units barely get shoved by separation
 const ENGAGE_SHARE = 0.999; // halt once ALL weapons that can hit the goal are in range (no reason to close further unless melee/charge)
 
 // spatial hash
+/** tug of war: enemies farther than a unit's longest range plus this (cells) are ignored; it marches on the core */
+const TUG_AGGRO = 8;
 const THREAT_MEMORY = 6 * TICK_RATE; // ticks a recorded attacker stays 'the threat'
 const CELL = 3;
 const HCOLS = Math.ceil(FIELD_W / CELL);
@@ -600,6 +602,10 @@ export class Battle {
   done = false;
   winner: 0 | 1 | -1 = -1;
   units: SimUnit[] = [];
+  /** tug of war: SimUnit.id of each side's core (castle); -1 = none. Losing it loses the battle. */
+  cores: [number, number] = [-1, -1];
+  /** tug of war overtime: hp per second every core crumbles by (0 = off) */
+  coreDecay = 0;
   projectiles: SimProjectile[] = [];
   /** events produced by the most recent step() only */
   events: BattleEvent[] = [];
@@ -731,12 +737,6 @@ export class Battle {
         }
       }
     }
-    const n = this.units.length;
-    this.blockAtk = new Array(this.blockCount).fill(-1);
-    this.blockAtkT = new Array(this.blockCount).fill(-1e9);
-    this.anchorX = new Float64Array(this.blockCount);
-    this.anchorY = new Float64Array(this.blockCount);
-    this.anchorN = new Int32Array(this.blockCount);
     // resolve escort targets (same side, by placement uid; not itself)
     const byUid: Map<number, number>[] = [new Map(), new Map()];
     for (let b = 0; b < this.blockCount; b++) if (!byUid[this.blockSide[b]].has(this.blockUid[b])) byUid[this.blockSide[b]].set(this.blockUid[b], b);
@@ -753,37 +753,71 @@ export class Battle {
       for (let k = 0; x >= 0 && x !== b && k < this.blockCount; k++) x = escOf[x];
       return x === b;
     });
-    for (const I of this.ints) {
-      I.escortBlock = inLoop[I.block] ? -1 : escOf[I.block];
+    for (const I of this.ints) I.escortBlock = inLoop[I.block] ? -1 : escOf[I.block];
+    this.registerUnits(0);
+  }
+
+  /** Size the per-block and per-unit buffers for the units added since index `from` (and register their support
+   *  systems). The constructor calls it once; spawnBlock after each mid-battle spawn. */
+  private registerUnits(from: number): void {
+    const n = this.units.length, nb = this.blockCount;
+    const growF = (a: Float64Array, len: number) => { if (a.length >= len) return a; const b = new Float64Array(len); b.set(a); return b; };
+    const growI = (a: Int32Array, len: number) => { if (a.length >= len) return a; const b = new Int32Array(len); b.set(a); return b; };
+    while (this.blockAtk.length < nb) { this.blockAtk.push(-1); this.blockAtkT.push(-1e9); }
+    this.anchorX = growF(this.anchorX, nb); this.anchorY = growF(this.anchorY, nb); this.anchorN = growI(this.anchorN, nb);
+    this.focusMark = growI(this.focusMark, n);
+    this.incoming = growF(this.incoming, n);
+    this.candJ = growI(this.candJ, n); this.candS = growF(this.candS, n); this.candD = growF(this.candD, n);
+    this.next = growI(this.next, n);
+    this.sideNext = growI(this.sideNext, n);
+    this.liveIdx = [growI(this.liveIdx[0], n), growI(this.liveIdx[1], n)];
+    this.scratch = growI(this.scratch, Math.max(16, n));
+    this.snapX = growF(this.snapX, n); this.snapY = growF(this.snapY, n); this.snapB = growF(this.snapB, n);
+    this.sepQ = growF(this.sepQ, n);
+    this.hashX = growF(this.hashX, n); this.hashY = growF(this.hashY, n);
+    this.radA = growF(this.radA, n);
+    this.auraPulse = null;
+    for (let i = from; i < n; i++) {
+      const I = this.ints[i];
       if (I.hasHeal || I.aura) this.healers.push(I);
-    }
-    this.focusMark = new Int32Array(n);
-    this.incoming = new Float64Array(n);
-    this.candJ = new Int32Array(n); this.candS = new Float64Array(n); this.candD = new Float64Array(n);
-    for (const I of this.ints) {
       if (I.cloak) this.hasCloak = true;
       if (I.detect > 0) this.detectors.push(I);
       if (I.domeAmt > 0) this.domes.push(I);
       if (I.uplinkBonus > 0) this.uplinks.push(I);
       if (I.jammer > 0) this.jammers.push(I);
       if (I.pdRange > 0) this.pds.push(I);
-    }
-    this.next = new Int32Array(n);
-    this.sideNext = new Int32Array(n);
-    this.liveIdx = [new Int32Array(n), new Int32Array(n)];
-    for (const I of this.ints) if (I.isStatic) this.staticOn[I.u.side] = true;
-    this.scratch = new Int32Array(Math.max(16, n));
-    this.snapX = new Float64Array(n); this.snapY = new Float64Array(n); this.snapB = new Float64Array(n);
-    this.sepQ = new Float64Array(n);
-    this.hashX = new Float64Array(n); this.hashY = new Float64Array(n);
-    this.radA = new Float64Array(n);
-    for (let i = 0; i < n; i++) this.radA[i] = this.ints[i].radius;
-    for (let i = 0; i < n; i++) {
-      this.snapB[i] = this.ints[i].bound;
-      this.sepQ[i] = Math.max(this.ints[i].bound, this.ints[i].radius);
+      if (I.isStatic) this.staticOn[I.u.side] = true;
+      this.radA[i] = I.radius;
+      this.snapB[i] = I.bound;
+      this.sepQ[i] = Math.max(I.bound, I.radius);
       this.maxSepQ = Math.max(this.maxSepQ, this.sepQ[i]);
     }
     this.rebuildHash();
+  }
+
+  /** Add a block mid-battle (tug of war: bought and dropped onto the field while the fight runs) at the given world
+   *  unit centers, with the design's default orders. Call between step()s only. The design is trusted (the caller
+   *  validates it: a castle is an otherwise illegal design). Returns the new units' ids. */
+  spawnBlock(side: Side, uid: number, design: Design, level: number, centers: { x: number; y: number }[]): number[] {
+    const shape = computeStats(design);
+    let mx = 0, my = 0;
+    for (const c of centers) { mx += c.x; my += c.y; }
+    mx /= centers.length; my /= centers.length;
+    const from = this.units.length;
+    const block = this.blockCount++;
+    this.blockUnits.push([]);
+    this.blockSide.push(side);
+    this.blockUid.push(uid);
+    this.blockEscortUid.push(-1);
+    const defs = defaultOrders(design);
+    for (const c of centers) {
+      this.blockUnits[block].push(this.units.length);
+      this.addUnit(side, uid, design, level, c.x, c.y, { block, prio: 'closest', hold: centers.length > 1, kite: defs.kite, kiteMount: -1, focus: defs.focus, stance: 'advance', delay: 0, retreat: false, offx: c.x - mx, offy: c.y - my, sepMin: Math.min(shape.fw, shape.fh) });
+    }
+    this.registerUnits(from);
+    const ids: number[] = [];
+    for (let i = from; i < this.units.length; i++) ids.push(i);
+    return ids;
   }
 
   private addUnit(side: Side, uid: number, design: Design, level: number, cx: number, cy: number, cfg: { block: number; prio: TargetPriority; hold: boolean; kite: boolean; kiteMount: number; focus: boolean; stance: Stance; delay: number; retreat: boolean; offx: number; offy: number; sepMin: number }): void {
@@ -1074,6 +1108,7 @@ export class Battle {
     }
     if (hpSum !== this.hpSum) { this.hpSum = hpSum; active = true; }
     if (active) this.activeTick = this.tick;
+    if (this.coreDecay > 0) for (const c of this.cores) if (c >= 0) this.crumble(this.units[c], this.coreDecay * DT);
 
     this.tick++;
     this.checkEnd();
@@ -1235,6 +1270,9 @@ export class Battle {
     const u = I.u;
     const units = this.units;
     let best = -1, bestD = Infinity;
+    // tug of war: only enemies near our lane count; with none, march on the enemy core
+    const core = this.input.tug ? this.cores[u.side === 0 ? 1 : 0] : -1;
+    const aggro = core >= 0 ? (I.maxRange + TUG_AGGRO) ** 2 : Infinity;
     if (I.blocker) {
       // pure walls: head for the nearest visible ground enemy (else any) to body-block it
       let bestA = -1, bestAD = Infinity;
@@ -1242,10 +1280,11 @@ export class Battle {
         const o = units[j];
         if (!o.alive || o.side === u.side || !this.visible(u, o)) continue;
         const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
+        if (d > aggro && j !== core) continue;
         if (o.flying) { if (d < bestAD) { bestAD = d; bestA = j; } }
         else if (d < bestD) { bestD = d; best = j; }
       }
-      return best >= 0 ? best : bestA;
+      return best >= 0 ? best : bestA >= 0 ? bestA : core >= 0 && units[core].alive ? core : -1;
     }
     if (!I.hasWeapon) {
       for (let j = 0; j < units.length; j++) {
@@ -1257,7 +1296,7 @@ export class Battle {
       return best;
     }
     const foes = this.liveIdx[u.side === 0 ? 1 : 0], nf = this.liveN[u.side === 0 ? 1 : 0];
-    if (I.airRole && I.airRole !== 'gunship') return this.airGoal(I, foes, nf);
+    if (I.airRole && I.airRole !== 'gunship') { const g = this.airGoal(I, foes, nf, aggro, core); return g >= 0 ? g : this.coreGoal(I, core); }
     const snap = this.posSnapOk, sx = this.snapX, sy = this.snapY;
     for (let k = 0; k < nf; k++) {
       const j = foes[k];
@@ -1267,15 +1306,33 @@ export class Battle {
       if (!o.alive) continue;
       if (o.flying ? !I.canHitA : !I.canHitG) continue;
       const dx = o.x - u.x, dy = o.y - u.y, d = dx * dx + dy * dy;
+      if (d > aggro && j !== core) continue;
       if (d < bestD && this.visible(u, o)) { bestD = d; best = j; }
     }
-    return best;
+    return best >= 0 ? best : this.coreGoal(I, core);
+  }
+
+  /** tug of war overtime: a core loses hp past its shields and armour; at 0 it is destroyed */
+  private crumble(u: SimUnit, amt: number): void {
+    if (!u.alive) return;
+    u.hp -= amt;
+    if (u.hp > 0) return;
+    u.hp = 0;
+    u.alive = false;
+    this.tallies[u.id].deathTick = this.tick;
+    this.events.push({ t: 'death', unit: u.id, x: u.x, y: u.y, size: u.stats.size, flying: u.flying, moduleId: '', overkill: 0, hit: 1, kind: 'explosive', wreck: 3 });
+  }
+
+  /** tug of war: the enemy core when nothing nearer is worth a fight and our guns can hit it (-1 otherwise) */
+  private coreGoal(I: Internal, core: number): number {
+    if (core < 0 || !this.units[core].alive) return -1;
+    return (this.units[core].flying ? I.canHitA : I.canHitG) ? core : -1;
   }
 
   /** Goal of a flyer by air role (stats.ts airRole): fighters hunt aircraft (ground only once the sky is clear),
    *  bombers go for the most valuable ground target in reach of a run, harassers for artillery and support. A
    *  role weight scales the squared distance, so a much nearer target still wins over a far preferred one. */
-  private airGoal(I: Internal, foes: ArrayLike<number>, nf: number): number {
+  private airGoal(I: Internal, foes: ArrayLike<number>, nf: number, aggro = Infinity, core = -1): number {
     const u = I.u, units = this.units, role = I.airRole;
     let best = -1, bestS = Infinity;
     for (let k = 0; k < nf; k++) {
@@ -1285,6 +1342,7 @@ export class Battle {
       const O = this.ints[j];
       const dx = o.x - u.x, dy = o.y - u.y;
       let sc = dx * dx + dy * dy;
+      if (sc > aggro && j !== core) continue;
       if (role === 'fighter') sc *= o.flying ? 0.08 : 3;
       else if (role === 'bomber') { if (o.flying) continue; sc /= Math.max(1, O.valueVal / 20); }
       else if (role === 'harasser') sc *= o.flying ? 2 : O.isSupport || o.stats.range >= 10 ? 0.25 : 1;
@@ -2805,7 +2863,8 @@ export class Battle {
         // far away: advance mostly straight ahead so formations hold their shape
         // only the guns that can hit this goal count (an AA-only long gun must not park us out of reach of a ground goal)
         const engageR = relevantR > 0 ? relevantR : I.maxRange;
-        const lw = clamp(1 - (d - engageR - 2) / 8, 0.3, 1);
+        // tug of war: march on the far enemy core straighter still (the lane holds until the core is near)
+        const lw = clamp(1 - (d - engageR - 2) / 8, goal.id === this.cores[goal.side] ? 0.12 : 0.3, 1);
         let hx = dx, hy = dy;
         if (I.hold && this.anchorN[I.block] > 0) {
           // formation: aim at our slot around the goal, pulled toward our slot around the squad's anchor. The pull
@@ -3494,6 +3553,12 @@ export class Battle {
   }
 
   private checkEnd(): void {
+    if (this.input.tug) {
+      const [c0, c1] = this.cores;
+      const d0 = c0 >= 0 && !this.units[c0].alive, d1 = c1 >= 0 && !this.units[c1].alive;
+      if (d0 || d1) this.finish(d0 && d1 ? -1 : d0 ? 1 : 0);
+      return;
+    }
     let a0 = 0, a1 = 0;
     for (const u of this.units) if (u.alive) { if (u.side === 0) a0++; else a1++; }
     if (a0 === 0 || a1 === 0) {

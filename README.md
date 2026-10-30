@@ -85,6 +85,20 @@ saves its data on shutdown, so nothing is lost. Health check: `GET /api/health`.
 4. **Battle** — fully automatic and deterministic. The loser takes damage based on the enemy's surviving
    units. Start at 100 HP; reach 0 and you lose.
 
+### Tug of War
+
+A real-time mode (menu → **Tug of War**), against the AI (easy / normal / hard) or another person online (quick
+match, or a private game with a join code). One endless battle: each side has a castle at its back edge and earns
+gold every second. Spend it on blocks from your **tug roster** (up to 9 designs, kept separately from the Loadout
+deck) and drop them anywhere on your half while the fight runs. They march straight up their lane, fight anything
+that comes within reach and shell the enemy castle once they get there. Gold can also be **invested** in a higher
+income rate or spent to **unlock the next hull tier** (Light and Medium to start, then Heavy, Giant, Titan). Destroy
+the enemy castle to win; from 10:00, overtime crumbles both castles so every game ends.
+
+Keys: `1`–`9` pick a roster card, click to drop, `R` turns a squad, `I` invests, `U` unlocks the next tier, `Esc`
+cancels. Online games are lockstep: the server stamps every command with a tick ~0.8 s ahead and both clients run the
+same deterministic sim up to the server's frontier (`src/shared/tug.ts`, `src/server/tug.ts`).
+
 ### Unit cost
 
 A design's cost is not just the sum of its parts. `src/shared/stats.ts` predicts each unit's
@@ -111,8 +125,9 @@ synergy, `mean + 0.5·(P80 − mean)` over contexts) and fits a correction `anal
 | `src/shared/stats.ts` | Design → stats, validation, cost model |
 | `src/shared/sim/` | Deterministic battle simulation (fixed 20 Hz tick, seeded RNG) |
 | `src/shared/match.ts` | Match rules: rounds, supply, deployment validation, damage, redaction |
+| `src/shared/tug.ts`, `tugai.ts` | Tug of war rules (economy, castles, drop zone, commands) and its AI |
 | `src/shared/ai.ts`, `starters.ts` | AI decks/deployment (hard mode simulates candidates), starter designs |
-| `src/server/` | Async multiplayer HTTP API + JSON persistence + static hosting |
+| `src/server/` | Async multiplayer HTTP API + JSON persistence + static hosting; `tug.ts`: real-time tug of war rooms (lockstep clock) |
 | `src/client/render/` | Procedural part-based unit art, effects, part icons |
 | `src/client/audio.ts` | Synthesized SFX + music |
 | `src/client/ui/` | Menu, garage, lobby, vs-AI, match (deploy + battle replay), settings |

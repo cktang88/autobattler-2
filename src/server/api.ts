@@ -8,10 +8,11 @@ import {
 } from '../shared/match.ts';
 import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
+import { TugHub } from './tug.ts';
 import { ChatHub } from './chat.ts';
 import { GlobalAiPool, REPORT_BODY_LIMIT, poolLog, validateReport } from './aipool.ts';
 import { hashToken, nameKey, type MatchRecord, type PasswordHash, type PlayerRecord, type Store } from './store.ts';
-import { HttpError, sanitizeAction, sanitizeDeck, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
+import { HttpError, sanitizeAction, sanitizeDeck, sanitizeRoster, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
 
 const scrypt = (pw: string, salt: Buffer) => new Promise<Buffer>((resolve, reject) =>
   crypto.scrypt(pw.normalize('NFKC'), salt, 32, (e, k) => (e ? reject(e) : resolve(k))));
@@ -93,6 +94,8 @@ export class Api {
   private readonly waiters = new Map<string, Set<() => void>>();
   /** in-match chat (server/chat.ts): in memory only */
   readonly chat = new ChatHub();
+  /** real-time tug of war rooms: in memory only */
+  readonly tugHub = new TugHub();
 
   constructor(store: Store, opts: ApiOptions = {}) {
     this.store = store;
@@ -148,6 +151,7 @@ export class Api {
       if (M === 'GET') return this.getGarage(c);
       if (M === 'POST') return this.putGarage(c);
     }
+    if (a === 'tug') return this.tugRoute(c, b, d);
     if (a === 'matches') {
       if (!b) {
         if (M === 'GET') return this.list(c);
@@ -162,6 +166,29 @@ export class Api {
         if (d === 'chat' && M === 'GET') return this.getChat(c, b);
         if (d === 'chat' && M === 'POST') return this.postChat(c, b);
       }
+    }
+    throw new HttpError(404, 'Not found');
+  }
+
+  // ---------------------------------------------------------------- tug of war (real time, server/tug.ts)
+
+  private tugRoute(c: Ctx, b: string | undefined, d: string | undefined): unknown {
+    const p = this.auth(c);
+    const me = { id: p.id, name: p.name };
+    const M = c.method === 'HEAD' ? 'GET' : c.method;
+    if (c.parts.length > 3) throw new HttpError(404, 'Not found');
+    if (!b && M === 'GET') return this.tugHub.list(me);
+    if (!b && M === 'POST') { const body = obj(c.body); return this.tugHub.create(me, sanitizeRoster(body.roster), body.private === true); }
+    if (b === 'quick' && !d && M === 'POST') return this.tugHub.quick(me, sanitizeRoster(obj(c.body).roster));
+    if (b && b !== 'quick') {
+      if (!d && M === 'GET') {
+        const closed = new Promise<void>((resolve) => c.req.once('close', () => resolve()));
+        return this.tugHub.poll(me, b, Number(c.query.get('since') ?? -1), Number(c.query.get('wait')) || 0, closed);
+      }
+      if (d === 'join' && M === 'POST') return this.tugHub.join(me, b, sanitizeRoster(obj(c.body).roster));
+      if (d === 'cmd' && M === 'POST') return this.tugHub.command(me, b, obj(c.body).cmd);
+      if (d === 'result' && M === 'POST') return this.tugHub.result(me, b, obj(c.body).winner);
+      if (d === 'leave' && M === 'POST') return this.tugHub.leave(me, b);
     }
     throw new HttpError(404, 'Not found');
   }

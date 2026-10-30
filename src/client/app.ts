@@ -1,6 +1,7 @@
 // Tiny screen router. Screens are plain DOM; each returns an element plus optional cleanup.
 
 import type { MatchDriver } from './driver.ts';
+import type { TugLaunch } from './ui/tug.ts';
 
 export type Route =
   | { name: 'menu' }
@@ -11,7 +12,10 @@ export type Route =
   | { name: 'match'; driver: MatchDriver }
   /** sandbox: place any designs on both sides for free and watch them fight */
   | { name: 'playground' }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  /** tug of war: roster + opponent setup, and the live game */
+  | { name: 'tug' }
+  | { name: 'tugmatch'; launch: TugLaunch };
 
 export interface Screen {
   el: HTMLElement;
