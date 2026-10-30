@@ -1334,6 +1334,22 @@ export class Battle {
     return nid;
   }
 
+  /** collision radius of a unit (cells): what other units are kept out of */
+  radiusOf(id: number): number { return this.ints[id].radius; }
+
+  /** Widen a unit's collision circle (tug of war: the castle's drawn base reaches past its hull's footprint). Capped at
+   *  the largest hull's bound (MAX_RADIUS), which the neighbour scans are sized for. Between step()s only. */
+  setRadius(id: number, r: number): void {
+    const I = this.ints[id];
+    r = Math.min(r, MAX_RADIUS);
+    I.radius = r;
+    I.bound = Math.max(I.bound, r);
+    this.radA[id] = r;
+    this.snapB[id] = I.bound;
+    this.sepQ[id] = Math.max(I.bound, r);
+    this.maxSepQ = Math.max(this.maxSepQ, this.sepQ[id]);
+  }
+
   /** tug of war overtime: a core loses hp past its shields and armour; at 0 it is destroyed */
   private crumble(u: SimUnit, amt: number): void {
     if (!u.alive) return;

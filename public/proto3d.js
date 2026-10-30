@@ -39017,7 +39017,7 @@ var domeP = (R, h, rr, n = 8) => {
 function castle(c) {
   const { b, kit, L, W } = c;
   b.simp = CASTLE_SIMP;
-  const k = Math.min(L, W) / 7 * 1.15;
+  const k = Math.min(L, W) / 7 * 1.1;
   const fine = fineFor(c.S);
   const gun = c.design.mounts[0] ? MODULE_BY_ID.get(c.design.mounts[0]) : void 0;
   const D = DRAW_D2[gun?.mount ?? "S"];
@@ -39146,8 +39146,8 @@ function castle(c) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const hx = sx * 1.7 * k - 0.2 * k;
     const hip = [hx, belly(hx) + 0.2 * k, sz * 1.1 * k];
-    const knee = [sx * 2.35 * k - 0.2 * k, 0.8 * k, sz * 2.2 * k];
-    const foot2 = [sx * 2.5 * k - 0.2 * k, 0.16 * k, sz * 2.55 * k];
+    const knee = [sx * 2.25 * k - 0.2 * k, 0.8 * k, sz * 2.1 * k];
+    const foot2 = [sx * 2.38 * k - 0.2 * k, 0.16 * k, sz * 2.4 * k];
     b.lathe(kit.armor2, [[0, -0.3 * k], [0.3 * k, -0.3 * k], [0.34 * k, -0.1 * k], [0.34 * k, 0.15 * k], [0.26 * k, 0.25 * k], [0, 0.25 * k]], [hip[0], hip[1] - 0.25 * k, hip[2]], "y", 40);
     b.strut(kit.mech, hip, knee, 0.22 * k, 0.19 * k, 24);
     b.strut(kit.mech, knee, foot2, 0.19 * k, 0.16 * k, 24);

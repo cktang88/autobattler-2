@@ -135,9 +135,10 @@ export class TugAi {
     for (let k = 0; k < 8; k++) {
       const px = Math.max(4, Math.min(FIELD_W - 4, x + (this.rng() - 0.5) * 6 * k));
       const py = ty + (this.rng() - 0.5) * 2 * k;
-      if (!dropError(this.side, d, px, py)) {
+      const cmd: TugCommand = { t: 'buy', designId: d.id, x: Math.round(px), y: Math.round(py) };
+      if (!dropError(this.side, d, cmd.x, cmd.y) && !g.overlapError(this.side, d, cmd.x, cmd.y)) {
         if (Number.isNaN(y)) this.want = null;
-        return { t: 'buy', designId: d.id, x: Math.round(px), y: Math.round(py) };
+        return cmd;
       }
     }
     return null;
