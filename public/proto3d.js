@@ -34123,967 +34123,6 @@ var Bld = class {
   }
 };
 
-// node_modules/three/examples/jsm/controls/OrbitControls.js
-var _changeEvent = { type: "change" };
-var _startEvent = { type: "start" };
-var _endEvent = { type: "end" };
-var _ray = new Ray();
-var _plane = new Plane();
-var _TILT_LIMIT = Math.cos(70 * MathUtils.DEG2RAD);
-var _v = new Vector3();
-var _twoPI = 2 * Math.PI;
-var _STATE = {
-  NONE: -1,
-  ROTATE: 0,
-  DOLLY: 1,
-  PAN: 2,
-  TOUCH_ROTATE: 3,
-  TOUCH_PAN: 4,
-  TOUCH_DOLLY_PAN: 5,
-  TOUCH_DOLLY_ROTATE: 6
-};
-var _EPS = 1e-6;
-var OrbitControls = class extends Controls {
-  /**
-   * Constructs a new controls instance.
-   *
-   * @param {Object3D} object - The object that is managed by the controls.
-   * @param {?HTMLElement} domElement - The HTML element used for event listeners.
-   */
-  constructor(object, domElement = null) {
-    super(object, domElement);
-    this.state = _STATE.NONE;
-    this.target = new Vector3();
-    this.cursor = new Vector3();
-    this.minDistance = 0;
-    this.maxDistance = Infinity;
-    this.minZoom = 0;
-    this.maxZoom = Infinity;
-    this.minTargetRadius = 0;
-    this.maxTargetRadius = Infinity;
-    this.minPolarAngle = 0;
-    this.maxPolarAngle = Math.PI;
-    this.minAzimuthAngle = -Infinity;
-    this.maxAzimuthAngle = Infinity;
-    this.enableDamping = false;
-    this.dampingFactor = 0.05;
-    this.enableZoom = true;
-    this.zoomSpeed = 1;
-    this.enableRotate = true;
-    this.rotateSpeed = 1;
-    this.keyRotateSpeed = 1;
-    this.enablePan = true;
-    this.panSpeed = 1;
-    this.screenSpacePanning = true;
-    this.keyPanSpeed = 7;
-    this.zoomToCursor = false;
-    this.autoRotate = false;
-    this.autoRotateSpeed = 2;
-    this.keys = { LEFT: "ArrowLeft", UP: "ArrowUp", RIGHT: "ArrowRight", BOTTOM: "ArrowDown" };
-    this.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
-    this.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
-    this.target0 = this.target.clone();
-    this.position0 = this.object.position.clone();
-    this.zoom0 = this.object.zoom;
-    this._cursorStyle = "auto";
-    this._domElementKeyEvents = null;
-    this._lastPosition = new Vector3();
-    this._lastQuaternion = new Quaternion();
-    this._lastTargetPosition = new Vector3();
-    this._quat = new Quaternion().setFromUnitVectors(object.up, new Vector3(0, 1, 0));
-    this._quatInverse = this._quat.clone().invert();
-    this._spherical = new Spherical();
-    this._sphericalDelta = new Spherical();
-    this._scale = 1;
-    this._panOffset = new Vector3();
-    this._rotateStart = new Vector2();
-    this._rotateEnd = new Vector2();
-    this._rotateDelta = new Vector2();
-    this._panStart = new Vector2();
-    this._panEnd = new Vector2();
-    this._panDelta = new Vector2();
-    this._dollyStart = new Vector2();
-    this._dollyEnd = new Vector2();
-    this._dollyDelta = new Vector2();
-    this._dollyDirection = new Vector3();
-    this._mouse = new Vector2();
-    this._performCursorZoom = false;
-    this._pointers = [];
-    this._pointerPositions = {};
-    this._controlActive = false;
-    this._onPointerMove = onPointerMove.bind(this);
-    this._onPointerDown = onPointerDown.bind(this);
-    this._onPointerUp = onPointerUp.bind(this);
-    this._onContextMenu = onContextMenu.bind(this);
-    this._onMouseWheel = onMouseWheel.bind(this);
-    this._onKeyDown = onKeyDown.bind(this);
-    this._onTouchStart = onTouchStart.bind(this);
-    this._onTouchMove = onTouchMove.bind(this);
-    this._onMouseDown = onMouseDown.bind(this);
-    this._onMouseMove = onMouseMove.bind(this);
-    this._interceptControlDown = interceptControlDown.bind(this);
-    this._interceptControlUp = interceptControlUp.bind(this);
-    if (this.domElement !== null) {
-      this.connect(this.domElement);
-    }
-    this.update();
-  }
-  /**
-   * Defines the visual representation of the cursor.
-   *
-   * @type {('auto'|'grab')}
-   * @default 'auto'
-   */
-  set cursorStyle(type) {
-    this._cursorStyle = type;
-    if (type === "grab") {
-      this.domElement.style.cursor = "grab";
-    } else {
-      this.domElement.style.cursor = "auto";
-    }
-  }
-  get cursorStyle() {
-    return this._cursorStyle;
-  }
-  connect(element) {
-    super.connect(element);
-    this.domElement.addEventListener("pointerdown", this._onPointerDown);
-    this.domElement.addEventListener("pointercancel", this._onPointerUp);
-    this.domElement.addEventListener("contextmenu", this._onContextMenu);
-    this.domElement.addEventListener("wheel", this._onMouseWheel, { passive: false });
-    const document2 = this.domElement.getRootNode();
-    document2.addEventListener("keydown", this._interceptControlDown, { passive: true, capture: true });
-    this.domElement.style.touchAction = "none";
-  }
-  disconnect() {
-    this.state = _STATE.NONE;
-    this.domElement.removeEventListener("pointerdown", this._onPointerDown);
-    this.domElement.ownerDocument.removeEventListener("pointermove", this._onPointerMove);
-    this.domElement.ownerDocument.removeEventListener("pointerup", this._onPointerUp);
-    this.domElement.removeEventListener("pointercancel", this._onPointerUp);
-    this.domElement.removeEventListener("wheel", this._onMouseWheel);
-    this.domElement.removeEventListener("contextmenu", this._onContextMenu);
-    this.stopListenToKeyEvents();
-    const document2 = this.domElement.getRootNode();
-    document2.removeEventListener("keydown", this._interceptControlDown, { capture: true });
-    document2.removeEventListener("keyup", this._interceptControlUp, { capture: true });
-    this._controlActive = false;
-    this._pointers.length = 0;
-    this._pointerPositions = {};
-    this.domElement.style.touchAction = "";
-    this.domElement.style.cursor = "auto";
-  }
-  dispose() {
-    this.disconnect();
-  }
-  /**
-   * Get the current vertical rotation, in radians.
-   *
-   * @return {number} The current vertical rotation, in radians.
-   */
-  getPolarAngle() {
-    return this._spherical.phi;
-  }
-  /**
-   * Get the current horizontal rotation, in radians.
-   *
-   * @return {number} The current horizontal rotation, in radians.
-   */
-  getAzimuthalAngle() {
-    return this._spherical.theta;
-  }
-  /**
-   * Returns the distance from the camera to the target.
-   *
-   * @return {number} The distance from the camera to the target.
-   */
-  getDistance() {
-    return this.object.position.distanceTo(this.target);
-  }
-  /**
-   * Adds key event listeners to the given DOM element.
-   * `window` is a recommended argument for using this method.
-   *
-   * @param {HTMLElement} domElement - The DOM element
-   */
-  listenToKeyEvents(domElement) {
-    domElement.addEventListener("keydown", this._onKeyDown);
-    this._domElementKeyEvents = domElement;
-  }
-  /**
-   * Removes the key event listener previously defined with `listenToKeyEvents()`.
-   */
-  stopListenToKeyEvents() {
-    if (this._domElementKeyEvents !== null) {
-      this._domElementKeyEvents.removeEventListener("keydown", this._onKeyDown);
-      this._domElementKeyEvents = null;
-    }
-  }
-  /**
-   * Save the current state of the controls. This can later be recovered with `reset()`.
-   */
-  saveState() {
-    this.target0.copy(this.target);
-    this.position0.copy(this.object.position);
-    this.zoom0 = this.object.zoom;
-  }
-  /**
-   * Reset the controls to their state from either the last time the `saveState()`
-   * was called, or the initial state.
-   */
-  reset() {
-    this.target.copy(this.target0);
-    this.object.position.copy(this.position0);
-    this.object.zoom = this.zoom0;
-    this.object.updateProjectionMatrix();
-    this.dispatchEvent(_changeEvent);
-    this.update();
-    this.state = _STATE.NONE;
-  }
-  /**
-   * Programmatically pan the camera.
-   *
-   * @param {number} deltaX - The horizontal pan amount in pixels.
-   * @param {number} deltaY - The vertical pan amount in pixels.
-   */
-  pan(deltaX, deltaY) {
-    this._pan(deltaX, deltaY);
-    this.update();
-  }
-  /**
-   * Programmatically dolly in (zoom in for perspective camera).
-   *
-   * @param {number} dollyScale - The dolly scale factor.
-   */
-  dollyIn(dollyScale) {
-    this._dollyIn(dollyScale);
-    this.update();
-  }
-  /**
-   * Programmatically dolly out (zoom out for perspective camera).
-   *
-   * @param {number} dollyScale - The dolly scale factor.
-   */
-  dollyOut(dollyScale) {
-    this._dollyOut(dollyScale);
-    this.update();
-  }
-  /**
-   * Programmatically rotate the camera left (around the vertical axis).
-   *
-   * @param {number} angle - The rotation angle in radians.
-   */
-  rotateLeft(angle) {
-    this._rotateLeft(angle);
-    this.update();
-  }
-  /**
-   * Programmatically rotate the camera up (around the horizontal axis).
-   *
-   * @param {number} angle - The rotation angle in radians.
-   */
-  rotateUp(angle) {
-    this._rotateUp(angle);
-    this.update();
-  }
-  update(deltaTime = null) {
-    const position = this.object.position;
-    _v.copy(position).sub(this.target);
-    _v.applyQuaternion(this._quat);
-    this._spherical.setFromVector3(_v);
-    if (this.autoRotate && this.state === _STATE.NONE) {
-      this._rotateLeft(this._getAutoRotationAngle(deltaTime));
-    }
-    if (this.enableDamping) {
-      this._spherical.theta += this._sphericalDelta.theta * this.dampingFactor;
-      this._spherical.phi += this._sphericalDelta.phi * this.dampingFactor;
-    } else {
-      this._spherical.theta += this._sphericalDelta.theta;
-      this._spherical.phi += this._sphericalDelta.phi;
-    }
-    let min = this.minAzimuthAngle;
-    let max = this.maxAzimuthAngle;
-    if (isFinite(min) && isFinite(max)) {
-      if (min < -Math.PI) min += _twoPI;
-      else if (min > Math.PI) min -= _twoPI;
-      if (max < -Math.PI) max += _twoPI;
-      else if (max > Math.PI) max -= _twoPI;
-      if (min <= max) {
-        this._spherical.theta = Math.max(min, Math.min(max, this._spherical.theta));
-      } else {
-        this._spherical.theta = this._spherical.theta > (min + max) / 2 ? Math.max(min, this._spherical.theta) : Math.min(max, this._spherical.theta);
-      }
-    }
-    this._spherical.phi = Math.max(this.minPolarAngle, Math.min(this.maxPolarAngle, this._spherical.phi));
-    this._spherical.makeSafe();
-    if (this.enableDamping === true) {
-      this.target.addScaledVector(this._panOffset, this.dampingFactor);
-    } else {
-      this.target.add(this._panOffset);
-    }
-    this.target.sub(this.cursor);
-    this.target.clampLength(this.minTargetRadius, this.maxTargetRadius);
-    this.target.add(this.cursor);
-    let zoomChanged = false;
-    if (this.zoomToCursor && this._performCursorZoom || this.object.isOrthographicCamera) {
-      this._spherical.radius = this._clampDistance(this._spherical.radius);
-    } else {
-      const prevRadius = this._spherical.radius;
-      this._spherical.radius = this._clampDistance(this._spherical.radius * this._scale);
-      zoomChanged = prevRadius != this._spherical.radius;
-    }
-    _v.setFromSpherical(this._spherical);
-    _v.applyQuaternion(this._quatInverse);
-    position.copy(this.target).add(_v);
-    this.object.lookAt(this.target);
-    if (this.enableDamping === true) {
-      this._sphericalDelta.theta *= 1 - this.dampingFactor;
-      this._sphericalDelta.phi *= 1 - this.dampingFactor;
-      this._panOffset.multiplyScalar(1 - this.dampingFactor);
-    } else {
-      this._sphericalDelta.set(0, 0, 0);
-      this._panOffset.set(0, 0, 0);
-    }
-    if (this.zoomToCursor && this._performCursorZoom) {
-      let newRadius = null;
-      if (this.object.isPerspectiveCamera) {
-        const prevRadius = _v.length();
-        newRadius = this._clampDistance(prevRadius * this._scale);
-        const radiusDelta = prevRadius - newRadius;
-        this.object.position.addScaledVector(this._dollyDirection, radiusDelta);
-        this.object.updateMatrixWorld();
-        zoomChanged = !!radiusDelta;
-      } else if (this.object.isOrthographicCamera) {
-        const mouseBefore = new Vector3(this._mouse.x, this._mouse.y, 0);
-        mouseBefore.unproject(this.object);
-        const prevZoom = this.object.zoom;
-        this.object.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.object.zoom / this._scale));
-        this.object.updateProjectionMatrix();
-        zoomChanged = prevZoom !== this.object.zoom;
-        const mouseAfter = new Vector3(this._mouse.x, this._mouse.y, 0);
-        mouseAfter.unproject(this.object);
-        this.object.position.sub(mouseAfter).add(mouseBefore);
-        this.object.updateMatrixWorld();
-        newRadius = _v.length();
-      } else {
-        console.warn("WARNING: OrbitControls.js encountered an unknown camera type - zoom to cursor disabled.");
-        this.zoomToCursor = false;
-      }
-      if (newRadius !== null) {
-        if (this.screenSpacePanning) {
-          this.target.set(0, 0, -1).transformDirection(this.object.matrix).multiplyScalar(newRadius).add(this.object.position);
-        } else {
-          _ray.origin.copy(this.object.position);
-          _ray.direction.set(0, 0, -1).transformDirection(this.object.matrix);
-          if (Math.abs(this.object.up.dot(_ray.direction)) < _TILT_LIMIT) {
-            this.object.lookAt(this.target);
-          } else {
-            _plane.setFromNormalAndCoplanarPoint(this.object.up, this.target);
-            _ray.intersectPlane(_plane, this.target);
-          }
-        }
-      }
-    } else if (this.object.isOrthographicCamera) {
-      const prevZoom = this.object.zoom;
-      this.object.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.object.zoom / this._scale));
-      if (prevZoom !== this.object.zoom) {
-        this.object.updateProjectionMatrix();
-        zoomChanged = true;
-      }
-    }
-    this._scale = 1;
-    this._performCursorZoom = false;
-    if (zoomChanged || this._lastPosition.distanceToSquared(this.object.position) > _EPS || 8 * (1 - this._lastQuaternion.dot(this.object.quaternion)) > _EPS || this._lastTargetPosition.distanceToSquared(this.target) > _EPS) {
-      this.dispatchEvent(_changeEvent);
-      this._lastPosition.copy(this.object.position);
-      this._lastQuaternion.copy(this.object.quaternion);
-      this._lastTargetPosition.copy(this.target);
-      return true;
-    }
-    return false;
-  }
-  _getAutoRotationAngle(deltaTime) {
-    if (deltaTime !== null) {
-      return _twoPI / 60 * this.autoRotateSpeed * deltaTime;
-    } else {
-      return _twoPI / 60 / 60 * this.autoRotateSpeed;
-    }
-  }
-  _getZoomScale(delta) {
-    const normalizedDelta = Math.abs(delta * 0.01);
-    return Math.pow(0.95, this.zoomSpeed * normalizedDelta);
-  }
-  _rotateLeft(angle) {
-    this._sphericalDelta.theta -= angle;
-  }
-  _rotateUp(angle) {
-    this._sphericalDelta.phi -= angle;
-  }
-  _panLeft(distance, objectMatrix) {
-    _v.setFromMatrixColumn(objectMatrix, 0);
-    _v.multiplyScalar(-distance);
-    this._panOffset.add(_v);
-  }
-  _panUp(distance, objectMatrix) {
-    if (this.screenSpacePanning === true) {
-      _v.setFromMatrixColumn(objectMatrix, 1);
-    } else {
-      _v.setFromMatrixColumn(objectMatrix, 0);
-      _v.crossVectors(this.object.up, _v);
-    }
-    _v.multiplyScalar(distance);
-    this._panOffset.add(_v);
-  }
-  // deltaX and deltaY are in pixels; right and down are positive
-  _pan(deltaX, deltaY) {
-    const element = this.domElement;
-    if (this.object.isPerspectiveCamera) {
-      const position = this.object.position;
-      _v.copy(position).sub(this.target);
-      let targetDistance = _v.length();
-      targetDistance *= Math.tan(this.object.fov / 2 * Math.PI / 180);
-      this._panLeft(2 * deltaX * targetDistance / element.clientHeight, this.object.matrix);
-      this._panUp(2 * deltaY * targetDistance / element.clientHeight, this.object.matrix);
-    } else if (this.object.isOrthographicCamera) {
-      this._panLeft(deltaX * (this.object.right - this.object.left) / this.object.zoom / element.clientWidth, this.object.matrix);
-      this._panUp(deltaY * (this.object.top - this.object.bottom) / this.object.zoom / element.clientHeight, this.object.matrix);
-    } else {
-      console.warn("WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.");
-      this.enablePan = false;
-    }
-  }
-  _dollyOut(dollyScale) {
-    if (this.object.isPerspectiveCamera || this.object.isOrthographicCamera) {
-      this._scale /= dollyScale;
-    } else {
-      console.warn("WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.");
-      this.enableZoom = false;
-    }
-  }
-  _dollyIn(dollyScale) {
-    if (this.object.isPerspectiveCamera || this.object.isOrthographicCamera) {
-      this._scale *= dollyScale;
-    } else {
-      console.warn("WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.");
-      this.enableZoom = false;
-    }
-  }
-  _updateZoomParameters(x, y) {
-    if (!this.zoomToCursor) {
-      return;
-    }
-    this._performCursorZoom = true;
-    const rect = this.domElement.getBoundingClientRect();
-    const dx = x - rect.left;
-    const dy = y - rect.top;
-    const w = rect.width;
-    const h = rect.height;
-    this._mouse.x = dx / w * 2 - 1;
-    this._mouse.y = -(dy / h) * 2 + 1;
-    this._dollyDirection.set(this._mouse.x, this._mouse.y, 1).unproject(this.object).sub(this.object.position).normalize();
-  }
-  _clampDistance(dist2) {
-    return Math.max(this.minDistance, Math.min(this.maxDistance, dist2));
-  }
-  //
-  // event callbacks - update the object state
-  //
-  _handleMouseDownRotate(event) {
-    this._rotateStart.set(event.clientX, event.clientY);
-  }
-  _handleMouseDownDolly(event) {
-    this._updateZoomParameters(event.clientX, event.clientX);
-    this._dollyStart.set(event.clientX, event.clientY);
-  }
-  _handleMouseDownPan(event) {
-    this._panStart.set(event.clientX, event.clientY);
-  }
-  _handleMouseMoveRotate(event) {
-    this._rotateEnd.set(event.clientX, event.clientY);
-    this._rotateDelta.subVectors(this._rotateEnd, this._rotateStart).multiplyScalar(this.rotateSpeed);
-    const element = this.domElement;
-    this._rotateLeft(_twoPI * this._rotateDelta.x / element.clientHeight);
-    this._rotateUp(_twoPI * this._rotateDelta.y / element.clientHeight);
-    this._rotateStart.copy(this._rotateEnd);
-    this.update();
-  }
-  _handleMouseMoveDolly(event) {
-    this._dollyEnd.set(event.clientX, event.clientY);
-    this._dollyDelta.subVectors(this._dollyEnd, this._dollyStart);
-    if (this._dollyDelta.y > 0) {
-      this._dollyOut(this._getZoomScale(this._dollyDelta.y));
-    } else if (this._dollyDelta.y < 0) {
-      this._dollyIn(this._getZoomScale(this._dollyDelta.y));
-    }
-    this._dollyStart.copy(this._dollyEnd);
-    this.update();
-  }
-  _handleMouseMovePan(event) {
-    this._panEnd.set(event.clientX, event.clientY);
-    this._panDelta.subVectors(this._panEnd, this._panStart).multiplyScalar(this.panSpeed);
-    this._pan(this._panDelta.x, this._panDelta.y);
-    this._panStart.copy(this._panEnd);
-    this.update();
-  }
-  _handleMouseWheel(event) {
-    this._updateZoomParameters(event.clientX, event.clientY);
-    if (event.deltaY < 0) {
-      this._dollyIn(this._getZoomScale(event.deltaY));
-    } else if (event.deltaY > 0) {
-      this._dollyOut(this._getZoomScale(event.deltaY));
-    }
-    this.update();
-  }
-  _handleKeyDown(event) {
-    let needsUpdate = false;
-    switch (event.code) {
-      case this.keys.UP:
-        if (event.ctrlKey || event.metaKey || event.shiftKey) {
-          if (this.enableRotate) {
-            this._rotateUp(_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
-          }
-        } else {
-          if (this.enablePan) {
-            this._pan(0, this.keyPanSpeed);
-          }
-        }
-        needsUpdate = true;
-        break;
-      case this.keys.BOTTOM:
-        if (event.ctrlKey || event.metaKey || event.shiftKey) {
-          if (this.enableRotate) {
-            this._rotateUp(-_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
-          }
-        } else {
-          if (this.enablePan) {
-            this._pan(0, -this.keyPanSpeed);
-          }
-        }
-        needsUpdate = true;
-        break;
-      case this.keys.LEFT:
-        if (event.ctrlKey || event.metaKey || event.shiftKey) {
-          if (this.enableRotate) {
-            this._rotateLeft(_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
-          }
-        } else {
-          if (this.enablePan) {
-            this._pan(this.keyPanSpeed, 0);
-          }
-        }
-        needsUpdate = true;
-        break;
-      case this.keys.RIGHT:
-        if (event.ctrlKey || event.metaKey || event.shiftKey) {
-          if (this.enableRotate) {
-            this._rotateLeft(-_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
-          }
-        } else {
-          if (this.enablePan) {
-            this._pan(-this.keyPanSpeed, 0);
-          }
-        }
-        needsUpdate = true;
-        break;
-    }
-    if (needsUpdate) {
-      event.preventDefault();
-      this.update();
-    }
-  }
-  _handleTouchStartRotate(event) {
-    if (this._pointers.length === 1) {
-      this._rotateStart.set(event.pageX, event.pageY);
-    } else {
-      const position = this._getSecondPointerPosition(event);
-      const x = 0.5 * (event.pageX + position.x);
-      const y = 0.5 * (event.pageY + position.y);
-      this._rotateStart.set(x, y);
-    }
-  }
-  _handleTouchStartPan(event) {
-    if (this._pointers.length === 1) {
-      this._panStart.set(event.pageX, event.pageY);
-    } else {
-      const position = this._getSecondPointerPosition(event);
-      const x = 0.5 * (event.pageX + position.x);
-      const y = 0.5 * (event.pageY + position.y);
-      this._panStart.set(x, y);
-    }
-  }
-  _handleTouchStartDolly(event) {
-    const position = this._getSecondPointerPosition(event);
-    const dx = event.pageX - position.x;
-    const dy = event.pageY - position.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    this._dollyStart.set(0, distance);
-  }
-  _handleTouchStartDollyPan(event) {
-    if (this.enableZoom) this._handleTouchStartDolly(event);
-    if (this.enablePan) this._handleTouchStartPan(event);
-  }
-  _handleTouchStartDollyRotate(event) {
-    if (this.enableZoom) this._handleTouchStartDolly(event);
-    if (this.enableRotate) this._handleTouchStartRotate(event);
-  }
-  _handleTouchMoveRotate(event) {
-    if (this._pointers.length == 1) {
-      this._rotateEnd.set(event.pageX, event.pageY);
-    } else {
-      const position = this._getSecondPointerPosition(event);
-      const x = 0.5 * (event.pageX + position.x);
-      const y = 0.5 * (event.pageY + position.y);
-      this._rotateEnd.set(x, y);
-    }
-    this._rotateDelta.subVectors(this._rotateEnd, this._rotateStart).multiplyScalar(this.rotateSpeed);
-    const element = this.domElement;
-    this._rotateLeft(_twoPI * this._rotateDelta.x / element.clientHeight);
-    this._rotateUp(_twoPI * this._rotateDelta.y / element.clientHeight);
-    this._rotateStart.copy(this._rotateEnd);
-  }
-  _handleTouchMovePan(event) {
-    if (this._pointers.length === 1) {
-      this._panEnd.set(event.pageX, event.pageY);
-    } else {
-      const position = this._getSecondPointerPosition(event);
-      const x = 0.5 * (event.pageX + position.x);
-      const y = 0.5 * (event.pageY + position.y);
-      this._panEnd.set(x, y);
-    }
-    this._panDelta.subVectors(this._panEnd, this._panStart).multiplyScalar(this.panSpeed);
-    this._pan(this._panDelta.x, this._panDelta.y);
-    this._panStart.copy(this._panEnd);
-  }
-  _handleTouchMoveDolly(event) {
-    const position = this._getSecondPointerPosition(event);
-    const dx = event.pageX - position.x;
-    const dy = event.pageY - position.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    this._dollyEnd.set(0, distance);
-    this._dollyDelta.set(0, Math.pow(this._dollyEnd.y / this._dollyStart.y, this.zoomSpeed));
-    this._dollyOut(this._dollyDelta.y);
-    this._dollyStart.copy(this._dollyEnd);
-    const centerX = (event.pageX + position.x) * 0.5;
-    const centerY = (event.pageY + position.y) * 0.5;
-    this._updateZoomParameters(centerX, centerY);
-  }
-  _handleTouchMoveDollyPan(event) {
-    if (this.enableZoom) this._handleTouchMoveDolly(event);
-    if (this.enablePan) this._handleTouchMovePan(event);
-  }
-  _handleTouchMoveDollyRotate(event) {
-    if (this.enableZoom) this._handleTouchMoveDolly(event);
-    if (this.enableRotate) this._handleTouchMoveRotate(event);
-  }
-  // pointers
-  _addPointer(event) {
-    this._pointers.push(event.pointerId);
-  }
-  _removePointer(event) {
-    delete this._pointerPositions[event.pointerId];
-    for (let i = 0; i < this._pointers.length; i++) {
-      if (this._pointers[i] == event.pointerId) {
-        this._pointers.splice(i, 1);
-        return;
-      }
-    }
-  }
-  _isTrackingPointer(event) {
-    for (let i = 0; i < this._pointers.length; i++) {
-      if (this._pointers[i] == event.pointerId) return true;
-    }
-    return false;
-  }
-  _trackPointer(event) {
-    let position = this._pointerPositions[event.pointerId];
-    if (position === void 0) {
-      position = new Vector2();
-      this._pointerPositions[event.pointerId] = position;
-    }
-    position.set(event.pageX, event.pageY);
-  }
-  _getSecondPointerPosition(event) {
-    const pointerId = event.pointerId === this._pointers[0] ? this._pointers[1] : this._pointers[0];
-    return this._pointerPositions[pointerId];
-  }
-  //
-  _customWheelEvent(event) {
-    const mode = event.deltaMode;
-    const newEvent = {
-      clientX: event.clientX,
-      clientY: event.clientY,
-      deltaY: event.deltaY
-    };
-    switch (mode) {
-      case 1:
-        newEvent.deltaY *= 16;
-        break;
-      case 2:
-        newEvent.deltaY *= 100;
-        break;
-    }
-    if (event.ctrlKey && !this._controlActive) {
-      newEvent.deltaY *= 10;
-    }
-    return newEvent;
-  }
-};
-function onPointerDown(event) {
-  if (this.enabled === false) return;
-  if (this._pointers.length === 0) {
-    this.domElement.setPointerCapture(event.pointerId);
-    this.domElement.ownerDocument.addEventListener("pointermove", this._onPointerMove);
-    this.domElement.ownerDocument.addEventListener("pointerup", this._onPointerUp);
-  }
-  if (this._isTrackingPointer(event)) return;
-  this._addPointer(event);
-  if (event.pointerType === "touch") {
-    this._onTouchStart(event);
-  } else {
-    this._onMouseDown(event);
-  }
-  if (this._cursorStyle === "grab") {
-    this.domElement.style.cursor = "grabbing";
-  }
-}
-function onPointerMove(event) {
-  if (this.enabled === false) return;
-  if (event.pointerType === "touch") {
-    this._onTouchMove(event);
-  } else {
-    this._onMouseMove(event);
-  }
-}
-function onPointerUp(event) {
-  this._removePointer(event);
-  switch (this._pointers.length) {
-    case 0:
-      this.domElement.releasePointerCapture(event.pointerId);
-      this.domElement.ownerDocument.removeEventListener("pointermove", this._onPointerMove);
-      this.domElement.ownerDocument.removeEventListener("pointerup", this._onPointerUp);
-      this.dispatchEvent(_endEvent);
-      this.state = _STATE.NONE;
-      if (this._cursorStyle === "grab") {
-        this.domElement.style.cursor = "grab";
-      }
-      break;
-    case 1:
-      const pointerId = this._pointers[0];
-      const position = this._pointerPositions[pointerId];
-      this._onTouchStart({ pointerId, pageX: position.x, pageY: position.y });
-      break;
-  }
-}
-function onMouseDown(event) {
-  let mouseAction;
-  switch (event.button) {
-    case 0:
-      mouseAction = this.mouseButtons.LEFT;
-      break;
-    case 1:
-      mouseAction = this.mouseButtons.MIDDLE;
-      break;
-    case 2:
-      mouseAction = this.mouseButtons.RIGHT;
-      break;
-    default:
-      mouseAction = -1;
-  }
-  switch (mouseAction) {
-    case MOUSE.DOLLY:
-      if (this.enableZoom === false) return;
-      this._handleMouseDownDolly(event);
-      this.state = _STATE.DOLLY;
-      break;
-    case MOUSE.ROTATE:
-      if (event.ctrlKey || event.metaKey || event.shiftKey) {
-        if (this.enablePan === false) return;
-        this._handleMouseDownPan(event);
-        this.state = _STATE.PAN;
-      } else {
-        if (this.enableRotate === false) return;
-        this._handleMouseDownRotate(event);
-        this.state = _STATE.ROTATE;
-      }
-      break;
-    case MOUSE.PAN:
-      if (event.ctrlKey || event.metaKey || event.shiftKey) {
-        if (this.enableRotate === false) return;
-        this._handleMouseDownRotate(event);
-        this.state = _STATE.ROTATE;
-      } else {
-        if (this.enablePan === false) return;
-        this._handleMouseDownPan(event);
-        this.state = _STATE.PAN;
-      }
-      break;
-    default:
-      this.state = _STATE.NONE;
-  }
-  if (this.state !== _STATE.NONE) {
-    this.dispatchEvent(_startEvent);
-  }
-}
-function onMouseMove(event) {
-  switch (this.state) {
-    case _STATE.ROTATE:
-      if (this.enableRotate === false) return;
-      this._handleMouseMoveRotate(event);
-      break;
-    case _STATE.DOLLY:
-      if (this.enableZoom === false) return;
-      this._handleMouseMoveDolly(event);
-      break;
-    case _STATE.PAN:
-      if (this.enablePan === false) return;
-      this._handleMouseMovePan(event);
-      break;
-  }
-}
-function onMouseWheel(event) {
-  if (this.enabled === false || this.enableZoom === false || this.state !== _STATE.NONE) return;
-  event.preventDefault();
-  this.dispatchEvent(_startEvent);
-  this._handleMouseWheel(this._customWheelEvent(event));
-  this.dispatchEvent(_endEvent);
-}
-function onKeyDown(event) {
-  if (this.enabled === false) return;
-  this._handleKeyDown(event);
-}
-function onTouchStart(event) {
-  this._trackPointer(event);
-  switch (this._pointers.length) {
-    case 1:
-      switch (this.touches.ONE) {
-        case TOUCH.ROTATE:
-          if (this.enableRotate === false) return;
-          this._handleTouchStartRotate(event);
-          this.state = _STATE.TOUCH_ROTATE;
-          break;
-        case TOUCH.PAN:
-          if (this.enablePan === false) return;
-          this._handleTouchStartPan(event);
-          this.state = _STATE.TOUCH_PAN;
-          break;
-        default:
-          this.state = _STATE.NONE;
-      }
-      break;
-    case 2:
-      switch (this.touches.TWO) {
-        case TOUCH.DOLLY_PAN:
-          if (this.enableZoom === false && this.enablePan === false) return;
-          this._handleTouchStartDollyPan(event);
-          this.state = _STATE.TOUCH_DOLLY_PAN;
-          break;
-        case TOUCH.DOLLY_ROTATE:
-          if (this.enableZoom === false && this.enableRotate === false) return;
-          this._handleTouchStartDollyRotate(event);
-          this.state = _STATE.TOUCH_DOLLY_ROTATE;
-          break;
-        default:
-          this.state = _STATE.NONE;
-      }
-      break;
-    default:
-      this.state = _STATE.NONE;
-  }
-  if (this.state !== _STATE.NONE) {
-    this.dispatchEvent(_startEvent);
-  }
-}
-function onTouchMove(event) {
-  this._trackPointer(event);
-  switch (this.state) {
-    case _STATE.TOUCH_ROTATE:
-      if (this.enableRotate === false) return;
-      this._handleTouchMoveRotate(event);
-      this.update();
-      break;
-    case _STATE.TOUCH_PAN:
-      if (this.enablePan === false) return;
-      this._handleTouchMovePan(event);
-      this.update();
-      break;
-    case _STATE.TOUCH_DOLLY_PAN:
-      if (this.enableZoom === false && this.enablePan === false) return;
-      this._handleTouchMoveDollyPan(event);
-      this.update();
-      break;
-    case _STATE.TOUCH_DOLLY_ROTATE:
-      if (this.enableZoom === false && this.enableRotate === false) return;
-      this._handleTouchMoveDollyRotate(event);
-      this.update();
-      break;
-    default:
-      this.state = _STATE.NONE;
-  }
-}
-function onContextMenu(event) {
-  if (this.enabled === false) return;
-  event.preventDefault();
-}
-function interceptControlDown(event) {
-  if (event.key === "Control") {
-    this._controlActive = true;
-    const document2 = this.domElement.getRootNode();
-    document2.addEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
-  }
-}
-function interceptControlUp(event) {
-  if (event.key === "Control") {
-    this._controlActive = false;
-    const document2 = this.domElement.getRootNode();
-    document2.removeEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
-  }
-}
-
-// src/shared/starters.ts
-var STARTER_DESIGNS = [
-  // ---- cheap swarm ----
-  { id: "starter-buzzsaw", name: "Buzzsaw", chassis: "scout", mobility: "wheels", mounts: ["mg"] },
-  { id: "starter-torchbug", name: "Torchbug", chassis: "scout", mobility: "halftrack", mounts: ["flamer"] },
-  // ---- skirmisher ----
-  { id: "starter-lancer", name: "Lancer", chassis: "raider", mobility: "legs", mounts: ["laser", "laser"] },
-  { id: "starter-hunter", name: "Tank Hunter", chassis: "raider", mobility: "legs", mounts: ["atgm", "mg"] },
-  // ---- frontline tank ----
-  { id: "starter-bulwark", name: "Bulwark", chassis: "warden", mobility: "treads", mounts: ["hmg", "plateL"] },
-  // ---- anti-tank ----
-  { id: "starter-tankbuster", name: "Tankbuster", chassis: "longarm", mobility: "treads", mounts: ["cannon"] },
-  // ---- anti-air ----
-  { id: "starter-skyguard", name: "Skyguard", chassis: "warden", mobility: "halftrack", mounts: ["ac40", "ac20"] },
-  // ---- artillery ----
-  { id: "starter-thunderhead", name: "Thunderhead", chassis: "longarm", mobility: "spider", mounts: ["howitzer"] },
-  { id: "starter-firestorm", name: "Firestorm", chassis: "striker", mobility: "spider", mounts: ["mortar", "mortar", null] },
-  // ---- flyers ----
-  { id: "starter-hornet", name: "Hornet", chassis: "drone", mobility: "rotor", mounts: ["twinmg"] },
-  { id: "starter-strafer", name: "Strafer", chassis: "strikejet", mobility: "jet", mounts: ["rockets", "guidedrocket", "targeting"] },
-  // ---- support ----
-  { id: "starter-medic", name: "Field Medic", chassis: "aegis", mobility: "halftrack", mounts: ["twin30", "repair"] },
-  // ---- brawler ----
-  { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "targeting"] },
-  // ---- size-3 heavies ----
-  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "reinforced", "plateL"] },
-  { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["autocannon", "plateM", "autocannon"] },
-  // ---- emplacement ----
-  { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "spider", mounts: ["guidedrocket", "hmg"] },
-  // ---- melee: fast hover brawler that dives into the line ----
-  { id: "starter-ripper", name: "Gnasher", chassis: "mantis", mobility: "hover", mounts: ["buzzsaw", null] },
-  // ---- stealth: cloaked sniper platform ----
-  { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
-  // ---- shield wall: barrier-heavy anchor of the line ----
-  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "cannon75", "smoke"] },
-  // ---- support aura: command vehicle that speeds up and repairs its escorts ----
-  { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "twin30", "hmg"] },
-  // ---- giant (size 4): all-round assault walker ----
-  { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "plateM"] },
-  // ---- titan (size 5): beam-armed war machine ----
-  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "plateM"] },
-  // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
-  { id: "starter-thunderbird", name: "Thunderbird", chassis: "strategic", mobility: "jet", mounts: ["bombs", "bombs", "heavybomb", "plateM", "pointdef", "shieldL"] }
-];
-
 // src/shared/parts.ts
 var CHASSIS = [
   { id: "scout", name: "Scout Frame", desc: "Tiny, cheap and quick. One light mount.", size: 1, hp: 140, armor: 0, weight: 3, cost: 10, mounts: ["S"], agility: 1.3, roles: ["scout", "raider"], traits: [], shape: "wedge" },
@@ -37224,1328 +36263,6 @@ var TEAM_PAL = [
 ];
 var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
 
-// src/client/proto3d/surface3d.ts
-var base = "assets/tex/";
-var LAYER = {
-  scout: 0,
-  cast: 1,
-  slab: 2,
-  titan: 3,
-  air: 4,
-  rotor: 5,
-  arty: 6,
-  support: 7,
-  carapace: 8,
-  ceramic: 9,
-  brawler: 10,
-  stealth: 11,
-  grating: 12,
-  machinery: 13,
-  dullmetal: 14
-};
-var N_LAYERS = 15;
-var TEX = 512;
-var L0 = {
-  scout: [1, 0.14, 0, 0],
-  cast: [1.2, 0.16, 0, 0],
-  slab: [1.4, 0.14, 0, 0],
-  titan: [1.1, 0.22, 0.3, 0],
-  air: [0.8, 0, 0, 0],
-  rotor: [1, 0, 0, 0],
-  arty: [1, 0, 0, 0],
-  support: [0.7, 0, 0, 0.7],
-  carapace: [0.9, 0, 0, 0],
-  ceramic: [1.1, 0, 0, 0.8],
-  brawler: [1.3, 0, 0.9, 0],
-  stealth: [0.6, 0, 0, 0],
-  grating: [1.3, 0, 0, 0],
-  machinery: [1.2, 0, 0, 0],
-  dullmetal: [1.25, 0, 0, 0.8]
-};
-var L1 = {
-  scout: [0, 0, 0, 0],
-  cast: [0, 0, 0, 0],
-  slab: [0, 0, 0, 0.7],
-  titan: [0, 0, 0, 0],
-  air: [0, 0, 0, 0],
-  rotor: [0, 0, 0, 0.6],
-  arty: [0, 0.55, 0, 0],
-  support: [0, 0, 0, 0],
-  carapace: [0, 0, 0.35, 0],
-  ceramic: [1.6, 0, 0, 0],
-  brawler: [0, 0, 0, 0],
-  stealth: [0, 0, 0, 0],
-  grating: [0, 0, 0, 0],
-  machinery: [0, 0, 0, 0.6],
-  dullmetal: [0, 0, 0, 0.3]
-};
-var UNIT = {
-  scout: [0.8, 0.8, 1, 0],
-  cast: [0.7, 1, 1, 0],
-  slab: [0.75, 1.35, 1, 0],
-  titan: [1.1, 1.2, 0.9, 0],
-  air: [0.45, 0.3, 0.6, 0],
-  rotor: [0.7, 0.8, 0.8, 0],
-  arty: [0.8, 1.2, 1, 0],
-  support: [0.35, 0.45, 0.5, 0],
-  carapace: [0.1, 0.6, 0.7, 0],
-  ceramic: [0.6, 0.45, 0.5, 0],
-  brawler: [1.8, 1.1, 1, 0],
-  stealth: [0.2, 0.4, 0.4, 0],
-  grating: [1, 1, 1, 0],
-  machinery: [1, 1, 1, 0],
-  dullmetal: [1, 0.9, 0.8, 0]
-};
-var L2 = {
-  scout: [0, 0, 0, 0],
-  cast: [0, 0, 0, 0],
-  slab: [0, 0, 0, 0],
-  titan: [0, 0, 0, 0],
-  air: [0, 0, 0, 0],
-  rotor: [0, 0, 0, 0],
-  arty: [0, 0, 0, 0],
-  support: [0, 0, 0, 0],
-  carapace: [0, 0, 0, 0],
-  ceramic: [0.85, 0.2, 0.42, 0.15],
-  brawler: [0, 0, 0, 0],
-  stealth: [0, 0, 0, 0],
-  grating: [0, 0, 0, 0],
-  machinery: [0, 0, 0, 0],
-  dullmetal: [0.88, 0.27, 0.62, 0.1]
-};
-var vec4s = (t, none = [1, 0, 0, 0]) => {
-  const out2 = [];
-  for (let i = 0; i < 16; i++) {
-    const k = Object.keys(LAYER).find((n) => LAYER[n] === i);
-    out2.push(new Vector4(...k ? t[k] : none));
-  }
-  return out2;
-};
-function flatArray() {
-  const t = new DataArrayTexture(new Uint8Array([128, 128, 191, 0]), 1, 1, 1);
-  t.needsUpdate = true;
-  return t;
-}
-function flat(r, g, b) {
-  const t = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat);
-  t.wrapS = t.wrapT = RepeatWrapping;
-  t.needsUpdate = true;
-  return t;
-}
-var surfaceUniforms = {
-  sdA: { value: flatArray() },
-  sdB: { value: flat(0, 0, 128) },
-  sdM: { value: flat(0, 0, 0) },
-  /** 1 when the maps are loaded and detail is enabled */
-  sdOn: { value: 0 },
-  /** global bump strength */
-  sdBump: { value: 0.9 },
-  sdL0: { value: vec4s(L0) },
-  sdL1: { value: vec4s(L1) },
-  sdL2: { value: vec4s(L2, [0, 0, 0, 0]) },
-  sdU: { value: vec4s(UNIT) }
-};
-var loaded = 0;
-var started = false;
-var wanted = true;
-var NEED = 3;
-var sync = () => {
-  surfaceUniforms.sdOn.value = loaded === NEED && wanted ? 1 : 0;
-};
-function loadImage(src) {
-  return new Promise((res, rej) => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = rej;
-    im.src = src;
-  });
-}
-function pixels(im) {
-  const c = document.createElement("canvas");
-  c.width = im.width;
-  c.height = im.height;
-  const g = c.getContext("2d", { willReadFrequently: true });
-  g.drawImage(im, 0, 0);
-  return g.getImageData(0, 0, im.width, im.height).data;
-}
-function loadSurfaceTextures() {
-  if (started || typeof document === "undefined" || typeof Image === "undefined") return;
-  started = true;
-  const done = () => {
-    loaded++;
-    sync();
-  };
-  Promise.all([loadImage(base + "surf_detail.png"), loadImage(base + "surf_mask.png")]).then(([rgb, msk]) => {
-    const a = pixels(rgb), m = pixels(msk);
-    const layers = Math.min(N_LAYERS, Math.floor(rgb.height / TEX));
-    const data = new Uint8Array(TEX * TEX * 4 * layers);
-    for (let l = 0; l < layers; l++) for (let y = 0; y < TEX; y++) {
-      const src = (l * TEX + (TEX - 1 - y)) * TEX * 4, dst = (l * TEX + y) * TEX * 4;
-      for (let x = 0; x < TEX * 4; x += 4) {
-        data[dst + x] = a[src + x];
-        data[dst + x + 1] = a[src + x + 1];
-        data[dst + x + 2] = a[src + x + 2];
-        data[dst + x + 3] = m[src + x];
-      }
-    }
-    const t = new DataArrayTexture(data, TEX, TEX, layers);
-    t.wrapS = t.wrapT = RepeatWrapping;
-    t.minFilter = LinearMipmapLinearFilter;
-    t.magFilter = LinearFilter;
-    t.generateMipmaps = true;
-    t.anisotropy = 8;
-    t.colorSpace = NoColorSpace;
-    t.needsUpdate = true;
-    surfaceUniforms.sdA.value = t;
-    done();
-  }).catch(() => {
-  });
-  const ld = new TextureLoader();
-  ld.load(base + "hull_wear.jpg", (t) => {
-    t.wrapS = t.wrapT = RepeatWrapping;
-    t.colorSpace = NoColorSpace;
-    t.minFilter = LinearMipmapLinearFilter;
-    t.generateMipmaps = true;
-    t.anisotropy = 8;
-    t.needsUpdate = true;
-    surfaceUniforms.sdB.value = t;
-    done();
-  }, void 0, () => {
-  });
-  ld.load(base + "surf_marks.png", (t) => {
-    t.colorSpace = NoColorSpace;
-    t.generateMipmaps = false;
-    t.minFilter = LinearFilter;
-    t.needsUpdate = true;
-    surfaceUniforms.sdM.value = t;
-    done();
-  }, void 0, () => {
-  });
-}
-var SD_VERT_DECL = (
-  /* glsl */
-  `
-attribute vec4 sdv; attribute vec4 sdb;
-varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;`
-);
-var SD_VERT_MAIN = (
-  /* glsl */
-  `
-  vSdP = position; vSdV = sdv; vSdB = sdb;
-  {
-    mat3 sdMv = mat3(modelViewMatrix);
-    #ifdef USE_INSTANCING
-      sdMv = sdMv * mat3(instanceMatrix);
-    #endif
-    vSdAX = normalize(sdMv[0]); vSdAY = normalize(sdMv[1]); vSdAZ = normalize(sdMv[2]);
-  }`
-);
-var SD_FRAG_DECL = (
-  /* glsl */
-  `
-varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;
-uniform highp sampler2DArray sdA; uniform sampler2D sdB; uniform sampler2D sdM; uniform float sdOn; uniform float sdBump;
-uniform vec4 sdL0[16]; uniform vec4 sdL1[16]; uniform vec4 sdL2[16]; uniform vec4 sdU[16];
-float sdCav, sdWear, sdGrime, sdMot, sdMask, sdLayer, sdRegion, sdGiant; vec3 sdGrad; vec3 sdON;
-float sdLayerFor(int mi, float wny) {
-  float w = floor(vSdV.w + 0.5);
-  sdRegion = floor(w / 32.0);
-  float sec = mod(w, 32.0) - 1.0;
-  sdGiant = sec >= 0.0 ? 1.0 : 0.0;
-  bool mech = mi == 3 || mi == 4 || mi >= 16;              // gunmetal, steel, metal finishes (materials.ts METAL_FINISH)
-  if (sdRegion > 1.5 && mech) return 13.0;               // running gear joints / hubs: machinery
-  if (sec >= 0.0 && sdRegion < 0.5) {                     // giant hull: skin by part
-    if (mi == 2) return sec;                              // superstructure panels
-    if (mi == 1 && wny > 0.8) return 12.0;                // decks: grating
-    if (mech) return 13.0;                                // exposed machinery
-  }
-  // each part role wears its own surface, so a hull reads as distinct pieces rather than one skin: dark mechanics are
-  // machinery, light shells clean fine panels (creature / stealth hulls keep their own look all over)
-  float own = floor(vSdV.x + 0.5);
-  if (sec < 0.0 && own != 8.0 && own != 11.0) {
-    if (mi == 1) return 13.0;
-    if (mi == 2) return 4.0;
-  }
-  return own;
-}
-void sdRun(int mi, vec3 nView) {
-  sdCav = 1.0; sdWear = 0.0; sdGrime = 0.0; sdMot = 0.0; sdMask = 0.0; sdGrad = vec3(0.0); sdLayer = 0.0;
-  sdON = normalize(vec3(dot(nView, vSdAX), dot(nView, vSdAY), dot(nView, vSdAZ)));
-  sdLayer = sdLayerFor(mi, sdON.y);
-  if (sdOn < 0.5) return;
-  float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
-  vec3 tw = pow(abs(sdON), vec3(6.0)); tw /= (tw.x + tw.y + tw.z);
-  vec3 p = vSdP * dens;
-  vec2 uX = p.zy + vec2(0.37, 0.11), uY = p.xz + vec2(0.71, 0.29), uZ = p.xy + vec2(0.13, 0.57);
-  vec4 aX = texture(sdA, vec3(uX, sdLayer)), aY = texture(sdA, vec3(uY, sdLayer)), aZ = texture(sdA, vec3(uZ, sdLayer));
-  vec3 bX = texture2D(sdB, uX * 0.5).rgb, bY = texture2D(sdB, uY * 0.5).rgb, bZ = texture2D(sdB, uZ * 0.5).rgb;
-  vec4 a = aX * tw.x + aY * tw.y + aZ * tw.z;
-  vec3 b = bX * tw.x + bY * tw.y + bZ * tw.z;
-  sdCav = a.b / 0.75; sdMask = a.a;
-  float macro = texture2D(sdB, (vSdP.xz + vSdP.yy * vec2(0.6, -0.4)) * 0.17 + vec2(0.5, 0.2)).g;
-  sdWear = b.r; sdGrime = b.g * (0.45 + 0.9 * macro); sdMot = b.b - 0.5 + (0.35 - macro) * 0.35;
-  vec2 sX = aX.rg - 0.5, sY = aY.rg - 0.5, sZ = aZ.rg - 0.5;
-  sdGrad = tw.x * vec3(0.0, sX.y, sX.x) + tw.y * vec3(sY.x, 0.0, sY.y) + tw.z * vec3(sZ.x, sZ.y, 0.0);
-  sdGrad *= sdL0[int(sdLayer)].x;
-}
-/** one glyph of the marks atlas painted on the flank (object x/y), read from the side the fragment faces */
-float sdGlyph(float cell, vec2 c, float h, float sgn) {
-  float u = (vSdP.x - c.x) * sgn / (0.75 * h) + 0.5, v = (vSdP.y - c.y) / h + 0.5;
-  float inb = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
-  return texture2D(sdM, vec2((cell + clamp(u, 0.01, 0.99)) / 12.0, clamp(v, 0.01, 0.99))).r * inb;
-}
-/** the same on the top deck, upright when seen from behind (object z across, x up the glyph) */
-float sdGlyphTop(float cell, vec2 c, float h) {
-  float u = (vSdP.z - c.y) / (0.75 * h) + 0.5, v = (vSdP.x - c.x) / h + 0.5;
-  float inb = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
-  return texture2D(sdM, vec2((cell + clamp(u, 0.01, 0.99)) / 12.0, clamp(v, 0.01, 0.99))).r * inb;
-}`
-);
-var SD_APPLY = (
-  /* glsl */
-  `
-  float sdGlow = 0.0, sdRough = 1.0, sdMetal = 0.0; vec3 sdGradR = vec3(0.0);
-  sdRun(mi, normalize(vNormal));
-  {
-    int sl = int(sdLayer + 0.5);
-    vec4 l0 = sdL0[sl], l1 = sdL1[sl], l2 = sdL2[sl], up = sdU[int(vSdV.z + 0.5)];
-    // fine detail (seams, rivets, small stencils, pits) fades out once a texel is well under a pixel, so a zoomed-out
-    // battle shows clean paint instead of averaged-down grey mud; big features (masks, markings, wear on edges) stay
-    float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
-    float lod = log2(max(length(fwidth(vSdP)) * dens * 512.0, 1e-4));
-    float fine = 1.0 - smoothstep(2.2, 4.0, lod);
-    float det = sdRowDet * fine;
-    float sdW = sdRowWear * up.x, sdGr = sdRowGrime * up.y;
-    // metal skins: the paint gives way to bare metal with a hint of the team hue (team colour stays on the accent mask)
-    float metalK = (mi == 0 || mi == 15) ? l2.x * sdRowDet : 0.0; // armour plates only
-    if (metalK > 0.0) {
-      float lm = max(dot(base, vec3(0.2126, 0.7152, 0.0722)), 0.02);
-      base = mix(base, l2.y * mix(vec3(1.0), base / lm, l2.w), metalK);
-    }
-    base *= mix(1.0, pow(sdCav, 1.5), det);
-    // the skin's special mask: camo / pits / scorch darken, gouges = bare metal, role paint in the team accent,
-    // dust, chitin sheen, soot / oil = grime. Glowing skins split the mask: 0.5 = accent paint, 1 = lights
-    float mk = sdMask * sdRowDet;
-    float gm = l1.x > 0.0 ? smoothstep(0.75, 0.95, sdMask) : 0.0;
-    float am = l1.x > 0.0 ? smoothstep(0.3, 0.5, sdMask) * (1.0 - gm) * sdRowDet : mk;
-    // (camo / pits / scorch: kept subtle -- strong blotches read from above as shadow patches lying on the unit)
-    base *= 1.0 - mk * l0.y;
-    float wearSrc = max(sdWear * up.x, sdMask * l0.z);
-    base = mix(base, sdAccent * (0.85 + 0.2 * sdCav), am * l0.w);
-    // dust (artillery skins): settles low on the hull and in crevices, faint up top -- big pale blotches across the
-    // deck read from the game camera as patches of light and shadow lying on the unit
-    base = mix(base, vec3(0.6, 0.53, 0.42), mk * l1.y * 0.3 * (1.0 - 0.8 * smoothstep(0.1, 0.6, vWY)));
-    base *= 1.0 + mk * l1.z * 0.35;
-    float grimeSrc = max(sdGrime, sdMask * l1.w);
-    sdGlow = gm * sdRowDet * l1.x;
-    // mottling and grime: low on the hull, underneath and in streaks down the sides; top faces stay clean
-    // (darkening only, and gentle: big pale blotches across a hull read from the game camera as cloud shadows
-    // lying on the unit)
-    base *= 1.0 + min(sdMot, 0.0) * 0.22 * sdRowGrime * up.z * (0.4 + 0.6 * fine);
-    float low = 1.0 - smoothstep(0.02, 0.22, vWY); // (thin band: low hulls must not be grimed all over)
-    float topClean = mix(1.0, 0.3, smoothstep(0.5, 0.9, wn.y));
-    float gr = clamp(grimeSrc * (0.6 + 0.6 * low) * topClean + sdGiant * 0.5 * smoothstep(-0.2, -0.7, wn.y), 0.0, 1.0) * sdGr;
-    base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.65);
-    // chipped paint: bare metal, concentrated on chamfer edges
-    // (edges only: chips spreading over flat faces made large grey patches that looked like shadows on the unit)
-    float wm = wearSrc * sdRowWear * (0.05 + 1.6 * bev);
-    wm = smoothstep(0.55, 0.8, wm);
-    base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
-    sdMetal = max(wm, metalK * 0.75); sdRough = mix(mix(1.0 + gr * 0.3, l2.z, metalK), 0.55, wm);
-    if (sdOn > 0.5) {
-      // giants: hazard bands on turret collars (the trim row of a turret)
-      if (sdGiant > 0.5 && sdRegion > 0.5 && sdRegion < 1.5 && mi == 1 && abs(sdON.y) < 0.5) {
-        float hz = step(0.5, fract((vSdP.x + vSdP.y + vSdP.z) * 5.0));
-        base = mix(base, mix(vec3(0.08), vec3(0.85, 0.64, 0.16), hz), 0.85 * (1.0 - wm * 0.7));
-      }
-      // heavy and bigger units: a hull number + insignia + kill tally on the flanks, the number again on the rear deck
-      if (vSdB.z > 0.0 && (mi == 0 || mi == 2)) {
-        float sgn = sign(sdON.z), side = smoothstep(0.6, 0.8, abs(sdON.z));
-        float h = vSdB.z; vec2 c = vSdB.xy;
-        float num = floor(vSdB.w + 0.5);
-        float gNum = max(sdGlyph(floor(num / 10.0), c - vec2(0.4 * h * sgn, 0.0), h, sgn), sdGlyph(mod(num, 10.0), c + vec2(0.4 * h * sgn, 0.0), h, sgn));
-        float gTally = sdGlyph(10.0, c - vec2(0.0, 0.82 * h), 0.5 * h, sgn) * side;
-        float gIns = sdGlyph(11.0, c - vec2(2.1 * h, 0.0), 1.15 * h, sgn) * side;
-        float th = 1.25 * h, tx = c.x - 3.2 * h, top = smoothstep(0.8, 0.92, sdON.y) * (mi == 0 ? 1.0 : 0.0);
-        gNum = max(gNum * side, top * max(sdGlyphTop(floor(num / 10.0), vec2(tx, -0.4 * th), th), sdGlyphTop(mod(num, 10.0), vec2(tx, 0.4 * th), th)));
-        float keep = 1.0 - 0.75 * smoothstep(0.3, 0.6, wearSrc);
-        base = mix(base, vec3(0.88, 0.87, 0.82), max(gNum, gTally) * keep * 0.92);
-        base = mix(base, sdAccent, gIns * keep * 0.9);
-      }
-    }
-    sdGradR = sdGrad * det;
-  }`
-);
-var sdBumpGLSL = (g) => (
-  /* glsl */
-  `
-  if (sdOn > 0.5) {
-    vec3 sdG = (vSdAX * (${g}).x + vSdAY * (${g}).y + vSdAZ * (${g}).z) * sdBump;
-    normal = normalize(normal - (sdG - normal * dot(normal, sdG)));
-  }`
-);
-
-// src/client/proto3d/materials.ts
-function rng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = a + 1831565813 >>> 0;
-    let t = a;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function makePanelTexture() {
-  const N = 1024;
-  const mk = () => {
-    const c = document.createElement("canvas");
-    c.width = c.height = N;
-    return c;
-  };
-  const cr = mk(), cg = mk(), cb = mk();
-  const gr = cr.getContext("2d"), gg = cg.getContext("2d"), gb = cb.getContext("2d");
-  const r = rng(4242);
-  gr.fillStyle = "rgb(206,206,206)";
-  gr.fillRect(0, 0, N, N);
-  gg.fillStyle = "rgb(150,150,150)";
-  gg.fillRect(0, 0, N, N);
-  gb.fillStyle = "#000";
-  gb.fillRect(0, 0, N, N);
-  const panels = [];
-  const split = (x, y, w, h, d) => {
-    const minS = 150;
-    if (w < minS * 1.6 && h < minS * 1.6 || d > 4 || d > 1 && r() < 0.18) {
-      panels.push([x, y, w, h]);
-      return;
-    }
-    const vert = w > h ? true : h > w ? false : r() < 0.5;
-    const cut = 0.38 + r() * 0.24;
-    if (vert && w > minS * 1.3) {
-      split(x, y, w * cut, h, d + 1);
-      split(x + w * cut, y, w * (1 - cut), h, d + 1);
-    } else if (!vert && h > minS * 1.3) {
-      split(x, y, w, h * cut, d + 1);
-      split(x, y + h * cut, w, h * (1 - cut), d + 1);
-    } else panels.push([x, y, w, h]);
-  };
-  split(0, 0, N, N, 0);
-  for (const [x, y, w, h] of panels) {
-    const tint = 190 + r() * 38;
-    gr.fillStyle = `rgb(${tint},${tint},${tint})`;
-    gr.fillRect(x, y, w, h);
-    const lg = gr.createLinearGradient(x, y, x + w * (r() < 0.5 ? 1 : 0.2), y + h * (r() < 0.5 ? 1 : 0.2));
-    lg.addColorStop(0, "rgba(255,255,255,0.05)");
-    lg.addColorStop(1, "rgba(0,0,0,0.07)");
-    gr.fillStyle = lg;
-    gr.fillRect(x, y, w, h);
-    gg.strokeStyle = "rgb(40,40,40)";
-    gg.lineWidth = 4;
-    gg.strokeRect(x + 2, y + 2, w - 4, h - 4);
-    gg.strokeStyle = "rgb(190,190,190)";
-    gg.lineWidth = 2;
-    gg.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
-    gr.strokeStyle = "rgba(20,20,20,0.45)";
-    gr.lineWidth = 2.5;
-    gr.strokeRect(x + 2, y + 2, w - 4, h - 4);
-    for (let px2 = x + 14; px2 < x + w - 10; px2 += 36) for (const py2 of [y + 14, y + h - 14]) {
-      gg.fillStyle = "rgb(235,235,235)";
-      gg.beginPath();
-      gg.arc(px2, py2, 2.6, 0, 7);
-      gg.fill();
-    }
-    for (let py2 = y + 14; py2 < y + h - 10; py2 += 36) for (const px2 of [x + 14, x + w - 14]) {
-      gg.fillStyle = "rgb(235,235,235)";
-      gg.beginPath();
-      gg.arc(px2, py2, 2.6, 0, 7);
-      gg.fill();
-    }
-    for (let i = 0; i < w / 6; i++) {
-      const o = r() < 0.5;
-      const px2 = x + r() * w, py2 = o ? y + 5 + r() * 6 : y + h - 11 + r() * 6;
-      gb.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.5})`;
-      gb.fillRect(px2, py2, 2 + r() * 9, 1 + r() * 3);
-    }
-    for (let i = 0; i < h / 6; i++) {
-      const o = r() < 0.5;
-      const px2 = o ? x + 5 + r() * 6 : x + w - 11 + r() * 6, py2 = y + r() * h;
-      gb.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.5})`;
-      gb.fillRect(px2, py2, 1 + r() * 3, 2 + r() * 9);
-    }
-    const f = r();
-    if (f < 0.3 && w > 90 && h > 90) {
-      const hw = w * (0.35 + r() * 0.25), hh = h * (0.3 + r() * 0.25), hx = x + (w - hw) / 2, hy = y + (h - hh) / 2;
-      gg.fillStyle = "rgb(176,176,176)";
-      gg.fillRect(hx, hy, hw, hh);
-      gg.strokeStyle = "rgb(50,50,50)";
-      gg.lineWidth = 3;
-      gg.strokeRect(hx, hy, hw, hh);
-      gg.fillStyle = "rgb(60,60,60)";
-      gg.fillRect(hx + hw * 0.4, hy + hh * 0.45, hw * 0.2, 7);
-    } else if (f < 0.5 && w > 90 && h > 90) {
-      const sx = x + w * 0.2, sw = w * 0.6;
-      for (let k = 0; k < 6; k++) {
-        gg.fillStyle = "rgb(24,24,24)";
-        gg.fillRect(sx, y + h * 0.25 + k * (h * 0.5 / 6), sw, 5);
-        gr.fillStyle = "rgba(10,10,10,0.6)";
-        gr.fillRect(sx, y + h * 0.25 + k * (h * 0.5 / 6), sw, 5);
-      }
-    } else if (f < 0.62) {
-      gr.fillStyle = "rgba(255,255,255,0.06)";
-      gr.fillRect(x + 12, y + 12, w - 24, h - 24);
-    }
-  }
-  for (let i = 0; i < 90; i++) {
-    const x = r() * N, y = r() * N, l = 40 + r() * 200;
-    const g2 = gr.createLinearGradient(x, y, x, y + l);
-    g2.addColorStop(0, "rgba(30,24,16,0.0)");
-    g2.addColorStop(0.2, `rgba(30,24,16,${0.08 + r() * 0.1})`);
-    g2.addColorStop(1, "rgba(30,24,16,0)");
-    gr.fillStyle = g2;
-    gr.fillRect(x, y, 2 + r() * 5, l);
-  }
-  for (let i = 0; i < 160; i++) {
-    const x = r() * N, y = r() * N, rad = 12 + r() * 60;
-    const g2 = gr.createRadialGradient(x, y, 0, x, y, rad);
-    const dark = r() < 0.7;
-    g2.addColorStop(0, dark ? "rgba(25,20,14,0.10)" : "rgba(255,255,255,0.07)");
-    g2.addColorStop(1, "rgba(0,0,0,0)");
-    gr.fillStyle = g2;
-    gr.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-  }
-  gb.strokeStyle = "rgba(255,255,255,0.55)";
-  gb.lineWidth = 1;
-  for (let i = 0; i < 160; i++) {
-    const x = r() * N, y = r() * N;
-    gb.beginPath();
-    gb.moveTo(x, y);
-    gb.lineTo(x + (r() - 0.5) * 60, y + (r() - 0.5) * 24);
-    gb.stroke();
-  }
-  const out2 = new Uint8Array(N * N * 4);
-  const dr = gr.getImageData(0, 0, N, N).data, dg = gg.getImageData(0, 0, N, N).data, db = gb.getImageData(0, 0, N, N).data;
-  for (let i = 0; i < N * N; i++) {
-    out2[i * 4] = dr[i * 4];
-    out2[i * 4 + 1] = dg[i * 4];
-    out2[i * 4 + 2] = db[i * 4];
-    out2[i * 4 + 3] = 255;
-  }
-  const t = new DataTexture(out2, N, N, RGBAFormat);
-  t.wrapS = t.wrapT = RepeatWrapping;
-  t.minFilter = LinearMipmapLinearFilter;
-  t.magFilter = LinearFilter;
-  t.generateMipmaps = true;
-  t.anisotropy = 8;
-  t.needsUpdate = true;
-  return t;
-}
-function makeDecalAtlas(accent2) {
-  const S = 512, T = 128;
-  const c = document.createElement("canvas");
-  c.width = c.height = S;
-  const g = c.getContext("2d");
-  const tile = (i) => [i % 4 * T, Math.floor(i / 4) * T];
-  {
-    const [x, y] = tile(0);
-    g.save();
-    g.beginPath();
-    g.rect(x + 2, y + 2, T - 4, T - 4);
-    g.clip();
-    g.fillStyle = "#d3a92e";
-    g.fillRect(x, y, T, T);
-    g.fillStyle = "#17181a";
-    for (let k = -T; k < T * 2; k += 32) {
-      g.beginPath();
-      g.moveTo(x + k, y + T);
-      g.lineTo(x + k + 16, y + T);
-      g.lineTo(x + k + 16 + T, y);
-      g.lineTo(x + k + T, y);
-      g.fill();
-    }
-    g.restore();
-  }
-  {
-    const [x, y] = tile(1);
-    g.fillStyle = accent2;
-    g.beginPath();
-    g.moveTo(x + 14, y + 20);
-    g.lineTo(x + 70, y + 20);
-    g.lineTo(x + 114, y + 64);
-    g.lineTo(x + 70, y + 108);
-    g.lineTo(x + 14, y + 108);
-    g.lineTo(x + 58, y + 64);
-    g.fill();
-  }
-  {
-    const [x, y] = tile(2);
-    g.fillStyle = accent2;
-    g.fillRect(x + 6, y + 14, T - 12, 28);
-    g.fillRect(x + 6, y + 56, T - 12, 14);
-    g.fillRect(x + 6, y + 84, T - 12, 14);
-  }
-  {
-    const [x, y] = tile(3);
-    g.strokeStyle = accent2;
-    g.lineWidth = 10;
-    g.beginPath();
-    g.arc(x + 64, y + 64, 44, 0, 7);
-    g.stroke();
-    g.fillStyle = accent2;
-    g.beginPath();
-    g.arc(x + 64, y + 64, 20, 0, 7);
-    g.fill();
-  }
-  g.fillStyle = "#dcdfd6";
-  g.font = "700 104px Arial Narrow, Arial, sans-serif";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  for (let d = 0; d < 10; d++) {
-    const [x, y] = tile(4 + d);
-    g.fillText(String(d), x + 64, y + 70);
-  }
-  {
-    const [x, y] = tile(14);
-    g.fillStyle = "#dcdfd6";
-    g.fillRect(x + 8, y + 52, T - 16, 22);
-  }
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
-}
-var atlasUV = (i) => {
-  const x = i % 4 / 4, y = 1 - (Math.floor(i / 4) + 1) / 4;
-  return [x + 4e-3, y + 4e-3, x + 0.25 - 4e-3, y + 0.25 - 4e-3];
-};
-var panelTex = null;
-var cache = /* @__PURE__ */ new Map();
-var GLSL_FNS = (
-  /* glsl */
-  `
-float h31(vec3 p){ p=fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
-float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
-  return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
-             mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x), mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y), f.z); }
-vec3 triBump(vec3 sp, vec3 sn, vec2 dH, float fd){
-  vec3 sx = normalize(dFdx(sp)), sy = normalize(dFdy(sp));
-  vec3 r1 = cross(sy, sn), r2 = cross(sn, sx);
-  float det = dot(sx, r1) * fd;
-  vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
-  return normalize(abs(det) * sn - grad);
-}`
-);
-function paint(color, o = {}) {
-  const key = JSON.stringify([color, o]);
-  let m = cache.get(key);
-  if (m) return m;
-  panelTex ??= makePanelTexture();
-  const tex = panelTex;
-  m = new MeshStandardMaterial({ color, roughness: o.rough ?? 0.7, metalness: o.metal ?? 0.2, envMapIntensity: 1 });
-  const col = (s) => new Color(s);
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.triMap = { value: tex };
-    sh.uniforms.triScale = { value: o.scale ?? 0.8 };
-    sh.uniforms.camoA = { value: col(o.camo?.[0] ?? "#000") };
-    sh.uniforms.camoB = { value: col(o.camo?.[1] ?? "#000") };
-    sh.uniforms.camoC = { value: col(o.camo?.[2] ?? "#000") };
-    sh.uniforms.camoOn = { value: o.camo ? 1 : 0 };
-    sh.uniforms.camoScale = { value: o.camoScale ?? 1.1 };
-    sh.uniforms.wearAmt = { value: o.wear ?? 0.7 };
-    sh.uniforms.bumpK = { value: o.bump ?? 2.2 };
-    sh.uniforms.dirtAmt = { value: o.dirt ?? 1 };
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vTP; varying vec3 vTN; varying float vWY;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvTP = position; vTN = normal; vWY = (modelMatrix * vec4(position, 1.0)).y;");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vTP; varying vec3 vTN; varying float vWY; uniform sampler2D triMap; uniform float triScale; uniform vec3 camoA; uniform vec3 camoB; uniform vec3 camoC; uniform float camoOn; uniform float camoScale; uniform float wearAmt; uniform float bumpK; uniform float dirtAmt;\n" + GLSL_FNS).replace(
-      "#include <map_fragment>",
-      /* glsl */
-      `
-        vec3 tb = pow(abs(normalize(vTN)), vec3(8.0)); tb /= (tb.x + tb.y + tb.z);
-        vec3 tp = vTP * triScale;
-        vec3 tc = texture2D(triMap, tp.zy).rgb * tb.x + texture2D(triMap, tp.xz + vec2(.37, .11)).rgb * tb.y + texture2D(triMap, tp.xy + vec2(.71, .53)).rgb * tb.z;
-        float tH = tc.g; float tWear = tc.b;
-        if (camoOn > 0.5) {
-          vec3 cp = vTP * camoScale;
-          float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
-          float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
-          vec3 cc = camoA;
-          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
-          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
-          diffuseColor.rgb = cc;
-        }
-        diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
-        diffuseColor.rgb *= 0.86 + 0.14 * vn(vTP * 1.7);
-        float dirt = smoothstep(0.5, 0.0, vWY) * (0.3 + 0.7 * vn(vTP * 7.0)) * dirtAmt;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.17, 0.12) * (0.6 + 0.8 * tc.r), dirt * 0.62);
-        float wearM = tWear * wearAmt * smoothstep(0.25, 0.7, vn(vTP * 8.0 + 5.0));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.43, 0.43, 0.42), wearM * 0.8);`
-    ).replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor * (1.12 - wearM * 0.55) + dirt * 0.18, 0.05, 1.0);").replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.85, clamp(wearM * 1.4, 0.0, 1.0));").replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = triBump(-vViewPosition, normal, vec2(dFdx(tH), dFdy(tH)) * bumpK, faceDirection);");
-  };
-  m.customProgramCacheKey = () => "tri2";
-  cache.set(key, m);
-  return m;
-}
-var N_ROWS = 21;
-function makeUber(rows) {
-  const A2 = [], B = [], E = [], M = [];
-  for (let i = 0; i < N_ROWS; i++) {
-    const r = rows[i] ?? rows[0];
-    const c = new Color(r.color);
-    const lit = (r.emI ?? 0) > 0 && r.color === "#000000";
-    A2.push(new Vector4(c.r, c.g, c.b, lit ? 0 : r.det ?? 1));
-    B.push(new Vector4(r.bev ?? 1, r.rim ?? 1, lit ? 0 : r.wear ?? 1, r.ao ?? 1));
-    const e = new Color(r.em ?? "#000");
-    E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), lit ? 0 : r.grime ?? 1));
-    M.push(new Vector4(lit ? 1 : r.rough ?? 0.5, lit ? 0 : r.metal ?? 0.1, 0, 0));
-  }
-  const m = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.5, metalness: 0.1, envMapIntensity: 1 });
-  loadSurfaceTextures();
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.uA = { value: A2 };
-    sh.uniforms.uB = { value: B };
-    sh.uniforms.uE = { value: E };
-    sh.uniforms.uM = { value: M };
-    Object.assign(sh.uniforms, surfaceUniforms);
-    sh.uniforms.rimCol = { value: new Color("#a9c8ff") };
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;" + SD_VERT_DECL).replace("#include <begin_vertex>", `#include <begin_vertex>
-        vMid = mid;${SD_VERT_MAIN}
-        vec4 wpS = vec4(transformed, 1.0);
-        #ifdef USE_INSTANCING
-          wpS = instanceMatrix * wpS;
-        #endif
-        vWY = (modelMatrix * wpS).y;`).replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvWN = inverseTransformDirection(transformedNormal, viewMatrix);");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
-varying float vMid; varying vec3 vWN; varying float vWY;
-uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec4 uM[${N_ROWS}]; uniform vec3 rimCol;${SD_FRAG_DECL}`).replace(
-      "#include <map_fragment>",
-      /* glsl */
-      `
-        int mi = int(floor(vMid + 0.5));
-        vec4 rA = uA[mi], rB = uB[mi], rM = uM[mi];
-        vec3 wn = normalize(vWN);
-        vec3 base = rA.rgb;
-        // per-part value / hue jitter: Bld.g() writes a small per-call offset into the fraction of the row id, so
-        // neighbouring plates of the same role are not cast from one piece (+-6% value, a touch warmer / cooler)
-        float pj = clamp((vMid - float(mi)) * 5.0, -1.0, 1.0);
-        base *= 1.0 + pj * 0.06 * rB.w;
-        base += vec3(0.006, 0.0, -0.006) * pj * rB.w;
-        // armour plating: the team-armour row is broken into plates of different paint -- team colour, light shell,
-        // near-black team shade -- with dark seams, laid out in object space on the face's dominant plane (so every
-        // chassis, flat or sloped, reads as an assembly of distinct plates instead of one moulded colour). Each plate
-        // is a cell of a grid sized to the unit (its skin's texel density), split once across at a random point.
-        // Creature and stealth skins keep their own look.
-        float plateSeam = 0.0;
-        float skinL = floor(vSdV.x + 0.5);
-        if (mi == 0 && skinL != 8.0 && skinL != 11.0) {
-          vec3 n = normalize(vNormal);
-          vec3 on = abs(vec3(dot(n, vSdAX), dot(n, vSdAY), dot(n, vSdAZ)));
-          float ax = on.y >= max(on.x, on.z) ? 0.0 : (on.x > on.z ? 1.0 : 2.0);
-          vec2 q = ax == 0.0 ? vSdP.xz : (ax == 1.0 ? vSdP.zy : vSdP.xy);
-          float S = 0.62 / max(0.3, vSdV.y > 0.001 ? vSdV.y : 0.8);
-          vec2 gq = q / S + vec2(0.31, 0.17) + ax * vec2(0.37, 0.71);
-          vec2 c = floor(gq), f = fract(gq);
-          float h1 = fract(sin(dot(c + ax * 7.0, vec2(127.1, 311.7))) * 43758.5453);
-          float cut = 0.3 + 0.4 * fract(h1 * 13.7);
-          bool cx = fract(h1 * 7.13) < 0.5;
-          float side = step(cut, cx ? f.x : f.y);
-          float id = fract(sin(dot(c + ax * 7.0 + side * vec2(17.0, 31.0), vec2(269.5, 183.3))) * 43758.5453);
-          float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-          e = min(e, abs((cx ? f.x : f.y) - cut)) * S; // distance to the plate edge, object units
-          float px = max(fwidth(gq.x), fwidth(gq.y)) * S;
-          plateSeam = 1.0 - smoothstep(0.012 + px * 0.5, 0.024 + px, e);
-          vec3 shell = uA[2].rgb * (0.97 + 0.06 * fract(id * 31.0)), dark = uA[15].rgb;
-          base = id < 0.5 ? base : id < 0.76 ? shell : dark;
-          // a bright worn bevel just inside each plate edge
-          base *= 1.0 + 0.1 * (1.0 - smoothstep(0.024 + px, 0.05 + px, e)) * (1.0 - plateSeam);
-          base *= 1.0 - 0.6 * plateSeam;
-        }
-        // painted top-light (subtle: the lighting does the form) + darker undersides (fake AO for faces looking down)
-        base *= mix(0.86, 1.02, smoothstep(-0.7, 0.85, wn.y));
-        base *= mix(1.0, mix(0.72, 1.0, smoothstep(-0.75, -0.05, wn.y)), rB.w);
-        // bevel brightening on chamfers (normals between side and up): barely there, real plates have sharp edges
-        float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
-        base = mix(base, base * 1.04 + vec3(0.004), bev * rB.x);
-        // grounded: dust on the running gear right at the ground (wheels, track bottoms, feet), a little ground-contact
-        // darkening; a fixed band, so it must stay thin: a 0.5-cell band covered whole low hulls (wheeled / half-track
-        // scouts and raiders came out sand-washed head to toe while walkers above it stayed clean)
-        float dustK = (1.0 - smoothstep(0.0, 0.14, vWY)) * rB.w * 0.6;
-        base *= mix(1.0, mix(0.8, 1.0, smoothstep(0.0, 0.18, vWY)), rB.w);
-        base = mix(base, vec3(0.43, 0.37, 0.28) * (0.75 + 0.5 * dot(base, vec3(0.33))), dustK * (0.28 + 0.2 * smoothstep(0.3, -0.3, wn.y)));
-        // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
-        float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
-        ${SD_APPLY}
-        diffuseColor.rgb = base;`
-    ).replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
-        // row roughness, scaled by the skin (grime roughens, chipped edges are bare satin metal)
-        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5) + pj * 0.05 * rB.w + dustK * 0.15, 0.08, 1.0);`).replace("#include <metalnessmap_fragment>", `#include <metalnessmap_fragment>
-        metalnessFactor = mix(rM.y, 0.8, sdMetal * 0.8);`).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
-        totalEmissiveRadiance = uE[mi].rgb + uE[10].rgb * sdGlow * 0.5;
-        float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-        totalEmissiveRadiance += rimCol * fres * 0.08 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
-  };
-  m.customProgramCacheKey = () => "uberPBR2";
-  return m;
-}
-var PAINT_PLAN = {
-  armor: "hull",
-  armor2: "hull2",
-  shell: "panel",
-  mech: "trim",
-  joint: "metal"
-};
-var TEAM_PAINT = [
-  ["#3b5d9c", "#1a2338", "#b4b6b0", "#4a5258"],
-  ["#9b3a27", "#36170f", "#bab0a3", "#5c5248"]
-];
-var METAL_FINISH = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20 };
-var FINISH_ROWS = [
-  /* chrome */
-  { color: "#646b74", rough: 0.2, metal: 1, bev: 0.7, det: 0.22, wear: 0.1, grime: 0.45 },
-  /* blued  */
-  { color: "#2f3a4c", rough: 0.3, metal: 0.88, bev: 0.6, det: 0.35, wear: 0.3, grime: 0.6 },
-  /* bronze */
-  { color: "#6a5234", rough: 0.36, metal: 0.9, bev: 0.6, det: 0.4, wear: 0.25, grime: 0.75 },
-  /* copper */
-  { color: "#93553a", rough: 0.28, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.15, grime: 0.6 },
-  /* brass  */
-  { color: "#9b7f42", rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 }
-];
-var kits = [null, null];
-var finKits = /* @__PURE__ */ new Map();
-function makeKit(team, fin3 = {}) {
-  const base3 = baseKit(team);
-  const j = fin3.joint ?? "gunmetal", f = fin3.fitting ?? j;
-  if (j === "gunmetal" && f === "gunmetal") return base3;
-  const key = `${team}|${j}|${f}`;
-  let k = finKits.get(key);
-  if (!k) {
-    const rowMat = (fi) => ({ uid: METAL_FINISH[fi], base: base3.uber });
-    const jm = j === "gunmetal" ? base3.metal : rowMat(j);
-    const fm = f === j ? jm : f === "gunmetal" ? base3.metal : rowMat(f);
-    k = { ...base3, metal: jm, joint: jm, fitting: fm, finish: { joint: j, fitting: f } };
-    finKits.set(key, k);
-  }
-  return k;
-}
-function baseKit(team) {
-  const hit = kits[team];
-  if (hit) return hit;
-  const p = TEAM_PAL[team];
-  const names = ["hull", "trim", "panel", "metal", "steel", "rubber", "glass", "canvas", "hazard", "accent", "glow", "lamp", "hot", "plasma", "rail", "hull2"];
-  const tp = TEAM_PAINT[team];
-  const rows = [
-    /* hull   */
-    { color: tp[0], rough: 0.58, metal: 0.06, det: 0.85, grime: 0.8, wear: 0.85 },
-    /* trim   */
-    { color: "#1d2023", rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
-    /* panel  */
-    { color: tp[2], rough: 0.6, metal: 0.03, det: 0.75, grime: 0.6, wear: 0.9 },
-    /* metal  */
-    { color: "#474e55", rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
-    /* steel  */
-    { color: "#b3bac0", rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
-    /* rubber */
-    { color: "#1b1c1e", rough: 0.88, metal: 0, bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.1 },
-    /* glass  */
-    { color: "#14262f", rough: 0.08, metal: 0.3, bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.2 },
-    /* canvas */
-    { color: tp[3], rough: 0.85, metal: 0, det: 0.12, wear: 0.2 },
-    /* hazard */
-    { color: "#c99a32", rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
-    /* accent */
-    { color: p.accent, rough: 0.55, metal: 0.05, bev: 0.3, det: 0.35, wear: 0.6, grime: 0.4 },
-    /* glow   */
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.6 },
-    /* lamp   */
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ffe8c4", emI: 1.45 },
-    /* hot    */
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ff7a2a", emI: 2.6 },
-    /* plasma */
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#79f0d6", emI: 2 },
-    /* rail   */
-    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#86adff", emI: 2.4 },
-    /* hull2  */
-    { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
-    ...FINISH_ROWS
-    // 16..20: METAL_FINISH
-  ];
-  const uber = makeUber(rows);
-  const decalTex = makeDecalAtlas(p.accent);
-  const kit = {
-    decal: new MeshStandardMaterial({ map: decalTex, roughness: 0.68, metalness: 0.02, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
-    uber,
-    pal: p
-  };
-  names.forEach((n, i) => {
-    kit[n] = { uid: i, base: uber };
-  });
-  for (const [role, slot] of Object.entries(PAINT_PLAN)) kit[role] = kit[slot];
-  kit.fitting = kit.metal;
-  kit.finish = { joint: "gunmetal", fitting: "gunmetal" };
-  kits[team] = kit;
-  return kits[team];
-}
-
-// src/client/proto3d/chassis/hs-kit.ts
-var fineFor = (S) => S >= 2;
-var v3 = (a) => new Vector3(a[0], a[1], a[2]);
-var add = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
-var lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-function frame(p, n, along = [1, 0, 0]) {
-  const y = v3(n).normalize();
-  const x = v3(along).addScaledVector(y, -v3(along).dot(y));
-  if (x.lengthSq() < 1e-8) x.set(0, 0, 1).addScaledVector(y, -y.z);
-  x.normalize();
-  const z = new Vector3().crossVectors(x, y);
-  return new Matrix4().makeBasis(x, y, z).setPosition(p[0], p[1], p[2]);
-}
-function sub2(F, x, y, z, rx = 0, ry = 0, rz = 0) {
-  const m = new Matrix4().makeRotationFromEuler(new Euler(rx, ry, rz, "YXZ")).setPosition(x, y, z);
-  return F.clone().multiply(m);
-}
-var rectP = (w, d, c = 0, cx = 0, cz = 0) => chamRect(w, d, c).map(([x, z]) => [x + cx, z + cz]);
-function trapP(l, wf, wb, c = 0) {
-  const x = l / 2;
-  if (c <= 0) return [[-x, -wb / 2], [x, -wf / 2], [x, wf / 2], [-x, wb / 2]];
-  return [[-x, -wb / 2 + c], [-x + c, -wb / 2], [x - c, -wf / 2], [x, -wf / 2 + c], [x, wf / 2 - c], [x - c, wf / 2], [-x + c, wb / 2], [-x, wb / 2 - c]];
-}
-function inset(p, d) {
-  const n = p.length;
-  let area2 = 0;
-  for (let i = 0; i < n; i++) {
-    const a = p[i], b = p[(i + 1) % n];
-    area2 += a[0] * b[1] - b[0] * a[1];
-  }
-  const s = area2 > 0 ? 1 : -1;
-  const lines = p.map((a, i) => {
-    const b = p[(i + 1) % n];
-    const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
-    const nx = -dz / l * s, nz = dx / l * s;
-    return { px: a[0] + nx * d, pz: a[1] + nz * d, dx, dz };
-  });
-  return p.map((q, i) => {
-    const A2 = lines[(i + n - 1) % n], B = lines[i];
-    const den = A2.dx * B.dz - A2.dz * B.dx;
-    if (Math.abs(den) < 1e-9) return [B.px, B.pz];
-    const t = ((B.px - A2.px) * B.dz - (B.pz - A2.pz) * B.dx) / den;
-    void q;
-    return [A2.px + A2.dx * t, A2.pz + A2.dz * t];
-  });
-}
-function armorPlate(b, kit, mat, F, poly, thick, o = {}) {
-  const so = o.standoff ?? thick * 0.45;
-  const gap = o.gap ?? thick * 0.9;
-  const back = o.back === void 0 ? kit.mech : o.back;
-  if (back && so > 5e-4) b.g(slabGeo(inset(poly, gap), so + thick * 0.2, 0), back, F);
-  const bev = Math.min(o.bev ?? thick * 0.22, thick * 0.45);
-  if (o.taper !== void 0 && o.taper < 1) {
-    const top = inset(poly, (1 - o.taper) * 0.5 * Math.min(spanOf(poly, 0), spanOf(poly, 1)));
-    b.loft(mat, [poly.map(([x, z]) => [x, so, z]), poly.map(([x, z]) => [x, so + thick * 0.55, z]), top.map(([x, z]) => [x, so + thick, z])], true, true, F);
-  } else b.g(slabGeo(poly, thick, bev), mat, F.clone().multiply(new Matrix4().makeTranslation(0, so, 0)));
-  return so + thick;
-}
-var spanOf = (p, k) => Math.max(...p.map((q) => q[k])) - Math.min(...p.map((q) => q[k]));
-function plateStack(b, kit, mat, F, poly, layers, o = {}) {
-  let y = 0;
-  layers.forEach((L, i) => {
-    const [sx, sz] = L.shift ?? [0, 0];
-    const p = inset(poly, L.inset).map(([x, z]) => [x + sx, z + sz]);
-    y += armorPlate(b, kit, L.mat ?? mat, sub2(F, 0, y, 0), p, L.thick, { ...o, standoff: L.standoff ?? (i === 0 ? o.standoff : L.thick * 0.35) });
-  });
-  return y;
-}
-function recessPanel(b, kit, F, w, d, depth, o = {}) {
-  const rim = o.rim ?? Math.min(w, d) * 0.12;
-  const fm = o.frame ?? kit.armor2;
-  for (const s of [-1, 1]) {
-    b.g(bevBox(w, depth, rim, rim * 0.25), fm, sub2(F, 0, depth / 2, s * (d / 2 - rim / 2)));
-    b.g(bevBox(rim, depth, d - rim * 2, rim * 0.25), fm, sub2(F, s * (w / 2 - rim / 2), depth / 2, 0));
-  }
-  b.g(new BoxGeometry(w - rim * 1.6, depth * 0.3, d - rim * 1.6), o.floor ?? kit.mech, sub2(F, 0, depth * 0.15, 0));
-  const n = o.slats ?? 0;
-  for (let i = 0; i < n; i++) {
-    const z = -d / 2 + rim + (d - rim * 2) * (i + 0.5) / n;
-    b.g(new BoxGeometry(w - rim * 2.2, depth * 0.16, (d - rim * 2) / n * 0.62), o.slatMat ?? kit.joint, sub2(F, 0, depth * 0.62, z, 0.5, 0, 0));
-  }
-}
-function hexSec(x, yb, wb, ws, ys0, ys1, wt, yt, zc = 0) {
-  return [[x, yb, zc - wb], [x, yb, zc + wb], [x, ys0, zc + ws], [x, ys1, zc + ws], [x, yt, zc + wt], [x, yt, zc - wt], [x, ys1, zc - ws], [x, ys0, zc - ws]];
-}
-function hull2d(pts) {
-  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const lo = [], up = [];
-  for (const q of p) {
-    while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop();
-    lo.push(q);
-  }
-  for (let i = p.length - 1; i >= 0; i--) {
-    const q = p[i];
-    while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop();
-    up.push(q);
-  }
-  up.pop();
-  lo.pop();
-  return [...lo, ...up];
-}
-function trackSystem(b, kit, o) {
-  const { L, h, w, z, side } = o;
-  const t = Math.max(0.016, h * 0.075);
-  let rw = h * 0.25, wy = t + rw;
-  const Rs = h * 0.27, xs = -L / 2 + Rs + t, ys = h * 0.6;
-  const Ri = h * 0.22, xi = L / 2 - Ri - t, yi = h * 0.55;
-  const x0 = xs + Rs * 0.75 + rw, x1 = xi - Ri * 0.5 - rw;
-  const span = Math.max(0, x1 - x0);
-  const nW = o.wheels ?? Math.max(2, Math.min(7, Math.round(span / (rw * 2.15)) + 1));
-  if (o.bigWheels) {
-    rw = Math.min(h * 0.36, (span + rw * 2) / (nW * 2.05));
-    wy = t + rw;
-  }
-  const wheelsX = nW === 1 || span < 1e-3 ? [(x0 + x1) / 2] : Array.from({ length: nW }, (_, i) => x0 + span * i / Math.max(1, nW - 1));
-  const nR = o.rollers ?? 3, rr = h * 0.075;
-  const yr = ys + Rs - rr + h * 5e-3;
-  const rollersX = Array.from({ length: nR }, (_, i) => x0 + (x1 - x0) * (i + 0.5 + (nR === 3 ? 0 : 0)) / nR);
-  const circ = [[xs, ys, Rs], [xi, yi, Ri], ...wheelsX.map((x) => [x, wy, rw]), ...rollersX.map((x) => [x, yr, rr])];
-  const samp = [];
-  for (const [cx, cy, r] of circ) for (let i = 0; i < 20; i++) {
-    const a = i / 20 * Math.PI * 2;
-    samp.push([cx + Math.cos(a) * (r + t), cy + Math.sin(a) * (r + t)]);
-  }
-  const hull = hull2d(samp);
-  const pitch = Math.max(0.028, h * (o.heavy ? 0.16 : 0.14));
-  const loop2 = [...hull, hull[0]];
-  const lens2 = [0];
-  for (let i = 1; i < loop2.length; i++) lens2.push(lens2[i - 1] + Math.hypot(loop2[i][0] - loop2[i - 1][0], loop2[i][1] - loop2[i - 1][1]));
-  const total = lens2[lens2.length - 1];
-  const nL = Math.max(12, Math.round(total / pitch));
-  const P = [], T = [];
-  let sg = 0;
-  for (let i = 0; i < nL; i++) {
-    const s = i / nL * total;
-    while (sg < lens2.length - 2 && lens2[sg + 1] < s) sg++;
-    const f = (s - lens2[sg]) / (lens2[sg + 1] - lens2[sg] || 1);
-    const [ax2, ay] = loop2[sg], [cx, cy] = loop2[sg + 1];
-    P.push([ax2 + (cx - ax2) * f, ay + (cy - ay) * f]);
-    const l = Math.hypot(cx - ax2, cy - ay) || 1;
-    T.push([(cx - ax2) / l, (cy - ay) / l]);
-  }
-  const pos = [];
-  const hw = w / 2;
-  const quad = (a, b2, c, d) => pos.push(...a, ...b2, ...c, ...a, ...c, ...d);
-  for (let i = 0; i < nL; i++) {
-    const j = (i + 1) % nL;
-    const [ax2, ay] = P[i], [bx3, by] = P[j];
-    const na = [T[i][1], -T[i][0]], nb = [T[j][1], -T[j][0]];
-    const ia = [ax2 - na[0] * t * 0.55, ay - na[1] * t * 0.55], ib = [bx3 - nb[0] * t * 0.55, by - nb[1] * t * 0.55];
-    quad([ax2, ay, z - hw], [bx3, by, z - hw], [bx3, by, z + hw], [ax2, ay, z + hw]);
-    quad([ax2, ay, z + hw], [bx3, by, z + hw], [ib[0], ib[1], z + hw], [ia[0], ia[1], z + hw]);
-    quad([ax2, ay, z - hw], [ia[0], ia[1], z - hw], [ib[0], ib[1], z - hw], [bx3, by, z - hw]);
-  }
-  const band2 = new BufferGeometry();
-  band2.setAttribute("position", new Float32BufferAttribute(pos, 3));
-  band2.computeVertexNormals();
-  b.g(band2, kit.rubber);
-  const coverY = o.coverTop ? Math.max(...hull.map((q) => q[1])) - t * 3 : 1e9;
-  for (let i = 0; i < nL; i++) {
-    const [px2, py2] = P[i], [tx, ty] = T[i];
-    if (py2 > coverY) continue;
-    const ang = Math.atan2(ty, tx), nx = ty, ny = -tx;
-    b.g(new BoxGeometry(pitch * 0.66, t * 0.62, w * 1.04), kit.joint, new Matrix4().makeRotationZ(ang).setPosition(px2 + nx * t * 0.22, py2 + ny * t * 0.22, z));
-  }
-  const ax = side > 0 ? "z" : "-z";
-  const zo = z + side * hw;
-  for (const x of wheelsX) {
-    b.lathe(kit.rubber, [[0, 0], [rw, 0], [rw, w * 0.94], [0, w * 0.94]], [x, wy, z - side * w * 0.47], ax, 10);
-    b.lathe(kit.joint, [[0, 0], [rw * 0.84, 0], [rw * 0.5, w * 0.07], [rw * 0.26, w * 0.14], [0, w * 0.14]], [x, wy, zo - side * w * 0.04], ax, 8);
-    const zi = z - side * (hw + w * 0.06);
-    b.g(strutGeo([x, wy, zi], [x + rw * 0.95, wy + rw * 0.75, zi], rw * 0.17, rw * 0.13, 5), kit.mech);
-    b.g(new BoxGeometry(rw * 0.5, rw * 0.4, w * 0.18), kit.mech, new Matrix4().makeTranslation(x + rw * 0.95, wy + rw * 0.75, zi - side * w * 0.04));
-    if (o.fine) b.g(new BoxGeometry(rw * 0.3, rw * 0.22, w * 0.3), kit.joint, new Matrix4().makeTranslation(x, wy + rw * 1.25, zi));
-  }
-  for (const x of rollersX) {
-    b.lathe(kit.joint, [[0, 0], [rr, 0], [rr, w * 0.7], [0, w * 0.7]], [x, yr, z - side * w * 0.35], ax, 6);
-    b.g(strutGeo([x, yr, z - side * w * 0.35], [x, yr, z - side * (hw + w * 0.2)], rr * 0.3, rr * 0.3, 5), kit.mech);
-  }
-  const nT = o.heavy ? 12 : 10;
-  b.lathe(kit.joint, [[0, 0], [Rs * 0.92, 0], [Rs * 0.92, w * 0.22], [Rs * 0.4, w * 0.34], [0, w * 0.42]], [xs, ys, zo - side * w * 0.2], ax, 10);
-  b.lathe(kit.joint, [[0, 0], [Rs * 0.92, 0], [Rs * 0.92, w * 0.16], [0, w * 0.16]], [xs, ys, z - side * w * 0.5], ax, 10);
-  for (let k = 0; k < nT; k++) {
-    const a = k / nT * Math.PI * 2;
-    b.g(new BoxGeometry(Rs * 0.26, Rs * 0.3, w * 0.12), kit.steel, new Matrix4().makeRotationZ(a).setPosition(xs + Math.cos(a) * (Rs + t * 0.35), ys + Math.sin(a) * (Rs + t * 0.35), zo - side * w * 0.09));
-  }
-  b.lathe(kit.mech, [[0, 0], [Rs * 0.62, 0], [Rs * 0.5, w * 0.3], [0, w * 0.3]], [xs, ys, z - side * (hw + w * 0.28)], ax, 8);
-  b.lathe(kit.joint, [[0, 0], [Ri * 0.95, 0], [Ri * 0.95, w * 0.12], [Ri * 0.5, w * 0.06], [Ri * 0.2, w * 0.2], [0, w * 0.2]], [xi, yi, zo - side * w * 0.1], ax, 10);
-  b.lathe(kit.rubber, [[0, 0], [Ri * 0.96, 0], [Ri * 0.96, w * 0.86], [0, w * 0.86]], [xi, yi, z - side * w * 0.45], ax, 10);
-  b.g(strutGeo([xi, yi, z - side * (hw + w * 0.05)], [xi - Ri * 1.6, yi + Ri * 0.2, z - side * (hw + w * 0.05)], Ri * 0.22, Ri * 0.18, 6), kit.mech);
-  const yTop = Math.max(...hull.map((q) => q[1]));
-  if (o.fender) {
-    const fl = L * 0.94;
-    b.g(slabGeo(rectP(fl, w * 1.1, w * 0.04), h * 0.035, h * 8e-3), kit.armor2, new Matrix4().makeTranslation(-L * 0.01, yTop + h * 0.02, z));
-    b.g(bevBox(h * 0.38, h * 0.03, w * 1.06, h * 6e-3), kit.armor2, new Matrix4().makeRotationZ(-0.5).setPosition(L * 0.47 + h * 0.12, yTop - h * 0.06, z));
-  }
-  if (o.skirt && o.skirt > 0) {
-    skirtRun(b, kit, { x0: -L * 0.46, x1: L * 0.44, yTop: yTop + h * 0.04, h: h * (o.skirtDrop ?? 0.45), z: zo + side * h * 0.035, side, n: o.skirt, thick: Math.max(0.012, h * 0.045), fine: o.fine, mat: o.skirtMat });
-  }
-  return hull;
-}
-function skirtRun(b, kit, o) {
-  const { x0, x1, yTop, h, z, side, n, thick } = o;
-  const pl = (x1 - x0) / n, gap = Math.min(pl * 0.06, thick * 1.2);
-  const lean = o.lean ?? 0.06;
-  b.g(bevBox(x1 - x0, thick * 1.6, thick * 1.4, thick * 0.3), kit.mech, new Matrix4().makeTranslation((x0 + x1) / 2, yTop - thick * 0.8, z - side * thick * 0.3));
-  for (let i = 0; i < n; i++) {
-    const cx = x0 + pl * (i + 0.5);
-    const first = i === n - 1;
-    const poly = first ? [[-pl / 2 + gap / 2, -h / 2], [pl / 2 - gap / 2 - h * 0.35, -h / 2], [pl / 2 - gap / 2, h / 2], [-pl / 2 + gap / 2, h / 2]] : rectP(pl - gap, h);
-    const F = frame([cx, yTop - h / 2 - thick, z], [0, 0, side], [1, 0, 0]).multiply(new Matrix4().makeRotationX(-side * lean));
-    const polyW = poly.map(([x, zz]) => [x, -side * zz]);
-    armorPlate(b, kit, o.mat ?? kit.armor2, F, polyW, thick, { standoff: thick * 0.2, gap: thick * 1.2, bev: thick * 0.25 });
-    if (o.fine) for (const dx of [-0.32, 0.32]) b.g(new BoxGeometry(thick * 1.1, thick * 1.1, thick * 0.8), kit.joint, new Matrix4().makeTranslation(cx + dx * pl, yTop - thick * 2.6, z + side * thick * 1.45));
-  }
-  b.g(new BoxGeometry(x1 - x0 - gap, h * 0.14, thick * 0.6), kit.rubber, new Matrix4().makeTranslation((x0 + x1) / 2, yTop - h - thick - h * 0.06, z + side * thick * 0.6));
-}
-function piston(b, kit, a, c, r, ext = 0.55, fine = true) {
-  const m = lerp3(a, c, ext);
-  b.g(strutGeo(lerp3(a, c, 0.06), m, r, r * 1.12, 7), kit.joint);
-  b.g(strutGeo(m, lerp3(a, c, 0.94), r * 0.45, r * 0.45, 5), kit.steel);
-  if (fine) for (const p of [a, c]) clevis(b, kit, p, c[0] - a[0], c[1] - a[1], c[2] - a[2], r);
-}
-function clevis(b, kit, p, dx, dy, dz, r) {
-  const d = new Vector3(dx, dy, dz).normalize();
-  let ax = new Vector3().crossVectors(d, new Vector3(0, 1, 0));
-  if (ax.lengthSq() < 1e-4) ax = new Vector3(1, 0, 0);
-  ax.normalize();
-  const m = new Matrix4().makeBasis(ax, new Vector3().crossVectors(d, ax), d).setPosition(p[0], p[1], p[2]);
-  b.g(new BoxGeometry(r * 2.2, r * 1.5, r * 1.6), kit.mech, m);
-  b.g(new CylinderGeometry(r * 0.55, r * 0.55, r * 2.8, 5, 1, true).rotateZ(Math.PI / 2), kit.steel, m);
-}
-function hose(b, kit, a, c, r, sag = 0.15, seg = 4, mat = kit.rubber) {
-  const len = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
-  let prev = a;
-  for (let i = 1; i <= seg; i++) {
-    const t = i / seg;
-    const p = lerp3(a, c, t);
-    p[1] -= Math.sin(t * Math.PI) * sag * len;
-    b.g(strutGeo(prev, p, r, r, 4), mat);
-    prev = p;
-  }
-}
-function cableBundle(b, kit, a, c, r, across, n = 3, sag = 0.12) {
-  for (let i = 0; i < n; i++) {
-    const f = (i - (n - 1) / 2) * r * 2.4;
-    hose(b, kit, add(a, across, f), add(c, across, f * 0.7), r, sag * (1 + i * 0.25), 4, i === 1 ? kit.joint : kit.rubber);
-  }
-}
-function jointDrum(b, kit, p, r, wdt, axis = "z") {
-  const ax = axis === "z" ? "z" : "x";
-  const o = axis === "z" ? [p[0], p[1], p[2] - wdt / 2] : [p[0] - wdt / 2, p[1], p[2]];
-  b.cylb(kit.joint, r, wdt, r * 0.12, o, ax, 10);
-  for (const s of [-1, 1]) {
-    const q = axis === "z" ? [p[0], p[1], p[2] + s * wdt / 2] : [p[0] + s * wdt / 2, p[1], p[2]];
-    b.lathe(kit.mech, [[0, 0], [r * 0.62, 0], [r * 0.5, r * 0.18], [r * 0.24, r * 0.18], [0, r * 0.26]], q, axis === "z" ? s > 0 ? "z" : "-z" : s > 0 ? "x" : "-x", 7);
-  }
-}
-function frameLimb(b, kit, a, c, r, spread) {
-  for (const s of [-1, 1]) b.g(strutGeo(add(a, spread, s), add(c, spread, s * 0.8), r, r * 0.85, 6), kit.mech);
-  for (const t of [0.3, 0.7]) b.g(strutGeo(add(lerp3(a, c, t), spread, -0.9), add(lerp3(a, c, t), spread, 0.9), r * 0.5, r * 0.5, 4), kit.joint);
-}
-function smokeLaunchers(b, kit, F, n, r) {
-  b.g(bevBox(r * 3, r * 1.6, r * 2.6 * n * 0.8, r * 0.3), kit.mech, sub2(F, -r * 0.4, r * 0.8, 0));
-  for (let i = 0; i < n; i++) {
-    const f = i - (n - 1) / 2;
-    const T = sub2(F, r * 0.4, r * 1.7, f * r * 2.15, 0, -f * 0.12, 0.45);
-    b.g(new CylinderGeometry(r, r * 0.92, r * 3.2, 8).rotateZ(-Math.PI / 2), kit.armor2, T);
-    b.g(new CylinderGeometry(r * 0.72, r * 0.72, r * 0.2, 8).rotateZ(-Math.PI / 2), kit.mech, sub2(T, r * 1.62, 0, 0));
-  }
-}
-function visionBlocks(b, kit, x, y, z, R, n, s, fine = true) {
-  if (!fine) {
-    b.lathe(kit.glass, [[R * 0.98, 0], [R * 1.04, 0], [R * 1.04, s * 0.8], [R * 0.98, s * 0.8]], [x, y, z], "y", 10);
-    return;
-  }
-  for (let i = 0; i < n; i++) {
-    const a = i / n * Math.PI * 2;
-    const m = new Matrix4().makeRotationY(-a).setPosition(x + Math.cos(a) * R, y + s * 0.4, z + Math.sin(a) * R);
-    b.g(new BoxGeometry(s * 0.7, s * 0.85, s * 1.3), kit.mech, m);
-    b.g(new BoxGeometry(s * 0.2, s * 0.5, s * 1), kit.glass, m.clone().multiply(new Matrix4().makeTranslation(s * 0.32, 0, 0)));
-  }
-}
-function cupola(b, kit, x, y, z, r, o = {}) {
-  const fine = o.fine ?? true, yaw = o.yaw ?? 0;
-  b.lathe(o.mat ?? kit.armor, [[0, 0], [r * 1.12, 0], [r * 1.1, r * 0.35], [r * 0.98, r * 0.52], [0, r * 0.52]], [x, y, z], "y", 12);
-  visionBlocks(b, kit, x, y + r * 0.08, z, r * 0.98, 6, r * 0.24, fine);
-  const top = y + r * 0.52;
-  b.lathe(kit.armor2, [[0, 0], [r * 0.78, 0], [r * 0.74, r * 0.08], [0, r * 0.12]], [x, top, z], "y", 10);
-  const hx = x - Math.cos(yaw) * r * 0.7, hz = z + Math.sin(yaw) * r * 0.7;
-  b.g(slabGeo(rectP(r * 0.9, r * 1, r * 0.2), r * 0.1, r * 0.03), kit.armor2, new Matrix4().makeRotationY(yaw).multiply(new Matrix4().makeRotationZ(1.35)).setPosition(hx, top + r * 0.04, hz));
-  if (o.mg !== false) {
-    const mx = x + Math.cos(yaw) * r * 0.4, mz = z - Math.sin(yaw) * r * 0.4;
-    b.g(new BoxGeometry(r * 0.22, r * 0.5, r * 0.22), kit.mech, new Matrix4().makeTranslation(mx, top + r * 0.25, mz));
-    b.g(new BoxGeometry(r * 0.55, r * 0.2, r * 0.18), kit.joint, new Matrix4().makeRotationY(yaw).setPosition(mx, top + r * 0.52, mz));
-    b.g(new CylinderGeometry(r * 0.045, r * 0.045, r * 1.2, 5).rotateZ(-Math.PI / 2), kit.joint, new Matrix4().makeRotationY(yaw).setPosition(mx + Math.cos(yaw) * r * 0.8, top + r * 0.56, mz - Math.sin(yaw) * r * 0.8));
-  }
-  return top + r * 0.12;
-}
-function crewHatch(b, kit, F, r, fine = true) {
-  b.g(new CylinderGeometry(r * 1.15, r * 1.2, r * 0.16, 10), kit.mech, sub2(F, 0, r * 0.08, 0));
-  b.g(new CylinderGeometry(r * 0.95, r, r * 0.2, 10), kit.armor2, sub2(F, 0, r * 0.18, 0));
-  if (fine) {
-    b.g(new BoxGeometry(r * 0.25, r * 0.22, r * 0.9), kit.joint, sub2(F, -r * 1, r * 0.2, 0));
-    b.g(new BoxGeometry(r * 0.12, r * 0.12, r * 0.6), kit.steel, sub2(F, r * 0.45, r * 0.33, 0));
-  }
-}
-function towHooks(b, kit, F, spacing, s) {
-  for (const sx of [-1, 1]) {
-    b.g(new BoxGeometry(s * 1.4, s * 0.9, s * 1.6), kit.mech, sub2(F, sx * spacing / 2, s * 0.45, 0));
-    b.g(new TorusGeometry(s * 0.55, s * 0.18, 4, 8), kit.joint, sub2(F, sx * spacing / 2, s * 1.2, 0, Math.PI / 2, 0, 0));
-  }
-}
-function handrail(b, kit, pts, r, postH, mat) {
-  for (let i = 0; i < pts.length - 1; i++) b.g(strutGeo(pts[i], pts[i + 1], r, r, 4), mat ?? kit.steel);
-  for (const p of pts) b.g(new BoxGeometry(r * 1.6, postH, r * 1.6), mat ?? kit.joint, new Matrix4().makeTranslation(p[0], p[1] - postH / 2, p[2]));
-}
-function ladder(b, kit, a, c, w, across, out2, off = w * 0.15) {
-  const r = w * 0.07;
-  const A2 = add(a, out2, off), C = add(c, out2, off);
-  for (const s of [-1, 1]) b.g(strutGeo(add(A2, across, s * w / 2), add(C, across, s * w / 2), r, r, 4), kit.joint);
-  const len = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
-  const n = Math.max(2, Math.round(len / (w * 0.45)));
-  for (let i = 1; i < n; i++) {
-    const p = lerp3(A2, C, i / n);
-    b.g(strutGeo(add(p, across, -w / 2), add(p, across, w / 2), r * 0.7, r * 0.7, 4), kit.steel);
-  }
-  for (const p of [A2, C]) b.g(strutGeo(p, add(p, out2, -off), r * 0.8, r * 0.8, 4), kit.joint);
-}
-function cagedLamp(b, kit, F, s, fine = true) {
-  b.g(new CylinderGeometry(s * 0.5, s * 0.42, s * 0.9, 8).rotateZ(-Math.PI / 2), kit.mech, sub2(F, 0, s * 0.55, 0));
-  b.g(new CylinderGeometry(s * 0.4, s * 0.4, s * 0.08, 8).rotateZ(-Math.PI / 2), kit.lamp, sub2(F, s * 0.46, s * 0.55, 0));
-  b.g(new BoxGeometry(s * 0.3, s * 0.2, s * 0.3), kit.mech, sub2(F, -s * 0.1, s * 0.05, 0));
-  if (fine) {
-    for (const a of [-0.28, 0, 0.28]) b.g(new BoxGeometry(s * 0.05, s * 0.05, s * 0.95), kit.joint, sub2(F, s * 0.62, s * 0.55 + a * s, 0));
-    for (const zz of [-0.45, 0.45]) b.g(new BoxGeometry(s * 0.7, s * 0.95, s * 0.05), kit.joint, sub2(F, s * 0.3, s * 0.55, zz * s));
-  }
-}
-function jerryCans(b, kit, F, n, s) {
-  for (let i = 0; i < n; i++) {
-    const zz = (i - (n - 1) / 2) * s * 0.62;
-    b.g(bevBox(s * 0.9, s * 1.2, s * 0.5, s * 0.08), kit.canvas, sub2(F, 0, s * 0.6, zz));
-    b.g(new BoxGeometry(s * 0.3, s * 0.14, s * 0.2), kit.mech, sub2(F, s * 0.2, s * 1.25, zz));
-  }
-  b.g(new BoxGeometry(s * 1, s * 0.08, s * 0.62 * n), kit.joint, sub2(F, 0, s * 0.8, 0));
-}
-function stowBox(b, kit, F, w, h, d, mat) {
-  b.g(bevBox(w, h, d, Math.min(w, h, d) * 0.12), mat ?? kit.armor2, sub2(F, 0, h / 2, 0));
-  b.g(new BoxGeometry(w * 1.02, h * 0.1, d * 1.02), kit.mech, sub2(F, 0, h * 0.78, 0));
-  b.g(new BoxGeometry(w * 0.12, h * 0.25, d * 0.08), kit.steel, sub2(F, 0, h * 0.62, d / 2));
-}
-function spareTrack(b, kit, F, n, w, pitch) {
-  for (let i = 0; i < n; i++) {
-    const x = (i - (n - 1) / 2) * pitch;
-    b.g(bevBox(pitch * 0.82, pitch * 0.22, w, pitch * 0.06), kit.joint, sub2(F, x, pitch * 0.11, 0));
-    b.g(new BoxGeometry(pitch * 0.25, pitch * 0.3, w * 0.2), kit.mech, sub2(F, x, pitch * 0.3, 0));
-  }
-  b.g(new BoxGeometry(pitch * n, pitch * 0.12, w * 0.12), kit.steel, sub2(F, 0, pitch * 0.34, w * 0.3));
-}
-function eraGrid(b, kit, F, rows, cols, cw, cd, t, mat) {
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    b.g(bevBox(cw * 0.9, t, cd * 0.88, t * 0.25), mat ?? kit.armor2, sub2(F, (c - (cols - 1) / 2) * cw, t / 2, (r - (rows - 1) / 2) * cd));
-  }
-}
-function exhaustBox(b, kit, F, s, fine = true) {
-  b.g(bevBox(s * 2.4, s * 1.2, s * 1.3, s * 0.12), kit.joint, sub2(F, 0, s * 0.6, 0));
-  if (fine) for (let i = 0; i < 4; i++) b.g(new BoxGeometry(s * 0.14, s * 0.1, s * 1.4), kit.mech, sub2(F, (i - 1.5) * s * 0.5, s * 1.24, 0));
-  b.g(new CylinderGeometry(s * 0.34, s * 0.34, s * 0.9, 8).rotateZ(-Math.PI / 2), kit.joint, sub2(F, s * 1.5, s * 0.6, 0));
-  b.g(new CylinderGeometry(s * 0.26, s * 0.26, s * 0.05, 8).rotateZ(-Math.PI / 2), kit.hot, sub2(F, s * 1.96, s * 0.6, 0));
-}
-function antenna(b, kit, x, y, z, h, r, lean = [0, 0, 0]) {
-  b.cylb(kit.mech, r * 3, r * 3, r, [x, y, z], "y", 6);
-  b.g(strutGeo([x, y, z], [x + lean[0] * h, y + h, z + lean[2] * h], r, r * 0.4, 4), kit.steel);
-}
-function dressHull(b, kit, sl, o) {
-  const { k, fine } = o, role = o.role ?? "mbt", no = (s) => !!o.skip?.includes(s);
-  for (const [p, s] of [[sl.noseL, -1], [sl.noseR, 1]]) {
-    if (!p) continue;
-    if (role === "mbt" && !no("smoke")) smokeLaunchers(b, kit, frame(p, [0, 1, 0], [Math.cos(0.5), 0, s * Math.sin(0.5)]), 3, 0.026 * k);
-    if (!no("lamps")) cagedLamp(b, kit, frame([p[0] + 0.06 * k, p[1], p[2] - s * 0.12 * k], [0, 1, 0], [1, 0, 0]), 0.065 * k, fine);
-  }
-  if (sl.rear && !no("tow")) towHooks(b, kit, frame(sl.rear.p, sl.rear.n ?? [-1, 0, 0], [0, 0, 1]), sl.rear.hw * 1.6, 0.04 * k);
-  if (sl.deckRearR && !no("exhaust")) exhaustBox(b, kit, frame(sl.deckRearR, [0, 1, 0], [0, 0, 1]), 0.05 * k, fine);
-  if (sl.deckRearL) {
-    const p = sl.deckRearL;
-    if (!no("cans")) jerryCans(b, kit, frame(p, [0, 1, 0]), 2, 0.08 * k);
-    if (!no("antenna")) antenna(b, kit, p[0] + 0.14 * k, p[1], p[2] + 0.04 * k, (role === "support" ? 0.9 : 0.6) * k, 8e-3 * k, [-0.15, 0, 0]);
-  }
-  if (role === "support" && sl.deckRearR && !no("antenna")) antenna(b, kit, sl.deckRearR[0] + 0.2 * k, sl.deckRearR[1], sl.deckRearR[2], 0.7 * k, 8e-3 * k, [-0.1, 0, 0.05]);
-  if (sl.flankR && !no("bins")) {
-    const [a, e] = sl.flankR, len = Math.hypot(e[0] - a[0], e[2] - a[2]);
-    stowBox(b, kit, frame(lerp3(a, e, 0.5), [0, 1, 0], [e[0] - a[0], 0, e[2] - a[2]]), len * 0.9, 0.07 * k, 0.1 * k, role === "artillery" ? kit.canvas : void 0);
-  }
-  if (sl.flankL && !no("track") && role !== "support") {
-    const [a, e] = sl.flankL;
-    spareTrack(b, kit, frame(lerp3(a, e, 0.5), [0, 1, 0], [e[0] - a[0], 0, e[2] - a[2]]), 3, 0.18 * k, 0.065 * k);
-  }
-  if (sl.hatch && !no("hatch")) crewHatch(b, kit, frame(sl.hatch, [0, 1, 0]), 0.07 * k, fine);
-}
-function autoDress(c, deckAt2, o = {}) {
-  const k = o.k ?? Math.min(c.L, c.W) / 2, L = c.L, W = c.W, ins = o.inset ?? 0.07 * k;
-  const clear = (x, z, m = 0.14 * k) => c.mounts.every((q) => Math.hypot(q.x - x, q.z - z) > q.r * 1.5 + m);
-  const on = (x, z) => deckAt2(x, z) > 0;
-  const step = Math.min(L, W) / 48;
-  const scanX = (z, from, dir) => {
-    for (let x = from; Math.abs(x) <= L * 0.6; x += dir * step) if (on(x, z)) return x;
-    return null;
-  };
-  const edgeZ = (x, s) => {
-    let last = null;
-    for (let z = 0; z <= W * 0.6; z += step) {
-      if (on(x, s * z)) last = z;
-      else if (last !== null) break;
-    }
-    return last;
-  };
-  const pt = (x, z) => [x, deckAt2(x, z), z];
-  const sl = {};
-  for (const s of [-1, 1]) {
-    const ez = edgeZ(0, s);
-    if (ez === null) continue;
-    const z = s * Math.max(0.12 * k, ez * 0.66);
-    const xf = scanX(z, L * 0.6, -1), xr = scanX(z, -L * 0.6, 1);
-    if (xf !== null && clear(xf - ins, z)) s < 0 ? sl.noseL = pt(xf - ins, z) : sl.noseR = pt(xf - ins, z);
-    if (xr !== null && clear(xr + ins * 1.6, z)) s < 0 ? sl.deckRearL = pt(xr + ins * 1.6, z) : sl.deckRearR = pt(xr + ins * 1.6, z);
-    const fz2 = (edgeZ(-L * 0.1, s) ?? ez) - 0.08 * k;
-    const a = [];
-    for (let x = -L * 0.32; x <= L * 0.16; x += step) if (on(x, s * fz2) && clear(x, s * fz2, 0.1 * k)) a.push(x);
-    if (a.length > 6) {
-      let best = [a[0], a[0]], cur = [a[0], a[0]];
-      for (let i = 1; i < a.length; i++) {
-        if (a[i] - a[i - 1] <= step * 1.5) cur[1] = a[i];
-        else cur = [a[i], a[i]];
-        if (cur[1] - cur[0] > best[1] - best[0]) best = [...cur];
-      }
-      if (best[1] - best[0] > 0.22 * k) {
-        const run = [pt(best[0] + 0.03 * k, s * fz2), pt(best[1] - 0.03 * k, s * fz2)];
-        if (Math.abs(run[0][1] - run[1][1]) < 0.03 * k) s < 0 ? sl.flankL = run : sl.flankR = run;
-      }
-    }
-  }
-  dressHull(c.b, c.kit, sl, { k, fine: fineFor(c.S), role: o.role, skip: [...o.skip ?? [], "tow"] });
-  return sl;
-}
-var AUTO_DRESS = {
-  fortress: {},
-  titan: {},
-  juggernaut: { skip: ["smoke"] },
-  siegeplat: { role: "artillery" },
-  long: { role: "artillery", skip: ["lamps"] },
-  cross: {},
-  riot: {},
-  hunter: { skip: ["cans"] },
-  round: { role: "support" },
-  crab: {},
-  scorpion: {},
-  centipede: { skip: ["smoke"] },
-  goliath: {},
-  leviathan: {}
-};
-
 // src/client/render/weaponsize.ts
 var CLASS_RANK = { S: 1, M: 2, L: 4, XL: 5 };
 var tierOf = (m, cls) => cls && cls !== m.mount ? CLASS_RANK[cls] : moduleTier(m);
@@ -39963,11 +37680,11 @@ function buildUtility(C) {
       return radar(C);
   }
 }
-var base2 = (C, k = 0.62, h = 0.2) => C.b.lathe(C.kit.panel, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.6], [C.r * k * 0.78, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
+var base = (C, k = 0.62, h = 0.2) => C.b.lathe(C.kit.panel, [[0, 0], [C.r * k, 0], [C.r * k, C.r * h * 0.6], [C.r * k * 0.78, C.r * h], [0, C.r * h]], [0, C.y0, 0], "y", 8);
 function repair(C) {
   const { b, p, kit, r, y0 } = C;
   const n = C.c > 0.5 ? 2 : 1;
-  base2(C);
+  base(C);
   cbox(b, kit.hazard, 0, y0 + r * 0.32, 0, r * 0.45, r * 0.24, r * 0.45, r * 0.04);
   b.cyl(kit.metal, r * 0.1, r * 0.09, r * 0.45, [0, y0 + r * 0.42, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.85, 0);
@@ -39986,7 +37703,7 @@ function shieldPylon(C) {
   const { b, kit, r, y0 } = C;
   const heavy = C.c > 0.7;
   const H = r * (heavy ? 1.35 : 1.1);
-  base2(C, 0.66, 0.22);
+  base(C, 0.66, 0.22);
   b.lathe(kit.hull, [[0, 0], [r * 0.26, 0], [r * 0.16, H * 0.8], [0, H * 0.8]], [0, y0 + r * 0.2, 0], "y", 8);
   for (const f of heavy ? [0.3, 0.55, 0.8] : [0.35, 0.7]) b.lathe(kit.glow, [[0, 0], [r * (0.38 - f * 0.18), 0], [r * (0.38 - f * 0.18), r * 0.05], [0, r * 0.05]], [0, y0 + r * 0.2 + H * f * 0.8, 0], "y", 10);
   b.lathe(kit.trim, [[0, 0], [r * 0.1, 0], [r * 0.4, r * 0.12], [r * 0.38, r * 0.17], [0, r * 0.1]], [0, y0 + r * 0.2 + H * 0.8, 0], "y", 10);
@@ -40011,7 +37728,7 @@ function domeProjector(C) {
 }
 function uplink(C) {
   const { b, kit, r, y0 } = C;
-  base2(C);
+  base(C);
   cbox(b, kit.trim, -r * 0.1, y0 + r * 0.32, 0, r * 0.5, r * 0.25, r * 0.5);
   b.lathe(kit.metal, [[0, 0], [r * 0.08, 0], [r * 0.04, r * 1.3], [0, r * 1.3]], [r * 0.05, y0 + r * 0.4, 0], "y", 6);
   for (const f of [0.3, 0.6]) bx(b, kit.hull, r * 0.05, y0 + r * 0.4 + r * 1.3 * f, 0, r * 0.05, r * 0.05, r * 0.5);
@@ -40022,7 +37739,7 @@ function uplink(C) {
 }
 function radar(C) {
   const { b, p, kit, r, y0 } = C;
-  base2(C, 0.55);
+  base(C, 0.55);
   b.cyl(kit.metal, r * 0.1, r * 0.08, r * 0.75, [0, y0 + r * 0.2, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 1, 0);
   C.t.pitch.rotation.z = 0.5;
@@ -40035,7 +37752,7 @@ function radar(C) {
 }
 function optics(C) {
   const { b, p, kit, r, y0 } = C;
-  base2(C, 0.55);
+  base(C, 0.55);
   b.cyl(kit.metal, r * 0.12, r * 0.12, r * 0.3, [0, y0 + r * 0.18, 0], "y", 6);
   C.t.pitch.position.set(0, y0 + r * 0.62, 0);
   cbox(p, kit.panel, -r * 0.05, 0, 0, r * 0.6, r * 0.38, r * 0.75, r * 0.07, void 0, 0.85);
@@ -40075,7 +37792,7 @@ function jammer(C) {
 }
 function smoke(C) {
   const { b, kit, r, y0 } = C;
-  base2(C, 0.5, 0.16);
+  base(C, 0.5, 0.16);
   for (const s of [-1, 1]) {
     cbox(b, kit.panel, 0, y0 + r * 0.26, s * r * 0.32, r * 0.5, r * 0.22, r * 0.3, r * 0.04);
     for (let i = 0; i < 3; i++) {
@@ -40158,7 +37875,7 @@ function turbo(C) {
 }
 function gyro(C) {
   const { b, kit, r, y0 } = C;
-  base2(C, 0.55, 0.18);
+  base(C, 0.55, 0.18);
   const c = y0 + r * 0.6, R = r * 0.42;
   b.lathe(kit.hull, [[R * 0.82, 0], [R, 0], [R, r * 0.08], [R * 0.82, r * 0.08]], [0, c - r * 0.04, 0], "y", 10);
   b.lathe(kit.steel, [[R * 0.72, 0], [R * 0.88, 0], [R * 0.88, r * 0.07], [R * 0.72, r * 0.07]], [-r * 0.035, c, 0], "x", 10);
@@ -40664,6 +38381,2428 @@ function recoilRelax(t, dt) {
   }
 }
 var hasGeo = (B) => B.m.size > 0;
+
+// src/client/proto3d/chassis/giants-kit.ts
+function ngon(n, rx, rz, a0 = Math.PI / n) {
+  const out2 = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + i / n * Math.PI * 2;
+    out2.push([Math.cos(a) * rx, Math.sin(a) * rz]);
+  }
+  return out2;
+}
+function planLoft(b, mat, poly, levels, at2 = [0, 0]) {
+  b.loft(mat, levels.map(([y, s, dx = 0, dz = 0]) => poly.map(([px2, pz2]) => [at2[0] + dx + px2 * s, y, at2[1] + dz + pz2 * s])));
+}
+function inPoly(poly, x, z) {
+  let sgn = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, az] = poly[i], [bx3, bz] = poly[(i + 1) % poly.length];
+    const c = (bx3 - ax) * (z - az) - (bz - az) * (x - ax);
+    if (Math.abs(c) < 1e-9) continue;
+    const s = Math.sign(c);
+    if (sgn === 0) sgn = s;
+    else if (s !== sgn) return false;
+  }
+  return true;
+}
+function mast(b, kit, x, y, z, h, r = 0.05) {
+  b.cylb(kit.trim, r * 2.6, r * 2.2, r * 0.6, [x, y, z], "y", 8);
+  b.cyl(kit.steel, r, r * 0.45, h, [x, y, z], "y", 6);
+  for (const f of [0.45, 0.72]) b.box(kit.metal, r * 0.8, r * 0.8, h * (0.42 - f * 0.25), x, y + h * f, z, r * 0.2);
+  b.box(kit.metal, h * 0.14, r * 0.7, r * 0.7, x, y + h * 0.6, z, r * 0.2);
+  b.cyl(kit.lamp, r * 1.3, r * 1.3, r * 1.6, [x, y + h, z], "y", 6);
+}
+function banner(b, kit, x, y, z, h, w, dir = -1) {
+  b.cyl(kit.steel, h * 0.016, h * 0.012, h, [x, y, z], "y", 6);
+  b.cyl(kit.lamp, h * 0.03, h * 0.03, h * 0.03, [x, y + h, z], "y", 6);
+  b.box(kit.metal, h * 0.03, h * 0.02, w * 1.1, x, y + h * 0.95, z + dir * w * 0.5, 4e-3);
+  const fh = h * 0.5, t = Math.max(0.012, h * 0.012);
+  const poly = [[0, 0], [w, 0], [w, fh * 0.8], [w * 0.5, fh * 0.62], [0, fh]];
+  const g = new Shape(poly.map(([px2, py2]) => new Vector2(px2, py2)));
+  const geo = new ExtrudeGeometry(g, { depth: t, bevelEnabled: false });
+  const m = new Matrix4().makeBasis(new Vector3(0, 0, dir), new Vector3(0, -1, 0), new Vector3(dir, 0, 0)).setPosition(x - t / 2 * dir, y + h * 0.94, z + dir * h * 0.02);
+  b.g(geo, kit.accent, m);
+  b.box(kit.hazard, t * 1.2, fh * 0.06, w * 0.9, x, y + h * 0.94 - fh * 0.2, z + dir * w * 0.5, 2e-3);
+}
+function reactor(b, kit, at2, r, axis = "y", ribs = 4) {
+  const d = r * 0.5;
+  b.cylb(kit.trim, r * 1.3, d, d * 0.2, at2, axis, 16);
+  const off = axis === "y" ? [0, d, 0] : axis === "x" ? [d, 0, 0] : [-d, 0, 0];
+  const c = [at2[0] + off[0], at2[1] + off[1], at2[2] + off[2]];
+  b.cyl(kit.glow, r, r * 0.7, r * 0.5, [c[0] - off[0] * 0.5, c[1] - off[1] * 0.5, c[2] - off[2] * 0.5], axis, 14);
+  for (let i = 0; i < ribs; i++) {
+    const a = i / ribs * Math.PI;
+    if (axis === "y") b.box(kit.metal, r * 2.3, r * 0.14, r * 0.14, c[0], c[1] + r * 0.22, c[2], r * 0.04, [0, a, 0]);
+    else b.box(kit.metal, r * 0.14, r * 2.3, r * 0.14, c[0] + off[0] * 0.44, c[1], c[2], r * 0.04, [a, 0, 0]);
+  }
+}
+function glowGrille(b, kit, x, y, z, w, h, n, dir = 1) {
+  b.box(kit.trim, h * 0.2, h, w, x, y, z, h * 0.06);
+  for (let i = 0; i < n; i++) glow(b, kit, x + dir * h * 0.08, y - h * 0.32 + h * 0.64 * i / Math.max(1, n - 1), z, h * 0.08, h * 0.08, w * 0.8);
+}
+
+// src/client/proto3d/chassis/hs-kit.ts
+var fineFor = (S) => S >= 2;
+var v3 = (a) => new Vector3(a[0], a[1], a[2]);
+var add = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+var lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+function frame(p, n, along = [1, 0, 0]) {
+  const y = v3(n).normalize();
+  const x = v3(along).addScaledVector(y, -v3(along).dot(y));
+  if (x.lengthSq() < 1e-8) x.set(0, 0, 1).addScaledVector(y, -y.z);
+  x.normalize();
+  const z = new Vector3().crossVectors(x, y);
+  return new Matrix4().makeBasis(x, y, z).setPosition(p[0], p[1], p[2]);
+}
+function sub2(F, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const m = new Matrix4().makeRotationFromEuler(new Euler(rx, ry, rz, "YXZ")).setPosition(x, y, z);
+  return F.clone().multiply(m);
+}
+var rectP = (w, d, c = 0, cx = 0, cz = 0) => chamRect(w, d, c).map(([x, z]) => [x + cx, z + cz]);
+function trapP(l, wf, wb, c = 0) {
+  const x = l / 2;
+  if (c <= 0) return [[-x, -wb / 2], [x, -wf / 2], [x, wf / 2], [-x, wb / 2]];
+  return [[-x, -wb / 2 + c], [-x + c, -wb / 2], [x - c, -wf / 2], [x, -wf / 2 + c], [x, wf / 2 - c], [x - c, wf / 2], [-x + c, wb / 2], [-x, wb / 2 - c]];
+}
+function inset(p, d) {
+  const n = p.length;
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const a = p[i], b = p[(i + 1) % n];
+    area2 += a[0] * b[1] - b[0] * a[1];
+  }
+  const s = area2 > 0 ? 1 : -1;
+  const lines = p.map((a, i) => {
+    const b = p[(i + 1) % n];
+    const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
+    const nx = -dz / l * s, nz = dx / l * s;
+    return { px: a[0] + nx * d, pz: a[1] + nz * d, dx, dz };
+  });
+  return p.map((q, i) => {
+    const A2 = lines[(i + n - 1) % n], B = lines[i];
+    const den = A2.dx * B.dz - A2.dz * B.dx;
+    if (Math.abs(den) < 1e-9) return [B.px, B.pz];
+    const t = ((B.px - A2.px) * B.dz - (B.pz - A2.pz) * B.dx) / den;
+    void q;
+    return [A2.px + A2.dx * t, A2.pz + A2.dz * t];
+  });
+}
+function armorPlate(b, kit, mat, F, poly, thick, o = {}) {
+  const so = o.standoff ?? thick * 0.45;
+  const gap = o.gap ?? thick * 0.9;
+  const back = o.back === void 0 ? kit.mech : o.back;
+  if (back && so > 5e-4) b.g(slabGeo(inset(poly, gap), so + thick * 0.2, 0), back, F);
+  const bev = Math.min(o.bev ?? thick * 0.22, thick * 0.45);
+  if (o.taper !== void 0 && o.taper < 1) {
+    const top = inset(poly, (1 - o.taper) * 0.5 * Math.min(spanOf(poly, 0), spanOf(poly, 1)));
+    b.loft(mat, [poly.map(([x, z]) => [x, so, z]), poly.map(([x, z]) => [x, so + thick * 0.55, z]), top.map(([x, z]) => [x, so + thick, z])], true, true, F);
+  } else b.g(slabGeo(poly, thick, bev), mat, F.clone().multiply(new Matrix4().makeTranslation(0, so, 0)));
+  return so + thick;
+}
+var spanOf = (p, k) => Math.max(...p.map((q) => q[k])) - Math.min(...p.map((q) => q[k]));
+function plateStack(b, kit, mat, F, poly, layers, o = {}) {
+  let y = 0;
+  layers.forEach((L, i) => {
+    const [sx, sz] = L.shift ?? [0, 0];
+    const p = inset(poly, L.inset).map(([x, z]) => [x + sx, z + sz]);
+    y += armorPlate(b, kit, L.mat ?? mat, sub2(F, 0, y, 0), p, L.thick, { ...o, standoff: L.standoff ?? (i === 0 ? o.standoff : L.thick * 0.35) });
+  });
+  return y;
+}
+function recessPanel(b, kit, F, w, d, depth, o = {}) {
+  const rim = o.rim ?? Math.min(w, d) * 0.12;
+  const fm = o.frame ?? kit.armor2;
+  for (const s of [-1, 1]) {
+    b.g(bevBox(w, depth, rim, rim * 0.25), fm, sub2(F, 0, depth / 2, s * (d / 2 - rim / 2)));
+    b.g(bevBox(rim, depth, d - rim * 2, rim * 0.25), fm, sub2(F, s * (w / 2 - rim / 2), depth / 2, 0));
+  }
+  b.g(new BoxGeometry(w - rim * 1.6, depth * 0.3, d - rim * 1.6), o.floor ?? kit.mech, sub2(F, 0, depth * 0.15, 0));
+  const n = o.slats ?? 0;
+  for (let i = 0; i < n; i++) {
+    const z = -d / 2 + rim + (d - rim * 2) * (i + 0.5) / n;
+    b.g(new BoxGeometry(w - rim * 2.2, depth * 0.16, (d - rim * 2) / n * 0.62), o.slatMat ?? kit.joint, sub2(F, 0, depth * 0.62, z, 0.5, 0, 0));
+  }
+}
+function hexSec(x, yb, wb, ws, ys0, ys1, wt, yt, zc = 0) {
+  return [[x, yb, zc - wb], [x, yb, zc + wb], [x, ys0, zc + ws], [x, ys1, zc + ws], [x, yt, zc + wt], [x, yt, zc - wt], [x, ys1, zc - ws], [x, ys0, zc - ws]];
+}
+function hull2d(pts) {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const q of p) {
+    while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop();
+    lo.push(q);
+  }
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop();
+    up.push(q);
+  }
+  up.pop();
+  lo.pop();
+  return [...lo, ...up];
+}
+function trackSystem(b, kit, o) {
+  const { L, h, w, z, side } = o;
+  const t = Math.max(0.016, h * 0.075);
+  let rw = h * 0.25, wy = t + rw;
+  const Rs = h * 0.27, xs = -L / 2 + Rs + t, ys = h * 0.6;
+  const Ri = h * 0.22, xi = L / 2 - Ri - t, yi = h * 0.55;
+  const x0 = xs + Rs * 0.75 + rw, x1 = xi - Ri * 0.5 - rw;
+  const span = Math.max(0, x1 - x0);
+  const nW = o.wheels ?? Math.max(2, Math.min(7, Math.round(span / (rw * 2.15)) + 1));
+  if (o.bigWheels) {
+    rw = Math.min(h * 0.36, (span + rw * 2) / (nW * 2.05));
+    wy = t + rw;
+  }
+  const wheelsX = nW === 1 || span < 1e-3 ? [(x0 + x1) / 2] : Array.from({ length: nW }, (_, i) => x0 + span * i / Math.max(1, nW - 1));
+  const nR = o.rollers ?? 3, rr = h * 0.075;
+  const yr = ys + Rs - rr + h * 5e-3;
+  const rollersX = Array.from({ length: nR }, (_, i) => x0 + (x1 - x0) * (i + 0.5 + (nR === 3 ? 0 : 0)) / nR);
+  const circ = [[xs, ys, Rs], [xi, yi, Ri], ...wheelsX.map((x) => [x, wy, rw]), ...rollersX.map((x) => [x, yr, rr])];
+  const samp = [];
+  for (const [cx, cy, r] of circ) for (let i = 0; i < 20; i++) {
+    const a = i / 20 * Math.PI * 2;
+    samp.push([cx + Math.cos(a) * (r + t), cy + Math.sin(a) * (r + t)]);
+  }
+  const hull = hull2d(samp);
+  const pitch = Math.max(0.028, h * (o.heavy ? 0.16 : 0.14));
+  const loop2 = [...hull, hull[0]];
+  const lens2 = [0];
+  for (let i = 1; i < loop2.length; i++) lens2.push(lens2[i - 1] + Math.hypot(loop2[i][0] - loop2[i - 1][0], loop2[i][1] - loop2[i - 1][1]));
+  const total = lens2[lens2.length - 1];
+  const nL = Math.max(12, Math.round(total / pitch));
+  const P = [], T = [];
+  let sg = 0;
+  for (let i = 0; i < nL; i++) {
+    const s = i / nL * total;
+    while (sg < lens2.length - 2 && lens2[sg + 1] < s) sg++;
+    const f = (s - lens2[sg]) / (lens2[sg + 1] - lens2[sg] || 1);
+    const [ax2, ay] = loop2[sg], [cx, cy] = loop2[sg + 1];
+    P.push([ax2 + (cx - ax2) * f, ay + (cy - ay) * f]);
+    const l = Math.hypot(cx - ax2, cy - ay) || 1;
+    T.push([(cx - ax2) / l, (cy - ay) / l]);
+  }
+  const pos = [];
+  const hw = w / 2;
+  const quad = (a, b2, c, d) => pos.push(...a, ...b2, ...c, ...a, ...c, ...d);
+  for (let i = 0; i < nL; i++) {
+    const j = (i + 1) % nL;
+    const [ax2, ay] = P[i], [bx3, by] = P[j];
+    const na = [T[i][1], -T[i][0]], nb = [T[j][1], -T[j][0]];
+    const ia = [ax2 - na[0] * t * 0.55, ay - na[1] * t * 0.55], ib = [bx3 - nb[0] * t * 0.55, by - nb[1] * t * 0.55];
+    quad([ax2, ay, z - hw], [bx3, by, z - hw], [bx3, by, z + hw], [ax2, ay, z + hw]);
+    quad([ax2, ay, z + hw], [bx3, by, z + hw], [ib[0], ib[1], z + hw], [ia[0], ia[1], z + hw]);
+    quad([ax2, ay, z - hw], [ia[0], ia[1], z - hw], [ib[0], ib[1], z - hw], [bx3, by, z - hw]);
+  }
+  const band2 = new BufferGeometry();
+  band2.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  band2.computeVertexNormals();
+  b.g(band2, kit.rubber);
+  const coverY = o.coverTop ? Math.max(...hull.map((q) => q[1])) - t * 3 : 1e9;
+  for (let i = 0; i < nL; i++) {
+    const [px2, py2] = P[i], [tx, ty] = T[i];
+    if (py2 > coverY) continue;
+    const ang = Math.atan2(ty, tx), nx = ty, ny = -tx;
+    b.g(new BoxGeometry(pitch * 0.66, t * 0.62, w * 1.04), kit.joint, new Matrix4().makeRotationZ(ang).setPosition(px2 + nx * t * 0.22, py2 + ny * t * 0.22, z));
+  }
+  const ax = side > 0 ? "z" : "-z";
+  const zo = z + side * hw;
+  for (const x of wheelsX) {
+    b.lathe(kit.rubber, [[0, 0], [rw, 0], [rw, w * 0.94], [0, w * 0.94]], [x, wy, z - side * w * 0.47], ax, 10);
+    b.lathe(kit.joint, [[0, 0], [rw * 0.84, 0], [rw * 0.5, w * 0.07], [rw * 0.26, w * 0.14], [0, w * 0.14]], [x, wy, zo - side * w * 0.04], ax, 8);
+    const zi = z - side * (hw + w * 0.06);
+    b.g(strutGeo([x, wy, zi], [x + rw * 0.95, wy + rw * 0.75, zi], rw * 0.17, rw * 0.13, 5), kit.mech);
+    b.g(new BoxGeometry(rw * 0.5, rw * 0.4, w * 0.18), kit.mech, new Matrix4().makeTranslation(x + rw * 0.95, wy + rw * 0.75, zi - side * w * 0.04));
+    if (o.fine) b.g(new BoxGeometry(rw * 0.3, rw * 0.22, w * 0.3), kit.joint, new Matrix4().makeTranslation(x, wy + rw * 1.25, zi));
+  }
+  for (const x of rollersX) {
+    b.lathe(kit.joint, [[0, 0], [rr, 0], [rr, w * 0.7], [0, w * 0.7]], [x, yr, z - side * w * 0.35], ax, 6);
+    b.g(strutGeo([x, yr, z - side * w * 0.35], [x, yr, z - side * (hw + w * 0.2)], rr * 0.3, rr * 0.3, 5), kit.mech);
+  }
+  const nT = o.heavy ? 12 : 10;
+  b.lathe(kit.joint, [[0, 0], [Rs * 0.92, 0], [Rs * 0.92, w * 0.22], [Rs * 0.4, w * 0.34], [0, w * 0.42]], [xs, ys, zo - side * w * 0.2], ax, 10);
+  b.lathe(kit.joint, [[0, 0], [Rs * 0.92, 0], [Rs * 0.92, w * 0.16], [0, w * 0.16]], [xs, ys, z - side * w * 0.5], ax, 10);
+  for (let k = 0; k < nT; k++) {
+    const a = k / nT * Math.PI * 2;
+    b.g(new BoxGeometry(Rs * 0.26, Rs * 0.3, w * 0.12), kit.steel, new Matrix4().makeRotationZ(a).setPosition(xs + Math.cos(a) * (Rs + t * 0.35), ys + Math.sin(a) * (Rs + t * 0.35), zo - side * w * 0.09));
+  }
+  b.lathe(kit.mech, [[0, 0], [Rs * 0.62, 0], [Rs * 0.5, w * 0.3], [0, w * 0.3]], [xs, ys, z - side * (hw + w * 0.28)], ax, 8);
+  b.lathe(kit.joint, [[0, 0], [Ri * 0.95, 0], [Ri * 0.95, w * 0.12], [Ri * 0.5, w * 0.06], [Ri * 0.2, w * 0.2], [0, w * 0.2]], [xi, yi, zo - side * w * 0.1], ax, 10);
+  b.lathe(kit.rubber, [[0, 0], [Ri * 0.96, 0], [Ri * 0.96, w * 0.86], [0, w * 0.86]], [xi, yi, z - side * w * 0.45], ax, 10);
+  b.g(strutGeo([xi, yi, z - side * (hw + w * 0.05)], [xi - Ri * 1.6, yi + Ri * 0.2, z - side * (hw + w * 0.05)], Ri * 0.22, Ri * 0.18, 6), kit.mech);
+  const yTop = Math.max(...hull.map((q) => q[1]));
+  if (o.fender) {
+    const fl = L * 0.94;
+    b.g(slabGeo(rectP(fl, w * 1.1, w * 0.04), h * 0.035, h * 8e-3), kit.armor2, new Matrix4().makeTranslation(-L * 0.01, yTop + h * 0.02, z));
+    b.g(bevBox(h * 0.38, h * 0.03, w * 1.06, h * 6e-3), kit.armor2, new Matrix4().makeRotationZ(-0.5).setPosition(L * 0.47 + h * 0.12, yTop - h * 0.06, z));
+  }
+  if (o.skirt && o.skirt > 0) {
+    skirtRun(b, kit, { x0: -L * 0.46, x1: L * 0.44, yTop: yTop + h * 0.04, h: h * (o.skirtDrop ?? 0.45), z: zo + side * h * 0.035, side, n: o.skirt, thick: Math.max(0.012, h * 0.045), fine: o.fine, mat: o.skirtMat });
+  }
+  return hull;
+}
+function skirtRun(b, kit, o) {
+  const { x0, x1, yTop, h, z, side, n, thick } = o;
+  const pl = (x1 - x0) / n, gap = Math.min(pl * 0.06, thick * 1.2);
+  const lean = o.lean ?? 0.06;
+  b.g(bevBox(x1 - x0, thick * 1.6, thick * 1.4, thick * 0.3), kit.mech, new Matrix4().makeTranslation((x0 + x1) / 2, yTop - thick * 0.8, z - side * thick * 0.3));
+  for (let i = 0; i < n; i++) {
+    const cx = x0 + pl * (i + 0.5);
+    const first = i === n - 1;
+    const poly = first ? [[-pl / 2 + gap / 2, -h / 2], [pl / 2 - gap / 2 - h * 0.35, -h / 2], [pl / 2 - gap / 2, h / 2], [-pl / 2 + gap / 2, h / 2]] : rectP(pl - gap, h);
+    const F = frame([cx, yTop - h / 2 - thick, z], [0, 0, side], [1, 0, 0]).multiply(new Matrix4().makeRotationX(-side * lean));
+    const polyW = poly.map(([x, zz]) => [x, -side * zz]);
+    armorPlate(b, kit, o.mat ?? kit.armor2, F, polyW, thick, { standoff: thick * 0.2, gap: thick * 1.2, bev: thick * 0.25 });
+    if (o.fine) for (const dx of [-0.32, 0.32]) b.g(new BoxGeometry(thick * 1.1, thick * 1.1, thick * 0.8), kit.joint, new Matrix4().makeTranslation(cx + dx * pl, yTop - thick * 2.6, z + side * thick * 1.45));
+  }
+  b.g(new BoxGeometry(x1 - x0 - gap, h * 0.14, thick * 0.6), kit.rubber, new Matrix4().makeTranslation((x0 + x1) / 2, yTop - h - thick - h * 0.06, z + side * thick * 0.6));
+}
+function piston(b, kit, a, c, r, ext = 0.55, fine = true) {
+  const m = lerp3(a, c, ext);
+  b.g(strutGeo(lerp3(a, c, 0.06), m, r, r * 1.12, 7), kit.joint);
+  b.g(strutGeo(m, lerp3(a, c, 0.94), r * 0.45, r * 0.45, 5), kit.steel);
+  if (fine) for (const p of [a, c]) clevis(b, kit, p, c[0] - a[0], c[1] - a[1], c[2] - a[2], r);
+}
+function clevis(b, kit, p, dx, dy, dz, r) {
+  const d = new Vector3(dx, dy, dz).normalize();
+  let ax = new Vector3().crossVectors(d, new Vector3(0, 1, 0));
+  if (ax.lengthSq() < 1e-4) ax = new Vector3(1, 0, 0);
+  ax.normalize();
+  const m = new Matrix4().makeBasis(ax, new Vector3().crossVectors(d, ax), d).setPosition(p[0], p[1], p[2]);
+  b.g(new BoxGeometry(r * 2.2, r * 1.5, r * 1.6), kit.mech, m);
+  b.g(new CylinderGeometry(r * 0.55, r * 0.55, r * 2.8, 5, 1, true).rotateZ(Math.PI / 2), kit.steel, m);
+}
+function hose(b, kit, a, c, r, sag = 0.15, seg = 4, mat = kit.rubber) {
+  const len = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+  let prev = a;
+  for (let i = 1; i <= seg; i++) {
+    const t = i / seg;
+    const p = lerp3(a, c, t);
+    p[1] -= Math.sin(t * Math.PI) * sag * len;
+    b.g(strutGeo(prev, p, r, r, 4), mat);
+    prev = p;
+  }
+}
+function cableBundle(b, kit, a, c, r, across, n = 3, sag = 0.12) {
+  for (let i = 0; i < n; i++) {
+    const f = (i - (n - 1) / 2) * r * 2.4;
+    hose(b, kit, add(a, across, f), add(c, across, f * 0.7), r, sag * (1 + i * 0.25), 4, i === 1 ? kit.joint : kit.rubber);
+  }
+}
+function jointDrum(b, kit, p, r, wdt, axis = "z") {
+  const ax = axis === "z" ? "z" : "x";
+  const o = axis === "z" ? [p[0], p[1], p[2] - wdt / 2] : [p[0] - wdt / 2, p[1], p[2]];
+  b.cylb(kit.joint, r, wdt, r * 0.12, o, ax, 10);
+  for (const s of [-1, 1]) {
+    const q = axis === "z" ? [p[0], p[1], p[2] + s * wdt / 2] : [p[0] + s * wdt / 2, p[1], p[2]];
+    b.lathe(kit.mech, [[0, 0], [r * 0.62, 0], [r * 0.5, r * 0.18], [r * 0.24, r * 0.18], [0, r * 0.26]], q, axis === "z" ? s > 0 ? "z" : "-z" : s > 0 ? "x" : "-x", 7);
+  }
+}
+function frameLimb(b, kit, a, c, r, spread) {
+  for (const s of [-1, 1]) b.g(strutGeo(add(a, spread, s), add(c, spread, s * 0.8), r, r * 0.85, 6), kit.mech);
+  for (const t of [0.3, 0.7]) b.g(strutGeo(add(lerp3(a, c, t), spread, -0.9), add(lerp3(a, c, t), spread, 0.9), r * 0.5, r * 0.5, 4), kit.joint);
+}
+function smokeLaunchers(b, kit, F, n, r) {
+  b.g(bevBox(r * 3, r * 1.6, r * 2.6 * n * 0.8, r * 0.3), kit.mech, sub2(F, -r * 0.4, r * 0.8, 0));
+  for (let i = 0; i < n; i++) {
+    const f = i - (n - 1) / 2;
+    const T = sub2(F, r * 0.4, r * 1.7, f * r * 2.15, 0, -f * 0.12, 0.45);
+    b.g(new CylinderGeometry(r, r * 0.92, r * 3.2, 8).rotateZ(-Math.PI / 2), kit.armor2, T);
+    b.g(new CylinderGeometry(r * 0.72, r * 0.72, r * 0.2, 8).rotateZ(-Math.PI / 2), kit.mech, sub2(T, r * 1.62, 0, 0));
+  }
+}
+function visionBlocks(b, kit, x, y, z, R, n, s, fine = true) {
+  if (!fine) {
+    b.lathe(kit.glass, [[R * 0.98, 0], [R * 1.04, 0], [R * 1.04, s * 0.8], [R * 0.98, s * 0.8]], [x, y, z], "y", 10);
+    return;
+  }
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2;
+    const m = new Matrix4().makeRotationY(-a).setPosition(x + Math.cos(a) * R, y + s * 0.4, z + Math.sin(a) * R);
+    b.g(new BoxGeometry(s * 0.7, s * 0.85, s * 1.3), kit.mech, m);
+    b.g(new BoxGeometry(s * 0.2, s * 0.5, s * 1), kit.glass, m.clone().multiply(new Matrix4().makeTranslation(s * 0.32, 0, 0)));
+  }
+}
+function cupola(b, kit, x, y, z, r, o = {}) {
+  const fine = o.fine ?? true, yaw = o.yaw ?? 0;
+  b.lathe(o.mat ?? kit.armor, [[0, 0], [r * 1.12, 0], [r * 1.1, r * 0.35], [r * 0.98, r * 0.52], [0, r * 0.52]], [x, y, z], "y", 12);
+  visionBlocks(b, kit, x, y + r * 0.08, z, r * 0.98, 6, r * 0.24, fine);
+  const top = y + r * 0.52;
+  b.lathe(kit.armor2, [[0, 0], [r * 0.78, 0], [r * 0.74, r * 0.08], [0, r * 0.12]], [x, top, z], "y", 10);
+  const hx = x - Math.cos(yaw) * r * 0.7, hz = z + Math.sin(yaw) * r * 0.7;
+  b.g(slabGeo(rectP(r * 0.9, r * 1, r * 0.2), r * 0.1, r * 0.03), kit.armor2, new Matrix4().makeRotationY(yaw).multiply(new Matrix4().makeRotationZ(1.35)).setPosition(hx, top + r * 0.04, hz));
+  if (o.mg !== false) {
+    const mx = x + Math.cos(yaw) * r * 0.4, mz = z - Math.sin(yaw) * r * 0.4;
+    b.g(new BoxGeometry(r * 0.22, r * 0.5, r * 0.22), kit.mech, new Matrix4().makeTranslation(mx, top + r * 0.25, mz));
+    b.g(new BoxGeometry(r * 0.55, r * 0.2, r * 0.18), kit.joint, new Matrix4().makeRotationY(yaw).setPosition(mx, top + r * 0.52, mz));
+    b.g(new CylinderGeometry(r * 0.045, r * 0.045, r * 1.2, 5).rotateZ(-Math.PI / 2), kit.joint, new Matrix4().makeRotationY(yaw).setPosition(mx + Math.cos(yaw) * r * 0.8, top + r * 0.56, mz - Math.sin(yaw) * r * 0.8));
+  }
+  return top + r * 0.12;
+}
+function crewHatch(b, kit, F, r, fine = true) {
+  b.g(new CylinderGeometry(r * 1.15, r * 1.2, r * 0.16, 10), kit.mech, sub2(F, 0, r * 0.08, 0));
+  b.g(new CylinderGeometry(r * 0.95, r, r * 0.2, 10), kit.armor2, sub2(F, 0, r * 0.18, 0));
+  if (fine) {
+    b.g(new BoxGeometry(r * 0.25, r * 0.22, r * 0.9), kit.joint, sub2(F, -r * 1, r * 0.2, 0));
+    b.g(new BoxGeometry(r * 0.12, r * 0.12, r * 0.6), kit.steel, sub2(F, r * 0.45, r * 0.33, 0));
+  }
+}
+function towHooks(b, kit, F, spacing, s) {
+  for (const sx of [-1, 1]) {
+    b.g(new BoxGeometry(s * 1.4, s * 0.9, s * 1.6), kit.mech, sub2(F, sx * spacing / 2, s * 0.45, 0));
+    b.g(new TorusGeometry(s * 0.55, s * 0.18, 4, 8), kit.joint, sub2(F, sx * spacing / 2, s * 1.2, 0, Math.PI / 2, 0, 0));
+  }
+}
+function handrail(b, kit, pts, r, postH, mat) {
+  for (let i = 0; i < pts.length - 1; i++) b.g(strutGeo(pts[i], pts[i + 1], r, r, 4), mat ?? kit.steel);
+  for (const p of pts) b.g(new BoxGeometry(r * 1.6, postH, r * 1.6), mat ?? kit.joint, new Matrix4().makeTranslation(p[0], p[1] - postH / 2, p[2]));
+}
+function ladder(b, kit, a, c, w, across, out2, off = w * 0.15) {
+  const r = w * 0.07;
+  const A2 = add(a, out2, off), C = add(c, out2, off);
+  for (const s of [-1, 1]) b.g(strutGeo(add(A2, across, s * w / 2), add(C, across, s * w / 2), r, r, 4), kit.joint);
+  const len = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+  const n = Math.max(2, Math.round(len / (w * 0.45)));
+  for (let i = 1; i < n; i++) {
+    const p = lerp3(A2, C, i / n);
+    b.g(strutGeo(add(p, across, -w / 2), add(p, across, w / 2), r * 0.7, r * 0.7, 4), kit.steel);
+  }
+  for (const p of [A2, C]) b.g(strutGeo(p, add(p, out2, -off), r * 0.8, r * 0.8, 4), kit.joint);
+}
+function cagedLamp(b, kit, F, s, fine = true) {
+  b.g(new CylinderGeometry(s * 0.5, s * 0.42, s * 0.9, 8).rotateZ(-Math.PI / 2), kit.mech, sub2(F, 0, s * 0.55, 0));
+  b.g(new CylinderGeometry(s * 0.4, s * 0.4, s * 0.08, 8).rotateZ(-Math.PI / 2), kit.lamp, sub2(F, s * 0.46, s * 0.55, 0));
+  b.g(new BoxGeometry(s * 0.3, s * 0.2, s * 0.3), kit.mech, sub2(F, -s * 0.1, s * 0.05, 0));
+  if (fine) {
+    for (const a of [-0.28, 0, 0.28]) b.g(new BoxGeometry(s * 0.05, s * 0.05, s * 0.95), kit.joint, sub2(F, s * 0.62, s * 0.55 + a * s, 0));
+    for (const zz of [-0.45, 0.45]) b.g(new BoxGeometry(s * 0.7, s * 0.95, s * 0.05), kit.joint, sub2(F, s * 0.3, s * 0.55, zz * s));
+  }
+}
+function jerryCans(b, kit, F, n, s) {
+  for (let i = 0; i < n; i++) {
+    const zz = (i - (n - 1) / 2) * s * 0.62;
+    b.g(bevBox(s * 0.9, s * 1.2, s * 0.5, s * 0.08), kit.canvas, sub2(F, 0, s * 0.6, zz));
+    b.g(new BoxGeometry(s * 0.3, s * 0.14, s * 0.2), kit.mech, sub2(F, s * 0.2, s * 1.25, zz));
+  }
+  b.g(new BoxGeometry(s * 1, s * 0.08, s * 0.62 * n), kit.joint, sub2(F, 0, s * 0.8, 0));
+}
+function stowBox(b, kit, F, w, h, d, mat) {
+  b.g(bevBox(w, h, d, Math.min(w, h, d) * 0.12), mat ?? kit.armor2, sub2(F, 0, h / 2, 0));
+  b.g(new BoxGeometry(w * 1.02, h * 0.1, d * 1.02), kit.mech, sub2(F, 0, h * 0.78, 0));
+  b.g(new BoxGeometry(w * 0.12, h * 0.25, d * 0.08), kit.steel, sub2(F, 0, h * 0.62, d / 2));
+}
+function spareTrack(b, kit, F, n, w, pitch) {
+  for (let i = 0; i < n; i++) {
+    const x = (i - (n - 1) / 2) * pitch;
+    b.g(bevBox(pitch * 0.82, pitch * 0.22, w, pitch * 0.06), kit.joint, sub2(F, x, pitch * 0.11, 0));
+    b.g(new BoxGeometry(pitch * 0.25, pitch * 0.3, w * 0.2), kit.mech, sub2(F, x, pitch * 0.3, 0));
+  }
+  b.g(new BoxGeometry(pitch * n, pitch * 0.12, w * 0.12), kit.steel, sub2(F, 0, pitch * 0.34, w * 0.3));
+}
+function eraGrid(b, kit, F, rows, cols, cw, cd, t, mat) {
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    b.g(bevBox(cw * 0.9, t, cd * 0.88, t * 0.25), mat ?? kit.armor2, sub2(F, (c - (cols - 1) / 2) * cw, t / 2, (r - (rows - 1) / 2) * cd));
+  }
+}
+function exhaustBox(b, kit, F, s, fine = true) {
+  b.g(bevBox(s * 2.4, s * 1.2, s * 1.3, s * 0.12), kit.joint, sub2(F, 0, s * 0.6, 0));
+  if (fine) for (let i = 0; i < 4; i++) b.g(new BoxGeometry(s * 0.14, s * 0.1, s * 1.4), kit.mech, sub2(F, (i - 1.5) * s * 0.5, s * 1.24, 0));
+  b.g(new CylinderGeometry(s * 0.34, s * 0.34, s * 0.9, 8).rotateZ(-Math.PI / 2), kit.joint, sub2(F, s * 1.5, s * 0.6, 0));
+  b.g(new CylinderGeometry(s * 0.26, s * 0.26, s * 0.05, 8).rotateZ(-Math.PI / 2), kit.hot, sub2(F, s * 1.96, s * 0.6, 0));
+}
+function antenna(b, kit, x, y, z, h, r, lean = [0, 0, 0]) {
+  b.cylb(kit.mech, r * 3, r * 3, r, [x, y, z], "y", 6);
+  b.g(strutGeo([x, y, z], [x + lean[0] * h, y + h, z + lean[2] * h], r, r * 0.4, 4), kit.steel);
+}
+function dressHull(b, kit, sl, o) {
+  const { k, fine } = o, role = o.role ?? "mbt", no = (s) => !!o.skip?.includes(s);
+  for (const [p, s] of [[sl.noseL, -1], [sl.noseR, 1]]) {
+    if (!p) continue;
+    if (role === "mbt" && !no("smoke")) smokeLaunchers(b, kit, frame(p, [0, 1, 0], [Math.cos(0.5), 0, s * Math.sin(0.5)]), 3, 0.026 * k);
+    if (!no("lamps")) cagedLamp(b, kit, frame([p[0] + 0.06 * k, p[1], p[2] - s * 0.12 * k], [0, 1, 0], [1, 0, 0]), 0.065 * k, fine);
+  }
+  if (sl.rear && !no("tow")) towHooks(b, kit, frame(sl.rear.p, sl.rear.n ?? [-1, 0, 0], [0, 0, 1]), sl.rear.hw * 1.6, 0.04 * k);
+  if (sl.deckRearR && !no("exhaust")) exhaustBox(b, kit, frame(sl.deckRearR, [0, 1, 0], [0, 0, 1]), 0.05 * k, fine);
+  if (sl.deckRearL) {
+    const p = sl.deckRearL;
+    if (!no("cans")) jerryCans(b, kit, frame(p, [0, 1, 0]), 2, 0.08 * k);
+    if (!no("antenna")) antenna(b, kit, p[0] + 0.14 * k, p[1], p[2] + 0.04 * k, (role === "support" ? 0.9 : 0.6) * k, 8e-3 * k, [-0.15, 0, 0]);
+  }
+  if (role === "support" && sl.deckRearR && !no("antenna")) antenna(b, kit, sl.deckRearR[0] + 0.2 * k, sl.deckRearR[1], sl.deckRearR[2], 0.7 * k, 8e-3 * k, [-0.1, 0, 0.05]);
+  if (sl.flankR && !no("bins")) {
+    const [a, e] = sl.flankR, len = Math.hypot(e[0] - a[0], e[2] - a[2]);
+    stowBox(b, kit, frame(lerp3(a, e, 0.5), [0, 1, 0], [e[0] - a[0], 0, e[2] - a[2]]), len * 0.9, 0.07 * k, 0.1 * k, role === "artillery" ? kit.canvas : void 0);
+  }
+  if (sl.flankL && !no("track") && role !== "support") {
+    const [a, e] = sl.flankL;
+    spareTrack(b, kit, frame(lerp3(a, e, 0.5), [0, 1, 0], [e[0] - a[0], 0, e[2] - a[2]]), 3, 0.18 * k, 0.065 * k);
+  }
+  if (sl.hatch && !no("hatch")) crewHatch(b, kit, frame(sl.hatch, [0, 1, 0]), 0.07 * k, fine);
+}
+function autoDress(c, deckAt2, o = {}) {
+  const k = o.k ?? Math.min(c.L, c.W) / 2, L = c.L, W = c.W, ins = o.inset ?? 0.07 * k;
+  const clear = (x, z, m = 0.14 * k) => c.mounts.every((q) => Math.hypot(q.x - x, q.z - z) > q.r * 1.5 + m);
+  const on = (x, z) => deckAt2(x, z) > 0;
+  const step = Math.min(L, W) / 48;
+  const scanX = (z, from, dir) => {
+    for (let x = from; Math.abs(x) <= L * 0.6; x += dir * step) if (on(x, z)) return x;
+    return null;
+  };
+  const edgeZ = (x, s) => {
+    let last = null;
+    for (let z = 0; z <= W * 0.6; z += step) {
+      if (on(x, s * z)) last = z;
+      else if (last !== null) break;
+    }
+    return last;
+  };
+  const pt = (x, z) => [x, deckAt2(x, z), z];
+  const sl = {};
+  for (const s of [-1, 1]) {
+    const ez = edgeZ(0, s);
+    if (ez === null) continue;
+    const z = s * Math.max(0.12 * k, ez * 0.66);
+    const xf = scanX(z, L * 0.6, -1), xr = scanX(z, -L * 0.6, 1);
+    if (xf !== null && clear(xf - ins, z)) s < 0 ? sl.noseL = pt(xf - ins, z) : sl.noseR = pt(xf - ins, z);
+    if (xr !== null && clear(xr + ins * 1.6, z)) s < 0 ? sl.deckRearL = pt(xr + ins * 1.6, z) : sl.deckRearR = pt(xr + ins * 1.6, z);
+    const fz2 = (edgeZ(-L * 0.1, s) ?? ez) - 0.08 * k;
+    const a = [];
+    for (let x = -L * 0.32; x <= L * 0.16; x += step) if (on(x, s * fz2) && clear(x, s * fz2, 0.1 * k)) a.push(x);
+    if (a.length > 6) {
+      let best = [a[0], a[0]], cur = [a[0], a[0]];
+      for (let i = 1; i < a.length; i++) {
+        if (a[i] - a[i - 1] <= step * 1.5) cur[1] = a[i];
+        else cur = [a[i], a[i]];
+        if (cur[1] - cur[0] > best[1] - best[0]) best = [...cur];
+      }
+      if (best[1] - best[0] > 0.22 * k) {
+        const run = [pt(best[0] + 0.03 * k, s * fz2), pt(best[1] - 0.03 * k, s * fz2)];
+        if (Math.abs(run[0][1] - run[1][1]) < 0.03 * k) s < 0 ? sl.flankL = run : sl.flankR = run;
+      }
+    }
+  }
+  dressHull(c.b, c.kit, sl, { k, fine: fineFor(c.S), role: o.role, skip: [...o.skip ?? [], "tow"] });
+  return sl;
+}
+var AUTO_DRESS = {
+  fortress: {},
+  titan: {},
+  juggernaut: { skip: ["smoke"] },
+  siegeplat: { role: "artillery" },
+  long: { role: "artillery", skip: ["lamps"] },
+  cross: {},
+  riot: {},
+  hunter: { skip: ["cans"] },
+  round: { role: "support" },
+  crab: {},
+  scorpion: {},
+  centipede: { skip: ["smoke"] },
+  goliath: {},
+  leviathan: {}
+};
+
+// src/client/proto3d/chassis/castle.ts
+var CASTLE_ID = "tug-castle";
+var isCastle = (id) => id === CASTLE_ID || id.startsWith(CASTLE_ID + "#");
+function castle(c) {
+  const { b, kit, L, W, stance } = c;
+  const k = Math.min(L, W) / 7;
+  const fine = fineFor(c.S);
+  const y0 = stance.y0;
+  const gun = c.design.mounts[0] ? MODULE_BY_ID.get(c.design.mounts[0]) : void 0;
+  const D = DRAW_D[gun?.mount ?? "S"];
+  const R = 2.75 * k;
+  const yRoof = y0 + 1.7 * k;
+  const P = ngon(8, R, R);
+  planLoft(b, kit.trim, P, [[y0 - 0.02, 1.06], [y0 + 0.28 * k, 1.06]]);
+  planLoft(b, kit.hull, P, [[y0 + 0.26 * k, 1.04], [yRoof - 0.3 * k, 0.94], [yRoof, 0.93]]);
+  planLoft(b, kit.accent, P, [[y0 + 0.9 * k, 0.99], [y0 + 1.02 * k, 0.985]]);
+  planLoft(b, kit.armor2, P, [[yRoof - 0.02, 0.93], [yRoof + 0.22 * k, 0.93], [yRoof + 0.26 * k, 0.9]]);
+  for (let i = 0; i < 8; i++) {
+    const a = (i + 0.5) * (Math.PI / 4);
+    const rr = R * 0.86;
+    block(b, kit.armor2, Math.cos(a) * rr, yRoof + 0.2 * k, Math.sin(a) * rr, 0.42 * k, 0.42 * k, 0.32 * k, { top: [0.8, 0.8], ch: 0.08 * k });
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = i * (Math.PI / 4);
+    const n = [Math.cos(a), 0.12, Math.sin(a)];
+    const rr = R * 0.99 * Math.cos(Math.PI / 8);
+    const p = [Math.cos(a) * rr, y0 + 1 * k, Math.sin(a) * rr];
+    if (Math.abs(a) < 0.2) continue;
+    armorPlate(b, kit, i % 2 ? kit.shell : kit.armor2, frame(p, n, [0, 1, 0]), rectP(0.7 * k, 1.2 * k, 0.06 * k), 0.09 * k, { standoff: 0.04 * k });
+  }
+  block(b, kit.trim, R * 0.9, y0 + 0.24 * k, 0, 0.5 * k, 1.3 * k, 0.95 * k, { top: [1, 0.85], ch: 0.1 * k });
+  glow(b, kit, R * 1, y0 + 0.75 * k, 0, 0.08 * k, 0.12 * k, 0.95 * k);
+  hazard(b, kit, R * 1.02, y0 + 0.26 * k, 0, 1.1 * k, 0.12 * k, 5, Math.PI / 2);
+  glowGrille(b, kit, -R * 0.93, y0 + 0.75 * k, 0, 1.1 * k, 0.45 * k, 3, -1);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const x = sx * 2.35 * k, z = sz * 2.35 * k, r = 0.85 * k, h = yRoof + 0.55 * k;
+    b.lathe(kit.hull, [[0, y0 - 0.02], [r * 1.12, y0 - 0.02], [r * 1.02, y0 + 0.5 * k], [r, h - 0.25 * k], [r * 1.12, h - 0.2 * k], [r * 1.12, h], [0, h]], [x, 0, z], "y", 16);
+    b.cylb(kit.accent, r * 1.005, 0.1 * k, 0.01, [x, y0 + 0.9 * k, z], "y", 16);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      block(b, kit.armor2, x + Math.cos(a) * r * 0.86, h - 0.02, z + Math.sin(a) * r * 0.86, 0.28 * k, 0.28 * k, 0.24 * k, { ch: 0.05 * k });
+    }
+    glow(b, kit, x + sx * r * 0.72, h - 0.55 * k, z + sz * r * 0.72, 0.12 * k, 0.22 * k, 0.12 * k);
+    cagedLamp(b, kit, frame([x, h, z], [0, 1, 0], [1, 0, 0]), 0.18 * k, fine);
+  }
+  banner(b, kit, -1.4 * k, yRoof + 0.2 * k, 2.15 * k, 1.6 * k, 0.55 * k, -1);
+  banner(b, kit, -1.4 * k, yRoof + 0.2 * k, -2.15 * k, 1.6 * k, 0.55 * k, -1);
+  const cr = D * 0.58 + 0.15 * k;
+  const ch = D * 0.3 + 0.12 * k;
+  const neck = cr > 2.2 * k ? 0.8 * k : cr > 1.5 * k ? 0.32 * k : 0.06 * k;
+  const rn = Math.min(cr * 0.78, R * 0.8);
+  planLoft(b, kit.trim, ngon(16, rn, rn), [[yRoof - 0.02, 1.08], [yRoof + neck * 0.35, 1], [yRoof + neck, 1]]);
+  if (neck > 0.1) planLoft(b, kit.accent, ngon(16, rn, rn), [[yRoof + neck * 0.5, 1.01], [yRoof + neck * 0.62, 1.01]]);
+  const at2 = [0, yRoof + neck, 0];
+  const hp0 = [cr * 0.12, ch * 1.02, 0];
+  const cupola3 = (t) => {
+    const Pc = ngon(8, cr, cr);
+    planLoft(t, kit.armor, Pc, [[0, 0.92], [0.12 * ch, 1], [0.62 * ch, 1], [0.9 * ch, 0.86], [ch, 0.74]]);
+    planLoft(t, kit.mech, Pc, [[0.12 * ch, 1.012], [0.2 * ch, 1.012]]);
+    both((s) => {
+      armorPlate(t, kit, kit.armor2, frame([cr * 0.1, ch * 0.42, s * cr * 0.98], [0, 0.15, s], [1, 0, 0]), rectP(cr * 0.8, ch * 0.4, cr * 0.06), cr * 0.04, { standoff: cr * 0.02 });
+      glow(t, kit, cr * 0.75, ch * 0.4, s * cr * 0.55, cr * 0.06, ch * 0.07, cr * 0.32);
+    });
+    block(t, kit.armor2, -cr * 0.48, ch * 0.96, 0, cr * 0.42, cr * 0.5, ch * 0.16, { top: [0.8, 0.8], ch: cr * 0.06 });
+    hazard(t, kit, -cr * 0.95, ch * 0.2, 0, cr * 0.6, ch * 0.08, 4, Math.PI / 2);
+  };
+  return {
+    deckAt: (x, z) => Math.hypot(x, z) < R * 0.9 ? yRoof : -1,
+    top: at2[1] + ch + 0.5,
+    custom: true,
+    dressed: true,
+    seat: (m) => ({ y: m === c.mounts[0] ? at2[1] : yRoof + 0.25 * k, socket: true }),
+    torso: (t) => {
+      cupola3(t);
+      return { hp: [hp0], at: at2 };
+    }
+  };
+}
+
+// node_modules/three/examples/jsm/controls/OrbitControls.js
+var _changeEvent = { type: "change" };
+var _startEvent = { type: "start" };
+var _endEvent = { type: "end" };
+var _ray = new Ray();
+var _plane = new Plane();
+var _TILT_LIMIT = Math.cos(70 * MathUtils.DEG2RAD);
+var _v = new Vector3();
+var _twoPI = 2 * Math.PI;
+var _STATE = {
+  NONE: -1,
+  ROTATE: 0,
+  DOLLY: 1,
+  PAN: 2,
+  TOUCH_ROTATE: 3,
+  TOUCH_PAN: 4,
+  TOUCH_DOLLY_PAN: 5,
+  TOUCH_DOLLY_ROTATE: 6
+};
+var _EPS = 1e-6;
+var OrbitControls = class extends Controls {
+  /**
+   * Constructs a new controls instance.
+   *
+   * @param {Object3D} object - The object that is managed by the controls.
+   * @param {?HTMLElement} domElement - The HTML element used for event listeners.
+   */
+  constructor(object, domElement = null) {
+    super(object, domElement);
+    this.state = _STATE.NONE;
+    this.target = new Vector3();
+    this.cursor = new Vector3();
+    this.minDistance = 0;
+    this.maxDistance = Infinity;
+    this.minZoom = 0;
+    this.maxZoom = Infinity;
+    this.minTargetRadius = 0;
+    this.maxTargetRadius = Infinity;
+    this.minPolarAngle = 0;
+    this.maxPolarAngle = Math.PI;
+    this.minAzimuthAngle = -Infinity;
+    this.maxAzimuthAngle = Infinity;
+    this.enableDamping = false;
+    this.dampingFactor = 0.05;
+    this.enableZoom = true;
+    this.zoomSpeed = 1;
+    this.enableRotate = true;
+    this.rotateSpeed = 1;
+    this.keyRotateSpeed = 1;
+    this.enablePan = true;
+    this.panSpeed = 1;
+    this.screenSpacePanning = true;
+    this.keyPanSpeed = 7;
+    this.zoomToCursor = false;
+    this.autoRotate = false;
+    this.autoRotateSpeed = 2;
+    this.keys = { LEFT: "ArrowLeft", UP: "ArrowUp", RIGHT: "ArrowRight", BOTTOM: "ArrowDown" };
+    this.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+    this.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
+    this.target0 = this.target.clone();
+    this.position0 = this.object.position.clone();
+    this.zoom0 = this.object.zoom;
+    this._cursorStyle = "auto";
+    this._domElementKeyEvents = null;
+    this._lastPosition = new Vector3();
+    this._lastQuaternion = new Quaternion();
+    this._lastTargetPosition = new Vector3();
+    this._quat = new Quaternion().setFromUnitVectors(object.up, new Vector3(0, 1, 0));
+    this._quatInverse = this._quat.clone().invert();
+    this._spherical = new Spherical();
+    this._sphericalDelta = new Spherical();
+    this._scale = 1;
+    this._panOffset = new Vector3();
+    this._rotateStart = new Vector2();
+    this._rotateEnd = new Vector2();
+    this._rotateDelta = new Vector2();
+    this._panStart = new Vector2();
+    this._panEnd = new Vector2();
+    this._panDelta = new Vector2();
+    this._dollyStart = new Vector2();
+    this._dollyEnd = new Vector2();
+    this._dollyDelta = new Vector2();
+    this._dollyDirection = new Vector3();
+    this._mouse = new Vector2();
+    this._performCursorZoom = false;
+    this._pointers = [];
+    this._pointerPositions = {};
+    this._controlActive = false;
+    this._onPointerMove = onPointerMove.bind(this);
+    this._onPointerDown = onPointerDown.bind(this);
+    this._onPointerUp = onPointerUp.bind(this);
+    this._onContextMenu = onContextMenu.bind(this);
+    this._onMouseWheel = onMouseWheel.bind(this);
+    this._onKeyDown = onKeyDown.bind(this);
+    this._onTouchStart = onTouchStart.bind(this);
+    this._onTouchMove = onTouchMove.bind(this);
+    this._onMouseDown = onMouseDown.bind(this);
+    this._onMouseMove = onMouseMove.bind(this);
+    this._interceptControlDown = interceptControlDown.bind(this);
+    this._interceptControlUp = interceptControlUp.bind(this);
+    if (this.domElement !== null) {
+      this.connect(this.domElement);
+    }
+    this.update();
+  }
+  /**
+   * Defines the visual representation of the cursor.
+   *
+   * @type {('auto'|'grab')}
+   * @default 'auto'
+   */
+  set cursorStyle(type) {
+    this._cursorStyle = type;
+    if (type === "grab") {
+      this.domElement.style.cursor = "grab";
+    } else {
+      this.domElement.style.cursor = "auto";
+    }
+  }
+  get cursorStyle() {
+    return this._cursorStyle;
+  }
+  connect(element) {
+    super.connect(element);
+    this.domElement.addEventListener("pointerdown", this._onPointerDown);
+    this.domElement.addEventListener("pointercancel", this._onPointerUp);
+    this.domElement.addEventListener("contextmenu", this._onContextMenu);
+    this.domElement.addEventListener("wheel", this._onMouseWheel, { passive: false });
+    const document2 = this.domElement.getRootNode();
+    document2.addEventListener("keydown", this._interceptControlDown, { passive: true, capture: true });
+    this.domElement.style.touchAction = "none";
+  }
+  disconnect() {
+    this.state = _STATE.NONE;
+    this.domElement.removeEventListener("pointerdown", this._onPointerDown);
+    this.domElement.ownerDocument.removeEventListener("pointermove", this._onPointerMove);
+    this.domElement.ownerDocument.removeEventListener("pointerup", this._onPointerUp);
+    this.domElement.removeEventListener("pointercancel", this._onPointerUp);
+    this.domElement.removeEventListener("wheel", this._onMouseWheel);
+    this.domElement.removeEventListener("contextmenu", this._onContextMenu);
+    this.stopListenToKeyEvents();
+    const document2 = this.domElement.getRootNode();
+    document2.removeEventListener("keydown", this._interceptControlDown, { capture: true });
+    document2.removeEventListener("keyup", this._interceptControlUp, { capture: true });
+    this._controlActive = false;
+    this._pointers.length = 0;
+    this._pointerPositions = {};
+    this.domElement.style.touchAction = "";
+    this.domElement.style.cursor = "auto";
+  }
+  dispose() {
+    this.disconnect();
+  }
+  /**
+   * Get the current vertical rotation, in radians.
+   *
+   * @return {number} The current vertical rotation, in radians.
+   */
+  getPolarAngle() {
+    return this._spherical.phi;
+  }
+  /**
+   * Get the current horizontal rotation, in radians.
+   *
+   * @return {number} The current horizontal rotation, in radians.
+   */
+  getAzimuthalAngle() {
+    return this._spherical.theta;
+  }
+  /**
+   * Returns the distance from the camera to the target.
+   *
+   * @return {number} The distance from the camera to the target.
+   */
+  getDistance() {
+    return this.object.position.distanceTo(this.target);
+  }
+  /**
+   * Adds key event listeners to the given DOM element.
+   * `window` is a recommended argument for using this method.
+   *
+   * @param {HTMLElement} domElement - The DOM element
+   */
+  listenToKeyEvents(domElement) {
+    domElement.addEventListener("keydown", this._onKeyDown);
+    this._domElementKeyEvents = domElement;
+  }
+  /**
+   * Removes the key event listener previously defined with `listenToKeyEvents()`.
+   */
+  stopListenToKeyEvents() {
+    if (this._domElementKeyEvents !== null) {
+      this._domElementKeyEvents.removeEventListener("keydown", this._onKeyDown);
+      this._domElementKeyEvents = null;
+    }
+  }
+  /**
+   * Save the current state of the controls. This can later be recovered with `reset()`.
+   */
+  saveState() {
+    this.target0.copy(this.target);
+    this.position0.copy(this.object.position);
+    this.zoom0 = this.object.zoom;
+  }
+  /**
+   * Reset the controls to their state from either the last time the `saveState()`
+   * was called, or the initial state.
+   */
+  reset() {
+    this.target.copy(this.target0);
+    this.object.position.copy(this.position0);
+    this.object.zoom = this.zoom0;
+    this.object.updateProjectionMatrix();
+    this.dispatchEvent(_changeEvent);
+    this.update();
+    this.state = _STATE.NONE;
+  }
+  /**
+   * Programmatically pan the camera.
+   *
+   * @param {number} deltaX - The horizontal pan amount in pixels.
+   * @param {number} deltaY - The vertical pan amount in pixels.
+   */
+  pan(deltaX, deltaY) {
+    this._pan(deltaX, deltaY);
+    this.update();
+  }
+  /**
+   * Programmatically dolly in (zoom in for perspective camera).
+   *
+   * @param {number} dollyScale - The dolly scale factor.
+   */
+  dollyIn(dollyScale) {
+    this._dollyIn(dollyScale);
+    this.update();
+  }
+  /**
+   * Programmatically dolly out (zoom out for perspective camera).
+   *
+   * @param {number} dollyScale - The dolly scale factor.
+   */
+  dollyOut(dollyScale) {
+    this._dollyOut(dollyScale);
+    this.update();
+  }
+  /**
+   * Programmatically rotate the camera left (around the vertical axis).
+   *
+   * @param {number} angle - The rotation angle in radians.
+   */
+  rotateLeft(angle) {
+    this._rotateLeft(angle);
+    this.update();
+  }
+  /**
+   * Programmatically rotate the camera up (around the horizontal axis).
+   *
+   * @param {number} angle - The rotation angle in radians.
+   */
+  rotateUp(angle) {
+    this._rotateUp(angle);
+    this.update();
+  }
+  update(deltaTime = null) {
+    const position = this.object.position;
+    _v.copy(position).sub(this.target);
+    _v.applyQuaternion(this._quat);
+    this._spherical.setFromVector3(_v);
+    if (this.autoRotate && this.state === _STATE.NONE) {
+      this._rotateLeft(this._getAutoRotationAngle(deltaTime));
+    }
+    if (this.enableDamping) {
+      this._spherical.theta += this._sphericalDelta.theta * this.dampingFactor;
+      this._spherical.phi += this._sphericalDelta.phi * this.dampingFactor;
+    } else {
+      this._spherical.theta += this._sphericalDelta.theta;
+      this._spherical.phi += this._sphericalDelta.phi;
+    }
+    let min = this.minAzimuthAngle;
+    let max = this.maxAzimuthAngle;
+    if (isFinite(min) && isFinite(max)) {
+      if (min < -Math.PI) min += _twoPI;
+      else if (min > Math.PI) min -= _twoPI;
+      if (max < -Math.PI) max += _twoPI;
+      else if (max > Math.PI) max -= _twoPI;
+      if (min <= max) {
+        this._spherical.theta = Math.max(min, Math.min(max, this._spherical.theta));
+      } else {
+        this._spherical.theta = this._spherical.theta > (min + max) / 2 ? Math.max(min, this._spherical.theta) : Math.min(max, this._spherical.theta);
+      }
+    }
+    this._spherical.phi = Math.max(this.minPolarAngle, Math.min(this.maxPolarAngle, this._spherical.phi));
+    this._spherical.makeSafe();
+    if (this.enableDamping === true) {
+      this.target.addScaledVector(this._panOffset, this.dampingFactor);
+    } else {
+      this.target.add(this._panOffset);
+    }
+    this.target.sub(this.cursor);
+    this.target.clampLength(this.minTargetRadius, this.maxTargetRadius);
+    this.target.add(this.cursor);
+    let zoomChanged = false;
+    if (this.zoomToCursor && this._performCursorZoom || this.object.isOrthographicCamera) {
+      this._spherical.radius = this._clampDistance(this._spherical.radius);
+    } else {
+      const prevRadius = this._spherical.radius;
+      this._spherical.radius = this._clampDistance(this._spherical.radius * this._scale);
+      zoomChanged = prevRadius != this._spherical.radius;
+    }
+    _v.setFromSpherical(this._spherical);
+    _v.applyQuaternion(this._quatInverse);
+    position.copy(this.target).add(_v);
+    this.object.lookAt(this.target);
+    if (this.enableDamping === true) {
+      this._sphericalDelta.theta *= 1 - this.dampingFactor;
+      this._sphericalDelta.phi *= 1 - this.dampingFactor;
+      this._panOffset.multiplyScalar(1 - this.dampingFactor);
+    } else {
+      this._sphericalDelta.set(0, 0, 0);
+      this._panOffset.set(0, 0, 0);
+    }
+    if (this.zoomToCursor && this._performCursorZoom) {
+      let newRadius = null;
+      if (this.object.isPerspectiveCamera) {
+        const prevRadius = _v.length();
+        newRadius = this._clampDistance(prevRadius * this._scale);
+        const radiusDelta = prevRadius - newRadius;
+        this.object.position.addScaledVector(this._dollyDirection, radiusDelta);
+        this.object.updateMatrixWorld();
+        zoomChanged = !!radiusDelta;
+      } else if (this.object.isOrthographicCamera) {
+        const mouseBefore = new Vector3(this._mouse.x, this._mouse.y, 0);
+        mouseBefore.unproject(this.object);
+        const prevZoom = this.object.zoom;
+        this.object.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.object.zoom / this._scale));
+        this.object.updateProjectionMatrix();
+        zoomChanged = prevZoom !== this.object.zoom;
+        const mouseAfter = new Vector3(this._mouse.x, this._mouse.y, 0);
+        mouseAfter.unproject(this.object);
+        this.object.position.sub(mouseAfter).add(mouseBefore);
+        this.object.updateMatrixWorld();
+        newRadius = _v.length();
+      } else {
+        console.warn("WARNING: OrbitControls.js encountered an unknown camera type - zoom to cursor disabled.");
+        this.zoomToCursor = false;
+      }
+      if (newRadius !== null) {
+        if (this.screenSpacePanning) {
+          this.target.set(0, 0, -1).transformDirection(this.object.matrix).multiplyScalar(newRadius).add(this.object.position);
+        } else {
+          _ray.origin.copy(this.object.position);
+          _ray.direction.set(0, 0, -1).transformDirection(this.object.matrix);
+          if (Math.abs(this.object.up.dot(_ray.direction)) < _TILT_LIMIT) {
+            this.object.lookAt(this.target);
+          } else {
+            _plane.setFromNormalAndCoplanarPoint(this.object.up, this.target);
+            _ray.intersectPlane(_plane, this.target);
+          }
+        }
+      }
+    } else if (this.object.isOrthographicCamera) {
+      const prevZoom = this.object.zoom;
+      this.object.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.object.zoom / this._scale));
+      if (prevZoom !== this.object.zoom) {
+        this.object.updateProjectionMatrix();
+        zoomChanged = true;
+      }
+    }
+    this._scale = 1;
+    this._performCursorZoom = false;
+    if (zoomChanged || this._lastPosition.distanceToSquared(this.object.position) > _EPS || 8 * (1 - this._lastQuaternion.dot(this.object.quaternion)) > _EPS || this._lastTargetPosition.distanceToSquared(this.target) > _EPS) {
+      this.dispatchEvent(_changeEvent);
+      this._lastPosition.copy(this.object.position);
+      this._lastQuaternion.copy(this.object.quaternion);
+      this._lastTargetPosition.copy(this.target);
+      return true;
+    }
+    return false;
+  }
+  _getAutoRotationAngle(deltaTime) {
+    if (deltaTime !== null) {
+      return _twoPI / 60 * this.autoRotateSpeed * deltaTime;
+    } else {
+      return _twoPI / 60 / 60 * this.autoRotateSpeed;
+    }
+  }
+  _getZoomScale(delta) {
+    const normalizedDelta = Math.abs(delta * 0.01);
+    return Math.pow(0.95, this.zoomSpeed * normalizedDelta);
+  }
+  _rotateLeft(angle) {
+    this._sphericalDelta.theta -= angle;
+  }
+  _rotateUp(angle) {
+    this._sphericalDelta.phi -= angle;
+  }
+  _panLeft(distance, objectMatrix) {
+    _v.setFromMatrixColumn(objectMatrix, 0);
+    _v.multiplyScalar(-distance);
+    this._panOffset.add(_v);
+  }
+  _panUp(distance, objectMatrix) {
+    if (this.screenSpacePanning === true) {
+      _v.setFromMatrixColumn(objectMatrix, 1);
+    } else {
+      _v.setFromMatrixColumn(objectMatrix, 0);
+      _v.crossVectors(this.object.up, _v);
+    }
+    _v.multiplyScalar(distance);
+    this._panOffset.add(_v);
+  }
+  // deltaX and deltaY are in pixels; right and down are positive
+  _pan(deltaX, deltaY) {
+    const element = this.domElement;
+    if (this.object.isPerspectiveCamera) {
+      const position = this.object.position;
+      _v.copy(position).sub(this.target);
+      let targetDistance = _v.length();
+      targetDistance *= Math.tan(this.object.fov / 2 * Math.PI / 180);
+      this._panLeft(2 * deltaX * targetDistance / element.clientHeight, this.object.matrix);
+      this._panUp(2 * deltaY * targetDistance / element.clientHeight, this.object.matrix);
+    } else if (this.object.isOrthographicCamera) {
+      this._panLeft(deltaX * (this.object.right - this.object.left) / this.object.zoom / element.clientWidth, this.object.matrix);
+      this._panUp(deltaY * (this.object.top - this.object.bottom) / this.object.zoom / element.clientHeight, this.object.matrix);
+    } else {
+      console.warn("WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.");
+      this.enablePan = false;
+    }
+  }
+  _dollyOut(dollyScale) {
+    if (this.object.isPerspectiveCamera || this.object.isOrthographicCamera) {
+      this._scale /= dollyScale;
+    } else {
+      console.warn("WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.");
+      this.enableZoom = false;
+    }
+  }
+  _dollyIn(dollyScale) {
+    if (this.object.isPerspectiveCamera || this.object.isOrthographicCamera) {
+      this._scale *= dollyScale;
+    } else {
+      console.warn("WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.");
+      this.enableZoom = false;
+    }
+  }
+  _updateZoomParameters(x, y) {
+    if (!this.zoomToCursor) {
+      return;
+    }
+    this._performCursorZoom = true;
+    const rect = this.domElement.getBoundingClientRect();
+    const dx = x - rect.left;
+    const dy = y - rect.top;
+    const w = rect.width;
+    const h = rect.height;
+    this._mouse.x = dx / w * 2 - 1;
+    this._mouse.y = -(dy / h) * 2 + 1;
+    this._dollyDirection.set(this._mouse.x, this._mouse.y, 1).unproject(this.object).sub(this.object.position).normalize();
+  }
+  _clampDistance(dist2) {
+    return Math.max(this.minDistance, Math.min(this.maxDistance, dist2));
+  }
+  //
+  // event callbacks - update the object state
+  //
+  _handleMouseDownRotate(event) {
+    this._rotateStart.set(event.clientX, event.clientY);
+  }
+  _handleMouseDownDolly(event) {
+    this._updateZoomParameters(event.clientX, event.clientX);
+    this._dollyStart.set(event.clientX, event.clientY);
+  }
+  _handleMouseDownPan(event) {
+    this._panStart.set(event.clientX, event.clientY);
+  }
+  _handleMouseMoveRotate(event) {
+    this._rotateEnd.set(event.clientX, event.clientY);
+    this._rotateDelta.subVectors(this._rotateEnd, this._rotateStart).multiplyScalar(this.rotateSpeed);
+    const element = this.domElement;
+    this._rotateLeft(_twoPI * this._rotateDelta.x / element.clientHeight);
+    this._rotateUp(_twoPI * this._rotateDelta.y / element.clientHeight);
+    this._rotateStart.copy(this._rotateEnd);
+    this.update();
+  }
+  _handleMouseMoveDolly(event) {
+    this._dollyEnd.set(event.clientX, event.clientY);
+    this._dollyDelta.subVectors(this._dollyEnd, this._dollyStart);
+    if (this._dollyDelta.y > 0) {
+      this._dollyOut(this._getZoomScale(this._dollyDelta.y));
+    } else if (this._dollyDelta.y < 0) {
+      this._dollyIn(this._getZoomScale(this._dollyDelta.y));
+    }
+    this._dollyStart.copy(this._dollyEnd);
+    this.update();
+  }
+  _handleMouseMovePan(event) {
+    this._panEnd.set(event.clientX, event.clientY);
+    this._panDelta.subVectors(this._panEnd, this._panStart).multiplyScalar(this.panSpeed);
+    this._pan(this._panDelta.x, this._panDelta.y);
+    this._panStart.copy(this._panEnd);
+    this.update();
+  }
+  _handleMouseWheel(event) {
+    this._updateZoomParameters(event.clientX, event.clientY);
+    if (event.deltaY < 0) {
+      this._dollyIn(this._getZoomScale(event.deltaY));
+    } else if (event.deltaY > 0) {
+      this._dollyOut(this._getZoomScale(event.deltaY));
+    }
+    this.update();
+  }
+  _handleKeyDown(event) {
+    let needsUpdate = false;
+    switch (event.code) {
+      case this.keys.UP:
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (this.enableRotate) {
+            this._rotateUp(_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+          }
+        } else {
+          if (this.enablePan) {
+            this._pan(0, this.keyPanSpeed);
+          }
+        }
+        needsUpdate = true;
+        break;
+      case this.keys.BOTTOM:
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (this.enableRotate) {
+            this._rotateUp(-_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+          }
+        } else {
+          if (this.enablePan) {
+            this._pan(0, -this.keyPanSpeed);
+          }
+        }
+        needsUpdate = true;
+        break;
+      case this.keys.LEFT:
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (this.enableRotate) {
+            this._rotateLeft(_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+          }
+        } else {
+          if (this.enablePan) {
+            this._pan(this.keyPanSpeed, 0);
+          }
+        }
+        needsUpdate = true;
+        break;
+      case this.keys.RIGHT:
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (this.enableRotate) {
+            this._rotateLeft(-_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+          }
+        } else {
+          if (this.enablePan) {
+            this._pan(-this.keyPanSpeed, 0);
+          }
+        }
+        needsUpdate = true;
+        break;
+    }
+    if (needsUpdate) {
+      event.preventDefault();
+      this.update();
+    }
+  }
+  _handleTouchStartRotate(event) {
+    if (this._pointers.length === 1) {
+      this._rotateStart.set(event.pageX, event.pageY);
+    } else {
+      const position = this._getSecondPointerPosition(event);
+      const x = 0.5 * (event.pageX + position.x);
+      const y = 0.5 * (event.pageY + position.y);
+      this._rotateStart.set(x, y);
+    }
+  }
+  _handleTouchStartPan(event) {
+    if (this._pointers.length === 1) {
+      this._panStart.set(event.pageX, event.pageY);
+    } else {
+      const position = this._getSecondPointerPosition(event);
+      const x = 0.5 * (event.pageX + position.x);
+      const y = 0.5 * (event.pageY + position.y);
+      this._panStart.set(x, y);
+    }
+  }
+  _handleTouchStartDolly(event) {
+    const position = this._getSecondPointerPosition(event);
+    const dx = event.pageX - position.x;
+    const dy = event.pageY - position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    this._dollyStart.set(0, distance);
+  }
+  _handleTouchStartDollyPan(event) {
+    if (this.enableZoom) this._handleTouchStartDolly(event);
+    if (this.enablePan) this._handleTouchStartPan(event);
+  }
+  _handleTouchStartDollyRotate(event) {
+    if (this.enableZoom) this._handleTouchStartDolly(event);
+    if (this.enableRotate) this._handleTouchStartRotate(event);
+  }
+  _handleTouchMoveRotate(event) {
+    if (this._pointers.length == 1) {
+      this._rotateEnd.set(event.pageX, event.pageY);
+    } else {
+      const position = this._getSecondPointerPosition(event);
+      const x = 0.5 * (event.pageX + position.x);
+      const y = 0.5 * (event.pageY + position.y);
+      this._rotateEnd.set(x, y);
+    }
+    this._rotateDelta.subVectors(this._rotateEnd, this._rotateStart).multiplyScalar(this.rotateSpeed);
+    const element = this.domElement;
+    this._rotateLeft(_twoPI * this._rotateDelta.x / element.clientHeight);
+    this._rotateUp(_twoPI * this._rotateDelta.y / element.clientHeight);
+    this._rotateStart.copy(this._rotateEnd);
+  }
+  _handleTouchMovePan(event) {
+    if (this._pointers.length === 1) {
+      this._panEnd.set(event.pageX, event.pageY);
+    } else {
+      const position = this._getSecondPointerPosition(event);
+      const x = 0.5 * (event.pageX + position.x);
+      const y = 0.5 * (event.pageY + position.y);
+      this._panEnd.set(x, y);
+    }
+    this._panDelta.subVectors(this._panEnd, this._panStart).multiplyScalar(this.panSpeed);
+    this._pan(this._panDelta.x, this._panDelta.y);
+    this._panStart.copy(this._panEnd);
+  }
+  _handleTouchMoveDolly(event) {
+    const position = this._getSecondPointerPosition(event);
+    const dx = event.pageX - position.x;
+    const dy = event.pageY - position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    this._dollyEnd.set(0, distance);
+    this._dollyDelta.set(0, Math.pow(this._dollyEnd.y / this._dollyStart.y, this.zoomSpeed));
+    this._dollyOut(this._dollyDelta.y);
+    this._dollyStart.copy(this._dollyEnd);
+    const centerX = (event.pageX + position.x) * 0.5;
+    const centerY = (event.pageY + position.y) * 0.5;
+    this._updateZoomParameters(centerX, centerY);
+  }
+  _handleTouchMoveDollyPan(event) {
+    if (this.enableZoom) this._handleTouchMoveDolly(event);
+    if (this.enablePan) this._handleTouchMovePan(event);
+  }
+  _handleTouchMoveDollyRotate(event) {
+    if (this.enableZoom) this._handleTouchMoveDolly(event);
+    if (this.enableRotate) this._handleTouchMoveRotate(event);
+  }
+  // pointers
+  _addPointer(event) {
+    this._pointers.push(event.pointerId);
+  }
+  _removePointer(event) {
+    delete this._pointerPositions[event.pointerId];
+    for (let i = 0; i < this._pointers.length; i++) {
+      if (this._pointers[i] == event.pointerId) {
+        this._pointers.splice(i, 1);
+        return;
+      }
+    }
+  }
+  _isTrackingPointer(event) {
+    for (let i = 0; i < this._pointers.length; i++) {
+      if (this._pointers[i] == event.pointerId) return true;
+    }
+    return false;
+  }
+  _trackPointer(event) {
+    let position = this._pointerPositions[event.pointerId];
+    if (position === void 0) {
+      position = new Vector2();
+      this._pointerPositions[event.pointerId] = position;
+    }
+    position.set(event.pageX, event.pageY);
+  }
+  _getSecondPointerPosition(event) {
+    const pointerId = event.pointerId === this._pointers[0] ? this._pointers[1] : this._pointers[0];
+    return this._pointerPositions[pointerId];
+  }
+  //
+  _customWheelEvent(event) {
+    const mode = event.deltaMode;
+    const newEvent = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      deltaY: event.deltaY
+    };
+    switch (mode) {
+      case 1:
+        newEvent.deltaY *= 16;
+        break;
+      case 2:
+        newEvent.deltaY *= 100;
+        break;
+    }
+    if (event.ctrlKey && !this._controlActive) {
+      newEvent.deltaY *= 10;
+    }
+    return newEvent;
+  }
+};
+function onPointerDown(event) {
+  if (this.enabled === false) return;
+  if (this._pointers.length === 0) {
+    this.domElement.setPointerCapture(event.pointerId);
+    this.domElement.ownerDocument.addEventListener("pointermove", this._onPointerMove);
+    this.domElement.ownerDocument.addEventListener("pointerup", this._onPointerUp);
+  }
+  if (this._isTrackingPointer(event)) return;
+  this._addPointer(event);
+  if (event.pointerType === "touch") {
+    this._onTouchStart(event);
+  } else {
+    this._onMouseDown(event);
+  }
+  if (this._cursorStyle === "grab") {
+    this.domElement.style.cursor = "grabbing";
+  }
+}
+function onPointerMove(event) {
+  if (this.enabled === false) return;
+  if (event.pointerType === "touch") {
+    this._onTouchMove(event);
+  } else {
+    this._onMouseMove(event);
+  }
+}
+function onPointerUp(event) {
+  this._removePointer(event);
+  switch (this._pointers.length) {
+    case 0:
+      this.domElement.releasePointerCapture(event.pointerId);
+      this.domElement.ownerDocument.removeEventListener("pointermove", this._onPointerMove);
+      this.domElement.ownerDocument.removeEventListener("pointerup", this._onPointerUp);
+      this.dispatchEvent(_endEvent);
+      this.state = _STATE.NONE;
+      if (this._cursorStyle === "grab") {
+        this.domElement.style.cursor = "grab";
+      }
+      break;
+    case 1:
+      const pointerId = this._pointers[0];
+      const position = this._pointerPositions[pointerId];
+      this._onTouchStart({ pointerId, pageX: position.x, pageY: position.y });
+      break;
+  }
+}
+function onMouseDown(event) {
+  let mouseAction;
+  switch (event.button) {
+    case 0:
+      mouseAction = this.mouseButtons.LEFT;
+      break;
+    case 1:
+      mouseAction = this.mouseButtons.MIDDLE;
+      break;
+    case 2:
+      mouseAction = this.mouseButtons.RIGHT;
+      break;
+    default:
+      mouseAction = -1;
+  }
+  switch (mouseAction) {
+    case MOUSE.DOLLY:
+      if (this.enableZoom === false) return;
+      this._handleMouseDownDolly(event);
+      this.state = _STATE.DOLLY;
+      break;
+    case MOUSE.ROTATE:
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        if (this.enablePan === false) return;
+        this._handleMouseDownPan(event);
+        this.state = _STATE.PAN;
+      } else {
+        if (this.enableRotate === false) return;
+        this._handleMouseDownRotate(event);
+        this.state = _STATE.ROTATE;
+      }
+      break;
+    case MOUSE.PAN:
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        if (this.enableRotate === false) return;
+        this._handleMouseDownRotate(event);
+        this.state = _STATE.ROTATE;
+      } else {
+        if (this.enablePan === false) return;
+        this._handleMouseDownPan(event);
+        this.state = _STATE.PAN;
+      }
+      break;
+    default:
+      this.state = _STATE.NONE;
+  }
+  if (this.state !== _STATE.NONE) {
+    this.dispatchEvent(_startEvent);
+  }
+}
+function onMouseMove(event) {
+  switch (this.state) {
+    case _STATE.ROTATE:
+      if (this.enableRotate === false) return;
+      this._handleMouseMoveRotate(event);
+      break;
+    case _STATE.DOLLY:
+      if (this.enableZoom === false) return;
+      this._handleMouseMoveDolly(event);
+      break;
+    case _STATE.PAN:
+      if (this.enablePan === false) return;
+      this._handleMouseMovePan(event);
+      break;
+  }
+}
+function onMouseWheel(event) {
+  if (this.enabled === false || this.enableZoom === false || this.state !== _STATE.NONE) return;
+  event.preventDefault();
+  this.dispatchEvent(_startEvent);
+  this._handleMouseWheel(this._customWheelEvent(event));
+  this.dispatchEvent(_endEvent);
+}
+function onKeyDown(event) {
+  if (this.enabled === false) return;
+  this._handleKeyDown(event);
+}
+function onTouchStart(event) {
+  this._trackPointer(event);
+  switch (this._pointers.length) {
+    case 1:
+      switch (this.touches.ONE) {
+        case TOUCH.ROTATE:
+          if (this.enableRotate === false) return;
+          this._handleTouchStartRotate(event);
+          this.state = _STATE.TOUCH_ROTATE;
+          break;
+        case TOUCH.PAN:
+          if (this.enablePan === false) return;
+          this._handleTouchStartPan(event);
+          this.state = _STATE.TOUCH_PAN;
+          break;
+        default:
+          this.state = _STATE.NONE;
+      }
+      break;
+    case 2:
+      switch (this.touches.TWO) {
+        case TOUCH.DOLLY_PAN:
+          if (this.enableZoom === false && this.enablePan === false) return;
+          this._handleTouchStartDollyPan(event);
+          this.state = _STATE.TOUCH_DOLLY_PAN;
+          break;
+        case TOUCH.DOLLY_ROTATE:
+          if (this.enableZoom === false && this.enableRotate === false) return;
+          this._handleTouchStartDollyRotate(event);
+          this.state = _STATE.TOUCH_DOLLY_ROTATE;
+          break;
+        default:
+          this.state = _STATE.NONE;
+      }
+      break;
+    default:
+      this.state = _STATE.NONE;
+  }
+  if (this.state !== _STATE.NONE) {
+    this.dispatchEvent(_startEvent);
+  }
+}
+function onTouchMove(event) {
+  this._trackPointer(event);
+  switch (this.state) {
+    case _STATE.TOUCH_ROTATE:
+      if (this.enableRotate === false) return;
+      this._handleTouchMoveRotate(event);
+      this.update();
+      break;
+    case _STATE.TOUCH_PAN:
+      if (this.enablePan === false) return;
+      this._handleTouchMovePan(event);
+      this.update();
+      break;
+    case _STATE.TOUCH_DOLLY_PAN:
+      if (this.enableZoom === false && this.enablePan === false) return;
+      this._handleTouchMoveDollyPan(event);
+      this.update();
+      break;
+    case _STATE.TOUCH_DOLLY_ROTATE:
+      if (this.enableZoom === false && this.enableRotate === false) return;
+      this._handleTouchMoveDollyRotate(event);
+      this.update();
+      break;
+    default:
+      this.state = _STATE.NONE;
+  }
+}
+function onContextMenu(event) {
+  if (this.enabled === false) return;
+  event.preventDefault();
+}
+function interceptControlDown(event) {
+  if (event.key === "Control") {
+    this._controlActive = true;
+    const document2 = this.domElement.getRootNode();
+    document2.addEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
+  }
+}
+function interceptControlUp(event) {
+  if (event.key === "Control") {
+    this._controlActive = false;
+    const document2 = this.domElement.getRootNode();
+    document2.removeEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
+  }
+}
+
+// src/shared/starters.ts
+var STARTER_DESIGNS = [
+  // ---- cheap swarm ----
+  { id: "starter-buzzsaw", name: "Buzzsaw", chassis: "scout", mobility: "wheels", mounts: ["mg"] },
+  { id: "starter-torchbug", name: "Torchbug", chassis: "scout", mobility: "halftrack", mounts: ["flamer"] },
+  // ---- skirmisher ----
+  { id: "starter-lancer", name: "Lancer", chassis: "raider", mobility: "legs", mounts: ["laser", "laser"] },
+  { id: "starter-hunter", name: "Tank Hunter", chassis: "raider", mobility: "legs", mounts: ["atgm", "mg"] },
+  // ---- frontline tank ----
+  { id: "starter-bulwark", name: "Bulwark", chassis: "warden", mobility: "treads", mounts: ["hmg", "plateL"] },
+  // ---- anti-tank ----
+  { id: "starter-tankbuster", name: "Tankbuster", chassis: "longarm", mobility: "treads", mounts: ["cannon"] },
+  // ---- anti-air ----
+  { id: "starter-skyguard", name: "Skyguard", chassis: "warden", mobility: "halftrack", mounts: ["ac40", "ac20"] },
+  // ---- artillery ----
+  { id: "starter-thunderhead", name: "Thunderhead", chassis: "longarm", mobility: "spider", mounts: ["howitzer"] },
+  { id: "starter-firestorm", name: "Firestorm", chassis: "striker", mobility: "spider", mounts: ["mortar", "mortar", null] },
+  // ---- flyers ----
+  { id: "starter-hornet", name: "Hornet", chassis: "drone", mobility: "rotor", mounts: ["twinmg"] },
+  { id: "starter-strafer", name: "Strafer", chassis: "strikejet", mobility: "jet", mounts: ["rockets", "guidedrocket", "targeting"] },
+  // ---- support ----
+  { id: "starter-medic", name: "Field Medic", chassis: "aegis", mobility: "halftrack", mounts: ["twin30", "repair"] },
+  // ---- brawler ----
+  { id: "starter-stormcaller", name: "Voltrider", chassis: "striker", mobility: "halftrack", mounts: ["minigun", "twin30", "targeting"] },
+  // ---- size-3 heavies ----
+  { id: "starter-behemoth", name: "Ironbreaker", chassis: "colossus", mobility: "treads", mounts: ["railgun", "cannon", "reinforced", "plateL"] },
+  { id: "starter-ironclad", name: "Ironclad", chassis: "bastion", mobility: "treads", mounts: ["autocannon", "plateM", "autocannon"] },
+  // ---- emplacement ----
+  { id: "starter-spire", name: "Missile Spire", chassis: "warden", mobility: "spider", mounts: ["guidedrocket", "hmg"] },
+  // ---- melee: fast hover brawler that dives into the line ----
+  { id: "starter-ripper", name: "Gnasher", chassis: "mantis", mobility: "hover", mounts: ["buzzsaw", null] },
+  // ---- stealth: cloaked sniper platform ----
+  { id: "starter-shade", name: "Shade", chassis: "striker", mobility: "halftrack", mounts: ["lightrail", "stealth", "sniper"] },
+  // ---- shield wall: barrier-heavy anchor of the line ----
+  { id: "starter-aegiswall", name: "Aegis Wall", chassis: "bastion", mobility: "treads", mounts: ["shieldH", "cannon75", "smoke"] },
+  // ---- support aura: command vehicle that speeds up and repairs its escorts ----
+  { id: "starter-commander", name: "Commander", chassis: "striker", mobility: "halftrack", mounts: ["uplink", "twin30", "hmg"] },
+  // ---- giant (size 4): all-round assault walker ----
+  { id: "starter-juggernaut", name: "Gargantua", chassis: "goliath", mobility: "megatracks", mounts: ["avenger", "cannon", "cannon", "plateM"] },
+  // ---- titan (size 5): beam-armed war machine ----
+  { id: "starter-warlord", name: "Kronos", chassis: "titan", mobility: "megatracks", mounts: ["annihilator", "siegeplasma", "cannon", "cannon", "plateM"] },
+  // ---- giant bomber (size 4): strategic jet bomber, a blockbuster in the middle bay, guns at chin and tail ----
+  { id: "starter-thunderbird", name: "Thunderbird", chassis: "strategic", mobility: "jet", mounts: ["bombs", "bombs", "heavybomb", "plateM", "pointdef", "shieldL"] }
+];
+
+// src/client/proto3d/surface3d.ts
+var base2 = "assets/tex/";
+var LAYER = {
+  scout: 0,
+  cast: 1,
+  slab: 2,
+  titan: 3,
+  air: 4,
+  rotor: 5,
+  arty: 6,
+  support: 7,
+  carapace: 8,
+  ceramic: 9,
+  brawler: 10,
+  stealth: 11,
+  grating: 12,
+  machinery: 13,
+  dullmetal: 14
+};
+var N_LAYERS = 15;
+var TEX = 512;
+var L0 = {
+  scout: [1, 0.14, 0, 0],
+  cast: [1.2, 0.16, 0, 0],
+  slab: [1.4, 0.14, 0, 0],
+  titan: [1.1, 0.22, 0.3, 0],
+  air: [0.8, 0, 0, 0],
+  rotor: [1, 0, 0, 0],
+  arty: [1, 0, 0, 0],
+  support: [0.7, 0, 0, 0.7],
+  carapace: [0.9, 0, 0, 0],
+  ceramic: [1.1, 0, 0, 0.8],
+  brawler: [1.3, 0, 0.9, 0],
+  stealth: [0.6, 0, 0, 0],
+  grating: [1.3, 0, 0, 0],
+  machinery: [1.2, 0, 0, 0],
+  dullmetal: [1.25, 0, 0, 0.8]
+};
+var L1 = {
+  scout: [0, 0, 0, 0],
+  cast: [0, 0, 0, 0],
+  slab: [0, 0, 0, 0.7],
+  titan: [0, 0, 0, 0],
+  air: [0, 0, 0, 0],
+  rotor: [0, 0, 0, 0.6],
+  arty: [0, 0.55, 0, 0],
+  support: [0, 0, 0, 0],
+  carapace: [0, 0, 0.35, 0],
+  ceramic: [1.6, 0, 0, 0],
+  brawler: [0, 0, 0, 0],
+  stealth: [0, 0, 0, 0],
+  grating: [0, 0, 0, 0],
+  machinery: [0, 0, 0, 0.6],
+  dullmetal: [0, 0, 0, 0.3]
+};
+var UNIT = {
+  scout: [0.8, 0.8, 1, 0],
+  cast: [0.7, 1, 1, 0],
+  slab: [0.75, 1.35, 1, 0],
+  titan: [1.1, 1.2, 0.9, 0],
+  air: [0.45, 0.3, 0.6, 0],
+  rotor: [0.7, 0.8, 0.8, 0],
+  arty: [0.8, 1.2, 1, 0],
+  support: [0.35, 0.45, 0.5, 0],
+  carapace: [0.1, 0.6, 0.7, 0],
+  ceramic: [0.6, 0.45, 0.5, 0],
+  brawler: [1.8, 1.1, 1, 0],
+  stealth: [0.2, 0.4, 0.4, 0],
+  grating: [1, 1, 1, 0],
+  machinery: [1, 1, 1, 0],
+  dullmetal: [1, 0.9, 0.8, 0]
+};
+var L2 = {
+  scout: [0, 0, 0, 0],
+  cast: [0, 0, 0, 0],
+  slab: [0, 0, 0, 0],
+  titan: [0, 0, 0, 0],
+  air: [0, 0, 0, 0],
+  rotor: [0, 0, 0, 0],
+  arty: [0, 0, 0, 0],
+  support: [0, 0, 0, 0],
+  carapace: [0, 0, 0, 0],
+  ceramic: [0.85, 0.2, 0.42, 0.15],
+  brawler: [0, 0, 0, 0],
+  stealth: [0, 0, 0, 0],
+  grating: [0, 0, 0, 0],
+  machinery: [0, 0, 0, 0],
+  dullmetal: [0.88, 0.27, 0.62, 0.1]
+};
+var vec4s = (t, none = [1, 0, 0, 0]) => {
+  const out2 = [];
+  for (let i = 0; i < 16; i++) {
+    const k = Object.keys(LAYER).find((n) => LAYER[n] === i);
+    out2.push(new Vector4(...k ? t[k] : none));
+  }
+  return out2;
+};
+function flatArray() {
+  const t = new DataArrayTexture(new Uint8Array([128, 128, 191, 0]), 1, 1, 1);
+  t.needsUpdate = true;
+  return t;
+}
+function flat(r, g, b) {
+  const t = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+var surfaceUniforms = {
+  sdA: { value: flatArray() },
+  sdB: { value: flat(0, 0, 128) },
+  sdM: { value: flat(0, 0, 0) },
+  /** 1 when the maps are loaded and detail is enabled */
+  sdOn: { value: 0 },
+  /** global bump strength */
+  sdBump: { value: 0.9 },
+  sdL0: { value: vec4s(L0) },
+  sdL1: { value: vec4s(L1) },
+  sdL2: { value: vec4s(L2, [0, 0, 0, 0]) },
+  sdU: { value: vec4s(UNIT) }
+};
+var loaded = 0;
+var started = false;
+var wanted = true;
+var NEED = 3;
+var sync = () => {
+  surfaceUniforms.sdOn.value = loaded === NEED && wanted ? 1 : 0;
+};
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = rej;
+    im.src = src;
+  });
+}
+function pixels(im) {
+  const c = document.createElement("canvas");
+  c.width = im.width;
+  c.height = im.height;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(im, 0, 0);
+  return g.getImageData(0, 0, im.width, im.height).data;
+}
+function loadSurfaceTextures() {
+  if (started || typeof document === "undefined" || typeof Image === "undefined") return;
+  started = true;
+  const done = () => {
+    loaded++;
+    sync();
+  };
+  Promise.all([loadImage(base2 + "surf_detail.png"), loadImage(base2 + "surf_mask.png")]).then(([rgb, msk]) => {
+    const a = pixels(rgb), m = pixels(msk);
+    const layers = Math.min(N_LAYERS, Math.floor(rgb.height / TEX));
+    const data = new Uint8Array(TEX * TEX * 4 * layers);
+    for (let l = 0; l < layers; l++) for (let y = 0; y < TEX; y++) {
+      const src = (l * TEX + (TEX - 1 - y)) * TEX * 4, dst = (l * TEX + y) * TEX * 4;
+      for (let x = 0; x < TEX * 4; x += 4) {
+        data[dst + x] = a[src + x];
+        data[dst + x + 1] = a[src + x + 1];
+        data[dst + x + 2] = a[src + x + 2];
+        data[dst + x + 3] = m[src + x];
+      }
+    }
+    const t = new DataArrayTexture(data, TEX, TEX, layers);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.minFilter = LinearMipmapLinearFilter;
+    t.magFilter = LinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 8;
+    t.colorSpace = NoColorSpace;
+    t.needsUpdate = true;
+    surfaceUniforms.sdA.value = t;
+    done();
+  }).catch(() => {
+  });
+  const ld = new TextureLoader();
+  ld.load(base2 + "hull_wear.jpg", (t) => {
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.colorSpace = NoColorSpace;
+    t.minFilter = LinearMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 8;
+    t.needsUpdate = true;
+    surfaceUniforms.sdB.value = t;
+    done();
+  }, void 0, () => {
+  });
+  ld.load(base2 + "surf_marks.png", (t) => {
+    t.colorSpace = NoColorSpace;
+    t.generateMipmaps = false;
+    t.minFilter = LinearFilter;
+    t.needsUpdate = true;
+    surfaceUniforms.sdM.value = t;
+    done();
+  }, void 0, () => {
+  });
+}
+var SD_VERT_DECL = (
+  /* glsl */
+  `
+attribute vec4 sdv; attribute vec4 sdb;
+varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;`
+);
+var SD_VERT_MAIN = (
+  /* glsl */
+  `
+  vSdP = position; vSdV = sdv; vSdB = sdb;
+  {
+    mat3 sdMv = mat3(modelViewMatrix);
+    #ifdef USE_INSTANCING
+      sdMv = sdMv * mat3(instanceMatrix);
+    #endif
+    vSdAX = normalize(sdMv[0]); vSdAY = normalize(sdMv[1]); vSdAZ = normalize(sdMv[2]);
+  }`
+);
+var SD_FRAG_DECL = (
+  /* glsl */
+  `
+varying vec3 vSdP; varying vec4 vSdV; varying vec4 vSdB; varying vec3 vSdAX; varying vec3 vSdAY; varying vec3 vSdAZ;
+uniform highp sampler2DArray sdA; uniform sampler2D sdB; uniform sampler2D sdM; uniform float sdOn; uniform float sdBump;
+uniform vec4 sdL0[16]; uniform vec4 sdL1[16]; uniform vec4 sdL2[16]; uniform vec4 sdU[16];
+float sdCav, sdWear, sdGrime, sdMot, sdMask, sdLayer, sdRegion, sdGiant; vec3 sdGrad; vec3 sdON;
+float sdLayerFor(int mi, float wny) {
+  float w = floor(vSdV.w + 0.5);
+  sdRegion = floor(w / 32.0);
+  float sec = mod(w, 32.0) - 1.0;
+  sdGiant = sec >= 0.0 ? 1.0 : 0.0;
+  bool mech = mi == 3 || mi == 4 || mi >= 16;              // gunmetal, steel, metal finishes (materials.ts METAL_FINISH)
+  if (sdRegion > 1.5 && mech) return 13.0;               // running gear joints / hubs: machinery
+  if (sec >= 0.0 && sdRegion < 0.5) {                     // giant hull: skin by part
+    if (mi == 2) return sec;                              // superstructure panels
+    if (mi == 1 && wny > 0.8) return 12.0;                // decks: grating
+    if (mech) return 13.0;                                // exposed machinery
+  }
+  // each part role wears its own surface, so a hull reads as distinct pieces rather than one skin: dark mechanics are
+  // machinery, light shells clean fine panels (creature / stealth hulls keep their own look all over)
+  float own = floor(vSdV.x + 0.5);
+  if (sec < 0.0 && own != 8.0 && own != 11.0) {
+    if (mi == 1) return 13.0;
+    if (mi == 2) return 4.0;
+  }
+  return own;
+}
+void sdRun(int mi, vec3 nView) {
+  sdCav = 1.0; sdWear = 0.0; sdGrime = 0.0; sdMot = 0.0; sdMask = 0.0; sdGrad = vec3(0.0); sdLayer = 0.0;
+  sdON = normalize(vec3(dot(nView, vSdAX), dot(nView, vSdAY), dot(nView, vSdAZ)));
+  sdLayer = sdLayerFor(mi, sdON.y);
+  if (sdOn < 0.5) return;
+  float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
+  vec3 tw = pow(abs(sdON), vec3(6.0)); tw /= (tw.x + tw.y + tw.z);
+  vec3 p = vSdP * dens;
+  vec2 uX = p.zy + vec2(0.37, 0.11), uY = p.xz + vec2(0.71, 0.29), uZ = p.xy + vec2(0.13, 0.57);
+  vec4 aX = texture(sdA, vec3(uX, sdLayer)), aY = texture(sdA, vec3(uY, sdLayer)), aZ = texture(sdA, vec3(uZ, sdLayer));
+  vec3 bX = texture2D(sdB, uX * 0.5).rgb, bY = texture2D(sdB, uY * 0.5).rgb, bZ = texture2D(sdB, uZ * 0.5).rgb;
+  vec4 a = aX * tw.x + aY * tw.y + aZ * tw.z;
+  vec3 b = bX * tw.x + bY * tw.y + bZ * tw.z;
+  sdCav = a.b / 0.75; sdMask = a.a;
+  float macro = texture2D(sdB, (vSdP.xz + vSdP.yy * vec2(0.6, -0.4)) * 0.17 + vec2(0.5, 0.2)).g;
+  sdWear = b.r; sdGrime = b.g * (0.45 + 0.9 * macro); sdMot = b.b - 0.5 + (0.35 - macro) * 0.35;
+  vec2 sX = aX.rg - 0.5, sY = aY.rg - 0.5, sZ = aZ.rg - 0.5;
+  sdGrad = tw.x * vec3(0.0, sX.y, sX.x) + tw.y * vec3(sY.x, 0.0, sY.y) + tw.z * vec3(sZ.x, sZ.y, 0.0);
+  sdGrad *= sdL0[int(sdLayer)].x;
+}
+/** one glyph of the marks atlas painted on the flank (object x/y), read from the side the fragment faces */
+float sdGlyph(float cell, vec2 c, float h, float sgn) {
+  float u = (vSdP.x - c.x) * sgn / (0.75 * h) + 0.5, v = (vSdP.y - c.y) / h + 0.5;
+  float inb = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
+  return texture2D(sdM, vec2((cell + clamp(u, 0.01, 0.99)) / 12.0, clamp(v, 0.01, 0.99))).r * inb;
+}
+/** the same on the top deck, upright when seen from behind (object z across, x up the glyph) */
+float sdGlyphTop(float cell, vec2 c, float h) {
+  float u = (vSdP.z - c.y) / (0.75 * h) + 0.5, v = (vSdP.x - c.x) / h + 0.5;
+  float inb = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
+  return texture2D(sdM, vec2((cell + clamp(u, 0.01, 0.99)) / 12.0, clamp(v, 0.01, 0.99))).r * inb;
+}`
+);
+var SD_APPLY = (
+  /* glsl */
+  `
+  float sdGlow = 0.0, sdRough = 1.0, sdMetal = 0.0; vec3 sdGradR = vec3(0.0);
+  sdRun(mi, normalize(vNormal));
+  {
+    int sl = int(sdLayer + 0.5);
+    vec4 l0 = sdL0[sl], l1 = sdL1[sl], l2 = sdL2[sl], up = sdU[int(vSdV.z + 0.5)];
+    // fine detail (seams, rivets, small stencils, pits) fades out once a texel is well under a pixel, so a zoomed-out
+    // battle shows clean paint instead of averaged-down grey mud; big features (masks, markings, wear on edges) stay
+    float dens = vSdV.y > 0.001 ? vSdV.y : 0.8;
+    float lod = log2(max(length(fwidth(vSdP)) * dens * 512.0, 1e-4));
+    float fine = 1.0 - smoothstep(2.2, 4.0, lod);
+    float det = sdRowDet * fine;
+    float sdW = sdRowWear * up.x, sdGr = sdRowGrime * up.y;
+    // metal skins: the paint gives way to bare metal with a hint of the team hue (team colour stays on the accent mask)
+    float metalK = (mi == 0 || mi == 15) ? l2.x * sdRowDet : 0.0; // armour plates only
+    if (metalK > 0.0) {
+      float lm = max(dot(base, vec3(0.2126, 0.7152, 0.0722)), 0.02);
+      base = mix(base, l2.y * mix(vec3(1.0), base / lm, l2.w), metalK);
+    }
+    base *= mix(1.0, pow(sdCav, 1.5), det);
+    // the skin's special mask: camo / pits / scorch darken, gouges = bare metal, role paint in the team accent,
+    // dust, chitin sheen, soot / oil = grime. Glowing skins split the mask: 0.5 = accent paint, 1 = lights
+    float mk = sdMask * sdRowDet;
+    float gm = l1.x > 0.0 ? smoothstep(0.75, 0.95, sdMask) : 0.0;
+    float am = l1.x > 0.0 ? smoothstep(0.3, 0.5, sdMask) * (1.0 - gm) * sdRowDet : mk;
+    // (camo / pits / scorch: kept subtle -- strong blotches read from above as shadow patches lying on the unit)
+    base *= 1.0 - mk * l0.y;
+    float wearSrc = max(sdWear * up.x, sdMask * l0.z);
+    base = mix(base, sdAccent * (0.85 + 0.2 * sdCav), am * l0.w);
+    // dust (artillery skins): settles low on the hull and in crevices, faint up top -- big pale blotches across the
+    // deck read from the game camera as patches of light and shadow lying on the unit
+    base = mix(base, vec3(0.6, 0.53, 0.42), mk * l1.y * 0.3 * (1.0 - 0.8 * smoothstep(0.1, 0.6, vWY)));
+    base *= 1.0 + mk * l1.z * 0.35;
+    float grimeSrc = max(sdGrime, sdMask * l1.w);
+    sdGlow = gm * sdRowDet * l1.x;
+    // mottling and grime: low on the hull, underneath and in streaks down the sides; top faces stay clean
+    // (darkening only, and gentle: big pale blotches across a hull read from the game camera as cloud shadows
+    // lying on the unit)
+    base *= 1.0 + min(sdMot, 0.0) * 0.22 * sdRowGrime * up.z * (0.4 + 0.6 * fine);
+    float low = 1.0 - smoothstep(0.02, 0.22, vWY); // (thin band: low hulls must not be grimed all over)
+    float topClean = mix(1.0, 0.3, smoothstep(0.5, 0.9, wn.y));
+    float gr = clamp(grimeSrc * (0.6 + 0.6 * low) * topClean + sdGiant * 0.5 * smoothstep(-0.2, -0.7, wn.y), 0.0, 1.0) * sdGr;
+    base = mix(base, base * vec3(0.55, 0.49, 0.40), gr * 0.65);
+    // chipped paint: bare metal, concentrated on chamfer edges
+    // (edges only: chips spreading over flat faces made large grey patches that looked like shadows on the unit)
+    float wm = wearSrc * sdRowWear * (0.05 + 1.6 * bev);
+    wm = smoothstep(0.55, 0.8, wm);
+    base = mix(base, vec3(0.36, 0.37, 0.38) * (0.8 + 0.3 * sdCav), wm * 0.6);
+    sdMetal = max(wm, metalK * 0.75); sdRough = mix(mix(1.0 + gr * 0.3, l2.z, metalK), 0.55, wm);
+    if (sdOn > 0.5) {
+      // giants: hazard bands on turret collars (the trim row of a turret)
+      if (sdGiant > 0.5 && sdRegion > 0.5 && sdRegion < 1.5 && mi == 1 && abs(sdON.y) < 0.5) {
+        float hz = step(0.5, fract((vSdP.x + vSdP.y + vSdP.z) * 5.0));
+        base = mix(base, mix(vec3(0.08), vec3(0.85, 0.64, 0.16), hz), 0.85 * (1.0 - wm * 0.7));
+      }
+      // heavy and bigger units: a hull number + insignia + kill tally on the flanks, the number again on the rear deck
+      if (vSdB.z > 0.0 && (mi == 0 || mi == 2)) {
+        float sgn = sign(sdON.z), side = smoothstep(0.6, 0.8, abs(sdON.z));
+        float h = vSdB.z; vec2 c = vSdB.xy;
+        float num = floor(vSdB.w + 0.5);
+        float gNum = max(sdGlyph(floor(num / 10.0), c - vec2(0.4 * h * sgn, 0.0), h, sgn), sdGlyph(mod(num, 10.0), c + vec2(0.4 * h * sgn, 0.0), h, sgn));
+        float gTally = sdGlyph(10.0, c - vec2(0.0, 0.82 * h), 0.5 * h, sgn) * side;
+        float gIns = sdGlyph(11.0, c - vec2(2.1 * h, 0.0), 1.15 * h, sgn) * side;
+        float th = 1.25 * h, tx = c.x - 3.2 * h, top = smoothstep(0.8, 0.92, sdON.y) * (mi == 0 ? 1.0 : 0.0);
+        gNum = max(gNum * side, top * max(sdGlyphTop(floor(num / 10.0), vec2(tx, -0.4 * th), th), sdGlyphTop(mod(num, 10.0), vec2(tx, 0.4 * th), th)));
+        float keep = 1.0 - 0.75 * smoothstep(0.3, 0.6, wearSrc);
+        base = mix(base, vec3(0.88, 0.87, 0.82), max(gNum, gTally) * keep * 0.92);
+        base = mix(base, sdAccent, gIns * keep * 0.9);
+      }
+    }
+    sdGradR = sdGrad * det;
+  }`
+);
+var sdBumpGLSL = (g) => (
+  /* glsl */
+  `
+  if (sdOn > 0.5) {
+    vec3 sdG = (vSdAX * (${g}).x + vSdAY * (${g}).y + vSdAZ * (${g}).z) * sdBump;
+    normal = normalize(normal - (sdG - normal * dot(normal, sdG)));
+  }`
+);
+
+// src/client/proto3d/materials.ts
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function makePanelTexture() {
+  const N = 1024;
+  const mk = () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = N;
+    return c;
+  };
+  const cr = mk(), cg = mk(), cb = mk();
+  const gr = cr.getContext("2d"), gg = cg.getContext("2d"), gb = cb.getContext("2d");
+  const r = rng(4242);
+  gr.fillStyle = "rgb(206,206,206)";
+  gr.fillRect(0, 0, N, N);
+  gg.fillStyle = "rgb(150,150,150)";
+  gg.fillRect(0, 0, N, N);
+  gb.fillStyle = "#000";
+  gb.fillRect(0, 0, N, N);
+  const panels = [];
+  const split = (x, y, w, h, d) => {
+    const minS = 150;
+    if (w < minS * 1.6 && h < minS * 1.6 || d > 4 || d > 1 && r() < 0.18) {
+      panels.push([x, y, w, h]);
+      return;
+    }
+    const vert = w > h ? true : h > w ? false : r() < 0.5;
+    const cut = 0.38 + r() * 0.24;
+    if (vert && w > minS * 1.3) {
+      split(x, y, w * cut, h, d + 1);
+      split(x + w * cut, y, w * (1 - cut), h, d + 1);
+    } else if (!vert && h > minS * 1.3) {
+      split(x, y, w, h * cut, d + 1);
+      split(x, y + h * cut, w, h * (1 - cut), d + 1);
+    } else panels.push([x, y, w, h]);
+  };
+  split(0, 0, N, N, 0);
+  for (const [x, y, w, h] of panels) {
+    const tint = 190 + r() * 38;
+    gr.fillStyle = `rgb(${tint},${tint},${tint})`;
+    gr.fillRect(x, y, w, h);
+    const lg = gr.createLinearGradient(x, y, x + w * (r() < 0.5 ? 1 : 0.2), y + h * (r() < 0.5 ? 1 : 0.2));
+    lg.addColorStop(0, "rgba(255,255,255,0.05)");
+    lg.addColorStop(1, "rgba(0,0,0,0.07)");
+    gr.fillStyle = lg;
+    gr.fillRect(x, y, w, h);
+    gg.strokeStyle = "rgb(40,40,40)";
+    gg.lineWidth = 4;
+    gg.strokeRect(x + 2, y + 2, w - 4, h - 4);
+    gg.strokeStyle = "rgb(190,190,190)";
+    gg.lineWidth = 2;
+    gg.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
+    gr.strokeStyle = "rgba(20,20,20,0.45)";
+    gr.lineWidth = 2.5;
+    gr.strokeRect(x + 2, y + 2, w - 4, h - 4);
+    for (let px2 = x + 14; px2 < x + w - 10; px2 += 36) for (const py2 of [y + 14, y + h - 14]) {
+      gg.fillStyle = "rgb(235,235,235)";
+      gg.beginPath();
+      gg.arc(px2, py2, 2.6, 0, 7);
+      gg.fill();
+    }
+    for (let py2 = y + 14; py2 < y + h - 10; py2 += 36) for (const px2 of [x + 14, x + w - 14]) {
+      gg.fillStyle = "rgb(235,235,235)";
+      gg.beginPath();
+      gg.arc(px2, py2, 2.6, 0, 7);
+      gg.fill();
+    }
+    for (let i = 0; i < w / 6; i++) {
+      const o = r() < 0.5;
+      const px2 = x + r() * w, py2 = o ? y + 5 + r() * 6 : y + h - 11 + r() * 6;
+      gb.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.5})`;
+      gb.fillRect(px2, py2, 2 + r() * 9, 1 + r() * 3);
+    }
+    for (let i = 0; i < h / 6; i++) {
+      const o = r() < 0.5;
+      const px2 = o ? x + 5 + r() * 6 : x + w - 11 + r() * 6, py2 = y + r() * h;
+      gb.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.5})`;
+      gb.fillRect(px2, py2, 1 + r() * 3, 2 + r() * 9);
+    }
+    const f = r();
+    if (f < 0.3 && w > 90 && h > 90) {
+      const hw = w * (0.35 + r() * 0.25), hh = h * (0.3 + r() * 0.25), hx = x + (w - hw) / 2, hy = y + (h - hh) / 2;
+      gg.fillStyle = "rgb(176,176,176)";
+      gg.fillRect(hx, hy, hw, hh);
+      gg.strokeStyle = "rgb(50,50,50)";
+      gg.lineWidth = 3;
+      gg.strokeRect(hx, hy, hw, hh);
+      gg.fillStyle = "rgb(60,60,60)";
+      gg.fillRect(hx + hw * 0.4, hy + hh * 0.45, hw * 0.2, 7);
+    } else if (f < 0.5 && w > 90 && h > 90) {
+      const sx = x + w * 0.2, sw = w * 0.6;
+      for (let k = 0; k < 6; k++) {
+        gg.fillStyle = "rgb(24,24,24)";
+        gg.fillRect(sx, y + h * 0.25 + k * (h * 0.5 / 6), sw, 5);
+        gr.fillStyle = "rgba(10,10,10,0.6)";
+        gr.fillRect(sx, y + h * 0.25 + k * (h * 0.5 / 6), sw, 5);
+      }
+    } else if (f < 0.62) {
+      gr.fillStyle = "rgba(255,255,255,0.06)";
+      gr.fillRect(x + 12, y + 12, w - 24, h - 24);
+    }
+  }
+  for (let i = 0; i < 90; i++) {
+    const x = r() * N, y = r() * N, l = 40 + r() * 200;
+    const g2 = gr.createLinearGradient(x, y, x, y + l);
+    g2.addColorStop(0, "rgba(30,24,16,0.0)");
+    g2.addColorStop(0.2, `rgba(30,24,16,${0.08 + r() * 0.1})`);
+    g2.addColorStop(1, "rgba(30,24,16,0)");
+    gr.fillStyle = g2;
+    gr.fillRect(x, y, 2 + r() * 5, l);
+  }
+  for (let i = 0; i < 160; i++) {
+    const x = r() * N, y = r() * N, rad = 12 + r() * 60;
+    const g2 = gr.createRadialGradient(x, y, 0, x, y, rad);
+    const dark = r() < 0.7;
+    g2.addColorStop(0, dark ? "rgba(25,20,14,0.10)" : "rgba(255,255,255,0.07)");
+    g2.addColorStop(1, "rgba(0,0,0,0)");
+    gr.fillStyle = g2;
+    gr.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  gb.strokeStyle = "rgba(255,255,255,0.55)";
+  gb.lineWidth = 1;
+  for (let i = 0; i < 160; i++) {
+    const x = r() * N, y = r() * N;
+    gb.beginPath();
+    gb.moveTo(x, y);
+    gb.lineTo(x + (r() - 0.5) * 60, y + (r() - 0.5) * 24);
+    gb.stroke();
+  }
+  const out2 = new Uint8Array(N * N * 4);
+  const dr = gr.getImageData(0, 0, N, N).data, dg = gg.getImageData(0, 0, N, N).data, db = gb.getImageData(0, 0, N, N).data;
+  for (let i = 0; i < N * N; i++) {
+    out2[i * 4] = dr[i * 4];
+    out2[i * 4 + 1] = dg[i * 4];
+    out2[i * 4 + 2] = db[i * 4];
+    out2[i * 4 + 3] = 255;
+  }
+  const t = new DataTexture(out2, N, N, RGBAFormat);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.minFilter = LinearMipmapLinearFilter;
+  t.magFilter = LinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = 8;
+  t.needsUpdate = true;
+  return t;
+}
+function makeDecalAtlas(accent2) {
+  const S = 512, T = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  const tile = (i) => [i % 4 * T, Math.floor(i / 4) * T];
+  {
+    const [x, y] = tile(0);
+    g.save();
+    g.beginPath();
+    g.rect(x + 2, y + 2, T - 4, T - 4);
+    g.clip();
+    g.fillStyle = "#d3a92e";
+    g.fillRect(x, y, T, T);
+    g.fillStyle = "#17181a";
+    for (let k = -T; k < T * 2; k += 32) {
+      g.beginPath();
+      g.moveTo(x + k, y + T);
+      g.lineTo(x + k + 16, y + T);
+      g.lineTo(x + k + 16 + T, y);
+      g.lineTo(x + k + T, y);
+      g.fill();
+    }
+    g.restore();
+  }
+  {
+    const [x, y] = tile(1);
+    g.fillStyle = accent2;
+    g.beginPath();
+    g.moveTo(x + 14, y + 20);
+    g.lineTo(x + 70, y + 20);
+    g.lineTo(x + 114, y + 64);
+    g.lineTo(x + 70, y + 108);
+    g.lineTo(x + 14, y + 108);
+    g.lineTo(x + 58, y + 64);
+    g.fill();
+  }
+  {
+    const [x, y] = tile(2);
+    g.fillStyle = accent2;
+    g.fillRect(x + 6, y + 14, T - 12, 28);
+    g.fillRect(x + 6, y + 56, T - 12, 14);
+    g.fillRect(x + 6, y + 84, T - 12, 14);
+  }
+  {
+    const [x, y] = tile(3);
+    g.strokeStyle = accent2;
+    g.lineWidth = 10;
+    g.beginPath();
+    g.arc(x + 64, y + 64, 44, 0, 7);
+    g.stroke();
+    g.fillStyle = accent2;
+    g.beginPath();
+    g.arc(x + 64, y + 64, 20, 0, 7);
+    g.fill();
+  }
+  g.fillStyle = "#dcdfd6";
+  g.font = "700 104px Arial Narrow, Arial, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  for (let d = 0; d < 10; d++) {
+    const [x, y] = tile(4 + d);
+    g.fillText(String(d), x + 64, y + 70);
+  }
+  {
+    const [x, y] = tile(14);
+    g.fillStyle = "#dcdfd6";
+    g.fillRect(x + 8, y + 52, T - 16, 22);
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+var atlasUV = (i) => {
+  const x = i % 4 / 4, y = 1 - (Math.floor(i / 4) + 1) / 4;
+  return [x + 4e-3, y + 4e-3, x + 0.25 - 4e-3, y + 0.25 - 4e-3];
+};
+var panelTex = null;
+var cache = /* @__PURE__ */ new Map();
+var GLSL_FNS = (
+  /* glsl */
+  `
+float h31(vec3 p){ p=fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
+  return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x), mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y), f.z); }
+vec3 triBump(vec3 sp, vec3 sn, vec2 dH, float fd){
+  vec3 sx = normalize(dFdx(sp)), sy = normalize(dFdy(sp));
+  vec3 r1 = cross(sy, sn), r2 = cross(sn, sx);
+  float det = dot(sx, r1) * fd;
+  vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
+  return normalize(abs(det) * sn - grad);
+}`
+);
+function paint(color, o = {}) {
+  const key = JSON.stringify([color, o]);
+  let m = cache.get(key);
+  if (m) return m;
+  panelTex ??= makePanelTexture();
+  const tex = panelTex;
+  m = new MeshStandardMaterial({ color, roughness: o.rough ?? 0.7, metalness: o.metal ?? 0.2, envMapIntensity: 1 });
+  const col = (s) => new Color(s);
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.triMap = { value: tex };
+    sh.uniforms.triScale = { value: o.scale ?? 0.8 };
+    sh.uniforms.camoA = { value: col(o.camo?.[0] ?? "#000") };
+    sh.uniforms.camoB = { value: col(o.camo?.[1] ?? "#000") };
+    sh.uniforms.camoC = { value: col(o.camo?.[2] ?? "#000") };
+    sh.uniforms.camoOn = { value: o.camo ? 1 : 0 };
+    sh.uniforms.camoScale = { value: o.camoScale ?? 1.1 };
+    sh.uniforms.wearAmt = { value: o.wear ?? 0.7 };
+    sh.uniforms.bumpK = { value: o.bump ?? 2.2 };
+    sh.uniforms.dirtAmt = { value: o.dirt ?? 1 };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vTP; varying vec3 vTN; varying float vWY;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvTP = position; vTN = normal; vWY = (modelMatrix * vec4(position, 1.0)).y;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vTP; varying vec3 vTN; varying float vWY; uniform sampler2D triMap; uniform float triScale; uniform vec3 camoA; uniform vec3 camoB; uniform vec3 camoC; uniform float camoOn; uniform float camoScale; uniform float wearAmt; uniform float bumpK; uniform float dirtAmt;\n" + GLSL_FNS).replace(
+      "#include <map_fragment>",
+      /* glsl */
+      `
+        vec3 tb = pow(abs(normalize(vTN)), vec3(8.0)); tb /= (tb.x + tb.y + tb.z);
+        vec3 tp = vTP * triScale;
+        vec3 tc = texture2D(triMap, tp.zy).rgb * tb.x + texture2D(triMap, tp.xz + vec2(.37, .11)).rgb * tb.y + texture2D(triMap, tp.xy + vec2(.71, .53)).rgb * tb.z;
+        float tH = tc.g; float tWear = tc.b;
+        if (camoOn > 0.5) {
+          vec3 cp = vTP * camoScale;
+          float n1 = vn(cp * 1.0 + 3.1) * 0.65 + vn(cp * 2.3 + 11.0) * 0.35;
+          float n2 = vn(cp * 1.7 + 41.0) * 0.6 + vn(cp * 3.9 + 7.0) * 0.4;
+          vec3 cc = camoA;
+          cc = mix(cc, camoB, smoothstep(0.48, 0.51, n1));
+          cc = mix(cc, camoC, smoothstep(0.56, 0.59, n2) * (1.0 - smoothstep(0.48, 0.51, n1) * 0.5));
+          diffuseColor.rgb = cc;
+        }
+        diffuseColor.rgb *= clamp(tc.r * 1.22, 0.0, 1.2);
+        diffuseColor.rgb *= 0.86 + 0.14 * vn(vTP * 1.7);
+        float dirt = smoothstep(0.5, 0.0, vWY) * (0.3 + 0.7 * vn(vTP * 7.0)) * dirtAmt;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.17, 0.12) * (0.6 + 0.8 * tc.r), dirt * 0.62);
+        float wearM = tWear * wearAmt * smoothstep(0.25, 0.7, vn(vTP * 8.0 + 5.0));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.43, 0.43, 0.42), wearM * 0.8);`
+    ).replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor * (1.12 - wearM * 0.55) + dirt * 0.18, 0.05, 1.0);").replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.85, clamp(wearM * 1.4, 0.0, 1.0));").replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = triBump(-vViewPosition, normal, vec2(dFdx(tH), dFdy(tH)) * bumpK, faceDirection);");
+  };
+  m.customProgramCacheKey = () => "tri2";
+  cache.set(key, m);
+  return m;
+}
+var N_ROWS = 21;
+function makeUber(rows) {
+  const A2 = [], B = [], E = [], M = [];
+  for (let i = 0; i < N_ROWS; i++) {
+    const r = rows[i] ?? rows[0];
+    const c = new Color(r.color);
+    const lit = (r.emI ?? 0) > 0 && r.color === "#000000";
+    A2.push(new Vector4(c.r, c.g, c.b, lit ? 0 : r.det ?? 1));
+    B.push(new Vector4(r.bev ?? 1, r.rim ?? 1, lit ? 0 : r.wear ?? 1, r.ao ?? 1));
+    const e = new Color(r.em ?? "#000");
+    E.push(new Vector4(e.r * (r.emI ?? 0), e.g * (r.emI ?? 0), e.b * (r.emI ?? 0), lit ? 0 : r.grime ?? 1));
+    M.push(new Vector4(lit ? 1 : r.rough ?? 0.5, lit ? 0 : r.metal ?? 0.1, 0, 0));
+  }
+  const m = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.5, metalness: 0.1, envMapIntensity: 1 });
+  loadSurfaceTextures();
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uA = { value: A2 };
+    sh.uniforms.uB = { value: B };
+    sh.uniforms.uE = { value: E };
+    sh.uniforms.uM = { value: M };
+    Object.assign(sh.uniforms, surfaceUniforms);
+    sh.uniforms.rimCol = { value: new Color("#a9c8ff") };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float mid; varying float vMid; varying vec3 vWN; varying float vWY;" + SD_VERT_DECL).replace("#include <begin_vertex>", `#include <begin_vertex>
+        vMid = mid;${SD_VERT_MAIN}
+        vec4 wpS = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          wpS = instanceMatrix * wpS;
+        #endif
+        vWY = (modelMatrix * wpS).y;`).replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvWN = inverseTransformDirection(transformedNormal, viewMatrix);");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
+varying float vMid; varying vec3 vWN; varying float vWY;
+uniform vec4 uA[${N_ROWS}]; uniform vec4 uB[${N_ROWS}]; uniform vec4 uE[${N_ROWS}]; uniform vec4 uM[${N_ROWS}]; uniform vec3 rimCol;${SD_FRAG_DECL}`).replace(
+      "#include <map_fragment>",
+      /* glsl */
+      `
+        int mi = int(floor(vMid + 0.5));
+        vec4 rA = uA[mi], rB = uB[mi], rM = uM[mi];
+        vec3 wn = normalize(vWN);
+        vec3 base = rA.rgb;
+        // per-part value / hue jitter: Bld.g() writes a small per-call offset into the fraction of the row id, so
+        // neighbouring plates of the same role are not cast from one piece (+-6% value, a touch warmer / cooler)
+        float pj = clamp((vMid - float(mi)) * 5.0, -1.0, 1.0);
+        base *= 1.0 + pj * 0.06 * rB.w;
+        base += vec3(0.006, 0.0, -0.006) * pj * rB.w;
+        // armour plating: the team-armour row is broken into plates of different paint -- team colour, light shell,
+        // near-black team shade -- with dark seams, laid out in object space on the face's dominant plane (so every
+        // chassis, flat or sloped, reads as an assembly of distinct plates instead of one moulded colour). Each plate
+        // is a cell of a grid sized to the unit (its skin's texel density), split once across at a random point.
+        // Creature and stealth skins keep their own look.
+        float plateSeam = 0.0;
+        float skinL = floor(vSdV.x + 0.5);
+        if (mi == 0 && skinL != 8.0 && skinL != 11.0) {
+          vec3 n = normalize(vNormal);
+          vec3 on = abs(vec3(dot(n, vSdAX), dot(n, vSdAY), dot(n, vSdAZ)));
+          float ax = on.y >= max(on.x, on.z) ? 0.0 : (on.x > on.z ? 1.0 : 2.0);
+          vec2 q = ax == 0.0 ? vSdP.xz : (ax == 1.0 ? vSdP.zy : vSdP.xy);
+          float S = 0.62 / max(0.3, vSdV.y > 0.001 ? vSdV.y : 0.8);
+          vec2 gq = q / S + vec2(0.31, 0.17) + ax * vec2(0.37, 0.71);
+          vec2 c = floor(gq), f = fract(gq);
+          float h1 = fract(sin(dot(c + ax * 7.0, vec2(127.1, 311.7))) * 43758.5453);
+          float cut = 0.3 + 0.4 * fract(h1 * 13.7);
+          bool cx = fract(h1 * 7.13) < 0.5;
+          float side = step(cut, cx ? f.x : f.y);
+          float id = fract(sin(dot(c + ax * 7.0 + side * vec2(17.0, 31.0), vec2(269.5, 183.3))) * 43758.5453);
+          float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+          e = min(e, abs((cx ? f.x : f.y) - cut)) * S; // distance to the plate edge, object units
+          float px = max(fwidth(gq.x), fwidth(gq.y)) * S;
+          plateSeam = 1.0 - smoothstep(0.012 + px * 0.5, 0.024 + px, e);
+          vec3 shell = uA[2].rgb * (0.97 + 0.06 * fract(id * 31.0)), dark = uA[15].rgb;
+          base = id < 0.5 ? base : id < 0.76 ? shell : dark;
+          // a bright worn bevel just inside each plate edge
+          base *= 1.0 + 0.1 * (1.0 - smoothstep(0.024 + px, 0.05 + px, e)) * (1.0 - plateSeam);
+          base *= 1.0 - 0.6 * plateSeam;
+        }
+        // painted top-light (subtle: the lighting does the form) + darker undersides (fake AO for faces looking down)
+        base *= mix(0.86, 1.02, smoothstep(-0.7, 0.85, wn.y));
+        base *= mix(1.0, mix(0.72, 1.0, smoothstep(-0.75, -0.05, wn.y)), rB.w);
+        // bevel brightening on chamfers (normals between side and up): barely there, real plates have sharp edges
+        float bev = smoothstep(0.22, 0.42, wn.y) * (1.0 - smoothstep(0.8, 0.93, wn.y));
+        base = mix(base, base * 1.04 + vec3(0.004), bev * rB.x);
+        // grounded: dust on the running gear right at the ground (wheels, track bottoms, feet), a little ground-contact
+        // darkening; a fixed band, so it must stay thin: a 0.5-cell band covered whole low hulls (wheeled / half-track
+        // scouts and raiders came out sand-washed head to toe while walkers above it stayed clean)
+        float dustK = (1.0 - smoothstep(0.0, 0.14, vWY)) * rB.w * 0.6;
+        base *= mix(1.0, mix(0.8, 1.0, smoothstep(0.0, 0.18, vWY)), rB.w);
+        base = mix(base, vec3(0.43, 0.37, 0.28) * (0.75 + 0.5 * dot(base, vec3(0.33))), dustK * (0.28 + 0.2 * smoothstep(0.3, -0.3, wn.y)));
+        // ---- surface detail (surface3d.ts): per-mesh skin layer, per-row weights ----
+        float sdRowDet = rA.w, sdRowWear = rB.z, sdRowGrime = uE[mi].w; vec3 sdAccent = uA[9].rgb;
+        ${SD_APPLY}
+        diffuseColor.rgb = base;`
+    ).replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
+        // row roughness, scaled by the skin (grime roughens, chipped edges are bare satin metal)
+        roughnessFactor = clamp(mix(rM.x * sdRough, 0.45, sdMetal * 0.5) + pj * 0.05 * rB.w + dustK * 0.15, 0.08, 1.0);`).replace("#include <metalnessmap_fragment>", `#include <metalnessmap_fragment>
+        metalnessFactor = mix(rM.y, 0.8, sdMetal * 0.8);`).replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>" + sdBumpGLSL("sdGradR")).replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+        totalEmissiveRadiance = uE[mi].rgb + uE[10].rgb * sdGlow * 0.5;
+        float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+        totalEmissiveRadiance += rimCol * fres * 0.08 * rB.y * (0.6 + 0.4 * smoothstep(-0.2, 0.8, wn.y));`);
+  };
+  m.customProgramCacheKey = () => "uberPBR2";
+  return m;
+}
+var PAINT_PLAN = {
+  armor: "hull",
+  armor2: "hull2",
+  shell: "panel",
+  mech: "trim",
+  joint: "metal"
+};
+var TEAM_PAINT = [
+  ["#3b5d9c", "#1a2338", "#b4b6b0", "#4a5258"],
+  ["#9b3a27", "#36170f", "#bab0a3", "#5c5248"]
+];
+var METAL_FINISH = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20 };
+var FINISH_ROWS = [
+  /* chrome */
+  { color: "#646b74", rough: 0.2, metal: 1, bev: 0.7, det: 0.22, wear: 0.1, grime: 0.45 },
+  /* blued  */
+  { color: "#2f3a4c", rough: 0.3, metal: 0.88, bev: 0.6, det: 0.35, wear: 0.3, grime: 0.6 },
+  /* bronze */
+  { color: "#6a5234", rough: 0.36, metal: 0.9, bev: 0.6, det: 0.4, wear: 0.25, grime: 0.75 },
+  /* copper */
+  { color: "#93553a", rough: 0.28, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.15, grime: 0.6 },
+  /* brass  */
+  { color: "#9b7f42", rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 }
+];
+var kits = [null, null];
+var finKits = /* @__PURE__ */ new Map();
+function makeKit(team, fin3 = {}) {
+  const base3 = baseKit(team);
+  const j = fin3.joint ?? "gunmetal", f = fin3.fitting ?? j;
+  if (j === "gunmetal" && f === "gunmetal") return base3;
+  const key = `${team}|${j}|${f}`;
+  let k = finKits.get(key);
+  if (!k) {
+    const rowMat = (fi) => ({ uid: METAL_FINISH[fi], base: base3.uber });
+    const jm = j === "gunmetal" ? base3.metal : rowMat(j);
+    const fm = f === j ? jm : f === "gunmetal" ? base3.metal : rowMat(f);
+    k = { ...base3, metal: jm, joint: jm, fitting: fm, finish: { joint: j, fitting: f } };
+    finKits.set(key, k);
+  }
+  return k;
+}
+function baseKit(team) {
+  const hit = kits[team];
+  if (hit) return hit;
+  const p = TEAM_PAL[team];
+  const names = ["hull", "trim", "panel", "metal", "steel", "rubber", "glass", "canvas", "hazard", "accent", "glow", "lamp", "hot", "plasma", "rail", "hull2"];
+  const tp = TEAM_PAINT[team];
+  const rows = [
+    /* hull   */
+    { color: tp[0], rough: 0.58, metal: 0.06, det: 0.85, grime: 0.8, wear: 0.85 },
+    /* trim   */
+    { color: "#1d2023", rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
+    /* panel  */
+    { color: tp[2], rough: 0.6, metal: 0.03, det: 0.75, grime: 0.6, wear: 0.9 },
+    /* metal  */
+    { color: "#474e55", rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
+    /* steel  */
+    { color: "#b3bac0", rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
+    /* rubber */
+    { color: "#1b1c1e", rough: 0.88, metal: 0, bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.1 },
+    /* glass  */
+    { color: "#14262f", rough: 0.08, metal: 0.3, bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.2 },
+    /* canvas */
+    { color: tp[3], rough: 0.85, metal: 0, det: 0.12, wear: 0.2 },
+    /* hazard */
+    { color: "#c99a32", rough: 0.45, metal: 0.05, det: 0.5, wear: 1.2, grime: 0.6 },
+    /* accent */
+    { color: p.accent, rough: 0.55, metal: 0.05, bev: 0.3, det: 0.35, wear: 0.6, grime: 0.4 },
+    /* glow   */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: p.glow, emI: 1.6 },
+    /* lamp   */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ffe8c4", emI: 1.45 },
+    /* hot    */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#ff7a2a", emI: 2.6 },
+    /* plasma */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#79f0d6", emI: 2 },
+    /* rail   */
+    { color: "#000000", bev: 0, rim: 0, ao: 0, em: "#86adff", emI: 2.4 },
+    /* hull2  */
+    { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
+    ...FINISH_ROWS
+    // 16..20: METAL_FINISH
+  ];
+  const uber = makeUber(rows);
+  const decalTex = makeDecalAtlas(p.accent);
+  const kit = {
+    decal: new MeshStandardMaterial({ map: decalTex, roughness: 0.68, metalness: 0.02, transparent: false, alphaTest: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    uber,
+    pal: p
+  };
+  names.forEach((n, i) => {
+    kit[n] = { uid: i, base: uber };
+  });
+  for (const [role, slot] of Object.entries(PAINT_PLAN)) kit[role] = kit[slot];
+  kit.fitting = kit.metal;
+  kit.finish = { joint: "gunmetal", fitting: "gunmetal" };
+  kits[team] = kit;
+  return kits[team];
+}
 
 // src/client/proto3d/zfix.ts
 var LIFT = 2e-3;
@@ -41839,7 +41978,7 @@ var XBld = class extends Bld {
   }
 };
 var place = (x, y, z, yaw = 0) => new Matrix4().makeRotationY(yaw).setPosition(x, y, z);
-function ngon(n, rx, rz = rx, rot = 0, cx = 0, cz = 0) {
+function ngon2(n, rx, rz = rx, rot = 0, cx = 0, cz = 0) {
   const out2 = [];
   for (let i = 0; i < n; i++) {
     const a = rot + i / n * Math.PI * 2;
@@ -42298,7 +42437,7 @@ function colossus(c) {
       const base3 = Math.max(y0, H.deck(m.x, m.z));
       if (m.x > X(1.2)) {
         const y = deckY + 0.02 * k;
-        frustum(b, kit.armor, ngon(8, m.r * 1.45, m.r * 1.45, Math.PI / 8, m.x, m.z), base3 - 0.1 * k, y - base3 + 0.1 * k, { top: [0.9, 0.9], bev: 0.01 * k });
+        frustum(b, kit.armor, ngon2(8, m.r * 1.45, m.r * 1.45, Math.PI / 8, m.x, m.z), base3 - 0.1 * k, y - base3 + 0.1 * k, { top: [0.9, 0.9], bev: 0.01 * k });
         return { y: ringSeat(b, kit, m, y, 0.015 * k, 16), socket: true };
       }
       return { y: ringSeat(b, kit, m, base3, 0.03 * k, 14), socket: true };
@@ -42422,66 +42561,6 @@ registerChassis(["long", "longarm"], longarm);
 registerChassis("colossus", colossus);
 registerChassis("juggernaut", juggernaut);
 registerTorso("juggernaut");
-
-// src/client/proto3d/chassis/giants-kit.ts
-function ngon2(n, rx, rz, a0 = Math.PI / n) {
-  const out2 = [];
-  for (let i = 0; i < n; i++) {
-    const a = a0 + i / n * Math.PI * 2;
-    out2.push([Math.cos(a) * rx, Math.sin(a) * rz]);
-  }
-  return out2;
-}
-function planLoft(b, mat, poly, levels, at2 = [0, 0]) {
-  b.loft(mat, levels.map(([y, s, dx = 0, dz = 0]) => poly.map(([px2, pz2]) => [at2[0] + dx + px2 * s, y, at2[1] + dz + pz2 * s])));
-}
-function inPoly(poly, x, z) {
-  let sgn = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const [ax, az] = poly[i], [bx3, bz] = poly[(i + 1) % poly.length];
-    const c = (bx3 - ax) * (z - az) - (bz - az) * (x - ax);
-    if (Math.abs(c) < 1e-9) continue;
-    const s = Math.sign(c);
-    if (sgn === 0) sgn = s;
-    else if (s !== sgn) return false;
-  }
-  return true;
-}
-function mast(b, kit, x, y, z, h, r = 0.05) {
-  b.cylb(kit.trim, r * 2.6, r * 2.2, r * 0.6, [x, y, z], "y", 8);
-  b.cyl(kit.steel, r, r * 0.45, h, [x, y, z], "y", 6);
-  for (const f of [0.45, 0.72]) b.box(kit.metal, r * 0.8, r * 0.8, h * (0.42 - f * 0.25), x, y + h * f, z, r * 0.2);
-  b.box(kit.metal, h * 0.14, r * 0.7, r * 0.7, x, y + h * 0.6, z, r * 0.2);
-  b.cyl(kit.lamp, r * 1.3, r * 1.3, r * 1.6, [x, y + h, z], "y", 6);
-}
-function banner(b, kit, x, y, z, h, w, dir = -1) {
-  b.cyl(kit.steel, h * 0.016, h * 0.012, h, [x, y, z], "y", 6);
-  b.cyl(kit.lamp, h * 0.03, h * 0.03, h * 0.03, [x, y + h, z], "y", 6);
-  b.box(kit.metal, h * 0.03, h * 0.02, w * 1.1, x, y + h * 0.95, z + dir * w * 0.5, 4e-3);
-  const fh = h * 0.5, t = Math.max(0.012, h * 0.012);
-  const poly = [[0, 0], [w, 0], [w, fh * 0.8], [w * 0.5, fh * 0.62], [0, fh]];
-  const g = new Shape(poly.map(([px2, py2]) => new Vector2(px2, py2)));
-  const geo = new ExtrudeGeometry(g, { depth: t, bevelEnabled: false });
-  const m = new Matrix4().makeBasis(new Vector3(0, 0, dir), new Vector3(0, -1, 0), new Vector3(dir, 0, 0)).setPosition(x - t / 2 * dir, y + h * 0.94, z + dir * h * 0.02);
-  b.g(geo, kit.accent, m);
-  b.box(kit.hazard, t * 1.2, fh * 0.06, w * 0.9, x, y + h * 0.94 - fh * 0.2, z + dir * w * 0.5, 2e-3);
-}
-function reactor(b, kit, at2, r, axis = "y", ribs = 4) {
-  const d = r * 0.5;
-  b.cylb(kit.trim, r * 1.3, d, d * 0.2, at2, axis, 16);
-  const off = axis === "y" ? [0, d, 0] : axis === "x" ? [d, 0, 0] : [-d, 0, 0];
-  const c = [at2[0] + off[0], at2[1] + off[1], at2[2] + off[2]];
-  b.cyl(kit.glow, r, r * 0.7, r * 0.5, [c[0] - off[0] * 0.5, c[1] - off[1] * 0.5, c[2] - off[2] * 0.5], axis, 14);
-  for (let i = 0; i < ribs; i++) {
-    const a = i / ribs * Math.PI;
-    if (axis === "y") b.box(kit.metal, r * 2.3, r * 0.14, r * 0.14, c[0], c[1] + r * 0.22, c[2], r * 0.04, [0, a, 0]);
-    else b.box(kit.metal, r * 0.14, r * 2.3, r * 0.14, c[0] + off[0] * 0.44, c[1], c[2], r * 0.04, [a, 0, 0]);
-  }
-}
-function glowGrille(b, kit, x, y, z, w, h, n, dir = 1) {
-  b.box(kit.trim, h * 0.2, h, w, x, y, z, h * 0.06);
-  for (let i = 0; i < n; i++) glow(b, kit, x + dir * h * 0.08, y - h * 0.32 + h * 0.64 * i / Math.max(1, n - 1), z, h * 0.08, h * 0.08, w * 0.8);
-}
 
 // src/client/proto3d/chassis/titan-greebles.ts
 var V = (x, y, z) => new Vector3(x, y, z);
@@ -42845,10 +42924,10 @@ function broodmother(c) {
   const spider = stance.legs === "spider";
   const by = spider ? stance.hipY * 1.3 : stance.legs === "biped" ? stance.hipY + 0.1 : Math.max(stance.yt, 0.5) + 0.55 * k;
   if (!spider && stance.legs !== "biped") {
-    planLoft(b, kit.mech, ngon2(8, 1.5 * kx, 1.5 * kz), [[0, 1.1], [by - 0.3, 1], [by, 0.85]], [-0.3 * kx, 0]);
-    planLoft(b, kit.armor2, ngon2(8, 1.5 * kx, 1.5 * kz), [[0.05, 1.16], [0.35, 1.12]], [-0.3 * kx, 0]);
+    planLoft(b, kit.mech, ngon(8, 1.5 * kx, 1.5 * kz), [[0, 1.1], [by - 0.3, 1], [by, 0.85]], [-0.3 * kx, 0]);
+    planLoft(b, kit.armor2, ngon(8, 1.5 * kx, 1.5 * kz), [[0.05, 1.16], [0.35, 1.12]], [-0.3 * kx, 0]);
   }
-  const cx = 0, cp = ngon2(8, 1.15 * kx, 1.45 * kz, Math.PI / 8);
+  const cx = 0, cp = ngon(8, 1.15 * kx, 1.45 * kz, Math.PI / 8);
   const cy0 = by - 0.45 * k, cW0 = by + 0.08 * k, cW1 = by + 0.3 * k, cR = by + 0.5 * k, cTop = by + 0.62 * k;
   planLoft(b, kit.mech, cp, [[cy0, 0.7], [by - 0.1 * k, 0.95], [cW0, 0.98], [cW1, 0.98], [cR, 0.78], [cTop - 0.06 * k, 0.56]], [cx, 0]);
   const ring4 = (y, s) => cp.map(([px2, pz2]) => [cx + px2 * s, y, pz2 * s]);
@@ -45568,7 +45647,7 @@ function striker(c) {
   block(b, kit.mech, X(0), y0, 0, X(2.5), wi * 2, yt - y0 + 0.04, { top: [0.96, 0.92], ch: 0.08, bev: 0.025, bot: 0.03 });
   block(b, kit.armor2, hx, yt - 0.02, hz, R * 1.9, Z(1), 0.08, { top: [0.97, 0.95], ch: 0.14, bev: 0.02 });
   const t0 = yt + 0.04, t1 = t0 + 0.15, g0 = t1 + 0.01, g1 = g0 + 0.07, t2 = seatY - 0.02;
-  const o1 = ngon(8, R * 0.92, R * 0.86, Math.PI / 8, hx, hz);
+  const o1 = ngon2(8, R * 0.92, R * 0.86, Math.PI / 8, hx, hz);
   frustum(b, kit.armor2, o1, t0 - 0.02, t1 - t0 + 0.02, { top: [0.92, 0.92], bev: 0.02 });
   frustumPlates(b, kit, kit.armor, o1, t0 - 0.02, t1 - t0 + 0.02, 0.92, 0.022, { standoff: 6e-3, gap: 0.012, widthK: 0.78, f0: 0.12, f1: 0.86 });
   b.cyl(kit.plasma, R * 0.72, R * 0.72, g1 - g0 + 0.02, [hx, g0 - 0.01, hz], "y", 16);
@@ -45576,7 +45655,7 @@ function striker(c) {
     const a = i / 10 * Math.PI * 2;
     b.g(bevBox(0.07, g1 - g0, 0.05, 0.012), kit.mech, mtx([hx + Math.cos(a) * R * 0.74, (g0 + g1) / 2, hz + Math.sin(a) * R * 0.74], [0, -a, 0]));
   }
-  const o2 = ngon(8, R * 0.84, R * 0.78, Math.PI / 8, hx, hz);
+  const o2 = ngon2(8, R * 0.84, R * 0.78, Math.PI / 8, hx, hz);
   frustum(b, kit.shell, o2, g1, t2 - g1, { top: [0.9, 0.9], bev: 0.025, bot: 0.012 });
   const pX0 = hx + R * 0.45, pX1 = X(1.5);
   block(b, kit.mech, (pX0 + pX1) / 2 - 0.05, y0 + 0.02, 0, pX1 - pX0 + 0.1, Z(0.56), yt - y0 + 0.02, { top: [0.82, 0.86], shift: [-0.06, 0], ch: 0.06, bev: 0.02, bot: 0.02 });
@@ -45680,7 +45759,7 @@ function bastion(c) {
     pbox6(b, kit.glow, wl * 0.36, 0.022 * k, 0.025 * k, (wX0 + wX1) / 2 + 0.1 * k, yt + 0.07 * k, s * (wz + ww * 0.5 + 4e-3));
   });
   const wR = R * 0.48;
-  frustum(b, kit.mech, ngon(8, wR * 1.25, wR * 1.25, Math.PI / 8, hx, hz), pY - 0.01, 0.07 * k, { top: [0.92, 0.92], bev: 0.015 * k });
+  frustum(b, kit.mech, ngon2(8, wR * 1.25, wR * 1.25, Math.PI / 8, hx, hz), pY - 0.01, 0.07 * k, { top: [0.92, 0.92], bev: 0.015 * k });
   b.cyl(kit.plasma, wR * 0.82, wR * 0.82, wY1 - wY0, [hx, wY0, hz], "y", 16);
   for (let i = 0; i < 10; i++) {
     const a = i / 10 * Math.PI * 2;
@@ -45754,7 +45833,7 @@ function bastion(c) {
         return { y: seatY, socket: true };
       }
       const y = pY + 0.12 * k;
-      frustum(b, kit.armor2, ngon(8, m.r * 1, m.r * 1, Math.PI / 8, m.x, m.z), pY - 0.02 * k, y - pY + 0.02 * k, { top: [0.9, 0.9], bev: 0.015 * k });
+      frustum(b, kit.armor2, ngon2(8, m.r * 1, m.r * 1, Math.PI / 8, m.x, m.z), pY - 0.02 * k, y - pY + 0.02 * k, { top: [0.9, 0.9], bev: 0.015 * k });
       return { y: ringSeat(b, kit, m, y, 0.02 * k, 14), socket: true };
     }
   };
@@ -47371,6 +47450,7 @@ registerTorso("lance");
 var facePlateHS2 = (b, kit, f, du, dv, w, d, t, mat, so = t * 0.45) => armorPlate(b, kit, mat, faceFrame(f, du, dv, 0), rectP(w, d, Math.min(w, d) * 0.08), t, { standoff: so, gap: t * 1.1 });
 var faceGrille2 = (b, kit, f, du, dv, w, d, n) => recessPanel(b, kit, faceFrame(f, du, dv, 0), w, d, Math.min(w, d) * 0.12, { slats: n });
 function monolith(c) {
+  if (isCastle(c.design.id)) return castle(c);
   const { b, kit, L, W, stance } = c;
   const kx = L / 7, kz = W / 7, k = Math.min(kx, kz);
   const legged = stance.legs !== null;
@@ -47382,7 +47462,7 @@ function monolith(c) {
   const ts = torsoSlots(c);
   const heroM = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : void 0;
   const wi = Math.min(stance.wi, 2.3 * kz);
-  planLoft(b, kit.trim, ngon2(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
+  planLoft(b, kit.trim, ngon(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
   const P1 = sc2(mirror2([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
   const s1 = yt + 1.25 * k, sTop = 0.84;
   const sh1 = s1 - 0.28 * k;
@@ -47417,8 +47497,8 @@ function monolith(c) {
     ladder(b, kit, [a.x, a.y, a.z], [e.x, e.y + 0.1 * k, e.z], 0.3 * k, [f.u.x, f.u.y, f.u.z], [f.n.x, f.n.y, f.n.z], 0.08 * k);
   });
   const wR = 2.35 * k;
-  planLoft(b, kit.trim, ngon2(10, wR * kx / k, wR * kz / k), [[s1 - 0.04, 1], [s1 + 0.4 * k, 1]]);
-  planLoft(b, kit.metal, ngon2(10, wR * kx / k, wR * kz / k), [[s1 + 0.3 * k, 1.04], [s1 + 0.38 * k, 1.04]]);
+  planLoft(b, kit.trim, ngon(10, wR * kx / k, wR * kz / k), [[s1 - 0.04, 1], [s1 + 0.4 * k, 1]]);
+  planLoft(b, kit.metal, ngon(10, wR * kx / k, wR * kz / k), [[s1 + 0.3 * k, 1.04], [s1 + 0.38 * k, 1.04]]);
   both((s) => {
     const x = -0.22 * kx, zi = s * 1.75 * kz, zo = s * 2.95 * kz;
     const ring4 = (z, hw, lo, hi) => [
@@ -51511,7 +51591,8 @@ if (lab) {
   let z = 0;
   const items = lab.split(",");
   items.forEach((it, k) => {
-    const [cid, mid2, seed, fit] = it.split(":");
+    const [cid0, mid0, seed, fit] = it.split(":");
+    const isCastle2 = cid0 === "castle", cid = isCastle2 ? "monolith" : cid0, mid2 = isCastle2 ? "anchor" : mid0;
     const c = CHASSIS_BY_ID.get(cid);
     if (!c) return;
     const sd = Number(seed ?? k) || 0;
@@ -51522,7 +51603,7 @@ if (lab) {
       const opts = MODULES.filter((m) => m.kind === "weapon" && m.mount === slot);
       return opts[(sd * 7 + i * 13) % opts.length]?.id ?? null;
     });
-    const d = { id: `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid2 ?? "treads", mounts };
+    const d = { id: isCastle2 ? `${CASTLE_ID}#${k}` : `lab-${k}-${cid}`, name: cid, chassis: cid, mobility: mid2 ?? "treads", mounts };
     byId2.set(d.id, d);
     const w = c.footprint?.[0] ?? c.size;
     z += k ? w / 2 : 0;

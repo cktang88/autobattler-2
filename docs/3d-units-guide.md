@@ -160,6 +160,13 @@ a dark core, big hip / knee drums, bright rams, stepped feet. `legStance`: biped
 stance: thigh and shin both read), bones 1.12x the hip height so the knee always bends forward. Chassis that place
 their own hips (`ChassisOut.hips`) set the leg height: hips set too low make short stubby legs.
 
+- **The tug of war castle** (`chassis/castle.ts`, design id `tug-castle`: a Monolith on an anchor in the sim) swaps
+  its one gun during a game for any weapon of any class, so its housing is the one exception that follows the gun: a
+  keep with corner bastions and a torso-mode cupola whose radius / height come from the equipped gun's `DRAW_D`
+  (S ~0.6, M ~1.0, L ~1.9, XL ~3.2 cells radius), raised on a neck drum when it would reach the parapet and bastions.
+  The gun itself keeps its class size. The Monolith builder hands off to it (`isCastle`); proto3d lab: `castle:anchor:0:<gun>|-`.
+  The zfight scan covers it with a gun of each class.
+
 ---
 
 ## 3. Triangle budgets and mesh simplification

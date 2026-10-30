@@ -18,7 +18,9 @@ if (process.env.SIMP) setSimplify(Number(process.env.SIMP));
 type T = { a: number[]; b: number[]; c: number[]; n: number[]; part: string; area: number };
 const only = process.env.ONLY?.split(',');
 const tot: Record<string, number> = {};
-for (const d of STARTER_DESIGNS) {
+// the tug of war castle (chassis/castle.ts) with a gun of each class: its cupola is sized round the gun
+const CASTLES = ['hmg', 'twin30', 'avenger', 'massdriver'].map((g, i) => ({ id: `tug-castle#${i}`, name: 'Castle', chassis: 'monolith', mobility: 'anchor', mounts: [g, null] }));
+for (const d of [...STARTER_DESIGNS, ...CASTLES]) {
   if (only && !only.includes(d.chassis)) continue;
   const u = buildUnit(d, 0);
   u.root.updateMatrixWorld(true);
@@ -55,7 +57,7 @@ for (const d of STARTER_DESIGNS) {
       if (inside(cs, t) || inside(ct, s)) { hits++; area += Math.min(s.area, t.area); if (where.length < 3) where.push(cs.map((x) => x.toFixed(2)).join(',')); }
     }
   }
-  const k = `${d.chassis}:${d.mobility}`;
+  const k = d.id.startsWith('tug-castle') ? `castle:${d.mounts[0]}` : `${d.chassis}:${d.mobility}`;
   tot[k] = area;
   console.log(k.padEnd(24), 'pairs', hits, 'area', area.toFixed(4), where.join(' | '));
 }

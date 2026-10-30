@@ -734,7 +734,15 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   renderSpeed();
   renderCards();
   // frame the whole field with our castle at the bottom
-  requestAnimationFrame(() => { try { view.resize(); view.fit(true); view.frameWorldBox(-2, -2, FIELD_W + 2, FIELD_H + 2); } catch { /* */ } });
+  // the whole field, nudged toward our end so our castle clears the bottom edge (the 3D perspective framing cut it off)
+  requestAnimationFrame(() => {
+    try {
+      view.resize();
+      view.fit(true);
+      view.frameWorldBox(-3, -3, FIELD_W + 3, FIELD_H + 3);
+      view.centerOn(FIELD_W / 2, me === 0 ? FIELD_H / 2 + 6 : FIELD_H / 2 - 6);
+    } catch { /* */ }
+  });
 
   return {
     el,
