@@ -5,7 +5,7 @@
 //                        raptorial forelimbs with scythe blades, the second on a flaring dorsal hump between swept
 //                        blade fins, a segmented abdomen trailing behind (one cell wide: both guns on the centre line)
 //   arachnid (arachnid)  orb walker: an armoured orb on a four-legged hub, twin medium guns on shoulder sockets
-// and the Warlord (a heavy hard-surface brute, see below).
+// and the Warlord (a heavy assault walker: its arm guns are the forearms, a dorsal shoulder cannon, see below).
 
 import * as THREE from 'three';
 import type { P2, V3 } from '../geo.ts';
@@ -14,12 +14,11 @@ import { lathe as latheGeo, mtx, slabGeo, strutGeo, type MatLike } from '../geo.
 import { Bld } from '../geo.ts';
 import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { beam, block, both, collar, exhaust, glow, hazard, sensor } from './shapes.ts';
-import { wristRing } from './creatures.ts';
 import {
   antenna, armorPlate, cableBundle, crewHatch, exhaustBox, fineFor, frame, frameLimb, hexSec, hose, jointDrum, ladder, piston, plateStack, rectP, trapP,
 } from './hs-kit.ts';
-import { archShell, claw, eyeCluster, shellGeo } from './hs-kit-organic.ts'
-;
+import { archShell, claw, eyeCluster, shellGeo } from './hs-kit-organic.ts';
+import { torsoSlots } from './torso-kit.ts';
 
 /** hard-surface arm: shoulder joint drum, twin-strut upper arm with an outer armour shell, elbow drum + actuator
  *  piston, forearm weapon pod (dark core, top and outer armour plates). Returns the pod top (weapon seat). */
@@ -476,139 +475,184 @@ function orbwalker(c: ChassisCtx): ChassisOut {
 }
 
 // ---- Warlord Mech -------------------------------------------------------------------------------------------------------
-// A hunched heavy brute (hard-surface: dark skeleton + layered armour, see chassis/hs-kit.ts): a dark pelvis frame with a
-// codpiece and tassets, an exposed spine column with stabiliser rams, a barrel chest built as a dark faceted core under a
-// three-layer chest stack and side shells, a sunken head (two eyes under an overhanging brow stack), the chin gun on a
-// jutting jaw ledge, the main cannon on a dorsal hump (a thick faceted shell over a dark core), massive four-plate
-// pauldrons, long arms on joint drums ending in forearm gauntlets that carry the arm weapons, and a reactor drum across
-// the back feeding coolant hoses into the torso. Asymmetric: a sensor mast on the left pauldron, one tall exhaust on the
-// left of the reactor and a muffler box on the right, a ladder up the right of the back, the hazard band on the right
-// pauldron.
+// A hunched heavy assault walker (War Robots Behemoth / Fafnir, BattleTech Timber Wolf) built round its medium guns in
+// mech torso mode: the whole upper body twists with the weapons. Static: a dark pelvis frame with a codpiece, tassets and
+// hip drums, a waist spine with stabiliser rams. The torso: a barrel chest (dark faceted core under a three-layer chest
+// stack and side shells), a sunken head with two eyes under an overhanging brow, massive four-plate pauldrons wider
+// than the stance, an angular reactor pack on the back with exhaust stacks. The weapons ARE its limbs: an arm gun is the
+// forearm (its ring sunk in an armoured gauntlet cradle under it, the upper arm coming down from the shoulder drum to an
+// elbow on the gun's back, knuckle claws under the muzzle); without a gun the arm ends in a heavy fist. The centre
+// slot is a dorsal shoulder cannon in a raised bay between the pauldrons, the light slot a chin gun on the jaw ledge.
+// Utilities stand on dark masts over the torso at their own mounts (the walker convention). Asymmetric: a sensor mast on
+// the left pauldron, the hazard band on the right one, one tall exhaust on the left of the pack.
 function warlord(c: ChassisCtx): ChassisOut {
   const { b, kit, W, L, stance } = c;
   const k = Math.min(W / 4, L / 3);
   const fine = fineFor(c.S);
-  const biped = stance.legs === 'biped';
+  const biped = stance.legs === 'biped', spider = stance.legs === 'spider';
   const t = biped ? stance.thick : 0.24 * k;
+  const ts = torsoSlots(c);
   let pelvisY: number;
   if (biped) pelvisY = stance.hipY;
   else {
-    pelvisY = stance.legs === 'spider' ? stance.hipY + 0.4 * k : stance.y0 + 0.55 * k;
-    // pedestal: dark turntable drum with an armour skirt ring the torso turns on
-    b.cylb(kit.mech, 0.62 * k, pelvisY - stance.y0 + 0.02, 0.06 * k, [-0.1 * k, stance.y0 - 0.02, 0], 'y', 12);
-    b.cylb(kit.armor2, 0.7 * k, 0.12 * k, 0.03 * k, [-0.1 * k, pelvisY - 0.3 * k, 0], 'y', 12);
+    pelvisY = spider ? stance.hipY + 0.4 * k : stance.y0 + 0.55 * k;
+    // pedestal: an angular dark leg hub / mount block under the pelvis (no round disc)
+    block(b, kit.mech, -0.12 * k, stance.y0 - 0.02, 0, 1.1 * k, 1.1 * k, pelvisY - stance.y0 - 0.2 * k, { top: [0.86, 0.86], ch: 0.2 * k, bev: 0.025 * k, bot: 0.03 * k });
+    both((s) => block(b, kit.armor2, -0.12 * k, pelvisY - 0.62 * k, s * 0.5 * k, 0.8 * k, 0.16 * k, 0.4 * k, { top: [0.8, 0.8], ch: 0.06 * k, bev: 0.015 * k }));
   }
   // ---- pelvis: dark frame block between the hip drums, armoured codpiece, two tassets
-  block(b, kit.mech, -0.12 * k, pelvisY - 0.28 * k, 0, 0.66 * k, 0.76 * k, 0.48 * k, { top: [0.86, 1.06], ch: 0.12 * k, bev: 0.025 * k });
+  block(b, kit.mech, -0.12 * k, pelvisY - 0.28 * k, 0, 0.66 * k, 0.76 * k, 0.44 * k, { top: [0.86, 1.06], ch: 0.12 * k, bev: 0.025 * k });
   armorPlate(b, kit, kit.armor, frame([0.24 * k, pelvisY - 0.1 * k, 0], [1, -0.3, 0], [0, 0, 1]), trapP(0.5 * k, 0.32 * k, 0.5 * k, 0.06 * k), 0.07 * k, { standoff: 0.03 * k });
   both((s) => armorPlate(b, kit, kit.armor2, frame([0.04 * k, pelvisY - 0.18 * k, s * 0.4 * k], [0.4, -0.2, s], [0, 1, 0]), rectP(0.36 * k, 0.36 * k, 0.05 * k), 0.05 * k, { standoff: 0.02 * k }));
-  // ---- spine column (waist) + stabiliser rams
-  b.cylb(kit.joint, 0.2 * k, 0.3 * k, 0.03 * k, [-0.15 * k, pelvisY + 0.02 * k, 0], 'y', 12);
-  b.cyl(kit.mech, 0.3 * k, 0.3 * k, 0.06 * k, [-0.15 * k, pelvisY + 0.12 * k, 0], 'y', 12);
-  both((s) => piston(b, kit, [0.08 * k, pelvisY - 0.05 * k, s * 0.26 * k], [0.06 * k, pelvisY + 0.3 * k, s * 0.24 * k], 0.045 * k, 0.55, fine));
-  const ty0 = pelvisY + 0.22 * k, th = 0.95 * k, ty1 = ty0 + th;
-  // ---- barrel chest: dark faceted core (hunched forward), chest stack, side shells, belly plate
-  b.loft(kit.mech, [
-    hexSec(-0.62 * k, ty0 + 0.04 * k, 0.5 * k, 0.62 * k, ty0 + 0.2 * k, ty1 - 0.32 * k, 0.4 * k, ty1 - 0.08 * k),
-    hexSec(0.0, ty0, 0.6 * k, 0.76 * k, ty0 + 0.18 * k, ty1 - 0.26 * k, 0.5 * k, ty1),
-    hexSec(0.46 * k, ty0 + 0.04 * k, 0.5 * k, 0.66 * k, ty0 + 0.2 * k, ty1 - 0.3 * k, 0.42 * k, ty1 - 0.12 * k),
-  ]);
-  // chest outline: x across the chest, z up it (narrower at the top)
-  const chest: P2[] = [[-0.5, -0.36], [0.5, -0.36], [0.56, 0.12], [0.36, 0.4], [-0.36, 0.4], [-0.56, 0.12]].map(([x, z]) => [x * k, z * k] as P2);
-  plateStack(b, kit, kit.armor, frame([0.52 * k, ty0 + th * 0.5, 0], [0.9, 0.42, 0], [0, 0, 1]), chest, [
-    { inset: 0, thick: 0.08 * k, standoff: 0.04 * k },
-    { inset: 0.09 * k, thick: 0.06 * k, shift: [0, 0.03 * k], mat: kit.armor2 },
-    { inset: 0.22 * k, thick: 0.05 * k, shift: [0, 0.06 * k] },
-  ], { gap: 0.05 * k });
-  both((s) => {
-    armorPlate(b, kit, kit.armor, frame([-0.08 * k, ty0 + th * 0.5, s * 0.78 * k], [0, 0.15, s], [1, 0, 0]), trapP(0.92 * k, th * 0.62, th * 0.78, 0.08 * k), 0.07 * k, { standoff: 0.03 * k });
-    armorPlate(b, kit, kit.armor2, frame([-0.12 * k, ty0 + th * 0.48, s * 0.86 * k], [0, 0.1, s], [1, 0, 0]), rectP(0.5 * k, th * 0.36, 0.05 * k), 0.05 * k, { standoff: 0.01 * k });
-  });
-  armorPlate(b, kit, kit.armor2, frame([0.4 * k, ty0 + 0.04 * k, 0], [0.7, -0.6, 0], [0, 0, 1]), rectP(0.8 * k, 0.24 * k, 0.05 * k), 0.06 * k, { standoff: 0.02 * k });
-  // ---- jaw ledge (chin gun seat): dark bracket under an armour shelf with a hazard lip
-  const jawY = ty0 + 0.36 * k;
-  block(b, kit.mech, 0.58 * k, ty0 + 0.02 * k, 0, 0.36 * k, 0.56 * k, jawY - ty0 - 0.08 * k, { top: [0.9, 0.86], ch: 0.08 * k, bev: 0.02 * k });
-  armorPlate(b, kit, kit.armor, frame([0.6 * k, jawY - 0.07 * k, 0], [0, 1, 0], [1, 0, 0]), trapP(0.46 * k, 0.5 * k, 0.66 * k, 0.1 * k), 0.06 * k, { standoff: 0.01 * k });
-  hazard(b, kit, 0.82 * k, ty0 + 0.12 * k, 0, 0.06 * k, 0.4 * k, 4, Math.PI / 2);
-  // ---- dorsal hump (main cannon platform): dark core block + thick faceted shell with a raised rear lip
-  block(b, kit.mech, -0.28 * k, ty1 - 0.2 * k, 0, 0.9 * k, 0.9 * k, 0.36 * k, { top: [0.8, 0.8], ch: 0.15 * k, bev: 0.03 * k });
-  const humpY = ty1 + 0.24 * k;
-  archShell(b, kit.armor, { x: -0.28 * k, len: 1.05 * k, y0: ty1 - 0.04 * k, w: 0.62 * k, h: 0.26 * k, thick: 0.06 * k, cols: 4, pw: 3, taperF: 0.86, taperB: 0.94, lift: 0.04 * k, drop: 0.1 * k });
-  // ---- sunken head: dark core, two eyes, an overhanging brow stack, cheek guards
-  const hy = ty1 - 0.36 * k;
-  block(b, kit.mech, 0.36 * k, hy, 0, 0.42 * k, 0.48 * k, 0.32 * k, { top: [0.7, 0.8], ch: 0.08 * k, bev: 0.02 * k });
-  eyeCluster(b, kit, frame([0.58 * k, hy + 0.18 * k, 0], [0, 1, 0], [1, 0, 0]), [[-0.1 * k, 0, 0.04 * k], [0.1 * k, 0, 0.04 * k]]);
-  plateStack(b, kit, kit.armor, frame([0.42 * k, hy + 0.3 * k, 0], [0.25, 1, 0], [1, 0, 0]), trapP(0.5 * k, 0.5 * k, 0.66 * k, 0.1 * k), [
-    { inset: 0, thick: 0.06 * k, standoff: 0.02 * k },
-    { inset: 0.06 * k, thick: 0.05 * k, shift: [-0.04 * k, 0], mat: kit.armor2 },
-  ], { gap: 0.04 * k });
-  both((s) => armorPlate(b, kit, kit.armor2, frame([0.44 * k, hy + 0.12 * k, s * 0.26 * k], [0.3, 0, s], [1, 0, 0]), trapP(0.34 * k, 0.16 * k, 0.26 * k, 0.04 * k), 0.04 * k, { standoff: 0.01 * k }));
-  // ---- reactor drum across the back: dark drum, glowing end caps behind cage ribs, coolant hoses into the torso
-  const rx = -0.82 * k, ry = ty0 + 0.42 * k;
-  b.cylb(kit.joint, 0.3 * k, 1.1 * k, 0.05 * k, [rx, ry, -0.55 * k], 'z', 12);
-  for (const f of [-0.3, 0, 0.3]) b.cyl(kit.mech, 0.32 * k, 0.32 * k, 0.05 * k, [rx, ry, f * k], 'z', 12);
-  both((s) => {
-    b.cyl(kit.glow, 0.2 * k, 0.2 * k, 0.03 * k, [rx, ry, s * 0.56 * k], s > 0 ? 'z' : '-z', 10);
-    for (const a of [Math.PI / 4, -Math.PI / 4]) b.g(new THREE.BoxGeometry(0.46 * k, 0.04 * k, 0.04 * k), kit.mech, new THREE.Matrix4().makeRotationZ(a).setPosition(rx, ry, s * 0.6 * k));
-    cableBundle(b, kit, [rx + 0.12 * k, ry + 0.2 * k, s * 0.4 * k], [-0.5 * k, ty1 - 0.25 * k, s * 0.42 * k], 0.03 * k, [0, 0, 1], fine ? 2 : 1, 0.08);
-  });
-  exhaust(b, kit, rx - 0.04 * k, ty0 + 0.66 * k, -0.3 * k, 0.07 * k, 0.42 * k);
-  exhaustBox(b, kit, frame([rx + 0.02 * k, ry + 0.3 * k, 0.32 * k], [0, 1, 0], [-1, 0, 0]), 0.09 * k, fine);
-  if (fine) ladder(b, kit, [-0.7 * k, ty0 + 0.1 * k, 0.5 * k], [-0.58 * k, ty1, 0.5 * k], 0.16 * k, [0, 0, 1], [-1, 0, 0], 0.03 * k);
-  crewHatch(b, kit, frame([-0.62 * k, ty1 - 0.06 * k, -0.28 * k], [-0.3, 1, 0]), 0.09 * k, fine);
-  // ---- pauldrons + arms with forearm gauntlets carrying the arm weapons
-  const armM = c.mounts.filter((m) => Math.abs(m.z) > 0.9 * k);
-  const podTop = new Map<MountSpec, number>();
-  both((s) => {
-    const m = armM.find((q) => Math.sign(q.z) === s);
-    const az = m ? m.z : s * 1.34 * k, ax = m ? m.x : 0.11 * k;
-    const melee = !!m && (m.mod.category === 'melee' || m.mod.projectile === 'melee');
+  // ---- waist: an armoured spine block (the swivel), stabiliser rams
+  const ax = -0.12 * k, P = pelvisY + 0.2 * k;
+  block(b, kit.joint, ax, pelvisY + 0.02 * k, 0, 0.42 * k, 0.5 * k, P - pelvisY - 0.04 * k, { top: [0.9, 0.9], ch: 0.1 * k, bev: 0.015 * k });
+  both((s) => piston(b, kit, [0.08 * k, pelvisY - 0.05 * k, s * 0.26 * k], [0.06 * k, P - 0.02 * k, s * 0.24 * k], 0.045 * k, 0.55, fine));
+
+  // ---- the torso (twists with the weapons); frame origin on the waist swivel, +x forward
+  const ty0 = 0.04 * k, th = 0.95 * k, ty1 = ty0 + th;
+  const gz = 1.38 * k, gx = 0.16 * k, gy = ty0 + 0.06 * k; // arm-gun trunnions: just outside the chest flank
+  const dx = -0.34 * k, dy = ty1 + 0.4 * k; // dorsal cannon trunnion
+  const jawY = ty0 + 0.36 * k, cx = 0.66 * k; // chin gun
+  const humpTop = ty1 + 0.28 * k;
+  const station = (i: number, r: number): V3 => (i === 0 ? [dx, dy, 0] : i === 3 ? [cx, jawY + r * 0.36, 0] : [gx, gy, (i === 1 ? -1 : 1) * gz]);
+  const build = (tb: Bld, heroR: number, podR: number[]): V3[] => {
+    const rOf = (i: number) => (i === ts.hero ? heroR : podR[ts.pods.indexOf(i)] ?? 0.375 * k);
+    tb.cylb(kit.mech, 0.3 * k, 0.06 * k, 0.012 * k, [0, -0.02 * k, 0], 'y', 12);
+    // ---- barrel chest: dark faceted core (hunched forward), chest stack, side shells, belly plate
+    tb.loft(kit.mech, [
+      hexSec(-0.62 * k, ty0 + 0.04 * k, 0.5 * k, 0.62 * k, ty0 + 0.2 * k, ty1 - 0.32 * k, 0.4 * k, ty1 - 0.08 * k),
+      hexSec(0.0, ty0, 0.6 * k, 0.76 * k, ty0 + 0.18 * k, ty1 - 0.26 * k, 0.5 * k, ty1),
+      hexSec(0.46 * k, ty0 + 0.04 * k, 0.5 * k, 0.66 * k, ty0 + 0.2 * k, ty1 - 0.3 * k, 0.42 * k, ty1 - 0.12 * k),
+    ]);
+    const chest: P2[] = [[-0.5, -0.36], [0.5, -0.36], [0.56, 0.12], [0.36, 0.4], [-0.36, 0.4], [-0.56, 0.12]].map(([x, z]) => [x * k, z * k] as P2);
+    plateStack(tb, kit, kit.armor, frame([0.52 * k, ty0 + th * 0.5, 0], [0.9, 0.42, 0], [0, 0, 1]), chest, [
+      { inset: 0, thick: 0.08 * k, standoff: 0.04 * k },
+      { inset: 0.09 * k, thick: 0.06 * k, shift: [0, 0.03 * k], mat: kit.armor2 },
+      { inset: 0.22 * k, thick: 0.05 * k, shift: [0, 0.06 * k] },
+    ], { gap: 0.05 * k });
+    both((s) => {
+      armorPlate(tb, kit, kit.armor, frame([-0.08 * k, ty0 + th * 0.55, s * 0.74 * k], [0, 0.15, s], [1, 0, 0]), trapP(0.92 * k, th * 0.5, th * 0.66, 0.08 * k), 0.07 * k, { standoff: 0.03 * k });
+      pbox(tb, kit.plasma, 0.5 * k, 0.04 * k, 0.02 * k, -0.1 * k, ty0 + th * 0.3, s * 0.8 * k);
+    });
+    armorPlate(tb, kit, kit.armor2, frame([0.4 * k, ty0 + 0.04 * k, 0], [0.7, -0.6, 0], [0, 0, 1]), rectP(0.8 * k, 0.24 * k, 0.05 * k), 0.06 * k, { standoff: 0.02 * k });
+    // ---- jaw ledge (chin gun seat): dark bracket under an armour shelf with a hazard lip
+    tb.loft(kit.mech, [hexSec(0.42 * k, ty0 + 0.02 * k, 0.4 * k, 0.5 * k, ty0 + 0.1 * k, jawY - 0.12 * k, 0.44 * k, jawY - 0.06 * k), hexSec(0.78 * k, ty0 + 0.04 * k, 0.3 * k, 0.4 * k, ty0 + 0.1 * k, jawY - 0.14 * k, 0.36 * k, jawY - 0.08 * k)]);
+    armorPlate(tb, kit, kit.armor, frame([0.62 * k, jawY - 0.07 * k, 0], [0, 1, 0], [1, 0, 0]), trapP(0.46 * k, 0.5 * k, 0.66 * k, 0.1 * k), 0.06 * k, { standoff: 0.01 * k });
+    hazard(tb, kit, 0.86 * k, ty0 + 0.12 * k, 0, 0.06 * k, 0.4 * k, 4, Math.PI / 2);
+    // ---- sunken head: dark core, two eyes, an overhanging brow stack, cheek guards
+    const hy = ty1 - 0.36 * k;
+    block(tb, kit.mech, 0.36 * k, hy, 0, 0.42 * k, 0.48 * k, 0.32 * k, { top: [0.7, 0.8], ch: 0.08 * k, bev: 0.02 * k });
+    eyeCluster(tb, kit, frame([0.58 * k, hy + 0.18 * k, 0], [0, 1, 0], [1, 0, 0]), [[-0.1 * k, 0, 0.04 * k], [0.1 * k, 0, 0.04 * k]]);
+    plateStack(tb, kit, kit.armor, frame([0.42 * k, hy + 0.3 * k, 0], [0.25, 1, 0], [1, 0, 0]), trapP(0.5 * k, 0.5 * k, 0.66 * k, 0.1 * k), [
+      { inset: 0, thick: 0.06 * k, standoff: 0.02 * k },
+      { inset: 0.06 * k, thick: 0.05 * k, shift: [-0.04 * k, 0], mat: kit.armor2 },
+    ], { gap: 0.04 * k });
+    both((s) => armorPlate(tb, kit, kit.armor2, frame([0.44 * k, hy + 0.12 * k, s * 0.26 * k], [0.3, 0, s], [1, 0, 0]), trapP(0.34 * k, 0.16 * k, 0.26 * k, 0.04 * k), 0.04 * k, { standoff: 0.01 * k }));
+    // ---- dorsal hump between the pauldrons: dark core block + faceted shell; with the cannon a raised bay it sinks into
+    block(tb, kit.mech, -0.32 * k, ty1 - 0.22 * k, 0, 0.92 * k, 0.86 * k, 0.4 * k, { top: [0.8, 0.8], ch: 0.15 * k, bev: 0.03 * k });
+    archShell(tb, kit.armor, { x: -0.32 * k, len: 1.05 * k, y0: ty1 - 0.06 * k, w: 0.6 * k, h: 0.24 * k, thick: 0.06 * k, cols: 4, pw: 3, taperF: 0.86, taperB: 0.94, lift: 0.04 * k, drop: 0.1 * k });
+    if (ts.armed(0)) {
+      const r = rOf(0), ct = dy - r * 0.11;
+      block(tb, kit.mech, dx, ty1 + 0.02 * k, 0, 0.7 * k, 0.7 * k, ct - r * 0.5 - ty1, { top: [0.9, 0.9], ch: 0.12 * k, bev: 0.015 * k });
+      block(tb, kit.armor2, dx - 0.04 * k, ct - r * 0.5, 0, r * 1.9, r * 1.7, r * 0.5, { top: [0.92, 0.92], ch: r * 0.45, bev: 0.02 * k, bot: 0.03 * k });
+      both((s) => {
+        armorPlate(tb, kit, kit.armor, frame([dx - 0.06 * k, ct - r * 0.26, s * r * 0.86], [0, 0, s], XA), trapP(r * 1.6, r * 0.34, r * 0.4, 0.03 * k), 0.035 * k, { standoff: 0.012 * k });
+        pbox(tb, kit.glow, r * 1.1, 0.022 * k, 0.012 * k, dx - 0.06 * k, ct - r * 0.44, s * (r * 0.9 + 0.01 * k));
+      });
+      if (ts.hero === 0) tb.lathe(kit.trim, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.2], [r * 0.74, r * 0.24], [0, r * 0.24]], [dx, ct - r * 0.12, 0], 'y', 16);
+    }
+    // ---- reactor pack on the back: an angular dark block, glowing vent stack, exhaust stacks, coolant hoses
+    const rx = -0.86 * k;
+    block(tb, kit.mech, rx, ty0 + 0.12 * k, 0, 0.4 * k, 1.0 * k, 0.66 * k, { top: [0.8, 0.9], shift: [-0.05 * k, 0], ch: 0.1 * k, bev: 0.02 * k });
+    block(tb, kit.armor2, rx - 0.04 * k, ty0 + 0.5 * k, 0, 0.32 * k, 1.08 * k, 0.2 * k, { top: [0.8, 0.9], shift: [-0.04 * k, 0], ch: 0.08 * k, bev: 0.015 * k });
+    for (const f of [0.26, 0.36, 0.46]) pbox(tb, kit.plasma, 0.02 * k, 0.04 * k, 0.7 * k, rx - 0.205 * k, ty0 + f * k, 0);
+    exhaust(tb, kit, rx - 0.04 * k, ty0 + 0.7 * k, -0.34 * k, 0.07 * k, 0.42 * k);
+    exhaustBox(tb, kit, frame([rx + 0.02 * k, ty0 + 0.7 * k, 0.32 * k], [0, 1, 0], [-1, 0, 0]), 0.09 * k, fine);
+    if (fine) both((s) => cableBundle(tb, kit, [rx + 0.12 * k, ty0 + 0.5 * k, s * 0.4 * k], [-0.5 * k, ty1 - 0.25 * k, s * 0.42 * k], 0.03 * k, [0, 0, 1], 2, 0.08));
+    // ---- shoulders + arms: the arm guns are the forearms
     const shY = ty1 - 0.24 * k;
-    const podL = 1.05 * k, podW = Math.max(0.5 * k, (m?.r ?? 0.39 * k) * 2.0), podH = 0.42 * k;
-    const px = melee ? ax - podL * 0.2 : ax + 0.15 * k;
-    const top = mechArmHS(b, kit, s, [-0.12 * k, shY, s * 0.92 * k], [-0.2 * k, ty0 - 0.02 * k, az - s * 0.04 * k], [px, ty0 - 0.62 * k, az], podL, podW, podH, 0.17 * k, fine);
-    if (m) podTop.set(m, top);
-    // knuckles: three armoured fingers (dark bone + armour cap) curled under the gauntlet nose; spread as a claw with a
-    // melee tool
-    for (const dz of [-0.3, 0, 0.3]) {
-      const f0: V3 = [px + podL * 0.42, ty0 - 0.5 * k, az + dz * podW];
-      const f1: V3 = [f0[0] + (melee ? 0.34 : 0.12) * k, f0[1] - (melee ? 0.1 : 0.2) * k, f0[2] + dz * (melee ? 0.3 : 0.05) * k];
-      b.g(strutGeo(f0, f1, 0.05 * k, 0.045 * k, 6), kit.mech);
-      claw(b, kit.joint, f1, [f1[0] + 0.08 * k, f1[1] - 0.06 * k, f1[2]], [f1[0] + 0.1 * k, f1[1] - 0.16 * k, f1[2]], 0.045 * k);
+    for (const i of [1, 2]) {
+      const s = i === 1 ? -1 : 1, z = s * gz, armed = ts.armed(i);
+      const r = armed ? rOf(i) : 0.75 * k / 2, ct = gy - r * 0.11;
+      const sh: V3 = [-0.14 * k, shY, s * 0.94 * k];
+      jointDrum(tb, kit, sh, 0.2 * k, 0.24 * k, 'z');
+      // upper arm: a dark bone from the shoulder drum down to an elbow on the gun's back, armour plate on its outside
+      const el: V3 = [gx - r * 1.1, ct + r * 0.62, z - s * r * 0.15];
+      beam(tb, kit.mech, sh, el, 0.18 * k, 0.17 * k, [0, 0, 1]);
+      armorPlate(tb, kit, kit.armor, frame([(sh[0] + el[0]) / 2, (sh[1] + el[1]) / 2, (sh[2] + el[2]) / 2 + s * 0.1 * k], [0, 0, s], [el[0] - sh[0], el[1] - sh[1], 0]), rectP(0.5 * k, 0.24 * k, 0.04 * k), 0.04 * k, { standoff: 0.015 * k });
+      jointDrum(tb, kit, el, 0.14 * k, 0.28 * k, 'z');
+      piston(tb, kit, [sh[0] + 0.06 * k, sh[1] - 0.2 * k, s * 0.86 * k], [el[0] + 0.14 * k, el[1] + 0.04 * k, el[2] - s * 0.1 * k], 0.035 * k, 0.55, fine);
+      // gauntlet: the armoured cradle under the gun (the pod's ring sunk in it), outer cheek plate, glow strip
+      block(tb, kit.mech, gx - 0.16 * k, ct - r * 0.82, z, r * 1.5, r * 1.0, r * 0.36, { top: [0.9, 0.9], ch: r * 0.25, bev: 0.012 * k });
+      block(tb, kit.armor2, gx - 0.08 * k, ct - r * 0.5, z, r * 1.75, r * 1.4, r * 0.5, { top: [0.9, 0.9], ch: r * 0.4, bev: 0.02 * k, bot: 0.03 * k, mid: [[0.5, 1.04, 1.04]] });
+      armorPlate(tb, kit, kit.armor, frame([gx - 0.12 * k, ct - r * 0.3, z + s * r * 0.72], [0, 0.1, s], XA), trapP(r * 1.5, r * 0.36, r * 0.44, 0.04 * k), 0.04 * k, { standoff: 0.015 * k });
+      pbox(tb, kit.glow, r * 1.0, 0.025 * k, 0.012 * k, gx - 0.12 * k, ct - r * 0.52, z + s * (r * 0.74 + 0.012 * k));
+      // knuckles: three armoured claws curled under the gauntlet's nose (spread wide on an empty fist)
+      for (const dz of [-0.3, 0, 0.3]) {
+        const f0: V3 = [gx + r * 0.7, ct - r * 0.7, z + dz * r * 1.1];
+        const f1: V3 = [f0[0] + (armed ? 0.12 : 0.3) * k, f0[1] - 0.16 * k, f0[2] + dz * (armed ? 0.05 : 0.3) * k];
+        tb.g(strutGeo(f0, f1, 0.06 * k, 0.05 * k, 6), kit.mech);
+        claw(tb, kit.joint, f1, [f1[0] + 0.08 * k, f1[1] - 0.06 * k, f1[2]], [f1[0] + 0.1 * k, f1[1] - 0.18 * k, f1[2]], 0.05 * k);
+      }
+      if (!armed) {
+        // no gun: a heavy armoured fist block on the gauntlet
+        block(tb, kit.armor, gx - 0.04 * k, ct - 0.02 * k, z, r * 1.6, r * 1.3, r * 0.6, { top: [0.7, 0.8], ch: r * 0.3, bev: 0.02 * k });
+      } else if (i === ts.hero) tb.lathe(kit.trim, [[0, 0], [r * 0.8, 0], [r * 0.8, r * 0.2], [r * 0.74, r * 0.24], [0, r * 0.24]], [gx, ct - r * 0.12, z], 'y', 16);
+      // pauldron: four overlapping plates stepping down and out over the shoulder drum (wider than the stance)
+      for (let j = 0; j < 4; j++) {
+        const a = 0.18 + j * 0.36;
+        const F = frame([-0.16 * k, shY + 0.36 * k - j * 0.12 * k, s * (1.02 + j * 0.11) * k], [0, Math.cos(a), s * Math.sin(a)], [1, 0, 0]);
+        armorPlate(tb, kit, j % 2 ? kit.armor2 : kit.armor, F, trapP((0.86 - j * 0.07) * k, (0.66 - j * 0.07) * k, (0.42 - j * 0.04) * k, 0.07 * k), 0.07 * k, { standoff: 0.04 * k, gap: 0.05 * k });
+        if (j === 0) tb.g(new THREE.BoxGeometry(0.56 * k, 0.012 * k, 0.06 * k), kit.accent, F.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.112 * k, 0)));
+      }
+      tb.g(strutGeo([-0.16 * k, shY + 0.1 * k, s * 0.7 * k], [-0.16 * k, shY + 0.28 * k, s * 1.1 * k], 0.06 * k, 0.05 * k, 6), kit.mech);
+      // a swept blade fin raking back off the pauldron
+      fin(tb, kit.armor2, [[-0.4 * k, shY + 0.42 * k], [-0.9 * k, shY + 0.5 * k], [-1.06 * k, shY + 0.66 * k], [-0.6 * k, shY + 0.52 * k]], s * 1.0 * k - 0.0175 * k, 0.035 * k);
     }
-    // pauldron: four overlapping plates stepping down and out over the shoulder drum, accent stripe on the top plate
-    for (let i = 0; i < 4; i++) {
-      const a = 0.18 + i * 0.36;
-      const F = frame([-0.14 * k, shY + 0.34 * k - i * 0.12 * k, s * (1.0 + i * 0.1) * k], [0, Math.cos(a), s * Math.sin(a)], [1, 0, 0]);
-      armorPlate(b, kit, i % 2 ? kit.armor2 : kit.armor, F, trapP((0.82 - i * 0.07) * k, (0.62 - i * 0.07) * k, (0.4 - i * 0.04) * k, 0.07 * k), 0.07 * k, { standoff: 0.04 * k, gap: 0.05 * k });
-      if (i === 0) b.g(new THREE.BoxGeometry(0.56 * k, 0.012 * k, 0.06 * k), kit.accent, F.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.112 * k, 0)));
+    // chin gun: a raised lip on the jaw ledge
+    if (ts.armed(3)) {
+      const r = rOf(3);
+      block(tb, kit.armor2, cx, jawY - 0.02 * k, 0, r * 1.7, r * 1.7, r * 0.3, { top: [0.92, 0.92], ch: r * 0.45, bev: 0.012 * k });
     }
-    // shoulder frame under the pauldron (the plates hang off it)
-    b.g(strutGeo([-0.14 * k, shY + 0.1 * k, s * 0.7 * k], [-0.14 * k, shY + 0.26 * k, s * 1.08 * k], 0.06 * k, 0.05 * k, 6), kit.mech);
-  });
-  // asymmetric kit: a sensor mast on the left pauldron, hazard band on the right
-  b.strut(kit.joint, [-0.3 * k, ty1 + 0.2 * k, -1.02 * k], [-0.45 * k, ty1 + 0.85 * k, -1.08 * k], 0.025 * k, 0.012 * k, 5);
-  sensor(b, kit, -0.42 * k, ty1 + 0.72 * k, -1.07 * k, 0.1 * k, kit.lamp);
-  hazard(b, kit, -0.12 * k, ty1 + 0.22 * k, 1.04 * k, 0.5 * k, 0.16 * k, 4, 0);
+    // asymmetric kit: a sensor mast on the left pauldron, hazard band on the right
+    tb.strut(kit.joint, [-0.3 * k, ty1 + 0.2 * k, -1.06 * k], [-0.45 * k, ty1 + 0.85 * k, -1.12 * k], 0.025 * k, 0.012 * k, 5);
+    sensor(tb, kit, -0.42 * k, ty1 + 0.72 * k, -1.11 * k, 0.1 * k, kit.lamp);
+    hazard(tb, kit, -0.12 * k, ty1 + 0.24 * k, 1.08 * k, 0.5 * k, 0.16 * k, 4, 0);
+    const hero = station(ts.hero >= 0 ? ts.hero : 0, heroR);
+    return [hero, ...ts.pods.map((i) => { const p = station(i, rOf(i)); return [p[0], p[1] - rOf(i) * 0.36, p[2]] as V3; })];
+  };
+  const at: V3 = [ax, P, 0];
+  if (ts.hero < 0) {
+    const tbb = new Bld(), g = new THREE.Group();
+    g.position.set(...at);
+    build(tbb, 0.375 * k, []);
+    tbb.mount(g);
+    c.body.add(g);
+  }
   const hips: Hip[] | undefined = biped ? ([-1, 1] as const).map((s) => ({
     p: [-0.15 * k, stance.hipY, s * 0.6 * k] as V3, side: s, t, foot: [-0.12 * k, 0, s * 0.72 * k] as V3, phase: s > 0 ? Math.PI : 0,
-  })) : stance.legs === 'spider' ? (() => {
+  })) : spider ? (() => {
     const out: Hip[] = [];
     for (const [hx, fx, ph] of [[0.25, 0.95, 0], [-0.5, -1.25, Math.PI]] as [number, number, number][]) for (const s of [-1, 1] as const) {
       out.push({ p: [hx * k, stance.hipY, s * 0.5 * k], side: s, t: stance.thick, foot: [fx * k, 0, s * 1.35 * k], phase: ph + (s > 0 ? Math.PI : 0) });
     }
     return out;
   })() : undefined;
-  const deck = (x: number, z: number) => (Math.abs(z) < 0.6 * k && x > -0.7 * k && x < 0.4 * k ? ty1 : -1);
+  const top = P + humpTop;
   return {
-    deckAt: deck, top: humpY, hips, custom: true, dressed: true,
+    deckAt: (x, z) => (Math.abs(z) < 0.5 * k && Math.abs(x - ax) < 0.4 * k ? P : -1), top, hips, custom: true, dressed: true,
     seat: (m) => {
-      const pt = podTop.get(m);
-      if (pt !== undefined) return { y: wristRing(b, kit, m.x, pt, m.z, m.r, 14), socket: true };
-      if (m.x > 0.4 * k) { collar(b, kit, m.x, jawY, m.z, m.r, jawY - 0.08 * k, 14); return { y: jawY, socket: true }; }
-      collar(b, kit, m.x, humpY, m.z, m.r, humpY - 0.2 * k, 16);
-      return { y: humpY, socket: true };
+      if (m.i === ts.hero) return { y: P, socket: true };
+      // utilities are static at their own mounts: the dorsal slot is on the twist axis, so its utility sits right on
+      // the hump; an arm-slot one rides a short dark stub just over the pauldron's outer edge, the light slot's over the
+      // brow (at rest they read as mounted on the shoulder / head)
+      const y = m.i === 0 ? top + 0.02 * k : Math.abs(m.z) > 0.6 * k ? P + ty1 + 0.2 * k : P + ty1 + 0.12 * k;
+      if (m.i !== 0) block(b, kit.mech, m.x, y - 0.3 * k, m.z, m.r * 0.5, m.r * 0.5, 0.33 * k, { ch: m.r * 0.12, bev: m.r * 0.04 });
+      collar(b, kit, m.x, y, m.z, m.r, y - 0.04 * k, 12);
+      return { y, socket: true };
     },
+    torso: ts.hero >= 0 ? (tt, r) => ({ hp: build(tt, r.heroR, r.podR), at }) : undefined,
   };
 }
 
@@ -616,4 +660,4 @@ registerChassis('mech', strider);
 registerChassis('mantis', needle);
 registerChassis('warlord', warlord);
 registerChassis('arachnid', orbwalker);
-registerTorso(['mech', 'mantis', 'arachnid']);
+registerTorso(['mech', 'mantis', 'arachnid', 'warlord']);

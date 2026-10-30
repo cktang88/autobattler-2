@@ -131,6 +131,13 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
     the other instead (mantis: chin gun under the head, second gun on a dorsal hump).
   - Arm guns: trunnion just outside the chest flank (z ~ 0.3 + 0.78 r), the chest narrow at gun height and the
     shoulders / pauldrons widening above the gun (strider): top-heavy without the gun clipping the body.
+  - Utilities stay static at their own mounts while the torso twists. Put the twist pivot (`at`) right under a utility
+    socket so its module stays on the torso's axis (crab: pivot under the light slot, the rig on the crest), or carry
+    the utility on a static frame above the torso's sweep (aegis: a rear gantry over the gun's breech); only fall back
+    to a mast / stub at the mount (walkers, warlord arm slots).
+  - Even single-gun vehicles use torso mode when the gun's surroundings must turn with it: a field gun's shield and
+    trunnion cheeks (carriage), a casemate's gun walls (juggernaut). An M housing is ~1.6 cells long: anything static
+    within that radius of the pivot and above the deck clips the breech when the gun traverses.
 - **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
   (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
   footprint art (`render/footart.ts`) still draws from them.
