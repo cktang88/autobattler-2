@@ -37106,14 +37106,20 @@ function vls(C) {
   C.t.rate = 0.4;
 }
 function erector(C) {
-  const { b, p, rc, kit, r, y0 } = C;
+  const { b, p, kit, r, y0 } = C;
   const nuke = C.tier >= 5;
   const R = r * (nuke ? 0.26 : 0.22), L = r * 2;
-  shell(b, kit.panel, [[-r * 0.85, r * 0.6, r * 0.5, r * 0.28], [r * 0.6, r * 0.6, r * 0.5, r * 0.28]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.4, y0 + r * 0.42, s * r * 0.36, r * 0.4, r * 0.35, r * 0.1);
-  C.t.pitch.position.set(-r * 0.4, y0 + r * 0.5, 0);
-  C.t.pitch.rotation.z = 0.22;
-  for (const s of [-1, 1]) cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
+  shell(b, kit.panel, [[-r * 0.85, r * 0.62, r * 0.52, r * 0.24], [r * 0.6, r * 0.62, r * 0.52, r * 0.24]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.4, y0 + r * 0.3, s * (R * 1.25 + r * 0.12), r * 0.42, r * 0.26, r * 0.1, r * 0.03);
+  C.t.pitch.position.set(-r * 0.4, y0 + r * 0.34, 0);
+  C.t.pitch.rotation.z = 0.06;
+  p.cyl(kit.trim, r * 0.12, r * 0.12, R * 2.5 + r * 0.2, [0, 0, -(R * 1.25 + r * 0.1)], "z", 12);
+  for (const s of [-1, 1]) {
+    cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
+    cbox(p, kit.hull, r * 0.55, R * 0.45, s * (R * 1.12 + r * 0.04), L * 0.55, R * 1.2, r * 0.09, r * 0.03, void 0, 0.85);
+    cbox(p, kit.panel, r * 0.4, R * 0.3, s * (R * 1.12 + r * 0.1), L * 0.28, R * 0.8, r * 0.04, r * 0.015, void 0, 0.85);
+    bx(p, kit.glow, r * 0.95, R * 0.55, s * (R * 1.12 + r * 0.09), L * 0.16, R * 0.32, r * 0.03);
+  }
   for (const f of [0.15, 0.6]) bx(p, kit.metal, f * L, R * 0.4, 0, r * 0.08, R * 1.4, R * 2.4);
   missile(C.am, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
   if (nuke) {
@@ -38006,12 +38012,13 @@ function rotary(C) {
 function blades(C) {
   const { p, rc, kit, r, y0 } = C;
   const n = Math.max(2, C.nb), per = Math.ceil(n / 2);
-  const rows = Math.min(per, per > 4 ? Math.ceil(per / 2) : per), cols = Math.ceil(per / rows), dt = detail2(C);
+  const big = per >= 8;
+  const rows = big ? 2 : Math.min(per, per > 4 ? Math.ceil(per / 2) : per), cols = Math.ceil(per / rows), dt = detail2(C);
   plinth(C, 0.62, 0.24);
-  C.t.pitch.position.set(-r * 0.1, y0 + r * 0.52, 0);
-  C.t.pitch.rotation.z = 0.32;
-  const cell = Math.min(r * 0.26, r * 1.1 / rows), bl = r * 1.45;
-  const bh = rows * cell + r * 0.14, bw = cols * cell + r * 0.08, zb = r * 0.17 + bw / 2 + r * 0.03;
+  C.t.pitch.position.set(-r * 0.1, y0 + r * (big ? 0.42 : 0.52), 0);
+  C.t.pitch.rotation.z = big ? 0.2 : 0.32;
+  const cell = big ? r * 0.19 : Math.min(r * 0.26, r * 1.1 / rows), bl = r * 1.45;
+  const bh = rows * cell + r * 0.14, bw = cols * cell + r * 0.08, zb = r * (big ? 0.14 : 0.17) + bw / 2 + r * 0.03;
   drum(p, kit.trim, 0, 0, -zb, r * 0.17, zb * 2, SM, "z");
   cbox(p, kit.hull2, -r * 0.08, 0, 0, r * 0.62, r * 0.36, r * 0.3, r * 0.05, void 0, 0.85);
   win(p, kit, kit.glow, -r * 0.1, r * 0.18, 0, r * 0.3, r * 0.14, "y", 1, r * 0.04);
@@ -38277,12 +38284,14 @@ function railDriver(C) {
   const len = Math.min(C.D * (xl ? 1.65 : 1.35 + 0.2 * C.c), R * (xl ? 24 : 15 + 4 * C.c)), x0 = r * 0.02, x1 = x0 + len;
   const g = R * 1.2, rh = R * 1.15, rw = R * 2.1, xb = x0 + r * 0.72;
   cbox(p, kit.trim, r * 0.1, 0, 0, r * 0.4, g * 2 + rh * 2.1, rw * nf + R * (nf > 1 ? 3.5 : 1.2), r * 0.05, void 0, 0.85);
+  const zc = nf > 1 ? rw / 2 + R * 0.9 : 0, zo = zc + rw * 0.57, hw = g + rh * 1.1;
   for (const s of [-1, 1]) {
-    const zw = s * (rw * (nf > 1 ? 2.2 : 1) / 2 + R * (nf > 1 ? 1.6 : 0.2));
-    cbox(rc, kit.hull, x0 + len * 0.3, 0, zw + s * R * 1.1, len * 0.36, R * 0.32, R * 2.4, R * 0.1, [0, s * 0.42, 0], 0.6);
-    cbox(rc, kit.panel, x0 + len * 0.27, R * 0.2, zw + s * R * 0.9, len * 0.26, R * 0.14, R * 1.6, R * 0.05, [0, s * 0.42, 0], 0.7);
-    cbox(rc, kit.trim, x0 + len * 0.22, 0, zw + s * R * 0.5, len * 0.3, R * 0.7, R * 0.9, R * 0.12);
-    bx(rc, kit.plasma, x0 + len * 0.21, 0, zw + s * R * 2, len * 0.2, R * 0.42, R * 0.16, [0, s * 0.42, 0]);
+    const zf = s * (zo + R * 0.2), xw = x0 + len * 0.2;
+    cbox(rc, kit.trim, xw - len * 0.02, 0, s * (zo + R * 0.06), len * 0.3, hw * 2 * 0.86, R * 0.2, R * 0.06, void 0, 0.8);
+    cbox(rc, kit.hull, xw, 0, zf, len * 0.3, hw * 2, R * 0.3, R * 0.1, void 0, 0.62);
+    cbox(rc, kit.panel, xw - len * 0.04, 0, zf + s * R * 0.16, len * 0.17, hw * 1.3, R * 0.1, R * 0.04, void 0, 0.7);
+    bx(rc, kit.plasma, xw + len * 0.13, 0, zf + s * R * 0.04, R * 0.42, hw * 1.7, R * 0.36, [0, 0, -0.32]);
+    bx(rc, kit.hot, xw - len * 0.04, 0, zf + s * R * 0.22, len * 0.12, R * 0.34, R * 0.06);
   }
   for (let f = 0; f < nf; f++) {
     const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0;
@@ -38308,7 +38317,7 @@ function railDriver(C) {
     }
     rc.lathe(kit.plasma, [[g * 0.7, 0], [g * 0.95, 0], [g * 0.95, R * 0.25], [g * 0.7, R * 0.25], [g * 0.7, 0]], [x1 - R * 0.6, 0, z], "x", 16);
     const nc = xl ? 6 : 4, cl = (x1 - R * 1.5 - (xb + R * 3.2)) / nc;
-    for (let k = 0; k < nc; k++) crystal(rc, k % 2 ? kit.rail : kit.plasma, xb + R * 3.2 + cl * (k + 0.5), 0, z, R * (0.36 - k * 0.03), cl * 0.42, "x");
+    for (let k = 0; k < nc; k++) crystal(rc, k % 2 ? kit.glow : kit.plasma, xb + R * 3.2 + cl * (k + 0.5), 0, z, R * (0.36 - k * 0.03), cl * 0.42, "x");
     C.muzzle(x1 + R * 0.4, 0, z);
   }
   C.spin("x", [x0 + len * 0.5, 0, 0]);

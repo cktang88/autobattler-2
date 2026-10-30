@@ -206,16 +206,25 @@ function vls(C: WCtx) {
   C.t.rate = 0.4;
 }
 
-/** Cruise missile / tactical nuke: one huge missile on an erector cradle. */
+/** Cruise missile / tactical nuke: one huge missile lying almost flat in a low armoured cradle (raised only when it
+ *  fires), so the launcher stays as low as the other guns of its class: the cradle's team cheeks climb to the
+ *  missile's waist with glowing seams, two clamp bulkheads hold it, a hinge block at the back is the erector pivot. */
 function erector(C: WCtx) {
-  const { b, p, rc, kit, r, y0 } = C;
+  const { b, p, kit, r, y0 } = C;
   const nuke = C.tier >= 5;
   const R = r * (nuke ? 0.26 : 0.22), L = r * 2.0;
-  shell(b, kit.panel, [[-r * 0.85, r * 0.6, r * 0.5, r * 0.28], [r * 0.6, r * 0.6, r * 0.5, r * 0.28]], y0);
-  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.4, y0 + r * 0.42, s * r * 0.36, r * 0.4, r * 0.35, r * 0.1);
-  C.t.pitch.position.set(-r * 0.4, y0 + r * 0.5, 0);
-  C.t.pitch.rotation.z = 0.22;
-  for (const s of [-1, 1]) cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
+  shell(b, kit.panel, [[-r * 0.85, r * 0.62, r * 0.52, r * 0.24], [r * 0.6, r * 0.62, r * 0.52, r * 0.24]], y0);
+  for (const s of [-1, 1]) cbox(b, kit.trim, -r * 0.4, y0 + r * 0.3, s * (R * 1.25 + r * 0.12), r * 0.42, r * 0.26, r * 0.1, r * 0.03);
+  C.t.pitch.position.set(-r * 0.4, y0 + r * 0.34, 0);
+  C.t.pitch.rotation.z = 0.06;
+  // hinge drum at the back, cradle rails, low armoured cheeks along the missile's flanks with a glowing seam each
+  p.cyl(kit.trim, r * 0.12, r * 0.12, R * 2.5 + r * 0.2, [0, 0, -(R * 1.25 + r * 0.1)], 'z', 12);
+  for (const s of [-1, 1]) {
+    cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
+    cbox(p, kit.hull, r * 0.55, R * 0.45, s * (R * 1.12 + r * 0.04), L * 0.55, R * 1.2, r * 0.09, r * 0.03, undefined, 0.85);
+    cbox(p, kit.panel, r * 0.4, R * 0.3, s * (R * 1.12 + r * 0.1), L * 0.28, R * 0.8, r * 0.04, r * 0.015, undefined, 0.85);
+    bx(p, kit.glow, r * 0.95, R * 0.55, s * (R * 1.12 + r * 0.09), L * 0.16, R * 0.32, r * 0.03);
+  }
   for (const f of [0.15, 0.6]) bx(p, kit.metal, f * L, R * 0.4, 0, r * 0.08, R * 1.4, R * 2.4);
   // the missile itself is ammunition: it leaves the erector when fired (C.am) and a fresh one is raised on reload
   missile(C.am, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
