@@ -23,6 +23,12 @@ export class RateLimiter {
     return true;
   }
 
+  /** Give back a token taken by take() (the action it guarded turned out not to count). */
+  refund(key: string): void {
+    const b = this.buckets.get(key);
+    if (b) b.tokens = Math.min(this.burst, b.tokens + 1);
+  }
+
   /** Whether a take() would succeed now, without consuming anything. */
   ok(key: string, now = Date.now()): boolean {
     const b = this.buckets.get(key);

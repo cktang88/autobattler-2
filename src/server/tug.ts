@@ -242,7 +242,7 @@ export class TugHub {
   result(p: TugPlayer, id: string, winner: unknown): { ok: true } {
     const r = this.rooms.get(id);
     if (!r || this.sideOf(r, p.id) === null) throw new HttpError(404, 'No such game');
-    if (r.winner === null && r.startAt && (winner === 0 || winner === 1 || winner === -1)) this.finish(r, winner, this.now());
+    if (r.winner === null && r.startAt && this.now() >= r.startAt && (winner === 0 || winner === 1 || winner === -1)) this.finish(r, winner, this.now());
     return { ok: true };
   }
 

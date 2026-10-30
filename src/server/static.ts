@@ -88,6 +88,7 @@ export function serveStatic(root: string, req: IncomingMessage, res: ServerRespo
   if (req.method === 'HEAD') { res.end(); return; }
   const stream = fs.createReadStream(file);
   stream.on('error', () => res.destroy());
+  res.on('close', () => stream.destroy()); // a client that hangs up mid-file must not keep the fd open
   stream.pipe(res);
 }
 

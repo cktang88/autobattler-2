@@ -234,11 +234,12 @@ export class Api {
     const now = Date.now();
     const acct = this.store.playersByName.get(key);
     if (acct) {
-      if (!this.failLimiter.ok(key)) throw new HttpError(429, 'Too many wrong passwords for this name — try again in a few minutes');
+      // charge the guess before the (slow) hash check so concurrent guesses can't all slip past the limit; refund a right one
+      if (!this.failLimiter.take(key)) throw new HttpError(429, 'Too many wrong passwords for this name — try again in a few minutes');
       if (!(await checkPassword(password, acct.pw!))) {
-        this.failLimiter.take(key);
         throw new HttpError(401, `Wrong password for "${acct.name}". (That name is taken: if it isn't yours, pick another.)`);
       }
+      this.failLimiter.refund(key);
       acct.lastSeen = now;
       this.store.addToken(acct, hashToken(token));
       return { ...this.session(acct, token), status: 'signed-in' as const };
@@ -608,7 +609,7 @@ export class Api {
         changed++;
       } else if (m.status === 'deploy' && now - m.updatedAt > STALE_TURN_MS) {
         const r0 = m.players[0].ready, r1 = m.players[1].ready;
-        if (r0 && r1) { this.tryResolve(r); continue; }
+        if (r0 && r1) { this.maybeRetryResolve(r); continue; } // throttled: a round that keeps failing must not re-simulate on every lobby list
         if (r0 !== r1) forfeitSide(r, r0 ? 1 : 0);
         else { m.status = 'done'; m.winner = -1; touch(m); }
         this.wake(m.id);
