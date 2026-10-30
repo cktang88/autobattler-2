@@ -108,8 +108,31 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const max = torsoHull ? 6 : 3;
     mods.forEach((m, i) => { if (n < max && i !== hero && m && m.kind === 'weapon' && tur[i] && offs[i]) podOf[i] = n++; });
   }
+  // where each standing module is drawn (render only; the sim keeps its mount table). Hulls are designed round their
+  // primary socket (the biggest class, first of a tie): the hero weapon always takes that seat, whatever slot the
+  // design put it in, and the module that was there takes the hero's slot. Then any module whose housing still
+  // clashes with another (a utility dropped on a seat inside the main gun) moves to the nearest clear spot on the hull.
+  const pos = offs.map((o) => (o ? { x: o.x, y: o.y } : o));
+  if (!flying && !torsoHull && hero >= 0 && pos[hero]) {
+    let prim = -1;
+    ch.mounts.forEach((c, i) => { if (pos[i] && podOf[i] < 0 && (prim < 0 || CLASS_RANK[c] > CLASS_RANK[ch.mounts[prim]!])) prim = i; });
+    if (prim >= 0 && prim !== hero && CLASS_RANK[ch.mounts[prim]!] >= CLASS_RANK[ch.mounts[hero]!]) { const t = pos[prim]!; pos[prim] = pos[hero]; pos[hero] = t; }
+    const stand = tur.map((tu, i) => (tu && pos[i] && podOf[i] < 0 ? i : -1)).filter((i) => i >= 0);
+    const clash = (i: number, x: number, y: number) => stand.some((j) => j !== i && Math.hypot(pos[j]!.x - x, pos[j]!.y - y) < 0.9 * (tur[i]!.r + tur[j]!.r));
+    // move the smaller module of a clashing pair (never the hero); candidates on a grid over the hull, inside its outline
+    for (const i of [...stand].sort((a, b) => tur[a]!.r - tur[b]!.r)) {
+      if (i === hero || !clash(i, pos[i]!.x, pos[i]!.y)) continue;
+      const r = tur[i]!.r, hx = Math.max(0, L / 2 - r * 0.8), hy = Math.max(0, W / 2 - r * 0.8);
+      let best: { x: number; y: number } | null = null, bd = Infinity;
+      for (let gx = -8; gx <= 8; gx++) for (let gy = -8; gy <= 8; gy++) {
+        const x = (gx / 8) * hx, y = (gy / 8) * hy, d = Math.hypot(x - pos[i]!.x, y - pos[i]!.y);
+        if (d < bd && !clash(i, x, y)) { bd = d; best = { x, y }; }
+      }
+      if (best) pos[i] = best;
+    }
+  }
   const specs: MountSpec[] = [];
-  tur.forEach((tu, i) => { if (tu && offs[i] && podOf[i] < 0) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
+  tur.forEach((tu, i) => { if (tu && pos[i] && podOf[i] < 0) specs.push({ i, x: pos[i]!.x, z: pos[i]!.y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
 
   // flyers with a registered airframe (chassis/air.ts) take the registry path like ground units; the airframe returns
   // its lift points (AirOut.lift) and the air mobility (mobility/air.ts) renders rotors / fans / nozzles / grav pods

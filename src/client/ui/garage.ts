@@ -1528,9 +1528,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     ms.forEach((m, i) => {
       const n = kids[i] as HTMLElement;
       let r = Math.max(15, Math.min(48, m.r * 1.1));
-      // crowded hulls (small stage, many sockets): never let a ring cover its neighbour's centre
+      // crowded hulls (small stage, many sockets): never let a ring cover its neighbour's centre. A socket the hull
+      // hides from this angle (drawn dimmer) never shrinks a visible one: a deck module that merely lines up behind
+      // the main gun used to squeeze the gun's ring to the minimum
       let nn = Infinity;
-      for (let j = 0; j < ms.length; j++) if (j !== i) nn = Math.min(nn, Math.hypot(ms[j].x - m.x, ms[j].y - m.y));
+      for (let j = 0; j < ms.length; j++) if (j !== i && (m.occ || !ms[j].occ)) nn = Math.min(nn, Math.hypot(ms[j].x - m.x, ms[j].y - m.y));
       r = Math.max(9, Math.min(r, nn * 0.55));
       const pad = Math.min(r + 6, W / 2, H / 2);
       const x = Math.max(pad, Math.min(W - pad, m.x)), y = Math.max(pad, Math.min(H - pad, m.y));

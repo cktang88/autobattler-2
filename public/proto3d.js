@@ -48267,9 +48267,36 @@ function buildUnit(design, team) {
       if (n < max && i !== hero && m && m.kind === "weapon" && tur[i] && offs[i]) podOf[i] = n++;
     });
   }
+  const pos = offs.map((o) => o ? { x: o.x, y: o.y } : o);
+  if (!flying && !torsoHull && hero >= 0 && pos[hero]) {
+    let prim = -1;
+    ch.mounts.forEach((c, i) => {
+      if (pos[i] && podOf[i] < 0 && (prim < 0 || CLASS_RANK[c] > CLASS_RANK[ch.mounts[prim]])) prim = i;
+    });
+    if (prim >= 0 && prim !== hero && CLASS_RANK[ch.mounts[prim]] >= CLASS_RANK[ch.mounts[hero]]) {
+      const t = pos[prim];
+      pos[prim] = pos[hero];
+      pos[hero] = t;
+    }
+    const stand = tur.map((tu, i) => tu && pos[i] && podOf[i] < 0 ? i : -1).filter((i) => i >= 0);
+    const clash = (i, x, y) => stand.some((j) => j !== i && Math.hypot(pos[j].x - x, pos[j].y - y) < 0.9 * (tur[i].r + tur[j].r));
+    for (const i of [...stand].sort((a, b) => tur[a].r - tur[b].r)) {
+      if (i === hero || !clash(i, pos[i].x, pos[i].y)) continue;
+      const r = tur[i].r, hx = Math.max(0, L / 2 - r * 0.8), hy = Math.max(0, W / 2 - r * 0.8);
+      let best = null, bd = Infinity;
+      for (let gx = -8; gx <= 8; gx++) for (let gy = -8; gy <= 8; gy++) {
+        const x = gx / 8 * hx, y = gy / 8 * hy, d = Math.hypot(x - pos[i].x, y - pos[i].y);
+        if (d < bd && !clash(i, x, y)) {
+          bd = d;
+          best = { x, y };
+        }
+      }
+      if (best) pos[i] = best;
+    }
+  }
   const specs = [];
   tur.forEach((tu, i) => {
-    if (tu && offs[i] && podOf[i] < 0) specs.push({ i, x: offs[i].x, z: offs[i].y, r: tu.r, cls: ch.mounts[i] ?? "S", mod: mods[i] });
+    if (tu && pos[i] && podOf[i] < 0) specs.push({ i, x: pos[i].x, z: pos[i].y, r: tu.r, cls: ch.mounts[i] ?? "S", mod: mods[i] });
   });
   const reg = registered().chassis;
   if (flying && !reg.includes(ch.id) && !reg.includes(ch.shape)) {
