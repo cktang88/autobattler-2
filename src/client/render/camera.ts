@@ -59,6 +59,7 @@ export class Camera {
   private velX = 0; // inertia, visual cells / s
   private velY = 0;
 
+  private fitPadY = 0;
   readonly fw: number;
   readonly fh: number;
 
@@ -74,13 +75,22 @@ export class Camera {
     const wasFit = this.vw > 0 && this.tk <= this.minK * 1.001;
     this.vw = Math.max(1, w);
     this.vh = Math.max(1, h);
-    this.minK = Math.max(0.5, Math.min(this.vw / this.fw, this.vh / (this.fh * this.ay)));
+    this.minK = Math.max(0.5, Math.min(this.vw / this.fw, this.vh / ((this.fh + 2 * this.fitPadY) * this.ay)));
     this.maxK = Math.max(MAX_K, this.minK * 1.5);
     if (wasFit) this.k = this.tk = this.minK;
     this.k = clampN(this.k, this.minK, this.maxK);
     this.tk = clampN(this.tk, this.minK, this.maxK);
     this.clampTarget();
     this.clampCurrent();
+  }
+
+  /** cells of scenery kept in view beyond each back line at the fit view (a map with bases behind the field) */
+  setFitPadY(pad: number): void {
+    if (pad === this.fitPadY) return;
+    const wasFit = this.tk <= this.minK * 1.001;
+    this.fitPadY = pad;
+    this.setViewport(this.vw, this.vh);
+    if (wasFit) { this.k = this.tk = this.minK; this.cx = this.tcx = this.fw / 2; this.cy = this.tcy = this.fh / 2; }
   }
 
   /** change the ground foreshortening (tilt on/off); keeps the fit view fitted */

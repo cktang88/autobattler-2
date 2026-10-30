@@ -19,7 +19,7 @@ import type { Design } from '../../shared/types.ts';
 import { CHASSIS_BY_ID } from '../../shared/parts.ts';
 import { approxTurretD, bodyScale, slotSeat } from '../../shared/mountgeo.ts';
 import { flyHeight } from '../render/tilt.ts';
-import { MAPS, type MapTheme } from '../render/ground.ts';
+import { MAP_BY_ID, type MapTheme } from '../render/ground.ts';
 import { TEAM_PAL } from '../render/palette.ts';
 import { UnitLayer, buildTerrain, createRenderer, setSurfaceDetail, setupPost, setupStage, surfaceDetailReady, type Post, type Rig } from './units-adapter.ts';
 import { UnitOutline } from './outline3d.ts';
@@ -153,8 +153,8 @@ export class UnitStage3D {
     this.post = setupPost(this.renderer, this.scene, this.camera, 512, 512, { ao: true, bloom: true, grade: true });
     this.outline.install(this.post.composer.passes, (p, i) => this.post.composer.insertPass(p, i));
     if (this.post.bloom) this.post.bloom.strength = 0.34;
-    // ground: the battlefield's terrain look, tinted for the default map, with the battle haze
-    const map = MAPS[0];
+    // ground: the battlefield's terrain look, tinted for the desert map, with the battle haze
+    const map = MAP_BY_ID.get('basin')!;
     const ground = groundFor(map).clone(true);
     this.scene.add(ground);
     const haze = new THREE.Color(map.void).lerp(new THREE.Color('#a7b6c4'), 0.5);
