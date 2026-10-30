@@ -11,7 +11,8 @@ import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type 
 import { beam, block, both, collar, glow, hazard } from './shapes.ts';
 import { banner, glowGrille } from './giants-kit.ts';
 import { armorPlate, cableBundle, eraGrid, fineFor, frame, hexSec, piston, plateStack, recessPanel, rectP, stowBox, trapP } from './hs-kit.ts';
-import { armourWalls, latticeMast, ngonT, octStack, planLoftT, searchlight, xPrism } from './hs-kit-titan.ts';
+import { armourWalls, latticeMast, ngonT, octStack, planLoftT, searchlight, titanLift, xPrism } from './hs-kit-titan.ts';
+import type { Lift } from '../mobility/air.ts';
 import { pipeRun, sensorDome } from './titan-greebles.ts';
 import { torsoHP, torsoSlots } from './torso-kit.ts';
 import { shiftTo } from './titans.ts';
@@ -28,6 +29,7 @@ function lance(c: ChassisCtx): ChassisOut {
 
   // ---- static carriage: a compact hip block on legs, or a low armoured deck on tracks / anchor / spider legs
   let hy: number;
+  let lift: Lift[] | undefined;
   const hx = -0.6 * kx;
   if (biped) {
     hy = stance.hipY + 0.35 * k;
@@ -43,6 +45,8 @@ function lance(c: ChassisCtx): ChassisOut {
     armourWalls(b, kit, P, [y1 + 0.06 * k, 1.0], [dy - 0.09 * k, 0.97], { at: [hx, 0], u: pu * 0.6, pitch: 1.4 * k, fill: 0.62, era: false });
     both((s) => hazard(b, kit, hx + 2.6 * kx, dy + 0.01, s * 1.0 * kz, 0.9 * kx, 0.3 * kz, 4, 0));
     hy = dy + 0.3 * k;
+    // flown (grav lifters / jets): outrigger lift nacelles off the carriage deck's diagonals
+    if (c.mob.kind === 'air') lift = titanLift(b, kit, c.mob.id, { cx: hx, rx: L * 0.33, rz: W * 0.37, y: y1 + 0.3 * k, yA: (y1 + dy) / 2, r: 0.95 * k, front: 0.6 });
   }
   // slewing ring the gun keel turns on
   planLoftT(b, kit.mech, ngonT(10, 1.15 * k, 1.15 * k), [[hy - 0.45 * k, 1.0], [hy - 0.05 * k, 1.0]], [hx, 0]);
@@ -137,7 +141,7 @@ function lance(c: ChassisCtx): ChassisOut {
   if (!heroM) keel(b, (i) => c.mounts.some((m) => m.i === i && m.mod.kind === 'weapon'));
   const toYaw = (p: V3): V3 => [p[0] - at[0], p[1] - at[1], p[2] - at[2]];
   return {
-    deckAt: (x, z) => (x > -4.5 * kx && x < 2.5 * kx && Math.abs(z) < 1.0 * kz ? yK : -1), top: tTop + 1.5 * k, custom: true, dressed: true, hips,
+    deckAt: (x, z) => (x > -4.5 * kx && x < 2.5 * kx && Math.abs(z) < 1.0 * kz ? yK : -1), top: tTop + 1.5 * k, custom: true, dressed: true, hips, lift,
     seat: (m: MountSpec) => {
       if (m === heroM) return { y: hy, socket: true };
       if (m.mod.kind === 'weapon') return { y: base(m.i)[1], socket: true };

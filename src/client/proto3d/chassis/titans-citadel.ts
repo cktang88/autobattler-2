@@ -15,10 +15,11 @@
 // (humanoid), the lance (one spinal gun) and the arachne (a spider's twisting mantle).
 
 import type { P2, V3 } from '../geo.ts';
+import type { Lift } from '../mobility/air.ts';
 import { registerChassis, type ChassisCtx, type ChassisOut, type Hip, type MountSpec } from './registry.ts';
 import { beam, block, both, collar, glow, hazard } from './shapes.ts';
 import { banner, inPoly, reactor } from './giants-kit.ts';
-import { armorPlate, crewHatch, eraGrid, fineFor, frame, ladder, piston, recessPanel, rectP } from './hs-kit.ts';
+import { armorPlate, crewHatch, eraGrid, fineFor, frame, ladder, piston, recessPanel, rectP, trapP } from './hs-kit.ts';
 import { armourWalls, facePlateHS, latticeMast, ngonT, octBarbette, octTower, parapet, planLoftT, railLoop, searchlight } from './hs-kit-titan.ts';
 import { inside, faceSlit, mirror, pipeRun, sensorDome, wallFace } from './titan-greebles.ts';
 
@@ -28,7 +29,12 @@ function citadel(c: ChassisCtx): ChassisOut {
   const kx = L / 9.2, kz = W / 10, k = Math.min(kx, kz);
   const fine = fineFor(c.S);
   const legged = stance.legs !== null;
-  const y0 = stance.y0;
+  const biped = stance.legs === 'biped', flown = c.mob.kind === 'air';
+  // titan legs: thick legs set wide under the bailey's waist, the hull riding just ABOVE the hip axis so the hip
+  // joints hang under it in armoured hip housings (the hull visibly sits on its legs, no flat slab over two sticks)
+  const tL = stance.thick * 1.5, hzL = 2.3 * kz, hxL = -0.3 * kx, hY = stance.hipY * 1.12;
+  // flown: the fortress rides higher so the grav emitters under its towers clear the ground
+  const y0 = biped ? hY + 0.55 * tL : flown ? stance.y0 + 0.9 * k : stance.y0;
   const yt = legged ? y0 + 0.5 * k : Math.max(stance.yt, y0 + 0.4);
   const deckY = yt + 1.7 * k;
   const u = 0.12 * k; // plate unit
@@ -88,7 +94,7 @@ function citadel(c: ChassisCtx): ChassisOut {
 
   // ---- bastions (SIGNATURE): plinth on the track pod, plated drum, corbel ring, overhanging crown with a glow band
   const P12 = ngonT(12, BR, BR);
-  const yb0 = legged ? yt - 0.6 * k : yt - 0.08;
+  const yb0 = biped ? yt - 0.25 * k : legged ? yt - 0.6 * k : yt - 0.08;
   const yBand = yb0 + 0.55 * k, yCor = yB - 0.85 * k, yCr = yB - 0.1 * k;
   for (const [x, z] of bastions) {
     const sz = Math.sign(z) as -1 | 1;
@@ -156,8 +162,10 @@ function citadel(c: ChassisCtx): ChassisOut {
     hazard(b, kit, fx - 0.1 * k, gTop - 0.16 * k, 0, 1.1 * k, 0.14 * k, 4, Math.PI / 2);
   }
   if (!legged) {
-    block(b, kit.joint, 4.1 * kx, 0.15, 0, 0.75 * kx, 2.2 * kz, yt - 0.05, { top: [0.4, 0.95], shift: [0.2 * kx, 0], ch: 0.15 * k, bev: 0.05 });
-    hazard(b, kit, 4.4 * kx, yt * 0.55, 0, 1.8 * kz, 0.3 * kx, 7, Math.PI / 2);
+    // ram glacis under the gate: down to the ground on tracks, a prow under the hull when flown
+    const rb = flown ? y0 - 0.15 * k : 0.15;
+    block(b, kit.joint, 4.1 * kx, rb, 0, 0.75 * kx, 2.2 * kz, yt + 0.1 - rb, { top: [0.4, 0.95], shift: [0.2 * kx, 0], ch: 0.15 * k, bev: 0.05 });
+    hazard(b, kit, 4.4 * kx, flown ? (rb + yt) / 2 : yt * 0.55, 0, 1.8 * kz, 0.3 * kx, 7, Math.PI / 2);
   }
 
   // ---- inner terrace: the deck steps up once round the keep (plated walls)
@@ -249,15 +257,46 @@ function citadel(c: ChassisCtx): ChassisOut {
     return inside(rimP, x, z) ? deckY : -1;
   };
   let hips: Hip[] | undefined;
-  if (stance.legs === 'biped') {
-    hips = ([-1, 1] as const).map((s) => ({ p: [-0.6 * kx, stance.hipY, s * 2.1 * kz] as V3, side: s, t: stance.thick, foot: [-0.6 * kx, 0, s * 2.5 * kz] as V3, phase: s > 0 ? Math.PI : 0 }));
+  if (biped) {
+    hips = ([-1, 1] as const).map((s) => ({ p: [hxL, hY, s * hzL] as V3, side: s, t: tL, foot: [hxL + 0.15 * kx, 0, s * (hzL + 0.45 * kz)] as V3, phase: s > 0 ? Math.PI : 0 }));
+    // pelvis keel: a faceted armoured mass hung under the bailey between the hips, its belly below the hip axis
+    const PK = ngonT(8, 1.55 * tL, hzL - 0.55 * tL);
+    planLoftT(b, kit.mech, PK, [[hY - 0.55 * tL, 0.62], [hY - 0.1 * tL, 0.92], [y0 + 0.15, 1.0]], [hxL, 0]);
+    planLoftT(b, kit.armor2, ngonT(8, 1.62 * tL, hzL - 0.75 * tL), [[hY + 0.05 * tL, 0.9], [hY + 0.3 * tL, 1.0], [y0 + 0.02, 1.0]], [hxL, 0]);
+    glow(b, kit, hxL + 1.45 * tL, hY + 0.2 * tL, 0, 0.08 * k, 0.12 * k, 1.3 * k, [0, 0, -0.5]);
     both((s) => {
-      planLoftT(b, kit.mech, [[0.9 * kx, 0.55 * kz], [-0.9 * kx, 0.55 * kz], [-0.9 * kx, -0.55 * kz], [0.9 * kx, -0.55 * kz]], [[y0 - 0.3 * k, 0.8], [y0 + 0.1 * k, 1.0], [y0 + 0.3 * k, 0.86]], [-0.6 * kx, s * 2.1 * kz]);
-      for (const dx of [-0.6, 0.6]) piston(b, kit, [-0.6 * kx + dx * kx, y0 - 0.05 * k, s * 2.1 * kz], [-0.6 * kx + dx * 1.6 * kx, yt - 0.05, s * 1.95 * kz], 0.12 * k, 0.55, fine);
+      const z = s * hzL;
+      // hip housing: a deep armoured socket from the hull's underside down over the hip drum (the drum's lower half
+      // shows under it), wider than the leg, stepped plates on its outer face, a tasset hanging over the thigh
+      const HP: P2[] = [[1.25 * tL, 1.0 * tL], [-1.25 * tL, 1.0 * tL], [-1.45 * tL, 0.55 * tL], [-1.45 * tL, -0.75 * tL], [1.45 * tL, -0.75 * tL], [1.45 * tL, 0.55 * tL]].map(([x, zz]) => [x, s * zz] as P2);
+      planLoftT(b, kit.armor, HP, [[hY + 0.12 * tL, 0.86], [hY + 0.45 * tL, 1.0], [yt + 0.1, 1.04]], [hxL, z]);
+      planLoftT(b, kit.mech, HP, [[hY + 0.42 * tL, 1.03], [hY + 0.56 * tL, 1.03]], [hxL, z]);
+      armorPlate(b, kit, kit.armor2, frame([hxL, hY + 0.15 * tL, z + s * 1.05 * tL], [0, -0.35, s], [1, 0, 0]), trapP(2.4 * tL, 1.0 * tL, 1.6 * tL, 0.15 * tL), u * 1.3, { standoff: u * 0.5 });
+      armorPlate(b, kit, kit.shell, frame([hxL + 1.48 * tL, hY + 0.5 * tL, z], [1, -0.2, 0], [0, 1, 0]), rectP(0.75 * tL, 1.4 * tL, 0.1 * tL), u, { standoff: u * 0.4 });
+      // load rams from the housing's foot up into the hull, fore and aft
+      for (const dx of [-1, 1]) piston(b, kit, [hxL + dx * 1.15 * tL, hY + 0.2 * tL, z - s * 0.55 * tL], [hxL + dx * 2.3 * tL, y0 + 0.05, z - s * 0.85 * tL], 0.11 * k, 0.55, fine);
     });
   }
+  // flown: grav emitters under the two bastion drums and the two rear towers (jets: thruster cans under the towers)
+  let lift: Lift[] | undefined;
+  if (flown) {
+    lift = [];
+    const emit = (x: number, z: number, top: number, r: number, s: -1 | 1) => {
+      const h = r * 0.75;
+      planLoftT(b, kit.mech, ngonT(12, r * 1.04, r * 1.04), [[top - 0.22 * k, 0.94], [top + 0.05, 1.0]], [x, z]);
+      planLoftT(b, kit.glow, ngonT(12, r * 1.06, r * 1.06), [[top - 0.16 * k, 0.96], [top - 0.1 * k, 0.97]], [x, z]);
+      lift!.push({ kind: 'grav', p: [x, top - 0.22 * k - h * 0.45, z], r, len: h, dir: s });
+    };
+    for (const [x, z] of bastions) emit(x, z, yt - 0.08, 1.5 * k, Math.sign(z) as -1 | 1);
+    for (const [tx, tz] of TW) {
+      if (c.mob.id === 'jet') {
+        const jr = 0.62 * k, len = jr * 2.6;
+        lift.push({ kind: 'jet', p: [tx - 1.25 * k, yt + 0.35 * k, tz], r: jr, len });
+      } else emit(tx, tz, Math.max(yt - 0.1, 1.0), 0.95 * k, Math.sign(tz) as -1 | 1);
+    }
+  }
   return {
-    deckAt: deck, top: s3, custom: true, hips,
+    deckAt: deck, top: s3, custom: true, hips, lift,
     seat: (m: MountSpec) => {
       const tw = isTower(m);
       if (tw) { collar(b, kit, m.x, tw[1] + 0.04, m.z, m.r, tw[1] - 0.1, 16); return { y: tw[1] + 0.04, socket: true }; }

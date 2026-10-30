@@ -23,7 +23,8 @@ import {
   armorPlate, cableBundle, eraGrid, fineFor, frame, frameLimb, jointDrum, ladder, piston, plateStack, recessPanel,
   rectP, stowBox, trapP,
 } from './hs-kit.ts';
-import { armourWalls, latticeMast, ngonT, octBarbette, octStack, planLoftT, searchlight } from './hs-kit-titan.ts';
+import { armourWalls, latticeMast, ngonT, octBarbette, octStack, planLoftT, searchlight, titanLift } from './hs-kit-titan.ts';
+import type { Lift } from '../mobility/air.ts';
 import { faceFrame, faceSlit, pipeRun, wallFace } from './titan-greebles.ts';
 import { torsoHP, torsoSlots } from './torso-kit.ts';
 
@@ -54,6 +55,7 @@ function titanWalker(c: ChassisCtx): ChassisOut {
 
   // ---- lower body (static): pelvis on the legs, or an armoured pedestal on tracks / anchor / spider legs
   let pelvisY: number;
+  let lift: Lift[] | undefined;
   if (biped) pelvisY = stance.hipY;
   else if (stance.legs === 'spider') {
     pelvisY = stance.hipY + 0.9 * u;
@@ -67,6 +69,8 @@ function titanWalker(c: ChassisCtx): ChassisOut {
     both((s) => { hazard(b, kit, 3.0 * u, dy + 0.01, s * 1.6 * u, 1.1 * u, 0.4 * u, 5, 0); recessPanel(b, kit, frame([-3.0 * u, dy, s * 1.5 * u], [0, 1, 0]), 1.2 * u, 0.8 * u, 0.08 * u, { slats: 4 }); });
     // a raised armoured hip deck the waist stands on (not a column)
     planLoftT(b, kit.armor2, ngonT(8, 2.4 * u, 2.2 * u), [[dy - 0.05, 1.0], [dy + 0.3 * u, 0.94], [dy + 0.42 * u, 0.86]], [-0.3 * u, 0]);
+    // flown (grav lifters / jets): the pedestal becomes the lift deck, outrigger nacelles on its diagonals
+    if (c.mob.kind === 'air') lift = titanLift(b, kit, c.mob.id, { cx: -0.2 * u, rx: L * 0.42, rz: W * 0.33, y: y1 + 0.3 * u, yA: (y1 + dy) / 2, r: 1.05 * u });
   }
   // pelvis: dark core between the hip joints, hanging kilt (front stack, rear plate, side tassets)
   const pc = -0.3 * u;
@@ -256,16 +260,16 @@ function titanWalker(c: ChassisCtx): ChassisOut {
   const tFrame = (t: Bld) => shiftTo(t, at);
   const top = yS + 2.2 * u;
   if (!heroM) {
-    // no torso (all utilities, or flying: every weapon seated on its own): the same upper body, static, every slot built
+    // no torso (an all-utility fit): the same upper body, static, every slot built
     upper(b, (i) => c.mounts.some((m) => m.i === i && m.mod.kind === 'weapon'));
   }
   const toYaw = (p: V3): V3 => [p[0] - at[0], p[1] - at[1], p[2] - at[2]];
   return {
-    deckAt: (x, z) => (Math.abs(z) < 1.4 * u && x > -2.0 * u && x < 1.0 * u ? Y0 + 3.0 * u : -1), top, hips, custom: true, dressed: true,
+    deckAt: (x, z) => (Math.abs(z) < 1.4 * u && x > -2.0 * u && x < 1.0 * u ? Y0 + 3.0 * u : -1), top, hips, lift, custom: true, dressed: true,
     seat: (m) => {
       if (m === heroM) return { y: yP, socket: true };
       if (m.mod.kind === 'weapon') {
-        // flying / no torso: each weapon on its own designed seat height
+        // no torso: each weapon on its own designed seat height
         const p = base(m.i);
         return { y: p[1], socket: true };
       }

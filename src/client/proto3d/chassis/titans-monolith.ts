@@ -14,7 +14,7 @@ import { beam, block, both, collar, glow, hazard, vent } from './shapes.ts';
 import { banner, glowGrille, mast, ngon, planLoft } from './giants-kit.ts';
 import { inside, faceFrame, faceSlit, hatch, mirror, pbox, pipeRun, sensorDome, wallFace, whip, type Face } from './titan-greebles.ts';
 import { armorPlate, cagedLamp, eraGrid, fineFor, frame, ladder, piston, plateStack, recessPanel, rectP, trapP } from './hs-kit.ts';
-import { octBarbette } from './hs-kit-titan.ts';
+import { octBarbette, titanLift } from './hs-kit-titan.ts';
 import { torsoHP, torsoSlots } from './torso-kit.ts';
 import { shiftTo } from './titans.ts';
 import { castle, isCastle } from './castle.ts';
@@ -44,6 +44,8 @@ function monolith(c: ChassisCtx): ChassisOut {
   // keel between the running gear
   const wi = Math.min(stance.wi, 2.3 * kz);
   planLoft(b, kit.trim, ngon(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1.0]]);
+  // flown (grav lifters / jets): lift nacelles slung in the skirt's waist pinch, between the shield and engine horns
+  const lift = c.mob.kind === 'air' ? titanLift(b, kit, c.mob.id, { cx: -0.2 * kx, rx: 3.0 * kx, rz: 2.3 * kz, y: yt + 0.35 * k, yA: yt + 0.75 * k, r: 0.8 * k, front: 1.3, rear: 1.95 }) : undefined;
 
   // ---- tier 1 (static): the battered skirt. Hourglass plan: front shield horns, a pinched waist, rear engine horns.
   const P1 = sc(mirror([[3.5, 0], [3.35, -1.0], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
@@ -195,7 +197,7 @@ function monolith(c: ChassisCtx): ChassisOut {
   const toYaw = (p: V3): V3 => [p[0] - at[0], p[1] - at[1], p[2] - at[2]];
   const top1 = P1.map(([x, z]) => [x * sTop, z * sTop] as P2);
   return {
-    deckAt: (x, z) => (Math.hypot(x / kx, z / kz) < 2.3 ? t2 : inside(top1, x, z) ? s1 : -1), top: t2 + 1.3 * k, custom: true, dressed: true, hips,
+    deckAt: (x, z) => (Math.hypot(x / kx, z / kz) < 2.3 ? t2 : inside(top1, x, z) ? s1 : -1), top: t2 + 1.3 * k, custom: true, dressed: true, hips, lift,
     seat: (m: MountSpec) => {
       if (m === heroM) return { y: yW, socket: true };
       if (m.mod.kind === 'weapon') return { y: base(m.i)[1], socket: true };
