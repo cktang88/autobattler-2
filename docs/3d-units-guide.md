@@ -84,8 +84,8 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   (`C.b` yaw, `C.p` pitch, `C.rc` recoil, `C.sp` spin). `C.muzzle(x,y,z)` adds a muzzle point; the game fires
   effects from the muzzle's world position.
 - **Weapon size belongs to the weapon, never to the hull** (units3d `DRAW_D`): one drawn housing diameter per
-  size class, the same on every hull, main gun or not: S 0.75, M 1.5, L 3.0, XL 6.0 cells (each class twice the one
-  below: classes must read apart at a glance; titans are built round guns this big) (calibre moves it a
+  size class, the same on every hull, main gun or not: S 0.75, M 1.5, L 3.0, XL 5.25 cells (each class twice the one
+  below, XL 1.75x L: classes must read apart at a glance; titans are built round guns this big) (calibre moves it a
   little inside the class: sqrt of weaponD / slotD). The same gun is the same size everywhere, so players read
   weapons by size. A hull gets its integrated look by being designed round its biggest slots (its 1-2 main weapon
   slots, which are the bigger classes) with everything else fitting round them, NOT by inflating the main gun.
@@ -116,7 +116,7 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   Big hulls use it too (arachne mantle, broodmother howdah in `giants.ts`): `chassis/torso-kit.ts` `torsoSlots(c)`
   tells which design slot is the hero and which slots ride as pods (so the torso builds a sponson / arm only for armed
   slots), `torsoHP` turns a per-slot base table into the hp list. Lay the slots out in world cells round the class
-  housings (XL 6.0, L 3.0, M 1.5: centre distance >= 0.9 x the radii sum, or stack them in tiers with clear air between
+  housings (XL 5.25, L 3.0, M 1.5: centre distance >= 0.9 x the radii sum, or stack them in tiers with clear air between
   housings), and keep the static body under the torso's sweep low (raise the swivel on a neck if an abdomen / knees
   would cut through it). The torso takes the hull's surface skin (skins.ts), not the turret's (no collar hazard bands).
   More examples: the walkers in `chassis/walkers.ts` (strider, mantis, arachnid; shared `torsoOut()` helper, which
@@ -232,7 +232,7 @@ the same size on every hull (size by class), hulls integrate by designing round 
 
 ## 7. Firing effects match the guns
 
-- Effect size per class follows the drawn gun ratios (`FieldView3D` `CLASS_S` S 0.3, M 0.6, L 1.2, XL 2.4): a titan
+- Effect size per class follows the drawn gun ratios (`FieldView3D` `CLASS_S` S 0.3, M 0.6, L 1.2, XL 2.1): a titan
   gun's flash, round and blast are as big as the gun. Rounds are as wide as the drawn barrel (`drawnBore`).
 - Visible ammunition is built into `C.am` (warhead tips in launcher cells, the missile on a cruise / nuke erector,
   bombs on a rack): it becomes `Turret.ammo`, and the game hides it when the weapon fires (`Rig.spent`) until the

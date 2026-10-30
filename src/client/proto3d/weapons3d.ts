@@ -62,8 +62,8 @@ const MELEE = new Set(['saw', 'chainsaw', 'hammer', 'claw', 'blade', 'drill', 'p
 
 /** Unit-size scale applied to reference weapon sizes (bigger hulls carry proportionally bigger hardware). */
 /** Drawn housing diameter (cells) of a weapon / module of each size class, the same on every hull: each class twice
- *  the one below (XL 2x L 2x M 2x S), so a weapon's class reads at a glance (a titan is built round guns this big). */
-export const DRAW_D: Record<MountClass, number> = { S: 0.75, M: 1.5, L: 3.0, XL: 6.0 };
+ *  the one below (L 2x M 2x S), titan weapons 1.75x large, so a class reads at a glance (titans are built round them). */
+export const DRAW_D: Record<MountClass, number> = { S: 0.75, M: 1.5, L: 3.0, XL: 5.25 };
 /** reference cells -> drawn cells for ground weapons (DRAW_D M 1.5 over the M band middle 0.52) */
 export const DRAW_K = 1.5 / 0.52;
 /** drawn barrel radius of a ground weapon (cells): what its rounds / rockets / beams are sized from */

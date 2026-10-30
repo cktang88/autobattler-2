@@ -40547,7 +40547,7 @@ var GUNS = /* @__PURE__ */ new Set(["gun", "gatling", "shotgun", "cannon", "gaus
 var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mortar", "artillery", "charge"]);
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
-var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 6 };
+var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 5.25 };
 var DRAW_K = 1.5 / 0.52;
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {
