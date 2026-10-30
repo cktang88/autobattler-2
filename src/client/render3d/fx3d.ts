@@ -1283,6 +1283,10 @@ export class Fx3D {
   private scrap = new Scrap(2400);
   private scorch: THREE.InstancedMesh;
   private scorchN = 0;
+  /** fx time each scorch slot was laid at, and how long a scorch stays (Infinity: until its slot is reused) */
+  private scorchT = new Float64Array(256);
+  scorchLife = Infinity;
+  private scorchSweep = 0;
   private beams = new Ribbons(4000, 10);
   private rails = new RailBeams();
   /** camera position (set by the view each frame) so rail beams can face it */
@@ -2245,6 +2249,7 @@ export class Fx3D {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(_up, Math.random() * 6.28);
     m.compose(new THREE.Vector3(x, 0.02 + (i % 7) * 0.0004, z), q, new THREE.Vector3(r * 1.5 * R(0.85, 1.15), 1, r * 1.5));
     m.toArray(this.scorch.instanceMatrix.array as unknown as number[], i * 16);
+    this.scorchT[i] = this.time;
     this.scorchN++;
     this.scorch.count = Math.min(256, this.scorchN);
     this.scorch.instanceMatrix.needsUpdate = true;
@@ -2254,6 +2259,18 @@ export class Fx3D {
 
   update(dt: number): void {
     this.time += dt;
+    // endless battles: scorch marks older than scorchLife are folded away (zero scale) every couple of seconds
+    if (this.scorchLife !== Infinity && (this.scorchSweep -= dt) <= 0) {
+      this.scorchSweep = 2;
+      const arr = this.scorch.instanceMatrix.array as Float32Array;
+      let any = false;
+      for (let i = 0; i < this.scorch.count; i++) {
+        if (this.time - this.scorchT[i] < this.scorchLife || arr[i * 16] === 0) continue;
+        for (let j = 0; j < 16; j++) arr[i * 16 + j] = 0;
+        any = true;
+      }
+      if (any) this.scorch.instanceMatrix.needsUpdate = true;
+    }
     this.heat = Math.max(0, this.heat - dt * 4);
     for (let i = this.later.length - 1; i >= 0; i--) if (this.later[i].t <= this.time) { const f = this.later[i].fn; this.later.splice(i, 1); f(); }
     // rising flames over the patches share one budget, so a carpet of 160 napalm patches stays affordable

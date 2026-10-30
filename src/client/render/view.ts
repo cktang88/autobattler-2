@@ -15,6 +15,9 @@ export interface BattleView {
   shakeScale: number;
   flashScale: number;
   alwaysShowHealth: boolean;
+  /** seconds of battle time a wreck stays on the field before it fades / sinks away (default: for the whole battle).
+   *  Tug of war's endless battle sets it: there is no end of round to clear the field. */
+  wreckLife: number;
   /** camera state: k = CSS px per cell (1 cell = 5 m) */
   readonly cam: { readonly k: number; userAt: number };
   readonly controls: { enabled: boolean; doubleClickZoom: boolean; rotate?: boolean; readonly wasDrag: boolean };

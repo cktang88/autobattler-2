@@ -90,9 +90,10 @@ test('income, tiers, gold and the drop zone are enforced', () => {
 test('spawned units march on the enemy castle and hurt it', () => {
   const g = new TugGame(3, [ROSTER, ROSTER]);
   g.sides[0].gold = 1e6;
-  for (const x of [12, 24, 36]) {
-    for (const d of ROSTER.slice(0, 4)) assert.equal(g.apply(0, { t: 'buy', designId: d.id, x, y: 92 }), null);
-    for (let i = 0; i < TUG.buyCooldown * 20; i++) g.step(); // each design once per cooldown
+  for (let wave = 0; wave < 3; wave++) {
+    // four designs side by side across the lane (never on top of each other: drops must not overlap units)
+    ROSTER.slice(0, 4).forEach((d, j) => assert.equal(g.apply(0, { t: 'buy', designId: d.id, x: 6 + j * 12, y: 92 }), null));
+    for (let i = 0; i < (TUG.spawnFreeze + 4) * 20; i++) g.step(); // past the buy cooldown, and the wave has moved off
   }
   for (let i = 0; i < 20 * 120 && !g.done; i++) g.step();
   assert.ok(g.castleHp(1) < TUG.castleHp, 'the enemy castle took damage');
@@ -115,6 +116,25 @@ test('a tier unlock skips hull sizes the roster has no design of', () => {
   const h = new TugGame(7, [ROSTER, ROSTER]);
   assert.equal(h.nextTier(0), null);
   assert.match(h.check(0, { t: 'tier' }) ?? '', /no bigger hulls/);
+});
+
+test('drops may not land on units already there; the castle keeps units out of its whole base', () => {
+  const g = new TugGame(8, [ROSTER, ROSTER]);
+  g.sides[0].gold = 1e6;
+  const [a, b] = ROSTER;
+  assert.equal(g.apply(0, { t: 'buy', designId: a.id, x: 12, y: 95 }), null);
+  assert.match(g.check(0, { t: 'buy', designId: b.id, x: 12, y: 95 }) ?? '', /in the way/);
+  assert.equal(g.check(0, { t: 'buy', designId: b.id, x: 36, y: 95 }), null, 'clear ground elsewhere is fine');
+  // the castle's collision circle covers its drawn landing legs and wing walls
+  assert.ok(g.battle.radiusOf(g.castles[0]) >= 3.4);
+  // a unit marching straight at the castle stops at its rim instead of walking into its legs
+  const c = g.battle.units[g.castles[1]];
+  const ids = g.battle.spawnBlock(0, 77, ROSTER[0], 1, [{ x: c.x, y: c.y + 9 }]);
+  for (let i = 0; i < 20 * 20; i++) g.step();
+  for (const id of ids) {
+    const u = g.battle.units[id];
+    if (u.alive) assert.ok(Math.hypot(u.x - c.x, u.y - c.y) > g.battle.radiusOf(c.id) * 0.95, 'outside the castle');
+  }
 });
 
 test('a design can only be bought again after its cooldown', () => {

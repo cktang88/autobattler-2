@@ -11,6 +11,7 @@ import { Battle } from './sim/battle.ts';
 import { DT, TICK_RATE } from './sim/types.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, blockDims, setField, squadOffsets, type FieldSize } from './grid.ts';
 import { MODULE_BY_ID } from './parts.ts';
+import { hullK } from './mountgeo.ts';
 import { computeStats, validateDesign, weaponDps } from './stats.ts';
 import type { Design, ModuleDef, Side, Size } from './types.ts';
 
@@ -76,6 +77,8 @@ export function castleGunPrice(m: ModuleDef): number {
 /** castle centre (world cells) per side: at the middle of the side's back edge */
 export const castlePos = (side: Side): { x: number; y: number } => ({ x: FIELD_W / 2, y: side === 0 ? FIELD_H - 6 : 6 });
 const CASTLE_CLEAR = 6.5; // cells around the castle centre where nothing may be dropped
+/** the castle's collision radius: its drawn base (landing legs, wing walls) reaches past the Monolith hull's circle */
+const CASTLE_RADIUS = 3.5;
 
 export type TugCommand =
   /** buy a block of a roster design and drop it with its centre at world (x, y); rot turns a squad 90° */
@@ -169,6 +172,7 @@ export class TugGame {
       const id = this.battle.spawnBlock(s, 0, castleDesign(TUG.startCastleGun), 1, [castlePos(s)])[0];
       const u = this.battle.units[id];
       u.hp = u.maxHp = TUG.castleHp;
+      this.battle.setRadius(id, CASTLE_RADIUS);
       // a castle is a big target, not a wall of armour: small guns must still chip it
       u.stats = { ...u.stats, armor: 8 };
       return id;
@@ -204,6 +208,19 @@ export class TugGame {
     }
     return best;
   }
+  /** A block may not land on units already standing there (any side, same layer: ground or air), measured with the
+   *  sim's own collision circles: dropped inside them it would only be shoved out through them. */
+  overlapError(side: Side, d: Design, x: number, y: number, rot = false): string | null {
+    const st = computeStats(d);
+    const r = hullK(st.size) * Math.sqrt(st.fw * st.fh);
+    const cs = blockCenters(side, d, x, y, rot);
+    for (const u of this.battle.units) {
+      if (!u.alive || u.flying !== st.flying) continue;
+      const lim = (r + this.battle.radiusOf(u.id)) * 0.95;
+      for (const c of cs) if ((c.x - u.x) ** 2 + (c.y - u.y) ** 2 < lim * lim) return 'Units are in the way';
+    }
+    return null;
+  }
   /** ticks until `side` may buy this design again (0: now) */
   cooldown(side: Side, designId: string): number { return Math.max(0, (this.sides[side].ready[designId] ?? 0) - this.battle.tick); }
 
@@ -222,7 +239,7 @@ export class TugGame {
         if (S.gold < st.cost) return 'Not enough gold';
         if (this.aliveCount(side) + st.squad > TUG.maxAlive) return 'Too many units on the field';
         if (!Number.isFinite(cmd.x) || !Number.isFinite(cmd.y)) return 'Bad position';
-        return dropError(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1);
+        return dropError(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1) ?? this.overlapError(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1);
       }
       case 'income':
         if (S.incomeLvl >= TUG.maxIncomeLevel) return 'Income is maxed';
@@ -267,6 +284,7 @@ export class TugGame {
         S.gold -= castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!);
         S.castleGun = cmd.moduleId;
         const nid = this.battle.replaceUnit(this.castles[side], castleDesign(cmd.moduleId));
+        this.battle.setRadius(nid, CASTLE_RADIUS);
         (this.castles as [number, number])[side] = nid;
         break;
       }
