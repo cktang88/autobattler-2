@@ -309,7 +309,7 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   // pre-filter used the latter, so a target whose nearest point was a corner was dropped although the gun reached it.
   // A kiter parked at its range edge then sat with no target for the rest of the battle.
   const flame = D('flametower', 'warden', 'anchor', ['flamer', null]);
-  const cit = D('cit', 'citadel', 'anchor', [null, null, null, 'flak', null, null]); // 8 x 7 box
+  const cit = D('cit', 'broodmother', 'anchor', [null, 'flak', null, null, null]); // 7 x 5 box (square hulls are round in the sim)
   assert.deepEqual(validateDesign(flame, true), []);
   assert.deepEqual(validateDesign(cit, true), []);
   const b = new Battle({ seed: 1, sides: [{ designs: [flame, cit], units: [pl('flametower')] }, { designs: [flame, cit], units: [pl('cit')] }] });
@@ -317,16 +317,16 @@ test('guns reach a long hull at its box corner (range pre-filters use the box\'s
   type W = { range: number; ox: number; oy: number };
   const I = (b as unknown as { ints: { wpns: (W | null)[]; hl: number; hw: number }[] }).ints;
   const w = I[0].wpns[0]!, T = I[t.id];
-  w.range = 3.5; // the flamer's old reach: the corner geometry below needs a short gun next to the 8 x 7 box
-  // mount world position at the shooter's facing; put the citadel's corner 0.8 x range away, diagonally
+  w.range = 2.5; // a short reach: the corner geometry below needs a short gun next to the 7 x 5 box
+  // mount world position at the shooter's facing; put the long hull's corner 0.8 x range away, diagonally
   const mx = s.x + Math.cos(s.angle) * w.ox - Math.sin(s.angle) * w.oy, my = s.y + Math.sin(s.angle) * w.ox + Math.cos(s.angle) * w.oy;
   t.angle = Math.PI / 2; // long axis (hl) along y, hw across x
   const g = (0.8 * w.range) / Math.SQRT2;
   t.x = mx + g + T.hw; t.y = my - g - T.hl;
   (b as unknown as { rebuildHash(): void }).rebuildHash();
-  assert.ok(Math.hypot(t.x - mx, t.y - my) > w.range + hullK(5) * 8, 'set-up: the corner case the old pre-filter missed');
+  assert.ok(Math.hypot(t.x - mx, t.y - my) > w.range + hullK(4) * 7, 'set-up: the corner case the old pre-filter missed');
   b.step();
-  assert.equal(s.mounts[0].target, t.id, 'the flamer should target the citadel corner 0.8 x range away');
+  assert.equal(s.mounts[0].target, t.id, 'the flamer should target the long hull corner 0.8 x range away');
 });
 
 // ---------------------------------------------------------------- sim bug pass: quiet end vs long reloads, overkill vs PD

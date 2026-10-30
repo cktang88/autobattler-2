@@ -198,83 +198,93 @@ function arachne(c: ChassisCtx): ChassisOut {
       collar(b, kit, m.x, y, m.z, m.r, y - 0.4 * u, 16);
       return { y, socket: true };
     },
-    torso: heroSeat ? (t, { heroR }) => { buildMantle(t, c, ts, fine); return { hp: torsoHP(ts, slotBase, heroR), at: [cx, yW, 0] }; } : undefined,
+    torso: heroSeat ? (t, { heroR }) => { buildMantle(t, c, ts, fine, heroR); return { hp: torsoHP(ts, slotBase, heroR), at: [cx, yW, 0] }; } : undefined,
   };
 }
 
 // ---- weapon mantle (torso): the whole battery twists on the waist as one weapon system ----------------------------
-// Yaw frame (origin = waist top, +x forward), world cells: weapons have a fixed size per class (XL 3.6, L 2.4, M 1.5),
-// so the mantle is laid out round those housings. The titan gun lies in a deep keel between two shoulder masses; each
-// shoulder carries a giant gun on its deck and the titan gun's trunnion bearing on its inner wall; a command spine
-// astern lifts the medium gun over the titan gun's breech. Only armed slots get their sponson / spine.
+// Yaw frame (origin = waist top, +x forward), world cells. Weapons have a fixed size per class (units3d DRAW_D: XL
+// 5.25, L 3.0, M 1.5; the titan gun's own body is ~4 wide in torso mode), so the mantle is laid out round them: the
+// titan gun is the SPINE of the mantle, laid in a deep channel down the middle between two massive shoulder blocks
+// whose inner walls are its cradle (trunnion bearing posts on them, the axle into the gun); each shoulder carries a
+// giant gun abreast of the titan gun, a swept pauldron behind it; a command spine astern lifts the medium gun over the
+// titan gun's breech. Only armed slots get their shoulder / spine.
 const P_XL: V3 = [0.1, 0.55, 0];
-const P_L = (s: number): V3 => [0.55, 0.95, s * 2.75];
-const P_M: V3 = [-2.8, 2.3, 0];
+/** half width of the channel the titan gun lies in (its body is <= ~2 half-wide) */
+const CH = 2.08;
+const P_L = (s: number): V3 => [0.3, 1.2, s * 3.3];
+const P_M: V3 = [-3.75, 2.45, 0];
 const slotBase = (i: number): V3 => (i === 0 ? P_XL : i === 1 ? P_L(-1) : i === 2 ? P_L(1) : i === 3 ? P_M : [-1.2, 1.4, 0]);
 
-function buildMantle(t: Bld, c: ChassisCtx, ts: TorsoSlots, fine: boolean): void {
+function buildMantle(t: Bld, c: ChassisCtx, ts: TorsoSlots, fine: boolean, heroR: number): void {
   const { kit } = c;
-  const pu = 0.055;
+  const pu = 0.06;
   // swivel: dark bearing drum and a bright race
-  t.cyl(kit.mech, 1.35, 1.45, 0.24, [0, 0.12, 0], 'y', 18);
-  t.cylb(kit.joint, 1.5, 0.06, 0.01, [0, 0.22, 0], 'y', 18);
+  t.cyl(kit.mech, 1.45, 1.6, 0.24, [0, 0.12, 0], 'y', 18);
+  t.cylb(kit.joint, 1.65, 0.06, 0.01, [0, 0.22, 0], 'y', 18);
   // keel: the long faceted gun bed the titan gun is laid in (nose glacis forward, tail aft), plated walls, ERA forward
-  const KP = mirror([[2.15, 0], [1.65, -1.05], [0.75, -1.6], [-1.9, -1.6], [-2.75, -1.05], [-3.15, 0]]);
-  planLoftT(t, kit.armor2, KP, [[0.1, 0.8], [0.3, 1.0], [0.6, 0.98], [0.72, 0.9]]);
-  armourWalls(t, kit, KP, [0.3, 1.0], [0.6, 0.98], { u: pu, pitch: 0.95, fill: 0.72, front: 0.75, rear: -0.9 });
+  const KP = mirror([[2.45, 0], [1.95, -1.45], [0.9, -CH], [-2.3, -CH], [-3.3, -1.4], [-3.7, 0]]);
+  planLoftT(t, kit.armor2, KP, [[0.1, 0.8], [0.3, 1.0], [0.6, 0.98], [0.72, 0.92]]);
+  armourWalls(t, kit, KP, [0.3, 1.0], [0.6, 0.98], { u: pu, pitch: 1.0, fill: 0.72, front: 0.75, rear: -0.9 });
   // the bed under the gun: a dark trough with a glowing feed core showing between the gun and the keel
-  planLoftT(t, kit.mech, ngonT(8, 1.55, 0.75), [[0.68, 1.0], [0.76, 0.96]], [-0.5, 0]);
-  glow(t, kit, -0.5, 0.78, 0, 2.2, 0.05, 0.42, undefined, kit.plasma);
-  both((s) => glow(t, kit, -2.2, 0.66, s * 0.98, 0.9, 0.06, 0.06, [0, s * 0.62, 0], kit.plasma));
-  // shoulders: a deep armoured mass each side, deck = the giant gun's seat; ERA on the front, a stepped cheek outboard,
-  // the titan gun's trunnion bearing on the inner wall, a swept blade astern of the gun
+  planLoftT(t, kit.mech, ngonT(8, 1.95, 1.05), [[0.68, 1.0], [0.77, 0.96]], [-0.4, 0]);
+  glow(t, kit, -0.4, 0.79, 0, 2.7, 0.05, 0.55, undefined, kit.plasma);
+  both((s) => glow(t, kit, -2.6, 0.67, s * 1.25, 1.0, 0.06, 0.07, [0, s * 0.5, 0], kit.plasma));
+  // trunnion: where the titan gun's pitch axle meets its cradle
+  const bx = P_XL[0] + 0.19 * heroR, byy = P_XL[1] + 0.46 * heroR;
   both((s) => {
     const slot = s < 0 ? 1 : 2;
-    const [, ly, lz] = P_L(s);
+    const [lx, ly, lz0] = P_L(s);
+    const lz = Math.abs(lz0);
     if (ts.armed(slot)) {
-      // shoulder mass: a wedge with a sloped glacis forward, its deck the giant gun's seat
-      block(t, kit.armor, -0.1, 0.12, lz * 0.97, 3.3, 1.95, ly - 0.12, { top: [0.78, 0.92], shift: [-0.3, s * 0.02], ch: 0.3, bev: 0.05, bot: 0.05 });
-      block(t, kit.mech, -1.5, 0.2, lz * 0.95, 0.9, 1.5, ly - 0.3, { ch: 0.2, bev: 0.03 });
+      // shoulder: a deep armoured block from the channel wall out, its sloped glacis forward, its deck the giant gun's
+      // seat; the inner wall is the titan gun's cradle
+      const zc = (CH + lz + 1.2) / 2, w = lz + 1.2 - CH;
+      block(t, kit.armor, -0.15, 0.12, s * zc, 3.6, w, ly - 0.12, { top: [0.8, 0.94], shift: [-0.3, s * 0.03], ch: 0.32, bev: 0.06, bot: 0.06 });
+      block(t, kit.mech, -1.75, 0.2, s * zc, 0.9, w * 0.8, ly - 0.3, { ch: 0.2, bev: 0.03 });
+      // deck well round the giant gun's seat: the pod ring sinks into it
+      planLoftT(t, kit.mech, ngonT(10, 0.95, 0.95), [[ly - 0.16, 1.0], [ly + 0.02, 1.0]], [lx, s * lz]);
       // outer cheek: stepped dark plates with a glow seam under them
-      plateStack(t, kit, kit.armor2, frame([-0.05, ly * 0.5, s * 3.63], [0, 0, s], [1, 0, 0]), rectP(2.7, ly * 0.66, 0.1), [
+      plateStack(t, kit, kit.armor2, frame([-0.1, ly * 0.5, s * (lz + 1.22)], [0, 0, s], [1, 0, 0]), rectP(3.0, ly * 0.66, 0.1), [
         { inset: 0, thick: pu * 1.4, standoff: pu * 0.5 }, { inset: pu * 2.2, thick: pu, mat: kit.armor, shift: [-0.25, 0] },
       ], { gap: pu * 1.1 });
-      glow(t, kit, -0.1, 0.2, s * 3.62, 2.4, 0.08, 0.06);
+      glow(t, kit, -0.15, 0.22, s * (lz + 1.21), 2.7, 0.09, 0.07);
       // glacis: ERA bricks on the sloped front face
-      eraGrid(t, kit, frame([1.45, ly * 0.5, lz * 0.97], [0.75, 0.66, 0], [0, 0, 1]), 2, 3, 0.5, 0.3, pu * 0.7, kit.armor2);
-      // pauldron: a big swept armour mass rising behind the gun and raking out and back, a bone cap and a blade fin
-      block(t, kit.armor, -1.65, ly - 0.15, lz * 1.06, 1.5, 1.25, 1.05, { top: [0.4, 0.55], shift: [-0.55, s * 0.22], ch: 0.22, bev: 0.04, mid: [[0.5, 0.82, 0.92]] });
-      block(t, kit.shell, -2.05, ly + 0.88, lz * 1.06 + s * 0.2, 0.62, 0.62, 0.06, { top: [0.6, 0.7], shift: [-0.12, s * 0.04], ch: 0.1, bev: 0.015 });
-      block(t, kit.armor2, -2.0, ly + 0.25, lz * 1.06 + s * 0.6, 1.2, 0.12, 0.8, { top: [0.2, 0.6], shift: [-0.6, s * 0.1], ch: 0.04, bev: 0.015 });
-      glow(t, kit, -1.6, ly + 0.35, lz * 1.06 + s * 0.6, 0.7, 0.06, 0.05, [0, 0, 0.5]);
-      if (fine) piston(t, kit, [-1.0, 0.3, s * 1.75], [-1.5, ly + 0.2, s * 2.3], 0.06, 0.55, fine);
+      eraGrid(t, kit, frame([1.6, ly * 0.5, s * zc], [0.75, 0.66, 0], [0, 0, 1]), 2, 4, 0.5, 0.3, pu * 0.7, kit.armor2);
+      // pauldron: a big swept armour mass rising behind the giant gun's breech, raking out and back, a bone cap and a fin
+      const px = -2.45, pz = s * (lz + 0.2);
+      block(t, kit.armor, px, ly - 0.15, pz, 1.4, 1.45, 1.25, { top: [0.4, 0.55], shift: [-0.55, s * 0.25], ch: 0.22, bev: 0.04, mid: [[0.5, 0.82, 0.92]] });
+      block(t, kit.shell, px - 0.4, ly + 1.08, pz + s * 0.25, 0.6, 0.66, 0.06, { top: [0.6, 0.7], shift: [-0.12, s * 0.04], ch: 0.1, bev: 0.015 });
+      block(t, kit.armor2, px - 0.35, ly + 0.3, pz + s * 0.72, 1.2, 0.12, 0.95, { top: [0.2, 0.6], shift: [-0.6, s * 0.1], ch: 0.04, bev: 0.015 });
+      glow(t, kit, px + 0.05, ly + 0.42, pz + s * 0.72, 0.7, 0.06, 0.05, [0, 0, 0.5]);
+      if (fine) piston(t, kit, [-1.2, 0.3, s * (lz + 1.1)], [px + 0.2, ly + 0.25, s * (lz + 0.9)], 0.07, 0.55, fine);
     } else {
-      // unarmed side: a low armour skirt so the keel still reads as a mantle
-      block(t, kit.armor, -0.2, 0.12, s * 1.95, 2.4, 0.9, 0.5, { top: [0.9, 0.7], ch: 0.2, bev: 0.04 });
+      // unarmed side: a low armour skirt so the keel still reads as a mantle (and the titan gun keeps its cradle)
+      block(t, kit.armor, -0.2, 0.12, s * (CH + 0.5), 2.8, 1.0, 0.75, { top: [0.9, 0.7], ch: 0.2, bev: 0.04 });
     }
     if (ts.armed(0)) {
-      // titan gun trunnion bearing: an upright armoured block on the shoulder's inner wall, the axle into the gun
-      const bx = P_XL[0] + 0.34, byy = P_XL[1] + 0.83;
-      block(t, kit.armor2, bx, 0.6, s * 1.76, 0.85, 0.3, byy + 0.28 - 0.6, { top: [0.7, 0.9], ch: 0.08, bev: 0.025 });
-      t.cyl(kit.joint, 0.22, 0.22, 0.42, [bx, byy, s * 1.42], 'z', 14);
-      t.cyl(kit.plasma, 0.12, 0.12, 0.06, [bx, byy, s * 1.93], 'z', 10);
+      // titan gun trunnion bearing: an upright armoured post on the channel wall, the axle into the gun
+      block(t, kit.armor2, bx, 0.6, s * (CH + 0.12), 1.0, 0.36, byy + 0.32 - 0.6, { top: [0.7, 0.85], ch: 0.1, bev: 0.03 });
+      t.cyl(kit.joint, 0.28, 0.28, 0.42, [bx, byy, s * (CH - 0.12)], 'z', 14);
+      t.cyl(kit.plasma, 0.15, 0.15, 0.06, [bx, byy, s * (CH + 0.32)], 'z', 10);
+      hazard(t, kit, bx, byy + 0.2, s * (CH + 0.31), 0.7, 0.1, 3);
     }
   });
   if (ts.armed(3)) {
     // command spine astern: a stepped armoured hump rising from the keel's tail behind the titan gun's breech up to the
     // medium gun's seat (the skyline climbs aft), a bone glacis plate on its slope, fins and glowing slots on its flanks
     const [mx, my] = P_M;
-    block(t, kit.armor, mx - 0.05, 0.55, 0, 1.6, 1.55, my - 0.55, { top: [0.66, 0.72], shift: [-0.1, 0], ch: 0.3, bev: 0.05, mid: [[0.45, 0.9, 0.95]] });
-    armorPlate(t, kit, kit.shell, frame([mx + 0.6, 1.5, 0], [0.95, 0.3, 0], [0, 0, 1]), rectP(1.05, 1.0, 0.12), pu * 1.3, { standoff: pu * 0.6 });
+    block(t, kit.armor, mx - 0.05, 0.55, 0, 1.5, 1.6, my - 0.55, { top: [0.66, 0.72], shift: [-0.1, 0], ch: 0.3, bev: 0.05, mid: [[0.45, 0.9, 0.95]] });
+    armorPlate(t, kit, kit.shell, frame([mx + 0.55, 1.55, 0], [0.95, 0.3, 0], [0, 0, 1]), rectP(1.05, 1.0, 0.12), pu * 1.3, { standoff: pu * 0.6 });
     both((s) => {
-      plateStack(t, kit, kit.armor2, frame([mx - 0.1, (my + 0.55) / 2 - 0.1, s * 0.72], [0, 0, s], [1, 0, 0]), rectP(1.1, (my - 0.55) * 0.6, 0.08), [
+      plateStack(t, kit, kit.armor2, frame([mx - 0.1, (my + 0.55) / 2 - 0.1, s * 0.75], [0, 0, s], [1, 0, 0]), rectP(1.05, (my - 0.55) * 0.6, 0.08), [
         { inset: 0, thick: pu * 1.2, standoff: pu * 0.4 }, { inset: pu * 1.6, thick: pu, mat: kit.armor },
       ], { gap: pu });
-      glow(t, kit, mx + 0.25, my - 0.55, s * 0.6, 0.06, 0.55, 0.05, undefined, kit.plasma);
+      glow(t, kit, mx + 0.25, my - 0.55, s * 0.62, 0.06, 0.55, 0.05, undefined, kit.plasma);
       // radiator fins down the back
-      for (let k = 0; k < 3; k++) t.box(kit.mech, 0.06, 0.8, 0.4, mx - 0.78, 0.95 + k * 0.38, s * 0.34, 0.01, [0, 0, 0.45]);
+      for (let k = 0; k < 3; k++) t.box(kit.mech, 0.06, 0.8, 0.4, mx - 0.72, 0.95 + k * 0.4, s * 0.34, 0.01, [0, 0, 0.45]);
     });
-    hazard(t, kit, mx + 0.62, my - 0.18, 0, 0.6, 0.12, 3, Math.PI / 2);
+    hazard(t, kit, mx + 0.58, my - 0.18, 0, 0.6, 0.12, 3, Math.PI / 2);
   }
 }
 

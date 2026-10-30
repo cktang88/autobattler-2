@@ -210,6 +210,13 @@ flush on a plate, two blocks sharing a face, a collar flush on a deck). The dept
   0.71 apart) and step their heights toward the rear (superfiring) instead of shrinking or overlapping them. Mounts
   riding animated parts come from the 2D rig (footart footParts) via PART_REST: change the rig, regenerate PART_REST
   from layoutOf, run test/mountgeo.test.ts.
+- Titan footprints: the sim's gather margin (battle.ts MAX_RADIUS) is the biggest hull's bound, and a non-square
+  footprint's bound is its full diagonal (a square one is just its side): enlarge a titan to a SQUARE footprint
+  (citadel 10x10, like the arachne) so the margin does not grow. A hull's hardpoints and drawn L/W follow its art box
+  (`ChassisDef.art`), so lay the anatomy out in art-box cells. Twin XL side by side need ~5.2 cells between centres:
+  the citadel's two 5.25 housings ride two 2.3-radius bastion drums all but touching on the centreline, and its keep
+  is tall enough that the giant gun superfires over them. In torso mode the hero's own body is narrower than DRAW_D
+  (the titan gun's pitch group is ~3.5-4 wide): measure it (`Box3` of `turret.pitch`) and lay the cradle round that.
 - Parallel agents: give each its own git worktree and render port, a written brief (concept rules + references +
   workflow), and tell them which shared files they must not touch. Merge their branches one at a time, re-run the
   tests, rebuild the bundle.
