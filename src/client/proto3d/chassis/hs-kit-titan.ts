@@ -16,6 +16,8 @@ import type { Bld, MatLike, P2, V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
 import { armorPlate, cagedLamp, eraGrid, frame, handrail, inset, plateStack, recessPanel, rectP } from './hs-kit.ts';
 import { faceBox, faceFrame, faceSlit, wallFace, type Face } from './titan-greebles.ts';
+import { beam } from './shapes.ts';
+import type { Lift } from '../mobility/air.ts';
 
 /** regular n-gon plan (local copy so the titans do not depend on the giants kit for it) */
 export function ngonT(n: number, rx: number, rz: number, a0 = Math.PI / n): P2[] {
@@ -222,4 +224,43 @@ export const shrink = (p: P2[], d: number): P2[] => inset(p, d);
 export function xPrism(b: Bld, mat: MatLike, n: number, stations: [number, number, number][], at: [number, number], a0 = Math.PI / n): void {
   const P = ngonT(n, 1, 1, a0);
   b.loft(mat, stations.map(([x, ry, rz]) => P.map(([py, pz]) => [x, at[0] + py * ry, at[1] + pz * rz] as V3)));
+}
+
+/** Lift gear for a titan flown on grav lifters or jets (a ground titan hull lifted into the air, units3d liftedTitan):
+ *  the hull keeps its anatomy and the lift hangs off its flanks where the RTS camera sees it. Grav lifters: four
+ *  outrigger nacelles on the plan's diagonals (a deep armoured pylon from the hull wall to an octagonal cowl with a
+ *  glow band, the big grav pod hanging in it). Jets: two heavy thruster cans on pylons astern plus two smaller grav
+ *  pods forward holding the bow up. Builds the nacelles into b and returns the Lift list (ChassisOut.lift) for
+ *  mobility/air.ts. Plan ellipse (cx, rx, rz) = the hull wall the pylons start from; y = pod centre height, yA = pylon
+ *  root height on the hull wall, r = grav pod radius, front / rear = angles of the forward / aft pods off the bow (rad). */
+export function titanLift(b: Bld, kit: Kit, mobId: string, o: { cx: number; rx: number; rz: number; y: number; yA: number; r: number; front?: number; rear?: number }): Lift[] {
+  const { cx, rx, rz, y, yA, r } = o;
+  const lift: Lift[] = [];
+  const pod = (a: number, rr: number, s: 1 | -1) => {
+    const ca = Math.cos(a), sa = Math.sin(a), h = rr * 0.8;
+    const ex = cx + ca * (rx + rr * 0.95), ez = sa * (rz + rr * 0.95);
+    const cowl = ngonT(8, rr * 1.16, rr * 1.16);
+    // pylon: a deep armoured beam from inside the hull wall out to the cowl's top, a dark rib under it
+    const root: V3 = [cx + ca * rx * 0.8, yA, sa * rz * 0.8], tip: V3 = [ex, y + h * 0.62, ez];
+    beam(b, kit.armor2, root, tip, rr * 0.7, rr * 0.55);
+    beam(b, kit.mech, [root[0], root[1] - rr * 0.3, root[2]], [tip[0], tip[1] - rr * 0.3, tip[2]], rr * 0.38, rr * 0.4);
+    // cowl over the pod: dark lip the pod's shell sits in, plated octagonal hood, glow band
+    planLoftT(b, kit.mech, cowl, [[y + h * 0.24, 0.98], [y + h * 0.34, 1.0]], [ex, ez]);
+    planLoftT(b, kit.armor, cowl, [[y + h * 0.32, 1.02], [y + h * 0.62, 1.0], [y + h * 0.86, 0.72]], [ex, ez]);
+    planLoftT(b, kit.glow, cowl, [[y + h * 0.42, 1.045], [y + h * 0.5, 1.045]], [ex, ez]);
+    lift.push({ kind: 'grav', p: [ex, y, ez], r: rr, len: h, dir: s });
+  };
+  const front = o.front ?? 0.75;
+  if (mobId === 'jet') {
+    for (const s of [-1, 1] as const) {
+      // heavy thruster can astern (nozzle exit at x, the can runs forward of it) on a pylon from the hull's rear quarter
+      const jr = r * 0.62, len = jr * 2.4, jx = cx - rx * 1.06 - jr * 0.3, jz = s * rz * 0.5, jy = Math.max(y, yA - jr * 0.2);
+      beam(b, kit.armor2, [jx + len * 0.9, yA + jr * 0.2, jz * 0.6], [jx + len * 0.55, jy + jr * 1.05, jz], jr * 1.2, jr * 0.5);
+      lift.push({ kind: 'jet', p: [jx, jy, jz], r: jr, len });
+      pod(s * front, r * 0.75, s);
+    }
+    return lift;
+  }
+  for (const s of [-1, 1] as const) for (const a of [front, o.rear ?? Math.PI - 0.8]) pod(s * a, r, s);
+  return lift;
 }

@@ -161,6 +161,12 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   - Even single-gun vehicles use torso mode when the gun's surroundings must turn with it: a field gun's shield and
     trunnion cheeks (carriage), a casemate's gun walls (juggernaut). An M housing is ~1.6 cells long: anything static
     within that radius of the pivot and above the deck clips the breech when the gun traverses.
+  - Flying titans: a titan-class GROUND hull on air mobility (gravlift / jet; units3d `liftedTitan`) is not an
+    airframe. Its weapons keep their DRAW_D class size and turn (no 1.1 hardpoint scale, not `fixed`), and a torso hull
+    keeps torso mode exactly as on the ground (hero at class size, pods on its yaw, utilities riding the torso). The
+    chassis builds its non-legged lower body and returns `ChassisOut.lift`: `titanLift` (hs-kit-titan.ts) hangs
+    outrigger grav nacelles / stern thruster cans off the hull; the citadel puts grav emitters under its bastions and
+    towers. Smaller flyers and air-domain hulls keep the aircraft hardpoint scale.
 - **Mount points are shared with the sim** (mountgeo.ts). You may move a chassis's mounts when the anatomy needs it
   (keep them inside the footprint, keep count and classes, run the mountgeo / turretseat tests). The old 2D
   footprint art (`render/footart.ts`) still draws from them.

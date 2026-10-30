@@ -36326,7 +36326,7 @@ function drawnSeats(d) {
   if (out2) return out2;
   const ch = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get("scout");
   const mob = MOBILITY_BY_ID.get(d.mobility);
-  const flying = (ch.domain ?? "ground") !== "ground" || mob?.kind === "air";
+  const flying = ((ch.domain ?? "ground") !== "ground" || mob?.kind === "air") && !(ch.size >= 5 && (ch.domain ?? "ground") === "ground");
   const torso = !flying && TORSO_HULLS.has(ch.id);
   const offs = mountOffsets(d);
   const mods = ch.mounts.map((_, i) => {
@@ -43078,6 +43078,34 @@ function xPrism(b, mat, n, stations, at2, a0 = Math.PI / n) {
   const P = ngonT(n, 1, 1, a0);
   b.loft(mat, stations.map(([x, ry, rz]) => P.map(([py2, pz2]) => [x, at2[0] + py2 * ry, at2[1] + pz2 * rz])));
 }
+function titanLift(b, kit, mobId, o) {
+  const { cx, rx, rz, y, yA, r } = o;
+  const lift = [];
+  const pod2 = (a, rr, s) => {
+    const ca = Math.cos(a), sa = Math.sin(a), h = rr * 0.8;
+    const ex = cx + ca * (rx + rr * 0.95), ez = sa * (rz + rr * 0.95);
+    const cowl = ngonT(8, rr * 1.16, rr * 1.16);
+    const root = [cx + ca * rx * 0.8, yA, sa * rz * 0.8], tip = [ex, y + h * 0.62, ez];
+    beam(b, kit.armor2, root, tip, rr * 0.7, rr * 0.55);
+    beam(b, kit.mech, [root[0], root[1] - rr * 0.3, root[2]], [tip[0], tip[1] - rr * 0.3, tip[2]], rr * 0.38, rr * 0.4);
+    planLoftT(b, kit.mech, cowl, [[y + h * 0.24, 0.98], [y + h * 0.34, 1]], [ex, ez]);
+    planLoftT(b, kit.armor, cowl, [[y + h * 0.32, 1.02], [y + h * 0.62, 1], [y + h * 0.86, 0.72]], [ex, ez]);
+    planLoftT(b, kit.glow, cowl, [[y + h * 0.42, 1.045], [y + h * 0.5, 1.045]], [ex, ez]);
+    lift.push({ kind: "grav", p: [ex, y, ez], r: rr, len: h, dir: s });
+  };
+  const front = o.front ?? 0.75;
+  if (mobId === "jet") {
+    for (const s of [-1, 1]) {
+      const jr = r * 0.62, len = jr * 2.4, jx = cx - rx * 1.06 - jr * 0.3, jz = s * rz * 0.5, jy = Math.max(y, yA - jr * 0.2);
+      beam(b, kit.armor2, [jx + len * 0.9, yA + jr * 0.2, jz * 0.6], [jx + len * 0.55, jy + jr * 1.05, jz], jr * 1.2, jr * 0.5);
+      lift.push({ kind: "jet", p: [jx, jy, jz], r: jr, len });
+      pod2(s * front, r * 0.75, s);
+    }
+    return lift;
+  }
+  for (const s of [-1, 1]) for (const a of [front, o.rear ?? Math.PI - 0.8]) pod2(s * a, r, s);
+  return lift;
+}
 
 // src/client/proto3d/chassis/giants.ts
 function pedestal2(c, m, base3, y) {
@@ -43450,6 +43478,7 @@ function titanWalker(c) {
   const heroM = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : void 0;
   const fist2 = isMelee(heroM) && ts.hero === 0;
   let pelvisY;
+  let lift;
   if (biped) pelvisY = stance.hipY;
   else if (stance.legs === "spider") {
     pelvisY = stance.hipY + 0.9 * u;
@@ -43465,6 +43494,7 @@ function titanWalker(c) {
       recessPanel(b, kit, frame([-3 * u, dy, s * 1.5 * u], [0, 1, 0]), 1.2 * u, 0.8 * u, 0.08 * u, { slats: 4 });
     });
     planLoftT(b, kit.armor2, ngonT(8, 2.4 * u, 2.2 * u), [[dy - 0.05, 1], [dy + 0.3 * u, 0.94], [dy + 0.42 * u, 0.86]], [-0.3 * u, 0]);
+    if (c.mob.kind === "air") lift = titanLift(b, kit, c.mob.id, { cx: -0.2 * u, rx: L * 0.42, rz: W * 0.33, y: y1 + 0.3 * u, yA: (y1 + dy) / 2, r: 1.05 * u });
   }
   const pc = -0.3 * u;
   planLoftT(b, kit.mech, ngonT(8, 1.25 * u, 1.35 * u), [[pelvisY - 0.85 * u, 0.8], [pelvisY - 0.45 * u, 1], [pelvisY + 0.45 * u, 1], [pelvisY + 0.65 * u, 0.86]], [pc, 0]);
@@ -43642,6 +43672,7 @@ function titanWalker(c) {
     deckAt: (x, z) => Math.abs(z) < 1.4 * u && x > -2 * u && x < 1 * u ? Y0 + 3 * u : -1,
     top,
     hips,
+    lift,
     custom: true,
     dressed: true,
     seat: (m) => {
@@ -47152,7 +47183,9 @@ function citadel(c) {
   const kx = L / 9.2, kz = W / 10, k = Math.min(kx, kz);
   const fine = fineFor(c.S);
   const legged = stance.legs !== null;
-  const y0 = stance.y0;
+  const biped = stance.legs === "biped", flown = c.mob.kind === "air";
+  const tL = stance.thick * 1.5, hzL = 2.3 * kz, hxL = -0.3 * kx, hY = stance.hipY * 1.12;
+  const y0 = biped ? hY + 0.55 * tL : flown ? stance.y0 + 0.9 * k : stance.y0;
   const yt = legged ? y0 + 0.5 * k : Math.max(stance.yt, y0 + 0.4);
   const deckY = yt + 1.7 * k;
   const u = 0.12 * k;
@@ -47208,7 +47241,7 @@ function citadel(c) {
   }
   if (fine) railLoop(b, kit, scl(B, 0.78), deckY + 0.34 * k, 0.6 * k, (x, z) => inBastion(x, z, 0.3) || inTower(x, z) || x > 2.2 * kx || nearMount(x, z, 0.3), 0.022 * k, 0.3 * k);
   const P12 = ngonT(12, BR, BR);
-  const yb0 = legged ? yt - 0.6 * k : yt - 0.08;
+  const yb0 = biped ? yt - 0.25 * k : legged ? yt - 0.6 * k : yt - 0.08;
   const yBand = yb0 + 0.55 * k, yCor = yB - 0.85 * k, yCr = yB - 0.1 * k;
   for (const [x, z] of bastions) {
     const sz = Math.sign(z);
@@ -47270,8 +47303,9 @@ function citadel(c) {
     hazard(b, kit, fx2 - 0.1 * k, gTop - 0.16 * k, 0, 1.1 * k, 0.14 * k, 4, Math.PI / 2);
   }
   if (!legged) {
-    block(b, kit.joint, 4.1 * kx, 0.15, 0, 0.75 * kx, 2.2 * kz, yt - 0.05, { top: [0.4, 0.95], shift: [0.2 * kx, 0], ch: 0.15 * k, bev: 0.05 });
-    hazard(b, kit, 4.4 * kx, yt * 0.55, 0, 1.8 * kz, 0.3 * kx, 7, Math.PI / 2);
+    const rb = flown ? y0 - 0.15 * k : 0.15;
+    block(b, kit.joint, 4.1 * kx, rb, 0, 0.75 * kx, 2.2 * kz, yt + 0.1 - rb, { top: [0.4, 0.95], shift: [0.2 * kx, 0], ch: 0.15 * k, bev: 0.05 });
+    hazard(b, kit, 4.4 * kx, flown ? (rb + yt) / 2 : yt * 0.55, 0, 1.8 * kz, 0.3 * kx, 7, Math.PI / 2);
   }
   const T = sc2(mirror2([[0.95, 0], [0.75, -1.25], [-0.6, -1.95], [-4, -1.95], [-4.2, 0]]));
   planLoftT(b, kit.mech, T, [[deckY - 0.02, 1.05], [deckY + 0.08 * k, 1.05]]);
@@ -47348,18 +47382,45 @@ function citadel(c) {
     return inside(rimP, x, z) ? deckY : -1;
   };
   let hips;
-  if (stance.legs === "biped") {
-    hips = [-1, 1].map((s) => ({ p: [-0.6 * kx, stance.hipY, s * 2.1 * kz], side: s, t: stance.thick, foot: [-0.6 * kx, 0, s * 2.5 * kz], phase: s > 0 ? Math.PI : 0 }));
+  if (biped) {
+    hips = [-1, 1].map((s) => ({ p: [hxL, hY, s * hzL], side: s, t: tL, foot: [hxL + 0.15 * kx, 0, s * (hzL + 0.45 * kz)], phase: s > 0 ? Math.PI : 0 }));
+    const PK = ngonT(8, 1.55 * tL, hzL - 0.55 * tL);
+    planLoftT(b, kit.mech, PK, [[hY - 0.55 * tL, 0.62], [hY - 0.1 * tL, 0.92], [y0 + 0.15, 1]], [hxL, 0]);
+    planLoftT(b, kit.armor2, ngonT(8, 1.62 * tL, hzL - 0.75 * tL), [[hY + 0.05 * tL, 0.9], [hY + 0.3 * tL, 1], [y0 + 0.02, 1]], [hxL, 0]);
+    glow(b, kit, hxL + 1.45 * tL, hY + 0.2 * tL, 0, 0.08 * k, 0.12 * k, 1.3 * k, [0, 0, -0.5]);
     both((s) => {
-      planLoftT(b, kit.mech, [[0.9 * kx, 0.55 * kz], [-0.9 * kx, 0.55 * kz], [-0.9 * kx, -0.55 * kz], [0.9 * kx, -0.55 * kz]], [[y0 - 0.3 * k, 0.8], [y0 + 0.1 * k, 1], [y0 + 0.3 * k, 0.86]], [-0.6 * kx, s * 2.1 * kz]);
-      for (const dx of [-0.6, 0.6]) piston(b, kit, [-0.6 * kx + dx * kx, y0 - 0.05 * k, s * 2.1 * kz], [-0.6 * kx + dx * 1.6 * kx, yt - 0.05, s * 1.95 * kz], 0.12 * k, 0.55, fine);
+      const z = s * hzL;
+      const HP = [[1.25 * tL, 1 * tL], [-1.25 * tL, 1 * tL], [-1.45 * tL, 0.55 * tL], [-1.45 * tL, -0.75 * tL], [1.45 * tL, -0.75 * tL], [1.45 * tL, 0.55 * tL]].map(([x, zz]) => [x, s * zz]);
+      planLoftT(b, kit.armor, HP, [[hY + 0.12 * tL, 0.86], [hY + 0.45 * tL, 1], [yt + 0.1, 1.04]], [hxL, z]);
+      planLoftT(b, kit.mech, HP, [[hY + 0.42 * tL, 1.03], [hY + 0.56 * tL, 1.03]], [hxL, z]);
+      armorPlate(b, kit, kit.armor2, frame([hxL, hY + 0.15 * tL, z + s * 1.05 * tL], [0, -0.35, s], [1, 0, 0]), trapP(2.4 * tL, 1 * tL, 1.6 * tL, 0.15 * tL), u * 1.3, { standoff: u * 0.5 });
+      armorPlate(b, kit, kit.shell, frame([hxL + 1.48 * tL, hY + 0.5 * tL, z], [1, -0.2, 0], [0, 1, 0]), rectP(0.75 * tL, 1.4 * tL, 0.1 * tL), u, { standoff: u * 0.4 });
+      for (const dx of [-1, 1]) piston(b, kit, [hxL + dx * 1.15 * tL, hY + 0.2 * tL, z - s * 0.55 * tL], [hxL + dx * 2.3 * tL, y0 + 0.05, z - s * 0.85 * tL], 0.11 * k, 0.55, fine);
     });
+  }
+  let lift;
+  if (flown) {
+    lift = [];
+    const emit = (x, z, top, r, s) => {
+      const h = r * 0.75;
+      planLoftT(b, kit.mech, ngonT(12, r * 1.04, r * 1.04), [[top - 0.22 * k, 0.94], [top + 0.05, 1]], [x, z]);
+      planLoftT(b, kit.glow, ngonT(12, r * 1.06, r * 1.06), [[top - 0.16 * k, 0.96], [top - 0.1 * k, 0.97]], [x, z]);
+      lift.push({ kind: "grav", p: [x, top - 0.22 * k - h * 0.45, z], r, len: h, dir: s });
+    };
+    for (const [x, z] of bastions) emit(x, z, yt - 0.08, 1.5 * k, Math.sign(z));
+    for (const [tx, tz] of TW) {
+      if (c.mob.id === "jet") {
+        const jr = 0.62 * k, len = jr * 2.6;
+        lift.push({ kind: "jet", p: [tx - 1.25 * k, yt + 0.35 * k, tz], r: jr, len });
+      } else emit(tx, tz, Math.max(yt - 0.1, 1), 0.95 * k, Math.sign(tz));
+    }
   }
   return {
     deckAt: deck,
     top: s3,
     custom: true,
     hips,
+    lift,
     seat: (m) => {
       const tw = isTower(m);
       if (tw) {
@@ -47397,7 +47458,8 @@ function arachne(c) {
   const spider = stance.legs === "spider";
   const ts = torsoSlots(c);
   const by = spider ? stance.hipY * 1.75 : stance.legs === "biped" ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1 * u;
-  if (!spider && stance.legs !== "biped") planLoftT(b, kit.mech, ngonT(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1], [by, 0.85]], [-0.4 * u, 0]);
+  const flown = c.mob.kind === "air";
+  if (!spider && stance.legs !== "biped") planLoftT(b, kit.mech, ngonT(10, 2.4 * u, 2.4 * u), [[flown ? stance.y0 : 0, flown ? 0.7 : 1.1], [by - 0.4 * u, 1], [by, 0.85]], [-0.4 * u, 0]);
   const cx = -0.4 * u, cp = ngonT(10, 2.65 * u, 2.85 * u, 0);
   const cTop = by + 1.6 * u;
   const yR = by + 0.45 * u, yS = by + 1.12 * u;
@@ -47527,6 +47589,7 @@ function arachne(c) {
   } else if (stance.legs === "biped") {
     hips = [-1, 1].map((s) => ({ p: [cx, stance.hipY, s * 1.6 * u], side: s, t: stance.thick, foot: [cx, 0, s * 1.9 * u], phase: s > 0 ? Math.PI : 0 }));
   }
+  const lift = flown ? titanLift(b, kit, c.mob.id, { cx, rx: 2.5 * u, rz: 2.7 * u, y: by - 0.35 * u, yA: by - 0.1 * u, r: 0.9 * u, front: 1.05, rear: 2.2 }) : void 0;
   const deck = (x, z) => inPoly(cp.map(([px2, pz2]) => [px2 * 0.5 + cx, pz2 * 0.5]), x, z) ? cTop : -1;
   const heroSeat = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : void 0;
   return {
@@ -47534,6 +47597,7 @@ function arachne(c) {
     top: yW + 2.4,
     custom: true,
     hips,
+    lift,
     seat: (m) => {
       if (m === heroSeat) return { y: yW, socket: true };
       const pt = palp.get(m);
@@ -47638,6 +47702,7 @@ function lance(c) {
   const heroM = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : void 0;
   const biped = stance.legs === "biped";
   let hy;
+  let lift;
   const hx = -0.6 * kx;
   if (biped) {
     hy = stance.hipY + 0.35 * k;
@@ -47652,6 +47717,7 @@ function lance(c) {
     armourWalls(b, kit, P, [y1 + 0.06 * k, 1], [dy - 0.09 * k, 0.97], { at: [hx, 0], u: pu * 0.6, pitch: 1.4 * k, fill: 0.62, era: false });
     both((s) => hazard(b, kit, hx + 2.6 * kx, dy + 0.01, s * 1 * kz, 0.9 * kx, 0.3 * kz, 4, 0));
     hy = dy + 0.3 * k;
+    if (c.mob.kind === "air") lift = titanLift(b, kit, c.mob.id, { cx: hx, rx: L * 0.33, rz: W * 0.37, y: y1 + 0.3 * k, yA: (y1 + dy) / 2, r: 0.95 * k, front: 0.6 });
   }
   planLoftT(b, kit.mech, ngonT(10, 1.15 * k, 1.15 * k), [[hy - 0.45 * k, 1], [hy - 0.05 * k, 1]], [hx, 0]);
   planLoftT(b, kit.joint, ngonT(10, 1.3 * k, 1.3 * k), [[hy - 0.14 * k, 1], [hy, 0.96]], [hx, 0]);
@@ -47734,6 +47800,7 @@ function lance(c) {
     custom: true,
     dressed: true,
     hips,
+    lift,
     seat: (m) => {
       if (m === heroM) return { y: hy, socket: true };
       if (m.mod.kind === "weapon") return { y: base3(m.i)[1], socket: true };
@@ -47769,6 +47836,7 @@ function monolith(c) {
   const heroM = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : void 0;
   const wi = Math.min(stance.wi, 2.3 * kz);
   planLoft(b, kit.trim, ngon2(8, 2.9 * kx, wi), [[y0, 0.9], [yt + 0.1, 1]]);
+  const lift = c.mob.kind === "air" ? titanLift(b, kit, c.mob.id, { cx: -0.2 * kx, rx: 3 * kx, rz: 2.3 * kz, y: yt + 0.35 * k, yA: yt + 0.75 * k, r: 0.8 * k, front: 1.3, rear: 1.95 }) : void 0;
   const P1 = sc2(mirror2([[3.5, 0], [3.35, -1], [2.15, -3.48], [1.35, -3.3], [0.45, -2.3], [-0.9, -2.3], [-1.8, -3.3], [-2.55, -3.45], [-3.2, -2.35], [-3.5, -0.9], [-3.5, 0]]));
   const s1 = yt + 1.25 * k, sTop = 0.84;
   const sh1 = s1 - 0.28 * k;
@@ -47915,6 +47983,7 @@ function monolith(c) {
     custom: true,
     dressed: true,
     hips,
+    lift,
     seat: (m) => {
       if (m === heroM) return { y: yW, socket: true };
       if (m.mod.kind === "weapon") return { y: base3(m.i)[1], socket: true };
@@ -48614,6 +48683,8 @@ function buildUnit(design, team) {
   const body = new Group();
   root.add(body);
   const flying = (ch.domain ?? "ground") !== "ground" || mob.kind === "air";
+  const liftedTitan = flying && S >= 5 && (ch.domain ?? "ground") === "ground";
+  const airScale = flying && !liftedTitan;
   const turrets = [];
   const updates = [];
   const offs = mountOffsets(design);
@@ -48632,11 +48703,11 @@ function buildUnit(design, team) {
     if (!mod) return null;
     const cls = slotCls(mod, i) ?? mod.mount;
     const d = mod.kind === "weapon" ? DRAW_D2[cls] : Math.min(DRAW_D2[cls] * 0.6, 1.2);
-    return buildTurret(mod, S, makeKit(team, fin3.turret[i] ?? fin3.hull), flying, slotCls(mod, i), flying ? 0 : d);
+    return buildTurret(mod, S, makeKit(team, fin3.turret[i] ?? fin3.hull), airScale, slotCls(mod, i), airScale ? 0 : d);
   });
   const seats = drawnSeats(design);
   const hero = seats.hero;
-  if (flying) tur.forEach((tu) => {
+  if (airScale) tur.forEach((tu) => {
     if (tu) {
       tu.yaw.scale.setScalar(1.1);
       tu.r *= 1.1;
@@ -48704,7 +48775,7 @@ function buildUnit(design, team) {
     }
     bk.mount(H.yaw);
   }
-  if (out2?.torso && hero >= 0 && tur[hero] && !tur[hero].fixed && !flying) {
+  if (out2?.torso && hero >= 0 && tur[hero] && !tur[hero].fixed && !airScale) {
     const H = tur[hero], kH = H.yaw.scale.x;
     for (const o of [...H.yaw.children]) if (o.isMesh) H.yaw.remove(o);
     const tb = new Bld(), T = new Group();

@@ -66,6 +66,12 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const body = new THREE.Group(); // hull + turrets (bobs); running gear lives in root
   root.add(body);
   const flying = (ch.domain ?? 'ground') !== 'ground' || mob.kind === 'air';
+  // a titan-class GROUND hull lifted into the air (grav lifters, jets) is still that titan, not an airframe: it keeps
+  // its anatomy, its weapons keep their class size (DRAW_D) and turn on their own, and a torso hull keeps torso mode
+  // (the hero's XL built round, pods on its yaw, utilities riding the torso). Only real aircraft (air-domain hulls and
+  // smaller lifted hulls) use the hardpoint scale: fixed forward guns sized by the hull (`airScale`).
+  const liftedTitan = flying && S >= 5 && (ch.domain ?? 'ground') === 'ground';
+  const airScale = flying && !liftedTitan;
   const turrets: Turret[] = [];
   const updates: ((t: number, dt: number, mv: number, dir?: number) => void)[] = [];
   const offs = mountOffsets(design);
@@ -88,7 +94,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     // utilities, armour and shields in the other sockets are compact add-on modules, never turret-sized, so a giant's
     // spare sockets don't read as more guns
     const d = mod.kind === 'weapon' ? DRAW_D[cls] : Math.min(DRAW_D[cls] * 0.6, 1.2);
-    return buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), flying ? 0 : d);
+    return buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), airScale, slotCls(mod, i), airScale ? 0 : d);
   });
   // weapon size is a property of the weapon, never of the hull it sits on or of whether it is the main gun: every
   // weapon of a size class has the same housing (DRAW_D, built at that size by buildTurret, no multipliers after);
@@ -102,7 +108,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   // module whose housing still clashes with another moves to the nearest clear spot on the hull.
   const seats = drawnSeats(design);
   const hero = seats.hero;
-  if (flying) tur.forEach((tu) => { if (tu) { tu.yaw.scale.setScalar(1.1); tu.r *= 1.1; } });
+  if (airScale) tur.forEach((tu) => { if (tu) { tu.yaw.scale.setScalar(1.1); tu.r *= 1.1; } });
   const podOf = seats.pod;
   const torsoHull = seats.torso;
   const pos = offs.map((o, i) => seats.pos[i] ?? (o ? { x: o.x, y: o.y } : o));
@@ -178,7 +184,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   }
   // mech torso: the chassis builds the upper body into the hero's yaw group (so torso + weapons twist together) and
   // says where the hero and the pods hang; the hero's own ring / yoke and the pod brackets go
-  if (out?.torso && hero >= 0 && tur[hero] && !tur[hero]!.fixed && !flying) {
+  if (out?.torso && hero >= 0 && tur[hero] && !tur[hero]!.fixed && !airScale) {
     const H = tur[hero]!, kH = H.yaw.scale.x;
     for (const o of [...H.yaw.children]) if ((o as THREE.Mesh).isMesh) H.yaw.remove(o);
     const tb = new Bld(), T = new THREE.Group();

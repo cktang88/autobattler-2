@@ -17,7 +17,7 @@ import { registerChassis, registerTorso, type ChassisCtx, type ChassisOut, type 
 import { beam, block, both, collar, glow, hazard } from './shapes.ts';
 import { banner, inPoly, reactor } from './giants-kit.ts';
 import { armorPlate, cableBundle, eraGrid, fineFor, frame, frameLimb, jointDrum, piston, plateStack, recessPanel, rectP, trapP } from './hs-kit.ts';
-import { armourWalls, facePlateHS, latticeMast, ngonT, octBarbette, planLoftT, xPrism } from './hs-kit-titan.ts';
+import { armourWalls, facePlateHS, latticeMast, ngonT, octBarbette, planLoftT, titanLift, xPrism } from './hs-kit-titan.ts';
 import { mirror, pipeRun, sensorDome, wallFace, whip } from './titan-greebles.ts';
 import { torsoHP, torsoSlots, type TorsoSlots } from './torso-kit.ts';
 
@@ -29,7 +29,9 @@ function arachne(c: ChassisCtx): ChassisOut {
   const spider = stance.legs === 'spider';
   const ts = torsoSlots(c);
   const by = spider ? stance.hipY * 1.75 : stance.legs === 'biped' ? stance.hipY + 0.2 * u : Math.max(stance.yt, 0.6) + 1.0 * u;
-  if (!spider && stance.legs !== 'biped') planLoftT(b, kit.mech, ngonT(10, 2.4 * u, 2.4 * u), [[0, 1.1], [by - 0.4 * u, 1.0], [by, 0.85]], [-0.4 * u, 0]);
+  const flown = c.mob.kind === 'air';
+  // anchor: a pedestal down to the ground; flown: a short belly keel under the carapace (the lift nacelles hold it up)
+  if (!spider && stance.legs !== 'biped') planLoftT(b, kit.mech, ngonT(10, 2.4 * u, 2.4 * u), [[flown ? stance.y0 : 0, flown ? 0.7 : 1.1], [by - 0.4 * u, 1.0], [by, 0.85]], [-0.4 * u, 0]);
   // ---- carapace: ten-faceted shell over a dark belly; scale plates on every upper facet, a skirt ring below
   const cx = -0.4 * u, cp = ngonT(10, 2.65 * u, 2.85 * u, 0);
   const cTop = by + 1.6 * u;
@@ -176,10 +178,12 @@ function arachne(c: ChassisCtx): ChassisOut {
   } else if (stance.legs === 'biped') {
     hips = ([-1, 1] as const).map((s) => ({ p: [cx, stance.hipY, s * 1.6 * u] as V3, side: s, t: stance.thick, foot: [cx, 0, s * 1.9 * u] as V3, phase: s > 0 ? Math.PI : 0 }));
   }
+  // flown (grav lifters / jets): four outrigger lift nacelles off the carapace skirt, between the palps and the abdomen
+  const lift = flown ? titanLift(b, kit, c.mob.id, { cx, rx: 2.5 * u, rz: 2.7 * u, y: by - 0.35 * u, yA: by - 0.1 * u, r: 0.9 * u, front: 1.05, rear: 2.2 }) : undefined;
   const deck = (x: number, z: number) => (inPoly(cp.map(([px, pz]) => [px * 0.5 + cx, pz * 0.5] as P2), x, z) ? cTop : -1);
   const heroSeat = ts.hero >= 0 ? c.mounts.find((m) => m.i === ts.hero) : undefined;
   return {
-    deckAt: deck, top: yW + 2.4, custom: true, hips,
+    deckAt: deck, top: yW + 2.4, custom: true, hips, lift,
     seat: (m: MountSpec) => {
       // the hero's yaw is the mantle's swivel (torso: at = the waist top)
       if (m === heroSeat) return { y: yW, socket: true };

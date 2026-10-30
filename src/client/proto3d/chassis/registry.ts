@@ -61,6 +61,7 @@ import type * as THREE from 'three';
 import type { ChassisDef, Design, ModuleDef, MountClass, MobilityDef as MobPart } from '../../../shared/types.ts';
 import type { Bld, V3 } from '../geo.ts';
 import type { Kit } from '../materials.ts';
+import type { Lift } from '../mobility/air.ts';
 
 /** what the mobility needs the hull to be built on */
 export interface Stance {
@@ -118,6 +119,9 @@ export interface ChassisOut {
   dressed?: boolean;
   /** the builder made its own footing (the tug castle's landing legs): skip the mobility's running gear */
   ownGround?: boolean;
+  /** flying: the lift units the air mobility renders (mobility/air.ts): airframes (chassis/air.ts) and titans lifted
+   *  into the air (hs-kit-titan titanLift) place their own; without it the mobility's default lift applies */
+  lift?: Lift[];
   /** mech torso: the hero weapon's turret becomes the upper body (it twists as a whole, weapons on arms / shoulders).
    *  Called after the turrets exist with a builder in the hero yaw frame (origin = the hero seat, +x forward, world
    *  units, unscaled); returns the weapon hardpoints in that frame: hp[0] = the hero's trunnion, hp[1..] = the pods

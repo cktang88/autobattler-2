@@ -232,6 +232,7 @@ export interface Seats {
   pod: number[];
   /** drawn housing radius per slot (0 = empty) */
   r: number[];
+  /** drawn as an aircraft (fixed hardpoint guns); a lifted titan is not */
   flying: boolean;
   torso: boolean;
 }
@@ -250,7 +251,9 @@ export function drawnSeats(d: Design): Seats {
   if (out) return out;
   const ch = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get('scout')!;
   const mob = MOBILITY_BY_ID.get(d.mobility);
-  const flying = (ch.domain ?? 'ground') !== 'ground' || mob?.kind === 'air';
+  // a titan-class ground hull lifted into the air keeps its anatomy and class-size turning guns (units3d liftedTitan);
+  // only real aircraft use fixed hardpoint guns
+  const flying = ((ch.domain ?? 'ground') !== 'ground' || mob?.kind === 'air') && !(ch.size >= 5 && (ch.domain ?? 'ground') === 'ground');
   const torso = !flying && TORSO_HULLS.has(ch.id);
   const offs = mountOffsets(d);
   const mods = ch.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
