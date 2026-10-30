@@ -95,12 +95,15 @@ export function rotary(C: WCtx): void {
 export function blades(C: WCtx): void {
   const { p, rc, kit, r, y0 } = C;
   const n = Math.max(2, C.nb), per = Math.ceil(n / 2);
-  const rows = Math.min(per, per > 4 ? Math.ceil(per / 2) : per), cols = Math.ceil(per / rows), dt = detail(C);
+  // a big battery (16 cells) lays its cells out wide and low (2 rows of 4 per blade) on a low trunnion, so it stays as
+  // low as the other guns of its class instead of towering in two tall stacks
+  const big = per >= 8;
+  const rows = big ? 2 : Math.min(per, per > 4 ? Math.ceil(per / 2) : per), cols = Math.ceil(per / rows), dt = detail(C);
   plinth(C, 0.62, 0.24);
-  C.t.pitch.position.set(-r * 0.1, y0 + r * 0.52, 0);
-  C.t.pitch.rotation.z = 0.32;
-  const cell = Math.min(r * 0.26, (r * 1.1) / rows), bl = r * 1.45;
-  const bh = rows * cell + r * 0.14, bw = cols * cell + r * 0.08, zb = r * 0.17 + bw / 2 + r * 0.03;
+  C.t.pitch.position.set(-r * 0.1, y0 + r * (big ? 0.42 : 0.52), 0);
+  C.t.pitch.rotation.z = big ? 0.2 : 0.32;
+  const cell = big ? r * 0.19 : Math.min(r * 0.26, (r * 1.1) / rows), bl = r * 1.45;
+  const bh = rows * cell + r * 0.14, bw = cols * cell + r * 0.08, zb = r * (big ? 0.14 : 0.17) + bw / 2 + r * 0.03;
   // elevating core between the blades: a round trunnion drum (the pitch axis) with glowing hubs, a dark spine and a
   // sensor head riding on it
   drum(p, kit.trim, 0, 0, -zb, r * 0.17, zb * 2, SM, 'z');
@@ -418,13 +421,17 @@ export function railDriver(C: WCtx): void {
   const g = R * 1.2, rh = R * 1.15, rw = R * 2.1, xb = x0 + r * 0.72;
   // breech block on the cradle
   cbox(p, kit.trim, r * 0.1, 0, 0, r * 0.4, g * 2 + rh * 2.1, rw * nf + R * (nf > 1 ? 3.5 : 1.2), r * 0.05, undefined, 0.85);
+  // folded wings: each side's wing is folded down flat against the outside of the fork (a vertical swept blade bridging
+  // the upper and lower rail over the rear third), so the driver stays inside its class width. A dark root spar, the
+  // team blade with a light plate set back on it, a thick plasma leading edge and a hot slot glowing through the fold.
+  const zc = nf > 1 ? rw / 2 + R * 0.9 : 0, zo = zc + rw * 0.57, hw = g + rh * 1.1;
   for (const s of [-1, 1]) {
-    // a swept wing off each side of the fork in the rail plane, a thick glowing edge along its root
-    const zw = s * ((rw * (nf > 1 ? 2.2 : 1)) / 2 + R * (nf > 1 ? 1.6 : 0.2));
-    cbox(rc, kit.hull, x0 + len * 0.3, 0, zw + s * R * 1.1, len * 0.36, R * 0.32, R * 2.4, R * 0.1, [0, s * 0.42, 0], 0.6);
-    cbox(rc, kit.panel, x0 + len * 0.27, R * 0.2, zw + s * R * 0.9, len * 0.26, R * 0.14, R * 1.6, R * 0.05, [0, s * 0.42, 0], 0.7);
-    cbox(rc, kit.trim, x0 + len * 0.22, 0, zw + s * R * 0.5, len * 0.3, R * 0.7, R * 0.9, R * 0.12);
-    bx(rc, kit.plasma, x0 + len * 0.21, 0, zw + s * R * 2.0, len * 0.2, R * 0.42, R * 0.16, [0, s * 0.42, 0]);
+    const zf = s * (zo + R * 0.2), xw = x0 + len * 0.2;
+    cbox(rc, kit.trim, xw - len * 0.02, 0, s * (zo + R * 0.06), len * 0.3, hw * 2 * 0.86, R * 0.2, R * 0.06, undefined, 0.8);
+    cbox(rc, kit.hull, xw, 0, zf, len * 0.3, hw * 2, R * 0.3, R * 0.1, undefined, 0.62);
+    cbox(rc, kit.panel, xw - len * 0.04, 0, zf + s * R * 0.16, len * 0.17, hw * 1.3, R * 0.1, R * 0.04, undefined, 0.7);
+    bx(rc, kit.plasma, xw + len * 0.13, 0, zf + s * R * 0.04, R * 0.42, hw * 1.7, R * 0.36, [0, 0, -0.32]);
+    bx(rc, kit.hot, xw - len * 0.04, 0, zf + s * R * 0.22, len * 0.12, R * 0.34, R * 0.06);
   }
   for (let f = 0; f < nf; f++) {
     const z = nf > 1 ? (f ? 1 : -1) * (rw / 2 + R * 0.9) : 0;
@@ -455,7 +462,7 @@ export function railDriver(C: WCtx): void {
     }
     rc.lathe(kit.plasma, [[g * 0.7, 0], [g * 0.95, 0], [g * 0.95, R * 0.25], [g * 0.7, R * 0.25], [g * 0.7, 0]], [x1 - R * 0.6, 0, z], 'x', 16);
     const nc = xl ? 6 : 4, cl = (x1 - R * 1.5 - (xb + R * 3.2)) / nc;
-    for (let k = 0; k < nc; k++) crystal(rc, k % 2 ? kit.rail : kit.plasma, xb + R * 3.2 + cl * (k + 0.5), 0, z, R * (0.36 - k * 0.03), cl * 0.42, 'x');
+    for (let k = 0; k < nc; k++) crystal(rc, k % 2 ? kit.glow : kit.plasma, xb + R * 3.2 + cl * (k + 0.5), 0, z, R * (0.36 - k * 0.03), cl * 0.42, 'x');
     C.muzzle(x1 + R * 0.4, 0, z);
   }
   // the sizzle: thick plasma arcs jumping between the rails, on an off-beat spin so they flicker rather than turn

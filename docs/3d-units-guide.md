@@ -102,6 +102,10 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   cells, so an M-carrying hull is >= 2 cells wide). Resize the footprint in `parts.ts` when it isn't (the art box may
   not overhang the footprint: a test enforces it); carriage, longarm and hunter went from 1 to 2 cells wide for this.
   Audit: fill every hull with typical weapons and check housing overlap / housing vs hull width.
+  `node scripts/3d/weapon-size.ts` prints every weapon's rest-pose box at its class (width / height as a multiple of
+  `DRAW_D`; most guns are ~0.6-1.0 wide and ~0.3-0.6 tall): keep side parts (wings, fins) inside the housing's width
+  and launchers low (the 16-cell battery lays its cells 2 high, the cruise / nuke missile lies nearly flat in its
+  cradle) instead of scaling the weapon.
 - **Pods**: on ground hulls with S <= 3 whose shape is not in PART_SHAPES, secondary weapons ride the hero's yaw
   group as pods (`Turret.host`, aimed with `aimPod`, +-0.4 rad of their own). The chassis builder only receives the
   hero (and utilities) in `c.mounts`.
