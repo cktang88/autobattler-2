@@ -88,12 +88,14 @@ export const FOOT_MOUNTS: Record<string, Pt[]> = {
   juggernaut: [[-0.14, 0], [-0.3, 0.2]],
   siegeplat: [[0.2, 0], [-0.16, 0]],
   hunter: [[0.12, 0], [-0.3, 0]],
-  colossal: [[0.14, 0.38], [0.14, -0.38], [-0.12, -0.17], [-0.12, 0.17], [-0.36, 0]],
+  // titan walker (torso: weapons drawn where the torso carries them): titan gun on the right shoulder (edge slot, a fist
+  // hangs on the right arm), giant gun on the left forearm, mediums on the left pauldron and the backpack
+  colossal: [[0.2, 0.38], [0.04, -0.38], [-0.06, -0.3], [-0.36, -0.12], [-0.36, 0.12]],
   citadel: [[0.22, -0.26], [0.22, 0.26], [-0.27, 0], [-0.39, -0.39], [-0.39, 0.39], [0.45, 0]],
-  // lance: the titan gun at the breech of the spinal accelerator (centreline, ahead of the bridge), the medium on the
-  // aft deck; monolith: the giant gun in the roof cupola, the medium in a rear-quarter casemate
-  lance: [[0.06, 0], [-0.36, 0]],
-  monolith: [[0.1, 0], [-0.33, 0.33]],
+  // lance: the titan gun in its keel between the trunnion cheeks (centreline), the medium on the command tower behind
+  // the breech; monolith: the giant gun in the casemate's front slot, the medium on the rear-right corner tower
+  lance: [[0.06, 0], [-0.38, 0]],
+  monolith: [[0.14, 0], [-0.235, 0.21]],
   pod: [[-0.04, 0]],
   box: [[0.06, -0.24], [0.06, 0.24]],
   hex: [[0.04, 0], [-0.24, 0]],
