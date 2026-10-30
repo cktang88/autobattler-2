@@ -8,7 +8,8 @@
 // render-only, so their rest-pose positions are snapshotted in PART_REST below (test/mountgeo.test.ts asserts
 // parity with layoutOf for every chassis + starter design, so a rig change that moves a weapon fails loudly).
 
-import { CHASSIS_BY_ID, MODULE_BY_ID } from './parts.ts';
+import { CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID, MODULES } from './parts.ts';
+import { weaponD } from './weaponsize.ts';
 import type { ChassisDef, Design, ModuleDef, MountClass } from './types.ts';
 
 type Pt = [number, number];
@@ -208,4 +209,154 @@ export function mountOffsets(d: Design): { x: number; y: number }[] {
   });
   offCache.set(key, out);
   return out;
+}
+
+// ---- where the 3D model draws each module, and so where the sim fires it from -------------------------------------
+// The 3D units (client/proto3d/units3d.ts) build every hull round its main weapon: the hero takes the hull's primary
+// seat, the secondary weapons of a small / medium hull ride the hero turret as pods on its flanks, and a module whose
+// housing would clash with another moves to the nearest clear spot. drawnSeats() is that placement, shared so the
+// battle sim, the range tools and the renderer agree on where every gun is.
+
+/** drawn housing diameter (cells) per weapon class on ground hulls: the same weapon is the same size on every hull */
+export const DRAW_D: Record<MountClass, number> = { S: 0.75, M: 1.5, L: 3.0, XL: 5.25 };
+/** hulls with a mech torso (client chassis registerTorso): the upper body twists with the guns and the chassis says
+ *  where on it each weapon hangs. Kept here as data so the server's sim sees the same list as the client */
+export const TORSO_HULLS = new Set(['raider', 'aegis', 'mantis', 'strider', 'arachnid', 'crab', 'saucer', 'warlord', 'juggernaut', 'broodmother', 'titan', 'arachne', 'lance', 'monolith']);
+
+export interface Seats {
+  /** the main weapon's slot (biggest housing, first of a tie), -1 without weapons */
+  hero: number;
+  /** standing module centres (cells, x forward, y right) per slot, null for empty slots and pods */
+  pos: ({ x: number; y: number } | null)[];
+  /** pod index on the hero turret per slot (-1 = not a pod) */
+  pod: number[];
+  /** drawn housing radius per slot (0 = empty) */
+  r: number[];
+  flying: boolean;
+  torso: boolean;
+}
+
+const seatCache = new Map<string, Seats>();
+/** class a module is drawn at in slot i (a utility in a smaller hardpoint shrinks to the slot) */
+const drawCls = (ch: ChassisDef, mod: ModuleDef, i: number): MountClass => {
+  const sl = ch.mounts[i];
+  return sl && mod.kind !== 'weapon' && RANK[mod.mount] > RANK[sl] ? sl : mod.mount;
+};
+
+/** The 3D model's seat for every module of a design (see the section comment). Cached per design; do not mutate. */
+export function drawnSeats(d: Design): Seats {
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
+  let out = seatCache.get(key);
+  if (out) return out;
+  const ch = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get('scout')!;
+  const mob = MOBILITY_BY_ID.get(d.mobility);
+  const flying = (ch.domain ?? 'ground') !== 'ground' || mob?.kind === 'air';
+  const torso = !flying && TORSO_HULLS.has(ch.id);
+  const offs = mountOffsets(d);
+  const mods = ch.mounts.map((_, i) => { const id = d.mounts[i] ?? null; return id ? MODULE_BY_ID.get(id) ?? null : null; });
+  const r = mods.map((m, i) => (!m ? 0 : m.kind === 'weapon' ? DRAW_D[drawCls(ch, m, i)] / 2 : Math.min(DRAW_D[drawCls(ch, m, i)] * 0.6, 1.2) / 2));
+  let hero = -1;
+  mods.forEach((m, i) => { if (m && m.kind === 'weapon' && (hero < 0 || weaponD(m) > weaponD(mods[hero]!))) hero = i; });
+  const pod = mods.map(() => -1);
+  if (!flying && (torso || (ch.size <= 3 && !PART_SHAPES.has(ch.shape))) && hero >= 0) {
+    let n = 0;
+    const max = torso ? 6 : 3;
+    mods.forEach((m, i) => { if (n < max && i !== hero && m && m.kind === 'weapon' && offs[i]) pod[i] = n++; });
+  }
+  const pos = offs.map((o, i) => (o && mods[i] && pod[i] < 0 ? { x: o.x, y: o.y } : null));
+  if (!flying && !torso && hero >= 0 && pos[hero]) {
+    // the hero takes the primary socket (biggest class, first of a tie); the module that was there takes its slot
+    let prim = -1;
+    ch.mounts.forEach((c, i) => { if (offs[i] && pod[i] < 0 && (prim < 0 || RANK[c] > RANK[ch.mounts[prim]!])) prim = i; });
+    if (prim >= 0 && prim !== hero && RANK[ch.mounts[prim]!] >= RANK[ch.mounts[hero]!]) {
+      const t = pos[prim] ?? { x: offs[prim]!.x, y: offs[prim]!.y };
+      if (pos[prim]) pos[prim] = pos[hero];
+      pos[hero] = t;
+    }
+    const stand = pos.map((p, i) => (p ? i : -1)).filter((i) => i >= 0);
+    const clash = (i: number, x: number, y: number) => stand.some((j) => j !== i && Math.hypot(pos[j]!.x - x, pos[j]!.y - y) < 0.9 * (r[i] + r[j]));
+    // move the smaller module of a clashing pair (never the hero); candidates on a grid over the hull, inside its outline
+    const [W, L] = artBox(ch);
+    for (const i of [...stand].sort((a, b) => r[a] - r[b])) {
+      if (i === hero || !clash(i, pos[i]!.x, pos[i]!.y)) continue;
+      const hx = Math.max(0, L / 2 - r[i] * 0.8), hy = Math.max(0, W / 2 - r[i] * 0.8);
+      let best: { x: number; y: number } | null = null, bd = Infinity;
+      for (let gx = -8; gx <= 8; gx++) for (let gy = -8; gy <= 8; gy++) {
+        const x = (gx / 8) * hx, y = (gy / 8) * hy, dd = Math.hypot(x - pos[i]!.x, y - pos[i]!.y);
+        if (dd < bd && !clash(i, x, y)) { bd = dd; best = { x, y }; }
+      }
+      if (best) pos[i] = best;
+    }
+  }
+  out = { hero, pos, pod, r, flying, torso };
+  seatCache.set(key, out);
+  return out;
+}
+
+/** a pod's place on its hero turret (hero-local cells, x forward, y right, h = height as a fraction of the hero's
+ *  trunnion height): side pods right then left by the housing, a third on top at the back */
+export function podSeat(slot: number, heroR: number, podR: number): { x: number; y: number; h: number } {
+  const s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
+  return { x: slot < 2 ? -heroR * 0.12 : -heroR * 0.75, y: s * (heroR * 1.05 + podR * 0.9), h: slot < 2 ? 0.6 : 1 };
+}
+
+/** where each torso hull hangs its weapons at rest (cells, x forward, y right), measured from the 3D builders
+ *  (scripts/3d/torso-seats.ts): keyed by role (hero 'H' / pod 'P0'.. in slot order) and weapon class, or by slot,
+ *  class and role ('S1:M:P'), whichever the hull's torso builder places by */
+export const TORSO_SEATS: Record<string, { by: 'role' | 'slot'; at: Record<string, [number, number]> }> = {
+  raider: { by: 'role', at: { 'H:S': [0.039, 0.572], 'P0:S': [0.081, -0.572] } },
+  aegis: { by: 'slot', at: { 'S0:M:H': [0.1, 0], 'S0:S:H': [0.1, 0], 'S0:S:P': [-0.918, 0.78], 'S1:S:H': [-0.64, 0], 'S1:S:P': [-0.17, 0.78] } },
+  mantis: { by: 'role', at: { 'H:S': [0.36, 0], 'P0:S': [-0.298, 0] } },
+  strider: { by: 'role', at: { 'H:M': [0.1, 0.885], 'H:S': [0.1, 0.593], 'P0:S': [0.17, -0.77], 'P1:S': [-0.184, -0.62] } },
+  arachnid: { by: 'role', at: { 'H:M': [0.06, 1.035], 'H:S': [0.06, 0.788], 'P0:M': [0.175, -1.035], 'P0:S': [0.102, -1.035] } },
+  crab: { by: 'slot', at: { 'S0:M:H': [0.7, -1.02], 'S0:M:P': [0.815, -1.02], 'S0:S:P': [0.742, -1.02], 'S1:M:H': [0.7, 1.02], 'S1:M:P': [0.815, 1.02], 'S1:S:H': [0.7, 1.02], 'S1:S:P': [0.662, 1.02], 'S2:S:H': [-0.26, 0], 'S2:S:P': [-0.224, 0] } },
+  saucer: { by: 'slot', at: { 'S0:M:H': [0, -0.86], 'S0:M:P': [0.115, -0.86], 'S0:S:P': [0.042, -0.86], 'S1:M:H': [0, 0.86], 'S1:M:P': [0.115, 0.86], 'S1:S:H': [0, 0.86], 'S1:S:P': [-0.038, 0.86], 'S2:S:H': [-0.86, 0], 'S2:S:P': [-0.824, 0] } },
+  warlord: { by: 'slot', at: { 'S0:M:H': [-0.46, 0], 'S0:M:P': [-0.345, 0], 'S0:S:P': [-0.418, 0], 'S1:M:H': [0.04, -1.38], 'S1:M:P': [0.155, -1.38], 'S1:S:P': [0.003, -1.38], 'S2:M:H': [0.04, 1.38], 'S2:M:P': [0.155, 1.38], 'S2:S:P': [-0.016, 1.38], 'S3:S:P': [0.484, 0] } },
+  juggernaut: { by: 'role', at: { 'H:M': [-0.06, 0], 'H:S': [-0.06, 0], 'P0:S': [-0.73, 0.96] } },
+  broodmother: { by: 'slot', at: { 'S0:L:H': [0.285, 0], 'S0:M:H': [0.143, 0], 'S0:M:P': [0.115, 0], 'S0:S:P': [0.036, 0], 'S1:M:H': [-2.058, 0], 'S1:M:P': [-2.085, 0], 'S1:S:P': [-2.238, 0], 'S2:M:H': [1.093, -1.8], 'S2:M:P': [1.065, -1.8], 'S2:S:P': [0.894, -1.8], 'S3:M:H': [1.093, 1.8], 'S3:M:P': [1.065, 1.8], 'S3:S:P': [1, 1.8], 'S4:S:P': [-1.958, -0.95] } },
+  titan: { by: 'slot', at: { 'S0:L:H': [0.335, 2.65], 'S0:M:H': [0.193, 2.65], 'S0:M:P': [0.165, 2.65], 'S0:S:P': [0.092, 2.65], 'S0:XL:H': [0.549, 2.65], 'S1:L:H': [0.635, -3.6], 'S1:M:H': [0.492, -3.6], 'S1:M:P': [0.465, -3.6], 'S1:S:P': [0.392, -3.6], 'S2:M:H': [-0.408, -3], 'S2:M:P': [-0.435, -3], 'S2:S:P': [-0.606, -3], 'S3:M:H': [-2.607, -1.15], 'S3:M:P': [-2.635, -1.15], 'S3:S:P': [-2.7, -1.15], 'S4:M:H': [-4.008, 0.9], 'S4:M:P': [-4.035, 0.9], 'S4:S:P': [-4.206, 0.9] } },
+  arachne: { by: 'slot', at: { 'S0:L:H': [0.101, 0], 'S0:M:H': [-0.041, 0], 'S0:M:P': [-0.069, 0], 'S0:S:P': [-0.142, 0], 'S0:XL:H': [0.315, 0], 'S1:L:H': [0.301, -3.3], 'S1:M:H': [0.159, -3.3], 'S1:M:P': [0.131, -3.3], 'S1:S:P': [0.058, -3.3], 'S2:L:H': [0.301, 3.3], 'S2:L:P': [0.304, 3.3], 'S2:M:H': [0.159, 3.3], 'S2:M:P': [0.131, 3.3], 'S2:S:H': [0.087, 3.3], 'S2:S:P': [-0.021, 3.3], 'S3:M:H': [-3.891, 0], 'S3:M:P': [-3.919, 0], 'S3:S:P': [-3.984, 0] } },
+  lance: { by: 'slot', at: { 'S0:L:H': [0.835, 0], 'S0:M:H': [0.693, 0], 'S0:M:P': [0.665, 0], 'S0:S:H': [0.621, 0], 'S0:S:P': [0.592, 0], 'S0:XL:H': [1.049, 0], 'S1:M:H': [-3.657, 0], 'S1:M:P': [-3.685, 0], 'S1:S:H': [-3.729, 0], 'S1:S:P': [-3.837, 0] } },
+  monolith: { by: 'slot', at: { 'S0:L:H': [1.285, 0], 'S0:M:H': [1.143, 0], 'S0:M:P': [1.115, 0], 'S0:S:H': [1.071, 0], 'S0:S:P': [1.042, 0], 'S1:M:H': [-1.507, 1.45], 'S1:M:P': [-1.535, 1.45], 'S1:S:H': [-1.579, 1.45], 'S1:S:P': [-1.688, 1.45] } },
+};
+
+const fireCache = new Map<string, { x: number; y: number }[]>();
+/**
+ * Where each mount fires from at rest (hull-local cells, +x forward, +y right; same frame and scaling as mountOffsets):
+ * the 3D model's seat for it (drawnSeats; a pod sits on its hero turret's flank). Torso hulls carry their weapons where
+ * the torso holds them, which their mount table already describes. Battle sim and range tools use this.
+ */
+export function fireOffsets(d: Design): { x: number; y: number }[] {
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? '-').join(',')}`;
+  let out = fireCache.get(key);
+  if (out) return out;
+  const offs = mountOffsets(d), st = drawnSeats(d);
+  const ts = st.torso ? TORSO_SEATS[d.chassis] : undefined;
+  out = offs.map((o, i) => {
+    if (ts && o && (i === st.hero || st.pod[i] >= 0)) {
+      const id = d.mounts[i], cls = id ? MODULE_BY_ID.get(id)?.mount : undefined;
+      const role = i === st.hero ? 'H' : `P${st.pod[i]}`;
+      const p = ts.by === 'role' ? ts.at[`${role}:${cls}`] : ts.at[`S${i}:${cls}:${role[0]}`];
+      if (p) return { x: p[0], y: p[1] };
+    }
+    if (st.torso || st.flying) return o;
+    if (st.pod[i] >= 0 && st.pos[st.hero]) {
+      const p = podSeat(st.pod[i], st.r[st.hero], st.r[i]);
+      return { x: st.pos[st.hero]!.x + p.x, y: st.pos[st.hero]!.y + p.y };
+    }
+    return st.pos[i] ?? o;
+  });
+  fireCache.set(key, out);
+  return out;
+}
+
+/** where a weapon put into slot i would be drawn (an empty socket's ring in the garage): fireOffsets of the design with
+ *  a typical gun of the slot's class in it */
+export function slotSeat(d: Design, i: number): { x: number; y: number } | null {
+  const ch = CHASSIS_BY_ID.get(d.chassis);
+  const cls = ch?.mounts[i];
+  if (!cls) return null;
+  const gun = MODULES.find((m) => m.kind === 'weapon' && m.mount === cls && m.projectile !== 'melee');
+  if (!gun) return mountOffsets(d)[i] ?? null;
+  return fireOffsets({ ...d, mounts: ch.mounts.map((_, j) => (j === i ? gun.id : d.mounts[j] ?? null)) })[i] ?? null;
 }

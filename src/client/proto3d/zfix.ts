@@ -18,10 +18,12 @@ function inside(P: THREE.Vector3, t: Tri): boolean {
   return e(t.a, t.b) > eps && e(t.b, t.d) > eps && e(t.d, t.a) > eps;
 }
 
-/** lift coplanar overlapping faces of different parts apart (two passes: a lifted face can land on a third plane);
- *  returns the number of triangles moved */
+/** lift coplanar overlapping faces of different parts apart, repeating while anything moved (a lifted face can land
+ *  on a third plane, and equal-area chains need a pass per link; at most 4); returns the number of triangles moved */
 export function fixZFight(root: THREE.Object3D): number {
-  return pass(root) + pass(root);
+  let moved = 0;
+  for (let i = 0, n = 1; i < 4 && n; i++) moved += n = pass(root);
+  return moved;
 }
 
 function pass(root: THREE.Object3D): number {
@@ -54,13 +56,18 @@ function pass(root: THREE.Object3D): number {
   const lift = new Map<Tri, number>();
   for (const l of buckets.values()) {
     if (l.length < 2) continue;
-    // several parts can stack in one plane: lift each by its rank (smallest on top)
-    for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
-      const s = l[i]!, t = l[j]!;
-      if (s.part === t.part) continue;
-      if (!(inside(s.c, t) || inside(t.c, s))) continue;
-      const top = s.area < t.area ? s : t, low = top === s ? t : s;
-      lift.set(top, Math.max(lift.get(top) ?? 0, (lift.get(low) ?? 0) + 1));
+    // several parts can stack in one plane: largest at the bottom, each face one step above the highest face of
+    // another part it overlaps that came before it (area order, ties by build order), so every chain gets distinct heights
+    l.sort((s, t) => t.area - s.area);
+    for (let j = 1; j < l.length; j++) {
+      const t = l[j]!;
+      let k = 0;
+      for (let i = 0; i < j; i++) {
+        const s = l[i]!;
+        if (s.part === t.part || !(inside(s.c, t) || inside(t.c, s))) continue;
+        k = Math.max(k, (lift.get(s) ?? 0) + 1);
+      }
+      if (k) lift.set(t, k);
     }
   }
   if (!lift.size) return 0;
@@ -69,7 +76,7 @@ function pass(root: THREE.Object3D): number {
   for (const [t, k] of lift) {
     const m = meshes[t.mesh]!, p = m.geometry.attributes.position as THREE.BufferAttribute;
     for (let v = 0; v < 3; v++) {
-      const w = new THREE.Vector3().fromBufferAttribute(p, t.f + v).applyMatrix4(m.matrixWorld).addScaledVector(t.n, LIFT * Math.min(k, 3));
+      const w = new THREE.Vector3().fromBufferAttribute(p, t.f + v).applyMatrix4(m.matrixWorld).addScaledVector(t.n, LIFT * Math.min(k, 4));
       w.applyMatrix4(inv[t.mesh]!);
       p.setXYZ(t.f + v, w.x, w.y, w.z);
     }

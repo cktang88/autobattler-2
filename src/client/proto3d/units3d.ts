@@ -5,17 +5,17 @@
 
 import * as THREE from 'three';
 import { CHASSIS_BY_ID, MODULE_BY_ID, MOBILITY_BY_ID } from '../../shared/parts.ts';
-import { artBox, mountOffsets, PART_SHAPES } from '../../shared/mountgeo.ts';
+import { artBox, drawnSeats, mountOffsets, podSeat } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
 import { buildTurret, DRAW_D, type Turret } from './weapons3d.ts';
-import { CLASS_RANK, slotD, weaponD } from '../render/weaponsize.ts';
+import { CLASS_RANK, slotD } from '../render/weaponsize.ts';
 import type { MountClass } from '../../shared/types.ts';
 import { fixZFight } from './zfix.ts';
 import { Bld } from './geo.ts';
 import './chassis/index.ts';
-import { chassisBuilder, hasTorso, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
+import { chassisBuilder, mobilityBuilder, registered, type ChassisOut, type MobilityCtx, type MountSpec } from './chassis/registry.ts';
 import { buildJet, buildRotor, type Air } from './air3d.ts';
 import { applySkin, pickSkin } from './skins.ts';
 import { pickFinish } from './finish3d.ts';
@@ -95,42 +95,17 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   // only its barrels differ (bore from the calibre, length from the weapon), so a player reads a weapon anywhere. A hull's look comes from being built
   // round its biggest slots (its main weapon system), not from inflating whatever it carries. Aircraft keep their
   // hardpoint scale (a ground turret's housing would swallow a jet).
-  let hero = -1;
-  mods.forEach((m, i) => { if (m && m.kind === 'weapon' && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]!))) hero = i; });
+  // which weapon is the hero, which ride it as pods and where every standing module sits: shared/mountgeo.ts
+  // drawnSeats, the same placement the battle sim fires from (fireOffsets). The hero takes the hull's primary seat;
+  // on small / medium ground hulls whose weapons are not carried by limbs the secondary weapons ride the hero turret
+  // as pods on its flanks (one cohesive weapon system that turns as a whole); torso hulls hang them on the torso; a
+  // module whose housing still clashes with another moves to the nearest clear spot on the hull.
+  const seats = drawnSeats(design);
+  const hero = seats.hero;
   if (flying) tur.forEach((tu) => { if (tu) { tu.yaw.scale.setScalar(1.1); tu.r *= 1.1; } });
-  // weapon pods: on small / medium ground hulls whose weapons are not carried by limbs, the secondary weapons ride the
-  // hero turret as pods on its flanks (right, mirrored left, then one on top at the back) instead of standing as
-  // separate turrets on the deck: one cohesive weapon system that turns as a whole, nothing blocks anything's traverse
-  const podOf: number[] = mods.map(() => -1);
-  const torsoHull = !flying && hasTorso(ch);
-  if (!flying && (torsoHull || (S <= 3 && !PART_SHAPES.has(ch.shape))) && hero >= 0 && tur[hero] && !tur[hero]!.fixed) {
-    let n = 0;
-    const max = torsoHull ? 6 : 3;
-    mods.forEach((m, i) => { if (n < max && i !== hero && m && m.kind === 'weapon' && tur[i] && offs[i]) podOf[i] = n++; });
-  }
-  // where each standing module is drawn (render only; the sim keeps its mount table). Hulls are designed round their
-  // primary socket (the biggest class, first of a tie): the hero weapon always takes that seat, whatever slot the
-  // design put it in, and the module that was there takes the hero's slot. Then any module whose housing still
-  // clashes with another (a utility dropped on a seat inside the main gun) moves to the nearest clear spot on the hull.
-  const pos = offs.map((o) => (o ? { x: o.x, y: o.y } : o));
-  if (!flying && !torsoHull && hero >= 0 && pos[hero]) {
-    let prim = -1;
-    ch.mounts.forEach((c, i) => { if (pos[i] && podOf[i] < 0 && (prim < 0 || CLASS_RANK[c] > CLASS_RANK[ch.mounts[prim]!])) prim = i; });
-    if (prim >= 0 && prim !== hero && CLASS_RANK[ch.mounts[prim]!] >= CLASS_RANK[ch.mounts[hero]!]) { const t = pos[prim]!; pos[prim] = pos[hero]; pos[hero] = t; }
-    const stand = tur.map((tu, i) => (tu && pos[i] && podOf[i] < 0 ? i : -1)).filter((i) => i >= 0);
-    const clash = (i: number, x: number, y: number) => stand.some((j) => j !== i && Math.hypot(pos[j]!.x - x, pos[j]!.y - y) < 0.9 * (tur[i]!.r + tur[j]!.r));
-    // move the smaller module of a clashing pair (never the hero); candidates on a grid over the hull, inside its outline
-    for (const i of [...stand].sort((a, b) => tur[a]!.r - tur[b]!.r)) {
-      if (i === hero || !clash(i, pos[i]!.x, pos[i]!.y)) continue;
-      const r = tur[i]!.r, hx = Math.max(0, L / 2 - r * 0.8), hy = Math.max(0, W / 2 - r * 0.8);
-      let best: { x: number; y: number } | null = null, bd = Infinity;
-      for (let gx = -8; gx <= 8; gx++) for (let gy = -8; gy <= 8; gy++) {
-        const x = (gx / 8) * hx, y = (gy / 8) * hy, d = Math.hypot(x - pos[i]!.x, y - pos[i]!.y);
-        if (d < bd && !clash(i, x, y)) { bd = d; best = { x, y }; }
-      }
-      if (best) pos[i] = best;
-    }
-  }
+  const podOf = seats.pod;
+  const torsoHull = seats.torso;
+  const pos = offs.map((o, i) => seats.pos[i] ?? (o ? { x: o.x, y: o.y } : o));
   // utilities, armour and shields on a torso hull ride the torso too (they turn with it): the chassis places them
   // on the torso (torso() returns `up`), they never stand on the static lower body under the torso's sweep
   const riders = torsoHull && hero >= 0 && tur[hero] && !tur[hero]!.fixed
@@ -191,8 +166,8 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     for (const i of pods) {
       const tu = tur[i]!, slot = podOf[i];
       tu.yaw.scale.multiplyScalar(1 / kH); // keeps its own drawn size inside the hero's scaled frame
-      const rl = tu.r / kH, s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
-      const x = slot < 2 ? -r0 * 0.12 : -r0 * 0.75, z = s * (r0 * 1.05 + rl * 0.9), y = slot < 2 ? py * 0.6 : py + r0 * 0.3;
+      const rl = tu.r / kH, ps = podSeat(slot, r0, rl), s = Math.sign(ps.y);
+      const x = ps.x, z = ps.y, y = slot < 2 ? py * ps.h : py + r0 * 0.3;
       tu.yaw.position.set(x, y, z);
       H.yaw.add(tu.yaw);
       // bracket arm from the housing to the pod's base (side pods), or a pillar (top pod)
@@ -211,7 +186,6 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     T.userData.torso = true; // not part of the hero weapon itself (the garage socket / highlight skips it)
     const res = out.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i]!.r), utilR: riders.map((i) => tur[i]!.r) });
     tb.mount(T);
-    H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
     const p0 = res.hp[0] ?? [0, 0, 0];
     H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);
@@ -256,3 +230,4 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     },
   };
 }
+

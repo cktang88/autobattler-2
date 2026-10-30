@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import type { Design } from '../../shared/types.ts';
 import { CHASSIS_BY_ID } from '../../shared/parts.ts';
-import { approxTurretD, bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
+import { approxTurretD, bodyScale, slotSeat } from '../../shared/mountgeo.ts';
 import { flyHeight } from '../render/tilt.ts';
 import { MAPS, type MapTheme } from '../render/ground.ts';
 import { TEAM_PAL } from '../render/palette.ts';
@@ -221,7 +221,6 @@ export class UnitStage3D {
   private buildMounts(d: Design, rig: Rig): void {
     const tpl = rig.tpl, u = tpl.unit;
     const ch = CHASSIS_BY_ID.get(d.chassis)!;
-    const offs = mountOffsets(d);
     u.root.updateMatrixWorld(true);
     this.occluders = tpl.meshes.filter((m, j) => {
       const mat = m.material as THREE.Material;
@@ -253,7 +252,8 @@ export class UnitStage3D {
         p.x = p2.x; p.z = p2.z;
         return { p, r: Math.max(0.12, tu.r), meshes, own };
       }
-      const o = offs[i] ?? { x: 0, y: 0 };
+      // where a gun put in this slot would be drawn (a torso hull hangs it on the torso, a small hull on its main turret)
+      const o = slotSeat(d, i) ?? { x: 0, y: 0 };
       // the deck under the hardpoint: first hull surface straight down
       this.ray.set(this.v.set(o.x, top, o.y), new THREE.Vector3(0, -1, 0));
       this.ray.far = top + 5;

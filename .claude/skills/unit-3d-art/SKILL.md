@@ -20,6 +20,8 @@ description: Design, model or fix the procedural 3D units (hulls, mech torsos, l
    - `node --test test/turretseat3d.test.ts test/mountgeo.test.ts`, then `npm test`
    - `node scripts/3d/zfight-scan.ts` (flicker), `node scripts/3d/tri-budget.ts` (S1 <= 15k, S2..S5 <= 30k),
      `node scripts/3d/fit-audit.ts` (weapons fit their hull, no housings overlapping)
+   - sim firing points = drawn guns: `RAND=1 node scripts/3d/mount-drift.ts`; if you moved a torso hull's
+     hardpoints, regenerate `TORSO_SEATS` (shared/mountgeo.ts) with `node scripts/3d/torso-seats.ts`
    - garage sockets if you touched turrets / pods / torso: `scripts/3d/garage-shots.cjs`
 6. Commit the rebuilt `public/proto3d.js(.map)` with the source change. Add anything new you learned to
    `docs/3d-units-guide.md`.

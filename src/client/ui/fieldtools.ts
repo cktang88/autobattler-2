@@ -8,7 +8,7 @@ import { TILT_SIN, flyHeight, hullHeight } from '../render/tilt.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import type { SimUnit } from '../../shared/sim/types.ts';
 import { forwardY, placementUnitCenters } from '../../shared/grid.ts';
-import { bodyScale, hullK, mountOffsets } from '../../shared/mountgeo.ts';
+import { bodyScale, fireOffsets, hullK } from '../../shared/mountgeo.ts';
 import { placementValue } from '../../shared/match.ts';
 import { MAX_LEVEL, fmtUnitPrice } from '../../shared/stats.ts';
 import type { Design, Placement, Side, UnitStats } from '../../shared/types.ts';
@@ -253,7 +253,7 @@ export function createRangeRings(view: BattleView, canvas: HTMLCanvasElement, ri
       const sc = view.scaleAt(worldCenters[0]?.x ?? 0, worldCenters[0]?.y ?? 0);
       const k = sc.k;
       // units deploy facing the enemy; ranges are measured from each weapon's own mount (same offsets as the sim)
-      const bs = bodyScale(t.st.size), offs = mountOffsets(t.design).map((o) => ({ x: o.x * bs, y: o.y * bs }));
+      const bs = bodyScale(t.st.size), offs = fireOffsets(t.design).map((o) => ({ x: o.x * bs, y: o.y * bs }));
       const head = forwardY(t.side) < 0 ? -Math.PI / 2 : Math.PI / 2, hc = Math.cos(head), hs = Math.sin(head);
       let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
       const frame = (mounts: number[] | null) => {

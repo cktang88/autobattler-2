@@ -105,6 +105,16 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
 - **Pods**: on ground hulls with S <= 3 whose shape is not in PART_SHAPES, secondary weapons ride the hero's yaw
   group as pods (`Turret.host`, aimed with `aimPod`, +-0.4 rad of their own). The chassis builder only receives the
   hero (and utilities) in `c.mounts`.
+- **Where a gun is drawn is where the sim fires it from.** `shared/mountgeo.ts` `drawnSeats(design)` is the one
+  placement both sides use: hero pick (biggest `weaponD`), hero into the primary seat, pods, clash relocation, with
+  `DRAW_D` and `TORSO_HULLS` kept in shared code so the server's sim sees the same data. `fireOffsets(design)` turns
+  it into firing points (a pod sits on its hero's flank, `podSeat`); the battle sim (`battle.ts`) and the range tools
+  (`fieldtools.ts`) use it, the 2D art keeps `mountOffsets`. Torso hulls place guns in their own builders, so their
+  firing points come from `TORSO_SEATS`, measured from the 3D build by `scripts/3d/torso-seats.ts` (keyed by role or
+  by slot, whichever the builder places by). **After changing a torso builder's hardpoints, re-run that script and
+  paste its table** (`node scripts/3d/torso-seats.ts`, ~5 min; `ONLY=titan` for one hull). Check with
+  `node scripts/3d/mount-drift.ts` (`RAND=1` for every hull with random fits; flags weapons > 0.5 cells off) and
+  `test/firepoints.test.ts`. An empty garage socket is drawn where a gun put in it would sit (`slotSeat`).
 - **Mech torso mode** (`ChassisOut.torso`): the chassis builds the upper body into the hero's yaw group, so torso
   and weapons twist together (a mech, not a turret on a box). It returns weapon hardpoints in the yaw frame:
   `hp[0]` = hero trunnion (its pitch group moves there), `hp[1..]` = pods; `at` moves the twist pivot. units3d
@@ -204,8 +214,10 @@ Cause: faces of different parts in exactly the same plane, facing the same way, 
 flush on a plate, two blocks sharing a face, a collar flush on a deck). The depth test can't pick one.
 
 - `zfix.ts` runs on every built unit (units3d, after assembly): buckets all triangles by world plane, finds
-  overlapping pairs from different parts, lifts the smaller face 2 mm along its normal (ranked when several stack),
-  two passes. Cut the titan from 344 coplanar pairs to 17, goliath 310 -> 14, most units -> 0.
+  overlapping pairs from different parts and lifts them apart 2 mm per step along the normal: in each plane the
+  faces are sorted largest first and each sits one step above the highest overlapping face before it, so chains of
+  three or more stacked parts (megatracks' track pods) all get distinct heights in one pass; it repeats until nothing
+  moves (max 4). Every starter scans at 0 pairs.
 - Still author cleanly: inset or proud details by a visible amount instead of exactly flush.
 - Check: `node scripts/3d/zfight-scan.ts` (expect 0 or a few tiny pairs per design).
 

@@ -59,11 +59,16 @@ test('void lance: hits scale with the target\'s max hp (big vs a titan)', () => 
 
 test('entropy ray strips the target\'s armour while it keeps hitting', () => {
   let most = 0;
-  const b = fight('entropy', 'tank', 1200, (bb) => {
-    const ints = (bb as unknown as { ints: { shred: number }[] }).ints;
-    const tank = bb.units.find((u) => u.design.id === 'tank');
-    if (tank) most = Math.max(most, ints[tank.id].shred);
-  });
-  const tank = b.units.find((u) => u.design.id === 'tank')!;
+  // against a plated wall that can't shoot back (air-only flak): the strip is measured, not who wins the duel
+  const wall = D('wall', 'bastion', 'treads', ['plateH', 'plateM', 'flak']);
+  const ds = [...designs, wall];
+  const b = new Battle({ seed: 3, sides: [{ designs: ds, units: [pl('entropy', 1, 40)] }, { designs: ds, units: [pl('wall', 2, 40, { stance: 'holdPos' })] }] });
+  for (let i = 0; i < 1200 && !b.done; i++) {
+    b.step();
+    const ints = (b as unknown as { ints: { shred: number }[] }).ints;
+    const w = b.units.find((u) => u.design.id === 'wall');
+    if (w) most = Math.max(most, ints[w.id].shred);
+  }
+  const tank = b.units.find((u) => u.design.id === 'wall')!;
   assert.ok(most > tank.stats.armor * 0.5, `stripped ${most.toFixed(1)} of ${tank.stats.armor} armour`);
 });

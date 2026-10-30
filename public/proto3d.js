@@ -36130,6 +36130,60 @@ function moduleTier(m) {
   return 5;
 }
 
+// src/shared/weaponsize.ts
+var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
+var CLASS_RANK = { S: 1, M: 2, L: 4, XL: 5 };
+var tierOf = (m, cls) => cls && cls !== m.mount ? CLASS_RANK[cls] : moduleTier(m);
+var BAND_MM = [[0, 0], [5, 25], [25, 85], [90, 160], [170, 260], [280, 420]];
+var BAND_DMG = [[0, 0], [8, 140], [8, 150], [30, 480], [22, 520], [140, 2200]];
+var BAND_WT = [[0, 0], [0.8, 2], [2, 5], [6, 13], [12, 18], [30, 40]];
+var BAND_D = [[0, 0], [0.28, 0.36], [0.42, 0.52], [0.58, 0.68], [0.8, 0.9], [1, 1.12]];
+var NAMED_MM = {
+  howitzer: 155,
+  barrage: 105,
+  cannon: 120,
+  twin120: 120,
+  siege240: 240,
+  doomsday: 406,
+  massdriver: 380,
+  sniper: 14.5,
+  mortar: 81,
+  flak: 57,
+  heavyflak: 88,
+  skyfortress: 200,
+  lightrail: 35,
+  railgun: 110,
+  gauss: 105,
+  minigun: 7.62,
+  avenger: 200
+};
+var logT = (v, lo, hi) => clamp2(Math.log(Math.max(v, 1e-3) / lo) / Math.log(hi / lo), 0, 1);
+var mmCache = /* @__PURE__ */ new Map();
+function calibreMm(m) {
+  let v = mmCache.get(m.id);
+  if (v !== void 0) return v;
+  const [lo, hi] = BAND_MM[moduleTier(m)];
+  const named2 = NAMED_MM[m.id] ?? (/(\d+(?:\.\d+)?)\s*mm/i.exec(m.name) ? Number(/(\d+(?:\.\d+)?)\s*mm/i.exec(m.name)[1]) : void 0);
+  if (named2 !== void 0) v = named2;
+  else if (m.kind === "weapon" && m.damage) {
+    const [dl, dh] = BAND_DMG[moduleTier(m)];
+    v = lo * Math.pow(hi / lo, logT(m.damage, dl, dh));
+  } else v = lo * Math.pow(hi / lo, clamp2(m.caliber ?? 0.5, 0, 1));
+  mmCache.set(m.id, v);
+  return v;
+}
+function classPos(m, cls) {
+  const t = tierOf(m, cls);
+  const [lo, hi] = BAND_MM[t];
+  const [wl, wh] = BAND_WT[t];
+  return clamp2(0.65 * logT(calibreMm(m), lo, hi) + 0.35 * clamp2((m.weight - wl) / (wh - wl), 0, 1), 0, 1);
+}
+function weaponD(m, cls) {
+  const [a, b] = BAND_D[tierOf(m, cls)];
+  return a + (b - a) * classPos(m, cls);
+}
+var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
+
 // src/shared/mountgeo.ts
 var MOUNT_PTS = {
   scout: [[0.02, 0]],
@@ -36223,6 +36277,7 @@ var PART_REST = {
   scorpion: [[-1.54, -0.798], [1.83, -0.99], [1.83, 0.99]],
   centipede: [[0.7599999999999999, 0.6], [0.04750000000000004, -0.6], [-0.665, 0.6], [-1.3775000000000002, -0.6]]
 };
+var RANK = { S: 1, M: 2, L: 3, XL: 4 };
 var PART_SHAPES = /* @__PURE__ */ new Set(["mantis", "mech", "warlord", "arachnid", "broodmother", "arachne", "crab", "saucer", "scorpion", "centipede"]);
 function hardpointsOf(chassis) {
   return FOOT_MOUNTS[chassis.shape] ?? MOUNT_PTS[chassis.id] ?? chassis.mounts.map((_, i, a) => [0.05 - 0.25 * Math.floor(i / 2), a.length === 1 ? 0 : i % 2 ? 0.2 : -0.2]);
@@ -36258,66 +36313,75 @@ function mountOffsets(d) {
   offCache.set(key, out2);
   return out2;
 }
-
-// src/client/render/palette.ts
-var TEAM_PAL = [
-  { body: "#34486f", light: "#506690", dark: "#253352", deep: "#141c2e", accent: "#3d9bff", mark: "#2f6ae0", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#344670" },
-  { body: "#7d3324", light: "#a04c3a", dark: "#56231a", deep: "#2c120d", accent: "#ff4a26", mark: "#d8402a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#662c22" }
-];
-var clamp2 = (v, a, b) => v < a ? a : v > b ? b : v;
-
-// src/client/render/weaponsize.ts
-var CLASS_RANK = { S: 1, M: 2, L: 4, XL: 5 };
-var tierOf = (m, cls) => cls && cls !== m.mount ? CLASS_RANK[cls] : moduleTier(m);
-var BAND_MM = [[0, 0], [5, 25], [25, 85], [90, 160], [170, 260], [280, 420]];
-var BAND_DMG = [[0, 0], [8, 140], [8, 150], [30, 480], [22, 520], [140, 2200]];
-var BAND_WT = [[0, 0], [0.8, 2], [2, 5], [6, 13], [12, 18], [30, 40]];
-var BAND_D = [[0, 0], [0.28, 0.36], [0.42, 0.52], [0.58, 0.68], [0.8, 0.9], [1, 1.12]];
-var NAMED_MM = {
-  howitzer: 155,
-  barrage: 105,
-  cannon: 120,
-  twin120: 120,
-  siege240: 240,
-  doomsday: 406,
-  massdriver: 380,
-  sniper: 14.5,
-  mortar: 81,
-  flak: 57,
-  heavyflak: 88,
-  skyfortress: 200,
-  lightrail: 35,
-  railgun: 110,
-  gauss: 105,
-  minigun: 7.62,
-  avenger: 200
+var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 5.25 };
+var TORSO_HULLS = /* @__PURE__ */ new Set(["raider", "aegis", "mantis", "strider", "arachnid", "crab", "saucer", "warlord", "juggernaut", "broodmother", "titan", "arachne", "lance", "monolith"]);
+var seatCache = /* @__PURE__ */ new Map();
+var drawCls = (ch, mod, i) => {
+  const sl = ch.mounts[i];
+  return sl && mod.kind !== "weapon" && RANK[mod.mount] > RANK[sl] ? sl : mod.mount;
 };
-var logT = (v, lo, hi) => clamp2(Math.log(Math.max(v, 1e-3) / lo) / Math.log(hi / lo), 0, 1);
-var mmCache = /* @__PURE__ */ new Map();
-function calibreMm(m) {
-  let v = mmCache.get(m.id);
-  if (v !== void 0) return v;
-  const [lo, hi] = BAND_MM[moduleTier(m)];
-  const named2 = NAMED_MM[m.id] ?? (/(\d+(?:\.\d+)?)\s*mm/i.exec(m.name) ? Number(/(\d+(?:\.\d+)?)\s*mm/i.exec(m.name)[1]) : void 0);
-  if (named2 !== void 0) v = named2;
-  else if (m.kind === "weapon" && m.damage) {
-    const [dl, dh] = BAND_DMG[moduleTier(m)];
-    v = lo * Math.pow(hi / lo, logT(m.damage, dl, dh));
-  } else v = lo * Math.pow(hi / lo, clamp2(m.caliber ?? 0.5, 0, 1));
-  mmCache.set(m.id, v);
-  return v;
+function drawnSeats(d) {
+  const key = `${d.chassis}|${d.mobility}|${d.mounts.map((m) => m ?? "-").join(",")}`;
+  let out2 = seatCache.get(key);
+  if (out2) return out2;
+  const ch = CHASSIS_BY_ID.get(d.chassis) ?? CHASSIS_BY_ID.get("scout");
+  const mob = MOBILITY_BY_ID.get(d.mobility);
+  const flying = (ch.domain ?? "ground") !== "ground" || mob?.kind === "air";
+  const torso = !flying && TORSO_HULLS.has(ch.id);
+  const offs = mountOffsets(d);
+  const mods = ch.mounts.map((_, i) => {
+    const id = d.mounts[i] ?? null;
+    return id ? MODULE_BY_ID.get(id) ?? null : null;
+  });
+  const r = mods.map((m, i) => !m ? 0 : m.kind === "weapon" ? DRAW_D[drawCls(ch, m, i)] / 2 : Math.min(DRAW_D[drawCls(ch, m, i)] * 0.6, 1.2) / 2);
+  let hero = -1;
+  mods.forEach((m, i) => {
+    if (m && m.kind === "weapon" && (hero < 0 || weaponD(m) > weaponD(mods[hero]))) hero = i;
+  });
+  const pod2 = mods.map(() => -1);
+  if (!flying && (torso || ch.size <= 3 && !PART_SHAPES.has(ch.shape)) && hero >= 0) {
+    let n = 0;
+    const max = torso ? 6 : 3;
+    mods.forEach((m, i) => {
+      if (n < max && i !== hero && m && m.kind === "weapon" && offs[i]) pod2[i] = n++;
+    });
+  }
+  const pos = offs.map((o, i) => o && mods[i] && pod2[i] < 0 ? { x: o.x, y: o.y } : null);
+  if (!flying && !torso && hero >= 0 && pos[hero]) {
+    let prim = -1;
+    ch.mounts.forEach((c, i) => {
+      if (offs[i] && pod2[i] < 0 && (prim < 0 || RANK[c] > RANK[ch.mounts[prim]])) prim = i;
+    });
+    if (prim >= 0 && prim !== hero && RANK[ch.mounts[prim]] >= RANK[ch.mounts[hero]]) {
+      const t = pos[prim] ?? { x: offs[prim].x, y: offs[prim].y };
+      if (pos[prim]) pos[prim] = pos[hero];
+      pos[hero] = t;
+    }
+    const stand = pos.map((p, i) => p ? i : -1).filter((i) => i >= 0);
+    const clash = (i, x, y) => stand.some((j) => j !== i && Math.hypot(pos[j].x - x, pos[j].y - y) < 0.9 * (r[i] + r[j]));
+    const [W, L] = artBox(ch);
+    for (const i of [...stand].sort((a, b) => r[a] - r[b])) {
+      if (i === hero || !clash(i, pos[i].x, pos[i].y)) continue;
+      const hx = Math.max(0, L / 2 - r[i] * 0.8), hy = Math.max(0, W / 2 - r[i] * 0.8);
+      let best = null, bd = Infinity;
+      for (let gx = -8; gx <= 8; gx++) for (let gy = -8; gy <= 8; gy++) {
+        const x = gx / 8 * hx, y = gy / 8 * hy, dd = Math.hypot(x - pos[i].x, y - pos[i].y);
+        if (dd < bd && !clash(i, x, y)) {
+          bd = dd;
+          best = { x, y };
+        }
+      }
+      if (best) pos[i] = best;
+    }
+  }
+  out2 = { hero, pos, pod: pod2, r, flying, torso };
+  seatCache.set(key, out2);
+  return out2;
 }
-function classPos(m, cls) {
-  const t = tierOf(m, cls);
-  const [lo, hi] = BAND_MM[t];
-  const [wl, wh] = BAND_WT[t];
-  return clamp2(0.65 * logT(calibreMm(m), lo, hi) + 0.35 * clamp2((m.weight - wl) / (wh - wl), 0, 1), 0, 1);
+function podSeat(slot, heroR, podR) {
+  const s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
+  return { x: slot < 2 ? -heroR * 0.12 : -heroR * 0.75, y: s * (heroR * 1.05 + podR * 0.9), h: slot < 2 ? 0.6 : 1 };
 }
-function weaponD(m, cls) {
-  const [a, b] = BAND_D[tierOf(m, cls)];
-  return a + (b - a) * classPos(m, cls);
-}
-var boreOf = (mm) => 535e-5 * Math.pow(mm, 0.65);
 
 // src/client/proto3d/weapons/wkit.ts
 var boxG = new BoxGeometry(1, 1, 1);
@@ -38269,7 +38333,7 @@ var GUNS = /* @__PURE__ */ new Set(["gun", "gatling", "shotgun", "cannon", "gaus
 var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mortar", "artillery", "charge"]);
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
-var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 5.25 };
+var DRAW_D2 = { S: 0.75, M: 1.5, L: 3, XL: 5.25 };
 var DRAW_K = 1.5 / 0.52;
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {
@@ -38947,7 +39011,7 @@ function castle(c) {
   const k = Math.min(L, W) / 7 * 1.15;
   const fine = fineFor(c.S);
   const gun = c.design.mounts[0] ? MODULE_BY_ID.get(c.design.mounts[0]) : void 0;
-  const D = DRAW_D[gun?.mount ?? "S"];
+  const D = DRAW_D2[gun?.mount ?? "S"];
   const CP = [
     [-3.25, 0.95, 1.15, 2.05],
     [-2.8, 1.3, 1, 2.3],
@@ -40176,6 +40240,12 @@ var STARTER_DESIGNS = [
   { id: "starter-thunderbird", name: "Thunderbird", chassis: "strategic", mobility: "jet", mounts: ["bombs", "bombs", "heavybomb", "plateM", "pointdef", "shieldL"] }
 ];
 
+// src/client/render/palette.ts
+var TEAM_PAL = [
+  { body: "#34486f", light: "#506690", dark: "#253352", deep: "#141c2e", accent: "#3d9bff", mark: "#2f6ae0", glow: "#8cf4ff", glowRgb: "140,244,255", bar: "#4fe3d0", rim: "#46dcff", camo: "#344670" },
+  { body: "#7d3324", light: "#a04c3a", dark: "#56231a", deep: "#2c120d", accent: "#ff4a26", mark: "#d8402a", glow: "#ffa266", glowRgb: "255,162,102", bar: "#ff5a3a", rim: "#ff4a22", camo: "#662c22" }
+];
+
 // src/client/proto3d/surface3d.ts
 var base2 = "assets/tex/";
 var LAYER = {
@@ -41046,7 +41116,9 @@ function inside2(P, t) {
   return e(t.a, t.b) > eps && e(t.b, t.d) > eps && e(t.d, t.a) > eps;
 }
 function fixZFight(root) {
-  return pass(root) + pass(root);
+  let moved = 0;
+  for (let i = 0, n = 1; i < 4 && n; i++) moved += n = pass(root);
+  return moved;
 }
 function pass(root) {
   root.updateMatrixWorld(true);
@@ -41078,12 +41150,16 @@ function pass(root) {
   const lift = /* @__PURE__ */ new Map();
   for (const l of buckets.values()) {
     if (l.length < 2) continue;
-    for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
-      const s = l[i], t = l[j];
-      if (s.part === t.part) continue;
-      if (!(inside2(s.c, t) || inside2(t.c, s))) continue;
-      const top = s.area < t.area ? s : t, low = top === s ? t : s;
-      lift.set(top, Math.max(lift.get(top) ?? 0, (lift.get(low) ?? 0) + 1));
+    l.sort((s, t) => t.area - s.area);
+    for (let j = 1; j < l.length; j++) {
+      const t = l[j];
+      let k = 0;
+      for (let i = 0; i < j; i++) {
+        const s = l[i];
+        if (s.part === t.part || !(inside2(s.c, t) || inside2(t.c, s))) continue;
+        k = Math.max(k, (lift.get(s) ?? 0) + 1);
+      }
+      if (k) lift.set(t, k);
     }
   }
   if (!lift.size) return 0;
@@ -41092,7 +41168,7 @@ function pass(root) {
   for (const [t, k] of lift) {
     const m = meshes[t.mesh], p = m.geometry.attributes.position;
     for (let v = 0; v < 3; v++) {
-      const w = new Vector3().fromBufferAttribute(p, t.f + v).applyMatrix4(m.matrixWorld).addScaledVector(t.n, LIFT * Math.min(k, 3));
+      const w = new Vector3().fromBufferAttribute(p, t.f + v).applyMatrix4(m.matrixWorld).addScaledVector(t.n, LIFT * Math.min(k, 4));
       w.applyMatrix4(inv[t.mesh]);
       p.setXYZ(t.f + v, w.x, w.y, w.z);
     }
@@ -41434,7 +41510,6 @@ var TORSO = /* @__PURE__ */ new Set();
 function registerTorso(keys) {
   for (const k of Array.isArray(keys) ? keys : [keys]) TORSO.add(k);
 }
-var hasTorso = (ch) => TORSO.has(ch.id) || !CHASSIS2.has(ch.id) && TORSO.has(ch.shape);
 function registerMobility(ids, def) {
   for (const k of Array.isArray(ids) ? ids : [ids]) MOBILITY2.set(k, def);
 }
@@ -48547,55 +48622,20 @@ function buildUnit(design, team) {
   const tur = mods.map((mod, i) => {
     if (!mod) return null;
     const cls = slotCls(mod, i) ?? mod.mount;
-    const d = mod.kind === "weapon" ? DRAW_D[cls] : Math.min(DRAW_D[cls] * 0.6, 1.2);
+    const d = mod.kind === "weapon" ? DRAW_D2[cls] : Math.min(DRAW_D2[cls] * 0.6, 1.2);
     return buildTurret(mod, S, makeKit(team, fin3.turret[i] ?? fin3.hull), flying, slotCls(mod, i), flying ? 0 : d);
   });
-  let hero = -1;
-  mods.forEach((m, i) => {
-    if (m && m.kind === "weapon" && tur[i] && (hero < 0 || weaponD(m) > weaponD(mods[hero]))) hero = i;
-  });
+  const seats = drawnSeats(design);
+  const hero = seats.hero;
   if (flying) tur.forEach((tu) => {
     if (tu) {
       tu.yaw.scale.setScalar(1.1);
       tu.r *= 1.1;
     }
   });
-  const podOf = mods.map(() => -1);
-  const torsoHull = !flying && hasTorso(ch);
-  if (!flying && (torsoHull || S <= 3 && !PART_SHAPES.has(ch.shape)) && hero >= 0 && tur[hero] && !tur[hero].fixed) {
-    let n = 0;
-    const max = torsoHull ? 6 : 3;
-    mods.forEach((m, i) => {
-      if (n < max && i !== hero && m && m.kind === "weapon" && tur[i] && offs[i]) podOf[i] = n++;
-    });
-  }
-  const pos = offs.map((o) => o ? { x: o.x, y: o.y } : o);
-  if (!flying && !torsoHull && hero >= 0 && pos[hero]) {
-    let prim = -1;
-    ch.mounts.forEach((c, i) => {
-      if (pos[i] && podOf[i] < 0 && (prim < 0 || CLASS_RANK[c] > CLASS_RANK[ch.mounts[prim]])) prim = i;
-    });
-    if (prim >= 0 && prim !== hero && CLASS_RANK[ch.mounts[prim]] >= CLASS_RANK[ch.mounts[hero]]) {
-      const t = pos[prim];
-      pos[prim] = pos[hero];
-      pos[hero] = t;
-    }
-    const stand = tur.map((tu, i) => tu && pos[i] && podOf[i] < 0 ? i : -1).filter((i) => i >= 0);
-    const clash = (i, x, y) => stand.some((j) => j !== i && Math.hypot(pos[j].x - x, pos[j].y - y) < 0.9 * (tur[i].r + tur[j].r));
-    for (const i of [...stand].sort((a, b) => tur[a].r - tur[b].r)) {
-      if (i === hero || !clash(i, pos[i].x, pos[i].y)) continue;
-      const r = tur[i].r, hx = Math.max(0, L / 2 - r * 0.8), hy = Math.max(0, W / 2 - r * 0.8);
-      let best = null, bd = Infinity;
-      for (let gx = -8; gx <= 8; gx++) for (let gy = -8; gy <= 8; gy++) {
-        const x = gx / 8 * hx, y = gy / 8 * hy, d = Math.hypot(x - pos[i].x, y - pos[i].y);
-        if (d < bd && !clash(i, x, y)) {
-          bd = d;
-          best = { x, y };
-        }
-      }
-      if (best) pos[i] = best;
-    }
-  }
+  const podOf = seats.pod;
+  const torsoHull = seats.torso;
+  const pos = offs.map((o, i) => seats.pos[i] ?? (o ? { x: o.x, y: o.y } : o));
   const riders = torsoHull && hero >= 0 && tur[hero] && !tur[hero].fixed ? mods.map((m, i) => m && m.kind !== "weapon" && tur[i] && offs[i] ? i : -1).filter((i) => i >= 0) : [];
   const specs = [];
   tur.forEach((tu, i) => {
@@ -48646,8 +48686,8 @@ function buildUnit(design, team) {
     for (const i of pods) {
       const tu = tur[i], slot = podOf[i];
       tu.yaw.scale.multiplyScalar(1 / kH);
-      const rl = tu.r / kH, s = slot === 0 ? 1 : slot === 1 ? -1 : 0;
-      const x = slot < 2 ? -r0 * 0.12 : -r0 * 0.75, z = s * (r0 * 1.05 + rl * 0.9), y = slot < 2 ? py2 * 0.6 : py2 + r0 * 0.3;
+      const rl = tu.r / kH, ps = podSeat(slot, r0, rl), s = Math.sign(ps.y);
+      const x = ps.x, z = ps.y, y = slot < 2 ? py2 * ps.h : py2 + r0 * 0.3;
       tu.yaw.position.set(x, y, z);
       H.yaw.add(tu.yaw);
       if (s) bk.box(kit.trim, rl * 1.3, rl * 0.32, Math.abs(z) - r0 * 0.55, x, y - rl * 0.05, s * (r0 * 0.55 + (Math.abs(z) - r0 * 0.55) / 2), rl * 0.06);
@@ -48663,7 +48703,6 @@ function buildUnit(design, team) {
     T.userData.torso = true;
     const res = out2.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i].r), utilR: riders.map((i) => tur[i].r) });
     tb.mount(T);
-    H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
     const p0 = res.hp[0] ?? [0, 0, 0];
     H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);

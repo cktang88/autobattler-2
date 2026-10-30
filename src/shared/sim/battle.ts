@@ -5,7 +5,7 @@
 // auras -> projectiles -> bookkeeping -> end check.
 
 import { CHASSIS, CHASSIS_BY_ID, MOBILITY_BY_ID, MODULE_BY_ID } from '../parts.ts';
-import { approxTurretD, bodyScale, hullK, mountOffsets } from '../mountgeo.ts';
+import { approxTurretD, bodyScale, fireOffsets, hullK } from '../mountgeo.ts';
 import { SPLASH_EDGE, dodgeChance, tunedWeapon, airRole, computeStats, standoffOrbit, damageKinds, stackedBonuses, defaultOrders, isValidDesign, levelMult, turretTurnRate, weaponDps } from '../stats.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, MAX_FIELD_H, MAX_FIELD_W, METERS_PER_CELL, forwardY, normSpacing, placementUnitCenters } from '../grid.ts';
 import { makeRng, type Rng } from '../rng.ts';
@@ -833,8 +833,8 @@ export class Battle {
     const mounts: MountState[] = [];
     const wpns: (Wpn | null)[] = [];
     let canHitG = false, canHitA = false, maxRange = 0, minWeaponRange = Infinity, hasWeapon = false, hasHeal = false;
-    // [mount origins] rest-pose mount offsets (identical to the render layout) + hull size for the muzzle reach
-    const offs = mountOffsets(design);
+    // [mount origins] where the 3D model draws each weapon at rest (mountgeo fireOffsets) + hull size for the muzzle reach
+    const offs = fireOffsets(design);
     const hullS = (CHASSIS_BY_ID.get(design.chassis) ?? CHASSIS_BY_ID.get('scout')!).size;
     const bs = bodyScale(stats.size), hk = hullK(stats.size);
         for (const mid of design.mounts) {
