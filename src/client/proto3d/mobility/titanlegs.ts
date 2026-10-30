@@ -11,7 +11,7 @@ import type { Kit } from '../materials.ts';
 import { mobilityBuilder, registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
 import { armorPlate, cableBundle, frame, jointDrum, piston, rectP, trapP } from '../chassis/hs-kit.ts';
-import { hsFoot, hsShin, hsThigh, strideFor } from './legs.ts';
+import { cadence, dutyFor, gait, hsFoot, hsShin, hsThigh, strideFor } from './legs.ts';
 
 /** titan stance: tall hips (big units stride over the field), thick legs */
 export function titanStance(s: StanceIn): Stance {
@@ -74,7 +74,7 @@ function foot(b: Bld, kit: Kit, t: number) {
   for (const sz of [-1, 1]) b.box(kit.trim, t * 1.0, t * 1.0, t * 0.3, 0, t * 0.95, sz * t * 0.7, t * 0.1);
 }
 
-function makeTitanLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number, hs = true) {
+function makeTitanLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number, rate: number, hs = true) {
   const t = hip.t;
   const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
@@ -95,13 +95,12 @@ function makeTitanLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lif
     m.matrixWorldNeedsUpdate = true;
   };
   const step = (time: number, moving: number, way = 0) => {
-    const ph = time * 3.2 + hip.phase;
+    const g = gait(time, hip.phase, stride, rate, dutyFor('biped'));
     f.copy(footV);
-    const sw = -Math.sin(ph) * stride * moving;
+    const sw = g.s * moving, up = g.up;
     f.x += sw * Math.cos(way);
     f.z += sw * Math.sin(way);
-    const up = Math.max(0, Math.cos(ph));
-    f.y += up * up * lift * moving;
+    f.y += up * lift * moving;
     dir.copy(f).sub(hipV);
     const d = Math.min(dir.length(), (l1 + l2) * 0.999);
     dir.normalize();
@@ -125,7 +124,8 @@ registerMobility('titanlegs', {
     const hips: Hip[] = c.hips && c.hips.length ? c.hips : ([-1, 1] as const).map((side) => ({ p: [-0.02 * c.L, st.hipY, side * c.W * 0.27] as V3, side, t: st.thick, foot: [-0.02 * c.L, 0, side * c.W * 0.31] as V3, phase: side > 0 ? Math.PI : 0 }));
     // same half-stride rule as legs.ts strideFor (render3d odometer clock), capped by hip height
     const stride = Math.min(0.2 + 0.2 * c.S, st.hipY * 0.55);
-    const legs = hips.map((h) => makeTitanLeg(c.root, c.kit, h, stride, st.hipY * 0.22));
+    const k = cadence(c.mobId, c.S, stride, dutyFor('biped'));
+    const legs = hips.map((h) => makeTitanLeg(c.root, c.kit, h, stride, st.hipY * 0.22, k));
     return (t, mv, dir) => { for (const l of legs) l(t, mv, dir); };
   },
 });
@@ -170,7 +170,7 @@ function spiderHoof(b: Bld, kit: Kit, t: number) {
     b.g(new THREE.BoxGeometry(t * 0.85, t * 0.22, t * 0.3), kit.joint, new THREE.Matrix4().makeRotationY(-a).setPosition(Math.cos(a) * t * 0.8, t * 0.11, Math.sin(a) * t * 0.8));
   }
 }
-function makeTitanSpiderLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number) {
+function makeTitanSpiderLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: number, lift: number, rate: number) {
   const t = hip.t;
   const hipV = new THREE.Vector3(...hip.p), footV = new THREE.Vector3(...hip.foot);
   const d0 = hipV.distanceTo(footV);
@@ -190,13 +190,12 @@ function makeTitanSpiderLeg(g: THREE.Object3D, kit: Kit, hip: Hip, stride: numbe
     m.matrixWorldNeedsUpdate = true;
   };
   const step = (time: number, moving: number, way = 0) => {
-    const ph = time * 3.2 + hip.phase;
+    const g = gait(time, hip.phase, stride, rate, dutyFor('spider'));
     f.copy(footV);
-    const sw = -Math.sin(ph) * stride * moving;
+    const sw = g.s * moving, up = g.up;
     f.x += sw * Math.cos(way);
     f.z += sw * Math.sin(way);
-    const up = Math.max(0, Math.cos(ph));
-    f.y += up * up * lift * moving;
+    f.y += up * lift * moving;
     dir.copy(f).sub(hipV);
     const d = Math.min(dir.length(), (l1 + l2) * 0.999);
     dir.normalize();
@@ -220,7 +219,8 @@ registerMobility('spider', {
     if (!(c.S >= 5 && c.shape === 'arachne' && c.hips && c.hips.length)) return baseSpider.build(c);
     const st = c.stance;
     const stride = Math.min(strideFor(c.mobId, c.S), st.hipY * 0.7);
-    const legs = c.hips.map((h) => makeTitanSpiderLeg(c.root, c.kit, h, stride, st.hipY * 0.32));
+    const k = cadence(c.mobId, c.S, stride, dutyFor('spider'));
+    const legs = c.hips.map((h) => makeTitanSpiderLeg(c.root, c.kit, h, stride, st.hipY * 0.32, k));
     return (t, mv, dir) => { for (const l of legs) l(t, mv, dir); };
   },
 });

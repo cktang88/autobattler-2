@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Bld, strutGeo, type V3 } from '../geo.ts';
 import type { Kit, MatLike } from '../materials.ts';
 import { registerMobility, type Hip, type Stance, type StanceIn } from '../chassis/registry.ts';
+import { bodyScale } from '../../../shared/mountgeo.ts';
 import { block } from '../chassis/shapes.ts';
 import { cableBundle, hose, piston } from '../chassis/hs-kit.ts';
 import { claw, limbSegs, limbShell, spike } from '../chassis/hs-kit-organic.ts';
@@ -19,6 +20,29 @@ export interface Leg { step(t: number, moving: number, dir?: number): void }
 /** half-stride (cells) that keeps planted feet from skating under render3d's odometer clock (units-adapter phaseFor) */
 export function strideFor(mobId: string, S: number): number {
   return mobId === 'spider' ? 0.14 + 0.17 * S : 0.2 + 0.2 * S;
+}
+
+/** share of a step cycle a foot is planted: bipeds always have a foot down (double support), spiders walk on tripods */
+export const dutyFor = (kind: 'biped' | 'spider') => (kind === 'spider' ? 0.55 : 0.6);
+
+/** Step-rate multiplier on the odometer clock (t * 3.2 rad = strideFor-based phase) so a planted foot slides back
+ *  under the hull at exactly ground speed: the game draws the model at bodyScale(S), so a foot travels `stride` model
+ *  cells = stride * bodyScale world cells per half stance, and a leg whose stride is capped by its hip height has to
+ *  step faster for the same pace. */
+export function cadence(mobId: string, S: number, stride: number, duty: number): number {
+  return (duty * Math.PI * strideFor(mobId, S)) / (bodyScale(S) * Math.max(1e-3, stride));
+}
+
+/** Planted-foot gait for one leg at odometer clock `time`: `s` = foot offset along the travel way (hull frame, + =
+ *  ahead, -stride..stride), `up` = lift 0..1. Stance (the first `duty` of the cycle): the foot moves back linearly
+ *  from +stride to -stride, i.e. it stays put on the ground while the hull walks over it; swing: it sweeps forward
+ *  on an eased arc. */
+export function gait(time: number, phase: number, stride: number, k: number, duty: number): { s: number; up: number } {
+  const c = (time * 3.2 * k + phase) / (Math.PI * 2);
+  const p = c - Math.floor(c);
+  if (p < duty) return { s: stride * (1 - (2 * p) / duty), up: 0 };
+  const q = (p - duty) / (1 - duty), e = q * q * (3 - 2 * q);
+  return { s: stride * (2 * e - 1), up: Math.sin(Math.PI * q) };
 }
 
 export function legStance(s: StanceIn): Stance {
@@ -255,6 +279,8 @@ export function hsFoot(b: Bld, kit: Kit, t: number, fine: boolean, heavy = false
 
 export interface LegOpts {
   kind: 'biped' | 'spider'; stride: number; lift: number;
+  /** step-rate multiplier (cadence()) */
+  k: number;
   /** cheap LOD (fewer drums / rams / toes) for small or many-legged units */
   lite?: boolean;
   /** bone length factor (x hip-to-foot distance); longer bones fold further at the knee */
@@ -313,13 +339,12 @@ export function makeLeg(g: THREE.Object3D, kit: Kit, hip: Hip, o: LegOpts): Leg 
   };
   /** way: travel direction in the hull frame (0 = forward): the feet stride that way (backing up, a spider strafing) */
   const step = (time: number, moving: number, way = 0) => {
-    const ph = time * 3.2 + hip.phase;
+    const g = gait(time, hip.phase, o.stride, o.k, dutyFor(o.kind));
     f.copy(footV);
-    const sw = -Math.sin(ph) * o.stride * moving;
+    const sw = g.s * moving, up = g.up;
     f.x += sw * Math.cos(way);
     f.z += sw * Math.sin(way);
-    const up = Math.max(0, Math.cos(ph));
-    f.y += up * up * o.lift * moving;
+    f.y += up * o.lift * moving;
     dir.copy(f).sub(hipV);
     let d = dir.length();
     d = Math.min(d, (l1 + l2) * 0.999);
@@ -374,7 +399,8 @@ registerMobility(['legs', 'titanlegs', 'spider'], {
     const style = legStyleFor(c.shape);
     // spider legs come four to eight at a time: tertiary detail (pin caps, clevis eyes, second cables) from heavy up
     const fine = kind === 'spider' ? c.S >= 3 : c.S >= 2;
-    const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, lift: st.hipY * (kind === 'spider' ? 0.32 : 0.26), lite, hs: kind === 'biped', fine, style }));
+    const k = cadence(c.mobId, c.S, stride, dutyFor(kind));
+    const legs = hips.map((h) => makeLeg(c.root, c.kit, h, { kind, stride, k, lift: st.hipY * (kind === 'spider' ? 0.32 : 0.26), lite, hs: kind === 'biped', fine, style }));
     return (t, mv, dir) => { for (const l of legs) l.step(t, mv, dir); };
   },
 });

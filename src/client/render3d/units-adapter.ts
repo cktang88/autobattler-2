@@ -292,8 +292,12 @@ export class Rig {
   locomote(dist: number, moving: boolean, t: number, dt: number, fwd = dist, lat = 0, turn = 0): void {
     const tpl = this.tpl;
     if (tpl.walks && dist < 1e-4 && Math.abs(turn) > 1e-4) { dist = Math.abs(turn) * this.radius * 0.5; moving = true; }
+    // a walker whose body travels steps, whatever moved it (shoved by a neighbour, knocked back, nudged into place):
+    // feet never skate under a hull the sim reports as standing; and it reaches full stride fast, since the stride
+    // amplitude scales the planted feet's speed (a slow ramp would skate them while the hull is already at pace)
+    if (tpl.walks && dt > 0 && dist / dt > 0.05) moving = true;
     const target = moving ? 1 : 0;
-    this.mv += (target - this.mv) * Math.min(1, dt * 7);
+    this.mv += (target - this.mv) * Math.min(1, dt * (tpl.walks ? 20 : 7));
     if (this.mv < 0.01) this.mv = 0;
     this.odo += dist;
     this.sodo += Math.abs(fwd) > 1e-6 ? Math.sign(fwd) * dist : 0;

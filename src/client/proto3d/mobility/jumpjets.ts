@@ -11,7 +11,7 @@ import type { Kit } from '../materials.ts';
 import { registerMobility } from '../chassis/registry.ts';
 import { block } from '../chassis/shapes.ts';
 import { armorPlate, frame, hose, rectP, sub, trapP } from '../chassis/hs-kit.ts';
-import { defaultHips, legStance, legStyleFor, liteLegs, makeLeg, strideFor } from './legs.ts';
+import { cadence, defaultHips, dutyFor, legStance, legStyleFor, liteLegs, makeLeg, strideFor } from './legs.ts';
 
 /** booster nozzle along local +Z (bone direction) at p: bell + hot core */
 function nozzle(b: Bld, kit: Kit, p: V3, r: number, len: number, seg: number) {
@@ -29,7 +29,7 @@ registerMobility('jumpjets', {
     const lite = liteLegs(c.S, hips.length, kind);
     const seg = lite ? 6 : 8, fine = (kind === 'spider' ? c.S >= 3 : c.S >= 2) && !lite;
     const legs = hips.map((h) => makeLeg(c.root, c.kit, h, {
-      kind, stride, lift: st.hipY * (kind === 'spider' ? 0.4 : 0.32), lite, fine, style: legStyleFor(c.shape), bend: kind === 'biped' ? 'back' : undefined, reach: kind === 'biped' ? 1.1 : 1,
+      kind, stride, k: cadence(c.mobId, c.S, stride, dutyFor(kind)), lift: st.hipY * (kind === 'spider' ? 0.4 : 0.32), lite, fine, style: legStyleFor(c.shape), bend: kind === 'biped' ? 'back' : undefined, reach: kind === 'biped' ? 1.1 : 1,
       extra: {
         // thigh thruster pod on the front face (+Y after the reverse-knee flip): dark housing under an armour shell on a
         // shadow gap, nozzle pointing down the bone, feed hose to the hip

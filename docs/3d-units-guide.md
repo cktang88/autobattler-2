@@ -182,6 +182,17 @@ a dark core, big hip / knee drums, bright rams, stepped feet. `legStance`: biped
 stance: thigh and shin both read), bones 1.12x the hip height so the knee always bends forward. Chassis that place
 their own hips (`ChassisOut.hips`) set the leg height: hips set too low make short stubby legs.
 
+**Gait (no skating feet).** Every leg (legs.ts `makeLeg`, titanlegs.ts) steps with `gait()`: for the first `duty` of
+its cycle (`dutyFor`: bipeds 0.6, always a foot down; spiders 0.55, tripods) the foot slides back linearly under the
+hull, i.e. it stays put on the ground while the body walks over it; then it swings forward on an eased lift arc. The
+clock is the odometer (units-adapter `phaseFor`); `cadence()` scales the step rate so the planted foot's speed equals
+ground speed, counting the game's `bodyScale` model scale and a stride capped by hip height (a short-legged walker
+steps faster, it doesn't skate). Feet follow the travel direction in the hull frame (a spider strafing, legs backing
+up). The rig steps whenever the body moves (shoved, nudged), reaches full stride fast, and hangs its legs mid-leap.
+Check: `node scripts/3d/foot-slip.ts` (`WAY=1.57` sideways) and `test/walkers.test.ts`: planted-foot ground speed
+must stay near 0 (the old sine gait ran backwards: planted feet moved WITH the body, skating at ~1.3x walking speed).
+Sim side, spider legs ('omni') sidestep across the line of fire while holding at range (battle.ts `sidestep`).
+
 - **The tug of war castle** (`chassis/castle.ts`, design id `tug-castle`: a Monolith on an anchor in the sim) is its own
   model: the side's mothership set down for good as a forward base (wedge carrier hull on four splayed landing legs,
   bow ramp down as the gate, folded wings planted as rampart walls, cooling engines, an off-centre command island, the

@@ -1187,7 +1187,9 @@ export class FieldView3D implements BattleView {
     rig.root.position.set(x, h, y);
     // (heavy guns rock the hull: Rig.update tilts the quaternion, so the full rotation is reset here every frame)
     rig.root.rotation.set(0, -ang, 0);
-    rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt, mdx * ca0 + mdy * sa0, -mdx * sa0 + mdy * ca0, Math.abs(turn) < 0.5 ? turn : 0);
+    // mid-leap the legs hang (no strides in the air)
+    if (u.leap > 0) rig.locomote(0, false, this.time + u.id * 0.37, dt);
+    else rig.locomote(dist, u.moving, this.time + u.id * 0.37, dt, mdx * ca0 + mdy * sa0, -mdx * sa0 + mdy * ca0, Math.abs(turn) < 0.5 ? turn : 0);
     // heavy ground units (size >= 3, on tracks / wheels / legs) kick up a little sandy dust behind them while moving
     if (rig.S >= 3 && !u.flying && dt > 1e-4 && dist > 1e-4 && !NO_DUST.has(u.design.mobility)) {
       const k = clamp(dist / dt / 1.2, 0, 1); // heavies crawl: ~1.2 cells/s = full

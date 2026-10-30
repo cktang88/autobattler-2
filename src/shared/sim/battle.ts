@@ -64,6 +64,8 @@ const CHAIN_JUMP = 2.5; // cells
 const CHAIN_FALLOFF = 0.8;
 const LEAP_COOLDOWN = 6;
 const LEAP_TIME = 0.8;
+/** seconds an omni walker (spider legs) sidesteps one way while holding and firing before it steps back the other way */
+const SIDESTEP_TIME = 1.4;
 const AURA_RANGE = REPAIR_AURA_RANGE; // [aura balance] edge to edge, see types.ts
 const AURA_RATE = 0.012; // fraction of maxHp per s
 const AURA_EVERY = 0.5;
@@ -355,6 +357,9 @@ interface Internal {
   lx1: number;
   ly1: number;
   strafeT: number;
+  /** omni walker sidestepping while it holds and fires: seconds left on this side (-1 = not sidestepping) and which way */
+  sideT: number;
+  sideDir: number;
   /** turn direction of a jet's loop back to its target (+1 / -1), flipped every pass (figure-eight runs) */
   loopDir: number;
   /** bomber heading home to rearm: set once every bay is empty, cleared once every bay is full again */
@@ -935,7 +940,7 @@ export class Battle {
       hover: traits.includes('hover'),
       isStatic: stats.isStatic, hasWeapon, hasHeal, canHitG, canHitA, maxRange, minWeaponRange,
       goal: -1, goalTimer: (id * 0.053) % GOAL_EVERY, px: c.x, py: c.y, vx: 0, vy: 0, lvx: 0, lvy: 0, sinceDamage: 99,
-      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, loopDir: id % 2 ? 1 : -1, rearming: false, crushCd: 0,
+      leapCd: 1 + this.rng() * 2, leapT: -1, lx0: 0, ly0: 0, lx1: 0, ly1: 0, strafeT: 0, sideT: -1, sideDir: id % 2 ? 1 : -1, loopDir: id % 2 ? 1 : -1, rearming: false, crushCd: 0,
       burnDps: 0, slowDmg: 0, disarmDmg: 0, burnSide: side, burnSrc: -1, burnModule: '', burnTick: 0, kbx: 0, kby: 0,
       cloak, detect, sinceFire: 99, sinceHeal: 99, domeR, domeAmt, regen, fireRate, reloadMult: Math.max(0.2, 1 - reloadBonus),
       uplinkR, uplinkBonus, rateAura: 0, pdRange, pdCooldown, pdCd: 0, pdModule, jammer, jammed: false,
@@ -2917,8 +2922,12 @@ export class Battle {
         if (!wantMove) {
           // holding: turrets do the aiming; only a spinal (fixed-arc) gun swings the hull toward the fight
           this.faceTarget(I);
+          // omni walkers (spider legs walk any way at full speed) don't stand still in a firefight: they sidestep
+          // across the line of fire and back, guns on the goal
+          if (I.omni && !u.flying && u.stun <= 0 && !I.meleeOnly && !this.spinalEngaged(I)) this.sidestep(I, goal, dx / Math.max(d, 1e-6), dy / Math.max(d, 1e-6));
           return;
         }
+        I.sideT = -1;
         // [mount origins] pressed against the goal's hull with no gun in reach (e.g. a rear-mounted flamer on a long
         // hull nosed into a big emplacement): pushing on gets nowhere and it sat there for good, so pivot in place to
         // swing the longest-ranged gun's mount toward the goal instead (one that can fire this close: a howitzer's
@@ -2942,6 +2951,25 @@ export class Battle {
     }
 
     this.steer(I, gx, gy, stopDist, goal ? goal.id : -1);
+  }
+
+  /** Omni walker holding at range: walk sideways (perpendicular to the goal), switching side every SIDESTEP_TIME
+   *  (the first leg half as long, so it weaves round where it stopped), turning back early at the field edge. */
+  private sidestep(I: Internal, goal: SimUnit, ux: number, uy: number): void {
+    const u = I.u;
+    if (I.sideT < 0) I.sideT = SIDESTEP_TIME * 0.5;
+    I.sideT -= DT;
+    let px = -uy * I.sideDir, py = ux * I.sideDir;
+    const r = I.radius + 0.3;
+    const out = u.x + px * r < I.radius || u.x + px * r > FIELD_W - I.radius || u.y + py * r < I.radius || u.y + py * r > FIELD_H - I.radius;
+    if (I.sideT <= 0 || out) { I.sideDir = -I.sideDir; I.sideT = SIDESTEP_TIME; px = -px; py = -py; }
+    this.steer(I, u.x + px * 2, u.y + py * 2, 0, goal.id);
+  }
+
+  /** a spinal (fixed-arc) gun is firing: the hull has to stay pointed, so no sidestepping */
+  private spinalEngaged(I: Internal): boolean {
+    for (let mi = 0; mi < I.wpns.length; mi++) { const w = I.wpns[mi]; if (w && w.def.spinal != null && I.u.mounts[mi].target >= 0) return true; }
+    return false;
   }
 
   /** Kite mount for this goal: the unit's kite mount if it can hit the goal, else its longest-ranged weapon that can
