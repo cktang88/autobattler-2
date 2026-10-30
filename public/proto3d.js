@@ -39332,7 +39332,7 @@ function erector(C) {
   missile(C.am, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
   if (nuke) {
     hazardRings(C.am, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10);
-    band(C.am, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10);
+    band(C.am, kit.hot, -L * 0.15 + L * 0.66, R + r * 0.06, 0, R * 1.02, r * 0.04, 10);
   } else accent(C, L * 0.3, R * 2 + r * 0.065, 0, L * 0.25, R * 0.5, void 0, C.am);
   C.acc = true;
   C.muzzle(L * 0.85, R + r * 0.06, 0);
@@ -40547,7 +40547,7 @@ var GUNS = /* @__PURE__ */ new Set(["gun", "gatling", "shotgun", "cannon", "gaus
 var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mortar", "artillery", "charge"]);
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
-var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 4.5 };
+var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 6 };
 var DRAW_K = 1.5 / 0.52;
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {

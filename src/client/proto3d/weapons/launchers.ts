@@ -219,7 +219,7 @@ function erector(C: WCtx) {
   for (const f of [0.15, 0.6]) bx(p, kit.metal, f * L, R * 0.4, 0, r * 0.08, R * 1.4, R * 2.4);
   // the missile itself is ammunition: it leaves the erector when fired (C.am) and a fresh one is raised on reload
   missile(C.am, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
-  if (nuke) { hazardRings(C.am, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10); band(C.am, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10); }
+  if (nuke) { hazardRings(C.am, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10); band(C.am, kit.hot, -L * 0.15 + L * 0.66, R + r * 0.06, 0, R * 1.02, r * 0.04, 10); } // glowing ring round the body behind the nose cone (on the cone it stood out as a flat disc)
   else accent(C, L * 0.3, R * 2 + r * 0.065, 0, L * 0.25, R * 0.5, undefined, C.am);
   C.acc = true;
   C.muzzle(L * 0.85, R + r * 0.06, 0);

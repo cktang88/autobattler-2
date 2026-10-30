@@ -186,9 +186,9 @@ interface WStyle {
   def: ModuleDef | undefined;
   muzzle: MuzzleKind | null;
 }
-// effect size per weapon class in the same ratios as the drawn guns (proto3d DRAW_D 0.75 / 1.5 / 3 / 4.5): a titan
+// effect size per weapon class in the same ratios as the drawn guns (proto3d DRAW_D 0.75 / 1.5 / 3 / 6): a titan
 // gun's flash, round and blast are as big as the gun that fires them
-const CLASS_S: Record<string, number> = { S: 0.3, M: 0.6, L: 1.2, XL: 1.8 };
+const CLASS_S: Record<string, number> = { S: 0.3, M: 0.6, L: 1.2, XL: 2.4 };
 
 function famOf(def: ModuleDef | undefined): Fam {
   if (!def) return 'other';
