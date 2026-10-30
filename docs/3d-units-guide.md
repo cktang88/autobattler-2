@@ -170,7 +170,9 @@ their own hips (`ChassisOut.hips`) set the leg height: hips set too low make sho
   skips the anchor's plinth). It swaps its one gun during a game for any weapon of any class, so its gun cupola is the
   one housing that follows the gun: radius / height from the gun's `DRAW_D` (S ~0.6 .. XL ~3.2 cells), on a raised
   drum for big guns. The gun keeps its class size. proto3d lab: `castle:anchor:0:<gun>|-`; the zfight scan covers it
-  with a gun of each class.
+  with a gun of each class. Everything round on it is really round (36-point hull sections, 40-48 segment lathes,
+  lathed tori for glow rings, continuous skin-following glow bands instead of strut chains), and it opts out of the
+  default simplification (`Bld.simp` 0.0008, see section 3) and of the far LOD build: ~25-28k tris.
 
 ---
 
@@ -189,6 +191,8 @@ their own hips (`ChassisOut.hips`) set the leg height: hips set too low make sho
   - 0.005 erased a thin support under a helicopter pod (turretseat test failed); 0.004 is the safe default.
 - Knobs: `setSimplify(err)` (geo.ts), `?simp=<err>` / `?simp=0` on proto3d.html for before / after renders.
   `scripts/3d/tri-budget.ts` prints roster totals at several errors.
+- The error is relative to each merged mesh's extent, so a large hull loses the most curvature: on the 8-cell tug castle
+  0.004 turned 40-segment circles into ~9-gons. A builder can lower it for its own meshes (`Bld.simp`).
 - Weapons self-reduce detail on big units (`detail()` in w2500: S3/S4 ~0.6 segments, S5 ~0.5).
 
 ---

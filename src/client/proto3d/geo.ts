@@ -17,9 +17,9 @@ const CREASE = Math.cos((40 * Math.PI) / 180);
 /** set the simplification error (fraction of each mesh's extent; 0 = off). Returns the previous value. */
 export function setSimplify(err: number): number { const was = SIMP; SIMP = err; return was; }
 
-function simplifyGeo(g: THREE.BufferGeometry): THREE.BufferGeometry {
+function simplifyGeo(g: THREE.BufferGeometry, err = SIMP): THREE.BufferGeometry {
   const p = g.attributes.position, n = p.count, mid = g.attributes.mid;
-  if (SIMP <= 0 || g.index || n < 96 || n % 3 || Object.keys(g.attributes).some((k) => k !== 'position' && k !== 'normal' && k !== 'mid')) return g;
+  if (err <= 0 || g.index || n < 96 || n % 3 || Object.keys(g.attributes).some((k) => k !== 'position' && k !== 'normal' && k !== 'mid')) return g;
   // weld per part (exact position + part id)
   const key = new Map<string, number>(), P: number[] = [], M: number[] = [], idx = new Uint32Array(n);
   for (let i = 0; i < n; i++) {
@@ -29,7 +29,7 @@ function simplifyGeo(g: THREE.BufferGeometry): THREE.BufferGeometry {
     if (v === undefined) { v = P.length / 3; key.set(k, v); P.push(x, y, z); M.push(m); }
     idx[i] = v;
   }
-  const [ix] = MeshoptSimplifier.simplify(idx, new Float32Array(P), 3, 0, SIMP, []);
+  const [ix] = MeshoptSimplifier.simplify(idx, new Float32Array(P), 3, 0, err, []);
   if (ix.length >= n * 0.97) return g;
   // un-index with crease-angle normals: a corner takes the area-weighted normals of the faces round its vertex that
   // lie within CREASE of its own face
@@ -289,6 +289,9 @@ export class Bld {
   segK = 1;
   /** caps radial segments of cyl/cylb/lathe/strut (weapons use 6: faceted hex forms read as armour, not turned tubes) */
   segMax = 64;
+  /** simplification error for this builder's meshes (fraction of each mesh's extent; default SIMP). The error is
+   *  relative, so one big merged hull loses the most curvature: a large showpiece (the tug castle) sets it lower. */
+  simp: number | undefined = undefined;
   private sg(n: number): number { return Math.min(this.segMax, this.segK === 1 ? n : Math.max(5, Math.round(n * this.segK))); }
   g(geo: THREE.BufferGeometry, matl: MatLike, m?: THREE.Matrix4): this {
     const n = prep(geo);
@@ -345,7 +348,7 @@ export class Bld {
     for (const [mat, list] of this.m) {
       const g0 = mergeGeometries(list, false);
       if (!g0) continue;
-      const g = simplifyGeo(g0);
+      const g = simplifyGeo(g0, this.simp === undefined ? SIMP : Math.min(this.simp, SIMP));
       const mesh = new THREE.Mesh(g, mat);
       mesh.castShadow = opts.shadow !== false;
       mesh.receiveShadow = true;
