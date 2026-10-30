@@ -162,15 +162,15 @@ function arachne(c: ChassisCtx): ChassisOut {
     if (s < 0) sensorDome(b, kit, px - pl * 0.35, top, m.z - s * pw * 0.32, 0.2 * u);
     palp.set(m, top);
   }
-  // ---- hips: eight legs round the carapace rim (alternating tetrapod gait); hip housings hung on exposed rams
+  // ---- hips: six legs round the carapace rim, front / middle / rear with clear air between them (tripod gait); hip housings hung on exposed rams
   let hips: Hip[] | undefined;
   if (spider) {
     hips = [];
-    const rows: [number, number, number, number][] = [[1.2, 2.2, 4.1, 3.7], [0.25, 2.7, 1.5, 4.8], [-1.05, 2.7, -1.5, 4.8], [-2.05, 2.1, -4.0, 3.8]];
+    const rows: [number, number, number, number][] = [[1.2, 2.2, 4.3, 3.8], [-0.4, 2.75, -0.1, 5.2], [-2.05, 2.1, -4.2, 3.9]];
     rows.forEach(([hxr, hz, fx, fz], i) => {
       for (const s of [-1, 1] as const) {
         const p: V3 = [cx + hxr * u, by, s * hz * u];
-        hips!.push({ p, side: s, t: stance.thick * 1.15, foot: [fx * u, 0, s * fz * u], phase: ((i % 2) ^ (s > 0 ? 1 : 0)) ? Math.PI : 0 });
+        hips!.push({ p, side: s, t: stance.thick * 1.3, foot: [fx * u, 0, s * fz * u], phase: ((i % 2) ^ (s > 0 ? 1 : 0)) ? Math.PI : 0 });
         planLoftT(b, kit.mech, ngonT(6, 0.4 * u, 0.36 * u), [[by - 0.85 * u, 0.8], [by - 0.5 * u, 1.0], [by + 0.25 * u, 0.9]], [p[0], s * (hz - 0.2) * u]);
         piston(b, kit, [p[0] + 0.15 * u, by - 0.55 * u, s * (hz - 0.45) * u], [p[0] + 0.15 * u, by + 0.35 * u, s * (hz - 1.05) * u], 0.07 * u, 0.55, fine);
       }

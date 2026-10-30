@@ -702,8 +702,11 @@ function landtrain(c: ChassisCtx): ChassisOut {
   let hips: Hip[] | undefined;
   if (legged) {
     hips = [];
-    cars.forEach((cr, i) => {
-      for (const s of [-1, 1] as const) hips!.push({ p: [cr.x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [cr.x + 0.05 * u, 0, s * 1.38 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
+    // six legs spread down the whole train (under the locomotive, mid-train, under the caboose): a pair on every car
+    // read as a cramped fringe. Tripod gait
+    const xs = [cars[0]!.x + 0.75, (cars[1]!.x + cars[2]!.x) / 2, cars[3]!.x - 0.55];
+    xs.forEach((x, j) => {
+      for (const s of [-1, 1] as const) hips!.push({ p: [x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick * 1.15, foot: [x + (1 - j) * 0.15 * u, 0, s * 1.45 * u], phase: (j % 2) ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
     });
   }
   const deck = (x: number, z: number) => (Math.abs(z) < 0.55 && cars.some((cr) => Math.abs(x - cr.x) < 0.3) ? by + 0.38 : -1);

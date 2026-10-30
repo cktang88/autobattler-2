@@ -252,15 +252,16 @@ function broodmother(c: ChassisCtx): ChassisOut {
   // asymmetric kit: sensor mast on the left of the carapace, vent stack on the right of the abdomen
   mast(b, kit, -0.35 * kx, cR - 0.04 * k, -0.95 * kz, 1.1 * k, 0.035);
   exhaust(b, kit, ax + 0.3 * kx, ay + 0.3 * k, 0.75 * kz, 0.09 * k, 0.5 * k, 0.3);
-  // ---- hips: 8 legs from heavy coxa housings around the cephalothorax, alternating tetrapod gait
+  // ---- hips: 6 legs from heavy coxa housings around the cephalothorax (front, middle, rear: room between them),
+  // alternating tripod gait
   let hips: Hip[] | undefined;
   if (spider) {
     hips = [];
-    const rows: [number, number, number][] = [[0.75, 2.05, 2.55], [0.25, 0.75, 3.05], [-0.25, -0.65, 3.05], [-0.7, -1.9, 2.6]];
+    const rows: [number, number, number][] = [[0.75, 2.15, 2.6], [0.0, 0.05, 3.25], [-0.7, -2.0, 2.65]];
     rows.forEach(([hxr, fx, fz], i) => {
       for (const s of [-1, 1] as const) {
         const p: V3 = [hxr * kx, by, s * 1.12 * kz];
-        hips!.push({ p, side: s, t: stance.thick * 0.92, foot: [fx * kx, 0, s * fz * kz], phase: ((i % 2) ^ (s > 0 ? 1 : 0)) ? Math.PI : 0 });
+        hips!.push({ p, side: s, t: stance.thick * 1.05, foot: [fx * kx, 0, s * fz * kz], phase: ((i % 2) ^ (s > 0 ? 1 : 0)) ? Math.PI : 0 });
         block(b, kit.mech, p[0], by - 0.3 * k, s * 1.0 * kz, 0.4 * k, 0.4 * k, 0.5 * k, { top: [0.8, 0.8], ch: 0.08 * k });
         armorPlate(b, kit, kit.armor2, frame([p[0], by + 0.2 * k, s * 1.08 * kz], [0, 1, s * 0.5], [1, 0, 0]), rectP(0.46 * k, 0.36 * k, 0.08 * k), 0.05 * k, { standoff: 0.02 * k });
       }

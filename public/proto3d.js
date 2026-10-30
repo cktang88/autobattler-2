@@ -43326,11 +43326,11 @@ function broodmother(c) {
   let hips;
   if (spider) {
     hips = [];
-    const rows = [[0.75, 2.05, 2.55], [0.25, 0.75, 3.05], [-0.25, -0.65, 3.05], [-0.7, -1.9, 2.6]];
+    const rows = [[0.75, 2.15, 2.6], [0, 0.05, 3.25], [-0.7, -2, 2.65]];
     rows.forEach(([hxr, fx2, fz2], i) => {
       for (const s of [-1, 1]) {
         const p = [hxr * kx, by, s * 1.12 * kz];
-        hips.push({ p, side: s, t: stance.thick * 0.92, foot: [fx2 * kx, 0, s * fz2 * kz], phase: i % 2 ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
+        hips.push({ p, side: s, t: stance.thick * 1.05, foot: [fx2 * kx, 0, s * fz2 * kz], phase: i % 2 ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
         block(b, kit.mech, p[0], by - 0.3 * k, s * 1 * kz, 0.4 * k, 0.4 * k, 0.5 * k, { top: [0.8, 0.8], ch: 0.08 * k });
         armorPlate(b, kit, kit.armor2, frame([p[0], by + 0.2 * k, s * 1.08 * kz], [0, 1, s * 0.5], [1, 0, 0]), rectP(0.46 * k, 0.36 * k, 0.08 * k), 0.05 * k, { standoff: 0.02 * k });
       }
@@ -46884,8 +46884,9 @@ function landtrain(c) {
   let hips;
   if (legged) {
     hips = [];
-    cars.forEach((cr, i) => {
-      for (const s of [-1, 1]) hips.push({ p: [cr.x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick, foot: [cr.x + 0.05 * u, 0, s * 1.38 * u], phase: i * (Math.PI / 2) + (s > 0 ? Math.PI : 0) });
+    const xs = [cars[0].x + 0.75, (cars[1].x + cars[2].x) / 2, cars[3].x - 0.55];
+    xs.forEach((x, j) => {
+      for (const s of [-1, 1]) hips.push({ p: [x, by - 0.02 * u, s * 0.42 * u], side: s, t: stance.thick * 1.15, foot: [x + (1 - j) * 0.15 * u, 0, s * 1.45 * u], phase: j % 2 ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
     });
   }
   const deck = (x, z) => Math.abs(z) < 0.55 && cars.some((cr) => Math.abs(x - cr.x) < 0.3) ? by + 0.38 : -1;
@@ -47590,11 +47591,11 @@ function arachne(c) {
   let hips;
   if (spider) {
     hips = [];
-    const rows = [[1.2, 2.2, 4.1, 3.7], [0.25, 2.7, 1.5, 4.8], [-1.05, 2.7, -1.5, 4.8], [-2.05, 2.1, -4, 3.8]];
+    const rows = [[1.2, 2.2, 4.3, 3.8], [-0.4, 2.75, -0.1, 5.2], [-2.05, 2.1, -4.2, 3.9]];
     rows.forEach(([hxr, hz, fx2, fz2], i) => {
       for (const s of [-1, 1]) {
         const p = [cx + hxr * u, by, s * hz * u];
-        hips.push({ p, side: s, t: stance.thick * 1.15, foot: [fx2 * u, 0, s * fz2 * u], phase: i % 2 ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
+        hips.push({ p, side: s, t: stance.thick * 1.3, foot: [fx2 * u, 0, s * fz2 * u], phase: i % 2 ^ (s > 0 ? 1 : 0) ? Math.PI : 0 });
         planLoftT(b, kit.mech, ngonT(6, 0.4 * u, 0.36 * u), [[by - 0.85 * u, 0.8], [by - 0.5 * u, 1], [by + 0.25 * u, 0.9]], [p[0], s * (hz - 0.2) * u]);
         piston(b, kit, [p[0] + 0.15 * u, by - 0.55 * u, s * (hz - 0.45) * u], [p[0] + 0.15 * u, by + 0.35 * u, s * (hz - 1.05) * u], 0.07 * u, 0.55, fine);
       }

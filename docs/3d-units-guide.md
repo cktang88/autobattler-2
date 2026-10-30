@@ -182,6 +182,8 @@ a dark core, big hip / knee drums, bright rams, stepped feet. `legStance`: biped
 stance: thigh and shin both read), bones 1.12x the hip height so the knee always bends forward. Chassis that place
 their own hips (`ChassisOut.hips`) set the leg height: hips set too low make short stubby legs.
 
+**Leg count.** Big walkers use six legs (front, middle, rear with clear air between them), not eight: eight read as a cramped fringe (broodmother, arachne, centipede were cut to six, legs a little thicker to carry the load).
+
 **Gait (no skating feet).** Every leg (legs.ts `makeLeg`, titanlegs.ts) steps with `gait()`: for the first `duty` of
 its cycle (`dutyFor`: bipeds 0.6, always a foot down; spiders 0.55, tripods) the foot slides back linearly under the
 hull, i.e. it stays put on the ground while the body walks over it; then it swings forward on an eased lift arc. The
