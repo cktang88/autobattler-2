@@ -193,6 +193,8 @@ export class FieldView {
   flashScale = 1;
   /** show every HP/shield bar permanently (otherwise bars appear for a few seconds after damage, or while Alt is held) */
   alwaysShowHealth = false;
+  get wreckLife(): number { return this.fx.wreckClear; }
+  set wreckLife(s: number) { this.fx.wreckClear = s > 0 ? s : Infinity; this.fx.decalClear = s > 0 ? s * 2 : Infinity; }
   /** Alt held (Zero-K style "show all bars"), tracked only when controls are interactive */
   private altHeld = false;
   private keyOff: (() => void) | null = null;

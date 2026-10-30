@@ -63,6 +63,8 @@ interface Decal {
   x: number; y: number; r: number; a: number;
   img?: HTMLCanvasElement;
   ext?: number;
+  /** battle time (simT) it was made at, for decalClear */
+  t?: number;
 }
 
 /** A burnt-out hulk: drawn live (crisp at any zoom), smouldering while it cools. Lives until the battle ends.
@@ -71,6 +73,8 @@ interface Decal {
 interface Wreck {
   x: number; y: number; a: number; sc: number; S: number;
   t0: number; life: number;
+  /** battle time (simT) it was left at, for Fx.wreckClear */
+  s0: number;
   ext: number;
   get: (px: number) => HTMLCanvasElement;
   hot: number[];
@@ -102,6 +106,8 @@ interface FireField {
 const MAX_FIELDS = 170;
 
 const MAX_P = 2600;
+/** seconds a wreck takes to fade out at the end of Fx.wreckClear */
+const WRECK_FADE = 2;
 /** global cap on wreck smoke: puffs per second across all wrecks (token bucket) */
 const WRECK_SMOKE_RATE = 22;
 const rnd = Math.random;
@@ -795,11 +801,37 @@ export class Fx {
       if (lv === 3) { hot = []; for (let i = 0; i < Math.min(8, ns); i++) hot.push(scrap[i * 5], scrap[i * 5 + 1]); }
     }
     const fireT = kind === 'fire' ? 6 + 2 * S : lv === 0 ? 1.5 + S * 0.5 : lv === 3 ? 1 + S * 0.5 : 2.5 + S * (lv === 2 ? 1.5 : 1);
-    this.wrecks.push({ x, y, a, sc, S, t0: this.time, life: (S >= 4 ? 48 : 14 + 5 * S) * (lv === 3 ? 0.5 : kind === 'energy' ? 1.3 : 1), ext, get, hot, scorch, smokeT: rr(0.2, 0.8), lv, kind, pieces, holes, scrap, fireT });
+    this.wrecks.push({ x, y, a, sc, S, t0: this.time, s0: this.simT, life: (S >= 4 ? 48 : 14 + 5 * S) * (lv === 3 ? 0.5 : kind === 'energy' ? 1.3 : 1), ext, get, hot, scorch, smokeT: rr(0.2, 0.8), lv, kind, pieces, holes, scrap, fireT });
     if (this.wrecks.length > 260) this.wrecks.shift();
   }
 
+  /** seconds of battle time a wreck stays before it fades away (Infinity: the whole battle) */
+  wreckClear = Infinity;
+  /** seconds of battle time a ground mark (scorch, crater, burn) stays (Infinity: the whole battle) */
+  decalClear = Infinity;
+  private decalSweep = 0;
+  /** drop ground marks older than decalClear and repaint the mark layer (every couple of seconds, only when one went) */
+  private sweepDecals(dt: number): void {
+    if (this.decalClear === Infinity || !this.decals.length || (this.decalSweep -= dt) > 0) return;
+    this.decalSweep = 2;
+    const keep = this.decals.filter((d) => d.t === undefined || this.simT - d.t < this.decalClear);
+    if (keep.length === this.decals.length) return;
+    this.decals = keep;
+    const c = this.decalCanvas;
+    if (!c) return;
+    const g = ctx2d(c);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, c.width, c.height);
+    for (const d of this.decals) this.paintDecal(d);
+  }
+  /** 1 while a wreck stands, easing to 0 over its last WRECK_FADE seconds under wreckClear */
+  private wreckFade(w: Wreck): number {
+    return this.wreckClear === Infinity ? 1 : clamp((this.wreckClear - (this.simT - w.s0)) / WRECK_FADE, 0, 1);
+  }
+
   private updateWrecks(dt: number): void {
+    this.sweepDecals(dt);
+    if (this.wreckClear !== Infinity && this.wrecks.length) this.wrecks = this.wrecks.filter((w) => this.simT - w.s0 < this.wreckClear);
     this.smokeTokens = Math.min(6, this.smokeTokens + dt * WRECK_SMOKE_RATE);
     for (const w of this.wrecks) {
       const age = this.time - w.t0, k = 1 - age / w.life;
@@ -914,6 +946,7 @@ export class Fx {
     if (!this.wrecks.length) return;
     for (const w of this.wrecks) {
       const tr = g.getTransform();
+      g.globalAlpha = this.wreckFade(w);
       g.translate(w.x, w.y);
       g.rotate(w.a);
       g.fillStyle = 'rgba(16,13,10,0.42)';
@@ -953,11 +986,12 @@ export class Fx {
       }
       g.setTransform(tr);
     }
+    g.globalAlpha = 1;
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
     const hotA = softDot('rgba(255,110,30,1)'), hotB = softDot('rgba(255,214,140,1)');
     for (const w of this.wrecks) {
-      const k = 1 - (this.time - w.t0) / w.life;
+      const k = (1 - (this.time - w.t0) / w.life) * this.wreckFade(w);
       if (k <= 0) continue;
       const rS = Math.sqrt(Math.min(w.S, 4));
       // melted (energy kill): the whole hulk glows dull red and cools down
@@ -993,7 +1027,7 @@ export class Fx {
   }
 
   decal(kind: Decal['kind'], x: number, y: number, r: number, img?: HTMLCanvasElement, ext?: number, a = rnd() * Math.PI * 2): void {
-    const d: Decal = { kind, x, y, r, a, img, ext };
+    const d: Decal = { kind, x, y, r, a, img, ext, t: this.simT };
     this.decals.push(d);
     if (this.decals.length > 500) {
       // keep wrecks, drop the oldest scorch

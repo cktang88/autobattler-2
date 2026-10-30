@@ -43,6 +43,8 @@ const SHADOW_TIER = 2;
 const LOD_FAR_K = 26;
 const LOD_NEAR_K = 30;
 /** mobility that does not touch the ground (no travel dust) */
+/** seconds a wreck takes to sink away at the end of its wreckLife */
+const WRECK_SINK = 2;
 const NO_DUST = new Set(['hover', 'gravlift', 'anchor', 'rotor', 'jet']);
 const R2 = (a: number, b: number) => a + Math.random() * (b - a);
 const normAng = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -84,6 +86,8 @@ interface Wreck {
   rig: Rig | null; x: number; z: number; smoke: number; S: number; fire: number; heat: number; char: number; seed: number; hx: number; hz: number; deck: number;
   /** wreck level, initial smoke seconds, hull heading (smoke comes out of holes / hatches / the engine deck) */
   lv: WreckLevel; smoke0: number; ang: number;
+  /** battle time (s) it was left at, for wreckLife; y0: its resting height once it starts sinking */
+  born: number; y0?: number;
 }
 interface ProjRec {
   y0: number; lastH: number; px: number; py: number; bright: boolean; hEnd: number; air: boolean; st: WStyle; k: number; bomblet: boolean;
@@ -392,6 +396,11 @@ export class FieldView3D implements BattleView {
   /** visible-region probe for the shadow fit (world x,y,z triplets) */
   private shadowPts = new Float32Array(8 * 3);
   alwaysShowHealth = false;
+  /** seconds of battle time a wreck stays before it sinks into the ground (Infinity: the whole battle); scorch marks
+   *  stay twice as long */
+  private wreckLife_ = Infinity;
+  get wreckLife(): number { return this.wreckLife_; }
+  set wreckLife(s: number) { this.wreckLife_ = s > 0 ? s : Infinity; this.fx.scorchLife = s > 0 ? s * 2 : Infinity; }
   readonly cam = new Camera(FIELD_W, FIELD_H);
   readonly controls: CameraControls;
   private tiltOn = true;
@@ -1823,6 +1832,23 @@ export class FieldView3D implements BattleView {
   /* ---------------------------------------------------------------------------------------------- wrecks */
 
   private syncWrecks(dt: number): void {
+    if (this.wreckLife_ !== Infinity && this.wrecks.length) {
+      // endless battles (tug of war): a wreck sinks into the ground over its last seconds, then goes
+      const now = this.rt * DT;
+      this.wrecks = this.wrecks.filter((w) => {
+        const left = this.wreckLife_ - (now - w.born);
+        if (left > WRECK_SINK) return true;
+        if (left <= 0) { if (w.rig) this.layer.release(w.rig); w.smoke = w.fire = 0; return false; }
+        if (w.rig) {
+          const r = w.rig;
+          w.y0 ??= r.root.position.y;
+          r.root.position.y = w.y0 - (1 - left / WRECK_SINK) * (r.height + 0.3);
+          r.frozen = false; r.update(0); r.frozen = true;
+        }
+        w.smoke = w.fire = 0;
+        return true;
+      });
+    }
     for (const w of this.wrecks) {
       if (w.heat > 0) w.heat = Math.max(0, w.heat - dt * 0.16);
       if (w.fire > 0) w.fire -= dt;
@@ -2490,7 +2516,7 @@ export class FieldView3D implements BattleView {
     if (lv === 3) {
       this.layer.release(rig);
       this.fx.scorchMark(x, y, 0.3 + rig.radius * 0.75);
-      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, char: 1, seed: 0, hx, hz, deck: 0.1, lv, smoke0: smoke, ang: angle });
+      this.wrecks.push({ rig: null, x, z: y, smoke, S, fire: 0, heat: 0, char: 1, seed: 0, hx, hz, deck: 0.1, lv, smoke0: smoke, ang: angle, born: this.rt * DT });
       return;
     }
     rig.look = 'wreck';
@@ -2522,7 +2548,7 @@ export class FieldView3D implements BattleView {
     const char = lv === 0 ? (kind === 'kinetic' || kind === 'crush' ? 0.6 : kind === 'fire' ? 0.88 : 0.72) : lv === 1 ? 0.88 : 0.97;
     // still glowing: melted (energy), blown up or burnt out hulls show ember cracks that cool over a few seconds
     const heat = catchUp ? 0 : kind === 'energy' ? (lv ? 1 : 0.75) : kind === 'explosive' ? (lv ? 0.55 + 0.15 * lv : 0.4) : kind === 'fire' ? 0.6 : 0.3;
-    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, char, seed: Math.random(), hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)), lv, smoke0: smoke, ang: angle });
+    this.wrecks.push({ rig, x, z: y, smoke, S, fire, heat, char, seed: Math.random(), hx, hz, deck: Math.max(0.15, rig.height * (lv === 2 ? 0.35 : 0.55)), lv, smoke0: smoke, ang: angle, born: this.rt * DT });
   }
 
   destroy(): void {

@@ -336,6 +336,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   try { view = makeView(canvas, me); } catch (e) { console.error(e); app.toast('Could not start the battlefield renderer', 'error'); throw e; }
   applyViewSettings(view, loadSettings());
   view.controls.doubleClickZoom = false;
+  // an endless battle has no end of round to clear the field: wrecks fade / sink away after a while
+  view.wreckLife = TUG_WRECK_LIFE;
   // the same field controls as a match and the playground: wheel / pinch zoom, drag / WASD pan, right-drag (Ctrl /
   // Option + drag), two-finger twist or Q / E to turn the 3D view, +/- and F, and the zoom buttons
   view.controls.rotate = !!view.canRotate;
@@ -774,3 +776,5 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
 };
 
 const TUG_GHOST_MS = 1400;
+/** seconds of battle time a wreck stays on the tug field */
+const TUG_WRECK_LIFE = 15;
