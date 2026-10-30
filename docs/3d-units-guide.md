@@ -119,6 +119,13 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   housings (XL 5.25, L 3.0, M 1.5: centre distance >= 0.9 x the radii sum, or stack them in tiers with clear air between
   housings), and keep the static body under the torso's sweep low (raise the swivel on a neck if an abdomen / knees
   would cut through it). The torso takes the hull's surface skin (skins.ts), not the turret's (no collar hazard bands).
+  Titans use it too, each round its main gun: the Titan Walker (`titans.ts`) carries the XL on a right-shoulder
+  saddle (a titan fist hangs as a right arm instead), the L as its left forearm; the Lance (`titans-lance.ts`) is the XL
+  laid in a long keel between two trunnion cheeks with a command tower at the breech; the Monolith
+  (`titans-monolith.ts`) twists its whole casemate, the L lying in a slot cut into its front between two shield horns.
+  `titans.ts` `shiftTo(t, pivot)` wraps the torso Bld so the upper body is authored in hull coordinates (one builder for
+  the torso and for the static fallback when there is no torso: all-utility fits, flyers). Utilities stay static: seat
+  them outside the torso's sweep (or the fit audit flags them against the hero's yaw origin).
   More examples: the walkers in `chassis/walkers.ts` (strider, mantis, arachnid; shared `torsoOut()` helper, which
   also builds the torso static when a fit has no weapon so all-utility fits still have a body).
   Torso lessons:
