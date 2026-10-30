@@ -13,17 +13,21 @@ import {
 import { makeView } from '../render/viewfactory.ts';
 import type { BattleView } from '../render/view.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
-import { paintWhenLaidOut, sizeLabel } from './match-ui.ts';
+import { openModal, paintWhenLaidOut, sizeLabel } from './match-ui.ts';
+import { zoomButtons } from './fieldtools.ts';
+import { drawPartIcon } from '../render/field.ts';
+import { MODULE_BY_ID } from '../../shared/parts.ts';
+import { weaponDps } from '../../shared/stats.ts';
 import { aiDeck, type AiDifficulty } from '../../shared/ai.ts';
-import { FIELD_H, FIELD_W, STANDARD_FIELD, setField } from '../../shared/grid.ts';
+import { FIELD_H, FIELD_W, STANDARD_FIELD, fmtMeters, setField } from '../../shared/grid.ts';
 import { TICK_RATE } from '../../shared/sim/types.ts';
 import { computeStats } from '../../shared/stats.ts';
 import {
-  TIER_COST, TIER_NAMES, TUG, advance, blockCenters, dropZone, incomeCost, incomeRate,
+  TIER_COST, TIER_NAMES, TUG, advance, castleGunPrice, castleGuns, blockCenters, dropZone, incomeCost, incomeRate,
   validateRoster, TugGame, type TugCommand, type TugOrder,
 } from '../../shared/tug.ts';
 import { TugAi } from '../../shared/tugai.ts';
-import type { Design, Side, Size } from '../../shared/types.ts';
+import type { Design, ModuleDef, Side, Size } from '../../shared/types.ts';
 
 /** what the game screen plays: the AI locally, or an online room */
 export type TugLaunch =
@@ -210,7 +214,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
         h('div.choice-label', { style: { marginTop: '16px' } }, 'Open games'),
         openHost,
       );
-    playPanel.replaceChildren(h('div.tabbar', { role: 'tablist' }, tabBtn('ai', 'vs AI'), tabBtn('online', 'vs Players')), body);
+    playPanel.replaceChildren(h('div.tabbar', { role: 'tablist' }, tabBtn('ai', 'vs AI'), tabBtn('online', 'Multiplayer')), body);
   };
   renderPlay();
 
@@ -254,6 +258,8 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
 // ---------------------------------------------------------------------------------------------------- the game
 
 const MS_PER_TICK = 1000 / TICK_RATE;
+/** roughly how long an online order takes to land (the server's lockstep lead) */
+const TUG_LEAD_S = 0.8;
 
 export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> = (app, route): Screen => {
   playMusic('battle');
@@ -296,6 +302,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   const netEl = h('div.tug-net');
   const incomeBtn = h('button.tug-eco', { onclick: () => send({ t: 'income' }) });
   const tierBtn = h('button.tug-eco', { onclick: () => send({ t: 'tier' }) });
+  const gunBtn = h('button.tug-eco.tug-gunbtn', { title: 'Buy a better gun for your castle (G)', onclick: () => openGunShop() });
   let speed = 1, paused = false;
   const speedBtns = ai ? h('div.row.tug-speed', null,
     ...([0, 1, 2, 4] as const).map((s) => h('button.small', {
@@ -317,7 +324,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     fieldwrap,
     hint,
     h('div.tug-bottom', null,
-      h('div.tug-econ', null, goldEl, incomeBtn, tierBtn),
+      h('div.tug-econ', null, goldEl, incomeBtn, tierBtn, gunBtn),
       cardsEl,
     ),
   );
@@ -326,19 +333,28 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   try { view = makeView(canvas, me); } catch (e) { console.error(e); app.toast('Could not start the battlefield renderer', 'error'); throw e; }
   applyViewSettings(view, loadSettings());
   view.controls.doubleClickZoom = false;
+  // the same field controls as a match and the playground: wheel / pinch zoom, drag / WASD pan, right-drag (Ctrl /
+  // Option + drag), two-finger twist or Q / E to turn the 3D view, +/- and F, and the zoom buttons
+  view.controls.rotate = !!view.canRotate;
+  fieldwrap.append(zoomButtons(view));
 
   // ---- roster cards ----
   let sel = -1, rot = false;
-  const cards: { el: HTMLElement; d: Design; cost: HTMLElement }[] = [];
+  const cards: { el: HTMLElement; d: Design; cost: HTMLElement; cd: HTMLElement }[] = [];
+  /** online: designs bought but not yet in the game, and when (performance.now ms) their cooldown runs out */
+  const localReady = new Map<string, number>();
+  /** seconds until this design can be bought again */
+  const cooldownLeft = (id: string): number => Math.max(g.cooldown(me, id) / TICK_RATE, ((localReady.get(id) ?? 0) - performance.now()) / 1000);
   rosters[me].forEach((d, i) => {
     const cv = h('canvas.tug-thumb');
     const cost = h('span.gold');
+    const cd = h('span.tug-cd', { 'aria-hidden': 'true' });
     const st = computeStats(d);
     const c = h('button.tug-unit', {
       title: `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}  [${i + 1}]`,
       onclick: () => { sfx('click'); sel = sel === i ? -1 : i; renderCards(); },
-    }, cv, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null), h('kbd.tug-key', null, String(i + 1)));
-    cards.push({ el: c, d, cost });
+    }, cv, cd, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null), h('kbd.tug-key', null, String(i + 1)));
+    cards.push({ el: c, d, cost, cd });
     cardsEl.append(c);
     paintWhenLaidOut([{ canvas: cv, design: d }]); // friendly colours, like our units on the field
   });
@@ -353,6 +369,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (c.t === 'buy') { const d = g.design(me, c.designId); if (d) s += costOf(d); }
       else if (c.t === 'income') s += incomeCost(g.sides[me].incomeLvl);
       else if (c.t === 'tier') s += TIER_COST[Math.min(5, g.sides[me].tier + 1) as Size];
+      else if (c.t === 'castleGun') { const m = MODULE_BY_ID.get(c.moduleId); if (m) s += castleGunPrice(m); }
     }
     return s + inFlight;
   };
@@ -367,7 +384,14 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       c.el.classList.toggle('locked', locked);
       c.el.classList.toggle('poor', !locked && st.cost > gold);
       c.cost.textContent = locked ? `🔒 ${TIER_NAMES[st.size]}` : `${st.cost}g`;
+      // cooldown: a dark wedge sweeping round the card, with the seconds left
+      const left = locked ? 0 : cooldownLeft(c.d.id);
+      c.el.classList.toggle('cooling', left > 0);
+      c.cd.style.setProperty('--cd', String(Math.min(1, left / TUG.buyCooldown)));
+      c.cd.textContent = left > 0 ? String(Math.ceil(left)) : '';
     });
+    const gun = MODULE_BY_ID.get(S.castleGun);
+    gunBtn.replaceChildren(h('span', null, 'Castle gun ▸'), h('small.muted', null, gun?.name ?? S.castleGun));
     goldEl.replaceChildren(h('b.gold', null, `${Math.floor(gold)}g`), h('span.muted', null, ` +${incomeRate(S.incomeLvl)}/s`));
     if (S.incomeLvl >= TUG.maxIncomeLevel) { incomeBtn.textContent = 'Income maxed'; incomeBtn.disabled = true; }
     else {
@@ -383,6 +407,55 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     }
   };
 
+  // ---- castle gun shop: every weapon a castle can carry, cheapest first ----
+  let shop: { close(): void } | null = null;
+  function openGunShop(): void {
+    if (g.done || shop) return;
+    sfx('click');
+    const rows: { b: HTMLButtonElement; m: ModuleDef; price: number }[] = [];
+    const cur = h('p');
+    const r0 = h('p.bad.gunshop-err');
+    const list = h('div.gunshop');
+    for (const m of castleGuns()) {
+      const price = castleGunPrice(m);
+      const icon = h('canvas.gunshop-icon', { width: '96', height: '96' }) as HTMLCanvasElement;
+      try { drawPartIcon(icon, 'module', m.id, { backdrop: true }); } catch { /* icon is decoration */ }
+      const reach = [m.targetsGround ? 'ground' : '', m.targetsAir ? 'air' : ''].filter(Boolean).join(' + ');
+      const b = h('button.gunshop-card', {
+        onclick: () => {
+          const err = checkSpendable({ t: 'castleGun', moduleId: m.id });
+          if (err) { sfx('error'); r0.textContent = err; return; }
+          send({ t: 'castleGun', moduleId: m.id });
+          close();
+        },
+      }, icon,
+        h('span.gunshop-name', null, m.name),
+        h('span.gunshop-stats', null, `${Math.round(weaponDps(m))} dps · ${fmtMeters(m.range ?? 0)} · ${reach}`),
+        h('span.gunshop-price.gold', null, `${price}g`)) as HTMLButtonElement;
+      rows.push({ b, m, price });
+      list.append(b);
+    }
+    const refresh = () => {
+      const gold = spendable(), mine = g.sides[me].castleGun;
+      cur.replaceChildren('Your castle has a ', h('b', null, MODULE_BY_ID.get(mine)?.name ?? mine), `. Buying a gun replaces it (the old one is not refunded). You have `, h('b.gold', null, `${Math.floor(gold)}g`), '.');
+      for (const r of rows) {
+        const on = r.m.id === mine;
+        r.b.classList.toggle('on', on);
+        r.b.classList.toggle('poor', !on && r.price > gold);
+        r.b.disabled = on;
+        r.b.title = on ? 'Equipped' : r.price > gold ? `Need ${Math.ceil(r.price - gold)}g more` : `Buy for ${r.price}g`;
+      }
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 300);
+    const handle = openModal('Castle gun', h('div', null, cur, r0, list));
+    const close = () => { window.clearInterval(timer); handle.close(); shop = null; };
+    // the modal closes itself too (Close button, backdrop, Esc): stop refreshing then
+    const obs = new MutationObserver(() => { if (!handle.el.isConnected) { window.clearInterval(timer); shop = null; obs.disconnect(); } });
+    obs.observe(document.body, { childList: true });
+    shop = { close };
+  }
+
   // ---- commands ----
   function send(cmd: TugCommand): void {
     if (g.done) return;
@@ -391,13 +464,22 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if (err) { sfx('error'); flashHint(err); return; }
     sfx(cmd.t === 'buy' ? 'place' : 'click');
     if (!net) { g.apply(me, cmd); renderCards(); return; }
-    const cost = cmd.t === 'buy' ? costOf(g.design(me, cmd.designId)!) : cmd.t === 'income' ? incomeCost(g.sides[me].incomeLvl) : cmd.t === 'tier' ? TIER_COST[Math.min(5, g.sides[me].tier + 1) as Size] : 0;
+    const cost = cmd.t === 'buy' ? costOf(g.design(me, cmd.designId)!) : cmd.t === 'income' ? incomeCost(g.sides[me].incomeLvl)
+      : cmd.t === 'tier' ? TIER_COST[Math.min(5, g.sides[me].tier + 1) as Size] : cmd.t === 'castleGun' ? castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!) : 0;
     inFlight += cost;
-    if (cmd.t === 'buy') ghosts.push({ cmd, at: performance.now() });
+    if (cmd.t === 'buy') {
+      ghosts.push({ cmd, at: performance.now() });
+      // the cooldown starts now on this screen (the game starts it when the order lands, ~1 s later)
+      localReady.set(cmd.designId, performance.now() + (TUG.buyCooldown + TUG_LEAD_S) * 1000);
+    }
     if (cmd.t !== 'buy') renderCards();
     tugCommand(net.id, cmd).then(() => { inFlight -= cost; }, (e) => { inFlight -= cost; flashHint(e instanceof Error ? e.message : 'Command failed'); });
   }
   function checkSpendable(cmd: TugCommand): string | null {
+    if (cmd.t === 'buy') {
+      const left = cooldownLeft(cmd.designId);
+      if (left > 0) return `${g.design(me, cmd.designId)?.name ?? 'That design'} is ready again in ${Math.ceil(left)} s`;
+    }
     const pend = pendingSpend();
     const S = g.sides[me];
     const saved = S.gold;
@@ -428,7 +510,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if (!w || sel < 0) return;
     send({ t: 'buy', designId: cards[sel].d.id, x: w.x, y: w.y, ...(rot ? { rot: true } : {}) });
   });
-  canvas.addEventListener('contextmenu', (e) => { if (sel >= 0) { e.preventDefault(); sel = -1; renderCards(); } });
+  canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); if (sel >= 0 && !view.wasDrag) { sel = -1; renderCards(); } });
   const onKey = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
     const n = Number(e.key);
@@ -437,6 +519,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     else if (e.key === 'r' || e.key === 'R') rot = !rot;
     else if (e.key === 'i' || e.key === 'I') send({ t: 'income' });
     else if (e.key === 'u' || e.key === 'U') send({ t: 'tier' });
+    else if (e.key === 'g' || e.key === 'G') openGunShop();
     else if (e.key === ' ' && ai) { paused = !paused; renderSpeed(); e.preventDefault(); }
   };
   window.addEventListener('keydown', onKey);
@@ -542,7 +625,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     netEl.textContent = net && netDown ? 'reconnecting…' : '';
     // the placement hint stays up while a card is picked (a refusal flashes over it for a moment)
     if (sel >= 0 && !hintTimer) {
-      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · R rotates' : ''} · right-click / Esc cancels`;
+      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
       hint.classList.add('show');
     } else if (sel < 0 && !hintTimer) hint.classList.remove('show');
     renderCards();
@@ -657,6 +740,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     el,
     destroy() {
       destroyed = true;
+      shop?.close();
       setField(STANDARD_FIELD); // TugGame switched to the tug field; every other screen plays on the standard one
       abort.abort();
       cancelAnimationFrame(raf);

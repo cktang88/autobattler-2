@@ -10,8 +10,9 @@
 import { Battle } from './sim/battle.ts';
 import { DT, TICK_RATE } from './sim/types.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W, blockDims, setField, squadOffsets, type FieldSize } from './grid.ts';
-import { computeStats, validateDesign } from './stats.ts';
-import type { Design, Side, Size } from './types.ts';
+import { MODULE_BY_ID } from './parts.ts';
+import { computeStats, validateDesign, weaponDps } from './stats.ts';
+import type { Design, ModuleDef, Side, Size } from './types.ts';
 
 export const TUG = {
   /** gold each side starts with */
@@ -25,6 +26,10 @@ export const TUG = {
   maxTier: 5 as Size,
   /** seconds a dropped block stays frozen where it landed before it may move (its guns fire from the start) */
   spawnFreeze: 5,
+  /** seconds after buying a design before that same design can be bought again (no spamming one cheap unit) */
+  buyCooldown: 5,
+  /** the castle's gun at the start: a plain heavy machine gun; better ones are bought (castleGunPrice) */
+  startCastleGun: 'hmg',
   castleHp: 20000,
   /** overtime: from this many seconds on both castles crumble by `overtimeDecay` hp/s, so the more battered one
    *  falls first and no game drags on for ever */
@@ -46,9 +51,28 @@ export const TIER_COST: Record<Size, number> = { 1: 0, 2: 0, 3: 400, 4: 900, 5: 
 export const incomeRate = (lvl: number): number => TUG.baseIncome + TUG.incomeStep * lvl;
 export const TIER_NAMES: Record<Size, string> = { 1: 'Light', 2: 'Medium', 3: 'Heavy', 4: 'Giant', 5: 'Titan' };
 
-/** The castle: an anchored Monolith fortress with a rotary cannon that shoots air and ground. Not a legal player
- *  design (anchors are retired); the sim takes it as trusted. */
-export const CASTLE_DESIGN: Design = { id: 'tug-castle', name: 'Castle', chassis: 'monolith', mobility: 'anchor', mounts: ['avenger', null] };
+/** The castle: an anchored Monolith fortress carrying one gun (`gun`, a module id: any weapon in castleGuns()). Not a
+ *  legal player design (anchors are retired, and the gun may be any size); the sim takes it as trusted. */
+export const castleDesign = (gun: string): Design => ({ id: 'tug-castle', name: 'Castle', chassis: 'monolith', mobility: 'anchor', mounts: [gun, null] });
+
+/** Weapons a castle can mount: every gun except melee (a castle can't reach anyone) and bomb bays (nothing to rearm). */
+export function castleGuns(): ModuleDef[] {
+  return [...MODULE_BY_ID.values()].filter((m) => m.kind === 'weapon' && m.projectile !== 'melee' && !m.resupply)
+    .sort((a, b) => castleGunPrice(a) - castleGunPrice(b) || a.name.localeCompare(b.name));
+}
+const gunPrices = new Map<string, number>();
+/** Gold to arm the castle with this weapon: what it does (damage per second, more for reach and for hitting both air
+ *  and ground), never less than five times the part's own cost (its splash, homing and effects that dps misses). */
+export function castleGunPrice(m: ModuleDef): number {
+  let p = gunPrices.get(m.id);
+  if (p === undefined) {
+    const both = m.targetsAir && m.targetsGround ? 1.15 : 1;
+    const v = Math.max(1.6 * weaponDps(m) * Math.sqrt(Math.max(4, m.range ?? 0) / 7) * both, 5 * m.cost);
+    p = Math.max(75, Math.round(v / 25) * 25);
+    gunPrices.set(m.id, p);
+  }
+  return p;
+}
 /** castle centre (world cells) per side: at the middle of the side's back edge */
 export const castlePos = (side: Side): { x: number; y: number } => ({ x: FIELD_W / 2, y: side === 0 ? FIELD_H - 6 : 6 });
 const CASTLE_CLEAR = 6.5; // cells around the castle centre where nothing may be dropped
@@ -58,6 +82,8 @@ export type TugCommand =
   | { t: 'buy'; designId: string; x: number; y: number; rot?: boolean }
   | { t: 'income' }
   | { t: 'tier' }
+  /** re-arm the castle with this weapon (module id) */
+  | { t: 'castleGun'; moduleId: string }
   | { t: 'surrender' };
 
 /** a command and when it takes effect: applied before step() advances battle.tick past `tick` */
@@ -71,6 +97,10 @@ export interface TugSideState {
   bought: number;
   /** gold spent on units */
   spent: number;
+  /** the castle's gun (module id) */
+  castleGun: string;
+  /** design id -> tick it can be bought again (TUG.buyCooldown) */
+  ready: Record<string, number>;
 }
 
 export function validateRoster(r: Design[]): string[] {
@@ -123,7 +153,7 @@ export class TugGame {
   readonly spawns: TugSpawn[] = [];
   readonly rosters: [Design[], Design[]];
   readonly sides: [TugSideState, TugSideState];
-  /** castle unit ids */
+  /** castle unit ids (a new gun swaps the castle unit: see Battle.replaceUnit) */
   readonly castles: [number, number];
   surrendered: Side | null = null;
   private uid = 1;
@@ -133,10 +163,10 @@ export class TugGame {
     setField(TUG.field);
     this.rosters = rosters;
     this.battle = new Battle({ seed, tug: true, sides: [{ designs: [], units: [] }, { designs: [], units: [] }] });
-    const mk = (): TugSideState => ({ gold: TUG.startGold, incomeLvl: 0, tier: TUG.startTier, bought: 0, spent: 0 });
+    const mk = (): TugSideState => ({ gold: TUG.startGold, incomeLvl: 0, tier: TUG.startTier, bought: 0, spent: 0, castleGun: TUG.startCastleGun, ready: {} });
     this.sides = [mk(), mk()];
     const ids = ([0, 1] as Side[]).map((s) => {
-      const id = this.battle.spawnBlock(s, 0, CASTLE_DESIGN, 1, [castlePos(s)])[0];
+      const id = this.battle.spawnBlock(s, 0, castleDesign(TUG.startCastleGun), 1, [castlePos(s)])[0];
       const u = this.battle.units[id];
       u.hp = u.maxHp = TUG.castleHp;
       // a castle is a big target, not a wall of armour: small guns must still chip it
@@ -164,6 +194,8 @@ export class TugGame {
   }
 
   design(side: Side, id: string): Design | undefined { return this.rosters[side].find((d) => d.id === id); }
+  /** ticks until `side` may buy this design again (0: now) */
+  cooldown(side: Side, designId: string): number { return Math.max(0, (this.sides[side].ready[designId] ?? 0) - this.battle.tick); }
 
   /** why `side` can't do `cmd` right now (null: it can) */
   check(side: Side, cmd: TugCommand): string | null {
@@ -175,6 +207,8 @@ export class TugGame {
         if (!d) return 'Not in your roster';
         const st = computeStats(d);
         if (st.size > S.tier) return `Unlock ${TIER_NAMES[st.size]} hulls first`;
+        const cd = this.cooldown(side, d.id);
+        if (cd > 0) return `${d.name} is ready again in ${Math.ceil(cd / TICK_RATE)} s`;
         if (S.gold < st.cost) return 'Not enough gold';
         if (this.aliveCount(side) + st.squad > TUG.maxAlive) return 'Too many units on the field';
         if (!Number.isFinite(cmd.x) || !Number.isFinite(cmd.y)) return 'Bad position';
@@ -186,6 +220,12 @@ export class TugGame {
       case 'tier':
         if (S.tier >= TUG.maxTier) return 'Every tier is unlocked';
         return S.gold < TIER_COST[(S.tier + 1) as Size] ? 'Not enough gold' : null;
+      case 'castleGun': {
+        const m = MODULE_BY_ID.get(cmd.moduleId);
+        if (!m || !castleGuns().includes(m)) return 'Not a castle gun';
+        if (m.id === S.castleGun) return 'Your castle already has that gun';
+        return S.gold < castleGunPrice(m) ? 'Not enough gold' : null;
+      }
       case 'surrender':
         return null;
     }
@@ -204,12 +244,20 @@ export class TugGame {
         S.gold -= st.cost;
         S.spent += st.cost;
         S.bought++;
+        S.ready[d.id] = this.battle.tick + Math.round(TUG.buyCooldown * TICK_RATE);
         const ids = this.battle.spawnBlock(side, this.uid++, d, 1, blockCenters(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1), TUG.spawnFreeze);
         this.spawns.push({ side, ids, until: this.battle.tick + Math.round(TUG.spawnFreeze * TICK_RATE) });
         break;
       }
       case 'income': S.gold -= incomeCost(S.incomeLvl); S.incomeLvl++; break;
       case 'tier': S.tier = (S.tier + 1) as Size; S.gold -= TIER_COST[S.tier]; break;
+      case 'castleGun': {
+        S.gold -= castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!);
+        S.castleGun = cmd.moduleId;
+        const nid = this.battle.replaceUnit(this.castles[side], castleDesign(cmd.moduleId));
+        (this.castles as [number, number])[side] = nid;
+        break;
+      }
       case 'surrender': this.surrendered = side; break;
     }
     return null;
@@ -248,6 +296,7 @@ export function sanitizeCommand(raw: unknown): TugCommand | null {
   if (!raw || typeof raw !== 'object') return null;
   const c = raw as Record<string, unknown>;
   if (c.t === 'income' || c.t === 'tier' || c.t === 'surrender') return { t: c.t };
+  if (c.t === 'castleGun' && typeof c.moduleId === 'string' && c.moduleId.length <= 64) return { t: 'castleGun', moduleId: c.moduleId };
   if (c.t === 'buy' && typeof c.designId === 'string' && c.designId.length <= 64 && typeof c.x === 'number' && typeof c.y === 'number' && Number.isFinite(c.x) && Number.isFinite(c.y)) {
     return { t: 'buy', designId: c.designId, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100, ...(c.rot === true ? { rot: true } : {}) };
   }

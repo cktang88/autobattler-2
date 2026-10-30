@@ -50,7 +50,7 @@
 .tug-field { position: relative; flex: 1; min-height: 0; }
 .tug-canvas, .tug-overlay { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .tug-overlay { pointer-events: none; }
-.tug-hint { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); background: rgba(10, 14, 20, 0.85); border: 1px solid var(--line2); border-radius: 4px; padding: 4px 10px; font-size: 0.9rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
+.tug-hint { position: absolute; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%); background: rgba(10, 14, 20, 0.85); border: 1px solid var(--line2); border-radius: 4px; padding: 4px 10px; font-size: 0.9rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
 .tug-hint.show { opacity: 1; }
 .tug-bottom { display: flex; gap: 10px; align-items: stretch; padding: 8px 10px; padding-bottom: calc(8px + var(--safe-b)); background: var(--panel); border-top: 1px solid var(--line); }
 .tug-econ { display: flex; flex-direction: column; gap: 5px; flex: none; width: 150px; }
@@ -74,3 +74,24 @@
 .tug-endveil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 8, 12, 0.6); z-index: 5; padding: 16px; }
 .tug-end { background: var(--panel); border: 1px solid var(--line2); border-radius: var(--radius); padding: 22px 26px; text-align: center; box-shadow: var(--shadow); max-width: 420px; }
 .tug-end .row { justify-content: center; margin-top: 10px; }
+
+/* buy cooldown: a dark wedge sweeping round the card with the seconds left */
+.tug-unit { overflow: hidden; }
+.tug-cd { position: absolute; inset: 0; pointer-events: none; display: grid; place-items: center; font-family: var(--font-head); font-weight: 700; font-size: 1.7rem; color: #fff; text-shadow: 0 1px 3px #000; }
+.tug-unit.cooling .tug-cd { background: conic-gradient(rgba(5, 8, 12, 0.78) calc(var(--cd, 0) * 1turn), rgba(5, 8, 12, 0.18) 0); }
+.tug-unit.cooling { border-color: var(--line); }
+
+/* castle gun shop */
+.tug-gunbtn { flex-direction: column; align-items: flex-start; gap: 0; border-color: var(--warn); }
+.tug-gunbtn small { text-transform: none; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.gunshop { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+button.gunshop-card { clip-path: none; flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; text-align: center; background: var(--bg2); border-color: var(--line); }
+button.gunshop-card.on { border-color: var(--accent); background: rgba(46, 211, 192, 0.1); opacity: 1; }
+button.gunshop-card.on .gunshop-price::after { content: ' · equipped'; color: var(--accent); }
+button.gunshop-card.poor { opacity: 0.5; }
+.gunshop-icon { width: 48px; height: 48px; align-self: center; }
+.gunshop-name { font-family: var(--font-head); font-weight: 600; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.gunshop-stats { font-family: var(--font-body); font-weight: 400; font-size: 0.8rem; color: var(--muted); }
+.gunshop-price { font-weight: 700; }
+.gunshop-err:empty { display: none; }
+.modal:has(.gunshop) { max-width: min(860px, calc(100vw - 32px)); width: 100%; }

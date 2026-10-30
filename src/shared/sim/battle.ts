@@ -1315,6 +1315,24 @@ export class Battle {
     return best >= 0 ? best : this.coreGoal(I, core);
   }
 
+  /** Swap a unit for a re-armed copy of itself (tug of war: a castle buys a new gun): the copy stands where it stood,
+   *  keeps its hp, max hp, armour and core role, and the old one leaves the field without a death. Between step()s
+   *  only. Returns the new unit's id. */
+  replaceUnit(id: number, design: Design): number {
+    const old = this.units[id];
+    const nid = this.spawnBlock(old.side, old.uid, design, old.level, [{ x: old.x, y: old.y }])[0];
+    const u = this.units[nid];
+    u.angle = old.angle;
+    u.maxHp = old.maxHp;
+    u.hp = old.hp;
+    u.stats = { ...u.stats, armor: old.stats.armor };
+    old.alive = false;
+    old.moving = false;
+    for (const s of [0, 1] as Side[]) if (this.cores[s] === id) this.cores[s] = nid;
+    this.rebuildHash();
+    return nid;
+  }
+
   /** tug of war overtime: a core loses hp past its shields and armour; at 0 it is destroyed */
   private crumble(u: SimUnit, amt: number): void {
     if (!u.alive) return;

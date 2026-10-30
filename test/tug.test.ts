@@ -7,9 +7,10 @@ import { FIELD_H, FIELD_W, STANDARD_FIELD, setField } from '../src/shared/grid.t
 import { computeStats } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import {
-  TIER_COST, TUG, TugGame, advance, castlePos, dropError, incomeCost, incomeRate, sanitizeCommand, validateRoster, type TugOrder,
+  TIER_COST, TUG, TugGame, advance, castleGunPrice, castleGuns, castlePos, dropError, incomeCost, incomeRate, sanitizeCommand, validateRoster, type TugOrder,
 } from '../src/shared/tug.ts';
 import { TugAi } from '../src/shared/tugai.ts';
+import { MODULE_BY_ID } from '../src/shared/parts.ts';
 import { TUG_IDLE_MS, TUG_LEAD, TugHub } from '../src/server/tug.ts';
 import type { Design, Side } from '../src/shared/types.ts';
 
@@ -89,10 +90,62 @@ test('income, tiers, gold and the drop zone are enforced', () => {
 test('spawned units march on the enemy castle and hurt it', () => {
   const g = new TugGame(3, [ROSTER, ROSTER]);
   g.sides[0].gold = 1e6;
-  for (const x of [12, 24, 36]) for (const d of ROSTER.slice(0, 4)) assert.equal(g.apply(0, { t: 'buy', designId: d.id, x, y: 92 }), null);
+  for (const x of [12, 24, 36]) {
+    for (const d of ROSTER.slice(0, 4)) assert.equal(g.apply(0, { t: 'buy', designId: d.id, x, y: 92 }), null);
+    for (let i = 0; i < TUG.buyCooldown * 20; i++) g.step(); // each design once per cooldown
+  }
   for (let i = 0; i < 20 * 120 && !g.done; i++) g.step();
   assert.ok(g.castleHp(1) < TUG.castleHp, 'the enemy castle took damage');
   assert.equal(g.castleHp(0), TUG.castleHp);
+});
+
+test('a design can only be bought again after its cooldown', () => {
+  const g = new TugGame(2, [ROSTER, ROSTER]);
+  g.sides[0].gold = 1e6;
+  const [a, b] = ROSTER;
+  assert.equal(g.apply(0, { t: 'buy', designId: a.id, x: 12, y: 95 }), null);
+  assert.match(g.check(0, { t: 'buy', designId: a.id, x: 30, y: 95 }) ?? '', /ready again in 5 s/);
+  assert.equal(g.check(0, { t: 'buy', designId: b.id, x: 30, y: 95 }), null, 'other designs are not held up');
+  assert.equal(g.check(1, { t: 'buy', designId: a.id, x: 12, y: 18 }), null, 'nor is the other side');
+  for (let i = 0; i < TUG.buyCooldown * 20 - 1; i++) g.step();
+  assert.ok(g.cooldown(0, a.id) > 0);
+  g.step();
+  assert.equal(g.cooldown(0, a.id), 0);
+  assert.equal(g.apply(0, { t: 'buy', designId: a.id, x: 30, y: 95 }), null);
+});
+
+test('castles start with a plain gun and can buy any other', () => {
+  const g = new TugGame(3, [ROSTER, ROSTER]);
+  const guns = castleGuns();
+  assert.ok(guns.length > 40);
+  assert.ok(guns.every((m) => m.projectile !== 'melee' && !m.resupply));
+  assert.ok(guns.some((m) => m.mount === 'XL'), 'titan guns too');
+  assert.equal(g.sides[0].castleGun, TUG.startCastleGun);
+  const start = MODULE_BY_ID.get(TUG.startCastleGun)!;
+  assert.ok(castleGunPrice(start) <= 100, 'the starting gun is a cheap one');
+  const big = MODULE_BY_ID.get('avenger')!;
+  assert.ok(castleGunPrice(big) > 1000, 'a big gun costs a lot');
+  assert.match(g.check(0, { t: 'castleGun', moduleId: 'avenger' }) ?? '', /gold/);
+  assert.match(g.check(0, { t: 'castleGun', moduleId: 'buzzsaw' }) ?? '', /castle gun/);
+  assert.match(g.check(0, { t: 'castleGun', moduleId: TUG.startCastleGun }) ?? '', /already/);
+  // buying swaps the castle for a re-armed one: same place, same hp, still the core
+  const old = g.battle.units[g.castles[0]];
+  old.hp = 12345;
+  g.sides[0].gold = 5000;
+  assert.equal(g.apply(0, { t: 'castleGun', moduleId: 'avenger' }), null);
+  assert.equal(g.sides[0].gold, 5000 - castleGunPrice(big));
+  const c = g.battle.units[g.castles[0]];
+  assert.notEqual(c, old);
+  assert.equal(old.alive, false);
+  assert.deepEqual([c.x, c.y, c.hp, c.maxHp, c.stats.armor], [old.x, old.y, 12345, TUG.castleHp, old.stats.armor]);
+  assert.equal(c.design.mounts[0], 'avenger');
+  assert.equal(g.battle.cores[0], c.id);
+  assert.equal(g.castleHp(0), 12345);
+  for (let i = 0; i < 20 * 5; i++) g.step();
+  assert.equal(g.done, false, 'the old castle leaving does not end the game');
+  c.hp = 1; c.alive = false;
+  g.step();
+  assert.equal(g.winner, 1);
 });
 
 test('a dropped block is frozen for the spawn time but fires from the start', () => {

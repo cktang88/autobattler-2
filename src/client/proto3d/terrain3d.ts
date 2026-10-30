@@ -275,6 +275,11 @@ export function buildTerrain(w: number, h: number, opts: TerrainOpts = {}): Terr
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(70, 70); t.colorSpace = THREE.SRGBColorSpace;
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(700, 700).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: t, roughness: 1 }));
     apron.position.y = -0.02; apron.receiveShadow = true;
+    // 0.02 below the field is lost in depth precision once the camera pulls back (a long tug-of-war field framed whole):
+    // the apron then won over part of the field along a triangle edge. Drawn first without writing depth, the field and
+    // everything on it always cover it.
+    (apron.material as THREE.MeshStandardMaterial).depthWrite = false;
+    apron.renderOrder = -1;
     group.add(apron);
   }
   if (opts.props === false) return { group, ground };

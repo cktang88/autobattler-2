@@ -5,11 +5,14 @@
 import { makeRng, type Rng } from './rng.ts';
 import { DEPLOY_D, FIELD_H, FIELD_W } from './grid.ts';
 import { computeStats } from './stats.ts';
-import { TIER_COST, TUG, castlePos, dropError, incomeCost, type TugCommand, type TugGame } from './tug.ts';
+import { MODULE_BY_ID } from './parts.ts';
+import { TIER_COST, TUG, castleGunPrice, castlePos, dropError, incomeCost, type TugCommand, type TugGame } from './tug.ts';
 import type { AiDifficulty } from './ai.ts';
 import type { Design, Side, Size } from './types.ts';
 
 const THINK_EVERY = 1; // s
+/** castle guns the AI buys, in order (starting from TUG.startCastleGun) */
+const CASTLE_LADDER = [TUG.startCastleGun, 'twin30', 'minigun', 'plasma', 'missilebattery'];
 
 export class TugAi {
   readonly side: Side;
@@ -38,10 +41,12 @@ export class TugAi {
       const out: TugCommand[] = [];
       if (S.gold >= threat.value * 0.9) {
         let gold = S.gold, sent = 0;
-        const usable = g.rosters[this.side].filter((d) => computeStats(d).size <= S.tier).sort((a, b) => computeStats(b).cost - computeStats(a).cost);
+        // each design once per wave (the buy cooldown)
+        const usable = g.rosters[this.side].filter((d) => computeStats(d).size <= S.tier && g.cooldown(this.side, d.id) === 0).sort((a, b) => computeStats(b).cost - computeStats(a).cost);
         for (let k = 0; k < 6 && sent < threat.value * 1.2; k++) {
           const best = usable.find((d) => computeStats(d).cost <= gold);
           if (!best) break;
+          usable.splice(usable.indexOf(best), 1);
           const c = this.buyCmd(g, gold, threat.x, threat.y, best);
           if (!c) break;
           out.push(c);
@@ -62,6 +67,14 @@ export class TugAi {
       const waiting = g.rosters[this.side].some((d) => computeStats(d).size >= nt);
       const due = g.time > (this.diff === 'hard' ? 80 : 110) * (nt - 2);
       if (waiting && due) return S.gold >= TIER_COST[nt] ? [{ t: 'tier' }] : this.spareBuy(g, TIER_COST[nt]);
+    }
+    // castle guns: climb a ladder of better guns once the economy is going
+    const ladder = this.diff === 'easy' ? CASTLE_LADDER.slice(0, 1) : CASTLE_LADDER;
+    const at = ladder.indexOf(S.castleGun);
+    const nextGun = ladder[at + 1];
+    if (nextGun && g.time > 150 * (at + 2)) {
+      const price = castleGunPrice(MODULE_BY_ID.get(nextGun)!);
+      return S.gold >= price ? [{ t: 'castleGun', moduleId: nextGun }] : this.spareBuy(g, price);
     }
     // otherwise save for a block and push a lane
     return this.spareBuy(g, 0);
@@ -96,9 +109,10 @@ export class TugAi {
    *  y NaN = a forward staging row; `pick` buys that design */
   private buyCmd(g: TugGame, gold: number, x: number, y: number, pick?: Design): TugCommand | null {
     const S = g.sides[this.side];
-    const usable = g.rosters[this.side].filter((d) => computeStats(d).size <= S.tier);
+    const usable = g.rosters[this.side].filter((d) => computeStats(d).size <= S.tier && g.cooldown(this.side, d.id) === 0);
     if (!usable.length) return null;
     if (pick) this.want = pick;
+    else if (this.want && g.cooldown(this.side, this.want.id) > 0) return null; // saving for it: wait out its cooldown
     else if (!this.want || computeStats(this.want).size > S.tier || this.rng() < 0.15) {
       // favour bigger hulls a little once they're unlocked
       const w = usable.map((d) => 1 + 0.35 * computeStats(d).size);

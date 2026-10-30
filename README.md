@@ -87,18 +87,21 @@ saves its data on shutdown, so nothing is lost. Health check: `GET /api/health`.
 
 ### Tug of War
 
-A real-time mode (main menu → choose a game mode → **Tug of War**), against the AI (easy / normal / hard) or another person online (quick
+A real-time mode (main menu → choose a game mode → **Tug of War**), against the AI (easy / normal / hard) or in Multiplayer (quick
 match, or a private game with a join code). One endless battle on its own field: half the standard width and a
 quarter longer (240 m x 575 m), with a shallower deploy zone per side. Each side has a castle at its back edge and
 earns gold every second. Spend it on blocks from your **tug roster** (up to 9 designs, kept separately from the
 Loadout deck) and drop them anywhere in your deploy zone while the fight runs. After a 5 s spawn time (frozen where
 they landed, though their guns already fire) they march straight up their lane, fight anything
-that comes within reach and shell the enemy castle once they get there. Gold can also be **invested** in a higher
+that comes within reach and shell the enemy castle once they get there. Each design has a 5 s buy cooldown (a wedge
+sweeps round its card), so one cheap unit can't be spammed. Castles start with a plain heavy machine gun; the
+**Castle gun** shop (`G`) sells any other gun, priced by what it does, titan guns included. Gold can also be **invested** in a higher
 income rate or spent to **unlock the next hull tier** (Light and Medium to start, then Heavy, Giant, Titan). Destroy
 the enemy castle to win; from 10:00, overtime crumbles both castles so every game ends.
 
-Keys: `1`–`9` pick a roster card, click to drop, `R` turns a squad, `I` invests, `U` unlocks the next tier, `Esc`
-cancels. Online games are lockstep: the server stamps every command with a tick ~0.8 s ahead and both clients run the
+Keys: `1`–`9` pick a roster card, click to drop, `R` turns a squad, `I` invests, `U` unlocks the next tier, `G` opens
+the castle gun shop, `Esc` cancels. The camera works as in a match: wheel / drag / WASD, `+`/`-`, `F`, and in 3D
+right-drag or `Q`/`E` to turn the view. Online games are lockstep: the server stamps every command with a tick ~0.8 s ahead and both clients run the
 same deterministic sim up to the server's frontier (`src/shared/tug.ts`, `src/server/tug.ts`).
 
 ### Unit cost

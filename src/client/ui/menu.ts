@@ -94,7 +94,7 @@ export function classicScreen(app: App): Screen {
         resumable ? h('button.mode-card.primary', { onclick: go(() => { const d = LocalDriver.resume(); if (d) app.go({ name: 'match', driver: d }); }) },
           h('span.mc-title', null, 'Resume vs AI'), h('span.mc-desc', null, `Your game in progress · round ${resumable.match.round}`), h('span.mc-go', null, '›')) : null,
         modeCard('vs AI', 'Play against the computer, at your own pace.', go(() => app.go({ name: 'vsai' })), !resumable),
-        modeCard('vs Players', 'Online, turn by turn: each of you deploys whenever you like.', go(() => app.go({ name: 'lobby' }))),
+        modeCard('Multiplayer', 'Online against other players, turn by turn: each of you deploys whenever you like.', go(() => app.go({ name: 'lobby' }))),
       ),
       h('div.menu-links', null,
         h('button.link', { onclick: go(() => app.go({ name: 'vsai', from: 'menu' })) }, 'Edit Loadout'),
