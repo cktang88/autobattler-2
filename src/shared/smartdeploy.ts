@@ -39,7 +39,7 @@ export function deployRole(d: Design): DeployRole {
   // the brawler to the back row), or an arcing gun with a minimum range
   const longDps = ws.filter((w) => (w.range ?? 0) * s.rangeMult >= 14).reduce((a, w) => a + weaponDps(w), 0);
   const allDps = ws.reduce((a, w) => a + weaponDps(w), 0);
-  if ((longest >= 14 && longDps >= 0.5 * allDps) || ws.some((w) => (w.minRange ?? 0) >= 3 && (w.range ?? 0) >= 14)) return 'artillery';
+  if ((longest >= 14 && longDps >= 0.5 * allDps) || ws.some((w) => (w.minRange ?? 0) >= 3 && (w.range ?? 0) * s.rangeMult >= 14)) return 'artillery';
   if (!ws.length || s.heal > 0) return 'support';
   if (s.size === 1 && s.squad >= 8) return 'chaff';
   if (s.size >= 3) return 'armor';
@@ -189,7 +189,8 @@ export function smartDeployBlocks(input: DeployBlock[], o: DeployOpts = {}): Pla
   const exArmor = ex('armor'), exChaff = ex('chaff');
   const anyChaff = chaff.length + exChaff.length > 0;
   // rows, front to back (an armour line already on the board keeps its row)
-  const chaffDepth = Math.max(depth(chaff, 1), exDepth(exChaff));
+  // the screen's back edge (a chaff block already on the board may sit behind row 0), as formationDelays measures it
+  const chaffDepth = Math.max(depth(chaff, 1), ...exChaff.map((q) => q.y + blockDims(q.shape, q.spacing, q.rot).h));
   const armorY = exArmor.length ? Math.min(...exArmor.map((q) => q.y)) : anyChaff ? chaffDepth + 2 : 0;
   // armour: the existing line's centre, new armour extends it sideways (alternating ends)
   let centre = o.centre ?? DEPLOY_W / 2;

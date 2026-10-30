@@ -7,6 +7,7 @@
 // Pure three.js: knows nothing about the sim. FieldView3D feeds it world positions (x, y = height, z).
 
 import * as THREE from 'three';
+import { uploadPrefix } from './upload.ts';
 
 const R = (a: number, b: number) => a + Math.random() * (b - a);
 const _rc = new THREE.Color();
@@ -388,11 +389,17 @@ class Particles {
       aT[j] = this.tex[j] + Math.min(0.999, t);
     }
     this.geo.instanceCount = this.n;
-    this.aPos.needsUpdate = this.aSR.needsUpdate = this.aCol.needsUpdate = this.aTex.needsUpdate = this.aVel.needsUpdate = true;
+    for (const a of this.attrs) uploadPrefix(a, this.n);
   }
 
+  private get attrs() { return [this.aPos, this.aSR, this.aCol, this.aTex, this.aVel]; }
   private copy(from: number, to: number): void {
-    for (const a of [this.px, this.py, this.pz, this.vx, this.vy, this.vz, this.age, this.life, this.s0, this.s1, this.rot, this.spin, this.drag, this.grav, this.tex]) a[to] = a[from];
+    // runs per particle death: no per-call array
+    this.px[to] = this.px[from]; this.py[to] = this.py[from]; this.pz[to] = this.pz[from];
+    this.vx[to] = this.vx[from]; this.vy[to] = this.vy[from]; this.vz[to] = this.vz[from];
+    this.age[to] = this.age[from]; this.life[to] = this.life[from]; this.s0[to] = this.s0[from]; this.s1[to] = this.s1[from];
+    this.rot[to] = this.rot[from]; this.spin[to] = this.spin[from]; this.drag[to] = this.drag[from]; this.grav[to] = this.grav[from];
+    this.tex[to] = this.tex[from];
     for (let k = 0; k < 12; k++) this.ramp[to * 12 + k] = this.ramp[from * 12 + k];
   }
 
@@ -696,7 +703,7 @@ class Ribbons {
   }
   end(): void {
     this.geo.instanceCount = this.n;
-    this.aA.needsUpdate = this.aB.needsUpdate = this.aC.needsUpdate = true;
+    uploadPrefix(this.aA, this.n); uploadPrefix(this.aB, this.n); uploadPrefix(this.aC, this.n);
   }
 }
 
@@ -1008,8 +1015,8 @@ class ShellSet {
   }
   end(): void {
     this.mesh.count = this.n;
-    this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor!.needsUpdate = true;
-    this.band.needsUpdate = true; this.glow.needsUpdate = true;
+    uploadPrefix(this.mesh.instanceMatrix, this.n); uploadPrefix(this.mesh.instanceColor!, this.n);
+    uploadPrefix(this.band, this.n); uploadPrefix(this.glow, this.n);
     this.n = 0;
   }
 }
@@ -1120,10 +1127,10 @@ export class ProjLayer {
   end(): void {
     this.streaks.end();
     this.bodies.count = this.nb;
-    this.bodies.instanceMatrix.needsUpdate = true; this.bodies.instanceColor!.needsUpdate = true;
+    uploadPrefix(this.bodies.instanceMatrix, this.nb); uploadPrefix(this.bodies.instanceColor!, this.nb);
     this.shells.ogive.end(); this.shells.bomb.end(); this.shells.rocket.end();
     this.orbs.count = this.no;
-    this.orbs.instanceMatrix.needsUpdate = true; this.orbs.instanceColor!.needsUpdate = true;
+    uploadPrefix(this.orbs.instanceMatrix, this.no); uploadPrefix(this.orbs.instanceColor!, this.no);
   }
 }
 

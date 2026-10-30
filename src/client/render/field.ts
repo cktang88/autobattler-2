@@ -157,6 +157,8 @@ interface PTrack {
 /** fixed resolution (device px per cell) of the cached base ground and the decal layer */
 const GROUND_PX = 24;
 const DECAL_PX = 32;
+/** cap on the hi-res ground patch, device px a side (3800 meant ~57 MB canvases rebuilt in one frame on camera settle) */
+const DETAIL_MAX = 2400;
 
 /** height (cells) of the gun line above the ground: where bullets, beams and muzzle flashes leave a ground unit */
 const GUN_H = 0.55;
@@ -274,7 +276,7 @@ export class FieldView {
 
   /** call when the canvas' CSS size changes */
   resize(): void {
-    const dpr = Math.min(3, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
+    const dpr = Math.min(2, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
     const cw = this.canvas.clientWidth || this.canvas.width / dpr || 300;
     const ch = this.canvas.clientHeight || this.canvas.height / dpr || 400;
     this.dpr = dpr;
@@ -357,7 +359,7 @@ export class FieldView {
 
   private checkSize(): void {
     const cw = this.canvas.clientWidth, ch = this.canvas.clientHeight;
-    const dpr = Math.min(3, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
+    const dpr = Math.min(2, typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
     if ((cw && cw !== this.cssW) || (ch && ch !== this.cssH) || dpr !== this.dpr) this.resize();
   }
 
@@ -478,15 +480,15 @@ export class FieldView {
     const vy0 = Math.max(0, Math.min(a.y, b.y)), vy1 = Math.min(FIELD_H, Math.max(a.y, b.y));
     let d = this.detail;
     const covers = !!d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6;
-    // the patch's resolution is capped (3800 device px a side): judge sharpness against what a rebuild could reach,
+    // the patch's resolution is capped (DETAIL_MAX device px a side): judge sharpness against what a rebuild could reach,
     // or on big hi-dpi canvases every frame rebuilds a patch that can never get sharper (~400 ms a frame)
-    const reach = Math.min(px, 3800 / Math.max(1e-6, (vx1 - vx0) * 1.6), 3800 / Math.max(1e-6, (vy1 - vy0) * 1.6));
+    const reach = Math.min(px, DETAIL_MAX / Math.max(1e-6, (vx1 - vx0) * 1.6), DETAIL_MAX / Math.max(1e-6, (vy1 - vy0) * 1.6));
     const sharp = !!d && d.px >= reach * 0.8 && d.px <= px * 1.6;
     if ((!d || !covers || !sharp) && this.cam.still > 0.12) {
       const mx = (vx1 - vx0) * 0.3, my = (vy1 - vy0) * 0.3;
       const x0 = Math.max(0, vx0 - mx), x1 = Math.min(FIELD_W, vx1 + mx);
       const y0 = Math.max(0, vy0 - my), y1 = Math.min(FIELD_H, vy1 + my);
-      const dpx = Math.min(px, 3800 / (x1 - x0), 3800 / (y1 - y0));
+      const dpx = Math.min(px, DETAIL_MAX / (x1 - x0), DETAIL_MAX / (y1 - y0));
       d = this.detail = { c: groundRegion(dpx, x0, y0, x1, y1, this.map), x0, y0, x1, y1, px: dpx };
     }
     if (d && vx0 >= d.x0 - 1e-6 && vx1 <= d.x1 + 1e-6 && vy0 >= d.y0 - 1e-6 && vy1 <= d.y1 + 1e-6) {
@@ -837,7 +839,7 @@ export class FieldView {
     // snapshot pair; fixed-rate ticks then move units by the same amount every frame at any speed (no judder)
     const target = this.curTick + this.sinceTick * this.tickRate - 1;
     this.rt += dt * this.tickRate;
-    this.rt += (target - this.rt) * 0.05;
+    this.rt += (target - this.rt) * (1 - Math.exp(-dt * 3)); // ~0.05 a frame at 60 fps, the same pull at any frame rate
     this.rt = clamp(this.rt, this.prevTick, this.curTick);
     this.alpha = this.curTick > this.prevTick ? (this.rt - this.prevTick) / (this.curTick - this.prevTick) : 1;
     this.fx.simT = this.rt * DT;

@@ -1694,11 +1694,14 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
         if (phase === 'battle') {
           if (!paused) acc += dt * TICK_RATE * speed;
           let n = 0;
-          while (acc >= 1 && !battle.done && n++ < 40) {
+          // a time budget as well as a step cap: a heavy late-battle tick at 4x must slow the replay, not freeze frames
+          const t0 = performance.now();
+          while (acc >= 1 && !battle.done && n++ < 40 && performance.now() - t0 < 12) {
             battle.step();
             acc -= 1;
             view.pushEvents?.(battle.events);
           }
+          if (acc > 4) acc = 4; // don't bank a backlog to burn through later
           if (battle.done) {
             endTimer += dt;
             if (endTimer > 1.2) showResult();

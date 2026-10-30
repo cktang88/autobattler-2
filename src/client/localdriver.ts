@@ -139,6 +139,9 @@ export class LocalDriver implements MatchDriver {
     const m = this.match;
     const err = validateDeploy(m, 0, a);
     if (err) throw new Error(err);
+    // the AI and the round's battle run synchronously (up to a second on Hard): let the click's UI paint first
+    if (typeof requestAnimationFrame === 'function') await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    if (this.match !== m || validateDeploy(m, 0, a)) return; // changed while we waited (a second submit already ran)
     // AI decides before seeing the player's new placements (the player's board only holds resolved units here).
     let ai: DeployAction;
     try {

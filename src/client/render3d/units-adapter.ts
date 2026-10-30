@@ -10,6 +10,7 @@
 // When the proto3d API changes, update this file only.
 
 import * as THREE from 'three';
+import { uploadPrefix } from './upload.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { bodyScale, mountOffsets } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
@@ -510,6 +511,8 @@ class Pool {
   }
   /** the layer's current minimum caster tier (kept here so rebuilt pools pick it up) */
   minTier = Infinity;
+  /** build the (empty) instanced meshes now, so their programs can be compiled ahead of first use */
+  ensureBuilt(): void { if (!this.meshes.length) this.build(16); }
 
   flush(): void {
     const n = this.rigs.length;
@@ -531,7 +534,7 @@ class Pool {
         c[i * 3] = r.tr; c[i * 3 + 1] = r.tg; c[i * 3 + 2] = r.tb;
       }
     }
-    for (const im of meshes) if (im) { im.count = n; im.instanceMatrix.needsUpdate = true; im.instanceColor!.needsUpdate = true; }
+    for (const im of meshes) if (im) { im.count = n; uploadPrefix(im.instanceMatrix, n); uploadPrefix(im.instanceColor!, n); }
     this.rigs.length = 0;
   }
 
@@ -705,6 +708,25 @@ export class UnitLayer {
     let p = r.tpl.pool[li];
     if (!p) { p = new Pool(r.tpl, look, this.group); p.minTier = this.shadowMin; r.tpl.pool[li] = p; this.pools.set(r.tpl.key + '|' + look, p); }
     p.rigs.push(r);
+  }
+  /** Empty wreck and cloak pools for every template on show, so their shader programs (the charred wreck twins
+   *  especially) can be compiled before the battle instead of on the first death mid-fight. True when any was added. */
+  prewarm(): boolean {
+    let added = false;
+    for (const p of [...this.pools.values()]) {
+      if (p.look !== 'normal') continue;
+      for (const look of ['wreck', 'cloak'] as const) {
+        const li = LOOKS.indexOf(look);
+        if (p.tpl.pool[li]) continue;
+        const q = new Pool(p.tpl, look, this.group);
+        q.minTier = this.shadowMin;
+        p.tpl.pool[li] = q;
+        this.pools.set(p.tpl.key + '|' + look, q);
+        q.ensureBuilt();
+        added = true;
+      }
+    }
+    return added;
   }
   /** write all queued instances; call once per frame after every submit() */
   flush(): void {

@@ -696,12 +696,14 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
         } else if (!paused) {
           acc += dt * TICK_RATE * speed;
           let n = 0;
-          while (acc >= 1 && !g.done && n++ < 40) {
+          const t0 = performance.now(); // time budget: a heavy tick must slow the game, not freeze frames
+          while (acc >= 1 && !g.done && n++ < 40 && performance.now() - t0 < 12) {
             for (const c of ai!.think(g)) g.apply(1, c);
             g.step();
             view.pushEvents(g.battle.events);
             acc -= 1;
           }
+          if (acc > 4) acc = 4;
         }
       }
       view.drawBattle(g.battle, dt);

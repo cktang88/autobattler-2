@@ -115,7 +115,7 @@ function army(d: Design, budget: number): Design[] {
 /** One equal-supply fight from each side of the field: 1 = `d` won both, 0.5 = split / draws, 0 = lost both. */
 export function matchup(d: Design, opp: Design, budget: number, seed = 1): Matchup {
   const a = { ...d, id: 'intel-a' }, b = { ...opp, id: 'intel-b' };
-  const A = army(a, budget), B = army(b, Math.max(budget, computeStats(a).cost * A.length));
+  const A = army(a, budget), B = army(b, computeStats(a).cost * A.length); // A's actual supply (it rounds to whole blocks, down as well as up)
   let score = 0;
   for (const side of [0, 1] as const) {
     const sides: [{ designs: Design[]; units: Placement[] }, { designs: Design[]; units: Placement[] }] = side === 0

@@ -325,7 +325,11 @@ export class UnitStage3D {
     if (key === this.ringKey) return;
     this.ringKey = key;
     this.dirty = true;
-    for (const c of [...this.rings.children]) { this.rings.remove(c); (c as THREE.Mesh).geometry?.dispose(); }
+    for (const c of [...this.rings.children]) {
+      this.rings.remove(c);
+      // each child is a Group of ring meshes: free their geometry and material, not just the (absent) group geometry
+      c.traverse((o) => { const m = o as THREE.Mesh; if (!m.isMesh) return; m.geometry.dispose(); (m.material as THREE.Material).dispose(); });
+    }
     this.ringDefs = [];
     if (!rings || !this.rig) return;
     const flat = (inner: number, outer: number, color: string, opacity: number) => {

@@ -2,6 +2,7 @@
 // (drawn after post-processing so colours stay exact), and pooled hex-lattice shield domes with hit ripples.
 
 import * as THREE from 'three';
+import { uploadPrefix } from './upload.ts';
 
 type RGB = readonly [number, number, number];
 export const rgb = (hex: string): RGB => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
@@ -75,8 +76,9 @@ export class Overlay {
   }
   end(): void {
     this.geo.setDrawRange(0, this.n * 6);
-    this.geo.attributes.position.needsUpdate = true;
-    this.geo.attributes.color.needsUpdate = true;
+    // 4 vertices a quad
+    uploadPrefix(this.geo.attributes.position as THREE.BufferAttribute, this.n * 4);
+    uploadPrefix(this.geo.attributes.color as THREE.BufferAttribute, this.n * 4);
     this.mesh.visible = this.n > 0;
   }
   get quads(): number { return this.n; }

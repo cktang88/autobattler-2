@@ -206,6 +206,13 @@ function envelopePoint(x0: number, y0: number, x1: number, y1: number, r: number
 export function createRangeRings(view: BattleView, canvas: HTMLCanvasElement, ringCv: HTMLCanvasElement, legendEl: HTMLElement, viewer: Side) {
   const ringCtx = ringCv.getContext('2d');
   let ringW = 0, ringH = 0, ringDpr = 1, ringsShown = false;
+  // what the canvas holds now: redrawing identical rings every frame reallocated the backing store 60 times a second
+  let lastTargets: RingTarget[] = [], lastHi: string | null = null, lastCam = '';
+  const sameTargets = (a: RingTarget[], b: RingTarget[]) => a.length === b.length && a.every((t, i) => {
+    const o = b[i];
+    return t.side === o.side && t.design === o.design && t.st === o.st && t.strong === o.strong && !!t.invalid === !!o.invalid
+      && t.pos.x === o.pos.x && t.pos.y === o.pos.y && t.pos.spacing === o.pos.spacing && !!t.pos.rot === !!o.pos.rot;
+  });
   function clear() {
     if (!ringCtx || !ringsShown) return;
     // Reset the backing store instead of clearRect: Chrome was seen skipping a lone clearRect on this canvas when
@@ -228,6 +235,11 @@ export function createRangeRings(view: BattleView, canvas: HTMLCanvasElement, ri
     }
     const g = ringCtx;
     if (!targets.length) { clear(); return; }
+    // camera probe: where two field points land on screen (moves with any pan, zoom, tilt or turn)
+    const a = view.worldToScreen(0, 0), b = view.worldToScreen(48, 46);
+    const cam = `${cw},${ch},${dpr},${a.x.toFixed(2)},${a.y.toFixed(2)},${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+    if (ringsShown && cam === lastCam && ringHi === lastHi && sameTargets(targets, lastTargets)) return;
+    lastCam = cam; lastHi = ringHi; lastTargets = targets;
     if (ringsShown) ringCv.width = ringCv.width; // full reset (see clear)
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     ringsShown = true;

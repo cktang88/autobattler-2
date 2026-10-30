@@ -886,6 +886,10 @@ export class FieldView3D implements BattleView {
     this.lodFar = this.cam.k < (this.lodFar ? LOD_NEAR_K : LOD_FAR_K);
     this.layer.setFar(this.lodFar);
     this.layer.flush();
+    // compile the wreck / cloak twins of each design as it first shows up, off the frame (the parallel-compile
+    // extension), instead of synchronously on its first death mid-fight (a visible hitch)
+    // (only the unit layer, lit by the scene: compiling the whole scene again stalled software-GL browsers)
+    if (this.layer.prewarm()) this.renderer.compileAsync(this.layer.group, this.camera, this.scene).catch(() => { /* lost context */ });
     const q = this.updateQuality(units, units + this.wrecks.length);
     this.syncCamera();
     this.sun.castShadow = q.shadow;
@@ -1093,7 +1097,7 @@ export class FieldView3D implements BattleView {
     } else this.sinceTick += dt;
     const target = this.curTick + this.sinceTick * this.tickRate - 1;
     this.rt += dt * this.tickRate;
-    this.rt += (target - this.rt) * 0.05;
+    this.rt += (target - this.rt) * (1 - Math.exp(-dt * 3)); // ~0.05 a frame at 60 fps, the same pull at any frame rate
     this.rt = clamp(this.rt, this.prevTick, this.curTick);
     this.alpha = this.curTick > this.prevTick ? (this.rt - this.prevTick) / (this.curTick - this.prevTick) : 1;
     this.boxes.clear();

@@ -1081,6 +1081,7 @@ export class Battle {
 
     if (this.pds.length) this.pointDefense();
     this.updateProjectiles();
+    this.curSrc = -1; // the last round's shooter must not be blamed for fire / blast / crush damage after it
     if (this.fires.length) this.updateFires();
     this.dmgSrc = -1;
     this.flushBlasts();
@@ -2211,7 +2212,8 @@ export class Battle {
       const dx = o.x - mx, dy = o.y - my, along = dx * c + dy * s;
       if (along < -0.3 - ob || along > len + ob || Math.abs(-dx * s + dy * c) > ob + bw) continue;
       const t = this.segCapsule(mx, my, c * (len + ob), s * (len + ob), O, bw);
-      if (t >= 0) hits.push({ j, t });
+      // t is a fraction of this hull's own (len + ob) segment: sort by distance along the slug instead
+      if (t >= 0) hits.push({ j, t: t * (len + ob) });
     }
     hits.sort((a, b) => a.t - b.t);
     let k = 1;
@@ -2810,7 +2812,8 @@ export class Battle {
       if (!w || w.heal > 0 || (bombRun && !w.resupply)) continue;
       const tg = u.mounts[mi].target;
       if (!goal || this.canHit(w, goal)) { relevantDps += w.dps; relevantR = Math.max(relevantR, w.range); if (w.melee) relevantMelee = true; }
-      if (tg >= 0) engagedDps += w.dps;
+      // only guns that could hit the goal count (a flak gun on a passing jet must not park a cannon out of range)
+      if (tg >= 0 && (!goal || this.canHit(w, goal))) engagedDps += w.dps;
     }
     const engaged = engagedDps > 0 && engagedDps >= ENGAGE_SHARE * relevantDps;
 
