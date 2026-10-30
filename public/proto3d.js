@@ -48588,6 +48588,8 @@ function buildTerrain(w, h, opts = {}) {
     const apron = new Mesh(new PlaneGeometry(700, 700).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map: t, roughness: 1 }));
     apron.position.y = -0.02;
     apron.receiveShadow = true;
+    apron.material.depthWrite = false;
+    apron.renderOrder = -1;
     group.add(apron);
   }
   if (opts.props === false) return { group, ground };
