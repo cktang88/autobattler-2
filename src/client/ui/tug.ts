@@ -141,6 +141,8 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     try {
       const r = await fn();
       busy = false;
+      // left the screen while the request was out: close the room we just opened so nobody joins a ghost
+      if (destroyed) { if (r.status === 'waiting') void tugLeave(r.id).catch(() => {}); return; }
       if (r.status === 'waiting') void waitFor(r);
       else go({ kind: 'net', room: r });
     } catch (e) { busy = false; renderStatus(); fail(e); }

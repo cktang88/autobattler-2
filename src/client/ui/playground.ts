@@ -1389,6 +1389,7 @@ export function playgroundScreen(app: App): Screen {
       cancelAnimationFrame(raf);
       ro.disconnect();
       window.removeEventListener('resize', onResize);
+      clearTimeout(paintTimer);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keydown', onShift);
       document.removeEventListener('keyup', onShift);

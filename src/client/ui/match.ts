@@ -1749,6 +1749,7 @@ export function matchScreen(app: App, route: Extract<Route, { name: 'match' }>):
       cancelAnimationFrame(raf);
       ro.disconnect();
       window.removeEventListener('resize', onResize);
+      clearTimeout(paintTimer);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keydown', onShift);
       document.removeEventListener('keyup', onShift);

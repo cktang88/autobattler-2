@@ -49,6 +49,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   const fail = (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
     sfx('error');
+    if (destroyed) return;
     app.toast(msg, 'error');
     if (e instanceof NetError && e.status === 401) render();
   };
@@ -347,7 +348,7 @@ export const lobbyScreen: ScreenFn<{ name: 'lobby' }> = (app) => {
   if (signedIn()) {
     void refresh();
     // verify the stored token is still known to the server (e.g. after a data reset)
-    getMe().catch((e) => { if (e instanceof NetError && e.status === 401) { app.toast('Session expired — please sign in again.', 'error'); render(); } });
+    getMe().catch((e) => { if (!destroyed && e instanceof NetError && e.status === 401) { app.toast('Session expired — please sign in again.', 'error'); render(); } });
   }
 
   const screen: Screen = {

@@ -22,9 +22,10 @@ export async function syncAiPool(timeoutMs = 2500): Promise<void> {
   if (pool) saveAiPool(pool);
   const pending = loadPendingReports();
   if (!pending.length) return;
-  const left: MatchState[] = [];
-  for (const m of pending) if (!(await reportAiMatch(m))) left.push(m);
-  savePendingReports(left);
+  const sent = new Set<string>();
+  for (const m of pending) if (await reportAiMatch(m)) sent.add(m.id);
+  // re-read: a match finished while the reports were out was queued meanwhile and must stay queued
+  if (sent.size) savePendingReports(loadPendingReports().filter((m) => !sent.has(m.id)));
 }
 if (typeof window !== 'undefined') setTimeout(() => { void syncAiPool(); }, 0);
 

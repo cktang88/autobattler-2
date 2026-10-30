@@ -141,9 +141,15 @@ async function syncOnce(): Promise<void> {
 export function syncGarage(): Promise<void> {
   // already syncing: run once more afterwards (edits / a sign-in since it started) and resolve after that run
   if (running) { again = true; return running.then(() => running ?? undefined); }
+  const had = currentSession();
   running = syncOnce()
-    // a token the server no longer knows (data reset) was just cleared by net.ts: sync again under a fresh account
-    .catch((e) => (e instanceof NetError && e.status === 401 ? syncOnce() : undefined))
+    // a guest token the server no longer knows (data reset) was just cleared by net.ts: sync again under a fresh account.
+    // A signed-in account that lost its token (evicted by sign-ins elsewhere) must not be swapped for a guest silently.
+    .catch((e) => {
+      if (!(e instanceof NetError && e.status === 401)) return undefined;
+      if (had?.registered) { problem('You were signed out: sign in again to sync your designs'); return undefined; }
+      return syncOnce();
+    })
     .catch(() => { /* offline or server unavailable: retried on the next write / start */ })
     .finally(() => { running = null; if (again) { again = false; void syncGarage(); } });
   return running;
