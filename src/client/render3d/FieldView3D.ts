@@ -97,6 +97,9 @@ interface ProjRec {
   dx: number; dy: number; dz: number; ex: number; ey: number; ez: number; born: number; seed: number;
   /** offset from the sim's launch point to the barrel / tube tip it left (eased out over the first few frames) */
   ox: number; oz: number;
+  /** arcing shell's ballistic path (quadratic Bezier: muzzle, control point on the barrel line, aim point) and the sim
+   *  progress it started at */
+  bz?: { mx: number; my: number; mz: number; cx: number; cy: number; cz: number; tx: number; ty: number; tz: number; k0: number };
   /** bright tracer round (every Nth round of a fast gun) and where the round started (streaks never reach behind it) */
   tracer: boolean; sx: number; sz: number; team: 0 | 1;
   /** one-shot path effect (sniper beam + smoke wake) already laid */
@@ -336,6 +339,7 @@ const FLASH_T = 0.05;
 const SELF_IMPACT = new Set<Fam>(['laser', 'focus', 'leech', 'prism', 'void', 'entropy', 'heatray', 'slow', 'disarm', 'gravity', 'heal', 'pd', 'rail']);
 
 const _v3 = new THREE.Vector3();
+const _v3b = new THREE.Vector3();
 const CORNERS: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
 /** shake per blast radius by explosion family (others 1): small-arms pops barely, flak bursts in the air, HE hits hard */
 const BLAST_SHAKE: Partial<Record<Fam, number>> = {
@@ -1210,7 +1214,19 @@ export class FieldView3D implements BattleView {
         this.fx.trackDust(x - ca * back - sa * side, y - sa * back + ca * side, -ca, -sa, rig.S, k);
       }
     }
-    for (let i = 0; i < u.mounts.length; i++) rig.aim(i, normAng(mounts[i] - ang), dt);
+    for (let i = 0; i < u.mounts.length; i++) {
+      rig.aim(i, normAng(mounts[i] - ang), dt);
+      // artillery lays its barrels to the arc it fires at its target's range (the sim lobs z = 4 arcH k (1 - k) with
+      // arcH = 1 + range x 0.38 for a mortar, 0.2 for a gun): the shell then leaves along the barrel
+      const m = u.mounts[i]!, def = m.moduleId ? MODULE_BY_ID.get(m.moduleId) : undefined;
+      if (def?.projectile === 'arc' && !def.resupply && !u.flying && m.target >= 0) {
+        const t = this.battle?.units[m.target];
+        if (t) {
+          const d = Math.max(1, Math.hypot(t.x - x, t.y - y)), arcH = 1 + d * (def.visual === 'mortar' ? 0.38 : 0.2);
+          rig.elevate(i, clamp(Math.atan((4 * arcH) / d), 0.15, 1.4), dt);
+        }
+      }
+    }
 
     // status tint: hit flash, burning flicker, stun crackle
     let tr = 1, tg = 1, tb = 1;
@@ -1532,11 +1548,26 @@ export class FieldView3D implements BattleView {
         const bomblet = !!cp, bh = cp?.h ?? 0;
         if (bomblet || st.fam === 'bomb') y0 = pos.z + 0.12 + bh;
         const ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);
+        // arcing shells fly a ballistic curve that leaves the muzzle along the barrel and comes down on the sim's aim
+        // point when the sim's round lands: a quadratic Bezier (a parabola) whose control point lies on the barrel
+        // line, halfway out over the ground (constant ground speed, so the timing follows the sim's progress)
+        let bz: ProjRec['bz'];
+        if (p.kind === 'arc' && !bomblet && st.fam !== 'bomb' && !air && p.tx !== undefined && p.ty !== undefined && key >= 0 && (ox || oz)) {
+          const rig = this.posedRig(p.src!);
+          if (rig && rig.muzzleDir(p.mount!, _v3b, this.lastBarrel.get(key) ?? 0)) {
+            const mx = pos.x + ox, mz = pos.y + oz, gx = p.tx - mx, gz = p.ty - mz, D = Math.hypot(gx, gz);
+            const bh = Math.hypot(_v3b.x, _v3b.z);
+            if (D > 0.5 && bh > 0.05 && _v3b.y > 0) {
+              const s = (D / 2) / bh;
+              bz = { mx, my: y0, mz, cx: mx + _v3b.x * s, cy: y0 + _v3b.y * s, cz: mz + _v3b.z * s, tx: p.tx, ty: 0.15, tz: p.ty, k0: clamp(pos.progress, 0, 0.9) };
+            }
+          }
+        }
         rec = {
           y0, lastH: y0, px: pos.x + ox, py: pos.y + oz, bright: p.id % 3 === 0, hEnd, air, st, k, bomblet, bh,
           dx: ca, dy: p.kind === 'arc' && !bomblet && st.fam !== 'bomb' ? 0.8 : 0, dz: sa, ex: pos.x + ox, ey: y0, ez: pos.y + oz, born: this.time, seed: (p.id * 0.618) % 1 * 6.283,
           ox, oz, tracer: every > 0 && shots % every === 0, sx: pos.x + ox, sz: pos.y + oz, team: this.teamOf(p.side),
-          fx0: pos.x, fz0: pos.y, k0: clamp(pos.progress, 0, 1), mod: p.moduleId, side: p.side, kind: p.kind,
+          fx0: pos.x, fz0: pos.y, k0: clamp(pos.progress, 0, 1), mod: p.moduleId, side: p.side, kind: p.kind, bz,
         };
         seen.set(p.id, rec);
         // every rocket / missile leaves its own tube: a launch flash, a backblast jet and a smoke cloud behind the pod
@@ -1563,6 +1594,13 @@ export class FieldView3D implements BattleView {
       // eased from the barrel tip onto the sim's path over the first ~0.15 s
       const ease = age < 0.15 ? 1 - age / 0.15 : 0;
       let X = pos.x + rec.ox * ease * ease, Z = pos.y + rec.oz * ease * ease;
+      if (rec.bz) {
+        // ballistic shell: on its barrel-aligned parabola, timed by the sim's progress
+        const b = rec.bz, q = clamp((kp - b.k0) / (1 - b.k0), 0, 1), q1 = 1 - q;
+        X = q1 * q1 * b.mx + 2 * q * q1 * b.cx + q * q * b.tx;
+        H = q1 * q1 * b.my + 2 * q * q1 * b.cy + q * q * b.ty;
+        Z = q1 * q1 * b.mz + 2 * q * q1 * b.cz + q * q * b.tz;
+      }
       // rockets and swarm missiles don't fly on rails: a little corkscrew wobble round the true path (none at the ends)
       if (p.kind === 'rocket' || (p.kind === 'missile' && st.def?.id === 'swarm')) {
         const env = Math.sin(Math.PI * kp), ca = Math.cos(pos.angle), sa = Math.sin(pos.angle);

@@ -119,6 +119,9 @@ export interface SimProjectile {
   /** shooter (SimUnit.id) and its mount index, so the view can launch the round from that barrel's tip */
   src?: number;
   mount?: number;
+  /** arc shells: launch point, aim point (cells) and apex height above the straight line between them (the sim flies
+   *  z = 4 arcH k (1 - k) over a straight ground track) */
+  sx?: number; sy?: number; tx?: number; ty?: number; arcH?: number;
 }
 
 export type BattleEvent =

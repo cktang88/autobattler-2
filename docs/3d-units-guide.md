@@ -304,6 +304,12 @@ the same size on every hull (size by class), hulls integrate by designing round 
 
 ## 7. Firing effects match the guns
 
+- **Artillery shells leave along the barrel.** Arcing guns (mortar, howitzer, barrage, cluster, doomsday...) lay their
+  barrels each frame to the arc the sim will fly at the target's range (FieldView3D `rig.elevate`: launch angle
+  atan(4 arcH / range), arcH = 1 + range x 0.38 mortar / 0.2 gun, as battle.ts). Each shell flies a quadratic Bezier
+  from the muzzle (control point on the barrel line, halfway out) to the sim's aim point (`SimProjectile.tx/ty`),
+  timed by the sim's progress: a parabola that starts exactly along the barrel and lands where and when the sim does.
+
 - Effect size per class follows the drawn gun ratios (`FieldView3D` `CLASS_S` S 0.3, M 0.6, L 1.2, XL 2.1): a titan
   gun's flash, round and blast are as big as the gun. Rounds are as wide as the drawn barrel (`drawnBore`).
 - Visible ammunition is built into `C.am` (warhead tips in launcher cells, the missile on a cruise / nuke erector,

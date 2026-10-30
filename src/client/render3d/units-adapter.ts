@@ -436,6 +436,21 @@ export class Rig {
   }
 
   /** world position of mount i's barrel tip (barrel `b` of a multi-barrel gun / launcher) */
+  /** world direction barrel b of mount i points (unit vector along the barrel, +x of its pitch frame) */
+  muzzleDir(mount: number, out: THREE.Vector3, b = 0): THREE.Vector3 | null {
+    const ms = this.turrets[mount]?.muzzles;
+    const m = ms?.[b % Math.max(1, ms.length)];
+    if (!m) return null;
+    return out.setFromMatrixColumn(m.matrixWorld, 0).normalize();
+  }
+  /** elevate mount i's barrels toward `ang` (rad above the hull's horizon), eased (artillery lays its barrels to the
+   *  arc it is about to fire, so the shell leaves along the barrel) */
+  elevate(i: number, ang: number, dt: number, rate = 3): void {
+    const tu = this.turrets[i];
+    if (!tu || tu.fixed) return;
+    this.dirty = true;
+    tu.pitch.rotation.z += (ang - tu.pitch.rotation.z) * Math.min(1, dt * rate);
+  }
   muzzleWorld(mount: number, out: THREE.Vector3, b = 0): THREE.Vector3 | null {
     const ms = this.turrets[mount]?.muzzles;
     const m = ms?.[b % Math.max(1, ms.length)];
