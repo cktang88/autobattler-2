@@ -110,8 +110,10 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   `hp[0]` = hero trunnion (its pitch group moves there), `hp[1..]` = pods; `at` moves the twist pivot. units3d
   drops the hero's ring / yoke / pod brackets; weapons keep their class size. The torso group is tagged `userData.torso` so the
   garage socket / highlight skips it. Example: `raider` in `chassis/mechframes.ts`. Declare the chassis with
-  `registerTorso(id)` (registry.ts): then ALL its secondary weapons ride the torso as pods at your hardpoints
-  (any size, any anatomy, up to 6), so the sim's mount table no longer decides where a gun is drawn: design the
+  `registerTorso(id)` (registry.ts): then ALL its secondary weapons ride the torso as pods at your hardpoints, and its
+  utilities / armour / shields ride it too (they turn with the torso: place them with `up[j]` for each `utilR[j]`, else
+  units3d spreads them over the back of the torso's top; they are never seated on the static lower body)
+  (weapons: any size, any anatomy, up to 6), so the sim's mount table no longer decides where a gun is drawn: design the
   hull, housing and hardpoints round the fixed-size weapons, never the other way round.
   Big hulls use it too (arachne mantle, broodmother howdah in `giants.ts`): `chassis/torso-kit.ts` `torsoSlots(c)`
   tells which design slot is the hero and which slots ride as pods (so the torso builds a sponson / arm only for armed

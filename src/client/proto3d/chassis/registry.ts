@@ -121,8 +121,9 @@ export interface ChassisOut {
    *  units, unscaled); returns the weapon hardpoints in that frame: hp[0] = the hero's trunnion, hp[1..] = the pods
    *  (secondary weapons riding the hero, in pod order). units3d drops the hero's ring / yoke and the pod brackets.
    *  at moves the twist pivot (the hero yaw origin) to that point of the hull frame. Weapons keep their own class size
-   *  (units3d DRAW_D): design the torso round the slot sizes, never rescale a weapon. */
-  torso?: (b: Bld, t: { heroR: number; podR: number[] }) => { hp: V3[]; at?: V3 };
+   *  (units3d DRAW_D): design the torso round the slot sizes, never rescale a weapon. Utilities / armour / shields of a
+   *  torso hull ride the torso too: `up[j]` places the j-th of `utilR` (else units3d spreads them over the torso's back). */
+  torso?: (b: Bld, t: { heroR: number; podR: number[]; utilR: number[] }) => { hp: V3[]; at?: V3; up?: V3[] };
 }
 
 export type ChassisBuilder = (c: ChassisCtx) => ChassisOut;

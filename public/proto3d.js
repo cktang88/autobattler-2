@@ -36184,7 +36184,7 @@ var FOOT_MOUNTS = {
   heavyheli: [[0.42, 0], [-0.02, 0.36], [-0.02, -0.36]],
   bomber: [[0.33, 0], [0, -0.3], [0, 0.3]],
   carrier: [[0.24, 0], [-0.2, 0], [-0.1, -0.33], [-0.1, 0.33]],
-  leviathan: [[0.29, 0], [-0.3, 0], [0, -0.3], [0, 0.3]],
+  leviathan: [[0.325, 0], [-0.325, 0], [0, -0.3], [0, 0.3]],
   goliath: [[0.15, 0], [-0.16, -0.37], [-0.16, 0.37], [-0.34, 0]],
   titan: [[0.02, -0.3], [0.02, 0.3], [0.38, 0], [-0.34, 0]],
   mantis: [[0.3, -0.27], [0.3, 0.27]],
@@ -48374,9 +48374,10 @@ function buildUnit(design, team) {
       if (best) pos[i] = best;
     }
   }
+  const riders = torsoHull && hero >= 0 && tur[hero] && !tur[hero].fixed ? mods.map((m, i) => m && m.kind !== "weapon" && tur[i] && offs[i] ? i : -1).filter((i) => i >= 0) : [];
   const specs = [];
   tur.forEach((tu, i) => {
-    if (tu && pos[i] && podOf[i] < 0) specs.push({ i, x: pos[i].x, z: pos[i].y, r: tu.r, cls: ch.mounts[i] ?? "S", mod: mods[i] });
+    if (tu && pos[i] && podOf[i] < 0 && !riders.includes(i)) specs.push({ i, x: pos[i].x, z: pos[i].y, r: tu.r, cls: ch.mounts[i] ?? "S", mod: mods[i] });
   });
   const reg = registered().chassis;
   if (flying && !reg.includes(ch.id) && !reg.includes(ch.shape)) {
@@ -48438,7 +48439,7 @@ function buildUnit(design, team) {
     const tb = new Bld(), T = new Group();
     T.scale.setScalar(1 / kH);
     T.userData.torso = true;
-    const res = out2.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i].r) });
+    const res = out2.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i].r), utilR: riders.map((i) => tur[i].r) });
     tb.mount(T);
     H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
@@ -48448,14 +48449,35 @@ function buildUnit(design, team) {
       const p = res.hp[j + 1], tu = tur[i];
       if (p) tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
     });
+    if (riders.length) {
+      const bb = new Box3();
+      T.traverse((o) => {
+        const m = o;
+        if (m.isMesh) {
+          m.geometry.computeBoundingBox();
+          bb.union(m.geometry.boundingBox);
+        }
+      });
+      riders.forEach((i, j) => {
+        const tu = tur[i];
+        let p = res.up?.[j];
+        if (!p) {
+          const n = riders.length, sz = bb.max.z - bb.min.z;
+          p = [bb.min.x + (bb.max.x - bb.min.x) * 0.22, bb.max.y - tu.r * 0.15, (bb.min.z + bb.max.z) / 2 + (n > 1 ? (j / (n - 1) - 0.5) * sz * 0.5 : 0)];
+        }
+        tu.yaw.scale.multiplyScalar(1 / kH);
+        tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
+        H.yaw.add(tu.yaw);
+      });
+    }
   }
   mods.forEach((_, i) => {
     if (tur[i] && offs[i]) turrets.push(tur[i]);
   });
-  for (const i of pods) tur[i].host = turrets.indexOf(tur[hero]);
+  for (const i of [...pods, ...riders]) if (tur[i].yaw.parent === tur[hero]?.yaw) tur[i].host = turrets.indexOf(tur[hero]);
   hb.mount(body, kit.decal);
   fixZFight(root);
-  applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i].yaw, mount: m.i })), ...pods.map((i) => ({ obj: tur[i].yaw, mount: i }))], kit.uber, skin, design.id);
+  applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i].yaw, mount: m.i })), ...[...pods, ...riders].map((i) => ({ obj: tur[i].yaw, mount: i }))], kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => {

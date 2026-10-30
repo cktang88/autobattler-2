@@ -131,8 +131,12 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
       if (best) pos[i] = best;
     }
   }
+  // utilities, armour and shields on a torso hull ride the torso too (they turn with it): the chassis places them
+  // on the torso (torso() returns `up`), they never stand on the static lower body under the torso's sweep
+  const riders = torsoHull && hero >= 0 && tur[hero] && !tur[hero]!.fixed
+    ? mods.map((m, i) => (m && m.kind !== 'weapon' && tur[i] && offs[i] ? i : -1)).filter((i) => i >= 0) : [];
   const specs: MountSpec[] = [];
-  tur.forEach((tu, i) => { if (tu && pos[i] && podOf[i] < 0) specs.push({ i, x: pos[i]!.x, z: pos[i]!.y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
+  tur.forEach((tu, i) => { if (tu && pos[i] && podOf[i] < 0 && !riders.includes(i)) specs.push({ i, x: pos[i]!.x, z: pos[i]!.y, r: tu.r, cls: ch.mounts[i] ?? 'S', mod: mods[i]! }); });
 
   // flyers with a registered airframe (chassis/air.ts) take the registry path like ground units; the airframe returns
   // its lift points (AirOut.lift) and the air mobility (mobility/air.ts) renders rotors / fans / nozzles / grav pods
@@ -205,7 +209,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     const tb = new Bld(), T = new THREE.Group();
     T.scale.setScalar(1 / kH);
     T.userData.torso = true; // not part of the hero weapon itself (the garage socket / highlight skips it)
-    const res = out.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i]!.r) });
+    const res = out.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i]!.r), utilR: riders.map((i) => tur[i]!.r) });
     tb.mount(T);
     H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
@@ -215,15 +219,31 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
       const p = res.hp[j + 1], tu = tur[i]!;
       if (p) tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
     });
+    // riding utilities: where the chassis put them on the torso, else spread across the back of the torso's top
+    if (riders.length) {
+      const bb = new THREE.Box3();
+      T.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.computeBoundingBox(); bb.union(m.geometry.boundingBox!); } });
+      riders.forEach((i, j) => {
+        const tu = tur[i]!;
+        let p = res.up?.[j];
+        if (!p) {
+          const n = riders.length, sz = bb.max.z - bb.min.z;
+          p = [bb.min.x + (bb.max.x - bb.min.x) * 0.22, bb.max.y - tu.r * 0.15, (bb.min.z + bb.max.z) / 2 + (n > 1 ? (j / (n - 1) - 0.5) * sz * 0.5 : 0)];
+        }
+        tu.yaw.scale.multiplyScalar(1 / kH);
+        tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
+        H.yaw.add(tu.yaw);
+      });
+    }
   }
   // turret list in design mount order (render3d maps mount i -> the i-th present turret)
   mods.forEach((_, i) => { if (tur[i] && offs[i]) turrets.push(tur[i]!); });
-  for (const i of pods) tur[i]!.host = turrets.indexOf(tur[hero]!);
+  for (const i of [...pods, ...riders]) if (tur[i]!.yaw.parent === tur[hero]?.yaw) tur[i]!.host = turrets.indexOf(tur[hero]!);
   hb.mount(body, kit.decal);
   // surface skin by role / domain / scale (skins.ts); turrets keep their own per-weapon skin
   // faces of different parts sharing a plane flicker (z-fighting): lift the smaller of each pair a hair off it
   fixZFight(root);
-  applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), ...pods.map((i) => ({ obj: tur[i]!.yaw, mount: i }))], kit.uber, skin, design.id);
+  applySkin(root, body, [...specs.map((m) => ({ obj: tur[m.i]!.yaw, mount: m.i })), ...[...pods, ...riders].map((i) => ({ obj: tur[i]!.yaw, mount: i }))], kit.uber, skin, design.id);
   if (!flying) root.add(contactShadow(L, W));
   let tris = 0;
   root.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && !(me.material as THREE.MeshBasicMaterial).isMeshBasicMaterial) tris += (me.geometry.index ? me.geometry.index.count : me.geometry.attributes.position.count) / 3; });
