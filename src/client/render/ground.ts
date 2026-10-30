@@ -5,12 +5,15 @@
 // and it lines up with every other rectangle: the full-field canvas, the hi-res patch drawn when zoomed in, and the
 // darkened surround outside the field all agree. Kept low-contrast and mid-dark so units (and their team glows) pop.
 
-import { DEPLOY_D, FIELD_H, FIELD_W, fieldKey } from '../../shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, STANDARD_FIELD, fieldKey, type FieldSize } from '../../shared/grid.ts';
 import { ctx2d, makeCanvas, type Ctx } from './palette.ts';
 
-export type MapId = 'basin' | 'plains' | 'steppe';
+export type MapId = 'basin' | 'plains' | 'steppe' | 'bastion';
 
 type RGB = [number, number, number];
+
+/** the light a baked map was painted under; `at` as view3d.SUN (viewer at side 0: x left, y up, z toward the camera) */
+export interface BakedSun { at: [number, number, number]; color: string; intensity: number }
 
 export interface MapTheme {
   id: MapId;
@@ -26,6 +29,8 @@ export interface MapTheme {
   /** colour used for the far surround beyond the field edge */
   void: string;
   seed: number;
+  /** authored in Blender: the 3D view loads public/assets/maps/<dir>/ when playing on `field`; 2D paints the theme */
+  baked?: { dir: string; field: Readonly<FieldSize>; sun: BakedSun };
 }
 
 export const MAPS: MapTheme[] = [
@@ -43,6 +48,11 @@ export const MAPS: MapTheme[] = [
     id: 'steppe', name: 'Frost Steppe', blurb: 'Wind-scoured snow over dark rock', seed: 37,
     ramp: [[72, 82, 94], [96, 108, 120], [118, 130, 142]], patch: [64, 72, 84], patchAmt: 0.35,
     grid: [235, 245, 255], void: '#10141a',
+  },
+  {
+    id: 'bastion', name: 'Sea Bastion', blurb: 'A paved arena between two island fortresses', seed: 53,
+    ramp: [[104, 100, 94], [128, 120, 106], [150, 138, 118]], patch: [84, 82, 80], patchAmt: 0.4,
+    grid: [240, 236, 220], void: '#0b2a3d', baked: { dir: 'bastion', field: STANDARD_FIELD, sun: { at: [34, 22, -24], color: '#ffe6c8', intensity: 3.1 } },
   },
 ];
 
@@ -95,7 +105,7 @@ function colorAt(th: MapTheme, x: number, y: number): RGB {
     c = mixC(c, [104, 124, 70], clamp01((m - 0.6) * 2.2) * 0.5);
     const track = Math.abs(Math.sin(wy * 0.09 + fbm(wx * 0.04, wy * 0.04, s + 13, 2) * 5) * 14 - (wx - FIELD_W * 0.62) * 0.35);
     if (track < 1.1) c = mixC(c, [104, 90, 64], (1 - track / 1.1) * 0.55);
-  } else {
+  } else if (th.id === 'steppe') {
     // exposed dark rock where the snow is thin; streaks blown along the wind
     // exposed rock: a hard-edged threshold (not a soft blur) so it reads as ground, not smoke
     const rock = fbm(wx * 0.11, wy * 0.11, s + 17, 5);
@@ -204,7 +214,7 @@ function paintScatter(g: Ctx, th: MapTheme, x0: number, y0: number, x1: number, 
         g.fillStyle = 'rgba(130,134,120,0.9)';
         g.beginPath(); g.ellipse(x, y, rr, rr * 0.75, r(9) * 3, 0, Math.PI * 2); g.fill();
       }
-    } else {
+    } else if (th.id === 'steppe') {
       // snow: drifts (soft bright crescents), dark rock chips where it is thin, ice glints
       if (r(1) < 0.12) {
         const x = cx + r(2), y = cy + r(3), w = 0.3 + r(4) * 0.5;

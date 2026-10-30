@@ -41,7 +41,8 @@ export function setField(f: Readonly<FieldSize>): void {
   DEPLOY_D = f.deploy;
 }
 /** cache key part for anything drawn or built at the current field size */
-export const fieldKey = (): string => `${FIELD_W}x${FIELD_H}x${DEPLOY_D}`;
+export const fieldKeyOf = (f: Readonly<FieldSize>): string => `${f.w}x${f.h}x${f.deploy}`;
+export const fieldKey = (): string => fieldKeyOf({ w: FIELD_W, h: FIELD_H, deploy: DEPLOY_D });
 
 /** Top-left world cell of a placement of the given size. */
 export function localToWorldCell(side: Side, x: number, y: number, size: number): { col: number; row: number } {

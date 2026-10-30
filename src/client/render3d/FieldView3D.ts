@@ -10,14 +10,15 @@
 
 import * as THREE from 'three';
 import { battleSfx, setPanFlip } from '../audio.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W, fieldKey } from '../../shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, fieldKey, fieldKeyOf } from '../../shared/grid.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import type { Battle } from '../../shared/sim/battle.ts';
 import { DT, type BattleEvent, type DeathKind, type SimProjectile, type SimUnit, type WreckLevel } from '../../shared/sim/types.ts';
 import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
-import { MAPS, type MapTheme } from '../render/ground.ts';
+import { MAPS, type BakedSun, type MapTheme } from '../render/ground.ts';
+import { loadBakedMap } from './bakedmap.ts';
 import { drawnBore } from '../proto3d/weapons3d.ts';
 import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
@@ -382,6 +383,23 @@ function terrainFor(map: MapTheme): BuiltTerrain {
   return t;
 }
 
+const DEFAULT_SUN: BakedSun = { at: SUN, color: '#fff0d8', intensity: 3.4 };
+
+/** cells behind each back line shown at the fit view on a baked map: enough to see the fronts of the bases */
+const BAKED_FIT_PAD = 13;
+
+/** Baked maps stay loaded for the session (they are only a few big textures, and reloading one would mean a download). */
+const bakedCache = new Map<string, BuiltTerrain>();
+const bakedLoads = new Map<string, Promise<void>>();
+function bakedTerrain(dir: string): Promise<void> {
+  let p = bakedLoads.get(dir);
+  if (!p) {
+    p = loadBakedMap(dir).then((t) => { bakedCache.set(dir, t); });
+    bakedLoads.set(dir, p);
+  }
+  return p;
+}
+
 export class FieldView3D implements BattleView {
   readonly canvas: HTMLCanvasElement;
   viewerSide: Side;
@@ -615,7 +633,14 @@ export class FieldView3D implements BattleView {
     // (both rock meshes share one geometry and material; InstancedMesh.dispose frees the instance buffers)
     for (const r of this.rocks) { const im = r as THREE.InstancedMesh; this.scene.remove(im); im.geometry.dispose(); (im.material as THREE.Material).dispose(); im.dispose(); }
     this.rocks = [];
-    const built = terrainFor(map);
+    // a baked map plays on the field size it was authored for; until it has loaded (or if it can't) the procedural
+    // terrain stands in
+    const baked = map.baked && fieldKey() === fieldKeyOf(map.baked.field) ? map.baked.dir : null;
+    const ready = baked ? bakedCache.get(baked) : undefined;
+    if (baked && !ready) {
+      bakedTerrain(baked).then(() => { if (this.map === map && fieldKey() === fieldKeyOf(map.baked!.field)) this.setMapNow(map); }, (e) => console.warn('baked map failed to load', e));
+    }
+    const built = ready ?? terrainFor(map);
     // the cached build is shared between views (textures live as long as the cache entry): each view gets a cheap clone
     const group = built.group.clone(true);
     // terrain is authored with deployment zones at its local +-x ends; our zones run along field y, so turn it a quarter
@@ -624,12 +649,21 @@ export class FieldView3D implements BattleView {
     group.position.set(FIELD_W / 2, 0, FIELD_H / 2);
     this.scene.add(group);
     this.terrain = { group, ground: built.ground };
-    this.scatterRocks(map, built.tint);
+    if (!ready) this.scatterRocks(map, built.tint);
+    this.cam.setFitPadY(ready ? BAKED_FIT_PAD : 0);
+    this.setSun(ready && map.baked ? map.baked.sun : DEFAULT_SUN);
     // atmospheric haze: distance fog toward a light sky-tinted version of the map's void colour (also the background)
     const haze = new THREE.Color(map.void).lerp(new THREE.Color('#a7b6c4'), 0.5);
     this.scene.background = haze;
     if (this.scene.fog) (this.scene.fog as THREE.Fog).color.copy(haze);
     this.fx.setGround([clamp(map.ramp[1][0] / 255 * 0.9, 0, 1), clamp(map.ramp[1][1] / 255 * 0.9, 0, 1), clamp(map.ramp[1][2] / 255 * 0.9, 0, 1)]);
+  }
+
+  private setSun(s: BakedSun): void {
+    const ss = this.viewerSide === 1 ? -1 : 1;
+    this.sunShadow = new SunShadow(this.sun, [-ss * s.at[0], s.at[1], ss * s.at[2]], [FIELD_W / 2, 0, FIELD_H / 2]);
+    this.sun.color.set(s.color);
+    this.sun.intensity = s.intensity;
   }
 
   /** boulders around the field edge and pebbles on it (cheap instanced noise-icosahedra; tinted from the map) */
