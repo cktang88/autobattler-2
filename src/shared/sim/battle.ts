@@ -798,8 +798,9 @@ export class Battle {
 
   /** Add a block mid-battle (tug of war: bought and dropped onto the field while the fight runs) at the given world
    *  unit centers, with the design's default orders. Call between step()s only. The design is trusted (the caller
-   *  validates it: a castle is an otherwise illegal design). Returns the new units' ids. */
-  spawnBlock(side: Side, uid: number, design: Design, level: number, centers: { x: number; y: number }[]): number[] {
+   *  validates it: a castle is an otherwise illegal design). `freeze`: seconds the new units hold still where they
+   *  landed (like a start delay: their guns still fire; a jet circles over its spot). Returns the new units' ids. */
+  spawnBlock(side: Side, uid: number, design: Design, level: number, centers: { x: number; y: number }[], freeze = 0): number[] {
     const shape = computeStats(design);
     let mx = 0, my = 0;
     for (const c of centers) { mx += c.x; my += c.y; }
@@ -817,7 +818,8 @@ export class Battle {
     }
     this.registerUnits(from);
     const ids: number[] = [];
-    for (let i = from; i < this.units.length; i++) ids.push(i);
+    const until = this.tick + Math.round(freeze * TICK_RATE);
+    for (let i = from; i < this.units.length; i++) { ids.push(i); this.ints[i].delayTicks = until; }
     return ids;
   }
 

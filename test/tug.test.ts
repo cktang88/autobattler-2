@@ -95,6 +95,32 @@ test('spawned units march on the enemy castle and hurt it', () => {
   assert.equal(g.castleHp(0), TUG.castleHp);
 });
 
+test('a dropped block is frozen for the spawn time but fires from the start', () => {
+  const solo = ROSTER.find((d) => computeStats(d).squad === 1 && computeStats(d).speed > 0 && computeStats(d).dps > 0)!;
+  const g = new TugGame(5, [[solo], [solo]]);
+  assert.equal(g.apply(0, { t: 'buy', designId: solo.id, x: 12, y: 95 }), null);
+  const id = g.spawns[0].ids[0];
+  const u = g.battle.units[id];
+  const x0 = u.x, y0 = u.y;
+  // an enemy parked right in front of it (straight into the sim, past the drop rules), itself frozen for good
+  const foe = g.battle.units[g.battle.spawnBlock(1, 99, solo, 1, [{ x: 12, y: 95 - Math.min(6, computeStats(solo).range * 0.6) }], 1e6)[0]];
+  let fired = false;
+  for (let i = 0; i < TUG.spawnFreeze * 20 - 1; i++) {
+    g.step();
+    if (g.battle.events.some((e) => e.t === 'fire' && e.unit === id)) fired = true;
+  }
+  assert.ok(Math.hypot(u.x - x0, u.y - y0) < 0.3, 'held its spot while frozen');
+  assert.ok(fired, 'its guns fired while frozen');
+  assert.equal(g.spawns.length, 1);
+  for (let i = 0; i < 20; i++) g.step();
+  assert.equal(g.spawns.length, 0, 'thawed');
+  // nothing left in reach: it marches on the enemy castle
+  foe.alive = false;
+  const y1 = u.y;
+  for (let i = 0; i < 20 * 3; i++) g.step();
+  assert.ok(u.alive && y1 - u.y > 1, 'moves once thawed');
+});
+
 test('the same orders give the same game (lockstep determinism)', () => {
   const orders: TugOrder[] = [];
   const g0 = new TugGame(11, [ROSTER, ROSTER]);

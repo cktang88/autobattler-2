@@ -182,7 +182,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     h('div.screen-scroll.grow', null, h('div.page', null,
       h('p.muted', null,
         'One endless battle on a long, narrow field. Gold flows in every second: spend it on units from your roster and drop them anywhere in your deploy zone — ',
-        'they march up their lane, fight whatever comes within reach and shell the enemy castle. Invest gold to raise your income, ',
+        `after a ${TUG.spawnFreeze} s spawn time (frozen, but already shooting) they march up their lane, fight whatever comes within reach and shell the enemy castle. Invest gold to raise your income, `,
         `or unlock bigger hulls (you start with ${TIER_NAMES[1]} and ${TIER_NAMES[2]}). Destroy the enemy castle to win.`),
       h('div.tug-cols', null,
         h('section.panel.tug-play', null,
@@ -441,6 +441,35 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       octx.stroke();
     }
   };
+  /** freshly dropped blocks: a ring that empties as their spawn freeze runs out, with the seconds left */
+  const drawFrozen = () => {
+    const freezeTicks = TUG.spawnFreeze * TICK_RATE;
+    for (const sp of g.spawns) {
+      let n = 0, cx = 0, cy = 0, ext = 0;
+      for (const id of sp.ids) { const u = g.battle.units[id]; if (u.alive) { n++; cx += u.x; cy += u.y; } }
+      if (!n) continue;
+      cx /= n; cy /= n;
+      for (const id of sp.ids) { const u = g.battle.units[id]; if (u.alive) ext = Math.max(ext, Math.hypot(u.x - cx, u.y - cy) + Math.max(u.stats.fw, u.stats.fh) / 2); }
+      const c = view.worldToScreen(cx, cy), e = view.worldToScreen(cx + ext + 0.8, cy);
+      const R = Math.max(10, Math.hypot(e.x - c.x, e.y - c.y));
+      const left = Math.max(0, sp.until - g.tick) / freezeTicks;
+      const col = sp.side === me ? '63, 182, 232' : '255, 106, 61';
+      octx.lineWidth = 3;
+      octx.strokeStyle = `rgba(${col}, 0.25)`;
+      octx.beginPath(); octx.arc(c.x, c.y, R, 0, Math.PI * 2); octx.stroke();
+      octx.strokeStyle = `rgba(${col}, 0.9)`;
+      octx.beginPath(); octx.arc(c.x, c.y, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); octx.stroke();
+      octx.font = '600 13px Barlow, system-ui, sans-serif';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      octx.lineWidth = 3;
+      octx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      const t = String(Math.ceil(Math.max(0, sp.until - g.tick) / TICK_RATE));
+      octx.strokeText(t, c.x, c.y - R - 9);
+      octx.fillStyle = `rgb(${col})`;
+      octx.fillText(t, c.x, c.y - R - 9);
+    }
+  };
   const drawOverlay = () => {
     const r = overlay.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -450,6 +479,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     octx.clearRect(0, 0, W, H);
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (g.done) return;
+    drawFrozen();
     if (sel >= 0) {
       const z = dropZone(me);
       quad(z.x0 + 0.2, z.y0 + 0.2, z.x1 - 0.2, z.y1 - 0.2);

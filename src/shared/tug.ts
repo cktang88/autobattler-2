@@ -23,6 +23,8 @@ export const TUG = {
   /** hull size classes buildable from the start, and the largest one */
   startTier: 2 as Size,
   maxTier: 5 as Size,
+  /** seconds a dropped block stays frozen where it landed before it may move (its guns fire from the start) */
+  spawnFreeze: 5,
   castleHp: 20000,
   /** overtime: from this many seconds on both castles crumble by `overtimeDecay` hp/s, so the more battered one
    *  falls first and no game drags on for ever */
@@ -112,8 +114,13 @@ export function dropZone(side: Side): { x0: number; y0: number; x1: number; y1: 
   return side === 0 ? { x0: 0, y0: FIELD_H - DEPLOY_D, x1: FIELD_W, y1: FIELD_H } : { x0: 0, y0: 0, x1: FIELD_W, y1: DEPLOY_D };
 }
 
+/** a block dropped onto the field: its units and the tick it may start moving */
+export interface TugSpawn { side: Side; ids: number[]; until: number }
+
 export class TugGame {
   readonly battle: Battle;
+  /** blocks still frozen after their drop (for drawing the countdown); pruned as they thaw */
+  readonly spawns: TugSpawn[] = [];
   readonly rosters: [Design[], Design[]];
   readonly sides: [TugSideState, TugSideState];
   /** castle unit ids */
@@ -197,7 +204,8 @@ export class TugGame {
         S.gold -= st.cost;
         S.spent += st.cost;
         S.bought++;
-        this.battle.spawnBlock(side, this.uid++, d, 1, blockCenters(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1));
+        const ids = this.battle.spawnBlock(side, this.uid++, d, 1, blockCenters(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1), TUG.spawnFreeze);
+        this.spawns.push({ side, ids, until: this.battle.tick + Math.round(TUG.spawnFreeze * TICK_RATE) });
         break;
       }
       case 'income': S.gold -= incomeCost(S.incomeLvl); S.incomeLvl++; break;
@@ -213,6 +221,7 @@ export class TugGame {
     for (const s of [0, 1] as Side[]) this.sides[s].gold += this.income(s) * DT;
     this.battle.coreDecay = this.overtime ? TUG.overtimeDecay : 0;
     this.battle.step();
+    while (this.spawns.length && this.spawns[0].until <= this.battle.tick) this.spawns.shift();
   }
 
   get overtime(): boolean { return this.time >= TUG.overtimeAt; }
