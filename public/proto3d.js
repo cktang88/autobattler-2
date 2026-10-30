@@ -39329,11 +39329,11 @@ function erector(C) {
   C.t.pitch.rotation.z = 0.22;
   for (const s of [-1, 1]) cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
   for (const f of [0.15, 0.6]) bx(p, kit.metal, f * L, R * 0.4, 0, r * 0.08, R * 1.4, R * 2.4);
-  missile(rc, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
+  missile(C.am, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
   if (nuke) {
-    hazardRings(rc, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10);
-    band(rc, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10);
-  } else accent(C, L * 0.3, R * 2 + r * 0.065, 0, L * 0.25, R * 0.5, void 0, rc);
+    hazardRings(C.am, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10);
+    band(C.am, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10);
+  } else accent(C, L * 0.3, R * 2 + r * 0.065, 0, L * 0.25, R * 0.5, void 0, C.am);
   C.acc = true;
   C.muzzle(L * 0.85, R + r * 0.06, 0);
   C.t.shot = "rocket";
@@ -39396,16 +39396,16 @@ function charge(C) {
   cbox(b, kit.trim, 0, C.fixed ? -r * 0.06 : y0 + r * 0.7, 0, r * 1.3, r * 0.12, r * 0.9);
   if (id === "clusterbombs" || id === "stuncluster") {
     for (const s of [-1, 1]) {
-      capsule(b, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, "x", 8);
-      for (let i = 0; i < 3; i++) b.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], "y", 5);
+      capsule(C.am, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, "x", 8);
+      for (let i = 0; i < 3; i++) C.am.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], "y", 5);
     }
   } else {
-    for (const z of [-r * 0.45, 0, r * 0.45]) missile(b, kit.canvas, kit.canvas, kit.trim, -r * 0.65, yb, z, r * 0.2, r * 1.35, 8);
+    for (const z of [-r * 0.45, 0, r * 0.45]) missile(C.am, kit.canvas, kit.canvas, kit.trim, -r * 0.65, yb, z, r * 0.2, r * 1.35, 8);
   }
   if (C.mod.stun) {
     const zs2 = id === "stuncluster" ? [-r * 0.3, r * 0.3] : [-r * 0.45, 0, r * 0.45];
     const rr = id === "stuncluster" ? r * 0.27 : r * 0.21;
-    for (const z of zs2) for (const x of [-r * 0.35, r * 0.1]) b.cyl(kit.rail, rr, rr, r * 0.05, [x, yb, z], "x", 8);
+    for (const z of zs2) for (const x of [-r * 0.35, r * 0.1]) C.am.cyl(kit.rail, rr, rr, r * 0.05, [x, yb, z], "x", 8);
   }
   accent(C, 0, (C.fixed ? -r * 0.06 : y0 + r * 0.7) + r * 0.065, 0, r * 0.5, r * 0.4);
   C.t.shot = "none";
@@ -40249,7 +40249,7 @@ function blades(C) {
       if (i * cols + j >= per) continue;
       const yy = (i - (rows - 1) / 2) * cell + (j % 2 ? cell * 0.18 : 0), zz = z + (j - (cols - 1) / 2) * cell, cR = cell * 0.36;
       if (!dt) ring(rc, kit.rubber, bl / 2 + r * 0.02, yy, zz, cR * 0.86, cR * 1.18, r * 0.03, 10);
-      rc.lathe(tip, dt ? [[cR, 0], [cR, cell * 0.12], [cR * 0.6, cell * 0.36], [0, cell * 0.48]] : [[0, 0], [cR, 0], [cR, cell * 0.12], [cR * 0.72, cell * 0.32], [cR * 0.3, cell * 0.44], [0, cell * 0.48]], [bl / 2 - cell * 0.1, yy, zz], "x", 10);
+      C.am.lathe(tip, dt ? [[cR, 0], [cR, cell * 0.12], [cR * 0.6, cell * 0.36], [0, cell * 0.48]] : [[0, 0], [cR, 0], [cR, cell * 0.12], [cR * 0.72, cell * 0.32], [cR * 0.3, cell * 0.44], [0, cell * 0.48]], [bl / 2 - cell * 0.1, yy, zz], "x", 10);
       C.muzzle(bl / 2 + cell * 0.4, yy, zz);
     }
   }
@@ -40547,6 +40547,7 @@ var GUNS = /* @__PURE__ */ new Set(["gun", "gatling", "shotgun", "cannon", "gaus
 var LAUNCH = /* @__PURE__ */ new Set(["rocketPod", "missileRack", "cruise", "mortar", "artillery", "charge"]);
 var ENERGY = /* @__PURE__ */ new Set(["laser", "heatray", "plasma", "flamer", "tesla", "emp", "slowbeam", "sonic", "gravity"]);
 var MELEE2 = /* @__PURE__ */ new Set(["saw", "chainsaw", "hammer", "claw", "blade", "drill", "prod", "ram"]);
+var DRAW_D = { S: 0.75, M: 1.5, L: 3, XL: 4.5 };
 var DRAW_K = 1.5 / 0.52;
 var unitScale = (S) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {
@@ -40565,6 +40566,7 @@ function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {
     p: new Bld(),
     rc: new Bld(),
     sp: new Bld(),
+    am: new Bld(),
     kit,
     mod,
     r,
@@ -40622,7 +40624,13 @@ function buildTurret(mod, S, kit, fixed = false, cls, drawD = 0) {
   C.p.mount(pitch);
   C.rc.mount(recoil);
   if (spinG) C.sp.mount(spinG);
-  t.tris = C.b.tris - tris0 + C.p.tris + C.rc.tris + C.sp.tris;
+  if (C.am.tris || hasGeo(C.am)) {
+    const ag = new Group();
+    recoil.add(ag);
+    C.am.mount(ag);
+    t.ammo = ag;
+  }
+  t.tris = C.b.tris - tris0 + C.p.tris + C.rc.tris + C.sp.tris + C.am.tris;
   return t;
 }
 function aimTurret(t, lx, lz, dt, rate = 3) {
@@ -40653,6 +40661,7 @@ function recoilRelax(t, dt) {
     t.spin.rotation.x = (t.spin.rotation.x + dt * t.spinV) % (Math.PI * 2);
   }
 }
+var hasGeo = (B) => B.m.size > 0;
 
 // src/client/proto3d/zfix.ts
 var LIFT = 2e-3;
@@ -48063,7 +48072,6 @@ function contactShadow(L, W) {
   m.renderOrder = 0;
   return m;
 }
-var DRAW_D = { S: 0.75, M: 1.5, L: 2.4, XL: 3.6 };
 function buildUnit(design, team) {
   const ch = CHASSIS_BY_ID.get(design.chassis);
   const mob = MOBILITY_BY_ID.get(design.mobility);

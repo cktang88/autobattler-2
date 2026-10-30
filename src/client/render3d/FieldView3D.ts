@@ -18,7 +18,7 @@ import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
 import { MAPS, type MapTheme } from '../render/ground.ts';
-import { boreOf, calibreMm } from '../render/weaponsize.ts';
+import { drawnBore } from '../proto3d/weapons3d.ts';
 import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
@@ -186,7 +186,9 @@ interface WStyle {
   def: ModuleDef | undefined;
   muzzle: MuzzleKind | null;
 }
-const CLASS_S: Record<string, number> = { S: 0.3, M: 0.5, L: 0.8, XL: 1 };
+// effect size per weapon class in the same ratios as the drawn guns (proto3d DRAW_D 0.75 / 1.5 / 3 / 4.5): a titan
+// gun's flash, round and blast are as big as the gun that fires them
+const CLASS_S: Record<string, number> = { S: 0.3, M: 0.6, L: 1.2, XL: 1.8 };
 
 function famOf(def: ModuleDef | undefined): Fam {
   if (!def) return 'other';
@@ -242,7 +244,8 @@ function styleOf(id: string): WStyle {
     const def = MODULE_BY_ID.get(id);
     const fam = famOf(def);
     const s = (CLASS_S[def?.mount ?? 'M'] ?? 0.5) * (0.75 + 0.5 * (def?.caliber ?? 0.5));
-    const rw = def ? Math.max(0.012, 0.75 * boreOf(calibreMm(def))) : 0.03;
+    // the round is as wide as the drawn barrel it leaves (battlefield body scale ~0.78)
+    const rw = def ? Math.max(0.012, 0.8 * drawnBore(def)) : 0.03;
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
     const j = ((h % 1000) / 1000 - 0.5) * 0.12; // +-6% per module
@@ -2169,6 +2172,8 @@ export class FieldView3D implements BattleView {
         // recoil: the barrel slams back and runs out (slowly on heavy guns), heavy guns rock the whole hull
         const rc = RECOIL[st.fam] ?? [1, 9, 0, false];
         v.rig.kick(e.mount, rc[0] * (0.8 + 0.4 * Math.min(1.2, st.s)), rc[1]);
+        // launchers: the warheads / missile / bombs leave the rack and are back once the weapon has reloaded
+        if (st.def) v.rig.spent(e.mount, Math.max(st.def.cooldown ?? 1, st.def.reload ?? 0) * 0.9);
         const su = byId.get(e.unit);
         if (rc[2] > 0 && su && !su.flying && v.posed) v.rig.rock(normAng(e.angle - su.angle), rc[2] * st.s * 1.5 / Math.sqrt(Math.max(1, v.rig.S)));
         if (!st.muzzle) break; // beams / bolts / flame / melee draw their own flare

@@ -217,9 +217,10 @@ function erector(C: WCtx) {
   C.t.pitch.rotation.z = 0.22;
   for (const s of [-1, 1]) cbox(p, kit.trim, r * 0.35, 0, s * R * 0.9, L * 0.75, r * 0.1, r * 0.08);
   for (const f of [0.15, 0.6]) bx(p, kit.metal, f * L, R * 0.4, 0, r * 0.08, R * 1.4, R * 2.4);
-  missile(rc, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
-  if (nuke) { hazardRings(rc, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10); band(rc, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10); }
-  else accent(C, L * 0.3, R * 2 + r * 0.065, 0, L * 0.25, R * 0.5, undefined, rc);
+  // the missile itself is ammunition: it leaves the erector when fired (C.am) and a fresh one is raised on reload
+  missile(C.am, nuke ? kit.hazard : kit.steel, kit.hull, kit.trim, -L * 0.15, R + r * 0.06, 0, R, L, 10);
+  if (nuke) { hazardRings(C.am, kit, -L * 0.15 + L * 0.5, R + r * 0.06, 0, R * 1.04, L * 0.2, 3, 10); band(C.am, kit.hot, L * 0.82, R + r * 0.06, 0, R * 0.96, r * 0.04, 10); }
+  else accent(C, L * 0.3, R * 2 + r * 0.065, 0, L * 0.25, R * 0.5, undefined, C.am);
   C.acc = true;
   C.muzzle(L * 0.85, R + r * 0.06, 0);
   C.t.shot = 'rocket';
@@ -290,17 +291,17 @@ function charge(C: WCtx) {
   cbox(b, kit.trim, 0, C.fixed ? -r * 0.06 : y0 + r * 0.7, 0, r * 1.3, r * 0.12, r * 0.9);
   if (id === 'clusterbombs' || id === 'stuncluster') {
     for (const s of [-1, 1]) {
-      capsule(b, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, 'x', 8);
-      for (let i = 0; i < 3; i++) b.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], 'y', 5);
+      capsule(C.am, kit.hull, 0, yb, s * r * 0.3, r * 0.26, r * 1.5, 'x', 8);
+      for (let i = 0; i < 3; i++) C.am.cyl(kit.trim, r * 0.07, r * 0.07, r * 0.02, [-r * 0.3 + i * r * 0.3, yb - r * 0.25, s * r * 0.3], 'y', 5);
     }
   } else {
-    for (const z of [-r * 0.45, 0, r * 0.45]) missile(b, kit.canvas, kit.canvas, kit.trim, -r * 0.65, yb, z, r * 0.2, r * 1.35, 8);
+    for (const z of [-r * 0.45, 0, r * 0.45]) missile(C.am, kit.canvas, kit.canvas, kit.trim, -r * 0.65, yb, z, r * 0.2, r * 1.35, 8);
   }
   // stun / EMP bombs: the same racks, banded in electric blue (glowing coil rings round each casing)
   if (C.mod.stun) {
     const zs = id === 'stuncluster' ? [-r * 0.3, r * 0.3] : [-r * 0.45, 0, r * 0.45];
     const rr = id === 'stuncluster' ? r * 0.27 : r * 0.21;
-    for (const z of zs) for (const x of [-r * 0.35, r * 0.1]) b.cyl(kit.rail, rr, rr, r * 0.05, [x, yb, z], 'x', 8);
+    for (const z of zs) for (const x of [-r * 0.35, r * 0.1]) C.am.cyl(kit.rail, rr, rr, r * 0.05, [x, yb, z], 'x', 8);
   }
   accent(C, 0, (C.fixed ? -r * 0.06 : y0 + r * 0.7) + r * 0.065, 0, r * 0.5, r * 0.4);
   C.t.shot = 'none';

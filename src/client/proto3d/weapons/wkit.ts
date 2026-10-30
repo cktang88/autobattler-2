@@ -27,6 +27,7 @@ export interface WCtx {
   /** pitch cradle */ p: Bld;
   /** recoiling barrels */ rc: Bld;
   /** spinning cluster (about local +X of t.spin) */ sp: Bld;
+  /** visible ammunition, in the recoil frame (hidden while the weapon reloads) */ am: Bld;
   kit: Kit;
   mod: ModuleDef;
   /** housing radius (cells) = D / 2 */ r: number;

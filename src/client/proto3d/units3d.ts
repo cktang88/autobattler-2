@@ -9,7 +9,7 @@ import { artBox, mountOffsets, PART_SHAPES } from '../../shared/mountgeo.ts';
 import type { Design } from '../../shared/types.ts';
 import { makeKit, rng } from './materials.ts';
 import { AUTO_DRESS, autoDress } from './chassis/hs-kit.ts';
-import { buildTurret, type Turret } from './weapons3d.ts';
+import { buildTurret, DRAW_D, type Turret } from './weapons3d.ts';
 import { CLASS_RANK, slotD, weaponD } from '../render/weaponsize.ts';
 import type { MountClass } from '../../shared/types.ts';
 import { fixZFight } from './zfix.ts';
@@ -53,9 +53,6 @@ export function contactShadow(L: number, W: number): THREE.Mesh {
   m.renderOrder = 0;
   return m;
 }
-
-/** Drawn housing diameter (cells) of a weapon / module at the middle of its size class, the same on every hull. */
-const DRAW_D: Record<MountClass, number> = { S: 0.75, M: 1.5, L: 2.4, XL: 3.6 };
 
 export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const ch = CHASSIS_BY_ID.get(design.chassis)!;

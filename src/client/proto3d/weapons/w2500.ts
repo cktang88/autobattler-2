@@ -131,7 +131,7 @@ export function blades(C: WCtx): void {
       if (i * cols + j >= per) continue;
       const yy = (i - (rows - 1) / 2) * cell + (j % 2 ? cell * 0.18 : 0), zz = z + (j - (cols - 1) / 2) * cell, cR = cell * 0.36;
       if (!dt) ring(rc, kit.rubber, bl / 2 + r * 0.02, yy, zz, cR * 0.86, cR * 1.18, r * 0.03, 10);
-      rc.lathe(tip, dt ? [[cR, 0], [cR, cell * 0.12], [cR * 0.6, cell * 0.36], [0, cell * 0.48]] : [[0, 0], [cR, 0], [cR, cell * 0.12], [cR * 0.72, cell * 0.32], [cR * 0.3, cell * 0.44], [0, cell * 0.48]], [bl / 2 - cell * 0.1, yy, zz], 'x', 10);
+      C.am.lathe(tip, dt ? [[cR, 0], [cR, cell * 0.12], [cR * 0.6, cell * 0.36], [0, cell * 0.48]] : [[0, 0], [cR, 0], [cR, cell * 0.12], [cR * 0.72, cell * 0.32], [cR * 0.3, cell * 0.44], [0, cell * 0.48]], [bl / 2 - cell * 0.1, yy, zz], 'x', 10);
       C.muzzle(bl / 2 + cell * 0.4, yy, zz);
     }
   }

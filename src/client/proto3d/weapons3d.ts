@@ -33,6 +33,9 @@ export interface Turret {
   muzzles: THREE.Object3D[];
   /** spinning barrel cluster (gatling), saw disc or drill: rotated about its local X */
   spin?: THREE.Object3D;
+  /** visible ammunition (warheads in a launcher's cells, a missile on its erector, bombs on a rack): the renderer
+   *  hides it when the weapon fires and shows it again once reloaded */
+  ammo?: THREE.Object3D;
   /** spin rate (rad/s) of `spin` right now: kicked up by each shot, winding down to idleSpin between bursts */
   spinV: number;
   /** spin rate at rest: 0 for rotary barrels (a parked gatling holds still), a slow idle for saw discs / drills */
@@ -58,8 +61,14 @@ const ENERGY = new Set(['laser', 'heatray', 'plasma', 'flamer', 'tesla', 'emp', 
 const MELEE = new Set(['saw', 'chainsaw', 'hammer', 'claw', 'blade', 'drill', 'prod', 'ram']);
 
 /** Unit-size scale applied to reference weapon sizes (bigger hulls carry proportionally bigger hardware). */
-/** reference cells -> drawn cells for ground weapons (units3d DRAW_D M 1.5 over the M band middle 0.52) */
+/** Drawn housing diameter (cells) of a weapon / module of each size class, the same on every hull: each class twice
+ *  the one below (L 2x M 2x S), titan weapons half again over large, so a weapon's class reads at a glance. */
+export const DRAW_D: Record<MountClass, number> = { S: 0.75, M: 1.5, L: 3.0, XL: 4.5 };
+/** reference cells -> drawn cells for ground weapons (DRAW_D M 1.5 over the M band middle 0.52) */
 export const DRAW_K = 1.5 / 0.52;
+/** drawn barrel radius of a ground weapon (cells): what its rounds / rockets / beams are sized from */
+export const drawnBore = (mod: ModuleDef, cls: MountClass = mod.mount): number =>
+  Math.max(boreOf(calibreMm(mod)) * 0.4 * DRAW_K, (DRAW_D[cls] / 2) * 0.075);
 
 export const unitScale = (S: number) => unitK(S) * (S > 2 ? 1 + 0.22 * (S - 2) : 1);
 
@@ -79,7 +88,7 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   const t: Turret = { yaw, pitch, recoil, muzzles: [], fixed, shot: 'tracer', rate: 0.5, r, tris: 0, spinV: 0, idleSpin: 0 };
   let spinG: THREE.Group | null = null;
   const C: WCtx = {
-    b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), kit, mod, r, D,
+    b: new Bld(), p: new Bld(), rc: new Bld(), sp: new Bld(), am: new Bld(), kit, mod, r, D,
     c: classPos(mod, ov), tier: (ov ? CLASS_RANK[ov] : moduleTier(mod)) as WCtx['tier'], nb: mod.barrels ?? 1,
     // armour level of the weapon body by its size class only (a weapon looks the same on every hull): small weapons
     // are slim exposed guns, medium ones get side pods and a sensor, large / titan weapons the full armoured body
@@ -122,7 +131,8 @@ export function buildTurret(mod: ModuleDef, S: number, kit: Kit, fixed = false, 
   C.p.mount(pitch);
   C.rc.mount(recoil);
   if (spinG) C.sp.mount(spinG);
-  t.tris = C.b.tris - tris0 + C.p.tris + C.rc.tris + C.sp.tris;
+  if (C.am.tris || hasGeo(C.am)) { const ag = new THREE.Group(); recoil.add(ag); C.am.mount(ag); t.ammo = ag; }
+  t.tris = C.b.tris - tris0 + C.p.tris + C.rc.tris + C.sp.tris + C.am.tris;
   return t;
 }
 
@@ -157,6 +167,9 @@ export function recoilRelax(t: Turret, dt: number): void {
     t.spin.rotation.x = (t.spin.rotation.x + dt * t.spinV) % (Math.PI * 2);
   }
 }
+
+/** a builder holds geometry not yet mounted */
+const hasGeo = (B: Bld): boolean => (B as unknown as { m: Map<unknown, unknown[]> }).m.size > 0;
 
 export { loft };
 export type { P2 };

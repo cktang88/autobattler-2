@@ -240,6 +240,8 @@ export class Rig {
   private relax: number[] = [];
   /** hull rock from heavy guns: tilt vector (the top's displacement, radians, hull-local x fwd / z right) + velocity */
   private rk = [0, 0, 0, 0];
+  /** per template node: seconds until a fired launcher's ammunition (Turret.ammo) shows again */
+  private ammoT = new Map<number, number>();
 
   constructor(tpl: Template) {
     this.tpl = tpl;
@@ -325,6 +327,18 @@ export class Rig {
   rock(localAngle: number, amt: number): void {
     this.rk[2] -= Math.cos(localAngle) * amt; this.rk[3] -= Math.sin(localAngle) * amt;
   }
+  /** the weapon on mount i fired its visible ammunition (warheads, a missile on its erector, bombs): it is gone
+   *  from the launcher until `sec` seconds later, when the reload puts it back */
+  spent(i: number, sec: number): void {
+    const tu = this.turrets[i];
+    if (!tu?.ammo) return;
+    const k = this.tpl.nodes.findIndex((n) => n.src === tu.ammo);
+    const o = k >= 0 ? this.objs[k] : null;
+    if (!o) return;
+    o.scale.setScalar(1e-4); o.updateMatrix();
+    this.ammoT.set(k, Math.max(0.3, sec));
+    this.dirty = true;
+  }
   /** number of barrel tips / tubes on mount i */
   muzzleCount(mount: number): number { return this.turrets[mount]?.muzzles.length ?? 0; }
   /** the barrel that fires next on mount i (then advances to the next one) */
@@ -351,7 +365,7 @@ export class Rig {
       if (n.manual) o.matrix.copy(n.src.matrix); else o.updateMatrix();
     });
     for (const tu of this.all) tu.spinV = tu.idleSpin;
-    this.barrel.length = 0; this.relax.length = 0; this.rk.fill(0);
+    this.barrel.length = 0; this.relax.length = 0; this.rk.fill(0); this.ammoT.clear();
     this.settle = 2;
     this.dirty = false;
   }
@@ -376,6 +390,12 @@ export class Rig {
   /** recompute transforms of the turret rigs / animated nodes after pose changes (root must already be positioned) */
   update(dt: number): void {
     if (this.frozen) return;
+    for (const [k, t] of this.ammoT) {
+      if (t - dt > 0) { this.ammoT.set(k, t - dt); continue; }
+      const o = this.objs[k]!, n = this.tpl.nodes[k];
+      o.scale.copy(n.src.scale); o.updateMatrix();
+      this.ammoT.delete(k);
+    }
     for (let i = 0; i < this.all.length; i++) {
       const tu = this.all[i], x0 = tu.recoil.position.x, rate = this.relax[i];
       recoilRelax(tu, dt);
