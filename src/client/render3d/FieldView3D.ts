@@ -17,7 +17,7 @@ import { DT, type BattleEvent, type DeathKind, type SimProjectile, type SimUnit,
 import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
-import { MAPS, type BakedSun, type MapTheme } from '../render/ground.ts';
+import { defaultMap, type BakedSun, type MapTheme } from '../render/ground.ts';
 import { loadBakedMap } from './bakedmap.ts';
 import { drawnBore } from '../proto3d/weapons3d.ts';
 import { TEAM_PAL } from '../render/palette.ts';
@@ -441,7 +441,7 @@ export class FieldView3D implements BattleView {
   private post: Post;
   /** dark contact edge around unit silhouettes (post pass fed by a unit coverage mask) */
   private outline = new UnitOutline();
-  private map: MapTheme = MAPS[0];
+  private map: MapTheme = defaultMap();
   private terrain: { group: THREE.Group; ground: THREE.Mesh } | null = null;
   private rocks: THREE.Object3D[] = [];
   private myZone: THREE.Mesh;

@@ -38,7 +38,7 @@ import { DT } from '../../shared/sim/types.ts';
 import type { Design, Side } from '../../shared/types.ts';
 import { Fx, modOf, visualOf } from './fx.ts';
 import { fireTex, glowTex, hash1, mixHex } from './vfx.ts';
-import { MAPS, SURROUND, groundCanvas, groundRegion, surroundCanvas, type MapTheme } from './ground.ts';
+import { defaultMap, SURROUND, groundCanvas, groundRegion, surroundCanvas, type MapTheme } from './ground.ts';
 import { TEAM_PAL, clamp, ctx2d, hash01, lerp, lerpAngle, rgba, roundRect, shade, softDot, type Ctx, type Team } from './palette.ts';
 import { loadTextures, tex, tinted } from './textures.ts';
 import { moduleGlow } from './turrets.ts';
@@ -216,7 +216,7 @@ export class FieldView {
     return { x: this.dirs.ux * l, y: this.dirs.uy * l };
   }
   /** terrain theme of the current map */
-  private map: MapTheme = MAPS[0];
+  private map: MapTheme = defaultMap();
   /** switch the battlefield terrain (maps rotate per round) */
   setMap(map: MapTheme): void {
     if (map.id === this.map.id) return;

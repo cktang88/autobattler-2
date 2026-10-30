@@ -5,7 +5,7 @@
 // and it lines up with every other rectangle: the full-field canvas, the hi-res patch drawn when zoomed in, and the
 // darkened surround outside the field all agree. Kept low-contrast and mid-dark so units (and their team glows) pop.
 
-import { DEPLOY_D, FIELD_H, FIELD_W, STANDARD_FIELD, fieldKey, type FieldSize } from '../../shared/grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, STANDARD_FIELD, fieldKey, fieldKeyOf, type FieldSize } from '../../shared/grid.ts';
 import { ctx2d, makeCanvas, type Ctx } from './palette.ts';
 
 export type MapId = 'basin' | 'plains' | 'steppe' | 'bastion';
@@ -35,6 +35,11 @@ export interface MapTheme {
 
 export const MAPS: MapTheme[] = [
   {
+    id: 'bastion', name: 'Sea Bastion', blurb: 'A paved arena between two island fortresses', seed: 53,
+    ramp: [[104, 100, 94], [128, 120, 106], [150, 138, 118]], patch: [84, 82, 80], patchAmt: 0.4,
+    grid: [240, 236, 220], void: '#0b2a3d', baked: { dir: 'bastion', field: STANDARD_FIELD, sun: { at: [34, 22, -24], color: '#ffe6c8', intensity: 3.1 } },
+  },
+  {
     id: 'basin', name: 'Dust Basin', blurb: 'Sun-baked sand and cracked hardpan', seed: 11,
     ramp: [[96, 74, 52], [128, 100, 68], [150, 121, 84]], patch: [92, 70, 52], patchAmt: 0.45,
     grid: [255, 236, 200], void: '#1d1712',
@@ -49,14 +54,11 @@ export const MAPS: MapTheme[] = [
     ramp: [[72, 82, 94], [96, 108, 120], [118, 130, 142]], patch: [64, 72, 84], patchAmt: 0.35,
     grid: [235, 245, 255], void: '#10141a',
   },
-  {
-    id: 'bastion', name: 'Sea Bastion', blurb: 'A paved arena between two island fortresses', seed: 53,
-    ramp: [[104, 100, 94], [128, 120, 106], [150, 138, 118]], patch: [84, 82, 80], patchAmt: 0.4,
-    grid: [240, 236, 220], void: '#0b2a3d', baked: { dir: 'bastion', field: STANDARD_FIELD, sun: { at: [34, 22, -24], color: '#ffe6c8', intensity: 3.1 } },
-  },
 ];
 
 export const MAP_BY_ID = new Map(MAPS.map((m) => [m.id, m] as const));
+/** The map a view opens on: the first that can play on the current field (a baked map fits only its own field size). */
+export const defaultMap = (): MapTheme => MAPS.find((m) => !m.baked || fieldKeyOf(m.baked.field) === fieldKey())!;
 /** Maps rotate every round. */
 export const mapForRound = (round: number): MapTheme => MAPS[((Math.max(1, round) - 1) % MAPS.length + MAPS.length) % MAPS.length];
 
