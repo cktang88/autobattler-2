@@ -48099,7 +48099,8 @@ function buildUnit(design, team) {
   const tur = mods.map((mod, i) => {
     if (!mod) return null;
     const cls = slotCls(mod, i) ?? mod.mount;
-    return buildTurret(mod, S, makeKit(team, fin2.turret[i] ?? fin2.hull), flying, slotCls(mod, i), flying ? 0 : DRAW_D[cls]);
+    const d = mod.kind === "weapon" ? DRAW_D[cls] : Math.min(DRAW_D[cls] * 0.6, 1.2);
+    return buildTurret(mod, S, makeKit(team, fin2.turret[i] ?? fin2.hull), flying, slotCls(mod, i), flying ? 0 : d);
   });
   let hero = -1;
   mods.forEach((m, i) => {

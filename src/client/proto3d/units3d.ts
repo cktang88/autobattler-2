@@ -84,7 +84,11 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
   const tur = mods.map((mod, i) => {
     if (!mod) return null;
     const cls = slotCls(mod, i) ?? mod.mount;
-    return buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), flying ? 0 : DRAW_D[cls]);
+    // only weapons get a weapon-class housing (a hull carries at most its weapon cap of them, parts.ts weaponCap);
+    // utilities, armour and shields in the other sockets are compact add-on modules, never turret-sized, so a giant's
+    // spare sockets don't read as more guns
+    const d = mod.kind === 'weapon' ? DRAW_D[cls] : Math.min(DRAW_D[cls] * 0.6, 1.2);
+    return buildTurret(mod, S, makeKit(team, fin.turret[i] ?? fin.hull), flying, slotCls(mod, i), flying ? 0 : d);
   });
   // weapon size is a property of the weapon, never of the hull it sits on or of whether it is the main gun: every
   // weapon of a size class has the same housing (DRAW_D, built at that size by buildTurret, no multipliers after);

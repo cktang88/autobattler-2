@@ -1,5 +1,5 @@
-// Fit audit: every ground chassis with every mount filled by a typical weapon of its class (S hmg, M autocannon,
-// L avenger, XL annihilator). Prints the biggest housing vs the hull's narrow side and OVERLAP for separately standing
+// Fit audit: every ground chassis with its biggest sockets armed up to its weapon cap by a typical weapon of the class
+// (S hmg, M autocannon, L avenger, XL annihilator) and utilities (armour of the slot's class) in the other sockets. Prints the biggest housing vs the hull's narrow side and OVERLAP for separately standing
 // turrets whose housings intersect (centre distance < 90% of the radii sum; the % is how close they are).
 //   node scripts/3d/fit-audit.ts            ONLY=strider,saucer node scripts/3d/fit-audit.ts
 const ctx2d: unknown = new Proxy({}, { get(_t, k) {
@@ -11,7 +11,8 @@ const ctx2d: unknown = new Proxy({}, { get(_t, k) {
 const R = new URL('../../', import.meta.url).pathname;
 const THREE = await import(R + 'node_modules/three/build/three.module.js');
 const { buildUnit } = await import(R + 'src/client/proto3d/units3d.ts');
-const { CHASSIS, MOBILITY, pairingError } = await import(R + 'src/shared/parts.ts');
+const { CHASSIS, MOBILITY, MODULES, pairingError, weaponCap } = await import(R + 'src/shared/parts.ts');
+const RK: Record<string, number> = { S: 1, M: 2, L: 3, XL: 4 };
 const PICK: Record<string, string> = { S: 'hmg', M: 'autocannon', L: 'avenger', XL: 'annihilator' };
 const only = process.env.ONLY?.split(',');
 for (const ch of CHASSIS) {
@@ -19,7 +20,11 @@ for (const ch of CHASSIS) {
   if ((ch.domain ?? 'ground') !== 'ground') continue;
   const mob = MOBILITY.find((m: any) => !pairingError(ch.id, m.id) && m.kind === 'ground');
   if (!mob) continue;
-  const d = { id: 'fit-' + ch.id, name: ch.id, chassis: ch.id, mobility: mob.id, mounts: ch.mounts.map((c: string) => PICK[c]) };
+  // weapons in the biggest sockets up to the hull's weapon cap, utilities (armour of the slot's class) in the rest
+  const order = ch.mounts.map((c: string, i: number) => [i, RK[c]] as const).sort((a: readonly number[], b: readonly number[]) => b[1] - a[1]).map((x: readonly number[]) => x[0]);
+  const armed = new Set(order.slice(0, weaponCap(ch)));
+  const util = (c: string) => MODULES.find((m: any) => m.kind !== 'weapon' && m.mount === c)?.id ?? null;
+  const d = { id: 'fit-' + ch.id, name: ch.id, chassis: ch.id, mobility: mob.id, mounts: ch.mounts.map((c: string, i: number) => (armed.has(i) ? PICK[c] : util(c))) };
   let u; try { u = buildUnit(d as any, 0); } catch (e) { console.log(ch.id, 'ERR', (e as Error).message); continue; }
   u.root.updateMatrixWorld(true);
   const sep = u.turrets.filter((t: any) => t.host === undefined);

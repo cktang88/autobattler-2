@@ -89,7 +89,12 @@ src/client/render3d/     game renderer: units-adapter.ts (instanced rigs from a 
   little inside the class: sqrt of weaponD / slotD). The same gun is the same size everywhere, so players read
   weapons by size. A hull gets its integrated look by being designed round its biggest slots (its 1-2 main weapon
   slots, which are the bigger classes) with everything else fitting round them, NOT by inflating the main gun.
-  The weapon body's armour level (`C.arm`) also follows the size class only. Aircraft keep their own hardpoint
+  The weapon body's armour level (`C.arm`) also follows the size class only.
+- **Weapon cap**: a hull carries at most `weaponCap` weapons (parts.ts: sizes 1-3 two, giants three, titans four);
+  its other sockets take utilities / armour / shields, which are drawn as compact add-on modules (0.6 x the class
+  size, at most 1.2 cells), never turret-sized. Design a hull round its 1-2 biggest weapon sockets (its main weapon
+  system) plus the rest of its cap; the fit audit arms the biggest sockets up to the cap and fills the rest with
+  utilities. Aircraft keep their own hardpoint
   scale. Never rescale a weapon per hull (no hero boost, no shrinking to fit: fix the layout / mounts instead).
   The housing is exactly `DRAW_D` (buildTurret `drawD`); only barrels vary (bore from calibre, length per weapon),
   all on one drawing scale `DRAW_K`. No hull-based barrel stretch either.
