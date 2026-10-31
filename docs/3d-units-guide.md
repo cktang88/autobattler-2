@@ -4,7 +4,12 @@ How the procedural 3D units (hulls, legs, weapons) are built, what makes them lo
 the hard way. Read this before touching `src/client/proto3d/`. The goal: units that look as cool, deadly and
 imposing as Mechabellum / War Robots / BattleTech, readable from the RTS camera.
 
-References live in `docs/inspo/` (user-picked) and `docs/inspo/research/` (War Robots Ares, Behemoth, Fafnir,
+References live in `docs/inspo/` (user-picked; `mechabellum_mountain.jpg` is the bar for a titan: every colour change
+is a separate part with real depth, legs and shoulders built from stacked pieces, weapons racked in deliberate rows; also wanted, not yet saved as files: a StarCraft-style heavy walker in gunmetal +
+red plates, where every part is obvious and no texture runs across several parts and blurs their seams; and the
+Ashes of the Singularity style as an alternative look for some factions / hulls: smooth sculpted dark-gunmetal hulls
+with white trim sweeps and orange glow channels cut deep into the shell, or long carrier hulls with grey decks, team
+colour as bold trim lines that follow the panel edges, recessed blue thruster rings) and `docs/inspo/research/` (War Robots Ares, Behemoth, Fafnir,
 Raijin, Ravana; BattleTech Timber Wolf). Mechabellum unit renders and top-down silhouettes were the first target.
 **Look at real reference images, never design from memory.**
 
@@ -38,6 +43,11 @@ Raijin, Ravana; BattleTech Timber Wolf). Mechabellum unit renders and top-down s
   Paint roles alternate: `kit.armor` (team colour), `kit.armor2` (near-black team), `kit.shell` (light bone),
   `kit.mech` (near-black mechanics), `kit.joint` (metal), emissives `kit.glow` / `kit.lamp` / `kit.plasma` /
   `kit.hot`.
+- **Colour comes from parts, never from the texture.** Team colour / near-black / bone change where one PART meets
+  another (a plate, a drum, a housing), each with real depth behind it. The surface skins (surface3d.ts) only add
+  seams, bump, wear and grime: no skin paints team-accent panels or lights from its mask, no bare-metal pass bleaches
+  the team plates, and texture panels never take their own shade. When they did, units looked like "a Mondrian painting
+  draped over a poly frame" (blue / white / black rectangles ignoring the geometry). If a surface looks flat, add a part.
 - **Layered armour**: 2-3 stacked bevelled plates with offset edges; exposed mechanics (rams, drums, pistons) in
   the gaps; glowing cores seen through cut-outs.
 - **A few big details, not many tiny ones.** Rows of tiny boxes read as "teeth" or "keyboard keys". Dots are cheap.
@@ -298,7 +308,8 @@ railgun: real rails, sizzling energy, wings -> denser, cooler weapons; legs like
 and vertical; not low-poly; 30k budget and simplification -> flat hulls should become vertical bodies / mechs,
 diverse, built around their weapons -> research real mech games (War Robots, Star Wars, BattleTech): look cool,
 deadly, imposing -> fix flicker and garage sockets -> write all of this down (this file) -> the same weapon must be
-the same size on every hull (size by class), hulls integrate by designing round their 1-2 main (bigger) slots.
+the same size on every hull (size by class), hulls integrate by designing round their 1-2 main (bigger) slots. ->
+no texture-painted colour panels ("Mondrian blanket"): colour and depth come from real parts, like Mechabellum's Mountain.
 
 ---
 

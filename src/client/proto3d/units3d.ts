@@ -192,6 +192,7 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
     T.userData.torso = true; // not part of the hero weapon itself (the garage socket / highlight skips it)
     const res = out.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i]!.r), utilR: riders.map((i) => tur[i]!.r) });
     tb.mount(T);
+    H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
     const p0 = res.hp[0] ?? [0, 0, 0];
     H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);

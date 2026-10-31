@@ -36,16 +36,19 @@ const N_LAYERS = 15, TEX = 512;
 
 // per layer: what the skin's mask does and how strong its bump is
 //   L0 = (bump, mask darkens, mask = bare metal, mask = team accent paint)   L1 = (glow, dust, sheen, grime)
+// Colour comes from the PARTS (kit.* rows), never from the texture: no skin paints team-accent panels or lights from its
+// mask (that drew a Mondrian grid of blue / white / black rectangles draped over the geometry, ignoring the real parts),
+// so the accent and glow columns stay 0. The skins only add seams, bump, wear and grime.
 const L0: Record<LayerName, [number, number, number, number]> = {
   scout: [1.0, 0.14, 0, 0], cast: [1.2, 0.16, 0, 0], slab: [1.4, 0.14, 0, 0], titan: [1.1, 0.22, 0.3, 0],
-  air: [0.8, 0, 0, 0], rotor: [1.0, 0, 0, 0], arty: [1.0, 0, 0, 0], support: [0.7, 0, 0, 0.7],
-  carapace: [0.9, 0, 0, 0], ceramic: [1.1, 0, 0, 0.8], brawler: [1.3, 0, 0.9, 0], stealth: [0.6, 0, 0, 0],
-  grating: [1.3, 0, 0, 0], machinery: [1.2, 0, 0, 0], dullmetal: [1.25, 0, 0, 0.8],
+  air: [0.8, 0, 0, 0], rotor: [1.0, 0, 0, 0], arty: [1.0, 0, 0, 0], support: [0.7, 0, 0, 0],
+  carapace: [0.9, 0, 0, 0], ceramic: [0.7, 0, 0, 0], brawler: [1.3, 0, 0.9, 0], stealth: [0.6, 0, 0, 0],
+  grating: [1.3, 0, 0, 0], machinery: [1.2, 0, 0, 0], dullmetal: [0.9, 0, 0, 0],
 };
 const L1: Record<LayerName, [number, number, number, number]> = {
   scout: [0, 0, 0, 0], cast: [0, 0, 0, 0], slab: [0, 0, 0, 0.7], titan: [0, 0, 0, 0],
   air: [0, 0, 0, 0], rotor: [0, 0, 0, 0.6], arty: [0, 0.55, 0, 0], support: [0, 0, 0, 0],
-  carapace: [0, 0, 0.35, 0], ceramic: [1.6, 0, 0, 0], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
+  carapace: [0, 0, 0.35, 0], ceramic: [0, 0, 0, 0], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
   grating: [0, 0, 0, 0], machinery: [0, 0, 0, 0.6], dullmetal: [0, 0, 0, 0.3],
 };
 // per PRIMARY skin (the whole unit shares it, so one machine has one wear / grime level): (wear, grime, mottle, -)
@@ -57,11 +60,12 @@ const UNIT: Record<LayerName, [number, number, number, number]> = {
 };
 // per layer: metal skins, where the paint gives way to bare metal and the team colour lives on the accent mask
 //   L2 = (metal amount, metal brightness, roughness, share of the team hue kept)
+// (gentle: a full bare-metal pass bleached the team-colour parts grey, so the unit lost its part-by-part paint)
 const L2: Record<LayerName, [number, number, number, number]> = {
   scout: [0, 0, 0, 0], cast: [0, 0, 0, 0], slab: [0, 0, 0, 0], titan: [0, 0, 0, 0],
   air: [0, 0, 0, 0], rotor: [0, 0, 0, 0], arty: [0, 0, 0, 0], support: [0, 0, 0, 0],
-  carapace: [0, 0, 0, 0], ceramic: [0.85, 0.2, 0.42, 0.15], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
-  grating: [0, 0, 0, 0], machinery: [0, 0, 0, 0], dullmetal: [0.88, 0.27, 0.62, 0.1],
+  carapace: [0, 0, 0, 0], ceramic: [0.35, 0.3, 0.5, 0.8], brawler: [0, 0, 0, 0], stealth: [0, 0, 0, 0],
+  grating: [0, 0, 0, 0], machinery: [0, 0, 0, 0], dullmetal: [0.35, 0.35, 0.65, 0.8],
 };
 const vec4s = (t: Record<LayerName, [number, number, number, number]>, none: [number, number, number, number] = [1, 0, 0, 0]) => {
   const out: THREE.Vector4[] = [];
@@ -92,7 +96,7 @@ export const surfaceUniforms = {
   /** 1 when the maps are loaded and detail is enabled */
   sdOn: { value: 0 },
   /** global bump strength */
-  sdBump: { value: 0.9 },
+  sdBump: { value: 0.7 },
   sdL0: { value: vec4s(L0) },
   sdL1: { value: vec4s(L1) },
   sdL2: { value: vec4s(L2, [0, 0, 0, 0]) },
@@ -252,7 +256,9 @@ export const SD_APPLY = /* glsl */ `
       float lm = max(dot(base, vec3(0.2126, 0.7152, 0.0722)), 0.02);
       base = mix(base, l2.y * mix(vec3(1.0), base / lm, l2.w), metalK);
     }
-    base *= mix(1.0, pow(sdCav, 1.5), det);
+    // panel tone: seams and recesses darken, but whole texture panels never take their own shade (a patchwork of
+    // light / dark rectangles reads as a painting over the hull, not as parts)
+    base *= mix(1.0, pow(min(sdCav, 1.0), 1.5), det * 0.55);
     // the skin's special mask: camo / pits / scorch darken, gouges = bare metal, role paint in the team accent,
     // dust, chitin sheen, soot / oil = grime. Glowing skins split the mask: 0.5 = accent paint, 1 = lights
     float mk = sdMask * sdRowDet;
