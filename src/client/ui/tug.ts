@@ -13,14 +13,14 @@ import {
 import { makeView } from '../render/viewfactory.ts';
 import type { BattleView } from '../render/view.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
-import { openModal, paintWhenLaidOut, sizeLabel } from './match-ui.ts';
-import { zoomButtons } from './fieldtools.ts';
+import { openModal, paintWhenLaidOut, quickCard, sizeLabel } from './match-ui.ts';
+import { liveLine, liveUnitAt, placeTipAt, tipFor, zoomButtons } from './fieldtools.ts';
 import { createFpsMeter } from './fps.ts';
 import { drawPartIcon } from '../render/field.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { weaponDps } from '../../shared/stats.ts';
 import { aiDeck, type AiDifficulty } from '../../shared/ai.ts';
-import { FIELD_H, FIELD_W, STANDARD_FIELD, fmtMeters, setField } from '../../shared/grid.ts';
+import { FIELD_H, FIELD_W, STANDARD_FIELD, fmtMeters, normSpacing, setField } from '../../shared/grid.ts';
 import { TICK_RATE } from '../../shared/sim/types.ts';
 import { computeStats } from '../../shared/stats.ts';
 import {
@@ -28,6 +28,7 @@ import {
   validateRoster, TugGame, type TugCommand, type TugOrder,
 } from '../../shared/tug.ts';
 import { TugAi } from '../../shared/tugai.ts';
+import type { SimUnit } from '../../shared/sim/types.ts';
 import type { Design, ModuleDef, Side, Size } from '../../shared/types.ts';
 
 /** what the game screen plays: the AI locally, or an online room */
@@ -356,7 +357,9 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const cd = h('span.tug-cd', { 'aria-hidden': 'true' });
     const st = computeStats(d);
     const c = h('button.tug-unit', {
-      title: `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}  [${i + 1}]`,
+      'aria-label': `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}  [${i + 1}]`,
+      onpointerenter: (e: PointerEvent) => { if (e.pointerType === 'mouse') showShopCard(c, d); },
+      onpointerleave: () => { if (quickFrom === c) hideQuick(); },
       onclick: () => { sfx('click'); sel = sel === i ? -1 : i; renderCards(); },
     }, cv, cd, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null), h('kbd.tug-key', null, String(i + 1)));
     cards.push({ el: c, d, cost, cd });
@@ -513,12 +516,26 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   let hover: { x: number; y: number } | null = null;
   const local = (e: PointerEvent) => { const r = canvas.getBoundingClientRect(); return { px: e.clientX - r.left, py: e.clientY - r.top }; };
   const toWorld = (e: PointerEvent) => { const { px, py } = local(e); try { return view.screenToWorld(px, py); } catch { return null; } };
-  canvas.addEventListener('pointermove', (e) => { hover = toWorld(e); });
-  canvas.addEventListener('pointerleave', () => { hover = null; });
+  canvas.addEventListener('pointermove', (e) => {
+    hover = toWorld(e);
+    // hovering a unit (mouse, nothing picked to drop, no card pinned): its quick card follows the pointer
+    if (e.pointerType !== 'mouse' || sel >= 0 || tipEl || view.wasDrag || e.buttons) { if (quickFrom === canvas) hideQuick(); return; }
+    const { px, py } = local(e);
+    const u = liveUnitAt(view, g.battle, px, py);
+    if (u) showQuick(u, { x: e.clientX, y: e.clientY }); else if (quickFrom === canvas) hideQuick();
+  });
+  canvas.addEventListener('pointerleave', () => { hover = null; if (quickFrom === canvas) hideQuick(); });
   canvas.addEventListener('pointerup', (e) => {
     if (view.wasDrag || e.button > 0) return;
+    if (sel < 0) {
+      // no card picked: click a unit to pin its stats (live hp + damage), click empty ground to close
+      const { px, py } = local(e);
+      const u = liveUnitAt(view, g.battle, px, py);
+      if (u) { showLiveTip(u, { x: e.clientX, y: e.clientY }); sfx('click'); } else hideTip();
+      return;
+    }
     const w = toWorld(e);
-    if (!w || sel < 0) return;
+    if (!w) return;
     send({ t: 'buy', designId: cards[sel].d.id, x: w.x, y: w.y, ...(rot ? { rot: true } : {}) });
   });
   canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); if (sel >= 0 && !view.wasDrag) { sel = -1; renderCards(); } });
@@ -526,7 +543,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
     const n = Number(e.key);
     if (n >= 1 && n <= cards.length) { sel = sel === n - 1 ? -1 : n - 1; renderCards(); }
-    else if (e.key === 'Escape') { sel = -1; renderCards(); }
+    else if (e.key === 'Escape') { if (tipEl && sel < 0) hideTip(); sel = -1; renderCards(); }
     else if (e.key === 'r' || e.key === 'R') rot = !rot;
     else if (e.key === 'i' || e.key === 'I') send({ t: 'income' });
     else if (e.key === 'u' || e.key === 'U') send({ t: 'tier' });
@@ -536,6 +553,67 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   window.addEventListener('keydown', onKey);
   const onResize = () => { try { view.resize(); } catch { /* */ } };
   window.addEventListener('resize', onResize);
+
+  // ---- inspect: a clicked unit's stat card, pinned where it was clicked, its hp / damage kept live ----
+  let tipEl: HTMLElement | null = null;
+  let tipId = -1, tipT = 0;
+  function hideTip(): void { tipEl?.remove(); tipEl = null; tipId = -1; }
+  function showLiveTip(u: SimUnit, at: { x: number; y: number }): void {
+    hideTip();
+    hideQuick();
+    const mine = u.side === me;
+    tipEl = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats, undefined), undefined, liveLine(g.battle, u));
+    fieldwrap.append(tipEl);
+    tipId = u.id;
+    placeTipAt(tipEl, fieldwrap, at, { w: tipEl.offsetWidth, h: tipEl.offsetHeight });
+  }
+  // quick card: hovering a unit on the field (or a roster card) shows what it is, what it shoots and how far
+  let quickEl: HTMLElement | null = null, quickFrom: HTMLElement | null = null;
+  let quickId = -1, quickT = 0;
+  function hideQuick(): void { quickEl?.remove(); quickEl = null; quickFrom = null; quickId = -1; }
+  function showQuick(u: SimUnit, at: { x: number; y: number }): void {
+    if (quickId !== u.id || !quickEl) {
+      hideQuick();
+      const mine = u.side === me;
+      quickEl = quickCard(u.design, u.stats, { level: u.level, tag: mine ? 'Yours' : 'Enemy', mine, live: liveLine(g.battle, u) });
+      fieldwrap.append(quickEl);
+      quickFrom = canvas;
+      quickId = u.id;
+    }
+    placeTipAt(quickEl, fieldwrap, at, { w: quickEl.offsetWidth, h: quickEl.offsetHeight });
+  }
+  function showShopCard(c: HTMLElement, d: Design): void {
+    hideQuick();
+    let st;
+    try { st = computeStats(d); } catch { return; }
+    quickEl = quickCard(d, st, { tag: 'Roster', mine: true });
+    quickEl.querySelector('.qc-more')?.remove();
+    fieldwrap.append(quickEl);
+    quickFrom = c;
+    // above the card, inside the field
+    const r = c.getBoundingClientRect(), fr = fieldwrap.getBoundingClientRect();
+    const w = quickEl.offsetWidth, ht = quickEl.offsetHeight;
+    quickEl.style.left = `${Math.max(4, Math.min(fr.width - w - 4, r.left - fr.left + r.width / 2 - w / 2))}px`;
+    quickEl.style.top = `${Math.max(4, fr.height - ht - 8)}px`;
+  }
+  function refreshTip(dt: number): void {
+    if (quickEl && quickId >= 0 && (quickT += dt) >= 0.2) {
+      quickT = 0;
+      const u = g.battle.units.find((q) => q.id === quickId);
+      const old = quickEl.querySelector('.sc-live');
+      if (!u || !u.alive) hideQuick();
+      else if (old) old.replaceWith(liveLine(g.battle, u));
+    }
+    if (!tipEl) return;
+    tipT += dt;
+    if (tipT < 0.2) return;
+    tipT = 0;
+    // wrecks are cleared from an endless battle after a while: the card goes with them
+    const u = g.battle.units.find((q) => q.id === tipId);
+    const old = tipEl.querySelector('.sc-live');
+    if (!u) hideTip();
+    else if (old) old.replaceWith(liveLine(g.battle, u));
+  }
 
   // ---- overlay: drop zone, the block under the cursor, pending drops ----
   const octx = overlay.getContext('2d')!;
@@ -639,6 +717,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
       hint.classList.add('show');
     } else if (sel < 0 && !hintTimer) hint.classList.remove('show');
+    if (sel >= 0 && tipEl) hideTip(); // picking a card to drop closes an inspected unit's card
     renderCards();
   };
 
@@ -710,6 +789,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       }
       view.drawBattle(g.battle, dt);
       drawOverlay();
+      refreshTip(dt);
     } catch (e) { console.error('[tug] frame failed', e); }
     hudT -= dt;
     if (hudT <= 0) { hudT = 0.1; renderHud(); }

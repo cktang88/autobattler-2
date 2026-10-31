@@ -294,16 +294,10 @@ export interface StatCardOpts {
  *  Display convention for squads (light and cheap medium designs, bought as a block of st.squad units): every number on the card is
  *  for ONE unit, and the card says so ("per unit" note, "/ unit" on hp, shield and dps); squad totals are always
  *  spelled out as "squad ×16: N". The footprint badge is the whole block's footprint. */
-export function statCard(o: StatCardOpts): HTMLElement {
-  const { design: d, st } = o;
-  const lv = o.level ?? 1, mult = levelMult(lv), squad = st.squad ?? 1;
-  const dp = dpsSplit(d, st, lv);
-  const tile = (icon: string, label: string, value: string, extra?: string | null, cls = '') =>
-    h('div.sc-tile', { class: cls }, svgIcon(icon, 18), h('div.sc-tv', null, h('b', null, value), extra ? h('small', null, extra) : null), h('span.sc-tl', null, label));
-  const hp = Math.round(st.hp * mult);
+/** what a unit is and what it can shoot: ground / flying / static, squad, anti-air or not */
+function roleBadges(st: UnitStats, dp: { ground: number; air: number; weapons: number }): HTMLElement[] {
   const flags: HTMLElement[] = [];
-  const fp = blockDims(st, o.spacing ?? 0, !!o.rot);
-  flags.push(h('span.sc-badge.neutral', { title: squad > 1 ? `Footprint of the whole ${squad}-unit squad` : 'Footprint' }, svgIcon('size', 14), `${sizeLabel(st.size)} · ${fmtMeters(fp.w)}×${fmtMeters(fp.h)}`));
+  const squad = st.squad ?? 1;
   if (st.flying) flags.push(h('span.sc-badge.air', null, svgIcon('air', 14), 'FLYING'));
   else if (st.isStatic) flags.push(h('span.sc-badge.neutral', null, 'STATIC'));
   else flags.push(h('span.sc-badge.neutral', null, svgIcon('ground', 14), 'GROUND'));
@@ -314,6 +308,20 @@ export function statCard(o: StatCardOpts): HTMLElement {
     else flags.push(h('span.sc-badge.noair', null, "CAN'T HIT AIR"));
     if (dp.ground <= 0) flags.push(h('span.sc-badge.noair', null, "CAN'T HIT GROUND"));
   } else flags.push(h('span.sc-badge.neutral', null, 'NO WEAPONS'));
+  return flags;
+}
+
+export function statCard(o: StatCardOpts): HTMLElement {
+  const { design: d, st } = o;
+  const lv = o.level ?? 1, mult = levelMult(lv), squad = st.squad ?? 1;
+  const dp = dpsSplit(d, st, lv);
+  const tile = (icon: string, label: string, value: string, extra?: string | null, cls = '') =>
+    h('div.sc-tile', { class: cls }, svgIcon(icon, 18), h('div.sc-tv', null, h('b', null, value), extra ? h('small', null, extra) : null), h('span.sc-tl', null, label));
+  const hp = Math.round(st.hp * mult);
+  const flags: HTMLElement[] = [];
+  const fp = blockDims(st, o.spacing ?? 0, !!o.rot);
+  flags.push(h('span.sc-badge.neutral', { title: squad > 1 ? `Footprint of the whole ${squad}-unit squad` : 'Footprint' }, svgIcon('size', 14), `${sizeLabel(st.size)} · ${fmtMeters(fp.w)}×${fmtMeters(fp.h)}`));
+  flags.push(...roleBadges(st, dp));
 
   const dpsBox = (kind: 'ground' | 'air', v: number) => {
     const none = v <= 0;
@@ -429,4 +437,46 @@ export function miniStats(d: Design, st: UnitStats, level = 1): HTMLElement {
     h('span.g', null, svgIcon('ground', 15), h('b', null, dp.ground > 0 ? dpsFmt(dp.ground) : '—')),
     dp.air > 0 ? h('span.a', null, svgIcon('air', 15), h('b', null, dpsFmt(dp.air))) : h('span.noair', null, svgIcon('air', 15), h('b', null, "NO AA")),
   );
+}
+
+/** Quick hover card of a unit (tug of war field / shop): what it is, what it can shoot and how far. One line per
+ *  weapon (hits ground / air, range, dps) or support module; the full statCard is a click away. `live` = a live hp
+ *  line for a unit on the field. */
+export function quickCard(d: Design, st: UnitStats, o: { level?: number; tag: string; mine: boolean; live?: HTMLElement | null }): HTMLElement {
+  const lv = o.level ?? 1;
+  const dp = dpsSplit(d, st, lv);
+  const fm = fireMods(d);
+  const rows: HTMLElement[] = [];
+  for (const id of d.mounts) {
+    const m = id ? MODULE_BY_ID.get(id) : undefined;
+    if (!m || m.kind === 'armor') continue;
+    if (m.kind === 'weapon' && m.damage) {
+      const melee = m.projectile === 'melee';
+      const range = (m.range ?? 0) * (melee ? 1 : st.rangeMult);
+      rows.push(h('div.qc-w', null,
+        h('span.qc-wn', null, m.name),
+        h('span.sc-chip', { class: m.targetsGround ? 'g' : 'off' }, 'GND'),
+        h('span.sc-chip', { class: m.targetsAir ? 'a' : 'off' }, 'AIR'),
+        h('span.sc-wr', null, melee ? 'melee' : fmtMeters(range), m.minRange ? h('span.min', null, ` min ${fmtMeters(m.minRange)}`) : null),
+        h('span.qc-dps', null, `${dpsFmt(mountDps(m, fm, lv))} dps`)));
+    } else {
+      const what = m.heal ? `repairs allies · ${fmtMeters((m.range ?? 0) * st.rangeMult)}`
+        : m.shieldAura ? `shield dome · ${fmtMeters(m.shieldAura.radius)}`
+        : m.shield ? `shield ${m.shield}`
+        : m.detect ? `detects cloaked · ${fmtMeters(m.detect)}`
+        : m.jammer ? `jams missiles · ${fmtMeters(m.jammer)}`
+        : m.pointDefense ? `shoots down shells / missiles · ${fmtMeters(m.pointDefense.range)}`
+        : m.fireRateAura ? `allies +${Math.round(m.fireRateAura.bonus * 100)}% fire rate`
+        : m.rangeBonus ? `range +${Math.round(m.rangeBonus * 100)}%`
+        : m.desc.split(/(?<=[.;])\s/)[0];
+      rows.push(h('div.qc-w', null, h('span.qc-wn', null, m.name), h('span.sc-chip.sup', null, 'SUPPORT'), h('span.qc-sup', null, what)));
+    }
+  }
+  return h('div.stat-tip.quick-card', { role: 'tooltip', class: o.mine ? 'friendly' : 'enemy' },
+    h('div.sc-head', null, h('b.sc-name', null, d.name), lv > 1 ? h('span.stars', null, '★'.repeat(lv)) : null, h('span.sc-tag2', null, o.tag)),
+    h('div.sc-badges', null, ...roleBadges(st, dp)),
+    o.live ?? null,
+    miniStats(d, st, lv),
+    rows.length ? h('div.qc-weps', null, ...rows) : null,
+    h('div.qc-more', null, 'Click for the full card'));
 }

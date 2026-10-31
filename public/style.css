@@ -418,6 +418,20 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 .stat-tip { position: absolute; z-index: 30; width: 360px; max-width: calc(100% - 8px); padding: 10px; background: #121a24; border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65); pointer-events: none; font-size: 0.95rem; }
 .stat-tip.friendly { border-top: 3px solid var(--friendly); }
 .stat-tip.enemy { border-top: 3px solid var(--enemy); }
+/* quick hover card (tug of war): what a unit is, what it can shoot and how far */
+.stat-tip.quick-card { width: 320px; padding: 8px 10px; }
+.quick-card .sc-head { margin-bottom: 6px; padding-right: 0; }
+.quick-card .sc-name { font-size: 1.15rem; }
+.quick-card .sc-badges { margin-bottom: 6px; }
+.quick-card .ministats { margin-bottom: 6px; }
+.quick-card .sc-dmg { margin: 4px 0 6px; padding: 4px 8px; }
+.qc-weps { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line2); padding-top: 6px; }
+.qc-w { display: flex; align-items: center; gap: 5px; font-size: 0.9rem; min-width: 0; }
+.qc-wn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qc-w .sc-wr { min-width: 46px; text-align: right; }
+.qc-dps { min-width: 52px; text-align: right; color: #ffcb5c; font-weight: 600; }
+.qc-sup { color: #cdb8ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.qc-more { margin-top: 6px; font-size: 0.8rem; color: #7a8896; text-align: right; }
 .stat-tip.sheet { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-width: none; max-height: 72vh; overflow-y: auto; border-radius: 12px 12px 0 0; padding: 12px 12px calc(14px + var(--safe-b)); pointer-events: auto; z-index: 60; }
 .stat-tip .close { position: absolute; top: 6px; right: 6px; min-width: 36px; min-height: 36px; }
 .sc-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; padding-right: 30px; }
