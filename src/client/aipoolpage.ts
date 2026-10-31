@@ -70,7 +70,7 @@ function render(log: Log): void {
   const roles = [...new Set(all.map((r) => r.role))].sort();
   root.replaceChildren();
   root.append(el('h1', '', 'AI Design Pool'));
-  root.append(el('div', 'sum', `${log.tested.length} tested · ${log.candidates.length} on trial · ${log.gone.length} gone · ${log.reports} matches learned from${log.rejected ? ` · ${log.rejected} reports rejected` : ''}`));
+  root.append(el('div', 'sum', `${log.tested.length} tested · ${log.candidates.length} on trial · ${log.gone.length} gone · ${log.reports} matches learned from${log.rejected ? ` · ${log.rejected} reports with a mismatched replay` : ''}`));
   const sel = (label: string, opts: [string, string][], on: (v: string) => void) => {
     const s = el('select');
     s.setAttribute('aria-label', label);

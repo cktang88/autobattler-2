@@ -338,3 +338,29 @@ test('mutateWeak: an ineffective AI design yields one deterministic, deduped mut
   assert.equal(full.candidates.filter((x) => x.mutant).length, MAX_UNPROVEN_MUTANTS);
   assert.equal(mutateWeak(full, m, 1, perf(m, rows), 77).length, 0);
 });
+
+test('a reported vs-AI match re-simulates exactly on the server (every battle order kept, e.g. a 10 s start delay)', async () => {
+  const { validateReport } = await import('../src/server/aipool.ts');
+  const { redactFor, roundDamage } = await import('../src/shared/match.ts');
+  const { defaultPool, simRound } = await import('../src/shared/aipool.ts');
+  let sawDelay10 = false;
+  for (let g = 0; g < 3; g++) {
+    const seed = 1000 + g * 7919;
+    const you = newPlayer('p', aiDeck(seed ^ 1, 'normal', defaultPool()));
+    const ai = newPlayer('ai', aiDeck(seed ^ 0x5bd1e995, 'normal', defaultPool(), you.deck), true);
+    const m = newMatch('local-resim' + g, 'ai', seed, you, ai, 0);
+    while (m.status !== 'done') {
+      applyDeploy(m, 0, aiDeploy(redactFor(m, 0), 0, 'normal'));
+      applyDeploy(m, 1, aiDeploy(redactFor(m, 1), 1, 'normal'));
+      resolveRound(m, 1);
+    }
+    const v = validateReport(JSON.parse(JSON.stringify({ match: m })));
+    for (const rec of v.history) {
+      if (rec.boards.some((b) => b.some((p) => p.delay === 10))) sawDelay10 = true;
+      const { summary } = simRound(v, rec);
+      const dmg = roundDamage(v, rec.round, summary.winner, summary.survivors, rec.boards, summary.aliveFraction);
+      assert.deepEqual([summary.winner, dmg], [rec.result.winner, rec.result.damage], `game ${g} round ${rec.round}`);
+    }
+  }
+  assert.ok(sawDelay10, 'the AI uses the 10 s delay, so the test covers it');
+});

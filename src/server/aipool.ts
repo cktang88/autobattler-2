@@ -28,7 +28,7 @@ import {
 import { blockInZone, MAX_SPACING } from '../shared/grid.ts';
 import { mixSeed } from '../shared/rng.ts';
 import { MAX_LEVEL } from '../shared/stats.ts';
-import { STANCES, TARGET_PRIORITIES } from '../shared/types.ts';
+import { STANCES, START_DELAYS, TARGET_PRIORITIES } from '../shared/types.ts';
 import type { Design, MatchState, Placement, PlayerState, RoundRecord, Side } from '../shared/types.ts';
 import { HttpError, sanitizeDeck, sanitizeRoster } from './validate.ts';
 import { TugReplay, sanitizeCommand, type TugOrder } from '../shared/tug.ts';
@@ -194,7 +194,7 @@ function readPlacement(raw: unknown, deck: Map<string, Design>, round: number): 
   if (TARGET_PRIORITIES.includes(o.target as never)) p.target = o.target as Placement['target'];
   if (STANCES.includes(o.stance as never)) p.stance = o.stance as Placement['stance'];
   for (const k of ['hold', 'kite', 'focus', 'retreat'] as const) if (typeof o[k] === 'boolean') p[k] = o[k] as boolean;
-  if (o.delay === 0 || o.delay === 3 || o.delay === 6) p.delay = o.delay;
+  if ((START_DELAYS as readonly unknown[]).includes(o.delay)) p.delay = o.delay as number;
   if (isInt(o.kiteMount) && o.kiteMount >= 0 && o.kiteMount < 12) p.kiteMount = o.kiteMount;
   if (isInt(o.escort) && o.escort >= 1) p.escort = o.escort;
   const d = deck.get(p.designId)!;
@@ -275,7 +275,7 @@ export function validateReport(raw: unknown): MatchState {
 // ---------------------------------------------------------------------------------------------
 // The service
 
-interface Job { match: MatchState; reporter: string; creator: string }
+interface Job { match: MatchState; reporter: string; creator: string; mismatched?: boolean }
 /** A finished multiplayer game to learn from: `work` runs one chunk (true when scored), `perf` rates its designs. */
 interface PvpJob { id: string; game: string; decks: [Design[], Design[]]; names: [string, string]; work: () => boolean; perf: () => DesignPerf[]; reporter?: string }
 /** multiplayer games waiting to be scored; beyond this new ones are skipped */
@@ -432,14 +432,13 @@ export class GlobalAiPool {
       try {
         if (i < job.match.history.length) {
           const rec = job.match.history[i++];
-          // re-simulate the round: its result must be what the reporter claimed (else the report is a fake)
+          // re-simulate the round for its per-design tally (the report carries no scores). A result that differs from
+          // the reported one is only counted (`rejected`, kept for the /aipool page as "mismatched"), never dropped:
+          // scoring uses the server's own simulation either way, so a fake claim can't inflate anything.
           const { tally, summary } = simRound(job.match, rec);
           const dmg = roundDamage(job.match, rec.round, summary.winner, summary.survivors, rec.boards, summary.aliveFraction);
           if (summary.winner !== rec.result.winner || dmg[0] !== rec.result.damage[0] || dmg[1] !== rec.result.damage[1]) {
-            this.state.rejected++;
-            this.save();
-            setImmediate(() => this.kick());
-            return;
+            if (!job.mismatched) { job.mismatched = true; this.state.rejected++; }
           }
           rounds.push(tally);
           setImmediate(step);
