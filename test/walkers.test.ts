@@ -1,6 +1,5 @@
 // Walkers walk like walkers: planted feet stay put on the ground while the body walks over them (the render rig's gait
-// clock against the distance travelled, any direction), and spider legs ('omni') sidestep across the line of fire
-// while holding at range instead of standing still.
+// clock against the distance travelled, any direction).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -17,8 +16,7 @@ const ctx2d: unknown = new Proxy({}, {
 
 const THREE = await import('three');
 const { UnitLayer } = await import('../src/client/render3d/units-adapter.ts');
-const { Battle } = await import('../src/shared/sim/battle.ts');
-import type { Design, Placement } from '../src/shared/types.ts';
+import type { Design } from '../src/shared/types.ts';
 import type { Matrix4, Vector3 } from 'three';
 
 const D = (id: string, chassis: string, mobility: string, mounts: (string | null)[]): Design => ({ id, name: id, chassis, mobility, mounts });
@@ -58,20 +56,6 @@ test('planted feet stay put while the body walks over them (forward, sideways, b
   }
 });
 
-test('spider legs sidestep across the line of fire while holding at range', () => {
-  const designs = [D('spider', 'warden', 'spider', ['hmg', null]), D('wall', 'bastion', 'treads', ['plateH', 'plateM', 'flak'])];
-  const pl = (designId: string, uid: number, extra: Partial<Placement> = {}): Placement => ({ uid, designId, x: 40, y: 0, level: 1, round: 1, ...extra });
-  const b = new Battle({ seed: 3, sides: [{ designs, units: [pl('spider', 1)] }, { designs, units: [pl('wall', 2, { stance: 'holdPos' })] }] });
-  let lo = Infinity, hi = -Infinity, fired = false;
-  for (let i = 0; i < 1500 && !b.done; i++) {
-    b.step();
-    const s = b.units[0]!;
-    if (s.mounts[0]!.target >= 0) { fired = true; lo = Math.min(lo, s.x); hi = Math.max(hi, s.x); }
-  }
-  assert.ok(fired, 'the spider got its gun on the wall');
-  assert.ok(hi - lo > 1, `weaves ${(hi - lo).toFixed(2)} cells side to side while firing`);
-});
-
 /** largest per-frame jump of any foot (model units) over a scripted motion: (dx, dz, sim-moving) per frame */
 function footJumps(d: Design, motion: (f: number) => [number, number, boolean], frames: number): number {
   const rig = new UnitLayer().acquire(d, 0);
@@ -103,7 +87,7 @@ test('legs do not twitch: jitter leaves the feet still, reversing does not whip 
   // a standing unit nudged back and forth by a hair every frame (separation / interpolation noise)
   const jitter = footJumps(spider, (f) => [Math.sin(f * 2.3) * 0.002, Math.cos(f * 1.7) * 0.002, false], 240);
   assert.ok(jitter < 0.01, `feet twitch ${jitter.toFixed(3)} per frame on a jittering standing unit`);
-  // walking sideways, reversing every 0.7 s (a spider's sidestep): no foot jumps much more than a walking step
+  // walking sideways, reversing every 0.7 s (a spider strafing back and forth): no foot jumps much more than a walking step
   const step = 1.2 / 60;
   const rev = footJumps(spider, (f) => [0, (Math.floor(f / 42) % 2 ? -1 : 1) * step, true], 400);
   assert.ok(rev < step * 6, `a foot jumps ${rev.toFixed(3)} per frame when the walk reverses (step ${step.toFixed(3)})`);

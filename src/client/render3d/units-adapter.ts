@@ -305,7 +305,7 @@ export class Rig {
       if (moving) this.walkHold = 0.3;
       else if (this.walkHold > 0 && sp > 0.05) { this.walkHold -= dt; moving = true; }
       if (!moving) dist = 0; // sub-pace jitter (separation nudges, interpolation): no stride, no twitching feet
-      // stride axis: reversing (backing up, a spider's sidestep turning back) runs the gait backwards along the same
+      // stride axis: reversing (backing up, a spider strafing back) runs the gait backwards along the same
       // axis instead of swinging every foot round through 180 deg; the axis itself turns slowly toward the travel
       if (moving && sp > 0.2) {
         let d = Math.atan2(lat, fwd) - this.way;
