@@ -105,4 +105,14 @@ button.gunshop-card.poor { opacity: 0.5; }
 .gunshop-stats { font-family: var(--font-body); font-weight: 400; font-size: 0.8rem; color: var(--muted); }
 .gunshop-price { font-weight: 700; }
 .gunshop-err:empty { display: none; }
+.gunshop-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.gunshop-reach { display: flex; align-items: center; gap: 8px; min-width: 220px; flex: 1 1 220px; max-width: 320px; font-size: 0.85rem; color: var(--muted); }
+.gunshop-reach .k-slider { flex: 1; }
+.gunshop-count { margin-left: auto; font-size: 0.85rem; }
+.gunshop-hits { display: flex; justify-content: center; gap: 4px; }
+.gunshop-stats b { color: var(--text); font-weight: 600; }
+.gunshop-stats .min { color: #ff9f5a; }
+.gunshop-stats .air { color: #7cc8ff; }
+.gunshop-tags { font-size: 0.75rem; color: #b4b9bd; }
+.gunshop-none { grid-column: 1 / -1; text-align: center; padding: 20px 0; }
 .modal:has(.gunshop) { max-width: min(860px, calc(100vw - 32px)); width: 100%; }

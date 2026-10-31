@@ -16,6 +16,7 @@ import { applyViewSettings, loadSettings } from '../storage.ts';
 import { openModal, paintWhenLaidOut, quickCard, sizeLabel } from './match-ui.ts';
 import { designInfo } from './deckstats.ts';
 import { capBadges, renderDeckAnalysis } from './deckpanel.ts';
+import * as kit from './kit.ts';
 import { liveLine, liveUnitAt, placeTipAt, tipFor, zoomButtons } from './fieldtools.ts';
 import { createFpsMeter } from './fps.ts';
 import { drawPartIcon } from '../render/field.ts';
@@ -270,6 +271,11 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
 
 // ---------------------------------------------------------------------------------------------------- the game
 
+/** castle gun shop filters (kept while the page is open, so reopening the shop keeps them) */
+type GunHit = 'all' | 'air' | 'ground' | 'aironly';
+type GunSort = 'price' | 'dps' | 'air' | 'range' | 'name';
+const gunFilter: { hit: GunHit; minReach: number; sort: GunSort; afford: boolean } = { hit: 'all', minReach: 0, sort: 'price', afford: false };
+
 const MS_PER_TICK = 1000 / TICK_RATE;
 /** roughly how long an online order takes to land (the server's lockstep lead) */
 const TUG_LEAD_S = 0.8;
@@ -453,15 +459,22 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   function openGunShop(): void {
     if (g.done || shop) return;
     sfx('click');
-    const rows: { b: HTMLButtonElement; m: ModuleDef; price: number }[] = [];
+    const rows: { b: HTMLButtonElement; m: ModuleDef; price: number; dps: number; air: number; range: number }[] = [];
     const cur = h('p');
     const r0 = h('p.bad.gunshop-err');
     const list = h('div.gunshop');
-    for (const m of castleGuns()) {
-      const price = castleGunPrice(m);
+    const bar = h('div.gunshop-bar');
+    const count = h('span.gunshop-count.muted');
+    const guns = castleGuns();
+    const maxReach = Math.ceil(Math.max(...guns.map((m) => m.range ?? 0)));
+    for (const m of guns) {
+      const price = castleGunPrice(m), dps = weaponDps(m), air = m.targetsAir ? dps * (m.airBonus ?? 1) : 0, range = m.range ?? 0;
       const icon = h('canvas.gunshop-icon', { width: '96', height: '96' }) as HTMLCanvasElement;
       try { drawPartIcon(icon, 'module', m.id, { backdrop: true }); } catch { /* icon is decoration */ }
-      const reach = [m.targetsGround ? 'ground' : '', m.targetsAir ? 'air' : ''].filter(Boolean).join(' + ');
+      const tags = [
+        m.splash ? `splash ${fmtMeters(m.splash)}` : '', m.pierce ? 'pierce' : '', m.chain ? `chain ×${m.chain}` : '',
+        m.stun ? 'stun' : '', m.slow ? 'slow' : '', m.burn ? 'burn' : '', m.projectile === 'missile' ? 'homing' : '',
+      ].filter(Boolean);
       const b = h('button.gunshop-card', {
         onclick: () => {
           const err = checkSpendable({ t: 'castleGun', moduleId: m.id });
@@ -471,11 +484,55 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
         },
       }, icon,
         h('span.gunshop-name', null, m.name),
-        h('span.gunshop-stats', null, `${Math.round(weaponDps(m))} dps · ${fmtMeters(m.range ?? 0)} · ${reach}`),
+        h('span.gunshop-hits', null,
+          h('span.sc-chip', { class: m.targetsGround ? 'g' : 'off' }, 'GND'),
+          h('span.sc-chip', { class: m.targetsAir ? 'a' : 'off' }, 'AIR')),
+        h('span.gunshop-stats', null,
+          h('b', null, fmtMeters(range)), m.minRange ? h('span.min', null, ` (min ${fmtMeters(m.minRange)})`) : null, ' · ',
+          h('b', null, String(Math.round(dps))), ' dps',
+          m.targetsAir && (m.airBonus ?? 1) > 1 ? h('span.air', null, ` · ${Math.round(air)} vs air`) : null),
+        tags.length ? h('span.gunshop-tags', null, tags.join(' · ')) : null,
         h('span.gunshop-price.gold', null, `${price}g`)) as HTMLButtonElement;
-      rows.push({ b, m, price });
-      list.append(b);
+      rows.push({ b, m, price, dps, air, range });
     }
+    const SORTS: Record<GunSort, (a: (typeof rows)[number], b: (typeof rows)[number]) => number> = {
+      price: (a, b) => a.price - b.price, dps: (a, b) => b.dps - a.dps, air: (a, b) => b.air - a.air,
+      range: (a, b) => b.range - a.range, name: (a, b) => a.m.name.localeCompare(b.m.name),
+    };
+    const relist = () => {
+      const f = gunFilter, gold = spendable();
+      const shown = rows.filter((r) => {
+        const m = r.m;
+        if (f.hit === 'air' && !m.targetsAir) return false;
+        if (f.hit === 'ground' && !m.targetsGround) return false;
+        if (f.hit === 'aironly' && (!m.targetsAir || m.targetsGround)) return false;
+        if (r.range < f.minReach) return false;
+        if (f.afford && r.price > gold && m.id !== g.sides[me].castleGun) return false;
+        return true;
+      }).sort((a, b) => SORTS[f.sort](a, b) || a.price - b.price);
+      list.replaceChildren(...shown.map((r) => r.b), ...(shown.length ? [] : [h('p.muted.gunshop-none', null, 'No gun matches these filters.')]));
+      count.textContent = `${shown.length} of ${rows.length} guns`;
+    };
+    const renderBar = () => {
+      const f = gunFilter;
+      const set = (patch: Partial<typeof gunFilter>) => { Object.assign(gunFilter, patch); renderBar(); relist(); };
+      bar.replaceChildren(
+        kit.segmented<GunHit>({
+          value: f.hit, label: 'What it hits', onChange: (v) => set({ hit: v }),
+          options: [{ value: 'all', label: 'All' }, { value: 'air', label: 'Hits air' }, { value: 'ground', label: 'Hits ground' }, { value: 'aironly', label: 'Air only' }],
+        }),
+        h('label.gunshop-reach', null, h('span', null, 'Min reach'), kit.slider({
+          value: f.minReach, min: 0, max: maxReach, step: 1, label: 'Minimum reach',
+          format: (v) => (v ? `≥ ${fmtMeters(v)}` : 'any'), onInput: (v) => { gunFilter.minReach = v; relist(); },
+        })),
+        kit.select<GunSort>({
+          value: f.sort, prefix: 'Sort', label: 'Sort by', onChange: (v) => set({ sort: v }),
+          options: [{ value: 'price', label: 'Price' }, { value: 'dps', label: 'DPS' }, { value: 'air', label: 'DPS vs air' }, { value: 'range', label: 'Range' }, { value: 'name', label: 'Name' }],
+        }),
+        kit.toggle({ label: 'Affordable', on: f.afford, onChange: (v) => set({ afford: v }), title: 'Only guns you can buy now' }),
+        count,
+      );
+    };
     const refresh = () => {
       const gold = spendable(), mine = g.sides[me].castleGun;
       cur.replaceChildren('Your castle has a ', h('b', null, MODULE_BY_ID.get(mine)?.name ?? mine), `. Buying a gun replaces it (the old one is not refunded). You have `, h('b.gold', null, `${Math.floor(gold)}g`), '.');
@@ -486,10 +543,13 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
         r.b.disabled = on;
         r.b.title = on ? 'Equipped' : r.price > gold ? `Need ${Math.ceil(r.price - gold)}g more` : `Buy for ${r.price}g`;
       }
+      if (gunFilter.afford) relist();
     };
+    renderBar();
+    relist();
     refresh();
     const timer = window.setInterval(refresh, 300);
-    const handle = openModal('Castle gun', h('div', null, cur, r0, list));
+    const handle = openModal('Castle gun', h('div', null, cur, r0, bar, list));
     const close = () => { window.clearInterval(timer); handle.close(); shop = null; };
     // the modal closes itself too (Close button, backdrop, Esc): stop refreshing then
     const obs = new MutationObserver(() => { if (!handle.el.isConnected) { window.clearInterval(timer); shop = null; obs.disconnect(); } });
