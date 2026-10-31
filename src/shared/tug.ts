@@ -27,8 +27,11 @@ export const TUG = {
   maxTier: 5 as Size,
   /** seconds a dropped block stays frozen where it landed before it may move (its guns fire from the start) */
   spawnFreeze: 3,
-  /** seconds after buying a design before that same design can be bought again (no spamming one cheap unit) */
-  buyCooldown: 3,
+  /** seconds after buying a design before that same design can be bought again (no spamming one cheap unit): this
+   *  doubles with each block of it already on the field, so the 2nd waits 1 s, the 3rd 2 s, the 4th 4 s, ...
+   *  (see buyCooldown), up to buyCooldownMax */
+  buyCooldown: 1,
+  buyCooldownMax: 32,
   /** the castle's gun at the start: a plain heavy machine gun; better ones are bought (castleGunPrice) */
   startCastleGun: 'hmg',
   castleHp: 20000,
@@ -105,8 +108,17 @@ export interface TugSideState {
   spent: number;
   /** the castle's gun (module id) */
   castleGun: string;
-  /** design id -> tick it can be bought again (TUG.buyCooldown) */
+  /** design id -> tick it can be bought again (buyCooldown) */
   ready: Record<string, number>;
+  /** design id -> length in ticks of its running cooldown (for drawing how much of it is left) */
+  cdLen: Record<string, number>;
+  /** design id -> unit ids of each block of it bought; blocks wiped out are pruned (liveBlocks) */
+  blocks: Record<string, number[][]>;
+}
+
+/** seconds before a design can be bought again, once `onField` blocks of it (counting the one just bought) are alive */
+export function buyCooldown(onField: number): number {
+  return Math.min(TUG.buyCooldownMax, TUG.buyCooldown * 2 ** Math.max(0, onField - 1));
 }
 
 export function validateRoster(r: Design[]): string[] {
@@ -171,7 +183,7 @@ export class TugGame {
     setField(TUG.field);
     this.rosters = rosters;
     this.battle = new Battle({ seed, tug: true, sides: [{ designs: [], units: [] }, { designs: [], units: [] }] });
-    const mk = (): TugSideState => ({ gold: TUG.startGold, incomeLvl: 0, tier: TUG.startTier, bought: 0, spent: 0, castleGun: TUG.startCastleGun, ready: {} });
+    const mk = (): TugSideState => ({ gold: TUG.startGold, incomeLvl: 0, tier: TUG.startTier, bought: 0, spent: 0, castleGun: TUG.startCastleGun, ready: {}, cdLen: {}, blocks: {} });
     this.sides = [mk(), mk()];
     const ids = ([0, 1] as Side[]).map((s) => {
       const id = this.battle.spawnBlock(s, 0, castleDesign(TUG.startCastleGun), 1, [castlePos(s)])[0];
@@ -226,6 +238,16 @@ export class TugGame {
     }
     return null;
   }
+  /** blocks of this design `side` has alive on the field (any member still standing) */
+  liveBlocks(side: Side, designId: string): number {
+    const bs = this.sides[side].blocks[designId];
+    if (!bs) return 0;
+    const live = bs.filter((ids) => ids.some((id) => this.battle.units[id]?.alive));
+    this.sides[side].blocks[designId] = live;
+    return live.length;
+  }
+  /** seconds the cooldown will run if `side` buys this design now */
+  nextCooldown(side: Side, designId: string): number { return buyCooldown(this.liveBlocks(side, designId) + 1); }
   /** ticks until `side` may buy this design again (0: now) */
   cooldown(side: Side, designId: string): number { return Math.max(0, (this.sides[side].ready[designId] ?? 0) - this.battle.tick); }
 
@@ -279,8 +301,11 @@ export class TugGame {
         S.gold -= st.cost;
         S.spent += st.cost;
         S.bought++;
-        S.ready[d.id] = this.battle.tick + Math.round(TUG.buyCooldown * TICK_RATE);
+        const cd = Math.round(this.nextCooldown(side, d.id) * TICK_RATE);
+        S.ready[d.id] = this.battle.tick + cd;
+        S.cdLen[d.id] = cd;
         const ids = this.battle.spawnBlock(side, this.uid++, d, 1, blockCenters(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1, normSpacing(st, cmd.spacing)), TUG.spawnFreeze);
+        (S.blocks[d.id] ??= []).push(ids);
         this.spawns.push({ side, ids, until: this.battle.tick + Math.round(TUG.spawnFreeze * TICK_RATE) });
         break;
       }

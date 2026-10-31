@@ -7,10 +7,11 @@ import { FIELD_H, FIELD_W, STANDARD_FIELD, setField } from '../src/shared/grid.t
 import { computeStats } from '../src/shared/stats.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import {
-  TIER_COST, TUG, TugGame, advance, castleGunPrice, castleGuns, castlePos, dropError, incomeCost, incomeRate, sanitizeCommand, validateRoster, type TugOrder,
+  TIER_COST, TUG, TugGame, advance, buyCooldown, castleGunPrice, castleGuns, castlePos, dropError, incomeCost, incomeRate, sanitizeCommand, validateRoster, type TugOrder,
 } from '../src/shared/tug.ts';
 import { TugAi } from '../src/shared/tugai.ts';
 import { MODULE_BY_ID } from '../src/shared/parts.ts';
+import { TICK_RATE } from '../src/shared/sim/types.ts';
 import { TUG_IDLE_MS, TUG_LEAD, TugHub } from '../src/server/tug.ts';
 import type { Design, Side } from '../src/shared/types.ts';
 
@@ -146,14 +147,35 @@ test('a design can only be bought again after its cooldown', () => {
   g.sides[0].gold = 1e6;
   const [a, b] = ROSTER;
   assert.equal(g.apply(0, { t: 'buy', designId: a.id, x: 12, y: 95 }), null);
-  assert.match(g.check(0, { t: 'buy', designId: a.id, x: 30, y: 95 }) ?? '', /ready again in 3 s/);
+  assert.match(g.check(0, { t: 'buy', designId: a.id, x: 30, y: 95 }) ?? '', /ready again in 1 s/);
   assert.equal(g.check(0, { t: 'buy', designId: b.id, x: 30, y: 95 }), null, 'other designs are not held up');
   assert.equal(g.check(1, { t: 'buy', designId: a.id, x: 12, y: 18 }), null, 'nor is the other side');
-  for (let i = 0; i < TUG.buyCooldown * 20 - 1; i++) g.step();
+  for (let i = 0; i < TUG.buyCooldown * TICK_RATE - 1; i++) g.step();
   assert.ok(g.cooldown(0, a.id) > 0);
   g.step();
   assert.equal(g.cooldown(0, a.id), 0);
   assert.equal(g.apply(0, { t: 'buy', designId: a.id, x: 30, y: 95 }), null);
+});
+
+test('the buy cooldown doubles with each block of that design on the field, and shrinks as they die', () => {
+  assert.deepEqual([1, 2, 3, 4, 5].map(buyCooldown), [1, 2, 4, 8, 16]);
+  assert.equal(buyCooldown(50), TUG.buyCooldownMax);
+  const g = new TugGame(2, [ROSTER, ROSTER]);
+  g.sides[0].gold = 1e6;
+  const a = ROSTER[0];
+  const buyWhenReady = (x: number, y: number) => {
+    while (g.cooldown(0, a.id) > 0) g.step();
+    assert.equal(g.apply(0, { t: 'buy', designId: a.id, x, y }), null);
+    return g.cooldown(0, a.id) / TICK_RATE;
+  };
+  assert.equal(buyWhenReady(12, 105), 1, '1st block: the 2nd waits 1 s');
+  assert.equal(buyWhenReady(36, 105), 2, '2nd block: the 3rd waits 2 s');
+  assert.equal(buyWhenReady(12, 92), 4, '3rd block: the 4th waits 4 s');
+  assert.equal(g.liveBlocks(0, a.id), 3);
+  // wipe out two of the three blocks: the next buy only counts what is left
+  for (const ids of g.sides[0].blocks[a.id]!.slice(0, 2)) for (const id of ids) g.battle.units[id]!.alive = false;
+  assert.equal(g.liveBlocks(0, a.id), 1);
+  assert.equal(g.nextCooldown(0, a.id), 2);
 });
 
 test('castles start with a plain gun and can buy any other', () => {

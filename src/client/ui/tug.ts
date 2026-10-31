@@ -398,10 +398,12 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     return true;
   }
   const cards: { el: HTMLElement; d: Design; cost: HTMLElement; cd: HTMLElement }[] = [];
-  /** online: designs bought but not yet in the game, and when (performance.now ms) their cooldown runs out */
-  const localReady = new Map<string, number>();
+  /** online: designs bought but not yet in the game: when (performance.now ms) their cooldown runs out, and its length (s) */
+  const localReady = new Map<string, { at: number; len: number }>();
   /** seconds until this design can be bought again */
-  const cooldownLeft = (id: string): number => Math.max(g.cooldown(me, id) / TICK_RATE, ((localReady.get(id) ?? 0) - performance.now()) / 1000);
+  const cooldownLeft = (id: string): number => Math.max(g.cooldown(me, id) / TICK_RATE, ((localReady.get(id)?.at ?? 0) - performance.now()) / 1000);
+  /** length (s) of this design's running cooldown */
+  const cooldownLen = (id: string): number => Math.max((g.sides[me].cdLen[id] ?? 0) / TICK_RATE, localReady.get(id)?.len ?? 0);
   rosters[me].forEach((d, i) => {
     const cv = h('canvas.tug-thumb');
     const cost = h('span.gold');
@@ -444,7 +446,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       // cooldown: a dark wedge sweeping round the card, with the seconds left
       const left = locked ? 0 : cooldownLeft(c.d.id);
       c.el.classList.toggle('cooling', left > 0);
-      c.cd.style.setProperty('--cd', String(Math.min(1, left / TUG.buyCooldown)));
+      c.cd.style.setProperty('--cd', String(left > 0 ? Math.min(1, left / Math.max(left, cooldownLen(c.d.id))) : 0));
       c.cd.textContent = left > 0 ? String(Math.ceil(left)) : '';
     });
     const gun = MODULE_BY_ID.get(S.castleGun);
@@ -587,8 +589,10 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     inFlight += cost;
     if (cmd.t === 'buy') {
       ghosts.push({ cmd, at: performance.now() });
-      // the cooldown starts now on this screen (the game starts it when the order lands, ~1 s later)
-      localReady.set(cmd.designId, performance.now() + (TUG.buyCooldown + TUG_LEAD_S) * 1000);
+      // the cooldown starts now on this screen (the game starts it when the order lands, ~1 s later); it lasts longer
+      // the more blocks of this design are already on the field
+      const len = g.nextCooldown(me, cmd.designId) + TUG_LEAD_S;
+      localReady.set(cmd.designId, { at: performance.now() + len * 1000, len });
     }
     if (cmd.t !== 'buy') renderCards();
     tugCommand(net.id, cmd).then(() => { inFlight -= cost; }, (e) => { inFlight -= cost; flashHint(e instanceof Error ? e.message : 'Command failed'); });
