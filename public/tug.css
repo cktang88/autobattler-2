@@ -95,7 +95,9 @@
 /* castle gun shop */
 .tug-gunbtn { flex-direction: column; align-items: flex-start; gap: 0; border-color: var(--warn); }
 .tug-gunbtn small { text-transform: none; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.gunshop { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+/* a fixed height, not a cap: the filters (min reach above all, dragged on a phone) shrink the list, and a shrinking
+   modal re-centres itself, jumping the slider out from under the finger */
+.gunshop { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; gap: 8px; height: 60vh; overflow-y: auto; padding-right: 4px; }
 button.gunshop-card { clip-path: none; flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; text-align: center; background: var(--bg2); border-color: var(--line); }
 button.gunshop-card.on { border-color: var(--accent); background: rgba(46, 211, 192, 0.1); opacity: 1; }
 button.gunshop-card.on .gunshop-price::after { content: ' · equipped'; color: var(--accent); }
@@ -118,3 +120,4 @@ button.gunshop-card .gunshop-need { font-size: 0.75rem; color: var(--bad); }
 .gunshop-tags { font-size: 0.75rem; color: #b4b9bd; }
 .gunshop-none { grid-column: 1 / -1; text-align: center; padding: 20px 0; }
 .modal:has(.gunshop) { max-width: min(860px, calc(100vw - 32px)); width: 100%; }
+.gunshop-reach .k-slider-out { min-width: 5.2em; } /* "any" … "≥ 200 m": a steady width keeps the track (and the thumb under the finger) still */
