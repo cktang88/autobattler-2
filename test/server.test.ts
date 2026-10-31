@@ -600,6 +600,10 @@ test('AI pool: GET serves the global pool (cacheable)', async () => {
 
 test('AI pool: reports are validated, deduped, re-simulated; one good report puts designs on trial; per-reporter cap', async () => {
   const m = aiMatch;
+  // earlier tests' multiplayer matches also teach the pool (their best designs go on trial in the background, and can
+  // be these very designs): let that finish and start from an empty candidate tier, so only the reports below add any
+  await srv.api.aiPool.drain();
+  srv.store.aiPool.pool.candidates = [];
   const reg = await api('POST', '/api/login', undefined, { name: 'Reporter A', password: 'pw-reporter' });
   assert.equal(reg.status, 200);
   const A = reg.body as { playerId: string; token: string };

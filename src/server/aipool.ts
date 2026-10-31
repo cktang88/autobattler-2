@@ -9,14 +9,18 @@
 //    tested design that a role floor protects is demoted instead);
 //  - the player's designs that did well go on trial in the candidate tier after ONE re-simulated report (at most
 //    CANDIDATES_PER_REPORTER_DAY per reporter per day), and the AI's clearly ineffective designs spawn a mutant.
+// Multiplayer games teach it too, though the AI plays in neither: every finished PvP match (learnFromMatch: the
+// server's own resolved rounds) and PvP tug of war game (learnFromTug: a replay of the relayed order log) is scored in
+// the background, and its two best designs (either player's, shared/aipool.ts pvpCandidates) go on trial in the
+// candidate tier, credited to their builders. From there they graduate or get kicked by how they do in AI matches.
 // Every change is logged (events, and a history of the designs that left) for GET /api/aipool/log and the /aipool page.
 // Anti-abuse: per-reporter rate limit (api.ts), dedupe by match id, a capped queue, a capped candidate tier, a daily
 // per-reporter cap on new candidates, re-simulation of every round.
 
 import { DECK_SIZE, MAX_BLOCKS, MAX_ROUNDS, RULES_VERSION, MAX_SIM_UNITS, START_HP, placementValue, roundDamage, shapeOf, totalSupplyThrough, validateDeck } from '../shared/match.ts';
 import {
-  combinePerf, defaultPool, designTags, foldMatch, hash, poolKey, roleOf, sanitizeEntry, sanitizePool, simRound, validEntryDesign,
-  MAX_CANDIDATES, type AiPool, type PoolEntry, type PoolEvent, type RoundTally,
+  combinePerf, defaultPool, designTags, foldMatch, foldPvp, hash, poolKey, pvpCandidates, roleOf, sanitizeEntry, sanitizePool, scoreRound, simRound, validEntryDesign,
+  MAX_CANDIDATES, type AiPool, type DesignPerf, type PoolEntry, type PoolEvent, type RoundTally,
 } from '../shared/aipool.ts';
 import { blockInZone, MAX_SPACING } from '../shared/grid.ts';
 import { mixSeed } from '../shared/rng.ts';
@@ -24,6 +28,10 @@ import { MAX_LEVEL } from '../shared/stats.ts';
 import { STANCES, TARGET_PRIORITIES } from '../shared/types.ts';
 import type { Design, MatchState, Placement, PlayerState, RoundRecord, Side } from '../shared/types.ts';
 import { HttpError, sanitizeDeck } from './validate.ts';
+import { TugReplay, type TugOrder } from '../shared/tug.ts';
+
+/** tug of war ticks replayed per macrotask when learning from a multiplayer tug game */
+const TUG_CHUNK = 200;
 
 /** new candidates one reporter may put on trial per UTC day */
 export const CANDIDATES_PER_REPORTER_DAY = 3;
@@ -265,6 +273,10 @@ export function validateReport(raw: unknown): MatchState {
 // The service
 
 interface Job { match: MatchState; reporter: string; creator: string }
+/** A finished multiplayer game to learn from: `work` runs one chunk (true when scored), `perf` rates its designs. */
+interface PvpJob { id: string; game: string; decks: [Design[], Design[]]; names: [string, string]; work: () => boolean; perf: () => DesignPerf[] }
+/** multiplayer games waiting to be scored; beyond this new ones are skipped */
+export const MAX_PVP_QUEUE = 20;
 
 export class GlobalAiPool {
   state: GlobalPoolState;
@@ -273,6 +285,8 @@ export class GlobalAiPool {
   private seenSet: Set<string>;
   private running = false;
   private idle: (() => void)[] = [];
+  private readonly pvpQueue: PvpJob[] = [];
+  private pvpRunning = false;
 
   constructor(state: GlobalPoolState, save: () => void) {
     this.state = state;
@@ -296,10 +310,81 @@ export class GlobalAiPool {
     return { queued: this.queue.length };
   }
 
-  /** Resolves when the queue is empty (tests, shutdown). */
+  /** Resolves when both queues are empty (tests, shutdown). */
   drain(): Promise<void> {
-    if (!this.running && !this.queue.length) return Promise.resolve();
+    if (!this.running && !this.queue.length && !this.pvpRunning && !this.pvpQueue.length) return Promise.resolve();
     return new Promise((res) => this.idle.push(res));
+  }
+  private wakeIdle(): void {
+    if (this.running || this.queue.length || this.pvpRunning || this.pvpQueue.length) return;
+    for (const f of this.idle.splice(0)) f();
+  }
+
+  /** A finished classic multiplayer match (the server resolved every round itself): its two best designs go on trial
+   *  in the candidate tier, whoever built them. Scored in the background, a round per macrotask. */
+  learnFromMatch(m: MatchState): boolean {
+    if (!m.history.length || !m.players[0] || !m.players[1]) return false;
+    const rounds: RoundTally[] = [];
+    let i = 0;
+    return this.queuePvp({
+      id: `pvp:${m.id}`, game: 'multiplayer', decks: [m.players[0].deck, m.players[1].deck], names: [m.players[0].name, m.players[1].name],
+      work: () => { if (i < m.history.length) rounds.push(scoreRound(m, m.history[i++])); return i >= m.history.length; },
+      perf: () => combinePerf(rounds),
+    });
+  }
+
+  /** A finished multiplayer tug of war game (the server only relayed its orders): replayed in the background to rate
+   *  its designs, then the two best go on trial like a classic match's. */
+  learnFromTug(id: string, seed: number, rosters: [Design[], Design[]], names: [string, string], orders: readonly TugOrder[], endTick: number): boolean {
+    let rep: TugReplay;
+    try { rep = new TugReplay(seed, rosters, orders, endTick); } catch (e) { console.error('[aipool] tug replay failed', e); return false; }
+    return this.queuePvp({
+      id: `tug:${id}`, game: 'tug of war', decks: rosters, names,
+      work: () => rep.step(TUG_CHUNK), perf: () => combinePerf([rep.tally()]),
+    });
+  }
+
+  private queuePvp(job: PvpJob): boolean {
+    if (this.seenSet.has(job.id) || this.pvpQueue.length >= MAX_PVP_QUEUE) return false;
+    this.remember(job.id);
+    this.pvpQueue.push(job);
+    if (!this.pvpRunning) this.kickPvp();
+    return true;
+  }
+
+  private kickPvp(): void {
+    const job = this.pvpQueue.shift();
+    if (!job) { this.pvpRunning = false; this.wakeIdle(); return; }
+    this.pvpRunning = true;
+    const step = () => {
+      try {
+        if (!job.work()) { setImmediate(step); return; }
+        const now = Date.now();
+        const pool = structuredClone(this.state.pool);
+        const before = new Map([...pool.entries, ...pool.candidates].map((e) => [poolKey(e.design), structuredClone(e)] as const));
+        const events = foldPvp(pool, pvpCandidates(job.perf(), job.decks, job.names), { now, alpha: GLOBAL_ALPHA, game: job.game });
+        this.log(events, before, pool, now);
+        this.state.pool = sanitizePool(pool);
+        this.save();
+      } catch (e) {
+        console.error('[aipool] multiplayer game failed', e);
+      }
+      setImmediate(() => this.kickPvp());
+    };
+    setImmediate(step);
+  }
+
+  /** time-stamp pool events; snapshot the designs that left */
+  private log(events: PoolEvent[], before: Map<string, PoolEntry>, pool: AiPool, now: number): void {
+    for (const e of events) {
+      this.state.events.push({ ...e, t: now });
+      if (e.kind === 'kicked' || e.kind === 'pruned' || e.kind === 'replaced' || e.kind === 'dropped') {
+        const was = before.get(e.key) ?? [...pool.entries, ...pool.candidates].find((x) => poolKey(x.design) === e.key);
+        if (was) this.state.gone.push({ entry: was, t: now, kind: e.kind, tier: e.tier, ...(e.detail ? { detail: e.detail } : {}) });
+      }
+    }
+    if (this.state.events.length > MAX_EVENTS) this.state.events.splice(0, this.state.events.length - MAX_EVENTS);
+    if (this.state.gone.length > MAX_GONE) this.state.gone.splice(0, this.state.gone.length - MAX_GONE);
   }
 
   private remember(id: string): void {
@@ -313,7 +398,7 @@ export class GlobalAiPool {
     const job = this.queue.shift();
     if (!job) {
       this.running = false;
-      for (const f of this.idle.splice(0)) f();
+      this.wakeIdle();
       return;
     }
     this.running = true;
@@ -363,15 +448,7 @@ export class GlobalAiPool {
         return true;
       },
     });
-    for (const e of res.events) {
-      this.state.events.push({ ...e, t: now });
-      if (e.kind === 'kicked' || e.kind === 'pruned' || e.kind === 'replaced' || e.kind === 'dropped') {
-        const was = before.get(e.key) ?? [...pool.entries, ...pool.candidates].find((x) => poolKey(x.design) === e.key);
-        if (was) this.state.gone.push({ entry: was, t: now, kind: e.kind, tier: e.tier, ...(e.detail ? { detail: e.detail } : {}) });
-      }
-    }
-    if (this.state.events.length > MAX_EVENTS) this.state.events.splice(0, this.state.events.length - MAX_EVENTS);
-    if (this.state.gone.length > MAX_GONE) this.state.gone.splice(0, this.state.gone.length - MAX_GONE);
+    this.log(res.events, before, pool, now);
     for (const [k, v] of Object.entries(this.state.adds)) if (v.day < day) delete this.state.adds[k];
     this.state.pool = sanitizePool(pool);
     this.state.reports++;

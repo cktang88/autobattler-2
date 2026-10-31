@@ -9,7 +9,7 @@
 
 import { Battle } from './sim/battle.ts';
 import { DT, TICK_RATE } from './sim/types.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W, MAX_SPACING, blockDims, normSpacing, setField, squadOffsets, type FieldSize } from './grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, MAX_SPACING, STANDARD_FIELD, blockDims, normSpacing, setField, squadOffsets, type FieldSize } from './grid.ts';
 import { MODULE_BY_ID } from './parts.ts';
 import { hullK } from './mountgeo.ts';
 import { computeStats, validateDesign, weaponDps } from './stats.ts';
@@ -338,4 +338,50 @@ export function sanitizeCommand(raw: unknown): TugCommand | null {
     return { t: 'buy', designId: c.designId, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100, ...(c.rot === true ? { rot: true } : {}), ...(sp ? { spacing: sp } : {}) };
   }
   return null;
+}
+
+/** Replays a finished tug of war game from its order log (deterministic, like both clients did) in chunks, then rates
+ *  every bought design (aipool.ts combinePerf: supply invested vs value killed and damage dealt; castles excluded), so
+ *  the server can learn from multiplayer games it only relayed. Each chunk switches the shared field to the tug field
+ *  and back (the server resolves classic matches on the standard field in between). */
+export class TugReplay {
+  /** the replayed game (tests compare it with the original) */
+  readonly g: TugGame;
+  private next = 0;
+  readonly end: number;
+  private readonly orders: readonly TugOrder[];
+  constructor(seed: number, rosters: [Design[], Design[]], orders: readonly TugOrder[], endTick: number) {
+    this.orders = orders;
+    this.end = endTick;
+    let g: TugGame;
+    try { g = new TugGame(seed, rosters); } finally { setField(STANDARD_FIELD); }
+    this.g = g;
+  }
+  /** play up to `ticks` more ticks; true when the game is over (or the end tick reached) */
+  step(ticks: number): boolean {
+    setField(TUG.field);
+    try {
+      this.next = advance(this.g, this.orders, this.next, Math.min(this.end, this.g.tick + ticks));
+      return this.g.done || this.g.tick >= this.end;
+    } finally { setField(STANDARD_FIELD); }
+  }
+  /** per design (side:id): supply invested, value of the enemy units it killed, damage dealt + healed */
+  tally(): Map<string, { side: Side; designId: string; invested: number; killed: number; dealt: number }> {
+    const b = this.g.battle, units = b.units;
+    // castles (their gun swaps rebuild them as new units: every one of them)
+    const castle = new Set<number>(units.filter((u) => u.design.id.startsWith('tug-castle')).map((u) => u.id));
+    const valueOf = units.map((u) => { try { return computeStats(u.design).cost / Math.max(1, computeStats(u.design).squad); } catch { return 0; } });
+    const out = new Map<string, { side: Side; designId: string; invested: number; killed: number; dealt: number }>();
+    for (const u of units) {
+      if (castle.has(u.id)) continue;
+      const k = `${u.side}:${u.design.id}`;
+      let e = out.get(k);
+      if (!e) { e = { side: u.side, designId: u.design.id, invested: 0, killed: 0, dealt: 0 }; out.set(k, e); }
+      const t = b.unitTally(u.id);
+      e.invested += valueOf[u.id];
+      e.dealt += t.dealt + t.healed;
+      for (const v of t.kills) if (!castle.has(v)) e.killed += valueOf[v] ?? 0;
+    }
+    return out;
+  }
 }

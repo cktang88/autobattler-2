@@ -759,3 +759,53 @@ export function roleCounts(pool: Pick<AiPool, 'entries'>): Record<Role, number> 
   return c;
 }
 export { classify };
+
+// ---------------------------------------------------------------------------------------------
+// Learning from multiplayer games (the AI plays in neither): the server scores every finished PvP game (classic: its
+// own resolved rounds; tug of war: a replay of the order log, tugReplay in tug.ts) and puts the two best designs of the
+// game on trial in the candidate tier. They graduate or get kicked like any candidate, by how they do in AI matches.
+
+/** a multiplayer design only counts as "best" when it beat the game's average supply efficiency by this much */
+export const PVP_MIN_EFF = 1.1;
+/** designs taken from one multiplayer game */
+export const PVP_PICKS = 2;
+
+/** A design from a multiplayer game that earned a trial (renamed like any adopted design), with who built it. */
+export interface PvpCandidate extends Candidate { creator: string; side: Side }
+
+/** The PVP_PICKS best designs of a finished multiplayer game (both sides), each with a real share of its side's
+ *  spending behind it and at least PVP_MIN_EFF x the game's average efficiency. `decks` / `names` per side. */
+export function pvpCandidates(scores: DesignPerf[], decks: [Design[], Design[]], names: [string, string]): PvpCandidate[] {
+  const byId = [new Map(decks[0].map((d) => [d.id, d] as const)), new Map(decks[1].map((d) => [d.id, d] as const))];
+  const total = [0, 1].map((s) => scores.filter((p) => p.side === s).reduce((t, p) => t + p.invested, 0));
+  const ranked = scores
+    .filter((p) => byId[p.side].has(p.designId) && p.invested >= Math.max(1, 0.05 * total[p.side]) && p.eff >= PVP_MIN_EFF)
+    .sort((a, b) => b.eff - a.eff || (a.designId < b.designId ? -1 : 1));
+  const out: PvpCandidate[] = [];
+  const keys = new Set<string>();
+  for (const p of ranked) {
+    if (out.length >= PVP_PICKS) break;
+    const src = byId[p.side].get(p.designId)!;
+    if (!validEntryDesign(src)) continue;
+    const d = adoptDesign(src);
+    if (!isValidDesign(d) || keys.has(poolKey(d))) continue;
+    keys.add(poolKey(d));
+    out.push({ design: d, eff: p.eff, creator: names[p.side], side: p.side });
+  }
+  return out;
+}
+
+/** Fold a multiplayer game's best designs into a pool (in place): known designs (same parts, or a near-duplicate)
+ *  only update their running score; new ones go on trial in the candidate tier. `game` names the source in the log. */
+export function foldPvp(pool: AiPool, cands: PvpCandidate[], o: { now?: number; alpha?: number; game: string }): PoolEvent[] {
+  const E: PoolEvent[] = [];
+  for (const c of cands) {
+    const known = findByKey(allEntries(pool), c.design) ?? findBySlot(allEntries(pool), c.design);
+    if (known) { blendScore(known, c.eff, o.alpha ?? SCORE_ALPHA); continue; }
+    const fresh: PoolEntry = { design: c.design, score: Math.max(0.5, Math.min(3, c.eff)), games: 0, learned: true, origin: 'adopted', creator: c.creator.slice(0, 24), addedAt: o.now ?? 0 };
+    const dropped = addCandidate(pool, fresh);
+    if (dropped) E.push(ev('dropped', dropped, 'candidate', 'candidate tier full'));
+    if (dropped !== fresh) E.push(ev('joined', fresh, 'candidate', `best of a ${o.game} game, by ${fresh.creator}`));
+  }
+  return E;
+}

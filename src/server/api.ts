@@ -105,6 +105,8 @@ export class Api {
     this.loginLimiter = new RateLimiter(Math.max(3, lpm / 2), lpm / 60);
     this.trustProxy = !!opts.trustProxy;
     this.aiPool = new GlobalAiPool(store.aiPool, () => store.save());
+    // every finished multiplayer game teaches the AI: its two best designs go on trial in the AI's candidate pool
+    this.tugHub.onFinish = (g) => { this.aiPool.learnFromTug(g.id, g.seed, g.rosters, g.names, g.orders, g.endTick); };
   }
 
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
@@ -483,6 +485,7 @@ export class Api {
       return { ok: true, cancelled: true };
     }
     forfeitSide(r, side);
+    this.learn(r);
     this.store.save();
     this.wake(r.match.id);
     return { ok: true, side, match: redactFor(r.match, side), summary: summarize(r, side) };
@@ -557,6 +560,12 @@ export class Api {
     this.wake(r.match.id);
   }
 
+  /** A finished multiplayer match (with both players and rounds played): its best designs go to the AI's pool. */
+  private learn(r: MatchRecord): void {
+    if (r.owners[1] == null) return;
+    try { this.aiPool.learnFromMatch(r.match); } catch (e) { console.error('[api] learning from match failed', e); }
+  }
+
   /** Resolve the round; on a sim exception roll back and retry later instead of crashing. */
   private tryResolve(r: MatchRecord): void {
     const snapshot = structuredClone(r.match);
@@ -564,6 +573,7 @@ export class Api {
       resolveRound(r.match, Date.now());
       touch(r.match);
       delete r.resolveErrorAt;
+      if (r.match.status === 'done') this.learn(r);
     } catch (e) {
       console.error(`[api] resolveRound failed for ${r.match.id} round ${snapshot.round}`, e);
       r.match = snapshot;
@@ -612,6 +622,7 @@ export class Api {
         if (r0 && r1) { this.maybeRetryResolve(r); continue; } // throttled: a round that keeps failing must not re-simulate on every lobby list
         if (r0 !== r1) forfeitSide(r, r0 ? 1 : 0);
         else { m.status = 'done'; m.winner = -1; touch(m); }
+        this.learn(r);
         this.wake(m.id);
         changed++;
       }

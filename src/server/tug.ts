@@ -69,6 +69,9 @@ export class TugHub {
   private rooms = new Map<string, Room>();
   private now: () => number;
 
+  /** called once per finished game both players joined (the server learns from it: GlobalAiPool.learnFromTug) */
+  onFinish: ((r: { id: string; seed: number; rosters: [Design[], Design[]]; names: [string, string]; orders: readonly TugOrder[]; endTick: number }) => void) | null = null;
+
   constructor(now: () => number = Date.now) {
     this.now = now;
   }
@@ -108,6 +111,10 @@ export class TugHub {
     r.winner = winner;
     r.doneAt = t;
     for (const fn of [...r.waiters]) fn();
+    if (r.owners[1] && r.rosters[1] && r.startAt && this.onFinish) {
+      try { this.onFinish({ id: r.id, seed: r.seed, rosters: [r.rosters[0], r.rosters[1]], names: [r.names[0], r.names[1] ?? '?'], orders: r.orders, endTick: r.endFrontier }); }
+      catch (e) { console.error('[tug] onFinish failed', e); }
+    }
   }
 
   private push(r: Room, side: Side, cmd: TugOrder['cmd'], t: number): TugOrder {
