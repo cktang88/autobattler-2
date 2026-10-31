@@ -48799,6 +48799,7 @@ function buildUnit(design, team) {
     T.userData.torso = true;
     const res = out2.torso(tb, { heroR: H.r, podR: pods.map((i) => tur[i].r), utilR: riders.map((i) => tur[i].r) });
     tb.mount(T);
+    H.yaw.add(T);
     if (res.at) H.yaw.position.set(...res.at);
     const p0 = res.hp[0] ?? [0, 0, 0];
     H.pitch.position.set(p0[0] / kH, p0[1] / kH, p0[2] / kH);
