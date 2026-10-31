@@ -29,7 +29,7 @@ g.document ??= { createElement: () => ({ width: 0, height: 0, style: {}, getCont
 
 const THREE = await import('three');
 const { buildUnit } = await import('../src/client/proto3d/units3d.ts');
-const { CHASSIS, MOBILITY, MODULES, pairingError } = await import('../src/shared/parts.ts');
+const { CHASSIS, MOBILITY, MODULES, MODULE_BY_ID, pairingError } = await import('../src/shared/parts.ts');
 const { slotError } = await import('../src/shared/stats.ts');
 const { weaponD } = await import('../src/client/render/weaponsize.ts');
 const { withDetail } = await import('../src/client/proto3d/geo.ts');
@@ -147,8 +147,11 @@ function checkDesign(d: Design, tamper?: (u: ReturnType<typeof buildUnit>) => vo
   u.animate(0, 0, 0);
   tamper?.(u);
   u.root.updateMatrixWorld(true);
+  // a mech torso hangs under the hero's yaw but is body: what the hero, its pods and riding utilities stand on
+  const torsoObjs = new Set<unknown>();
+  u.root.traverse((o) => { if (o.userData.torso) o.traverse((c) => torsoObjs.add(c)); });
   const turretObjs = new Set<unknown>();
-  for (const t of u.turrets) t.yaw.traverse((o) => turretObjs.add(o));
+  for (const t of u.turrets) t.yaw.traverse((o) => { if (!torsoObjs.has(o)) turretObjs.add(o); });
   const tris: number[] = [];
   const v = new THREE.Vector3();
   u.root.traverse((o) => {
@@ -163,8 +166,9 @@ function checkDesign(d: Design, tamper?: (u: ReturnType<typeof buildUnit>) => vo
   const mods = d.mounts.filter((m) => m);
   const fill = d.mounts.map((m) => m ?? '-').join('|');
   u.turrets.forEach((t, k) => {
-    // a weapon pod rides its host turret's flank on a bracket: the host is the one that must stand on the hull
-    if (t.host !== undefined) return;
+    // a weapon pod rides its host turret's flank on a bracket: the host is the one that must stand on the hull.
+    // A utility riding a torso (armour, shields, sensors) must stand on the torso.
+    if (t.host !== undefined && (MODULE_BY_ID.get(String(mods[k]))?.kind === 'weapon' || !torsoObjs.size)) return;
     const base = t.yaw.getWorldPosition(new THREE.Vector3());
     const limit = Math.max(0.04, 0.3 * t.r);
     const top = new THREE.Box3().setFromObject(t.yaw).max.y;
@@ -203,6 +207,9 @@ function fills(ch: (typeof CHASSIS)[number], mob: string): Record<string, (strin
     small: ch.mounts.map((_, i) => pick(i, wpn, false)),
     util: ch.mounts.map((_, i) => pick(i, utl, true)),
   };
+  // armour plates next to the biggest weapon (a torso hull carries them on its back; they once floated over it)
+  const plate = ch.mounts.map((_, i) => pick(i, (m) => m.visual === 'plate', true));
+  if (plate.some((m) => m)) out.plate = plate.map((m, i) => (i === 0 ? out.big[0] : m));
   // melee tools ride the hull's front edge (meleeFront): their arms / rams must still reach back onto the hull
   const mel = ch.mounts.map((_, i) => pick(i, (m) => m.kind === 'weapon' && m.projectile === 'melee', true));
   if (mel.some((m) => m)) out.melee = mel;

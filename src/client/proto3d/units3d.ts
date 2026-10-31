@@ -200,16 +200,34 @@ export function buildUnit(design: Design, team: 0 | 1): Unit3D {
       const p = res.hp[j + 1], tu = tur[i]!;
       if (p) tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
     });
-    // riding utilities: where the chassis put them on the torso, else spread across the back of the torso's top
+    // riding utilities: where the chassis put them on the torso, else spread across the back of the torso's top,
+    // seated on the armour actually under them (the bounding box top is a mast / fin tip: modules floated over the back)
     if (riders.length) {
       const bb = new THREE.Box3();
-      T.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.computeBoundingBox(); bb.union(m.geometry.boundingBox!); } });
+      const tm: THREE.Mesh[] = [];
+      T.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.computeBoundingBox(); bb.union(m.geometry.boundingBox!); m.updateMatrix(); m.matrixWorld.copy(m.matrix); tm.push(m); } });
+      const ray = new THREE.Raycaster();
+      // the median of five columns under the module: a thin mast / banner / antenna in one column doesn't lift it
+      const surfaceY = (x: number, z: number, r: number): number | null => {
+        const tops: number[] = [];
+        for (const [dx, dz] of [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]]) {
+          ray.set(new THREE.Vector3(x + dx * r, bb.max.y + 1, z + dz * r), new THREE.Vector3(0, -1, 0));
+          const hit = ray.intersectObjects(tm, false)[0];
+          if (hit) tops.push(hit.point.y);
+        }
+        return tops.length >= 3 ? tops.sort((a, b) => a - b)[Math.floor(tops.length / 2)] : null;
+      };
       riders.forEach((i, j) => {
         const tu = tur[i]!;
         let p = res.up?.[j];
         if (!p) {
           const n = riders.length, sz = bb.max.z - bb.min.z;
-          p = [bb.min.x + (bb.max.x - bb.min.x) * 0.22, bb.max.y - tu.r * 0.15, (bb.min.z + bb.max.z) / 2 + (n > 1 ? (j / (n - 1) - 0.5) * sz * 0.5 : 0)];
+          let x = bb.min.x + (bb.max.x - bb.min.x) * 0.22;
+          const z = (bb.min.z + bb.max.z) / 2 + (n > 1 ? (j / (n - 1) - 0.5) * sz * 0.5 : 0);
+          // no torso under that spot (an open ring, a gap between masses): step toward the middle until there is
+          let y = surfaceY(x, z, tu.r);
+          for (let k = 1; y === null && k <= 6; k++) { x = bb.min.x + (bb.max.x - bb.min.x) * (0.22 + 0.05 * k); y = surfaceY(x, z, tu.r); }
+          p = [x, (y ?? bb.max.y) - tu.r * 0.1, z];
         }
         tu.yaw.scale.multiplyScalar(1 / kH);
         tu.yaw.position.set(p[0] / kH, p[1] / kH, p[2] / kH);
