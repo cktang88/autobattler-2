@@ -142,7 +142,7 @@ test('a design can only be bought again after its cooldown', () => {
   g.sides[0].gold = 1e6;
   const [a, b] = ROSTER;
   assert.equal(g.apply(0, { t: 'buy', designId: a.id, x: 12, y: 95 }), null);
-  assert.match(g.check(0, { t: 'buy', designId: a.id, x: 30, y: 95 }) ?? '', /ready again in 5 s/);
+  assert.match(g.check(0, { t: 'buy', designId: a.id, x: 30, y: 95 }) ?? '', /ready again in 3 s/);
   assert.equal(g.check(0, { t: 'buy', designId: b.id, x: 30, y: 95 }), null, 'other designs are not held up');
   assert.equal(g.check(1, { t: 'buy', designId: a.id, x: 12, y: 18 }), null, 'nor is the other side');
   for (let i = 0; i < TUG.buyCooldown * 20 - 1; i++) g.step();

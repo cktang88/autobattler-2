@@ -2,6 +2,7 @@
 
 import { METERS_PER_CELL } from '../../shared/grid.ts';
 import { START_SUPPLY } from '../../shared/match.ts';
+import { TIER_NAMES, TUG } from '../../shared/tug.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { computeStats, levelMult } from '../../shared/stats.ts';
 import type { Design, ModuleDef, UnitStats } from '../../shared/types.ts';
@@ -45,7 +46,7 @@ export function unitDps(d: Design, level = 1): { ground: number; air: number; we
   return { ground, air, weapons };
 }
 
-export type Cap = 'aa' | 'armor' | 'swarm' | 'long' | 'front' | 'support' | 'detect' | 'air' | 'fast';
+export type Cap = 'aa' | 'armor' | 'swarm' | 'long' | 'front' | 'support' | 'detect' | 'stealth' | 'air' | 'fast';
 
 export const CAPS: { id: Cap; label: string; tip: string }[] = [
   { id: 'aa', label: 'Anti-air', tip: 'Can shoot aircraft' },
@@ -55,6 +56,7 @@ export const CAPS: { id: Cap; label: string; tip: string }[] = [
   { id: 'front', label: 'Frontline', tip: 'Each unit is tough enough to hold the line (lots of hp, armor or shields); a squad of flimsy units does not count' },
   { id: 'support', label: 'Support', tip: 'Repairs or shields allies' },
   { id: 'detect', label: 'Detection', tip: 'Sensors that reveal cloaked units' },
+  { id: 'stealth', label: 'Stealth', tip: 'Cloaked: hidden from enemies without sensors until it fires' },
   { id: 'air', label: 'Aircraft', tip: 'Flying units: only anti-air can hit them' },
   { id: 'fast', label: 'Fast', tip: 'Moves 15 m/s or faster: raiders, flankers' },
 ];
@@ -88,6 +90,7 @@ export function designInfo(d: Design): DesignInfo | null {
     }
     if (m.heal || m.shieldAura) caps.add('support');
     if (m.detect) caps.add('detect');
+    if (m.cloak) caps.add('stealth');
   }
   const rangeM = st.range * METERS_PER_CELL;
   const speedMs = st.isStatic ? 0 : st.speed * METERS_PER_CELL;
@@ -113,7 +116,7 @@ export interface DeckReport {
   maxRange: number;
   gnd: number;
   air: number;
-  /** designs affordable with round-1 supply */
+  /** designs you can buy from the start: affordable with round-1 supply (match), in the starting tiers (tug) */
   roundOne: number;
   warnings: { level: 'bad' | 'warn' | 'good'; text: string }[];
 }
@@ -122,7 +125,8 @@ export const COST_BUCKETS: [string, number, number][] = [
   ['< 80', 0, 80], ['80–159', 80, 160], ['160–299', 160, 300], ['300–599', 300, 600], ['600+', 600, Infinity],
 ];
 
-export function analyzeDeck(deck: Design[]): DeckReport {
+/** `mode`: a match deck (round supply) or a tug of war roster (gold flow, hull tiers unlocked during the game) */
+export function analyzeDeck(deck: Design[], mode: 'match' | 'tug' = 'match'): DeckReport {
   const infos = deck.map(designInfo).filter((x): x is DesignInfo => !!x);
   const capCount = Object.fromEntries(CAPS.map((c) => [c.id, 0])) as Record<Cap, number>;
   for (const i of infos) for (const c of i.caps) capCount[c]++;
@@ -138,7 +142,7 @@ export function analyzeDeck(deck: Design[]): DeckReport {
     maxRange: infos.reduce((a, i) => Math.max(a, i.rangeM), 0),
     gnd: infos.reduce((a, i) => a + i.gnd, 0),
     air: infos.reduce((a, i) => a + i.air, 0),
-    roundOne: costs.filter((c) => c <= START_SUPPLY).length,
+    roundOne: mode === 'tug' ? infos.filter((i) => i.st.size <= TUG.startTier).length : costs.filter((c) => c <= START_SUPPLY).length,
     warnings: [],
   };
   const w = r.warnings;
@@ -150,7 +154,10 @@ export function analyzeDeck(deck: Design[]): DeckReport {
   if (!capCount.front) w.push({ level: 'warn', text: 'No frontline: nothing tough to soak damage for the rest of the army.' });
   if (!capCount.long) w.push({ level: 'warn', text: 'Nothing reaches 80 m: artillery and snipers will outrange you.' });
   if (!capCount.detect) w.push({ level: 'warn', text: 'No sensors: cloaked units stay hidden until they fire.' });
-  if (r.minCost > START_SUPPLY) w.push({ level: 'bad', text: `Nothing fits round 1's ${START_SUPPLY} supply: you can't deploy at all in round 1.` });
+  if (mode === 'tug') {
+    if (!r.roundOne) w.push({ level: 'bad', text: `Nothing ${TIER_NAMES[1]} or ${TIER_NAMES[2]}: you can't buy a unit until you unlock bigger hulls.` });
+    else if (r.roundOne === 1) w.push({ level: 'warn', text: `Only one design is buyable at the start (${TIER_NAMES[1]} / ${TIER_NAMES[2]}).` });
+  } else if (r.minCost > START_SUPPLY) w.push({ level: 'bad', text: `Nothing fits round 1's ${START_SUPPLY} supply: you can't deploy at all in round 1.` });
   else if (r.minCost > START_SUPPLY / 2) w.push({ level: 'warn', text: `Cheapest design is ${r.minCost}: hard to spend supply efficiently early on.` });
   if (r.buckets[0].n + r.buckets[1].n === 0) w.push({ level: 'warn', text: 'No cheap units (under 160): nothing to fill leftover supply or screen with.' });
   if (infos.length < 6) w.push({ level: 'warn', text: `Only ${infos.length} designs: you have room for more answers.` });

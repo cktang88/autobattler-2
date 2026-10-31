@@ -26,9 +26,9 @@ export const TUG = {
   startTier: 2 as Size,
   maxTier: 5 as Size,
   /** seconds a dropped block stays frozen where it landed before it may move (its guns fire from the start) */
-  spawnFreeze: 5,
+  spawnFreeze: 3,
   /** seconds after buying a design before that same design can be bought again (no spamming one cheap unit) */
-  buyCooldown: 5,
+  buyCooldown: 3,
   /** the castle's gun at the start: a plain heavy machine gun; better ones are bought (castleGunPrice) */
   startCastleGun: 'hmg',
   castleHp: 20000,
@@ -47,8 +47,9 @@ export const TUG = {
 
 /** price of the next income level (from level `lvl`) */
 export const incomeCost = (lvl: number): number => 150 + 125 * lvl;
-/** price to unlock hull tier `size` (the unlock skips sizes the roster has no design of: TugGame.nextTier) */
-export const TIER_COST: Record<Size, number> = { 1: 0, 2: 0, 3: 400, 4: 900, 5: 1600 };
+/** price to unlock hull tier `size` (the unlock skips sizes the roster has no design of: TugGame.nextTier). Giants and
+ *  titans unlock cheaply (was 900 / 1600): the units themselves are already dear. */
+export const TIER_COST: Record<Size, number> = { 1: 0, 2: 0, 3: 400, 4: 450, 5: 800 };
 export const incomeRate = (lvl: number): number => TUG.baseIncome + TUG.incomeStep * lvl;
 export const TIER_NAMES: Record<Size, string> = { 1: 'Light', 2: 'Medium', 3: 'Heavy', 4: 'Giant', 5: 'Titan' };
 

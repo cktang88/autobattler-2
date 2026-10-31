@@ -14,6 +14,8 @@ import { makeView } from '../render/viewfactory.ts';
 import type { BattleView } from '../render/view.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
 import { openModal, paintWhenLaidOut, quickCard, sizeLabel } from './match-ui.ts';
+import { designInfo } from './deckstats.ts';
+import { capBadges, renderDeckAnalysis } from './deckpanel.ts';
 import { liveLine, liveUnitAt, placeTipAt, tipFor, zoomButtons } from './fieldtools.ts';
 import { createFpsMeter } from './fps.ts';
 import { drawPartIcon } from '../render/field.ts';
@@ -66,6 +68,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
   let destroyed = false;
 
   const rosterHost = h('div.tug-roster');
+  const statsHost = h('div.db-stats');
   const poolHost = h('div.tug-pool');
   const openHost = h('div.tug-open');
   const status = h('div.tug-status');
@@ -82,6 +85,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     const cv = h('canvas.tug-thumb');
     paintWhenLaidOut([{ canvas: cv, design: d }]);
     const size = sizeOf(d);
+    const info = designInfo(d);
     return h('button.tug-card', {
       class: inRoster ? 'on' : '',
       title: inRoster ? 'Remove from roster' : roster.length >= TUG.rosterSize ? `The roster is full (${TUG.rosterSize})` : 'Add to roster',
@@ -96,6 +100,10 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     }, h('span.tug-card-badge', { 'aria-hidden': 'true' }, inRoster ? '✕' : '+'), cv,
       h('div.tug-card-name', null, d.name),
       h('div.tug-card-meta', null, h('span.gold', null, `${costOf(d)}g`), ' · ', h('span', { class: size > TUG.startTier ? 'warn' : 'muted' }, sizeLabel(size))),
+      info ? h('div.tug-card-caps', null,
+        info.gnd > 0 ? h('span.db-chip.gnd', { title: 'Hits ground units' }, 'GND') : null,
+        info.air > 0 ? h('span.db-chip.air', { title: 'Hits aircraft' }, 'AIR') : null,
+        capBadges(info)) : null,
     );
   };
 
@@ -106,6 +114,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
     );
     const inR = new Set(roster.map((d) => d.id));
     poolHost.replaceChildren(...allDesigns().filter((d) => !inR.has(d.id)).map((d) => card(d, false)));
+    renderDeckAnalysis(statsHost, roster, { slots: TUG.rosterSize, mode: 'tug', title: 'Roster analysis' });
   };
 
   const go = (launch: TugLaunch) => { if (!destroyed) app.go({ name: 'tugmatch', launch }); };
@@ -234,7 +243,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
         `after a ${TUG.spawnFreeze} s spawn time (frozen, but already shooting) they march up their lane, fight whatever comes within reach and shell the enemy castle. Invest gold to raise your income, `,
         `or unlock bigger hulls (you start with ${TIER_NAMES[1]} and ${TIER_NAMES[2]}). Destroy the enemy castle to win.`),
       h('div.tug-cols', null,
-        playPanel,
+        h('div.tug-left', null, playPanel, h('section.panel', null, statsHost)),
         h('section.panel.tug-rosterpanel', null,
           h('h3', null, `Tug roster (up to ${TUG.rosterSize})`),
           h('p.muted', null, 'The designs you can buy in Tug of War (separate from your Classic Loadout). ✕ removes one; + below adds one.'),

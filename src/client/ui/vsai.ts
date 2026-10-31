@@ -11,7 +11,8 @@ import { DECK_SIZE } from '../../shared/match.ts';
 import type { Design } from '../../shared/types.ts';
 import { paintPreview, sizeLabel } from './match-ui.ts';
 import * as kit from './kit.ts';
-import { CAPS, analyzeDeck, designInfo, type Cap, type DesignInfo } from './deckstats.ts';
+import { CAPS, designInfo, type Cap, type DesignInfo } from './deckstats.ts';
+import { CAP_ICON, capBadges, renderDeckAnalysis } from './deckpanel.ts';
 import { fmtUnitPrice } from '../../shared/stats.ts';
 
 const KEY_DIFF = 'ab2.aiDifficulty';
@@ -44,10 +45,6 @@ const sorter: Record<Sort, (a: DesignInfo, b: DesignInfo) => number> = {
   range: (a, b) => b.rangeM - a.rangeM,
   speed: (a, b) => b.speedMs - a.speedMs,
   name: (a, b) => a.d.name.localeCompare(b.d.name),
-};
-
-const CAP_ICON: Record<Cap, string> = {
-  aa: '✈', armor: '⛨', swarm: '✸', long: '◎', front: '▣', support: '✚', detect: '◉', air: '⇡', fast: '»',
 };
 
 export function playerName(): string {
@@ -139,8 +136,6 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' | 'me
   }
 
   // ---------- rendering ----------
-  const capBadges = (i: DesignInfo) => h('span.db-caps', null,
-    ...CAPS.filter((c) => i.caps.has(c.id)).map((c) => h('span.db-cap', { class: `cap-${c.id}`, title: c.label }, CAP_ICON[c.id])));
 
   /** what a design is at a glance: weight class, what it can shoot at, and how many units one purchase buys */
   const roleChips = (i: DesignInfo) => {
@@ -221,38 +216,7 @@ export function vsaiScreen(app: App, route: { name: 'vsai'; from?: 'lobby' | 'me
   }
 
   function renderStats() {
-    const r = analyzeDeck(deck.map((id) => infoById.get(id)!.d));
-    const maxB = Math.max(1, ...r.buckets.map((b) => b.n));
-    const stat = (label: string, value: string, tip = '') => h('div.db-stat', { title: tip || null }, h('span', null, label), h('b', null, value));
-    statsHost.replaceChildren(
-      h('div.panel-title', null, 'Deck analysis'),
-      h('div.db-warn', null, ...r.warnings.map((w) => h('div.db-w', { class: w.level }, w.text))),
-      h('div.db-sec', null, h('h4', null, 'Coverage'),
-        h('div.db-capgrid', null, ...CAPS.map((c) => {
-          const n = r.capCount[c.id];
-          return h('div.db-caprow', { class: n || c.id === 'air' || c.id === 'fast' || c.id === 'support' ? '' : 'zero', title: c.tip },
-            h('span.db-cap', { class: `cap-${c.id}` }, CAP_ICON[c.id]),
-            h('span.db-caplbl', null, c.label),
-            h('span.db-capbar', null, ...Array.from({ length: DECK_SIZE }, (_, k) => h('i', { class: k < n ? 'on' : null }))),
-            h('b', null, String(n)));
-        }))),
-      h('div.db-sec', null, h('h4', null, 'Cost curve'),
-        h('div.db-hist', null, ...r.buckets.map((b) => h('div.db-col', { title: `${b.n} design${b.n === 1 ? '' : 's'} costing ${b.label}` },
-          h('div.db-bar', null, h('i', { style: { height: `${(b.n / maxB) * 100}%` } })),
-          h('b', null, String(b.n)),
-          h('span', null, b.label))))),
-      h('div.db-sec', null, h('h4', null, 'Numbers'),
-        h('div.db-statgrid', null,
-          stat('Avg cost', String(Math.round(r.avgCost))),
-          stat('Cheapest', String(r.minCost), 'Smallest purchase you can make'),
-          stat('Priciest', String(r.maxCost)),
-          stat('Round-1 buys', `${r.roundOne}/${r.infos.length}`, 'Designs you can afford with round 1 supply'),
-          stat('Avg speed', `${Math.round(r.avgSpeed)} m/s`, 'Mobile designs only'),
-          stat('Max reach', `${Math.round(r.maxRange)} m`),
-          stat('Ground DPS · all blocks', String(Math.round(r.gnd)), 'One block of each design combined (a light design\'s block is its whole squad of 4, 8 or 16)'),
-          stat('Air DPS · all blocks', String(Math.round(r.air)), 'One block of each design combined (a light design\'s block is its whole squad of 4, 8 or 16)'),
-        )),
-    );
+    renderDeckAnalysis(statsHost, deck.map((id) => infoById.get(id)!.d), { slots: DECK_SIZE, mode: 'match' });
   }
 
   function render() {
