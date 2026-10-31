@@ -113,7 +113,8 @@ export function barrel(C: WCtx, B: Bld, o: {
   const sEnd = L * (o.sleeve ? 0.72 : 0.64), cut = sEnd * 0.42, g = R * 0.55;
   const h0 = R * 2.5, w0 = R * 2.9;
   jacket(B, kit.panel, x0, x0 + cut - g / 2, y, z, h0, w0, 0.96);
-  jacket(B, kit.trim, x0 + cut + g / 2, x0 + sEnd, y, z, h0 * 0.86, w0 * 0.86, 0.88);
+  // (the forward shroud is bare metal in the weapon's finish, finish3d.ts: grey / blued / silver ... by weapon group)
+  jacket(B, kit.metal, x0 + cut + g / 2, x0 + sEnd, y, z, h0 * 0.86, w0 * 0.86, 0.88);
   B.lathe(kit.glow, [[0, 0], [R * 1.12, 0], [R * 1.12, g * 1.1], [0, g * 1.1]], [x0 + cut - g * 0.55, y, z], 'x', seg);
   if (!detail(C)) ring(B, kit.trim, x0 + cut, y, z, R * 0.9, R * 1.18, g * 0.3, seg);
   if (o.evac) jacket(B, kit.fitting, x0 + L * 0.74, x0 + L * 0.8, y, z, h0 * 0.7, w0 * 0.7, 0.9);

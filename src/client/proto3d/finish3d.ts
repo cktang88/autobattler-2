@@ -12,16 +12,16 @@
 //   scout (light 1)         blued steel or gunmetal, a little chrome
 //   arty                    gunmetal or blued;    brawler   gunmetal, blued or bronze
 //   legged walkers: half the gunmetal ones get chrome pistons (exposed leg hydraulics catch the light)
-// Weapons (per turret) override for their barrels / coils / emitters:
-//   gauss / rail / plasma                                          dark chrome bores, copper coil rings (kit.fitting)
-//   sniper, laser / slowbeam / gravity                             dark chrome (precision bores, polished emitters)
-//   tesla / emp / heat-ray                                         copper coils
-//   sonic                                                          brass;   flamer   oiled bronze nozzles
-//   howitzer / mortar                                              blued or gunmetal tube, brass breech rings
-//   saw / blade / drill / chainsaw                                 dark chrome (polished working steel)
-//   guns / cannons / autocannons / flak                            the hull's finish (warm hull finishes -> gunmetal:
-//                                                                  no copper tank barrels); siege calibres: brass rings
-//   launchers, hammers, utility                                    the hull's finish
+// Weapons (per turret) always take their GROUP's barrel finish (never the hull's), so a player reads a weapon family
+// from its barrels and not every barrel is black (by category; coil / emitter looks first):
+//   gauss / rail                                                   silver bores, copper coil rings
+//   tesla / emp / heat-ray, other disruption                       copper coils;  sonic  brass;  flame  oiled bronze
+//   precision (snipers), energy (lasers, plasma), melee            silver
+//   machine guns                                                   gunmetal grey
+//   autocannons, flak                                              blued (blue-black)
+//   cannons                                                        blued tubes, brass breech rings on L / XL
+//   artillery                                                      gunmetal tube, brass breech rings
+//   rockets, missiles, bombs, utilities                            the hull's finish
 // Roughly half of all units stay plain gunmetal; warm metals stay rare and every finish is dark-to-mid and low-chroma.
 
 import type { ChassisDef, Design, MobilityDef, ModuleDef } from '../../shared/types.ts';
@@ -69,32 +69,29 @@ function hullFinish(design: Design, mob: MobilityDef, skin: Skin): MetalFinish {
   return f;
 }
 
-const WARM = new Set<MetalFinish>(['bronze', 'copper', 'brass']);
 
-function weaponFinish(m: ModuleDef, hull: MetalFinish, design: Design, i: number): FinishSpec {
-  const v = m.visual;
-  switch (v) {
-    // coil guns: polished bores, copper coil rings round the barrel
-    case 'gauss': case 'rail': case 'plasma': return { joint: 'chrome', fitting: 'copper' };
-    case 'sniper': case 'laser': case 'slowbeam': case 'gravity':
-    case 'saw': case 'blade': case 'drill': case 'chainsaw':
-      return { joint: 'chrome' };
+function weaponFinish(m: ModuleDef, hull: MetalFinish): FinishSpec {
+  // coil / emitter weapons first (their look, whatever the category)
+  switch (m.visual) {
+    case 'gauss': case 'rail': return { joint: 'silver', fitting: 'copper' };
     case 'tesla': case 'emp': case 'heatray': return { joint: 'copper', fitting: 'copper' };
     case 'sonic': return { joint: 'brass' };
     case 'flamer': return { joint: 'bronze' };
-    case 'artillery': case 'mortar':
-      return { joint: h01(design.id, 41 + i) < 0.5 ? 'blued' : 'gunmetal', fitting: 'brass' };
-    case 'gun': case 'cannon': case 'gatling': case 'shotgun': case 'flak': case 'pointdef': {
-      const j: MetalFinish = WARM.has(hull) ? 'gunmetal' : hull;
-      // siege calibres (L / XL cannons) get brass breech rings
-      return { joint: j, fitting: v === 'cannon' && (m.mount === 'L' || m.mount === 'XL') ? 'brass' : j };
-    }
-    default: return { joint: hull };
+  }
+  switch (m.category) {
+    case 'machinegun': return { joint: 'gunmetal' };
+    case 'autocannon': case 'antiair': return { joint: 'blued' };
+    case 'cannon': return { joint: 'blued', fitting: m.mount === 'L' || m.mount === 'XL' ? 'brass' : 'blued' };
+    case 'precision': case 'energy': case 'melee': return { joint: 'silver' };
+    case 'artillery': return { joint: 'gunmetal', fitting: 'brass' };
+    case 'disruption': return { joint: 'copper', fitting: 'copper' };
+    case 'flame': return { joint: 'bronze' };
+    default: return { joint: hull }; // launchers, bombs, utilities
   }
 }
 
 /** Finish of the hull / running gear and of each mounted weapon (index = mount; null = empty). */
 export function pickFinish(design: Design, ch: ChassisDef, mob: MobilityDef, mods: (ModuleDef | null)[], skin: Skin): { hull: FinishSpec; turret: (FinishSpec | null)[] } {
   const hull = hullFinish(design, mob, skin);
-  return { hull: { joint: hull }, turret: mods.map((m, i) => (m ? weaponFinish(m, hull, design, i) : null)) };
+  return { hull: { joint: hull }, turret: mods.map((m) => (m ? weaponFinish(m, hull) : null)) };
 }

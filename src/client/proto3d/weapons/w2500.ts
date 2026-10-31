@@ -439,10 +439,10 @@ export function railDriver(C: WCtx): void {
       const y = s * (g + rh / 2);
       // the rail: a main beam (team top, light bottom), a stacked dark plate offset back on it, a lighter cap plate
       cbox(rc, s > 0 ? kit.hull : kit.panel, (x0 + x1) / 2, y, z, len, rh, rw, rh * 0.25, undefined, 0.88);
-      cbox(rc, kit.trim, (x0 + x1) / 2 - len * 0.06, y + s * rh * 0.55, z, len * 0.82, R * 0.26, rw * 0.8, R * 0.1, undefined, 0.8);
+      cbox(rc, kit.metal, (x0 + x1) / 2 - len * 0.06, y + s * rh * 0.55, z, len * 0.82, R * 0.26, rw * 0.8, R * 0.1, undefined, 0.8); // weapon finish (silver)
       cbox(rc, s > 0 ? kit.panel : kit.hull, (x0 + x1) / 2 - len * 0.12, y + s * rh * 0.7, z, len * 0.5, R * 0.18, rw * 0.5, R * 0.07, undefined, 0.75);
       // heavy layered tip
-      cbox(rc, kit.trim, x1 - R * 1.0, y + s * R * 0.1, z, R * 2.4, rh * 1.35, rw * 1.14, R * 0.3, [0, 0, s * 0.1], 0.8);
+      cbox(rc, kit.metal, x1 - R * 1.0, y + s * R * 0.1, z, R * 2.4, rh * 1.35, rw * 1.14, R * 0.3, [0, 0, s * 0.1], 0.8);
       cbox(rc, s > 0 ? kit.hull : kit.panel, x1 - R * 1.3, y + s * R * 0.55, z, R * 1.6, R * 0.4, rw * 0.9, R * 0.12, [0, 0, s * 0.1], 0.75);
       // inner face: two bright metal ridges either side of a wide plasma conductor
       bx(rc, kit.plasma, (x0 + x1) / 2 + R * 0.6, s * g, z, len * 0.84, R * 0.14, rw * 0.32);

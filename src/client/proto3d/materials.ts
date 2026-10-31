@@ -243,7 +243,7 @@ interface Row {
   rough?: number; metal?: number;
 }
 
-const N_ROWS = 21; // 16 paint roles + 5 metal finishes (METAL_FINISH)
+const N_ROWS = 22; // 16 paint roles + 6 metal finishes (METAL_FINISH)
 
 function makeUber(rows: Row[]): THREE.MeshStandardMaterial {
   const A: THREE.Vector4[] = [], B: THREE.Vector4[] = [], E: THREE.Vector4[] = [], M: THREE.Vector4[] = [];
@@ -415,23 +415,25 @@ export const TEAM_PAINT: [string, string, string, string][] = [
 /**
  * Bare-metal finishes for the joint / metal role (pistons, axles, hinges, barrels) as extra uber rows: every finish of
  * a team lives in the same shared material (only the per-vertex row id differs), so a finish costs no draw calls or
- * programs and instancing is untouched. Kept dark-to-mid and low-chroma so they read as machined metal, not paint:
- *   gunmetal  dark grey-blue, semi-gloss (the default, most units)
+ * programs and instancing is untouched. Low-chroma so they read as machined metal, not paint:
+ *   gunmetal  mid grey, semi-gloss (the default, most units; a grey that reads grey, not a black mirror)
  *   chrome    dark chrome: cool, polished, mirror-ish (precision guns, energy emitters, aircraft oleos, support)
  *   blued     blued steel: blue-black, satin (light scouts, artillery tubes)
  *   bronze    oiled bronze: warm brown, satin (heavy industrial hydraulics, titans, creatures, flamers)
  *   copper    dark copper: warm red-brown, glossy (coils on tesla / EMP / heat-ray weapons)
  *   brass     dull brass: warm yellow, satin (artillery breech rings, sonic emitters)
+ *   silver    bright polished steel (precision / energy barrels, blades)
  * The finish of a unit / weapon is picked in finish3d.ts.
  */
-export type MetalFinish = 'gunmetal' | 'chrome' | 'blued' | 'bronze' | 'copper' | 'brass';
-export const METAL_FINISH: Record<MetalFinish, number> = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20 };
+export type MetalFinish = 'gunmetal' | 'chrome' | 'blued' | 'bronze' | 'copper' | 'brass' | 'silver';
+export const METAL_FINISH: Record<MetalFinish, number> = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20, silver: 21 };
 const FINISH_ROWS: Row[] = [
   /* chrome */ { color: '#646b74', rough: 0.2, metal: 1, bev: 0.7, det: 0.22, wear: 0.1, grime: 0.45 },
   /* blued  */ { color: '#2f3a4c', rough: 0.3, metal: 0.88, bev: 0.6, det: 0.35, wear: 0.3, grime: 0.6 },
   /* bronze */ { color: '#6a5234', rough: 0.36, metal: 0.9, bev: 0.6, det: 0.4, wear: 0.25, grime: 0.75 },
   /* copper */ { color: '#93553a', rough: 0.28, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.15, grime: 0.6 },
   /* brass  */ { color: '#9b7f42', rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 },
+  /* silver */ { color: '#c3c9cf', rough: 0.26, metal: 0.55, bev: 0.7, det: 0.2, wear: 0.05, grime: 0.4 },
 ];
 
 export interface FinishSpec { joint?: MetalFinish; fitting?: MetalFinish }
@@ -466,7 +468,7 @@ function baseKit(team: 0 | 1): Kit {
     /* hull   */ { color: tp[0], rough: 0.58, metal: 0.06, det: 0.85, grime: 0.8, wear: 0.85 },
     /* trim   */ { color: '#1d2023', rough: 0.62, metal: 0.35, bev: 0.5, det: 0.7, grime: 0.9, wear: 0.5 },
     /* panel  */ { color: tp[2], rough: 0.6, metal: 0.03, det: 0.75, grime: 0.6, wear: 0.9 },
-    /* metal  */ { color: '#474e55', rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
+    /* metal  */ { color: '#727a82', rough: 0.4, metal: 0.45, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
     /* steel  */ { color: '#b3bac0', rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
     /* rubber */ { color: '#1b1c1e', rough: 0.88, metal: 0, bev: 0.3, rim: 0.4, det: 0.15, wear: 0, grime: 1.1 },
     /* glass  */ { color: '#14262f', rough: 0.08, metal: 0.3, bev: 0.4, rim: 2.2, em: p.glow, emI: 0.12, det: 0, wear: 0, grime: 0.2 },
@@ -479,7 +481,7 @@ function baseKit(team: 0 | 1): Kit {
     /* plasma */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#79f0d6', emI: 2.0 },
     /* rail   */ { color: '#000000', bev: 0, rim: 0, ao: 0, em: '#86adff', emI: 2.4 },
     /* hull2  */ { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
-    ...FINISH_ROWS, // 16..20: METAL_FINISH
+    ...FINISH_ROWS, // 16..21: METAL_FINISH
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);

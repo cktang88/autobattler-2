@@ -36569,7 +36569,7 @@ function barrel(C, B, o) {
   const sEnd = L * (o.sleeve ? 0.72 : 0.64), cut = sEnd * 0.42, g = R * 0.55;
   const h0 = R * 2.5, w0 = R * 2.9;
   jacket(B, kit.panel, x0, x0 + cut - g / 2, y, z, h0, w0, 0.96);
-  jacket(B, kit.trim, x0 + cut + g / 2, x0 + sEnd, y, z, h0 * 0.86, w0 * 0.86, 0.88);
+  jacket(B, kit.metal, x0 + cut + g / 2, x0 + sEnd, y, z, h0 * 0.86, w0 * 0.86, 0.88);
   B.lathe(kit.glow, [[0, 0], [R * 1.12, 0], [R * 1.12, g * 1.1], [0, g * 1.1]], [x0 + cut - g * 0.55, y, z], "x", seg);
   if (!detail2(C)) ring(B, kit.trim, x0 + cut, y, z, R * 0.9, R * 1.18, g * 0.3, seg);
   if (o.evac) jacket(B, kit.fitting, x0 + L * 0.74, x0 + L * 0.8, y, z, h0 * 0.7, w0 * 0.7, 0.9);
@@ -38442,9 +38442,9 @@ function railDriver(C) {
     for (const s of [-1, 1]) {
       const y = s * (g + rh / 2);
       cbox(rc, s > 0 ? kit.hull : kit.panel, (x0 + x1) / 2, y, z, len, rh, rw, rh * 0.25, void 0, 0.88);
-      cbox(rc, kit.trim, (x0 + x1) / 2 - len * 0.06, y + s * rh * 0.55, z, len * 0.82, R * 0.26, rw * 0.8, R * 0.1, void 0, 0.8);
+      cbox(rc, kit.metal, (x0 + x1) / 2 - len * 0.06, y + s * rh * 0.55, z, len * 0.82, R * 0.26, rw * 0.8, R * 0.1, void 0, 0.8);
       cbox(rc, s > 0 ? kit.panel : kit.hull, (x0 + x1) / 2 - len * 0.12, y + s * rh * 0.7, z, len * 0.5, R * 0.18, rw * 0.5, R * 0.07, void 0, 0.75);
-      cbox(rc, kit.trim, x1 - R * 1, y + s * R * 0.1, z, R * 2.4, rh * 1.35, rw * 1.14, R * 0.3, [0, 0, s * 0.1], 0.8);
+      cbox(rc, kit.metal, x1 - R * 1, y + s * R * 0.1, z, R * 2.4, rh * 1.35, rw * 1.14, R * 0.3, [0, 0, s * 0.1], 0.8);
       cbox(rc, s > 0 ? kit.hull : kit.panel, x1 - R * 1.3, y + s * R * 0.55, z, R * 1.6, R * 0.4, rw * 0.9, R * 0.12, [0, 0, s * 0.1], 0.75);
       bx(rc, kit.plasma, (x0 + x1) / 2 + R * 0.6, s * g, z, len * 0.84, R * 0.14, rw * 0.32);
       for (const q of [-1, 1]) cbox(rc, kit.steel, (x0 + x1) / 2 + R * 0.6, s * (g - R * 0.06), z + q * rw * 0.33, len * 0.84, R * 0.24, rw * 0.2, R * 0.06, void 0, 0.7);
@@ -41060,7 +41060,7 @@ function paint(color, o = {}) {
   cache.set(key, m);
   return m;
 }
-var N_ROWS = 21;
+var N_ROWS = 22;
 function makeUber(rows) {
   const A2 = [], B = [], E = [], M = [];
   for (let i = 0; i < N_ROWS; i++) {
@@ -41172,7 +41172,7 @@ var TEAM_PAINT = [
   ["#3b5d9c", "#1a2338", "#b4b6b0", "#4a5258"],
   ["#9b3a27", "#36170f", "#bab0a3", "#5c5248"]
 ];
-var METAL_FINISH = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20 };
+var METAL_FINISH = { gunmetal: 3, chrome: 16, blued: 17, bronze: 18, copper: 19, brass: 20, silver: 21 };
 var FINISH_ROWS = [
   /* chrome */
   { color: "#646b74", rough: 0.2, metal: 1, bev: 0.7, det: 0.22, wear: 0.1, grime: 0.45 },
@@ -41183,7 +41183,9 @@ var FINISH_ROWS = [
   /* copper */
   { color: "#93553a", rough: 0.28, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.15, grime: 0.6 },
   /* brass  */
-  { color: "#9b7f42", rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 }
+  { color: "#9b7f42", rough: 0.32, metal: 0.92, bev: 0.6, det: 0.3, wear: 0.2, grime: 0.6 },
+  /* silver */
+  { color: "#c3c9cf", rough: 0.26, metal: 0.55, bev: 0.7, det: 0.2, wear: 0.05, grime: 0.4 }
 ];
 var kits = [null, null];
 var finKits = /* @__PURE__ */ new Map();
@@ -41216,7 +41218,7 @@ function baseKit(team) {
     /* panel  */
     { color: tp[2], rough: 0.6, metal: 0.03, det: 0.75, grime: 0.6, wear: 0.9 },
     /* metal  */
-    { color: "#474e55", rough: 0.45, metal: 0.75, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
+    { color: "#727a82", rough: 0.4, metal: 0.45, bev: 0.6, det: 0.45, wear: 0.4, grime: 0.7 },
     /* steel  */
     { color: "#b3bac0", rough: 0.26, metal: 0.95, bev: 0.6, det: 0.2, wear: 0, grime: 0.4 },
     /* rubber */
@@ -41242,7 +41244,7 @@ function baseKit(team) {
     /* hull2  */
     { color: tp[1], rough: 0.7, metal: 0.04, det: 0.85, grime: 0.85, wear: 0.75 },
     ...FINISH_ROWS
-    // 16..20: METAL_FINISH
+    // 16..21: METAL_FINISH
   ];
   const uber = makeUber(rows);
   const decalTex = makeDecalAtlas(p.accent);
@@ -48762,24 +48764,11 @@ function hullFinish(design, mob, skin) {
   if (f === "gunmetal" && LEGGED.has(mob.id) && skin.hull !== "stealth" && h01(design.id, 29) < 0.5) f = "chrome";
   return f;
 }
-var WARM = /* @__PURE__ */ new Set(["bronze", "copper", "brass"]);
-function weaponFinish(m, hull, design, i) {
-  const v = m.visual;
-  switch (v) {
-    // coil guns: polished bores, copper coil rings round the barrel
+function weaponFinish(m, hull) {
+  switch (m.visual) {
     case "gauss":
     case "rail":
-    case "plasma":
-      return { joint: "chrome", fitting: "copper" };
-    case "sniper":
-    case "laser":
-    case "slowbeam":
-    case "gravity":
-    case "saw":
-    case "blade":
-    case "drill":
-    case "chainsaw":
-      return { joint: "chrome" };
+      return { joint: "silver", fitting: "copper" };
     case "tesla":
     case "emp":
     case "heatray":
@@ -48788,25 +48777,32 @@ function weaponFinish(m, hull, design, i) {
       return { joint: "brass" };
     case "flamer":
       return { joint: "bronze" };
-    case "artillery":
-    case "mortar":
-      return { joint: h01(design.id, 41 + i) < 0.5 ? "blued" : "gunmetal", fitting: "brass" };
-    case "gun":
+  }
+  switch (m.category) {
+    case "machinegun":
+      return { joint: "gunmetal" };
+    case "autocannon":
+    case "antiair":
+      return { joint: "blued" };
     case "cannon":
-    case "gatling":
-    case "shotgun":
-    case "flak":
-    case "pointdef": {
-      const j = WARM.has(hull) ? "gunmetal" : hull;
-      return { joint: j, fitting: v === "cannon" && (m.mount === "L" || m.mount === "XL") ? "brass" : j };
-    }
+      return { joint: "blued", fitting: m.mount === "L" || m.mount === "XL" ? "brass" : "blued" };
+    case "precision":
+    case "energy":
+    case "melee":
+      return { joint: "silver" };
+    case "artillery":
+      return { joint: "gunmetal", fitting: "brass" };
+    case "disruption":
+      return { joint: "copper", fitting: "copper" };
+    case "flame":
+      return { joint: "bronze" };
     default:
       return { joint: hull };
   }
 }
 function pickFinish(design, ch, mob, mods, skin) {
   const hull = hullFinish(design, mob, skin);
-  return { hull: { joint: hull }, turret: mods.map((m, i) => m ? weaponFinish(m, hull, design, i) : null) };
+  return { hull: { joint: hull }, turret: mods.map((m) => m ? weaponFinish(m, hull) : null) };
 }
 
 // src/client/proto3d/units3d.ts
