@@ -17,7 +17,7 @@ import { DT, type BattleEvent, type DeathKind, type SimProjectile, type SimUnit,
 import type { ModuleDef, Side } from '../../shared/types.ts';
 import { Camera, CameraControls } from '../render/camera.ts';
 import type { BoardOverlay, BoardUnit } from '../render/field.ts';
-import { defaultMap, type BakedSun, type MapTheme } from '../render/ground.ts';
+import { MAPS, defaultMap, type BakedSun, type MapTheme } from '../render/ground.ts';
 import { loadBakedMap } from './bakedmap.ts';
 import { drawnBore } from '../proto3d/weapons3d.ts';
 import { TEAM_PAL } from '../render/palette.ts';
@@ -391,13 +391,41 @@ const BAKED_FIT_PAD = 13;
 /** Baked maps stay loaded for the session (they are only a few big textures, and reloading one would mean a download). */
 const bakedCache = new Map<string, BuiltTerrain>();
 const bakedLoads = new Map<string, Promise<void>>();
+/** baked maps whose files failed to load: these show the procedural terrain for the rest of the session */
+const bakedFailed = new Set<string>();
 function bakedTerrain(dir: string): Promise<void> {
   let p = bakedLoads.get(dir);
   if (!p) {
-    p = loadBakedMap(dir).then((t) => { bakedCache.set(dir, t); });
+    p = loadBakedMap(dir).then((t) => { bakedCache.set(dir, t); }, (e) => { bakedFailed.add(dir); throw e; });
     bakedLoads.set(dir, p);
   }
   return p;
+}
+
+/** Start downloading every baked map that plays on the current field (call once the 3D renderer is loaded), so the
+ *  first match on one doesn't wait for its files. */
+export function preloadBakedMaps(): void {
+  for (const m of MAPS) if (m.baked && fieldKey() === fieldKeyOf(m.baked.field)) bakedTerrain(m.baked.dir).catch(() => {});
+}
+
+/** Stand-in ground while a baked map's files load: a flat field in the map's colour. The procedural terrain would cost
+ *  a second or more of fbm per pixel only to be thrown away the moment the baked map arrives. */
+const placeholderCache = new Map<string, BuiltTerrain>();
+function placeholderFor(map: MapTheme): BuiltTerrain {
+  const key = `${map.id}:${fieldKey()}`;
+  let t = placeholderCache.get(key);
+  if (!t) {
+    const tint = new THREE.Color().setRGB(map.ramp[1][0] / 255, map.ramp[1][1] / 255, map.ramp[1][2] / 255, THREE.SRGBColorSpace);
+    // same footprint as buildTerrain (12 cells of pad each way), authored along local x like it
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_H + 24, FIELD_W + 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: tint, roughness: 1 }));
+    ground.receiveShadow = true;
+    const group = new THREE.Group();
+    group.name = 'terrain';
+    group.add(ground);
+    t = { group, ground, tint };
+    placeholderCache.set(key, t);
+  }
+  return t;
 }
 
 export class FieldView3D implements BattleView {
@@ -635,12 +663,12 @@ export class FieldView3D implements BattleView {
     this.rocks = [];
     // a baked map plays on the field size it was authored for; until it has loaded (or if it can't) the procedural
     // terrain stands in
-    const baked = map.baked && fieldKey() === fieldKeyOf(map.baked.field) ? map.baked.dir : null;
+    const baked = map.baked && fieldKey() === fieldKeyOf(map.baked.field) && !bakedFailed.has(map.baked.dir) ? map.baked.dir : null;
     const ready = baked ? bakedCache.get(baked) : undefined;
     if (baked && !ready) {
-      bakedTerrain(baked).then(() => { if (this.map === map && fieldKey() === fieldKeyOf(map.baked!.field)) this.setMapNow(map); }, (e) => console.warn('baked map failed to load', e));
+      bakedTerrain(baked).then(() => { if (this.map === map && fieldKey() === fieldKeyOf(map.baked!.field)) this.setMapNow(map); }, (e) => { console.warn('baked map failed to load', e); if (this.map === map) this.setMapNow(map); });
     }
-    const built = ready ?? terrainFor(map);
+    const built = ready ?? (baked ? placeholderFor(map) : terrainFor(map));
     // the cached build is shared between views (textures live as long as the cache entry): each view gets a cheap clone
     const group = built.group.clone(true);
     // terrain is authored with deployment zones at its local +-x ends; our zones run along field y, so turn it a quarter
@@ -649,7 +677,7 @@ export class FieldView3D implements BattleView {
     group.position.set(FIELD_W / 2, 0, FIELD_H / 2);
     this.scene.add(group);
     this.terrain = { group, ground: built.ground };
-    if (!ready) this.scatterRocks(map, built.tint);
+    if (!ready && !baked) this.scatterRocks(map, built.tint);
     this.cam.setFitPadY(ready ? BAKED_FIT_PAD : 0);
     this.setSun(ready && map.baked ? map.baked.sun : DEFAULT_SUN);
     // atmospheric haze: distance fog toward a light sky-tinted version of the map's void colour (also the background)

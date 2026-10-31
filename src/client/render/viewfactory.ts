@@ -25,9 +25,10 @@ export function webglAvailable(): boolean {
   return webglOk;
 }
 
-/** Start loading the 3D renderer (idempotent). Resolves when ready or failed. */
+/** Start loading the 3D renderer (idempotent), then the baked maps' files in the background. Resolves when the
+ *  renderer is ready or failed. */
 export function preload3d(): Promise<void> {
-  loading ??= import('../render3d/FieldView3D.ts').then((m) => { ctor3d = m.FieldView3D as unknown as Ctor3D; }).catch((e) => { console.warn('3D renderer unavailable', e); });
+  loading ??= import('../render3d/FieldView3D.ts').then((m) => { ctor3d = m.FieldView3D as unknown as Ctor3D; m.preloadBakedMaps(); }).catch((e) => { console.warn('3D renderer unavailable', e); });
   return loading;
 }
 
