@@ -35,6 +35,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 16px; line-height: 1.35; }
+/* nothing is selectable (taps and long-presses on a phone select words and pop up the copy menu), except invite codes,
+   which are there to be copied, and text fields, which must stay editable */
+* { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+.lobby-code, .tug-codeshow { -webkit-user-select: all; user-select: all; -webkit-touch-callout: default; }
 body {
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
