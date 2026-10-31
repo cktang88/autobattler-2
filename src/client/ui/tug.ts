@@ -8,7 +8,7 @@ import { h, type App, type Screen, type ScreenFn } from '../app.ts';
 import { playMusic, sfx } from '../audio.ts';
 import { allDesigns, activeDeck } from '../collection.ts';
 import {
-  NetError, tugCommand, tugCreate, tugJoin, tugLeave, tugList, tugPoll, tugQuick, tugResult, type TugRoom,
+  NetError, flushTugReports, reportTugGame, tugCommand, tugCreate, tugJoin, tugLeave, tugList, tugPoll, tugQuick, tugResult, type TugRoom,
 } from '../net.ts';
 import { makeView } from '../render/viewfactory.ts';
 import type { BattleView } from '../render/view.ts';
@@ -62,6 +62,7 @@ export function tugRoster(): Design[] {
 
 export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
   playMusic('menu');
+  void flushTugReports(); // vs-AI games that could not be reported earlier (offline)
   let roster = tugRoster();
   let busy = false;
   let waitingRoom: TugRoom | null = null;
@@ -291,6 +292,17 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   const names: [string, string] = L.kind === 'net' ? [L.room.names[0] ?? '?', L.room.names[1] ?? '?'] : ['You', `AI (${L.difficulty})`];
   const g = new TugGame(seed, rosters);
   const ai = L.kind === 'ai' ? new TugAi(1, seed ^ 0x5bd1e995, L.difficulty) : null;
+  // vs AI: every command applied (both sides, in order, with its tick) so the server can replay the game and learn
+  // from its best designs (reportTugGame; online games are already logged by the server)
+  const log: TugOrder[] = [];
+  const applyLocal = (side: Side, cmd: TugCommand): void => { if (!g.apply(side, cmd)) log.push({ tick: g.tick, side, cmd }); };
+  let reported = false;
+  /** report a vs-AI game that ran long enough to say something (at its end, or when the player leaves) */
+  const reportGame = (): void => {
+    if (!ai || reported || g.time < 30) return;
+    reported = true;
+    void reportTugGame({ seed, rosters, orders: log, endTick: g.tick });
+  };
   // handy for debugging in the console (like window.app)
   (window as unknown as { tugGame: TugGame }).tugGame = g;
 
@@ -569,7 +581,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const err = cmd.t === 'surrender' ? null : checkSpendable(cmd);
     if (err) { sfx('error'); flashHint(err); return; }
     sfx(cmd.t === 'buy' ? 'place' : 'click');
-    if (!net) { g.apply(me, cmd); renderCards(); return; }
+    if (!net) { applyLocal(me, cmd); renderCards(); return; }
     const cost = cmd.t === 'buy' ? costOf(g.design(me, cmd.designId)!) : cmd.t === 'income' ? incomeCost(g.sides[me].incomeLvl)
       : cmd.t === 'tier' ? TIER_COST[g.nextTier(me) ?? 1] : cmd.t === 'castleGun' ? castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!) : 0;
     inFlight += cost;
@@ -937,7 +949,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
           let n = 0;
           const t0 = performance.now(); // time budget: a heavy tick must slow the game, not freeze frames
           while (acc >= 1 && !g.done && n++ < 40 && performance.now() - t0 < 12) {
-            for (const c of ai!.think(g)) g.apply(1, c);
+            for (const c of ai!.think(g)) applyLocal(1, c);
             g.step();
             view.pushEvents(g.battle.events);
             acc -= 1;
@@ -959,6 +971,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   const showEnd = async () => {
     const w = g.winner ?? finishedByServer ?? -1;
     if (net && g.done) void tugResult(net.id, w).catch(() => {});
+    reportGame();
     sfx(w === me ? 'victory' : 'defeat');
     const title = w === me ? 'Victory' : w === -1 ? 'Draw' : 'Defeat';
     const S = g.sides[me];
@@ -980,6 +993,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if (!g.done && !ended) {
       if (!confirm('Surrender and leave the game?')) return;
       if (net) { try { await tugCommand(net.id, { t: 'surrender' }); } catch { /* leaving anyway */ } }
+      reportGame();
     }
     app.go({ name: 'tug' });
   };

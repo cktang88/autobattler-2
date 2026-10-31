@@ -10,7 +10,7 @@ import type { MatchState, Side } from '../shared/types.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { TugHub } from './tug.ts';
 import { ChatHub } from './chat.ts';
-import { GlobalAiPool, REPORT_BODY_LIMIT, poolLog, validateReport } from './aipool.ts';
+import { GlobalAiPool, REPORT_BODY_LIMIT, poolLog, validateReport, validateTugReport } from './aipool.ts';
 import { hashToken, nameKey, type MatchRecord, type PasswordHash, type PlayerRecord, type Store } from './store.ts';
 import { HttpError, sanitizeAction, sanitizeDeck, sanitizeRoster, sanitizeGarage, sanitizeName, sanitizePassword } from './validate.ts';
 
@@ -106,7 +106,7 @@ export class Api {
     this.trustProxy = !!opts.trustProxy;
     this.aiPool = new GlobalAiPool(store.aiPool, () => store.save());
     // every finished multiplayer game teaches the AI: its two best designs go on trial in the AI's candidate pool
-    this.tugHub.onFinish = (g) => { this.aiPool.learnFromTug(g.id, g.seed, g.rosters, g.names, g.orders, g.endTick); };
+    this.tugHub.onFinish = (g) => { this.aiPool.learnFromTug(`tug:${g.id}`, g.seed, g.rosters, g.names, g.orders, g.endTick); };
   }
 
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
@@ -121,7 +121,7 @@ export class Api {
         throw new HttpError(429, 'Too many requests — slow down');
       }
       let body: unknown = undefined;
-      if (method === 'POST') body = await readJson(req, url.pathname === '/api/aipool/report' ? REPORT_BODY_LIMIT : BODY_LIMIT);
+      if (method === 'POST') body = await readJson(req, url.pathname === '/api/aipool/report' || url.pathname === '/api/aipool/tugreport' ? REPORT_BODY_LIMIT : BODY_LIMIT);
       else if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
       const ctx: Ctx = { req, method, parts: url.pathname.split('/').filter(Boolean).slice(1), query: url.searchParams, ip, body };
       const out = await this.route(ctx);
@@ -147,6 +147,7 @@ export class Api {
     if (a === 'aipool') {
       if (!b && M === 'GET') { c.cache = 60; return { pool: this.aiPool.pool(), reports: this.store.aiPool.reports }; }
       if (b === 'report' && !d && M === 'POST') return this.reportAiMatch(c);
+      if (b === 'tugreport' && !d && M === 'POST') return this.reportTugAi(c);
       if (b === 'log' && !d && M === 'GET') { c.cache = 30; return poolLog(this.store.aiPool); }
     }
     if (a === 'garage' && !b) {
@@ -642,6 +643,21 @@ export class Api {
     const reporterKey = crypto.createHash('sha256').update(reporter).digest('hex').slice(0, 24);
     // adopted designs credit a registered account's name; anyone else is "guest" (no IPs or hashes are ever shown)
     return { ok: true, ...this.aiPool.submit(match, reporterKey, p?.pw ? p.name : 'guest') };
+  }
+
+  /** A finished tug of war vs AI game, for the global AI pool: validated now, replayed from its orders and scored in the
+   *  background (its best designs go on trial, within the reporter's daily cap). Same reporter / rate limit as above. */
+  private reportTugAi(c: Ctx) {
+    const auth = bearer(c.req);
+    const p = auth ? this.store.playersByToken.get(hashToken(auth)) : undefined;
+    const reporter = p ? `p:${p.id}` : `ip:${c.ip}`;
+    if (!this.reportLimiter.take(reporter)) throw new HttpError(429, 'Too many reports — try again later');
+    const rep = validateTugReport(obj(c.body));
+    const id = 'tugai:' + crypto.createHash('sha256').update(JSON.stringify(rep)).digest('hex').slice(0, 24);
+    if (this.aiPool.knows(id)) throw new HttpError(409, 'This game was already reported');
+    const reporterKey = crypto.createHash('sha256').update(reporter).digest('hex').slice(0, 24);
+    if (!this.aiPool.learnFromTug(id, rep.seed, rep.rosters, [p?.pw ? p.name : 'guest', 'AI'], rep.orders, rep.endTick, reporterKey)) throw new HttpError(503, 'Busy: try again later');
+    return { ok: true, queued: this.aiPool.pvpPending() };
   }
 
   private clientIp(req: IncomingMessage): string {

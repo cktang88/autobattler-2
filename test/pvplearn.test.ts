@@ -10,7 +10,7 @@ import { applyDeploy, newMatch, newPlayer, resolveRound } from '../src/shared/ma
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
 import { TugGame, TugReplay, type TugOrder } from '../src/shared/tug.ts';
 import { TugAi } from '../src/shared/tugai.ts';
-import { GlobalAiPool, freshState } from '../src/server/aipool.ts';
+import { CANDIDATES_PER_REPORTER_DAY, GlobalAiPool, MAX_TUG_TICKS, freshState, validateTugReport } from '../src/server/aipool.ts';
 import { computeStats } from '../src/shared/stats.ts';
 import type { Design } from '../src/shared/types.ts';
 
@@ -98,4 +98,31 @@ test('the server learns from a finished multiplayer tug game', async () => {
   assert.ok(gp.state.events.some((e) => e.kind === 'joined'), 'a design of the game went on trial');
   for (const e of gp.state.events) assert.match(e.detail ?? '', /tug of war game, by (Ann|Bob)/);
   for (const c of gp.pool().candidates) assert.ok(c.creator === 'Ann' || c.creator === 'Bob');
+});
+
+test('tug of war vs AI: a reported game is validated, replayed and teaches the pool, within the daily cap', async () => {
+  const { rosters, orders, g } = tugGame(6, 150);
+  const raw = JSON.parse(JSON.stringify({ seed: 6, rosters, orders, endTick: g.tick }));
+  const rep = validateTugReport(raw);
+  assert.equal(rep.orders.length, orders.length);
+  // malformed reports are refused before any replay
+  for (const bad of [
+    { ...raw, seed: -1 }, { ...raw, endTick: 0 }, { ...raw, endTick: MAX_TUG_TICKS + 1 }, { ...raw, rosters: [rosters[0]] },
+    { ...raw, orders: [...raw.orders].reverse() }, { ...raw, orders: [{ tick: 1, side: 2, cmd: { t: 'income' } }] },
+    { ...raw, orders: [{ tick: 1, side: 0, cmd: { t: 'nuke' } }] }, { ...raw, rosters: [[], rosters[1]] },
+  ]) assert.throws(() => validateTugReport(bad), (e: { status?: number }) => e.status === 400);
+  const gp = new GlobalAiPool(freshState(), () => {});
+  assert.equal(gp.learnFromTug('tugai:x', rep.seed, rep.rosters, ['Ann', 'AI'], rep.orders, rep.endTick, 'rep1'), true);
+  assert.equal(gp.knows('tugai:x'), true);
+  assert.equal(gp.learnFromTug('tugai:x', rep.seed, rep.rosters, ['Ann', 'AI'], rep.orders, rep.endTick, 'rep1'), false, 'once');
+  await gp.drain();
+  const joined = gp.state.events.filter((e) => e.kind === 'joined');
+  assert.ok(joined.length >= 1 && joined.every((e) => /tug of war vs AI game/.test(e.detail ?? '')));
+  assert.equal(gp.state.adds.rep1.n, joined.length, 'counted against the reporter');
+  // a reporter with today's allowance spent adds nothing new
+  const gp2 = new GlobalAiPool(freshState(), () => {});
+  gp2.state.adds.rep2 = { day: Math.floor(Date.now() / 86_400_000), n: CANDIDATES_PER_REPORTER_DAY };
+  gp2.learnFromTug('tugai:y', rep.seed, rep.rosters, ['Ann', 'AI'], rep.orders, rep.endTick, 'rep2');
+  await gp2.drain();
+  assert.equal(gp2.pool().candidates.length, 0);
 });

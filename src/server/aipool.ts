@@ -13,6 +13,9 @@
 // server's own resolved rounds) and PvP tug of war game (learnFromTug: a replay of the relayed order log) is scored in
 // the background, and its two best designs (either player's, shared/aipool.ts pvpCandidates) go on trial in the
 // candidate tier, credited to their builders. From there they graduate or get kicked by how they do in AI matches.
+// Tug of war vs AI games (played in the browser) are reported too (POST /api/aipool/tugreport: seed, both rosters, the
+// command log): validated (validateTugReport), replayed on the server the same way, best designs on trial within the
+// reporter's daily cap. So every game mode teaches the AI: classic vs AI (reports), classic PvP, tug vs AI, tug PvP.
 // Every change is logged (events, and a history of the designs that left) for GET /api/aipool/log and the /aipool page.
 // Anti-abuse: per-reporter rate limit (api.ts), dedupe by match id, a capped queue, a capped candidate tier, a daily
 // per-reporter cap on new candidates, re-simulation of every round.
@@ -27,8 +30,8 @@ import { mixSeed } from '../shared/rng.ts';
 import { MAX_LEVEL } from '../shared/stats.ts';
 import { STANCES, TARGET_PRIORITIES } from '../shared/types.ts';
 import type { Design, MatchState, Placement, PlayerState, RoundRecord, Side } from '../shared/types.ts';
-import { HttpError, sanitizeDeck } from './validate.ts';
-import { TugReplay, type TugOrder } from '../shared/tug.ts';
+import { HttpError, sanitizeDeck, sanitizeRoster } from './validate.ts';
+import { TugReplay, sanitizeCommand, type TugOrder } from '../shared/tug.ts';
 
 /** tug of war ticks replayed per macrotask when learning from a multiplayer tug game */
 const TUG_CHUNK = 200;
@@ -274,7 +277,7 @@ export function validateReport(raw: unknown): MatchState {
 
 interface Job { match: MatchState; reporter: string; creator: string }
 /** A finished multiplayer game to learn from: `work` runs one chunk (true when scored), `perf` rates its designs. */
-interface PvpJob { id: string; game: string; decks: [Design[], Design[]]; names: [string, string]; work: () => boolean; perf: () => DesignPerf[] }
+interface PvpJob { id: string; game: string; decks: [Design[], Design[]]; names: [string, string]; work: () => boolean; perf: () => DesignPerf[]; reporter?: string }
 /** multiplayer games waiting to be scored; beyond this new ones are skipped */
 export const MAX_PVP_QUEUE = 20;
 
@@ -333,15 +336,34 @@ export class GlobalAiPool {
     });
   }
 
-  /** A finished multiplayer tug of war game (the server only relayed its orders): replayed in the background to rate
-   *  its designs, then the two best go on trial like a classic match's. */
-  learnFromTug(id: string, seed: number, rosters: [Design[], Design[]], names: [string, string], orders: readonly TugOrder[], endTick: number): boolean {
+  /** A finished tug of war game: multiplayer (the server only relayed its orders) or vs AI (`reporter`: a player's
+   *  report of the game they played in their browser; its new candidates count against the reporter's daily cap).
+   *  Replayed in the background from the order log (never trusting the reporter's result) to rate its designs, then the
+   *  two best go on trial like a classic match's. */
+  learnFromTug(id: string, seed: number, rosters: [Design[], Design[]], names: [string, string], orders: readonly TugOrder[], endTick: number, reporter?: string): boolean {
+    if (this.knows(id)) return false;
     let rep: TugReplay;
     try { rep = new TugReplay(seed, rosters, orders, endTick); } catch (e) { console.error('[aipool] tug replay failed', e); return false; }
     return this.queuePvp({
-      id: `tug:${id}`, game: 'tug of war', decks: rosters, names,
+      id, game: reporter ? 'tug of war vs AI' : 'tug of war', decks: rosters, names, reporter,
       work: () => rep.step(TUG_CHUNK), perf: () => combinePerf([rep.tally()]),
     });
+  }
+
+  /** this game (match id, or `tug:` / `tugai:` key) was learnt from or reported already */
+  knows(id: string): boolean { return this.seenSet.has(id) || this.queue.some((j) => j.match.id === id); }
+  /** multiplayer / tug games waiting to be scored */
+  pvpPending(): number { return this.pvpQueue.length; }
+
+  /** a reporter's daily allowance of new candidates: each call takes one (false when today's is used up) */
+  private allowance(reporter: string, day: number): () => boolean {
+    return () => {
+      const a = this.state.adds[reporter];
+      const cur = a && a.day === day ? a : { day, n: 0 };
+      if (cur.n >= CANDIDATES_PER_REPORTER_DAY) return false;
+      this.state.adds[reporter] = { day, n: cur.n + 1 };
+      return true;
+    };
   }
 
   private queuePvp(job: PvpJob): boolean {
@@ -362,7 +384,9 @@ export class GlobalAiPool {
         const now = Date.now();
         const pool = structuredClone(this.state.pool);
         const before = new Map([...pool.entries, ...pool.candidates].map((e) => [poolKey(e.design), structuredClone(e)] as const));
-        const events = foldPvp(pool, pvpCandidates(job.perf(), job.decks, job.names), { now, alpha: GLOBAL_ALPHA, game: job.game });
+        const events = foldPvp(pool, pvpCandidates(job.perf(), job.decks, job.names), {
+          now, alpha: GLOBAL_ALPHA, game: job.game, ...(job.reporter ? { mayAddCandidate: this.allowance(job.reporter, Math.floor(now / 86_400_000)) } : {}),
+        });
         this.log(events, before, pool, now);
         this.state.pool = sanitizePool(pool);
         this.save();
@@ -440,13 +464,7 @@ export class GlobalAiPool {
     const before = new Map([...pool.entries, ...pool.candidates].map((e) => [poolKey(e.design), structuredClone(e)] as const));
     const res = foldMatch(pool, m, 1, combinePerf(rounds), {
       matchId: m.id, alpha: GLOBAL_ALPHA, now, seed: hash(m.id), creator: job.creator,
-      mayAddCandidate: () => {
-        const a = this.state.adds[job.reporter];
-        const cur = a && a.day === day ? a : { day, n: 0 };
-        if (cur.n >= CANDIDATES_PER_REPORTER_DAY) return false;
-        this.state.adds[job.reporter] = { day, n: cur.n + 1 };
-        return true;
-      },
+      mayAddCandidate: this.allowance(job.reporter, day),
     });
     this.log(res.events, before, pool, now);
     for (const [k, v] of Object.entries(this.state.adds)) if (v.day < day) delete this.state.adds[k];
@@ -454,4 +472,33 @@ export class GlobalAiPool {
     this.state.reports++;
     this.save();
   }
+}
+
+/** longest tug of war vs AI game a report may claim (ticks: 40 min; overtime ends real games well before) */
+export const MAX_TUG_TICKS = 20 * 60 * 40;
+/** most commands a tug report may carry */
+export const MAX_TUG_ORDERS = 6000;
+export interface TugReport { seed: number; rosters: [Design[], Design[]]; orders: TugOrder[]; endTick: number }
+
+/** A tug of war vs AI report, validated (shape, sizes, both rosters legal, commands well formed and in tick order).
+ *  Throws 400. The game itself is replayed later from these orders (learnFromTug), never trusting a reported result. */
+export function validateTugReport(raw: unknown): TugReport {
+  if (!raw || typeof raw !== 'object') throw new HttpError(400, 'Bad report');
+  const r = raw as Record<string, unknown>;
+  const seed = r.seed, endTick = r.endTick;
+  if (typeof seed !== 'number' || !Number.isInteger(seed) || seed < 0 || seed > 0x7fffffff) throw new HttpError(400, 'Bad seed');
+  if (typeof endTick !== 'number' || !Number.isInteger(endTick) || endTick < 1 || endTick > MAX_TUG_TICKS) throw new HttpError(400, 'Bad game length');
+  if (!Array.isArray(r.rosters) || r.rosters.length !== 2) throw new HttpError(400, 'Bad rosters');
+  const rosters = [sanitizeRoster(r.rosters[0]), sanitizeRoster(r.rosters[1])] as [Design[], Design[]];
+  if (!Array.isArray(r.orders) || r.orders.length > MAX_TUG_ORDERS) throw new HttpError(400, 'Bad orders');
+  const orders: TugOrder[] = [];
+  let last = 0;
+  for (const o of r.orders as unknown[]) {
+    const x = o as Record<string, unknown> | null;
+    const cmd = x ? sanitizeCommand(x.cmd) : null;
+    if (!x || !cmd || (x.side !== 0 && x.side !== 1) || typeof x.tick !== 'number' || !Number.isInteger(x.tick) || x.tick < last || x.tick > endTick) throw new HttpError(400, 'Bad order');
+    last = x.tick;
+    orders.push({ tick: x.tick, side: x.side, cmd });
+  }
+  return { seed, rosters, orders, endTick };
 }

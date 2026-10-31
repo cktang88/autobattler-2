@@ -358,6 +358,36 @@ export async function reportAiMatch(match: MatchState): Promise<boolean> {
   }
 }
 
+/** A finished tug of war vs AI game for the global AI pool: the server replays it from its command log and puts its
+ *  best designs on trial. Kept and retried (flushTugReports) while the server can't be reached. */
+export interface TugGameReport { seed: number; rosters: [Design[], Design[]]; orders: TugOrder[]; endTick: number }
+const KEY_TUG_REPORTS = 'ab2.tugReports';
+const MAX_PENDING_TUG = 3;
+function pendingTug(): TugGameReport[] {
+  try { const v = JSON.parse(localStorage.getItem(KEY_TUG_REPORTS) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+function savePendingTug(r: TugGameReport[]): void {
+  try { localStorage.setItem(KEY_TUG_REPORTS, JSON.stringify(r.slice(-MAX_PENDING_TUG))); } catch { /* storage full / unavailable */ }
+}
+/** true = accepted or refused for good (bad / duplicate report); false = try again later */
+async function sendTugReport(r: TugGameReport): Promise<boolean> {
+  try {
+    await call('POST', '/aipool/tugreport', r);
+    return true;
+  } catch (e) {
+    const st = e instanceof NetError ? e.status : 0;
+    return st === 400 || st === 409 || st === 413;
+  }
+}
+export async function reportTugGame(r: TugGameReport): Promise<void> {
+  if (!(await sendTugReport(r))) savePendingTug([...pendingTug(), r]);
+}
+export async function flushTugReports(): Promise<void> {
+  const left: TugGameReport[] = [];
+  for (const r of pendingTug()) if (!(await sendTugReport(r))) left.push(r);
+  savePendingTug(left);
+}
+
 // ---- in-match chat (server: src/server/chat.ts) ----
 
 /** Mirrors ChatMessage in src/server/chat.ts. */

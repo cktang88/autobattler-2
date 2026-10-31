@@ -797,11 +797,12 @@ export function pvpCandidates(scores: DesignPerf[], decks: [Design[], Design[]],
 
 /** Fold a multiplayer game's best designs into a pool (in place): known designs (same parts, or a near-duplicate)
  *  only update their running score; new ones go on trial in the candidate tier. `game` names the source in the log. */
-export function foldPvp(pool: AiPool, cands: PvpCandidate[], o: { now?: number; alpha?: number; game: string }): PoolEvent[] {
+export function foldPvp(pool: AiPool, cands: PvpCandidate[], o: { now?: number; alpha?: number; game: string; mayAddCandidate?: () => boolean }): PoolEvent[] {
   const E: PoolEvent[] = [];
   for (const c of cands) {
     const known = findByKey(allEntries(pool), c.design) ?? findBySlot(allEntries(pool), c.design);
     if (known) { blendScore(known, c.eff, o.alpha ?? SCORE_ALPHA); continue; }
+    if (o.mayAddCandidate && !o.mayAddCandidate()) continue;
     const fresh: PoolEntry = { design: c.design, score: Math.max(0.5, Math.min(3, c.eff)), games: 0, learned: true, origin: 'adopted', creator: c.creator.slice(0, 24), addedAt: o.now ?? 0 };
     const dropped = addCandidate(pool, fresh);
     if (dropped) E.push(ev('dropped', dropped, 'candidate', 'candidate tier full'));
