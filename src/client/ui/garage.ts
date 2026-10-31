@@ -265,6 +265,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   let modQuery = '';
   /** range overlay: zooms the bench out to fit every weapon's reach */
   let rangesOn = false;
+  /** Touch / narrow screens: parts are chosen in a full-screen picker (tap a socket, or Change hull / mobility) instead of
+   *  dragged from the bay, which sits a long scroll away from the sockets there. */
+  type Picker = { kind: 'hull' } | { kind: 'drive' } | { kind: 'slot'; slot: number; which: 'weapons' | 'systems' };
+  let picker: Picker | null = null;
+  const pickerUi = () => window.matchMedia('(max-width: 760px), (hover: none)').matches;
   let viewExt = MIN_VIEW_CELLS;
   /** blueprint zoom (1 = fit) and pan offset of the view centre (cells); wheel / buttons / drag empty space */
   let zoom = 1, zoomT = 1;
@@ -313,6 +318,9 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   const loadEl = h('div.g-load');
   const tabsEl = h('nav.g-tabs', { role: 'tablist', 'aria-label': 'Parts' });
   const bayBody = h('div.g-baybody', { role: 'tabpanel' });
+  /** touch: Change hull / Change mobility (opens the picker) */
+  const mkitEl = h('div.g-mkit');
+  const pickerEl = h('div.g-picker', { role: 'dialog', 'aria-modal': 'true', hidden: true });
   const inspector = h('div.g-inspector', { 'aria-live': 'polite' });
 
   nameInput.addEventListener('input', () => {
@@ -448,6 +456,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       h('section.g-bench', { 'aria-label': 'Blueprint' },
         h('div.g-namebar', null, nameInput, rerollBtn, revertBtn, saveBtn),
         classEl,
+        mkitEl,
         stage,
         loadoutEl,
         errorsEl,
@@ -460,6 +469,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
         inspector,
       ),
     ),
+    pickerEl,
   );
 
   // ---------------- actions ----------------
@@ -844,6 +854,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
 
   /** Click on a socket: select it and open the matching bay tab. */
   function focusSlot(i: number) {
+    if (pickerUi()) { openSlotPicker(i); return; }
     const why = el.classList.contains('picking') ? el.querySelector<HTMLElement>(`.g-sock[data-sock="${i}"]`)?.dataset.why : '';
     if (why && !draft.mounts[i]) { sfx('invalid'); app.toast(why, 'error'); }
     if (activeSlot === i) { activeSlot = null; sfx('click'); update(); return; }
@@ -1037,6 +1048,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     renderBench();
     renderSockets();
     renderBay();
+    renderMkit();
+    renderPicker();
     applyPick();
     if (fk) (el.querySelector(`[data-fk="${fk}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
@@ -1549,6 +1562,80 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
   }
 
   // ---------------- parts bay ----------------
+  // ---------------- touch: part picker ----------------
+  /** Tap a socket: pick what goes in it (the tab its current part belongs to; systems once the weapon limit is hit). */
+  function openSlotPicker(i: number) {
+    const cur = draft.mounts[i] ? MODULE_BY_ID.get(draft.mounts[i]!) : undefined;
+    const which = cur ? (isWeaponTab(cur) ? 'weapons' : 'systems') : atWeaponCap() ? 'systems' : 'weapons';
+    activeSlot = i;
+    openPicker({ kind: 'slot', slot: i, which });
+  }
+  function openPicker(p: Picker) {
+    picker = p;
+    hoverInspect = null;
+    sfx('click');
+    update();
+    pickerEl.querySelector<HTMLElement>('.g-picker-body')?.scrollTo(0, 0);
+  }
+  function closePicker() {
+    if (!picker) return;
+    picker = null;
+    update();
+  }
+  /** mount `m` in the picker's socket and close; a part that can't go there says why */
+  function mountFromPicker(m: ModuleDef) {
+    if (picker?.kind !== 'slot') return;
+    const why = slotBlock(m, picker.slot);
+    if (why) { sfx('invalid'); app.toast(why, 'error'); return; }
+    pinned[isWeaponTab(m) ? 'weapons' : 'systems'] = { kind: 'module', id: m.id };
+    const slot = picker.slot;
+    picker = null;
+    equip(slot, m.id);
+  }
+
+  function renderMkit() {
+    const c = chassis(), mob = MOBILITY_BY_ID.get(draft.mobility);
+    const btn = (label: string, value: string, fk: string, onclick: () => void) =>
+      h('button.g-mkit-btn', { type: 'button', 'data-fk': fk, onclick }, h('span.g-mkit-k', null, label), h('span.g-mkit-v', null, value), h('span.g-mkit-go', { 'aria-hidden': 'true' }, '›'));
+    mkitEl.replaceChildren(
+      btn('Hull', c.name, 'mk-hull', () => openPicker({ kind: 'hull' })),
+      btn('Mobility', mob?.name ?? draft.mobility, 'mk-drive', () => openPicker({ kind: 'drive' })),
+      h('p.g-mkit-hint', null, 'Tap a socket on the unit (or in the list below it) to fit a part'),
+    );
+  }
+
+  function renderPicker() {
+    pickerEl.hidden = !picker;
+    if (!picker) { pickerEl.replaceChildren(); return; }
+    if (picker.kind === 'slot' && picker.slot >= chassis().mounts.length) { picker = null; pickerEl.hidden = true; pickerEl.replaceChildren(); return; }
+    const oldBody = pickerEl.querySelector<HTMLElement>('.g-picker-body');
+    const keep = oldBody?.scrollTop ?? 0;
+    const close = h('button.g-btn.small.g-picker-x', { type: 'button', 'aria-label': 'Close', onclick: () => { sfx('click'); closePicker(); } }, icon('x'));
+    let title: (Node | string)[], extra: HTMLElement[] = [], body: HTMLElement[];
+    if (picker.kind === 'hull') { title = ['Choose a hull']; body = renderHullTab(true); }
+    else if (picker.kind === 'drive') { title = ['Choose mobility']; body = renderDriveTab(true); }
+    else {
+      const p = picker, cls = chassis().mounts[p.slot];
+      const cur = draft.mounts[p.slot] ? MODULE_BY_ID.get(draft.mounts[p.slot]!) : undefined;
+      title = ['Socket ', String(p.slot + 1), ' ', h('span.g-chip', { class: `c${cls}`, title: sizeTip(cls) }, ML[cls])];
+      extra = [
+        h('div.g-picker-cur', null,
+          cur ? partIcon('module', cur.id, 30, true) : null,
+          h('span', null, cur ? h('b', null, cur.name) : 'Empty socket'),
+          cur ? h('button.g-btn.small.danger', { type: 'button', onclick: () => { const slot = p.slot; picker = null; equip(slot, null); } }, icon('x'), 'Remove') : null),
+        kit.segmented<'weapons' | 'systems'>({
+          value: p.which, label: 'Part type', fk: 'pk-which', className: 'g-subtabs full',
+          options: [{ value: 'weapons', label: 'Weapons' }, { value: 'systems', label: 'Systems' }],
+          onChange: (v) => { picker = { ...p, which: v }; sfx('click'); update(); pickerEl.querySelector<HTMLElement>('.g-picker-body')?.scrollTo(0, 0); },
+        }),
+      ];
+      body = renderModuleTab(p.which, p.slot);
+    }
+    const bodyEl = h('div.g-picker-body', { class: picker.kind === 'slot' ? `t-${picker.which}` : `t-${picker.kind}` }, ...body);
+    pickerEl.replaceChildren(h('div.g-picker-head', null, h('h2', null, ...title), close), ...extra, bodyEl);
+    bodyEl.scrollTop = keep;
+  }
+
   function renderBay() {
     const counts: Partial<Record<Tab, string>> = {
       weapons: String(draft.mounts.filter((m) => m && isWeaponTab(MODULE_BY_ID.get(m)!)).length),
@@ -1621,7 +1708,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     return bonus.length ? bonus.join(' · ') : undefined;
   }
 
-  function renderHullTab(): HTMLElement[] {
+  /** `pick`: in the touch picker (a tap picks the hull and closes it) */
+  function renderHullTab(pick = false): HTMLElement[] {
     const pool = domainChassis(designDomain(draft));
     const sizes = [...new Set(pool.map((c) => c.size))].sort((a, b) => a - b);
     if (sizeSel !== 0 && !sizes.includes(sizeSel as ChassisDef['size'])) sizeSel = 0;
@@ -1630,13 +1718,13 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const tiles = shown.map((c) => partTile({
       kind: 'chassis', id: c.id, name: c.name, sub: `${footDims(c)} · socket${c.mounts.length > 1 ? 's' : ''} ${[...c.mounts].sort((x, y) => RANK[y] - RANK[x]).map((m) => ML[m]).join(' ')} · ${weaponCap(c)} weapons`,
       trait: traitLine(c.traits),
-      cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `ch-${c.id}`,
-      onclick: () => pickChassis(c.id),
+      cls: [c.id === draft.chassis ? 'sel' : '', pinned.hull?.id === c.id ? 'pin' : ''].join(' '), fk: `${pick ? 'pk-' : ''}ch-${c.id}`,
+      onclick: () => { if (pick) picker = null; pickChassis(c.id); },
     }));
     return [
       h('div.g-baytools', null,
         kit.segmented({
-          value: sizeSel, label: 'Hull size', fk: 'hsize', className: 'g-subtabs',
+          value: sizeSel, label: 'Hull size', fk: `${pick ? 'pk-' : ''}hsize`, className: 'g-subtabs',
           options: [{ value: 0, label: 'All' }, ...sizes.map((z) => ({ value: z as number, label: footprintLabel(z), title: `${SIZE_CLASSES[z - 1]} hulls, ${footprintLabel(z)} across` }))],
           onChange: (v) => { sizeSel = v; sfx('click'); update(); },
         })),
@@ -1645,7 +1733,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     ].filter(Boolean) as HTMLElement[];
   }
 
-  function renderDriveTab(): HTMLElement[] {
+  /** `pick`: in the touch picker (a tap picks the drive and closes it, if it fits the hull) */
+  function renderDriveTab(pick = false): HTMLElement[] {
     const c = chassis();
     const dpool = domainMobility(designDomain(draft));
     const kinds = (['ground', 'air', 'static'] as const).filter((k) => dpool.some((m) => m.kind === k));
@@ -1658,8 +1747,8 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return partTile({
         kind: 'mobility', id: m.id, name: m.name, trait: traitLine(m.traits),
         sub: err ? 'Not for this hull' : m.kind === 'static' ? 'Static' : `${Math.round(res!.speed * METERS_PER_CELL)} m/s`,
-        cls: [m.id === draft.mobility ? 'sel' : '', pinned.drive?.id === m.id ? 'pin' : '', err ? 'nofit' : ''].join(' '), fk: `mob-${m.id}`,
-        title: err ?? undefined, onclick: () => pickMobility(m.id),
+        cls: [m.id === draft.mobility ? 'sel' : '', pinned.drive?.id === m.id ? 'pin' : '', err ? 'nofit' : ''].join(' '), fk: `${pick ? 'pk-' : ''}mob-${m.id}`,
+        title: err ?? undefined, onclick: () => { if (pick && !err) picker = null; pickMobility(m.id); },
       });
     };
     const fits = pool.filter((m) => !pairingError(draft.chassis, m.id));
@@ -1667,7 +1756,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     return [
       h('div.g-baytools', null,
         kit.segmented({
-          value: driveSel, label: 'Drive type', fk: 'dkind', className: 'g-subtabs',
+          value: driveSel, label: 'Drive type', fk: `${pick ? 'pk-' : ''}dkind`, className: 'g-subtabs',
           options: [{ value: '*', label: 'All' }, ...kinds.map((k) => ({ value: k as string, label: KIND_LABEL[k] }))],
           onChange: (v) => { driveSel = v; sfx('click'); update(); },
         })),
@@ -1677,7 +1766,11 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     ];
   }
 
-  function renderModuleTab(which: 'weapons' | 'systems'): HTMLElement[] {
+  /** `pickSlot`: in the touch picker for that socket: only parts that fit it, a tap mounts one and closes the picker */
+  function renderModuleTab(which: 'weapons' | 'systems', pickSlot: number | null = null): HTMLElement[] {
+    const pk = pickSlot !== null ? 'pk-' : '';
+    /** back to the top of the list a filter just changed (the picker's, else the bay's) */
+    const listTop = () => { if (pickSlot !== null) pickerEl.querySelector<HTMLElement>('.g-picker-body')?.scrollTo(0, 0); else bayBody.scrollTop = 0; };
     const c = chassis();
     const groups = (which === 'weapons' ? WEAPON_GROUPS : SYSTEM_GROUPS).filter((g) => MODULES.some((m) => g.cats.includes(m.category)));
     let gid = groupSel[which];
@@ -1685,29 +1778,29 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
     const q = modQuery.trim().toLowerCase();
     const counts = new Map<string, number>();
     for (const id of draft.mounts) if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-    const fitsHull = (m: ModuleDef) => !noFitReason(m);
+    const fitsHull = (m: ModuleDef) => (pickSlot !== null ? !slotBlock(m, pickSlot) : !noFitReason(m));
     const mountedIn = (g: Group) => draft.mounts.some((id) => id && g.cats.includes(MODULE_BY_ID.get(id)!.category));
     const air = which === 'weapons' && airOnly;
     // search (and the hits-air filter) looks across the whole tab; otherwise the selected group
     const cats = q || air ? groups.flatMap((g) => g.cats) : groups.find((g) => g.id === gid)!.cats;
     const pin = pinned[which];
     const tile = (m: ModuleDef) => {
-      const fitsActive = activeSlot !== null && !slotBlock(m, activeSlot);
+      const fitsActive = pickSlot === null && activeSlot !== null && !slotBlock(m, activeSlot);
       const fh = fitsHull(m);
       // weapon limit reached: weapon tiles stay live (drag one onto a mounted weapon to replace it) but get a note
       const capped = m.kind === 'weapon' && atWeaponCap();
       const t = partTile({
         kind: 'module', id: m.id, name: m.name, sub: `${fmt(m.weight)} wt`, chip: m.mount, cat: moduleCategoryColor(m.id), count: counts.get(m.id),
         cls: [pin?.id === m.id ? 'pin' : '', fh ? '' : 'nofit', fitsActive ? 'fitsel' : '', counts.has(m.id) ? 'mounted' : ''].join(' '),
-        fk: `mod-${m.id}`, title: !fh ? noFitReason(m) ?? undefined : capped ? `Weapon limit reached (${weaponCap(chassis())}/${weaponCap(chassis())}): it can only replace a mounted weapon` : m.category === 'melee' ? 'Melee: fits edge mounts only' : undefined,
-        onclick: () => { pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
-        ondblclick: () => quickEquip(m.id),
+        fk: `${pk}mod-${m.id}`, title: !fh ? (pickSlot !== null ? slotBlock(m, pickSlot) : noFitReason(m)) ?? undefined : capped ? `Weapon limit reached (${weaponCap(chassis())}/${weaponCap(chassis())}): it can only replace a mounted weapon` : m.category === 'melee' ? 'Melee: fits edge mounts only' : undefined,
+        onclick: () => { if (pickSlot !== null) { mountFromPicker(m); return; } pinned[which] = { kind: 'module', id: m.id }; hoverInspect = null; sfx('click'); update(); },
+        ondblclick: pickSlot !== null ? undefined : () => quickEquip(m.id),
         onkeydown: (e) => { if (e.key === 'Enter' && (e.shiftKey || pinned[which]?.id === m.id)) { e.preventDefault(); quickEquip(m.id); } },
       });
       // penetration + damage type at a glance on weapon tiles
       if (m.kind === 'weapon') t.querySelector('.g-ptile-sub')?.append(' ', apBadge(m), ' ', damageKindBadges(m));
       if (capped) t.append(h('span.g-ptile-cap', null, 'weapon limit reached'));
-      if (fh) armDrag(t, () => ({ mod: m.id, from: null }));
+      if (fh && pickSlot === null) armDrag(t, () => ({ mod: m.id, from: null }));
       return t;
     };
     const sections: HTMLElement[] = [];
@@ -1728,35 +1821,35 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       );
     }
     const search = kit.textField({
-      value: modQuery, placeholder: `Search ${which}`, label: `Search ${which}`, fk: `msearch-${which}`, className: 'g-search',
+      value: modQuery, placeholder: `Search ${which}`, label: `Search ${which}`, fk: `${pk}msearch-${which}`, className: 'g-search',
       icon: svgIcon('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'),
       onInput: (v) => {
         modQuery = v;
         const pos = search.input.selectionStart;
         update();
-        const again = el.querySelector<HTMLInputElement>(`[data-fk="msearch-${which}"]`);
+        const again = el.querySelector<HTMLInputElement>(`[data-fk="${pk}msearch-${which}"]`);
         again?.focus();
         if (pos != null) again?.setSelectionRange(pos, pos);
       },
-      onClear: () => { modQuery = ''; update(); el.querySelector<HTMLInputElement>(`[data-fk="msearch-${which}"]`)?.focus(); },
+      onClear: () => { modQuery = ''; update(); el.querySelector<HTMLInputElement>(`[data-fk="${pk}msearch-${which}"]`)?.focus(); },
     });
     const slotCls = activeSlot !== null ? c.mounts[activeSlot] : null;
     return [
       h('div.g-baytools', null, search.el, which === 'weapons' ? kit.toggle({
-        label: 'Hits air', on: airOnly, fk: 'aironly', className: 'g-aironly', title: 'Show only weapons that can shoot at aircraft, from every group',
-        onChange: (v) => { airOnly = v; sfx('click'); update(); bayBody.scrollTop = 0; },
+        label: 'Hits air', on: airOnly, fk: `${pk}aironly`, className: 'g-aironly', title: 'Show only weapons that can shoot at aircraft, from every group',
+        onChange: (v) => { airOnly = v; sfx('click'); update(); listTop(); },
       }) : null),
       q || air ? h('p.g-secnote', null, q ? `Searching all ${which}${air ? ' that hit air' : ''}` : 'All weapons that can hit aircraft') : kit.segmented({
-        value: gid, label: `${which} group`, fk: `grp-${which}`, className: 'g-subtabs full',
+        value: gid, label: `${which} group`, fk: `${pk}grp-${which}`, className: 'g-subtabs full',
         options: groups.map((g) => ({ value: g.id, label: h('span', null, g.label, mountedIn(g) ? h('i.g-gdot', { title: 'Something from this group is mounted' }) : null), title: g.tip })),
-        onChange: (v) => { groupSel[which] = v; sfx('click'); update(); bayBody.scrollTop = 0; },
+        onChange: (v) => { groupSel[which] = v; sfx('click'); update(); listTop(); },
       }),
-      activeSlot !== null ? h('div.g-slotnote', null,
+      activeSlot !== null && pickSlot === null ? h('div.g-slotnote', null,
         h('span', null, 'Fitting socket ', h('b', null, String(activeSlot + 1)), ' ', h('span.g-chip', { class: `c${slotCls}` }, ML[slotCls!]), ' · double-click a part to mount it'),
         h('button.g-rclear', { type: 'button', onclick: () => { activeSlot = null; sfx('click'); update(); } }, icon('x'), 'Done')) : null,
       hiddenN || showAllMods ? h('button.g-showall', {
-        type: 'button', 'aria-pressed': String(showAllMods), 'data-fk': 'showall',
-        title: 'Parts that fit no socket on this chassis + drive are hidden; show them greyed out',
+        type: 'button', 'aria-pressed': String(showAllMods), 'data-fk': `${pk}showall`,
+        title: pickSlot !== null ? "Parts that can't go in this socket are hidden; show them greyed out" : 'Parts that fit no socket on this chassis + drive are hidden; show them greyed out',
         onclick: () => { showAllMods = !showAllMods; sfx('click'); update(); },
       }, showAllMods ? 'Hide unusable parts' : `Show all (${hiddenN} hidden)`) : null,
       ...(sections.length ? sections : [h('p.g-nomatch', null, `No ${which} match.`)]),
@@ -2440,6 +2533,7 @@ export const garageScreen: ScreenFn<{ name: 'garage' }> = (app) => {
       return;
     }
     if (e.key === 'Escape') {
+      if (picker) { closePicker(); return; }
       if (drag?.started) { cancelDrag(); return; }
       if (activeSlot !== null) { activeSlot = null; update(); }
       return;
