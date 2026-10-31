@@ -77,7 +77,8 @@ export function castleGunPrice(m: ModuleDef): number {
 }
 /** castle centre (world cells) per side: at the middle of the side's back edge */
 export const castlePos = (side: Side): { x: number; y: number } => ({ x: FIELD_W / 2, y: side === 0 ? FIELD_H - 6 : 6 });
-const CASTLE_CLEAR = 6.5; // cells around the castle centre where nothing may be dropped
+/** clear air kept between a dropped block and the castle's collision circle (cells) */
+const CASTLE_GAP = 0.4;
 /** the castle's collision radius: its drawn base (landing legs, wing walls) reaches past the Monolith hull's circle */
 const CASTLE_RADIUS = 3.5;
 
@@ -140,7 +141,9 @@ export function dropError(side: Side, design: Design, x: number, y: number, rot 
   if (x0 < 0 || y0 < 0 || x1 > FIELD_W || y1 > FIELD_H) return 'Off the field';
   if (side === 0 ? y0 < FIELD_H - DEPLOY_D : y1 > DEPLOY_D) return 'Only in your own deploy zone';
   const c = castlePos(side);
-  if (x1 > c.x - CASTLE_CLEAR && x0 < c.x + CASTLE_CLEAR && y1 > c.y - CASTLE_CLEAR && y0 < c.y + CASTLE_CLEAR) return 'Too close to your castle';
+  // anywhere in the zone (beside or behind the castle too) as long as the block's box clears the castle itself
+  const nx = Math.max(x0, Math.min(c.x, x1)), ny = Math.max(y0, Math.min(c.y, y1));
+  if (Math.hypot(nx - c.x, ny - c.y) < CASTLE_RADIUS + CASTLE_GAP) return 'On top of your castle';
   return null;
 }
 

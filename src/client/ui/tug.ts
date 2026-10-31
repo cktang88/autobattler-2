@@ -13,7 +13,7 @@ import {
 import { makeView } from '../render/viewfactory.ts';
 import type { BattleView } from '../render/view.ts';
 import { applyViewSettings, loadSettings } from '../storage.ts';
-import { openModal, paintWhenLaidOut, quickCard, sizeLabel } from './match-ui.ts';
+import { openModal, paintWhenLaidOut, ringsOf, sizeLabel } from './match-ui.ts';
 import { designInfo } from './deckstats.ts';
 import { capBadges, renderDeckAnalysis } from './deckpanel.ts';
 import * as kit from './kit.ts';
@@ -27,7 +27,7 @@ import { FIELD_H, FIELD_W, MAX_SPACING, STANDARD_FIELD, fmtMeters, hasSpacing, n
 import { TICK_RATE } from '../../shared/sim/types.ts';
 import { computeStats } from '../../shared/stats.ts';
 import {
-  TIER_COST, TIER_NAMES, TUG, advance, castleGunPrice, castleGuns, blockCenters, dropZone, incomeCost, incomeRate,
+  TIER_COST, TIER_NAMES, TUG, advance, castleGunPrice, castleGuns, castlePos, blockCenters, dropError, dropZone, incomeCost, incomeRate,
   validateRoster, TugGame, type TugCommand, type TugOrder,
 } from '../../shared/tug.ts';
 import { TugAi } from '../../shared/tugai.ts';
@@ -364,6 +364,12 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   /** squad spacing per roster design (mouse wheel / [ ] while its card is picked), kept between drops */
   const spacingOf = new Map<string, number>();
   const selSquad = (): boolean => sel >= 0 && hasSpacing(computeStats(cards[sel].d));
+  /** the pointer is over our own deploy zone with the picked card's block on the field (else: no drop preview) */
+  const hoverInZone = (): boolean => {
+    if (sel < 0 || !hover) return false;
+    const err = dropError(me, cards[sel].d, hover.x, hover.y, rot && computeStats(cards[sel].d).squad > 1, curSpacing());
+    return err !== 'Only in your own deploy zone' && err !== 'Off the field';
+  };
   const curSpacing = (): number => (sel >= 0 ? normSpacing(computeStats(cards[sel].d), spacingOf.get(cards[sel].d.id)) : 0);
   /** the buy command for the picked card dropped at (x, y), with its rotation and spacing */
   const buyCmd = (x: number, y: number): Extract<TugCommand, { t: 'buy' }> => {
@@ -391,8 +397,6 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const st = computeStats(d);
     const c = h('button.tug-unit', {
       'aria-label': `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}  [${i + 1}]`,
-      onpointerenter: (e: PointerEvent) => { if (e.pointerType === 'mouse') showShopCard(c, d); },
-      onpointerleave: () => { if (quickFrom === c) hideQuick(); },
       onclick: () => { sfx('click'); sel = sel === i ? -1 : i; renderCards(); },
     }, cv, cd, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null), h('kbd.tug-key', null, String(i + 1)));
     cards.push({ el: c, d, cost, cd });
@@ -608,25 +612,24 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     hover = toWorld(e);
     wheelPos = { x: e.clientX, y: e.clientY };
     renderWheelSign();
-    // hovering a unit (mouse, nothing picked to drop, no card pinned): its quick card follows the pointer
-    if (e.pointerType !== 'mouse' || sel >= 0 || tipEl || view.wasDrag || e.buttons) { if (quickFrom === canvas) hideQuick(); return; }
+    // hovering a unit (mouse, nothing picked to drop): its weapon ranges are drawn round it (click for its card)
+    if (e.pointerType !== 'mouse' || sel >= 0 || view.wasDrag || e.buttons) { ringId = -1; return; }
     const { px, py } = local(e);
-    const u = liveUnitAt(view, g.battle, px, py);
-    if (u) showQuick(u, { x: e.clientX, y: e.clientY }); else if (quickFrom === canvas) hideQuick();
+    ringId = liveUnitAt(view, g.battle, px, py)?.id ?? -1;
   });
-  canvas.addEventListener('pointerleave', () => { hover = null; wheelPos = null; renderWheelSign(); if (quickFrom === canvas) hideQuick(); });
+  canvas.addEventListener('pointerleave', () => { hover = null; wheelPos = null; renderWheelSign(); ringId = -1; });
   // a little sign by the cursor while a squad is about to be dropped: the wheel opens / closes its formation
   const wheelSign = h('div.tug-wheel', { 'aria-hidden': 'true' });
   fieldwrap.append(wheelSign);
   let wheelPos: { x: number; y: number } | null = null;
   function renderWheelSign(): void {
-    const on = !!wheelPos && selSquad() && window.matchMedia('(hover: hover)').matches;
+    const on = !!wheelPos && selSquad() && hoverInZone() && window.matchMedia('(hover: hover)').matches;
     wheelSign.classList.toggle('show', on);
     if (!on) return;
     const sp = curSpacing();
     wheelSign.replaceChildren(
       h('span.tug-wheel-ico', null, '🖱'),
-      h('span', null, 'Wheel ± spacing'),
+      h('span', null, 'Shift + wheel: spacing'),
       h('b', null, sp ? fmtMeters(sp) : 'tight'),
       h('span.tug-wheel-dots', null, ...Array.from({ length: MAX_SPACING + 1 }, (_, i) => h('i', { class: i <= sp ? 'on' : '' }))));
     const fr = fieldwrap.getBoundingClientRect();
@@ -660,10 +663,11 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     else if (e.key === ' ' && ai) { paused = !paused; renderSpeed(); e.preventDefault(); }
   };
   window.addEventListener('keydown', onKey);
-  // while a squad card is picked the mouse wheel sets its spacing (captured before the camera's wheel zoom sees it)
+  // while a squad card is picked Shift + wheel sets its spacing (captured before the camera's wheel zoom sees it);
+  // the plain wheel keeps zooming the map
   let wheelAt = 0;
   const onWheel = (e: WheelEvent) => {
-    if (!selSquad() || e.ctrlKey) return;
+    if (!selSquad() || !e.shiftKey || e.ctrlKey) return;
     e.preventDefault();
     e.stopPropagation();
     const dy = e.deltaY || e.deltaX, now = performance.now();
@@ -681,50 +685,52 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   function hideTip(): void { tipEl?.remove(); tipEl = null; tipId = -1; }
   function showLiveTip(u: SimUnit, at: { x: number; y: number }): void {
     hideTip();
-    hideQuick();
     const mine = u.side === me;
     tipEl = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats, undefined), undefined, liveLine(g.battle, u));
     fieldwrap.append(tipEl);
     tipId = u.id;
     placeTipAt(tipEl, fieldwrap, at, { w: tipEl.offsetWidth, h: tipEl.offsetHeight });
   }
-  // quick card: hovering a unit on the field (or a roster card) shows what it is, what it shoots and how far
-  let quickEl: HTMLElement | null = null, quickFrom: HTMLElement | null = null;
-  let quickId = -1, quickT = 0;
-  function hideQuick(): void { quickEl?.remove(); quickEl = null; quickFrom = null; quickId = -1; }
-  function showQuick(u: SimUnit, at: { x: number; y: number }): void {
-    if (quickId !== u.id || !quickEl) {
-      hideQuick();
-      const mine = u.side === me;
-      quickEl = quickCard(u.design, u.stats, { level: u.level, tag: mine ? 'Yours' : 'Enemy', mine, live: liveLine(g.battle, u) });
-      fieldwrap.append(quickEl);
-      quickFrom = canvas;
-      quickId = u.id;
+  /** the unit whose weapon ranges are drawn: the hovered one (else the one whose card is pinned) */
+  let ringId = -1;
+  /** its weapon / support rings on the ground (perspective-correct: each ring is traced through the camera) */
+  const drawUnitRings = () => {
+    const id = ringId >= 0 ? ringId : tipId;
+    const u = id >= 0 ? g.battle.units.find((q) => q.id === id) : undefined;
+    if (!u || !u.alive) return;
+    const ring = (r: number) => {
+      octx.beginPath();
+      for (let a = 0; a <= 48; a++) {
+        const p = view.worldToScreen(u.x + Math.cos((a / 48) * Math.PI * 2) * r, u.y + Math.sin((a / 48) * Math.PI * 2) * r);
+        if (a) octx.lineTo(p.x, p.y); else octx.moveTo(p.x, p.y);
+      }
+      octx.closePath();
+    };
+    const rings = ringsOf(u.design, u.stats).sort((a, b) => b.range - a.range);
+    for (const rg of rings) {
+      ring(rg.range);
+      octx.globalAlpha = rg.kind === 'support' ? 0.05 : 0.09;
+      octx.fillStyle = rg.color;
+      octx.fill();
+      octx.globalAlpha = 0.95;
+      octx.strokeStyle = rg.color;
+      octx.lineWidth = 2;
+      octx.stroke();
+      if (rg.minRange > 0) { ring(rg.minRange); octx.globalAlpha = 0.22; octx.fillStyle = '#000'; octx.fill(); }
+      octx.globalAlpha = 1;
+      // label at the ring's far side (toward the enemy)
+      const fy = u.side === 0 ? -1 : 1, lp = view.worldToScreen(u.x, u.y + fy * rg.range);
+      octx.font = '600 12px Barlow, system-ui, sans-serif';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      octx.lineWidth = 3;
+      octx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+      octx.strokeText(rg.label, lp.x, lp.y);
+      octx.fillStyle = rg.color;
+      octx.fillText(rg.label, lp.x, lp.y);
     }
-    placeTipAt(quickEl, fieldwrap, at, { w: quickEl.offsetWidth, h: quickEl.offsetHeight });
-  }
-  function showShopCard(c: HTMLElement, d: Design): void {
-    hideQuick();
-    let st;
-    try { st = computeStats(d); } catch { return; }
-    quickEl = quickCard(d, st, { tag: 'Roster', mine: true });
-    quickEl.querySelector('.qc-more')?.remove();
-    fieldwrap.append(quickEl);
-    quickFrom = c;
-    // above the card, inside the field
-    const r = c.getBoundingClientRect(), fr = fieldwrap.getBoundingClientRect();
-    const w = quickEl.offsetWidth, ht = quickEl.offsetHeight;
-    quickEl.style.left = `${Math.max(4, Math.min(fr.width - w - 4, r.left - fr.left + r.width / 2 - w / 2))}px`;
-    quickEl.style.top = `${Math.max(4, fr.height - ht - 8)}px`;
-  }
+  };
   function refreshTip(dt: number): void {
-    if (quickEl && quickId >= 0 && (quickT += dt) >= 0.2) {
-      quickT = 0;
-      const u = g.battle.units.find((q) => q.id === quickId);
-      const old = quickEl.querySelector('.sc-live');
-      if (!u || !u.alive) hideQuick();
-      else if (old) old.replaceWith(liveLine(g.battle, u));
-    }
     if (!tipEl) return;
     tipT += dt;
     if (tipT < 0.2) return;
@@ -796,17 +802,47 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (g.done) return;
     drawFrozen();
-    if (sel >= 0) {
-      const z = dropZone(me);
-      quad(z.x0 + 0.2, z.y0 + 0.2, z.x1 - 0.2, z.y1 - 0.2);
-      octx.fillStyle = 'rgba(63, 182, 232, 0.06)';
+    drawUnitRings();
+    // our deploy zone: a faint outline always (so it's learnt), lit up with the castle's no-drop circle while a
+    // card is picked
+    {
+      const z = dropZone(me), on = sel >= 0;
+      quad(z.x0 + 0.15, z.y0 + 0.15, z.x1 - 0.15, z.y1 - 0.15);
+      octx.fillStyle = `rgba(63, 182, 232, ${on ? 0.14 : 0.03})`;
       octx.fill();
-      octx.setLineDash([6, 6]);
-      octx.strokeStyle = 'rgba(63, 182, 232, 0.55)';
-      octx.lineWidth = 1.5;
+      octx.setLineDash(on ? [] : [6, 6]);
+      octx.strokeStyle = `rgba(63, 182, 232, ${on ? 0.95 : 0.35})`;
+      octx.lineWidth = on ? 2.5 : 1.5;
       octx.stroke();
       octx.setLineDash([]);
-      if (hover) {
+      if (on) {
+        // label on the zone's front edge
+        const front = me === 0 ? z.y0 : z.y1, lp = view.worldToScreen((z.x0 + z.x1) / 2, front + (me === 0 ? 1.2 : -1.2));
+        octx.font = '700 13px Barlow, system-ui, sans-serif';
+        octx.textAlign = 'center';
+        octx.textBaseline = 'middle';
+        octx.lineWidth = 3;
+        octx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+        octx.strokeText('DEPLOY ZONE', lp.x, lp.y);
+        octx.fillStyle = 'rgb(120, 210, 245)';
+        octx.fillText('DEPLOY ZONE', lp.x, lp.y);
+        // the castle itself: no drops on it
+        const c = castlePos(me), R = 3.5 + 0.4, pts: { x: number; y: number }[] = [];
+        for (let a = 0; a <= 32; a++) pts.push(view.worldToScreen(c.x + Math.cos((a / 32) * Math.PI * 2) * R, c.y + Math.sin((a / 32) * Math.PI * 2) * R));
+        octx.beginPath();
+        pts.forEach((p, i) => (i ? octx.lineTo(p.x, p.y) : octx.moveTo(p.x, p.y)));
+        octx.closePath();
+        octx.fillStyle = 'rgba(240, 80, 70, 0.12)';
+        octx.fill();
+        octx.setLineDash([5, 5]);
+        octx.strokeStyle = 'rgba(255, 110, 90, 0.8)';
+        octx.lineWidth = 1.5;
+        octx.stroke();
+        octx.setLineDash([]);
+      }
+    }
+    if (sel >= 0) {
+      if (hover && hoverInZone()) {
         const d = cards[sel].d;
         const ok = !checkSpendable(buyCmd(hover.x, hover.y));
         drawBlock(d, hover.x, hover.y, rot, ok, 1, curSpacing());
@@ -835,7 +871,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     netEl.textContent = net && netDown ? 'reconnecting…' : '';
     // the placement hint stays up while a card is picked (a refusal flashes over it for a moment)
     if (sel >= 0 && !hintTimer) {
-      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · mouse wheel / [ ] spacing · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
+      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · Shift + wheel / [ ] spacing · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
       hint.classList.add('show');
     } else if (sel < 0 && !hintTimer) hint.classList.remove('show');
     if (sel >= 0 && tipEl) hideTip(); // picking a card to drop closes an inspected unit's card

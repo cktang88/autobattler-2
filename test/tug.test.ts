@@ -59,6 +59,10 @@ test('income, tiers, gold and the drop zone are enforced', () => {
   assert.match(dropError(0, d, 12, 18) ?? '', /deploy zone/);
   assert.match(dropError(1, d, 12, 95) ?? '', /deploy zone/);
   assert.match(dropError(0, d, castlePos(0).x, castlePos(0).y) ?? '', /castle/);
+  // right beside the castle (and behind it, toward the back edge) is fine as long as the block clears the castle
+  const c0 = castlePos(0);
+  assert.equal(dropError(0, d, c0.x + 6, c0.y), null, 'beside the castle');
+  assert.equal(dropError(0, d, c0.x + 5, FIELD_H - 1), null, 'behind the castle line');
   assert.match(dropError(0, d, -5, 95) ?? '', /Off the field/);
   assert.equal(dropError(0, d, 12, 95), null);
   assert.equal(dropError(0, d, 36, FIELD_H - TUG.field.deploy + 3), null);
