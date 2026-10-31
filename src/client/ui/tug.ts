@@ -444,6 +444,24 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     b.addEventListener('pointercancel', end);
     // the phone's own long-press menu / callout
     b.addEventListener('contextmenu', (e) => e.preventDefault());
+    // mouse: hovering the card shows its stat card above it
+    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showCardHover(b, d); });
+    b.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hideCardHover(); });
+  }
+  // ---- hover a card (mouse): the same stat card, floating above the card row ----
+  let cardHover: HTMLElement | null = null;
+  const hideCardHover = () => { cardHover?.remove(); cardHover = null; };
+  function showCardHover(b: HTMLElement, d: Design): void {
+    hideCardHover();
+    const st = computeStats(d);
+    const tip = tipFor(d, st, 1, 'Roster', true, normSpacing(st, undefined));
+    Object.assign(tip.style, { position: 'fixed', visibility: 'hidden', zIndex: '70' });
+    document.body.append(tip);
+    const r = b.getBoundingClientRect(), w = tip.offsetWidth, ht = tip.offsetHeight;
+    const left = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2));
+    const top = r.top - ht - 8 >= 4 ? r.top - ht - 8 : Math.min(window.innerHeight - ht - 4, r.bottom + 8);
+    Object.assign(tip.style, { left: `${left}px`, top: `${Math.max(4, top)}px`, visibility: '' });
+    cardHover = tip;
   }
 
   const cards: { el: HTMLElement; d: Design; cost: HTMLElement; cd: HTMLElement }[] = [];
@@ -689,8 +707,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     hover = toWorld(e);
     wheelPos = { x: e.clientX, y: e.clientY };
     renderWheelSign();
-    // hovering a unit (mouse, nothing picked to drop): its weapon ranges are drawn round it (click for its card)
-    if (e.pointerType !== 'mouse' || sel >= 0 || view.wasDrag || e.buttons) { ringId = -1; return; }
+    // hovering a unit (mouse, not about to drop a card there): its weapon ranges are drawn round it (click for its card)
+    if (e.pointerType !== 'mouse' || (sel >= 0 && hoverInZone()) || view.wasDrag || e.buttons) { ringId = -1; return; }
     const { px, py } = local(e);
     ringId = liveUnitAt(view, g.battle, px, py)?.id ?? -1;
   });
@@ -724,6 +742,14 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     }
     const w = toWorld(e);
     if (!w) return;
+    // a card is picked (it stays picked after a drop): a click outside our deploy zone that lands on a unit
+    // inspects it instead of trying to drop there
+    const d = cards[sel].d, err = dropError(me, d, w.x, w.y, rot && computeStats(d).squad > 1, curSpacing());
+    if (err === 'Only in your own deploy zone' || err === 'Off the field') {
+      const { px, py } = local(e);
+      const u = liveUnitAt(view, g.battle, px, py);
+      if (u) { showLiveTip(u, { x: e.clientX, y: e.clientY }); sfx('click'); return; }
+    }
     send(buyCmd(w.x, w.y));
   });
   canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); if (sel >= 0 && !view.wasDrag) { sel = -1; renderCards(); } });
@@ -759,6 +785,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   // ---- inspect: a clicked unit's stat card, pinned where it was clicked, its hp / damage kept live ----
   let tipEl: HTMLElement | null = null;
   let tipId = -1, tipT = 0;
+  /** the picked card when the unit card was last checked (see the frame loop) */
+  let tipSel = -1;
   function hideTip(): void { tipEl?.remove(); tipEl = null; tipId = -1; }
   function showLiveTip(u: SimUnit, at: { x: number; y: number }): void {
     hideTip();
@@ -951,7 +979,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · Shift + wheel / [ ] spacing · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
       hint.classList.add('show');
     } else if (sel < 0 && !hintTimer) hint.classList.remove('show');
-    if (sel >= 0 && tipEl) hideTip(); // picking a card to drop closes an inspected unit's card
+    // picking a card to drop closes an inspected unit's card (once: a unit clicked while a card stays picked keeps it)
+    if (sel !== tipSel) { if (sel >= 0 && tipEl) hideTip(); tipSel = sel; }
     renderWheelSign();
     renderCards();
   };
@@ -1136,7 +1165,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     destroy() {
       destroyed = true;
       shop?.close();
-      hideCardSheet();
+      hideCardSheet(); hideCardHover();
       setField(STANDARD_FIELD); // TugGame switched to the tug field; every other screen plays on the standard one
       abort.abort();
       cancelAnimationFrame(raf);
