@@ -31,7 +31,7 @@ export const TUG = {
    *  doubles with each block of it already on the field, so the 2nd waits 1 s, the 3rd 2 s, the 4th 4 s, ...
    *  (see buyCooldown), up to buyCooldownMax */
   buyCooldown: 1,
-  buyCooldownMax: 32,
+  buyCooldownMax: 8,
   /** the castle's gun at the start: a plain heavy machine gun; better ones are bought (castleGunPrice) */
   startCastleGun: 'hmg',
   castleHp: 20000,

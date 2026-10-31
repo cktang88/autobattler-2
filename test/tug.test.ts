@@ -158,7 +158,7 @@ test('a design can only be bought again after its cooldown', () => {
 });
 
 test('the buy cooldown doubles with each block of that design on the field, and shrinks as they die', () => {
-  assert.deepEqual([1, 2, 3, 4, 5].map(buyCooldown), [1, 2, 4, 8, 16]);
+  assert.deepEqual([1, 2, 3, 4, 5].map(buyCooldown), [1, 2, 4, 8, 8], 'doubling, capped at 8 s');
   assert.equal(buyCooldown(50), TUG.buyCooldownMax);
   const g = new TugGame(2, [ROSTER, ROSTER]);
   g.sides[0].gold = 1e6;

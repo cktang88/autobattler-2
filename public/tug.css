@@ -121,3 +121,9 @@ button.gunshop-card .gunshop-need { font-size: 0.75rem; color: var(--bad); }
 .gunshop-none { grid-column: 1 / -1; text-align: center; padding: 20px 0; }
 .modal:has(.gunshop) { max-width: min(860px, calc(100vw - 32px)); width: 100%; }
 .gunshop-reach .k-slider-out { min-width: 5.2em; } /* "any" … "≥ 200 m": a steady width keeps the track (and the thumb under the finger) still */
+/* the in-game cards: what each can shoot (AIR struck through when it can't hit aircraft), no phone long-press callout or
+   text selection: a long-press opens the stat sheet instead */
+.tug-unit { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.tug-unit-caps { display: flex; justify-content: center; gap: 3px; margin-top: 1px; }
+.tug-unit-caps .db-chip { font-size: 0.62rem; padding: 0 4px; height: 14px; }
+.tug-unit-caps .db-chip.noair { text-decoration: line-through; }

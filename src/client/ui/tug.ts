@@ -397,6 +397,40 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     renderWheelSign();
     return true;
   }
+  // ---- long-press a card (touch): its full stat card as a bottom sheet, instead of the phone's own long-press ----
+  let cardSheet: HTMLElement | null = null;
+  let cardSheetOff: (() => void) | null = null;
+  const hideCardSheet = () => { cardSheet?.remove(); cardSheet = null; cardSheetOff?.(); cardSheetOff = null; };
+  const showCardSheet = (d: Design) => {
+    hideCardSheet();
+    const st = computeStats(d);
+    const tip = tipFor(d, st, 1, 'Roster', true, normSpacing(st, undefined));
+    tip.classList.add('sheet');
+    tip.prepend(h('button.icon.small.ghost.close', { type: 'button', 'aria-label': 'Close', onclick: () => hideCardSheet() }, '✕'));
+    // any touch outside closes it (armed after the long-press itself has ended)
+    const off = (e: Event) => { if (!tip.contains(e.target as Node)) hideCardSheet(); };
+    const t = window.setTimeout(() => document.addEventListener('pointerdown', off, true), 350);
+    cardSheetOff = () => { clearTimeout(t); document.removeEventListener('pointerdown', off, true); };
+    document.body.append(tip);
+    cardSheet = tip;
+  };
+  function attachLongPress(b: HTMLElement, d: Design): void {
+    let timer = 0, x0 = 0, y0 = 0;
+    b.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      clearTimeout(timer);
+      x0 = e.clientX; y0 = e.clientY;
+      timer = window.setTimeout(() => { b.dataset.lp = '1'; navigator.vibrate?.(10); showCardSheet(d); }, 450);
+    });
+    // a finger that slides (scrolling the card row) isn't a long-press
+    b.addEventListener('pointermove', (e) => { if (Math.hypot(e.clientX - x0, e.clientY - y0) > 10) clearTimeout(timer); });
+    const end = () => { clearTimeout(timer); if (b.dataset.lp) setTimeout(() => delete b.dataset.lp, 400); };
+    b.addEventListener('pointerup', end);
+    b.addEventListener('pointercancel', end);
+    // the phone's own long-press menu / callout
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
   const cards: { el: HTMLElement; d: Design; cost: HTMLElement; cd: HTMLElement }[] = [];
   /** online: designs bought but not yet in the game: when (performance.now ms) their cooldown runs out, and its length (s) */
   const localReady = new Map<string, { at: number; len: number }>();
@@ -409,10 +443,21 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const cost = h('span.gold');
     const cd = h('span.tug-cd', { 'aria-hidden': 'true' });
     const st = computeStats(d);
+    const info = designInfo(d);
+    const hitsAir = !!info && info.air > 0, hitsGnd = !!info && info.gnd > 0;
     const c = h('button.tug-unit', {
-      'aria-label': `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}  [${i + 1}]`,
-      onclick: () => { sfx('click'); sel = sel === i ? -1 : i; renderCards(); },
-    }, cv, cd, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null), h('kbd.tug-key', null, String(i + 1)));
+      'aria-label': `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}, ${hitsAir ? 'hits aircraft' : "can't hit aircraft"}  [${i + 1}]`,
+      onclick: () => {
+        if (c.dataset.lp) return; // the tap that ends a long-press opened the stat sheet: don't also pick the card
+        sfx('click'); sel = sel === i ? -1 : i; renderCards();
+      },
+    }, cv, cd, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null),
+    // what it can shoot, readable at a glance on a phone: AIR is struck through when it can't hit aircraft
+    h('div.tug-unit-caps', null,
+      hitsGnd ? h('span.db-chip.gnd', { title: 'Hits ground units' }, 'GND') : null,
+      h('span.db-chip', { class: hitsAir ? 'air' : 'none noair', title: hitsAir ? 'Hits aircraft' : "Can't hit aircraft" }, 'AIR')),
+    h('kbd.tug-key', null, String(i + 1)));
+    attachLongPress(c, d);
     cards.push({ el: c, d, cost, cd });
     cardsEl.append(c);
     paintWhenLaidOut([{ canvas: cv, design: d }]); // friendly colours, like our units on the field
@@ -1020,6 +1065,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     destroy() {
       destroyed = true;
       shop?.close();
+      hideCardSheet();
       setField(STANDARD_FIELD); // TugGame switched to the tug field; every other screen plays on the standard one
       abort.abort();
       cancelAnimationFrame(raf);
