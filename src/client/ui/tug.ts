@@ -613,7 +613,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     relist();
     refresh();
     const timer = window.setInterval(refresh, 300);
-    const handle = openModal('Castle gun', h('div', null, cur, r0, bar, list));
+    const handle = openModal('Castle gun', h('div.gunshop-body', null, cur, r0, bar, list));
     const close = () => { window.clearInterval(timer); handle.close(); shop = null; };
     // the modal closes itself too (Close button, backdrop, Esc): stop refreshing then
     const obs = new MutationObserver(() => { if (!handle.el.isConnected) { window.clearInterval(timer); shop = null; obs.disconnect(); } });

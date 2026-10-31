@@ -95,9 +95,14 @@
 /* castle gun shop */
 .tug-gunbtn { flex-direction: column; align-items: flex-start; gap: 0; border-color: var(--warn); }
 .tug-gunbtn small { text-transform: none; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-/* a fixed height, not a cap: the filters (min reach above all, dragged on a phone) shrink the list, and a shrinking
-   modal re-centres itself, jumping the slider out from under the finger */
-.gunshop { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; gap: 8px; height: 60vh; overflow-y: auto; padding-right: 4px; }
+/* the shop takes (nearly) the whole screen at a fixed size and the list fills what's left under the filters: room for
+   67 guns, and a list the filters shrink (min reach above all, dragged on a phone) can't shrink the modal, which would
+   re-centre it and jump the slider out from under the finger. Rows keep their content's height (the cards'
+   min-height: 0 would otherwise let a full grid squash them). */
+.modal-back:has(.gunshop) { padding: 8px; }
+.modal:has(.gunshop) { width: min(1280px, 100%); max-width: none; height: calc(100% - 16px); max-height: none; display: flex; flex-direction: column; overflow: hidden; }
+.gunshop-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gunshop { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 8px; overflow-y: auto; padding-right: 4px; }
 button.gunshop-card { clip-path: none; flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; text-align: center; background: var(--bg2); border-color: var(--line); }
 button.gunshop-card.on { border-color: var(--accent); background: rgba(46, 211, 192, 0.1); opacity: 1; }
 button.gunshop-card.on .gunshop-price::after { content: ' · equipped'; color: var(--accent); }
@@ -119,7 +124,6 @@ button.gunshop-card .gunshop-need { font-size: 0.75rem; color: var(--bad); }
 .gunshop-stats .air { color: #7cc8ff; }
 .gunshop-tags { font-size: 0.75rem; color: #b4b9bd; }
 .gunshop-none { grid-column: 1 / -1; text-align: center; padding: 20px 0; }
-.modal:has(.gunshop) { max-width: min(860px, calc(100vw - 32px)); width: 100%; }
 .gunshop-reach .k-slider-out { min-width: 5.2em; } /* "any" … "≥ 200 m": a steady width keeps the track (and the thumb under the finger) still */
 /* the in-game cards: what each can shoot (AIR struck through when it can't hit aircraft), no phone long-press callout or
    text selection: a long-press opens the stat sheet instead */
@@ -127,3 +131,16 @@ button.gunshop-card .gunshop-need { font-size: 0.75rem; color: var(--bad); }
 .tug-unit-caps { display: flex; justify-content: center; gap: 3px; margin-top: 1px; }
 .tug-unit-caps .db-chip { font-size: 0.62rem; padding: 0 4px; height: 14px; }
 .tug-unit-caps .db-chip.noair { text-decoration: line-through; }
+/* phone: the castle gun shop, compact (after the base rules so it wins) */
+@media (max-width: 600px) {
+  .gunshop { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .gunshop-body > p:first-child { font-size: 0.85rem; margin-bottom: 6px; }
+  /* compact cards: more of the list on screen at once */
+  .gunshop { gap: 6px; }
+  button.gunshop-card { padding: 5px 4px; gap: 1px; }
+  .gunshop-icon { width: 34px; height: 34px; }
+  .gunshop-name { font-size: 0.85rem; letter-spacing: 0.02em; }
+  .gunshop-stats { font-size: 0.74rem; }
+  .gunshop-tags, button.gunshop-card .gunshop-need { font-size: 0.68rem; }
+  .gunshop-hits .sc-chip { font-size: 0.66rem; }
+}
