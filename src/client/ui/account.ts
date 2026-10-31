@@ -5,7 +5,7 @@ import { h, type App } from '../app.ts';
 import { sfx } from '../audio.ts';
 import { changePassword, currentSession, logout, signedIn, signIn, type SignInStatus } from '../net.ts';
 import { syncGarage } from '../sync.ts';
-import { openModal, type ModalHandle } from './match-ui.ts';
+import { openModal, type ModalHandle } from './modal.ts';
 import * as kit from './kit.ts';
 
 const PASSWORD_MIN = 4;

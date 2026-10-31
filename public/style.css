@@ -562,6 +562,8 @@ button.rbtn.foe.active, button.rbtn.foe.active:hover:not(:disabled) { background
 /* drag feedback */
 body.db-dragging .db-slot { border-color: #35d6bf; color: #35d6bf; background: rgba(53, 214, 191, 0.05); }
 body.db-dragging .db-slots .db-card { box-shadow: inset 0 0 0 1px rgba(53, 214, 191, 0.4); }
+/* a lazily loaded screen is on its way (first visit only) */
+body.app-loading, body.app-loading * { cursor: progress !important; }
 body.db-from-deck .db-coll { box-shadow: inset 0 0 0 2px rgba(255, 90, 74, 0.5); }
 .db-over { box-shadow: inset 0 0 0 2px #ffb21e !important; background: rgba(255, 178, 30, 0.08) !important; }
 /* analysis */

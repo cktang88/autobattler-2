@@ -5,7 +5,6 @@ import { h, type App, type Screen } from '../app.ts';
 import { playMusic, sfx } from '../audio.ts';
 import type { BoardUnit } from '../render/field.ts';
 import type { BattleView } from '../render/view.ts';
-import { makeView } from '../render/viewfactory.ts';
 import { MAPS } from '../render/ground.ts';
 import { LocalDriver } from '../localdriver.ts';
 import { Battle } from '../../shared/sim/battle.ts';
@@ -15,7 +14,7 @@ import { computeStats } from '../../shared/stats.ts';
 import { STARTER_DESIGNS } from '../../shared/starters.ts';
 import { makeRng } from '../../shared/rng.ts';
 import type { Design, Placement, Side, Size } from '../../shared/types.ts';
-import { openModal } from './match-ui.ts';
+import { openModal } from './modal.ts';
 import { accountChip } from './account.ts';
 import { onSessionChange } from '../net.ts';
 
@@ -108,13 +107,9 @@ export function classicScreen(app: App): Screen {
 export function menuScreen(app: App): Screen {
   playMusic('menu');
   const canvas = h('canvas.menu-bg');
+  // the background battlefield is built after the menu is up (see startBackground): building it (and loading the
+  // renderer) takes long enough that doing it first left the buttons dead on the first load
   let view: BattleView | null = null;
-  try { view = makeView(canvas, 0, { interactive: false }); } catch (e) { console.warn(e); }
-
-  // keep the background skirmish silent
-  if (view) { view.muted = true; try { view.setTilt(loadSettings().tilt !== false); } catch { /* */ } }
-  // a different battlefield each visit
-  view?.setMap(MAPS[Math.floor(Math.random() * MAPS.length)]);
   const go = (fn: () => void) => () => {
     sfx('click');
     fn();
@@ -223,18 +218,43 @@ export function menuScreen(app: App): Screen {
   const ro = new ResizeObserver(() => view?.resize());
   ro.observe(canvas);
   let gone = false;
-  raf = requestAnimationFrame(() => {
+  const whenIdle = () => new Promise<void>((r) => ('requestIdleCallback' in window ? requestIdleCallback(() => r(), { timeout: 1500 }) : setTimeout(r, 200)));
+  // the build blocks the page for a moment (terrain bake, shader compiles), so wait for a lull in the player's input:
+  // a click right after the page loads must not get stuck behind it
+  let lastInput = performance.now();
+  const onInput = () => { lastInput = performance.now(); };
+  window.addEventListener('pointerdown', onInput, true);
+  window.addEventListener('keydown', onInput, true);
+  const QUIET_MS = 1500;
+  const startBackground = async () => {
+    await whenIdle();
+    const { makeView, preload3d } = await import('../render/viewfactory.ts');
+    if (loadSettings().renderer === '3d') await preload3d();
+    for (let wait; !gone && (wait = lastInput + QUIET_MS - performance.now()) > 0;) await new Promise((r) => setTimeout(r, wait));
+    await whenIdle();
     if (gone) return;
-    view?.resize();
-    newScene();
-    raf = requestAnimationFrame(frame);
-  });
+    try { view = makeView(canvas, 0, { interactive: false }); } catch (e) { console.warn(e); return; }
+    // keep the background skirmish silent
+    view.muted = true;
+    try { view.setTilt(loadSettings().tilt !== false); } catch { /* */ }
+    // a different battlefield each visit
+    view.setMap(MAPS[Math.floor(Math.random() * MAPS.length)]);
+    raf = requestAnimationFrame(() => {
+      if (gone) return;
+      view?.resize();
+      newScene();
+      raf = requestAnimationFrame(frame);
+    });
+  };
+  void startBackground().catch((e) => console.warn('menu background', e));
 
   return {
     el,
     destroy() {
       offSession();
       gone = true;
+      window.removeEventListener('pointerdown', onInput, true);
+      window.removeEventListener('keydown', onInput, true);
       cancelAnimationFrame(raf);
       ro.disconnect();
       view?.destroy();

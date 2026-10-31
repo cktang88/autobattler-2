@@ -25,11 +25,16 @@ export interface Screen {
 }
 
 export type ScreenFn<R extends Route = Route> = (app: App, route: R) => Screen;
+/** Fetches a screen's code on first visit (a dynamic import), so the first page load only carries the menu. */
+export type ScreenLoader<R extends Route = Route> = () => Promise<ScreenFn<R>>;
 
 export class App {
   readonly root: HTMLElement;
   private screens = new Map<string, ScreenFn<any>>();
+  private loaders = new Map<string, () => Promise<ScreenFn<any>>>();
   private current: Screen | null = null;
+  /** bumped on every go(): a lazy screen that finishes loading after a newer go() is not shown */
+  private nav = 0;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -39,9 +44,37 @@ export class App {
     this.screens.set(name, fn);
   }
 
+  /** Register a screen whose module loads on first use. The load is shared, so prefetch() and go() never fetch twice. */
+  registerLazy<N extends Route['name']>(name: N, load: ScreenLoader<Extract<Route, { name: N }>>): void {
+    let p: Promise<ScreenFn<any>> | null = null;
+    this.loaders.set(name, () => (p ??= load().then((fn) => { this.screens.set(name, fn); return fn; }, (e) => { p = null; throw e; })));
+  }
+
+  /** Warm up lazy screens in the background (after the first screen is up) so later clicks open instantly. */
+  prefetch(): void {
+    for (const [name, load] of this.loaders) if (!this.screens.has(name)) load().catch((e) => console.warn(`prefetch ${name}`, e));
+  }
+
   go(route: Route): void {
+    const ticket = ++this.nav;
     const fn = this.screens.get(route.name);
-    if (!fn) throw new Error(`no screen ${route.name}`);
+    if (fn) { this.show(fn, route); return; }
+    const load = this.loaders.get(route.name);
+    if (!load) throw new Error(`no screen ${route.name}`);
+    document.body.classList.add('app-loading');
+    load().then(
+      (f) => { if (ticket === this.nav) this.show(f, route); },
+      (e) => {
+        console.error(e);
+        if (ticket !== this.nav) return;
+        document.body.classList.remove('app-loading');
+        this.toast('Could not load that screen. Check your connection and try again.', 'error');
+      },
+    );
+  }
+
+  private show(fn: ScreenFn<any>, route: Route): void {
+    document.body.classList.remove('app-loading');
     this.current?.destroy?.();
     this.root.replaceChildren();
     this.current = fn(this, route);

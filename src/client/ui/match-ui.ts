@@ -13,37 +13,8 @@ import { hullK } from '../../shared/mountgeo.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { START_DELAYS, STANCES, TARGET_PRIORITIES, type Design, type ModuleDef, type Side, type Size, type Stance, type TargetPriority, type UnitBehavior, type UnitStats } from '../../shared/types.ts';
 
-export interface ModalHandle { close(): void; el: HTMLElement }
-
-export function openModal(title: string, body: Node, actions: HTMLElement[] = []): ModalHandle {
-  const close = () => { back.remove(); document.removeEventListener('keydown', onKey, true); };
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
-  const closeBtn = h('button', { onclick: () => { sfx('click'); close(); } }, actions.length ? 'Cancel' : 'Close');
-  const panel = h('div.panel.modal', { role: 'dialog' },
-    h('h2', null, title),
-    body,
-    h('div.modal-actions', null, ...actions, closeBtn),
-  );
-  const back = h('div.modal-back', { onclick: (e: Event) => { if (e.target === back) close(); } }, panel);
-  document.addEventListener('keydown', onKey, true);
-  document.body.append(back);
-  return { close, el: panel };
-}
-
-export function confirmModal(title: string, text: string, okLabel: string, danger = false): Promise<boolean> {
-  return new Promise((resolve) => {
-    let done = false;
-    const ok = h(danger ? 'button.danger' : 'button.primary', {
-      onclick: () => { done = true; m.close(); resolve(true); },
-    }, okLabel);
-    const m = openModal(title, h('p', null, text), [ok]);
-    // resolve false when closed any other way
-    const obs = new MutationObserver(() => {
-      if (!m.el.isConnected) { obs.disconnect(); if (!done) resolve(false); }
-    });
-    obs.observe(document.body, { childList: true });
-  });
-}
+// modals live in a light module so the menu can open them without loading the battle UI
+export { confirmModal, openModal, type ModalHandle } from './modal.ts';
 
 /** Size the canvas backing store to its CSS box * devicePixelRatio, then draw a design preview. */
 export function paintPreview(canvas: HTMLCanvasElement, design: Design, side: Side = 0, time = 0): void {
