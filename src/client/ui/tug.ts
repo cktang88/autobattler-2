@@ -49,13 +49,28 @@ function saveRosterIds(ids: string[]): void {
 const costOf = (d: Design) => { try { return computeStats(d).cost; } catch { return Infinity; } };
 const sizeOf = (d: Design): Size => { try { return computeStats(d).size; } catch { return 5; } };
 
-/** the saved tug roster, else the active deck (both kept to legal designs that still exist) */
+/** cheapest first: rosters and the in-game cards read left to right by price */
+const byCost = (r: Design[]): Design[] => [...r].sort((a, b) => costOf(a) - costOf(b));
+
+/** The tug roster to start from: the whole range a long game climbs through, so a new player sees an aircraft, a
+ *  Giant and a Titan to unlock towards (Strafer, Gargantua, Kronos) next to cheap line units and anti-air. */
+const TUG_DEFAULT_ROSTER = [
+  'starter-strafer', 'starter-firestorm', 'starter-thunderhead', 'starter-tankbuster', 'starter-skyguard',
+  'starter-buzzsaw', 'starter-ironclad', 'starter-juggernaut', 'starter-warlord',
+];
+
+/** the saved tug roster, else the default one (topped up from the active deck if a starter is missing), both kept to
+ *  legal designs that still exist, cheapest first */
 export function tugRoster(): Design[] {
   const all = allDesigns();
   const byId = new Map(all.map((d) => [d.id, d] as const));
   const ids = loadRosterIds();
-  const r = (ids ?? []).map((id) => byId.get(id)).filter((d): d is Design => !!d).slice(0, TUG.rosterSize);
-  return r.length ? r : activeDeck().slice(0, TUG.rosterSize);
+  const pick = (list: readonly string[]) => list.map((id) => byId.get(id)).filter((d): d is Design => !!d);
+  const r = pick(ids ?? []).slice(0, TUG.rosterSize);
+  if (r.length) return byCost(r);
+  const def = pick(TUG_DEFAULT_ROSTER);
+  for (const d of activeDeck()) if (def.length < TUG.rosterSize && !def.includes(d)) def.push(d);
+  return byCost(def.slice(0, TUG.rosterSize));
 }
 
 // ---------------------------------------------------------------------------------------------------- setup
@@ -94,7 +109,7 @@ export const tugSetupScreen: ScreenFn<{ name: 'tug' }> = (app) => {
       onclick: () => {
         sfx('click');
         if (inRoster) roster = roster.filter((x) => x.id !== d.id);
-        else if (roster.length < TUG.rosterSize) roster = [...roster, d];
+        else if (roster.length < TUG.rosterSize) roster = byCost([...roster, d]);
         else { app.toast(`A roster holds at most ${TUG.rosterSize} designs`, 'error'); return; }
         saveRosterIds(roster.map((x) => x.id));
         renderRoster();
@@ -438,7 +453,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   const cooldownLeft = (id: string): number => Math.max(g.cooldown(me, id) / TICK_RATE, ((localReady.get(id)?.at ?? 0) - performance.now()) / 1000);
   /** length (s) of this design's running cooldown */
   const cooldownLen = (id: string): number => Math.max((g.sides[me].cdLen[id] ?? 0) / TICK_RATE, localReady.get(id)?.len ?? 0);
-  rosters[me].forEach((d, i) => {
+  byCost(rosters[me]).forEach((d, i) => {
     const cv = h('canvas.tug-thumb');
     const cost = h('span.gold');
     const cd = h('span.tug-cd', { 'aria-hidden': 'true' });
@@ -628,6 +643,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const err = cmd.t === 'surrender' ? null : checkSpendable(cmd);
     if (err) { sfx('error'); flashHint(err); return; }
     sfx(cmd.t === 'buy' ? 'place' : 'click');
+    if (cmd.t === 'buy') deployUntil = performance.now() + DEPLOY_HOLD * 1000;
     if (!net) { applyLocal(me, cmd); renderCards(); return; }
     const cost = cmd.t === 'buy' ? costOf(g.design(me, cmd.designId)!) : cmd.t === 'income' ? incomeCost(g.sides[me].incomeLvl)
       : cmd.t === 'tier' ? TIER_COST[g.nextTier(me) ?? 1] : cmd.t === 'castleGun' ? castleGunPrice(MODULE_BY_ID.get(cmd.moduleId)!) : 0;
@@ -980,6 +996,59 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   let raf = 0, last = performance.now(), acc = 0, hudT = 0, ended = false;
   view.fit(true);
   const fps = createFpsMeter(fieldwrap);
+  // ---- phone camera: a phone shows only part of the long field, so the view follows the fighting by itself; picking a
+  // card swings it to our deploy zone, and a while after the last drop it goes back to the fight. The player's own
+  // pan / zoom pauses it for a few seconds. (Settings > Auto battle camera turns it off.)
+  const AUTO_CAM = window.matchMedia('(max-width: 760px), (hover: none)').matches && loadSettings().autoCam !== false;
+  /** seconds the view stays on the deploy zone after a drop before it heads back to the fight */
+  const DEPLOY_HOLD = 3;
+  /** ms after the player's last pan / zoom before the camera takes over again */
+  const USER_PAUSE = 4000;
+  let camBox: [number, number, number, number] | null = null;
+  let camSel = -1;
+  /** performance.now() until which the camera holds our deploy zone (Infinity while a card is picked and not dropped yet) */
+  let deployUntil = 0;
+  /** the camera move of the opening framing doesn't count as the player's */
+  let camUserAt = Infinity;
+  const fightBox = (): [number, number, number, number] => {
+    const castles = new Set<number>(g.castles);
+    const xs: number[] = [], ys: number[] = [], ax: number[] = [], ay: number[] = [];
+    for (const u of g.battle.units) {
+      if (!u.alive || castles.has(u.id)) continue;
+      ax.push(u.x); ay.push(u.y);
+      // fighting: a gun on a target
+      if (u.mounts.some((m) => m.target >= 0)) { xs.push(u.x); ys.push(u.y); }
+    }
+    const px = xs.length >= 2 ? xs : ax, py = xs.length >= 2 ? ys : ay;
+    // nobody out yet: the middle of the field
+    if (!px.length) return [0, FIELD_H * 0.3, FIELD_W, FIELD_H * 0.7];
+    px.sort((a, b) => a - b); py.sort((a, b) => a - b);
+    // the bulk of them: with 8+, the outer 8% each way (a lone runner, a jet looping wide) is left out
+    const cut = px.length >= 8 ? Math.floor(px.length * 0.08) : 0, hi = px.length - 1 - cut;
+    return [px[cut], py[cut], px[hi], py[hi]];
+  };
+  const updateCam = (now: number, dt: number) => {
+    if (!AUTO_CAM) return;
+    if (sel !== camSel) { deployUntil = sel >= 0 ? Infinity : Math.min(deployUntil, now + 600); camSel = sel; }
+    if (view.cam.userAt > camUserAt && now - view.cam.userAt < USER_PAUSE) return;
+    let want: [number, number, number, number];
+    if (now < deployUntil) {
+      const z = dropZone(me);
+      want = [z.x0, z.y0 - 4, z.x1, z.y1 + 4];
+    } else {
+      const b = fightBox();
+      // never closer than the field's width or ~a third of its length: the fight stays in context
+      const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+      const hw = Math.max((b[2] - b[0]) / 2 + 4, FIELD_W / 2), hh = Math.max((b[3] - b[1]) / 2 + 6, FIELD_H / 6);
+      // sideways the box stays on the (narrow) field: a fight bunched on one flank mustn't slide the field off screen
+      const mx = Math.min(Math.max(cx, hw - 3), FIELD_W + 3 - hw);
+      want = [hw * 2 >= FIELD_W + 6 ? FIELD_W / 2 - hw : mx - hw, Math.max(-3, cy - hh), hw * 2 >= FIELD_W + 6 ? FIELD_W / 2 + hw : mx + hw, Math.min(FIELD_H + 3, cy + hh)];
+    }
+    if (!camBox) camBox = [...want];
+    else for (let i = 0; i < 4; i++) camBox[i] += (want[i] - camBox[i]) * Math.min(1, dt * 2.5);
+    view.frameWorldBox(camBox[0], camBox[1], camBox[2], camBox[3]);
+  };
+
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     fps.tick(now);
@@ -1006,6 +1075,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
           if (acc > 4) acc = 4;
         }
       }
+      updateCam(now, dt);
       view.drawBattle(g.battle, dt);
       drawOverlay();
       refreshTip(dt);
@@ -1058,6 +1128,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       view.frameWorldBox(-3, -3, FIELD_W + 3, FIELD_H + 3);
       view.centerOn(FIELD_W / 2, me === 0 ? FIELD_H / 2 + 6 : FIELD_H / 2 - 6);
     } catch { /* */ }
+    camUserAt = view.cam.userAt;
   });
 
   return {
