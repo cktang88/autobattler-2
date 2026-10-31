@@ -20,7 +20,7 @@ import { drawPartIcon } from '../render/field.ts';
 import { MODULE_BY_ID } from '../../shared/parts.ts';
 import { weaponDps } from '../../shared/stats.ts';
 import { aiDeck, type AiDifficulty } from '../../shared/ai.ts';
-import { FIELD_H, FIELD_W, STANDARD_FIELD, fmtMeters, normSpacing, setField } from '../../shared/grid.ts';
+import { FIELD_H, FIELD_W, MAX_SPACING, STANDARD_FIELD, fmtMeters, hasSpacing, normSpacing, setField } from '../../shared/grid.ts';
 import { TICK_RATE } from '../../shared/sim/types.ts';
 import { computeStats } from '../../shared/stats.ts';
 import {
@@ -346,6 +346,24 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
 
   // ---- roster cards ----
   let sel = -1, rot = false;
+  /** squad spacing per roster design (mouse wheel / [ ] while its card is picked), kept between drops */
+  const spacingOf = new Map<string, number>();
+  const selSquad = (): boolean => sel >= 0 && hasSpacing(computeStats(cards[sel].d));
+  const curSpacing = (): number => (sel >= 0 ? normSpacing(computeStats(cards[sel].d), spacingOf.get(cards[sel].d.id)) : 0);
+  /** the buy command for the picked card dropped at (x, y), with its rotation and spacing */
+  const buyCmd = (x: number, y: number): Extract<TugCommand, { t: 'buy' }> => {
+    const sp = curSpacing();
+    return { t: 'buy', designId: cards[sel].d.id, x, y, ...(rot ? { rot: true } : {}), ...(sp ? { spacing: sp } : {}) };
+  };
+  function stepSpacing(dir: number): boolean {
+    if (!selSquad()) return false;
+    const d = cards[sel].d, cur = curSpacing(), next = Math.max(0, Math.min(MAX_SPACING, cur + dir));
+    if (next === cur) return true;
+    spacingOf.set(d.id, next);
+    sfx('click');
+    renderWheelSign();
+    return true;
+  }
   const cards: { el: HTMLElement; d: Design; cost: HTMLElement; cd: HTMLElement }[] = [];
   /** online: designs bought but not yet in the game, and when (performance.now ms) their cooldown runs out */
   const localReady = new Map<string, number>();
@@ -518,13 +536,33 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   const toWorld = (e: PointerEvent) => { const { px, py } = local(e); try { return view.screenToWorld(px, py); } catch { return null; } };
   canvas.addEventListener('pointermove', (e) => {
     hover = toWorld(e);
+    wheelPos = { x: e.clientX, y: e.clientY };
+    renderWheelSign();
     // hovering a unit (mouse, nothing picked to drop, no card pinned): its quick card follows the pointer
     if (e.pointerType !== 'mouse' || sel >= 0 || tipEl || view.wasDrag || e.buttons) { if (quickFrom === canvas) hideQuick(); return; }
     const { px, py } = local(e);
     const u = liveUnitAt(view, g.battle, px, py);
     if (u) showQuick(u, { x: e.clientX, y: e.clientY }); else if (quickFrom === canvas) hideQuick();
   });
-  canvas.addEventListener('pointerleave', () => { hover = null; if (quickFrom === canvas) hideQuick(); });
+  canvas.addEventListener('pointerleave', () => { hover = null; wheelPos = null; renderWheelSign(); if (quickFrom === canvas) hideQuick(); });
+  // a little sign by the cursor while a squad is about to be dropped: the wheel opens / closes its formation
+  const wheelSign = h('div.tug-wheel', { 'aria-hidden': 'true' });
+  fieldwrap.append(wheelSign);
+  let wheelPos: { x: number; y: number } | null = null;
+  function renderWheelSign(): void {
+    const on = !!wheelPos && selSquad() && window.matchMedia('(hover: hover)').matches;
+    wheelSign.classList.toggle('show', on);
+    if (!on) return;
+    const sp = curSpacing();
+    wheelSign.replaceChildren(
+      h('span.tug-wheel-ico', null, '🖱'),
+      h('span', null, 'Wheel ± spacing'),
+      h('b', null, sp ? fmtMeters(sp) : 'tight'),
+      h('span.tug-wheel-dots', null, ...Array.from({ length: MAX_SPACING + 1 }, (_, i) => h('i', { class: i <= sp ? 'on' : '' }))));
+    const fr = fieldwrap.getBoundingClientRect();
+    wheelSign.style.left = `${wheelPos!.x - fr.left + 18}px`;
+    wheelSign.style.top = `${wheelPos!.y - fr.top + 18}px`;
+  }
   canvas.addEventListener('pointerup', (e) => {
     if (view.wasDrag || e.button > 0) return;
     if (sel < 0) {
@@ -536,7 +574,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     }
     const w = toWorld(e);
     if (!w) return;
-    send({ t: 'buy', designId: cards[sel].d.id, x: w.x, y: w.y, ...(rot ? { rot: true } : {}) });
+    send(buyCmd(w.x, w.y));
   });
   canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); if (sel >= 0 && !view.wasDrag) { sel = -1; renderCards(); } });
   const onKey = (e: KeyboardEvent) => {
@@ -545,12 +583,25 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if (n >= 1 && n <= cards.length) { sel = sel === n - 1 ? -1 : n - 1; renderCards(); }
     else if (e.key === 'Escape') { if (tipEl && sel < 0) hideTip(); sel = -1; renderCards(); }
     else if (e.key === 'r' || e.key === 'R') rot = !rot;
+    else if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) { if (stepSpacing(e.key === ']' ? 1 : -1)) e.preventDefault(); }
     else if (e.key === 'i' || e.key === 'I') send({ t: 'income' });
     else if (e.key === 'u' || e.key === 'U') send({ t: 'tier' });
     else if (e.key === 'g' || e.key === 'G') openGunShop();
     else if (e.key === ' ' && ai) { paused = !paused; renderSpeed(); e.preventDefault(); }
   };
   window.addEventListener('keydown', onKey);
+  // while a squad card is picked the mouse wheel sets its spacing (captured before the camera's wheel zoom sees it)
+  let wheelAt = 0;
+  const onWheel = (e: WheelEvent) => {
+    if (!selSquad() || e.ctrlKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const dy = e.deltaY || e.deltaX, now = performance.now();
+    if (!dy || now - wheelAt < 110) return; // one step per notch, not per trackpad tick
+    wheelAt = now;
+    stepSpacing(dy < 0 ? 1 : -1);
+  };
+  fieldwrap.addEventListener('wheel', onWheel, { capture: true, passive: false });
   const onResize = () => { try { view.resize(); } catch { /* */ } };
   window.addEventListener('resize', onResize);
 
@@ -624,13 +675,13 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     for (let i = 1; i < 4; i++) octx.lineTo(p[i].x, p[i].y);
     octx.closePath();
   };
-  const drawBlock = (d: Design, x: number, y: number, r: boolean, ok: boolean, alpha: number) => {
+  const drawBlock = (d: Design, x: number, y: number, r: boolean, ok: boolean, alpha: number, sp = 0) => {
     const st = computeStats(d);
     const fw = st.fw, fh = st.fh;
     octx.fillStyle = ok ? `rgba(80, 220, 140, ${0.35 * alpha})` : `rgba(240, 80, 70, ${0.35 * alpha})`;
     octx.strokeStyle = ok ? `rgba(120, 255, 170, ${alpha})` : `rgba(255, 110, 90, ${alpha})`;
     octx.lineWidth = 1.5;
-    for (const c of blockCenters(me, d, x, y, r && st.squad > 1)) {
+    for (const c of blockCenters(me, d, x, y, r && st.squad > 1, normSpacing(st, sp))) {
       quad(c.x - fw / 2, c.y - fh / 2, c.x + fw / 2, c.y + fh / 2);
       octx.fill();
       octx.stroke();
@@ -687,8 +738,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       octx.setLineDash([]);
       if (hover) {
         const d = cards[sel].d;
-        const ok = !checkSpendable({ t: 'buy', designId: d.id, x: hover.x, y: hover.y, ...(rot ? { rot: true } : {}) });
-        drawBlock(d, hover.x, hover.y, rot, ok, 1);
+        const ok = !checkSpendable(buyCmd(hover.x, hover.y));
+        drawBlock(d, hover.x, hover.y, rot, ok, 1, curSpacing());
       }
     }
     const now = performance.now();
@@ -696,7 +747,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       const gh = ghosts[i];
       if (now - gh.at > TUG_GHOST_MS) { ghosts.splice(i, 1); continue; }
       const d = g.design(me, gh.cmd.designId);
-      if (d) drawBlock(d, gh.cmd.x, gh.cmd.y, !!gh.cmd.rot, true, 0.5 + 0.3 * Math.sin(now / 90));
+      if (d) drawBlock(d, gh.cmd.x, gh.cmd.y, !!gh.cmd.rot, true, 0.5 + 0.3 * Math.sin(now / 90), gh.cmd.spacing ?? 0);
     }
   };
 
@@ -714,10 +765,11 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     netEl.textContent = net && netDown ? 'reconnecting…' : '';
     // the placement hint stays up while a card is picked (a refusal flashes over it for a moment)
     if (sel >= 0 && !hintTimer) {
-      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
+      hint.textContent = `Click your deploy zone to drop ${cards[sel].d.name}${computeStats(cards[sel].d).squad > 1 ? ' · mouse wheel / [ ] spacing · R rotates' : ''} · right-click / Esc cancels · right-drag turns the view`;
       hint.classList.add('show');
     } else if (sel < 0 && !hintTimer) hint.classList.remove('show');
     if (sel >= 0 && tipEl) hideTip(); // picking a card to drop closes an inspected unit's card
+    renderWheelSign();
     renderCards();
   };
 

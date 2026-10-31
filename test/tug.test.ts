@@ -327,3 +327,21 @@ test('server hub: matchmaking, lockstep stamping, surrender and idle forfeit', a
   assert.equal(f.winner, 0 as Side);
   assert.equal(f.orders.at(-1)?.cmd.t, 'surrender');
 });
+
+test('a dropped squad keeps the spacing it was bought with', () => {
+  const sq = STARTER_DESIGNS.find((d) => computeStats(d).squad >= 4 && computeStats(d).size <= 2)!;
+  const roster = [sq, ...ROSTER.filter((d) => d.id !== sq.id)].slice(0, 6);
+  const width = (sp?: number) => {
+    const g = new TugGame(3, [roster, roster]);
+    g.sides[0].gold = 1e6;
+    assert.equal(g.apply(0, { t: 'buy', designId: sq.id, x: 30, y: 95, ...(sp ? { spacing: sp } : {}) }), null);
+    const xs = g.battle.units.filter((u) => u.side === 0 && u.design.id === sq.id).map((u) => u.x);
+    return Math.max(...xs) - Math.min(...xs);
+  };
+  const tight = width(), open = width(2);
+  assert.ok(open > tight + 1, `spacing 2 opens the formation (${tight} -> ${open})`);
+  // the network shape check keeps only whole steps inside 0..MAX_SPACING
+  assert.equal((sanitizeCommand({ t: 'buy', designId: 'x', x: 1, y: 1, spacing: 2 }) as { spacing?: number }).spacing, 2);
+  assert.equal((sanitizeCommand({ t: 'buy', designId: 'x', x: 1, y: 1, spacing: 9 }) as { spacing?: number }).spacing, undefined);
+  assert.equal((sanitizeCommand({ t: 'buy', designId: 'x', x: 1, y: 1, spacing: 1.5 }) as { spacing?: number }).spacing, undefined);
+});

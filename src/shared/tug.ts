@@ -9,7 +9,7 @@
 
 import { Battle } from './sim/battle.ts';
 import { DT, TICK_RATE } from './sim/types.ts';
-import { DEPLOY_D, FIELD_H, FIELD_W, blockDims, setField, squadOffsets, type FieldSize } from './grid.ts';
+import { DEPLOY_D, FIELD_H, FIELD_W, MAX_SPACING, blockDims, normSpacing, setField, squadOffsets, type FieldSize } from './grid.ts';
 import { MODULE_BY_ID } from './parts.ts';
 import { hullK } from './mountgeo.ts';
 import { computeStats, validateDesign, weaponDps } from './stats.ts';
@@ -81,8 +81,9 @@ const CASTLE_CLEAR = 6.5; // cells around the castle centre where nothing may be
 const CASTLE_RADIUS = 3.5;
 
 export type TugCommand =
-  /** buy a block of a roster design and drop it with its centre at world (x, y); rot turns a squad 90° */
-  | { t: 'buy'; designId: string; x: number; y: number; rot?: boolean }
+  /** buy a block of a roster design and drop it with its centre at world (x, y); rot turns a squad 90°, spacing
+   *  opens a squad's formation (cells between units, 0..MAX_SPACING, like a match deployment) */
+  | { t: 'buy'; designId: string; x: number; y: number; rot?: boolean; spacing?: number }
   | { t: 'income' }
   | { t: 'tier' }
   /** re-arm the castle with this weapon (module id) */
@@ -121,19 +122,19 @@ export function validateRoster(r: Design[]): string[] {
 }
 
 /** world centres of each unit of a block of `design` centred on (x, y), facing `side`'s enemy */
-export function blockCenters(side: Side, design: Design, x: number, y: number, rot = false): { x: number; y: number }[] {
+export function blockCenters(side: Side, design: Design, x: number, y: number, rot = false, spacing = 0): { x: number; y: number }[] {
   const st = computeStats(design);
-  const { w, h } = blockDims(st, 0, rot);
+  const { w, h } = blockDims(st, spacing, rot);
   // snap the block to whole cells like a normal deployment
   const col = Math.round(x - w / 2), row = Math.round(y - h / 2);
-  return squadOffsets(st, 0, rot).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
+  return squadOffsets(st, spacing, rot).map((o) => (side === 0 ? { x: col + o.x, y: row + o.y } : { x: col + w - o.x, y: row + h - o.y }));
 }
 
 /** where `side` may drop a block of this footprint (world box of the whole block): anywhere in its own deploy zone
  *  (the back DEPLOY_D rows of the tug field), clear of its castle. Returns null when allowed, else the reason. */
-export function dropError(side: Side, design: Design, x: number, y: number, rot = false): string | null {
+export function dropError(side: Side, design: Design, x: number, y: number, rot = false, spacing = 0): string | null {
   const st = computeStats(design);
-  const { w, h } = blockDims(st, 0, rot);
+  const { w, h } = blockDims(st, spacing, rot);
   const x0 = Math.round(x - w / 2), y0 = Math.round(y - h / 2), x1 = x0 + w, y1 = y0 + h;
   if (x0 < 0 || y0 < 0 || x1 > FIELD_W || y1 > FIELD_H) return 'Off the field';
   if (side === 0 ? y0 < FIELD_H - DEPLOY_D : y1 > DEPLOY_D) return 'Only in your own deploy zone';
@@ -210,10 +211,10 @@ export class TugGame {
   }
   /** A block may not land on units already standing there (any side, same layer: ground or air), measured with the
    *  sim's own collision circles: dropped inside them it would only be shoved out through them. */
-  overlapError(side: Side, d: Design, x: number, y: number, rot = false): string | null {
+  overlapError(side: Side, d: Design, x: number, y: number, rot = false, spacing = 0): string | null {
     const st = computeStats(d);
     const r = hullK(st.size) * Math.sqrt(st.fw * st.fh);
-    const cs = blockCenters(side, d, x, y, rot);
+    const cs = blockCenters(side, d, x, y, rot, spacing);
     for (const u of this.battle.units) {
       if (!u.alive || u.flying !== st.flying) continue;
       const lim = (r + this.battle.radiusOf(u.id)) * 0.95;
@@ -239,7 +240,8 @@ export class TugGame {
         if (S.gold < st.cost) return 'Not enough gold';
         if (this.aliveCount(side) + st.squad > TUG.maxAlive) return 'Too many units on the field';
         if (!Number.isFinite(cmd.x) || !Number.isFinite(cmd.y)) return 'Bad position';
-        return dropError(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1) ?? this.overlapError(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1);
+        const r = !!cmd.rot && st.squad > 1, sp = normSpacing(st, cmd.spacing);
+        return dropError(side, d, cmd.x, cmd.y, r, sp) ?? this.overlapError(side, d, cmd.x, cmd.y, r, sp);
       }
       case 'income':
         if (S.incomeLvl >= TUG.maxIncomeLevel) return 'Income is maxed';
@@ -274,7 +276,7 @@ export class TugGame {
         S.spent += st.cost;
         S.bought++;
         S.ready[d.id] = this.battle.tick + Math.round(TUG.buyCooldown * TICK_RATE);
-        const ids = this.battle.spawnBlock(side, this.uid++, d, 1, blockCenters(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1), TUG.spawnFreeze);
+        const ids = this.battle.spawnBlock(side, this.uid++, d, 1, blockCenters(side, d, cmd.x, cmd.y, !!cmd.rot && st.squad > 1, normSpacing(st, cmd.spacing)), TUG.spawnFreeze);
         this.spawns.push({ side, ids, until: this.battle.tick + Math.round(TUG.spawnFreeze * TICK_RATE) });
         break;
       }
@@ -328,7 +330,8 @@ export function sanitizeCommand(raw: unknown): TugCommand | null {
   if (c.t === 'income' || c.t === 'tier' || c.t === 'surrender') return { t: c.t };
   if (c.t === 'castleGun' && typeof c.moduleId === 'string' && c.moduleId.length <= 64) return { t: 'castleGun', moduleId: c.moduleId };
   if (c.t === 'buy' && typeof c.designId === 'string' && c.designId.length <= 64 && typeof c.x === 'number' && typeof c.y === 'number' && Number.isFinite(c.x) && Number.isFinite(c.y)) {
-    return { t: 'buy', designId: c.designId, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100, ...(c.rot === true ? { rot: true } : {}) };
+    const sp = typeof c.spacing === 'number' && Number.isInteger(c.spacing) && c.spacing > 0 && c.spacing <= MAX_SPACING ? c.spacing : 0;
+    return { t: 'buy', designId: c.designId, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100, ...(c.rot === true ? { rot: true } : {}), ...(sp ? { spacing: sp } : {}) };
   }
   return null;
 }
