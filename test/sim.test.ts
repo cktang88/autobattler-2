@@ -744,7 +744,8 @@ test('focus: units join the target their neighbours already shoot', () => {
 
 test('stance holdPos: never moves but still fires', () => {
   const run = (stance?: 'holdPos') => {
-    const b = new Battle(input(2, [{ ...P('gunner', 10, 0), stance }], [P('brawler', 10, 0)]));
+    // (kite off: kiting by default would back the advancing gunner off the brawler again)
+    const b = new Battle(input(2, [{ ...P('gunner', 10, 0), stance, kite: false }], [P('brawler', 10, 0)]));
     const x0 = b.units[0].x, y0 = b.units[0].y;
     for (let i = 0; i < 400 && !b.done; i++) b.step();
     return { moved: Math.hypot(b.units[0].x - x0, b.units[0].y - y0), dealt: b.summary().damageDealt[0] };
@@ -1039,9 +1040,9 @@ test('default orders: kite / focus derived from the design; unset placements use
   const des = (id: string) => DESIGNS.find((d) => d.id === id)!;
   const want: Record<string, [boolean, boolean]> = {
     sniperw: [true, true], arty: [true, true], mortartruck: [true, true], // long guns: kite + focus
-    bulwark: [false, true], gunner: [false, true], buggy: [false, true], // frontline-range guns: focus only
+    bulwark: [true, true], gunner: [true, true], buggy: [true, true], // every ranged ground unit kites by default
     brawler: [false, false], // melee: neither
-    torch: [false, true], sonic: [false, true], // the flamer (5 cells) and sonic pulser (5.5) now reach focus range: focus only
+    torch: [true, true], sonic: [true, true], // the flamer (5 cells) and sonic pulser (5.5) too
     spire: [false, true], hornet: [false, true], // static / flying: never kite by default
   };
   for (const [id, [kite, focus]] of Object.entries(want)) assert.deepEqual(defaultOrders(des(id)), { kite, focus }, id);
@@ -1051,7 +1052,7 @@ test('default orders: kite / focus derived from the design; unset placements use
   assert.deepEqual([unset.kite, unset.focus], [true, true]);
   const off = mk({ ...P('sniperw', 10, 0), kite: false, focus: false }).ints[0];
   assert.deepEqual([off.kite, off.focus], [false, false]);
-  const on = mk({ ...P('bulwark', 10, 0), kite: true }).ints[0];
+  const on = mk({ ...P('hornet', 10, 0), kite: true }).ints[0]; // a flyer: off by default, on when asked
   assert.deepEqual([on.kite, on.focus], [true, true]);
 });
 
