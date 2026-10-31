@@ -636,15 +636,16 @@ test('AI pool: reports are validated, deduped, re-simulated; one good report put
   assert.ok(onTrial().length >= 1, 'on trial after one report');
   assert.ok(onTrial().every((e) => e.origin === 'adopted' && e.creator === 'Reporter A' && !STARTER_DESIGNS.some((d) => d.name === e.design.name)));
   assert.equal(srv.store.aiPool.pool.entries.filter((e) => playerKeys.has(poolKey(e.design))).length, 0, 'not in the tested tier yet');
-  // a tampered result fails re-simulation: rejected, nothing learned
+  // a tampered result is counted as mismatched but still learned from (scored from the server's own simulation)
   const fake = structuredClone(m);
   fake.id = 'local-test-fake';
   const loser = fake.history[0].result.winner === 0 ? 1 : 0;
   fake.history[0].result.damage[loser] += 1;
-  const rejected = srv.store.aiPool.rejected;
+  const rejected = srv.store.aiPool.rejected, reports = srv.store.aiPool.reports;
   assert.equal((await send(fake, A.token)).status, 200);
   await srv.api.aiPool.drain();
   assert.equal(srv.store.aiPool.rejected, rejected + 1);
+  assert.equal(srv.store.aiPool.reports, reports + 1, 'learned from anyway');
   // the public log: tiers, origins, events; nothing about reporters
   const lr = await fetch(base + '/api/aipool/log');
   assert.equal(lr.status, 200);
