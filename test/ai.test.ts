@@ -8,6 +8,7 @@ import type { MatchState, Placement } from '../src/shared/types.ts';
 import { deployRole, formationDelays } from '../src/shared/smartdeploy.ts';
 import { START_DELAYS } from '../src/shared/types.ts';
 import { STARTER_DESIGNS } from '../src/shared/starters.ts';
+import { inWorker } from './support/pool.ts';
 
 test('aiDeck is valid, deterministic and covers roles', () => {
   for (const diff of ['easy', 'normal', 'hard'] as AiDifficulty[]) {
@@ -24,25 +25,28 @@ test('aiDeck is valid, deterministic and covers roles', () => {
   }
 });
 
-export function playMatch(seed: number, a: AiDifficulty, b: AiDifficulty): MatchState {
-  const m = newMatch(`t${seed}`, 'ai', seed, newPlayer('A', aiDeck(seed * 2 + 1, a), true), newPlayer('B', aiDeck(seed * 2 + 2, b), true));
-  let guard = 0;
-  while (m.status === 'deploy' && guard++ < 50) {
-    for (const side of [0, 1] as const) {
-      const act = aiDeploy(m, side, side === 0 ? a : b);
-      const err = validateDeploy(m, side, act);
-      assert.equal(err, null, `round ${m.round} side ${side}: ${err}`);
-      applyDeploy(m, side, act);
-    }
-    resolveRound(m);
-  }
-  return m;
-}
+// every full match the tests below play, started at once on worker threads (one core each) instead of one by one
+const MATCH = new URL('./support/aimatch.ts', import.meta.url);
+const started = new Map<string, Promise<MatchState>>();
+const playMatch = (seed: number, a: AiDifficulty, b: AiDifficulty) => {
+  const k = `${seed}:${a}:${b}`;
+  if (!started.has(k)) started.set(k, inWorker<MatchState>(MATCH, 'playMatch', seed, a, b));
+  return started.get(k)!;
+};
+const plays = (specs: [number, AiDifficulty, AiDifficulty][]) => Promise.all(specs.map(([s, a, b]) => playMatch(s, a, b)));
+const range = (from: number, n: number) => Array.from({ length: n }, (_, i) => from + i);
+const M = {
+  complete: plays([[100, 'easy', 'normal'], [101, 'normal', 'hard'], [102, 'hard', 'easy']]),
+  boards: plays(range(200, 4).map((s) => [s, 'normal', 'hard'])),
+  fast: playMatch(300, 'hard', 'normal'),
+  settings: plays(range(400, 6).map((s) => [s, 'hard', 'normal'])),
+  rounds: plays(range(600, 5).map((s) => [s, 'normal', 'normal'])),
+  formation: plays([3, 7].map((s) => [s, 'normal', 'normal'])),
+};
+for (const p of Object.values(M)) (p as Promise<unknown>).catch(() => {}); // a failure is reported by its own test
 
-test('AI vs AI matches complete with valid deployments', () => {
-  const pairs: [AiDifficulty, AiDifficulty][] = [['easy', 'normal'], ['normal', 'hard'], ['hard', 'easy']];
-  pairs.forEach(([a, b], i) => {
-    const m = playMatch(100 + i, a, b);
+test('AI vs AI matches complete with valid deployments', async () => {
+  (await M.complete).forEach((m) => {
     assert.equal(m.status, 'done');
     assert.ok(m.winner !== undefined);
     // AIs actually spend: after round 1 both have units
@@ -79,10 +83,9 @@ function checkBoard(m: MatchState, side: 0 | 1, board: Placement[]) {
   assert.ok(units <= MAX_SIM_UNITS);
 }
 
-test('AI boards are valid blocks; squads get spacing; matches last about 5-8 rounds', () => {
+test('AI boards are valid blocks; squads get spacing; matches last about 5-8 rounds', async () => {
   let rounds = 0, spaced = 0, squads = 0, n = 0;
-  for (let i = 0; i < 4; i++) {
-    const m = playMatch(200 + i, 'normal', 'hard');
+  for (const m of await M.boards) {
     rounds += m.history.length; n++;
     for (const r of m.history) for (const side of [0, 1] as const) {
       checkBoard(m, side, r.boards[side]);
@@ -97,19 +100,19 @@ test('AI boards are valid blocks; squads get spacing; matches last about 5-8 rou
   assert.ok(avg >= 4 && avg <= 9.5, `avg rounds ${avg}`);
 });
 
-test('hard AI decision stays fast (<1.5s)', () => {
-  const m = playMatch(300, 'hard', 'normal');
+test('hard AI decision stays fast (<1.5s)', async () => {
+  const m = await M.fast;
   assert.equal(m.status, 'done');
+  await Promise.allSettled(Object.values(M)); // time the decision with the match workers idle, not fighting them for cores
   const mm = newMatch('x', 'ai', 5, newPlayer('A', aiDeck(5, 'hard'), true), newPlayer('B', aiDeck(6, 'hard'), true));
   const t = performance.now();
   aiDeploy(mm, 0, 'hard');
   assert.ok(performance.now() - t < 1500);
 });
 
-test('AI uses the new battle settings sensibly and keeps them valid', () => {
+test('AI uses the new battle settings sensibly and keeps them valid', async () => {
   const seen = { stance: new Set<string>(), target: new Set<string>(), delay: 0, retreat: 0, focus: 0, escort: 0 };
-  for (let i = 0; i < 6; i++) {
-    const m = playMatch(400 + i, 'hard', 'normal');
+  for (const m of await M.settings) {
     for (const r of m.history) for (const side of [0, 1] as const) {
       const uids = new Set(r.boards[side].map((p) => p.uid));
       const byId = new Map(m.players[side].deck.map((d) => [d.id, d] as const));
@@ -143,10 +146,9 @@ test('AI never hands the opponent an exploitable view: redacted deck has no beha
   for (const d of v.players[1].deck) assert.equal(d.behavior, undefined);
 });
 
-test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 2/4/8/16-unit squad deployments', () => {
+test('AI vs AI matches last about 5-8 rounds with valid, in-zone, 2/4/8/16-unit squad deployments', async () => {
   const lens: number[] = [];
-  for (let i = 0; i < 5; i++) {
-    const m = playMatch(600 + i, 'normal', 'normal');
+  for (const m of await M.rounds) {
     lens.push(m.history.length);
     for (const r of m.history) for (const side of [0, 1] as const) checkBoard(m, side, r.boards[side]);
   }
@@ -193,12 +195,12 @@ test('hard AI mid-match decision with big armies stays under 1.5s (on a laptop)'
   assert.ok(ms < 1500 * slow, `took ${ms}ms (machine ${slow.toFixed(2)}x a laptop)`);
 });
 
-test('normal / hard AI: decks carry chaff clear; every round lays out in the smart formation', () => {
+test('normal / hard AI: decks carry chaff clear; every round lays out in the smart formation', async () => {
   let riotDecks = 0;
   for (let seed = 1; seed <= 20; seed++) if (aiDeck(seed, 'normal').some((d) => deployRole(d) === 'riot')) riotDecks++;
   assert.ok(riotDecks >= 18, `chaff clear in ${riotDecks}/20 decks`);
-  for (const seed of [3, 7]) {
-    const m = playMatch(seed, 'normal', 'normal');
+  for (const [i, m] of (await M.formation).entries()) {
+    const seed = [3, 7][i];
     for (const rec of m.history) for (const side of [0, 1] as const) {
       const deck = m.players[side].deck, byId = new Map(deck.map((d) => [d.id, d] as const));
       const board = rec.boards[side];
