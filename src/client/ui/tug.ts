@@ -492,7 +492,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
           h('b', null, String(Math.round(dps))), ' dps',
           m.targetsAir && (m.airBonus ?? 1) > 1 ? h('span.air', null, ` · ${Math.round(air)} vs air`) : null),
         tags.length ? h('span.gunshop-tags', null, tags.join(' · ')) : null,
-        h('span.gunshop-price.gold', null, `${price}g`)) as HTMLButtonElement;
+        h('span.gunshop-price.gold', null, `${price}g`), h('span.gunshop-need')) as HTMLButtonElement;
       rows.push({ b, m, price, dps, air, range });
     }
     const SORTS: Record<GunSort, (a: (typeof rows)[number], b: (typeof rows)[number]) => number> = {
@@ -542,6 +542,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
         r.b.classList.toggle('poor', !on && r.price > gold);
         r.b.disabled = on;
         r.b.title = on ? 'Equipped' : r.price > gold ? `Need ${Math.ceil(r.price - gold)}g more` : `Buy for ${r.price}g`;
+        r.b.querySelector('.gunshop-need')!.textContent = !on && r.price > gold ? `need ${Math.ceil(r.price - gold)}g more` : '';
       }
       if (gunFilter.afford) relist();
     };

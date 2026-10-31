@@ -99,7 +99,9 @@
 button.gunshop-card { clip-path: none; flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; min-height: 0; text-transform: none; letter-spacing: 0; text-align: center; background: var(--bg2); border-color: var(--line); }
 button.gunshop-card.on { border-color: var(--accent); background: rgba(46, 211, 192, 0.1); opacity: 1; }
 button.gunshop-card.on .gunshop-price::after { content: ' · equipped'; color: var(--accent); }
-button.gunshop-card.poor { opacity: 0.5; }
+/* can't afford it yet: stays fully visible (only filters hide guns), the price turns red with the gold still needed */
+button.gunshop-card.poor .gunshop-price { color: var(--bad); }
+button.gunshop-card .gunshop-need { font-size: 0.75rem; color: var(--bad); }
 .gunshop-icon { width: 48px; height: 48px; align-self: center; }
 .gunshop-name { font-family: var(--font-head); font-weight: 600; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .gunshop-stats { font-family: var(--font-body); font-weight: 400; font-size: 0.8rem; color: var(--muted); }
