@@ -52,7 +52,7 @@ export const TUG = {
 export const incomeCost = (lvl: number): number => 150 + 125 * lvl;
 /** price to unlock hull tier `size` (the unlock skips sizes the roster has no design of: TugGame.nextTier). Giants and
  *  titans unlock cheaply (was 900 / 1600): the units themselves are already dear. */
-export const TIER_COST: Record<Size, number> = { 1: 0, 2: 0, 3: 400, 4: 450, 5: 800 };
+export const TIER_COST: Record<Size, number> = { 1: 0, 2: 0, 3: 200, 4: 300, 5: 400 };
 export const incomeRate = (lvl: number): number => TUG.baseIncome + TUG.incomeStep * lvl;
 export const TIER_NAMES: Record<Size, string> = { 1: 'Light', 2: 'Medium', 3: 'Heavy', 4: 'Giant', 5: 'Titan' };
 
