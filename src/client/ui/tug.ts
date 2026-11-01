@@ -1080,7 +1080,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   /** the swing to our deploy zone when a card is picked: quicker (the player is waiting to drop) */
   const DEPLOY_PAN_T = 0.35, DEPLOY_PAN_MAX = 2.2;
   /** tightest framing: cells across the field and along it (the field is 48 x 115) */
-  const MIN_HW = DESKTOP ? 20 : 13, MIN_HH = DESKTOP ? 30 : 17;
+  const MIN_HW = DESKTOP ? 16 : 13, MIN_HH = DESKTOP ? 23 : 17;
   let camSel = -1;
   /** performance.now() until which the camera holds our deploy zone (Infinity while a card is picked and not dropped yet) */
   let deployUntil = 0;
@@ -1129,7 +1129,22 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     px.sort((a, b) => a - b); py.sort((a, b) => a - b);
     // the bulk: with 6+, the outer 12% each way (a lone runner, a jet looping wide) is left out
     const cut = px.length >= 6 ? Math.floor(px.length * 0.12) : 0, hi = px.length - 1 - cut;
-    return [px[cut], py[cut], px[hi], py[hi]];
+    const b: [number, number, number, number] = [px[cut], py[cut], px[hi], py[hi]];
+    // the enemy closest to our castle is always in it, however far ahead of the rest
+    const l = leadFoe();
+    if (l) { b[0] = Math.min(b[0], l.x); b[1] = Math.min(b[1], l.y); b[2] = Math.max(b[2], l.x); b[3] = Math.max(b[3], l.y); }
+    return b;
+  };
+  /** the (visible) enemy unit closest to our castle: the threat, always kept in frame */
+  const leadFoe = (): { x: number; y: number } | null => {
+    const c = castlePos(me), castles = g.castles;
+    let best: { x: number; y: number } | null = null, bd = Infinity;
+    for (const u of g.battle.units) {
+      if (!u.alive || u.side !== foe || castles.includes(u.id) || (u as { cloaked?: boolean }).cloaked) continue;
+      const d = Math.hypot(u.x - c.x, u.y - c.y);
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
   };
   /** framing [cx, cy, ln hw, ln hh] around a world box, padded, never tighter than MIN_HW x MIN_HH, kept on the field */
   const framing = (b: [number, number, number, number], padX: number, padY: number): number[] => {
@@ -1181,11 +1196,13 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       const z = dropZone(me), ref = aim ?? cam;
       const near = ref ? Math.abs(z.y0 - ref[1]) < Math.abs(z.y1 - ref[1]) : true;
       const band: [number, number, number, number] = near ? [z.x0, z.y0, z.x1, Math.min(z.y1, z.y0 + DEPLOY_BAND)] : [z.x0, Math.max(z.y0, z.y1 - DEPLOY_BAND), z.x1, z.y1];
-      want = ref ? reveal(ref, band) : framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
+      const l = leadFoe(), base = ref && l ? reveal(ref, [l.x - 2, l.y - 2, l.x + 2, l.y + 2]) : ref;
+      want = base ? reveal(base, band) : framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
     } else if (now < peekUntil) {
       // the new enemy units, brought in at the screen's edge
       const ref = aim ?? cam;
-      want = ref ? reveal(ref, peekBox) : framing(peekBox, 2, 4); commit = true;
+      const l = leadFoe(), base = ref && l ? reveal(ref, [l.x - 2, l.y - 2, l.x + 2, l.y + 2]) : ref;
+      want = base ? reveal(base, peekBox) : framing(peekBox, 2, 4); commit = true;
     } else {
       want = framing(fightBox(), 6, 8);
       // artillery firing (a muzzle flash on a gun with a target): a short nudge toward the guns, then back
@@ -1202,6 +1219,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
         want = [...want];
         want[0] += Math.max(-limX, Math.min(limX, (artyX - want[0]) * ARTY_SHARE));
         want[1] += Math.max(-lim, Math.min(lim, (artyY - want[1]) * ARTY_SHARE));
+        const l = leadFoe();
+        if (l) want = reveal(want, [l.x - 2, l.y - 2, l.x + 2, l.y + 2]); // never at the cost of the leading enemy
         aim = want; // the nudge itself skips the dead zone
         artyOn = true;
       }
@@ -1212,7 +1231,9 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (now >= artyUntil) artyOn = false;
       if (aim && !commit) {
         const hw = Math.exp(aim[2]), hh = Math.exp(aim[3]);
-        commit = Math.abs(want[0] - aim[0]) > hw * DEAD || Math.abs(want[1] - aim[1]) > hh * DEAD
+        const l = leadFoe();
+        commit = (!!l && (Math.abs(l.x - aim[0]) > hw - REVEAL_M || Math.abs(l.y - aim[1]) > hh - REVEAL_M))
+          || Math.abs(want[0] - aim[0]) > hw * DEAD || Math.abs(want[1] - aim[1]) > hh * DEAD
           || want[2] > aim[2] + 0.05 || want[3] > aim[3] + 0.05 || want[2] < aim[2] - 0.3 || want[3] < aim[3] - 0.3;
       }
     }
