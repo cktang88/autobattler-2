@@ -144,3 +144,7 @@ button.gunshop-card .gunshop-need { font-size: 0.75rem; color: var(--bad); }
   .gunshop-tags, button.gunshop-card .gunshop-need { font-size: 0.68rem; }
   .gunshop-hits .sc-chip { font-size: 0.66rem; }
 }
+/* a clicked unit's pinned card: takes clicks (its close button, scrolling), and on a phone stays within the field */
+.tug-field .stat-tip.pinned { pointer-events: auto; }
+.tug-field .stat-tip.pinned .sc-head { padding-right: 44px; }
+@media (max-width: 700px), (max-height: 560px) { .tug-field .stat-tip.pinned { max-height: 58%; overflow-y: auto; } }

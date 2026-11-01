@@ -787,11 +787,23 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   let tipId = -1, tipT = 0;
   /** the picked card when the unit card was last checked (see the frame loop) */
   let tipSel = -1;
-  function hideTip(): void { tipEl?.remove(); tipEl = null; tipId = -1; }
+  // a press anywhere outside the card closes it; on the field itself the click decides (another unit opens its
+  // card, empty ground closes it), so field presses are left to the canvas' pointerup
+  const tipOutside = (e: PointerEvent) => {
+    if (tipEl && !tipEl.contains(e.target as Node) && e.target !== canvas) hideTip();
+  };
+  function hideTip(): void {
+    tipEl?.remove(); tipEl = null; tipId = -1;
+    document.removeEventListener('pointerdown', tipOutside, true);
+  }
   function showLiveTip(u: SimUnit, at: { x: number; y: number }): void {
     hideTip();
     const mine = u.side === me;
     tipEl = tipFor(u.design, u.stats, u.level, mine ? 'Yours' : 'Enemy', mine, normSpacing(u.stats, undefined), undefined, liveLine(g.battle, u));
+    // pinned card: clickable, with a close button (on a phone it covers much of the field)
+    tipEl.classList.add('pinned');
+    tipEl.prepend(h('button.icon.small.ghost.close', { type: 'button', 'aria-label': 'Close', onclick: () => hideTip() }, '✕'));
+    document.addEventListener('pointerdown', tipOutside, true);
     fieldwrap.append(tipEl);
     tipId = u.id;
     placeTipAt(tipEl, fieldwrap, at, { w: tipEl.offsetWidth, h: tipEl.offsetHeight });
@@ -1165,7 +1177,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     destroy() {
       destroyed = true;
       shop?.close();
-      hideCardSheet(); hideCardHover();
+      hideCardSheet(); hideCardHover(); hideTip();
       setField(STANDARD_FIELD); // TugGame switched to the tug field; every other screen plays on the standard one
       abort.abort();
       cancelAnimationFrame(raf);
