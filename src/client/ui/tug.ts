@@ -1135,6 +1135,37 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if (l) { b[0] = Math.min(b[0], l.x); b[1] = Math.min(b[1], l.y); b[2] = Math.max(b[2], l.x); b[3] = Math.max(b[3], l.y); }
     return b;
   };
+  /** cells: the leading enemy and our nearest unit (or castle) this close = in contact; how far ahead of an enemy that
+   *  is still far from anything of ours the view looks */
+  const CONTACT = 14, LOOK = 30;
+  /** the fight, ready for what's coming: until the leading enemy meets our line, frame it together with where it is
+   *  heading (our nearest unit, else our castle; at most LOOK cells ahead), so it sits in the far part of the view
+   *  with room in front instead of being chased along the screen's edge */
+  /** our castle's hp a moment ago, and until when it counts as under fire (ms) */
+  let castleHp = -1, castleHitUntil = 0;
+  const approachBox = (): [number, number, number, number] => {
+    const b = fightBox(), l = leadFoe();
+    // our castle under fire (from guns that may be out of frame): it joins the shot for a few seconds
+    const cu = g.battle.units.find((u) => g.castles.includes(u.id) && u.side === me);
+    if (cu) {
+      const now = performance.now();
+      if (castleHp >= 0 && !g.overtime && cu.hp < castleHp - 0.5) castleHitUntil = now + 3000; // (overtime decay isn't fire)
+      castleHp = cu.hp;
+      if (now < castleHitUntil) { b[0] = Math.min(b[0], cu.x); b[1] = Math.min(b[1], cu.y); b[2] = Math.max(b[2], cu.x); b[3] = Math.max(b[3], cu.y); }
+    }
+    if (!l) return b;
+    const castles = g.castles;
+    let m: { x: number; y: number } = castlePos(me), md = Math.hypot(l.x - m.x, l.y - m.y);
+    for (const u of g.battle.units) {
+      if (!u.alive || u.side !== me || castles.includes(u.id)) continue;
+      const d = Math.hypot(u.x - l.x, u.y - l.y);
+      if (d < md) { md = d; m = u; }
+    }
+    if (md <= CONTACT) return b;
+    // where it's heading, no further than LOOK cells ahead
+    const k = Math.min(1, LOOK / md), tx = l.x + (m.x - l.x) * k, ty = l.y + (m.y - l.y) * k;
+    return [Math.min(b[0], tx), Math.min(b[1], ty), Math.max(b[2], tx), Math.max(b[3], ty)];
+  };
   /** the (visible) enemy unit closest to our castle: the threat, always kept in frame */
   const leadFoe = (): { x: number; y: number } | null => {
     const c = castlePos(me), castles = g.castles;
@@ -1204,7 +1235,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       const l = leadFoe(), base = ref && l ? reveal(ref, [l.x - 2, l.y - 2, l.x + 2, l.y + 2]) : ref;
       want = base ? reveal(base, peekBox) : framing(peekBox, 2, 4); commit = true;
     } else {
-      want = framing(fightBox(), 6, 8);
+      want = framing(approachBox(), 6, 8);
       // artillery firing (a muzzle flash on a gun with a target): a short nudge toward the guns, then back
       if (now >= artyUntil && now - artyAt > ARTY_GAP) {
         let n = 0, sx = 0, sy = 0;
@@ -1232,7 +1263,10 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (aim && !commit) {
         const hw = Math.exp(aim[2]), hh = Math.exp(aim[3]);
         const l = leadFoe();
-        commit = (!!l && (Math.abs(l.x - aim[0]) > hw - REVEAL_M || Math.abs(l.y - aim[1]) > hh - REVEAL_M))
+        // the leading enemy past 70% of the way to the view's edge: re-aim (ahead of it, see approachBox) before it gets there
+        // (it is framed in the far part on purpose: behind it, only leaving the view counts)
+        const ahead = l ? Math.sign(castlePos(me).y - l.y) * (l.y - aim[1]) : 0;
+        commit = (!!l && (Math.abs(l.x - aim[0]) > hw * 0.7 || ahead > hh * 0.7 || Math.abs(l.y - aim[1]) > hh - REVEAL_M))
           || Math.abs(want[0] - aim[0]) > hw * DEAD || Math.abs(want[1] - aim[1]) > hh * DEAD
           || want[2] > aim[2] + 0.05 || want[3] > aim[3] + 0.05 || want[2] < aim[2] - 0.3 || want[3] < aim[3] - 0.3;
       }
