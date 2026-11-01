@@ -1045,8 +1045,9 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   // overshoots), with capped pan / zoom speeds, and a dead zone: it only re-aims when the fight drifts well off centre
   // or needs a clearly different zoom, so it doesn't sway with every unit's step. Zoom runs in log space, slower than pan.
   const AUTO_CAM = window.matchMedia('(max-width: 760px), (hover: none)').matches && loadSettings().autoCam !== false;
-  /** seconds the view stays on the deploy zone after a drop before it heads back to the fight */
-  const DEPLOY_HOLD = 3;
+  /** seconds the view stays on the deploy zone after a drop before it heads back to the fight (the card may stay
+   *  picked: picking a card again, or another one, brings it back) */
+  const DEPLOY_HOLD = 2;
   /** ms after the player's last pan / zoom before the camera takes over again */
   const USER_PAUSE = 4000;
   /** enemy deploy glance: how long it lasts, and the least time between two (ms) */
