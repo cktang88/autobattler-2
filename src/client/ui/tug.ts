@@ -1037,14 +1037,14 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   let raf = 0, last = performance.now(), acc = 0, hudT = 0, ended = false;
   view.fit(true);
   const fps = createFpsMeter(fieldwrap);
-  // ---- phone camera: a phone shows only part of the long field, so the view follows the fighting by itself; picking a
+  // ---- auto camera (phone and desktop): the view shows only part of the long field, so the view follows the fighting by itself; picking a
   // card swings it to our deploy zone, and a while after the last drop it goes back to the fight; now and then it
   // glances at the enemy's deploy zone when they drop new units. The player's own pan / zoom pauses it for a few
   // seconds. (Settings > Auto battle camera turns it off.)
   // Comfort (motion sickness): the framing moves on a critically damped spring (starts from rest, eases out, never
   // overshoots), with capped pan / zoom speeds, and a dead zone: it only re-aims when the fight drifts well off centre
   // or needs a clearly different zoom, so it doesn't sway with every unit's step. Zoom runs in log space, slower than pan.
-  const AUTO_CAM = window.matchMedia('(max-width: 760px), (hover: none)').matches && loadSettings().autoCam !== false;
+  const AUTO_CAM = loadSettings().autoCam !== false;
   /** seconds the view stays on the deploy zone after a drop before it heads back to the fight (the card may stay
    *  picked: picking a card again, or another one, brings it back) */
   const DEPLOY_HOLD = 2;
@@ -1054,6 +1054,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   const PEEK_MS = 2200, PEEK_GAP = 20000;
   /** spring times (s) and speed caps: pan in view-heights per second, zoom in e-folds per second */
   const PAN_T = 0.9, ZOOM_T = 1.3, PAN_MAX = 0.55, ZOOM_MAX = 0.45;
+  /** the swing to our deploy zone when a card is picked: quicker (the player is waiting to drop) */
+  const DEPLOY_PAN_T = 0.35, DEPLOY_PAN_MAX = 2.2;
   /** tightest framing: cells across the field and along it (the field is 48 x 115) */
   const MIN_HW = 13, MIN_HH = 17;
   let camSel = -1;
@@ -1197,9 +1199,10 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       cam = [...aim]; camV.fill(0);
       try { const w = view.screenToWorld(canvas.clientWidth / 2, canvas.clientHeight / 2); cam[0] = w.x; cam[1] = w.y; } catch { /* */ }
     }
-    const span = Math.exp(cam[3]) * 2;
-    cam[0] = smoothDamp(cam[0], aim[0], 0, PAN_T, PAN_MAX * span, dt);
-    cam[1] = smoothDamp(cam[1], aim[1], 1, PAN_T, PAN_MAX * span, dt);
+    const span = Math.exp(cam[3]) * 2, fast = now < deployUntil;
+    const pt = fast ? DEPLOY_PAN_T : PAN_T, pm = (fast ? DEPLOY_PAN_MAX : PAN_MAX) * span;
+    cam[0] = smoothDamp(cam[0], aim[0], 0, pt, pm, dt);
+    cam[1] = smoothDamp(cam[1], aim[1], 1, pt, pm, dt);
     cam[2] = smoothDamp(cam[2], aim[2], 2, ZOOM_T, ZOOM_MAX, dt);
     cam[3] = smoothDamp(cam[3], aim[3], 3, ZOOM_T, ZOOM_MAX, dt);
     // frameWorldBox adds a 6-cell margin round the box: take it off so the framing is the one asked for
