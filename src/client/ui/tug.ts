@@ -1114,21 +1114,53 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const cy = Math.min(Math.max((b[1] + b[3]) / 2, hh - 3), FIELD_H + 3 - hh);
     return [cx, cy, Math.log(hw), Math.log(hh)];
   };
+  /** cells of our deploy zone that must come into view when deploying (the zone is 28 deep) */
+  const DEPLOY_BAND = 9;
+  /** where the new enemy units were dropped (world cells) */
+  let peekBox: [number, number, number, number] = [0, 0, 0, 0];
+  /** the least move of framing `f` (same zoom) that brings box `b` into view, `REVEAL_M` cells inside the edge; a
+   *  box wider / taller than the view on an axis only has to overlap it there */
+  const REVEAL_M = 3;
+  const reveal = (f: number[], b: [number, number, number, number]): number[] => {
+    const hw = Math.exp(f[2]), hh = Math.exp(f[3]), m = REVEAL_M;
+    const axis = (c: number, h: number, lo: number, hi: number): number => {
+      if (hi - lo > 2 * (h - m)) return Math.min(Math.max(c, lo - h + m), hi + h - m); // too big: overlap is enough
+      if (lo < c - h + m) return lo + h - m;
+      if (hi > c + h - m) return hi - h + m;
+      return c;
+    };
+    // kept on the field, like framing()
+    const cx = Math.min(Math.max(axis(f[0], hw, b[0], b[2]), hw - 3), FIELD_W + 3 - hw);
+    const cy = Math.min(Math.max(axis(f[1], hh, b[1], b[3]), hh - 3), FIELD_H + 3 - hh);
+    return [cx, cy, f[2], f[3]];
+  };
   const updateCam = (now: number, dt: number) => {
     if (!AUTO_CAM) return;
     if (sel !== camSel) { deployUntil = sel >= 0 ? Infinity : Math.min(deployUntil, now + 600); camSel = sel; }
     // new enemy units: glance at their deploy zone (not while we're deploying, and not too often)
-    let foeNew = false;
-    for (const u of g.battle.units) if (u.side === foe && !seenFoe.has(u.id)) { seenFoe.add(u.id); if (!g.castles.includes(u.id)) foeNew = true; }
-    if (foeNew && now >= deployUntil && now - peekAt > PEEK_GAP && cam) { peekAt = now; peekUntil = now + PEEK_MS; }
+    const nb = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const u of g.battle.units) {
+      if (u.side !== foe || seenFoe.has(u.id)) continue;
+      seenFoe.add(u.id);
+      if (g.castles.includes(u.id)) continue;
+      nb[0] = Math.min(nb[0], u.x); nb[1] = Math.min(nb[1], u.y); nb[2] = Math.max(nb[2], u.x); nb[3] = Math.max(nb[3], u.y);
+    }
+    if (nb[0] <= nb[2] && now >= deployUntil && now - peekAt > PEEK_GAP && cam) {
+      peekAt = now; peekUntil = now + PEEK_MS;
+      peekBox = [nb[0] - 3, nb[1] - 3, nb[2] + 3, nb[3] + 3];
+    }
     if (view.cam.userAt > camUserAt && now - view.cam.userAt < USER_PAUSE) { cam = null; return; }
     let want: number[], commit: boolean;
     if (now < deployUntil) {
-      const z = dropZone(me);
-      want = framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
+      // our deploy zone: just the strip of it nearest the view, brought in at the screen's edge
+      const z = dropZone(me), ref = aim ?? cam;
+      const near = ref ? Math.abs(z.y0 - ref[1]) < Math.abs(z.y1 - ref[1]) : true;
+      const band: [number, number, number, number] = near ? [z.x0, z.y0, z.x1, Math.min(z.y1, z.y0 + DEPLOY_BAND)] : [z.x0, Math.max(z.y0, z.y1 - DEPLOY_BAND), z.x1, z.y1];
+      want = ref ? reveal(ref, band) : framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
     } else if (now < peekUntil) {
-      const z = dropZone(foe);
-      want = framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
+      // the new enemy units, brought in at the screen's edge
+      const ref = aim ?? cam;
+      want = ref ? reveal(ref, peekBox) : framing(peekBox, 2, 4); commit = true;
     } else {
       want = framing(fightBox(), 6, 8);
       // artillery firing (a muzzle flash on a gun with a target): a short nudge toward the guns, then back
