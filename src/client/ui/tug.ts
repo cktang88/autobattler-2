@@ -1078,15 +1078,25 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if ((target - cur > 0) === (out > target)) { out = target; camV[i] = 0; }
     return out;
   };
-  /** the units in combat (a gun on a target), else everyone out; their bulk, with stragglers trimmed */
+  /** long-range artillery (cells; 22 = 110 m): it fights from far behind the line, so it isn't framed with the
+   *  frontline; when it fires, the camera only nudges toward it for a moment (ARTY_NUDGE) */
+  const ARTY_RANGE = 22;
+  /** arty glance: how long it holds (ms), the least time between two (ms), how far toward the guns (fraction of the gap,
+   *  at most this share of the view's half-height) */
+  const ARTY_HOLD = 1600, ARTY_GAP = 9000, ARTY_SHARE = 0.35, ARTY_MAX = 0.5;
+  let artyUntil = 0, artyAt = -Infinity, artyX = 0, artyY = 0, artyOn = false;
+  /** the frontline in combat (a gun on a target; artillery left out), else everyone out; its bulk, stragglers trimmed */
   const fightBox = (): [number, number, number, number] => {
     const castles = new Set<number>(g.castles);
-    const xs: number[] = [], ys: number[] = [], ax: number[] = [], ay: number[] = [];
+    const xs: number[] = [], ys: number[] = [], ax: number[] = [], ay: number[] = [], rx: number[] = [], ry: number[] = [];
     for (const u of g.battle.units) {
       if (!u.alive || castles.has(u.id)) continue;
+      if (u.stats.range >= ARTY_RANGE) { rx.push(u.x); ry.push(u.y); continue; }
       ax.push(u.x); ay.push(u.y);
       if (u.mounts.some((m) => m.target >= 0)) { xs.push(u.x); ys.push(u.y); }
     }
+    // only artillery out: frame it after all
+    if (!ax.length) { ax.push(...rx); ay.push(...ry); }
     const px = xs.length >= 2 ? xs : ax, py = xs.length >= 2 ? ys : ay;
     // nobody out yet: the middle of the field
     if (!px.length) return [FIELD_W / 2, FIELD_H / 2, FIELD_W / 2, FIELD_H / 2];
@@ -1120,10 +1130,29 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       want = framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
     } else {
       want = framing(fightBox(), 6, 8);
+      // artillery firing (a muzzle flash on a gun with a target): a short nudge toward the guns, then back
+      if (now >= artyUntil && now - artyAt > ARTY_GAP) {
+        let n = 0, sx = 0, sy = 0;
+        for (const u of g.battle.units) {
+          if (!u.alive || u.stats.range < ARTY_RANGE || g.castles.includes(u.id)) continue;
+          if (u.mounts.some((m) => m.target >= 0 && m.flash > 0.5)) { n++; sx += u.x; sy += u.y; }
+        }
+        if (n) { artyAt = now; artyUntil = now + ARTY_HOLD; artyX = sx / n; artyY = sy / n; }
+      }
+      if (now < artyUntil) {
+        const lim = Math.exp(want[3]) * ARTY_MAX, limX = Math.exp(want[2]) * ARTY_MAX;
+        want = [...want];
+        want[0] += Math.max(-limX, Math.min(limX, (artyX - want[0]) * ARTY_SHARE));
+        want[1] += Math.max(-lim, Math.min(lim, (artyY - want[1]) * ARTY_SHARE));
+        aim = want; // the nudge itself skips the dead zone
+        artyOn = true;
+      }
       // dead zone: keep the current aim while the fight's centre stays in the middle 40% of it and the zoom it needs
       // is within ~30%; zooming OUT to keep the fight in view is never held back
-      commit = !aim;
-      if (aim) {
+      // the nudge just ended: straight back to the frontline
+      commit = !aim || (artyOn && now >= artyUntil);
+      if (now >= artyUntil) artyOn = false;
+      if (aim && !commit) {
         const hw = Math.exp(aim[2]), hh = Math.exp(aim[3]);
         commit = Math.abs(want[0] - aim[0]) > hw * 0.4 || Math.abs(want[1] - aim[1]) > hh * 0.4
           || want[2] > aim[2] + 0.05 || want[3] > aim[3] + 0.05 || want[2] < aim[2] - 0.3 || want[3] < aim[3] - 0.3;
