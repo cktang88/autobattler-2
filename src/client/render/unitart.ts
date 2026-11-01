@@ -1865,7 +1865,8 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   const cs = Math.cos(ang), sn = Math.sin(ang);
   let alpha = p.alpha ?? 1;
   if (p.cloak === 'own') alpha *= 0.4 + 0.08 * Math.sin(p.time * 5 + (p.seed ?? 0));
-  else if (p.cloak === 'enemy') alpha *= 0.06 + 0.05 * Math.max(0, Math.sin(p.time * 3.3 + (p.seed ?? 0)));
+  // enemy cloak: never fully invisible, a faint see-through hull that breathes (the shimmer outline below does the rest)
+  else if (p.cloak === 'enemy') alpha *= 0.14 + 0.08 * Math.max(0, Math.sin(p.time * 3.3 + (p.seed ?? 0)));
   g.globalAlpha = alpha;
 
   // hover fan wash: an actual light source (lift-fan exhaust), kept small and faint
@@ -2074,10 +2075,12 @@ export function drawUnit(g: Ctx, p: UnitPose, px: number, dirs: ViewDirs = DEFAU
   }
   if (p.cloak) {
     // refractive shimmer outline
-    g.globalAlpha = (p.cloak === 'own' ? 0.25 : 0.12) * (0.6 + 0.4 * Math.sin(p.time * 7 + (p.seed ?? 0)));
+    g.globalAlpha = (p.cloak === 'own' ? 0.25 : 0.3) * (0.6 + 0.4 * Math.sin(p.time * 7 + (p.seed ?? 0)));
     const prev = g.globalCompositeOperation;
     g.globalCompositeOperation = 'lighter';
     silAll('#9fdcff', Math.sin(p.time * 9) * 0.03, 1.02);
+    // enemy: a second, wobbling copy offset the other way, like heat haze bending the air round the hull
+    if (p.cloak === 'enemy') { g.globalAlpha *= 0.6; silAll('#cfeeff', Math.sin(p.time * 6.1 + 1.7) * -px * 0.05, 1.05); }
     g.globalCompositeOperation = prev;
   }
   // team marker at small scale: circle = friendly, diamond = enemy (shape + colour + luminance cue)

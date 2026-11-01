@@ -24,7 +24,7 @@ import { TEAM_PAL } from '../render/palette.ts';
 import { flyHeight } from '../render/tilt.ts';
 import type { BattleView } from '../render/view.ts';
 import { buildTerrain, createRenderer, setSurfaceDetail, setupPost, setupStage, type Post, type Stage } from './units-adapter.ts';
-import { UnitLayer, teamHullRgb, templateKey, type Look, type Rig } from './units-adapter.ts';
+import { UnitLayer, setShimmerTime, teamHullRgb, templateKey, type Look, type Rig } from './units-adapter.ts';
 import { Fx3D, RAMPS, SHELL_PAT, type MuzzleKind, type Ramp, type ShellLook, type TrailKind, type WispKind } from './fx3d.ts';
 import { Overlay, ShieldPool, rgb } from './ui3d.ts';
 import { UnitOutline } from './outline3d.ts';
@@ -1035,6 +1035,7 @@ export class FieldView3D implements BattleView {
     this.checkSize();
     const dt = this.time ? clamp(time - this.time, 0, 0.1) : 0;
     this.time = time;
+    setShimmerTime(time);
     if (this.battle) { this.battle = null; this.lastTick = -1; this.clearBattle(); }
     this.cam.update(dt);
     this.fx.eye.copy(this.camera.position);
@@ -1257,7 +1258,7 @@ export class FieldView3D implements BattleView {
     v.lx = x; v.ly = y; v.la = ang; v.seen = true;
     this.trackVis(u, v);
     v.posed = false;
-    if (enemyCloak || this.offscreen(x, y, rig.radius + 5)) return;
+    if (this.offscreen(x, y, rig.radius + 5)) return;
     const h = u.flying ? flyHeight(rig.S, rig.jet) + 0.4 + Math.sin(this.time * 2.1 + u.id) * 0.05 : u.leap * 1.8 * rig.S;
     rig.root.position.set(x, h, y);
     // (heavy guns rock the hull: Rig.update tilts the quaternion, so the full rotation is reset here every frame)
@@ -1308,7 +1309,9 @@ export class FieldView3D implements BattleView {
     rig.tr = tr; rig.tg = tg; rig.tb = tb;
     rig.update(dt);
     v.posed = true;
-    this.layer.submit(rig, ext.cloaked ? 'cloak' : 'normal');
+    // cloaked: our own reads as a ghost; an enemy's is a near-invisible shimmer of bent air (never fully invisible)
+    this.layer.submit(rig, enemyCloak ? 'shimmer' : ext.cloaked ? 'cloak' : 'normal');
+    if (enemyCloak) return; // no status effects (fire, frost, sparks) to give it away
 
     // status effects
     const S = rig.S;

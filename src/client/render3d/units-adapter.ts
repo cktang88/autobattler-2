@@ -28,8 +28,8 @@ export function teamHullRgb(team: 0 | 1): [number, number, number] {
   return [c.r, c.g, c.b];
 }
 
-export type Look = 'normal' | 'ghost' | 'invalid' | 'wreck' | 'cloak';
-const LOOKS: Look[] = ['normal', 'ghost', 'invalid', 'wreck', 'cloak'];
+export type Look = 'normal' | 'ghost' | 'invalid' | 'wreck' | 'cloak' | 'shimmer';
+const LOOKS: Look[] = ['normal', 'ghost', 'invalid', 'wreck', 'cloak', 'shimmer'];
 
 const lookMats: Record<Exclude<Look, 'normal'>, THREE.Material> = {
   ghost: new THREE.MeshStandardMaterial({ color: '#9fe8c0', transparent: true, opacity: 0.5, roughness: 0.6, metalness: 0.1, depthWrite: false }),
@@ -37,7 +37,30 @@ const lookMats: Record<Exclude<Look, 'normal'>, THREE.Material> = {
   // burnt-out hull: same plate seams / grime as the living paint, scorched darker
   wreck: withSurfaceDetail(new THREE.MeshStandardMaterial({ color: '#3a352f', roughness: 0.95, metalness: 0.12, envMapIntensity: 0.6 }), { det: 1, grime: 1.4 }),
   cloak: new THREE.MeshStandardMaterial({ color: '#8fb8d0', transparent: true, opacity: 0.32, roughness: 0.5, metalness: 0.1, depthWrite: false }),
+  shimmer: shimmerMat(),
 };
+
+/** an ENEMY cloaked unit: never fully invisible. A near-transparent glassy hull whose edges glow (fresnel rim, like
+ *  air bent round it) and ripple, rendered additively so it reads as distorted air rather than a solid ghost. */
+const shimmerTime = { value: 0 };
+export function setShimmerTime(t: number): void { shimmerTime.value = t; }
+function shimmerMat(): THREE.Material {
+  const m = new THREE.MeshStandardMaterial({ color: '#bfe6ff', emissive: '#4f86a8', transparent: true, opacity: 0.5, roughness: 0.2, metalness: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uShimmerT = shimmerTime;
+    sh.fragmentShader = 'uniform float uShimmerT;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      {
+        vec3 vd = normalize(vViewPosition);
+        float fr = pow(1.0 - abs(dot(vd, normalize(normal))), 2.2);
+        // ripples crawling over the hull (view space, so they slide as it moves)
+        float rip = 0.5 + 0.5 * sin(uShimmerT * 5.5 + vViewPosition.y * 1.7 + vViewPosition.x * 1.3);
+        gl_FragColor.rgb *= 0.35 + 1.4 * fr;
+        gl_FragColor.a = opacity * (0.06 + 0.55 * fr) * (0.7 + 0.3 * rip);
+      }`);
+  };
+  m.customProgramCacheKey = () => 'shimmer';
+  return m;
+}
 
 // ---- charred wrecks: each unit material gets a wreck twin running the same program (team paint, plate detail, decals)
 // with a char pass on top: desaturated, darkened, soot-black on upper surfaces and in noisy burnt patches, lamps out,
@@ -756,7 +779,7 @@ export class UnitLayer {
     let added = false;
     for (const p of [...this.pools.values()]) {
       if (p.look !== 'normal') continue;
-      for (const look of ['wreck', 'cloak'] as const) {
+      for (const look of ['wreck', 'cloak', 'shimmer'] as const) {
         const li = LOOKS.indexOf(look);
         if (p.tpl.pool[li]) continue;
         const q = new Pool(p.tpl, look, this.group);
