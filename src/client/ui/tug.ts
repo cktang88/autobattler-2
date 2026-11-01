@@ -482,7 +482,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       'aria-label': `${d.name} — ${st.cost}g, ${sizeLabel(st.size)}${st.squad > 1 ? `, squad of ${st.squad}` : ''}, ${hitsAir ? 'hits aircraft' : "can't hit aircraft"}  [${i + 1}]`,
       onclick: () => {
         if (c.dataset.lp) return; // the tap that ends a long-press opened the stat sheet: don't also pick the card
-        sfx('click'); sel = sel === i ? -1 : i; renderCards();
+        sfx('click'); hideCardHover(); sel = sel === i ? -1 : i; renderCards();
       },
     }, cv, cd, h('div.tug-unit-name', null, d.name), h('div.tug-unit-meta', null, cost, st.squad > 1 ? h('span.muted', null, ` ×${st.squad}`) : null),
     // what it can shoot, readable at a glance on a phone: AIR is struck through when it can't hit aircraft
@@ -818,7 +818,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     const ring = (r: number) => {
       octx.beginPath();
       for (let a = 0; a <= 48; a++) {
-        const p = view.worldToScreen(u.x + Math.cos((a / 48) * Math.PI * 2) * r, u.y + Math.sin((a / 48) * Math.PI * 2) * r);
+        const p = w2s(u.x + Math.cos((a / 48) * Math.PI * 2) * r, u.y + Math.sin((a / 48) * Math.PI * 2) * r);
         if (a) octx.lineTo(p.x, p.y); else octx.moveTo(p.x, p.y);
       }
       octx.closePath();
@@ -836,7 +836,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (rg.minRange > 0) { ring(rg.minRange); octx.globalAlpha = 0.22; octx.fillStyle = '#000'; octx.fill(); }
       octx.globalAlpha = 1;
       // label at the ring's far side (toward the enemy)
-      const fy = u.side === 0 ? -1 : 1, lp = view.worldToScreen(u.x, u.y + fy * rg.range);
+      const fy = u.side === 0 ? -1 : 1, lp = w2s(u.x, u.y + fy * rg.range);
       octx.font = '600 12px Barlow, system-ui, sans-serif';
       octx.textAlign = 'center';
       octx.textBaseline = 'middle';
@@ -861,8 +861,25 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
 
   // ---- overlay: drop zone, the block under the cursor, pending drops ----
   const octx = overlay.getContext('2d')!;
+  /** the ground on screen this frame (world bbox of the screen corners, padded); a rectangle is clipped to it before
+   *  being projected, so no corner lies behind the tilted 3D camera (those project to wild places: zone outlines
+   *  flailing across the board while the camera zooms in) */
+  let vis = [-1e9, -1e9, 1e9, 1e9];
+  const updateVis = () => {
+    try {
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const c = [view.screenToWorld(0, 0), view.screenToWorld(w, 0), view.screenToWorld(0, h), view.screenToWorld(w, h)];
+      if (c.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) { vis = [-1e9, -1e9, 1e9, 1e9]; return; }
+      vis = [Math.min(...c.map((p) => p.x)) - 2, Math.min(...c.map((p) => p.y)) - 2, Math.max(...c.map((p) => p.x)) + 2, Math.max(...c.map((p) => p.y)) + 2];
+    } catch { vis = [-1e9, -1e9, 1e9, 1e9]; }
+  };
+  /** world -> screen for the overlay, with the point first pulled onto the ground that's on screen (see vis) */
+  const w2s = (x: number, y: number) => view.worldToScreen(Math.min(vis[2], Math.max(vis[0], x)), Math.min(vis[3], Math.max(vis[1], y)));
   const quad = (x0: number, y0: number, x1: number, y1: number) => {
-    const p = [view.worldToScreen(x0, y0), view.worldToScreen(x1, y0), view.worldToScreen(x1, y1), view.worldToScreen(x0, y1)];
+    x0 = Math.max(x0, vis[0]); y0 = Math.max(y0, vis[1]); x1 = Math.min(x1, vis[2]); y1 = Math.min(y1, vis[3]);
+    octx.beginPath();
+    if (x0 >= x1 || y0 >= y1) return; // off screen: an empty path
+    const p = [w2s(x0, y0), w2s(x1, y0), w2s(x1, y1), w2s(x0, y1)];
     octx.beginPath();
     octx.moveTo(p[0].x, p[0].y);
     for (let i = 1; i < 4; i++) octx.lineTo(p[i].x, p[i].y);
@@ -889,7 +906,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (!n) continue;
       cx /= n; cy /= n;
       for (const id of sp.ids) { const u = g.battle.units[id]; if (u.alive) ext = Math.max(ext, Math.hypot(u.x - cx, u.y - cy) + Math.max(u.stats.fw, u.stats.fh) / 2); }
-      const c = view.worldToScreen(cx, cy), e = view.worldToScreen(cx + ext + 0.8, cy);
+      const c = w2s(cx, cy), e = w2s(cx + ext + 0.8, cy);
       const R = Math.max(10, Math.hypot(e.x - c.x, e.y - c.y));
       const left = Math.max(0, sp.until - g.tick) / freezeTicks;
       const col = sp.side === me ? '63, 182, 232' : '255, 106, 61';
@@ -918,6 +935,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     octx.clearRect(0, 0, W, H);
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (g.done) return;
+    updateVis();
     drawFrozen();
     drawUnitRings();
     // our deploy zone: a faint outline always (so it's learnt), lit up with the castle's no-drop circle while a
@@ -934,7 +952,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       octx.setLineDash([]);
       if (on) {
         // label on the zone's front edge
-        const front = me === 0 ? z.y0 : z.y1, lp = view.worldToScreen((z.x0 + z.x1) / 2, front + (me === 0 ? 1.2 : -1.2));
+        const front = me === 0 ? z.y0 : z.y1, lp = w2s((z.x0 + z.x1) / 2, front + (me === 0 ? 1.2 : -1.2));
         octx.font = '700 13px Barlow, system-ui, sans-serif';
         octx.textAlign = 'center';
         octx.textBaseline = 'middle';
@@ -945,7 +963,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
         octx.fillText('DEPLOY ZONE', lp.x, lp.y);
         // the castle itself: no drops on it
         const c = castlePos(me), R = 3.5 + 0.4, pts: { x: number; y: number }[] = [];
-        for (let a = 0; a <= 32; a++) pts.push(view.worldToScreen(c.x + Math.cos((a / 32) * Math.PI * 2) * R, c.y + Math.sin((a / 32) * Math.PI * 2) * R));
+        for (let a = 0; a <= 32; a++) pts.push(w2s(c.x + Math.cos((a / 32) * Math.PI * 2) * R, c.y + Math.sin((a / 32) * Math.PI * 2) * R));
         octx.beginPath();
         pts.forEach((p, i) => (i ? octx.lineTo(p.x, p.y) : octx.moveTo(p.x, p.y)));
         octx.closePath();
@@ -1053,11 +1071,16 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   /** enemy deploy glance: how long it lasts, and the least time between two (ms) */
   const PEEK_MS = 2200, PEEK_GAP = 20000;
   /** spring times (s) and speed caps: pan in view-heights per second, zoom in e-folds per second */
-  const PAN_T = 0.9, ZOOM_T = 1.3, PAN_MAX = 0.55, ZOOM_MAX = 0.45;
+  // desktop (a big screen, a mouse): framed wider and moving less, slower and later than on a phone; the same motion
+  // fills more of the eye on a big screen
+  const DESKTOP = window.matchMedia('(hover: hover) and (pointer: fine)').matches && window.innerWidth > 900;
+  const PAN_T = DESKTOP ? 1.4 : 0.9, ZOOM_T = DESKTOP ? 1.9 : 1.3, PAN_MAX = DESKTOP ? 0.3 : 0.55, ZOOM_MAX = DESKTOP ? 0.28 : 0.45;
+  /** dead zone: share of the view's half-size the fight's centre may drift before the camera re-aims */
+  const DEAD = DESKTOP ? 0.55 : 0.4;
   /** the swing to our deploy zone when a card is picked: quicker (the player is waiting to drop) */
   const DEPLOY_PAN_T = 0.35, DEPLOY_PAN_MAX = 2.2;
   /** tightest framing: cells across the field and along it (the field is 48 x 115) */
-  const MIN_HW = 13, MIN_HH = 17;
+  const MIN_HW = DESKTOP ? 20 : 13, MIN_HH = DESKTOP ? 30 : 17;
   let camSel = -1;
   /** performance.now() until which the camera holds our deploy zone (Infinity while a card is picked and not dropped yet) */
   let deployUntil = 0;
@@ -1189,7 +1212,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (now >= artyUntil) artyOn = false;
       if (aim && !commit) {
         const hw = Math.exp(aim[2]), hh = Math.exp(aim[3]);
-        commit = Math.abs(want[0] - aim[0]) > hw * 0.4 || Math.abs(want[1] - aim[1]) > hh * 0.4
+        commit = Math.abs(want[0] - aim[0]) > hw * DEAD || Math.abs(want[1] - aim[1]) > hh * DEAD
           || want[2] > aim[2] + 0.05 || want[3] > aim[3] + 0.05 || want[2] < aim[2] - 0.3 || want[3] < aim[3] - 0.3;
       }
     }
@@ -1197,7 +1220,11 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     if (!cam) {
       // first frame (or back from the player's own move): start from where the view is now, at rest
       cam = [...aim]; camV.fill(0);
-      try { const w = view.screenToWorld(canvas.clientWidth / 2, canvas.clientHeight / 2); cam[0] = w.x; cam[1] = w.y; } catch { /* */ }
+      // (before the view is laid out this reads garbage far off the field: then start at the aim)
+      try {
+        const w = view.screenToWorld(canvas.clientWidth / 2, canvas.clientHeight / 2);
+        if (canvas.clientWidth > 0 && w.x >= -4 && w.x <= FIELD_W + 4 && w.y >= -4 && w.y <= FIELD_H + 4) { cam[0] = w.x; cam[1] = w.y; }
+      } catch { /* */ }
     }
     const span = Math.exp(cam[3]) * 2, fast = now < deployUntil;
     const pt = fast ? DEPLOY_PAN_T : PAN_T, pm = (fast ? DEPLOY_PAN_MAX : PAN_MAX) * span;
