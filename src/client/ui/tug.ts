@@ -1080,7 +1080,10 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   /** the swing to our deploy zone when a card is picked: quicker (the player is waiting to drop) */
   const DEPLOY_PAN_T = 0.35, DEPLOY_PAN_MAX = 2.2;
   /** tightest framing: cells across the field and along it (the field is 48 x 115) */
-  const MIN_HW = DESKTOP ? 16 : 13, MIN_HH = DESKTOP ? 23 : 17;
+  const MIN_HW = DESKTOP ? 16 : 11, MIN_HH = DESKTOP ? 23 : 14;
+  /** phone / tablet: the small screen frames only the hottest fight right now (the densest knot of units in combat,
+   *  within HOT_R cells of it), and only looks ahead while nothing is fighting */
+  const HOT_R = 13;
   let camSel = -1;
   /** performance.now() until which the camera holds our deploy zone (Infinity while a card is picked and not dropped yet) */
   let deployUntil = 0;
@@ -1123,7 +1126,19 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
     }
     // only artillery out: frame it after all
     if (!ax.length) { ax.push(...rx); ay.push(...ry); }
-    const px = xs.length >= 2 ? xs : ax, py = xs.length >= 2 ? ys : ay;
+    let px = xs.length >= 2 ? xs : ax, py = xs.length >= 2 ? ys : ay;
+    if (!DESKTOP && xs.length >= 3) {
+      // the hottest spot: the fighter with the most other fighters near it; keep only the knot round it
+      let bi = 0, bn = -1;
+      for (let i = 0; i < xs.length; i++) {
+        let n = 0;
+        for (let j = 0; j < xs.length; j++) if (Math.hypot(xs[i] - xs[j], ys[i] - ys[j]) <= HOT_R) n++;
+        if (n > bn) { bn = n; bi = i; }
+      }
+      const kx: number[] = [], ky: number[] = [];
+      for (let j = 0; j < xs.length; j++) if (Math.hypot(xs[bi] - xs[j], ys[bi] - ys[j]) <= HOT_R) { kx.push(xs[j]); ky.push(ys[j]); }
+      px = kx; py = ky;
+    }
     // nobody out yet: the middle of the field
     if (!px.length) return [FIELD_W / 2, FIELD_H / 2, FIELD_W / 2, FIELD_H / 2];
     px.sort((a, b) => a - b); py.sort((a, b) => a - b);
@@ -1162,6 +1177,8 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       if (d < md) { md = d; m = u; }
     }
     if (md <= CONTACT) return b;
+    // phone / tablet: a fight on now beats the look ahead (the leading enemy is still kept in, by fightBox)
+    if (!DESKTOP && g.battle.units.some((u) => u.alive && !castles.includes(u.id) && u.stats.range < ARTY_RANGE && u.mounts.some((mt) => mt.target >= 0))) return b;
     // where it's heading, no further than LOOK cells ahead
     const k = Math.min(1, LOOK / md), tx = l.x + (m.x - l.x) * k, ty = l.y + (m.y - l.y) * k;
     return [Math.min(b[0], tx), Math.min(b[1], ty), Math.max(b[2], tx), Math.max(b[3], ty)];
@@ -1235,7 +1252,7 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
       const l = leadFoe(), base = ref && l ? reveal(ref, [l.x - 2, l.y - 2, l.x + 2, l.y + 2]) : ref;
       want = base ? reveal(base, peekBox) : framing(peekBox, 2, 4); commit = true;
     } else {
-      want = framing(approachBox(), 6, 8);
+      want = DESKTOP ? framing(approachBox(), 6, 8) : framing(approachBox(), 4, 5);
       // artillery firing (a muzzle flash on a gun with a target): a short nudge toward the guns, then back
       if (now >= artyUntil && now - artyAt > ARTY_GAP) {
         let n = 0, sx = 0, sy = 0;
