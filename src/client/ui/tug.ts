@@ -1038,56 +1038,111 @@ export const tugMatchScreen: ScreenFn<{ name: 'tugmatch'; launch: TugLaunch }> =
   view.fit(true);
   const fps = createFpsMeter(fieldwrap);
   // ---- phone camera: a phone shows only part of the long field, so the view follows the fighting by itself; picking a
-  // card swings it to our deploy zone, and a while after the last drop it goes back to the fight. The player's own
-  // pan / zoom pauses it for a few seconds. (Settings > Auto battle camera turns it off.)
+  // card swings it to our deploy zone, and a while after the last drop it goes back to the fight; now and then it
+  // glances at the enemy's deploy zone when they drop new units. The player's own pan / zoom pauses it for a few
+  // seconds. (Settings > Auto battle camera turns it off.)
+  // Comfort (motion sickness): the framing moves on a critically damped spring (starts from rest, eases out, never
+  // overshoots), with capped pan / zoom speeds, and a dead zone: it only re-aims when the fight drifts well off centre
+  // or needs a clearly different zoom, so it doesn't sway with every unit's step. Zoom runs in log space, slower than pan.
   const AUTO_CAM = window.matchMedia('(max-width: 760px), (hover: none)').matches && loadSettings().autoCam !== false;
   /** seconds the view stays on the deploy zone after a drop before it heads back to the fight */
   const DEPLOY_HOLD = 3;
   /** ms after the player's last pan / zoom before the camera takes over again */
   const USER_PAUSE = 4000;
-  let camBox: [number, number, number, number] | null = null;
+  /** enemy deploy glance: how long it lasts, and the least time between two (ms) */
+  const PEEK_MS = 2200, PEEK_GAP = 20000;
+  /** spring times (s) and speed caps: pan in view-heights per second, zoom in e-folds per second */
+  const PAN_T = 0.9, ZOOM_T = 1.3, PAN_MAX = 0.55, ZOOM_MAX = 0.45;
+  /** tightest framing: cells across the field and along it (the field is 48 x 115) */
+  const MIN_HW = 13, MIN_HH = 17;
   let camSel = -1;
   /** performance.now() until which the camera holds our deploy zone (Infinity while a card is picked and not dropped yet) */
   let deployUntil = 0;
   /** the camera move of the opening framing doesn't count as the player's */
   let camUserAt = Infinity;
+  /** enemy deploy glance: until when, and when the last one started */
+  let peekUntil = 0, peekAt = -Infinity;
+  const seenFoe = new Set<number>();
+  /** framing state [centre x, centre y, ln half-width, ln half-height] (world cells), its velocities, the aim it eases to */
+  let cam: number[] | null = null;
+  const camV = [0, 0, 0, 0];
+  let aim: number[] | null = null;
+  /** Unity's SmoothDamp (Game Programming Gems 4): a critically damped spring with a speed cap */
+  const smoothDamp = (cur: number, target: number, i: number, smoothTime: number, maxSpeed: number, dt: number): number => {
+    const omega = 2 / smoothTime, x = omega * dt, ex = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+    const maxChange = maxSpeed * smoothTime;
+    const change = Math.max(-maxChange, Math.min(maxChange, cur - target)), to = cur - change;
+    const temp = (camV[i] + omega * change) * dt;
+    camV[i] = (camV[i] - omega * temp) * ex;
+    let out = to + (change + temp) * ex;
+    if ((target - cur > 0) === (out > target)) { out = target; camV[i] = 0; }
+    return out;
+  };
+  /** the units in combat (a gun on a target), else everyone out; their bulk, with stragglers trimmed */
   const fightBox = (): [number, number, number, number] => {
     const castles = new Set<number>(g.castles);
     const xs: number[] = [], ys: number[] = [], ax: number[] = [], ay: number[] = [];
     for (const u of g.battle.units) {
       if (!u.alive || castles.has(u.id)) continue;
       ax.push(u.x); ay.push(u.y);
-      // fighting: a gun on a target
       if (u.mounts.some((m) => m.target >= 0)) { xs.push(u.x); ys.push(u.y); }
     }
     const px = xs.length >= 2 ? xs : ax, py = xs.length >= 2 ? ys : ay;
     // nobody out yet: the middle of the field
-    if (!px.length) return [0, FIELD_H * 0.3, FIELD_W, FIELD_H * 0.7];
+    if (!px.length) return [FIELD_W / 2, FIELD_H / 2, FIELD_W / 2, FIELD_H / 2];
     px.sort((a, b) => a - b); py.sort((a, b) => a - b);
-    // the bulk of them: with 8+, the outer 8% each way (a lone runner, a jet looping wide) is left out
-    const cut = px.length >= 8 ? Math.floor(px.length * 0.08) : 0, hi = px.length - 1 - cut;
+    // the bulk: with 6+, the outer 12% each way (a lone runner, a jet looping wide) is left out
+    const cut = px.length >= 6 ? Math.floor(px.length * 0.12) : 0, hi = px.length - 1 - cut;
     return [px[cut], py[cut], px[hi], py[hi]];
+  };
+  /** framing [cx, cy, ln hw, ln hh] around a world box, padded, never tighter than MIN_HW x MIN_HH, kept on the field */
+  const framing = (b: [number, number, number, number], padX: number, padY: number): number[] => {
+    const hw = Math.min(FIELD_W / 2 + 3, Math.max(MIN_HW, (b[2] - b[0]) / 2 + padX));
+    const hh = Math.min(FIELD_H / 2 + 3, Math.max(MIN_HH, (b[3] - b[1]) / 2 + padY));
+    const cx = Math.min(Math.max((b[0] + b[2]) / 2, hw - 3), FIELD_W + 3 - hw);
+    const cy = Math.min(Math.max((b[1] + b[3]) / 2, hh - 3), FIELD_H + 3 - hh);
+    return [cx, cy, Math.log(hw), Math.log(hh)];
   };
   const updateCam = (now: number, dt: number) => {
     if (!AUTO_CAM) return;
     if (sel !== camSel) { deployUntil = sel >= 0 ? Infinity : Math.min(deployUntil, now + 600); camSel = sel; }
-    if (view.cam.userAt > camUserAt && now - view.cam.userAt < USER_PAUSE) return;
-    let want: [number, number, number, number];
+    // new enemy units: glance at their deploy zone (not while we're deploying, and not too often)
+    let foeNew = false;
+    for (const u of g.battle.units) if (u.side === foe && !seenFoe.has(u.id)) { seenFoe.add(u.id); if (!g.castles.includes(u.id)) foeNew = true; }
+    if (foeNew && now >= deployUntil && now - peekAt > PEEK_GAP && cam) { peekAt = now; peekUntil = now + PEEK_MS; }
+    if (view.cam.userAt > camUserAt && now - view.cam.userAt < USER_PAUSE) { cam = null; return; }
+    let want: number[], commit: boolean;
     if (now < deployUntil) {
       const z = dropZone(me);
-      want = [z.x0, z.y0 - 4, z.x1, z.y1 + 4];
+      want = framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
+    } else if (now < peekUntil) {
+      const z = dropZone(foe);
+      want = framing([z.x0, z.y0, z.x1, z.y1], 2, 4); commit = true;
     } else {
-      const b = fightBox();
-      // never closer than the field's width or ~a third of its length: the fight stays in context
-      const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
-      const hw = Math.max((b[2] - b[0]) / 2 + 4, FIELD_W / 2), hh = Math.max((b[3] - b[1]) / 2 + 6, FIELD_H / 6);
-      // sideways the box stays on the (narrow) field: a fight bunched on one flank mustn't slide the field off screen
-      const mx = Math.min(Math.max(cx, hw - 3), FIELD_W + 3 - hw);
-      want = [hw * 2 >= FIELD_W + 6 ? FIELD_W / 2 - hw : mx - hw, Math.max(-3, cy - hh), hw * 2 >= FIELD_W + 6 ? FIELD_W / 2 + hw : mx + hw, Math.min(FIELD_H + 3, cy + hh)];
+      want = framing(fightBox(), 6, 8);
+      // dead zone: keep the current aim while the fight's centre stays in the middle 40% of it and the zoom it needs
+      // is within ~30%; zooming OUT to keep the fight in view is never held back
+      commit = !aim;
+      if (aim) {
+        const hw = Math.exp(aim[2]), hh = Math.exp(aim[3]);
+        commit = Math.abs(want[0] - aim[0]) > hw * 0.4 || Math.abs(want[1] - aim[1]) > hh * 0.4
+          || want[2] > aim[2] + 0.05 || want[3] > aim[3] + 0.05 || want[2] < aim[2] - 0.3 || want[3] < aim[3] - 0.3;
+      }
     }
-    if (!camBox) camBox = [...want];
-    else for (let i = 0; i < 4; i++) camBox[i] += (want[i] - camBox[i]) * Math.min(1, dt * 2.5);
-    view.frameWorldBox(camBox[0], camBox[1], camBox[2], camBox[3]);
+    if (commit || !aim) aim = want;
+    if (!cam) {
+      // first frame (or back from the player's own move): start from where the view is now, at rest
+      cam = [...aim]; camV.fill(0);
+      try { const w = view.screenToWorld(canvas.clientWidth / 2, canvas.clientHeight / 2); cam[0] = w.x; cam[1] = w.y; } catch { /* */ }
+    }
+    const span = Math.exp(cam[3]) * 2;
+    cam[0] = smoothDamp(cam[0], aim[0], 0, PAN_T, PAN_MAX * span, dt);
+    cam[1] = smoothDamp(cam[1], aim[1], 1, PAN_T, PAN_MAX * span, dt);
+    cam[2] = smoothDamp(cam[2], aim[2], 2, ZOOM_T, ZOOM_MAX, dt);
+    cam[3] = smoothDamp(cam[3], aim[3], 3, ZOOM_T, ZOOM_MAX, dt);
+    // frameWorldBox adds a 6-cell margin round the box: take it off so the framing is the one asked for
+    const hw = Math.max(1, Math.exp(cam[2]) - 6), hh = Math.max(1, Math.exp(cam[3]) - 6);
+    view.frameWorldBox(cam[0] - hw, cam[1] - hh, cam[0] + hw, cam[1] + hh);
   };
 
   const frame = (now: number) => {
