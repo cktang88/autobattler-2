@@ -8,8 +8,11 @@
   <link rel="icon" href="icon.svg">
   <link rel="stylesheet" href="style.css">
   <style>
-    body { margin: 0; background: var(--bg); color: #d6e0ea; font: 14px/1.35 'Barlow', system-ui, sans-serif; overflow: auto; }
-    .ap { max-width: 1200px; margin: 0 auto; padding: 12px; }
+    /* style.css pins the game's #app to the screen (fixed, no scroll): this page is a normal scrolling document */
+    html, body { height: auto; min-height: 100%; }
+    body { margin: 0; background: var(--bg); color: #d6e0ea; font: 14px/1.35 'Barlow', system-ui, sans-serif; overflow: visible; overflow-x: hidden; }
+    #app.ap { position: static; display: block; inset: auto; max-width: 1200px; margin: 0 auto; padding: 12px 12px 40px; box-sizing: border-box; }
+    .ap .row > * { min-width: 0; overflow-wrap: anywhere; }
     .ap h1 { font: 700 24px 'Barlow Condensed', sans-serif; letter-spacing: .04em; margin: 4px 0 2px; color: var(--accent); }
     .ap h2 { font: 600 16px 'Barlow Condensed', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8fa3b5; margin: 18px 0 6px; }
     .ap .sum { color: #8fa3b5; font-size: 13px; }
@@ -33,7 +36,18 @@
     .ap .detail td { padding: 1px 8px 1px 0; }
     .ap .ev { display: grid; grid-template-columns: 130px 80px 1fr; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--panel); font-size: 13px; }
     @media (max-width: 760px) {
-      .ap .row { grid-template-columns: 52px 1fr 1fr; }
+      .ap { padding: 10px 10px 32px; }
+      .ap h1 { font-size: 22px; }
+      .ap .bar select { flex: 1 1 30%; min-width: 0; min-height: 40px; }
+      /* a card per design: preview | name, score / loadout / origin, tier / dates */
+      .ap .row { grid-template-columns: 48px 1fr auto; grid-template-areas: "pv nm sc" "pv lo lo" "pv or ti" "pv dt dt"; gap: 2px 10px; padding: 8px; align-items: start; }
+      .ap .row > .pv { grid-area: pv; } .ap .row > .nmc { grid-area: nm; } .ap .row > .sc { grid-area: sc; text-align: right; white-space: nowrap; overflow-wrap: normal; display: block; }
+      .ap .row > .lo { grid-area: lo; } .ap .row > .or { grid-area: or; } .ap .row > .ti { grid-area: ti; text-align: right; }
+      .ap .row > .dt { grid-area: dt; }
+      .ap .row > .dt::before { content: 'joined / promoted '; }
+      .ap .row > .detail { grid-area: auto; grid-column: 1 / -1; margin-top: 6px; }
+      .ap .detail canvas { width: 120px; height: 120px; }
+      .ap .detail > * { min-width: 0; }
       .ap .row.head { display: none; }
       .ap .ev { grid-template-columns: 1fr; gap: 0; }
     }

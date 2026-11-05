@@ -773,13 +773,14 @@ export const PVP_PICKS = 2;
 /** A design from a multiplayer game that earned a trial (renamed like any adopted design), with who built it. */
 export interface PvpCandidate extends Candidate { creator: string; side: Side }
 
-/** The PVP_PICKS best designs of a finished multiplayer game (both sides), each with a real share of its side's
+/** The PVP_PICKS best designs of a finished multiplayer game (both sides, or only `sides`: a vs-AI game picks from
+ *  the player's side, the AI's designs are already in the pool), each with a real share of its side's
  *  spending behind it and at least PVP_MIN_EFF x the game's average efficiency. `decks` / `names` per side. */
-export function pvpCandidates(scores: DesignPerf[], decks: [Design[], Design[]], names: [string, string]): PvpCandidate[] {
+export function pvpCandidates(scores: DesignPerf[], decks: [Design[], Design[]], names: [string, string], sides: readonly Side[] = [0, 1]): PvpCandidate[] {
   const byId = [new Map(decks[0].map((d) => [d.id, d] as const)), new Map(decks[1].map((d) => [d.id, d] as const))];
   const total = [0, 1].map((s) => scores.filter((p) => p.side === s).reduce((t, p) => t + p.invested, 0));
   const ranked = scores
-    .filter((p) => byId[p.side].has(p.designId) && p.invested >= Math.max(1, 0.05 * total[p.side]) && p.eff >= PVP_MIN_EFF)
+    .filter((p) => sides.includes(p.side) && byId[p.side].has(p.designId) && p.invested >= Math.max(1, 0.05 * total[p.side]) && p.eff >= PVP_MIN_EFF)
     .sort((a, b) => b.eff - a.eff || (a.designId < b.designId ? -1 : 1));
   const out: PvpCandidate[] = [];
   const keys = new Set<string>();

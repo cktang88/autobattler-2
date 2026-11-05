@@ -23,6 +23,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', ...kids: (N
   for (const k of kids) if (k != null) e.append(k);
   return e;
 }
+const cls = <T extends HTMLElement>(e: T, c: string): T => { e.classList.add(c); return e; };
 const date = (t?: number) => (t ? new Date(t).toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' }) : '—');
 const when = (t: number) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const modName = (id: string | null) => (id ? MODULE_BY_ID.get(id)?.name ?? id : '');
@@ -98,13 +99,13 @@ function render(log: Log): void {
       .sort((a, b) => (sort === 'score' ? b.score - a.score : sort === 'games' ? b.games - a.games : (b.addedAt ?? 0) - (a.addedAt ?? 0)));
     for (const r of rows) {
       const line = el('div', 'row',
-        preview(r, 48),
-        el('div', '', el('div', 'nm', r.name), el('div', 'dim', `${r.role} · ${r.tags.join(', ')}`)),
-        el('div', 'dim', `${CHASSIS_BY_ID.get(r.chassis)?.name ?? r.chassis} / ${mobName(r.mobility)} — ${r.mounts.filter(Boolean).map(modName).join(', ')}`),
-        el('div', '', el('span', `tier ${r.tier}`, r.tier)),
-        el('div', 'dim', origin(r)),
-        el('div', 'dim', `${date(r.addedAt)} / ${date(r.promotedAt)}`),
-        el('div', 'num', `${r.games} · `, el('span', 'good', String(r.good)), '/', el('span', 'bad', String(r.bad)), ` · ${r.score.toFixed(2)}`),
+        cls(preview(r, 48), 'pv'),
+        el('div', 'nmc', el('div', 'nm', r.name), el('div', 'dim', `${r.role} · ${r.tags.join(', ')}`)),
+        el('div', 'dim lo', `${CHASSIS_BY_ID.get(r.chassis)?.name ?? r.chassis} / ${mobName(r.mobility)} — ${r.mounts.filter(Boolean).map(modName).join(', ')}`),
+        el('div', 'ti', el('span', `tier ${r.tier}`, r.tier)),
+        el('div', 'dim or', origin(r)),
+        el('div', 'dim dt', `${date(r.addedAt)} / ${date(r.promotedAt)}`),
+        el('div', 'num sc', `${r.games} · `, el('span', 'good', String(r.good)), '/', el('span', 'bad', String(r.bad)), ` · ${r.score.toFixed(2)}`),
       );
       let open: HTMLElement | null = null;
       line.addEventListener('click', () => { if (open) { open.remove(); open = null; } else { open = detail(r, log.events); line.append(open); } });
