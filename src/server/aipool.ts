@@ -384,11 +384,12 @@ export class GlobalAiPool {
         const now = Date.now();
         const pool = structuredClone(this.state.pool);
         const before = new Map([...pool.entries, ...pool.candidates].map((e) => [poolKey(e.design), structuredClone(e)] as const));
-        const events = foldPvp(pool, pvpCandidates(job.perf(), job.decks, job.names), {
+        const events = foldPvp(pool, pvpCandidates(job.perf(), job.decks, job.names, job.reporter ? [0] : [0, 1]), {
           now, alpha: GLOBAL_ALPHA, game: job.game, ...(job.reporter ? { mayAddCandidate: this.allowance(job.reporter, Math.floor(now / 86_400_000)) } : {}),
         });
         this.log(events, before, pool, now);
         this.state.pool = sanitizePool(pool);
+        this.state.reports++; // a game learnt from, like a classic report
         this.save();
       } catch (e) {
         console.error('[aipool] multiplayer game failed', e);
